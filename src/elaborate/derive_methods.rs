@@ -294,7 +294,11 @@ impl Generated<'_, '_> {
                 self.live[*src] = false;
                 self.live[*dst] = true;
             }
-            k::Op::Drop { place } => self.live[place.local] = false,
+            k::Op::Drop { place } | k::Op::DropIf { place } => {
+                if place.projections.is_empty() {
+                    self.live[place.local] = false;
+                }
+            }
             k::Op::If { condition } => self.live[*condition] = false,
             k::Op::Return { src } => self.live[*src] = false,
             _ => {}

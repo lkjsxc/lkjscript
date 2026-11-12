@@ -329,6 +329,27 @@ are dropped in dependency order; K independently verifies every emitted drop.
 Concrete trait method selection is represented by an explicit function call.
 K has a readable/writable text form accepted by `check` for direct tests.
 
+Strict destruction (`drop` in text K) requires the named place to be initialized.
+An already moved or dropped exact place, or an absent ancestor, produces
+`E_MOVE` with the concrete place path. Structural destruction of a remaining
+aggregate shell skips its moved children. A custom destructor requires every
+field it may inspect to be initialized.
+
+Conditional destruction (`drop-if`) skips an absent root or exact owned place.
+Every projected ancestor must still be initialized; the operation cannot recover
+a missing container or manufacture an owner. Both destruction operations reject
+paths through a reference or an indexed collection under `E_BORROW`. Replacement
+of such storage moves the old value through checked `replace` before destroying
+that separate owner, keeping the destination initialized.
+
+Wasm lowering maintains initialization flags for roots used by conditional
+destruction and clears moved owned payload slots. Consumed call arguments do not
+remain initialized merely because their old bits remain in a physical slot.
+K cannot supply a flag value. The independent machine tests its own cell state.
+Conditional cleanup runs at the original destruction or replacement point;
+it does not move destruction to a branch join. Initialization joins still require
+the existing equal branch state; a maybe-initialized lattice is not implemented.
+
 The checker validates all type references, signatures and operation shapes,
 including dead code, then checks ownership through each function. Variant payload
 access needs a proven tag. Moving, dropping or replacing a payload field preserves

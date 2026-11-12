@@ -19,20 +19,37 @@ const sourceFiles=[],expected=[];
 const prelude=`fn write(out: &mut Stdout, bytes: &[u8]) { out.write(bytes); }
 struct Mark<'a> { out: &'a mut Stdout, byte: u8 }
 impl<'a> Drop for Mark<'a> { fn drop(&mut self) { let b: [u8; 1] = [self.byte]; self.out.write(b.as_slice()); } }
+struct OwnedMark { out: Stdout, byte: u8 }
+impl Drop for OwnedMark { fn drop(&mut self) { let b: [u8; 1] = [self.byte]; self.out.write(b.as_slice()); } }
+struct Marks { first: OwnedMark, second: OwnedMark }
 `;
 let oracle='#![allow(warnings)]\nmod __lkj_host {\n'+fs.readFileSync('bridge/output.rs','utf8')+'\n}\n';
 for(let i=0;i<count;i++) {
  let source=prelude+'pub fn main(mut world: World) { let writer: Stdout = world.stdout(); let mut out: Stdout = writer;\n';
  const bytes=[];const chunks=1+random(8);
  for(let j=0;j<chunks;j++) {
-   const choice=random(3);
+   const choice=random(4);
    if(choice===0) {
      const data=Array.from({length:1+random(12)},()=>random(256));
      source+=`let b${j}: [u8; ${data.length}] = [${data.map(n=>n+'u8').join(',')}]; write(&mut out, b${j}.as_slice());\n`;bytes.push(...data);
    } else if(choice===1) {
      const value=random(256);source+=`{ let mark: Mark<'_> = Mark { out: &mut out, byte: ${value}u8 }; }\n`;bytes.push(value);
-   } else {
+   } else if(choice===2) {
      const length=random(64);source+=`let mut v${j}: Vec<u8> = Vec::new(); let mut i${j}: usize = 0; while i${j} < ${length}usize { v${j}.push(i${j} as u8); i${j} = i${j} + 1; } out.write(v${j}.as_slice());\n`;bytes.push(...Array.from({length},(_,n)=>n));
+   } else {
+     const [a,b,c,d,marker]=Array.from({length:5},()=>random(256));
+     const beforeMarker=random(2)===0;
+     source+=`{ let mut pair=Marks { first: OwnedMark { out: world.stdout(), byte: ${a}u8 }, second: OwnedMark { out: world.stdout(), byte: ${b}u8 } };
+let moved=pair.first;
+pair.first=OwnedMark { out: world.stdout(), byte: ${c}u8 };
+pair.second=OwnedMark { out: world.stdout(), byte: ${d}u8 };
+`;
+     bytes.push(b);
+     if(beforeMarker){source+='drop(moved);\n';bytes.push(a);}
+     source+=`let marker=[${marker}u8]; out.write(&marker);
+`;bytes.push(marker);
+     if(!beforeMarker){source+='drop(moved);\n';bytes.push(a);}
+     source+='}\n';bytes.push(c,d);
    }
  }
  const trapped=random(5)===0;if(trapped)source+='assert!(false);\n';source+='}\n';

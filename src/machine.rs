@@ -950,11 +950,9 @@ impl<H: Host> Machine<'_, H> {
     fn drop_work(&mut self, work: DropWork) -> Result<(), RunError> {
         self.site = work.site;
         if self.cell(work.access.cell)?.value.is_none() {
-            // Structural cleanup skips absent fields. A projected clearing drop
-            // accepts a preceding move, but not an earlier clearing drop.
-            if !work.optional
-                || (!work.release && self.cell(work.access.cell)?.empty != Empty::Moved)
-            {
+            // Structural cleanup and explicit DropIf skip an absent value.
+            // A strict Drop requires this exact storage to be initialized.
+            if !work.optional {
                 return Err(self.error(
                     MachineError::DoubleDrop,
                     "drop of uninitialized, moved, or already dropped storage",
@@ -1463,11 +1461,9 @@ impl<H: Host> Machine<'_, H> {
                 }
                 self.put(destination.cell, value)?;
             }
-            Op::Drop { place } => {
-                // Current K uses projected drops to clear a moved field before
-                // reinitialization; its heap helper treats the absent slot as empty.
-                let optional = !place.projections.is_empty();
-                let access = self.resolve(&frame, &place)?;
+            Op::Drop { ref place } | Op::DropIf { ref place } => {
+                let optional = matches!(instruction.op, Op::DropIf { .. });
+                let access = self.resolve(&frame, place)?;
                 let site = self.site;
                 self.work.push(Work::Frame(frame));
                 self.work.push(Work::Drop(DropWork {

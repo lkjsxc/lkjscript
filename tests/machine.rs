@@ -401,7 +401,7 @@ fn model_host_failure_keeps_previous_output_and_has_its_own_trap_kind() {
 }
 
 #[test]
-fn projected_clearing_drop_can_follow_move_and_reinitialization_but_not_another_drop() {
+fn conditional_projected_drop_clears_moves_while_strict_drop_rejects_repeated_destruction() {
     let types = vec![
         k::Type {
             name: "Box".to_string(),
@@ -438,7 +438,7 @@ fn projected_clearing_drop_can_follow_move_and_reinitialization_but_not_another_
             place: field.clone(),
             moving: true,
         },
-        k::Op::Drop {
+        k::Op::DropIf {
             place: field.clone(),
         },
         k::Op::Int { dst: 3, value: 2 },
@@ -507,4 +507,63 @@ fn model_checks_signed_minimum_overflow_and_invalid_raw_integer_widths() {
         ),
         MachineError::InvalidK,
     );
+}
+
+#[test]
+fn strict_and_conditional_drops_have_independent_static_and_dynamic_checks() {
+    fn program(text: &str) -> k::Program {
+        lkjscript::k_text::read(text)
+            .unwrap_or_else(|problem| panic!("{}: {}", problem.code, problem.message))
+    }
+    let accepted = program(include_str!("conformance/k/drop_if_owned.k"));
+    lkjscript::check::check(accepted.clone())
+        .unwrap_or_else(|problem| panic!("{}: {}", problem.code, problem.message));
+    assert!(
+        must_run(machine::run(&accepted, 0, &[], &mut Vec::new())).value
+            == Scalar::Int {
+                value: 42,
+                bits: 64,
+                signed: true,
+            }
+    );
+    for (text, code, fault, place) in [
+        (
+            include_str!("conformance/k/double_projected_drop.k"),
+            "E_MOVE",
+            MachineError::DoubleDrop,
+            "pair.left",
+        ),
+        (
+            include_str!("conformance/k/drop_after_projected_move.k"),
+            "E_MOVE",
+            MachineError::DoubleDrop,
+            "pair.left",
+        ),
+        (
+            include_str!("conformance/k/drop_if_absent_ancestor.k"),
+            "E_MOVE",
+            MachineError::UseAfterMove,
+            "outer.*",
+        ),
+        (
+            include_str!("conformance/k/drop_if_borrowed_owner.k"),
+            "E_BORROW",
+            MachineError::UseAfterMove,
+            "slot.*",
+        ),
+        (
+            include_str!("conformance/k/drop_if_indexed_owner.k"),
+            "E_BORROW",
+            MachineError::UseAfterMove,
+            "array[index]",
+        ),
+    ] {
+        let raw = program(text);
+        let problem = lkjscript::check::check(raw.clone())
+            .err()
+            .expect("forged drop passed the checker");
+        assert_eq!(problem.code, code);
+        assert!(problem.message.contains(place), "{}", problem.message);
+        fails(raw, fault);
+    }
 }

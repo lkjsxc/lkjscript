@@ -150,7 +150,7 @@ impl Builder<'_, '_> {
                 }
                 self.set_dependencies(*dst, dependencies);
             }
-            k::Op::Drop { place } if place.projections.is_empty() => {
+            k::Op::Drop { place } | k::Op::DropIf { place } if place.projections.is_empty() => {
                 self.carriers.remove(&place.local);
             }
             k::Op::Return { src } => {

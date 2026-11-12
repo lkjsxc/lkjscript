@@ -1,0 +1,144 @@
+{
+  "command": "bash tools/check.sh",
+  "compilerBase": "c60c3cbaffb5303e8e6e141a56465bd48e2b7364",
+  "elapsedSeconds": 37.41,
+  "cargoTests": 409,
+  "conformance": [
+    {
+      "engine": "node",
+      "passed": 128,
+      "pending": 8,
+      "failed": 0,
+      "rustcComparisons": 114,
+      "seconds": 6.04
+    },
+    {
+      "engine": "k",
+      "passed": 128,
+      "pending": 8,
+      "failed": 0,
+      "rustcComparisons": 114,
+      "seconds": 3.23
+    }
+  ],
+  "generators": [
+    {
+      "generator": "value",
+      "engine": "node",
+      "sha256": "706db4c7909c91e968e892f02fed5dee19514ff3746c3c3d8e79038d3fa662ae",
+      "binarySha256": "22ba243d01975b18fdbe582fc7dcc07aab0c9114f006d9d1e9156d84362eafd4",
+      "compilerDirty": true,
+      "compiler": "c60c3cbaffb5303e8e6e141a56465bd48e2b7364",
+      "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)",
+      "node": "v24.18.1",
+      "rustFlags": "--edition=2024 -C overflow-checks=yes -C opt-level=0 -A warnings -A arithmetic_overflow -A unconditional_panic -A overflowing_literals",
+      "seed": "601",
+      "programs": 100,
+      "value-equal": 92,
+      "trap-equal": 8
+    },
+    {
+      "generator": "verdict",
+      "engine": "node",
+      "sha256": "58081744ff8ee9523b540eab516f520e7efa9bc1a32788b03474cfca86cebc81",
+      "binarySha256": "22ba243d01975b18fdbe582fc7dcc07aab0c9114f006d9d1e9156d84362eafd4",
+      "compilerDirty": true,
+      "compiler": "c60c3cbaffb5303e8e6e141a56465bd48e2b7364",
+      "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)",
+      "node": "v24.18.1",
+      "rustFlags": {
+        "verdict": "--edition=2024 --error-format=short -A warnings --emit=metadata",
+        "execution": "--edition=2024 -C overflow-checks=yes -A warnings"
+      },
+      "seed": "601",
+      "programs": 100,
+      "both-reject-ownership": 73,
+      "both-run-value-equal": 26,
+      "rejects-valid:E_BORROW": 1,
+      "rejectCodePairs": {
+        "E0382/E_MOVE": 46,
+        "E0502/E_BORROW": 10,
+        "E0499/E_BORROW": 7,
+        "E0506/E_BORROW": 3,
+        "E0505/E_BORROW": 4,
+        "E0382/E_BORROW": 1,
+        "E0499/E_MOVE": 1,
+        "E0502/E_MOVE": 1
+      }
+    },
+    {
+      "generator": "value",
+      "engine": "k",
+      "sha256": "706db4c7909c91e968e892f02fed5dee19514ff3746c3c3d8e79038d3fa662ae",
+      "binarySha256": "22ba243d01975b18fdbe582fc7dcc07aab0c9114f006d9d1e9156d84362eafd4",
+      "compilerDirty": true,
+      "compiler": "c60c3cbaffb5303e8e6e141a56465bd48e2b7364",
+      "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)",
+      "node": "v24.18.1",
+      "rustFlags": "--edition=2024 -C overflow-checks=yes -C opt-level=0 -A warnings -A arithmetic_overflow -A unconditional_panic -A overflowing_literals",
+      "seed": "601",
+      "programs": 100,
+      "value-equal": 92,
+      "trap-equal": 8
+    },
+    {
+      "generator": "verdict",
+      "engine": "k",
+      "sha256": "58081744ff8ee9523b540eab516f520e7efa9bc1a32788b03474cfca86cebc81",
+      "binarySha256": "22ba243d01975b18fdbe582fc7dcc07aab0c9114f006d9d1e9156d84362eafd4",
+      "compilerDirty": true,
+      "compiler": "c60c3cbaffb5303e8e6e141a56465bd48e2b7364",
+      "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)",
+      "node": "v24.18.1",
+      "rustFlags": {
+        "verdict": "--edition=2024 --error-format=short -A warnings --emit=metadata",
+        "execution": "--edition=2024 -C overflow-checks=yes -A warnings"
+      },
+      "seed": "601",
+      "programs": 100,
+      "both-reject-ownership": 73,
+      "both-run-value-equal": 26,
+      "rejects-valid:E_BORROW": 1,
+      "rejectCodePairs": {
+        "E0382/E_MOVE": 46,
+        "E0502/E_BORROW": 10,
+        "E0499/E_BORROW": 7,
+        "E0506/E_BORROW": 3,
+        "E0505/E_BORROW": 4,
+        "E0382/E_BORROW": 1,
+        "E0499/E_MOVE": 1,
+        "E0502/E_MOVE": 1
+      }
+    },
+    {
+      "generator": "output",
+      "sha256": "e759fb36e7a4f4b3cc3d5ae327277f5885dd3a3a7a988a9c6dad48916b7d45f9",
+      "compiler": "c60c3cbaffb5303e8e6e141a56465bd48e2b7364",
+      "compilerDirty": true,
+      "binarySha256": "22ba243d01975b18fdbe582fc7dcc07aab0c9114f006d9d1e9156d84362eafd4",
+      "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)",
+      "node": "v24.18.1",
+      "rustFlags": [
+        "--edition=2024",
+        "-C",
+        "overflow-checks=yes",
+        "-A",
+        "warnings"
+      ],
+      "seed": "601",
+      "programs": 50,
+      "tally": {
+        "node": {
+          "equal-output-trap": 11,
+          "equal-output-exit": 39
+        },
+        "k": {
+          "equal-output-trap": 11,
+          "equal-output-exit": 39
+        }
+      }
+    }
+  ],
+  "logSha256": "dd39d72ff333283305283bcda236cd240f727f8e403ce9bc99a9c1dab0b3ba5f",
+  "note": "Compiler, fixtures and generators were frozen for the complete gate. This record is committed with the tested strict Drop / DropIf correction. Output generator now emits partial moves and initialized/absent field replacements with independently predicted destructor byte order."
+}

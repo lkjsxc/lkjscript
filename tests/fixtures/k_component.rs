@@ -97,6 +97,7 @@ fn operation(which: usize, changed: bool) -> k::Op {
         22 => k::Op::Break,
         23 => k::Op::Continue,
         24 => k::Op::Return { src: n },
+        26 => k::Op::DropIf { place: place(n) },
         _ => k::Op::Trap {
             message: if changed {
                 "changed".to_string()
@@ -129,6 +130,7 @@ fn operation_value(value: &k::Op) -> i64 {
         k::Op::Array { dst, elements } => *dst as i64 + elements[0] as i64 + elements[1] as i64,
         k::Op::Assign { place, src } => place.local as i64 + *src as i64,
         k::Op::Drop { place } => place.local as i64,
+        k::Op::DropIf { place } => place.local as i64 + 1,
         k::Op::Unary { dst, op, src } => *dst as i64 + op.as_bytes()[0] as i64 + *src as i64,
         k::Op::Binary {
             dst,
@@ -259,7 +261,7 @@ fn model() -> k::Program {
     });
     let mut body: Vec<k::Instruction> = Vec::new();
     let mut index: usize = 0;
-    while index < 26 {
+    while index < 27 {
         body.push(k::Instruction {
             op: operation(index, false),
             line: 100 + index,

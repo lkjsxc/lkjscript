@@ -147,6 +147,7 @@ struct Body<'a> {
     function: &'a Function,
     bytes: Vec<u8>,
     slots: Vec<Slot>,
+    drop_flags: BTreeMap<usize, usize>,
     scratch: usize,
     frame: usize,
     frame_bytes: u64,
@@ -165,7 +166,7 @@ impl<'a> Body<'a> {
             Slot::Register(register) => get(&mut self.bytes, register),
         }
     }
-    fn write(&mut self, local: usize) {
+    fn write_value(&mut self, local: usize) {
         match self.slots[local] {
             Slot::Frame(offset) => {
                 set(&mut self.bytes, self.scratch + 7);
@@ -174,6 +175,54 @@ impl<'a> Body<'a> {
                 store(&mut self.bytes, offset);
             }
             Slot::Register(register) => set(&mut self.bytes, register),
+        }
+    }
+    fn initialized(&mut self, local: usize, present: bool) {
+        if let Some(flag) = self.drop_flags.get(&local) {
+            self.bytes.extend_from_slice(&[0x41, u8::from(present)]);
+            set(&mut self.bytes, *flag);
+        }
+    }
+    fn write(&mut self, local: usize) {
+        self.write_value(local);
+        self.initialized(local, true);
+    }
+    // K consumes operands even when their old bits remain in a reusable slot.
+    // Conditional destruction reads compiler-owned flags, never those stale bits.
+    fn consume_inputs(&mut self, op: &Op) {
+        if self.drop_flags.is_empty() {
+            return;
+        }
+        match op {
+            Op::Read {
+                place,
+                moving: true,
+                ..
+            } if place.projections.is_empty() => {
+                self.initialized(place.local, false);
+            }
+            Op::Assign { src, .. } | Op::Unary { src, .. } | Op::Return { src } => {
+                self.initialized(*src, false);
+            }
+            Op::Binary { left, right, .. } => {
+                self.initialized(*left, false);
+                self.initialized(*right, false);
+            }
+            Op::Array { elements, .. }
+            | Op::Struct {
+                fields: elements, ..
+            }
+            | Op::Variant {
+                fields: elements, ..
+            }
+            | Op::Call { args: elements, .. }
+            | Op::Intrinsic { args: elements, .. } => {
+                for local in elements {
+                    self.initialized(*local, false);
+                }
+            }
+            Op::If { condition } => self.initialized(*condition, false),
+            _ => {}
         }
     }
     fn address(&mut self, place: &Place, line: usize) -> usize {
@@ -254,16 +303,37 @@ impl<'a> Body<'a> {
         }
     }
     fn clear_place(&mut self, place: &Place, ty: usize, line: usize) {
-        if !heap_type(&self.program.types[ty].kind) {
-            return;
-        }
         if place.projections.is_empty() {
-            constant(&mut self.bytes, 0);
-            self.write(place.local);
-        } else {
+            if heap_type(&self.program.types[ty].kind) {
+                constant(&mut self.bytes, 0);
+                self.write_value(place.local);
+            }
+            self.initialized(place.local, false);
+        } else if heap_type(&self.program.types[ty].kind) {
             self.address(place, line);
             constant(&mut self.bytes, 0);
             store(&mut self.bytes, 0);
+        }
+    }
+    fn drop_place(&mut self, place: &Place, conditional: bool, line: usize) {
+        let root = place.projections.is_empty();
+        if root && !heap_type(&self.program.types[self.function.locals[place.local].ty].kind) {
+            self.initialized(place.local, false);
+            return;
+        }
+        if conditional && root {
+            get(&mut self.bytes, self.drop_flags[&place.local]);
+            begin_if(&mut self.bytes);
+        }
+        let ty = self.read_place(place, line);
+        call(
+            &mut self.bytes,
+            helper_index(self.program, self.runtime, ty, false),
+        );
+        self.bytes.push(0x1a);
+        self.clear_place(place, ty, line);
+        if conditional && root {
+            self.bytes.push(0x0b);
         }
     }
     fn narrow(&mut self, bits: u8, signed: bool, line: usize) {
@@ -522,6 +592,7 @@ impl<'a> Body<'a> {
         Ok(())
     }
     fn emit(&mut self, op: &Op, line: usize) -> Result<(), String> {
+        self.consume_inputs(op);
         match op {
             Op::Int { dst, value } => {
                 constant(&mut self.bytes, *value);
@@ -548,7 +619,7 @@ impl<'a> Body<'a> {
                     );
                 }
                 self.write(*dst);
-                if *moving {
+                if *moving && !(place.projections.is_empty() && place.local == *dst) {
                     self.clear_place(place, ty, line);
                 }
             }
@@ -594,20 +665,8 @@ impl<'a> Body<'a> {
                     store(&mut self.bytes, 0);
                 }
             }
-            Op::Drop { place } => {
-                if place.projections.is_empty()
-                    && !heap_type(&self.program.types[self.function.locals[place.local].ty].kind)
-                {
-                    return Ok(());
-                }
-                let ty = self.read_place(place, line);
-                call(
-                    &mut self.bytes,
-                    helper_index(self.program, self.runtime, ty, false),
-                );
-                self.bytes.push(0x1a);
-                self.clear_place(place, ty, line);
-            }
+            Op::Drop { place } => self.drop_place(place, false, line),
+            Op::DropIf { place } => self.drop_place(place, true, line),
             Op::Unary { dst, op, src } => {
                 match op.as_str() {
                     "-" => match self.program.types[self.function.locals[*src].ty].kind {
@@ -1915,7 +1974,7 @@ fn local_layout(program: &Program, function: &Function) -> Result<LocalLayout, S
                 touch_place(&mut ranges, place, at);
                 touch_local(&mut ranges, *src, at);
             }
-            Op::Drop { place } => {
+            Op::Drop { place } | Op::DropIf { place } => {
                 if !place.projections.is_empty()
                     || heap_type(&program.types[function.locals[place.local].ty].kind)
                 {
@@ -2045,11 +2104,27 @@ fn function_body(
     texts: &TextPool,
 ) -> Result<Vec<u8>, String> {
     let layout = local_layout(program, function)?;
+    let mut drop_flags = BTreeMap::new();
+    for instruction in &function.body {
+        if let Op::DropIf { place } = &instruction.op {
+            if place.projections.is_empty() && !drop_flags.contains_key(&place.local) {
+                let flag = layout
+                    .registers
+                    .checked_add(9)
+                    .and_then(|first| first.checked_add(drop_flags.len()))
+                    .filter(|index| *index < u32::MAX as usize)
+                    .ok_or("WebAssembly parameter/local indices exceed the u32 representation")?;
+                drop_flags.insert(place.local, flag);
+            }
+        }
+    }
+    let flag_count = drop_flags.len();
     let mut body = Body {
         program,
         function,
         bytes: Vec::new(),
         slots: layout.slots,
+        drop_flags,
         scratch: layout.registers,
         frame: layout.registers + 8,
         frame_bytes: layout.frame_bytes,
@@ -2058,12 +2133,19 @@ fn function_body(
         texts,
         runtime,
     };
-    uleb(&mut body.bytes, 1);
+    uleb(&mut body.bytes, if flag_count == 0 { 1 } else { 2 });
     uleb(
         &mut body.bytes,
         (layout.registers - function.params + 9) as u64,
     );
     body.bytes.push(0x7e);
+    if flag_count != 0 {
+        uleb(&mut body.bytes, flag_count as u64);
+        body.bytes.push(0x7f);
+        for local in 0..function.params {
+            body.initialized(local, true);
+        }
+    }
     if layout.frame_bytes != 0 {
         constant(&mut body.bytes, layout.frame_bytes as i64);
         call(&mut body.bytes, ALLOC + runtime);

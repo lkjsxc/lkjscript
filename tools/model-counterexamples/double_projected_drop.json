@@ -1,0 +1,46 @@
+{
+  "compiler": "9d3d1172885681ed622b28168684d7504e1dc9da",
+  "binarySha256": "a16387c74c36aba08b6f48d8af34d28fa089044bf92ca19d7389ff03dc2856a0",
+  "fixtureSha256": "4075aa840861fbcf0503f712beb37e5154c104009b5096de82bc1171b66b9c95",
+  "origin": "Hand-written independent K-machine counterexample found while reviewing initialization and projected cleanup; not a generated or minimized Rust program.",
+  "observations": [
+    {
+      "command": [
+        ".artifacts/validation-snapshot/target/release/lkjscript",
+        "check",
+        "tools/model-counterexamples/double_projected_drop.k"
+      ],
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": [
+        ".artifacts/validation-snapshot/target/release/lkjscript",
+        "run",
+        "tools/model-counterexamples/double_projected_drop.k",
+        "--engine",
+        "node"
+      ],
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": [
+        ".artifacts/validation-snapshot/target/release/lkjscript",
+        "run",
+        "tools/model-counterexamples/double_projected_drop.k",
+        "--engine",
+        "k"
+      ],
+      "status": 1,
+      "stdout": "",
+      "stderr": "tools/model-counterexamples/double_projected_drop.k:5: M_DOUBLE_DROP drop of uninitialized, moved, or already dropped storage\n"
+    }
+  ],
+  "issue": "Current K Drop conflates strict destruction and projected clearing. The checker accepts a repeated projected drop; Wasm skips the cleared pointer, while the independent machine diagnoses DoubleDrop.",
+  "next": "Split strict Drop from explicit conditional cleanup. Only then move this fixture to rejecting conformance with its specified diagnostic.",
+  "fixture": "tests/conformance/k/double_projected_drop.k",
+  "resolution": "Strict Drop now rejects the repeated projected destruction. Explicit DropIf replaces the old ambiguous clearing operation. Original observations above remain unchanged."
+}

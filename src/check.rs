@@ -824,6 +824,51 @@ fn access(
     }
     Ok(())
 }
+fn place_name(types: &[Type], function: &Function, place: &Place) -> String {
+    let local = &function.locals[place.local];
+    let mut name = if local.name.is_empty() {
+        format!("local {}", place.local)
+    } else {
+        local.name.clone()
+    };
+    let mut ty = local.ty;
+    for projection in &place.projections {
+        match (projection, &types[ty].kind) {
+            (Projection::Deref, TypeKind::Ref { inner, .. } | TypeKind::Box { inner }) => {
+                name.push_str(".*");
+                ty = *inner;
+            }
+            (Projection::Field(index), TypeKind::Struct { fields, .. }) => {
+                name.push('.');
+                name.push_str(&fields[*index].name);
+                ty = fields[*index].ty;
+            }
+            (Projection::VariantField(variant, index), TypeKind::Enum { variants, .. }) => {
+                name.push_str("::");
+                name.push_str(&variants[*variant].name);
+                name.push('.');
+                name.push_str(&variants[*variant].fields[*index].name);
+                ty = variants[*variant].fields[*index].ty;
+            }
+            (
+                Projection::Index(index),
+                TypeKind::Vec { inner }
+                | TypeKind::Array { inner, .. }
+                | TypeKind::Slice { inner, .. },
+            ) => {
+                name.push('[');
+                name.push_str(&function.locals[*index].name);
+                name.push(']');
+                ty = *inner;
+            }
+            _ => {
+                name.push_str(".<invalid>");
+                break;
+            }
+        }
+    }
+    name
+}
 fn consume(
     state: &mut State,
     types: &[Type],
@@ -1223,13 +1268,16 @@ fn check_shape(
                 ));
             }
         }
-        Op::Drop { place } => {
+        Op::Drop { place } | Op::DropIf { place } => {
             let _ = place_ty(place)?;
             if borrowed_projection(types, function, place) {
                 return Err(error(
                     line,
                     "E_BORROW",
-                    "cannot drop through a borrow or indexed collection",
+                    &format!(
+                        "cannot drop {} through a borrow or indexed collection",
+                        place_name(types, function, place)
+                    ),
                 ));
             }
         }
@@ -1698,15 +1746,40 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                     );
                 }
             }
-            Op::Drop { place } => {
+            Op::Drop { place } | Op::DropIf { place } => {
+                let conditional = matches!(instruction.op, Op::DropIf { .. });
                 if !state.live[place.local] {
+                    if conditional && place.projections.is_empty() {
+                        continue;
+                    }
                     return Err(error(
                         line,
                         "E_MOVE",
-                        "drop of an uninitialized or moved local",
+                        &format!(
+                            "cannot drop {}: its owner is uninitialized or moved",
+                            place_name(types, function, place)
+                        ),
                     ));
                 }
+                if let Some(moved) = state.moved.iter().find(|moved| within(place, moved)) {
+                    if !conditional || moved != place {
+                        return Err(error(
+                            line,
+                            "E_MOVE",
+                            &format!(
+                                "cannot drop {}: {} was moved or already dropped",
+                                place_name(types, function, place),
+                                place_name(types, function, moved)
+                            ),
+                        ));
+                    }
+                }
+                // Projection still requires every ancestor. Conditional cleanup
+                // may skip only this exact absent place, never invent its owner.
                 access(&state, types, function, place, true, 1, line)?;
+                if conditional && state.moved.iter().any(|moved| moved == place) {
+                    continue;
+                }
                 let pt = place_type(types, function, place).unwrap();
                 if has_destructor(program, pt) {
                     if state.moved.iter().any(|moved| within(moved, place)) {

@@ -125,6 +125,12 @@ pub enum Op {
     Drop {
         place: Place,
     },
+    /// Destroy this place only when its own storage is initialized. Every
+    /// projected ancestor must still exist; this does not authorize a hole
+    /// through a reference or an indexed container.
+    DropIf {
+        place: Place,
+    },
     Unary {
         dst: usize,
         op: String,

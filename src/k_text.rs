@@ -291,6 +291,9 @@ fn instruction(words: &[String], line: usize) -> Result<Instruction> {
         "drop" => Op::Drop {
             place: place(words, 2, line)?,
         },
+        "drop-if" => Op::DropIf {
+            place: place(words, 2, line)?,
+        },
         "unary" => {
             exact(words, 5, line)?;
             Op::Unary {
@@ -687,6 +690,10 @@ fn write_instruction(text: &mut String, instruction: &Instruction) {
             text.push_str("drop");
             write_place(text, place);
         }
+        Op::DropIf { place } => {
+            text.push_str("drop-if");
+            write_place(text, place);
+        }
         Op::Unary { dst, op, src } => text.push_str(&format!("unary {dst} {} {src}", quoted(op))),
         Op::Binary {
             dst,
@@ -952,6 +959,9 @@ mod tests {
                 src: 1,
             },
             Op::Drop {
+                place: Place::local(0),
+            },
+            Op::DropIf {
                 place: Place::local(0),
             },
             Op::Unary {

@@ -990,12 +990,19 @@ impl Builder<'_, '_> {
                             self.written.set(place.local, true);
                             return;
                         }
-                        self.emit(
+                        // The root is live, but an owned projected field may
+                        // already have moved. Its flag controls destruction at
+                        // this assignment; other fields and owners stay live.
+                        let destruction = if place.projections.is_empty() {
                             k::Op::Drop {
                                 place: place.clone(),
-                            },
-                            line,
-                        );
+                            }
+                        } else {
+                            k::Op::DropIf {
+                                place: place.clone(),
+                            }
+                        };
+                        self.emit(destruction, line);
                     }
                 }
             }
@@ -1021,7 +1028,7 @@ impl Builder<'_, '_> {
                 self.set_live(place.local, true);
                 self.written.set(place.local, true);
             }
-            k::Op::Drop { place } => {
+            k::Op::Drop { place } | k::Op::DropIf { place } => {
                 if place.projections.is_empty() {
                     self.set_live(place.local, false);
                 }

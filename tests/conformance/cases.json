@@ -1076,5 +1076,55 @@
     "code": "E_BORROW",
     "rust": true,
     "rustAccept": false
+  },
+  {
+    "id": "drop_if_owned",
+    "file": "k/drop_if_owned.k",
+    "kind": "run",
+    "value": "42",
+    "rust": false
+  },
+  {
+    "id": "double_projected_drop",
+    "file": "k/double_projected_drop.k",
+    "kind": "reject",
+    "code": "E_MOVE",
+    "rust": false
+  },
+  {
+    "id": "drop_after_projected_move",
+    "file": "k/drop_after_projected_move.k",
+    "kind": "reject",
+    "code": "E_MOVE",
+    "rust": false
+  },
+  {
+    "id": "drop_if_absent_ancestor",
+    "file": "k/drop_if_absent_ancestor.k",
+    "kind": "reject",
+    "code": "E_MOVE",
+    "rust": false
+  },
+  {
+    "id": "drop_if_borrowed_owner",
+    "file": "k/drop_if_borrowed_owner.k",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": false
+  },
+  {
+    "id": "drop_if_indexed_owner",
+    "file": "k/drop_if_indexed_owner.k",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": false
+  },
+  {
+    "id": "drop_if_order",
+    "file": "output/drop_if_order.rs",
+    "kind": "output",
+    "rust": true,
+    "hex": "43414244",
+    "ending": "normal"
   }
 ]
