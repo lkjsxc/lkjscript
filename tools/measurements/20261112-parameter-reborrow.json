@@ -1,0 +1,24 @@
+{
+  "commit": "9d3d1172885681ed622b28168684d7504e1dc9da",
+  "binarySha256": "a16387c74c36aba08b6f48d8af34d28fa089044bf92ca19d7389ff03dc2856a0",
+  "source": "/home/coder/lkjscript-claude-20261112/ownership/c30_option_box_take.rs",
+  "sourceSha256": "b66c528f3774ccf609ede7375b6488d4eac6aa53208b3297747ed337a936f8ca",
+  "route": "k",
+  "original": {
+    "ending": "E_MOVE",
+    "message": "value is uninitialized or moved"
+  },
+  "change": {
+    "from": "std::mem::replace(head, None)",
+    "to": "std::mem::replace(&mut *head, None)"
+  },
+  "changed": {
+    "ending": "normal",
+    "value": 42
+  },
+  "diagnosis": "The intrinsic replace special case elaborates its first argument without the declared &mut T coercion context. A bare mutable reference parameter moves there, leaving head uninitialized for the later assignment. The explicit reborrow changes only the earlier call; the partial move and assignment through the parameter then work.",
+  "commands": [
+    ".artifacts/validation-snapshot/target/release/lkjscript run <(cat /home/coder/lkjscript-claude-20261112/ownership/c30_option_box_take.rs) --entry probe --engine k",
+    ".artifacts/validation-snapshot/target/release/lkjscript run <(sed 's/std::mem::replace(head, None)/std::mem::replace(\\&mut *head, None)/' /home/coder/lkjscript-claude-20261112/ownership/c30_option_box_take.rs) --entry probe --engine k"
+  ]
+}

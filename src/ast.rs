@@ -8,6 +8,26 @@ pub type ExprId = usize;
 pub type BlockId = usize;
 pub type PatternId = usize;
 
+/// Source function identities are distinct from implementation and trait owners.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct FunctionId {
+    pub index: usize,
+}
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ImplId {
+    pub index: usize,
+}
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct TraitId {
+    pub index: usize,
+}
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum FunctionOwner {
+    Free,
+    Implementation(ImplId),
+    Trait(TraitId),
+}
+
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
 pub struct Span {
     pub file: FileId,
@@ -470,6 +490,8 @@ pub struct Program {
     pub scopes: Vec<ModuleScope>,
     pub declarations: Vec<Declaration>,
     pub resolved: bool,
+    /// Populated once by resolution; later phases read this relation directly.
+    pub function_owners: Vec<FunctionOwner>,
     pub types: Vec<TypeNode>,
     pub exprs: Vec<ExprNode>,
     pub patterns: Vec<PatternNode>,
@@ -485,4 +507,11 @@ pub struct Program {
     pub constants: Vec<Constant>,
     pub items: Vec<Item>,
     pub attrs: Vec<Attribute>,
+}
+
+impl Program {
+    /// The caller supplies a resolved program, whose owner table covers every function.
+    pub fn function_owner(&self, function: FunctionId) -> FunctionOwner {
+        self.function_owners[function.index]
+    }
 }

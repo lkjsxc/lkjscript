@@ -60,6 +60,8 @@ struct Node {
     // An unresolved source operation can still constrain this component later.
     // Do not manufacture a numeric default at that unresolved boundary.
     blocked: bool,
+    // Expression operations establish their own result types before coercions.
+    producers: usize,
 }
 
 pub(super) struct DefinitionTypes {
@@ -253,6 +255,11 @@ fn parameters(source: &a::Program, declaration: a::DeclarationId) -> Vec<String>
 }
 #[derive(Clone)]
 enum Obligation {
+    Coercion {
+        source: Variable,
+        target: Variable,
+        span: a::Span,
+    },
     Deref {
         source: Variable,
         result: Variable,
@@ -287,6 +294,7 @@ struct Infer<'a, 'b> {
     waiting: Vec<Vec<usize>>,
     obligations: Vec<Option<Obligation>>,
     queue: VecDeque<usize>,
+    fallback: VecDeque<usize>,
     queued: Vec<bool>,
 }
 impl Infer<'_, '_> {
@@ -298,6 +306,7 @@ impl Infer<'_, '_> {
             shape,
             integer,
             blocked,
+            producers: if blocked { 1 } else { 0 },
         });
         self.waiting.push(Vec::new());
         id
@@ -307,6 +316,11 @@ impl Infer<'_, '_> {
     }
     fn blocked(&mut self) -> Variable {
         self.fresh(None, false, true)
+    }
+    fn operation_type(&mut self) -> Variable {
+        let id = self.unknown();
+        self.definition.nodes[id].producers = 1;
+        id
     }
     fn shaped(&mut self, shape: Shape) -> Variable {
         self.fresh(Some(shape), false, false)
@@ -363,6 +377,7 @@ impl Infer<'_, '_> {
         self.definition.nodes[a].shape = shape;
         self.definition.nodes[a].integer |= self.definition.nodes[b].integer;
         self.definition.nodes[a].blocked |= self.definition.nodes[b].blocked;
+        self.definition.nodes[a].producers += self.definition.nodes[b].producers;
         let mut waiting = std::mem::take(&mut self.waiting[a]);
         waiting.extend(std::mem::take(&mut self.waiting[b]));
         for id in waiting {
@@ -467,25 +482,72 @@ impl Infer<'_, '_> {
         }
         Ok(())
     }
+    fn pending_operation(&self, mut variable: Variable) -> bool {
+        loop {
+            let root = self.definition.root(variable);
+            match self.shape(root) {
+                None => return self.definition.nodes[root].producers != 0,
+                Some(Shape::Ref(_, inner) | Shape::Box(inner)) => variable = inner,
+                _ => return false,
+            }
+        }
+    }
+    fn coercion_pending(&self, from: Variable, to: Variable) -> bool {
+        if self.pending_operation(from) || self.pending_operation(to) {
+            return true;
+        }
+        match (self.shape(from), self.shape(to)) {
+            (Some(Shape::Ref(_, _)), None) => true,
+            (Some(Shape::Ref(_, _)), Some(Shape::Ref(_, inner))) => self.shape(inner).is_none(),
+            _ => false,
+        }
+    }
     fn coerce(&mut self, from: Variable, to: Variable, span: a::Span) -> Result<()> {
-        if let (Some(Shape::Ref(fm, mut from)), Some(Shape::Ref(tm, to))) =
+        if self.coercion_pending(from, to) {
+            self.obligation(Obligation::Coercion {
+                source: from,
+                target: to,
+                span,
+            });
+            return Ok(());
+        }
+        self.coerce_known(from, to, span)
+    }
+    fn coerce_known(&mut self, from: Variable, to: Variable, span: a::Span) -> Result<()> {
+        if let (Some(Shape::Ref(fm, from)), Some(Shape::Ref(tm, to))) =
             (self.shape(from), self.shape(to))
         {
             if tm && !fm {
                 return Ok(());
             } // K/type checking diagnoses an invalid mutable coercion.
-            if let Some(Shape::Slice(element)) = self.shape(to) {
-                if let Some(Shape::Vec(source) | Shape::Array(source, _)) = self.shape(from) {
-                    return self.unify(source, element, span);
-                }
+            return self.coerce_referents(from, to, span);
+        }
+        self.unify(from, to, span)
+    }
+    fn finish_operation(&mut self, variable: Variable) {
+        let root = self.root(variable);
+        self.definition.nodes[root].producers -= 1;
+        if self.definition.nodes[root].producers == 0 {
+            let waiting = std::mem::take(&mut self.waiting[root]);
+            for id in waiting {
+                self.enqueue(id);
             }
-            while let Some(Shape::Box(inner)) = self.shape(from) {
-                if matches!(self.shape(to), Some(Shape::Box(_))) {
-                    break;
-                }
-                from = inner;
+        }
+    }
+    fn coerce_referents(&mut self, mut from: Variable, to: Variable, span: a::Span) -> Result<()> {
+        if let Some(Shape::Slice(element)) = self.shape(to) {
+            if let Some(Shape::Vec(source) | Shape::Array(source, _)) = self.shape(from) {
+                return self.unify(source, element, span);
             }
-            return self.unify(from, to, span);
+        }
+        while let Some(Shape::Box(inner)) = self.shape(from) {
+            if matches!(
+                self.shape(to),
+                None | Some(Shape::Box(_) | Shape::Rigid(_) | Shape::Source(_))
+            ) {
+                break;
+            }
+            from = inner;
         }
         self.unify(from, to, span)
     }
@@ -926,7 +988,7 @@ impl Infer<'_, '_> {
             a::Expr::Unary { op, value } => {
                 let value = self.expr(value)?;
                 if op == "*" {
-                    let result = self.unknown();
+                    let result = self.operation_type();
                     self.obligation(Obligation::Deref {
                         source: value,
                         result,
@@ -1053,7 +1115,7 @@ impl Infer<'_, '_> {
             }
             a::Expr::Field { value, name } => {
                 let source = self.expr(value)?;
-                let result = self.unknown();
+                let result = self.operation_type();
                 self.obligation(Obligation::Field {
                     source,
                     name,
@@ -1067,7 +1129,7 @@ impl Infer<'_, '_> {
                 let index = self.expr(index)?;
                 let usize = self.atom("usize");
                 self.unify(index, usize, span)?;
-                let result = self.unknown();
+                let result = self.operation_type();
                 self.obligation(Obligation::Index {
                     source,
                     result,
@@ -1212,6 +1274,28 @@ impl Infer<'_, '_> {
     }
     fn solve_obligation(&mut self, id: usize, obligation: Obligation) -> Result<bool> {
         match obligation {
+            Obligation::Coercion {
+                source,
+                target,
+                span,
+            } => {
+                if self.coercion_pending(source, target) {
+                    for mut variable in [source, target] {
+                        loop {
+                            self.watch(variable, id);
+                            match self.shape(variable) {
+                                Some(Shape::Ref(_, inner) | Shape::Box(inner)) => variable = inner,
+                                _ => break,
+                            }
+                        }
+                    }
+                    if !self.pending_operation(source) && !self.pending_operation(target) {
+                        self.fallback.push_back(id);
+                    }
+                    return Ok(false);
+                }
+                self.coerce_known(source, target, span)?;
+            }
             Obligation::Deref {
                 source,
                 result,
@@ -1342,8 +1426,18 @@ impl Infer<'_, '_> {
         while let Some(id) = self.queue.pop_front() {
             self.queued[id] = false;
             if let Some(obligation) = self.obligations[id].clone() {
+                let result = match &obligation {
+                    Obligation::Coercion { .. } => None,
+                    Obligation::Deref { result, .. }
+                    | Obligation::Index { result, .. }
+                    | Obligation::Field { result, .. }
+                    | Obligation::Method { result, .. } => Some(*result),
+                };
                 if self.solve_obligation(id, obligation)? {
                     self.obligations[id] = None;
+                    if let Some(result) = result {
+                        self.finish_operation(result);
+                    }
                 }
             }
         }
@@ -1351,6 +1445,42 @@ impl Infer<'_, '_> {
     }
     fn finish(mut self) -> Result<DefinitionTypes> {
         self.solve()?;
+        // If no surrounding constraint selects a reference coercion, infer the
+        // intact referent. Each choice can wake ordinary constraints and another
+        // coercion; process those before choosing the next unresolved fallback.
+        while let Some(id) = self.fallback.pop_front() {
+            if let Some(Obligation::Coercion {
+                source,
+                target,
+                span,
+            }) = self.obligations[id].clone()
+            {
+                if !self.pending_operation(source) && !self.pending_operation(target) {
+                    self.obligations[id] = None;
+                    self.coerce_known(source, target, span)?;
+                    self.solve()?;
+                }
+            }
+        }
+        // An operation still missing its type contract can constrain every leaf
+        // of an adjacent coercion later. Leave those defaults to the old gate.
+        let mut blocked = Vec::new();
+        for obligation in self.obligations.iter().flatten() {
+            if let Obligation::Coercion { source, target, .. } = obligation {
+                blocked.push(*source);
+                blocked.push(*target);
+            }
+        }
+        let mut seen = std::collections::BTreeSet::new();
+        while let Some(variable) = blocked.pop() {
+            let root = self.root(variable);
+            if seen.insert(root) {
+                self.definition.nodes[root].blocked = true;
+                if let Some(shape) = self.shape(root) {
+                    blocked.extend(shape.children());
+                }
+            }
+        }
         // All known source constraints get a chance to propagate before numeric
         // defaults. A blocked operation supplies no guessed method signature.
         let span = a::Span::default();
@@ -1390,10 +1520,12 @@ pub(super) fn infer(
         waiting: Vec::new(),
         obligations: Vec::new(),
         queue: VecDeque::new(),
+        fallback: VecDeque::new(),
         queued: Vec::new(),
     };
-    for implementation in &source.impls {
-        if implementation.methods.contains(&index) {
+    match source.function_owner(a::FunctionId { index }) {
+        a::FunctionOwner::Implementation(owner) => {
+            let implementation = &source.impls[owner.index];
             for parameter in &implementation.generics {
                 if !parameter.lifetime {
                     let variable = inference.shaped(Shape::Rigid(parameter.name.clone()));
@@ -1406,9 +1538,8 @@ pub(super) fn infer(
             let receiver = inference.source_type(implementation.target, &environment)?;
             inference.environment.insert("Self".to_string(), receiver);
         }
-    }
-    for definition in &source.traits {
-        if definition.methods.contains(&index) {
+        a::FunctionOwner::Trait(owner) => {
+            let definition = &source.traits[owner.index];
             let receiver = inference.shaped(Shape::Rigid("Self".to_string()));
             inference.environment.insert("Self".to_string(), receiver);
             for parameter in &definition.generics {
@@ -1420,6 +1551,7 @@ pub(super) fn infer(
                 }
             }
         }
+        a::FunctionOwner::Free => {}
     }
     for parameter in &function.generics {
         if !parameter.lifetime {

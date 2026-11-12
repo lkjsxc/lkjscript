@@ -453,11 +453,10 @@ enum Task {
 }
 struct Analysis<'a> {
     source: &'a Program,
-    resolution: Option<crate::resolve::Resolver<'a>>,
+    resolution: crate::resolve::Resolver<'a>,
     terms: Vec<Term>,
     generics: Vec<BTreeMap<String, usize>>,
     nodes: Vec<Vec<usize>>,
-    names: BTreeMap<String, usize>,
     edges: Vec<Edge>,
     count: usize,
 }
@@ -465,25 +464,14 @@ impl Analysis<'_> {
     fn term(&mut self, kind: Term) -> usize {
         push(&mut self.terms, kind)
     }
-    fn lookup(&self, module: &str, name: &str) -> Option<usize> {
-        if let Some(resolution) = &self.resolution {
-            let path = resolution
-                .value_path(
-                    resolution.scope(module),
-                    &Path {
-                        declaration: None,
-                        name: name.to_string(),
-                        args: Vec::new(),
-                    },
-                    Span::default(),
-                )
-                .ok()?;
-            self.names.get(&path.name).copied()
-        } else {
-            self.names
-                .get(&qualified(module, name))
-                .copied()
-                .or_else(|| self.names.get(name).copied())
+    fn lookup(&self, module: &str, path: &Path, span: Span) -> Option<FunctionId> {
+        let path = self
+            .resolution
+            .value_path(self.resolution.scope(module), path, span)
+            .ok()?;
+        match self.source.declarations.get(path.declaration?)?.item {
+            Item::Function(index) => Some(FunctionId { index }),
+            _ => None,
         }
     }
     fn call(
@@ -831,8 +819,16 @@ impl Analysis<'_> {
                                 for e in args {
                                     ts.push(exprs[e]);
                                 }
-                                if let Some(target) = self.lookup(&function.module, &path.name) {
-                                    self.call(caller, target, &path.args, &ts, expression.span)
+                                if let Some(target) =
+                                    self.lookup(&function.module, path, expression.span)
+                                {
+                                    self.call(
+                                        caller,
+                                        target.index,
+                                        &path.args,
+                                        &ts,
+                                        expression.span,
+                                    )
                                 } else if path.name == "Box::new" && ts.len() == 1 {
                                     self.term(Term::Named("Box".to_string(), ts))
                                 } else if path.name == "Vec::new"
@@ -855,18 +851,13 @@ impl Analysis<'_> {
                             receiver,
                             name,
                             args,
-                            types,
+                            ..
                         } => {
-                            let receiver_type = exprs[receiver];
                             if name == "clone" && args.is_empty() {
-                                receiver_type
-                            } else if let Some(target) = self.lookup(&function.module, name) {
-                                let mut ts = vec![receiver_type];
-                                for e in args {
-                                    ts.push(exprs[e]);
-                                }
-                                self.call(caller, target, types, &ts, expression.span)
+                                exprs[receiver]
                             } else {
+                                // Method syntax never denotes a same-spelled free
+                                // function. Its selected witness belongs to typing.
                                 0
                             }
                         }
@@ -903,19 +894,13 @@ impl Analysis<'_> {
 fn finite(source: &Program) -> Result<(), Diagnostic> {
     let mut analysis = Analysis {
         source,
-        resolution: if source.resolved {
-            Some(crate::resolve::Resolver::new(source)?)
-        } else {
-            None
-        },
+        resolution: crate::resolve::Resolver::new(source)?,
         terms: vec![Term::Unknown],
         generics: Vec::new(),
         nodes: Vec::new(),
-        names: BTreeMap::new(),
         edges: Vec::new(),
         count: 0,
     };
-    let mut duplicate = BTreeMap::new();
     for i in 0..source.functions.len() {
         let f = &source.functions[i];
         let env = variables(
@@ -932,13 +917,6 @@ fn finite(source: &Program) -> Result<(), Diagnostic> {
         }
         analysis.generics.push(env);
         analysis.nodes.push(nodes);
-        let name = qualified(&f.module, &f.name);
-        if analysis.names.insert(name.clone(), i).is_some() {
-            duplicate.insert(name, ());
-        }
-    }
-    for name in duplicate.keys() {
-        analysis.names.remove(name);
     }
     for i in 0..source.functions.len() {
         if !analysis.nodes[i].is_empty() {
@@ -967,6 +945,10 @@ fn finite(source: &Program) -> Result<(), Diagnostic> {
     Ok(())
 }
 pub fn validate(source: &Program) -> Result<(), Diagnostic> {
+    if !source.resolved {
+        // Direct callers use the same recorded identities as compilation.
+        return validate(&crate::resolve::resolve(source)?);
+    }
     declarations(source)?;
     alias_cycles(source)?;
     constant_cycles(source)?;
@@ -2405,7 +2387,7 @@ mod signature_tests {
     }
     #[test]
     fn alias_cycle_rejected() {
-        check("type Result<T> = std::result::Result<T, i64>; trait A {fn f(&self)->Result<bool>;} impl A for i64 {fn f(&self)->std::result::Result<bool,i64>{Ok(true)}}").unwrap();
+        check("mod std {pub mod result {pub enum Result<T,E> {Ok(T),Err(E)}}} type Result<T> = std::result::Result<T, i64>; trait A {fn f(&self)->Result<bool>;} impl A for i64 {fn f(&self)->std::result::Result<bool,i64>{std::result::Result::Ok(true)}}").unwrap();
         assert_eq!(check("type A=B;type B=Vec<A>;").unwrap_err().code, "E_TYPE");
     }
 }
@@ -2436,16 +2418,7 @@ fn generic_names(params: &[GenericParam]) -> Result<(), Diagnostic> {
 fn declarations(source: &Program) -> Result<(), Diagnostic> {
     let mut type_names = BTreeMap::new();
     let mut value_names = BTreeMap::new();
-    let mut methods = vec![false; source.functions.len()];
-    for t in &source.traits {
-        for m in &t.methods {
-            methods[*m] = true;
-        }
-    }
     for im in &source.impls {
-        for m in &im.methods {
-            methods[*m] = true;
-        }
         generic_names(&im.generics)?;
     }
     for module in &source.modules {
@@ -2467,7 +2440,7 @@ fn declarations(source: &Program) -> Result<(), Diagnostic> {
                 add_name(&mut parameters, "", &p.name, p.span)?;
             }
         }
-        if !methods[i] {
+        if source.function_owner(FunctionId { index: i }) == FunctionOwner::Free {
             add_name(&mut value_names, &f.module, &f.name, f.span)?;
         }
     }

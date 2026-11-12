@@ -1044,5 +1044,37 @@
     "code": "E_MOVE",
     "rust": true,
     "rustAccept": false
+  },
+  {
+    "id": "replace_reborrow",
+    "file": "output/replace_reborrow.rs",
+    "kind": "output",
+    "rust": true,
+    "hex": "2a2a2a2a2a",
+    "ending": "normal"
+  },
+  {
+    "id": "replace_reborrow_alias",
+    "file": "fail/replace_reborrow_alias.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "replace_moved_reference",
+    "file": "fail/replace_moved_reference.rs",
+    "kind": "reject",
+    "code": "E_MOVE",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "projected_reborrow_alias",
+    "file": "fail/projected_reborrow_alias.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false
   }
 ]

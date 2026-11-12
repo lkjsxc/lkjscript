@@ -169,16 +169,12 @@ fn elaborate_definitions(
         }
     }
 
-    let mut methods = Vec::new();
-    for im in &source.impls {
-        methods.extend_from_slice(&im.methods);
-    }
-    for tr in &source.traits {
-        methods.extend_from_slice(&tr.methods);
-    }
     for i in 0..source.functions.len() {
         let f = &source.functions[i];
-        if f.body.is_some() && f.generics.iter().all(|g| g.lifetime) && !methods.contains(&i) {
+        if f.body.is_some()
+            && f.generics.iter().all(|g| g.lifetime)
+            && source.function_owner(a::FunctionId { index: i }) == a::FunctionOwner::Free
+        {
             c.instantiate(i, empty.clone())?;
         }
     }
@@ -309,11 +305,10 @@ impl Compiler<'_> {
     }
     fn method_access(&self, index: usize, scope: a::ModuleId, span: a::Span) -> Result<()> {
         let method = &self.source.functions[index];
-        let implementation = self
-            .source
-            .impls
-            .iter()
-            .find(|im| im.methods.contains(&index));
+        let implementation = match self.source.function_owner(a::FunctionId { index }) {
+            a::FunctionOwner::Implementation(owner) => Some(&self.source.impls[owner.index]),
+            _ => None,
+        };
         if let Some(ty) = implementation.and_then(|im| im.trait_ty) {
             if let a::Type::Path(path) = &self.source.types[ty].kind {
                 if path
@@ -557,17 +552,7 @@ impl Compiler<'_> {
             return Ok(*id);
         }
         let mut name = qualified(&source.module, &source.name);
-        if self
-            .source
-            .impls
-            .iter()
-            .any(|im| im.methods.contains(&index))
-            || self
-                .source
-                .traits
-                .iter()
-                .any(|tr| tr.methods.contains(&index))
-        {
+        if self.source.function_owner(a::FunctionId { index }) != a::FunctionOwner::Free {
             name.push_str(&format!("$f{index}"));
         }
         if !sub.is_empty() {
@@ -904,10 +889,12 @@ impl Builder<'_, '_> {
         if self.parameter_allows_trait(&function.generics, base, declaration) {
             return true;
         }
-        for owner in &self.compiler.source.impls {
-            if !owner.methods.contains(&self.source_function) {
-                continue;
-            }
+        if let a::FunctionOwner::Implementation(owner) =
+            self.compiler.source.function_owner(a::FunctionId {
+                index: self.source_function,
+            })
+        {
+            let owner = &self.compiler.source.impls[owner.index];
             if self.parameter_allows_trait(&owner.generics, base, declaration) {
                 return true;
             }
@@ -1532,30 +1519,42 @@ impl Builder<'_, '_> {
         let inferred = inferred
             .or_else(|| self.inferred.expressions.get(&id).copied())
             .filter(|ty| !self.compiler.has_view(*ty));
-        if let Some(target) = expected {
-            if let k::TypeKind::Ref {
-                inner,
-                mutable: true,
-            } = self.compiler.types[target].kind
-            {
-                if let a::Expr::Path(path) = &self.compiler.source.exprs[id].kind {
-                    if let Some(local) = self.binding(&path.name) {
-                        if self.ty(local) == target {
-                            return self.borrow(
-                                k::Place {
-                                    local,
-                                    projections: vec![k::Projection::Deref],
-                                },
-                                true,
-                                self.compiler.source.exprs[id].span.line,
-                            );
-                        }
-                        let _ = inner;
-                    }
-                }
+        let reference_context = expected.is_some_and(|target| {
+            matches!(self.compiler.types[target].kind, k::TypeKind::Ref { .. })
+        });
+        let place_expression = match &self.compiler.source.exprs[id].kind {
+            a::Expr::Path(path) => self.binding(&path.name).is_some(),
+            a::Expr::Field { .. } | a::Expr::Index { .. } => true,
+            a::Expr::Unary { op, .. } => op == "*",
+            _ => false,
+        };
+        let value = if reference_context && place_expression {
+            // A declared reference context reborrows a mutable reference held
+            // in any checked place. Resolve the projection only once: an index
+            // or the base of a field can have observable effects.
+            let mut place = self.place(id)?;
+            let span = self.compiler.source.exprs[id].span;
+            let source = place_type(&self.compiler.types, self.function, &place)
+                .ok_or_else(|| err(span, "E_TYPE", "invalid reference coercion place"))?;
+            let line = span.line;
+            if matches!(
+                self.compiler.types[source].kind,
+                k::TypeKind::Ref { mutable: true, .. }
+            ) {
+                place.projections.push(k::Projection::Deref);
+                let mutable = expected.is_some_and(|target| {
+                    matches!(
+                        self.compiler.types[target].kind,
+                        k::TypeKind::Ref { mutable: true, .. }
+                    )
+                });
+                self.borrow(place, mutable, line)?
+            } else {
+                self.read(place, line)?
             }
-        }
-        let value = self.expr_inner(id, expected.or(inferred))?;
+        } else {
+            self.expr_inner(id, expected.or(inferred))?
+        };
         if let Some(target) = expected {
             if target != value.1 {
                 if let (
@@ -2577,7 +2576,11 @@ impl Builder<'_, '_> {
             if args.len() != 2 {
                 return Err(err(span, "E_TYPE", "replace requires a place and a value"));
             }
-            let receiver = self.expr(args[0], None)?;
+            // replace declares its first parameter as &mut T. Its solved
+            // operand type supplies T at that coercion site, so a mutable
+            // reference binding is reborrowed rather than moved.
+            let receiver_type = self.inferred.expressions.get(&args[0]).copied();
+            let receiver = self.expr(args[0], receiver_type)?;
             let inner = match self.compiler.types[receiver.1].kind {
                 k::TypeKind::Ref {
                     inner,

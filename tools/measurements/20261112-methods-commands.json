@@ -1,0 +1,15 @@
+{
+  "family": "methods",
+  "description": "One nominal type with n inherent implementation blocks, each containing one distinct unused method; ownership lookup is exercised without growing call-site dispatch or nominal-type count.",
+  "sizes": [
+    2000,
+    4000,
+    8000
+  ],
+  "repeats": 3,
+  "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)",
+  "node": "v24.18.1",
+  "beforeCommand": "node tools/scale/run.mjs .artifacts/validation-snapshot/target/release/lkjscript --families methods --sizes 2000,4000,8000 --out target/scale/methods-before",
+  "afterCommand": "node tools/scale/run.mjs .artifacts/20261112-progress/owners-final --families methods --sizes 2000,4000,8000 --out target/scale/methods-final",
+  "baselineMetadata": "The before records identify the clean source worktree that produced the binary. measurementCheckout and measurementCheckoutDirty retain the invoking checkout metadata originally printed by scale/run.mjs."
+}

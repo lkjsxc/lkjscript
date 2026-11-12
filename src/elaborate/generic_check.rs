@@ -112,14 +112,7 @@ pub(super) fn validate(
             .generics
             .iter()
             .any(|parameter| !parameter.lifetime)
-            || source
-                .impls
-                .iter()
-                .any(|item| item.methods.contains(&index))
-            || source
-                .traits
-                .iter()
-                .any(|item| item.methods.contains(&index))
+            || source.function_owner(a::FunctionId { index }) != a::FunctionOwner::Free
         {
             roots.push(index);
         }
@@ -385,13 +378,9 @@ impl Compiler<'_> {
     fn definition_parameters(&mut self, index: usize) -> Result<BTreeMap<String, usize>> {
         let function = self.source.functions[index].clone();
         let mut substitutions = BTreeMap::new();
-        if let Some(implementation) = self
-            .source
-            .impls
-            .iter()
-            .find(|item| item.methods.contains(&index))
-            .cloned()
-        {
+        let owner = self.source.function_owner(a::FunctionId { index });
+        if let a::FunctionOwner::Implementation(owner) = owner {
+            let implementation = self.source.impls[owner.index].clone();
             self.declare_parameters(&implementation.generics, &mut substitutions)?;
             let self_ty = self.resolve(implementation.target, &substitutions)?;
             substitutions.insert("Self".to_string(), self_ty);
@@ -423,14 +412,9 @@ impl Compiler<'_> {
                 }
                 remaining = retry;
             }
-        } else if let Some((trait_index, declaration)) = self
-            .source
-            .traits
-            .iter()
-            .enumerate()
-            .find(|(_, item)| item.methods.contains(&index))
-            .map(|(index, item)| (index, item.clone()))
-        {
+        } else if let a::FunctionOwner::Trait(owner) = owner {
+            let trait_index = owner.index;
+            let declaration = self.source.traits[trait_index].clone();
             self.declare_parameters(&declaration.generics, &mut substitutions)?;
             let self_ty = self.rigid_type("Self");
             substitutions.insert("Self".to_string(), self_ty);
@@ -523,11 +507,10 @@ impl Compiler<'_> {
         substitutions: &mut BTreeMap<String, usize>,
     ) -> Result<()> {
         let function = self.source.functions[index].clone();
-        let owner = self
-            .source
-            .impls
-            .iter()
-            .position(|item| item.methods.contains(&index));
+        let owner = match self.source.function_owner(a::FunctionId { index }) {
+            a::FunctionOwner::Implementation(owner) => Some(owner.index),
+            _ => None,
+        };
         let mut parameters = function.generics.clone();
         if let Some(owner) = owner {
             parameters.extend(self.source.impls[owner].generics.clone());
@@ -1101,20 +1084,19 @@ impl super::Builder<'_, '_> {
         args: &[usize],
         span: a::Span,
     ) -> Result<(usize, usize)> {
-        let implementation = self
-            .compiler
-            .source
-            .impls
-            .iter()
-            .find(|implementation| implementation.methods.contains(&index))
-            .cloned()
-            .ok_or_else(|| {
-                err(
-                    span,
-                    "E_GENERIC",
-                    "checked source method has no implementation",
-                )
-            })?;
+        let implementation = match self.compiler.source.function_owner(a::FunctionId { index }) {
+            a::FunctionOwner::Implementation(owner) => {
+                Some(self.compiler.source.impls[owner.index].clone())
+            }
+            _ => None,
+        }
+        .ok_or_else(|| {
+            err(
+                span,
+                "E_GENERIC",
+                "checked source method has no implementation",
+            )
+        })?;
         let mut substitutions = BTreeMap::new();
         self.infer_type(implementation.target, base, &mut substitutions)?;
         substitutions.insert("Self".to_string(), base);

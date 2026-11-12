@@ -36,6 +36,12 @@ fn bump(w: &mut Vec<i64>) { let n: usize = w.len(); if n > 0usize { w[n - 1usize
 fn unbox(b: Box<i64>) -> i64 { *b }
 fn pickopt(o: Option<Box<i64>>, d: i64) -> i64 { match o { Some(b) => *b, None => d } }
 fn inferred_pair() -> (i64, u8) { (40, 2) }
+fn replace_mix(p: &mut i64, n: i64) { let old = std::mem::replace(p, n); let next = std::mem::replace(p, old); *p = mix(*p, next); }
+fn refill<T>(slot: &mut T, first: T, second: T) -> T { let old = std::mem::replace(slot, first); drop(old); std::mem::replace(slot, second) }
+fn borrow<T>(value: &mut T) -> &mut T { value }
+struct Slot<'a> { value: &'a mut i64 }
+fn projected_mix(slot: &mut i64, n: i64) { let mut held = Slot { value: slot }; replace_mix(held.value, n); *held.value = mix(*held.value, n); }
+
 fn mix(h: i64, x: i64) -> i64 { ((h % 1000003) * 1009 + (x % 1000003) + 2000006) % 1000003 }
 fn mixv(h: i64, w: &Vec<i64>) -> i64 { let mut s: i64 = h; let mut i = 0; while i < w.len() { s = mix(s, w[i]); i = i + 1; } mix(s, w.len() as i64) }
 `;
@@ -62,7 +68,12 @@ function gen() {
     if (c < 13) { const it = pick(INTS); return `(match ${expr(it, env, d - 1)} { ${rnd(5)}${it} => ${sub()}, ${5 + rnd(3)}${it}..=${9 + rnd(9)}${it} => ${sub()}, _ => ${sub()} })`; }
     if (c < 14 && structs.length) { const st = pick(structs); const i = st.fields.indexOf(t); if (i >= 0) return `(${st.name} { ${st.fields.map((f, j) => `f${j}: ${expr(f, env, d - 1)}`).join(', ')} }).f${i}`; }
     if (c < 15) { const n = `w${uid++}`; const annotation = uid % 2 ? `: Vec<${t}>` : ''; return `{ let mut ${n}${annotation} = Vec::new(); ${n}.push(${sub()}); ${n}.push(${sub()}); ${n}[(${us()} % 2usize)] }`; }
-    if (c < 16) { const n = `x${uid++}`; return `{ let ${n}: Box<${t}> = Box::new(${sub()}); *${n} }`; }
+    if (c < 16) {
+      const n = `x${uid++}`, kind = rnd(3);
+      if (kind === 1) return `{ let mut ${n}: Box<${t}> = Box::new(${sub()}); let old = refill(&mut ${n}, Box::new(${sub()}), Box::new(${sub()})); *old + *${n} }`;
+      if (kind === 2) return `{ let mut ${n}: Box<${t}> = Box::new(${sub()}); let r: &mut ${t} = borrow(&mut ${n}); *r }`;
+      return `{ let ${n}: Box<${t}> = Box::new(${sub()}); *${n} }`;
+    }
     if (c < 17) { const n = `t${uid++}`; return `{ let ${n}: (${t}, bool) = (${sub()}, ${b()}); if ${n}.1 { ${n}.0 } else { ${sub()} } }`; }
     if (c < 18) { const n = `a${uid++}`; return `{ let ${n}: [${t}; 3] = [${sub()}, ${sub()}, ${sub()}]; ${n}[(${us()} % 3usize)] }`; }
     if (c < 19) { const n = `o${uid++}`; return `{ let ${n}: Option<${t}> = if ${b()} { Some(${sub()}) } else { None }; match ${n} { Some(y) => y, None => ${sub()} } }`; }
@@ -73,7 +84,7 @@ function gen() {
       if (c < 22) { const n = `h${uid++}`; return `{ let mut ${n}: Vec<i64> = Vec::new(); ${n}.push(${sub()}); let g: Hs = mv(Hs { v: ${n}, n: ${sub()} }); sumv(g.v) + g.n }`; }
       if (c < 23) return `unbox(Box::new(${sub()}))`;
       if (c < 24) return `pickopt(if ${b()} { Some(Box::new(${sub()})) } else { None }, ${sub()})`;
-      if (c < 25) { const n = `m${uid++}`; return `{ let mut ${n}: i64 = ${sub()}; let q: i64 = ${sub()}; addto(&mut ${n}, &q); ${n} }`; }
+      if (c < 25) { const n = `m${uid++}`; return `{ let mut ${n}: i64 = ${sub()}; let q: i64 = ${sub()}; ${pick([`addto(&mut ${n}, &q);`, `replace_mix(&mut ${n}, q);`, `projected_mix(&mut ${n}, q);`])} ${n} }`; }
     }
     return lit(t);
   }

@@ -1,7 +1,7 @@
 //! Module and declaration identity. Later phases consume resolved paths, never bare-name guesses.
 use crate::ast::*;
 use crate::names::qualified;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 type Result<T> = std::result::Result<T, Diagnostic>;
 #[derive(Clone)]
@@ -22,6 +22,9 @@ pub struct Resolver<'a> {
     names: BTreeMap<(ModuleId, String, Namespace), Binding>,
     modules: BTreeMap<String, ModuleId>,
     generic_ranges: Vec<(Span, Vec<String>)>,
+    // Only an unresolved input needs a newly built relation. Resolved inputs
+    // retain the program's authoritative table without constructing another.
+    function_owners: Option<Vec<FunctionOwner>>,
 }
 
 fn within(program: &Program, mut scope: ModuleId, ancestor: ModuleId) -> bool {
@@ -90,29 +93,82 @@ fn builtin(name: &str) -> bool {
             | "FnOnce"
     )
 }
+fn insert_function_owner(
+    owners: &mut [FunctionOwner],
+    function: FunctionId,
+    owner: FunctionOwner,
+    span: Span,
+) -> Result<()> {
+    let slot = owners.get_mut(function.index).ok_or_else(|| {
+        Diagnostic::new(span, "E_NAME", "method owner refers to an unknown function")
+    })?;
+    if *slot != FunctionOwner::Free {
+        return Err(Diagnostic::new(
+            span,
+            "E_NAME",
+            "a function cannot have more than one method owner",
+        ));
+    }
+    *slot = owner;
+    Ok(())
+}
+
+fn index_function_owners(program: &Program) -> Result<Vec<FunctionOwner>> {
+    let mut owners = vec![FunctionOwner::Free; program.functions.len()];
+    for (index, implementation) in program.impls.iter().enumerate() {
+        for function in &implementation.methods {
+            insert_function_owner(
+                &mut owners,
+                FunctionId { index: *function },
+                FunctionOwner::Implementation(ImplId { index }),
+                implementation.span,
+            )?;
+        }
+    }
+    for (index, declaration) in program.traits.iter().enumerate() {
+        for function in &declaration.methods {
+            insert_function_owner(
+                &mut owners,
+                FunctionId { index: *function },
+                FunctionOwner::Trait(TraitId { index }),
+                declaration.span,
+            )?;
+        }
+    }
+    Ok(owners)
+}
+
 impl<'a> Resolver<'a> {
     pub fn new(program: &'a Program) -> Result<Self> {
+        if program.resolved && program.function_owners.len() != program.functions.len() {
+            return Err(Diagnostic::new(
+                Span::default(),
+                "E_NAME",
+                "resolved source is missing its function ownership relation",
+            ));
+        }
+        let function_owners = if program.resolved {
+            None
+        } else {
+            Some(index_function_owners(program)?)
+        };
         let mut result = Resolver {
             program,
             declarations: Vec::new(),
             names: BTreeMap::new(),
             modules: BTreeMap::new(),
             generic_ranges: Vec::new(),
+            function_owners,
         };
         for (id, scope) in program.scopes.iter().enumerate() {
             result.modules.insert(scope.path.clone(), id);
         }
-        let mut methods = BTreeSet::new();
-        for item in &program.traits {
-            methods.extend(item.methods.iter().copied());
-        }
         for item in &program.impls {
-            methods.extend(item.methods.iter().copied());
             result.generics(item.span, &item.generics);
         }
         for (id, item) in program.functions.iter().enumerate() {
             result.generics(item.span, &item.generics);
-            if !methods.contains(&id) {
+            if result.function_owner(FunctionId { index: id }) == FunctionOwner::Free {
                 result.declare(
                     &item.name,
                     &item.module,
@@ -196,6 +252,12 @@ impl<'a> Resolver<'a> {
         }
         result.imports()?;
         Ok(result)
+    }
+    fn function_owner(&self, function: FunctionId) -> FunctionOwner {
+        match &self.function_owners {
+            Some(owners) => owners[function.index],
+            None => self.program.function_owner(function),
+        }
     }
     fn generics(&mut self, span: Span, params: &[GenericParam]) {
         if !params.is_empty() {
@@ -624,6 +686,9 @@ pub fn resolve(source: &Program) -> Result<Program> {
         }
     }
     result.declarations = resolver.declarations;
+    result.function_owners = resolver
+        .function_owners
+        .expect("unresolved source has indexed owners");
     result.resolved = true;
     Ok(result)
 }

@@ -37,7 +37,7 @@ function gen() {
     let out = ''; env = env.slice();
     const of = k => env.filter(v => v.k === k);
     for (let i = 0; i < n; i++) {
-      const c = rnd(35); const N = uid++;
+      const c = rnd(36); const N = uid++;
       const V = of('vec'), B = of('box'), H = of('hs'), R = of('ri'), RV = of('rv'), MV = of('mv'), MI = of('mi'), VW = of('view');
       if (c < 3) { out += `let mut v${N}: Vec<i64> = Vec::new(); v${N}.push(${rnd(9)}); v${N}.push(${rnd(9)});\n`; env.push({ k: 'vec', n: `v${N}` }); }
       else if (c < 4) { out += `let mut b${N}: Box<i64> = Box::new(${rnd(9)});\n`; env.push({ k: 'box', n: `b${N}` }); }
@@ -71,6 +71,10 @@ function gen() {
         const reference = pick(MI).n;
         const initializer = pick([`Some(${reference})`, `Capture { value: ${reference} }`, `capture(${reference})`]);
         out += `let captured${N} = ${initializer}; drop(captured${N}); *${reference} = 1;\n`;
+      }
+      else if (c === 35 && MI.length) {
+        const reference = pick(MI).n;
+        out += `acc = acc + std::mem::replace(${reference}, ${rnd(9)}); *${reference} = *${reference} + 1;\n`;
       }
       else if (d > 0) { out += `let mut k${N}: i64 = 0;\nwhile k${N} < 2 {\nk${N} = k${N} + 1;\n${stmts(env, d - 1, 3)}}\n`; }
     }
