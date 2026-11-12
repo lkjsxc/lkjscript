@@ -1,13 +1,13 @@
 import { readFile } from 'node:fs/promises';
 import { writeSync } from 'node:fs';
-import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
+import { isMainThread, parentPort, workerData } from 'node:worker_threads';
+import { startWorker } from './worker.mjs';
 import { dirname, join } from 'node:path';
 
 const messages = {
   1: 'integer overflow', 2: 'division by zero', 3: 'index out of bounds',
   4: 'explicit trap', 5: 'assertion failed', 6: 'allocation failed',
 };
-const mib = 1024 * 1024;
 const readText = path => readFile(path, 'utf8');
 
 async function cgroupExtent(name, extent) {
@@ -40,10 +40,10 @@ async function stackReservation() {
   let bytes = await cgroupExtent('memory.max', kib('MemTotal'))
     + await cgroupExtent('memory.swap.max', kib('SwapTotal'));
   const limits = await readText('/proc/self/limits');
-  const limit = limits.match(/^Max address space\\s+(\\d+)/m);
+  const limit = limits.match(/^Max address space\s+(\d+)/m);
   if (limit) {
     const status = await readText('/proc/self/status');
-    const mapped = status.match(/^VmSize:\\s+(\\d+)/m);
+    const mapped = status.match(/^VmSize:\s+(\d+)/m);
     if (!mapped) throw new Error('cannot read mapped address-space extent');
     bytes = Math.min(bytes, Math.max(0, Number(limit[1]) - Number(mapped[1]) * 1024) / 2);
   }
@@ -87,9 +87,9 @@ if (isMainThread) {
     const stack = await stackReservation();
     const started = performance.now();
     let startup;
-    const worker = new Worker(new URL(import.meta.url), {
-      workerData: { path, entry, args }, resourceLimits: { stackSizeMb: stack / mib },
-    });
+    const {worker, stackBytes} = startWorker(new URL(import.meta.url), {
+      workerData: { path, entry, args },
+    }, stack);
     const message = await new Promise((resolve, reject) => {
       let result;
       let failure;
@@ -108,7 +108,7 @@ if (isMainThread) {
     });
     metrics = {
       route: 'node', ...message.metrics, worker_startup_ms: startup,
-      stack_reservation_bytes: stack, peak_rss_bytes: process.resourceUsage().maxRSS * 1024,
+      stack_reservation_bytes: stackBytes, requested_stack_bytes: stack, peak_rss_bytes: process.resourceUsage().maxRSS * 1024,
     };
     if (message.ok) printResult(message.result, resultKind);
     else report(path, message.problem);
