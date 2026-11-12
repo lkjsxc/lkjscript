@@ -1,7 +1,7 @@
 # lkjscript, generation two
 
-Read `docs/status.md`, inspect Git and live jobs, then implement the next concrete
-action. Language quality comes first, reliable agent development second. Own the
+Read `docs/status.md`, inspect Git and live jobs, then implement the next dependency-driven
+result. Use corpus/census evidence; do not resume a file-by-file source campaign. Language quality comes first, reliable agent development second. Own the
 compiler, runtime, library and tools, eventually without Rust or Node. Applications
 are probes; historical architecture and backward compatibility are not goals.
 
@@ -18,7 +18,8 @@ and artifact validation remain necessary. Unsupported syntax gets a diagnostic.
 Keep the trusted implementation and outstanding obligations explicit.
 
 No arbitrary acceptance ceilings, work accounting or policy plumbing. Choose
-growing representations and explicit stacks; keep checked arithmetic and ownership
+growing representations and suitable algorithms; recursion and explicit work stacks
+are both valid when the supported depth remains usable; keep checked arithmetic and ownership
 sound. Record actual representation and engine constraints in `docs/limits.md`.
 Measure the stages that actually ran, including engine loading and cleanup.
 

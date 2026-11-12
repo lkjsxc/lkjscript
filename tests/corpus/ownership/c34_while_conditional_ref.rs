@@ -1,0 +1,1 @@
+pub fn probe() -> i64 { let mut v: Vec<i64> = Vec::new(); v.push(5); v.push(42); let mut best: &i64 = &v[0]; let mut i: usize = 1; while i < v.len() { if v[i] > *best { best = &v[i]; } i = i + 1; } *best }

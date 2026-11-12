@@ -1,44 +1,44 @@
 # Direction
 
-Language design comes first: types, generics, trait evidence, ownership, views,
-capabilities and structured concurrency that compose soundly. Reliable agent
-editing comes second. Applications probe the language. The project eventually
-owns its compiler, runtime, library and tools without Rust or Node.
+Language design comes first: types, generics, trait evidence, ownership, lifetimes,
+effects and concurrency that compose soundly. Reliable agent development is second;
+applications are probes. The project eventually owns its compiler, runtime,
+library and tools without Rust or Node. No compatibility with past versions is owed.
 
-Generation two is the working foundation. Rust-compatible source resolves to
-explicit meaning and checked K; the current backend emits memory64 WebAssembly.
-These are selected strategies, not permanent owner requirements. A replacement
-needs a causal reason, meaningful evidence and a working transition. Source and
-history live in Git. The generation-one store, services and formats are frozen.
+Work by dependency, then general usefulness, corpus frequency and cost. Compiler
+file order is not a roadmap. A census locates missing constructs and blocked
+regions; acceptance counts do not establish self-compilation. The milestone is
+execution of the real compiler and library graph with declared host inputs.
 
-The near-term foundation is complete reference provenance, real module/declaration
-identity and privacy, structural interning, and generic-definition contracts. Each
-change must strengthen a semantic invariant, close a production compiler dependency,
-remove an incidental constraint, or replace obsolete machinery. Preserve meaningful
-operations while repairing their rules. Missing provenance must never grant access.
+Resolve uses by identity. Infer and check definitions under declared assumptions,
+record choices once, then instantiate and lower the recorded form. Migrate each
+responsibility behind compiler::compile while retaining one runnable route. The
+independent K checker remains a trust boundary. A separately implemented K machine
+is the next execution route and a counterexample search for checking and lowering.
 
-Use the same production compiler/library components under rustc and lkjscript.
-The first ownership boundary is a complete source-to-artifact compiler core taking
-declared source/library inputs and returning artifacts or diagnostics through a
-small host-buffer adapter. Compile and execute real components, then close the
-whole production dependency graph. Accepted syntax alone is not self-hosting.
+Ownership facts need distinct joins: initialization weakens to maybe, possible
+reference holders unite, and authority originates only from checked borrows.
+Conditional cleanup preserves destructor order. Loop invariants are supplied by
+construction and checked by inclusion. Origin-variable call contracts must precede
+general reference-bearing mutation. These are designs until language.md says they
+are implemented; current equality joins are still conservative.
 
-A scoped WebAssembly fixed point means C0's language pipeline emits W1 from the
-exact compiler closure and W1, executed on the declared host, emits identical W2.
-Conformance and behavior-changing source mutations accompany the equality. Node
-and the host adapter may still be required at that milestone. Later close the CLI,
-memory, host capability and execution dependencies deliberately. Choose an owned
-machine or native route from dependencies and measurements; an interpreter is not
-a mandatory predecessor to native code. Native N1=N2 and an isolated rebuild
-without Rust/Node establish different claims, and both need explicit bootstrap
-inputs. Never remove shared-host tools to simulate independence.
+First remove measured lookup/state-copy exponents and make output available through
+World-derived capabilities. Widen inference, patterns, question-mark, closures,
+iteration, text and source collections according to dependency and census. Preserve
+per-leaf provenance, exact versus bounded sources and reborrow-parent distinctions.
+No arbitrary acceptance ceilings or source-depth cutoff. Recursive and explicit
+work stacks are both implementation choices, judged on acceptance and measurements.
 
-Remove arbitrary ceilings by choosing growing representations and suitable
-algorithms. Keep semantic invariants, target encodings and external operational
-controls distinct. Address practical emission, engine loading, execution and
-cleanup failures alongside compiler work; check-only scale is not execution
-capacity. External Rust and Wasm implementations remain useful test oracles.
+Keep the Rust bootstrap and Node route explicit. The source compiler boundary takes
+declared source/library bytes and returns artifacts or diagnostics. Resource setup
+belongs to host adapters. A scoped fixed point requires C0's language pipeline to
+emit W1 from the actual closure, then W1 to emit identical W2 with the same inputs,
+plus conformance and source-sensitivity checks. Native closure and a rebuild without
+Rust/Node are later, separate observations. Do not remove shared-host tools.
 
-The implemented-language specification is `language.md`; working state, concrete
-next actions and evidence are in `status.md`; actual representation and engine
-constraints are in `limits.md`. Pending designs remain visibly pending.
+Conformance compares bytes and termination; seeded generators search combinations;
+forged K reaches the safety gate directly; shared source-sensitivity probes protect
+source ownership. Keep reduced failures and exact commands. Measure each available
+stage and name fused stages honestly. Unexplained growth is a defect. External test
+process envelopes never become language semantics.
