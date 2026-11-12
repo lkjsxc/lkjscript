@@ -5,6 +5,8 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { run } from '../process.mjs';
+import { runCases } from '../batch.mjs';
+import { oracleCache, packResult, unpackResult } from '../oracle.mjs';
 const [binary='target/debug/lkjscript',seedText='601',countText='50',output='target/generators']=process.argv.slice(2);
 const bin=path.resolve(binary), seed=BigInt(seedText), count=Number(countText);
 const engines=(process.env.LKJ_ENGINES || 'node,k').split(',');
@@ -59,8 +61,6 @@ pair.second=OwnedMark { out: world.stdout(), byte: ${d}u8 };
 oracle+='fn main() { match std::env::args().nth(1).unwrap().as_str() {\n'+sourceFiles.map((_,i)=>`"${i}" => __lkj_host::enter(c${i}::main),`).join('\n')+'\n_ => std::process::exit(2) } }\n';
 const rustSource=path.join(dir,'oracle.rs'),rustBinary=path.join(dir,'oracle');fs.writeFileSync(rustSource,oracle);
 const rustFlags=['--edition=2024','-C','overflow-checks=yes','-A','warnings'];
-const built=await run('rustc',[...rustFlags,rustSource,'-o',rustBinary]);
-if(built.error||built.status!==0) {process.stderr.write(built.stderr||String(built.error));process.exit(1);}
 function ending(result,oracle) {
  if(result.error)return result.error.code==='ETIMEDOUT'?'timeout':'crash';
  if(result.status===0&&!result.signal)return 'normal';
@@ -69,11 +69,18 @@ function ending(result,oracle) {
  const code=text.match(oracle?/LKJ_RUST_TRAP (R[0-9]+)/:/: (R[0-9]+)\b/)?.[1];
  return code?(Number(code.slice(1))>=16?'R0004':code):'crash';
 }
+const references=await oracleCache({generator:generatorHash,seed:seedText,count,flags:rustFlags,source:oracle},async()=>{
+const built=await run('rustc',[...rustFlags,rustSource,'-o',rustBinary]);
+if(built.error||built.status!==0) {process.stderr.write(built.stderr||String(built.error));process.exit(1);}
+
+const results=[];for(let i=0;i<count;i++)results.push(packResult(await run(rustBinary,[String(i)],{encoding:null})));return results;
+});
+const actualResults={};for(const engine of engines)actualResults[engine]=await runCases(bin,sourceFiles.map(path=>({path})),{engine,output:dir,encoding:null});
 const tally=Object.fromEntries(engines.map(engine=>[engine,{}])),failures=[];
 for(let i=0;i<count;i++) {
- const reference=await run(rustBinary,[String(i)],{encoding:null});
+ const reference=unpackResult(references[i],null);
  for(const engine of engines) {
-   const actual=await run(bin,['run',sourceFiles[i],'--engine',engine],{encoding:null});
+   const actual=actualResults[engine][i];
    const end=ending(actual,false),oracleEnd=ending(reference,true);
    const category=oracleEnd!==expected[i].ending||!reference.stdout.equals(expected[i].bytes)?'oracle-differs':end==='timeout'||end==='crash'?end:end.startsWith('M_')?'machine-error:'+end:end!==oracleEnd?'different-ending':!actual.stdout.equals(reference.stdout)?'different-output':end==='normal'?'equal-output-exit':'equal-output-trap';
    tally[engine][category]=(tally[engine][category]||0)+1;

@@ -1,14 +1,10 @@
 import { readFile } from 'node:fs/promises';
 import { writeSync } from 'node:fs';
-import { writeBytes } from './output.mjs';
+import { describe, resultText, executeModule } from './engine.mjs';
 import { isMainThread, parentPort, workerData } from 'node:worker_threads';
 import { startWorker } from './worker.mjs';
 import { dirname, join } from 'node:path';
 
-const messages = {
-  1: 'integer overflow', 2: 'division by zero', 3: 'index out of bounds',
-  4: 'explicit trap', 5: 'assertion failed', 6: 'allocation failed', 7: 'host output failure',
-};
 const readText = path => readFile(path, 'utf8');
 
 async function cgroupExtent(name, extent) {
@@ -56,29 +52,12 @@ async function stackReservation() {
   return Math.floor(bytes);
 }
 
-function describe(problem) {
-  return {
-    message: problem instanceof Error ? problem.message : String(problem),
-    code: problem.code ?? 'E_ENGINE', line: problem.line ?? 0,
-  };
-}
-
 function report(path, problem) {
   writeSync(2, path + ':' + problem.line + ': ' + problem.code + ' ' + problem.message + '\n');
   process.exitCode = 1;
 }
 
-function printResult(result, kind) {
-  if (kind === 'f64') {
-    const data = new DataView(new ArrayBuffer(8));
-    data.setBigUint64(0, BigInt.asUintN(64, result), true);
-    writeSync(1, String(data.getFloat64(0, true)) + '\n');
-  } else if (kind === 'bool') {
-    writeSync(1, (result === 0n ? 'false' : 'true') + '\n');
-  } else if (kind !== 'unit' && kind !== '--unit') {
-    writeSync(1, (kind === 'u64' || kind === 'usize' ? BigInt.asUintN(64, result) : result).toString() + '\n');
-  }
-}
+function printResult(result, kind) { writeSync(1, resultText(result, kind)); }
 
 if (isMainThread) {
   const [path, entry = 'main', resultKind = 'i64', ...args] = process.argv.slice(2);
@@ -122,52 +101,7 @@ if (isMainThread) {
   }
 } else {
   parentPort.postMessage({ ready: true });
-  const metrics = {};
-  let stage = 'module_read';
-  let stageStarted = performance.now();
-  try {
-    const readStarted = performance.now();
-    const bytes = await readFile(workerData.path);
-    metrics.module_read_ms = performance.now() - readStarted;
-    const loadStarted = performance.now();
-    stage = 'engine_load';
-    stageStarted = loadStarted;
-    const module = await WebAssembly.compile(bytes);
-    const metadata = WebAssembly.Module.customSections(module, 'lkjscript.traps');
-    const userMessages = metadata.length ? JSON.parse(Buffer.from(metadata[0]).toString('utf8')) : [];
-    const instance = await WebAssembly.instantiate(module, {
-      lkjscript: {
-        stdout(pointer, length, line) {
-          return writeBytes(instance.exports.memory, pointer, length, line);
-        },
-      },
-    });
-    metrics.engine_load_ms = performance.now() - loadStarted;
-    const fn = instance.exports['fn:' + workerData.entry];
-    if (typeof fn !== 'function') throw new Error('entry function not found: ' + workerData.entry);
-    const runStarted = performance.now();
-    stage = 'run';
-    stageStarted = runStarted;
-    try {
-      instance.exports.__lkj_trap_code.value = 0n;
-      instance.exports.__lkj_trap_line.value = 0n;
-      const result = fn(...workerData.args.map(BigInt));
-      parentPort.postMessage({ ok: true, result, metrics: { ...metrics, run_ms: performance.now() - runStarted, stopped_stage: 'done' } });
-    } catch (problem) {
-      metrics.run_ms = performance.now() - runStarted;
-      const code = instance.exports.__lkj_trap_code.value;
-      if (problem instanceof WebAssembly.RuntimeError && code !== 0n) {
-        const trapped = new Error(messages[Number(code)] ?? userMessages[Number(code) - 16] ?? 'trap');
-        trapped.code = 'R' + code.toString().padStart(4, '0');
-        trapped.line = instance.exports.__lkj_trap_line.value;
-        throw trapped;
-      }
-      throw problem;
-    }
-  } catch (problem) {
-    metrics[stage + '_ms'] ??= performance.now() - stageStarted;
-    metrics.stopped_stage = stage;
-    parentPort.postMessage({ ok: false, problem: describe(problem), metrics });
-    process.exitCode = 1;
-  }
+  const result = await executeModule(workerData);
+  parentPort.postMessage(result);
+  if (!result.ok) process.exitCode = 1;
 }

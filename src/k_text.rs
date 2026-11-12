@@ -201,11 +201,16 @@ fn place(words: &[String], start: usize, line: usize) -> Result<Place> {
 }
 
 fn instruction(words: &[String], line: usize) -> Result<Instruction> {
-    let source_line = word(words, 0, line)?
+    let location = word(words, 0, line)?
         .strip_prefix('@')
-        .ok_or_else(|| error(line, "instruction needs @source-line"))?
+        .ok_or_else(|| error(line, "instruction needs @source-line[:column]"))?;
+    let (source_line, column) = location.split_once(':').unwrap_or((location, "1"));
+    let source_line = source_line
         .parse::<usize>()
         .map_err(|_| error(line, "invalid source line"))?;
+    let column = column
+        .parse::<usize>()
+        .map_err(|_| error(line, "invalid source column"))?;
     let op = match word(words, 1, line)? {
         "text" => {
             exact(words, 4, line)?;
@@ -336,10 +341,15 @@ fn instruction(words: &[String], line: usize) -> Result<Instruction> {
             exact(words, 5, line)?;
             Op::TagTest {
                 dst: number(words, 2, line)?,
-                src: number(words, 3, line)?,
+                place: Place::local(number(words, 3, line)?),
                 variant: number(words, 4, line)?,
             }
         }
+        "tag-test-place" => Op::TagTest {
+            dst: number(words, 2, line)?,
+            variant: number(words, 3, line)?,
+            place: place(words, 4, line)?,
+        },
         "intrinsic" => Op::Intrinsic {
             dst: number(words, 2, line)?,
             name: word(words, 3, line)?.to_string(),
@@ -378,6 +388,7 @@ fn instruction(words: &[String], line: usize) -> Result<Instruction> {
     Ok(Instruction {
         op,
         line: source_line,
+        column,
     })
 }
 
@@ -637,7 +648,7 @@ fn write_projections(text: &mut String, projections: &[Projection]) {
 }
 
 fn write_instruction(text: &mut String, instruction: &Instruction) {
-    text.push_str(&format!("@{} ", instruction.line));
+    text.push_str(&format!("@{}:{} ", instruction.line, instruction.column));
     match &instruction.op {
         Op::Text { dst, bytes } => {
             let mut encoded = String::new();
@@ -722,8 +733,13 @@ fn write_instruction(text: &mut String, instruction: &Instruction) {
             write_indices(text, fields);
         }
         Op::Discriminant { dst, src } => text.push_str(&format!("tag {dst} {src}")),
-        Op::TagTest { dst, src, variant } => {
-            text.push_str(&format!("tag-test {dst} {src} {variant}"))
+        Op::TagTest {
+            dst,
+            place,
+            variant,
+        } => {
+            text.push_str(&format!("tag-test-place {dst} {variant}"));
+            write_place(text, place);
         }
         Op::Intrinsic { dst, name, args } => {
             text.push_str(&format!("intrinsic {dst} {}", quoted(name)));
@@ -992,7 +1008,7 @@ mod tests {
             Op::Discriminant { dst: 0, src: 1 },
             Op::TagTest {
                 dst: 0,
-                src: 1,
+                place: Place::local(1),
                 variant: 2,
             },
             Op::Intrinsic {
@@ -1023,7 +1039,11 @@ mod tests {
                 locals: Vec::new(),
                 body: ops
                     .into_iter()
-                    .map(|op| Instruction { op, line: 7 })
+                    .map(|op| Instruction {
+                        op,
+                        line: 7,
+                        column: 1,
+                    })
                     .collect(),
                 test: true,
             }],

@@ -140,6 +140,14 @@ fn index_function_owners(program: &Program) -> Result<Vec<FunctionOwner>> {
 
 impl<'a> Resolver<'a> {
     pub fn new(program: &'a Program) -> Result<Self> {
+        let (resolver, problems) = Self::new_report(program)?;
+        if let Some(problem) = problems.into_iter().next() {
+            Err(problem)
+        } else {
+            Ok(resolver)
+        }
+    }
+    fn new_report(program: &'a Program) -> Result<(Self, Vec<Diagnostic>)> {
         if program.resolved && program.function_owners.len() != program.functions.len() {
             return Err(Diagnostic::new(
                 Span::default(),
@@ -250,8 +258,8 @@ impl<'a> Resolver<'a> {
                 (true, false),
             )?;
         }
-        result.imports()?;
-        Ok(result)
+        let problems = result.imports();
+        Ok((result, problems))
     }
     fn function_owner(&self, function: FunctionId) -> FunctionOwner {
         match &self.function_owners {
@@ -569,90 +577,100 @@ impl<'a> Resolver<'a> {
         );
         Ok(true)
     }
-    fn imports(&mut self) -> Result<()> {
+    fn import_one(&mut self, index: usize) -> Result<(bool, bool)> {
+        let import = self.program.uses[index].clone();
+        let scope = self.modules[&import.module];
+        let mut changed = false;
+        if import.glob {
+            let resolved = self.path(scope, &import.path, Namespace::Type, import.span, false)?;
+            let id = match resolved {
+                Some((_, Some(id))) => id,
+                _ => return Ok((false, false)),
+            };
+            let target = match self.declarations[id].item {
+                Item::Module(m) => self.program.modules[m].scope,
+                _ => {
+                    return Err(Diagnostic::new(
+                        import.span,
+                        "E_UNSUPPORTED",
+                        "glob imports currently require a module",
+                    ));
+                }
+            };
+            let entries: Vec<_> = self
+                .names
+                .iter()
+                .filter(|((s, _, _), b)| {
+                    *s == target && visible(self.program, b.scope, b.public, scope)
+                })
+                .map(|((_, n, ns), b)| (n.clone(), *ns, b.declaration, b.target.clone()))
+                .collect();
+            for (name, ns, id, target) in entries {
+                changed |= self.import_binding(&import, scope, &name, ns, id, &target)?;
+            }
+            Ok((changed, true))
+        } else {
+            let mut found = false;
+            for ns in [Namespace::Type, Namespace::Value] {
+                if let Some((target, Some(id))) =
+                    self.path(scope, &import.path, ns, import.span, false)?
+                {
+                    found = true;
+                    changed |=
+                        self.import_binding(&import, scope, &import.alias, ns, id, &target)?;
+                }
+            }
+            if !found
+                && self
+                    .path(scope, &import.path, Namespace::Type, import.span, true)?
+                    .is_some_and(|(_, id)| id.is_none())
+            {
+                return Err(Diagnostic::new(
+                    import.span,
+                    "E_UNSUPPORTED",
+                    "import aliases for intrinsic types or functions are not implemented",
+                ));
+            }
+            Ok((changed, found))
+        }
+    }
+    fn imports(&mut self) -> Vec<Diagnostic> {
+        let mut problems = BTreeMap::new();
         loop {
-            let mut next = Vec::new();
+            let mut unresolved = Vec::new();
             let mut changed = false;
             for index in 0..self.program.uses.len() {
-                let import = self.program.uses[index].clone();
-                let scope = self.modules[&import.module];
-                if import.glob {
-                    let resolved =
-                        self.path(scope, &import.path, Namespace::Type, import.span, false)?;
-                    let id = match resolved {
-                        Some((_, Some(id))) => id,
-                        _ => {
-                            next.push(index);
-                            continue;
-                        }
-                    };
-                    let target = match self.declarations[id].item {
-                        Item::Module(m) => self.program.modules[m].scope,
-                        _ => {
-                            return Err(Diagnostic::new(
-                                import.span,
-                                "E_UNSUPPORTED",
-                                "glob imports currently require a module",
-                            ));
-                        }
-                    };
-                    let entries: Vec<_> = self
-                        .names
-                        .iter()
-                        .filter(|((s, _, _), b)| {
-                            *s == target && visible(self.program, b.scope, b.public, scope)
-                        })
-                        .map(|((_, n, ns), b)| (n.clone(), *ns, b.declaration, b.target.clone()))
-                        .collect();
-                    for (name, ns, id, target) in entries {
-                        changed |= self.import_binding(&import, scope, &name, ns, id, &target)?;
-                    }
-                } else {
-                    let mut found = false;
-                    for ns in [Namespace::Type, Namespace::Value] {
-                        if let Some((target, Some(id))) =
-                            self.path(scope, &import.path, ns, import.span, false)?
-                        {
-                            found = true;
-                            changed |= self.import_binding(
-                                &import,
-                                scope,
-                                &import.alias,
-                                ns,
-                                id,
-                                &target,
-                            )?;
+                if problems.contains_key(&index) {
+                    continue;
+                }
+                match self.import_one(index) {
+                    Ok((updated, found)) => {
+                        changed |= updated;
+                        if !found {
+                            unresolved.push(index);
                         }
                     }
-                    if !found {
-                        // Compiler intrinsics have a fixed identity, never an arbitrary bare-name fallback.
-                        if self
-                            .path(scope, &import.path, Namespace::Type, import.span, true)?
-                            .is_some_and(|(_, id)| id.is_none())
-                        {
-                            return Err(Diagnostic::new(
-                                import.span,
-                                "E_UNSUPPORTED",
-                                "import aliases for intrinsic types or functions are not implemented",
-                            ));
-                        }
-                        next.push(index);
+                    Err(problem) => {
+                        problems.insert(index, problem);
                     }
                 }
             }
-            if !changed && next.is_empty() {
+            if !changed {
+                for index in unresolved {
+                    let import = &self.program.uses[index];
+                    problems.insert(
+                        index,
+                        Diagnostic::new(
+                            import.span,
+                            "E_IMPORT",
+                            &format!("unresolved or cyclic import {}", import.path),
+                        ),
+                    );
+                }
                 break;
             }
-            if !changed {
-                let import = &self.program.uses[next[0]];
-                return Err(Diagnostic::new(
-                    import.span,
-                    "E_IMPORT",
-                    &format!("unresolved or cyclic import {}", import.path),
-                ));
-            }
         }
-        Ok(())
+        problems.into_values().collect()
     }
 }
 
@@ -784,4 +802,50 @@ impl Resolver<'_> {
         let item = &self.declarations[declaration];
         visible(self.program, item.scope, item.public, scope)
     }
+}
+
+/// Diagnostic inventory over the same declaration/import resolver. No resolved
+/// Program or checked authority escapes when an import or use is unresolved.
+/// Method bodies still require valid signatures; missing imports can account
+/// for later unresolved type uses, so the census reports them as dependencies.
+pub fn resolution_problems(source: &Program) -> Vec<Diagnostic> {
+    let (resolver, mut problems) = match Resolver::new_report(source) {
+        Ok(result) => result,
+        Err(problem) => return vec![problem],
+    };
+    for node in &source.types {
+        if let Type::Path(path) = &node.kind {
+            let mut path = path.clone();
+            if let Err(problem) =
+                resolver.resolve_path(node.scope, &mut path, Namespace::Type, node.span)
+            {
+                problems.push(problem);
+            }
+        }
+    }
+    for node in &source.patterns {
+        let operand = match &node.kind {
+            Pattern::Path(path) | Pattern::Variant { path, .. } => Some((path, Namespace::Value)),
+            Pattern::Struct { path, .. } => Some((path, Namespace::Type)),
+            _ => None,
+        };
+        if let Some((path, namespace)) = operand {
+            let mut path = path.clone();
+            if let Err(problem) = resolver.resolve_path(node.scope, &mut path, namespace, node.span)
+            {
+                problems.push(problem);
+            }
+        }
+    }
+    for node in &source.exprs {
+        if let Expr::Struct { path, .. } = &node.kind {
+            let mut path = path.clone();
+            if let Err(problem) =
+                resolver.resolve_path(node.scope, &mut path, Namespace::Type, node.span)
+            {
+                problems.push(problem);
+            }
+        }
+    }
+    problems
 }

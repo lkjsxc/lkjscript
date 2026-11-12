@@ -1862,9 +1862,121 @@ impl Parser {
             } else {
                 None
             };
-            if self.is("else") {
-                return Err(self.unsupported("let else"));
-            }
+            let (pattern, value, ty) = if self.take("else") {
+                let value = value.ok_or_else(|| self.err("let-else requires an initializer"))?;
+                let block = self.block()?;
+                let otherwise = self.add_expr(Expr::Block(block), self.program.blocks[block].span);
+                let otherwise =
+                    self.add_expr(Expr::Diverge(otherwise), self.program.blocks[block].span);
+                // A match produces exactly the bindings exported by the pattern.
+                // Generated tuple bindings do not repeat ref binding modes.
+                let mut pending = vec![pattern];
+                let mut bindings = Vec::new();
+                let mut seen = BTreeSet::new();
+                while let Some(id) = pending.pop() {
+                    match self.program.patterns[id].kind.clone() {
+                        Pattern::Bind { name, mutable, .. } => {
+                            if seen.insert(name.clone()) {
+                                bindings.push((name, mutable));
+                            }
+                        }
+                        Pattern::Tuple(fields) | Pattern::Variant { fields, .. } => {
+                            pending.extend(fields.into_iter().rev())
+                        }
+                        Pattern::Struct { fields, .. } => {
+                            pending.extend(fields.into_iter().rev().map(|(_, pattern)| pattern))
+                        }
+                        Pattern::Ref { inner, .. } => pending.push(inner),
+                        Pattern::Or(alternatives) => {
+                            if let Some(first) = alternatives.first() {
+                                pending.push(*first);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                let mut result = Vec::new();
+                let mut outer = Vec::new();
+                for (name, mutable) in bindings {
+                    result.push(self.add_expr(
+                        Expr::Path(Path {
+                            declaration: None,
+                            name: name.clone(),
+                            args: Vec::new(),
+                        }),
+                        start,
+                    ));
+                    outer.push(self.add_pattern(
+                        Pattern::Bind {
+                            name,
+                            mutable,
+                            by_ref: false,
+                            ref_mut: false,
+                        },
+                        start,
+                    ));
+                }
+                let output = self.add_expr(Expr::Tuple(result), start);
+                let wildcard = self.add_pattern(Pattern::Wild, start);
+                let initializer = if let Some(ty) = ty {
+                    let name = format!("$let_else{}", self.program.exprs.len());
+                    let binding = self.add_pattern(
+                        Pattern::Bind {
+                            name: name.clone(),
+                            mutable: false,
+                            by_ref: false,
+                            ref_mut: false,
+                        },
+                        start,
+                    );
+                    let path = self.add_expr(
+                        Expr::Path(Path {
+                            declaration: None,
+                            name,
+                            args: Vec::new(),
+                        }),
+                        start,
+                    );
+                    let block = self.program.blocks.len();
+                    self.program.blocks.push(Block {
+                        statements: vec![Stmt::Let {
+                            pattern: binding,
+                            ty: Some(ty),
+                            value: Some(value),
+                            span: start,
+                        }],
+                        tail: Some(path),
+                        span: start,
+                    });
+                    self.add_expr(Expr::Block(block), start)
+                } else {
+                    value
+                };
+                let value = self.add_expr(
+                    Expr::Match {
+                        value: initializer,
+                        arms: vec![
+                            Arm {
+                                pattern,
+                                guard: None,
+                                value: output,
+                                span: start,
+                            },
+                            Arm {
+                                pattern: wildcard,
+                                guard: None,
+                                value: otherwise,
+                                span: start,
+                            },
+                        ],
+                    },
+                    self.finish_span(start),
+                );
+                let pattern = self.add_pattern(Pattern::Tuple(outer), start);
+                (pattern, Some(value), None)
+            } else {
+                (pattern, value, ty)
+            };
             self.expect(";")?;
             return Ok(BlockPart::Statement(Stmt::Let {
                 pattern,
@@ -2236,12 +2348,32 @@ impl Parser {
                 None
             };
             let kind = match pattern {
-                Some(pattern) => Expr::IfLet {
-                    pattern,
-                    value: condition,
-                    then_block,
-                    otherwise,
-                },
+                Some(pattern) => {
+                    let body = self.add_expr(
+                        Expr::Block(then_block),
+                        self.program.blocks[then_block].span,
+                    );
+                    let fallback =
+                        otherwise.unwrap_or_else(|| self.add_expr(Expr::Tuple(Vec::new()), span));
+                    let wild = self.add_pattern(Pattern::Wild, span);
+                    Expr::Match {
+                        value: condition,
+                        arms: vec![
+                            Arm {
+                                pattern,
+                                guard: None,
+                                value: body,
+                                span,
+                            },
+                            Arm {
+                                pattern: wild,
+                                guard: None,
+                                value: fallback,
+                                span,
+                            },
+                        ],
+                    }
+                }
                 None => Expr::If {
                     condition,
                     then_block,
@@ -2261,11 +2393,41 @@ impl Parser {
             let condition = self.expr(false)?;
             let body = self.block()?;
             let kind = match pattern {
-                Some(pattern) => Expr::WhileLet {
-                    pattern,
-                    value: condition,
-                    body,
-                },
+                Some(pattern) => {
+                    let matched = self.add_expr(Expr::Block(body), self.program.blocks[body].span);
+                    let fallback = self.add_expr(Expr::Break(None), span);
+                    let wild = self.add_pattern(Pattern::Wild, span);
+                    let selection = self.add_expr(
+                        Expr::Match {
+                            value: condition,
+                            arms: vec![
+                                Arm {
+                                    pattern,
+                                    guard: None,
+                                    value: matched,
+                                    span,
+                                },
+                                Arm {
+                                    pattern: wild,
+                                    guard: None,
+                                    value: fallback,
+                                    span,
+                                },
+                            ],
+                        },
+                        span,
+                    );
+                    let body = self.program.blocks.len();
+                    self.program.blocks.push(Block {
+                        statements: vec![Stmt::Expr {
+                            value: selection,
+                            semicolon: true,
+                        }],
+                        tail: None,
+                        span: self.finish_span(span),
+                    });
+                    Expr::Loop { body }
+                }
                 None => Expr::While { condition, body },
             };
             return Ok(self.add_expr(kind, self.finish_span(span)));

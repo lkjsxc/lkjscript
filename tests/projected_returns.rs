@@ -380,7 +380,11 @@ fn function(
         body: operations
             .into_iter()
             .enumerate()
-            .map(|(line, op)| k::Instruction { op, line: line + 1 })
+            .map(|(line, op)| k::Instruction {
+                column: 1,
+                op,
+                line: line + 1,
+            })
             .collect(),
         test: false,
     }

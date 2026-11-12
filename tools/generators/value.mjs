@@ -5,6 +5,8 @@
 import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { run } from '../process.mjs';
+import { runCases } from '../batch.mjs';
+import { oracleCache } from '../oracle.mjs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 const [binary, seedS = '601', countS = '100', output = 'target/generators'] = process.argv.slice(2);
@@ -126,8 +128,6 @@ for (let i = 0; i < N; i++) { const s = gen(); srcs.push(s); fs.writeFileSync(`$
 harness += 'fn main() { let n: usize = std::env::args().nth(1).unwrap().parse().unwrap(); let r = match n {\n' + srcs.map((_, i) => `${i} => c${i}::probe(),`).join('\n') + '\n_ => 0 }; println!("{}", r); }\n';
 fs.writeFileSync(`${dir}/oracle.rs`, harness);
 const FLAGS = ['--edition=2024', '-C', 'overflow-checks=yes', '-C', 'opt-level=0', '-A', 'warnings', '-A', 'arithmetic_overflow', '-A', 'unconditional_panic', '-A', 'overflowing_literals'];
-const rc = await run('rustc', [...FLAGS, `${dir}/oracle.rs`, '-o', `${dir}/oracle`], { encoding: 'utf8' });
-if (rc.status !== 0) { console.log('oracle failed:\n' + rc.stderr.split('\n').slice(0, 40).join('\n')); process.exit(1); }
 // Outcomes are kept apart: a value, a trap of a given kind at a given line, a compile-time rejection, a crash, a timeout.
 const rustKind = m => /with overflow/.test(m) ? 'R0001' : /divide by zero|divisor of zero/.test(m) ? 'R0002' : /index out of bounds/.test(m) ? 'R0003' : /assertion/.test(m) ? 'R0005' : 'R0004';
 async function rustRun(i) {
@@ -139,7 +139,7 @@ async function rustRun(i) {
   return { k: 'abnormal', text: 'status ' + r.status };
 }
 async function lkRun(i) {
-  const l = await run(bin, ['run', `${dir}/c${i}.rs`, '--entry', 'probe', '--engine', engine], { encoding: 'utf8', timeout: 20000 });
+  const l = actualResults[i];
   const text = (l.stdout + l.stderr).trim().split('\n')[0] || '';
   if (l.error || l.signal) return { k: l.error?.code === 'ETIMEDOUT' ? 'timeout' : 'crash', text };
   if (l.status === 0) return { k: 'value', v: text, text };
@@ -149,9 +149,16 @@ async function lkRun(i) {
   if (m) return { k: 'reject', code: m[2], text };
   return { k: 'crash', text };
 }
+const references=await oracleCache({generator:metadata.sha256,seed:seedS,count:N,flags:FLAGS,harness},async()=>{
+const rc = await run('rustc', [...FLAGS, `${dir}/oracle.rs`, '-o', `${dir}/oracle`], { encoding: 'utf8' });
+if (rc.status !== 0) { console.log('oracle failed:\n' + rc.stderr.split('\n').slice(0, 40).join('\n')); process.exit(1); }
+
+const results=[];for(let i=0;i<N;i++){const result=await rustRun(i);if(result.k==='abnormal')throw new Error('abnormal Rust oracle: '+result.text);results.push(result);}return results;
+});
+const actualResults=await runCases(bin,srcs.map((_,i)=>({path:dir+'/c'+i+'.rs',entry:'probe'})),{engine,output:dir,timeout:20000});
 const tally = {}; const show = []; const bump = c => { tally[c] = (tally[c] || 0) + 1; };
 for (let i = 0; i < N; i++) {
-  const r = await rustRun(i), l = await lkRun(i); let cls;
+  const r = references[i], l = await lkRun(i); let cls;
   if (r.k === 'abnormal') cls = 'oracle-abnormal';
   else if (l.k === 'timeout' || l.k === 'crash') cls = l.k;
   else if (l.k === 'machine-error') cls = 'machine-error:' + l.code;

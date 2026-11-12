@@ -1,9 +1,0 @@
-{
-  "compiler": "d32a611d62caa574da48c8c37e6fe94eb70afa67",
-  "binarySha256": "305250aadaeae85573bc0c5e80d83ff935fb199e8a18013df0e5eb2f57abb26e",
-  "scope": "Isolated final scaling sample after strict Drop / DropIf. Compiler source was committed and frozen; compilerDirty in runner metadata describes pending documentation/measurement-tool changes.",
-  "commands": [
-    "node tools/scale/run.mjs target/release/lkjscript --families funcs,ifs,match,boxes,vecs --sizes 8000,16000,32000 --repeat 3 --out target/scale/final-d32",
-    "node tools/scale/run.mjs target/release/lkjscript --families methods --sizes 2000,4000,8000 --repeat 3 --out target/scale/methods-d32"
-  ]
-}

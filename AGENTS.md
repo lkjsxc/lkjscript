@@ -40,3 +40,11 @@ All ordinary technical decisions are delegated; continue without routine approva
 behavior, remaining dependencies, evidence and the next action. `docs/direction.md`
 records the selected strategy. Git preserves history; avoid session diaries,
 duplicate specifications and permanent superseded production implementations.
+
+Choose width by trust cost. Surface forms lower to existing K where possible;
+validate sugars against independently generated expansions as well as rustc.
+Treat the existing stack bridge as finished. Separate checked-K lowering, layout,
+explicit glue and source runtime before adding an owned native encoder; do not
+assemble another runtime by hand. Prefer printing conformance programs and direct
+K fixtures over large Rust harnesses. Keep seeds and reduced failures in Git,
+commands beside measurements in status, and detailed run output under target/.

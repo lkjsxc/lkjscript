@@ -373,11 +373,11 @@ fn optional<'a>(values:&'a Numbers,present:bool)->Maybe<'a> {
     let problem = compiler::check_bundle(&bundle(source))
         .err()
         .expect("view join precision has not been implemented");
-    assert_eq!(problem.code, "E_MOVE", "{problem:?}");
+    assert_eq!(problem.code, "E_BORROW", "{problem:?}");
     assert!(
         problem
             .message
-            .contains("branches must leave the same owners and borrows"),
+            .contains("branches must preserve the same reference holders and origins"),
         "{problem:?}"
     );
     let rust = rust_metadata(source);

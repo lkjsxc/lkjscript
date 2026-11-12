@@ -2,16 +2,48 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 check_started_ns=$(date +%s%N)
-cargo fmt --check
-node --test tests/worker_host.mjs tools/generators/reduce.test.mjs
-cargo test --quiet
-cargo clippy --quiet --all-targets -- -D warnings
-cargo build --quiet
+step() {
+    local label=$1
+    shift
+    local started_ns
+    started_ns=$(date +%s%N)
+    "$@"
+    local elapsed_ns=$(($(date +%s%N)-started_ns))
+    awk -v label="$label" -v elapsed_ns="$elapsed_ns" 'BEGIN { printf "Gate %s: %.3f s\n", label, elapsed_ns / 1000000000 }'
+}
+step format cargo fmt --check
+step host node --test tests/worker_host.mjs tools/generators/reduce.test.mjs
+step rust cargo test --quiet
+step lint cargo clippy --quiet --all-targets -- -D warnings
+step build cargo build --quiet
+check_binary="${CARGO_TARGET_DIR:-target}/debug/lkjscript"
+# Independent processes have separate case directories. Batching amortizes each
+# compiler/engine startup; parallel suites use the host's available cores.
+mkdir -p target/gate
+check_pids=()
+check_logs=()
+parallel_step() {
+    local log="target/gate/$1.log"
+    (step "$@") >"$log" 2>&1 &
+    check_pids+=("$!")
+    check_logs+=("$log")
+}
+parallel_started_ns=$(date +%s%N)
 for engine in node k; do
-    LKJ_ENGINE="$engine" node tools/conformance.mjs "${CARGO_TARGET_DIR:-target}/debug/lkjscript"
-    LKJ_ENGINE="$engine" node tools/generators/value.mjs "${CARGO_TARGET_DIR:-target}/debug/lkjscript" 601 100 "target/generators/$engine"
-    LKJ_ENGINE="$engine" node tools/generators/verdict.mjs "${CARGO_TARGET_DIR:-target}/debug/lkjscript" 601 100 "target/generators/$engine"
+    parallel_step "conformance-$engine" env LKJ_ENGINE="$engine" node tools/conformance.mjs "$check_binary"
+    parallel_step "values-$engine" env LKJ_ENGINE="$engine" node tools/generators/value.mjs "$check_binary" 601 100 "target/generators/$engine"
+    parallel_step "verdicts-$engine" env LKJ_ENGINE="$engine" node tools/generators/verdict.mjs "$check_binary" 601 100 "target/generators/$engine"
 done
-node tools/generators/output.mjs "${CARGO_TARGET_DIR:-target}/debug/lkjscript" 601 50
+parallel_step output node tools/generators/output.mjs "$check_binary" 601 50
+parallel_step drops env ONE_SIDED=1 node tools/generators/drops.mjs "$check_binary" 1201 100
+parallel_step sugars node tools/generators/sugar.mjs "$check_binary" 1301 52
+check_failed=0
+for i in "${!check_pids[@]}"; do
+    if ! wait "${check_pids[$i]}"; then check_failed=1; fi
+    cat "${check_logs[$i]}"
+done
+parallel_elapsed_ns=$(($(date +%s%N)-parallel_started_ns))
+awk -v elapsed_ns="$parallel_elapsed_ns" 'BEGIN { printf "Gate parallel suites: %.3f s\n", elapsed_ns / 1000000000 }'
+if ((check_failed)); then exit 1; fi
 check_elapsed_ns=$(($(date +%s%N)-check_started_ns))
 awk -v elapsed_ns="$check_elapsed_ns" 'BEGIN { printf "Full check: %.3f s\n", elapsed_ns / 1000000000 }'

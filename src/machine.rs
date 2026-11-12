@@ -1570,10 +1570,15 @@ impl<H: Host> Machine<'_, H> {
                 let fields = self.fields(&frame, &elements, &expected)?;
                 self.put_local(&frame, dst, Value::Sequence(fields))?;
             }
-            Op::Discriminant { dst, src } | Op::TagTest { dst, src, .. } => {
-                let mut place = Place::local(src);
+            Op::Discriminant { dst, .. } | Op::TagTest { dst, .. } => {
+                let mut place = match &instruction.op {
+                    Op::Discriminant { src, .. } => Place::local(*src),
+                    Op::TagTest { place, .. } => place.clone(),
+                    _ => unreachable!(),
+                };
+                let initial = self.resolve(&frame, &place)?;
                 if matches!(
-                    self.kind(self.local(&frame, src)?.ty)?,
+                    self.kind(self.cell(initial.cell)?.ty)?,
                     TypeKind::Ref { .. }
                 ) {
                     place.projections.push(Projection::Deref);

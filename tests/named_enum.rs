@@ -429,7 +429,7 @@ fn direct_borrows(second_variant: usize, second_field: usize, checked_tag: bool)
         body.extend([
             k::Op::TagTest {
                 dst: 3,
-                src: 2,
+                place: k::Place::local(2),
                 variant: 0,
             },
             k::Op::If { condition: 3 },
@@ -482,7 +482,11 @@ fn direct_borrows(second_variant: usize, second_field: usize, checked_tag: bool)
             body: body
                 .into_iter()
                 .enumerate()
-                .map(|(line, op)| k::Instruction { op, line: line + 1 })
+                .map(|(line, op)| k::Instruction {
+                    column: 1,
+                    op,
+                    line: line + 1,
+                })
                 .collect(),
             test: false,
         }],
@@ -520,20 +524,16 @@ fn explicit_mutable_field_bindings_preserve_original_place_mutability() {
 }
 
 #[test]
-fn mixed_affine_moves_and_explicit_references_are_named_unsupported() {
+fn mixed_affine_moves_and_explicit_references_preserve_disjoint_places() {
     let declaration = "enum E{Named{left:Box<i64>,right:Box<i64>}}";
-    rejects(
-        &format!(
-            "{declaration} fn bad(value:E)->i64{{match value{{E::Named{{left,ref right}}=>*left+**right}}}}"
+    for source in [
+        format!(
+            "{declaration} fn read(value:E)->i64{{match value{{E::Named{{left,ref right}}=>*left+**right}}}}"
         ),
-        "E_UNSUPPORTED",
-        "mixed affine",
-    );
-    rejects(
-        &format!(
-            "{declaration} struct Holder{{value:E}} fn bad(holder:Holder)->i64{{match holder.value{{E::Named{{left,ref right}}=>*left+**right}}}}"
+        format!(
+            "{declaration} struct Holder{{value:E}} fn read(holder:Holder)->i64{{match holder.value{{E::Named{{left,ref right}}=>*left+**right}}}}"
         ),
-        "E_UNSUPPORTED",
-        "mixed affine",
-    );
+    ] {
+        checked(&source).unwrap_or_else(|error| panic!("{error:?}"));
+    }
 }

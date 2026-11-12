@@ -28,8 +28,13 @@ parsing, as do initializers, arguments, returns and operator right-hand sides.
 Match arms use the same block boundary and require commas after grouped or
 postfix expressions. An implicit block statement must produce unit unless it
 diverges; an explicit semicolon may discard any value with ordinary cleanup.
-Statements and tails after an unconditional return are still checked. Parser
-support for if let, while let and question-mark does not establish their execution.
+Statements and tails after an unconditional return are still checked. `if let`
+and `while let` lower to ordinary matches and loops. `let else` requires its
+failure branch to diverge and extends borrowed initializer temporaries through
+the binding scope. Result/Option `?` branches to ordinary early return; Result
+error types must currently be equal. Loops accept a value on `break`, unified
+across their exit edges. Struct update evaluates explicit fields in source order,
+then the base once, transferring only the remaining fields.
 
 Integer and byte literal patterns support inclusive, half-open and open ranges:
 `a..=b`, `a..b`, `a..`, `..b` and `..=b`. Endpoints share ordinary integer literal
@@ -39,8 +44,14 @@ signed minima and u64::MAX; it does not enumerate the domain. Source arm order
 controls execution. Every arm is checked, including bodies after a wildcard or
 binding default and bodies in unused generic definitions. Scalar matches through
 references read the referent and preserve mutable-reference reborrowing.
-Named/runtime endpoints, guards, or-patterns and nested refutable patterns remain
-explicitly unsupported.
+Named/runtime range endpoints remain unsupported. Nested tuple, struct and enum
+patterns, reference binding modes, or-patterns and match guards execute in source
+order. Failed pattern tests and guards do not move payloads. Guard bindings are
+protected by shared loans until the guard succeeds; mutation or moving an affine
+binding in a guard is rejected. Overlapping or alternatives retry the guard in
+source order. No-binding, unguarded or-pattern products share their source tree.
+General bound/guarded product sharing and irrefutable or-pattern binding remain
+unfinished; status records that code-growth defect.
 
 Enums retain distinct unit, tuple and named-field variant shapes. Named constructors
 evaluate initializers in written order and store payloads in declaration order.
@@ -53,9 +64,9 @@ field visibility is invalid. Nonempty tuple numeric-brace syntax remains unsuppo
 Explicit ref/ref mut match bindings refer to the original storage. Nonmoving
 matches preserve the owner, mutability and destructor timing. Distinct fields of
 one proven enum variant may be mutably borrowed together; other tags or the same
-field do not gain disjointness. Existing-place matches combining affine moves and
-explicit reference bindings are named unsupported until place-based tag witnesses
-and branch-specific partial-move/cleanup contracts are available.
+field do not gain disjointness. Existing-place matches may combine affine moves and
+explicit reference bindings of disjoint fields. Tag tests name projected enum
+places, so testing a nested payload preserves its owner and lexical cleanup.
 
 Source bundles declare their root, source files and optional source-library root.
 The owned loader handles inline modules, file modules (`child.rs` or
@@ -328,6 +339,9 @@ remains live while another live value needs its storage. Dead reference chains
 are dropped in dependency order; K independently verifies every emitted drop.
 Concrete trait method selection is represented by an explicit function call.
 K has a readable/writable text form accepted by `check` for direct tests.
+Instructions preserve source lines and columns (`@line:column`; `@line` reads
+as column 1). Ownership errors name the place, conflicting holder and loan
+creation site; parameter-supplied authority is identified as a parameter.
 
 Strict destruction (`drop` in text K) requires the named place to be initialized.
 An already moved or dropped exact place, or an absent ancestor, produces
@@ -347,8 +361,12 @@ destruction and clears moved owned payload slots. Consumed call arguments do not
 remain initialized merely because their old bits remain in a physical slot.
 K cannot supply a flag value. The independent machine tests its own cell state.
 Conditional cleanup runs at the original destruction or replacement point;
-it does not move destruction to a branch join. Initialization joins still require
-the existing equal branch state; a maybe-initialized lattice is not implemented.
+it does not move destruction to a branch join. Initialization joins intersect
+definite roots and union possible roots, with corresponding must/may projected
+holes. A later read requires definite initialization; overwriting a possible
+owner, strict destruction of a maybe-owner, projection through an absent shell
+and leaking a possible owner all reject. Reference inventories and loop
+backedges still require equality until their own contracts are implemented.
 
 The checker validates all type references, signatures and operation shapes,
 including dead code, then checks ownership through each function. Variant payload
@@ -485,3 +503,21 @@ The rustc conformance adapter supplies the same types and methods, privately
 constructs World in its host wrapper, uses write_all and aborts on output failure.
 Conformance compares exact bytes and normal exit versus the specified trap kind;
 matching bytes followed by a crash is not a passing execution.
+
+## Diagnostic recovery and test oracles
+
+Once signatures are valid, a body that passes definition inference proceeds to K
+construction and ownership checking even if a peer fails. Diagnostic-only trap
+bodies retain known signatures for dependent checks; the saved error list
+prevents such a program from becoming an emitted artifact. Unsupported source
+forms are enumerated across parsed regions. The census separates syntax sites,
+blocked regions and observed name/type/trait dependencies; blocked method bodies
+are not counted as successfully resolved. Missing imports can explain dependent
+unresolved type names.
+
+The bootstrap batch command compiles each case once. K uses a fresh machine per
+case; Node loads fresh modules in one process through the same engine and byte
+writer implementation. Cases retain their own output bytes and termination
+classes. Rust reference output is cached by generated source, generator/seed,
+compiler version and flags. Generators and reduced failures are source records;
+detailed measurements remain under target/.

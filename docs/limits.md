@@ -2,7 +2,8 @@
 
 These are constraints of current routes. Successful probe sizes are observations,
 not acceptance limits; the language has no source-depth or execution-fuel quota.
-Records are in `tools/measurements/` and `tools/scale/records/`.
+Reproduction commands and seeds belong beside observations in `status.md`; detailed
+tool output is disposable under `target/`.
 
 | Route / stage | What can stop a valid program |
 | --- | --- |

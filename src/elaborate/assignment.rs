@@ -16,7 +16,11 @@ impl Builder<'_, '_> {
         let mut ty = loop {
             match &self.compiler.source.exprs[expression].kind {
                 a::Expr::Path(path) => {
-                    break self.binding(&path.name).map(|local| self.ty(local))?;
+                    break self
+                        .guard_aliases
+                        .get(&path.name)
+                        .and_then(|place| place_type(&self.compiler.types, self.function, place))
+                        .or_else(|| self.binding(&path.name).map(|local| self.ty(local)))?;
                 }
                 a::Expr::Unary { op, value } if op == "*" => {
                     steps.push(Step::Deref);
@@ -94,6 +98,7 @@ impl Builder<'_, '_> {
         };
         let mut bindings = Bindings::default();
         let mut live = Vec::new();
+        let mut definite_live = Vec::new();
         let mut written = Vec::new();
         for (name, original) in &self.bindings.entries {
             let local = function.locals.len();
@@ -102,6 +107,7 @@ impl Builder<'_, '_> {
                 .push(self.function.locals[*original].clone());
             bindings.push((name.clone(), local));
             live.push(self.live[*original]);
+            definite_live.push(self.definite_live[*original]);
             written.push(self.written[*original]);
         }
         let references = Facts::new(function.locals.len());
@@ -112,6 +118,8 @@ impl Builder<'_, '_> {
                 start: 0,
                 range: None,
                 exits: Vec::new(),
+                result: None,
+                result_typed: true,
             })
             .collect();
         // The memo belongs to this one function instance. Nested probes share
@@ -127,11 +135,17 @@ impl Builder<'_, '_> {
                 function: &mut function,
                 sub: self.sub.clone(),
                 bindings,
+                guard_aliases: BTreeMap::new(),
+                active_span: self.active_span,
+                reference_updates: references.clone(),
+                reference_schedules: BTreeMap::new(),
                 references,
                 carriers: BTreeMap::new(),
+                dependents: BTreeMap::new(),
                 assignment_types,
                 inferred: self.inferred.clone(),
                 live: live.into_iter().collect(),
+                definite_live: definite_live.into_iter().collect(),
                 written: written.into_iter().collect(),
                 loops,
                 reachable: self.reachable,

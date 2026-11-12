@@ -820,12 +820,13 @@ impl<'a> Body<'a> {
                     i += 1;
                 }
             }
-            Op::TagTest { dst, src, variant } => {
-                self.read(*src);
-                if matches!(
-                    self.program.types[self.function.locals[*src].ty].kind,
-                    TypeKind::Ref { .. }
-                ) {
+            Op::TagTest {
+                dst,
+                place,
+                variant,
+            } => {
+                let ty = self.read_place(place, line);
+                if matches!(self.program.types[ty].kind, TypeKind::Ref { .. }) {
                     load(&mut self.bytes, 0);
                 }
                 load(&mut self.bytes, 0);
@@ -1981,9 +1982,11 @@ fn local_layout(program: &Program, function: &Function) -> Result<LocalLayout, S
                     touch_place(&mut ranges, place, at);
                 }
             }
-            Op::Unary { dst, src, .. }
-            | Op::Discriminant { dst, src }
-            | Op::TagTest { dst, src, .. } => {
+            Op::TagTest { dst, place, .. } => {
+                touch_local(&mut ranges, *dst, at);
+                touch_place(&mut ranges, place, at);
+            }
+            Op::Unary { dst, src, .. } | Op::Discriminant { dst, src } => {
                 touch_local(&mut ranges, *dst, at);
                 touch_local(&mut ranges, *src, at);
             }

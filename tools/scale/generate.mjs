@@ -14,6 +14,38 @@ if (kind === 'match') { s += 'pub fn probe() -> i64 { let x: i64 = 7; match x {\
 if (kind === 'vecs') { s += 'pub fn probe() -> i64 { let mut s: i64 = 0;\n'; for (let i = 0; i < n; i++) s += `let mut v${i}: Vec<i64> = Vec::new(); v${i}.push(${i}); s = s + v${i}[0];\n`; s += 's }\n'; }
 if (kind === 'allocvec') s = `pub fn probe() -> i64 { let mut v: Vec<i64> = Vec::new(); let mut i: usize = 0; while i < ${n}usize { v.push(i as i64); i = i + 1; } v[v.len() - 1] }\n`;
 if (kind === 'alloclist') s = `enum List { Nil, Cons(i64, Box<List>) } pub fn probe() -> i64 { let mut v: List = List::Nil; let mut i: i64 = 0; while i < ${n} { v = List::Cons(i, Box::new(v)); i = i + 1; } match v { List::Cons(x, rest) => x, List::Nil => 0 } }\n`;
+// Width probes: one trait's implementation set, one aggregate's members, and
+// simultaneously live loans. Keep generated sources deterministic and readable.
+if (kind === 'traits') {
+  s = 'trait Val { fn val(&self) -> i64; }\nfn get<T: Val>(x: &T) -> i64 { x.val() }\n';
+  for (let i = 0; i < n; i++) s += `struct S${i} { v: i64 }\nimpl Val for S${i} { fn val(&self) -> i64 { self.v } }\n`;
+  s += 'pub fn probe() -> i64 { let mut t: i64 = 0;\n';
+  for (let i = 0; i < n; i++) s += `{ let s: S${i} = S${i} { v: 1 }; t = t + get(&s); }\n`;
+  s += 't }\n';
+}
+if (kind === 'fields') {
+  s = 'struct S { ';
+  for (let i = 0; i < n; i++) s += `f${i}: i64, `;
+  s += ' }\npub fn probe() -> i64 { let s: S = S { ';
+  for (let i = 0; i < n; i++) s += `f${i}: 1, `;
+  s += ' }; let mut t: i64 = 0;\n';
+  for (let i = 0; i < n; i++) s += `t = t + s.f${i};\n`;
+  s += 't }\n';
+}
+if (kind === 'variants') {
+  s = 'enum E { ';
+  for (let i = 0; i < n; i++) s += `V${i}(i64), `;
+  s += ' }\nfn pick(e: E) -> i64 { match e { ';
+  for (let i = 0; i < n; i++) s += `E::V${i}(x) => x + ${i},\n`;
+  s += ` } }\npub fn probe() -> i64 { pick(E::V${n - 1}(1)) }\n`;
+}
+if (kind === 'refs') {
+  s = 'pub fn probe() -> i64 { let x: i64 = 1;\n';
+  for (let i = 0; i < n; i++) s += `let r${i}: &i64 = &x;\n`;
+  s += 'let mut t: i64 = 0;\n';
+  for (let i = 0; i < n; i++) s += `t = t + *r${i};\n`;
+  s += 't }\n';
+}
 if (!s) throw new Error('unknown scale family: ' + kind);
 return s;
 }

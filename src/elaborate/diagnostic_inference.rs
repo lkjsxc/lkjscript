@@ -2,10 +2,12 @@
 use super::{a, definition_types};
 use std::collections::BTreeMap;
 
-pub(super) fn infer_all(
-    source: &a::Program,
-    names: &crate::resolve::Resolver<'_>,
-) -> std::result::Result<BTreeMap<usize, definition_types::DefinitionTypes>, Vec<a::Diagnostic>> {
+pub(super) struct Report {
+    pub definitions: BTreeMap<usize, definition_types::DefinitionTypes>,
+    pub problems: Vec<a::Diagnostic>,
+}
+
+pub(super) fn infer_all(source: &a::Program, names: &crate::resolve::Resolver<'_>) -> Report {
     let mut definitions = BTreeMap::new();
     let mut problems = Vec::new();
     for (index, function) in source.functions.iter().enumerate() {
@@ -19,9 +21,8 @@ pub(super) fn infer_all(
             Err(problem) => problems.push(problem),
         }
     }
-    if problems.is_empty() {
-        Ok(definitions)
-    } else {
-        Err(problems)
+    Report {
+        definitions,
+        problems,
     }
 }

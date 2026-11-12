@@ -82,7 +82,7 @@ fn operation(which: usize, changed: bool) -> k::Op {
         15 => k::Op::Discriminant { dst: n, src: 21 },
         16 => k::Op::TagTest {
             dst: n,
-            src: 22,
+            place: k::Place::local(22),
             variant: 3,
         },
         17 => k::Op::Intrinsic {
@@ -150,7 +150,7 @@ fn operation_value(value: &k::Op) -> i64 {
             fields,
         } => *dst as i64 + *variant as i64 + fields[0] as i64 + fields[1] as i64,
         k::Op::Discriminant { dst, src } => *dst as i64 + *src as i64,
-        k::Op::TagTest { dst, src, variant } => *dst as i64 + *src as i64 + *variant as i64,
+        k::Op::TagTest { dst, place, variant } => *dst as i64 + place.local as i64 + *variant as i64,
         k::Op::Intrinsic { dst, name, args } => {
             *dst as i64 + name.len() as i64 + args[0] as i64 + args[1] as i64
         }
@@ -262,7 +262,7 @@ fn model() -> k::Program {
     let mut body: Vec<k::Instruction> = Vec::new();
     let mut index: usize = 0;
     while index < 27 {
-        body.push(k::Instruction {
+        body.push(k::Instruction { column: 1,
             op: operation(index, false),
             line: 100 + index,
         });

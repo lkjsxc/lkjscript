@@ -183,8 +183,45 @@ fn unify(terms: &[Term], pairs: Vec<(usize, usize)>) -> bool {
     }
     true
 }
+#[derive(Default)]
+struct Candidates {
+    heads: BTreeMap<String, Vec<usize>>,
+    generic: Vec<usize>,
+    all: Vec<usize>,
+}
+impl Candidates {
+    fn insert(&mut self, head: Option<String>, value: usize) {
+        self.all.push(value);
+        if let Some(head) = head {
+            self.heads.entry(head).or_default().push(value);
+        } else {
+            self.generic.push(value);
+        }
+    }
+    fn matching(&self, head: Option<&str>) -> Vec<usize> {
+        let Some(head) = head else {
+            return self.all.clone();
+        };
+        let mut values = self.generic.clone();
+        if let Some(specific) = self.heads.get(head) {
+            values.extend_from_slice(specific);
+        }
+        values
+    }
+}
+fn term_head(terms: &[Term], term: usize) -> Option<String> {
+    match &terms[term] {
+        Term::Named(name, _) => Some(name.clone()),
+        Term::DeclaredTrait(id, _) => Some(format!("trait#{id}")),
+        Term::Variable(_) | Term::Unknown => None,
+    }
+}
+
 fn coherence(source: &Program) -> Result<(), Diagnostic> {
-    let mut by_trait: BTreeMap<TraitIdentity, Vec<usize>> = BTreeMap::new();
+    let mut by_trait: BTreeMap<TraitIdentity, Candidates> = BTreeMap::new();
+    let mut terms = Vec::new();
+    let mut next = 0;
+    let mut normalized = Vec::<(usize, usize)>::new();
     for i in 0..source.impls.len() {
         let implementation = &source.impls[i];
         let trait_ty = match implementation.trait_ty {
@@ -195,21 +232,13 @@ fn coherence(source: &Program) -> Result<(), Diagnostic> {
             Type::Path(path) => bound_identity(source, path),
             _ => continue,
         };
+        let environment = variables(source, &implementation.generics, &mut terms, &mut next);
+        let a = signature_type(source, implementation.target, &environment, &mut terms)?;
+        let at = signature_type(source, trait_ty, &environment, &mut terms)?;
+        let head = term_head(&terms, a);
         if let Some(previous) = by_trait.get(&identity) {
-            for j in previous {
-                let other = &source.impls[*j];
-                let mut terms = Vec::new();
-                let mut next = 0;
-                let left = variables(source, &implementation.generics, &mut terms, &mut next);
-                let right = variables(source, &other.generics, &mut terms, &mut next);
-                let a = type_term(source, implementation.target, &left, &mut terms);
-                let b = type_term(source, other.target, &right, &mut terms);
-                let at = type_term(source, trait_ty, &left, &mut terms);
-                let bt = type_term(source, other.trait_ty.unwrap(), &right, &mut terms);
-                let a = normalize(source, a, &mut terms)?;
-                let b = normalize(source, b, &mut terms)?;
-                let at = normalize(source, at, &mut terms)?;
-                let bt = normalize(source, bt, &mut terms)?;
+            for j in previous.matching(head.as_deref()) {
+                let (b, bt) = normalized[j];
                 if unify(&terms, vec![(a, b), (at, bt)]) {
                     return Err(Diagnostic::new(
                         implementation.span,
@@ -219,7 +248,12 @@ fn coherence(source: &Program) -> Result<(), Diagnostic> {
                 }
             }
         }
-        by_trait.entry(identity.clone()).or_default().push(i);
+        let index = normalized.len();
+        normalized.push((a, at));
+        by_trait
+            .entry(identity.clone())
+            .or_default()
+            .insert(head, index);
         if let TraitIdentity::Declared(t) = identity {
             let trait_def = &source.traits[t];
             let mut names = BTreeMap::new();
@@ -631,7 +665,8 @@ impl Analysis<'_> {
                         | Expr::Borrow { value, .. }
                         | Expr::Cast { value, .. }
                         | Expr::Field { value, .. }
-                        | Expr::Try(value) => kids.push(*value),
+                        | Expr::Try(value)
+                        | Expr::Diverge(value) => kids.push(*value),
                         Expr::Binary { left, right, .. } => {
                             kids.push(*left);
                             kids.push(*right);
@@ -791,6 +826,17 @@ impl Analysis<'_> {
                                 t
                             }
                         }
+                        Expr::Try(value) => match &self.terms[exprs[value]] {
+                            Term::Named(name, children)
+                                if (name == "$std::prelude::Result"
+                                    || name == "$std::prelude::Option")
+                                    && !children.is_empty() =>
+                            {
+                                children[0]
+                            }
+                            _ => 0,
+                        },
+                        Expr::Diverge(_) => self.term(Term::Named("!".to_string(), Vec::new())),
                         Expr::Tuple(items) => {
                             let mut ts = Vec::new();
                             for e in items {
@@ -1362,15 +1408,84 @@ pub(crate) struct ImplementationWitness {
     pub(crate) implementation: usize,
     pub(crate) substitutions: BTreeMap<String, usize>,
 }
+/// Candidate filtering never proves a bound: the original structural matcher
+/// and prerequisite solver still validate each selected implementation.
+/// A generic or non-nominal target stays in the fallback set.
+pub(crate) struct ImplementationIndex {
+    by_trait: BTreeMap<TraitIdentity, Candidates>,
+}
+impl ImplementationIndex {
+    pub(crate) fn new(source: &Program) -> Result<Self, Diagnostic> {
+        let mut index = Self {
+            by_trait: BTreeMap::new(),
+        };
+        for (id, implementation) in source.impls.iter().enumerate() {
+            let Some(trait_type) = implementation.trait_ty else {
+                continue;
+            };
+            let Type::Path(path) = &source.types[trait_type].kind else {
+                continue;
+            };
+            let mut terms = Vec::new();
+            let mut next = 0;
+            let environment = variables(source, &implementation.generics, &mut terms, &mut next);
+            let target = signature_type(source, implementation.target, &environment, &mut terms)?;
+            let head = match &terms[target] {
+                Term::Named(name, _)
+                    if !matches!(name.as_str(), "&" | "&mut" | "[]" | "tuple" | "fn" | "!")
+                        && !name.starts_with("[;") =>
+                {
+                    Some(if name == "usize" {
+                        "u64".to_string()
+                    } else {
+                        name.clone()
+                    })
+                }
+                _ => None,
+            };
+            index
+                .by_trait
+                .entry(bound_identity(source, path))
+                .or_default()
+                .insert(head, id);
+        }
+        Ok(index)
+    }
+    pub(crate) fn candidates(
+        &self,
+        types: &[crate::k::Type],
+        applications: &BTreeMap<usize, (String, Vec<usize>)>,
+        ty: usize,
+        bound: &TraitIdentity,
+    ) -> Vec<usize> {
+        let Some(candidates) = self.by_trait.get(bound) else {
+            return Vec::new();
+        };
+        let head = if let Some((name, _)) = applications.get(&ty) {
+            Some(name.as_str())
+        } else {
+            match &types[ty].kind {
+                crate::k::TypeKind::Vec { .. } => Some("Vec"),
+                crate::k::TypeKind::Box { .. } => Some("Box"),
+                _ if !types[ty].name.is_empty() => Some(types[ty].name.as_str()),
+                _ => None,
+            }
+        };
+        candidates.matching(head.map(|name| if name == "usize" { "u64" } else { name }))
+    }
+}
+
 fn select_implementation(
     source: &Program,
+    index: &ImplementationIndex,
     types: &[crate::k::Type],
     applications: &BTreeMap<usize, (String, Vec<usize>)>,
     ty: usize,
     bound: &TraitIdentity,
 ) -> Option<ImplementationWitness> {
     let mut selected = None;
-    for (index, implementation) in source.impls.iter().enumerate() {
+    for candidate in index.candidates(types, applications, ty, bound) {
+        let implementation = &source.impls[candidate];
         let trait_type = match implementation.trait_ty {
             Some(ty) => ty,
             None => continue,
@@ -1388,7 +1503,7 @@ fn select_implementation(
                 return None;
             }
             selected = Some(ImplementationWitness {
-                implementation: index,
+                implementation: candidate,
                 substitutions,
             });
         }
@@ -1397,20 +1512,22 @@ fn select_implementation(
 }
 pub(crate) fn implementation_witness(
     source: &Program,
+    index: &ImplementationIndex,
     types: &[crate::k::Type],
     applications: &BTreeMap<usize, (String, Vec<usize>)>,
     ty: usize,
     bound: &TraitIdentity,
     rigid: &BTreeMap<usize, BTreeSet<TraitIdentity>>,
 ) -> Option<ImplementationWitness> {
-    if !satisfies_under(source, types, applications, ty, bound, rigid) {
+    if !satisfies_under(source, index, types, applications, ty, bound, rigid) {
         return None;
     }
-    select_implementation(source, types, applications, ty, bound)
+    select_implementation(source, index, types, applications, ty, bound)
 }
 
 fn trait_requirements(
     source: &Program,
+    index: &ImplementationIndex,
     types: &[crate::k::Type],
     applications: &BTreeMap<usize, (String, Vec<usize>)>,
     goal: &Goal,
@@ -1570,7 +1687,7 @@ fn trait_requirements(
             });
         }
     }
-    let selected = select_implementation(source, types, applications, goal.ty, &goal.bound)?;
+    let selected = select_implementation(source, index, types, applications, goal.ty, &goal.bound)?;
     let implementation = &source.impls[selected.implementation];
     let env = selected.substitutions;
     let mut children = Vec::new();
@@ -1617,21 +1734,34 @@ pub fn satisfies(
     } else {
         TraitIdentity::Builtin(bound.to_string())
     };
-    satisfies_resolved(source, types, applications, ty, &identity)
+    let Ok(index) = ImplementationIndex::new(source) else {
+        return false;
+    };
+    satisfies_resolved(source, &index, types, applications, ty, &identity)
 }
 
 pub(crate) fn satisfies_resolved(
     source: &Program,
+    index: &ImplementationIndex,
     types: &[crate::k::Type],
     applications: &BTreeMap<usize, (String, Vec<usize>)>,
     ty: usize,
     bound: &TraitIdentity,
 ) -> bool {
-    satisfies_under(source, types, applications, ty, bound, &BTreeMap::new())
+    satisfies_under(
+        source,
+        index,
+        types,
+        applications,
+        ty,
+        bound,
+        &BTreeMap::new(),
+    )
 }
 
 pub(crate) fn satisfies_under(
     source: &Program,
+    index: &ImplementationIndex,
     types: &[crate::k::Type],
     applications: &BTreeMap<usize, (String, Vec<usize>)>,
     ty: usize,
@@ -1672,7 +1802,7 @@ pub(crate) fn satisfies_under(
             }
             continue;
         }
-        match trait_requirements(source, types, applications, &goal, rigid) {
+        match trait_requirements(source, index, types, applications, &goal, rigid) {
             None => {
                 state.insert(key, 1);
             }

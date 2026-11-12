@@ -36,7 +36,7 @@ fn recovery_reaches_independent_statements_items_and_nested_methods() {
         }
     "#);
     let report = source::parse_bundle_report(&input);
-    assert_eq!(report.diagnostics.len(), 6);
+    assert_eq!(report.diagnostics.len(), 5);
     let functions: Vec<_> = report
         .program
         .functions
@@ -51,10 +51,10 @@ fn recovery_reaches_independent_statements_items_and_nested_methods() {
     );
     assert!(report.diagnostics.iter().all(|e| e.path == "case/main.rs"));
     let census = diagnostics::census(&report);
-    assert_eq!(census.unsupported["let else"], 1);
+    assert!(!census.unsupported.contains_key("let else"));
     assert_eq!(census.unsupported["mystery!"], 1);
     assert_eq!(census.unsupported["impl item"], 1);
-    assert_eq!(census.blocked["statement"], 5);
+    assert_eq!(census.blocked["statement"], 4);
     assert_eq!(census.blocked["item"], 1);
     assert_eq!(census.blocked["semantic phase"], 1);
     assert!(compiler::compile(&input).is_err());
@@ -128,18 +128,12 @@ fn census_uses_parsed_constructs_and_ignores_comments_and_literal_text() {
     let census = diagnostics::census(&report);
     for kind in [
         "char literal",
-        "if let",
-        "while let",
-        "?",
         "closure",
         "format!",
-        "or-pattern",
-        "match guard",
         "collection iteration",
         "range slicing",
         "repeated Vec literal",
         "function pointer",
-        "break value",
     ] {
         assert_eq!(
             census.unsupported.get(kind),
@@ -148,7 +142,7 @@ fn census_uses_parsed_constructs_and_ignores_comments_and_literal_text() {
             census.unsupported
         );
     }
-    assert_eq!(census.unsupported.len(), 13);
+    assert_eq!(census.unsupported.len(), 7);
     assert!(census.blocked.is_empty());
 }
 
@@ -259,6 +253,7 @@ fn uninitialized_function(name: &str, file: usize, line: usize) -> lkjscript::k:
             mutable: false,
         }],
         body: vec![k::Instruction {
+            column: 1,
             op: k::Op::Return { src: 0 },
             line,
         }],
@@ -390,5 +385,18 @@ fn census_counts_semantic_diagnostics_and_their_parsed_site_once() {
             "{kind}: {:?}",
             census.unsupported
         );
+    }
+}
+
+#[test]
+fn independent_typed_bodies_reach_ownership_after_peer_type_failure() {
+    let output = Command::new(env!("CARGO_BIN_EXE_lkjscript"))
+        .args(["check", "tests/diagnostics/four_errors.rs"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let text = String::from_utf8(output.stderr).unwrap();
+    for code in ["E_TYPE", "E_NAME", "E_BORROW", "E_MOVE"] {
+        assert!(text.contains(&format!(": {code} ")), "{text}");
     }
 }

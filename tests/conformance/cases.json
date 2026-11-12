@@ -1126,5 +1126,214 @@
     "rust": true,
     "hex": "43414244",
     "ending": "normal"
+  },
+  {
+    "id": "trait_index_alias",
+    "file": "pass/trait_index_alias.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "trait_index_alias_overlap",
+    "file": "fail/trait_index_alias_overlap.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "trait_index_blanket_overlap",
+    "file": "fail/trait_index_blanket_overlap.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "conditional_cleanup",
+    "file": "pass/conditional_cleanup.rs",
+    "kind": "output",
+    "hex": "41787942437a77454446764748754b",
+    "ending": "normal",
+    "rust": true
+  },
+  {
+    "id": "conditional_owner_cleanup",
+    "file": "k/conditional_owner_cleanup.k",
+    "kind": "run",
+    "value": "42"
+  },
+  {
+    "id": "conditional_move_read",
+    "file": "fail/conditional_move_read.rs",
+    "kind": "reject",
+    "code": "E_MOVE",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "loop_move_read",
+    "file": "fail/loop_move_read.rs",
+    "kind": "reject",
+    "code": "E_MOVE",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "conditional_initialization_read",
+    "file": "fail/conditional_initialization_read.rs",
+    "kind": "reject",
+    "code": "E_MOVE",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "conditional_borrow_after_move",
+    "file": "fail/conditional_borrow_after_move.rs",
+    "kind": "reject",
+    "code": "E_MOVE",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "conditional_reinitialization_read",
+    "file": "fail/conditional_reinitialization_read.rs",
+    "kind": "reject",
+    "code": "E_MOVE",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "loop_exit_move_read",
+    "file": "fail/loop_exit_move_read.rs",
+    "kind": "reject",
+    "code": "E_MOVE",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "conditional_owner_strict_drop",
+    "file": "k/conditional_owner_strict_drop.k",
+    "kind": "reject",
+    "code": "E_MOVE"
+  },
+  {
+    "id": "conditional_parent_projection",
+    "file": "k/conditional_parent_projection.k",
+    "kind": "reject",
+    "code": "E_MOVE"
+  },
+  {
+    "id": "conditional_partial_read",
+    "file": "k/conditional_partial_read.k",
+    "kind": "reject",
+    "code": "E_MOVE"
+  },
+  {
+    "id": "conditional_owner_overwrite",
+    "file": "k/conditional_owner_overwrite.k",
+    "kind": "reject",
+    "code": "E_K"
+  },
+  {
+    "id": "conditional_owner_leak",
+    "file": "k/conditional_owner_leak.k",
+    "kind": "reject",
+    "code": "E_K"
+  },
+  {
+    "id": "control_sugars",
+    "file": "pass/control_sugars.rs",
+    "kind": "run",
+    "value": "58",
+    "rust": true
+  },
+  {
+    "id": "pattern_order",
+    "file": "output/pattern_order.rs",
+    "kind": "output",
+    "hex": "41783272353545464847444342",
+    "ending": "normal",
+    "rust": true
+  },
+  {
+    "id": "let_else_falls_through",
+    "file": "fail/let_else_falls_through.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "guard_moves_payload",
+    "file": "fail/guard_moves_payload.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "guard_mutates_payload",
+    "file": "fail/guard_mutates_payload.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "nested_pattern_gap",
+    "file": "fail/nested_pattern_gap.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "or_binding_names",
+    "file": "fail/or_binding_names.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "try_error_mismatch",
+    "file": "fail/try_error_mismatch.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "break_value_mismatch",
+    "file": "fail/break_value_mismatch.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "conditional_owned_view_field",
+    "file": "k/conditional_owned_view_field.k",
+    "kind": "run",
+    "value": "42",
+    "entry": "probe"
+  },
+  {
+    "id": "guard_mutable_reference",
+    "file": "pass/guard_mutable_reference.rs",
+    "kind": "run",
+    "value": "2",
+    "rust": true
+  },
+  {
+    "id": "guard_writes_reference",
+    "file": "fail/guard_writes_reference.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false
   }
 ]

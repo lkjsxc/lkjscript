@@ -109,7 +109,11 @@ fn program(types: Vec<k::Type>, locals: Vec<k::Local>, ops: Vec<k::Op>) -> k::Pr
             body: ops
                 .into_iter()
                 .enumerate()
-                .map(|(line, op)| k::Instruction { op, line: line + 1 })
+                .map(|(line, op)| k::Instruction {
+                    column: 1,
+                    op,
+                    line: line + 1,
+                })
                 .collect(),
             test: false,
         }],

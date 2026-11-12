@@ -55,14 +55,14 @@ pub struct Type {
     pub name: String,
     pub kind: TypeKind,
 }
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Projection {
     Deref,
     Field(usize),
     VariantField(usize, usize),
     Index(usize),
 }
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Place {
     pub local: usize,
     pub projections: Vec<Projection>,
@@ -162,7 +162,7 @@ pub enum Op {
     },
     TagTest {
         dst: usize,
-        src: usize,
+        place: Place,
         variant: usize,
     },
     Intrinsic {
@@ -189,6 +189,7 @@ pub enum Op {
 pub struct Instruction {
     pub op: Op,
     pub line: usize,
+    pub column: usize,
 }
 #[derive(Clone, PartialEq, Eq)]
 pub enum ReturnSource {

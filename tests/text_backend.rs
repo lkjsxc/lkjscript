@@ -120,7 +120,11 @@ fn function(
             .collect(),
         body: body
             .into_iter()
-            .map(|op| k::Instruction { op, line: 1 })
+            .map(|op| k::Instruction {
+                column: 1,
+                op,
+                line: 1,
+            })
             .collect(),
         test: false,
     }
@@ -399,7 +403,7 @@ fn runtime_utf8_validation_matches_rust_at_encoding_boundaries() {
             intrinsic(1, "str_from_utf8", &[0]),
             k::Op::TagTest {
                 dst: 2,
-                src: 1,
+                place: k::Place::local(1),
                 variant: 0,
             },
             drop_local(1),

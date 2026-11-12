@@ -2,6 +2,7 @@
 use lkjscript::{
     ast::Diagnostic, check, diagnostics, elaborate, k, k_text, machine, resolve, source, wasm,
 };
+mod batch;
 mod library;
 mod timing;
 use std::fs;
@@ -108,6 +109,17 @@ fn print_census(source: &source::SourceReport) {
         census.unsupported.values().sum::<usize>()
     );
     println!("TOTAL\t{}\tblocked", census.blocked.values().sum::<usize>());
+    println!("\nsemantic dependency\tcount\tcategory");
+    let semantic = diagnostics::semantic_census(source);
+    for (kind, count) in &semantic {
+        println!("{kind}\t{count}\tsemantic");
+    }
+    println!("TOTAL\t{}\tsemantic", semantic.values().sum::<usize>());
+    if !source.blocked.is_empty() {
+        println!(
+            "Method and trait body resolution remains incomplete in blocked regions. Missing imports may account for dependent names."
+        );
+    }
 }
 fn analysis_failure(
     path: &str,
@@ -135,19 +147,22 @@ fn analysis_failure(
             reason: reason.to_string(),
         });
     }
+    diagnostics::complete_unsupported(source);
     if census {
         print_census(source);
     }
-    for problem in source.diagnostics.drain(..) {
-        eprintln!("{}", report(path, problem));
-    }
+    let mut messages: Vec<String> = source
+        .diagnostics
+        .drain(..)
+        .map(|problem| report(path, problem))
+        .collect();
     for blocked in &source.blocked {
-        eprintln!(
+        messages.push(format!(
             "{}:{}:{}: E_BLOCKED {}: {}",
             blocked.path, blocked.span.line, blocked.span.column, blocked.kind, blocked.reason
-        );
+        ));
     }
-    String::new()
+    messages.join("\n")
 }
 fn compile(
     path: &str,
@@ -195,19 +210,13 @@ fn compile(
     });
     timings.count("source_bytes", sizes.values().sum());
     if !loaded.diagnostics.is_empty() {
-        if census {
-            print_census(&loaded);
-        }
-        for problem in loaded.diagnostics {
-            eprintln!("{}", report(path, problem));
-        }
-        for blocked in loaded.blocked {
-            eprintln!(
-                "{}:{}:{}: E_BLOCKED {}: {}",
-                blocked.path, blocked.span.line, blocked.span.column, blocked.kind, blocked.reason
-            );
-        }
-        return Err(String::new());
+        return Err(analysis_failure(
+            path,
+            &mut loaded,
+            Vec::new(),
+            census,
+            None,
+        ));
     }
     let resolved = match timings.measure("resolve", || resolve::resolve(&loaded.program)) {
         Ok(value) => value,
@@ -223,7 +232,8 @@ fn compile(
             ));
         }
     };
-    let definitions = match timings.measure("type", || elaborate::infer_resolved_all(&resolved)) {
+    let definitions = match timings.measure("type", || elaborate::infer_resolved_report(&resolved))
+    {
         Ok(value) => value,
         Err(problems) => {
             return Err(analysis_failure(
@@ -246,7 +256,7 @@ fn compile(
                 problems,
                 census,
                 Some(
-                    "K construction stopped at its diagnostic; dependent analysis was not attempted",
+                    "failed bodies are blocked; independent typed bodies were constructed and checked",
                 ),
             ));
         }
@@ -471,6 +481,9 @@ fn run(child_stack: host_stack::Limits) -> Result<(), String> {
             "source/resolve/type/K: src/\nindependent K interpreter: src/machine.rs, src/machine/scalar.rs\nRust host, resource setup and source packing: bridge/lib.rs, bridge/compiler_stack.rs, bridge/main.rs, bridge/library.rs\nNode host and byte boundary: bridge/run.mjs, bridge/output.mjs\nRust output oracle: bridge/output.rs"
         );
         return Ok(());
+    }
+    if argv.get(1).is_some_and(|verb| verb == "batch") {
+        return batch::run(&argv[2..], child_stack);
     }
     let args = arguments(&argv)?;
     let mut timings = timing::Timings::new();

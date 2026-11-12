@@ -154,6 +154,7 @@ fn function(
             .into_iter()
             .enumerate()
             .map(|(index, op)| k::Instruction {
+                column: 1,
                 line: index + 1,
                 op,
             })
@@ -498,6 +499,7 @@ fn bounded_write(replace: bool, reference_value: bool, mutate_referent: bool) ->
         probe.body.insert(
             at,
             k::Instruction {
+                column: 1,
                 line: 6,
                 op: k::Op::Int { dst: 12, value: 7 },
             },

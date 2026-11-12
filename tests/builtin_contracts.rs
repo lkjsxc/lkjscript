@@ -293,6 +293,7 @@ fn cyclic_reference_program(depth: usize) -> lkjscript::k::Program {
         ],
         body: vec![
             k::Instruction {
+                column: 1,
                 line: 1,
                 op: k::Op::Read {
                     dst: 1,
@@ -304,12 +305,14 @@ fn cyclic_reference_program(depth: usize) -> lkjscript::k::Program {
                 },
             },
             k::Instruction {
+                column: 1,
                 line: 2,
                 op: k::Op::Drop {
                     place: k::Place::local(0),
                 },
             },
             k::Instruction {
+                column: 1,
                 line: 3,
                 op: k::Op::Return { src: 1 },
             },

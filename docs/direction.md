@@ -21,11 +21,13 @@ reference holders unite, and authority originates only from checked borrows.
 Conditional cleanup preserves destructor order. Loop invariants are supplied by
 construction and checked by inclusion. Origin-variable call contracts must precede
 general reference-bearing mutation. These are designs until language.md says they
-are implemented; current equality joins are still conservative.
+are implemented; initialization joins now weaken; loan and loop joins remain conservative.
 
-First remove measured lookup/state-copy exponents and make output available through
-World-derived capabilities. Widen inference, patterns, question-mark, closures,
-iteration, text and source collections according to dependency and census. Preserve
+World-derived output and an independent K machine are available. Prioritize
+front-end width over new trusted rules: patterns and question-mark first, then
+source-library text and collections, then closures and iteration behind multi-root
+view and origin-variable call contracts. Remove measured lookup and loan scans
+as those constructs multiply their use. Preserve
 per-leaf provenance, exact versus bounded sources and reborrow-parent distinctions.
 No arbitrary acceptance ceilings or source-depth cutoff. Recursive and explicit
 work stacks are both implementation choices, judged on acceptance and measurements.
@@ -42,3 +44,18 @@ forged K reaches the safety gate directly; shared source-sensitivity probes prot
 source ownership. Keep reduced failures and exact commands. Measure each available
 stage and name fused stages honestly. Unexplained growth is a defect. External test
 process envelopes never become language semantics.
+
+## Owned execution
+
+Checked K lowers once to an explicit target-independent layout and operation
+form. Copy, destruction and equality glue are functions in that form. Natural
+scalar widths and one source runtime supply allocation, growth and UTF-8; raw
+memory operations belong only to the runtime module. WebAssembly and x86-64
+encoders consume the same lowered operations. The native Linux ELF uses no libc;
+system calls derive from capabilities. Stack and heap exhaustion have defined
+traps and must not require retries or an engine-imposed extent.
+
+Keep the working Node route until native conformance, generators and capacity
+probes agree with the K model. Then delete the stack/worker bridge and run the
+routine gate on native and K. The million-function chain, non-tail recursion and
+large list are observations to reproduce, not new acceptance ceilings.

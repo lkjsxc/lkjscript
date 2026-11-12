@@ -30,7 +30,11 @@ fn run_node(bytes: &[u8], body: &str) {
 }
 
 fn instruction(op: k::Op) -> k::Instruction {
-    k::Instruction { op, line: 1 }
+    k::Instruction {
+        column: 1,
+        op,
+        line: 1,
+    }
 }
 
 #[test]

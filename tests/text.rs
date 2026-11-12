@@ -71,6 +71,7 @@ fn function(
             .into_iter()
             .enumerate()
             .map(|(index, op)| k::Instruction {
+                column: 1,
                 op,
                 line: index + 1,
             })
@@ -455,6 +456,7 @@ fn direct_k_invalid_utf8_is_checked_even_after_a_trap() {
     invalid.functions[0].body.insert(
         0,
         k::Instruction {
+            column: 1,
             op: k::Op::Trap {
                 message: "unreachable payload".to_string(),
             },

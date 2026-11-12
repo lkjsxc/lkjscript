@@ -152,7 +152,11 @@ fn raw(mut types: Vec<k::Type>, locals: &[usize], result: usize, ops: Vec<k::Op>
             body: ops
                 .into_iter()
                 .enumerate()
-                .map(|(line, op)| k::Instruction { line: line + 1, op })
+                .map(|(line, op)| k::Instruction {
+                    column: 1,
+                    line: line + 1,
+                    op,
+                })
                 .collect(),
             test: false,
         }],

@@ -47,6 +47,7 @@ impl Compiler<'_> {
         let assumptions = self.contracts.as_ref().map_or(&empty, |c| &c.rigid);
         if let Some(witness) = implementation_witness(
             self.source,
+            &self.implementations,
             &self.types,
             &self.applications,
             receiver,
@@ -306,6 +307,7 @@ impl Generated<'_, '_> {
         self.function.body.push(k::Instruction {
             op,
             line: self.span.line,
+            column: self.span.column.max(1),
         });
     }
 
@@ -442,7 +444,7 @@ impl Generated<'_, '_> {
                     let condition = self.local(k::BOOL);
                     self.emit(k::Op::TagTest {
                         dst: condition,
-                        src: 0,
+                        place: k::Place::local(0),
                         variant,
                     });
                     self.emit(k::Op::If { condition });
@@ -560,7 +562,7 @@ impl Generated<'_, '_> {
                     let condition = self.local(k::BOOL);
                     self.emit(k::Op::TagTest {
                         dst: condition,
-                        src: 0,
+                        place: k::Place::local(0),
                         variant,
                     });
                     self.emit(k::Op::If { condition });
@@ -568,7 +570,7 @@ impl Generated<'_, '_> {
                     let condition = self.local(k::BOOL);
                     self.emit(k::Op::TagTest {
                         dst: condition,
-                        src: 1,
+                        place: k::Place::local(1),
                         variant,
                     });
                     self.emit(k::Op::If { condition });

@@ -13,6 +13,7 @@ pub struct BlockedRegion {
 #[derive(Default)]
 pub struct Census {
     pub unsupported: BTreeMap<String, usize>,
+    pub unsupported_sites: Vec<(String, Span)>,
     pub blocked: BTreeMap<String, usize>,
 }
 
@@ -36,13 +37,8 @@ pub fn census(report: &SourceReport) -> Census {
     let program = &report.program;
     for node in &program.exprs {
         let kind = match &node.kind {
-            Expr::IfLet { .. } => Some("if let"),
-            Expr::WhileLet { .. } => Some("while let"),
-            Expr::Try(_) => Some("?"),
             Expr::Closure { .. } => Some("closure"),
-            Expr::Break(Some(_)) => Some("break value"),
             Expr::Char(_) => Some("char literal"),
-            Expr::Struct { base: Some(_), .. } => Some("struct update"),
             Expr::For {
                 iterator, pattern, ..
             } => {
@@ -67,25 +63,10 @@ pub fn census(report: &SourceReport) -> Census {
                 name, separator, ..
             } if name == "vec" && separator == ";" => Some("repeated Vec literal"),
             Expr::Macro { name, .. } if name == "format" => Some("format!"),
-            Expr::Match { arms, .. } => {
-                for arm in arms {
-                    if arm.guard.is_some() {
-                        recognized.push(("match guard", arm.span));
-                    }
-                }
-                None
-            }
             _ => None,
         };
         if let Some(kind) = kind {
             recognized.push((kind, node.span));
-        }
-    }
-    for node in &program.patterns {
-        match &node.kind {
-            Pattern::Or(_) => recognized.push(("or-pattern", node.span)),
-            Pattern::Ref { .. } => recognized.push(("reference pattern", node.span)),
-            _ => {}
         }
     }
     for node in &program.types {
@@ -95,6 +76,7 @@ pub fn census(report: &SourceReport) -> Census {
     }
     for (kind, span) in recognized {
         count(&mut result.unsupported, kind);
+        result.unsupported_sites.push((kind.to_string(), span));
         sites.insert((span.file, span.line, span.column));
     }
     for problem in &report.diagnostics {
@@ -113,6 +95,65 @@ pub fn census(report: &SourceReport) -> Census {
         };
         if sites.insert((problem.file, problem.line, problem.column)) {
             count(&mut result.unsupported, kind);
+        }
+    }
+    result
+}
+
+/// Report every recognized unsupported site, including those after the first
+/// failed body. Existing diagnostics retain their more specific explanation.
+pub fn complete_unsupported(report: &mut SourceReport) {
+    let sites = census(report).unsupported_sites;
+    let mut seen: BTreeSet<_> = report
+        .diagnostics
+        .iter()
+        .map(|p| (p.file, p.line, p.column))
+        .collect();
+    for (kind, span) in sites {
+        if seen.insert((span.file, span.line, span.column)) {
+            let mut problem = crate::ast::Diagnostic::new(
+                span,
+                "E_UNSUPPORTED",
+                &format!("unsupported construct: {kind}"),
+            );
+            if let Some(file) = report.program.files.get(span.file) {
+                problem.path = file.path.clone();
+            }
+            report.diagnostics.push(problem);
+        }
+    }
+}
+
+/// Actual resolution/type/trait diagnostics, not a guess based on a method name.
+/// A blocked body contributes no claimed result for its unresolved methods.
+pub fn semantic_census(report: &SourceReport) -> BTreeMap<String, usize> {
+    let mut result = BTreeMap::new();
+    let mut seen = BTreeSet::new();
+    let problems = crate::resolve::resolution_problems(&report.program);
+    for problem in problems.iter().chain(&report.diagnostics) {
+        let semantic_unsupported = problem.code == "E_UNSUPPORTED"
+            && ["trait", "method", "import", "lifetime"]
+                .iter()
+                .any(|word| problem.message.contains(word));
+        if !semantic_unsupported
+            && !matches!(
+                problem.code.as_str(),
+                "E_NAME" | "E_IMPORT" | "E_METHOD" | "E_TRAIT" | "E_GENERIC" | "E_TYPE"
+            )
+        {
+            continue;
+        }
+        if seen.insert((
+            problem.file,
+            problem.line,
+            problem.column,
+            problem.code.clone(),
+            problem.message.clone(),
+        )) {
+            count(
+                &mut result,
+                &format!("{} {}", problem.code, problem.message),
+            );
         }
     }
     result

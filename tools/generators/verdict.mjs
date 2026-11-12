@@ -6,6 +6,8 @@
 import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { run } from '../process.mjs';
+import { runCases } from '../batch.mjs';
+import { oracleCache } from '../oracle.mjs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 const [binary, seedS = '601', countS = '100', output = 'target/generators'] = process.argv.slice(2);
@@ -87,6 +89,9 @@ const N = Number(countS); const srcs = []; const ranges = [];
 let crate = '#![allow(warnings)]\n'; let line = 2;
 for (let i = 0; i < N; i++) { const s = gen(); srcs.push(s); fs.writeFileSync(`${dir}/c${i}.rs`, s); const body = `mod c${i} {\n${s}}\n`; const n = body.split('\n').length - 1; ranges.push([line, line + n - 1]); line += n; crate += body; }
 fs.writeFileSync(`${dir}/all.rs`, crate + 'fn main() {}\n');
+const OWN = new Set(['E0382', 'E0499', 'E0502', 'E0503', 'E0505', 'E0506', 'E0507', 'E0509', 'E0515', 'E0596', 'E0597', 'E0716', 'E0713', 'E0381', 'E0384', 'E0594']);
+const rustKind = m => /with overflow/.test(m) ? 'R0001' : /divide by zero|divisor of zero/.test(m) ? 'R0002' : /index out of bounds/.test(m) ? 'R0003' : /assertion/.test(m) ? 'R0005' : 'R0004';
+const references=await oracleCache({generator:metadata.sha256,seed:seedS,count:N,source:crate,flags:'2024 error-format=short overflow-checks=yes'},async()=>{
 const first = await run('rustc', ['--edition=2024', '--error-format=short', '-A', 'warnings', '--emit=metadata', '-o', `${dir}/all.rmeta`, `${dir}/all.rs`], { encoding: 'utf8', maxBuffer: 1 << 28 });
 const rejected = new Map();
 for (const l of first.stderr.split('\n')) { const m = l.match(/all\.rs:(\d+):\d+: error\[(E\d+)\]/); if (!m) continue; const ln = Number(m[1]); const i = ranges.findIndex(r => ln >= r[0] && ln <= r[1]); if (i >= 0 && !rejected.has(i)) rejected.set(i, m[2]); }
@@ -97,14 +102,14 @@ ok += 'fn main() { let n: usize = std::env::args().nth(1).unwrap().parse().unwra
 fs.writeFileSync(`${dir}/ok.rs`, ok);
 const second = await run('rustc', ['--edition=2024', '-C', 'overflow-checks=yes', '-A', 'warnings', `${dir}/ok.rs`, '-o', `${dir}/ok`], { encoding: 'utf8', maxBuffer: 1 << 28 });
 if (second.status !== 0) { console.log('second rustc build failed:\n' + second.stderr.slice(0, 3000)); process.exit(1); }
-const OWN = new Set(['E0382', 'E0499', 'E0502', 'E0503', 'E0505', 'E0506', 'E0507', 'E0509', 'E0515', 'E0596', 'E0597', 'E0716', 'E0713', 'E0381', 'E0384', 'E0594']);
-const rustKind = m => /with overflow/.test(m) ? 'R0001' : /divide by zero|divisor of zero/.test(m) ? 'R0002' : /index out of bounds/.test(m) ? 'R0003' : /assertion/.test(m) ? 'R0005' : 'R0004';
+
+const results=[];for(let i=0;i<N;i++){let rust;if(rejected.has(i))rust={k:'reject',code:rejected.get(i)};else{const r=await run(dir+'/ok',[String(i)],{encoding:'utf8',timeout:10000});const m=r.stderr.match(/panicked at [^:\n]+:\d+:\d+:\n(.*)/);rust=r.status===0?{k:'value',v:r.stdout.trim()}:r.status===101&&m?{k:'trap',kind:rustKind(m[1])}:{k:'abnormal'};}if(rust.k==='abnormal')throw new Error('abnormal Rust oracle');results.push(rust);}return results;
+});
+const actualResults=await runCases(bin,srcs.map((_,i)=>({path:dir+'/c'+i+'.rs',entry:'probe'})),{engine,output:dir,timeout:20000});
 const tally = {}; const pairs = {}; const show = []; const bump = (o, c) => { o[c] = (o[c] || 0) + 1; };
 for (let i = 0; i < N; i++) {
-  let rust;
-  if (rejected.has(i)) rust = { k: 'reject', code: rejected.get(i) };
-  else { const r = await run(`${dir}/ok`, [String(i)], { encoding: 'utf8', timeout: 10000 }); const m = r.stderr.match(/panicked at [^:\n]+:\d+:\d+:\n(.*)/); rust = r.status === 0 ? { k: 'value', v: r.stdout.trim() } : r.status === 101 && m ? { k: 'trap', kind: rustKind(m[1]) } : { k: 'abnormal' }; }
-  const l = await run(bin, ['run', `${dir}/c${i}.rs`, '--entry', 'probe', '--engine', engine], { encoding: 'utf8', timeout: 20000 });
+  const rust = references[i];
+  const l = actualResults[i];
   const text = (l.stdout + l.stderr).trim().split('\n')[0] || '';
   const code = text.match(/\b(E_[A-Z_]+|M_[A-Z_]+|R\d{4})\b/)?.[1];
   const lk = l.error || l.signal ? { k: l.error?.code === 'ETIMEDOUT' ? 'timeout' : 'crash' } : l.status === 0 ? { k: 'value', v: text } : code && code[0] === 'R' ? { k: 'trap', kind: code } : code && code[0] === 'M' ? { k: 'machine-error', code } : code ? { k: 'reject', code } : { k: 'crash' };

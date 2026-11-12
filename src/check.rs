@@ -3,6 +3,7 @@ use crate::ast::{Diagnostic, Span};
 use crate::facts::Facts;
 use crate::k::*;
 use std::collections::{BTreeMap, BTreeSet};
+use std::rc::Rc;
 
 fn error(line: usize, code: &str, message: &str) -> Diagnostic {
     Diagnostic::new(
@@ -159,7 +160,7 @@ fn is_prefix(a: &[Projection], b: &[Projection]) -> bool {
     a.len() <= b.len() && a == &b[..a.len()]
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum Root {
     /// Immutable storage that lives for the entire module instance.
     Static,
@@ -195,6 +196,8 @@ struct SourceBound {
 }
 #[derive(Clone)]
 struct Loan {
+    // Diagnostic metadata is deliberately excluded from semantic equality.
+    created: Option<(usize, usize)>,
     holder: Place,
     target: Origin,
     sources: Vec<SourceBound>,
@@ -211,6 +214,123 @@ impl PartialEq for Loan {
     }
 }
 impl Eq for Loan {}
+
+/// Each reference leaf has one holder identity. Root and parent indexes keep a
+/// shared read independent of unrelated loans and of other shared references.
+#[derive(Clone, Default)]
+struct Loans {
+    values: BTreeMap<Place, Loan>,
+    holders: BTreeMap<usize, BTreeSet<Place>>,
+    targets: BTreeMap<Root, BTreeSet<Place>>,
+    mutable_targets: BTreeMap<Root, BTreeSet<Place>>,
+    parents: BTreeMap<usize, BTreeSet<Place>>,
+}
+fn remove_index<K: Ord>(map: &mut BTreeMap<K, BTreeSet<Place>>, key: &K, place: &Place) {
+    if let Some(entries) = map.get_mut(key) {
+        entries.remove(place);
+        if entries.is_empty() {
+            map.remove(key);
+        }
+    }
+}
+impl Loans {
+    fn push(&mut self, loan: Loan) {
+        let holder = loan.holder.clone();
+        self.remove(&holder);
+        self.holders
+            .entry(holder.local)
+            .or_default()
+            .insert(holder.clone());
+        self.targets
+            .entry(loan.target.root.clone())
+            .or_default()
+            .insert(holder.clone());
+        if loan.mutable {
+            self.mutable_targets
+                .entry(loan.target.root.clone())
+                .or_default()
+                .insert(holder.clone());
+        }
+        for parent in &loan.parents {
+            self.parents
+                .entry(parent.local)
+                .or_default()
+                .insert(holder.clone());
+        }
+        self.values.insert(holder, loan);
+    }
+    fn remove(&mut self, holder: &Place) -> Option<Loan> {
+        let loan = self.values.remove(holder)?;
+        remove_index(&mut self.holders, &holder.local, holder);
+        remove_index(&mut self.targets, &loan.target.root, holder);
+        if loan.mutable {
+            remove_index(&mut self.mutable_targets, &loan.target.root, holder);
+        }
+        for parent in &loan.parents {
+            remove_index(&mut self.parents, &parent.local, holder);
+        }
+        Some(loan)
+    }
+    fn remove_place(&mut self, place: &Place) {
+        let holders: Vec<_> = self
+            .for_holder(place.local)
+            .filter(|loan| within(&loan.holder, place))
+            .map(|loan| loan.holder.clone())
+            .collect();
+        for holder in holders {
+            self.remove(&holder);
+        }
+    }
+    fn extend(&mut self, loans: Vec<Loan>) {
+        for loan in loans {
+            self.push(loan);
+        }
+    }
+    fn get(&self, holder: &Place) -> Option<&Loan> {
+        self.values.get(holder)
+    }
+    fn for_holder(&self, local: usize) -> impl Iterator<Item = &Loan> {
+        self.holders
+            .get(&local)
+            .into_iter()
+            .flatten()
+            .map(|holder| &self.values[holder])
+    }
+    fn for_target(&self, root: &Root, mutable_only: bool) -> impl Iterator<Item = &Loan> {
+        let index = if mutable_only {
+            &self.mutable_targets
+        } else {
+            &self.targets
+        };
+        index
+            .get(root)
+            .into_iter()
+            .flatten()
+            .map(|holder| &self.values[holder])
+    }
+    fn remap_parents(&mut self, from: &Place, to: &Place) {
+        let holders: Vec<_> = self
+            .parents
+            .get(&from.local)
+            .into_iter()
+            .flatten()
+            .cloned()
+            .collect();
+        for holder in holders {
+            let mut loan = self.remove(&holder).unwrap();
+            for parent in &mut loan.parents {
+                *parent = rebase(parent, from, to);
+            }
+            self.push(loan);
+        }
+    }
+}
+impl PartialEq for Loans {
+    fn eq(&self, other: &Self) -> bool {
+        self.values == other.values
+    }
+}
+impl Eq for Loans {}
 struct ResolvedOrigin {
     target: Origin,
     sources: Vec<SourceBound>,
@@ -236,9 +356,15 @@ struct Tag {
 }
 #[derive(Clone, PartialEq)]
 struct State {
+    // Definite and possible presence of each owner shell. A shell can remain
+    // present while some fields are absent; those facts are tracked separately.
     live: Facts,
+    maybe_live: Facts,
     moved: Vec<Place>,
-    loans: Vec<Loan>,
+    definitely_moved: Vec<Place>,
+    views: Rc<Vec<bool>>,
+    site: Option<(usize, usize)>,
+    loans: Loans,
     absent_references: Vec<Place>,
     tags: Vec<Tag>,
     predicates: BTreeMap<usize, Tag>,
@@ -317,7 +443,7 @@ fn resolve_origin(state: &State, place: &Place) -> ResolvedOrigin {
                     if visited.contains(&holder) {
                         continue;
                     }
-                    if let Some(loan) = state.loans.iter().find(|loan| loan.holder == holder) {
+                    if let Some(loan) = state.loans.get(&holder) {
                         found = Some((index, loan));
                         break;
                     }
@@ -549,14 +675,14 @@ fn carried_provenance(
     line: usize,
 ) -> Result<Provenance, Diagnostic> {
     let value_ty = place_type(types, function, from).unwrap();
-    let paths = reference_paths(types, value_ty);
     let mut result = Provenance {
         loans: Vec::new(),
         absent: Vec::new(),
     };
-    if paths.is_empty() {
+    if !state.views[value_ty] {
         return Ok(result);
     }
+    let paths = reference_paths(types, value_ty);
     let resolved = resolve_origin(state, from);
     let target = &resolved.target;
     let exact_storage = resolved.exact();
@@ -571,7 +697,7 @@ fn carried_provenance(
                 projections: target.projections.clone(),
             };
             source.projections.extend_from_slice(&path);
-            if let Some(loan) = state.loans.iter().find(|loan| loan.holder == source) {
+            if let Some(loan) = state.loans.get(&source) {
                 let mut next = loan.clone();
                 next.holder = holder;
                 result.loans.push(next);
@@ -594,6 +720,7 @@ fn carried_provenance(
             source.projections.push(Projection::Deref);
             let resolved = resolve_origin(state, &source);
             result.loans.push(Loan {
+                created: state.site,
                 holder,
                 target: resolved.target,
                 sources: resolved.sources,
@@ -605,7 +732,7 @@ fn carried_provenance(
     Ok(result)
 }
 fn remove_provenance(state: &mut State, place: &Place) {
-    state.loans.retain(|loan| !within(&loan.holder, place));
+    state.loans.remove_place(place);
     state
         .absent_references
         .retain(|absent| !within(absent, place));
@@ -653,22 +780,13 @@ fn check_external_write(
 }
 fn validate_stored_view(state: &State, target: &Origin, line: usize) -> Result<(), Diagnostic> {
     if let Root::Local(local) = target.root {
-        let loans: Vec<Loan> = state
-            .loans
-            .iter()
-            .filter(|loan| loan.holder.local == local)
-            .cloned()
-            .collect();
+        let loans: Vec<Loan> = state.loans.for_holder(local).cloned().collect();
         validate_view(&loans, line)?;
     }
     Ok(())
 }
 fn remap_parents(state: &mut State, from: &Place, to: &Place) {
-    for loan in &mut state.loans {
-        for parent in &mut loan.parents {
-            *parent = rebase(parent, from, to);
-        }
-    }
+    state.loans.remap_parents(from, to);
 }
 fn remap_carried(loans: &mut [Loan], from: &Place, to: &Place) {
     for loan in loans {
@@ -709,8 +827,27 @@ pub(crate) fn borrowed_projection(types: &[Type], function: &Function, place: &P
     }
     false
 }
-fn loan_use(state: &State, loan: &Loan, mutable: bool, line: usize) -> Result<(), Diagnostic> {
-    for other in &state.loans {
+fn loan_description(types: &[Type], function: &Function, loan: &Loan) -> String {
+    let location = match loan.created {
+        Some((line, column)) => format!("created at {}:{}", line, column),
+        None => "supplied by a function parameter".to_string(),
+    };
+    format!(
+        "{} borrow held by {} ({})",
+        if loan.mutable { "exclusive" } else { "shared" },
+        place_name(types, function, &loan.holder),
+        location
+    )
+}
+fn loan_use(
+    state: &State,
+    types: &[Type],
+    function: &Function,
+    loan: &Loan,
+    mutable: bool,
+    line: usize,
+) -> Result<(), Diagnostic> {
+    for other in state.loans.for_target(&loan.target.root, !mutable) {
         if other.holder == loan.holder
             || loan.parents.contains(&other.holder)
             || exclusive_variants(&loan.holder, &other.holder)
@@ -721,14 +858,20 @@ fn loan_use(state: &State, loan: &Loan, mutable: bool, line: usize) -> Result<()
             return Err(error(
                 line,
                 "E_BORROW",
-                "reference conflicts with a live borrow",
+                &format!(
+                    "{} conflicts with {}",
+                    place_name(types, function, &loan.holder),
+                    loan_description(types, function, other)
+                ),
             ));
         }
     }
     Ok(())
 }
 
-// mode 0 reads a whole value; mode 1 replaces/drops its remaining fields.
+// Mode 0 reads a whole value; mode 1 replaces/drops remaining fields.
+// Mode 2 additionally allows an absent root for conditional cleanup or an
+// overwrite. It never permits projecting through a possibly absent shell.
 fn access(
     state: &State,
     types: &[Type],
@@ -738,8 +881,16 @@ fn access(
     mode: u8,
     line: usize,
 ) -> Result<(), Diagnostic> {
-    if !state.live[place.local] {
-        return Err(error(line, "E_MOVE", "value is uninitialized or moved"));
+    let optional_root = mode == 2 && place.projections.is_empty();
+    if !state.live[place.local] && !optional_root {
+        return Err(error(
+            line,
+            "E_MOVE",
+            &format!(
+                "{} is uninitialized or moved on a reachable path",
+                place_name(types, function, place)
+            ),
+        ));
     }
     let mut prefix = Place::local(place.local);
     for projection in &place.projections {
@@ -772,23 +923,54 @@ fn access(
         return Err(error(line, "E_BORROW", "static storage is immutable"));
     }
     if let Root::Local(local) = target.root {
-        if !state.live[local] {
-            return Err(error(line, "E_MOVE", "borrow points to a moved owner"));
+        if !state.live[local] && !(optional_root && local == place.local) {
+            return Err(error(
+                line,
+                "E_MOVE",
+                &format!(
+                    "{} points to an owner that may be moved",
+                    place_name(types, function, place)
+                ),
+            ));
         }
         for moved in &state.moved {
             if moved.local == local && path_overlaps(&moved.projections, &target.projections) {
                 let ancestor = is_prefix(&moved.projections, &target.projections)
                     && moved.projections.len() < target.projections.len();
                 if mode == 0 || ancestor {
-                    return Err(error(line, "E_MOVE", "place contains a moved field"));
+                    return Err(error(
+                        line,
+                        "E_MOVE",
+                        &format!(
+                            "{} contains {} which may have been moved",
+                            place_name(types, function, place),
+                            place_name(types, function, moved)
+                        ),
+                    ));
                 }
             }
         }
     }
     let value_ty = place_type(types, function, place).unwrap();
-    let view_owner =
-        is_view(types, value_ty) && !matches!(types[value_ty].kind, TypeKind::Ref { .. });
-    for loan in &state.loans {
+    let view_owner = state.views[value_ty] && !matches!(types[value_ty].kind, TypeKind::Ref { .. });
+    let mut candidates = BTreeSet::new();
+    for loan in state.loans.for_target(&target.root, !write) {
+        candidates.insert(loan.holder.clone());
+    }
+    for parent in &parents {
+        for loan in state.loans.for_target(&Root::Local(parent.local), !write) {
+            candidates.insert(loan.holder.clone());
+        }
+    }
+    if write && view_owner {
+        if let Root::Local(local) = target.root {
+            if let Some(holders) = state.loans.parents.get(&local) {
+                candidates.extend(holders.iter().cloned());
+            }
+        }
+    }
+    for holder in candidates {
+        let loan = state.loans.get(&holder).unwrap();
         if loan.holder == *place || parents.contains(&loan.holder) {
             continue;
         }
@@ -796,7 +978,11 @@ fn access(
             return Err(error(
                 line,
                 "E_BORROW",
-                "place conflicts with a live borrow",
+                &format!(
+                    "{} conflicts with {}",
+                    place_name(types, function, place),
+                    loan_description(types, function, loan)
+                ),
             ));
         }
         // Using a reference field also uses the storage containing that field.
@@ -805,7 +991,11 @@ fn access(
                 return Err(error(
                     line,
                     "E_BORROW",
-                    "reference field is inside borrowed storage",
+                    &format!(
+                        "{} uses reference storage frozen by {}",
+                        place_name(types, function, place),
+                        loan_description(types, function, loan)
+                    ),
                 ));
             }
         }
@@ -816,7 +1006,11 @@ fn access(
                     return Err(error(
                         line,
                         "E_BORROW",
-                        "view is still borrowed through one of its fields",
+                        &format!(
+                            "{} is still borrowed through {}",
+                            place_name(types, function, place),
+                            loan_description(types, function, loan)
+                        ),
                     ));
                 }
             }
@@ -877,18 +1071,24 @@ fn consume(
     line: usize,
 ) -> Result<(), Diagnostic> {
     access(state, types, function, &Place::local(local), true, 0, line)?;
-    state.live.set(local, false);
-    remove_provenance(state, &Place::local(local));
-    state.moved.retain(|place| place.local != local);
-    invalidate(state, &Origin::local(local));
-    state.predicates.remove(&local);
+    forget(state, local);
     Ok(())
 }
+fn forget(state: &mut State, local: usize) {
+    state.live.set(local, false);
+    state.maybe_live.set(local, false);
+    remove_provenance(state, &Place::local(local));
+    state.moved.retain(|place| place.local != local);
+    state.definitely_moved.retain(|place| place.local != local);
+    invalidate(state, &Origin::local(local));
+    state.predicates.remove(&local);
+}
 fn put(state: &mut State, local: usize, line: usize) -> Result<(), Diagnostic> {
-    if state.live[local] {
-        return Err(error(line, "E_K", "destination still owns a value"));
+    if state.maybe_live[local] {
+        return Err(error(line, "E_K", "destination may still own a value"));
     }
     state.live.set(local, true);
+    state.maybe_live.set(local, true);
     state.predicates.remove(&local);
     invalidate(state, &Origin::local(local));
     Ok(())
@@ -901,8 +1101,10 @@ fn validate_merge(a: &State, b: &State, line: usize) -> Result<(), Diagnostic> {
         return Ok(());
     }
     if a.live != b.live
+        || a.maybe_live != b.maybe_live
+        || !same_set(&a.definitely_moved, &b.definitely_moved)
         || !same_set(&a.moved, &b.moved)
-        || !same_set(&a.loans, &b.loans)
+        || a.loans != b.loans
         || !same_set(&a.absent_references, &b.absent_references)
     {
         return Err(error(
@@ -913,14 +1115,53 @@ fn validate_merge(a: &State, b: &State, line: usize) -> Result<(), Diagnostic> {
     }
     Ok(())
 }
-fn merge(mut a: State, b: State, line: usize) -> Result<State, Diagnostic> {
+fn merge(
+    mut a: State,
+    b: State,
+    types: &[Type],
+    function: &Function,
+    line: usize,
+) -> Result<State, Diagnostic> {
     if !a.reachable {
         return Ok(b);
     }
     if !b.reachable {
         return Ok(a);
     }
-    validate_merge(&a, &b, line)?;
+    if a.loans != b.loans || !same_set(&a.absent_references, &b.absent_references) {
+        return Err(error(
+            line,
+            "E_BORROW",
+            "branches must preserve the same reference holders and origins",
+        ));
+    }
+    let changed = a
+        .live
+        .symmetric_difference(&b.live)
+        .union(&a.maybe_live.symmetric_difference(&b.maybe_live));
+    if changed
+        .indices_from(0)
+        .any(|local| a.views[function.locals[local].ty])
+        || a.moved.iter().chain(b.moved.iter()).any(|place| {
+            a.views[place_type(types, function, place).unwrap()]
+                && (a.moved.contains(place) != b.moved.contains(place))
+        })
+    {
+        return Err(error(
+            line,
+            "E_BORROW",
+            "conditional initialization of a reference-bearing owner needs holder joins",
+        ));
+    }
+    a.live = a.live.intersection(&b.live);
+    a.maybe_live = a.maybe_live.union(&b.maybe_live);
+    for place in &b.moved {
+        if !a.moved.contains(place) {
+            a.moved.push(place.clone());
+        }
+    }
+    a.definitely_moved
+        .retain(|place| b.definitely_moved.contains(place));
     a.tags.retain(|tag| b.tags.contains(tag));
     a.predicates
         .retain(|local, tag| b.predicates.get(local) == Some(tag));
@@ -933,9 +1174,11 @@ fn local_type(function: &Function, local: usize, line: usize) -> Result<usize, D
         .map(|l| l.ty)
         .ok_or_else(|| error(line, "E_K", "local index is not declared"))
 }
-fn enum_place(types: &[Type], function: &Function, local: usize) -> Place {
-    let mut place = Place::local(local);
-    if matches!(types[function.locals[local].ty].kind, TypeKind::Ref { .. }) {
+fn enum_place(types: &[Type], function: &Function, mut place: Place) -> Place {
+    if matches!(
+        types[place_type(types, function, &place).unwrap()].kind,
+        TypeKind::Ref { .. }
+    ) {
         place.projections.push(Projection::Deref);
     }
     place
@@ -1381,8 +1624,12 @@ fn check_shape(
                 }
             }
         }
-        Op::Discriminant { dst, src } | Op::TagTest { dst, src, .. } => {
-            let st = ty(*src)?;
+        Op::Discriminant { dst, .. } | Op::TagTest { dst, .. } => {
+            let st = match &instruction.op {
+                Op::Discriminant { src, .. } => ty(*src)?,
+                Op::TagTest { place, .. } => place_ty(place)?,
+                _ => unreachable!(),
+            };
             let inner = match types[st].kind {
                 TypeKind::Ref { inner, .. } => inner,
                 _ => st,
@@ -1450,22 +1697,20 @@ fn call_borrows(
                     local,
                     projections: target.projections.clone(),
                 };
-                for loan in &state.loans {
+                for loan in state.loans.for_holder(local) {
                     if within(&loan.holder, &base) {
                         used.push((loan.clone(), mutable && loan.mutable));
                     }
                 }
             }
         } else {
-            for loan in &state.loans {
-                if loan.holder.local == *arg {
-                    used.push((loan.clone(), loan.mutable));
-                }
+            for loan in state.loans.for_holder(*arg) {
+                used.push((loan.clone(), loan.mutable));
             }
         }
     }
     for (loan, mutable) in &used {
-        loan_use(state, loan, *mutable, line)?;
+        loan_use(state, types, function, loan, *mutable, line)?;
         if *mutable {
             changed.push(loan.target.clone());
         }
@@ -1476,12 +1721,36 @@ fn call_borrows(
     Ok(())
 }
 
-fn check_function(program: &Program, function: &Function) -> Result<(), Diagnostic> {
+fn check_function(
+    program: &Program,
+    function: &Function,
+    views: &Rc<Vec<bool>>,
+) -> Result<(), Diagnostic> {
+    let mut site = None;
+    check_function_body(program, function, views, &mut site).map_err(|mut problem| {
+        if let Some((line, column)) = site {
+            if problem.line == line {
+                problem.column = column;
+            }
+        }
+        problem
+    })
+}
+fn check_function_body(
+    program: &Program,
+    function: &Function,
+    views: &Rc<Vec<bool>>,
+    site: &mut Option<(usize, usize)>,
+) -> Result<(), Diagnostic> {
     let types = &program.types;
     let mut state = State {
         live: Facts::new(function.locals.len()),
+        maybe_live: Facts::new(function.locals.len()),
         moved: Vec::new(),
-        loans: Vec::new(),
+        definitely_moved: Vec::new(),
+        views: views.clone(),
+        site: None,
+        loans: Loans::default(),
         absent_references: Vec::new(),
         tags: Vec::new(),
         predicates: BTreeMap::new(),
@@ -1489,6 +1758,7 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
     };
     for i in 0..function.params {
         state.live.set(i, true);
+        state.maybe_live.set(i, true);
         for (path, mutable) in reference_paths(types, function.locals[i].ty) {
             let mut projections = path.clone();
             if !path.is_empty() {
@@ -1499,6 +1769,7 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                 projections,
             };
             state.loans.push(Loan {
+                created: state.site,
                 holder: Place {
                     local: i,
                     projections: path,
@@ -1529,6 +1800,8 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
     let mut controls: Vec<Control> = Vec::new();
     for instruction in &function.body {
         let line = instruction.line;
+        *site = Some((line, instruction.column));
+        state.site = *site;
         check_shape(program, function, instruction)?;
         match &instruction.op {
             Op::Else => {
@@ -1551,10 +1824,16 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                     }
                     state.reachable = false;
                     for exit in control.breaks {
-                        state = merge(state, exit, line)?;
+                        state = merge(state, exit, types, function, line)?;
                     }
                 } else {
-                    state = merge(state, control.then_state.unwrap_or(control.entry), line)?;
+                    state = merge(
+                        state,
+                        control.then_state.unwrap_or(control.entry),
+                        types,
+                        function,
+                        line,
+                    )?;
                 }
                 continue;
             }
@@ -1597,6 +1876,7 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
             Op::Text { dst, .. } => {
                 put(&mut state, *dst, line)?;
                 state.loans.push(Loan {
+                    created: state.site,
                     holder: Place::local(*dst),
                     target: Origin {
                         root: Root::Static,
@@ -1637,6 +1917,7 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                         remove_provenance(&mut state, place);
                         invalidate(&mut state, &target);
                         state.moved.push(place.clone());
+                        state.definitely_moved.push(place.clone());
                     }
                 }
                 put(&mut state, *dst, line)?;
@@ -1669,6 +1950,7 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                 let resolved = resolve_origin(&state, place);
                 put(&mut state, *dst, line)?;
                 state.loans.push(Loan {
+                    created: state.site,
                     holder: Place::local(*dst),
                     target: resolved.target,
                     sources: resolved.sources,
@@ -1677,10 +1959,18 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                 });
             }
             Op::Assign { place, src } => {
-                if !place.projections.is_empty() || state.live[place.local] {
-                    access(&state, types, function, place, true, 1, line)?;
+                if !place.projections.is_empty() || state.maybe_live[place.local] {
+                    access(
+                        &state,
+                        types,
+                        function,
+                        place,
+                        true,
+                        if place.projections.is_empty() { 2 } else { 1 },
+                        line,
+                    )?;
                 }
-                if state.live[place.local]
+                if state.maybe_live[place.local]
                     && place.projections.is_empty()
                     && !function.locals[place.local].mutable
                 {
@@ -1689,9 +1979,9 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                 let resolved = resolve_origin(&state, place);
                 let target = &resolved.target;
                 let absent = if place.projections.is_empty() {
-                    !state.live[place.local]
+                    !state.maybe_live[place.local]
                 } else {
-                    state.moved.iter().any(|moved| moved == place)
+                    state.definitely_moved.iter().any(|moved| moved == place)
                 };
                 let pt = place_type(types, function, place).unwrap();
                 if !absent && heap_type(&types[pt].kind) {
@@ -1720,6 +2010,11 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                 consume(&mut state, types, function, *src, line)?;
                 invalidate(&mut state, target);
                 state.live.set(place.local, true);
+                state.maybe_live.set(place.local, true);
+                state.definitely_moved.retain(|moved| {
+                    !(moved.local == place.local
+                        && is_prefix(&place.projections, &moved.projections))
+                });
                 state.moved.retain(|moved| {
                     !(moved.local == place.local
                         && is_prefix(&place.projections, &moved.projections))
@@ -1748,7 +2043,11 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
             }
             Op::Drop { place } | Op::DropIf { place } => {
                 let conditional = matches!(instruction.op, Op::DropIf { .. });
-                if !state.live[place.local] {
+                if !state.live[place.local]
+                    && !(conditional
+                        && place.projections.is_empty()
+                        && state.maybe_live[place.local])
+                {
                     if conditional && place.projections.is_empty() {
                         continue;
                     }
@@ -1776,29 +2075,40 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                 }
                 // Projection still requires every ancestor. Conditional cleanup
                 // may skip only this exact absent place, never invent its owner.
-                access(&state, types, function, place, true, 1, line)?;
-                if conditional && state.moved.iter().any(|moved| moved == place) {
+                access(
+                    &state,
+                    types,
+                    function,
+                    place,
+                    true,
+                    if conditional { 2 } else { 1 },
+                    line,
+                )?;
+                if conditional && state.definitely_moved.iter().any(|moved| moved == place) {
                     continue;
                 }
                 let pt = place_type(types, function, place).unwrap();
                 if has_destructor(program, pt) {
-                    if state.moved.iter().any(|moved| within(moved, place)) {
+                    if state
+                        .moved
+                        .iter()
+                        .any(|moved| moved != place && within(moved, place))
+                    {
                         return Err(error(
                             line,
                             "E_MOVE",
                             "custom drop requires every field to be initialized",
                         ));
                     }
-                    for loan in &state.loans {
+                    for loan in state.loans.for_holder(place.local) {
                         if within(&loan.holder, place) {
-                            loan_use(&state, loan, loan.mutable, line)?;
+                            loan_use(&state, types, function, loan, loan.mutable, line)?;
                         }
                     }
                 }
                 remove_provenance(&mut state, place);
                 if place.projections.is_empty() {
-                    state.moved.retain(|moved| moved.local != place.local);
-                    consume(&mut state, types, function, place.local, line)?;
+                    forget(&mut state, place.local);
                 } else {
                     let target = origin(&state, place).0;
                     invalidate(&mut state, &target);
@@ -1807,6 +2117,8 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                             && is_prefix(&place.projections, &moved.projections))
                     });
                     state.moved.push(place.clone());
+                    state.definitely_moved.retain(|moved| !within(moved, place));
+                    state.definitely_moved.push(place.clone());
                 }
             }
             Op::Unary { dst, src, .. } => {
@@ -1887,6 +2199,7 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                             }
                         }
                         returned.loans.push(Loan {
+                            created: state.site,
                             holder,
                             target: source.target.clone(),
                             sources: bounds,
@@ -1902,6 +2215,7 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                             projections: Vec::new(),
                         };
                         returned.loans.push(Loan {
+                            created: state.site,
                             holder,
                             sources: vec![SourceBound {
                                 origin: target.clone(),
@@ -1992,8 +2306,13 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                 }
                 put(&mut state, *dst, line)?;
             }
-            Op::Discriminant { dst, src } | Op::TagTest { dst, src, .. } => {
-                let place = enum_place(types, function, *src);
+            Op::Discriminant { dst, .. } | Op::TagTest { dst, .. } => {
+                let source = match &instruction.op {
+                    Op::Discriminant { src, .. } => Place::local(*src),
+                    Op::TagTest { place, .. } => place.clone(),
+                    _ => unreachable!(),
+                };
+                let place = enum_place(types, function, source);
                 access(&state, types, function, &place, false, 0, line)?;
                 let target = origin(&state, &place).0;
                 put(&mut state, *dst, line)?;
@@ -2143,7 +2462,7 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                     }
                 }
                 consume(&mut state, types, function, *src, line)?;
-                if state.live.any() {
+                if state.maybe_live.any() {
                     return Err(error(
                         line,
                         "E_K",
@@ -2444,8 +2763,9 @@ fn check_structure(program: &Program) -> Result<(), Diagnostic> {
 pub fn check_all(program: Program) -> Result<CheckedProgram, Vec<Diagnostic>> {
     check_structure(&program).map_err(|problem| vec![problem])?;
     let mut problems = Vec::new();
+    let views = Rc::new(reference_containment(&program.types));
     for function in &program.functions {
-        if let Err(mut problem) = check_function(&program, function) {
+        if let Err(mut problem) = check_function(&program, function, &views) {
             problem.file = function.file;
             problems.push(problem);
         }
@@ -2478,7 +2798,11 @@ mod tests {
         }
     }
     fn op(op: Op) -> Instruction {
-        Instruction { op, line: 1 }
+        Instruction {
+            op,
+            line: 1,
+            column: 1,
+        }
     }
     fn program(
         types: Vec<Type>,
@@ -3121,7 +3445,7 @@ mod tests {
                 vec![
                     Op::TagTest {
                         dst: 1,
-                        src: 0,
+                        place: Place::local(0),
                         variant: 0
                     },
                     Op::If { condition: 1 },
@@ -3710,7 +4034,7 @@ mod tests {
         let mut body = vec![
             Op::TagTest {
                 dst: 1,
-                src: 0,
+                place: Place::local(0),
                 variant: 0,
             },
             Op::If { condition: 1 },
@@ -3915,7 +4239,7 @@ mod tests {
                     },
                     Op::TagTest {
                         dst: 3,
-                        src: 2,
+                        place: Place::local(2),
                         variant: 0,
                     },
                     Op::Int { dst: 4, value: 1 },

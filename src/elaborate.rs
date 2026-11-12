@@ -14,6 +14,7 @@ mod output;
 mod patterns;
 mod sequences;
 mod static_lifetimes;
+mod sugars;
 mod type_resolve;
 mod variants;
 
@@ -54,6 +55,10 @@ enum PendingFunction {
 struct Compiler<'a> {
     source: &'a a::Program,
     names: crate::resolve::Resolver<'a>,
+    implementations: crate::generics::ImplementationIndex,
+    field_positions: Vec<BTreeMap<String, usize>>,
+    variant_positions: Vec<BTreeMap<String, usize>>,
+    anonymous_fields: BTreeMap<usize, BTreeMap<String, usize>>,
     types: Vec<k::Type>,
     type_names: BTreeMap<String, usize>,
     type_keys: BTreeMap<TypeKey, usize>,
@@ -97,41 +102,87 @@ pub fn elaborate_resolved(source: &a::Program) -> Result<k::Program> {
 pub struct TypedDefinitions<'source> {
     compiler: Compiler<'source>,
     evidence: generic_check::DefinitionEvidence,
+    problems: Vec<a::Diagnostic>,
 }
 
-/// Definition inference is isolated, so its errors can be collected without
-/// inventing signatures or continuing partially mutated K/type interning state.
-pub fn infer_resolved_all(
+/// Keep independent body results when signatures are valid. This report cannot
+/// authorize emission: lower_definitions returns all saved errors before K can
+/// escape, after checking the independently constructed bodies.
+pub fn infer_resolved_report(
     source: &a::Program,
 ) -> std::result::Result<TypedDefinitions<'_>, Vec<a::Diagnostic>> {
     static_lifetimes::annotations(source).map_err(|error| vec![error])?;
     crate::generics::validate(source).map_err(|error| vec![error])?;
     static_lifetimes::outputs(source).map_err(|error| vec![error])?;
     let compiler = Compiler::new(source).map_err(|error| vec![error])?;
-    let definitions = diagnostic_inference::infer_all(source, &compiler.names)?;
-    let evidence = generic_check::validate(source, definitions).map_err(|error| vec![error])?;
-    Ok(TypedDefinitions { compiler, evidence })
+    let inferred = diagnostic_inference::infer_all(source, &compiler.names);
+    let (evidence, mut problems) = generic_check::validate_report(source, inferred.definitions)
+        .map_err(|error| {
+            let mut errors = inferred.problems.clone();
+            errors.push(error);
+            errors
+        })?;
+    problems.splice(0..0, inferred.problems);
+    Ok(TypedDefinitions {
+        compiler,
+        evidence,
+        problems,
+    })
 }
 
-/// Build concrete K from the same recorded answers used for definition checking.
+/// The strict type-phase API preserves its all-or-error result.
+pub fn infer_resolved_all(
+    source: &a::Program,
+) -> std::result::Result<TypedDefinitions<'_>, Vec<a::Diagnostic>> {
+    let definitions = infer_resolved_report(source)?;
+    if definitions.problems.is_empty() {
+        Ok(definitions)
+    } else {
+        Err(definitions.problems)
+    }
+}
+
+/// Construct and check independent bodies even after peer bodies fail. Failed
+/// bodies have their declared signatures and a diagnostic-only trap body; the
+/// accumulated error list prevents this program from leaving this function.
 pub fn lower_definitions(
     definitions: TypedDefinitions<'_>,
 ) -> std::result::Result<k::Program, Vec<a::Diagnostic>> {
     let source = definitions.compiler.source;
-    elaborate_definitions(source, definitions.compiler, definitions.evidence)
-        .map_err(|error| vec![error])
+    let mut problems = definitions.problems;
+    let meaning = elaborate_definitions(
+        source,
+        definitions.compiler,
+        definitions.evidence,
+        &mut problems,
+    )
+    .map_err(|error| {
+        let mut errors = problems.clone();
+        errors.push(error);
+        errors
+    })?;
+    if problems.is_empty() {
+        return Ok(meaning);
+    }
+    if let Err(errors) = crate::check::check_all(meaning) {
+        problems.extend(errors);
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    problems.retain(|p| seen.insert((p.file, p.line, p.column, p.code.clone(), p.message.clone())));
+    Err(problems)
 }
 
 pub fn elaborate_resolved_all(
     source: &a::Program,
 ) -> std::result::Result<k::Program, Vec<a::Diagnostic>> {
-    lower_definitions(infer_resolved_all(source)?)
+    lower_definitions(infer_resolved_report(source)?)
 }
 
 fn elaborate_definitions(
     source: &a::Program,
     mut c: Compiler<'_>,
     evidence: generic_check::DefinitionEvidence,
+    problems: &mut Vec<a::Diagnostic>,
 ) -> Result<k::Program> {
     c.method_selections = evidence.methods;
     c.definition_types = evidence.types;
@@ -168,7 +219,6 @@ fn elaborate_definitions(
             )?;
         }
     }
-
     for i in 0..source.functions.len() {
         let f = &source.functions[i];
         if f.body.is_some()
@@ -187,14 +237,40 @@ fn elaborate_definitions(
         }
         if next < c.pending_functions.len() {
             let (index, pending) = c.pending_functions[next].clone();
-            c.functions[index] = match pending {
-                PendingFunction::Source(instance) => c.compile_function(index, &instance)?,
-                PendingFunction::Derived(instance) => c.compile_derived(index, &instance)?,
+            let compiled = match pending {
+                PendingFunction::Source(instance)
+                    if !c.definition_types.contains_key(&instance.source) =>
+                {
+                    None
+                }
+                PendingFunction::Source(instance) => Some(c.compile_function(index, &instance)),
+                PendingFunction::Derived(instance) => Some(c.compile_derived(index, &instance)),
             };
+            match compiled {
+                Some(Ok(function)) => c.functions[index] = function,
+                failed => {
+                    if let Some(Err(problem)) = failed {
+                        problems.push(problem);
+                    }
+                    if problems.is_empty() {
+                        return Err(err(
+                            a::Span::default(),
+                            "E_BLOCKED",
+                            "a body has no successful definition inference",
+                        ));
+                    }
+                    c.functions[index].body = vec![k::Instruction {
+                        column: 1,
+                        op: k::Op::Trap {
+                            message: "body blocked by a source diagnostic".to_string(),
+                        },
+                        line: 1,
+                    }];
+                }
+            }
             next += 1;
         }
     }
-
     Ok(k::Program {
         types: c.types,
         functions: c.functions,
@@ -207,6 +283,32 @@ impl<'a> Compiler<'a> {
         let mut c = Compiler {
             source,
             names: crate::resolve::Resolver::new(source)?,
+            implementations: crate::generics::ImplementationIndex::new(source)?,
+            field_positions: source
+                .structs
+                .iter()
+                .map(|definition| {
+                    definition
+                        .fields
+                        .iter()
+                        .enumerate()
+                        .map(|(i, field)| (field.name.clone(), i))
+                        .collect()
+                })
+                .collect(),
+            variant_positions: source
+                .enums
+                .iter()
+                .map(|definition| {
+                    definition
+                        .variants
+                        .iter()
+                        .enumerate()
+                        .map(|(i, variant)| (variant.name.clone(), i))
+                        .collect()
+                })
+                .collect(),
+            anonymous_fields: BTreeMap::new(),
             types: k::primitives(),
             type_names: BTreeMap::new(),
             type_keys: BTreeMap::new(),
@@ -267,6 +369,31 @@ impl Compiler<'_> {
             .filter(|declaration| declaration.name == path.name)
             .map(|declaration| declaration.item)
     }
+    fn field_index(&mut self, ty: usize, name: &str) -> Option<usize> {
+        if let Some((owner, _)) = self.applications.get(&ty) {
+            if let Some(a::Item::Struct(index)) = self
+                .declaration_names
+                .get(owner)
+                .map(|id| self.source.declarations[*id].item)
+            {
+                return self.field_positions[index].get(name).copied();
+            }
+        }
+        if !self.anonymous_fields.contains_key(&ty) {
+            let k::TypeKind::Struct { fields, .. } = &self.types[ty].kind else {
+                return None;
+            };
+            self.anonymous_fields.insert(
+                ty,
+                fields
+                    .iter()
+                    .enumerate()
+                    .map(|(i, field)| (field.name.clone(), i))
+                    .collect(),
+            );
+        }
+        self.anonymous_fields[&ty].get(name).copied()
+    }
     fn field_access(&self, ty: usize, name: &str, scope: a::ModuleId, span: a::Span) -> Result<()> {
         if let Some((owner, _)) = self.applications.get(&ty) {
             if let Some(a::Item::Struct(index)) = self
@@ -275,8 +402,13 @@ impl Compiler<'_> {
                 .map(|id| self.source.declarations[*id].item)
             {
                 let definition = &self.source.structs[index];
-                if let Some(field) = definition.fields.iter().find(|f| f.name == name) {
-                    self.declared_field_access(definition, field, scope, span)?;
+                if let Some(position) = self.field_positions[index].get(name) {
+                    self.declared_field_access(
+                        definition,
+                        &definition.fields[*position],
+                        scope,
+                        span,
+                    )?;
                 }
             }
         }
@@ -637,8 +769,14 @@ impl Compiler<'_> {
         ) {
             return Ok(());
         }
-        let impls = self.source.impls.clone();
-        for im in impls {
+        let candidates = self.implementations.candidates(
+            &self.types,
+            &self.applications,
+            ty,
+            &crate::generics::TraitIdentity::Builtin("Drop".to_string()),
+        );
+        for index in candidates {
+            let im = self.source.impls[index].clone();
             if let Some(trait_ty) = im.trait_ty {
                 let builtin_drop = matches!(
                     &self.source.types[trait_ty].kind,
@@ -722,11 +860,17 @@ impl Compiler<'_> {
             function: &mut function,
             sub: instance.substitutions.clone(),
             bindings,
+            guard_aliases: BTreeMap::new(),
+            active_span: source.span,
+            reference_updates: references.clone(),
+            reference_schedules: BTreeMap::new(),
             references,
             carriers: BTreeMap::new(),
+            dependents: BTreeMap::new(),
             assignment_types: BTreeMap::new(),
             inferred,
             written: live.clone(),
+            definite_live: live.clone(),
             live,
             loops: Vec::new(),
             reachable: true,
@@ -797,13 +941,17 @@ impl FromIterator<(String, usize)> for Bindings {
 #[derive(Clone)]
 struct Snapshot {
     live: Facts,
+    definite_live: Facts,
     written: Facts,
     references: Facts,
     carriers: borrow_cleanup::Dependencies,
+    dependents: borrow_cleanup::Dependencies,
 }
 struct LoopScope {
     start: usize,
     range: Option<(usize, usize, bool)>,
+    result: Option<usize>,
+    result_typed: bool,
     exits: Vec<Snapshot>,
 }
 struct Builder<'a, 'b> {
@@ -814,11 +962,17 @@ struct Builder<'a, 'b> {
     function: &'a mut k::Function,
     sub: BTreeMap<String, usize>,
     bindings: Bindings,
+    guard_aliases: BTreeMap<String, k::Place>,
+    active_span: a::Span,
     references: Facts,
+    reference_updates: Facts,
+    reference_schedules: BTreeMap<(usize, usize), borrow_cleanup::ReferenceSchedule>,
     carriers: borrow_cleanup::Dependencies,
+    dependents: borrow_cleanup::Dependencies,
     assignment_types: BTreeMap<usize, usize>,
     inferred: std::rc::Rc<definition_types::Types>,
     live: Facts,
+    definite_live: Facts,
     written: Facts,
     loops: Vec<LoopScope>,
     reachable: bool,
@@ -922,8 +1076,10 @@ impl Builder<'_, '_> {
             mutable,
         });
         self.live.push(false);
+        self.definite_live.push(false);
         self.written.push(false);
         self.references.push(false);
+        self.reference_updates.push(false);
         id
     }
     fn temp(&mut self, ty: usize) -> usize {
@@ -937,14 +1093,17 @@ impl Builder<'_, '_> {
     }
     fn set_live(&mut self, local: usize, live: bool) {
         self.live.set(local, live);
-        self.references.set(
-            local,
-            live && !self.function.locals[local].name.starts_with('$')
-                && matches!(
-                    self.compiler.types[self.ty(local)].kind,
-                    k::TypeKind::Ref { .. }
-                ),
-        );
+        self.definite_live.set(local, live);
+        let reference = live
+            && !self.function.locals[local].name.starts_with('$')
+            && matches!(
+                self.compiler.types[self.ty(local)].kind,
+                k::TypeKind::Ref { .. }
+            );
+        self.references.set(local, reference);
+        if reference {
+            self.reference_updates.set(local, true);
+        }
     }
     fn emit(&mut self, op: k::Op, line: usize) {
         if let k::Op::Assign { place, src } = &op {
@@ -993,15 +1152,16 @@ impl Builder<'_, '_> {
                         // The root is live, but an owned projected field may
                         // already have moved. Its flag controls destruction at
                         // this assignment; other fields and owners stay live.
-                        let destruction = if place.projections.is_empty() {
-                            k::Op::Drop {
-                                place: place.clone(),
-                            }
-                        } else {
-                            k::Op::DropIf {
-                                place: place.clone(),
-                            }
-                        };
+                        let destruction =
+                            if place.projections.is_empty() && self.definite_live[place.local] {
+                                k::Op::Drop {
+                                    place: place.clone(),
+                                }
+                            } else {
+                                k::Op::DropIf {
+                                    place: place.clone(),
+                                }
+                            };
                         self.emit(destruction, line);
                     }
                 }
@@ -1076,20 +1236,31 @@ impl Builder<'_, '_> {
             k::Op::Continue | k::Op::Trap { .. } => self.reachable = false,
             _ => {}
         }
-        self.function.body.push(k::Instruction { op, line });
+        self.function.body.push(k::Instruction {
+            op,
+            line,
+            column: if self.active_span.line == line {
+                self.active_span.column.max(1)
+            } else {
+                1
+            },
+        });
     }
     fn cleanup(&mut self, start: usize, except: Option<usize>, line: usize) {
         let locals: Vec<_> = self.live.indices_from(start).collect();
         for i in locals {
             if Some(i) != except {
-                self.emit(
-                    k::Op::Drop {
-                        place: k::Place::local(i),
-                    },
-                    line,
-                );
+                self.cleanup_place(k::Place::local(i), line);
             }
         }
+    }
+    fn cleanup_place(&mut self, place: k::Place, line: usize) {
+        let op = if place.projections.is_empty() && self.definite_live[place.local] {
+            k::Op::Drop { place }
+        } else {
+            k::Op::DropIf { place }
+        };
+        self.emit(op, line);
     }
     fn unit(&mut self, line: usize) -> (usize, usize) {
         let d = self.temp(k::UNIT);
@@ -1099,15 +1270,22 @@ impl Builder<'_, '_> {
     fn snapshot(&self) -> Snapshot {
         Snapshot {
             live: self.live.clone(),
+            definite_live: self.definite_live.clone(),
             written: self.written.clone(),
             references: self.references.clone(),
             carriers: self.carriers.clone(),
+            dependents: self.dependents.clone(),
         }
     }
     fn restore(&mut self, state: &Snapshot) {
+        let changed = self.references.symmetric_difference(&state.references);
+        self.reference_updates = self.reference_updates.union(&changed);
         self.carriers = state.carriers.clone();
+        self.dependents = state.dependents.clone();
         self.live = state.live.clone();
         self.live.resize(self.function.locals.len(), false);
+        self.definite_live = state.definite_live.clone();
+        self.definite_live.resize(self.function.locals.len(), false);
         self.written = state.written.clone();
         self.written.resize(self.function.locals.len(), false);
         self.references = state.references.clone();
@@ -1166,7 +1344,11 @@ impl Builder<'_, '_> {
             }
         }
         match self.compiler.source.exprs[id].kind.clone() {
-            a::Expr::Path(p) => self.binding(&p.name).map(|i| self.ty(i)),
+            a::Expr::Path(p) => self
+                .guard_aliases
+                .get(&p.name)
+                .and_then(|place| place_type(&self.compiler.types, self.function, place))
+                .or_else(|| self.binding(&p.name).map(|i| self.ty(i))),
             a::Expr::Cast { ty, .. } => self.compiler.resolve(ty, &self.sub).ok(),
             a::Expr::Bool(_) => Some(k::BOOL),
             a::Expr::Float(_) => Some(k::F64),
@@ -1192,10 +1374,9 @@ impl Builder<'_, '_> {
                 {
                     t = inner;
                 }
+                let index = self.compiler.field_index(t, &name)?;
                 match &self.compiler.types[t].kind {
-                    k::TypeKind::Struct { fields, .. } => {
-                        fields.iter().find(|f| f.name == name).map(|f| f.ty)
-                    }
+                    k::TypeKind::Struct { fields, .. } => Some(fields[index].ty),
                     _ => None,
                 }
             }
@@ -1218,8 +1399,10 @@ impl Builder<'_, '_> {
         let node = self.compiler.source.exprs[id].clone();
         match node.kind {
             a::Expr::Path(path) => self
-                .binding(&path.name)
-                .map(k::Place::local)
+                .guard_aliases
+                .get(&path.name)
+                .cloned()
+                .or_else(|| self.binding(&path.name).map(k::Place::local))
                 .ok_or_else(|| err(node.span, "E_TYPE", &format!("unknown value {}", path.name))),
             a::Expr::Unary { op, value } if op == "*" => {
                 let mut place = self.addressable(value)?;
@@ -1236,10 +1419,10 @@ impl Builder<'_, '_> {
                     place.projections.push(k::Projection::Deref);
                     ty = inner;
                 }
-                if let k::TypeKind::Struct { fields, .. } = &self.compiler.types[ty].kind {
-                    let index = fields
-                        .iter()
-                        .position(|f| f.name == name)
+                if matches!(&self.compiler.types[ty].kind, k::TypeKind::Struct { .. }) {
+                    let index = self
+                        .compiler
+                        .field_index(ty, &name)
                         .ok_or_else(|| err(node.span, "E_TYPE", "unknown field"))?;
                     self.compiler
                         .field_access(ty, &name, self.scope, node.span)?;
@@ -1277,30 +1460,44 @@ impl Builder<'_, '_> {
         }
     }
     fn end_unused_borrows(&mut self, start: usize, position: usize, end: usize, line: usize) {
-        let mut drops = std::collections::BTreeSet::new();
-        for local in self.references.indices_from(start) {
-            let name = &self.function.locals[local].name;
-            if self.live[local] {
-                let mut used = false;
-                if let Some(positions) = self.compiler.uses.get(&(self.file, name.clone())) {
-                    let mut low = 0;
-                    let mut high = positions.len();
-                    while low < high {
-                        let mid = low + (high - low) / 2;
-                        if positions[mid] < position {
-                            low = mid + 1;
-                        } else {
-                            high = mid;
-                        }
-                    }
-                    used = low < positions.len() && positions[low] < end;
-                }
-                if !used {
-                    drops.insert(local);
-                }
+        // Each named reference is scheduled at its last lexical use in this
+        // block. Changed bindings and restored branch states invalidate only
+        // their own entry; a statement never rescans all live references.
+        let key = (start, end);
+        let mut schedule = self.reference_schedules.remove(&key).unwrap_or_default();
+        let updated: Vec<_> = self.reference_updates.indices_from(start).collect();
+        for local in updated {
+            self.reference_updates.set(local, false);
+            if !self.references[local] {
+                continue;
             }
+            let name = &self.function.locals[local].name;
+            let last = self
+                .compiler
+                .uses
+                .get(&(self.file, name.clone()))
+                .and_then(|positions| {
+                    let before_end = positions.partition_point(|p| *p < end);
+                    before_end.checked_sub(1).map(|i| positions[i])
+                });
+            schedule
+                .deadlines
+                .entry(last.unwrap_or(0))
+                .or_default()
+                .insert(local);
         }
-        self.drop_unused_references(drops, line);
+        while schedule
+            .deadlines
+            .first_key_value()
+            .is_some_and(|(last, _)| *last < position)
+        {
+            let (_, locals) = schedule.deadlines.pop_first().unwrap();
+            schedule.pending.extend(locals);
+        }
+        schedule.pending.retain(|local| self.references[*local]);
+        self.drop_unused_references(schedule.pending.clone(), line);
+        schedule.pending.retain(|local| self.references[*local]);
+        self.reference_schedules.insert(key, schedule);
     }
     fn bind_name(&mut self, name: String, mutable: bool, value: (usize, usize), line: usize) {
         let dst = self.local(value.1, &name, mutable);
@@ -1361,16 +1558,34 @@ impl Builder<'_, '_> {
         }
     }
     fn extends_temporary(&self, value: usize, pattern: usize) -> bool {
-        if matches!(
-            self.compiler.source.patterns[pattern].kind,
-            a::Pattern::Bind { by_ref: true, .. }
-        ) {
-            return true;
+        let mut patterns = vec![pattern];
+        while let Some(pattern) = patterns.pop() {
+            match &self.compiler.source.patterns[pattern].kind {
+                a::Pattern::Bind { by_ref: true, .. } => return true,
+                a::Pattern::Tuple(fields)
+                | a::Pattern::Variant { fields, .. }
+                | a::Pattern::Or(fields) => patterns.extend(fields),
+                a::Pattern::Struct { fields, .. } => {
+                    patterns.extend(fields.iter().map(|(_, id)| *id))
+                }
+                a::Pattern::Ref { inner, .. } => patterns.push(*inner),
+                _ => {}
+            }
         }
         let mut todo = vec![value];
         while let Some(id) = todo.pop() {
             match &self.compiler.source.exprs[id].kind {
                 a::Expr::Borrow { .. } => return true,
+                a::Expr::Match { arms, .. }
+                    if arms.iter().any(|arm| {
+                        matches!(
+                            self.compiler.source.exprs[arm.value].kind,
+                            a::Expr::Diverge(_)
+                        )
+                    }) =>
+                {
+                    return true;
+                }
                 a::Expr::Tuple(items) | a::Expr::Array(items) => todo.extend_from_slice(items),
                 a::Expr::Struct { fields, .. } => {
                     for (_, value) in fields {
@@ -1386,12 +1601,7 @@ impl Builder<'_, '_> {
         let locals: Vec<_> = self.live.indices_from(start).collect();
         for local in locals {
             if self.function.locals[local].name.starts_with('$') {
-                self.emit(
-                    k::Op::Drop {
-                        place: k::Place::local(local),
-                    },
-                    line,
-                );
+                self.cleanup_place(k::Place::local(local), line);
             }
         }
     }
@@ -1427,13 +1637,7 @@ impl Builder<'_, '_> {
                     if let Some(value) = value {
                         let before = self.live.len();
                         let extends = self.extends_temporary(value, pattern);
-                        let v = self.expr(value, expected)?;
-                        if let Some(t) = expected {
-                            if t != v.1 {
-                                return Err(err(span, "E_TYPE", "binding type differs"));
-                            }
-                        }
-                        self.bind(pattern, v, span.line)?;
+                        self.pattern_initializer(pattern, value, expected, span.line)?;
                         if !extends {
                             self.cleanup_temporaries(before, span.line);
                         }
@@ -1518,6 +1722,18 @@ impl Builder<'_, '_> {
         expected: Option<usize>,
         inferred: Option<usize>,
     ) -> Result<(usize, usize)> {
+        let previous = self.active_span;
+        self.active_span = self.compiler.source.exprs[id].span;
+        let result = self.expr_with_inference_inner(id, expected, inferred);
+        self.active_span = previous;
+        result
+    }
+    fn expr_with_inference_inner(
+        &mut self,
+        id: usize,
+        expected: Option<usize>,
+        inferred: Option<usize>,
+    ) -> Result<(usize, usize)> {
         // A solved type is not by itself a coercion site. In particular a bare
         // mutable reference binding moves its value; it must not acquire the
         // automatic reborrow used at an explicitly typed argument or binding.
@@ -1530,7 +1746,9 @@ impl Builder<'_, '_> {
             matches!(self.compiler.types[target].kind, k::TypeKind::Ref { .. })
         });
         let place_expression = match &self.compiler.source.exprs[id].kind {
-            a::Expr::Path(path) => self.binding(&path.name).is_some(),
+            a::Expr::Path(path) => {
+                self.binding(&path.name).is_some() || self.guard_aliases.contains_key(&path.name)
+            }
             a::Expr::Field { .. } | a::Expr::Index { .. } => true,
             a::Expr::Unary { op, .. } => op == "*",
             _ => false,
@@ -1708,7 +1926,8 @@ impl Builder<'_, '_> {
                 Ok((dst, k::F64))
             }
             a::Expr::Path(path) => {
-                if self.binding(&path.name).is_some() {
+                if self.binding(&path.name).is_some() || self.guard_aliases.contains_key(&path.name)
+                {
                     let place = self.place(id)?;
                     return self.read(place, line);
                 }
@@ -1847,14 +2066,7 @@ impl Builder<'_, '_> {
                 args,
             } => self.method(id, receiver, &name, &types, &args, node.span),
             a::Expr::Struct { path, fields, base } => {
-                if base.is_some() {
-                    return Err(err(
-                        node.span,
-                        "E_UNSUPPORTED",
-                        "struct update is not implemented yet",
-                    ));
-                }
-                self.construct_struct(&path, &fields, expected, node.span)
+                self.construct_struct(&path, &fields, base, expected, node.span)
             }
             a::Expr::Array(elements) => self.array_expr(&elements, expected, node.span),
             a::Expr::Repeat { value, count } => {
@@ -1948,8 +2160,10 @@ impl Builder<'_, '_> {
                 then_block,
                 otherwise,
             } => self.if_expr(condition, then_block, otherwise, expected, line),
-            a::Expr::While { condition, body } => self.while_expr(Some(condition), body, line),
-            a::Expr::Loop { body } => self.while_expr(None, body, line),
+            a::Expr::While { condition, body } => {
+                self.while_expr(Some(condition), body, None, line)
+            }
+            a::Expr::Loop { body } => self.while_expr(None, body, expected, line),
             a::Expr::For {
                 pattern,
                 iterator,
@@ -1967,19 +2181,35 @@ impl Builder<'_, '_> {
                 Ok(result)
             }
             a::Expr::Break(value) => {
-                if value.is_some() {
-                    return Err(err(
-                        node.span,
-                        "E_UNSUPPORTED",
-                        "break values are not implemented yet",
-                    ));
-                }
-                let start = self
+                let scope = self
                     .loops
                     .last()
-                    .ok_or_else(|| err(node.span, "E_TYPE", "break outside loop"))?
-                    .start;
-                self.cleanup(start, None, line);
+                    .ok_or_else(|| err(node.span, "E_TYPE", "break outside loop"))?;
+                let (start, result, typed) = (scope.start, scope.result, scope.result_typed);
+                if let Some(result) = result {
+                    let value = if let Some(value) = value {
+                        self.expr(value, if typed { Some(self.ty(result)) } else { None })?
+                    } else {
+                        self.unit(line)
+                    };
+                    if typed && self.ty(result) != value.1 && self.reachable {
+                        return Err(err(node.span, "E_TYPE", "break result type differs"));
+                    }
+                    if !typed {
+                        self.function.locals[result].ty = value.1;
+                        self.loops.last_mut().unwrap().result_typed = true;
+                    }
+                    self.emit(
+                        k::Op::Assign {
+                            place: k::Place::local(result),
+                            src: value.0,
+                        },
+                        line,
+                    );
+                } else if value.is_some() {
+                    return Err(err(node.span, "E_TYPE", "only loop accepts a break value"));
+                }
+                self.cleanup(start, result, line);
                 self.emit(k::Op::Break, line);
                 Ok(self.unit(line))
             }
@@ -1993,6 +2223,18 @@ impl Builder<'_, '_> {
                 self.cleanup(start, None, line);
                 self.emit(k::Op::Continue, line);
                 Ok(self.unit(line))
+            }
+            a::Expr::Try(value) => self.try_expr(value, node.span),
+            a::Expr::Diverge(value) => {
+                let result = self.expr(value, None)?;
+                if self.reachable {
+                    return Err(err(
+                        node.span,
+                        "E_TYPE",
+                        "let-else alternative must diverge",
+                    ));
+                }
+                Ok(result)
             }
             a::Expr::Macro {
                 name,
@@ -2293,13 +2535,21 @@ impl Builder<'_, '_> {
         &mut self,
         condition: Option<usize>,
         body: usize,
+        expected: Option<usize>,
         line: usize,
     ) -> Result<(usize, usize)> {
+        let result = if condition.is_none() {
+            Some(self.local(expected.unwrap_or(k::UNIT), "$loop", true))
+        } else {
+            None
+        };
         let start = self.live.len();
         let entry = self.snapshot();
         self.loops.push(LoopScope {
             start,
             range: None,
+            result,
+            result_typed: expected.is_some(),
             exits: Vec::new(),
         });
         self.emit(k::Op::Loop, line);
@@ -2341,7 +2591,11 @@ impl Builder<'_, '_> {
             self.restore(&entry);
             self.reachable = false;
         }
-        Ok(self.unit(line))
+        Ok(if let Some(result) = result {
+            (result, self.ty(result))
+        } else {
+            self.unit(line)
+        })
     }
     fn for_expr(
         &mut self,
@@ -2397,6 +2651,8 @@ impl Builder<'_, '_> {
         self.loops.push(LoopScope {
             start: first,
             range: Some((counter, finish, inclusive)),
+            result: None,
+            result_typed: true,
             exits: Vec::new(),
         });
         self.emit(k::Op::Loop, line);
@@ -2487,12 +2743,10 @@ impl Builder<'_, '_> {
         }
         self.constrain_constructor_target(&mut target, span)?;
         let ty = self.finish_constructor(target, span)?;
-        let k::TypeKind::Enum { variants, .. } = &self.compiler.types[ty].kind else {
-            unreachable!()
-        };
-        let tag = variants
-            .iter()
-            .position(|variant| variant.name == name)
+        let definition = self.enum_definition(ty, span)?;
+        let tag = self.compiler.variant_positions[definition]
+            .get(&name)
+            .copied()
             .ok_or_else(|| err(span, "E_TYPE", "unknown enum variant"))?;
         Ok((ty, tag))
     }
@@ -3295,14 +3549,18 @@ impl Builder<'_, '_> {
         &mut self,
         path: &a::Path,
         fields: &[(String, usize)],
+        base: Option<usize>,
         expected: Option<usize>,
         span: a::Span,
     ) -> Result<(usize, usize)> {
-        if let Some(value) =
-            self.construct_variant(path, fields, a::VariantStyle::Named, expected, span)?
-        {
-            return Ok(value);
+        if base.is_none() {
+            if let Some(value) =
+                self.construct_variant(path, fields, a::VariantStyle::Named, expected, span)?
+            {
+                return Ok(value);
+            }
         }
+        let expected = expected.or_else(|| base.and_then(|base| self.hint(base)));
         let mut target = self
             .constructor_target(path, expected, span)?
             .ok_or_else(|| err(span, "E_TYPE", "constructor requires a struct declaration"))?;
@@ -3319,10 +3577,9 @@ impl Builder<'_, '_> {
         let mut positions = Vec::new();
         let mut supplied = vec![false; definition.fields.len()];
         for (name, _) in fields {
-            let index = definition
-                .fields
-                .iter()
-                .position(|field| field.name == *name)
+            let index = self.compiler.field_positions[index]
+                .get(name)
+                .copied()
                 .ok_or_else(|| err(span, "E_TYPE", &format!("unknown field {name}")))?;
             if supplied[index] {
                 return Err(err(span, "E_TYPE", &format!("duplicate field {name}")));
@@ -3336,7 +3593,7 @@ impl Builder<'_, '_> {
             )?;
             positions.push(index);
         }
-        if supplied.iter().any(|supplied| !supplied) {
+        if base.is_none() && supplied.iter().any(|supplied| !supplied) {
             return Err(err(span, "E_TYPE", "struct constructor is missing fields"));
         }
         let mut coercion_substitutions = target.substitutions.clone();
@@ -3369,12 +3626,45 @@ impl Builder<'_, '_> {
             self.infer_type(pattern, value.1, &mut target.substitutions)?;
             ordered[field] = Some(value);
         }
+        let base_place = if let Some(base) = base {
+            let existing = match &self.compiler.source.exprs[base].kind {
+                a::Expr::Path(path) => self.binding(&path.name).is_some(),
+                a::Expr::Field { .. } | a::Expr::Index { .. } => true,
+                a::Expr::Unary { op, .. } => op == "*",
+                _ => false,
+            };
+            let place = if existing {
+                self.place(base)?
+            } else {
+                k::Place::local(self.expr(base, expected)?.0)
+            };
+            let ty = place_type(&self.compiler.types, self.function, &place)
+                .ok_or_else(|| err(span, "E_TYPE", "invalid struct update base"))?;
+            self.constrain_constructor_from_type(&mut target, ty, span)?;
+            Some(place)
+        } else {
+            None
+        };
         let ty = self.finish_constructor(target, span)?;
-        let k::TypeKind::Struct { fields, .. } = &self.compiler.types[ty].kind else {
+        let k::TypeKind::Struct {
+            fields: declared, ..
+        } = self.compiler.types[ty].kind.clone()
+        else {
             unreachable!()
         };
+        if let Some(base) = base_place {
+            for (index, field) in declared.iter().enumerate() {
+                if ordered[index].is_none() {
+                    self.compiler
+                        .field_access(ty, &field.name, self.scope, span)?;
+                    let mut place = base.clone();
+                    place.projections.push(k::Projection::Field(index));
+                    ordered[index] = Some(self.read(place, span.line)?);
+                }
+            }
+        }
         let mut values = Vec::new();
-        for (value, field) in ordered.into_iter().zip(fields) {
+        for (value, field) in ordered.into_iter().zip(&declared) {
             let (local, actual) = value.expect("all struct fields supplied");
             if actual != field.ty {
                 return Err(err(
@@ -3525,19 +3815,11 @@ impl Builder<'_, '_> {
         expected: Option<usize>,
         span: a::Span,
     ) -> Result<(usize, usize)> {
-        let hint = if let Some(hint) = self.hint(value) {
-            Some(hint)
-        } else {
-            self.pattern_hint(arms).map(|inner| {
-                if let a::Expr::Borrow { mutable, .. } = self.compiler.source.exprs[value].kind {
-                    self.compiler.reference(inner, mutable)
-                } else {
-                    inner
-                }
-            })
-        };
+        let hint = self.hint(value).or_else(|| self.pattern_hint(arms));
         let existing = match &self.compiler.source.exprs[value].kind {
-            a::Expr::Path(path) => self.binding(&path.name).is_some(),
+            a::Expr::Path(path) => {
+                self.binding(&path.name).is_some() || self.guard_aliases.contains_key(&path.name)
+            }
             a::Expr::Field { .. } | a::Expr::Index { .. } => true,
             a::Expr::Unary { op, .. } => op == "*",
             _ => false,
@@ -3549,185 +3831,80 @@ impl Builder<'_, '_> {
             self.function.locals[local].mutable = true;
             k::Place::local(local)
         };
-        let original_ty = place_type(&self.compiler.types, self.function, &original)
+        let ty = place_type(&self.compiler.types, self.function, &original)
             .ok_or_else(|| err(span, "E_TYPE", "invalid match scrutinee place"))?;
-        let (ty, borrowed, mutable) = match self.compiler.types[original_ty].kind {
-            k::TypeKind::Ref { inner, mutable } => (inner, true, mutable),
-            _ => (original_ty, false, false),
-        };
-        let (patterns, exhaustive) = self.match_patterns(ty, arms)?;
-        if !exhaustive {
+        let mut plan = patterns::PatternPlan::default();
+        let mut roots = Vec::new();
+        let mut coverage = Vec::new();
+        for arm in arms {
+            let root = self.prepare_pattern(&mut plan, arm.pattern, ty, None)?;
+            if arm.guard.is_none() {
+                coverage.push(root);
+            }
+            roots.push(root);
+        }
+        if !self.patterns_exhaustive(&plan, &coverage, ty)? {
             return Err(err(span, "E_TYPE", "match is not exhaustive"));
         }
-        let moving = self.match_moves(original_ty, ty, borrowed, arms, &patterns);
-        let (explicit_borrow, explicit_mutable) = self.explicit_match_borrows(arms);
-        if moving && explicit_borrow && existing {
-            return Err(err(
-                span,
-                "E_UNSUPPORTED",
-                "mixed affine moves and explicit ref match bindings need branch-specific place contracts",
-            ));
-        }
-        let (scrutinee, field_base, default_base, cleanup_scrutinee) = if existing && !moving {
-            let mut data = original.clone();
-            if borrowed {
-                data.projections.push(k::Projection::Deref);
-            }
-            if original.projections.is_empty() {
-                (original.local, data, original.clone(), false)
+        let mut entries = Vec::new();
+        for (arm, root) in arms.iter().zip(roots) {
+            let alternatives = if plan.has_or(root)
+                && (arm.guard.is_some() || !plan.bindings(root, original.clone()).is_empty())
+            {
+                plan.alternatives(root)
             } else {
-                let reference = self
-                    .borrow(data, explicit_mutable || borrowed && mutable, span.line)?
-                    .0;
-                let data = k::Place {
-                    local: reference,
-                    projections: vec![k::Projection::Deref],
-                };
-                let default = if borrowed {
-                    original.clone()
-                } else {
-                    data.clone()
-                };
-                (reference, data, default, true)
-            }
-        } else {
-            let local = if existing {
-                self.read(original, span.line)?.0
-            } else {
-                original.local
+                vec![root]
             };
-            let mut data = k::Place::local(local);
-            if borrowed {
-                data.projections.push(k::Projection::Deref);
+            for root in alternatives {
+                entries.push((arm, root));
             }
-            (local, data, k::Place::local(local), true)
-        };
+        }
         let start = self.live.len();
-        let base = self.snapshot();
         let binding_count = self.bindings.len();
         let mut result: Option<usize> = None;
         let mut exit_state: Option<Snapshot> = None;
-        let mut open = 0;
-        let mut default_seen = false;
-        for (index, arm) in arms.iter().enumerate() {
-            let pattern = self.compiler.source.patterns[arm.pattern].clone();
-            let mut fields = Vec::new();
-            let mut binding_default = false;
-            let condition = match pattern.kind {
-                a::Pattern::Wild | a::Pattern::Bind { .. } => {
-                    binding_default = matches!(pattern.kind, a::Pattern::Bind { .. });
-                    if index + 1 == arms.len() {
-                        default_seen = true;
-                        None
-                    } else {
-                        let condition = self.temp(k::BOOL);
-                        self.emit(
-                            k::Op::Int {
-                                dst: condition,
-                                value: 1,
-                            },
-                            arm.span.line,
-                        );
-                        Some(condition)
-                    }
-                }
-                a::Pattern::Variant { .. } | a::Pattern::Struct { .. } => {
-                    let tag = patterns[index].tag.expect("validated variant");
-                    fields = patterns[index].fields.clone();
-                    let c = self.temp(k::BOOL);
-                    self.emit(
-                        k::Op::TagTest {
-                            dst: c,
-                            src: scrutinee,
-                            variant: tag,
-                        },
-                        span.line,
-                    );
-                    Some(c)
-                }
-                a::Pattern::Path(_) => {
-                    let tag = patterns[index].tag.expect("validated variant");
-                    let c = self.temp(k::BOOL);
-                    self.emit(
-                        k::Op::TagTest {
-                            dst: c,
-                            src: scrutinee,
-                            variant: tag,
-                        },
-                        span.line,
-                    );
-                    Some(c)
-                }
-                a::Pattern::Literal(expr) => {
-                    let l = self.read(field_base.clone(), span.line)?.0;
-                    let r = self.expr(expr, Some(ty))?.0;
-                    let c = self.temp(k::BOOL);
-                    self.emit(
-                        k::Op::Binary {
-                            dst: c,
-                            op: "==".to_string(),
-                            left: l,
-                            right: r,
-                        },
-                        span.line,
-                    );
-                    Some(c)
-                }
-                a::Pattern::Range { .. } => Some(self.range_condition(
-                    field_base.clone(),
-                    ty,
-                    patterns[index].range.expect("validated range"),
+        let mut exhausted = false;
+        let extends_scrutinee = arms.iter().any(|arm| {
+            matches!(
+                self.compiler.source.exprs[arm.value].kind,
+                a::Expr::Diverge(_)
+            )
+        });
+        for (arm, pattern) in &entries {
+            let mut condition = self.pattern_condition(&plan, *pattern, original.clone())?;
+            if let Some(guard) = arm.guard {
+                condition = self.pattern_guard(
+                    &plan,
+                    *pattern,
+                    original.clone(),
+                    guard,
+                    condition,
                     arm.span.line,
-                )?),
-                _ => {
-                    return Err(err(
-                        pattern.span,
-                        "E_UNSUPPORTED",
-                        "this match pattern is not implemented yet",
-                    ));
-                }
-            };
-            if let Some(c) = condition {
-                self.emit(k::Op::If { condition: c }, span.line);
-                open += 1;
-            }
-            if binding_default {
-                self.bind_match_place(arm.pattern, default_base.clone(), None, arm.span.line)?;
-            }
-            for (pattern, projection) in fields {
-                let mut place = field_base.clone();
-                place.projections.push(projection);
-                self.bind_match_place(
-                    pattern,
-                    place,
-                    if borrowed { Some(mutable) } else { None },
-                    span.line,
                 )?;
             }
-            let v = self.expr(arm.value, expected.or(result.map(|i| self.ty(i))))?;
-            if self.reachable {
-                let target = if let Some(r) = result {
-                    r
+            self.emit(k::Op::If { condition }, arm.span.line);
+            let failure = self.snapshot();
+            self.bind_pattern_plan(&plan, *pattern, original.clone(), arm.span.line)?;
+            let value = self.expr(arm.value, expected.or(result.map(|id| self.ty(id))))?;
+            if self.reachable && !exhausted {
+                let target = if let Some(target) = result {
+                    target
                 } else {
-                    let d = self.local(expected.unwrap_or(v.1), "$match", true);
-                    result = Some(d);
-                    d
+                    let target = self.local(expected.unwrap_or(value.1), "$match", true);
+                    result = Some(target);
+                    target
                 };
                 self.emit(
                     k::Op::Assign {
                         place: k::Place::local(target),
-                        src: v.0,
+                        src: value.0,
                     },
                     span.line,
                 );
                 self.cleanup(start, Some(target), span.line);
-                if cleanup_scrutinee && self.live[scrutinee] {
-                    self.emit(
-                        k::Op::Drop {
-                            place: k::Place::local(scrutinee),
-                        },
-                        span.line,
-                    );
+                let extended = extends_scrutinee && self.compiler.has_view(self.ty(target));
+                if !existing && !extended && self.live[original.local] {
+                    self.cleanup_place(original.clone(), span.line);
                 }
                 if let Some(exit) = &exit_state {
                     self.merge_carriers(exit);
@@ -3735,25 +3912,26 @@ impl Builder<'_, '_> {
                 exit_state = Some(self.snapshot());
             }
             self.bindings.truncate(binding_count);
-            if condition.is_some() {
-                self.emit(k::Op::Else, span.line);
-                self.restore(&base);
-            } else {
-                break;
-            }
-        }
-        if open > 0 {
-            if !default_seen {
+            self.emit(k::Op::Else, span.line);
+            if arm.guard.is_none() && self.pattern_irrefutable(&plan, *pattern) {
                 self.emit(
                     k::Op::Trap {
-                        message: "unreachable match".to_string(),
+                        message: "unreachable arm after irrefutable pattern".to_string(),
                     },
                     span.line,
                 );
+                exhausted = true;
             }
-            for _ in 0..open {
-                self.emit(k::Op::End, span.line);
-            }
+            self.restore(&failure);
+        }
+        self.emit(
+            k::Op::Trap {
+                message: "unreachable match".to_string(),
+            },
+            span.line,
+        );
+        for _ in &entries {
+            self.emit(k::Op::End, span.line);
         }
         if let Some(exit) = exit_state {
             self.restore(&exit);

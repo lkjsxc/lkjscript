@@ -372,6 +372,8 @@ pub enum Expr {
         separator: String,
     },
     Try(ExprId),
+    /// A source obligation introduced by let-else expansion.
+    Diverge(ExprId),
     Range {
         start: Option<ExprId>,
         end: Option<ExprId>,

@@ -171,6 +171,15 @@ impl Builder<'_, '_> {
         Ok(())
     }
 
+    pub(super) fn constrain_constructor_from_type(
+        &mut self,
+        target: &mut ConstructorTarget,
+        ty: usize,
+        span: a::Span,
+    ) -> Result<()> {
+        self.constrain_constructor(target.declaration, ty, &mut target.substitutions, span)
+    }
+
     pub(super) fn constructor_target(
         &mut self,
         path: &a::Path,

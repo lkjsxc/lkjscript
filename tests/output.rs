@@ -50,8 +50,13 @@ fn capabilities_cannot_be_fabricated_by_source_or_raw_k() {
                         mutable: false,
                     }],
                     body: vec![
-                        k::Instruction { op, line: 1 },
                         k::Instruction {
+                            column: 1,
+                            op,
+                            line: 1,
+                        },
+                        k::Instruction {
+                            column: 1,
                             op: k::Op::Return { src: 0 },
                             line: 2,
                         },

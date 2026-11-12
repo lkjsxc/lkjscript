@@ -49,6 +49,7 @@ fn program(locals: usize, branches: usize, consume_in_then: bool) -> k::Program 
                 .into_iter()
                 .enumerate()
                 .map(|(index, op)| k::Instruction {
+                    column: 1,
                     line: index + 1,
                     op,
                 })
@@ -70,13 +71,21 @@ fn sparse_local_snapshots_accept_balanced_branches() {
 }
 
 #[test]
-fn sparse_local_snapshots_reject_one_branch_consuming_the_owner() {
+fn sparse_local_snapshots_reject_reading_a_conditionally_consumed_owner() {
     for locals in [65, 4097, 65_537] {
         let diagnostic = match check::check(program(locals, 128, true)) {
-            Ok(_) => panic!("divergent owner states accepted"),
+            Ok(_) => panic!("read of a conditionally consumed owner accepted"),
             Err(diagnostic) => diagnostic,
         };
         assert_eq!(diagnostic.code, "E_MOVE");
-        assert!(diagnostic.message.contains("branches must leave"));
+        assert!(diagnostic.message.contains("moved on a reachable path"));
+        assert_eq!(
+            diagnostic.line,
+            program(locals, 128, true).functions[0]
+                .body
+                .last()
+                .unwrap()
+                .line
+        );
     }
 }

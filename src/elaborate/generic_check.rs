@@ -99,13 +99,13 @@ pub(super) struct DefinitionEvidence {
     pub(super) types: BTreeMap<usize, super::definition_types::DefinitionTypes>,
 }
 
-pub(super) fn validate(
+pub(super) fn validate_report(
     source: &a::Program,
     definitions: BTreeMap<usize, super::definition_types::DefinitionTypes>,
-) -> Result<DefinitionEvidence> {
+) -> Result<(DefinitionEvidence, Vec<a::Diagnostic>)> {
     let mut roots = Vec::new();
     for (index, function) in source.functions.iter().enumerate() {
-        if function.body.is_none() {
+        if function.body.is_none() || !definitions.contains_key(&index) {
             continue;
         }
         if function
@@ -122,12 +122,16 @@ pub(super) fn validate(
     compiler.contracts = Some(Contracts::default());
     super::derive_check::validate(&mut compiler)?;
     if roots.is_empty() {
-        return Ok(DefinitionEvidence {
-            methods: MethodSelections::default(),
-            types: compiler.definition_types,
-        });
+        return Ok((
+            DefinitionEvidence {
+                methods: MethodSelections::default(),
+                types: compiler.definition_types,
+            },
+            Vec::new(),
+        ));
     }
     let mut checked_roots = BTreeSet::new();
+    let mut problems = Vec::new();
     for index in roots {
         let substitutions = compiler.definition_parameters(index)?;
         let function = compiler.instantiate(index, substitutions.clone())?;
@@ -135,8 +139,13 @@ pub(super) fn validate(
             source: index,
             substitutions,
         };
-        compiler.functions[function] = compiler.compile_function(function, &instance)?;
-        checked_roots.insert(function);
+        match compiler.compile_function(function, &instance) {
+            Ok(body) => {
+                compiler.functions[function] = body;
+                checked_roots.insert(function);
+            }
+            Err(problem) => problems.push(problem),
+        }
     }
 
     // User destructors retain their ordinary K obligations. Their definitions
@@ -204,6 +213,7 @@ pub(super) fn validate(
             ));
         }
         function.body = vec![k::Instruction {
+            column: 1,
             op: k::Op::Trap {
                 message: "abstract declared contract".to_string(),
             },
@@ -215,11 +225,16 @@ pub(super) fn validate(
         functions: compiler.functions,
         destructors: compiler.destructors,
     };
-    let _checked_definition_meaning = crate::check::check(program)?;
-    Ok(DefinitionEvidence {
-        methods: compiler.method_selections,
-        types: compiler.definition_types,
-    })
+    if let Err(errors) = crate::check::check_all(program) {
+        problems.extend(errors);
+    }
+    Ok((
+        DefinitionEvidence {
+            methods: compiler.method_selections,
+            types: compiler.definition_types,
+        },
+        problems,
+    ))
 }
 
 impl Compiler<'_> {
@@ -549,6 +564,7 @@ impl Compiler<'_> {
                     .unwrap_or(&empty);
                 let mut witness = crate::generics::implementation_witness(
                     self.source,
+                    &self.implementations,
                     &self.types,
                     &self.applications,
                     ty,
@@ -592,6 +608,7 @@ impl Compiler<'_> {
         if let Some(contracts) = &self.contracts {
             crate::generics::satisfies_under(
                 self.source,
+                &self.implementations,
                 &self.types,
                 &self.applications,
                 ty,
@@ -601,6 +618,7 @@ impl Compiler<'_> {
         } else {
             crate::generics::satisfies_resolved(
                 self.source,
+                &self.implementations,
                 &self.types,
                 &self.applications,
                 ty,
@@ -1034,6 +1052,7 @@ impl super::Builder<'_, '_> {
         let rigid = BTreeMap::new();
         let implementation = crate::generics::implementation_witness(
             self.compiler.source,
+            &self.compiler.implementations,
             &self.compiler.types,
             &self.compiler.applications,
             base,

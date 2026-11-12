@@ -178,6 +178,7 @@ fn production_emitter_uses_the_shared_json_encoder_for_trap_metadata() {
             return_source: None,
             locals: Vec::new(),
             body: vec![k::Instruction {
+                column: 1,
                 op: k::Op::Trap {
                     message: message.clone(),
                 },

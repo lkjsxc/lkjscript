@@ -6,6 +6,12 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub(super) type Dependencies = BTreeMap<usize, BTreeSet<usize>>;
 
+#[derive(Default)]
+pub(super) struct ReferenceSchedule {
+    pub(super) deadlines: BTreeMap<usize, BTreeSet<usize>>,
+    pub(super) pending: BTreeSet<usize>,
+}
+
 impl Builder<'_, '_> {
     fn storage_dependencies(&self, place: &k::Place) -> BTreeSet<usize> {
         let mut storage = BTreeSet::from([place.local]);
@@ -49,10 +55,24 @@ impl Builder<'_, '_> {
         }
     }
 
+    fn remove_dependencies(&mut self, local: usize) -> Option<BTreeSet<usize>> {
+        let parents = self.carriers.remove(&local)?;
+        for parent in &parents {
+            if let Some(children) = self.dependents.get_mut(parent) {
+                children.remove(&local);
+                if children.is_empty() {
+                    self.dependents.remove(parent);
+                }
+            }
+        }
+        Some(parents)
+    }
     fn set_dependencies(&mut self, local: usize, dependencies: BTreeSet<usize>) {
-        if dependencies.is_empty() {
-            self.carriers.remove(&local);
-        } else {
+        self.remove_dependencies(local);
+        if !dependencies.is_empty() {
+            for parent in &dependencies {
+                self.dependents.entry(*parent).or_default().insert(local);
+            }
             self.carriers.insert(local, dependencies);
         }
     }
@@ -65,10 +85,9 @@ impl Builder<'_, '_> {
             // scheduling approximation may keep carriers longer; K checks the
             // exact projected loans and moves independently.
             for local in self.storage_dependencies(place) {
-                self.carriers
-                    .entry(local)
-                    .or_default()
-                    .extend(&dependencies);
+                let mut parents = self.carriers.get(&local).cloned().unwrap_or_default();
+                parents.extend(&dependencies);
+                self.set_dependencies(local, parents);
             }
         }
     }
@@ -82,13 +101,13 @@ impl Builder<'_, '_> {
             k::Op::Read { dst, place, moving } => {
                 let dependencies = self.value_dependencies(place);
                 if *moving && place.projections.is_empty() {
-                    self.carriers.remove(&place.local);
+                    self.remove_dependencies(place.local);
                 }
                 self.set_dependencies(*dst, dependencies);
             }
             k::Op::Assign { place, src } => {
                 let dependencies = self.carriers.get(src).cloned().unwrap_or_default();
-                self.carriers.remove(src);
+                self.remove_dependencies(*src);
                 self.store_dependencies(place, dependencies);
             }
             k::Op::Struct { dst, fields }
@@ -99,7 +118,7 @@ impl Builder<'_, '_> {
             } => {
                 let mut dependencies = BTreeSet::new();
                 for field in fields {
-                    if let Some(parents) = self.carriers.remove(field) {
+                    if let Some(parents) = self.remove_dependencies(*field) {
                         dependencies.extend(parents);
                     }
                 }
@@ -119,7 +138,7 @@ impl Builder<'_, '_> {
                     _ => BTreeSet::new(),
                 };
                 for argument in args {
-                    self.carriers.remove(argument);
+                    self.remove_dependencies(*argument);
                 }
                 self.set_dependencies(*dst, dependencies);
             }
@@ -146,36 +165,52 @@ impl Builder<'_, '_> {
                     }
                 }
                 for argument in args {
-                    self.carriers.remove(argument);
+                    self.remove_dependencies(*argument);
                 }
                 self.set_dependencies(*dst, dependencies);
             }
             k::Op::Drop { place } | k::Op::DropIf { place } if place.projections.is_empty() => {
-                self.carriers.remove(&place.local);
+                self.remove_dependencies(place.local);
             }
             k::Op::Return { src } => {
-                self.carriers.remove(src);
+                self.remove_dependencies(*src);
             }
             _ => {}
         }
     }
 
     pub(super) fn merge_carriers(&mut self, state: &Snapshot) {
+        // Source construction tracks possible owners so lexical cleanup is
+        // emitted for either path. K independently checks definite availability.
+        self.live = self.live.union(&state.live);
+        self.definite_live = self.definite_live.intersection(&state.definite_live);
+        self.written = self.written.union(&state.written);
+        let changed = self.references.symmetric_difference(&state.references);
+        self.reference_updates = self.reference_updates.union(&changed);
+        self.references = self.references.union(&state.references);
         for (local, parents) in &state.carriers {
-            if self.live.get(*local) == Some(true) && state.live[*local] {
-                self.carriers.entry(*local).or_default().extend(parents);
+            if state.live[*local] {
+                let mut combined = self.carriers.get(local).cloned().unwrap_or_default();
+                combined.extend(parents);
+                self.set_dependencies(*local, combined);
             }
         }
     }
 
     pub(super) fn drop_unused_references(&mut self, mut candidates: BTreeSet<usize>, line: usize) {
-        // A live value outside the proposed drop set can depend on several
-        // descriptors. Walk immediate edges once instead of expanding chains
-        // into every value's metadata.
+        if candidates.is_empty() {
+            return;
+        }
+        // Reverse edges limit this query to the proposed descriptors. A live
+        // value outside the set protects its carriers and their ancestors.
         let mut pending = Vec::new();
-        for (local, parents) in &self.carriers {
-            if self.live[*local] && !candidates.contains(local) {
-                pending.extend(parents);
+        for local in &candidates {
+            if self.dependents.get(local).is_some_and(|children| {
+                children
+                    .iter()
+                    .any(|child| self.live[*child] && !candidates.contains(child))
+            }) {
+                pending.push(*local);
             }
         }
         let mut needed = BTreeSet::new();

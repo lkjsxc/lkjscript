@@ -53,6 +53,65 @@ fn equal(a: &Link, b: &Link) -> bool {
     }
 }
 
+// Combine shared subtrees directly; work is proportional to changed branches.
+// kind: 0 intersection, 1 union, 2 symmetric difference.
+fn combine(a: &Link, b: &Link, kind: u8) -> Link {
+    match (a, b) {
+        (None, None) => None,
+        (None, Some(_)) => {
+            if kind == 0 {
+                None
+            } else {
+                b.clone()
+            }
+        }
+        (Some(_), None) => {
+            if kind == 0 {
+                None
+            } else {
+                a.clone()
+            }
+        }
+        (Some(left), Some(right)) => {
+            if Rc::ptr_eq(left, right) {
+                return if kind == 2 { None } else { a.clone() };
+            }
+            let node = match (&**left, &**right) {
+                (Node::Word(a), Node::Word(b)) => {
+                    let value = match kind {
+                        0 => a & b,
+                        1 => a | b,
+                        _ => a ^ b,
+                    };
+                    if value == 0 {
+                        return None;
+                    }
+                    Node::Word(value)
+                }
+                (
+                    Node::Branch {
+                        left: al,
+                        right: ar,
+                    },
+                    Node::Branch {
+                        left: bl,
+                        right: br,
+                    },
+                ) => {
+                    let left = combine(al, bl, kind);
+                    let right = combine(ar, br, kind);
+                    if left.is_none() && right.is_none() {
+                        return None;
+                    }
+                    Node::Branch { left, right }
+                }
+                _ => unreachable!(),
+            };
+            Some(Rc::new(node))
+        }
+    }
+}
+
 fn set_word(link: &mut Link, depth: usize, index: usize, bit: u64, value: bool) {
     if link.is_none() {
         if !value {
@@ -224,6 +283,28 @@ impl Facts {
             self.depth -= 1;
         }
         self.len = len;
+    }
+
+    fn combined(&self, other: &Self, kind: u8) -> Self {
+        let len = self.len.max(other.len);
+        let mut a = self.clone();
+        let mut b = other.clone();
+        a.resize(len, false);
+        b.resize(len, false);
+        a.root = combine(&a.root, &b.root, kind);
+        a
+    }
+
+    pub(crate) fn intersection(&self, other: &Self) -> Self {
+        self.combined(other, 0)
+    }
+
+    pub(crate) fn union(&self, other: &Self) -> Self {
+        self.combined(other, 1)
+    }
+
+    pub(crate) fn symmetric_difference(&self, other: &Self) -> Self {
+        self.combined(other, 2)
     }
 
     pub(crate) fn any(&self) -> bool {

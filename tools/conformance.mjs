@@ -4,13 +4,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { run as runProcess } from './process.mjs';
+import { runCases } from './batch.mjs';
+import { oracleCache, packResult, unpackResult } from './oracle.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const binary = path.resolve(root, process.env.LKJSCRIPT_BIN || process.argv[2] || 'target/debug/lkjscript');
 const engine = process.env.LKJ_ENGINE || 'node';
 const fixtures = path.join(root, 'tests/conformance');
 const cases = JSON.parse(fs.readFileSync(path.join(fixtures, 'cases.json'), 'utf8'));
-const out = path.join(root, 'target/conformance');
+const out = path.join(root, 'target/conformance', engine);
 fs.mkdirSync(out, { recursive: true });
 const timeout = Number(process.env.LKJ_TEST_TIMEOUT_MS || 30000);
 function run(command, args, options = {}) {
@@ -43,15 +45,22 @@ harness += '_ => std::process::exit(2), } }\n';
 const oracleSource = path.join(out, 'oracle.rs');
 const oracle = path.join(out, 'oracle');
 fs.writeFileSync(oracleSource, harness);
-const compiled = await run('rustc', ['--edition=2024', '-C', 'overflow-checks=yes', '-C', 'opt-level=1', '-A', 'warnings', oracleSource, '-o', oracle]);
-if (!succeeded(compiled)) {
-    process.stderr.write('Rust oracle did not build:\n' + diagnostic(compiled) + '\n');
-    process.exit(1);
-}
+const referenceResults = await oracleCache({suite:'conformance',harness,flags:'2024 overflow-checks=yes opt-level=1',negative:cases.filter(c=>c.rust&&c.kind!=='run'&&c.kind!=='output').map(c=>[c.id,fs.readFileSync(path.join(fixtures,c.file),'utf8')])},async()=>{
+ const compiled=await run('rustc',['--edition=2024','-C','overflow-checks=yes','-C','opt-level=1','-A','warnings',oracleSource,'-o',oracle]);
+ if(!succeeded(compiled))throw new Error('Rust oracle did not build: '+diagnostic(compiled));
+ const results={};
+ for(const c of cases.filter(c=>c.rust)) {
+  const result=c.kind==='run'||c.kind==='output'?await run(oracle,[c.id],{encoding:null}):await run('rustc',['--edition=2024','--crate-type=lib','--emit=metadata','-A','warnings',path.join(fixtures,c.file),'-o',path.join(out,c.id+'.rmeta')],{encoding:null});
+  results[c.id]=packResult(result);
+ }
+ return results;
+});
+const actualResults = await runCases(binary,cases.map(c=>({path:path.join(fixtures,c.file),entry:c.entry,mode:c.kind==='run'||c.kind==='output'?'run':'check'})),{engine,output:out,encoding:null});
 
 for (const c of cases) {
     const source = path.join(fixtures, c.file);
-    const checked = await run(binary, ['check', source]);
+    const result = actualResults[cases.indexOf(c)];
+    const checked = {...result,status:result.checkStatus};
     if (!succeeded(checked)) {
         const error = diagnostic(checked);
         const actualCode = error.match(/\bE_[A-Z_]+\b/)?.[0] || 'NO_DIAGNOSTIC';
@@ -69,8 +78,8 @@ for (const c of cases) {
     }
 
     if (c.kind === 'output') {
-        const actual = await run(binary, ['run', source, '--engine', engine], {encoding: null});
-        const reference = await run(oracle, [c.id], {encoding: null});
+        const actual = result;
+        const reference = unpackResult(referenceResults[c.id],null);
         const normalKind = code => Number(code.slice(1)) >= 16 ? 'R0004' : code;
         const ending = (result, rust) => {
             if (result.error) return result.error.code === 'ETIMEDOUT' ? 'timeout' : 'crash';
@@ -88,9 +97,7 @@ for (const c of cases) {
         }
         rustCompared++;
     } else if (c.kind === 'run') {
-        const args = ['run', source, '--engine', engine];
-        if (c.entry) args.push('--entry', c.entry);
-        const executed = await run(binary, args);
+        const executed = {...result,stdout:result.stdout.toString(),stderr:result.stderr.toString()};
         if (!succeeded(executed)) {
             fail(c.id + ': execution failed: ' + diagnostic(executed));
             continue;
@@ -101,7 +108,7 @@ for (const c of cases) {
             continue;
         }
         if (c.rust) {
-            const reference = await run(oracle, [c.id]);
+            const reference = unpackResult(referenceResults[c.id]);
             if (!succeeded(reference) || reference.stdout.trim() !== actual) {
                 fail(c.id + ': rustc/Node disagreement: ' + diagnostic(reference) + ' result=' + reference.stdout?.trim());
                 continue;
@@ -109,7 +116,7 @@ for (const c of cases) {
             rustCompared++;
         }
     } else if (c.rust) {
-        const reference = await run('rustc', ['--edition=2024', '--crate-type=lib', '--emit=metadata', '-A', 'warnings', source, '-o', path.join(out, c.id + '.rmeta')]);
+        const reference = unpackResult(referenceResults[c.id]);
         if (succeeded(reference) !== Boolean(c.rustAccept)) {
             fail(c.id + ': unexpected Rust oracle verdict: ' + diagnostic(reference));
             continue;

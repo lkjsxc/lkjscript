@@ -260,6 +260,11 @@ enum Obligation {
         target: Variable,
         span: a::Span,
     },
+    Try {
+        source: Variable,
+        result: Variable,
+        span: a::Span,
+    },
     Deref {
         source: Variable,
         result: Variable,
@@ -296,6 +301,9 @@ struct Infer<'a, 'b> {
     queue: VecDeque<usize>,
     fallback: VecDeque<usize>,
     queued: Vec<bool>,
+    field_types: BTreeMap<a::DeclarationId, BTreeMap<String, a::TypeId>>,
+    variant_fields: BTreeMap<a::DeclarationId, BTreeMap<String, Vec<a::Field>>>,
+    loops: Vec<(Variable, bool, bool)>,
 }
 impl Infer<'_, '_> {
     fn fresh(&mut self, shape: Option<Shape>, integer: bool, blocked: bool) -> Variable {
@@ -678,6 +686,46 @@ impl Infer<'_, '_> {
             .zip(args.iter().copied())
             .collect()
     }
+    fn struct_field_type(
+        &mut self,
+        declaration: a::DeclarationId,
+        name: &str,
+    ) -> Option<a::TypeId> {
+        if !self.field_types.contains_key(&declaration) {
+            let a::Item::Struct(index) = self.source.declarations[declaration].item else {
+                return None;
+            };
+            self.field_types.insert(
+                declaration,
+                self.source.structs[index]
+                    .fields
+                    .iter()
+                    .map(|field| (field.name.clone(), field.ty))
+                    .collect(),
+            );
+        }
+        self.field_types[&declaration].get(name).copied()
+    }
+    fn enum_variant_fields(
+        &mut self,
+        declaration: a::DeclarationId,
+        name: &str,
+    ) -> Option<Vec<a::Field>> {
+        if !self.variant_fields.contains_key(&declaration) {
+            let a::Item::Enum(index) = self.source.declarations[declaration].item else {
+                return None;
+            };
+            self.variant_fields.insert(
+                declaration,
+                self.source.enums[index]
+                    .variants
+                    .iter()
+                    .map(|variant| (variant.name.clone(), variant.fields.clone()))
+                    .collect(),
+            );
+        }
+        self.variant_fields[&declaration].get(name).cloned()
+    }
     fn constructor(
         &mut self,
         path: &a::Path,
@@ -722,25 +770,26 @@ impl Infer<'_, '_> {
                 }
                 self.source.structs[index].fields.clone()
             }
-            a::Item::Enum(index) => {
+            a::Item::Enum(_) => {
                 let Some((_, variant)) = path.name.rsplit_once("::") else {
                     return Ok(None);
                 };
-                let Some(variant) = self.source.enums[index]
-                    .variants
-                    .iter()
-                    .find(|item| item.name == variant)
-                else {
+                let Some(fields) = self.enum_variant_fields(declaration, variant) else {
                     return Ok(None);
                 };
-                variant.fields.clone()
+                fields
             }
             _ => return Ok(None),
         };
+        let declared: BTreeMap<_, _> = declared
+            .into_iter()
+            .map(|field| (field.name.clone(), field))
+            .collect();
+        let generic = !parameters(self.source, declaration).is_empty();
         for (name, value) in fields {
-            if let Some(field) = declared.iter().find(|field| &field.name == name) {
+            if let Some(field) = declared.get(name) {
                 let expected = self.source_type(field.ty, &environment)?;
-                let reason = if parameters(self.source, declaration).is_empty() {
+                let reason = if !generic {
                     "constructor field type differs"
                 } else {
                     "generic arguments disagree for constructor field"
@@ -806,9 +855,31 @@ impl Infer<'_, '_> {
         &mut self,
         pattern: a::PatternId,
         value: Variable,
-        structural: bool,
+        _structural: bool,
+    ) -> Result<()> {
+        self.bind_pattern_mode(pattern, value, None)
+    }
+    fn bind_pattern_mode(
+        &mut self,
+        pattern: a::PatternId,
+        mut value: Variable,
+        mut mode: Option<bool>,
     ) -> Result<()> {
         let node = self.source.patterns[pattern].clone();
+        // Structural patterns follow references and carry the resulting binding
+        // mode down to their fields; a bare binding preserves its subject type.
+        if matches!(
+            node.kind,
+            a::Pattern::Tuple(_)
+                | a::Pattern::Variant { .. }
+                | a::Pattern::Struct { .. }
+                | a::Pattern::Path(_)
+        ) {
+            while let Some(Shape::Ref(mutable, inner)) = self.shape(value) {
+                value = inner;
+                mode = Some(mode.unwrap_or(true) && mutable);
+            }
+        }
         match node.kind {
             a::Pattern::Bind {
                 name,
@@ -816,46 +887,128 @@ impl Infer<'_, '_> {
                 ref_mut,
                 ..
             } => {
-                let value = if by_ref {
-                    self.shaped(Shape::Ref(ref_mut, value))
+                let reference = if by_ref { Some(ref_mut) } else { mode };
+                let value = if let Some(mutable) = reference {
+                    self.shaped(Shape::Ref(mutable, value))
                 } else {
                     value
                 };
                 self.bindings.push((name, value));
             }
-            a::Pattern::Tuple(fields) if structural => {
+            a::Pattern::Tuple(fields) => {
                 let values: Vec<_> = fields.iter().map(|_| self.unknown()).collect();
-                let tuple = self.shaped(Shape::Tuple(values.clone()));
+                let tuple = if values.is_empty() {
+                    self.atom("()")
+                } else {
+                    self.shaped(Shape::Tuple(values.clone()))
+                };
                 self.unify(value, tuple, node.span)?;
                 for (field, value) in fields.into_iter().zip(values) {
-                    self.bind_pattern(field, value, true)?;
+                    self.bind_pattern_mode(field, value, mode)?;
                 }
             }
-            a::Pattern::Ref { mutable, inner } if structural => {
+            a::Pattern::Ref { mutable, inner } => {
                 let pointee = self.unknown();
                 let reference = self.shaped(Shape::Ref(mutable, pointee));
                 self.unify(value, reference, node.span)?;
-                self.bind_pattern(inner, pointee, true)?;
+                self.bind_pattern_mode(inner, pointee, None)?;
             }
-            a::Pattern::Tuple(fields)
-            | a::Pattern::Variant { fields, .. }
-            | a::Pattern::Or(fields) => {
-                for field in fields {
-                    let value = self.blocked();
-                    self.bind_pattern(field, value, false)?;
+            a::Pattern::Variant { path, fields } => {
+                let fields: Vec<_> = fields
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, pattern)| (i.to_string(), pattern))
+                    .collect();
+                self.bind_nominal_pattern(&path, &fields, value, mode, node.scope, node.span)?;
+            }
+            a::Pattern::Struct { path, fields, .. } => {
+                self.bind_nominal_pattern(&path, &fields, value, mode, node.scope, node.span)?;
+            }
+            a::Pattern::Path(path) => {
+                self.bind_nominal_pattern(&path, &[], value, mode, node.scope, node.span)?;
+            }
+            a::Pattern::Or(alternatives) => {
+                let scope = self.bindings.len();
+                let mut first = None::<BTreeMap<String, Variable>>;
+                for alternative in alternatives {
+                    self.bindings.truncate(scope);
+                    self.bind_pattern_mode(alternative, value, mode)?;
+                    let bindings: BTreeMap<_, _> =
+                        self.bindings.entries[scope..].iter().cloned().collect();
+                    if let Some(first) = &first {
+                        if first.len() != bindings.len() || first.keys().ne(bindings.keys()) {
+                            return Err(err(
+                                node.span,
+                                "E_TYPE",
+                                "or-pattern alternatives must bind the same names",
+                            ));
+                        }
+                        for (name, ty) in &bindings {
+                            self.unify(*ty, first[name], node.span)?;
+                        }
+                    } else {
+                        first = Some(bindings);
+                    }
                 }
-            }
-            a::Pattern::Struct { fields, .. } => {
-                for (_, field) in fields {
-                    let value = self.blocked();
-                    self.bind_pattern(field, value, false)?;
+                self.bindings.truncate(scope);
+                for binding in first.unwrap_or_default() {
+                    self.bindings.push(binding);
                 }
-            }
-            a::Pattern::Ref { inner, .. } => {
-                let value = self.blocked();
-                self.bind_pattern(inner, value, false)?;
             }
             _ => {}
+        }
+        Ok(())
+    }
+    fn bind_nominal_pattern(
+        &mut self,
+        path: &a::Path,
+        fields: &[(String, a::PatternId)],
+        value: Variable,
+        mode: Option<bool>,
+        scope: a::ModuleId,
+        span: a::Span,
+    ) -> Result<()> {
+        let path = if path.declaration.is_some() {
+            path.clone()
+        } else {
+            self.names.value_path(scope, path, span)?
+        };
+        let Some(nominal) = self.constructor(&path, &[], span)? else {
+            for (_, pattern) in fields {
+                let value = self.blocked();
+                self.bind_pattern_mode(*pattern, value, mode)?;
+            }
+            return Ok(());
+        };
+        self.unify(value, nominal, span)?;
+        let Some(Shape::Nominal(declaration, arguments)) = self.shape(nominal) else {
+            return Ok(());
+        };
+        let environment = self.nominal_environment(declaration, &arguments);
+        let variant = if matches!(self.source.declarations[declaration].item, a::Item::Enum(_)) {
+            path.name
+                .rsplit_once("::")
+                .and_then(|(_, name)| self.enum_variant_fields(declaration, name))
+                .map(|fields| {
+                    fields
+                        .into_iter()
+                        .map(|field| (field.name, field.ty))
+                        .collect::<BTreeMap<_, _>>()
+                })
+        } else {
+            None
+        };
+        for (name, pattern) in fields {
+            let declared = if let Some(variant) = &variant {
+                variant.get(name).copied()
+            } else {
+                self.struct_field_type(declaration, name)
+            };
+            let field = match declared {
+                Some(ty) => self.source_type(ty, &environment)?,
+                None => self.blocked(),
+            };
+            self.bind_pattern_mode(*pattern, field, mode)?;
         }
         Ok(())
     }
@@ -1173,12 +1326,22 @@ impl Infer<'_, '_> {
                 let condition = self.expr(condition)?;
                 let boolean = self.atom("bool");
                 self.unify(condition, boolean, span)?;
+                let unit = self.atom("()");
+                self.loops.push((unit, false, false));
                 self.block(body)?;
-                self.atom("()")
+                self.loops.pop();
+                unit
             }
             a::Expr::Loop { body } => {
+                let result = self.unknown();
+                self.loops.push((result, true, false));
                 self.block(body)?;
-                self.blocked()
+                let (_, _, has_break) = self.loops.pop().unwrap();
+                if has_break {
+                    result
+                } else {
+                    self.shaped(Shape::Never)
+                }
             }
             a::Expr::For {
                 pattern,
@@ -1204,9 +1367,12 @@ impl Infer<'_, '_> {
                     self.blocked()
                 };
                 self.bind_pattern(pattern, item, true)?;
+                let unit = self.atom("()");
+                self.loops.push((unit, false, false));
                 self.block(body)?;
+                self.loops.pop();
                 self.bindings.truncate(bindings);
-                self.atom("()")
+                unit
             }
             a::Expr::Match { value, arms } => {
                 let subject = self.expr(value)?;
@@ -1215,8 +1381,7 @@ impl Infer<'_, '_> {
                 for arm in arms {
                     self.constrain_pattern(arm.pattern, subject)?;
                     let bindings = self.bindings.len();
-                    let value = self.blocked();
-                    self.bind_pattern(arm.pattern, value, false)?;
+                    self.bind_pattern(arm.pattern, subject, true)?;
                     if let Some(guard) = arm.guard {
                         let guard = self.expr(guard)?;
                         let boolean = self.atom("bool");
@@ -1242,21 +1407,52 @@ impl Infer<'_, '_> {
                 self.shaped(Shape::Never)
             }
             a::Expr::Break(value) => {
-                if let Some(value) = value {
-                    self.expr(value)?;
+                let Some(&(result, allow_value, _)) = self.loops.last() else {
+                    return Err(err(span, "E_CONTROL", "break outside a loop"));
+                };
+                if value.is_some() && !allow_value {
+                    return Err(err(
+                        span,
+                        "E_TYPE",
+                        "break value requires a loop expression",
+                    ));
                 }
+                let value = if let Some(value) = value {
+                    self.expr(value)?
+                } else {
+                    self.atom("()")
+                };
+                self.coerce(value, result, span)?;
+                self.loops.last_mut().unwrap().2 = true;
                 self.shaped(Shape::Never)
             }
             a::Expr::Continue => self.shaped(Shape::Never),
-            a::Expr::Macro { args, .. } => {
+            a::Expr::Macro { name, args, .. } => {
                 for arg in args {
                     self.expr(arg)?;
                 }
-                self.blocked()
+                if name == "panic" || name == "unreachable" {
+                    self.shaped(Shape::Never)
+                } else {
+                    self.blocked()
+                }
             }
             a::Expr::Try(value) => {
-                self.expr(value)?;
-                self.blocked()
+                let source = self.expr(value)?;
+                let result = self.operation_type();
+                self.obligation(Obligation::Try {
+                    source,
+                    result,
+                    span,
+                });
+                result
+            }
+            a::Expr::Diverge(value) => {
+                let value = self.expr(value)?;
+                if self.shape(value).is_some() && !self.never(value) {
+                    return Err(err(span, "E_TYPE", "let-else branch must diverge"));
+                }
+                self.shaped(Shape::Never)
             }
             a::Expr::Range { start, end, .. } => {
                 if let Some(start) = start {
@@ -1295,6 +1491,63 @@ impl Infer<'_, '_> {
                     return Ok(false);
                 }
                 self.coerce_known(source, target, span)?;
+            }
+            Obligation::Try {
+                source,
+                result,
+                span,
+            } => {
+                let Some(shape) = self.shape(source) else {
+                    self.watch(source, id);
+                    return Ok(false);
+                };
+                let Shape::Nominal(declaration, arguments) = shape else {
+                    if matches!(shape, Shape::Rigid(_) | Shape::Source(_)) {
+                        return Ok(false);
+                    }
+                    return Err(err(
+                        span,
+                        "E_TYPE",
+                        "question-mark requires Result or Option",
+                    ));
+                };
+                let name = self.source.declarations[declaration].name.as_str();
+                let arity = match name {
+                    "$std::prelude::Result" => 2,
+                    "$std::prelude::Option" => 1,
+                    _ => {
+                        return Err(err(
+                            span,
+                            "E_TYPE",
+                            "question-mark requires the source-library Result or Option",
+                        ));
+                    }
+                };
+                if arguments.len() != arity {
+                    return Err(err(span, "E_TYPE", "question-mark type arguments differ"));
+                }
+                let Some(output_shape) = self.shape(self.result) else {
+                    self.watch(self.result, id);
+                    return Ok(false);
+                };
+                let Shape::Nominal(output, output_arguments) = output_shape else {
+                    return Err(err(
+                        span,
+                        "E_TYPE",
+                        "question-mark requires the same return enum",
+                    ));
+                };
+                if output != declaration || output_arguments.len() != arity {
+                    return Err(err(
+                        span,
+                        "E_TYPE",
+                        "question-mark requires the same return enum",
+                    ));
+                }
+                self.unify(result, arguments[0], span)?;
+                if arity == 2 {
+                    self.unify(arguments[1], output_arguments[1], span)?;
+                }
             }
             Obligation::Deref {
                 source,
@@ -1354,20 +1607,11 @@ impl Infer<'_, '_> {
                         self.unify(result, field, span)?;
                     }
                     Shape::Nominal(declaration, args) => {
-                        let a::Item::Struct(index) = self.source.declarations[declaration].item
-                        else {
-                            return Ok(false);
-                        };
-                        let Some(field) = self.source.structs[index]
-                            .fields
-                            .iter()
-                            .find(|field| field.name == name)
-                            .cloned()
-                        else {
+                        let Some(field_type) = self.struct_field_type(declaration, &name) else {
                             return Ok(false);
                         };
                         let environment = self.nominal_environment(declaration, &args);
-                        let ty = self.source_type(field.ty, &environment)?;
+                        let ty = self.source_type(field_type, &environment)?;
                         self.unify(result, ty, span)?;
                     }
                     _ => return Ok(false),
@@ -1428,7 +1672,8 @@ impl Infer<'_, '_> {
             if let Some(obligation) = self.obligations[id].clone() {
                 let result = match &obligation {
                     Obligation::Coercion { .. } => None,
-                    Obligation::Deref { result, .. }
+                    Obligation::Try { result, .. }
+                    | Obligation::Deref { result, .. }
                     | Obligation::Index { result, .. }
                     | Obligation::Field { result, .. }
                     | Obligation::Method { result, .. } => Some(*result),
@@ -1522,6 +1767,9 @@ pub(super) fn infer(
         queue: VecDeque::new(),
         fallback: VecDeque::new(),
         queued: Vec::new(),
+        field_types: BTreeMap::new(),
+        variant_fields: BTreeMap::new(),
+        loops: Vec::new(),
     };
     match source.function_owner(a::FunctionId { index }) {
         a::FunctionOwner::Implementation(owner) => {

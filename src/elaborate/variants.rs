@@ -75,11 +75,7 @@ impl Builder<'_, '_> {
         else {
             return Ok(None);
         };
-        let Some(tag) = self.compiler.source.enums[index]
-            .variants
-            .iter()
-            .position(|variant| variant.name == name)
-        else {
+        let Some(tag) = self.compiler.variant_positions[index].get(&name).copied() else {
             if style == a::VariantStyle::Named {
                 return Err(err(span, "E_TYPE", "unknown enum variant"));
             }

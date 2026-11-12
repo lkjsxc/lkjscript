@@ -1,1 +1,0 @@
-{"stage":"engine_load","engine":"v24.18.1","wasm_bytes":105727609,"wasm_sha256":"d31d407142d8fac252206f4fc10e9dff3256c7eb9a0f4ad111ba1f83cbc46088","source_functions":1000000,"outcome":"rejected","message":"CompileError: WebAssembly.compile(): functions count of 1000073 exceeds internal limit of 1000000 @+55","elapsed_ms":9.609559000000004}
