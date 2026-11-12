@@ -79,15 +79,96 @@ pub fn reservation() -> io::Result<usize> {
 }
 
 pub fn run<T: Send>(work: impl FnOnce() -> T + Send) -> io::Result<T> {
-    let stack = reservation()?;
+    run_with_reservation(reservation()?, work)
+}
+
+fn run_with_reservation<T: Send>(
+    mut stack: usize,
+    work: impl FnOnce() -> T + Send,
+) -> io::Result<T> {
+    // pthread creation can reject a reservation even below observed memory
+    // extents: address-space fragmentation, commit accounting and concurrent
+    // workers are live host constraints. A failed spawn must not consume work.
+    let pending = std::sync::Mutex::new(Some(work));
     std::thread::scope(|scope| {
-        let worker = std::thread::Builder::new()
-            .name("lkjscript-compiler".to_string())
-            .stack_size(stack)
-            .spawn_scoped(scope, work)?;
-        match worker.join() {
-            Ok(result) => Ok(result),
-            Err(panic) => std::panic::resume_unwind(panic),
+        loop {
+            let pending = &pending;
+            let worker = std::thread::Builder::new()
+                .name("lkjscript-compiler".to_string())
+                .stack_size(stack)
+                .spawn_scoped(scope, move || {
+                    let work = pending
+                        .lock()
+                        .unwrap()
+                        .take()
+                        .expect("compiler task starts once");
+                    work()
+                });
+            match worker {
+                Ok(worker) => {
+                    return match worker.join() {
+                        Ok(result) => Ok(result),
+                        Err(panic) => std::panic::resume_unwind(panic),
+                    };
+                }
+                Err(error) => {
+                    if !matches!(
+                        error.kind(),
+                        io::ErrorKind::WouldBlock | io::ErrorKind::OutOfMemory
+                    ) || stack <= 1
+                    {
+                        return Err(error);
+                    }
+                    // This adapts only host virtual-address reservation. There is
+                    // no source-size/depth test, and no work has started yet.
+                    stack /= 2;
+                }
+            }
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::run_with_reservation;
+    use std::process::Command;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[test]
+    fn rejected_reservations_preserve_exactly_once_work_and_panic_payload() {
+        const CHILD: &str = "LKJSCRIPT_STACK_RESERVATION_RETRY_CHILD";
+        if std::env::var_os(CHILD).is_some() {
+            // The child has only 256 MiB of virtual address space. This first
+            // 1 GiB reservation must fail, independently of host RAM/overcommit.
+            struct Token(String);
+            let token = Token("once".to_string());
+            let calls = AtomicUsize::new(0);
+            let calls_ref = &calls;
+            let result = run_with_reservation(1024 * 1024 * 1024, move || {
+                calls_ref.fetch_add(1, Ordering::SeqCst);
+                token
+            })
+            .unwrap();
+            assert_eq!(result.0, "once");
+            assert_eq!(calls.load(Ordering::SeqCst), 1);
+            let panic = std::panic::catch_unwind(|| {
+                let _ =
+                    run_with_reservation(1024 * 1024 * 1024, || std::panic::panic_any(37_usize));
+            })
+            .unwrap_err();
+            assert_eq!(panic.downcast_ref::<usize>(), Some(&37));
+            return;
+        }
+        let output = Command::new("bash").arg("-c")
+            .arg("ulimit -v 262144; exec \"$1\" --exact compiler_stack::tests::rejected_reservations_preserve_exactly_once_work_and_panic_payload --nocapture")
+            .arg("stack-reservation-probe").arg(std::env::current_exe().unwrap())
+            .env(CHILD, "1").output().unwrap();
+        assert!(
+            output.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed"));
+    }
 }
