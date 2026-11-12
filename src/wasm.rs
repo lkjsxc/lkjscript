@@ -1253,13 +1253,39 @@ fn allocator() -> Vec<u8> {
     b.extend_from_slice(&[0x3f, 0]);
     b.push(0x56);
     begin_if(&mut b);
-    get(&mut b, 6);
+    // Capacity grows geometrically. A host may refuse spare pages while the
+    // exact request still fits, so a failed reservation retries only the need.
+    // This amortizes memory.grow and its host/GC work without a target quota.
     b.extend_from_slice(&[0x3f, 0]);
+    tee(&mut b, 7);
+    constant(&mut b, 2);
+    b.push(0x7e);
+    tee(&mut b, 8);
+    get(&mut b, 7);
+    b.push(0x54);
+    get(&mut b, 8);
+    get(&mut b, 6);
+    b.push(0x54);
+    b.push(0x72);
+    begin_if(&mut b);
+    get(&mut b, 6);
+    set(&mut b, 8);
+    b.push(0x0b);
+    get(&mut b, 8);
+    get(&mut b, 7);
+    b.push(0x7d);
+    b.extend_from_slice(&[0x40, 0]);
+    constant(&mut b, -1);
+    b.push(0x51);
+    begin_if(&mut b);
+    get(&mut b, 6);
+    get(&mut b, 7);
     b.push(0x7d);
     b.extend_from_slice(&[0x40, 0]);
     constant(&mut b, -1);
     b.push(0x51);
     trap_if(&mut b, 6, 0);
+    b.push(0x0b);
     b.push(0x0b);
     get(&mut b, 5);
     b.extend_from_slice(&[0x24, 0]);

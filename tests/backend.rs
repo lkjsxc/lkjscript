@@ -606,3 +606,82 @@ fn iterative_cleanup_preserves_field_and_element_order() {
         );
     }
 }
+
+/// Set a host maximum and expose the private allocator to exercise its boundary.
+/// This edits only the test module, never the compiler's acceptance rules.
+fn memory_maximum(bytes: &[u8], pages: usize) -> Vec<u8> {
+    fn read(bytes: &[u8], at: &mut usize) -> usize {
+        let mut value = 0;
+        let mut shift = 0;
+        loop {
+            let byte = bytes[*at];
+            *at += 1;
+            value |= ((byte & 127) as usize) << shift;
+            if byte & 128 == 0 {
+                return value;
+            }
+            shift += 7;
+        }
+    }
+    let mut result = bytes[..8].to_vec();
+    let mut at = 8;
+    while at < bytes.len() {
+        let id = bytes[at];
+        at += 1;
+        let length = read(bytes, &mut at);
+        let end = at + length;
+        result.push(id);
+        if id == 5 {
+            assert_eq!(read(bytes, &mut at), 1);
+            assert_eq!(read(bytes, &mut at), 4);
+            let minimum = read(bytes, &mut at);
+            assert!(minimum <= pages);
+            assert_eq!(at, end);
+            let mut limits = vec![1, 5]; // memory64 with a maximum
+            lkjscript::encoding::uleb(&mut limits, minimum as u64);
+            lkjscript::encoding::uleb(&mut limits, pages as u64);
+            lkjscript::encoding::uleb(&mut result, limits.len() as u64);
+            result.extend(limits);
+        } else if id == 7 {
+            let count = read(bytes, &mut at);
+            let mut exports = Vec::new();
+            lkjscript::encoding::uleb(&mut exports, (count + 1) as u64);
+            exports.extend_from_slice(&bytes[at..end]);
+            let name = b"__test_allocate";
+            lkjscript::encoding::uleb(&mut exports, name.len() as u64);
+            exports.extend_from_slice(name);
+            exports.extend_from_slice(&[0, 0]); // allocator is first, no imports
+            lkjscript::encoding::uleb(&mut result, exports.len() as u64);
+            result.extend(exports);
+            at = end;
+        } else {
+            lkjscript::encoding::uleb(&mut result, length as u64);
+            result.extend_from_slice(&bytes[at..end]);
+            at = end;
+        }
+    }
+    result
+}
+
+#[test]
+fn spare_memory_growth_failure_retries_exact_need_and_real_exhaustion_traps() {
+    let parsed = syntax::parse("fn probe() -> i64 { 42 }").unwrap();
+    let checked = check::check(elaborate::elaborate(&parsed).unwrap()).unwrap();
+    let bytes = wasm::emit(&checked).unwrap();
+    run_node(&memory_maximum(&bytes, 3), "
+        const first=instance.exports.__test_allocate(96000n);
+        new DataView(instance.exports.memory.buffer).setBigInt64(Number(first)+95992,20n,true);
+        const second=instance.exports.__test_allocate(64000n);
+        const view=new DataView(instance.exports.memory.buffer);
+        view.setBigInt64(Number(second)+63992,22n,true);
+        if(view.getBigInt64(Number(first)+95992,true)+view.getBigInt64(Number(second)+63992,true)!==42n)
+            throw Error('growth corrupted live allocations');
+        if(instance.exports.memory.buffer.byteLength!==3*65536)throw Error('exact retry did not reach third page');
+    ");
+    run_node(&memory_maximum(&bytes, 2), "
+        instance.exports.__test_allocate(96000n);
+        let failed=false;
+        try{instance.exports.__test_allocate(64000n)}catch(e){failed=e instanceof WebAssembly.RuntimeError}
+        if(!failed||instance.exports.__lkj_trap_code.value!==6n)throw Error('real exhaustion did not report allocation failure');
+    ");
+}
