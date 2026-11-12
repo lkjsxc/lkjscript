@@ -4,7 +4,7 @@ version = "0.2.0"
 edition = "2024"
 
 [lib]
-path = "src/lib.rs"
+path = "bridge/lib.rs"
 
 [[bin]]
 name = "lkjscript"

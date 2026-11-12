@@ -2,6 +2,7 @@
 use lkjscript::{ast::Diagnostic, check, compiler, k, k_text, source, wasm};
 mod library;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
@@ -22,6 +23,8 @@ mod host_stack {
     unsafe extern "C" {
         fn getrlimit(resource: i32, limits: *mut Limits) -> i32;
         fn setrlimit(resource: i32, limits: *const Limits) -> i32;
+        fn prctl(option: i32, ...) -> i32;
+        fn getppid() -> i32;
     }
 
     pub fn configure(memory: usize) -> io::Result<Limits> {
@@ -44,11 +47,21 @@ mod host_stack {
         Ok(original)
     }
 
-    pub fn restore_in_child(command: &mut Command, original: Limits) {
-        // Only an async-signal-safe syscall and error capture run after fork.
+    pub fn prepare_child(command: &mut Command, original: Limits) {
+        let parent = std::process::id() as i32;
+        // Only async-signal-safe syscalls and error capture run after fork.
         // Node must not inherit an enormous default pthread stack reservation.
         unsafe {
             command.pre_exec(move || {
+                // PR_SET_PDEATHSIG=1, SIGTERM=15. Killing a timed-out CLI must
+                // also terminate Node and all of its in-process workers.
+                if prctl(1, 15_usize, 0_usize, 0_usize, 0_usize) != 0 {
+                    return Err(io::Error::last_os_error());
+                }
+                // Close the race where the parent died before prctl ran.
+                if getppid() != parent {
+                    return Err(io::Error::from_raw_os_error(3));
+                }
                 if setrlimit(RLIMIT_STACK, &original) == 0 {
                     Ok(())
                 } else {
@@ -108,12 +121,19 @@ fn execute(
         .arg(module)
         .arg(entry)
         .arg(kind);
-    host_stack::restore_in_child(&mut command, child_stack);
+    host_stack::prepare_child(&mut command, child_stack);
     let output = command.output().map_err(|e| format!("E_HOST Node: {e}"))?;
+    // Preserve all program bytes, including output preceding a trap. Text
+    // conversion would corrupt arbitrary bytes at the stdout boundary.
+    std::io::stdout()
+        .write_all(&output.stdout)
+        .map_err(|e| format!("E_IO stdout: {e}"))?;
     if !output.status.success() {
         return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
     }
-    print!("{}", String::from_utf8_lossy(&output.stdout));
+    std::io::stderr()
+        .write_all(&output.stderr)
+        .map_err(|e| format!("E_IO stderr: {e}"))?;
     Ok(())
 }
 fn result_kind(program: &k::Program, function: &k::Function) -> &'static str {
