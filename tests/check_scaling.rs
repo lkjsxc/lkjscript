@@ -1,0 +1,82 @@
+//! Direct K protects sparse ownership snapshots independently of elaboration.
+use lkjscript::{check, k};
+
+fn program(locals: usize, branches: usize, consume_in_then: bool) -> k::Program {
+    let owner = locals - 1;
+    let mut declarations = vec![
+        k::Local {
+            name: String::new(),
+            ty: k::I64,
+            mutable: false
+        };
+        locals
+    ];
+    declarations[0].ty = k::BOOL;
+    let mut ops = vec![k::Op::Int {
+        dst: owner,
+        value: 42,
+    }];
+    for branch in 0..branches {
+        ops.push(k::Op::Int { dst: 0, value: 1 });
+        ops.push(k::Op::If { condition: 0 });
+        ops.push(k::Op::Int { dst: 1, value: 7 });
+        ops.push(k::Op::Drop {
+            place: k::Place::local(1),
+        });
+        if consume_in_then && branch + 1 == branches {
+            ops.push(k::Op::Drop {
+                place: k::Place::local(owner),
+            });
+        }
+        ops.push(k::Op::Else);
+        ops.push(k::Op::Int { dst: 2, value: 9 });
+        ops.push(k::Op::Drop {
+            place: k::Place::local(2),
+        });
+        ops.push(k::Op::End);
+    }
+    ops.push(k::Op::Return { src: owner });
+    k::Program {
+        types: k::primitives(),
+        functions: vec![k::Function {
+            file: 0,
+            name: "probe".to_string(),
+            params: 0,
+            result: k::I64,
+            return_source: None,
+            locals: declarations,
+            body: ops
+                .into_iter()
+                .enumerate()
+                .map(|(index, op)| k::Instruction {
+                    line: index + 1,
+                    op,
+                })
+                .collect(),
+            test: false,
+        }],
+        destructors: Vec::new(),
+    }
+}
+
+#[test]
+fn sparse_local_snapshots_accept_balanced_branches() {
+    // Far-apart owner bits and changing temporaries must survive Else restoration.
+    for locals in [65, 4097, 65_537] {
+        if let Err(diagnostic) = check::check(program(locals, 128, false)) {
+            panic!("balanced branches rejected: {diagnostic:?}");
+        }
+    }
+}
+
+#[test]
+fn sparse_local_snapshots_reject_one_branch_consuming_the_owner() {
+    for locals in [65, 4097, 65_537] {
+        let diagnostic = match check::check(program(locals, 128, true)) {
+            Ok(_) => panic!("divergent owner states accepted"),
+            Err(diagnostic) => diagnostic,
+        };
+        assert_eq!(diagnostic.code, "E_MOVE");
+        assert!(diagnostic.message.contains("branches must leave"));
+    }
+}

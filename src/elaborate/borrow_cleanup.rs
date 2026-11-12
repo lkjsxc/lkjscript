@@ -162,7 +162,7 @@ impl Builder<'_, '_> {
 
     pub(super) fn merge_carriers(&mut self, state: &Snapshot) {
         for (local, parents) in &state.carriers {
-            if self.live.get(*local) == Some(&true) && state.live[*local] {
+            if self.live.get(*local) == Some(true) && state.live[*local] {
                 self.carriers.entry(*local).or_default().extend(parents);
             }
         }

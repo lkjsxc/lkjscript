@@ -3,6 +3,7 @@ pub mod check;
 pub mod compiler;
 pub mod elaborate;
 pub mod encoding;
+pub(crate) mod facts;
 pub mod generics;
 pub mod json;
 pub mod k;

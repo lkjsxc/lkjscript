@@ -1,6 +1,6 @@
 //! Assignment has a different operand order from ordinary binary expressions:
 //! first compute the incoming value, then the destination, then replace it.
-use super::{Builder, LoopScope, Result, a, err, k, place_type};
+use super::{Bindings, Builder, Facts, LoopScope, Result, a, err, k, place_type};
 use std::collections::BTreeMap;
 
 impl Builder<'_, '_> {
@@ -92,10 +92,10 @@ impl Builder<'_, '_> {
             body: Vec::new(),
             test: false,
         };
-        let mut bindings = Vec::new();
+        let mut bindings = Bindings::default();
         let mut live = Vec::new();
         let mut written = Vec::new();
-        for (name, original) in &self.bindings {
+        for (name, original) in &self.bindings.entries {
             let local = function.locals.len();
             function
                 .locals
@@ -104,6 +104,7 @@ impl Builder<'_, '_> {
             live.push(self.live[*original]);
             written.push(self.written[*original]);
         }
+        let references = Facts::new(function.locals.len());
         let loops = self
             .loops
             .iter()
@@ -126,11 +127,11 @@ impl Builder<'_, '_> {
                 function: &mut function,
                 sub: self.sub.clone(),
                 bindings,
-                ref_bindings: Vec::new(),
+                references,
                 carriers: BTreeMap::new(),
                 assignment_types,
-                live,
-                written,
+                live: live.into_iter().collect(),
+                written: written.into_iter().collect(),
                 loops,
                 reachable: self.reachable,
             };

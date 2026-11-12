@@ -16,6 +16,7 @@ mod variants;
 
 use crate::ast as a;
 use crate::check::{borrowed_projection, is_copy, place_type};
+use crate::facts::Facts;
 use crate::k;
 use crate::names::qualified;
 use std::collections::BTreeMap;
@@ -202,14 +203,20 @@ impl<'a> Compiler<'a> {
 }
 
 impl Compiler<'_> {
+    fn declaration_item(&self, path: &a::Path) -> Option<a::Item> {
+        path.declaration
+            .and_then(|id| self.source.declarations.get(id))
+            .filter(|declaration| declaration.name == path.name)
+            .map(|declaration| declaration.item)
+    }
     fn field_access(&self, ty: usize, name: &str, scope: a::ModuleId, span: a::Span) -> Result<()> {
         if let Some((owner, _)) = self.applications.get(&ty) {
-            if let Some(definition) = self
-                .source
-                .structs
-                .iter()
-                .find(|s| qualified(&s.module, &s.name) == *owner)
+            if let Some(a::Item::Struct(index)) = self
+                .declaration_names
+                .get(owner)
+                .map(|id| self.source.declarations[*id].item)
             {
+                let definition = &self.source.structs[index];
                 if let Some(field) = definition.fields.iter().find(|f| f.name == name) {
                     self.declared_field_access(definition, field, scope, span)?;
                 }
@@ -649,7 +656,8 @@ impl Compiler<'_> {
             .enumerate()
             .map(|(i, l)| (l.name.clone(), i))
             .collect();
-        let live = vec![true; function.locals.len()];
+        let live: Facts = function.locals.iter().map(|_| true).collect();
+        let references = Facts::new(live.len());
         let scope = self.names.scope(&source.module);
         let mut builder = Builder {
             source_function: instance.source,
@@ -659,7 +667,7 @@ impl Compiler<'_> {
             function: &mut function,
             sub: instance.substitutions.clone(),
             bindings,
-            ref_bindings: Vec::new(),
+            references,
             carriers: BTreeMap::new(),
             assignment_types: BTreeMap::new(),
             written: live.clone(),
@@ -685,10 +693,56 @@ impl Compiler<'_> {
     }
 }
 
+/// The stack records lexical scope restoration; the index answers each use
+/// without scanning earlier declarations. A shadow has its own stack entry.
+#[derive(Default)]
+struct Bindings {
+    entries: Vec<(String, usize)>,
+    visible: BTreeMap<String, Vec<usize>>,
+}
+impl Bindings {
+    fn push(&mut self, binding: (String, usize)) {
+        self.visible
+            .entry(binding.0.clone())
+            .or_default()
+            .push(binding.1);
+        self.entries.push(binding);
+    }
+    fn len(&self) -> usize {
+        self.entries.len()
+    }
+    fn get(&self, name: &str) -> Option<usize> {
+        self.visible
+            .get(name)
+            .and_then(|locals| locals.last())
+            .copied()
+    }
+    fn truncate(&mut self, len: usize) {
+        while self.entries.len() > len {
+            let (name, _) = self.entries.pop().unwrap();
+            let locals = self.visible.get_mut(&name).unwrap();
+            locals.pop();
+            if locals.is_empty() {
+                self.visible.remove(&name);
+            }
+        }
+    }
+}
+impl FromIterator<(String, usize)> for Bindings {
+    fn from_iter<I: IntoIterator<Item = (String, usize)>>(iter: I) -> Self {
+        let mut bindings = Self::default();
+        for binding in iter {
+            bindings.push(binding);
+        }
+        bindings
+    }
+}
+
 #[derive(Clone)]
 struct Snapshot {
-    live: Vec<bool>,
-    written: Vec<bool>,
+    live: Facts,
+    written: Facts,
+    references: Facts,
     carriers: borrow_cleanup::Dependencies,
 }
 struct LoopScope {
@@ -703,12 +757,12 @@ struct Builder<'a, 'b> {
     compiler: &'a mut Compiler<'b>,
     function: &'a mut k::Function,
     sub: BTreeMap<String, usize>,
-    bindings: Vec<(String, usize)>,
-    ref_bindings: Vec<(String, usize)>,
+    bindings: Bindings,
+    references: Facts,
     carriers: borrow_cleanup::Dependencies,
     assignment_types: BTreeMap<usize, usize>,
-    live: Vec<bool>,
-    written: Vec<bool>,
+    live: Facts,
+    written: Facts,
     loops: Vec<LoopScope>,
     reachable: bool,
 }
@@ -810,6 +864,7 @@ impl Builder<'_, '_> {
         });
         self.live.push(false);
         self.written.push(false);
+        self.references.push(false);
         id
     }
     fn temp(&mut self, ty: usize) -> usize {
@@ -819,11 +874,18 @@ impl Builder<'_, '_> {
         self.function.locals[id].ty
     }
     fn binding(&self, name: &str) -> Option<usize> {
-        self.bindings
-            .iter()
-            .rev()
-            .find(|(n, _)| n == name)
-            .map(|(_, i)| *i)
+        self.bindings.get(name)
+    }
+    fn set_live(&mut self, local: usize, live: bool) {
+        self.live.set(local, live);
+        self.references.set(
+            local,
+            live && !self.function.locals[local].name.starts_with('$')
+                && matches!(
+                    self.compiler.types[self.ty(local)].kind,
+                    k::TypeKind::Ref { .. }
+                ),
+        );
     }
     fn emit(&mut self, op: k::Op, line: usize) {
         if let k::Op::Assign { place, src } = &op {
@@ -866,7 +928,7 @@ impl Builder<'_, '_> {
                                 },
                                 line,
                             );
-                            self.written[place.local] = true;
+                            self.written.set(place.local, true);
                             return;
                         }
                         self.emit(
@@ -888,39 +950,39 @@ impl Builder<'_, '_> {
             | k::Op::Borrow { dst, .. }
             | k::Op::SliceBorrow { dst, .. }
             | k::Op::Discriminant { dst, .. }
-            | k::Op::TagTest { dst, .. } => self.live[*dst] = true,
+            | k::Op::TagTest { dst, .. } => self.set_live(*dst, true),
             k::Op::Read { dst, place, moving } => {
                 if *moving && place.projections.is_empty() {
-                    self.live[place.local] = false;
+                    self.set_live(place.local, false);
                 }
-                self.live[*dst] = true;
+                self.set_live(*dst, true);
             }
             k::Op::Assign { place, src } => {
-                self.live[*src] = false;
-                self.live[place.local] = true;
-                self.written[place.local] = true;
+                self.set_live(*src, false);
+                self.set_live(place.local, true);
+                self.written.set(place.local, true);
             }
             k::Op::Drop { place } => {
                 if place.projections.is_empty() {
-                    self.live[place.local] = false;
+                    self.set_live(place.local, false);
                 }
             }
             k::Op::Unary { dst, src, .. } => {
-                self.live[*src] = false;
-                self.live[*dst] = true;
+                self.set_live(*src, false);
+                self.set_live(*dst, true);
             }
             k::Op::Binary {
                 dst, left, right, ..
             } => {
-                self.live[*left] = false;
-                self.live[*right] = false;
-                self.live[*dst] = true;
+                self.set_live(*left, false);
+                self.set_live(*right, false);
+                self.set_live(*dst, true);
             }
             k::Op::Call { dst, args, .. } | k::Op::Intrinsic { dst, args, .. } => {
                 for arg in args {
-                    self.live[*arg] = false;
+                    self.set_live(*arg, false);
                 }
-                self.live[*dst] = true;
+                self.set_live(*dst, true);
             }
             k::Op::Struct { dst, fields }
             | k::Op::Variant { dst, fields, .. }
@@ -929,13 +991,13 @@ impl Builder<'_, '_> {
                 elements: fields,
             } => {
                 for field in fields {
-                    self.live[*field] = false;
+                    self.set_live(*field, false);
                 }
-                self.live[*dst] = true;
+                self.set_live(*dst, true);
             }
-            k::Op::If { condition } => self.live[*condition] = false,
+            k::Op::If { condition } => self.set_live(*condition, false),
             k::Op::Return { src } => {
-                self.live[*src] = false;
+                self.set_live(*src, false);
                 self.reachable = false;
             }
             k::Op::Break => {
@@ -951,8 +1013,9 @@ impl Builder<'_, '_> {
         self.function.body.push(k::Instruction { op, line });
     }
     fn cleanup(&mut self, start: usize, except: Option<usize>, line: usize) {
-        for i in (start..self.live.len()).rev() {
-            if self.live[i] && Some(i) != except {
+        let locals: Vec<_> = self.live.indices_from(start).collect();
+        for i in locals {
+            if Some(i) != except {
                 self.emit(
                     k::Op::Drop {
                         place: k::Place::local(i),
@@ -971,6 +1034,7 @@ impl Builder<'_, '_> {
         Snapshot {
             live: self.live.clone(),
             written: self.written.clone(),
+            references: self.references.clone(),
             carriers: self.carriers.clone(),
         }
     }
@@ -980,6 +1044,8 @@ impl Builder<'_, '_> {
         self.live.resize(self.function.locals.len(), false);
         self.written = state.written.clone();
         self.written.resize(self.function.locals.len(), false);
+        self.references = state.references.clone();
+        self.references.resize(self.function.locals.len(), false);
         self.reachable = true;
     }
     fn read(&mut self, place: k::Place, line: usize) -> Result<(usize, usize)> {
@@ -1142,8 +1208,9 @@ impl Builder<'_, '_> {
     }
     fn end_unused_borrows(&mut self, start: usize, position: usize, end: usize, line: usize) {
         let mut drops = std::collections::BTreeSet::new();
-        for (name, local) in &self.ref_bindings {
-            if *local >= start && self.live[*local] {
+        for local in self.references.indices_from(start) {
+            let name = &self.function.locals[local].name;
+            if self.live[local] {
                 let mut used = false;
                 if let Some(positions) = self.compiler.uses.get(&(self.file, name.clone())) {
                     let mut low = 0;
@@ -1159,7 +1226,7 @@ impl Builder<'_, '_> {
                     used = low < positions.len() && positions[low] < end;
                 }
                 if !used {
-                    drops.insert(*local);
+                    drops.insert(local);
                 }
             }
         }
@@ -1174,9 +1241,6 @@ impl Builder<'_, '_> {
             },
             line,
         );
-        if matches!(self.compiler.types[value.1].kind, k::TypeKind::Ref { .. }) {
-            self.ref_bindings.push((name.clone(), dst));
-        }
         self.bindings.push((name, dst));
     }
 
@@ -1249,8 +1313,9 @@ impl Builder<'_, '_> {
         false
     }
     fn cleanup_temporaries(&mut self, start: usize, line: usize) {
-        for local in (start..self.live.len()).rev() {
-            if self.live[local] && self.function.locals[local].name.starts_with('$') {
+        let locals: Vec<_> = self.live.indices_from(start).collect();
+        for local in locals {
+            if self.function.locals[local].name.starts_with('$') {
                 self.emit(
                     k::Op::Drop {
                         place: k::Place::local(local),
@@ -1269,8 +1334,8 @@ impl Builder<'_, '_> {
             if !self.reachable {
                 checking_dead = true;
                 self.reachable = true;
-                for live in &mut self.live {
-                    *live = true;
+                for local in 0..self.live.len() {
+                    self.set_live(local, true);
                 }
             }
             let end = match &stmt {
@@ -1345,8 +1410,8 @@ impl Builder<'_, '_> {
         if !self.reachable {
             if let Some(tail) = block.tail {
                 self.reachable = true;
-                for live in &mut self.live {
-                    *live = true;
+                for local in 0..self.live.len() {
+                    self.set_live(local, true);
                 }
                 let value = self.expr(tail, expected)?;
                 if let Some(ty) = expected {
@@ -1553,14 +1618,8 @@ impl Builder<'_, '_> {
                     .compiler
                     .names
                     .value_path(node.scope, &path, node.span)?;
-                if let Some(constant) = self
-                    .compiler
-                    .source
-                    .constants
-                    .iter()
-                    .find(|c| qualified(&c.module, &c.name) == path.name)
-                    .cloned()
-                {
+                if let Some(a::Item::Constant(index)) = self.compiler.declaration_item(&path) {
+                    let constant = self.compiler.source.constants[index].clone();
                     let t = self.compiler.resolve(constant.ty, &self.sub)?;
                     return self.expr(constant.value, Some(t));
                 }
@@ -2530,14 +2589,15 @@ impl Builder<'_, '_> {
         {
             return Ok(value);
         }
-        if let Some(s) = self
-            .compiler
-            .source
-            .structs
-            .iter()
-            .find(|s| qualified(&s.module, &s.name) == path.name && s.tuple)
-            .cloned()
-        {
+        if let Some(a::Item::Struct(index)) = self.compiler.declaration_item(&path) {
+            let s = self.compiler.source.structs[index].clone();
+            if !s.tuple {
+                return Err(err(
+                    span,
+                    "E_TYPE",
+                    "named struct constructor requires fields",
+                ));
+            }
             let ty = self.compiler.named_type(&path, &self.sub, span)?;
             let fields = match &self.compiler.types[ty].kind {
                 k::TypeKind::Struct { fields, .. } => fields.clone(),
@@ -2621,12 +2681,16 @@ impl Builder<'_, '_> {
         let index = if let Some(index) = associated {
             index
         } else {
-            self.compiler
-                .source
-                .functions
-                .iter()
-                .position(|f| qualified(&f.module, &f.name) == path.name)
-                .ok_or_else(|| err(span, "E_TYPE", &format!("unknown function {}", path.name)))?
+            match self.compiler.declaration_item(&path) {
+                Some(a::Item::Function(index)) => index,
+                _ => {
+                    return Err(err(
+                        span,
+                        "E_TYPE",
+                        &format!("unknown function {}", path.name),
+                    ));
+                }
+            }
         };
         if associated.is_some() {
             self.compiler.method_access(index, self.scope, span)?;

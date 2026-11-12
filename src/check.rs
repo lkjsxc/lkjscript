@@ -1,5 +1,6 @@
 //! The single gate for explicit K. Each structured edge has an ownership state.
 use crate::ast::{Diagnostic, Span};
+use crate::facts::Facts;
 use crate::k::*;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -235,7 +236,7 @@ struct Tag {
 }
 #[derive(Clone, PartialEq)]
 struct State {
-    live: Vec<bool>,
+    live: Facts,
     moved: Vec<Place>,
     loans: Vec<Loan>,
     absent_references: Vec<Place>,
@@ -831,7 +832,7 @@ fn consume(
     line: usize,
 ) -> Result<(), Diagnostic> {
     access(state, types, function, &Place::local(local), true, 0, line)?;
-    state.live[local] = false;
+    state.live.set(local, false);
     remove_provenance(state, &Place::local(local));
     state.moved.retain(|place| place.local != local);
     invalidate(state, &Origin::local(local));
@@ -842,7 +843,7 @@ fn put(state: &mut State, local: usize, line: usize) -> Result<(), Diagnostic> {
     if state.live[local] {
         return Err(error(line, "E_K", "destination still owns a value"));
     }
-    state.live[local] = true;
+    state.live.set(local, true);
     state.predicates.remove(&local);
     invalidate(state, &Origin::local(local));
     Ok(())
@@ -850,12 +851,9 @@ fn put(state: &mut State, local: usize, line: usize) -> Result<(), Diagnostic> {
 fn same_set<T: PartialEq>(a: &[T], b: &[T]) -> bool {
     a.len() == b.len() && a.iter().all(|item| b.contains(item))
 }
-fn merge(mut a: State, b: State, line: usize) -> Result<State, Diagnostic> {
-    if !a.reachable {
-        return Ok(b);
-    }
-    if !b.reachable {
-        return Ok(a);
+fn validate_merge(a: &State, b: &State, line: usize) -> Result<(), Diagnostic> {
+    if !a.reachable || !b.reachable {
+        return Ok(());
     }
     if a.live != b.live
         || !same_set(&a.moved, &b.moved)
@@ -868,6 +866,16 @@ fn merge(mut a: State, b: State, line: usize) -> Result<State, Diagnostic> {
             "branches must leave the same owners and borrows",
         ));
     }
+    Ok(())
+}
+fn merge(mut a: State, b: State, line: usize) -> Result<State, Diagnostic> {
+    if !a.reachable {
+        return Ok(b);
+    }
+    if !b.reachable {
+        return Ok(a);
+    }
+    validate_merge(&a, &b, line)?;
     a.tags.retain(|tag| b.tags.contains(tag));
     a.predicates
         .retain(|local, tag| b.predicates.get(local) == Some(tag));
@@ -1410,7 +1418,7 @@ fn call_borrows(
 fn check_function(program: &Program, function: &Function) -> Result<(), Diagnostic> {
     let types = &program.types;
     let mut state = State {
-        live: vec![false; function.locals.len()],
+        live: Facts::new(function.locals.len()),
         moved: Vec::new(),
         loans: Vec::new(),
         absent_references: Vec::new(),
@@ -1419,7 +1427,7 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
         reachable: true,
     };
     for i in 0..function.params {
-        state.live[i] = true;
+        state.live.set(i, true);
         for (path, mutable) in reference_paths(types, function.locals[i].ty) {
             let mut projections = path.clone();
             if !path.is_empty() {
@@ -1469,8 +1477,7 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                 if control.is_loop || control.then_state.is_some() {
                     return Err(error(line, "E_K", "invalid else"));
                 }
-                control.then_state = Some(state.clone());
-                state = control.entry.clone();
+                control.then_state = Some(std::mem::replace(&mut state, control.entry.clone()));
                 continue;
             }
             Op::End => {
@@ -1479,7 +1486,7 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                     .ok_or_else(|| error(line, "E_K", "end outside control"))?;
                 if control.is_loop {
                     if state.reachable {
-                        let _ = merge(control.entry.clone(), state.clone(), line)?;
+                        validate_merge(&control.entry, &state, line)?;
                     }
                     state.reachable = false;
                     for exit in control.breaks {
@@ -1651,7 +1658,7 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                 remap_carried(&mut carried.loans, &source, &destination);
                 consume(&mut state, types, function, *src, line)?;
                 invalidate(&mut state, target);
-                state.live[place.local] = true;
+                state.live.set(place.local, true);
                 state.moved.retain(|moved| {
                     !(moved.local == place.local
                         && is_prefix(&place.projections, &moved.projections))
@@ -2050,7 +2057,7 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                     }
                 }
                 consume(&mut state, types, function, *src, line)?;
-                if state.live.iter().any(|live| *live) {
+                if state.live.any() {
                     return Err(error(
                         line,
                         "E_K",
@@ -2066,7 +2073,7 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                     .find(|control| control.is_loop)
                     .unwrap();
                 if matches!(instruction.op, Op::Continue) {
-                    let _ = merge(control.entry.clone(), state.clone(), line)?;
+                    validate_merge(&control.entry, &state, line)?;
                 } else {
                     control.breaks.push(state.clone());
                 }
