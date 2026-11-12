@@ -2,6 +2,8 @@
 name = "lkjscript"
 version = "0.2.0"
 edition = "2024"
+# Language entry points use World; the rustc conformance shim supplies the host.
+autoexamples = false
 
 [lib]
 path = "bridge/lib.rs"

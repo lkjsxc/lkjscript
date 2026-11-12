@@ -12,13 +12,14 @@ const sizes = option('--sizes', '8000,16000,32000').split(',').map(Number);
 const families = option('--families', 'funcs,ifs,match,boxes,vecs').split(',');
 const repeats = Number(option('--repeat', '3'));
 const verb = option('--verb', 'check');
+const engine = option('--engine', 'node');
 const out = path.resolve(option('--out', 'target/scale'));
 const timeout = Number(option('--timeout-ms', '180000'));
 fs.mkdirSync(out, {recursive: true});
 const median = a => { const b = [...a].sort((x,y) => x-y); return b[Math.floor(b.length/2)]; };
 const hash = file => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const git = (...a) => spawnSync('git', a, {encoding:'utf8'}).stdout.trim();
-const context = {compiler:git('rev-parse','HEAD'), compilerDirty:git('status','--porcelain','--untracked-files=no') !== '', binarySha256:hash(binary), generatorSha256:hash(new URL('./generate.mjs',import.meta.url)), repeats, verb};
+const context = {compiler:git('rev-parse','HEAD'), compilerDirty:git('status','--porcelain','--untracked-files=no') !== '', binarySha256:hash(binary), generatorSha256:hash(new URL('./generate.mjs',import.meta.url)), repeats, verb, engine};
 let failed = false, anyFailed = false;
 for (const family of families) {
   let previous;
@@ -28,12 +29,12 @@ for (const family of families) {
     const samples = [];
     for (let i = 0; i < repeats; i++) {
       const command = [verb, source];
-      if (verb === 'run') command.push('--entry','probe');
+      if (verb === 'run') command.push('--entry','probe','--engine',engine);
       if (verb === 'build') command.push('-o',path.join(out, `${family}-${n}.wasm`));
       const start = performance.now();
       const result = await run(binary, command, {timeout, sampleMemory:true, env:{...process.env,LKJSCRIPT_TIMINGS:'1'}});
       const ms = performance.now()-start;
-            const stages = result.stderr.split('\n').filter(l=>l.startsWith('LKJ_TIMING ')).map(l=>JSON.parse(l.slice(11)));
+      const stages = result.stderr.split('\n').filter(l=>l.startsWith('LKJ_TIMING ')).map(l=>JSON.parse(l.slice(11)));
       samples.push({ms,sampled_peak_tree_rss_bytes:result.sampled_peak_tree_rss_bytes,stages});
       if (result.error || result.status !== 0) {
         const diagnostic = result.stderr.split('\n').filter(l=>!l.startsWith('LKJ_')).join('\n').trim();

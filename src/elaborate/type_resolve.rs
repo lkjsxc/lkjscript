@@ -166,14 +166,14 @@ impl Compiler<'_> {
                                 });
                             }
                         }
-                        a::Type::Never => work.values.push(k::UNIT),
-                        _ => {
+                        a::Type::Function { .. } => {
                             return Err(err(
                                 node.span,
                                 "E_UNSUPPORTED",
-                                "this type form is not implemented yet",
+                                "function pointer types are not implemented",
                             ));
                         }
+                        a::Type::Never => work.values.push(k::UNIT),
                     }
                 }
                 Work::Remember { id, environment } => {
@@ -427,9 +427,20 @@ impl Compiler<'_> {
                 .push(self.intern(String::new(), k::TypeKind::Str));
             return Ok(());
         }
-        if path.declaration.is_none() && path.name == "World" {
-            work.values
-                .push(self.intern(String::new(), k::TypeKind::World));
+        if path.declaration.is_none() && matches!(path.name.as_str(), "World" | "Stdout") {
+            if !args.is_empty() {
+                return Err(err(
+                    span,
+                    "E_TYPE",
+                    "capability types take no type arguments",
+                ));
+            }
+            let kind = if path.name == "World" {
+                k::TypeKind::World
+            } else {
+                k::TypeKind::Stdout
+            };
+            work.values.push(self.intern(String::new(), kind));
             return Ok(());
         }
         let declaration = path

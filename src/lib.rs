@@ -1,6 +1,7 @@
 pub mod ast;
 pub mod check;
 pub mod compiler;
+pub mod diagnostics;
 pub mod elaborate;
 pub mod encoding;
 pub(crate) mod facts;
@@ -8,6 +9,7 @@ pub mod generics;
 pub mod json;
 pub mod k;
 pub mod k_text;
+pub mod machine;
 pub mod names;
 pub mod resolve;
 pub mod source;

@@ -37,6 +37,8 @@ pub enum TypeKind {
     /// Unsized immutable UTF-8 text; stored values use a shared Ref.
     Str,
     World,
+    /// Affine authority to write standard output, derived from World.
+    Stdout,
 }
 #[derive(Clone, PartialEq)]
 pub struct Field {

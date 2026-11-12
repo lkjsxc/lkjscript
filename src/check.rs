@@ -73,7 +73,7 @@ pub fn is_data(types: &[Type], ty: usize) -> bool {
         }
         seen[current] = true;
         match &types[current].kind {
-            TypeKind::World => return false,
+            TypeKind::World | TypeKind::Stdout => return false,
             TypeKind::Ref { inner, .. }
             | TypeKind::Slice { inner, .. }
             | TypeKind::Vec { inner }
@@ -941,6 +941,19 @@ fn check_intrinsic(
             TypeKind::Slice { inner: U8, mutable: false }))
     };
     let valid = match name {
+        "world_stdout" => {
+            ts.len() == 1
+                && matches!(types[dt].kind, TypeKind::Stdout)
+                && matches!(types[ts[0]].kind, TypeKind::Ref { inner, mutable: true }
+                if matches!(types[inner].kind, TypeKind::World))
+        }
+        "stdout_write" => {
+            ts.len() == 2
+                && dt == UNIT
+                && bytes_ref(ts[1])
+                && matches!(types[ts[0]].kind, TypeKind::Ref { inner, mutable: true }
+                if matches!(types[inner].kind, TypeKind::Stdout))
+        }
         "str_len" => ts.len() == 1 && text_ref(ts[0]) && dt == U64,
         "str_as_bytes" => ts.len() == 1 && text_ref(ts[0]) && bytes_ref(dt),
         "str_from_utf8" => {
@@ -2255,7 +2268,7 @@ fn check_types(types: &[Type]) -> Result<(), Diagnostic> {
     Ok(())
 }
 
-pub fn check(program: Program) -> Result<CheckedProgram, Diagnostic> {
+fn check_structure(program: &Program) -> Result<(), Diagnostic> {
     check_types(&program.types)?;
     let mut function_names = BTreeSet::new();
     for function in &program.functions {
@@ -2350,13 +2363,34 @@ pub fn check(program: Program) -> Result<CheckedProgram, Diagnostic> {
             ));
         }
     }
+    Ok(())
+}
+
+/// The shared type/signature graph must be valid before independent body checks.
+/// An error list never contains CheckedProgram authority and cannot reach emit.
+pub fn check_all(program: Program) -> Result<CheckedProgram, Vec<Diagnostic>> {
+    check_structure(&program).map_err(|problem| vec![problem])?;
+    let mut problems = Vec::new();
     for function in &program.functions {
-        check_function(&program, function).map_err(|mut problem| {
+        if let Err(mut problem) = check_function(&program, function) {
             problem.file = function.file;
-            problem
-        })?;
+            problems.push(problem);
+        }
     }
-    Ok(CheckedProgram { program })
+    if problems.is_empty() {
+        Ok(CheckedProgram { program })
+    } else {
+        Err(problems)
+    }
+}
+
+pub fn check(program: Program) -> Result<CheckedProgram, Diagnostic> {
+    check_all(program).map_err(|problems| {
+        problems
+            .into_iter()
+            .next()
+            .expect("failed K check has a diagnostic")
+    })
 }
 
 #[cfg(test)]

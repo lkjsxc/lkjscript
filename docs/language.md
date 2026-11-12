@@ -75,10 +75,8 @@ order. Constructor parameters have fresh bindings separate from the caller.
 Explicit, omitted and inferred alias arguments can constrain fixed, reordered
 and nested field types. A type alias does not introduce a tuple constructor in
 the value namespace; a use alias can refer to the original tuple constructor.
-Partially known nested alias targets do not yet propagate every expected type
-before literal defaulting: for Alias<T> = Holder<Pair<T, u8>>, an unannotated
-nested Pair field can require Alias::<i64> or an explicit u8 literal. This is an
-inference limitation, with an actionable diagnostic, not an invalid source type.
+Nested alias targets participate in the same structural type constraints as their
+expanded constructors.
 Generic parameter binding uses its original lexical/file scope. It shadows an
 unrelated declaration, while qualified paths keep their declaration identity.
 Substitution, inference, coherence and implementation selection do not turn a
@@ -127,6 +125,54 @@ reference-bearing write through an opaque call result additionally needs an exac
 destination contract. Its conservative alias footprint is not a storage identity;
 using it to clear reference leaves would erase sibling evidence. Reference-free
 writes remain supported and preserve the other leaves and their tag witnesses.
+
+## Inference and coercions
+
+Each function definition has one constraint plan over lexical bindings and source
+expression identities. Generic parameters are rigid under the definition's
+stated assumptions. Structural constraints propagate through locals, assignments,
+returns, known call signatures, tuples, arrays, Vec, Box, nominal fields, aliases,
+projections and scalar patterns. A dependency worklist propagates known answers;
+union/find represents equal type variables. Concrete instances consume the
+recorded definition plan and instantiate its symbolic types.
+
+Expected types flow into composite expressions. Integer suffixes fix their types.
+An unsuffixed integer component defaults to i32 only after its surrounding known
+constraints have propagated; its value must fit the selected width. Thus
+`let mut v = Vec::new(); v.push(42i64)`, an index initialized with `let mut i = 0`
+and later compared with `v.len()`, and `fn pair() -> (i64, i64) { (40, 2) }`
+are accepted. Conflicting types or out-of-range literals report E_TYPE. There is
+no implicit numeric conversion between fixed types; an explicit cast supplies it.
+Unresolved generic arguments or receiver obligations still require enough source
+context for the ordinary method/type gate and can report E_TYPE or E_UNSUPPORTED.
+This contract covers these constraints; it does not promise all Rust inference.
+
+A solved type is not itself a coercion site. Actual annotations, declared
+reference parameters and explicit expected result types can authorize the
+supported dereference/reborrow coercions. A generic T learned only from an
+operand cannot silently change a move into a reborrow: Some(r), Holder { value: r }
+and identity(r) move an otherwise unconstrained mutable reference r. Later use
+then reports E_MOVE. An actual Option<&mut T>, Holder<&mut T> or &mut T result
+context permits the corresponding Rust reborrow. Reference-bearing inference
+hints preserve this distinction through transparent aliases and nested types.
+
+## Diagnostics and census
+
+The parser recovers at item, method and block-statement boundaries using balanced
+tokens. It reports independent syntax errors and marks skipped regions as
+E_BLOCKED. A recovered source graph never authorizes an artifact. A valid shared
+declaration graph permits independent definition constraint errors to be
+collected. A structurally valid K graph permits independent function-body errors
+to be collected. Analysis of a failing body stops at its diagnostic; shared
+signature/resolution failures and subsequent mutable K construction are explicitly
+blocked instead of supplying invented types or ownership facts. The single-error
+library API selects the first error from these same production paths.
+
+`check --census` prints recognized unsupported syntax and blocked regions by kind.
+It counts parsed constructs and unsupported parser diagnostics, not text matches
+inside strings or comments. Receiver-dependent operations are not guessed from
+method spelling. Regions skipped after an error are separate from counted syntax;
+a zero in this table is not a claim that blocked source compiles.
 
 ## Immutable text
 
@@ -317,8 +363,14 @@ separate allocation. Moved heap slots are cleared so partial cleanup skips them.
 These layouts are implementation details, not an exposed source API.
 
 Generated functions export as `fn:<K-name>`, avoiding a collision with the
-`memory` export. Node is currently the only execution path for generated code.
-The host prints scalar entry results; floating display formatting is Node's.
+`memory` export. The Node route executes this encoding. The independent K
+machine executes checked K directly over its own heap, explicit call/control/drop
+stacks, initialization states and exact storage/loan identities. It validates
+reference tags and active variants on actual access and distinguishes M_* machine
+errors from R* program traps. It shares neither the checker implementation nor
+WebAssembly lowering. This dynamic search is not a proof or a full Rust memory
+model. The host prints scalar entry results; floating display formatting is route
+specific, while World output compares exact bytes.
 No generated engine implements a step counter or per-operation allowance.
 
 ## Source library, trusted modules and imports
@@ -372,7 +424,43 @@ program or a compiler-core fixed point.
 `bridge/main.rs` supplies bootstrap file/process/command-line access and the trusted Linux main-stack shim;
 `bridge/run.mjs` instantiates on Node. `lkjscript trusted` lists these boundaries.
 
-Generated modules import only `lkjscript.trap(code: i64, line: i64)`.
+Generated modules have no ambient imports. A module using a checked Stdout value
+imports only the byte writer. Language traps record a code and source line in
+module globals and execute WebAssembly unreachable; the host translates that
+record after the trap. Trapping requires no host authority.
 Ordinary source cannot declare host imports or construct capabilities from scalars.
-Ambient filesystem, environment and print operations are rejected. World and its
-derived capabilities, closures and structured task scopes remain unimplemented.
+Ambient filesystem, environment and print operations are rejected. World-derived
+standard output is specified below. Other capabilities, closures and structured
+task scopes remain unimplemented.
+
+## World and byte output
+
+The host entry alone creates `World`. An entry is either a zero-argument function
+or a function taking exactly one `World`; ordinary source calls still supply their
+own arguments. `World` and `Stdout` are affine intrinsic types with no source
+constructor, Copy, Clone, Data, Send or Sync implementation. Structs merely named
+World or Stdout do not acquire capability authority. K cannot construct a
+capability with an integer, cast, unit or aggregate instruction.
+
+`World::stdout(&mut self) -> Stdout` derives authority to write standard output.
+A writer may outlive the World borrow and may be moved or passed by mutable
+reference. Repeated derivation is permitted. `Stdout::write(&mut self, &[u8])`
+returns unit after the complete byte sequence has been written, in call order.
+Only checked `world_stdout` and `stdout_write` K operations grant and use this
+interface. Source code cannot name a host import or forge either operation's
+required value. Pure programs do not import the output operation.
+
+The WebAssembly host boundary receives a packed byte pointer, length and source
+line. It checks the entire range without overflowing, copies chunks before
+writing, loops on partial writes and retains no bytes or pointer after returning.
+The current eight-byte scalar layout is packed inside lowering; it is not exposed
+to the host API. Zero-length writes produce no bytes. An invalid range, zero-byte
+write or operating-system write failure traps with `R0007` (host output failure).
+Output emitted before any trap remains observable. Traps do not unwind; this is a
+specified departure from Rust panic unwinding. Normal destructor order remains
+Rust-compatible in the supported intersection.
+
+The rustc conformance adapter supplies the same types and methods, privately
+constructs World in its host wrapper, uses write_all and aborts on output failure.
+Conformance compares exact bytes and normal exit versus the specified trap kind;
+matching bytes followed by a crash is not a passing execution.

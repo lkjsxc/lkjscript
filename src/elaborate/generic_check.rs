@@ -93,7 +93,16 @@ pub(super) struct Contracts {
     builtin_methods: BTreeMap<(usize, BuiltinMethod), usize>,
 }
 
-pub(super) fn validate(source: &a::Program) -> Result<MethodSelections> {
+#[derive(Default)]
+pub(super) struct DefinitionEvidence {
+    pub(super) methods: MethodSelections,
+    pub(super) types: BTreeMap<usize, super::definition_types::DefinitionTypes>,
+}
+
+pub(super) fn validate(
+    source: &a::Program,
+    definitions: BTreeMap<usize, super::definition_types::DefinitionTypes>,
+) -> Result<DefinitionEvidence> {
     let mut roots = Vec::new();
     for (index, function) in source.functions.iter().enumerate() {
         if function.body.is_none() {
@@ -116,10 +125,14 @@ pub(super) fn validate(source: &a::Program) -> Result<MethodSelections> {
         }
     }
     let mut compiler = Compiler::new(source)?;
+    compiler.definition_types = definitions;
     compiler.contracts = Some(Contracts::default());
     super::derive_check::validate(&mut compiler)?;
     if roots.is_empty() {
-        return Ok(MethodSelections::new());
+        return Ok(DefinitionEvidence {
+            methods: MethodSelections::default(),
+            types: compiler.definition_types,
+        });
     }
     let mut checked_roots = BTreeSet::new();
     for index in roots {
@@ -210,7 +223,10 @@ pub(super) fn validate(source: &a::Program) -> Result<MethodSelections> {
         destructors: compiler.destructors,
     };
     let _checked_definition_meaning = crate::check::check(program)?;
-    Ok(compiler.method_selections)
+    Ok(DefinitionEvidence {
+        methods: compiler.method_selections,
+        types: compiler.definition_types,
+    })
 }
 
 impl Compiler<'_> {

@@ -1,12 +1,13 @@
 import { readFile } from 'node:fs/promises';
 import { writeSync } from 'node:fs';
+import { writeBytes } from './output.mjs';
 import { isMainThread, parentPort, workerData } from 'node:worker_threads';
 import { startWorker } from './worker.mjs';
 import { dirname, join } from 'node:path';
 
 const messages = {
   1: 'integer overflow', 2: 'division by zero', 3: 'index out of bounds',
-  4: 'explicit trap', 5: 'assertion failed', 6: 'allocation failed',
+  4: 'explicit trap', 5: 'assertion failed', 6: 'allocation failed', 7: 'host output failure',
 };
 const readText = path => readFile(path, 'utf8');
 
@@ -136,11 +137,8 @@ if (isMainThread) {
     const userMessages = metadata.length ? JSON.parse(Buffer.from(metadata[0]).toString('utf8')) : [];
     const instance = await WebAssembly.instantiate(module, {
       lkjscript: {
-        trap(code, line) {
-          const problem = new Error(messages[Number(code)] ?? userMessages[Number(code) - 16] ?? 'trap');
-          problem.code = 'R' + code.toString().padStart(4, '0');
-          problem.line = line;
-          throw problem;
+        stdout(pointer, length, line) {
+          return writeBytes(instance.exports.memory, pointer, length, line);
         },
       },
     });
@@ -151,10 +149,19 @@ if (isMainThread) {
     stage = 'run';
     stageStarted = runStarted;
     try {
+      instance.exports.__lkj_trap_code.value = 0n;
+      instance.exports.__lkj_trap_line.value = 0n;
       const result = fn(...workerData.args.map(BigInt));
       parentPort.postMessage({ ok: true, result, metrics: { ...metrics, run_ms: performance.now() - runStarted, stopped_stage: 'done' } });
     } catch (problem) {
       metrics.run_ms = performance.now() - runStarted;
+      const code = instance.exports.__lkj_trap_code.value;
+      if (problem instanceof WebAssembly.RuntimeError && code !== 0n) {
+        const trapped = new Error(messages[Number(code)] ?? userMessages[Number(code) - 16] ?? 'trap');
+        trapped.code = 'R' + code.toString().padStart(4, '0');
+        trapped.line = instance.exports.__lkj_trap_line.value;
+        throw trapped;
+      }
       throw problem;
     }
   } catch (problem) {

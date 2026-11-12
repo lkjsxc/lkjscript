@@ -1,5 +1,7 @@
 //! Rust-compatible surface reader. The syntax tree is an arena, not a recursive tree.
 use crate::ast::*;
+use crate::diagnostics::BlockedRegion;
+use std::collections::BTreeSet;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum TokenKind {
@@ -387,23 +389,61 @@ pub fn parse(source: &str) -> Result<Program, Diagnostic> {
     Ok(program)
 }
 
-/// Append one source file to shared arenas. File loading is owned by source.rs.
+/// Syntax recovery is for reporting only; diagnostics prevent source compilation.
+pub struct ParseReport {
+    pub items: Vec<Item>,
+    pub diagnostics: Vec<Diagnostic>,
+    pub blocked: Vec<BlockedRegion>,
+}
+
+/// Append one source file to shared arenas, refusing every recovered error.
 pub fn parse_file(
     program: &mut Program,
     source: &str,
     file: FileId,
     scope: ModuleId,
 ) -> Result<Vec<Item>, Diagnostic> {
+    let report = parse_file_report(program, source, file, scope);
+    match report.diagnostics.into_iter().next() {
+        Some(error) => Err(error),
+        None => Ok(report.items),
+    }
+}
+
+/// Continue at balanced item and statement boundaries. Skipped input is named as
+/// blocked, never replaced with fabricated types or expressions for compilation.
+pub fn parse_file_report(
+    program: &mut Program,
+    source: &str,
+    file: FileId,
+    scope: ModuleId,
+) -> ParseReport {
     let mut lexer = Lexer {
         source,
         at: 0,
         line: 1,
         column: 1,
     };
-    let mut tokens = lexer.lex().map_err(|mut error| {
-        error.file = file;
-        error
-    })?;
+    let mut tokens = match lexer.lex() {
+        Ok(tokens) => tokens,
+        Err(mut error) => {
+            error.file = file;
+            error.path = program.files[file].path.clone();
+            let mut span = lexer.here();
+            span.file = file;
+            span.end = source.len();
+            return ParseReport {
+                items: Vec::new(),
+                diagnostics: vec![error],
+                blocked: vec![BlockedRegion {
+                    path: program.files[file].path.clone(),
+                    span,
+                    kind: "file".to_string(),
+                    reason: "lexing failed; remaining token boundaries are unknown".to_string(),
+                }],
+            };
+        }
+    };
     for token in &mut tokens {
         token.span.file = file;
     }
@@ -413,14 +453,27 @@ pub fn parse_file(
         module: program.scopes[scope].path.clone(),
         scope,
         program: std::mem::take(program),
+        diagnostics: Vec::new(),
+        blocked: Vec::new(),
+        diagnostic_keys: BTreeSet::new(),
     };
     if parser.program.types.is_empty() {
         parser.add_type(Type::Infer, Span::default());
         parser.add_type(Type::Tuple(Vec::new()), Span::default());
     }
-    let result = parser.items(false);
+    let items = match parser.items(false) {
+        Ok(items) => items,
+        Err(error) => {
+            parser.record(error);
+            Vec::new()
+        }
+    };
     *program = parser.program;
-    result
+    ParseReport {
+        items,
+        diagnostics: parser.diagnostics,
+        blocked: parser.blocked,
+    }
 }
 
 enum TypeFrame {
@@ -476,9 +529,132 @@ struct Parser {
     program: Program,
     module: String,
     scope: ModuleId,
+    diagnostics: Vec<Diagnostic>,
+    blocked: Vec<BlockedRegion>,
+    diagnostic_keys: BTreeSet<(FileId, usize, usize, String, String)>,
+}
+
+enum BlockPart {
+    Statement(Stmt),
+    Tail(ExprId),
 }
 
 impl Parser {
+    fn record(&mut self, mut error: Diagnostic) {
+        if error.path.is_empty() {
+            error.path = self.program.files[error.file].path.clone();
+        }
+        // Unterminated nested regions can propagate the same root error.
+        if self.diagnostic_keys.insert((
+            error.file,
+            error.line,
+            error.column,
+            error.code.clone(),
+            error.message.clone(),
+        )) {
+            self.diagnostics.push(error);
+        }
+    }
+
+    fn recover_region(&mut self, start: usize, kind: &str, error: Diagnostic) {
+        let span = self.tokens[start].span;
+        let code = error.code.clone();
+        self.record(error);
+        // Propagating an EOF error through nested regions must not rescan the
+        // same suffix once per nesting level.
+        let mut at = if self.token().kind == TokenKind::End {
+            self.at
+        } else {
+            start
+        };
+        let mut delimiters: Vec<&str> = Vec::new();
+        let block_statement = kind == "statement"
+            && matches!(
+                self.tokens[start].kind,
+                TokenKind::Ident | TokenKind::Symbol
+            )
+            && matches!(
+                self.tokens[start].text.as_str(),
+                "{" | "if" | "while" | "loop" | "for" | "match" | "unsafe" | "async"
+            );
+        while self.tokens[at].kind != TokenKind::End {
+            let token = &self.tokens[at];
+            if at > start
+                && at >= self.at
+                && delimiters.is_empty()
+                && token.kind == TokenKind::Ident
+                && matches!(
+                    token.text.as_str(),
+                    "let"
+                        | "fn"
+                        | "struct"
+                        | "enum"
+                        | "trait"
+                        | "impl"
+                        | "mod"
+                        | "use"
+                        | "type"
+                        | "pub"
+                        | "static"
+                )
+            {
+                // A missing semicolon must not swallow the next declaration.
+                // Only keyword tokens at the enclosing delimiter depth qualify.
+                break;
+            }
+            if token.kind == TokenKind::Symbol {
+                match token.text.as_str() {
+                    "(" | "[" | "{" => delimiters.push(token.text.as_str()),
+                    ")" | "]" | "}" => {
+                        let expected = match token.text.as_str() {
+                            ")" => "(",
+                            "]" => "[",
+                            _ => "{",
+                        };
+                        if delimiters.last().copied() == Some(expected) {
+                            delimiters.pop();
+                            if expected == "{"
+                                && delimiters.is_empty()
+                                && (kind == "item" || block_statement)
+                            {
+                                at += 1;
+                                if self.tokens[at].kind != TokenKind::Ident
+                                    || self.tokens[at].text != "else"
+                                {
+                                    break;
+                                }
+                                continue;
+                            }
+                        } else if token.text == "}" && !delimiters.contains(&"{") {
+                            // Leave the enclosing block's close for its caller.
+                            break;
+                        }
+                    }
+                    ";" if delimiters.is_empty() => {
+                        at += 1;
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+            at += 1;
+        }
+        if at == start && self.tokens[at].kind != TokenKind::End {
+            at += 1;
+        }
+        self.at = at;
+        let mut extent = span;
+        if at > start {
+            extent.end = self.tokens[at - 1].span.end;
+        }
+        self.blocked.push(BlockedRegion {
+            path: self.program.files[span.file].path.clone(),
+            span: extent,
+            kind: kind.to_string(),
+            reason: format!("not analyzed after {code}"),
+        });
+    }
+
     fn token(&self) -> &Token {
         &self.tokens[self.at]
     }
@@ -631,13 +807,26 @@ impl Parser {
             if self.take(";") {
                 continue;
             }
-            let attrs = self.attrs()?;
-            if self.token().kind == TokenKind::End {
-                break;
+            let start = self.at;
+            let scope = self.scope;
+            let module = self.module.clone();
+            let result = (|| {
+                let attrs = self.attrs()?;
+                if self.token().kind == TokenKind::End {
+                    return Ok(None);
+                }
+                let public = self.visibility()?;
+                self.item(attrs, public).map(Some)
+            })();
+            match result {
+                Ok(Some(item)) => items.push(item),
+                Ok(None) => break,
+                Err(error) => {
+                    self.scope = scope;
+                    self.module = module;
+                    self.recover_region(start, "item", error);
+                }
             }
-            let public = self.visibility()?;
-            let item = self.item(attrs, public)?;
-            items.push(item);
         }
         Ok(items)
     }
@@ -1479,13 +1668,23 @@ impl Parser {
         let mut methods = Vec::new();
         let mut associated = Vec::new();
         while !self.is("}") {
-            let attrs = self.attrs()?;
-            if self.is("fn") {
-                methods.push(self.function(attrs, Visibility::Private)?);
-            } else if self.is("type") {
-                associated.push(self.associated_type()?);
-            } else {
-                return Err(self.unsupported("trait item"));
+            if self.token().kind == TokenKind::End {
+                return Err(self.err("unterminated trait"));
+            }
+            let start = self.at;
+            let result = (|| {
+                let attrs = self.attrs()?;
+                if self.is("fn") {
+                    methods.push(self.function(attrs, Visibility::Private)?);
+                } else if self.is("type") {
+                    associated.push(self.associated_type()?);
+                } else {
+                    return Err(self.unsupported("trait item"));
+                }
+                Ok(())
+            })();
+            if let Err(error) = result {
+                self.recover_region(start, "item", error);
             }
         }
         self.expect("}")?;
@@ -1521,14 +1720,24 @@ impl Parser {
         let mut methods = Vec::new();
         let mut associated = Vec::new();
         while !self.is("}") {
-            let attrs = self.attrs()?;
-            let public = self.visibility()?;
-            if self.is("fn") {
-                methods.push(self.function(attrs, public)?);
-            } else if self.is("type") {
-                associated.push(self.associated_type()?);
-            } else {
-                return Err(self.unsupported("impl item"));
+            if self.token().kind == TokenKind::End {
+                return Err(self.err("unterminated impl"));
+            }
+            let start = self.at;
+            let result = (|| {
+                let attrs = self.attrs()?;
+                let public = self.visibility()?;
+                if self.is("fn") {
+                    methods.push(self.function(attrs, public)?);
+                } else if self.is("type") {
+                    associated.push(self.associated_type()?);
+                } else {
+                    return Err(self.unsupported("impl item"));
+                }
+                Ok(())
+            })();
+            if let Err(error) = result {
+                self.recover_region(start, "item", error);
             }
         }
         self.expect("}")?;
@@ -1613,62 +1822,20 @@ impl Parser {
             if self.take(";") {
                 continue;
             }
-            if self.take("let") {
-                let start = self.tokens[self.at - 1].span;
-                let pattern = self.pattern()?;
-                let ty = if self.take(":") {
-                    Some(self.ty()?)
-                } else {
-                    None
-                };
-                let value = if self.take("=") {
-                    Some(self.expr(true)?)
-                } else {
-                    None
-                };
-                if self.is("else") {
-                    return Err(self.unsupported("let else"));
+            let start = self.at;
+            let scope = self.scope;
+            let module = self.module.clone();
+            match self.block_part() {
+                Ok(BlockPart::Statement(statement)) => statements.push(statement),
+                Ok(BlockPart::Tail(expression)) => {
+                    tail = Some(expression);
+                    break;
                 }
-                self.expect(";")?;
-                statements.push(Stmt::Let {
-                    pattern,
-                    ty,
-                    value,
-                    span: self.finish_span(start),
-                });
-                continue;
-            }
-            if self.is("fn")
-                || self.is("const")
-                || self.is("struct")
-                || self.is("enum")
-                || self.is("use")
-                || self.is("type")
-                || self.is("#")
-            {
-                let attrs = self.attrs()?;
-                let public = self.visibility()?;
-                let item = self.item(attrs, public)?;
-                statements.push(Stmt::Item(item));
-                continue;
-            }
-            let (expression, standalone) = self.statement_expr()?;
-            if self.take(";") {
-                statements.push(Stmt::Expr {
-                    value: expression,
-                    semicolon: true,
-                });
-            } else if self.is("}") {
-                tail = Some(expression);
-                break;
-            } else {
-                if !standalone {
-                    return Err(self.err("expected `;` after expression"));
+                Err(error) => {
+                    self.scope = scope;
+                    self.module = module;
+                    self.recover_region(start, "statement", error);
                 }
-                statements.push(Stmt::Expr {
-                    value: expression,
-                    semicolon: false,
-                });
             }
         }
         self.expect("}")?;
@@ -1679,6 +1846,63 @@ impl Parser {
             span: self.finish_span(span),
         });
         Ok(id)
+    }
+
+    fn block_part(&mut self) -> Result<BlockPart, Diagnostic> {
+        if self.take("let") {
+            let start = self.tokens[self.at - 1].span;
+            let pattern = self.pattern()?;
+            let ty = if self.take(":") {
+                Some(self.ty()?)
+            } else {
+                None
+            };
+            let value = if self.take("=") {
+                Some(self.expr(true)?)
+            } else {
+                None
+            };
+            if self.is("else") {
+                return Err(self.unsupported("let else"));
+            }
+            self.expect(";")?;
+            return Ok(BlockPart::Statement(Stmt::Let {
+                pattern,
+                ty,
+                value,
+                span: self.finish_span(start),
+            }));
+        }
+        if self.is("fn")
+            || self.is("const")
+            || self.is("struct")
+            || self.is("enum")
+            || self.is("use")
+            || self.is("type")
+            || self.is("#")
+        {
+            let attrs = self.attrs()?;
+            let public = self.visibility()?;
+            let item = self.item(attrs, public)?;
+            return Ok(BlockPart::Statement(Stmt::Item(item)));
+        }
+        let (expression, standalone) = self.statement_expr()?;
+        if self.take(";") {
+            Ok(BlockPart::Statement(Stmt::Expr {
+                value: expression,
+                semicolon: true,
+            }))
+        } else if self.is("}") {
+            Ok(BlockPart::Tail(expression))
+        } else {
+            if !standalone {
+                return Err(self.err("expected `;` after expression"));
+            }
+            Ok(BlockPart::Statement(Stmt::Expr {
+                value: expression,
+                semicolon: false,
+            }))
+        }
     }
     /// Block expressions in statement or match-arm position end before an
     /// ambiguous following expression. A dot or question mark continues the
@@ -2126,6 +2350,9 @@ impl Parser {
                 while !self.is("|") {
                     let start = self.token().span;
                     let mutable = self.take("mut");
+                    if self.is("(") || self.is("&") || self.is("[") {
+                        return Err(self.unsupported("closure parameter patterns"));
+                    }
                     let name = self.ident()?;
                     let ty = if self.take(":") { self.ty()? } else { 0 };
                     params.push(Param {

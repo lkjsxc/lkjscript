@@ -1,5 +1,6 @@
 //! Source loading owns module discovery; the host supplies bytes for requested paths.
 use crate::ast::*;
+use crate::diagnostics::BlockedRegion;
 use crate::syntax;
 use std::collections::BTreeMap;
 
@@ -13,25 +14,57 @@ pub struct SourceBundle {
     pub files: Vec<SourceInput>,
 }
 
+/// Recovered syntax is retained for diagnostics and census only. An error in
+/// this report prevents every production path from constructing checked K.
+pub struct SourceReport {
+    pub program: Program,
+    pub diagnostics: Vec<Diagnostic>,
+    pub blocked: Vec<BlockedRegion>,
+}
+impl SourceReport {
+    pub fn into_result(self) -> Result<Program, Diagnostic> {
+        match self.diagnostics.into_iter().next() {
+            Some(error) => Err(error),
+            None => Ok(self.program),
+        }
+    }
+}
+
 pub fn parse_bundle(bundle: &SourceBundle) -> Result<Program, Diagnostic> {
+    parse_bundle_report(bundle).into_result()
+}
+
+pub fn parse_bundle_report(bundle: &SourceBundle) -> SourceReport {
     let mut files = BTreeMap::new();
+    let mut duplicates = Vec::new();
     for file in &bundle.files {
-        if files
-            .insert(file.path.as_str(), file.text.as_str())
-            .is_some()
-        {
+        if files.contains_key(file.path.as_str()) {
             let mut error = Diagnostic::new(
                 Span::default(),
                 "E_SOURCE_DUPLICATE",
                 &format!("source bundle repeats {}", file.path),
             );
             error.path = file.path.clone();
-            return Err(error);
+            duplicates.push(error);
+        } else {
+            files.insert(file.path.as_str(), file.text.as_str());
         }
     }
-    load(&bundle.root, bundle.library.as_deref(), &mut |path| {
+    let mut report = load_report(&bundle.root, bundle.library.as_deref(), &mut |path| {
         Ok(files.get(path).map(|s| s.to_string()))
-    })
+    });
+    if !duplicates.is_empty() {
+        let mut diagnostics = duplicates;
+        diagnostics.append(&mut report.diagnostics);
+        report.diagnostics = diagnostics;
+        report.blocked.push(BlockedRegion {
+            path: bundle.root.clone(),
+            span: Span::default(),
+            kind: "source bundle".to_string(),
+            reason: "duplicate source inputs prevent an unambiguous compilation".to_string(),
+        });
+    }
+    report
 }
 
 fn parent(path: &str) -> &str {
@@ -71,6 +104,18 @@ pub fn load<F: FnMut(&str) -> std::result::Result<Option<String>, String>>(
     standard: Option<&str>,
     read: &mut F,
 ) -> Result<Program, Diagnostic> {
+    load_report(root, standard, read).into_result()
+}
+
+/// Load every independently discoverable file even after source errors. File
+/// reads and parsing use the same path rules as ordinary compilation.
+pub fn load_report<F: FnMut(&str) -> std::result::Result<Option<String>, String>>(
+    root: &str,
+    standard: Option<&str>,
+    read: &mut F,
+) -> SourceReport {
+    let mut diagnostics = Vec::new();
+    let mut blocked = Vec::new();
     let mut program = Program::default();
     program.scopes.push(ModuleScope {
         path: String::new(),
@@ -91,24 +136,53 @@ pub fn load<F: FnMut(&str) -> std::result::Result<Option<String>, String>>(
     let mut loaded = BTreeMap::new();
     let mut next_module = 0;
     while let Some((path, scope, owner)) = pending.pop() {
-        let text = read_source(read, &path, Span::default())?.ok_or_else(|| {
-            Diagnostic::new(
-                Span::default(),
-                "E_MODULE_MISSING",
-                &format!("missing source file {path}"),
-            )
-        })?;
+        let text = match read_source(read, &path, Span::default()) {
+            Ok(Some(text)) => text,
+            result => {
+                let mut error = match result {
+                    Err(error) => error,
+                    _ => Diagnostic::new(
+                        Span::default(),
+                        "E_MODULE_MISSING",
+                        &format!("missing source file {path}"),
+                    ),
+                };
+                error.path = path.clone();
+                blocked.push(BlockedRegion {
+                    path: path.clone(),
+                    span: Span::default(),
+                    kind: "file".to_string(),
+                    reason: error.message.clone(),
+                });
+                diagnostics.push(error);
+                continue;
+            }
+        };
         // A file can be mounted in multiple modules, but an ancestor inclusion cycle cannot terminate.
         let mut ancestor = Some(scope);
+        let mut cycle = false;
         while let Some(a) = ancestor {
             if loaded.get(&a) == Some(&path) {
-                return Err(Diagnostic::new(
-                    Span::default(),
-                    "E_MODULE_CYCLE",
-                    &format!("recursive module file {path}"),
-                ));
+                cycle = true;
+                break;
             }
             ancestor = program.scopes[a].parent;
+        }
+        if cycle {
+            let mut error = Diagnostic::new(
+                Span::default(),
+                "E_MODULE_CYCLE",
+                &format!("recursive module file {path}"),
+            );
+            error.path = path.clone();
+            blocked.push(BlockedRegion {
+                path: path.clone(),
+                span: Span::default(),
+                kind: "file".to_string(),
+                reason: error.message.clone(),
+            });
+            diagnostics.push(error);
+            continue;
         }
         loaded.insert(scope, path.clone());
         let file = program.files.len();
@@ -122,10 +196,10 @@ pub fn load<F: FnMut(&str) -> std::result::Result<Option<String>, String>>(
             join(parent(&path), stem(&path))
         };
         directories.insert(scope, base);
-        let items = syntax::parse_file(&mut program, &text, file, scope).map_err(|mut e| {
-            e.path = path.clone();
-            e
-        })?;
+        let mut parsed = syntax::parse_file_report(&mut program, &text, file, scope);
+        diagnostics.append(&mut parsed.diagnostics);
+        blocked.append(&mut parsed.blocked);
+        let items = parsed.items;
         if let Some(index) = owner {
             let module: &mut Module = &mut program.modules[index];
             module.items = items;
@@ -157,32 +231,76 @@ pub fn load<F: FnMut(&str) -> std::result::Result<Option<String>, String>>(
             }
             let direct = join(&directory, &format!("{}.rs", module.name));
             let nested = join(&directory, &format!("{}/mod.rs", module.name));
-            let first = read_source(read, &direct, module.span)?;
-            let second = read_source(read, &nested, module.span)?;
+            let first = read_source(read, &direct, module.span);
+            let second = read_source(read, &nested, module.span);
+            let (first, second) = match (first, second) {
+                (Ok(first), Ok(second)) => (first, second),
+                (first, second) => {
+                    for error in [first.err(), second.err()].into_iter().flatten() {
+                        blocked.push(BlockedRegion {
+                            path: error.path.clone(),
+                            span: module.span,
+                            kind: "module".to_string(),
+                            reason: error.message.clone(),
+                        });
+                        diagnostics.push(error);
+                    }
+                    continue;
+                }
+            };
             let selected = match (first, second) {
                 (Some(_), Some(_)) => {
-                    return Err(load_error(
+                    let error = load_error(
                         &program,
                         module.span,
                         "E_MODULE_AMBIGUOUS",
                         &format!("both {direct} and {nested} define module {}", module.name),
-                    ));
+                    );
+                    blocked.push(BlockedRegion {
+                        path: error.path.clone(),
+                        span: module.span,
+                        kind: "module".to_string(),
+                        reason: error.message.clone(),
+                    });
+                    diagnostics.push(error);
+                    continue;
                 }
                 (Some(_), None) => direct,
                 (None, Some(_)) => nested,
                 (None, None) => {
-                    return Err(load_error(
+                    let error = load_error(
                         &program,
                         module.span,
                         "E_MODULE_MISSING",
                         &format!("module {} needs {direct} or {nested}", module.name),
-                    ));
+                    );
+                    blocked.push(BlockedRegion {
+                        path: error.path.clone(),
+                        span: module.span,
+                        kind: "module".to_string(),
+                        reason: error.message.clone(),
+                    });
+                    diagnostics.push(error);
+                    continue;
                 }
             };
             pending.push((selected, module.scope, Some(index)));
         }
     }
-    Ok(program)
+    if !diagnostics.is_empty() {
+        blocked.push(BlockedRegion {
+            path: root.to_string(),
+            span: Span::default(),
+            kind: "semantic phase".to_string(),
+            reason: "source errors prevent complete name resolution and semantic checking"
+                .to_string(),
+        });
+    }
+    SourceReport {
+        program,
+        diagnostics,
+        blocked,
+    }
 }
 
 fn load_error(program: &Program, span: Span, code: &str, message: &str) -> Diagnostic {

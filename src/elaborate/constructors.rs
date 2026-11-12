@@ -19,6 +19,77 @@ fn parameters(source: &a::Program, declaration: a::DeclarationId) -> Vec<a::Gene
 }
 
 impl Builder<'_, '_> {
+    /// Preserve the distinction between a source coercion context and a type
+    /// discovered from the operands. A generic T inferred to be &mut U still
+    /// moves its first operand; it does not grant an automatic reborrow.
+    pub(super) fn constructor_argument(
+        &mut self,
+        expression: a::ExprId,
+        declared: a::TypeId,
+        inferred: &BTreeMap<String, usize>,
+        context: &mut BTreeMap<String, usize>,
+    ) -> Result<(usize, usize)> {
+        let hint = self.compiler.resolve_if_known(declared, inferred)?;
+        let mut expected = self.compiler.resolve_if_known(declared, context)?;
+        if expected.is_none() && self.declared_reference_shape(declared, context) {
+            expected = hint;
+        }
+        let value = self.expr_with_inference(expression, expected, hint)?;
+        self.infer_type(declared, value.1, context)?;
+        Ok(value)
+    }
+
+    /// Transparent aliases preserve the outer reference constructor even when
+    /// its referent is still generic. Each alias has its own lexical environment.
+    fn declared_reference_shape(
+        &self,
+        mut ty: a::TypeId,
+        substitutions: &BTreeMap<String, usize>,
+    ) -> bool {
+        let mut environments: Vec<BTreeMap<String, (a::TypeId, usize)>> = vec![BTreeMap::new()];
+        let mut environment = 0;
+        loop {
+            match &self.compiler.source.types[ty].kind {
+                a::Type::Ref { .. } => return true,
+                a::Type::Path(path) => {
+                    if path.declaration.is_none() {
+                        if let Some((next, scope)) = environments[environment].get(&path.name) {
+                            ty = *next;
+                            environment = *scope;
+                            continue;
+                        }
+                        return substitutions.get(&path.name).is_some_and(|ty| {
+                            matches!(
+                                self.compiler.types[*ty].kind,
+                                super::k::TypeKind::Ref { .. }
+                            )
+                        });
+                    }
+                    let a::Item::Alias(index) =
+                        self.compiler.source.declarations[path.declaration.unwrap()].item
+                    else {
+                        return false;
+                    };
+                    let alias = &self.compiler.source.aliases[index];
+                    let arguments = path.args.iter().filter(|id| !matches!(&self.compiler.source.types[**id].kind, a::Type::Path(path) if path.name.starts_with('\'')));
+                    let bindings = alias
+                        .generics
+                        .iter()
+                        .filter(|parameter| !parameter.lifetime)
+                        .zip(arguments)
+                        .map(|(parameter, argument)| {
+                            (parameter.name.clone(), (*argument, environment))
+                        })
+                        .collect();
+                    environments.push(bindings);
+                    environment = environments.len() - 1;
+                    ty = alias.ty;
+                }
+                _ => return false,
+            }
+        }
+    }
+
     pub(super) fn nominal_declaration(&self, ty: usize, span: a::Span) -> Result<a::DeclarationId> {
         let (name, _) = self.compiler.applications.get(&ty).ok_or_else(|| {
             err(

@@ -1522,7 +1522,7 @@ fn trait_requirements(
                     return None;
                 }
             }
-            TypeKind::World => {
+            TypeKind::World | TypeKind::Stdout => {
                 return None;
             }
             TypeKind::Vec { inner } | TypeKind::Box { inner } | TypeKind::Array { inner, .. } => {

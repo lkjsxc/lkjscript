@@ -130,6 +130,7 @@ impl Builder<'_, '_> {
                 references,
                 carriers: BTreeMap::new(),
                 assignment_types,
+                inferred: self.inferred.clone(),
                 live: live.into_iter().collect(),
                 written: written.into_iter().collect(),
                 loops,

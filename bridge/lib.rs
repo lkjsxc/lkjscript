@@ -5,8 +5,8 @@ mod language;
 
 pub(crate) use language::facts;
 pub use language::{
-    ast, check, elaborate, encoding, generics, json, k, k_text, names, resolve, source, syntax,
-    wasm,
+    ast, check, diagnostics, elaborate, encoding, generics, json, k, k_text, names, resolve,
+    source, syntax, wasm,
 };
 
 /// Preserve the public compiler boundary while isolating Rust resource setup.
@@ -28,3 +28,5 @@ pub mod compiler {
         )?
     }
 }
+
+pub use language::machine;

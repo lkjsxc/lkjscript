@@ -74,6 +74,7 @@ fn builtin(name: &str) -> bool {
             | "Vec"
             | "Box"
             | "World"
+            | "Stdout"
             | "Copy"
             | "Clone"
             | "Ord"

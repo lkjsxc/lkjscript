@@ -2,12 +2,15 @@
 mod assignment;
 mod borrow_cleanup;
 mod constructors;
+mod definition_types;
 mod derive_check;
 mod derive_methods;
+mod diagnostic_inference;
 mod generic_check;
 mod inference;
 mod integers;
 mod operators;
+mod output;
 mod patterns;
 mod sequences;
 mod static_lifetimes;
@@ -34,6 +37,7 @@ enum TypeKey {
     Vec(usize),
     Box(usize),
     World,
+    Stdout,
     Str,
     Nominal(a::DeclarationId, Vec<usize>),
 }
@@ -63,17 +67,74 @@ struct Compiler<'a> {
     uses: BTreeMap<(a::FileId, String), Vec<usize>>,
     contracts: Option<generic_check::Contracts>,
     method_selections: generic_check::MethodSelections,
+    definition_types: BTreeMap<usize, definition_types::DefinitionTypes>,
+}
+
+fn first_problem(problems: Vec<a::Diagnostic>) -> a::Diagnostic {
+    problems
+        .into_iter()
+        .next()
+        .expect("failed analysis has a diagnostic")
 }
 
 pub fn elaborate(source: &a::Program) -> Result<k::Program> {
-    let resolved = crate::resolve::resolve(source)?;
-    let source = &resolved;
-    static_lifetimes::annotations(source)?;
-    crate::generics::validate(source)?;
-    static_lifetimes::outputs(source)?;
-    let method_selections = generic_check::validate(source)?;
-    let mut c = Compiler::new(source)?;
-    c.method_selections = method_selections;
+    elaborate_all(source).map_err(first_problem)
+}
+
+/// Resolve declarations before collecting independent definition diagnostics.
+pub fn elaborate_all(source: &a::Program) -> std::result::Result<k::Program, Vec<a::Diagnostic>> {
+    let resolved = crate::resolve::resolve(source).map_err(|error| vec![error])?;
+    elaborate_resolved_all(&resolved)
+}
+
+/// Elaborate an already resolved source graph; the independent K gate follows.
+pub fn elaborate_resolved(source: &a::Program) -> Result<k::Program> {
+    elaborate_resolved_all(source).map_err(first_problem)
+}
+
+/// Recorded definition constraints and rigid generic evidence. Only this phase
+/// selects source-level generic witnesses; concrete construction consumes them.
+pub struct TypedDefinitions<'source> {
+    compiler: Compiler<'source>,
+    evidence: generic_check::DefinitionEvidence,
+}
+
+/// Definition inference is isolated, so its errors can be collected without
+/// inventing signatures or continuing partially mutated K/type interning state.
+pub fn infer_resolved_all(
+    source: &a::Program,
+) -> std::result::Result<TypedDefinitions<'_>, Vec<a::Diagnostic>> {
+    static_lifetimes::annotations(source).map_err(|error| vec![error])?;
+    crate::generics::validate(source).map_err(|error| vec![error])?;
+    static_lifetimes::outputs(source).map_err(|error| vec![error])?;
+    let compiler = Compiler::new(source).map_err(|error| vec![error])?;
+    let definitions = diagnostic_inference::infer_all(source, &compiler.names)?;
+    let evidence = generic_check::validate(source, definitions).map_err(|error| vec![error])?;
+    Ok(TypedDefinitions { compiler, evidence })
+}
+
+/// Build concrete K from the same recorded answers used for definition checking.
+pub fn lower_definitions(
+    definitions: TypedDefinitions<'_>,
+) -> std::result::Result<k::Program, Vec<a::Diagnostic>> {
+    let source = definitions.compiler.source;
+    elaborate_definitions(source, definitions.compiler, definitions.evidence)
+        .map_err(|error| vec![error])
+}
+
+pub fn elaborate_resolved_all(
+    source: &a::Program,
+) -> std::result::Result<k::Program, Vec<a::Diagnostic>> {
+    lower_definitions(infer_resolved_all(source)?)
+}
+
+fn elaborate_definitions(
+    source: &a::Program,
+    mut c: Compiler<'_>,
+    evidence: generic_check::DefinitionEvidence,
+) -> Result<k::Program> {
+    c.method_selections = evidence.methods;
+    c.definition_types = evidence.types;
     let empty = BTreeMap::new();
     for s in &source.structs {
         if s.generics.is_empty() {
@@ -168,6 +229,7 @@ impl<'a> Compiler<'a> {
             uses: BTreeMap::new(),
             contracts: None,
             method_selections: BTreeMap::new(),
+            definition_types: BTreeMap::new(),
         };
         for i in 0..c.types.len() {
             c.type_names.insert(c.types[i].name.clone(), i);
@@ -306,6 +368,7 @@ impl Compiler<'_> {
             k::TypeKind::Vec { inner } => (TypeKey::Vec(*inner), format!("Vec<t{inner}>")),
             k::TypeKind::Box { inner } => (TypeKey::Box(*inner), format!("Box<t{inner}>")),
             k::TypeKind::World => (TypeKey::World, "World".to_string()),
+            k::TypeKind::Stdout => (TypeKey::Stdout, "Stdout".to_string()),
             k::TypeKind::Str => (TypeKey::Str, "str".to_string()),
             _ => unreachable!("only structural types use intern"),
         };
@@ -648,6 +711,13 @@ impl Compiler<'_> {
         Ok(())
     }
     fn compile_function(&mut self, index: usize, instance: &Instance) -> Result<k::Function> {
+        let definition = match self.definition_types.remove(&instance.source) {
+            Some(definition) => definition,
+            None => definition_types::infer(self.source, &self.names, instance.source)?,
+        };
+        let inferred = definition.instantiate(self, &instance.substitutions);
+        self.definition_types.insert(instance.source, definition);
+        let inferred = std::rc::Rc::new(inferred?);
         let source = self.source.functions[instance.source].clone();
         let mut function = self.functions[index].clone();
         let bindings = function
@@ -670,6 +740,7 @@ impl Compiler<'_> {
             references,
             carriers: BTreeMap::new(),
             assignment_types: BTreeMap::new(),
+            inferred,
             written: live.clone(),
             live,
             loops: Vec::new(),
@@ -761,6 +832,7 @@ struct Builder<'a, 'b> {
     references: Facts,
     carriers: borrow_cleanup::Dependencies,
     assignment_types: BTreeMap<usize, usize>,
+    inferred: std::rc::Rc<definition_types::Types>,
     live: Facts,
     written: Facts,
     loops: Vec<LoopScope>,
@@ -1094,6 +1166,11 @@ impl Builder<'_, '_> {
         Ok((dst, rt))
     }
     fn hint(&mut self, id: usize) -> Option<usize> {
+        if let Some(ty) = self.inferred.expressions.get(&id) {
+            if !self.compiler.has_view(*ty) {
+                return Some(*ty);
+            }
+        }
         match self.compiler.source.exprs[id].kind.clone() {
             a::Expr::Path(p) => self.binding(&p.name).map(|i| self.ty(i)),
             a::Expr::Cast { ty, .. } => self.compiler.resolve(ty, &self.sub).ok(),
@@ -1140,7 +1217,6 @@ impl Builder<'_, '_> {
                     _ => None,
                 }
             }
-            a::Expr::Method { name, .. } if name == "len" => Some(k::U64),
             _ => None,
         }
     }
@@ -1440,6 +1516,22 @@ impl Builder<'_, '_> {
         Ok(result)
     }
     fn expr(&mut self, id: usize, expected: Option<usize>) -> Result<(usize, usize)> {
+        self.expr_with_inference(id, expected, None)
+    }
+    fn expr_with_inference(
+        &mut self,
+        id: usize,
+        expected: Option<usize>,
+        inferred: Option<usize>,
+    ) -> Result<(usize, usize)> {
+        // A solved type is not by itself a coercion site. In particular a bare
+        // mutable reference binding moves its value; it must not acquire the
+        // automatic reborrow used at an explicitly typed argument or binding.
+        // Reference-bearing constructor inference stays on the existing path
+        // until the typed form records each coercion separately.
+        let inferred = inferred
+            .or_else(|| self.inferred.expressions.get(&id).copied())
+            .filter(|ty| !self.compiler.has_view(*ty));
         if let Some(target) = expected {
             if let k::TypeKind::Ref {
                 inner,
@@ -1463,7 +1555,7 @@ impl Builder<'_, '_> {
                 }
             }
         }
-        let value = self.expr_inner(id, expected)?;
+        let value = self.expr_inner(id, expected.or(inferred))?;
         if let Some(target) = expected {
             if target != value.1 {
                 if let (
@@ -2712,6 +2804,11 @@ impl Builder<'_, '_> {
                 );
             }
         }
+        // Only the call's actual source context feeds argument coercions.
+        // Solved operand types do not establish a reborrow site.
+        if let Some(expected) = expected {
+            self.infer_type_matches(target.result, expected, &mut sub)?;
+        }
         let mut values = Vec::new();
         for i in 0..args.len() {
             let parameter = self.compiler.resolve(target.params[i].ty, &sub).ok();
@@ -2950,6 +3047,16 @@ impl Builder<'_, '_> {
                 ));
             }
             return self.text_method(target, name, args, span);
+        }
+        if matches!(
+            self.compiler.types[base].kind,
+            k::TypeKind::World | k::TypeKind::Stdout
+        ) && matches!(name, "stdout" | "write")
+        {
+            if !_types.is_empty() {
+                return Err(err(span, "E_TYPE", "output methods take no type arguments"));
+            }
+            return self.output_method(target, base, name, args, span);
         }
         if let Some(method) = generic_check::BuiltinMethod::named(name) {
             if selection.is_some() || self.builtin_method_available(base, name, span)? {
@@ -3222,6 +3329,7 @@ impl Builder<'_, '_> {
         if supplied.iter().any(|supplied| !supplied) {
             return Err(err(span, "E_TYPE", "struct constructor is missing fields"));
         }
+        let mut coercion_substitutions = target.substitutions.clone();
         // Infer from known types before evaluating initializers. Unsuffixed
         // literals then receive the same constraints regardless of field order.
         for ((_, expression), field) in fields.iter().zip(&positions) {
@@ -3242,10 +3350,12 @@ impl Builder<'_, '_> {
         let mut ordered = vec![None; definition.fields.len()];
         for ((_, expression), field) in fields.iter().zip(positions) {
             let pattern = definition.fields[field].ty;
-            let hint = self
-                .compiler
-                .resolve_if_known(pattern, &target.substitutions)?;
-            let value = self.expr(*expression, hint)?;
+            let value = self.constructor_argument(
+                *expression,
+                pattern,
+                &target.substitutions,
+                &mut coercion_substitutions,
+            )?;
             self.infer_type(pattern, value.1, &mut target.substitutions)?;
             ordered[field] = Some(value);
         }

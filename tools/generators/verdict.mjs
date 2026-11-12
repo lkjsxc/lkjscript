@@ -10,12 +10,18 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 const [binary, seedS = '601', countS = '100', output = 'target/generators'] = process.argv.slice(2);
 const bin = path.resolve(binary || 'target/debug/lkjscript');
+const engine = process.env.LKJ_ENGINE || 'node';
+const sh = (c, a) => (spawnSync(c, a, { encoding: 'utf8' }).stdout || '').trim();
+// Capture identities before execution so later edits cannot relabel this run.
+const metadata = { sha256: createHash('sha256').update(fs.readFileSync(new URL(import.meta.url))).update(fs.readFileSync(new URL('../process.mjs', import.meta.url))).digest('hex'), binarySha256: createHash('sha256').update(fs.readFileSync(bin)).digest('hex'), compilerDirty: sh('git', ['status', '--porcelain', '--untracked-files=no']) !== '', compiler: sh('git', ['-C', path.dirname(fs.realpathSync(bin)), 'rev-parse', 'HEAD']) || 'unknown', rustc: sh('rustc', ['--version']), node: process.version };
 let state = (BigInt(seedS) * 0x9E3779B97F4A7C15n & 0xFFFFFFFFFFFFFFFFn) || 1n;
 function rnd(n) { state ^= (state << 13n) & 0xFFFFFFFFFFFFFFFFn; state ^= state >> 7n; state ^= (state << 17n) & 0xFFFFFFFFFFFFFFFFn; return Number(state % BigInt(n)); }
 const pick = a => a[rnd(a.length)];
-const PRE = `struct Hs { v: Vec<i64>, n: i64 }
+const PRE = `struct Capture<T> { value: T }
+fn capture<T>(value: T) -> T { value }
+struct Hs { v: Vec<i64>, n: i64 }
 struct View<'a> { r: &'a i64, k: i64 }
-fn sumr(w: &Vec<i64>) -> i64 { let mut s: i64 = 0; let mut i: usize = 0; while i < w.len() { s = s + w[i]; i = i + 1; } s }
+fn sumr(w: &Vec<i64>) -> i64 { let mut s: i64 = 0; let mut i = 0; while i < w.len() { s = s + w[i]; i = i + 1; } s }
 fn sumv(w: Vec<i64>) -> i64 { sumr(&w) }
 fn mv(h: Hs) -> Hs { h }
 fn first(w: &Vec<i64>) -> &i64 { &w[0] }
@@ -31,7 +37,7 @@ function gen() {
     let out = ''; env = env.slice();
     const of = k => env.filter(v => v.k === k);
     for (let i = 0; i < n; i++) {
-      const c = rnd(34); const N = uid++;
+      const c = rnd(35); const N = uid++;
       const V = of('vec'), B = of('box'), H = of('hs'), R = of('ri'), RV = of('rv'), MV = of('mv'), MI = of('mi'), VW = of('view');
       if (c < 3) { out += `let mut v${N}: Vec<i64> = Vec::new(); v${N}.push(${rnd(9)}); v${N}.push(${rnd(9)});\n`; env.push({ k: 'vec', n: `v${N}` }); }
       else if (c < 4) { out += `let mut b${N}: Box<i64> = Box::new(${rnd(9)});\n`; env.push({ k: 'box', n: `b${N}` }); }
@@ -61,6 +67,11 @@ function gen() {
       else if (c < 31 && V.length) out += `acc = acc + ${pick([`sumr(&${pick(V).n})`, `${pick(V).n}.len() as i64`])};\n`;
       else if (c < 32 && d > 0) out += `if acc % 2 == ${rnd(2)} {\n${stmts(env, d - 1, 3)}}\n`;
       else if (c < 33 && d > 0) out += `if acc % 3 == ${rnd(3)} {\n${stmts(env, d - 1, 3)}} else {\n${stmts(env, d - 1, 3)}}\n`;
+      else if (c === 34 && MI.length) {
+        const reference = pick(MI).n;
+        const initializer = pick([`Some(${reference})`, `Capture { value: ${reference} }`, `capture(${reference})`]);
+        out += `let captured${N} = ${initializer}; drop(captured${N}); *${reference} = 1;\n`;
+      }
       else if (d > 0) { out += `let mut k${N}: i64 = 0;\nwhile k${N} < 2 {\nk${N} = k${N} + 1;\n${stmts(env, d - 1, 3)}}\n`; }
     }
     return out;
@@ -89,14 +100,15 @@ for (let i = 0; i < N; i++) {
   let rust;
   if (rejected.has(i)) rust = { k: 'reject', code: rejected.get(i) };
   else { const r = await run(`${dir}/ok`, [String(i)], { encoding: 'utf8', timeout: 10000 }); const m = r.stderr.match(/panicked at [^:\n]+:\d+:\d+:\n(.*)/); rust = r.status === 0 ? { k: 'value', v: r.stdout.trim() } : r.status === 101 && m ? { k: 'trap', kind: rustKind(m[1]) } : { k: 'abnormal' }; }
-  const l = await run(bin, ['run', `${dir}/c${i}.rs`, '--entry', 'probe'], { encoding: 'utf8', timeout: 20000 });
+  const l = await run(bin, ['run', `${dir}/c${i}.rs`, '--entry', 'probe', '--engine', engine], { encoding: 'utf8', timeout: 20000 });
   const text = (l.stdout + l.stderr).trim().split('\n')[0] || '';
-  const code = text.match(/\b(E_[A-Z_]+|R\d{4})\b/)?.[1];
-  const lk = l.error || l.signal ? { k: l.error?.code === 'ETIMEDOUT' ? 'timeout' : 'crash' } : l.status === 0 ? { k: 'value', v: text } : code && code[0] === 'R' ? { k: 'trap', kind: code } : code ? { k: 'reject', code } : { k: 'crash' };
+  const code = text.match(/\b(E_[A-Z_]+|M_[A-Z_]+|R\d{4})\b/)?.[1];
+  const lk = l.error || l.signal ? { k: l.error?.code === 'ETIMEDOUT' ? 'timeout' : 'crash' } : l.status === 0 ? { k: 'value', v: text } : code && code[0] === 'R' ? { k: 'trap', kind: code } : code && code[0] === 'M' ? { k: 'machine-error', code } : code ? { k: 'reject', code } : { k: 'crash' };
   const ownLk = lk.k === 'reject' && (lk.code === 'E_MOVE' || lk.code === 'E_BORROW');
   let cls;
   if (rust.k === 'abnormal' || (rust.k === 'reject' && !OWN.has(rust.code))) cls = 'generator-or-oracle-problem';
   else if (lk.k === 'crash' || lk.k === 'timeout') cls = lk.k;
+  else if (lk.k === 'machine-error') cls = 'machine-error:' + lk.code;
   else if (rust.k === 'reject') { if (ownLk) { cls = 'both-reject-ownership'; bump(pairs, rust.code + '/' + lk.code); } else if (lk.k === 'reject') cls = 'rejected-for-another-reason:' + lk.code; else cls = 'ACCEPTS-RUST-REJECTED'; }
   else if (lk.k === 'reject') cls = (lk.code === 'E_UNSUPPORTED' || lk.code === 'E_PARSE') ? 'unsupported' : 'rejects-valid:' + lk.code;
   else if (rust.k === 'value' && lk.k === 'value') cls = rust.v === lk.v ? 'both-run-value-equal' : 'VALUE-DIFFERS';
@@ -105,11 +117,10 @@ for (let i = 0; i < N; i++) {
   bump(tally, cls);
   if (!cls.startsWith('both-')) show.push(`${dir}/c${i} ${cls} rust=${rust.k}:${rust.code || rust.v || rust.kind || ''} lkj=${text.replace(/^\S*\/c\d+\.rs:/, '').slice(0, 140)}`);
 }
-const sh = (c, a) => (spawnSync(c, a, { encoding: 'utf8' }).stdout || '').trim();
-const record = { generator: 'verdict', sha256: createHash('sha256').update(fs.readFileSync(new URL(import.meta.url))).update(fs.readFileSync(new URL('../process.mjs', import.meta.url))).digest('hex'), binarySha256: createHash('sha256').update(fs.readFileSync(bin)).digest('hex'), compilerDirty: sh('git', ['status', '--porcelain', '--untracked-files=no']) !== '', compiler: sh('git', ['-C', path.dirname(fs.realpathSync(bin)), 'rev-parse', 'HEAD']) || 'unknown', rustc: sh('rustc', ['--version']), node: process.version, seed: seedS, programs: N, ...tally, rejectCodePairs: pairs };
+const record = { generator: 'verdict', engine, ...metadata, rustFlags: { verdict: '--edition=2024 --error-format=short -A warnings --emit=metadata', execution: '--edition=2024 -C overflow-checks=yes -A warnings' }, seed: seedS, programs: N, ...tally, rejectCodePairs: pairs };
 fs.mkdirSync(output, {recursive: true});
 fs.appendFileSync(path.join(output, 'runs.jsonl'), JSON.stringify(record) + '\n');
 console.log(JSON.stringify(record)); fs.writeFileSync(`${dir}/report.txt`, show.join('\n') + '\n');
 
-const fatal = Object.keys(tally).some(key => /DIFFERS|VALUE-VS-TRAP|ACCEPTS-RUST-REJECTED|crash|timeout|oracle|generator|other-line/.test(key));
+const fatal = Object.keys(tally).some(key => /DIFFERS|VALUE-VS-TRAP|ACCEPTS-RUST-REJECTED|crash|timeout|oracle|generator|other-line|machine-error/.test(key));
 if (fatal) process.exitCode = 1;

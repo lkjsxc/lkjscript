@@ -13,8 +13,8 @@ execution of the real compiler and library graph with declared host inputs.
 Resolve uses by identity. Infer and check definitions under declared assumptions,
 record choices once, then instantiate and lower the recorded form. Migrate each
 responsibility behind compiler::compile while retaining one runnable route. The
-independent K checker remains a trust boundary. A separately implemented K machine
-is the next execution route and a counterexample search for checking and lowering.
+independent K checker remains a trust boundary. The separately implemented K machine
+is an execution route and a counterexample search for checking and lowering.
 
 Ownership facts need distinct joins: initialization weakens to maybe, possible
 reference holders unite, and authority originates only from checked borrows.

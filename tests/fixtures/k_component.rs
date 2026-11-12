@@ -185,6 +185,7 @@ fn kind_value(kind: &k::TypeKind) -> i64 {
         k::TypeKind::Box { inner } => *inner as i64,
         k::TypeKind::Str => 4,
         k::TypeKind::World => 5,
+        k::TypeKind::Stdout => 6,
     }
 }
 

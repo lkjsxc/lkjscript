@@ -3,20 +3,21 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawnSync } from 'node:child_process';
+import { run as runProcess } from './process.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const binary = path.resolve(root, process.env.LKJSCRIPT_BIN || process.argv[2] || 'target/debug/lkjscript');
+const engine = process.env.LKJ_ENGINE || 'node';
 const fixtures = path.join(root, 'tests/conformance');
 const cases = JSON.parse(fs.readFileSync(path.join(fixtures, 'cases.json'), 'utf8'));
 const out = path.join(root, 'target/conformance');
 fs.mkdirSync(out, { recursive: true });
 const timeout = Number(process.env.LKJ_TEST_TIMEOUT_MS || 30000);
-function run(command, args) {
-    return spawnSync(command, args, { cwd: root, encoding: 'utf8', timeout, maxBuffer: 4 * 1024 * 1024 });
+function run(command, args, options = {}) {
+    return runProcess(command, args, { cwd: root, encoding: 'utf8', timeout, maxBuffer: 4 * 1024 * 1024, ...options });
 }
 function diagnostic(result) {
-    return (result.stderr || result.stdout || result.error?.message || '').trim();
+    return (result.stderr || result.stdout || result.error?.message || '').toString().trim();
 }
 function succeeded(result) { return !result.error && result.status === 0; }
 function fail(message) { failures.push(message); }
@@ -28,20 +29,21 @@ const started = performance.now();
 
 // One Rust build contains every comparable positive case, including planned
 // language features. Unsupported lkjscript cases remain explicitly pending.
-const rustCases = cases.filter(c => c.rust && c.kind === 'run');
+const rustCases = cases.filter(c => c.rust && (c.kind === 'run' || c.kind === 'output'));
 let harness = '#![allow(dead_code, unused_imports, unused_variables)]\n';
+harness += 'mod __lkj_host {\n' + fs.readFileSync(path.join(root, 'bridge/output.rs'), 'utf8') + '\n}\n';
 for (const c of rustCases) {
-    harness += 'mod case_' + c.id + ' {\n' + fs.readFileSync(path.join(fixtures, c.file), 'utf8') + '\n}\n';
+    harness += 'mod case_' + c.id + ' {\n' + (c.kind === 'output' ? 'use crate::__lkj_host::{World, Stdout};\n' : '') + fs.readFileSync(path.join(fixtures, c.file), 'utf8') + '\n}\n';
 }
 harness += 'fn main() { let name = std::env::args().nth(1).unwrap(); match name.as_str() {\n';
 for (const c of rustCases) {
-    harness += JSON.stringify(c.id) + ' => println!("{}", case_' + c.id + '::probe()),\n';
+    harness += JSON.stringify(c.id) + (c.kind === 'output' ? ' => __lkj_host::enter(case_' + c.id + '::main),\n' : ' => println!("{}", case_' + c.id + '::probe()),\n');
 }
 harness += '_ => std::process::exit(2), } }\n';
 const oracleSource = path.join(out, 'oracle.rs');
 const oracle = path.join(out, 'oracle');
 fs.writeFileSync(oracleSource, harness);
-const compiled = run('rustc', ['--edition=2024', '-C', 'overflow-checks=yes', '-C', 'opt-level=1', '-A', 'warnings', oracleSource, '-o', oracle]);
+const compiled = await run('rustc', ['--edition=2024', '-C', 'overflow-checks=yes', '-C', 'opt-level=1', '-A', 'warnings', oracleSource, '-o', oracle]);
 if (!succeeded(compiled)) {
     process.stderr.write('Rust oracle did not build:\n' + diagnostic(compiled) + '\n');
     process.exit(1);
@@ -49,7 +51,7 @@ if (!succeeded(compiled)) {
 
 for (const c of cases) {
     const source = path.join(fixtures, c.file);
-    const checked = run(binary, ['check', source]);
+    const checked = await run(binary, ['check', source]);
     if (!succeeded(checked)) {
         const error = diagnostic(checked);
         const actualCode = error.match(/\bE_[A-Z_]+\b/)?.[0] || 'NO_DIAGNOSTIC';
@@ -66,10 +68,29 @@ for (const c of cases) {
         continue;
     }
 
-    if (c.kind === 'run') {
-        const args = ['run', source];
+    if (c.kind === 'output') {
+        const actual = await run(binary, ['run', source, '--engine', engine], {encoding: null});
+        const reference = await run(oracle, [c.id], {encoding: null});
+        const normalKind = code => Number(code.slice(1)) >= 16 ? 'R0004' : code;
+        const ending = (result, rust) => {
+            if (result.error) return result.error.code === 'ETIMEDOUT' ? 'timeout' : 'crash';
+            if (result.status === 0 && !result.signal) return 'normal';
+            const diagnostic = result.stderr.toString();
+            const code = diagnostic.match(rust ? /LKJ_RUST_TRAP (R[0-9]+)/ : /: (R[0-9]+)\b/)?.[1];
+            return code ? normalKind(code) : 'crash';
+        };
+        const expected = Buffer.from(c.hex, 'hex');
+        if (!actual.stdout.equals(expected) || !reference.stdout.equals(expected)
+            || ending(actual, false) !== c.ending || ending(reference, true) !== c.ending) {
+            fail(c.id + ': output/termination differs: lkj=' + ending(actual, false)
+                + ' rust=' + ending(reference, true) + ' expected=' + c.ending + ' ' + diagnostic(actual));
+            continue;
+        }
+        rustCompared++;
+    } else if (c.kind === 'run') {
+        const args = ['run', source, '--engine', engine];
         if (c.entry) args.push('--entry', c.entry);
-        const executed = run(binary, args);
+        const executed = await run(binary, args);
         if (!succeeded(executed)) {
             fail(c.id + ': execution failed: ' + diagnostic(executed));
             continue;
@@ -80,7 +101,7 @@ for (const c of cases) {
             continue;
         }
         if (c.rust) {
-            const reference = run(oracle, [c.id]);
+            const reference = await run(oracle, [c.id]);
             if (!succeeded(reference) || reference.stdout.trim() !== actual) {
                 fail(c.id + ': rustc/Node disagreement: ' + diagnostic(reference) + ' result=' + reference.stdout?.trim());
                 continue;
@@ -88,7 +109,7 @@ for (const c of cases) {
             rustCompared++;
         }
     } else if (c.rust) {
-        const reference = run('rustc', ['--edition=2024', '--crate-type=lib', '--emit=metadata', '-A', 'warnings', source, '-o', path.join(out, c.id + '.rmeta')]);
+        const reference = await run('rustc', ['--edition=2024', '--crate-type=lib', '--emit=metadata', '-A', 'warnings', source, '-o', path.join(out, c.id + '.rmeta')]);
         if (succeeded(reference) !== Boolean(c.rustAccept)) {
             fail(c.id + ': unexpected Rust oracle verdict: ' + diagnostic(reference));
             continue;
@@ -98,7 +119,7 @@ for (const c of cases) {
     passed++;
 }
 const seconds = ((performance.now() - started) / 1000).toFixed(2);
-process.stdout.write('conformance: ' + passed + ' passed, ' + pending.length + ' pending, ' + failures.length + ' failed; ' + rustCompared + ' rustc comparisons; ' + seconds + ' s\n');
+process.stdout.write('conformance (' + engine + '): ' + passed + ' passed, ' + pending.length + ' pending, ' + failures.length + ' failed; ' + rustCompared + ' rustc comparisons; ' + seconds + ' s\n');
 for (const message of pending) process.stdout.write('PENDING ' + message + '\n');
 for (const message of failures) process.stderr.write('FAIL ' + message + '\n');
 if (failures.length !== 0) process.exit(1);

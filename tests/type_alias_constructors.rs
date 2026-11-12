@@ -362,9 +362,8 @@ fn aliases_preserve_private_fields_and_private_underlying_types() {
 }
 
 #[test]
-fn nested_partial_alias_expectation_is_a_documented_inference_boundary() {
-    // This original Rust-valid case remains a known inference limitation. Its
-    // rejection is an integration boundary observation, not semantic conformance.
+fn nested_partial_alias_expectation_propagates_before_literal_defaults() {
+    // The alias fixes the nested u8 leaf while another leaf determines T.
     let source = r#"
 struct Pair<A,B>{first:A,second:B}
 struct Holder<T>{value:T}
@@ -374,36 +373,7 @@ pub fn probe()->i64 {
     value.value.first+value.value.second as i64
 }
 "#;
-    let error = compiler::check_bundle(&bundle(&[("main.rs", source)]))
-        .err()
-        .expect("partial expected-type propagation remains explicitly pending");
-    assert_eq!(error.code, "E_TYPE", "{error:?}");
-    assert!(
-        error.message.contains("inferred constructor fields")
-            && error.message.contains("specify alias type arguments"),
-        "{error:?}"
-    );
-    let directory = directory();
-    let input = directory.join("main.rs");
-    std::fs::write(&input, source).unwrap();
-    let oracle = Command::new("rustc")
-        .args([
-            "--edition=2024",
-            "--crate-type=lib",
-            "--emit=metadata",
-            "--cap-lints=allow",
-        ])
-        .arg(input)
-        .arg("-o")
-        .arg(directory.join("probe.rmeta"))
-        .output()
-        .unwrap();
-    std::fs::remove_dir_all(directory).unwrap();
-    assert!(
-        oracle.status.success(),
-        "the unsimplified boundary case must remain Rust-valid: {}",
-        String::from_utf8_lossy(&oracle.stderr)
-    );
+    accepted(&[("main.rs", source)], &[("probe", 42)]);
 
     let explicit = source.replace("let value=Alias{", "let value=Alias::<i64>{");
     let typed = source.replace("second:2}", "second:2u8}");

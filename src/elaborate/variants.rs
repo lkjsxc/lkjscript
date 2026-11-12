@@ -124,6 +124,7 @@ impl Builder<'_, '_> {
         if supplied.iter().any(|found| !found) {
             return Err(err(span, "E_TYPE", "variant constructor is missing fields"));
         }
+        let mut coercion_substitutions = target.substitutions.clone();
         // Known field types constrain unsuffixed literals without evaluating any
         // initializer out of source order.
         for ((_, expression), field) in values.iter().zip(&positions) {
@@ -141,10 +142,12 @@ impl Builder<'_, '_> {
         let mut ordered = vec![None; variant.fields.len()];
         for ((_, expression), field) in values.iter().zip(positions) {
             let declared = variant.fields[field].ty;
-            let hint = self
-                .compiler
-                .resolve_if_known(declared, &target.substitutions)?;
-            let value = self.expr(*expression, hint)?;
+            let value = self.constructor_argument(
+                *expression,
+                declared,
+                &target.substitutions,
+                &mut coercion_substitutions,
+            )?;
             self.infer_type(declared, value.1, &mut target.substitutions)?;
             ordered[field] = Some(value);
         }

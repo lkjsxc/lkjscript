@@ -456,6 +456,10 @@ pub fn read(text: &str) -> Result<Program> {
                         exact(&words, 3, line)?;
                         TypeKind::World
                     }
+                    "stdout" => {
+                        exact(&words, 3, line)?;
+                        TypeKind::Stdout
+                    }
                     "int" => {
                         exact(&words, 5, line)?;
                         let bits = word(&words, 3, line)?
@@ -740,6 +744,7 @@ pub fn write(program: &Program) -> String {
             TypeKind::F64 => text.push_str("f64"),
             TypeKind::Str => text.push_str("str"),
             TypeKind::World => text.push_str("world"),
+            TypeKind::Stdout => text.push_str("stdout"),
             TypeKind::Int { bits, signed } => text.push_str(&format!(
                 "int {bits} {}",
                 if *signed { "signed" } else { "unsigned" }

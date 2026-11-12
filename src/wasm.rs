@@ -52,8 +52,9 @@ fn begin_if(out: &mut Vec<u8>) {
 }
 fn trap(out: &mut Vec<u8>, code: i64, line: usize) {
     constant(out, code);
+    out.extend_from_slice(&[0x24, 2]);
     constant(out, line as i64);
-    call(out, 0);
+    out.extend_from_slice(&[0x24, 3]);
     out.push(0x00);
 }
 fn trap_if(out: &mut Vec<u8>, code: i64, line: usize) {
@@ -61,11 +62,11 @@ fn trap_if(out: &mut Vec<u8>, code: i64, line: usize) {
     trap(out, code, line);
     out.push(0x0b);
 }
-const ALLOC: usize = 1;
-const FREE: usize = 2;
-const DROP_RUN: usize = 3;
-const UTF8_VALIDATE: usize = 4;
-const FIRST_USER: usize = 5;
+const ALLOC: usize = 0;
+const FREE: usize = 1;
+const DROP_RUN: usize = 2;
+const UTF8_VALIDATE: usize = 3;
+const FIRST_USER: usize = 4;
 
 // The immutable region precedes the allocator. Each distinct literal has a
 // header-pointer cell, a {data, length, capacity} header, then eight-byte u8 slots.
@@ -152,6 +153,7 @@ struct Body<'a> {
     controls: Vec<u8>,
     messages: &'a [String],
     texts: &'a TextPool,
+    runtime: usize,
 }
 impl<'a> Body<'a> {
     fn read(&mut self, local: usize) {
@@ -540,7 +542,10 @@ impl<'a> Body<'a> {
             Op::Read { dst, place, moving } => {
                 let ty = self.read_place(place, line);
                 if !moving {
-                    call(&mut self.bytes, helper_index(self.program, ty, true));
+                    call(
+                        &mut self.bytes,
+                        helper_index(self.program, self.runtime, ty, true),
+                    );
                 }
                 self.write(*dst);
                 if *moving {
@@ -553,11 +558,11 @@ impl<'a> Body<'a> {
             }
             Op::Array { dst, elements } => {
                 constant(&mut self.bytes, 24);
-                call(&mut self.bytes, ALLOC);
+                call(&mut self.bytes, ALLOC + self.runtime);
                 self.write(*dst);
                 self.read(*dst);
                 constant(&mut self.bytes, elements.len() as i64 * 8);
-                call(&mut self.bytes, ALLOC);
+                call(&mut self.bytes, ALLOC + self.runtime);
                 store(&mut self.bytes, 0);
                 self.read(*dst);
                 constant(&mut self.bytes, elements.len() as i64);
@@ -596,7 +601,10 @@ impl<'a> Body<'a> {
                     return Ok(());
                 }
                 let ty = self.read_place(place, line);
-                call(&mut self.bytes, helper_index(self.program, ty, false));
+                call(
+                    &mut self.bytes,
+                    helper_index(self.program, self.runtime, ty, false),
+                );
                 self.bytes.push(0x1a);
                 self.clear_place(place, ty, line);
             }
@@ -674,7 +682,7 @@ impl<'a> Body<'a> {
                 for arg in args {
                     self.read(*arg);
                 }
-                call(&mut self.bytes, FIRST_USER + *function);
+                call(&mut self.bytes, (FIRST_USER + self.runtime) + *function);
                 self.write(*dst);
             }
             Op::If { condition } => {
@@ -715,7 +723,7 @@ impl<'a> Body<'a> {
                 set(&mut self.bytes, self.scratch + 6);
                 if self.frame_bytes != 0 {
                     get(&mut self.bytes, self.frame);
-                    call(&mut self.bytes, FREE);
+                    call(&mut self.bytes, FREE + self.runtime);
                     self.bytes.push(0x1a);
                 }
                 get(&mut self.bytes, self.scratch + 6);
@@ -735,7 +743,7 @@ impl<'a> Body<'a> {
                 };
                 let words = fields.len() + if tag.is_some() { 1 } else { 0 };
                 constant(&mut self.bytes, (words.max(1) as i64) * 8);
-                call(&mut self.bytes, ALLOC);
+                call(&mut self.bytes, ALLOC + self.runtime);
                 self.write(*dst);
                 if let Some(variant) = tag {
                     self.read(*dst);
@@ -784,6 +792,54 @@ impl<'a> Body<'a> {
         line: usize,
     ) -> Result<(), String> {
         match name {
+            "world_stdout" => {
+                // Only the checked derivation produces this affine handle.
+                constant(&mut self.bytes, 1);
+                self.write(dst);
+            }
+            "stdout_write" => {
+                // Pack the current word-sized u8 storage into the byte ABI.
+                // The host sees only a pointer, byte length and source line.
+                self.read(args[1]);
+                load(&mut self.bytes, 0);
+                tee(&mut self.bytes, self.scratch + 4);
+                load(&mut self.bytes, 8);
+                set(&mut self.bytes, self.scratch);
+                get(&mut self.bytes, self.scratch + 4);
+                load(&mut self.bytes, 0);
+                set(&mut self.bytes, self.scratch + 1);
+                get(&mut self.bytes, self.scratch);
+                call(&mut self.bytes, ALLOC + self.runtime);
+                set(&mut self.bytes, self.scratch + 2);
+                constant(&mut self.bytes, 0);
+                set(&mut self.bytes, self.scratch + 3);
+                self.bytes.extend_from_slice(&[0x02, 0x40, 0x03, 0x40]);
+                get(&mut self.bytes, self.scratch + 3);
+                get(&mut self.bytes, self.scratch);
+                self.bytes.extend_from_slice(&[0x5a, 0x0d, 1]);
+                get(&mut self.bytes, self.scratch + 2);
+                get(&mut self.bytes, self.scratch + 3);
+                self.bytes.push(0x7c);
+                get(&mut self.bytes, self.scratch + 1);
+                get(&mut self.bytes, self.scratch + 3);
+                constant(&mut self.bytes, 8);
+                self.bytes.extend_from_slice(&[0x7e, 0x7c]);
+                load(&mut self.bytes, 0);
+                self.bytes.extend_from_slice(&[0x3c, 0, 0]);
+                get(&mut self.bytes, self.scratch + 3);
+                constant(&mut self.bytes, 1);
+                self.bytes.push(0x7c);
+                set(&mut self.bytes, self.scratch + 3);
+                self.bytes.extend_from_slice(&[0x0c, 0, 0x0b, 0x0b]);
+                get(&mut self.bytes, self.scratch + 2);
+                get(&mut self.bytes, self.scratch);
+                constant(&mut self.bytes, line as i64);
+                call(&mut self.bytes, 0);
+                self.write(dst);
+                get(&mut self.bytes, self.scratch + 2);
+                call(&mut self.bytes, FREE + self.runtime);
+                self.bytes.push(0x1a);
+            }
             "assert" => {
                 self.read(args[0]);
                 self.bytes.push(0x50);
@@ -862,7 +918,7 @@ impl<'a> Body<'a> {
 
             "box_new" => {
                 constant(&mut self.bytes, 8);
-                call(&mut self.bytes, ALLOC);
+                call(&mut self.bytes, ALLOC + self.runtime);
                 self.write(dst);
                 self.read(dst);
                 self.read(args[0]);
@@ -881,7 +937,7 @@ impl<'a> Body<'a> {
             }
             "vec_new" => {
                 constant(&mut self.bytes, 24);
-                call(&mut self.bytes, ALLOC);
+                call(&mut self.bytes, ALLOC + self.runtime);
                 self.write(dst);
                 for offset in [0, 8, 16] {
                     self.read(dst);
@@ -902,7 +958,7 @@ impl<'a> Body<'a> {
                 load(&mut self.bytes, 8);
                 set(&mut self.bytes, self.scratch + 5);
                 constant(&mut self.bytes, 16);
-                call(&mut self.bytes, ALLOC);
+                call(&mut self.bytes, ALLOC + self.runtime);
                 self.write(dst);
                 get(&mut self.bytes, self.scratch + 5);
                 self.bytes.push(0x50);
@@ -974,7 +1030,7 @@ impl<'a> Body<'a> {
                 get(&mut self.bytes, self.scratch + 6);
                 constant(&mut self.bytes, 8);
                 self.bytes.push(0x7e);
-                call(&mut self.bytes, ALLOC);
+                call(&mut self.bytes, ALLOC + self.runtime);
                 set(&mut self.bytes, self.scratch + 3);
                 get(&mut self.bytes, self.scratch + 3);
                 get(&mut self.bytes, self.scratch + 4);
@@ -985,7 +1041,7 @@ impl<'a> Body<'a> {
                 self.bytes.extend_from_slice(&[0xfc, 10, 0, 0]);
                 get(&mut self.bytes, self.scratch + 4);
                 load(&mut self.bytes, 0);
-                call(&mut self.bytes, FREE);
+                call(&mut self.bytes, FREE + self.runtime);
                 self.bytes.push(0x1a);
                 get(&mut self.bytes, self.scratch + 4);
                 get(&mut self.bytes, self.scratch + 3);
@@ -1019,7 +1075,10 @@ impl<'a> Body<'a> {
                     }
                     _ => self.function.locals[args[0]].ty,
                 };
-                call(&mut self.bytes, helper_index(self.program, ty, true));
+                call(
+                    &mut self.bytes,
+                    helper_index(self.program, self.runtime, ty, true),
+                );
                 self.write(dst);
             }
 
@@ -1036,10 +1095,10 @@ impl<'a> Body<'a> {
             }
             "str_from_utf8" => {
                 self.read(args[0]);
-                call(&mut self.bytes, UTF8_VALIDATE);
+                call(&mut self.bytes, UTF8_VALIDATE + self.runtime);
                 set(&mut self.bytes, self.scratch + 4);
                 constant(&mut self.bytes, 16);
-                call(&mut self.bytes, ALLOC);
+                call(&mut self.bytes, ALLOC + self.runtime);
                 self.write(dst);
                 get(&mut self.bytes, self.scratch + 4);
                 self.bytes.push(0x50);
@@ -1049,7 +1108,7 @@ impl<'a> Body<'a> {
                 store(&mut self.bytes, 0);
                 self.read(dst);
                 constant(&mut self.bytes, 8);
-                call(&mut self.bytes, ALLOC);
+                call(&mut self.bytes, ALLOC + self.runtime);
                 store(&mut self.bytes, 8);
                 self.bytes.push(0x05);
                 self.read(dst);
@@ -1075,7 +1134,12 @@ impl<'a> Body<'a> {
                 self.read(args[0]);
                 call(
                     &mut self.bytes,
-                    helper_index(self.program, self.function.locals[args[0]].ty, false),
+                    helper_index(
+                        self.program,
+                        self.runtime,
+                        self.function.locals[args[0]].ty,
+                        false,
+                    ),
                 );
                 self.bytes.push(0x1a);
                 constant(&mut self.bytes, 0);
@@ -1086,8 +1150,8 @@ impl<'a> Body<'a> {
         Ok(())
     }
 }
-fn helper_index(program: &Program, ty: usize, copying: bool) -> usize {
-    FIRST_USER + program.functions.len() + ty * 2 + if copying { 1 } else { 0 }
+fn helper_index(program: &Program, runtime: usize, ty: usize, copying: bool) -> usize {
+    (FIRST_USER + runtime) + program.functions.len() + ty * 2 + if copying { 1 } else { 0 }
 }
 fn heap_type(kind: &TypeKind) -> bool {
     matches!(
@@ -1333,18 +1397,24 @@ fn utf8_validator() -> Vec<u8> {
     b
 }
 
-fn copy_fields(b: &mut Vec<u8>, program: &Program, fields: &[crate::k::Field], first: u64) {
+fn copy_fields(
+    b: &mut Vec<u8>,
+    program: &Program,
+    runtime: usize,
+    fields: &[crate::k::Field],
+    first: u64,
+) {
     for (i, field) in fields.iter().enumerate() {
         let offset = (first + i as u64) * 8;
         get(b, 1);
         get(b, 0);
         load(b, offset);
-        call(b, helper_index(program, field.ty, true));
+        call(b, helper_index(program, runtime, field.ty, true));
         store(b, offset);
     }
 }
 
-fn copy_helper(program: &Program, ty: usize) -> Vec<u8> {
+fn copy_helper(program: &Program, runtime: usize, ty: usize) -> Vec<u8> {
     let mut b = vec![1, 5, 0x7e];
     let kind = &program.types[ty].kind;
     if !heap_type(kind) {
@@ -1361,9 +1431,9 @@ fn copy_helper(program: &Program, ty: usize) -> Vec<u8> {
     match kind {
         TypeKind::Struct { fields, .. } => {
             constant(&mut b, fields.len().max(1) as i64 * 8);
-            call(&mut b, ALLOC);
+            call(&mut b, ALLOC + runtime);
             set(&mut b, 1);
-            copy_fields(&mut b, program, fields, 0);
+            copy_fields(&mut b, program, runtime, fields, 0);
         }
         TypeKind::Enum { variants, .. } => {
             get(&mut b, 0);
@@ -1375,22 +1445,22 @@ fn copy_helper(program: &Program, ty: usize) -> Vec<u8> {
                 b.push(0x51);
                 begin_if(&mut b);
                 constant(&mut b, (value.fields.len() + 1) as i64 * 8);
-                call(&mut b, ALLOC);
+                call(&mut b, ALLOC + runtime);
                 set(&mut b, 1);
                 get(&mut b, 1);
                 get(&mut b, 2);
                 store(&mut b, 0);
-                copy_fields(&mut b, program, &value.fields, 1);
+                copy_fields(&mut b, program, runtime, &value.fields, 1);
                 b.push(0x0b);
             }
         }
         TypeKind::Box { inner } => {
             constant(&mut b, 8);
-            call(&mut b, ALLOC);
+            call(&mut b, ALLOC + runtime);
             tee(&mut b, 1);
             get(&mut b, 0);
             load(&mut b, 0);
-            call(&mut b, helper_index(program, *inner, true));
+            call(&mut b, helper_index(program, runtime, *inner, true));
             store(&mut b, 0);
         }
         TypeKind::Vec { inner } | TypeKind::Array { inner, .. } => {
@@ -1402,12 +1472,12 @@ fn copy_helper(program: &Program, ty: usize) -> Vec<u8> {
             load(&mut b, 8);
             set(&mut b, 3);
             constant(&mut b, 24);
-            call(&mut b, ALLOC);
+            call(&mut b, ALLOC + runtime);
             set(&mut b, 1);
             get(&mut b, 3);
             constant(&mut b, 8);
             b.push(0x7e);
-            call(&mut b, ALLOC);
+            call(&mut b, ALLOC + runtime);
             set(&mut b, 5);
             get(&mut b, 1);
             get(&mut b, 5);
@@ -1436,7 +1506,7 @@ fn copy_helper(program: &Program, ty: usize) -> Vec<u8> {
             b.push(0x7e);
             b.push(0x7c);
             load(&mut b, 0);
-            call(&mut b, helper_index(program, inner, true));
+            call(&mut b, helper_index(program, runtime, inner, true));
             store(&mut b, 0);
             get(&mut b, 4);
             constant(&mut b, 1);
@@ -1446,7 +1516,7 @@ fn copy_helper(program: &Program, ty: usize) -> Vec<u8> {
         }
         TypeKind::Slice { .. } => {
             constant(&mut b, 16);
-            call(&mut b, ALLOC);
+            call(&mut b, ALLOC + runtime);
             set(&mut b, 1);
             get(&mut b, 1);
             get(&mut b, 0);
@@ -1466,7 +1536,7 @@ fn copy_helper(program: &Program, ty: usize) -> Vec<u8> {
 // A custom destructor is an ordinary call before the first child. Its &mut self
 // points at the value slot, which remains stable until that call returns.
 // Reentrant cleanup gets its own stack.
-fn drop_dispatcher() -> Vec<u8> {
+fn drop_dispatcher(runtime: usize) -> Vec<u8> {
     // 0 base, 1 top byte offset, 2 capacity bytes, 3 child, 4 child type,
     // 5 replacement base, 6 replacement capacity, 7 current frame.
     let mut b = vec![1, 7, 0x7e];
@@ -1489,7 +1559,7 @@ fn drop_dispatcher() -> Vec<u8> {
     b.push(0x50);
     begin_if(&mut b);
     get(&mut b, 0);
-    call(&mut b, FREE);
+    call(&mut b, FREE + runtime);
     b.push(0x0f);
     b.push(0x0b);
     get(&mut b, 1);
@@ -1516,14 +1586,14 @@ fn drop_dispatcher() -> Vec<u8> {
     b.push(0x54);
     trap_if(&mut b, 6, 0);
     get(&mut b, 6);
-    call(&mut b, ALLOC);
+    call(&mut b, ALLOC + runtime);
     set(&mut b, 5);
     get(&mut b, 5);
     get(&mut b, 0);
     get(&mut b, 2);
     b.extend_from_slice(&[0xfc, 10, 0, 0]);
     get(&mut b, 0);
-    call(&mut b, FREE);
+    call(&mut b, FREE + runtime);
     b.push(0x1a);
     get(&mut b, 5);
     set(&mut b, 0);
@@ -1550,7 +1620,7 @@ fn drop_dispatcher() -> Vec<u8> {
     b
 }
 
-fn drop_start(program: &Program, ty: usize) -> Vec<u8> {
+fn drop_start(program: &Program, runtime: usize, ty: usize) -> Vec<u8> {
     let mut b = vec![1, 1, 0x7e];
     if !heap_type(&program.types[ty].kind) {
         constant(&mut b, 0);
@@ -1564,7 +1634,7 @@ fn drop_start(program: &Program, ty: usize) -> Vec<u8> {
     b.push(0x0f);
     b.push(0x0b);
     constant(&mut b, 32);
-    call(&mut b, ALLOC);
+    call(&mut b, ALLOC + runtime);
     set(&mut b, 1);
     get(&mut b, 1);
     get(&mut b, 0);
@@ -1579,7 +1649,7 @@ fn drop_start(program: &Program, ty: usize) -> Vec<u8> {
     constant(&mut b, 0);
     store(&mut b, 24);
     get(&mut b, 1);
-    call(&mut b, DROP_RUN);
+    call(&mut b, DROP_RUN + runtime);
     b.push(0x0b);
     b
 }
@@ -1621,7 +1691,7 @@ fn drop_fields(b: &mut Vec<u8>, program: &Program, fields: &[crate::k::Field], f
     }
 }
 
-fn drop_step(program: &Program, ty: usize, destructor: Option<usize>) -> Vec<u8> {
+fn drop_step(program: &Program, runtime: usize, ty: usize, destructor: Option<usize>) -> Vec<u8> {
     let mut b = vec![1, 4, 0x7e];
     let kind = &program.types[ty].kind;
     get(&mut b, 0);
@@ -1630,7 +1700,7 @@ fn drop_step(program: &Program, ty: usize, destructor: Option<usize>) -> Vec<u8>
     begin_if(&mut b);
     if let Some(function) = destructor {
         get(&mut b, 0);
-        call(&mut b, FIRST_USER + function);
+        call(&mut b, (FIRST_USER + runtime) + function);
         b.push(0x1a);
     }
     get(&mut b, 0);
@@ -1704,14 +1774,14 @@ fn drop_step(program: &Program, ty: usize, destructor: Option<usize>) -> Vec<u8>
             }
             get(&mut b, 1);
             load(&mut b, 0);
-            call(&mut b, FREE);
+            call(&mut b, FREE + runtime);
             b.push(0x1a);
         }
         _ => {}
     }
     if heap_type(kind) {
         get(&mut b, 1);
-        call(&mut b, FREE);
+        call(&mut b, FREE + runtime);
         b.push(0x1a);
     }
     constant(&mut b, 0);
@@ -1719,8 +1789,8 @@ fn drop_step(program: &Program, ty: usize, destructor: Option<usize>) -> Vec<u8>
     b
 }
 
-fn drop_step_index(program: &Program, ty: usize) -> usize {
-    FIRST_USER + program.functions.len() + program.types.len() * 2 + ty
+fn drop_step_index(program: &Program, runtime: usize, ty: usize) -> usize {
+    (FIRST_USER + runtime) + program.functions.len() + program.types.len() * 2 + ty
 }
 
 // This pool is a lowering/performance choice, never an acceptance limit.
@@ -1943,6 +2013,7 @@ fn local_layout(program: &Program, function: &Function) -> Result<LocalLayout, S
 
 fn function_body(
     program: &Program,
+    runtime: usize,
     function: &Function,
     messages: &[String],
     texts: &TextPool,
@@ -1959,6 +2030,7 @@ fn function_body(
         controls: Vec::new(),
         messages,
         texts,
+        runtime,
     };
     uleb(&mut body.bytes, 1);
     uleb(
@@ -1968,7 +2040,7 @@ fn function_body(
     body.bytes.push(0x7e);
     if layout.frame_bytes != 0 {
         constant(&mut body.bytes, layout.frame_bytes as i64);
-        call(&mut body.bytes, ALLOC);
+        call(&mut body.bytes, ALLOC + runtime);
         set(&mut body.bytes, body.frame);
         for i in 0..function.params {
             if let Slot::Frame(offset) = body.slots[i] {
@@ -1983,7 +2055,7 @@ fn function_body(
     }
     if layout.frame_bytes != 0 {
         get(&mut body.bytes, body.frame);
-        call(&mut body.bytes, FREE);
+        call(&mut body.bytes, FREE + runtime);
         body.bytes.push(0x1a);
     }
     constant(&mut body.bytes, 0);
@@ -1992,6 +2064,12 @@ fn function_body(
 }
 pub fn emit(checked: &CheckedProgram) -> Result<Vec<u8>, String> {
     let program = checked.program();
+    let runtime = usize::from(program.functions.iter().any(|function| {
+        function.body.iter().any(|instruction| {
+            matches!(&instruction.op,
+            Op::Intrinsic { name, .. } if name == "stdout_write")
+        })
+    }));
     let texts = TextPool::collect(program)?;
     let mut destructors = vec![None; program.types.len()];
     for (owner, function) in &program.destructors {
@@ -2007,7 +2085,9 @@ pub fn emit(checked: &CheckedProgram) -> Result<Vec<u8>, String> {
             }
         }
     }
-    if program.functions.len() as u64 + program.types.len() as u64 * 3 + FIRST_USER as u64
+    if program.functions.len() as u64
+        + program.types.len() as u64 * 3
+        + (FIRST_USER + runtime) as u64
         > u32::MAX as u64
     {
         return Err("WebAssembly function indices exceed the u32 representation".to_string());
@@ -2018,6 +2098,10 @@ pub fn emit(checked: &CheckedProgram) -> Result<Vec<u8>, String> {
             arities.push(f.params);
         }
     }
+    if runtime != 0 && !arities.contains(&3) {
+        arities.push(3);
+    }
+    let stdout_type = arities.iter().position(|arity| *arity == 3).map(|i| i + 1);
     let mut out = vec![0, 97, 115, 109, 1, 0, 0, 0];
     let mut types = Vec::new();
     uleb(&mut types, (arities.len() + 1) as u64);
@@ -2031,10 +2115,13 @@ pub fn emit(checked: &CheckedProgram) -> Result<Vec<u8>, String> {
         types.extend_from_slice(&[1, 0x7e]);
     }
     section(&mut out, 1, &types)?;
-    let mut imports = vec![1];
-    text(&mut imports, "lkjscript");
-    text(&mut imports, "trap");
-    imports.extend_from_slice(&[0, 0]);
+    let mut imports = vec![runtime as u8];
+    if runtime != 0 {
+        text(&mut imports, "lkjscript");
+        text(&mut imports, "stdout");
+        imports.push(0);
+        uleb(&mut imports, stdout_type.unwrap() as u64);
+    }
     section(&mut out, 2, &imports)?;
     let mut functions = Vec::new();
     uleb(
@@ -2062,29 +2149,38 @@ pub fn emit(checked: &CheckedProgram) -> Result<Vec<u8>, String> {
     let mut memory = vec![1, 4];
     uleb(&mut memory, texts.pages()?);
     section(&mut out, 5, &memory)?;
-    let mut globals = vec![2, 0x7e, 1];
+    let mut globals = vec![4, 0x7e, 1];
     constant(&mut globals, texts.heap_start()? as i64);
     globals.push(0x0b);
     globals.extend_from_slice(&[0x7e, 1]);
     constant(&mut globals, 0);
     globals.push(0x0b);
+    for _ in 0..2 {
+        globals.extend_from_slice(&[0x7e, 1]);
+        constant(&mut globals, 0);
+        globals.push(0x0b);
+    }
     section(&mut out, 6, &globals)?;
     let mut exports = Vec::new();
-    uleb(&mut exports, (program.functions.len() + 1) as u64);
+    uleb(&mut exports, (program.functions.len() + 3) as u64);
     text(&mut exports, "memory");
     exports.extend_from_slice(&[2, 0]);
+    text(&mut exports, "__lkj_trap_code");
+    exports.extend_from_slice(&[3, 2]);
+    text(&mut exports, "__lkj_trap_line");
+    exports.extend_from_slice(&[3, 3]);
     let mut i = 0;
     while i < program.functions.len() {
         text(&mut exports, &format!("fn:{}", program.functions[i].name));
         exports.push(0);
-        uleb(&mut exports, (FIRST_USER + i) as u64);
+        uleb(&mut exports, ((FIRST_USER + runtime) + i) as u64);
         i += 1;
     }
     section(&mut out, 7, &exports)?;
     let mut elements = vec![1, 0, 0x41, 0, 0x0b];
     uleb(&mut elements, program.types.len() as u64);
     for ty in 0..program.types.len() {
-        uleb(&mut elements, drop_step_index(program, ty) as u64);
+        uleb(&mut elements, drop_step_index(program, runtime, ty) as u64);
     }
     section(&mut out, 9, &elements)?;
     let mut code = Vec::new();
@@ -2098,30 +2194,30 @@ pub fn emit(checked: &CheckedProgram) -> Result<Vec<u8>, String> {
     let free = deallocator();
     uleb(&mut code, free.len() as u64);
     code.extend_from_slice(&free);
-    let dispatcher = drop_dispatcher();
+    let dispatcher = drop_dispatcher(runtime);
     uleb(&mut code, dispatcher.len() as u64);
     code.extend_from_slice(&dispatcher);
     let validator = utf8_validator();
     uleb(&mut code, validator.len() as u64);
     code.extend_from_slice(&validator);
     for f in &program.functions {
-        let body = function_body(program, f, &messages, &texts)?;
+        let body = function_body(program, runtime, f, &messages, &texts)?;
         uleb(&mut code, body.len() as u64);
         code.extend_from_slice(&body);
     }
     for ty in 0..program.types.len() {
         for copying in [false, true] {
             let body = if copying {
-                copy_helper(program, ty)
+                copy_helper(program, runtime, ty)
             } else {
-                drop_start(program, ty)
+                drop_start(program, runtime, ty)
             };
             uleb(&mut code, body.len() as u64);
             code.extend_from_slice(&body);
         }
     }
     for (ty, destructor) in destructors.iter().enumerate() {
-        let body = drop_step(program, ty, *destructor);
+        let body = drop_step(program, runtime, ty, *destructor);
         uleb(&mut code, body.len() as u64);
         code.extend_from_slice(&body);
     }
@@ -2137,27 +2233,32 @@ pub fn emit(checked: &CheckedProgram) -> Result<Vec<u8>, String> {
     let mut names = Vec::new();
     uleb(
         &mut names,
-        (program.functions.len() + FIRST_USER + program.types.len() * 3) as u64,
+        (program.functions.len() + (FIRST_USER + runtime) + program.types.len() * 3) as u64,
     );
-    uleb(&mut names, 0);
-    text(&mut names, "trap");
-    uleb(&mut names, ALLOC as u64);
+    if runtime != 0 {
+        uleb(&mut names, 0);
+        text(&mut names, "stdout::write");
+    }
+    uleb(&mut names, (ALLOC + runtime) as u64);
     text(&mut names, "memory::allocate");
-    uleb(&mut names, FREE as u64);
+    uleb(&mut names, (FREE + runtime) as u64);
     text(&mut names, "memory::release");
-    uleb(&mut names, DROP_RUN as u64);
+    uleb(&mut names, (DROP_RUN + runtime) as u64);
     text(&mut names, "drop::walk");
-    uleb(&mut names, UTF8_VALIDATE as u64);
+    uleb(&mut names, (UTF8_VALIDATE + runtime) as u64);
     text(&mut names, "str::valid_utf8");
     let mut i = 0;
     while i < program.functions.len() {
-        uleb(&mut names, (FIRST_USER + i) as u64);
+        uleb(&mut names, ((FIRST_USER + runtime) + i) as u64);
         text(&mut names, &program.functions[i].name);
         i += 1;
     }
     for ty in 0..program.types.len() {
         for copying in [false, true] {
-            uleb(&mut names, helper_index(program, ty, copying) as u64);
+            uleb(
+                &mut names,
+                helper_index(program, runtime, ty, copying) as u64,
+            );
             text(
                 &mut names,
                 &format!(
@@ -2169,7 +2270,7 @@ pub fn emit(checked: &CheckedProgram) -> Result<Vec<u8>, String> {
         }
     }
     for ty in 0..program.types.len() {
-        uleb(&mut names, drop_step_index(program, ty) as u64);
+        uleb(&mut names, drop_step_index(program, runtime, ty) as u64);
         text(
             &mut names,
             &format!("drop::step<{}>", program.types[ty].name),

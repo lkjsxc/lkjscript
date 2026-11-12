@@ -9,6 +9,10 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 const [binary, seedS = '601', countS = '100', output = 'target/generators'] = process.argv.slice(2);
 const bin = path.resolve(binary || 'target/debug/lkjscript');
+const engine = process.env.LKJ_ENGINE || 'node';
+const sh = (c, a) => (spawnSync(c, a, { encoding: 'utf8' }).stdout || '').trim();
+// Capture identities before execution so later edits cannot relabel this run.
+const metadata = { sha256: createHash('sha256').update(fs.readFileSync(new URL(import.meta.url))).update(fs.readFileSync(new URL('../process.mjs', import.meta.url))).digest('hex'), binarySha256: createHash('sha256').update(fs.readFileSync(bin)).digest('hex'), compilerDirty: sh('git', ['status', '--porcelain', '--untracked-files=no']) !== '', compiler: sh('git', ['-C', path.dirname(fs.realpathSync(bin)), 'rev-parse', 'HEAD']) || 'unknown', rustc: sh('rustc', ['--version']), node: process.version };
 let state = (BigInt(seedS) * 0x9E3779B97F4A7C15n & 0xFFFFFFFFFFFFFFFFn) || 1n;
 function rnd(n) { state ^= (state << 13n) & 0xFFFFFFFFFFFFFFFFn; state ^= state >> 7n; state ^= (state << 17n) & 0xFFFFFFFFFFFFFFFFn; return Number(state % BigInt(n)); }
 const pick = a => a[rnd(a.length)];
@@ -24,15 +28,16 @@ function lit(t) {
 const PRE = `enum En { A(i64), B(u8, bool), C }
 struct Hs { v: Vec<i64>, n: i64 }
 fn addto(p: &mut i64, q: &i64) { *p = *p + *q; }
-fn sumr(w: &Vec<i64>) -> i64 { let mut s: i64 = 0; let mut i: usize = 0; while i < w.len() { s = s + w[i]; i = i + 1; } s }
+fn sumr(w: &Vec<i64>) -> i64 { let mut s: i64 = 0; let mut i = 0; while i < w.len() { s = s + w[i]; i = i + 1; } s }
 fn sumv(w: Vec<i64>) -> i64 { sumr(&w) }
 fn mv(h: Hs) -> Hs { h }
 fn first(w: &Vec<i64>) -> &i64 { &w[0] }
 fn bump(w: &mut Vec<i64>) { let n: usize = w.len(); if n > 0usize { w[n - 1usize] = w[n - 1usize] + 1; } w.push(n as i64); }
 fn unbox(b: Box<i64>) -> i64 { *b }
 fn pickopt(o: Option<Box<i64>>, d: i64) -> i64 { match o { Some(b) => *b, None => d } }
+fn inferred_pair() -> (i64, u8) { (40, 2) }
 fn mix(h: i64, x: i64) -> i64 { ((h % 1000003) * 1009 + (x % 1000003) + 2000006) % 1000003 }
-fn mixv(h: i64, w: &Vec<i64>) -> i64 { let mut s: i64 = h; let mut i: usize = 0; while i < w.len() { s = mix(s, w[i]); i = i + 1; } mix(s, w.len() as i64) }
+fn mixv(h: i64, w: &Vec<i64>) -> i64 { let mut s: i64 = h; let mut i = 0; while i < w.len() { s = mix(s, w[i]); i = i + 1; } mix(s, w.len() as i64) }
 `;
 function gen() {
   let src = PRE; const fns = []; let uid = 0; const structs = [];
@@ -56,7 +61,7 @@ function gen() {
     if (c < 12) { const n = `b${uid++}`; const bt = pick(INTS); return `{ let ${n}: ${bt} = ${expr(bt, env, d - 1)}; ${expr(t, env.concat([{ n, t: bt }]), d - 1)} }`; }
     if (c < 13) { const it = pick(INTS); return `(match ${expr(it, env, d - 1)} { ${rnd(5)}${it} => ${sub()}, ${5 + rnd(3)}${it}..=${9 + rnd(9)}${it} => ${sub()}, _ => ${sub()} })`; }
     if (c < 14 && structs.length) { const st = pick(structs); const i = st.fields.indexOf(t); if (i >= 0) return `(${st.name} { ${st.fields.map((f, j) => `f${j}: ${expr(f, env, d - 1)}`).join(', ')} }).f${i}`; }
-    if (c < 15) { const n = `w${uid++}`; return `{ let mut ${n}: Vec<${t}> = Vec::new(); ${n}.push(${sub()}); ${n}.push(${sub()}); ${n}[(${us()} % 2usize)] }`; }
+    if (c < 15) { const n = `w${uid++}`; const annotation = uid % 2 ? `: Vec<${t}>` : ''; return `{ let mut ${n}${annotation} = Vec::new(); ${n}.push(${sub()}); ${n}.push(${sub()}); ${n}[(${us()} % 2usize)] }`; }
     if (c < 16) { const n = `x${uid++}`; return `{ let ${n}: Box<${t}> = Box::new(${sub()}); *${n} }`; }
     if (c < 17) { const n = `t${uid++}`; return `{ let ${n}: (${t}, bool) = (${sub()}, ${b()}); if ${n}.1 { ${n}.0 } else { ${sub()} } }`; }
     if (c < 18) { const n = `a${uid++}`; return `{ let ${n}: [${t}; 3] = [${sub()}, ${sub()}, ${sub()}]; ${n}[(${us()} % 3usize)] }`; }
@@ -92,7 +97,7 @@ function gen() {
     lastEnv = env;
     return out;
   }
-  const tail = (t, e, env) => 'let mut hh: i64 = 0;\n' + env.map(x => x.t === 'vec' ? `hh = mixv(hh, &${x.n});\n` : `hh = mix(hh, (${x.n} as i64));\n`).join('') + `let rr: ${t} = ${e};\nhh = mix(hh, (rr as i64));\n${t === 'i64' ? 'hh' : `((hh % 100) as ${t})`}`;
+  const tail = (t, e, env) => 'let mut hh: i64 = 0;\nlet inferred = inferred_pair();\nhh = mix(hh, inferred.0);\nhh = mix(hh, inferred.1 as i64);\n' + env.map(x => x.t === 'vec' ? `hh = mixv(hh, &${x.n});\n` : `hh = mix(hh, (${x.n} as i64));\n`).join('') + `let rr: ${t} = ${e};\nhh = mix(hh, (rr as i64));\n${t === 'i64' ? 'hh' : `((hh % 100) as ${t})`}`;
   for (let i = 0; i < 2; i++) { const fields = [pick(INTS), pick(INTS), 'bool']; structs.push({ name: `S${i}`, fields }); src += `struct S${i} { ${fields.map((f, j) => `f${j}: ${f}`).join(', ')} }\n`; }
   for (let i = 0; i < 3; i++) {
     const params = Array.from({ length: rnd(3) }, () => pick(INTS)); const ret = pick(INTS); const name = `f${i}`;
@@ -123,12 +128,13 @@ async function rustRun(i) {
   return { k: 'abnormal', text: 'status ' + r.status };
 }
 async function lkRun(i) {
-  const l = await run(bin, ['run', `${dir}/c${i}.rs`, '--entry', 'probe'], { encoding: 'utf8', timeout: 20000 });
+  const l = await run(bin, ['run', `${dir}/c${i}.rs`, '--entry', 'probe', '--engine', engine], { encoding: 'utf8', timeout: 20000 });
   const text = (l.stdout + l.stderr).trim().split('\n')[0] || '';
   if (l.error || l.signal) return { k: l.error?.code === 'ETIMEDOUT' ? 'timeout' : 'crash', text };
   if (l.status === 0) return { k: 'value', v: text, text };
-  const m = text.match(/:(\d+):(?:\d+:)? (E_[A-Z_]+|R\d{4})\b/);
+  const m = text.match(/:(\d+):(?:\d+:)? (E_[A-Z_]+|M_[A-Z_]+|R\d{4})\b/);
   if (m && m[2][0] === 'R') return { k: 'trap', kind: m[2], line: Number(m[1]), text };
+  if (m && m[2][0] === 'M') return { k: 'machine-error', code: m[2], text };
   if (m) return { k: 'reject', code: m[2], text };
   return { k: 'crash', text };
 }
@@ -137,6 +143,7 @@ for (let i = 0; i < N; i++) {
   const r = await rustRun(i), l = await lkRun(i); let cls;
   if (r.k === 'abnormal') cls = 'oracle-abnormal';
   else if (l.k === 'timeout' || l.k === 'crash') cls = l.k;
+  else if (l.k === 'machine-error') cls = 'machine-error:' + l.code;
   else if (l.k === 'reject') cls = (l.code === 'E_UNSUPPORTED' || l.code === 'E_PARSE') ? 'unsupported' : 'rejects-valid:' + l.code;
   else if (r.k === 'value' && l.k === 'value') cls = r.v === l.v ? 'value-equal' : 'VALUE-DIFFERS';
   else if (r.k === 'trap' && l.k === 'trap') cls = r.kind !== l.kind ? 'TRAP-KIND-DIFFERS' : r.line !== l.line ? 'trap-same-kind-other-line' : 'trap-equal';
@@ -144,11 +151,10 @@ for (let i = 0; i < N; i++) {
   bump(cls);
   if (cls !== 'value-equal' && cls !== 'trap-equal') show.push(`${dir}/c${i} ${cls} rust=${r.k === 'value' ? r.v : r.k === 'trap' ? r.kind + '@' + r.line + ' ' + r.text : r.text} lkj=${(l.text || '').replace(/^\S*\.(rs|wasm):/, '').slice(0, 150)}`);
 }
-const sh = (c, a) => (spawnSync(c, a, { encoding: 'utf8' }).stdout || '').trim();
-const record = { generator: 'value', sha256: createHash('sha256').update(fs.readFileSync(new URL(import.meta.url))).update(fs.readFileSync(new URL('../process.mjs', import.meta.url))).digest('hex'), binarySha256: createHash('sha256').update(fs.readFileSync(bin)).digest('hex'), compilerDirty: sh('git', ['status', '--porcelain', '--untracked-files=no']) !== '', compiler: sh('git', ['-C', path.dirname(fs.realpathSync(bin)), 'rev-parse', 'HEAD']) || 'unknown', rustc: sh('rustc', ['--version']), node: process.version, rustFlags: FLAGS.join(' '), seed: seedS, programs: N, ...tally };
+const record = { generator: 'value', engine, ...metadata, rustFlags: FLAGS.join(' '), seed: seedS, programs: N, ...tally };
 fs.mkdirSync(output, {recursive: true});
 fs.appendFileSync(path.join(output, 'runs.jsonl'), JSON.stringify(record) + '\n');
 console.log(JSON.stringify(record)); fs.writeFileSync(`${dir}/report.txt`, show.join('\n') + '\n');
 
-const fatal = Object.keys(tally).some(key => /DIFFERS|VALUE-VS-TRAP|ACCEPTS-RUST-REJECTED|crash|timeout|oracle|generator|other-line/.test(key));
+const fatal = Object.keys(tally).some(key => /DIFFERS|VALUE-VS-TRAP|ACCEPTS-RUST-REJECTED|crash|timeout|oracle|generator|other-line|machine-error/.test(key));
 if (fatal) process.exitCode = 1;

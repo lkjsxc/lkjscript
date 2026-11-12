@@ -599,7 +599,7 @@ fn iterative_cleanup_preserves_field_and_element_order() {
             &wasm::emit(&checked).unwrap(),
             "
             let failure='';
-            try { instance.exports['fn:probe'](); } catch(e) { failure=e.message; }
+            try { instance.exports['fn:probe'](); } catch { failure='trap '+instance.exports.__lkj_trap_code.value+':'+instance.exports.__lkj_trap_line.value; }
             // The first marker traps on line 4; the second traps on line 5.
             if(failure!=='trap 16:4')throw Error('wrong first destructor: '+failure);
             ",
