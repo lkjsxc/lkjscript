@@ -5,6 +5,7 @@ use crate::k::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
+mod io;
 pub(crate) mod scoped;
 
 fn error(line: usize, code: &str, message: &str) -> Diagnostic {
@@ -80,7 +81,12 @@ pub fn is_data(types: &[Type], ty: usize) -> bool {
         }
         seen[current] = true;
         match &types[current].kind {
-            TypeKind::World | TypeKind::Stdout => return false,
+            TypeKind::World
+            | TypeKind::Stdout
+            | TypeKind::Stdin
+            | TypeKind::Stderr
+            | TypeKind::Directory
+            | TypeKind::File => return false,
             TypeKind::Ref { inner, .. }
             | TypeKind::Slice { inner, .. }
             | TypeKind::Vec { inner }
@@ -1632,18 +1638,8 @@ fn check_intrinsic(
             TypeKind::Slice { inner: U8, mutable: false }))
     };
     let valid = match name {
-        "world_stdout" => {
-            ts.len() == 1
-                && matches!(types[dt].kind, TypeKind::Stdout)
-                && matches!(types[ts[0]].kind, TypeKind::Ref { inner, mutable: true }
-                if matches!(types[inner].kind, TypeKind::World))
-        }
-        "stdout_write" => {
-            ts.len() == 2
-                && dt == UNIT
-                && bytes_ref(ts[1])
-                && matches!(types[ts[0]].kind, TypeKind::Ref { inner, mutable: true }
-                if matches!(types[inner].kind, TypeKind::Stdout))
+        _ if io::signature(types, dt, &ts, name).is_some() => {
+            io::signature(types, dt, &ts, name).unwrap()
         }
         "str_len" => ts.len() == 1 && text_ref(ts[0]) && dt == U64,
         "str_as_bytes" => ts.len() == 1 && text_ref(ts[0]) && bytes_ref(dt),

@@ -20,12 +20,12 @@ trap_case() {
         > "$work/$name.stdout" 2> "$work/$name.stderr" || status=$?
     [[ "$status" == 1 ]]
     [[ ! -s "$work/$name.stdout" ]]
-    rg -q "^$code at line $line( |$)" "$work/$name.stderr"
+    grep -Eq "^$code at line $line( |$)" "$work/$name.stderr"
     status=0
     timeout -s KILL 5 "$binary" run "$source" --entry probe \
         > "$work/$name-run.stdout" 2> "$work/$name-run.stderr" || status=$?
     [[ "$status" == 1 ]]
-    rg -q ":$line: $code " "$work/$name-run.stderr"
+    grep -Eq ":$line: $code " "$work/$name-run.stderr"
 }
 trap_case stack_exhaustion R0008 2
 trap_case heap_exhaustion R0006 4
@@ -38,6 +38,15 @@ for name in stack_exhaustion heap_exhaustion; do
     line=2
     code=R0008
     if [[ "$name" == heap_exhaustion ]]; then line=4; code=R0006; fi
-    rg -q ":$line: $code " "$work/$name-k.stderr"
+    grep -Eq ":$line: $code " "$work/$name-k.stderr"
 done
-printf 'Host boundary: deterministic ELF; K identity; located native and K exhaustion under Linux budgets\n'
+# Native-only batches capture guest streams in a Rust worker too. Infinite
+# output must exhaust that explicit process envelope, never the compiler parent.
+printf 'run\t\ttests/fixtures/runtime_output_exhaustion.rs\n' > "$work/output.tsv"
+status=0
+timeout -s KILL 5 env LKJ_RUN_MEMORY_BYTES=268435456 "$binary" batch "$work/output.tsv" --engine native \
+    > "$work/output.stdout" 2> "$work/output.stderr" || status=$?
+[[ "$status" == 1 ]]
+[[ ! -s "$work/output.stdout" ]]
+grep -Eq 'E_HOST execution worker terminated by signal [0-9]+ under Linux address-space budget 268435456 bytes' "$work/output.stderr"
+printf 'Host boundary: deterministic ELF; K identity; located native/K exhaustion; bounded batch capture\n'

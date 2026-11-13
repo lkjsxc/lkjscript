@@ -8,7 +8,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { run } from '../process.mjs';
 import { runRoutes } from '../batch.mjs';
-import { oracleCache, packResult, unpackResult } from '../oracle.mjs';
+import { oracleCache, packResult, unpackResult, worldOutcome } from '../oracle.mjs';
 import { combinatorPair, optionExtraPair, optionViewPair } from './combinators.mjs';
 import { sequencePair, extendSlicePair } from './sequence.mjs';
 import { iteratorClosurePair } from './iterator_closures.mjs';
@@ -305,22 +305,23 @@ let references;
 if(compareRust){
  let source='#![allow(warnings)]\nmod host {\n'+fs.readFileSync('bridge/output.rs','utf8')+'\n}\n';
  for(let i=0;i<count;i++)for(const variant of ['sugar','expanded'])if(variant!=='sugar'||pairs[i].rustSugar)source+=`mod c${i}_${variant} { use crate::host::{World,Stdout};\n${pairs[i][variant]} }\n`;
- source+='fn main(){match std::env::args().nth(1).unwrap().as_str(){\n';
+ source+='fn main(){match std::env::var("LKJ_ORACLE_CASE").unwrap().as_str(){\n';
  for(let i=0;i<count;i++)for(const variant of ['sugar','expanded'])if(variant!=='sugar'||pairs[i].rustSugar)source+=`"${i}-${variant}"=>host::enter(c${i}_${variant}::main),\n`;
  source+='_=>std::process::exit(2)}}\n';
  const rustSource=path.join(dir,'oracle.rs'),rustBinary=path.join(dir,'oracle');fs.writeFileSync(rustSource,source);
- const flags=['--edition=2024','-C','overflow-checks=yes','-A','warnings'];
+ const flags=['--edition=2024','--cfg','lkj_control','-C','overflow-checks=yes','-A','warnings'];
  references=await oracleCache({generator:generatorHash,seed:seedText,count,flags,source},async()=>{
   const built=await run('rustc',[...flags,rustSource,'-o',rustBinary]);if(built.error||built.status!==0)throw Error('invalid generated Rust: '+built.stderr);
-  const results=[];for(let i=0;i<count;i++)for(const variant of ['sugar','expanded'])results.push(variant==='sugar'&&!pairs[i].rustSugar?null:packResult(await run(rustBinary,[`${i}-${variant}`],{encoding:null})));return results;
+  const results=[];for(let i=0;i<count;i++)for(const variant of ['sugar','expanded'])results.push(variant==='sugar'&&!pairs[i].rustSugar?null:packResult(await run(rustBinary,[],{encoding:null,captureControl:true,env:{...process.env,LKJ_ORACLE_CASE:`${i}-${variant}`}})));return results;
  });
 }
 function ending(result,rust=false){
+ if(rust){const outcome=worldOutcome(result);return outcome.kind==='normal'?(outcome.status===0?'normal':'exit:'+outcome.status):outcome.kind==='trap'?(Number(outcome.code.slice(1))>=16?'R0004':outcome.code):'crash';}
  if(result.error)return result.error.code==='ETIMEDOUT'?'timeout':'crash';
  if(result.checkStatus!==undefined&&result.checkStatus!==0)return 'rejected:'+(result.stderr.toString().match(/\bE_[A-Z_]+\b/)?.[0]||'unknown');
  if(result.status===0&&!result.signal)return 'normal';
  const text=result.stderr.toString(),machine=text.match(/\bM_[A-Z_]+\b/)?.[0];if(machine)return'machine:'+machine;
- const code=text.match(rust?/LKJ_RUST_TRAP (R[0-9]+)/:/: (R[0-9]+)\b/)?.[1];return code?(Number(code.slice(1))>=16?'R0004':code):'crash';
+ const code=text.match(/: (R[0-9]+)\b/)?.[1];return code?(Number(code.slice(1))>=16?'R0004':code):'crash';
 }
 const tally={},failures=[];
 const routes=await runRoutes(bin,files.map(path=>({path})),{engines,output:dir,encoding:null});

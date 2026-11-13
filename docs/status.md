@@ -1,60 +1,67 @@
 # Status — 2026-11-13
 
-The production K compiler is the first self-compilation target. Its isolated
-cargo build now takes program K and prepared runtime K and emits the same ELF as
-the complete compiler. It is not self-built. Native and the independent K machine
-are the execution routes; WebAssembly and its Node host have been removed.
+Host-boundary and World-input steps are complete. The production K compiler is
+isolated behind explicit program-K/runtime-K inputs, with native byte identity.
+It is cargo-built; no self-build or fixed point is claimed. Native and the
+independent K machine are the execution routes. WebAssembly and its Node host
+are gone; Node remains test orchestration.
 
 ## Current observations
 
 | Observation | Result | Reproduce |
 | --- | --- | --- |
-| Full gate | Green, 43.144 s including 16.282 s release build | bash tools/check.sh |
-| Conformance, each route | 841 pass, 4 pending; 540 Rust comparisons | node tools/conformance.mjs target/release/lkjscript |
+| Full gate | Green, 39.503 s including 1.21 s release build | bash tools/check.sh |
+| Conformance, each route | 853 pass, 4 pending; 547 Rust comparisons | node tools/conformance.mjs target/release/lkjscript |
 | Bootstrap tests | 412 pass; Clippy all targets clean | cargo test; cargo clippy --all-targets -- -D warnings |
-| Cargo K compiler parity | 528 verdicts, including 60 rejections; 468 byte-identical artifacts; 2 pending | node tools/kc.mjs |
-| Host boundary | Byte-identical under different build resource limits; located native/K stack, heap and bounds failures | bash tools/host-boundary.sh target/release/lkjscript |
+| Cargo K compiler parity | 535 verdicts, including 64 rejections; 471 identical artifacts; 2 pending | node tools/kc.mjs |
+| World end-to-end | 91 observations, no failures, across standalone/native/K/Rust | node tools/world-io.mjs |
+| Host boundary | Resource-independent ELF bytes; located resource traps; bounded output capture | bash tools/host-boundary.sh target/release/lkjscript |
 | Full source recovery | 470 first semantic sites, down from outside review's 494 | target/release/lkjscript check --census src/lib.rs |
-| K consumer recovery | 105 semantic sites, 688 bodies; 18 reach ownership construction | target/release/lkjscript check --census src/kc_lib.rs |
+| K consumer recovery | 105 sites, 720 bodies; 18 reach ownership construction | target/release/lkjscript check --census src/kc_lib.rs |
 
-The K source measurement includes runtime sealing and excludes the independent
-machine. It is a partial recovery count: 36 attempted bodies fail, 16 are blocked,
-and 670 have not reached layout/ownership. No claim about those ownership verdicts
-or a fixed point follows from the cargo boundary check. The known generator
-ownership rejection remains a deliberate conservative rejection; no generator
-finds an accepted-program behavior mismatch.
+The K root includes runtime sealing and excludes the independent model. Recovery
+is partial: 36 attempted bodies fail, 16 are blocked, and most ownership verdicts
+remain unknown. No total self-compilation distance follows from these counts.
+The gate finds no accepted-program disagreement; the known conservative ownership
+rejection remains. Counts include test migration and are not a width score.
+Commands and machine-readable observations: observations/2026-11-13-checkpoint.json.
 
-Ordinary text equality/patterns, String coercions/construction/ordering, byte
-strings, declaration cfg(test), Default, scalar helpers, owned Vec iteration,
-retain and stable sort now run. The outside calculator v1 checks; v0 reports the
-view-container rule at its expression with an owned-value/index rewrite.
-Diagnostics name source types, receivers and conflicting expectations. cfg on
-fields and inner attributes rejects explicitly instead of silently changing Rust
-behavior. The view-container rule remains deliberate.
+## Implemented course
 
-The source ordered map is an indexed AVL tree with free-slot reuse. On xorshift
-inserts plus 333335 lookups, median native time at 50000 inserts moved from 9.647 s
-to 0.468 s. At 400000 it finishes in 2.414 s under an explicit 1 GiB process budget;
-the same AVL source built by optimized Rust takes 0.120 s. These working-tree
-measurements and raw samples are in docs/observations/2026-11-13-maps.json. Generated
-code remains a major cost; no speed ratio is an acceptance requirement.
+Ordinary text comparisons/patterns, String coercions/construction/ordering, byte
+strings, declaration-level non-test cfg, struct Default, scalar helpers, owned
+Vec iteration, retain and sort now run. Diagnostics name source types and useful
+rewrites. The outside calculator v1 checks; v0 gets a located owned-value/index
+rewrite for the deliberate no-heap-views rule. Field/inner cfg and capability
+method collisions reject explicitly.
 
-## Open obligations
+World supplies owned argument bytes, binary standard streams, normal exit status
+and files beneath directory capabilities. Handles close through local and nested
+cleanup. Kernel confinement rejects parent/absolute/symlink escapes; no weaker
+fallback is used. Program stderr and status cannot impersonate trap control.
+Closed descriptors and broken pipes agree across the Rust and native hosts.
 
-- World currently derives stdout. Add arguments, binary stdin/stderr, requested
-  exit status and files beneath directory capabilities, with a matching Rust shim.
-- Close the real K consumer. Rc-backed facts, shared view masks and scoped paths
-  are candidates for one per-function owned arena. Cost and measure before replacing.
-  Entry/retain/extend and ordinary source rewrites must serve this consumer.
-- iter_mut needs a disjoint mutable slice contract; general From/Into and associated
-  Item equality need definition-site evidence. They have not been added speculatively.
-- Only then build kc1, compare every applicable verdict/byte with B0, build kc2,
-  and measure the self-built workload. The full compiler and removal of Cargo follow.
+The source ordered map uses an indexed AVL tree. On xorshift insertion plus
+333335 lookups, 50000 inserts moved from 9.647 s to 0.468 s. At 400000, native
+takes 2.414 s versus 0.120 s for the same AVL source built by optimized Rust.
+Raw samples, budgets and provenance: observations/2026-11-13-maps.json.
+Generated-code performance still needs work on the real K compiler workload.
 
-Native execution defaults to 256 MiB and K workers to 512 MiB address space, with
-explicit override. Artifacts decide extents at startup and report code/line to
-stderr on traps. Some infallible Rust allocations can still abort inside K; the
-parent reports a host failure without inventing a location. These are execution
-budgets, never source limits. See limits.md for controls and remaining constraints.
+## Next consumer obligation
 
-Next action: inputs through World, then the K consumer's actual ownership pass.
+Close the real K compiler: replace shared Rc facts/view state with owned indices
+where that is cheaper, rewrite ordinary uses or add source-library operations
+from actual diagnostics, and reach its first complete ownership pass. Keep
+prepared runtime K explicit. Then build kc1, compare verdicts and bytes with B0,
+build kc2 and measure the fixed point. Full front-end closure and Cargo removal
+follow those observations.
+
+General From/Into, iter_mut, enum Default and broader associated-type evidence
+remain unfinished. Concurrency and speculative reference contracts remain parked.
+The existing K source rewrites removed a new collect dependency and an unnecessary
+array-iterator dependency without adding a checker rule.
+
+Native child budgets default to 256 MiB; K and batch workers to 512 MiB. Budgets
+are operator choices, never source ceilings. Some infallible Rust allocations can
+still abort a worker; the parent reports a host failure without a fabricated line.
+See limits.md for controls and remaining representation/host constraints.

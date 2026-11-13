@@ -100,7 +100,14 @@ fn operation(which: usize, changed: bool) -> k::Op {
         26 => k::Op::DropIf { place: place(n) },
         27 => k::Op::BreakTo { depth: n },
         28 => k::Op::ContinueTo { depth: n },
-        29 => k::Op::ViewRange { dst:n, place:place(6), start:7, end:8, inclusive:true, mutable:false },
+        29 => k::Op::ViewRange {
+            dst: n,
+            place: place(6),
+            start: 7,
+            end: 8,
+            inclusive: true,
+            mutable: false,
+        },
         _ => k::Op::Trap {
             message: if changed {
                 "changed".to_string()
@@ -130,7 +137,21 @@ fn operation_value(value: &k::Op) -> i64 {
             place,
             mutable,
         } => *dst as i64 + place.local as i64 + flag(mutable),
-        k::Op::ViewRange { dst, place, start, end, inclusive, mutable } => *dst as i64 + place.local as i64 + *start as i64 + *end as i64 + flag(inclusive) + flag(mutable),
+        k::Op::ViewRange {
+            dst,
+            place,
+            start,
+            end,
+            inclusive,
+            mutable,
+        } => {
+            *dst as i64
+                + place.local as i64
+                + *start as i64
+                + *end as i64
+                + flag(inclusive)
+                + flag(mutable)
+        }
         k::Op::Array { dst, elements } => *dst as i64 + elements[0] as i64 + elements[1] as i64,
         k::Op::Assign { place, src } => place.local as i64 + *src as i64,
         k::Op::Drop { place } => place.local as i64,
@@ -154,7 +175,11 @@ fn operation_value(value: &k::Op) -> i64 {
             fields,
         } => *dst as i64 + *variant as i64 + fields[0] as i64 + fields[1] as i64,
         k::Op::Discriminant { dst, src } => *dst as i64 + *src as i64,
-        k::Op::TagTest { dst, place, variant } => *dst as i64 + place.local as i64 + *variant as i64,
+        k::Op::TagTest {
+            dst,
+            place,
+            variant,
+        } => *dst as i64 + place.local as i64 + *variant as i64,
         k::Op::Intrinsic { dst, name, args } => {
             *dst as i64 + name.len() as i64 + args[0] as i64 + args[1] as i64
         }
@@ -195,6 +220,10 @@ fn kind_value(kind: &k::TypeKind) -> i64 {
         k::TypeKind::Str => 4,
         k::TypeKind::World => 5,
         k::TypeKind::Stdout => 6,
+        k::TypeKind::Stdin => 7,
+        k::TypeKind::Stderr => 8,
+        k::TypeKind::Directory => 9,
+        k::TypeKind::File => 10,
     }
 }
 
@@ -266,10 +295,31 @@ fn model() -> k::Program {
         name: "world".to_string(),
         kind: k::TypeKind::World,
     });
+    types.push(k::Type {
+        name: "stdout".to_string(),
+        kind: k::TypeKind::Stdout,
+    });
+    types.push(k::Type {
+        name: "stdin".to_string(),
+        kind: k::TypeKind::Stdin,
+    });
+    types.push(k::Type {
+        name: "stderr".to_string(),
+        kind: k::TypeKind::Stderr,
+    });
+    types.push(k::Type {
+        name: "directory".to_string(),
+        kind: k::TypeKind::Directory,
+    });
+    types.push(k::Type {
+        name: "file".to_string(),
+        kind: k::TypeKind::File,
+    });
     let mut body: Vec<k::Instruction> = Vec::new();
     let mut index: usize = 0;
     while index < 30 {
-        body.push(k::Instruction { column: 1,
+        body.push(k::Instruction {
+            column: 1,
             op: operation(index, false),
             line: 100 + index,
         });
@@ -395,12 +445,13 @@ fn projections_value(projections: &Vec<k::Projection>) -> i64 {
     let mut result: i64 = 0;
     let mut cursor: usize = 0;
     while cursor < projections.len() {
-        result = result + match &projections[cursor] {
-            k::Projection::Deref => 1,
-            k::Projection::Field(value) => *value as i64,
-            k::Projection::VariantField(tag, value) => *tag as i64 + *value as i64,
-            k::Projection::Index(value) => *value as i64,
-        };
+        result = result
+            + match &projections[cursor] {
+                k::Projection::Deref => 1,
+                k::Projection::Field(value) => *value as i64,
+                k::Projection::VariantField(tag, value) => *tag as i64 + *value as i64,
+                k::Projection::Index(value) => *value as i64,
+            };
         cursor = cursor + 1;
     }
     result
@@ -426,10 +477,16 @@ pub fn return_source_snapshot(which: usize) -> i64 {
             k::LeafOrigin::Static
         } else {
             k::LeafOrigin::Inputs {
-                inputs: vec![k::InputLeaf {
-                    index: 11,
-                    projections: vec![k::Projection::Deref, k::Projection::Field(7)],
-                }, k::InputLeaf { index: 13, projections: vec![k::Projection::Field(2)] }],
+                inputs: vec![
+                    k::InputLeaf {
+                        index: 11,
+                        projections: vec![k::Projection::Deref, k::Projection::Field(7)],
+                    },
+                    k::InputLeaf {
+                        index: 13,
+                        projections: vec![k::Projection::Field(2)],
+                    },
+                ],
                 exact: which == 3,
             }
         };
@@ -453,18 +510,21 @@ pub fn return_source_snapshot(which: usize) -> i64 {
                 let mut cursor: usize = 0;
                 while cursor < leaves.len() {
                     result = result + projections_value(&leaves[cursor].projections);
-                    result = result + match &leaves[cursor].origin {
-                        k::LeafOrigin::Static => 103,
-                        k::LeafOrigin::Inputs { inputs, exact } => {
-                            let mut value = flag(exact);
-                            let mut index: usize = 0;
-                            while index < inputs.len() {
-                                value = value + inputs[index].index as i64 + projections_value(&inputs[index].projections);
-                                index = index + 1;
+                    result = result
+                        + match &leaves[cursor].origin {
+                            k::LeafOrigin::Static => 103,
+                            k::LeafOrigin::Inputs { inputs, exact } => {
+                                let mut value = flag(exact);
+                                let mut index: usize = 0;
+                                while index < inputs.len() {
+                                    value = value
+                                        + inputs[index].index as i64
+                                        + projections_value(&inputs[index].projections);
+                                    index = index + 1;
+                                }
+                                value
                             }
-                            value
-                        }
-                    };
+                        };
                     cursor = cursor + 1;
                 }
                 result

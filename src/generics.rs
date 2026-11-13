@@ -1621,7 +1621,12 @@ fn trait_requirements(
     if bound == "Data" {
         let mut children = Vec::new();
         match &ty.kind {
-            TypeKind::World | TypeKind::Stdout => return None,
+            TypeKind::World
+            | TypeKind::Stdout
+            | TypeKind::Stdin
+            | TypeKind::Stderr
+            | TypeKind::Directory
+            | TypeKind::File => return None,
             TypeKind::Ref { inner, .. }
             | TypeKind::Slice { inner, .. }
             | TypeKind::Vec { inner }
@@ -1673,7 +1678,12 @@ fn trait_requirements(
                     return None;
                 }
             }
-            TypeKind::World | TypeKind::Stdout => {
+            TypeKind::World
+            | TypeKind::Stdout
+            | TypeKind::Stdin
+            | TypeKind::Stderr
+            | TypeKind::Directory
+            | TypeKind::File => {
                 return None;
             }
             TypeKind::Vec { inner } | TypeKind::Box { inner } | TypeKind::Array { inner, .. } => {

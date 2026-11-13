@@ -78,7 +78,16 @@ impl Infer<'_, '_> {
                                 if integer_name(&path.name)
                                     || matches!(
                                         path.name.as_str(),
-                                        "bool" | "char" | "f64" | "str" | "World" | "Stdout"
+                                        "bool"
+                                            | "char"
+                                            | "f64"
+                                            | "str"
+                                            | "World"
+                                            | "Stdout"
+                                            | "Stdin"
+                                            | "Stderr"
+                                            | "Directory"
+                                            | "File"
                                     )
                                 {
                                     values.push(self.atom(&path.name));

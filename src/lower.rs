@@ -7,6 +7,7 @@ use crate::k::{
 };
 use std::collections::{BTreeMap, BTreeSet};
 
+mod io;
 mod ir;
 pub use ir::*;
 
@@ -345,6 +346,7 @@ struct Body<'a> {
     messages: &'a [String],
     texts: &'a TextPool,
     runtime: usize,
+    hosts: &'a [HostFunction],
     source_lines: bool,
 }
 impl<'a> Body<'a> {
@@ -524,12 +526,12 @@ impl<'a> Body<'a> {
     }
     fn clear_place(&mut self, place: &Place, ty: usize, line: usize) {
         if place.projections.is_empty() {
-            if heap_type(&self.program.types[ty].kind) {
+            if needs_cleanup(&self.program.types[ty].kind) {
                 constant(&mut self.code, 0);
                 self.write_value(place.local);
             }
             self.initialized(place.local, false);
-        } else if heap_type(&self.program.types[ty].kind) {
+        } else if needs_cleanup(&self.program.types[ty].kind) {
             self.address(place, line);
             constant(&mut self.code, 0);
             store(&mut self.code, 0);
@@ -537,7 +539,7 @@ impl<'a> Body<'a> {
     }
     fn drop_place(&mut self, place: &Place, conditional: bool, line: usize) {
         let root = place.projections.is_empty();
-        if root && !heap_type(&self.program.types[self.function.locals[place.local].ty].kind) {
+        if root && !needs_cleanup(&self.program.types[self.function.locals[place.local].ty].kind) {
             self.initialized(place.local, false);
             return;
         }
@@ -1276,19 +1278,10 @@ impl<'a> Body<'a> {
         args: &[usize],
         line: usize,
     ) -> Result<(), String> {
+        if self.io_intrinsic(dst, name, args, line)? {
+            return Ok(());
+        }
         match name {
-            "world_stdout" => {
-                // Only the checked derivation produces this affine handle.
-                constant(&mut self.code, 1);
-                self.write(dst);
-            }
-            "stdout_write" => {
-                // The capability-derived import receives the view's data/count.
-                self.read(args[1]);
-                constant(&mut self.code, line as i64);
-                call(&mut self.code, 0);
-                self.write(dst);
-            }
             "assert" => {
                 self.read(args[0]);
                 self.code.push(Instruction::Scalar(ScalarOp::I64Eqz));
@@ -1699,6 +1692,9 @@ impl<'a> Body<'a> {
 fn helper_index(program: &KProgram, runtime: usize, ty: usize, copying: bool) -> usize {
     (FIRST_USER + runtime) + program.functions.len() + ty * 2 + if copying { 1 } else { 0 }
 }
+fn needs_cleanup(kind: &TypeKind) -> bool {
+    heap_type(kind) || matches!(kind, TypeKind::File | TypeKind::Directory)
+}
 fn heap_type(kind: &TypeKind) -> bool {
     matches!(
         kind,
@@ -1901,8 +1897,21 @@ fn copy_helper(program: &KProgram, runtime: usize, layout: &Layouts, ty: usize) 
     b
 }
 
-fn drop_start(program: &KProgram, runtime: usize, ty: usize) -> Code {
+fn drop_start(program: &KProgram, runtime: usize, ty: usize, close: Option<usize>) -> Code {
     let mut b = Code::words(1);
+    if matches!(program.types[ty].kind, TypeKind::File | TypeKind::Directory) {
+        get(&mut b, 0);
+        b.push(Instruction::Scalar(ScalarOp::I64Eqz));
+        b.push(Instruction::Scalar(ScalarOp::I32Eqz));
+        begin_if(&mut b);
+        get(&mut b, 0);
+        call(&mut b, close.unwrap());
+        b.push(Instruction::Drop);
+        b.push(Instruction::End);
+        constant(&mut b, 0);
+        b.push(Instruction::End);
+        return b;
+    }
     if !heap_type(&program.types[ty].kind) {
         constant(&mut b, 0);
         b.push(Instruction::End);
@@ -1954,7 +1963,7 @@ fn yield_drop_child(b: &mut Code, ty: usize) {
 fn drop_fields(b: &mut Code, program: &KProgram, fields: &[crate::k::Field], offsets: &[u64]) {
     let mut next = 1;
     for (i, field) in fields.iter().enumerate() {
-        if heap_type(&program.types[field.ty].kind) {
+        if needs_cleanup(&program.types[field.ty].kind) {
             get(b, 0);
             load(b, 16);
             constant(b, next);
@@ -1978,6 +1987,7 @@ fn drop_step(
     layout: &Layouts,
     ty: usize,
     destructor: Option<usize>,
+    close: Option<usize>,
 ) -> Code {
     let mut b = Code::words(4);
     let kind = &program.types[ty].kind;
@@ -2019,8 +2029,13 @@ fn drop_step(
                 b.push(Instruction::End);
             }
         }
+        TypeKind::File | TypeKind::Directory => {
+            get(&mut b, 1);
+            call(&mut b, close.unwrap());
+            b.push(Instruction::Drop);
+        }
         TypeKind::Box { inner } => {
-            if heap_type(&program.types[*inner].kind) {
+            if needs_cleanup(&program.types[*inner].kind) {
                 get(&mut b, 0);
                 load(&mut b, 16);
                 constant(&mut b, 1);
@@ -2037,7 +2052,7 @@ fn drop_step(
         }
         TypeKind::Vec { inner } | TypeKind::Array { inner, .. } => {
             let inner = *inner;
-            if heap_type(&program.types[inner].kind) {
+            if needs_cleanup(&program.types[inner].kind) {
                 b.extend_from_slice(&[Instruction::Block(None), Instruction::Loop(None)]);
                 get(&mut b, 0);
                 load(&mut b, 16);
@@ -2217,7 +2232,7 @@ fn local_layout(
             }
             Op::Drop { place } | Op::DropIf { place } => {
                 if !place.projections.is_empty()
-                    || heap_type(&program.types[function.locals[place.local].ty].kind)
+                    || needs_cleanup(&program.types[function.locals[place.local].ty].kind)
                 {
                     touch_place(&mut ranges, place, at);
                 }
@@ -2356,12 +2371,13 @@ fn local_layout(
 fn function_body(
     program: &KProgram,
     representations: &Layouts,
-    runtime: usize,
+    hosts: &[HostFunction],
     function: &KFunction,
     messages: &[String],
     texts: &TextPool,
     source_lines: bool,
 ) -> Result<Code, String> {
+    let runtime = hosts.len();
     let layout = local_layout(program, representations, function)?;
     let extra_words = function
         .locals
@@ -2399,6 +2415,7 @@ fn function_body(
         messages,
         texts,
         runtime,
+        hosts,
         source_lines,
     };
     body.code.locals = vec![ValueType::I64; layout.registers - layout.abi.words + 9 + extra_words];
@@ -2450,12 +2467,28 @@ pub fn lower(
     source_runtime: &crate::runtime::Runtime,
 ) -> Result<Program, String> {
     let program = checked.program();
-    let runtime = usize::from(program.functions.iter().any(|function| {
-        function.body.iter().any(|instruction| {
-            matches!(&instruction.op,
-            Op::Intrinsic { name, .. } if name == "stdout_write")
-        })
-    }));
+    let mut hosts = Vec::new();
+    for function in &program.functions {
+        for instruction in &function.body {
+            if let Op::Intrinsic { name, .. } = &instruction.op {
+                if let Some(host) = io::host_for(name) {
+                    if !hosts.contains(&host) {
+                        hosts.push(host);
+                    }
+                }
+            }
+        }
+    }
+    let mut close = None;
+    if program
+        .types
+        .iter()
+        .any(|ty| matches!(ty.kind, TypeKind::File | TypeKind::Directory))
+    {
+        close = Some(hosts.len());
+        hosts.push(HostFunction::HandleClose);
+    }
+    let runtime = hosts.len();
     let texts = TextPool::collect(program)?;
     let layout = Layouts::new(program)?;
     let mut destructors = vec![None; program.types.len()];
@@ -2495,7 +2528,7 @@ pub fn lower(
             name: function.name.clone(),
             signature: FunctionAbi::new(&layout, function)?.signature(),
             role: FunctionRole::Source,
-            code: function_body(program, &layout, runtime, function, &messages, &texts, true)?,
+            code: function_body(program, &layout, &hosts, function, &messages, &texts, true)?,
         });
     }
     for ty in 0..program.types.len() {
@@ -2518,7 +2551,7 @@ pub fn lower(
                 code: if copying {
                     copy_helper(program, runtime, &layout, ty)
                 } else {
-                    drop_start(program, runtime, ty)
+                    drop_start(program, runtime, ty, close)
                 },
             });
         }
@@ -2528,21 +2561,18 @@ pub fn lower(
             name: format!("drop::step<{}>", program.types[ty].name),
             signature: Signature::words(1),
             role: FunctionRole::DropStep,
-            code: drop_step(program, runtime, &layout, ty, *destructor),
+            code: drop_step(program, runtime, &layout, ty, *destructor, close),
         });
     }
     let minimum_memory_pages = texts.pages()?;
     let heap_start = texts.heap_start()?;
+    let mut imports = Vec::new();
+    for host in hosts {
+        imports.push(io::import(host));
+    }
     let mut lowered = Program {
         layout,
-        imports: if runtime == 0 {
-            Vec::new()
-        } else {
-            vec![Import {
-                host: HostFunction::StdoutWrite,
-                signature: Signature::words(3),
-            }]
-        },
+        imports,
         functions,
         globals: vec![
             Global {
@@ -2625,7 +2655,15 @@ pub fn lower_runtime_functions(checked: &CheckedProgram) -> Result<Vec<Function>
                 }
             }
         }
-        let code = function_body(program, &layout, 0, function, &trap_messages, &texts, false)?;
+        let code = function_body(
+            program,
+            &layout,
+            &[],
+            function,
+            &trap_messages,
+            &texts,
+            false,
+        )?;
         if code.instructions.iter().any(|instruction| matches!(instruction, Instruction::Call(index) if *index < FIRST_USER || *index >= FIRST_USER + program.functions.len())) {
             return Err("runtime source function requires ordinary heap glue".to_string());
         }

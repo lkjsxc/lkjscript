@@ -4970,21 +4970,21 @@
     "id": "backend_drop_order_0",
     "kind": "trap",
     "file": "migrated/backend_drop_order_0.rs",
-    "code": "R0016",
+    "code": "R0004",
     "line": 4
   },
   {
     "id": "backend_drop_order_1",
     "kind": "trap",
     "file": "migrated/backend_drop_order_1.rs",
-    "code": "R0016",
+    "code": "R0004",
     "line": 4
   },
   {
     "id": "backend_drop_order_2",
     "kind": "trap",
     "file": "migrated/backend_drop_order_2.rs",
-    "code": "R0016",
+    "code": "R0004",
     "line": 4
   },
   {
@@ -6363,5 +6363,106 @@
     "pending": false,
     "rust": true,
     "rustAccept": true
+  },
+  {
+    "id": "forged_stdin",
+    "file": "k/forged_stdin.k",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": false
+  },
+  {
+    "id": "forged_stderr",
+    "file": "k/forged_stderr.k",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": false
+  },
+  {
+    "id": "forged_directory",
+    "file": "k/forged_directory.k",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": false
+  },
+  {
+    "id": "forged_file",
+    "file": "k/forged_file.k",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": false
+  },
+  {
+    "id": "file_capability_copy",
+    "file": "fail/file_capability_copy.rs",
+    "kind": "reject",
+    "code": "E_MOVE",
+    "rust": true,
+    "world": true,
+    "rustAccept": false,
+    "rustCode": "E0382"
+  },
+  {
+    "id": "stdin_capability_forge",
+    "file": "fail/stdin_capability_forge.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": true,
+    "world": true,
+    "rustAccept": false,
+    "rustCode": "E0308"
+  },
+  {
+    "id": "stdin_read_shared_buffer",
+    "file": "fail/stdin_read_shared_buffer.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": true,
+    "world": true,
+    "rustAccept": false,
+    "rustCode": "E0308"
+  },
+  {
+    "id": "file_capability_data",
+    "file": "fail/file_capability_data.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "rust": false
+  },
+  {
+    "id": "capability_identity_names",
+    "file": "pass/capability_identity_names.rs",
+    "kind": "run",
+    "rust": true,
+    "value": "42"
+  },
+  {
+    "id": "capability_raw_method_priority",
+    "file": "output/capability_raw_method_priority.rs",
+    "kind": "output",
+    "hex": "7072696f72697479206f6b0a",
+    "ending": "normal",
+    "rust": true
+  },
+  {
+    "id": "capability_inherent_collision",
+    "file": "fail/capability_inherent_collision.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "pending": false,
+    "rust": true,
+    "world": true,
+    "rustAccept": false,
+    "rustCode": "E0592"
+  },
+  {
+    "id": "stderr_status_marker",
+    "file": "output/stderr_status_marker.rs",
+    "kind": "output",
+    "hex": "",
+    "stderrHex": "4c4b4a5f525553545f545241502052303030350a",
+    "status": 101,
+    "ending": "normal",
+    "rust": true
   }
 ]

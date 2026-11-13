@@ -2,11 +2,15 @@
 //! capabilities. The ELF itself has no Rust, Node, loader or libc dependency.
 use super::*;
 use lkjscript::{bootstrap_runtime, lower};
+use std::ffi::OsString;
+use std::io::Read;
 use std::os::unix::fs::PermissionsExt;
 use std::process::Stdio;
 
 pub struct Outcome {
     pub stdout: Vec<u8>,
+    pub stderr: Vec<u8>,
+    pub status: u8,
     pub value: u64,
     pub error: Option<String>,
 }
@@ -31,7 +35,7 @@ pub fn image(
         lkjscript::native::Entry {
             function: exported.function,
             arguments: if world { vec![1] } else { Vec::new() },
-            result_fd: if packet { Some(2) } else { None },
+            result_fd: if packet { Some(3) } else { None },
         },
     )
 }
@@ -61,49 +65,75 @@ pub fn execute(
     program: &lower::Program,
     source: &str,
     capture: bool,
+    arguments: &[OsString],
 ) -> Result<Outcome, String> {
     let mut command = Command::new(path);
     command
+        .args(arguments)
+        .stdin(if capture {
+            Stdio::null()
+        } else {
+            Stdio::inherit()
+        })
         .stdout(if capture {
             Stdio::piped()
         } else {
             Stdio::inherit()
         })
-        .stderr(Stdio::piped());
+        .stderr(if capture {
+            Stdio::piped()
+        } else {
+            Stdio::inherit()
+        });
+    let mut channel = host_process::result_channel(&mut command)
+        .map_err(|error| format!("E_HOST result channel: {error}"))?;
     host_process::prepare_native_child(&mut command)?;
     let output = command
         .output()
         .map_err(|error| format!("E_HOST native: {error}"))?;
-    if output.stderr.len() != 24 {
+    drop(command);
+    let mut packet = Vec::new();
+    channel
+        .read_to_end(&mut packet)
+        .map_err(|error| format!("E_HOST result channel: {error}"))?;
+    if packet.len() != 24 {
         return Err(format!(
             "E_HOST native image exited {} without its result packet: {}",
             output.status,
             String::from_utf8_lossy(&output.stderr)
         ));
     }
-    let word = |offset| u64::from_le_bytes(output.stderr[offset..offset + 8].try_into().unwrap());
+    let word = |offset| u64::from_le_bytes(packet[offset..offset + 8].try_into().unwrap());
     let code = word(0);
     let value = word(8);
     let line = word(16);
-    let error = if code != 0 {
+    let status = if code == 0 {
+        u8::try_from(line).map_err(|_| "E_HOST invalid native exit status".to_string())?
+    } else {
+        1
+    };
+    let error = if output.status.code() != Some(i32::from(status)) {
+        Some(format!(
+            "E_HOST native image exited {} after declaring status {status}",
+            output.status
+        ))
+    } else if code != 0 {
         Some(format!(
             "{source}:{line}: R{code:04} {}",
             trap_message(program, code)
-        ))
-    } else if !output.status.success() {
-        Some(format!(
-            "E_HOST native image exited {} after a success packet",
-            output.status
         ))
     } else {
         None
     };
     Ok(Outcome {
         stdout: output.stdout,
+        stderr: output.stderr,
+        status,
         value,
         error,
     })
 }
+
 pub fn scalar(
     program: &k::Program,
     function: &k::Function,
@@ -135,7 +165,8 @@ pub fn run(
     checked: &k::CheckedProgram,
     args: &Arguments,
     timings: &mut timing::Timings,
-) -> Result<(), String> {
+) -> Result<u8, String> {
+    let mut status = 0;
     let lowered = timings
         .measure("lower", || lower(checked))
         .map_err(|error| format!("E_EMIT {error}"))?;
@@ -160,10 +191,14 @@ pub fn run(
         } else {
             let path = directory.join(format!("{}-{entry}.elf", std::process::id()));
             save(&path, &bytes)?;
-            let outcome =
-                timings.measure("native_run", || execute(&path, &lowered, &args.path, false));
+            let outcome = timings.measure("native_run", || {
+                execute(&path, &lowered, &args.path, false, &args.program_arguments)
+            });
             let _ = fs::remove_file(&path);
             let outcome = outcome?;
+            if status == 0 {
+                status = outcome.status;
+            }
             if let Some(error) = outcome.error {
                 return Err(error);
             }
@@ -177,5 +212,5 @@ pub fn run(
             }
         }
     }
-    Ok(())
+    Ok(status)
 }

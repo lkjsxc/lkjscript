@@ -1358,10 +1358,28 @@ impl Parser {
         let mut i = 0;
         while i < denied.len() {
             if name == denied[i] || name.starts_with(&format!("{}::", denied[i])) {
+                let help = match denied[i] {
+                    "std::fs" => {
+                        "use world.directory(path), then directory.open(name) or directory.create(name)"
+                    }
+                    "std::env" => {
+                        "use world.args() for argument bytes; environment access is not implemented"
+                    }
+                    "std::io" => {
+                        "use world.stdin(), world.stdout(), or world.stderr() and pass that capability explicitly"
+                    }
+                    "std::process" => {
+                        "use world.set_exit_status(code) and return from main; child processes are not implemented"
+                    }
+                    "std::cell" | "core::cell" | "std::sync" => {
+                        "use owned values and indices; shared interior mutation is not supported"
+                    }
+                    _ => "this capability is not implemented; pass required values explicitly",
+                };
                 return Err(Diagnostic::new(
                     self.token().span,
                     "E_CAPABILITY",
-                    &format!("`{name}` is unavailable; use a capability derived from World"),
+                    &format!("`{name}` is unavailable; help: {help}"),
                 ));
             }
             i += 1;
@@ -2910,10 +2928,18 @@ impl Parser {
                 || path.name == "eprintln"
                 || path.name == "eprint"
             {
+                let receiver = if path.name == "eprintln" || path.name == "eprint" {
+                    "stderr"
+                } else {
+                    "stdout"
+                };
                 return Err(Diagnostic::new(
                     span,
                     "E_CAPABILITY",
-                    "ambient output is unavailable; use a World output capability",
+                    &format!(
+                        "`{}!` requires ambient output; help: obtain world.{receiver}() and call its write(bytes) method",
+                        path.name
+                    ),
                 ));
             }
             let known = path.name == "assert"

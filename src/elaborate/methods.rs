@@ -12,6 +12,10 @@ pub(super) enum Receiver {
     Slice,
     World,
     Stdout,
+    Stdin,
+    Stderr,
+    Directory,
+    File,
     Other,
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -35,10 +39,17 @@ pub(super) fn receiver(kind: &k::TypeKind) -> Receiver {
         k::TypeKind::Slice { .. } => Receiver::Slice,
         k::TypeKind::World => Receiver::World,
         k::TypeKind::Stdout => Receiver::Stdout,
+        k::TypeKind::Stdin => Receiver::Stdin,
+        k::TypeKind::Stderr => Receiver::Stderr,
+        k::TypeKind::Directory => Receiver::Directory,
+        k::TypeKind::File => Receiver::File,
         _ => Receiver::Other,
     }
 }
 pub(super) fn direct(receiver: Receiver, name: &str) -> Option<Direct> {
+    if super::capabilities::method(receiver, name).is_some() {
+        return Some(Direct::Output);
+    }
     match (receiver, name) {
         (Receiver::Integer, "wrapping_add" | "wrapping_sub" | "wrapping_mul") => {
             Some(Direct::Wrapping)
@@ -78,7 +89,6 @@ pub(super) fn direct(receiver: Receiver, name: &str) -> Option<Direct> {
             | "to_ascii_lowercase"
             | "to_ascii_uppercase",
         ) => Some(Direct::Text),
-        (Receiver::World, "stdout") | (Receiver::Stdout, "write") => Some(Direct::Output),
         (Receiver::Vector | Receiver::Array, "as_slice" | "as_mut_slice") => Some(Direct::Slice),
         (Receiver::Vector | Receiver::Array | Receiver::Slice, "len") => Some(Direct::Length),
         (Receiver::Vector, "push") => Some(Direct::Push),

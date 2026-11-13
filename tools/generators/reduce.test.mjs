@@ -67,3 +67,37 @@ test('matching output prefix cannot hide an unexpected crash or wrong trap', () 
   assert.equal(classify({kind: 'trap', code: 'R0005', stdout: bytes}, {kind: 'trap', code: 'R0005', stdout: bytes}, 'output'), 'equal-output-trap');
   assert.equal(classify({kind: 'value', stdout: bytes}, {kind: 'value', stdout: Buffer.from([0])}, 'output'), 'different-output');
 });
+
+test('World outcome uses the private record even for a marker-shaped stderr and exit 101', async () => {
+  const {worldOutcome} = await import('../oracle.mjs');
+  const control = (code, status = 0, reserved = 0) => {
+    const bytes = Buffer.alloc(24);
+    [code, reserved, status].forEach((value, index) => bytes.writeBigUInt64LE(BigInt(value), index * 8));
+    return bytes;
+  };
+  const result = {status: 101, signal: null, stderr: Buffer.from('LKJ_RUST_TRAP R0004\n'), control: control(0, 101)};
+  assert.deepEqual(worldOutcome(result), {kind: 'normal', status: 101});
+  assert.deepEqual(worldOutcome({...result, stderr: Buffer.alloc(0), control: control(4)}), {kind: 'trap', code: 'R0004'});
+  for (const invalid of [undefined, Buffer.alloc(23), Buffer.concat([control(4), control(4)]), control(4, 1), control(4, 0, 1), control(0, 0), control(0, 256)]) {
+    assert.deepEqual(worldOutcome({...result, control: invalid}), {kind: 'crash'});
+  }
+  assert.deepEqual(worldOutcome({...result, signal: 'SIGKILL'}), {kind: 'crash'});
+  assert.deepEqual(worldOutcome({...result, error: new Error('incomplete capture')}), {kind: 'crash'});
+});
+
+test('oracle cache preserves binary stdout, stderr and control independently', async () => {
+  const {packResult, unpackResult} = await import('../oracle.mjs');
+  const result = {status: 101, stdout: Buffer.from([0, 255, 128]), stderr: Buffer.from([255, 0, 128]), control: Buffer.alloc(24)};
+  result.control.writeBigUInt64LE(101n, 16);
+  const restored = unpackResult(JSON.parse(JSON.stringify(packResult(result))), null);
+  assert.equal(restored.status, result.status);
+  for (const stream of ['stdout', 'stderr', 'control']) assert.deepEqual(restored[stream], result[stream]);
+  assert.equal(unpackResult({status: 0, stdoutHex: '', stderr: 'old cache'}).stderr, 'old cache');
+});
+
+test('World reduction compares deliberate status and binary program stderr', () => {
+  const reference = {kind: 'value', status: 101, stdout: Buffer.alloc(0), programStderr: Buffer.from([255, 0, 128])};
+  assert.equal(classify(reference, {...reference}, 'output'), 'equal-output-exit');
+  assert.equal(classify(reference, {...reference, status: 0}, 'output'), 'different-ending');
+  assert.equal(classify(reference, {...reference, programStderr: Buffer.from([239, 191, 189, 0, 239, 191, 189])}, 'output'), 'different-stderr');
+});

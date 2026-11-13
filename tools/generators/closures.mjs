@@ -6,7 +6,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { run } from '../process.mjs';
 import { runRoutes } from '../batch.mjs';
-import { oracleCache, packResult, unpackResult } from '../oracle.mjs';
+import { oracleCache, packResult, unpackResult, worldOutcome } from '../oracle.mjs';
 const [binary='target/debug/lkjscript',seed='1501',countText='88',output='target/generators']=process.argv.slice(2);
 const count=Number(countText),bin=path.resolve(binary),dir=path.resolve(output,`closures-${seed}`);
 const engines=(process.env.LKJ_ENGINES||'native,k').split(','),rust=process.env.LKJ_CLOSURE_RUST!=='0';
@@ -142,15 +142,15 @@ let references;
 if(rust){
  let source='#![allow(warnings)]\nmod host{\n'+fs.readFileSync('bridge/output.rs','utf8')+'\n}\n';
  for(let index=0;index<count;index++)for(const variant of ['source','expanded'])source+=`mod c${index}_${variant}{use crate::host::{World,Stdout};\n${pairs[index][variant]} }\n`;
- source+='fn main(){match std::env::args().nth(1).unwrap().as_str(){\n';
+ source+='fn main(){match std::env::var("LKJ_ORACLE_CASE").unwrap().as_str(){\n';
  for(let index=0;index<count;index++)for(const variant of ['source','expanded'])source+=`"${index}-${variant}"=>host::enter(c${index}_${variant}::main),\n`;
  source+='_=>std::process::exit(2)}}\n';
  const rustSource=path.join(dir,'oracle.rs'),rustBinary=path.join(dir,'oracle');fs.writeFileSync(rustSource,source);
- const flags=['--edition=2024','-C','overflow-checks=yes','-A','warnings'];
+ const flags=['--edition=2024','--cfg','lkj_control','-C','overflow-checks=yes','-A','warnings'];
  const generator=createHash('sha256').update(fs.readFileSync(new URL(import.meta.url))).digest('hex');
  references=await oracleCache({generator,seed,count,flags,source},async()=>{
   const built=await run('rustc',[...flags,rustSource,'-o',rustBinary]);if(built.error||built.status!==0)throw Error('invalid generated Rust: '+built.stderr);
-  const results=[];for(let index=0;index<count;index++)for(const variant of ['source','expanded'])results.push(packResult(await run(rustBinary,[`${index}-${variant}`],{encoding:null})));return results;
+  const results=[];for(let index=0;index<count;index++)for(const variant of ['source','expanded'])results.push(packResult(await run(rustBinary,[],{encoding:null,captureControl:true,env:{...process.env,LKJ_ORACLE_CASE:`${index}-${variant}`}})));return results;
  });
 }
 function ending(result){
@@ -166,7 +166,7 @@ for(const engine of engines){
  for(let index=0;index<count;index++){
   const source=results[index*2],expanded=results[index*2+1],a=ending(source),b=ending(expanded);
   let category=a!=='normal'?'source-'+a:b!=='normal'?'expansion-'+b:source.stdout.equals(expanded.stdout)?'equal-output':'different-output';
-  if(category==='equal-output'&&references)for(let offset=0;offset<2;offset++){const oracle=unpackResult(references[index*2+offset],null);if(oracle.status!==0||!source.stdout.equals(oracle.stdout))category='rust-difference';}
+  if(category==='equal-output'&&references)for(let offset=0;offset<2;offset++){const oracle=unpackResult(references[index*2+offset],null),outcome=worldOutcome(oracle);if(outcome.kind!=='normal'||outcome.status!==0||!source.stdout.equals(oracle.stdout))category='rust-difference';}
   tallies[engine][category]=(tallies[engine][category]||0)+1;
   if(category!=='equal-output')failures.push({engine,index,family:pairs[index].family,category,source:source.stderr.toString(),expanded:expanded.stderr.toString(),output:[...source.stdout],expected:[...expanded.stdout]});
  }

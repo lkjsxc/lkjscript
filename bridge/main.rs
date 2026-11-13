@@ -6,154 +6,16 @@ mod batch;
 mod library;
 mod native;
 mod timing;
+mod world;
+use std::ffi::OsString;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
-/// Bootstrap child lifetime management; source programs cannot call these operations.
 #[allow(unsafe_code)]
-mod host_process {
-    use std::io;
-    use std::os::unix::process::CommandExt;
-    use std::process::Command;
-
-    unsafe extern "C" {
-        fn prctl(option: i32, ...) -> i32;
-        fn getppid() -> i32;
-        fn prlimit(pid: i32, resource: u32, new: *const Limit, old: *mut Limit) -> i32;
-    }
-    #[repr(C)]
-    struct Limit {
-        current: u64,
-        maximum: u64,
-    }
-
-    /// A runner budget is host policy, not a property of the accepted source.
-    /// An explicit environment setting can enlarge it or inherit Linux's full
-    /// extent; a tighter limit imposed by the operator always remains effective.
-    pub fn prepare_native_child(command: &mut Command) -> Result<(), String> {
-        prepare_budgeted_child(command, 268435456).map(|_| ())
-    }
-    fn prepare_budgeted_child(command: &mut Command, default: u64) -> Result<u64, String> {
-        let text = std::env::var("LKJ_RUN_MEMORY_BYTES").unwrap_or_else(|_| default.to_string());
-        let budget = if text == "unlimited" {
-            u64::MAX
-        } else {
-            text.parse::<u64>().ok().filter(|n| *n > 0).ok_or_else(|| {
-                "E_HOST LKJ_RUN_MEMORY_BYTES must be positive bytes or unlimited".to_string()
-            })?
-        };
-        prepare_child(command);
-        unsafe {
-            command.pre_exec(move || {
-                let mut limit = Limit {
-                    current: 0,
-                    maximum: 0,
-                };
-                if prlimit(0, 9, std::ptr::null(), &mut limit) != 0 {
-                    return Err(io::Error::last_os_error());
-                }
-                let no_core = Limit {
-                    current: 0,
-                    maximum: 0,
-                };
-                if prlimit(0, 4, &no_core, std::ptr::null_mut()) != 0 {
-                    return Err(io::Error::last_os_error());
-                }
-                limit.current = limit.current.min(budget);
-                if prlimit(0, 9, &limit, std::ptr::null_mut()) != 0 {
-                    return Err(io::Error::last_os_error());
-                }
-                Ok(())
-            });
-        }
-        Ok(budget)
-    }
-
-    pub fn prepare_child(command: &mut Command) {
-        let parent = std::process::id() as i32;
-        // Only async-signal-safe syscalls run after fork. Process-group timeout
-        // handling normally kills children too; this also covers parent death.
-        unsafe {
-            command.pre_exec(move || {
-                if prctl(1, 15_usize, 0_usize, 0_usize, 0_usize) != 0 {
-                    return Err(io::Error::last_os_error());
-                }
-                if getppid() != parent {
-                    return Err(io::Error::from_raw_os_error(3));
-                }
-                Ok(())
-            });
-        }
-    }
-
-    /// The Rust K model runs in a fresh process so its allocator cannot consume
-    /// the compiler host. Compile/check-only commands have no runner budget.
-    /// Batch keeps its streaming protocol and gets one process envelope.
-    pub fn model_worker() -> Result<Option<std::process::ExitCode>, String> {
-        use std::io::Write;
-        use std::os::unix::process::ExitStatusExt;
-        use std::process::{ExitCode, Stdio};
-        if std::env::var("LKJ_MODEL_WORKER").as_deref() == Ok("1") {
-            return Ok(None);
-        }
-        let argv = std::env::args().skip(1).collect::<Vec<_>>();
-        let Some(verb) = argv.first() else {
-            return Ok(None);
-        };
-        let selected = argv.windows(2).find_map(|pair| {
-            if pair[0] == "--engine" || pair[0] == "--engines" {
-                Some(pair[1].as_str())
-            } else {
-                None
-            }
-        });
-        let runs_model = if verb == "batch" {
-            selected
-                .unwrap_or("k")
-                .split(',')
-                .any(|engine| engine == "k")
-        } else {
-            (verb == "run" || verb == "test") && selected == Some("k")
-        };
-        if !runs_model {
-            return Ok(None);
-        }
-        let executable = std::env::current_exe().map_err(|error| format!("E_HOST {error}"))?;
-        let mut command = Command::new(executable);
-        command
-            .args(&argv)
-            .env("LKJ_MODEL_WORKER", "1")
-            .stdin(Stdio::inherit())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::piped());
-        let budget = prepare_budgeted_child(&mut command, 536870912)?;
-        let output = command
-            .output()
-            .map_err(|error| format!("E_HOST K worker: {error}"))?;
-        std::io::stderr()
-            .write_all(&output.stderr)
-            .map_err(|error| format!("E_HOST {error}"))?;
-        if let Some(signal) = output.status.signal() {
-            let text = String::from_utf8_lossy(&output.stderr);
-            if signal == 6
-                && text.contains("memory allocation of ")
-                && text.contains(" bytes failed")
-            {
-                return Err(format!(
-                    "E_HOST K worker exhausted its Linux address-space budget ({budget} bytes); Rust allocator failure has no source location"
-                ));
-            }
-            return Err(format!(
-                "E_HOST K worker terminated by signal {signal} under Linux address-space budget {budget} bytes"
-            ));
-        }
-        Ok(Some(
-            ExitCode::from(output.status.code().unwrap_or(1) as u8),
-        ))
-    }
-}
+#[path = "process.rs"]
+mod host_process;
 
 fn report(path: &str, problem: Diagnostic) -> String {
     let path = if problem.path.is_empty() {
@@ -379,10 +241,11 @@ struct Arguments {
     engine: String,
     census: bool,
     unchecked: bool,
+    program_arguments: Vec<OsString>,
 }
 fn arguments(args: &[String]) -> Result<Arguments, String> {
     if args.len() < 2 {
-        return Err("usage: lkjscript check|run|test|build|k <source> [--census] [--engine native|k] [--entry name] [-o artifact]".to_string());
+        return Err("usage: lkjscript check|run|test|build|k <source> [--census] [--engine native|k] [--entry name] [-o artifact] [-- program arguments]".to_string());
     }
     let mut result = Arguments {
         verb: args[1].clone(),
@@ -392,6 +255,7 @@ fn arguments(args: &[String]) -> Result<Arguments, String> {
         engine: "native".to_string(),
         census: false,
         unchecked: false,
+        program_arguments: Vec::new(),
     };
     let mut at = 2;
     while at < args.len() {
@@ -516,22 +380,19 @@ fn scalar(value: machine::Scalar) -> String {
         machine::Scalar::F64 { bits } => format!("{}\n", f64::from_bits(bits)),
     }
 }
-struct StandardOutput;
-impl machine::Host for StandardOutput {
-    fn write_stdout(&mut self, bytes: &[u8]) -> Result<(), String> {
-        std::io::stdout()
-            .write_all(bytes)
-            .map_err(|e| e.to_string())
-    }
-}
 fn execute_machine(
     program: &k::Program,
     args: &Arguments,
     timings: &mut timing::Timings,
-) -> Result<(), String> {
+) -> Result<u8, String> {
+    let mut status = 0;
     for entry in entries(program, args)? {
         let started = std::time::Instant::now();
-        let result = machine::run(program, entry, &[], &mut StandardOutput);
+        let mut host = world::Host::stdio(&args.program_arguments);
+        let result = machine::run(program, entry, &[], &mut host);
+        if status == 0 {
+            status = host.status;
+        }
         if std::env::var("LKJSCRIPT_TIMINGS").as_deref() == Ok("1") {
             eprintln!(
                 "LKJ_TIMING {{\"route\":\"k\",\"run_ms\":{},\"stopped_stage\":\"{}\"}}",
@@ -549,63 +410,85 @@ fn execute_machine(
                 .map_err(|error| format!("E_IO {error}"))?;
         }
     }
-    Ok(())
+    Ok(status)
 }
-fn run() -> Result<(), String> {
-    let argv: Vec<String> = std::env::args().collect();
+fn run() -> Result<u8, String> {
+    let mut argv = vec!["lkjscript".to_string()];
+    let mut program_arguments = Vec::new();
+    let mut after_separator = false;
+    for argument in std::env::args_os().skip(1) {
+        if after_separator {
+            program_arguments.push(argument);
+        } else if argument == "--" {
+            after_separator = true;
+        } else {
+            argv.push(argument.into_string().map_err(|_| {
+                "E_USAGE compiler arguments must be UTF-8; program bytes follow --".to_string()
+            })?);
+        }
+    }
+    if !program_arguments.is_empty()
+        && !argv
+            .get(1)
+            .is_some_and(|verb| verb == "run" || verb == "test")
+    {
+        return Err("E_USAGE program arguments after -- require run or test".to_string());
+    }
     if argv.len() == 2 && argv[1] == "runtime-k" {
         print!(
             "{}",
             k_text::write(lkjscript::bootstrap_runtime::get()?.checked_program())
         );
-        return Ok(());
+        return Ok(0);
     }
     if argv.len() == 2 && argv[1] == "trusted" {
         println!(
-            "source meaning: src/syntax.rs, src/resolve.rs, src/generics.rs, src/elaborate/\nK safety gate: src/k.rs, src/check.rs\nlayout and lowering: src/lower.rs, src/lower/ir.rs\nsource runtime and sealed raw binding: library/runtime.rs, src/runtime.rs\nnative ELF encoder and Linux entry: src/native.rs\nindependent models: src/machine.rs, src/machine/scalar.rs, src/runtime_memory.rs\nRust host and declared source provisioning: bridge/\nRust output oracle: bridge/output.rs\nphysical size ledger: node tools/trust.mjs"
+            "source meaning: src/syntax.rs, src/resolve.rs, src/generics.rs, src/elaborate/\nK safety gate: src/k.rs, src/check.rs\nlayout and lowering: src/lower.rs, src/lower/\nsource runtime and sealed raw binding: library/runtime.rs, src/runtime.rs\nnative ELF encoder and Linux entry: src/native.rs, src/native/\nindependent models: src/machine.rs, src/machine/, src/runtime_memory.rs\nRust host and declared source provisioning: bridge/\nRust output oracle: bridge/output.rs\nphysical size ledger: node tools/trust.mjs"
         );
-        return Ok(());
+        return Ok(0);
     }
     if argv.get(1).is_some_and(|verb| verb == "batch") {
-        return batch::run(&argv[2..]);
+        return batch::run(&argv[2..]).map(|_| 0);
     }
-    let args = arguments(&argv)?;
+    let mut args = arguments(&argv)?;
+    args.program_arguments = program_arguments;
     let mut timings = timing::Timings::new();
     if args.unchecked {
         let text = fs::read_to_string(&args.path).map_err(|e| format!("E_IO {e}"))?;
         let program = timings
             .measure("parse_k", || k_text::read(&text))
             .map_err(|e| report(&args.path, e))?;
-        execute_machine(&program, &args, &mut timings)?;
+        let status = execute_machine(&program, &args, &mut timings)?;
         timings.done();
-        return Ok(());
+        return Ok(status);
     }
     let checked = compile(&args.path, args.census, &mut timings)?;
     if args.verb == "check" {
         timings.done();
-        return Ok(());
+        return Ok(0);
     }
     if args.verb == "k" {
         print!("{}", k_text::write(checked.program()));
         timings.done();
-        return Ok(());
+        return Ok(0);
     }
     if args.engine == "k" && args.verb != "build" {
-        execute_machine(checked.program(), &args, &mut timings)?;
+        let status = execute_machine(checked.program(), &args, &mut timings)?;
         timings.done();
-        return Ok(());
+        return Ok(status);
     }
-    native::run(&checked, &args, &mut timings)?;
+    let status = native::run(&checked, &args, &mut timings)?;
     timings.done();
-    Ok(())
+    Ok(status)
 }
 
 fn main() -> ExitCode {
-    match host_process::model_worker() {
+    world::restore_closed_standard_streams();
+    match host_process::execution_worker() {
         Ok(Some(status)) => return status,
         Ok(None) => {}
         Err(error) => {
-            eprintln!("{error}");
+            let _ = writeln!(std::io::stderr(), "{error}");
             return ExitCode::FAILURE;
         }
     }
@@ -613,10 +496,10 @@ fn main() -> ExitCode {
         .map_err(|error| format!("E_HOST {error}"))
         .and_then(|result| result);
     match result {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(status) => ExitCode::from(status),
         Err(error) => {
             if !error.is_empty() {
-                eprintln!("{error}");
+                let _ = writeln!(std::io::stderr(), "{error}");
             }
             ExitCode::FAILURE
         }

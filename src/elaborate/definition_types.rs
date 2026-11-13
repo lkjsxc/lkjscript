@@ -4,6 +4,7 @@
 use super::{Bindings, Compiler, Result, a, err, is_copy, k};
 use std::collections::{BTreeMap, VecDeque};
 
+mod capabilities;
 pub(super) mod census;
 mod closures;
 mod method_headers;
@@ -51,6 +52,10 @@ impl Shape {
             Self::Atom(name) if name == "str" => Receiver::Text,
             Self::Atom(name) if name == "World" => Receiver::World,
             Self::Atom(name) if name == "Stdout" => Receiver::Stdout,
+            Self::Atom(name) if name == "Stdin" => Receiver::Stdin,
+            Self::Atom(name) if name == "Stderr" => Receiver::Stderr,
+            Self::Atom(name) if name == "Directory" => Receiver::Directory,
+            Self::Atom(name) if name == "File" => Receiver::File,
             Self::Vec(_) => Receiver::Vector,
             Self::Array(_, _) => Receiver::Array,
             Self::Slice(_) => Receiver::Slice,
@@ -1970,14 +1975,26 @@ impl Infer<'_, '_> {
                     return Ok(false);
                 }
                 // The same primitive inventory drives construction and inference.
-                if direct == Some(super::methods::Direct::Output) {
-                    let output = match primitive {
-                        super::methods::Receiver::World if arguments.is_empty() => {
-                            self.atom("Stdout")
-                        }
-                        super::methods::Receiver::Stdout if arguments.len() == 1 => self.atom("()"),
-                        _ => return Ok(false),
-                    };
+                if let Some(method) = super::capabilities::method(primitive, &name) {
+                    let (parameters, output) = method.signature();
+                    if parameters.len() != arguments.len() {
+                        return Err(err(
+                            span,
+                            "E_TYPE",
+                            &format!(
+                                "capability method {name} expects {} arguments, found {}",
+                                parameters.len(),
+                                arguments.len()
+                            ),
+                        ));
+                    }
+                    let mut index = 0;
+                    while index < parameters.len() {
+                        let parameter = self.capability_type(parameters[index], span)?;
+                        self.coerce(arguments[index], parameter, span)?;
+                        index += 1;
+                    }
+                    let output = self.capability_type(output, span)?;
                     self.unify(result, output, span)?;
                     return Ok(true);
                 }

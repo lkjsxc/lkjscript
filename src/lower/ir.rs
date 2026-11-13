@@ -203,6 +203,17 @@ pub struct Function {
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum HostFunction {
     StdoutWrite,
+    ArgumentCount,
+    ArgumentLength,
+    ArgumentCopy,
+    StdinRead,
+    StderrWrite,
+    SetExitStatus,
+    DirectoryOpen,
+    FileOpen,
+    FileRead,
+    FileWrite,
+    HandleClose,
 }
 pub struct Import {
     pub host: HostFunction,

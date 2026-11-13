@@ -22,5 +22,5 @@ struct Node { ready: i64, next: List }
             }
             i
         }
-    
+
 pub fn probe()->i64 { let mut i=0; while i<3 { assert_eq!(work(),20000); i+=1; } 20000 }

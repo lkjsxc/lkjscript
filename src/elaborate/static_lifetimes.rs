@@ -144,6 +144,11 @@ fn wholly_static(source: &a::Program, result: usize) -> bool {
                             | "f64"
                             | "str"
                             | "World"
+                            | "Stdout"
+                            | "Stdin"
+                            | "Stderr"
+                            | "Directory"
+                            | "File"
                             | "Vec"
                             | "Box"
                     ) {

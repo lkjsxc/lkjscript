@@ -539,6 +539,15 @@ pub fn read(text: &str) -> Result<Program> {
                         exact(&words, 3, line)?;
                         TypeKind::Stdout
                     }
+                    "stdin" | "stderr" | "directory" | "file" => {
+                        exact(&words, 3, line)?;
+                        match words[2].as_str() {
+                            "stdin" => TypeKind::Stdin,
+                            "stderr" => TypeKind::Stderr,
+                            "directory" => TypeKind::Directory,
+                            _ => TypeKind::File,
+                        }
+                    }
                     "int" => {
                         exact(&words, 5, line)?;
                         let bits = word(&words, 3, line)?
@@ -851,6 +860,10 @@ pub fn write(program: &Program) -> String {
             TypeKind::Str => text.push_str("str"),
             TypeKind::World => text.push_str("world"),
             TypeKind::Stdout => text.push_str("stdout"),
+            TypeKind::Stdin => text.push_str("stdin"),
+            TypeKind::Stderr => text.push_str("stderr"),
+            TypeKind::Directory => text.push_str("directory"),
+            TypeKind::File => text.push_str("file"),
             TypeKind::Int { bits, signed } => text.push_str(&format!(
                 "int {bits} {}",
                 if *signed { "signed" } else { "unsigned" }

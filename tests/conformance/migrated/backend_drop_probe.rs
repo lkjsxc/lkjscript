@@ -20,5 +20,5 @@ struct Counter<'a> { count: &'a mut i64 }
             { let parent = Parent { child: Counter { count: &mut count } }; }
             count + value
         }
-    
+
 pub fn probe()->i64 { let mut i=0; while i<1000 { assert_eq!(drop_probe(),10); i+=1; } 10 }

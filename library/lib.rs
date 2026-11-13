@@ -8,6 +8,7 @@ pub mod bytes;
 pub mod char;
 pub mod fmt;
 pub mod integer;
+pub mod io;
 pub mod iter;
 mod ordered_map;
 mod ordered_set;

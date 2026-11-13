@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { run as runProcess } from './process.mjs';
 import { runRoutes } from './batch.mjs';
-import { oracleCache, packResult, unpackResult } from './oracle.mjs';
+import { oracleCache, packResult, unpackResult, worldOutcome } from './oracle.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const binary = path.resolve(root, process.env.LKJSCRIPT_BIN || process.argv[2] || 'target/debug/lkjscript');
@@ -26,6 +26,8 @@ for (const c of cases) {
         || (c.ending !== 'normal' && !/^R[0-9]{4}$/.test(c.ending)))) {
         throw new Error('output cases need a Rust oracle, hexadecimal bytes and an explicit ending: ' + c.id);
     }
+    if (c.status !== undefined && (!Number.isInteger(c.status) || c.status < 0 || c.status > 255)) throw new Error('invalid expected exit status: ' + c.id);
+    if (c.stderrHex !== undefined && (typeof c.stderrHex !== 'string' || !/^(?:[0-9a-fA-F]{2})*$/.test(c.stderrHex))) throw new Error('invalid expected stderr bytes: ' + c.id);
     if (c.kind === 'trap' && (c.rust || !/^R[0-9]{4}$/.test(c.code))) {
         throw new Error('trap cases need a runtime code and no Rust oracle; use output for Rust trap comparisons: ' + c.id);
     }
@@ -48,21 +50,21 @@ const rustCases = cases.filter(c => c.rust && (c.kind === 'run' || c.kind === 'o
 let harness = '#![allow(dead_code, unused_imports, unused_variables)]\n';
 harness += 'mod __lkj_host {\n' + fs.readFileSync(path.join(root, 'bridge/output.rs'), 'utf8') + '\n}\n';
 for (const c of rustCases) {
-    harness += 'mod case_' + c.id + ' {\n' + (c.kind === 'output' ? 'use crate::__lkj_host::{World, Stdout};\n' : '') + fs.readFileSync(path.join(fixtures, c.file), 'utf8') + '\n}\n';
+    harness += 'mod case_' + c.id + ' {\n' + (c.kind === 'output' ? 'use crate::__lkj_host::{World, Stdout, Stdin, Stderr, Directory, File};\n' : '') + fs.readFileSync(path.join(fixtures, c.file), 'utf8') + '\n}\n';
 }
-harness += 'fn main() { let name = std::env::args().nth(1).unwrap(); match name.as_str() {\n';
+harness += 'fn main() { let name = std::env::var("LKJ_ORACLE_CASE").unwrap(); match name.as_str() {\n';
 for (const c of rustCases) {
-    harness += JSON.stringify(c.id) + (c.kind === 'output' ? ' => __lkj_host::enter(case_' + c.id + '::main),\n' : ' => println!("{}", case_' + c.id + '::probe()),\n');
+    harness += JSON.stringify(c.id) + (c.kind === 'output' ? ' => __lkj_host::enter(case_' + c.id + '::main),\n' : ' => __lkj_host::observe(|| { println!("{}", case_' + c.id + '::probe()); 0 }),\n');
 }
 harness += '_ => std::process::exit(2), } }\n';
 const oracleSource = path.join(out, 'oracle.rs');
 const oracle = path.join(out, 'oracle');
 fs.writeFileSync(oracleSource, harness);
-const referenceResults = await oracleCache({suite:'conformance-positive',harness,flags:'2024 overflow-checks=yes opt-level=1'},async()=>{
- const compiled=await run('rustc',['--edition=2024','-C','overflow-checks=yes','-C','opt-level=1','-A','warnings',oracleSource,'-o',oracle]);
+const referenceResults = await oracleCache({suite:'conformance-positive',harness,flags:'2024 overflow-checks=yes opt-level=1 cfg=lkj_control'},async()=>{
+ const compiled=await run('rustc',['--edition=2024','--cfg','lkj_control','-C','overflow-checks=yes','-C','opt-level=1','-A','warnings',oracleSource,'-o',oracle]);
  if(!succeeded(compiled))throw new Error('Rust oracle did not build: '+diagnostic(compiled));
  const results={};
- for(const c of rustCases)results[c.id]=packResult(await run(oracle,[c.id],{encoding:null}));
+ for(const c of rustCases)results[c.id]=packResult(await run(oracle,[],{encoding:null,captureControl:true,env:{...process.env,LKJ_ORACLE_CASE:c.id}}));
  return results;
 });
 // A new rejection fixture must not invalidate every unchanged Rust rejection.
@@ -73,7 +75,7 @@ for(const c of cases.filter(c=>c.rust&&c.kind!=='run'&&c.kind!=='output')){
  let source=fs.readFileSync(negativeSource,'utf8');
  if(c.kind==='reject'&&c.world){
   negativeSource=path.join(out,c.id+'.rs');
-  source='mod __lkj_host {\n'+fs.readFileSync(path.join(root,'bridge/output.rs'),'utf8')+'\n}\nmod case {\n'+source+'\nuse crate::__lkj_host::{World,Stdout};\n}\n';
+  source='mod __lkj_host {\n'+fs.readFileSync(path.join(root,'bridge/output.rs'),'utf8')+'\n}\nmod case {\n'+source+'\nuse crate::__lkj_host::{World,Stdout,Stdin,Stderr,Directory,File};\n}\n';
   fs.writeFileSync(negativeSource,source);
  }
  referenceResults[c.id]=await oracleCache({suite:'conformance-rejection',file:c.file,source,flags:negativeFlags},async()=>packResult(
@@ -108,11 +110,12 @@ for (const c of cases) {
     }
 
     if (c.kind === 'trap') {
-        const code = result.stderr.toString().match(/: (R[0-9]+)\b/)?.[1];
+        const emittedCode = result.stderr.toString().match(/: (R[0-9]+)\b/)?.[1];
+        const code = c.code === 'R0004' && emittedCode && Number(emittedCode.slice(1)) >= 16 ? 'R0004' : emittedCode;
         const expected = Buffer.from(c.hex || '', 'hex');
         if (result.error || result.signal || result.status === 0 || code !== c.code
             || !result.stdout.equals(expected)
-            || (c.line !== undefined && !result.stderr.toString().includes(`:${c.line}: ${c.code} `))) {
+            || (c.line !== undefined && !result.stderr.toString().includes(`:${c.line}: ${emittedCode} `))) {
             fail(c.id + ': expected ' + c.code + ' and output ' + expected.toString('hex')
                 + ', got ' + diagnostic(result));
             continue;
@@ -123,13 +126,19 @@ for (const c of cases) {
         const normalKind = code => Number(code.slice(1)) >= 16 ? 'R0004' : code;
         const ending = (result, rust) => {
             if (result.error) return result.error.code === 'ETIMEDOUT' ? 'timeout' : 'crash';
-            if (result.status === 0 && !result.signal) return 'normal';
-            const diagnostic = result.stderr.toString();
-            const code = diagnostic.match(rust ? /LKJ_RUST_TRAP (R[0-9]+)/ : /: (R[0-9]+)\b/)?.[1];
+            if (rust) {
+                const observed = worldOutcome(result);
+                if (observed.kind === 'trap') return normalKind(observed.code);
+                return observed.kind === 'normal' && observed.status === (c.status ?? 0) ? 'normal' : 'crash';
+            }
+            if (result.status === (c.status ?? 0) && !result.signal && result.stderr.length === 0) return 'normal';
+            const code = result.stderr.toString().match(/: (R[0-9]+)\b/)?.[1];
             return code ? normalKind(code) : 'crash';
         };
         const expected = Buffer.from(c.hex, 'hex');
+        const expectedStderr = Buffer.from(c.stderrHex || '', 'hex');
         if (!actual.stdout.equals(expected) || !reference.stdout.equals(expected)
+            || !actual.programStderr.equals(expectedStderr) || !reference.stderr.equals(expectedStderr)
             || ending(actual, false) !== c.ending || ending(reference, true) !== c.ending) {
             fail(c.id + ': output/termination differs: lkj=' + ending(actual, false)
                 + ' rust=' + ending(reference, true) + ' expected=' + c.ending + ' ' + diagnostic(actual));

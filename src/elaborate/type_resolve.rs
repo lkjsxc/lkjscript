@@ -443,7 +443,12 @@ impl Compiler<'_> {
                 .push(self.intern(String::new(), k::TypeKind::Str));
             return Ok(());
         }
-        if path.declaration.is_none() && matches!(path.name.as_str(), "World" | "Stdout") {
+        if path.declaration.is_none()
+            && matches!(
+                path.name.as_str(),
+                "World" | "Stdout" | "Stdin" | "Stderr" | "Directory" | "File"
+            )
+        {
             if !args.is_empty() {
                 return Err(err(
                     span,
@@ -451,10 +456,14 @@ impl Compiler<'_> {
                     "capability types take no type arguments",
                 ));
             }
-            let kind = if path.name == "World" {
-                k::TypeKind::World
-            } else {
-                k::TypeKind::Stdout
+            let kind = match path.name.as_str() {
+                "World" => k::TypeKind::World,
+                "Stdout" => k::TypeKind::Stdout,
+                "Stdin" => k::TypeKind::Stdin,
+                "Stderr" => k::TypeKind::Stderr,
+                "Directory" => k::TypeKind::Directory,
+                "File" => k::TypeKind::File,
+                _ => unreachable!(),
             };
             work.values.push(self.intern(String::new(), kind));
             return Ok(());

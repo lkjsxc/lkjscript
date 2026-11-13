@@ -17,11 +17,11 @@ for (const [signal, status] of [['SIGINT', 130], ['SIGTERM', 143]]) {
 }
 export function run(command, args, options = {}) {
   const { timeout = Number(process.env.LKJ_TEST_TIMEOUT_MS || 30000),
-    maxBuffer = 32 * 1024 * 1024, encoding = 'utf8', sampleMemory = false, idleTimeout = 0,
+    maxBuffer = 32 * 1024 * 1024, encoding = 'utf8', sampleMemory = false, idleTimeout = 0, input, captureControl = false,
     memoryBytes = process.env.LKJ_TEST_MEMORY_BYTES || (path.basename(command) === 'rustc' ? '8589934592' : '2147483648'), ...spawnOptions } = options;
   if (![timeout, idleTimeout].every(value => Number.isFinite(value) && value >= 0)) throw new Error('invalid process timeout');
   return new Promise(resolve => {
-    const stdout = [], stderr = [];
+    const stdout = [], stderr = [], control = [];
     let size = 0, error;
     // Programs under test, including Rust references, inherit an explicit Linux
     // address-space envelope. Capacity probes opt into a larger value or
@@ -36,7 +36,11 @@ export function run(command, args, options = {}) {
     const arguments_ = process.platform === 'linux'
       ? ['--core=0', ...(node || budget === 'unlimited' ? [] : ['--as=' + budget]), '--', command, ...args] : args;
     const child = spawn(executable, arguments_, { ...spawnOptions, detached: process.platform !== 'win32',
-      stdio: ['ignore', 'pipe', 'pipe'] });
+      stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe', ...(captureControl ? ['pipe'] : [])] });
+    if (child.stdin) {
+      child.stdin.on('error', problem => { if (problem.code !== 'EPIPE') error = problem; });
+      child.stdin.end(input);
+    }
     active.add(child);
     let peakTreeRss = 0;
     function sample() {
@@ -66,7 +70,7 @@ export function run(command, args, options = {}) {
       idleTimer = setTimeout(() => expire(`process produced no result for ${idleTimeout} ms`), idleTimeout);
     }
     progress();
-    for (const [stream, chunks] of [[child.stdout, stdout], [child.stderr, stderr]]) {
+    for (const [stream, chunks] of [[child.stdout, stdout], [child.stderr, stderr], ...(captureControl ? [[child.stdio[3], control]] : [])]) {
       stream.on('data', chunk => {
         if (stream === child.stdout) progress();
         size += chunk.length;
@@ -80,7 +84,7 @@ export function run(command, args, options = {}) {
     child.on('close', (status, signal) => {
       clearTimeout(timer); clearTimeout(idleTimer); if (memoryTimer) clearInterval(memoryTimer); active.delete(child);
       const convert = chunks => encoding ? Buffer.concat(chunks).toString(encoding) : Buffer.concat(chunks);
-      resolve({status, signal, error, sampled_peak_tree_rss_bytes: sampleMemory ? peakTreeRss : undefined, stdout: convert(stdout), stderr: convert(stderr)});
+      resolve({status, signal, error, sampled_peak_tree_rss_bytes: sampleMemory ? peakTreeRss : undefined, stdout: convert(stdout), stderr: convert(stderr), control: Buffer.concat(control)});
     });
   });
 }

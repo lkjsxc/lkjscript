@@ -6,6 +6,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { run } from '../process.mjs';
+import { runRoutes } from '../batch.mjs';
+import { worldOutcome } from '../oracle.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const hash = text => createHash('sha256').update(text).digest('hex');
@@ -180,6 +182,20 @@ function execution(result, rust) {
   return {kind: code[0] === 'R' ? 'trap' : code[0] === 'M' ? 'machine-error' : 'reject',
     code: code[0] === 'R' ? normalTrap(code) : code, line: Number(diagnostic[1]), stdout};
 }
+function worldExecution(result, rust) {
+  if (rust) {
+    const outcome = worldOutcome(result), bytes = {stdout: result.stdout, programStderr: result.stderr};
+    if (outcome.kind === 'normal') return {kind: 'value', status: outcome.status, ...bytes};
+    if (outcome.kind === 'trap') return {kind: 'trap', code: normalTrap(outcome.code), ...bytes};
+    return {kind: 'crash', ...bytes};
+  }
+  // Batch diagnostics are separate from program stderr. A deliberate nonzero
+  // exit is a normal result, even when stderr resembles a compiler diagnostic.
+  if (!result.error && !result.signal && result.checkStatus === 0 && result.stderr.length === 0) {
+    return {kind: 'value', status: result.status, stdout: result.stdout, programStderr: result.programStderr};
+  }
+  return {...execution(result, false), programStderr: result.programStderr};
+}
 export function classify(reference, actual, profile = 'verdict') {
   if (reference.kind === 'timeout' || reference.kind === 'crash') return 'oracle-abnormal';
   if (reference.kind === 'reject' && !OWN.has(reference.code)) return 'generator-or-oracle-problem';
@@ -192,7 +208,9 @@ export function classify(reference, actual, profile = 'verdict') {
   if (actual.kind === 'reject') return ['E_PARSE', 'E_UNSUPPORTED'].includes(actual.code) ? 'unsupported' : 'rejects-valid:' + actual.code;
   if (profile === 'output') {
     if (reference.kind !== actual.kind || reference.code !== actual.code) return 'different-ending';
+    if (reference.kind === 'value' && (reference.status ?? 0) !== (actual.status ?? 0)) return 'different-ending';
     if (!reference.stdout.equals(actual.stdout)) return 'different-output';
+    if (!(reference.programStderr ?? Buffer.alloc(0)).equals(actual.programStderr ?? Buffer.alloc(0))) return 'different-stderr';
     return reference.kind === 'value' ? 'equal-output-exit' : 'equal-output-trap';
   }
   if (reference.kind === 'value' && actual.kind === 'value') {
@@ -207,8 +225,9 @@ export function classify(reference, actual, profile = 'verdict') {
   return 'VALUE-VS-TRAP';
 }
 function compact(outcome) {
-  return {kind: outcome.kind, code: outcome.code, line: outcome.line,
-    stdoutBytes: outcome.stdout?.length || 0, stdoutSha256: hash(outcome.stdout || Buffer.alloc(0))};
+  return {kind: outcome.kind, code: outcome.code, line: outcome.line, status: outcome.status,
+    stdoutBytes: outcome.stdout?.length || 0, stdoutSha256: hash(outcome.stdout || Buffer.alloc(0)),
+    ...(outcome.programStderr === undefined ? {} : {stderrBytes: outcome.programStderr.length, stderrSha256: hash(outcome.programStderr)})};
 }
 function writeAtomic(file, content) {
   fs.writeFileSync(file + '.tmp-' + process.pid, content);
@@ -224,12 +243,13 @@ export function createEvaluator(binary, options = {}) {
   const frozen = path.join(directory, 'lkjscript'), sourceFile = path.join(directory, 'case.rs');
   const rustSource = path.join(directory, 'oracle.rs'), rustCase = path.join(directory, 'oracle_case.rs'), oracle = path.join(directory, 'oracle');
   fs.copyFileSync(binary, frozen); fs.chmodSync(frozen, 0o700);
-  const runtimeFiles = ['bridge/output.rs', 'tools/process.mjs']
+  const runtimeFiles = ['bridge/output.rs', 'tools/process.mjs', ...(profile === 'output' ? ['tools/oracle.mjs', 'tools/batch.mjs'] : [])]
     .filter(file => fs.existsSync(path.join(root, file)));
   const runtimeHashes = Object.fromEntries(runtimeFiles.map(file => [file, hash(fs.readFileSync(path.join(root, file)))]));
   const shim = path.join(directory, 'output.rs');
   if (profile === 'output') fs.copyFileSync(path.join(root, 'bridge/output.rs'), shim);
   const flags = ['--edition=2024', '--error-format=json', '-C', 'overflow-checks=yes', '-C', 'opt-level=0', '-A', 'warnings'];
+  if (profile === 'output') flags.push('--cfg', 'lkj_control');
   if (profile === 'value') flags.push('-A', 'arithmetic_overflow', '-A', 'unconditional_panic', '-A', 'overflowing_literals');
   const processOptions = {cwd: root, encoding: null, timeout: options.timeout || 10000};
   function stableRuntime() {
@@ -241,7 +261,7 @@ export function createEvaluator(binary, options = {}) {
     stableRuntime();
     const adapter = '__lkjscript_reduce_' + hash(source).slice(0, 16);
     fs.writeFileSync(sourceFile, source);
-    const importHost = profile === 'output' ? '\nuse crate::__lkj_host::{World,Stdout};\n' : '\n';
+    const importHost = profile === 'output' ? '\nuse crate::__lkj_host::{World,Stdout,Stdin,Stderr,Directory,File};\n' : '\n';
     const body = profile === 'output' ? 'crate::__lkj_host::enter(' + entry + ');' : 'println!("{}", ' + entry + '());';
     fs.writeFileSync(rustCase, source + importHost + 'pub fn ' + adapter + '() { ' + body + ' }\n');
     fs.writeFileSync(rustSource, '#![allow(warnings)]\n'
@@ -259,9 +279,17 @@ export function createEvaluator(binary, options = {}) {
       });
       reference = {kind: 'reject', code: diagnostics.find(d => d.code?.code)?.code.code || 'NO_RUST_CODE', stdout: Buffer.alloc(0)};
     } else {
-      rustAccepted = true; reference = execution(await run(oracle, [], processOptions), true);
+      rustAccepted = true;
+      const result = await run(oracle, [], {...processOptions, captureControl: profile === 'output'});
+      reference = profile === 'output' ? worldExecution(result, true) : execution(result, true);
     }
-    const actual = execution(await run(frozen, ['run', sourceFile, '--entry', entry, '--engine', engine], processOptions), false);
+    let actual;
+    if (profile === 'output') {
+      const routes = await runRoutes(frozen, [{path: sourceFile, entry}], {...processOptions, engines: [engine], output: directory});
+      actual = worldExecution(routes[engine][0], false);
+    } else {
+      actual = execution(await run(frozen, ['run', sourceFile, '--entry', entry, '--engine', engine], processOptions), false);
+    }
     stableRuntime();
     return {category: classify(reference, actual, profile), rustAccepted,
       rustCode: reference.kind === 'reject' ? reference.code : undefined,

@@ -3,12 +3,12 @@
 import fs from 'node:fs';
 const groups={
  'K contract and safety gate':['src/k.rs','src/check.rs','src/check','src/facts.rs'],
- 'Lowering, layout and lowered contract':['src/lower.rs','src/lower/ir.rs'],
+ 'Lowering, layout and lowered contract':['src/lower.rs','src/lower'],
  'Source runtime and raw-memory binding':['library/runtime.rs','src/runtime.rs'],
  'K text and diagnostics':['src/k_text.rs','src/kc.rs','src/diagnostic.rs'],
- 'Native encoder and Linux entry':['src/native.rs'],
- 'Production host boundary':['bridge/main.rs','bridge/lib.rs','bridge/batch.rs','bridge/library.rs','bridge/compiler_stack.rs','bridge/runtime.rs','bridge/native.rs'],
- 'Independent K and raw-memory models':['src/machine.rs','src/machine/scalar.rs','src/runtime_memory.rs'],
+ 'Native encoder and Linux entry':['src/native.rs','src/native'],
+ 'Production host boundary':['bridge/main.rs','bridge/lib.rs','bridge/batch.rs','bridge/library.rs','bridge/compiler_stack.rs','bridge/runtime.rs','bridge/native.rs','bridge/process.rs','bridge/world.rs','bridge/output.rs','bridge/kc.rs'],
+ 'Independent K and raw-memory models':['src/machine.rs','src/machine','src/runtime_memory.rs'],
 };
 function sourceFiles(entry){
  if(!fs.existsSync(entry))return [];

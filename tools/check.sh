@@ -48,6 +48,7 @@ parallel_step() {
 parallel_started_ns=$(date +%s%N)
 check_engines_text="${LKJ_GATE_ENGINES:-native,k}"
 parallel_step rust-and-lint rust_checks
+parallel_step world-io node tools/world-io.mjs "$check_binary"
 parallel_step k-compiler node tools/kc.mjs "$check_binary" "${CARGO_TARGET_DIR:-target}/release/kc"
 parallel_step conformance env LKJ_ENGINES="$check_engines_text" node tools/conformance.mjs "$check_binary"
 parallel_step values env LKJ_ENGINES="$check_engines_text" node tools/generators/value.mjs "$check_binary" 601 100

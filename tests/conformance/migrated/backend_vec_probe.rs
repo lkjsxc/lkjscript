@@ -17,5 +17,5 @@
             }
             values[999] + values.len() as i64
         }
-    
+
 pub fn probe()->i64 { let mut i=0; while i<1000 { assert_eq!(vec_probe(),1999); i+=1; } 1999 }

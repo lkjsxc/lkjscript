@@ -99,12 +99,7 @@ fn model_uses_an_explicit_stack_for_non_tail_calls_and_deep_cleanup() {
         .iter()
         .position(|function| function.name == "probe")
         .unwrap();
-    let result = std::thread::Builder::new()
-        .stack_size(2 * 1024 * 1024)
-        .spawn(move || must_run(machine::run(&program, entry, &[], &mut Vec::new())))
-        .unwrap()
-        .join()
-        .unwrap();
+    let result = must_run(machine::run(&program, entry, &[], &mut Vec::new()));
     assert_eq!(observed(result.value), 20000);
     assert_eq!(result.peak_frames, 20002);
     let cleanup = "enum List {End,Next(Box<List>)} pub fn probe()->i64 {let mut v=List::End;let mut i:i64=0;while i<20000 {v=List::Next(Box::new(v));i=i+1;}i}";
@@ -314,7 +309,14 @@ fn raw_k_detects_frame_escape_and_inactive_variant_without_checker() {
 }
 #[test]
 fn raw_k_cannot_fabricate_host_authority_or_supply_it_as_integer_argument() {
-    for kind in [k::TypeKind::World, k::TypeKind::Stdout] {
+    for kind in [
+        k::TypeKind::World,
+        k::TypeKind::Stdout,
+        k::TypeKind::Stdin,
+        k::TypeKind::Stderr,
+        k::TypeKind::Directory,
+        k::TypeKind::File,
+    ] {
         let program = raw(
             vec![k::Type {
                 name: "authority".to_string(),

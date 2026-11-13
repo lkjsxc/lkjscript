@@ -4,6 +4,7 @@
 //! frame slots; only the platform primitives below issue system calls.
 use crate::lower::{HostFunction, Instruction, Program, ScalarOp, Signature, ValueType};
 use std::collections::BTreeMap;
+mod io;
 
 pub struct Entry {
     pub function: usize,
@@ -16,6 +17,8 @@ const CONTEXT_GLOBALS: i64 = 80;
 const HEAP_RESERVED: i64 = 0;
 const STACK_RESERVED: i64 = 8;
 const HEAP_USED: i64 = 16;
+const INITIAL_STACK: i64 = 24;
+const EXIT_STATUS: i64 = 32;
 const PACKET: i64 = 40;
 const A: u8 = 0;
 const C: u8 = 1;
@@ -158,6 +161,7 @@ impl Assembler {
 
 #[derive(Clone, Copy)]
 struct Platform {
+    io: io::Io,
     trap: Label,
     exhausted: Label,
     stack_exhausted: Label,
@@ -180,6 +184,7 @@ struct Platform {
 impl Platform {
     fn new(a: &mut Assembler, program: &Program) -> Self {
         Self {
+            io: io::Io::new(a),
             trap: a.label(),
             exhausted: a.label(),
             stack_exhausted: a.label(),
@@ -353,6 +358,7 @@ fn platform(
     // Startup performs only resource observation and capability setup. The ELF
     // contains no observation of the machine that compiled it.
     a.address(GLOBALS, p.context);
+    a.store(GLOBALS, INITIAL_STACK, SP);
     a.immediate(A, 1);
     a.store(GLOBALS, Platform::global(p.trap_line), A);
     startup_extents(a, p, initial);
@@ -412,6 +418,7 @@ fn platform(
     a.store(GLOBALS, PACKET + 8, A);
     a.immediate(A, 0);
     a.store(GLOBALS, PACKET, A);
+    a.load(A, GLOBALS, EXIT_STATUS);
     a.store(GLOBALS, PACKET + 16, A);
     a.jump(p.complete);
 
@@ -458,9 +465,13 @@ fn platform(
     } else {
         standalone_diagnostic(a, p);
     }
-    a.load(DI, GLOBALS, PACKET);
-    a.test(DI, true);
-    a.raw(&[0x40, 0x0f, 0x95, 0xc7, 0x40, 0x0f, 0xb6, 0xff]);
+    a.load(A, GLOBALS, PACKET);
+    a.test(A, true);
+    a.immediate(DI, 1);
+    let exiting = a.label();
+    a.condition(5, exiting);
+    a.load(DI, GLOBALS, EXIT_STATUS);
+    a.bind(exiting);
     a.immediate(A, 60);
     a.syscall();
     a.raw(&[0x0f, 0x0b]);
@@ -531,41 +542,7 @@ fn platform(
     a.bind(copy_done);
     a.ret();
 
-    a.bind(p.stdout); // descending argument words: address, length, source line.
-    let output_failed = a.label();
-    a.load(R8, DI, 0);
-    a.load(R9, DI, -8);
-    a.load(A, DI, -16);
-    a.store(GLOBALS, Platform::global(p.trap_line), A);
-    p.range_to(a, R8, R9, output_failed);
-    a.rr(0x01, R8, HEAP, true);
-    let write = a.label();
-    let written = a.label();
-    a.bind(write);
-    a.test(R9, true);
-    a.condition(4, written);
-    a.immediate(A, 1);
-    a.immediate(DI, 1);
-    a.mov(SI, R8);
-    a.mov(D, R9);
-    a.syscall();
-    a.immediate(C, (-4i64) as u64);
-    a.compare(A, C);
-    a.condition(4, write);
-    a.test(A, true);
-    a.condition(14, output_failed);
-    a.compare(A, R9);
-    a.condition(7, output_failed);
-    a.rr(0x01, R8, A, true);
-    a.rr(0x29, R9, A, true);
-    a.jump(write);
-    a.bind(output_failed);
-    a.immediate(A, 7);
-    a.store(GLOBALS, Platform::global(p.trap_code), A);
-    a.jump(p.trap);
-    a.bind(written);
-    a.immediate(A, 0);
-    a.ret();
+    io::emit(a, p);
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -1248,16 +1225,12 @@ pub fn encode(program: &Program, entry: Entry) -> Result<Vec<u8>> {
     for _ in &signatures {
         functions.push(a.label());
     }
-    // Host output is the only language-visible import.
     for (index, import) in program.imports.iter().enumerate() {
-        match import.host {
-            HostFunction::StdoutWrite => {
-                if import.signature != Signature::words(3) {
-                    return Err("invalid stdout import signature".to_string());
-                }
-                functions[index] = p.stdout;
-            }
+        let (label, parameters) = p.io.import(import.host, p.stdout);
+        if import.signature != Signature::words(parameters) {
+            return Err("invalid host import signature".to_string());
         }
+        functions[index] = label;
     }
     platform(&mut a, p, program, &entry, &functions, initial);
     for index in 0..program.functions.len() {
@@ -1293,6 +1266,7 @@ pub fn encode(program: &Program, entry: Entry) -> Result<Vec<u8>> {
     data.extend_from_slice(&[0u8; 16]);
     a.data_label(p.diagnostic_buffer, data_offset + data.len());
     data.extend_from_slice(&[0u8; 128]);
+    p.io.data(&mut a, &mut data, data_offset);
     for argument in entry.arguments.iter().rev() {
         data.extend_from_slice(&argument.to_le_bytes());
     }

@@ -1,6 +1,8 @@
 #[path = "../bridge/library.rs"]
 mod bootstrap_library;
 // Existing Rust library behavior and native execution use the same probes.
+#[path = "support/library_rust.rs"]
+mod library_rust;
 #[path = "support/native.rs"]
 mod native;
 use lkjscript::{k, source};
@@ -202,7 +204,9 @@ fn strings_validate_and_project_borrowed_bytes() {
 fn complete_source_library_builds_with_rustc() {
     let directory = std::path::Path::new(".artifacts");
     std::fs::create_dir_all(directory).unwrap();
-    let output = directory.join(format!("source-library-{}.rlib", std::process::id()));
+    let staged = directory.join(format!("source-library-{}", std::process::id()));
+    let input = library_rust::stage(&staged, &bootstrap_library::standard_library());
+    let output = staged.join("library.rlib");
     let result = Command::new("rustc")
         .args([
             "--crate-type",
@@ -212,7 +216,7 @@ fn complete_source_library_builds_with_rustc() {
             "-C",
             "overflow-checks=yes",
         ])
-        .arg("library/lib.rs")
+        .arg(input)
         .arg("-o")
         .arg(&output)
         .output()
@@ -222,7 +226,7 @@ fn complete_source_library_builds_with_rustc() {
         "{}",
         std::string::String::from_utf8_lossy(&result.stderr)
     );
-    std::fs::remove_file(output).unwrap();
+    std::fs::remove_dir_all(staged).unwrap();
 }
 
 #[test]

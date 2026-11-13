@@ -27,3 +27,15 @@ outputs and cached Rust comparisons stay under target/.
 
 `node tools/kc.mjs` compares the cargo-built independent K compiler with B0 over
 this data. That boundary comparison must not be called self-compilation.
+
+World output records may also declare `stderrHex` (default empty) and normal
+`status` (default zero). Rust World runs use a dedicated control pipe; neither
+program stderr nor an intentional status 101 can impersonate a trap. Selectors
+are harness environment metadata, so World sees only application arguments.
+The separate `tools/world-io.mjs` suite exercises declared binary input/arguments,
+filesystem state and process descriptor conditions that do not fit a batch row.
+
+For an explicit panic, expected code `R0004` includes the artifact-local message
+codes `R0016` and above. Their slot numbers can move when unrelated library
+functions change. Drop-order cases also assert the source line of the first
+panic, so a different destructor cannot satisfy the observation.

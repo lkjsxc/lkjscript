@@ -1,6 +1,7 @@
 //! Rust-compatible syntax to explicit K. Inference lives here; K trusts none of it.
 mod assignment;
 mod borrow_cleanup;
+mod capabilities;
 pub(crate) mod census;
 mod census_ownership;
 mod closures;
@@ -54,6 +55,10 @@ enum TypeKey {
     Box(usize),
     World,
     Stdout,
+    Stdin,
+    Stderr,
+    Directory,
+    File,
     Str,
     Nominal(a::DeclarationId, Vec<usize>),
 }
@@ -134,7 +139,10 @@ pub fn infer_resolved_report(
     static_lifetimes::annotations(source).map_err(|error| vec![error])?;
     crate::generics::validate(source).map_err(|error| vec![error])?;
     static_lifetimes::outputs(source).map_err(|error| vec![error])?;
-    let compiler = Compiler::new(source).map_err(|error| vec![error])?;
+    let mut compiler = Compiler::new(source).map_err(|error| vec![error])?;
+    compiler
+        .check_capability_methods()
+        .map_err(|error| vec![error])?;
     let inferred =
         diagnostic_inference::infer_all(source, &compiler.names, &compiler.implementations);
     let (evidence, mut problems) = generic_check::validate_report(source, inferred.definitions)
@@ -551,6 +559,10 @@ impl Compiler<'_> {
             k::TypeKind::Box { inner } => (TypeKey::Box(*inner), format!("Box<t{inner}>")),
             k::TypeKind::World => (TypeKey::World, "World".to_string()),
             k::TypeKind::Stdout => (TypeKey::Stdout, "Stdout".to_string()),
+            k::TypeKind::Stdin => (TypeKey::Stdin, "Stdin".to_string()),
+            k::TypeKind::Stderr => (TypeKey::Stderr, "Stderr".to_string()),
+            k::TypeKind::Directory => (TypeKey::Directory, "Directory".to_string()),
+            k::TypeKind::File => (TypeKey::File, "File".to_string()),
             k::TypeKind::Str => (TypeKey::Str, "str".to_string()),
             _ => unreachable!("only structural types use intern"),
         };

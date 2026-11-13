@@ -15,6 +15,7 @@ pub fn standard_library() -> Vec<SourceInput> {
         ("$std/fmt.rs", include_str!("../library/fmt.rs")),
         ("$std/iter.rs", include_str!("../library/iter.rs")),
         ("$std/integer.rs", include_str!("../library/integer.rs")),
+        ("$std/io.rs", include_str!("../library/io.rs")),
         (
             "$std/ordered_map.rs",
             include_str!("../library/ordered_map.rs"),

@@ -41,6 +41,12 @@ pub enum TypeKind {
     World,
     /// Affine authority to write standard output, derived from World.
     Stdout,
+    Stdin,
+    Stderr,
+    /// Affine directory authority; descendants remain beneath this root.
+    Directory,
+    /// Affine open file; structural destruction closes its handle.
+    File,
 }
 #[derive(Clone, PartialEq)]
 pub struct Field {

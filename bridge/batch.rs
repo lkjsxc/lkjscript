@@ -16,22 +16,26 @@ fn hex(bytes: &[u8]) -> String {
     }
     out
 }
-fn record(index: usize, engine: &str, checked: bool, status: i32, stdout: &[u8], stderr: &str) {
+fn record(index: usize, engine: &str, checked: bool, status: i32, stdout: &[u8], diagnostic: &str) {
+    record_streams(index, engine, checked, status, stdout, &[], diagnostic);
+}
+fn record_streams(
+    index: usize,
+    engine: &str,
+    checked: bool,
+    status: i32,
+    stdout: &[u8],
+    stderr: &[u8],
+    diagnostic: &str,
+) {
     println!(
-        "{{\"index\":{index},\"engine\":{},\"checkStatus\":{},\"status\":{status},\"stdoutHex\":\"{}\",\"stderr\":{}}}",
+        "{{\"index\":{index},\"engine\":{},\"checkStatus\":{},\"status\":{status},\"stdoutHex\":\"{}\",\"stderrHex\":\"{}\",\"stderr\":{}}}",
         quoted(engine),
         if checked { 0 } else { 1 },
         hex(stdout),
-        quoted(stderr)
+        hex(stderr),
+        quoted(diagnostic)
     );
-}
-#[derive(Default)]
-struct Output(Vec<u8>);
-impl machine::Host for Output {
-    fn write_stdout(&mut self, bytes: &[u8]) -> Result<(), String> {
-        self.0.extend_from_slice(bytes);
-        Ok(())
-    }
 }
 pub fn run(argv: &[String]) -> Result<(), String> {
     let usage = "E_USAGE batch <manifest.tsv|directory> [--engine native|k | --engines native,k]";
@@ -86,6 +90,7 @@ pub fn run(argv: &[String]) -> Result<(), String> {
                 engine: engines[0].to_string(),
                 census: false,
                 unchecked: false,
+                program_arguments: Vec::new(),
             };
             let mut timings = timing::Timings::new();
             let checked = match compile(&args.path, false, &mut timings) {
@@ -121,20 +126,31 @@ pub fn run(argv: &[String]) -> Result<(), String> {
                 .then(|| timings.measure("lower", || native::lower(&checked)));
             for engine in &engines {
                 if *engine == "k" {
-                    let mut output = Output::default();
+                    let mut output = world::Host::captured();
                     match timings
                         .measure("machine", || machine::run(program, entry, &[], &mut output))
                     {
                         Ok(result) => {
-                            output.0.extend_from_slice(scalar(result.value).as_bytes());
-                            record(index, engine, true, 0, &output.0, "");
+                            output
+                                .stdout
+                                .extend_from_slice(scalar(result.value).as_bytes());
+                            record_streams(
+                                index,
+                                engine,
+                                true,
+                                i32::from(output.status),
+                                &output.stdout,
+                                &output.stderr,
+                                "",
+                            );
                         }
-                        Err(error) => record(
+                        Err(error) => record_streams(
                             index,
                             engine,
                             true,
                             1,
-                            &output.0,
+                            &output.stdout,
+                            &output.stderr,
                             &format!(
                                 "{}:{}: {} {}",
                                 args.path,
@@ -166,11 +182,19 @@ pub fn run(argv: &[String]) -> Result<(), String> {
                     let path = directory.join(format!("{index}.elf"));
                     native::save(&path, &bytes)?;
                     match timings.measure("native_run", || {
-                        native::execute(&path, lowered, &args.path, true)
+                        native::execute(&path, lowered, &args.path, true, &args.program_arguments)
                     }) {
                         Ok(mut outcome) => {
                             if let Some(error) = outcome.error {
-                                record(index, engine, true, 1, &outcome.stdout, &error);
+                                record_streams(
+                                    index,
+                                    engine,
+                                    true,
+                                    1,
+                                    &outcome.stdout,
+                                    &outcome.stderr,
+                                    &error,
+                                );
                             } else {
                                 let value = match native::scalar(
                                     program,
@@ -184,7 +208,15 @@ pub fn run(argv: &[String]) -> Result<(), String> {
                                     }
                                 };
                                 outcome.stdout.extend_from_slice(scalar(value).as_bytes());
-                                record(index, engine, true, 0, &outcome.stdout, "");
+                                record_streams(
+                                    index,
+                                    engine,
+                                    true,
+                                    i32::from(outcome.status),
+                                    &outcome.stdout,
+                                    &outcome.stderr,
+                                    "",
+                                );
                             }
                         }
                         Err(error) => record(index, engine, true, 1, &[], &error),

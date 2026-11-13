@@ -17,5 +17,5 @@ fn sum(values: &[i64]) -> i64 {
             assert_eq!(copied[1], 2);
             sum(&original) + sum(&copied)
         }
-    
+
 pub fn probe()->i64 { let mut i=0; while i<1000 { assert_eq!(array_probe(),109); i+=1; } 109 }

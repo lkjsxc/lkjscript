@@ -755,7 +755,9 @@ still kill a process under physical/cgroup memory pressure; ordinary operator
 budgets belong to execution, not source acceptance.
 
 The runner supplies a default 256 MiB address-space budget for native children
-and a 512 MiB budget for a fresh K worker, preserving tighter inherited limits.
+and a 512 MiB budget for fresh K execution and batch workers, preserving tighter
+inherited limits. Batch workers bound captured stdout/stderr as well as the K
+allocator.
 LKJ_RUN_MEMORY_BYTES selects explicit bytes or unlimited. Some infallible Rust
 allocations in the K host can still abort; the parent reports that host failure
 without inventing a source location. Fallible K frame and heap paths distinguish
@@ -851,46 +853,79 @@ the raw interface. `src/native.rs` encodes the lowered program as static ELF.
 and library source. `lkjscript trusted` lists these boundaries; `tools/trust.mjs`
 reports their physical sizes.
 
-Generated modules have no ambient imports. A module using a checked Stdout value
-imports only the byte writer. Language traps record a code and source line in
-lowered globals and terminate the selected route; the host translates that
-record after the trap. Trapping requires no application I/O authority.
-Ordinary source cannot declare host imports or construct capabilities from scalars.
-Ambient filesystem, environment and print operations are rejected. World-derived
-standard output is specified below. Other capabilities and structured
-task scopes remain unimplemented.
+Generated programs have no ambient filesystem, environment or process imports.
+Only checked operations on capability values can request host I/O. Source cannot
+declare host imports or construct capabilities from scalar words. Traps record a
+code and source line and terminate the selected route without requiring an
+application output capability. Structured task scopes remain unimplemented.
 
-## World and byte output
+## World and I/O capabilities
 
 The host entry alone creates `World`. An entry is either a zero-argument function
-or a function taking exactly one `World`; ordinary source calls still supply their
-own arguments. `World` and `Stdout` are affine intrinsic types with no source
-constructor, Copy, Clone, Data, Send or Sync implementation. Structs merely named
-World or Stdout do not acquire capability authority. K cannot construct a
-capability with an integer, cast, unit or aggregate instruction.
+or a function taking exactly one `World`; ordinary source calls supply their own
+arguments. `World`, `Stdout`, `Stdin`, `Stderr`, `Directory` and `File` are
+affine intrinsic types with no source constructor, Copy, Clone, Data, Send or Sync
+implementation. Same-spelled source structs acquire no authority. K checks the
+capability type and operation signature independently; integers, casts and
+aggregate construction cannot forge a capability. A function without a capability
+in its arguments or captures has no observable I/O effects.
 
-`World::stdout(&mut self) -> Stdout` derives authority to write standard output.
-A writer may outlive the World borrow and may be moved or passed by mutable
-reference. Repeated derivation is permitted. `Stdout::write(&mut self, &[u8])`
-returns unit after the complete byte sequence has been written, in call order.
-Only checked `world_stdout` and `stdout_write` K operations grant and use this
-interface. Source code cannot name a host import or forge either operation's
-required value. Pure programs do not import the output operation.
+All methods below take `&mut self`. Derived capabilities may outlive the World
+borrow, move into owners and pass by mutable reference. Deriving standard streams
+more than once refers to the same inherited streams. Convenience algorithms live
+in [library/io.rs](../library/io.rs); the host leaves handle only their primitive
+operations.
 
-The native host boundary receives a byte pointer, length and source line. It
-checks the range without overflowing, handles partial writes and EINTR, and
-retains no bytes or pointer after returning.
-Byte storage is already contiguous under the common layout contract; the host
-API does not depend on a source aggregate representation. Zero-length writes produce no bytes. An invalid range, zero-byte
-write or operating-system write failure traps with `R0007` (host output failure).
-Output emitted before any trap remains observable. Traps do not unwind; this is a
-specified departure from Rust panic unwinding. Normal destructor order remains
+| Methods | Result and contract |
+| --- | --- |
+| `World::args()` | `Vec<Vec<u8>>`: owned argument bytes in order, excluding argv0; no UTF-8 requirement. |
+| `World::stdout()`, `stdin()`, `stderr()` | The corresponding stream capability. |
+| `World::directory(&str)` | `Result<Directory, i64>`: open the explicitly named root directory. |
+| `World::set_exit_status(u8)` | Unit: select the eventual normal process status; execution and cleanup continue. The last setting in an entry wins. |
+| `Directory::open(&str)`, `create(&str)` | `Result<File, i64>`: open for reading, or create/truncate for writing, beneath that root. |
+| `Stdin::read(&mut [u8])`, `File::read(&mut [u8])` | `Result<usize, i64>`: copy a possibly short read; zero means EOF for a nonempty buffer. |
+| `Stdin::read_to_end()`, `File::read_to_end()` | `Result<Vec<u8>, i64>`: collect remaining bytes. |
+| `File::write(&[u8])`, `write_all(&[u8])` | `Result<usize, i64>` for one possibly short write, or `Result<(), i64>` for the complete sequence. |
+| `Stdout::write(&[u8])`, `Stderr::write(&[u8])` | Unit after the complete byte sequence has been written, in call order; output failure traps with R0007. |
+
+I/O Results carry positive Linux errno values. Reads, writes and opens retry
+EINTR. Paths reject embedded NUL with EINVAL (22); raw terminated path buffers
+also require exactly one final NUL. Root acquisition uses openat with
+O_PATH | O_DIRECTORY | O_CLOEXEC. File resolution uses openat2 with
+RESOLVE_BENEATH | RESOLVE_NO_MAGICLINKS: absolute paths and resolution that
+escapes the root fail. Relative parent components and ordinary symlinks are
+permitted when they remain beneath it. An unavailable openat2 reports its error, without a weaker fallback.
+Creation uses mode 0666 subject to the inherited umask. Dropping a Directory or
+File closes its owned handle exactly once; moves and partial cleanup retain that
+ownership. Dropping a standard-stream capability does not close the stream.
+
+Host leaves check byte ranges without overflow and retain no caller pointer.
+A zero-length complete write succeeds without emitting bytes. A write that makes
+no progress with bytes remaining, or an OS error writing stdout/stderr, traps
+with R0007 at the source call. SIGPIPE does not bypass that trap. File write
+errors instead return errno. Output emitted before a trap remains observable;
+traps terminate without cleanup or unwinding. Normal destructor order remains
 Rust-compatible in the supported intersection.
 
-The rustc conformance adapter supplies the same types and methods, privately
-constructs World in its host wrapper, uses write_all and aborts on output failure.
-Conformance compares exact bytes and normal exit versus the specified trap kind;
-matching bytes followed by a crash is not a passing execution.
+Inherited closed standard descriptors stay closed; opening another capability
+cannot retarget them. The Rust bootstrap records their state before Rust startup
+fills closed descriptors and restores that state once before application work.
+Both native and K runners inherit stdin/stdout/stderr directly for run and test.
+The native runner uses a separate result descriptor, so program stderr cannot be
+interpreted as a trap packet. Program arguments after the command-line `--`
+separator retain their original bytes. A normal nonzero requested status remains
+a normal completion; a trap exits unsuccessfully and reports its code and line
+on stderr when that stream is writable. Tests retain the first nonzero requested
+status across entries rather than losing it when a later entry succeeds.
+
+The [rustc conformance adapter](../bridge/output.rs) supplies the same capability
+methods and privately constructs World. Conformance compares exact output bytes,
+normal exit status and the specified trap kind. With `--cfg lkj_control`, the
+adapter reports its outcome on a separate descriptor and leaves stderr entirely
+to the program. Arbitrary stderr bytes and a normal status of 101 cannot
+impersonate an oracle trap. Missing or malformed control records are host
+failures. Matching bytes followed by an unrequested crash are not a passing
+execution.
 
 ## Diagnostic recovery and test oracles
 
@@ -917,7 +952,11 @@ remain blocked. A method's spelling alone is not evidence that it resolves.
 
 The bootstrap batch command accepts native, K, or both. It checks each source
 once. K uses fresh machine state per case inside its bounded worker; native cases
-execute separate images. Every case retains its own bytes and termination class.
+execute separate images. Every batch route runs inside a bounded worker, including
+native-only batches whose captured streams grow in the Rust host. Each result
+records program stdout in `stdoutHex`, program stderr in `stderrHex`, normal
+status separately, and compiler/runtime diagnostics in `stderr`. Each case
+retains its own bytes and termination class.
 The batch watchdog measures missing progress, not total duration. Missing,
 duplicate or incomplete results fail the suite. Rust reference outputs are cached
 by source, seed, compiler version and flags. Semantic cases are source/K data;

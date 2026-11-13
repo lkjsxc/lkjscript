@@ -1,5 +1,6 @@
 //! Independent execution of raw K over an independently owned heap and explicit work
 //! stack. This model neither invokes the checker nor uses native lowering.
+mod io;
 mod scalar;
 use crate::k::{self, Op, Place, Program, Projection, TypeKind};
 use std::collections::{BTreeMap, BTreeSet};
@@ -8,6 +9,29 @@ use std::rc::Rc;
 pub trait Host {
     /// Consume bytes before returning. The borrowed buffer cannot be retained.
     fn write_stdout(&mut self, bytes: &[u8]) -> Result<(), String>;
+    fn arguments(&self) -> &[Vec<u8>] {
+        &[]
+    }
+    fn read_stdin(&mut self, _bytes: &mut [u8]) -> Result<usize, i64> {
+        Err(38)
+    }
+    fn write_stderr(&mut self, _bytes: &[u8]) -> Result<(), String> {
+        Err("stderr is unavailable".to_string())
+    }
+    fn open_directory(&mut self, _path: &[u8]) -> Result<u64, i64> {
+        Err(38)
+    }
+    fn open_file(&mut self, _directory: u64, _path: &[u8], _create: bool) -> Result<u64, i64> {
+        Err(38)
+    }
+    fn read_file(&mut self, _handle: u64, _bytes: &mut [u8]) -> Result<usize, i64> {
+        Err(38)
+    }
+    fn write_file(&mut self, _handle: u64, _bytes: &[u8]) -> Result<usize, i64> {
+        Err(38)
+    }
+    fn close_handle(&mut self, _handle: u64) {}
+    fn set_exit_status(&mut self, _status: u8) {}
 }
 impl Host for Vec<u8> {
     fn write_stdout(&mut self, bytes: &[u8]) -> Result<(), String> {
@@ -106,6 +130,10 @@ enum Value {
     Reference(Reference),
     World,
     Stdout,
+    Stdin,
+    Stderr,
+    Directory(u64),
+    File(u64),
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Empty {
@@ -547,7 +575,11 @@ impl<H: Host> Machine<'_, H> {
     fn discard_scalar(&mut self, value: Value) -> Result<(), RunError> {
         match value {
             Value::Reference(reference) => self.release_reference(&reference),
-            Value::Aggregate { .. } | Value::Sequence(_) | Value::Box(_) => Err(self.error(
+            Value::Aggregate { .. }
+            | Value::Sequence(_)
+            | Value::Box(_)
+            | Value::Directory(_)
+            | Value::File(_) => Err(self.error(
                 MachineError::MissingDrop,
                 "owned value requires structural destruction",
             )),
@@ -702,7 +734,12 @@ impl<H: Host> Machine<'_, H> {
                     scalar::normalize(*value, *bits, *signed) == *value
                 }
                 (TypeKind::F64, Value::Bits(_)) => true,
-                (TypeKind::World, Value::World) | (TypeKind::Stdout, Value::Stdout) => true,
+                (TypeKind::World, Value::World)
+                | (TypeKind::Stdout, Value::Stdout)
+                | (TypeKind::Stdin, Value::Stdin)
+                | (TypeKind::Stderr, Value::Stderr) => true,
+                (TypeKind::Directory, Value::Directory(handle))
+                | (TypeKind::File, Value::File(handle)) => *handle != 0,
                 (TypeKind::Ref { inner, mutable }, Value::Reference(reference)) => {
                     *inner == reference.referent && *mutable == reference.mutable
                 }
@@ -1127,8 +1164,10 @@ impl<H: Host> Machine<'_, H> {
         let value = self.take(&work.access)?;
         self.cells[work.access.cell.index].empty = Empty::Dropped;
         let children = Self::children(&value).to_vec();
-        if let Value::Reference(reference) = value {
-            self.release_reference(&reference)?;
+        match value {
+            Value::Reference(reference) => self.release_reference(&reference)?,
+            Value::Directory(handle) | Value::File(handle) => self.host.close_handle(handle),
+            _ => {}
         }
         if work.release {
             self.release(work.access.cell)?;
@@ -1453,12 +1492,15 @@ impl<H: Host> Machine<'_, H> {
                     .map_err(|message| self.trap(7, &message))?;
                 Value::Unit
             }
-            _ => {
-                return Err(self.error(
-                    MachineError::Unsupported,
-                    &format!("intrinsic {name} is not implemented by the K machine"),
-                ));
-            }
+            _ => match self.io_intrinsic(destination.ty, name, &values)? {
+                Some(value) => value,
+                None => {
+                    return Err(self.error(
+                        MachineError::Unsupported,
+                        &format!("intrinsic {name} is not implemented by the K machine"),
+                    ));
+                }
+            },
         };
         for (_, value) in values {
             self.discard_scalar(value)?;

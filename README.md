@@ -27,8 +27,9 @@ Vec. Patterns, guards, question-mark, closures and value-producing breaks lower
 through ordinary K operations. The source library provides text, iterators,
 formatting, ordered maps and collection algorithms. Heap containers own their
 contents; stored relationships use indices or owned values. World-derived
-output is explicit. Arguments, input and directory-relative files are the next
-capability work.
+effects are explicit: owned byte arguments, binary standard streams, requested
+exit status and files beneath directory capabilities. File handles close on
+structural destruction. Arguments after `--` are passed to the program unchanged.
 
 The compiler takes declared source, library and runtime inputs. Layout,
 copy/drop/equality glue and runtime calls are applied once. Allocation, growth,

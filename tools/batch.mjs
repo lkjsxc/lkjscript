@@ -40,14 +40,17 @@ export async function runRoutes(binary, cases, {
             throw new Error('invalid or duplicate batch route/case index');
         }
         if (typeof record.stdoutHex !== 'string' || !/^(?:[0-9a-f]{2})*$/.test(record.stdoutHex) || typeof record.stderr !== 'string'
-            || ![0, 1].includes(record.checkStatus) || ![0, 1].includes(record.status)) {
+            || typeof record.stderrHex !== 'string' || !/^(?:[0-9a-f]{2})*$/.test(record.stderrHex)
+            || ![0, 1].includes(record.checkStatus) || !Number.isInteger(record.status) || record.status < 0 || record.status > 255) {
             throw new Error('invalid batch result');
         }
         const stdout = Buffer.from(record.stdoutHex, 'hex'), stderr = Buffer.from(record.stderr);
+        const programStderr = Buffer.from(record.stderrHex, 'hex');
         results[record.index] = {
             ...record,
             stdout: encoding ? stdout.toString(encoding) : stdout,
             stderr: encoding ? stderr.toString(encoding) : stderr,
+            programStderr: encoding ? programStderr.toString(encoding) : programStderr,
             error: undefined, signal: null,
         };
     }
@@ -55,6 +58,7 @@ export async function runRoutes(binary, cases, {
         for (let i = 0; i < cases.length; i++) if (!results[i]) results[i] = {
             engine, checkStatus: null, status: result.status,
             stdout: encoding ? '' : Buffer.alloc(0),
+            programStderr: encoding ? '' : Buffer.alloc(0),
             stderr: encoding ? result.stderr : Buffer.from(result.stderr),
             error: result.error || new Error('batch ended without ' + engine + ' case ' + i),
             signal: result.signal,
