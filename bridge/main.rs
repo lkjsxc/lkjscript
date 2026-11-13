@@ -386,10 +386,12 @@ fn execute_machine(
     timings: &mut timing::Timings,
 ) -> Result<u8, String> {
     let mut status = 0;
+    let resources = host_process::machine_resources()?;
+    timings.count("machine_stack_extent_bytes", resources.stack_bytes);
     for entry in entries(program, args)? {
         let started = std::time::Instant::now();
         let mut host = world::Host::stdio(&args.program_arguments);
-        let result = machine::run(program, entry, &[], &mut host);
+        let result = machine::run(program, entry, &[], &mut host, resources);
         if status == 0 {
             status = host.status;
         }
@@ -404,6 +406,7 @@ fn execute_machine(
             result.map_err(|e| format!("{}:{}: {} {}", args.path, e.line, e.code(), e.message))?;
         timings.count("machine_peak_frames", result.peak_frames);
         timings.count("machine_peak_cells", result.peak_cells);
+        timings.count("machine_peak_stack_bytes", result.peak_stack_bytes);
         if args.verb != "test" {
             std::io::stdout()
                 .write_all(scalar(result.value).as_bytes())

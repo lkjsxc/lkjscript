@@ -16,20 +16,66 @@ struct Limit {
     maximum: u64,
 }
 
-/// A runner budget is host policy, not a property of the accepted source.
-/// An explicit environment setting can enlarge it or inherit Linux's full
-/// extent; a tighter limit imposed by the operator always remains effective.
-pub fn prepare_native_child(command: &mut Command) -> Result<(), String> {
-    prepare_budgeted_child(command, 268435456).map(|_| ())
+const STACK_FALLBACK: u64 = 64 * 1024 * 1024;
+
+fn budget(name: &str) -> Result<Option<u64>, String> {
+    let text = match std::env::var(name) {
+        Ok(text) => text,
+        Err(std::env::VarError::NotPresent) => return Ok(None),
+        Err(_) => return Err(format!("E_HOST {name} must be positive bytes or unlimited")),
+    };
+    if text == "unlimited" {
+        return Ok(None);
+    }
+    text.parse::<u64>()
+        .ok()
+        .filter(|value| *value > 0)
+        .map(Some)
+        .ok_or_else(|| format!("E_HOST {name} must be positive bytes or unlimited"))
 }
-fn prepare_budgeted_child(command: &mut Command, default: u64) -> Result<u64, String> {
-    let text = std::env::var("LKJ_RUN_MEMORY_BYTES").unwrap_or_else(|_| default.to_string());
-    let budget = if text == "unlimited" {
-        u64::MAX
+
+fn inherited_limit(resource: u32) -> Result<Limit, String> {
+    let mut limit = Limit {
+        current: 0,
+        maximum: 0,
+    };
+    if unsafe { prlimit(0, resource, std::ptr::null(), &mut limit) } != 0 {
+        return Err(format!(
+            "E_HOST resource limit: {}",
+            io::Error::last_os_error()
+        ));
+    }
+    Ok(limit)
+}
+
+/// The model receives an execution input; its core never reads host policy.
+/// A finite inherited stack limit is always authoritative. Only an unlimited
+/// inherited extent needs a finite provisioning fallback.
+pub fn machine_resources() -> Result<lkjscript::machine::Resources, String> {
+    let inherited = inherited_limit(3)?.current;
+    let stack = match budget("LKJ_RUN_STACK_BYTES")? {
+        Some(requested) => inherited.min(requested),
+        None if inherited == u64::MAX => STACK_FALLBACK,
+        None => inherited,
+    };
+    let stack_bytes = usize::try_from(stack)
+        .map_err(|_| "E_HOST stack extent exceeds host representation".to_string())?;
+    Ok(lkjscript::machine::Resources { stack_bytes })
+}
+
+/// Budgets are explicit host choices. An absent memory setting inherits Linux
+/// controls, and an explicit setting can only tighten an inherited soft limit.
+pub fn prepare_native_child(command: &mut Command) -> Result<(), String> {
+    prepare_budgeted_child(command, true).map(|_| ())
+}
+fn prepare_budgeted_child(command: &mut Command, native_stack: bool) -> Result<u64, String> {
+    let requested_memory = budget("LKJ_RUN_MEMORY_BYTES")?.unwrap_or(u64::MAX);
+    let selected_memory = inherited_limit(9)?.current.min(requested_memory);
+    let requested_stack = if native_stack {
+        budget("LKJ_RUN_STACK_BYTES")?
     } else {
-        text.parse::<u64>().ok().filter(|n| *n > 0).ok_or_else(|| {
-            "E_HOST LKJ_RUN_MEMORY_BYTES must be positive bytes or unlimited".to_string()
-        })?
+        // A tiny model extent must not shrink the Rust worker's startup stack.
+        None
     };
     prepare_child(command);
     unsafe {
@@ -48,14 +94,23 @@ fn prepare_budgeted_child(command: &mut Command, default: u64) -> Result<u64, St
             if prlimit(0, 4, &no_core, std::ptr::null_mut()) != 0 {
                 return Err(io::Error::last_os_error());
             }
-            limit.current = limit.current.min(budget);
+            limit.current = limit.current.min(requested_memory);
             if prlimit(0, 9, &limit, std::ptr::null_mut()) != 0 {
                 return Err(io::Error::last_os_error());
+            }
+            if let Some(requested_stack) = requested_stack {
+                if prlimit(0, 3, std::ptr::null(), &mut limit) != 0 {
+                    return Err(io::Error::last_os_error());
+                }
+                limit.current = limit.current.min(requested_stack);
+                if prlimit(0, 3, &limit, std::ptr::null_mut()) != 0 {
+                    return Err(io::Error::last_os_error());
+                }
             }
             Ok(())
         });
     }
-    Ok(budget)
+    Ok(selected_memory)
 }
 
 pub fn prepare_child(command: &mut Command) {
@@ -112,15 +167,20 @@ pub fn execution_worker() -> Result<Option<std::process::ExitCode>, String> {
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
-    let budget = prepare_budgeted_child(&mut command, 536870912)?;
+    let budget = prepare_budgeted_child(&mut command, false)?;
     let status = command
         .status()
         .map_err(|error| format!("E_HOST execution worker: {error}"))?;
     // Program streams belong to the child directly: proxying stderr would hide
     // prompts and change write errors when the caller closes a pipe or fd2.
     if let Some(signal) = status.signal() {
+        let extent = if budget == u64::MAX {
+            "unlimited (inherited)".to_string()
+        } else {
+            format!("{budget} bytes")
+        };
         return Err(format!(
-            "E_HOST execution worker terminated by signal {signal} under Linux address-space budget {budget} bytes"
+            "E_HOST execution worker terminated by signal {signal} under Linux address-space budget {extent}"
         ));
     }
     Ok(Some(ExitCode::from(status.code().unwrap_or(1) as u8)))

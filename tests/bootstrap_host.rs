@@ -29,7 +29,11 @@ fn file(name: &str, extension: &str) -> PathBuf {
 fn run_source(name: &str, text: &str, verb: &str) -> Output {
     let path = file(name, "rs");
     fs::write(&path, text).unwrap();
-    let output = Command::new(env!("CARGO_BIN_EXE_lkjscript"))
+    // These deliberately deep executions select their stack extent explicitly;
+    // the ordinary runner preserves the caller's finite Linux stack limit.
+    let output = Command::new("prlimit")
+        .args(["--as=1073741824", "--stack=67108864", "--"])
+        .arg(env!("CARGO_BIN_EXE_lkjscript"))
         .arg(verb)
         .arg(&path)
         .output()

@@ -127,9 +127,10 @@ pub fn run(argv: &[String]) -> Result<(), String> {
             for engine in &engines {
                 if *engine == "k" {
                     let mut output = world::Host::captured();
-                    match timings
-                        .measure("machine", || machine::run(program, entry, &[], &mut output))
-                    {
+                    let resources = host_process::machine_resources()?;
+                    match timings.measure("machine", || {
+                        machine::run(program, entry, &[], &mut output, resources)
+                    }) {
                         Ok(result) => {
                             output
                                 .stdout

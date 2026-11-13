@@ -103,10 +103,11 @@ fn entry_declaration(slot: usize) -> (lower::RuntimeFunction, String) {
             lower::RuntimeFunction::DropDispatch,
             "drop_walk".to_string(),
         ),
-        _ => (
+        3 => (
             lower::RuntimeFunction::Utf8Validate,
             "utf8_validate".to_string(),
         ),
+        _ => (lower::RuntimeFunction::Reallocate, "reallocate".to_string()),
     }
 }
 
@@ -114,7 +115,7 @@ fn entry_declaration(slot: usize) -> (lower::RuntimeFunction, String) {
 pub struct Runtime {
     checked: CheckedProgram,
     primitives: BTreeMap<usize, Primitive>,
-    entries: [usize; 4],
+    entries: Vec<usize>,
     functions: Vec<Function>,
 }
 fn problem(message: &str) -> Diagnostic {
@@ -164,8 +165,8 @@ pub fn seal(checked: CheckedProgram) -> Result<Runtime, Diagnostic> {
         }
         primitives.insert(index, primitive);
     }
-    let mut entries = [0; 4];
-    for slot in 0usize..4usize {
+    let mut entries = vec![0; lower::RUNTIME_ENTRIES];
+    for slot in 0usize..lower::RUNTIME_ENTRIES {
         let (role, name) = entry_declaration(slot);
         let index = *names
             .get(&name)
@@ -264,7 +265,7 @@ impl Runtime {
     /// the bytes and compare this source on K and every production encoder.
     pub fn model_program(&self, drop_steps: &[usize]) -> Result<lower::Program, String> {
         let mut functions = Vec::new();
-        for slot in 0usize..4usize {
+        for slot in 0usize..lower::RUNTIME_ENTRIES {
             let (role, _) = entry_declaration(slot);
             functions.push(Function {
                 name: "runtime entry".to_string(),
@@ -292,14 +293,14 @@ impl Runtime {
                     "runtime model cleanup target must take and return one word".to_string()
                 );
             }
-            table.push(4 + index);
+            table.push(lower::RUNTIME_ENTRIES + index);
         }
         let mut exports = Vec::new();
         for index in 0usize..self.functions.len() {
             if !self.primitives.contains_key(&index) {
                 exports.push(lower::Export {
                     name: format!("fn:{}", self.functions[index].name),
-                    function: 4usize + index,
+                    function: lower::RUNTIME_ENTRIES + index,
                 });
             }
         }
@@ -338,14 +339,14 @@ impl Runtime {
         Ok(program)
     }
     /// Link source functions after the application's explicit glue. Existing
-    /// runtime calls retain their four stable entry slots and use trampolines.
+    /// runtime calls retain their declared entry slots and use trampolines.
     pub(crate) fn link(&self, program: &mut lower::Program) -> Result<(), String> {
         let base = program
             .imports
             .len()
             .checked_add(program.functions.len())
             .ok_or("runtime function index overflow")?;
-        let end = 4_usize
+        let end = lower::RUNTIME_ENTRIES
             .checked_add(self.functions.len())
             .ok_or("runtime function index overflow")?;
         for function in &self.functions {
@@ -353,14 +354,14 @@ impl Runtime {
             for position in 0usize..code.instructions.len() {
                 let instruction = &mut code.instructions[position];
                 if let Instruction::Call(index) = instruction {
-                    if *index < 4 || *index >= end {
+                    if *index < lower::RUNTIME_ENTRIES || *index >= end {
                         return Err(
                             "source runtime has a call outside its checked scalar closure"
                                 .to_string(),
                         );
                     }
                     *index = base
-                        .checked_add(*index - 4)
+                        .checked_add(*index - lower::RUNTIME_ENTRIES)
                         .ok_or("runtime function index overflow")?;
                 }
             }

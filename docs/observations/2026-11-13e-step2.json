@@ -3,7 +3,7 @@
   "description": "Native pending operand/reachability, compact array repeats, and ordinary-source World K compiler driver.",
   "command": "bash tools/check.sh",
   "fullSeconds": 55.678,
-  "rustTests": 0,
+  "rustTests": 421,
   "clippy": "all targets clean",
   "conformance": {
     "perRoute": 883,

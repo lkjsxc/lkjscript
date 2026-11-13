@@ -90,11 +90,25 @@ pub enum Scalar {
     Int { value: u64, bits: u8, signed: bool },
     F64 { bits: u64 },
 }
+/// Execution resources supplied by the host; they never constrain accepted K.
+#[derive(Clone, Copy)]
+pub struct Resources {
+    pub stack_bytes: usize,
+}
+impl Resources {
+    pub const fn unlimited() -> Self {
+        Self {
+            stack_bytes: usize::MAX,
+        }
+    }
+}
+
 #[derive(Clone, PartialEq, Eq)]
 pub struct RunResult {
     pub value: Scalar,
     pub peak_frames: usize,
     pub peak_cells: usize,
+    pub peak_stack_bytes: usize,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -182,6 +196,7 @@ enum ReturnTo {
     Discard,
 }
 struct Frame {
+    byte_cost: usize,
     function: usize,
     pc: usize,
     locals: Vec<Location>,
@@ -220,6 +235,9 @@ struct Machine<'a, H: Host> {
     work: Vec<Work>,
     frames: usize,
     peak_frames: usize,
+    resources: Resources,
+    stack_bytes: usize,
+    peak_stack_bytes: usize,
     flow: Vec<Option<Flow>>,
     texts: BTreeMap<(usize, Vec<u8>), Location>,
     site: Site,
@@ -990,12 +1008,26 @@ impl<H: Host> Machine<'_, H> {
             }
             self.validate_value(*ty, value)?;
         }
+        // Frame entry allocates only root cells and their location table.
+        // Aggregate, array, Vec and Box payloads allocate separately on the heap.
+        let local_bytes = std::mem::size_of::<Location>() + std::mem::size_of::<Cell>();
+        let byte_cost = declaration
+            .locals
+            .len()
+            .checked_mul(local_bytes)
+            .and_then(|bytes| bytes.checked_add(std::mem::size_of::<Frame>()))
+            .ok_or_else(|| self.trap(8, "stack extent exhausted"))?;
+        let stack_bytes = self
+            .stack_bytes
+            .checked_add(byte_cost)
+            .filter(|bytes| *bytes <= self.resources.stack_bytes)
+            .ok_or_else(|| self.trap(8, "stack extent exhausted"))?;
         if self.flow[function].is_none() {
             self.flow[function] = Some(self.prepare_flow(function)?);
         }
         let mut locals = Vec::new();
         locals
-            .try_reserve(declaration.locals.len())
+            .try_reserve_exact(declaration.locals.len())
             .map_err(|_| self.trap(8, "stack extent exhausted"))?;
         for local in &declaration.locals {
             let location = self.allocate(local.ty, None, false).map_err(|error| {
@@ -1011,6 +1043,7 @@ impl<H: Host> Machine<'_, H> {
             self.put(locals[index], value)?;
         }
         self.push_work(Work::Frame(Frame {
+            byte_cost,
             function,
             pc: 0,
             locals,
@@ -1018,6 +1051,8 @@ impl<H: Host> Machine<'_, H> {
         }))?;
         self.frames += 1;
         self.peak_frames = self.peak_frames.max(self.frames);
+        self.stack_bytes = stack_bytes;
+        self.peak_stack_bytes = self.peak_stack_bytes.max(stack_bytes);
         Ok(())
     }
     fn push_work(&mut self, work: Work) -> Result<(), RunError> {
@@ -1087,6 +1122,7 @@ impl<H: Host> Machine<'_, H> {
             self.release(local)?;
         }
         self.frames -= 1;
+        self.stack_bytes -= frame.byte_cost;
         match frame.return_to {
             ReturnTo::Entry => {
                 self.result = Some(self.scalar_result(ty, &value)?);
@@ -2024,8 +2060,9 @@ pub fn run<H: Host>(
     entry: usize,
     args: &[u64],
     host: &mut H,
+    resources: Resources,
 ) -> Result<RunResult, RunError> {
-    run_inner(program, entry, args, host, None)
+    run_inner(program, entry, args, host, None, resources)
 }
 
 /// Exercise an explicitly sealed source runtime in a separate raw byte arena.
@@ -2036,6 +2073,7 @@ pub fn run_runtime<H: Host>(
     args: &[u64],
     memory: &mut crate::runtime_memory::Memory,
     host: &mut H,
+    resources: Resources,
 ) -> Result<RunResult, RunError> {
     run_inner(
         runtime.checked().program(),
@@ -2043,6 +2081,7 @@ pub fn run_runtime<H: Host>(
         args,
         host,
         Some(RuntimeState { runtime, memory }),
+        resources,
     )
 }
 fn run_inner<'a, H: Host>(
@@ -2051,6 +2090,7 @@ fn run_inner<'a, H: Host>(
     args: &[u64],
     host: &'a mut H,
     runtime: Option<RuntimeState<'a>>,
+    resources: Resources,
 ) -> Result<RunResult, RunError> {
     let site = Site {
         function: entry,
@@ -2074,6 +2114,9 @@ fn run_inner<'a, H: Host>(
         work: Vec::new(),
         frames: 0,
         peak_frames: 0,
+        resources,
+        stack_bytes: 0,
+        peak_stack_bytes: 0,
         flow: (0..program.functions.len()).map(|_| None).collect(),
         texts: BTreeMap::new(),
         site,
@@ -2121,6 +2164,7 @@ fn run_inner<'a, H: Host>(
         value,
         peak_frames: machine.peak_frames,
         peak_cells: machine.peak_cells,
+        peak_stack_bytes: machine.peak_stack_bytes,
     })
 }
 
@@ -2153,6 +2197,9 @@ mod tests {
             work: Vec::new(),
             frames: 0,
             peak_frames: 0,
+            resources: Resources::unlimited(),
+            stack_bytes: 0,
+            peak_stack_bytes: 0,
             flow: Vec::new(),
             texts: BTreeMap::new(),
             site: Site {

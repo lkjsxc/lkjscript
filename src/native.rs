@@ -174,6 +174,7 @@ struct Platform {
     complete: Label,
     context: Label,
     literals: Label,
+    image_end: Label,
     table: Label,
     arguments: Label,
     stdout: Label,
@@ -197,6 +198,7 @@ impl Platform {
             complete: a.label(),
             context: a.label(),
             literals: a.label(),
+            image_end: a.label(),
             table: a.label(),
             arguments: a.label(),
             stdout: a.label(),
@@ -232,9 +234,9 @@ impl Platform {
 }
 
 /// Linux x86-64 sysinfo and prlimit64 have fixed ABI layouts. Resource readings
-/// occur in the artifact process, before its own heap and stack are mapped. Each
-/// gets a quarter of the tighter physical/address-space extent; the other half
-/// remains available for the image, initial process stack and host mappings.
+/// occur in the artifact process, before its own heap and stack are mapped. A
+/// finite Linux stack limit selects that reservation; unlimited uses 64 MiB.
+/// The heap gets the remaining physical/address-space extent after stack and ELF.
 fn startup_extents(a: &mut Assembler, p: Platform, initial: u64) {
     a.immediate(A, 99); // sysinfo
     a.address(DI, p.system_info);
@@ -260,14 +262,39 @@ fn startup_extents(a: &mut Assembler, p: Platform, initial: u64) {
     a.condition(3, physical);
     a.mov(R9, A);
     a.bind(physical);
-    a.shift(R9, 5, 2);
+    a.immediate(A, 302); // prlimit64(0, RLIMIT_STACK, NULL, &old)
+    a.immediate(DI, 0);
+    a.immediate(SI, 3);
+    a.immediate(D, 0);
+    a.address(R10, p.resource_limit);
+    a.syscall();
+    a.test(A, true);
+    a.condition(8, p.stack_exhausted);
+    a.load(A, R10, 0);
+    a.immediate(C, 18446744073709551615_u64);
+    a.compare(A, C);
+    let finite_stack = a.label();
+    a.condition(5, finite_stack);
+    a.immediate(A, 67108864);
+    a.bind(finite_stack);
+    a.immediate(C, !4095_u64);
+    a.rr(0x21, A, C, true);
+    a.test(A, true);
+    a.condition(4, p.stack_exhausted);
+    a.store(GLOBALS, STACK_RESERVED, A);
+    a.rr(0x29, R9, A, true);
+    a.condition(2, p.stack_exhausted);
+    a.address(C, p.image_end);
+    a.immediate(D, IMAGE_BASE);
+    a.rr(0x29, C, D, true);
+    a.rr(0x29, R9, C, true);
+    a.condition(2, p.exhausted);
     a.immediate(A, !65535_u64);
     a.rr(0x21, R9, A, true);
     a.immediate(A, initial.max(65536));
     a.compare(R9, A);
     a.condition(2, p.exhausted);
     a.store(GLOBALS, HEAP_RESERVED, R9);
-    a.store(GLOBALS, STACK_RESERVED, R9);
 }
 
 // Format traps without allocating or using the exhausted language stack. R8
@@ -379,25 +406,7 @@ fn platform(
         a.test(A, true);
         a.condition(8, p.exhausted);
     }
-    a.immediate(A, 9);
-    a.immediate(DI, 0);
-    a.load(SI, GLOBALS, HEAP_RESERVED);
-    a.immediate(D, 0);
-    a.immediate(R10, 0x4022);
-    a.immediate(R8, 18446744073709551615_u64);
-    a.immediate(R9, 0);
-    a.syscall();
-    a.immediate(C, (-4095i64) as u64);
-    a.compare(A, C);
-    a.condition(3, p.exhausted);
-    a.mov(HEAP, A);
-    a.immediate(A, 10);
-    a.mov(DI, HEAP);
-    a.immediate(SI, initial);
-    a.immediate(D, 3);
-    a.syscall();
-    a.test(A, true);
-    a.condition(8, p.exhausted);
+    // Reserve the stack first, so a heap reservation cannot consume its budget.
     a.immediate(A, 9);
     a.immediate(DI, 0);
     a.load(SI, GLOBALS, STACK_RESERVED);
@@ -410,6 +419,44 @@ fn platform(
     a.compare(A, C);
     a.condition(3, p.stack_exhausted);
     a.mov(STACK, A);
+
+    // Initial argv/environment, the Linux stack and kernel mappings vary. Let
+    // mmap account for them, losing at most one 64-KiB heap page on success.
+    let reserve_heap = a.label();
+    let heap_ready = a.label();
+    a.bind(reserve_heap);
+    a.immediate(A, 9);
+    a.immediate(DI, 0);
+    a.load(SI, GLOBALS, HEAP_RESERVED);
+    a.immediate(D, 0);
+    a.immediate(R10, 0x4022);
+    a.immediate(R8, 18446744073709551615_u64);
+    a.immediate(R9, 0);
+    a.syscall();
+    a.immediate(C, (-4095i64) as u64);
+    a.compare(A, C);
+    a.condition(2, heap_ready);
+    a.immediate(C, (-12i64) as u64); // ENOMEM
+    a.compare(A, C);
+    a.condition(5, p.exhausted);
+    a.load(A, GLOBALS, HEAP_RESERVED);
+    a.immediate(C, initial.max(65536));
+    a.compare(A, C);
+    a.condition(6, p.exhausted);
+    a.immediate(C, 65536);
+    a.rr(0x29, A, C, true);
+    a.store(GLOBALS, HEAP_RESERVED, A);
+    a.jump(reserve_heap);
+    a.bind(heap_ready);
+    a.mov(HEAP, A);
+    a.immediate(A, 10);
+    a.mov(DI, HEAP);
+    a.immediate(SI, initial);
+    a.immediate(D, 3);
+    a.syscall();
+    a.test(A, true);
+    a.condition(8, p.exhausted);
+    a.mov(A, STACK);
     a.load(C, GLOBALS, STACK_RESERVED);
     a.rr(0x01, A, C, true);
     a.mov(SP, A);
@@ -1457,6 +1504,12 @@ pub fn encode(program: &Program, entry: Entry) -> Result<Vec<u8>> {
     );
     a.data_label(p.literals, data_offset + data.len());
     data.extend_from_slice(&program.data);
+    let image_end = data_offset
+        .checked_add(data.len())
+        .and_then(|end| end.checked_add(4095))
+        .ok_or("native image size overflow")?
+        & !4095;
+    a.data_label(p.image_end, image_end);
     for (at, label) in table_references {
         put64(
             &mut data,

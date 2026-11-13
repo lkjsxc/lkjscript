@@ -235,7 +235,8 @@ const ALLOC: usize = 0;
 const FREE: usize = 1;
 const DROP_RUN: usize = 2;
 const UTF8_VALIDATE: usize = 3;
-const FIRST_USER: usize = 4;
+const REALLOC: usize = 4;
+const FIRST_USER: usize = RUNTIME_ENTRIES;
 
 // The immutable region precedes the allocator and stores UTF-8 bytes only.
 // Text values carry their byte offset and count directly; no descriptor is owned.
@@ -1639,22 +1640,13 @@ impl<'a> Body<'a> {
                 constant(&mut self.code, ((!0u64) / stride) as i64);
                 self.code.push(Instruction::Scalar(ScalarOp::I64GtU));
                 trap_if(&mut self.code, 6, line);
+                get(&mut self.code, self.scratch + 4);
+                load(&mut self.code, 0);
                 get(&mut self.code, self.scratch + 6);
                 constant(&mut self.code, stride as i64);
                 self.code.push(Instruction::Scalar(ScalarOp::I64Mul));
-                call(&mut self.code, ALLOC + self.runtime);
+                call(&mut self.code, REALLOC + self.runtime);
                 set(&mut self.code, self.scratch + 3);
-                get(&mut self.code, self.scratch + 3);
-                get(&mut self.code, self.scratch + 4);
-                load(&mut self.code, 0);
-                get(&mut self.code, self.scratch + 5);
-                constant(&mut self.code, stride as i64);
-                self.code.push(Instruction::Scalar(ScalarOp::I64Mul));
-                self.code.extend_from_slice(&[Instruction::MemoryCopy]);
-                get(&mut self.code, self.scratch + 4);
-                load(&mut self.code, 0);
-                call(&mut self.code, FREE + self.runtime);
-                self.code.push(Instruction::Drop);
                 get(&mut self.code, self.scratch + 4);
                 get(&mut self.code, self.scratch + 3);
                 store(&mut self.code, 0);
@@ -2689,12 +2681,13 @@ pub fn lower(
         }
     }
     let mut functions = Vec::new();
-    for slot in 0usize..4usize {
+    for slot in 0usize..RUNTIME_ENTRIES {
         let (name, role) = match slot {
             0 => ("memory::allocate", RuntimeFunction::Allocate),
             1 => ("memory::release", RuntimeFunction::Release),
             2 => ("drop::walk", RuntimeFunction::DropDispatch),
-            _ => ("str::valid_utf8", RuntimeFunction::Utf8Validate),
+            3 => ("str::valid_utf8", RuntimeFunction::Utf8Validate),
+            _ => ("memory::reallocate", RuntimeFunction::Reallocate),
         };
         functions.push(Function {
             name: name.to_string(),

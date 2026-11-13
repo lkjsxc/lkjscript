@@ -46,10 +46,10 @@ fn ensure_memory(end: u64) -> u64 {
     0
 }
 
-// Each class owns a free list of equally sized power-of-two blocks. A block has
-// a {size, next_free} header followed by its payload. Small blocks start at 32
-// bytes; payloads stay eight-byte aligned. Freed blocks are reused in constant
-// list work. Each block uses at most twice (payload bytes + 16).
+// Size classes describe the payload, so a power-of-two Vec capacity fills its
+// class. Each block has a {capacity, next_free} header followed by at least 16
+// payload bytes. Headers add 16 bytes; payloads remain eight-byte aligned.
+// Freed blocks are reused in constant list work. Tip growth keeps its address.
 fn classes() -> u64 {
     let old = raw_classes();
     if old != 0 {
@@ -68,18 +68,30 @@ fn classes() -> u64 {
     base
 }
 
-pub fn allocate(bytes: u64) -> u64 {
-    let needed = add_extent(bytes, 16);
-    let mut size: u64 = 32;
-    let mut class: u64 = 0;
-    while size < needed {
+fn payload_capacity(bytes: u64) -> u64 {
+    let mut size: u64 = 16;
+    while size < bytes {
         if size > 9223372036854775807 {
             return raw_fail();
         }
         size = size * 2;
+    }
+    size
+}
+
+fn class_index(size: u64) -> u64 {
+    let mut extent: u64 = 16;
+    let mut class: u64 = 0;
+    while extent < size {
+        extent = extent * 2;
         class = class + 1;
     }
-    let head = classes() + class * 8;
+    class
+}
+
+pub fn allocate(bytes: u64) -> u64 {
+    let size = payload_capacity(bytes);
+    let head = classes() + class_index(size) * 8;
     let old = raw_load64(head);
     if old != 0 {
         raw_store64(head, raw_load64(old + 8));
@@ -87,12 +99,38 @@ pub fn allocate(bytes: u64) -> u64 {
         return old + 16;
     }
     let block = raw_heap_tip();
-    let end = add_extent(block, size);
+    let pointer = add_extent(block, 16);
+    let end = add_extent(pointer, size);
     ensure_memory(end);
     raw_set_heap_tip(end);
     raw_store64(block, size);
     raw_store64(block + 8, 0);
-    block + 16
+    pointer
+}
+
+// Reallocation transfers the block; callers retain no pointer into its payload.
+// Only the tip can grow in place. Other blocks move, copy their entire old
+// capacity, and release the old class after the copy succeeds.
+pub fn reallocate(pointer: u64, bytes: u64) -> u64 {
+    if pointer == 0 {
+        return allocate(bytes);
+    }
+    let old_size = raw_load64(pointer - 16);
+    if bytes <= old_size {
+        return pointer;
+    }
+    if add_extent(pointer, old_size) == raw_heap_tip() {
+        let size = payload_capacity(bytes);
+        let end = add_extent(pointer, size);
+        ensure_memory(end);
+        raw_store64(pointer - 16, size);
+        raw_set_heap_tip(end);
+        return pointer;
+    }
+    let replacement = allocate(bytes);
+    raw_memory_copy(replacement, pointer, old_size);
+    release(pointer);
+    replacement
 }
 
 pub fn release(pointer: u64) -> u64 {
@@ -101,13 +139,7 @@ pub fn release(pointer: u64) -> u64 {
     }
     let block = pointer - 16;
     let size = raw_load64(block);
-    let mut extent: u64 = 32;
-    let mut class: u64 = 0;
-    while extent < size {
-        extent = extent * 2;
-        class = class + 1;
-    }
-    let head = raw_classes() + class * 8;
+    let head = raw_classes() + class_index(size) * 8;
     raw_store64(block + 8, raw_load64(head));
     raw_store64(head, block);
     0
@@ -183,10 +215,7 @@ pub fn drop_walk(mut base: u64) -> u64 {
                     return raw_fail();
                 }
                 let larger = capacity * 2;
-                let replacement = allocate(larger);
-                raw_memory_copy(replacement, base, capacity);
-                release(base);
-                base = replacement;
+                base = reallocate(base, larger);
                 capacity = larger;
             }
             let next = base + top;

@@ -747,10 +747,12 @@ loads extend correctly. Registers and pointers retain 64-bit representations.
 F64 retains its bit representation and canonical NaNs after arithmetic.
 Collection indexing checks bounds. Traps report a code and source line. The
 source runtime releases owned fields, arrays, boxes and vector elements. Its
-power-of-two size classes reuse released blocks in constant free-list work;
-each block rounds payload plus a 16-byte header to a power of two, with a 32-byte minimum. Growth tries
-geometric capacity and then the exact required extent. Structural cleanup uses
-an explicit growable DFS stack, preserving custom-destructor-before-children and
+power-of-two payload classes reuse released blocks in constant free-list work.
+A block has at least 16 payload bytes and a separate 16-byte header, so a
+power-of-two Vec capacity fills its class. A block at the heap tip grows in
+place; otherwise reallocation copies the old payload before releasing it.
+Heap commitment tries geometric capacity and then the exact required extent.
+Structural cleanup uses an explicit growable DFS stack, preserving custom-destructor-before-children and
 declaration/element order. Moved fields are skipped. Copy helpers, recursive
 generated Clone/equality calls and explicit recursive source calls use the selected
 route's call stack. Loop-condition temporaries end before either loop edge,
@@ -769,22 +771,24 @@ trusted implementation; ordinary type checking alone does not establish them.
 
 Native output is a static Linux x86-64 ELF without libc or a dynamic loader.
 Build-host resource measurements never enter its bytes. Startup reads physical
-memory (excluding swap) and RLIMIT_AS, then reserves stack and heap within the
-available execution extent. Prologues check stack exhaustion (R0008); heap
-mapping/growth refusal and allocation exhaustion report R0006. Standalone traps
+memory (excluding swap), RLIMIT_AS and RLIMIT_STACK. It maps the selected stack
+first, then gives the heap the remaining extent after image and startup mappings.
+Prologues check stack exhaustion (R0008); heap mapping/growth refusal and allocation exhaustion report R0006. Standalone traps
 write their code and source line to stderr and exit unsuccessfully. Linux may
 still kill a process under physical/cgroup memory pressure; ordinary operator
 budgets belong to execution, not source acceptance.
 
-The runner supplies a default 256 MiB address-space budget for native children
-and a 512 MiB budget for fresh K execution and batch workers, preserving tighter
-inherited limits. Batch workers bound captured stdout/stderr as well as the K
-allocator.
-LKJ_RUN_MEMORY_BYTES selects explicit bytes or unlimited. Some infallible Rust
-allocations in the K host can still abort; the parent reports that host failure
-without inventing a source location. Fallible K frame and heap paths distinguish
-R0008 and R0006 at their instruction lines. The generator subprocess budget is
-2 GiB for test executables and 8 GiB for rustc compilation/linking, configurable
+The runner inherits the caller's Linux address-space limit unless
+LKJ_RUN_MEMORY_BYTES explicitly tightens it; unlimited also means inheritance.
+LKJ_RUN_STACK_BYTES independently tightens the stack extent. Finite inherited
+stack limits are preserved; only an unlimited inherited limit needs the 64 MiB
+provisioning fallback. The K model receives the extent as an explicit input and
+charges live frame/root-cell storage, while payload allocations remain heap
+storage. A small model budget does not shrink its Rust worker's OS stack.
+Some infallible Rust allocations in the K host can still abort; the parent
+reports that host failure without inventing a source location. Fallible K frame
+and heap paths distinguish R0008 and R0006 at their instruction lines. The
+generator subprocess budget is 2 GiB for test executables and 8 GiB for rustc compilation/linking, configurable
 with LKJ_TEST_MEMORY_BYTES; Node orchestration is
 excluded from this address-space setting because its VM reserves a large cage.
 

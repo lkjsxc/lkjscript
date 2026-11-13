@@ -169,18 +169,21 @@ impl Code {
         self.instructions.extend_from_slice(instructions);
     }
 }
+pub const RUNTIME_ENTRIES: usize = 5;
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum RuntimeFunction {
     Allocate,
     Release,
     DropDispatch,
     Utf8Validate,
+    Reallocate,
 }
 impl RuntimeFunction {
     /// The common runtime ABI; encoders do not adapt these signatures.
     pub fn signature(self) -> Signature {
         Signature::words(match self {
-            Self::Utf8Validate => 2,
+            Self::Utf8Validate | Self::Reallocate => 2,
             Self::Allocate | Self::Release | Self::DropDispatch => 1,
         })
     }

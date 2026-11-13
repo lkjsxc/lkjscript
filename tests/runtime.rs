@@ -30,6 +30,7 @@ fn value(
         args,
         memory,
         &mut Vec::new(),
+        machine::Resources::unlimited(),
     )
     .unwrap_or_else(|error| panic!("{}: {}", error.code(), error.message))
 }
@@ -92,6 +93,7 @@ fn source_runtime_reuse_growth_copy_utf8_and_cleanup_agree_with_its_k_model() {
         &[],
         &mut memory,
         &mut Vec::new(),
+        machine::Resources::unlimited(),
     )
     .err()
     .unwrap();
@@ -108,7 +110,13 @@ fn raw_names_in_ordinary_source_do_not_grant_runtime_authority() {
         .iter()
         .position(|function| function.name == "probe_allocator")
         .unwrap();
-    let result = machine::run(checked.program(), entry, &[], &mut Vec::new());
+    let result = machine::run(
+        checked.program(),
+        entry,
+        &[],
+        &mut Vec::new(),
+        machine::Resources::unlimited(),
+    );
     assert!(matches!(result.err().unwrap().kind,machine::ErrorKind::Trap(code) if code>=16));
     let replaced = input.files[0]
         .text

@@ -77,9 +77,15 @@ fn character_construction_checks_its_signature_on_both_k_boundaries() {
             check::check(forged.clone()).is_err(),
             "checker accepted signature mutation {mutation}"
         );
-        let error = machine::run(&forged, entry, &[], &mut Vec::new())
-            .err()
-            .expect("model accepted malformed construction");
+        let error = machine::run(
+            &forged,
+            entry,
+            &[],
+            &mut Vec::new(),
+            machine::Resources::unlimited(),
+        )
+        .err()
+        .expect("model accepted malformed construction");
         assert!(
             matches!(error.kind, machine::ErrorKind::Machine(_)),
             "signature mutation {mutation}: {}",

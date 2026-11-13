@@ -374,3 +374,97 @@ fn reachability_rejects_invalid_roots_table_entries_and_dead_direct_calls() {
     program.functions[1].code.instructions = vec![I::Call(99), I::End];
     assert_eq!(encode(&program, 0).unwrap_err(), "invalid lowered call");
 }
+
+fn resource_packet(
+    image: &Image,
+    address_space: u64,
+    stack: &str,
+    arguments: &[String],
+) -> [u64; 3] {
+    packet(
+        Command::new("prlimit")
+            .arg(format!("--as={address_space}"))
+            .arg(format!("--stack={stack}"))
+            .arg("--")
+            .arg(&image.0)
+            .args(arguments)
+            .output()
+            .unwrap(),
+    )
+}
+
+#[test]
+fn stack_extent_controls_recursive_depth_independently_of_address_space() {
+    let _execution = EXECUTION.lock().unwrap();
+    use lower::{Instruction as I, ScalarOp as S, ValueType as V};
+    let program = instruction_program(
+        vec![instruction_function(
+            "recurse",
+            vec![V::I64],
+            vec![],
+            vec![
+                I::LocalGet(0),
+                I::Scalar(S::I64Eqz),
+                I::If(Some(V::I64)),
+                I::I64(42),
+                I::Else,
+                I::LocalGet(0),
+                I::I64(1),
+                I::Scalar(S::I64Sub),
+                I::I64(47),
+                I::GlobalSet(1),
+                I::Call(0),
+                I::End,
+                I::End,
+            ],
+        )],
+        vec![],
+    );
+    let shallow = Image::new("stack_shallow", &program, 0, vec![64]);
+    assert_eq!(
+        resource_packet(&shallow, 67108864, "65536", &[]),
+        [0, 42, 0]
+    );
+    let deep = Image::new("stack_deep", &program, 0, vec![4096]);
+    assert_eq!(resource_packet(&deep, 67108864, "65536", &[]), [8, 0, 47]);
+    assert_eq!(resource_packet(&deep, 67108864, "8388608", &[]), [0, 42, 0]);
+    assert_eq!(
+        resource_packet(&deep, 268435456, "unlimited", &[]),
+        [0, 42, 0]
+    );
+}
+
+#[test]
+fn heap_uses_remaining_extent_with_variable_initial_arguments() {
+    let _execution = EXECUTION.lock().unwrap();
+    use lower::{Instruction as I, ValueType as V};
+    let program = instruction_program(
+        vec![instruction_function(
+            "grow",
+            vec![V::I64],
+            vec![],
+            vec![I::LocalGet(0), I::MemoryGrow, I::End],
+        )],
+        vec![],
+    );
+    // The same 48-MiB growth fits beside an 8-MiB stack under a 64-MiB AS
+    // budget, but not beside a 16-MiB stack. There is no fractional heap split.
+    let large = Image::new("heap_remaining", &program, 0, vec![768]);
+    assert_eq!(resource_packet(&large, 67108864, "8388608", &[]), [0, 1, 0]);
+    assert_eq!(
+        resource_packet(&large, 67108864, "16777216", &[]),
+        [0, u64::MAX, 0]
+    );
+    // Kernel-owned initial-stack mappings grow with argv. Reservation retries
+    // must accommodate this actual overhead without a fixed-size cushion.
+    let arguments = vec!["x".repeat(100000); 10];
+    let smaller = Image::new("heap_arguments", &program, 0, vec![320]);
+    assert_eq!(
+        resource_packet(&smaller, 33554432, "8388608", &[]),
+        [0, 1, 0]
+    );
+    assert_eq!(
+        resource_packet(&smaller, 33554432, "8388608", &arguments),
+        [0, 1, 0]
+    );
+}
