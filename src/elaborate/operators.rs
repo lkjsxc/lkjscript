@@ -5,61 +5,127 @@ use super::generic_check::BuiltinMethod;
 use super::{Builder, Result, a, err, k, place_type};
 
 impl Builder<'_, '_> {
-    pub(super) fn string_ordering(
+    /// Relations borrow aggregates and read scalar operands exactly once, before
+    /// evaluating the right expression. Derived operations are ordinary checked K.
+    pub(super) fn ordering_expr(
         &mut self,
         operation: &str,
         left: usize,
         right: usize,
         span: a::Span,
-    ) -> Result<Option<(usize, usize)>> {
-        let Some(operand_type) = self
+    ) -> Result<(usize, usize)> {
+        let first_temporary = self.live.len();
+        let expected = self
             .equality_hint(left)
-            .or_else(|| self.equality_hint(right))
-        else {
-            return Ok(None);
+            .or_else(|| self.equality_hint(right));
+        let (left_place, operand_type) = self.equality_operand(left, expected, span)?;
+        let result = if self.compiler.depends_on_rigid(operand_type) {
+            let function = self
+                .compiler
+                .comparison_contract(operand_type, operation, span)?;
+            let left = self.borrow(left_place, false, span.line)?.0;
+            let (right_place, right_type) =
+                self.equality_operand(right, Some(operand_type), span)?;
+            if right_type != operand_type {
+                return Err(err(span, "E_TYPE", "comparison operand types differ"));
+            }
+            let right = self.borrow(right_place, false, span.line)?.0;
+            self.equality_call(function, false, left, right, span)
+        } else {
+            let (left_place, target) = self.equality_referent(left_place, operand_type);
+            if matches!(
+                self.compiler.types[target].kind,
+                k::TypeKind::Bool | k::TypeKind::Char | k::TypeKind::Int { .. } | k::TypeKind::F64
+            ) {
+                let left = self.read(left_place, span.line)?.0;
+                let (right_place, right_type) =
+                    self.equality_operand(right, Some(operand_type), span)?;
+                if right_type != operand_type {
+                    return Err(err(span, "E_TYPE", "comparison operand types differ"));
+                }
+                let (right_place, _) = self.equality_referent(right_place, right_type);
+                let right = self.read(right_place, span.line)?.0;
+                let result = self.temp(k::BOOL);
+                if target == k::BOOL {
+                    let negated = self.temp(k::BOOL);
+                    self.emit(
+                        k::Op::Unary {
+                            dst: negated,
+                            op: "!".to_string(),
+                            src: if operation == "<" || operation == "<=" {
+                                left
+                            } else {
+                                right
+                            },
+                        },
+                        span.line,
+                    );
+                    self.emit(
+                        k::Op::Binary {
+                            dst: result,
+                            op: if operation == "<" || operation == ">" {
+                                "&"
+                            } else {
+                                "|"
+                            }
+                            .to_string(),
+                            left: negated,
+                            right: if operation == "<" || operation == "<=" {
+                                right
+                            } else {
+                                left
+                            },
+                        },
+                        span.line,
+                    );
+                } else {
+                    self.emit(
+                        k::Op::Binary {
+                            dst: result,
+                            op: operation.to_string(),
+                            left,
+                            right,
+                        },
+                        span.line,
+                    );
+                }
+                (result, k::BOOL)
+            } else {
+                let method = match operation {
+                    "<" => BuiltinMethod::Lt,
+                    "<=" => BuiltinMethod::Le,
+                    ">" => BuiltinMethod::Gt,
+                    ">=" => BuiltinMethod::Ge,
+                    _ => unreachable!(),
+                };
+                let function = self.compiler.builtin_operation(target, method, span)?;
+                let left = self.borrow(left_place, false, span.line)?.0;
+                let (right_place, right_type) =
+                    self.equality_operand(right, Some(operand_type), span)?;
+                if right_type != operand_type {
+                    return Err(err(span, "E_TYPE", "comparison operand types differ"));
+                }
+                let (right_place, _) = self.equality_referent(right_place, right_type);
+                let right = self.borrow(right_place, false, span.line)?.0;
+                self.equality_call(function, false, left, right, span)
+            }
         };
-        let mut target = operand_type;
-        while let k::TypeKind::Ref { inner, .. } = self.compiler.types[target].kind {
-            target = inner;
+        for local in (first_temporary..self.live.len()).rev() {
+            if self.live.at(local)
+                && matches!(
+                    self.compiler.types[self.ty(local)].kind,
+                    k::TypeKind::Ref { .. }
+                )
+            {
+                self.emit(
+                    k::Op::Drop {
+                        place: k::Place::local(local),
+                    },
+                    span.line,
+                );
+            }
         }
-        if !self.library_string(target, span) {
-            return Ok(None);
-        }
-        let (left, left_type) = self.equality_operand(left, Some(operand_type), span)?;
-        let (left, _) = self.equality_referent(left, left_type);
-        let left = self.borrow(left, false, span.line)?.0;
-        let (right, right_type) = self.equality_operand(right, Some(operand_type), span)?;
-        if left_type != right_type {
-            return Err(err(span, "E_TYPE", "comparison operand types differ"));
-        }
-        let (right, _) = self.equality_referent(right, right_type);
-        let right = self.borrow(right, false, span.line)?.0;
-        let ordering = self.source_library_call(
-            "string",
-            "__lkj_compare",
-            std::collections::BTreeMap::new(),
-            vec![left, right],
-            span,
-        )?;
-        let zero = self.temp(ordering.1);
-        self.emit(
-            k::Op::Int {
-                dst: zero,
-                value: 0,
-            },
-            span.line,
-        );
-        let dst = self.temp(k::BOOL);
-        self.emit(
-            k::Op::Binary {
-                dst,
-                op: operation.to_string(),
-                left: ordering.0,
-                right: zero,
-            },
-            span.line,
-        );
-        Ok(Some((dst, k::BOOL)))
+        Ok(result)
     }
 
     fn equality_hint(&mut self, expression: usize) -> Option<usize> {
@@ -307,6 +373,20 @@ impl Builder<'_, '_> {
                         let right = self.borrow(right_place, false, span.line)?.0;
                         self.equality_call(function, negate, left, right, span)
                     }
+                    k::TypeKind::Slice { inner, .. } => {
+                        let function =
+                            self.compiler
+                                .sequence_instance("__lkj_slice_equal", inner, span)?;
+                        let left = self.borrow(left_place, false, span.line)?.0;
+                        let (right_place, right_type) =
+                            self.equality_operand(right, Some(operand_type), span)?;
+                        if right_type != operand_type {
+                            return Err(err(span, "E_TYPE", "equality operand types differ"));
+                        }
+                        let (right_place, _) = self.equality_referent(right_place, right_type);
+                        let right = self.borrow(right_place, false, span.line)?.0;
+                        self.equality_call(function, operation == "!=", left, right, span)
+                    }
                     k::TypeKind::Vec { inner } => {
                         let left = self.borrow(left_place, false, span.line)?.0;
                         let (right_place, right_type) =
@@ -332,7 +412,7 @@ impl Builder<'_, '_> {
         // End their loans here while retaining owned operand temporaries until
         // their ordinary enclosing statement cleanup (and destructor order).
         for local in (first_temporary..self.live.len()).rev() {
-            if self.live[local]
+            if self.live.at(local)
                 && matches!(
                     self.compiler.types[self.ty(local)].kind,
                     k::TypeKind::Ref { .. }

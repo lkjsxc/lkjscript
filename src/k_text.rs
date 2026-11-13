@@ -23,7 +23,7 @@ fn hex(chars: &[char], at: &mut usize, line: usize) -> Result<u32> {
     for _ in 0..4 {
         let digit = chars
             .get(*at)
-            .and_then(|c| c.to_digit(16))
+            .and_then(|c: &char| -> Option<u32> { c.to_digit(16) })
             .ok_or_else(|| error(line, "expected four hexadecimal digits after \\u"))?;
         value = value * 16 + digit;
         *at += 1;
@@ -32,7 +32,10 @@ fn hex(chars: &[char], at: &mut usize, line: usize) -> Result<u32> {
 }
 
 fn words(text: &str, line: usize) -> Result<Vec<String>> {
-    let chars: Vec<char> = text.chars().collect();
+    let mut chars: Vec<char> = Vec::new();
+    for c in text.chars() {
+        chars.push(c);
+    }
     let mut result = Vec::new();
     let mut at = 0;
     while at < chars.len() {
@@ -74,13 +77,13 @@ fn words(text: &str, line: usize) -> Result<Vec<String>> {
                     'f' => word.push('\u{000c}'),
                     'u' => {
                         let mut value = hex(&chars, &mut at, line)?;
-                        if (0xd800..=0xdbff).contains(&value) {
+                        if value >= 0xd800 && value <= 0xdbff {
                             if chars.get(at) != Some(&'\\') || chars.get(at + 1) != Some(&'u') {
                                 return Err(error(line, "high surrogate needs a low surrogate"));
                             }
                             at += 2;
                             let low = hex(&chars, &mut at, line)?;
-                            if !(0xdc00..=0xdfff).contains(&low) {
+                            if low < 0xdc00 || low > 0xdfff {
                                 return Err(error(line, "invalid low surrogate"));
                             }
                             value = 0x10000 + (value - 0xd800) * 1024 + low - 0xdc00;
@@ -114,10 +117,10 @@ fn words(text: &str, line: usize) -> Result<Vec<String>> {
 }
 
 fn word<'a>(words: &'a [String], at: usize, line: usize) -> Result<&'a str> {
-    words
-        .get(at)
-        .map(String::as_str)
-        .ok_or_else(|| error(line, "missing operand"))
+    match words.get(at) {
+        Some(value) => Ok(value.as_str()),
+        None => Err(error(line, "missing operand")),
+    }
 }
 
 fn number(words: &[String], at: usize, line: usize) -> Result<usize> {
@@ -937,7 +940,7 @@ pub fn write(program: &Program) -> String {
                             if index != 0 {
                                 text.push_str(" or ");
                             }
-                            text.push_str(&input.index.to_string());
+                            text.push_str(&format!("{}", input.index));
                             write_projections(&mut text, &input.projections);
                         }
                     }

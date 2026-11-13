@@ -1277,6 +1277,47 @@ impl<H: Host> Machine<'_, H> {
                 }
                 Value::Unit
             }
+            "char_from_u32" if values.len() == 1 => {
+                if !matches!(
+                    self.kind(values[0].0)?,
+                    TypeKind::Int {
+                        bits: 32,
+                        signed: false
+                    }
+                ) {
+                    return Err(self.invalid("character construction requires u32"));
+                }
+                let TypeKind::Enum { variants, .. } = self.kind(destination.ty)? else {
+                    return Err(self.invalid("character construction requires Option<char>"));
+                };
+                if variants.len() != 2
+                    || variants[0].name != "None"
+                    || !variants[0].fields.is_empty()
+                    || variants[1].name != "Some"
+                    || variants[1].fields.len() != 1
+                    || !matches!(self.kind(variants[1].fields[0].ty)?, TypeKind::Char)
+                {
+                    return Err(self.invalid("character construction result shape differs"));
+                }
+                let character = variants[1].fields[0].ty;
+                let Value::Bits(code) = values[0].1 else {
+                    return Err(self.invalid("character code must be scalar"));
+                };
+                match u32::try_from(code).ok().and_then(char::from_u32) {
+                    Some(value) => {
+                        let field =
+                            self.allocate(character, Some(Value::Bits(value as u64)), false)?;
+                        Value::Aggregate {
+                            variant: Some(1),
+                            fields: vec![field],
+                        }
+                    }
+                    None => Value::Aggregate {
+                        variant: Some(0),
+                        fields: Vec::new(),
+                    },
+                }
+            }
             "cast" if values.len() == 1 => {
                 let Value::Bits(value) = values[0].1 else {
                     return Err(self.invalid("cast requires a scalar"));

@@ -1,0 +1,18 @@
+Library implementation review — 2026-11-14
+
+Evidence kit: /home/coder/lkjscript-codex-20261114-library-review/README.txt
+Inputs: source-sha256.json and library_snapshot/ in that kit.
+
+Exact production-source Rust differential:
+- 2,048 map retain/owned-iteration/destructor traces match Rust.
+- Set first/pop_first/owned traversal passes.
+- Text/decimal/slice/iterator/ordering/clear/truncate source harness passes.
+- Five new escaping/mutating iterator-view probes reject with E_BORROW.
+
+Trusted char_from_u32 review: signature checks agree on exactly one u32 input and a None/Some(char) enum; native scalar range checks and independent model construction agree. Root's eight malformed-signature and scalar-boundary fixtures already cover those conditions; this review did not duplicate them. No defect found in that trusted operation.
+
+One concrete source-helper defect found and fixed: invalid char::to_digit radix used assertion failure R0005 while Rust uses explicit-panic category R0004. Replaced assert with panic guard and added low/high invalid-radix World output fixtures. Their Rust output/termination matches the expected categories; refreshed native/K validation belongs to root's checkpoint gate.
+
+Vec::truncate was added through the forward-drop retain path; empty/no-op/shorten and partial-prefix destructor order match Rust. World fixture Rust hex is 6403040565010266.
+
+No other concrete text, decimal, ownership-view, map-retain, or owned-iterator discrepancy found.

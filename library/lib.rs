@@ -1,7 +1,8 @@
 //! Source standard library, also buildable by rustc during bootstrap.
 mod prelude;
 pub use prelude::{
-    CheckedArithmetic, IntoIterator, IterSource, Iterator, IteratorExt, Option, Result, VecAccess,
+    CheckedArithmetic, IntoIterator, IterSource, Iterator, IteratorExt, Option, ParseInteger,
+    Result, SequencePrefix, SliceClone, SliceCopy, TextView, VecAccess, VecAccessMut, VecClear,
     VecContains, VecExtend,
 };
 pub mod bytes;
@@ -18,15 +19,19 @@ pub use ordered_set::BTreeSet;
 mod string;
 pub use string::{FromUtf8Error, String};
 mod sequence;
-pub use sequence::{__lkj_vec_clone, __lkj_vec_compare, __lkj_vec_equal, __lkj_vec_repeat};
+pub use sequence::{
+    __lkj_slice_equal, __lkj_slice_order, __lkj_vec_clone, __lkj_vec_equal, __lkj_vec_order,
+    __lkj_vec_repeat,
+};
+pub use sequence::{SliceSplit, SliceSplitSource};
 
 pub mod collections {
     pub use crate::{BTreeMap, BTreeSet};
     pub mod btree_map {
-        pub use crate::ordered_map::{Iter, Keys, Values};
+        pub use crate::ordered_map::{IntoIter, Iter, Keys, Values};
     }
     pub mod btree_set {
-        pub use crate::ordered_set::Iter;
+        pub use crate::ordered_set::{IntoIter, Iter};
     }
 }
 

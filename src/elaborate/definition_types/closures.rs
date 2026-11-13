@@ -139,12 +139,19 @@ impl Infer<'_, '_> {
         arguments: Vec<Variable>,
         result: Variable,
         span: a::Span,
+        produced: bool,
     ) -> Result<bool> {
         let Some((_, shape)) = self.strip_references(receiver, id) else {
             return Ok(false);
         };
+        let mut span = span;
         let signature = match shape {
             Shape::Closure(expression, _) => {
+                // Callable bounds are declared in library headers, but a mismatch
+                // in a supplied closure belongs to that caller's expression.
+                if !produced {
+                    span = self.source.exprs[expression].span;
+                }
                 let closure = &self.definition.closures[&expression];
                 Some((closure.arguments.clone(), closure.result))
             }

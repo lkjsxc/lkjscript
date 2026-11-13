@@ -443,10 +443,8 @@ fn conditional_traits_require_every_payload_even_when_that_variant_is_absent() {
 
 #[test]
 fn removing_source_derives_removes_their_contracts() {
-    let without_clone = PRELUDE.replace(
-        "#[derive(Clone, Copy, PartialEq, Eq)]",
-        "#[derive(PartialEq, Eq)]",
-    );
+    let without_clone = PRELUDE.replace("derive(Clone, Copy, ", "derive(");
+    assert_ne!(without_clone, PRELUDE);
     rejects(
         "fn require<T:Clone>(value:&T){}fn bad(){require(&Option::Some(42i64));}",
         &without_clone,
@@ -459,10 +457,10 @@ fn removing_source_derives_removes_their_contracts() {
         "E_TRAIT",
         "Clone",
     );
-    let without_eq = PRELUDE.replace(
-        "#[derive(Clone, Copy, PartialEq, Eq)]",
-        "#[derive(Clone, Copy, PartialEq)]",
-    );
+    let without_eq = PRELUDE
+        .replace("PartialEq, Eq, PartialOrd, Ord", "PartialEq")
+        .replace("PartialEq, Eq", "PartialEq");
+    assert_ne!(without_eq, PRELUDE);
     rejects(
         "fn require<T:Eq>(value:&T){}fn bad(){require(&Option::Some(42i64));}",
         &without_eq,

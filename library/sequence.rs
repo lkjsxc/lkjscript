@@ -1,25 +1,5 @@
 //! Vec operations are ordinary source over checked element access.
 use crate::prelude::Option;
-pub fn __lkj_vec_compare<T: Ord>(left: &Vec<T>, right: &Vec<T>) -> i32 {
-    let mut i: usize = 0;
-    while i < left.len() && i < right.len() {
-        if left[i] < right[i] {
-            return -1;
-        }
-        if left[i] > right[i] {
-            return 1;
-        }
-        i = i + 1;
-    }
-    if left.len() < right.len() {
-        return -1;
-    }
-    if left.len() > right.len() {
-        return 1;
-    }
-    0
-}
-
 pub fn __lkj_vec_clone<T: Clone>(source: &Vec<T>) -> Vec<T> {
     let mut result: Vec<T> = Vec::new();
     let mut index: usize = 0;
@@ -66,6 +46,7 @@ pub trait VecAccess<T> {
     fn is_empty(&self) -> bool;
     fn get<'a>(&'a self, index: usize) -> Option<&'a T>;
     fn first<'a>(&'a self) -> Option<&'a T>;
+    fn last<'a>(&'a self) -> Option<&'a T>;
 }
 
 impl<T> VecAccess<T> for Vec<T> {
@@ -80,7 +61,18 @@ impl<T> VecAccess<T> for Vec<T> {
         }
     }
     fn first<'a>(&'a self) -> Option<&'a T> {
-        self.get(0)
+        if self.len() == 0 {
+            Option::None
+        } else {
+            Option::Some(&self[0usize])
+        }
+    }
+    fn last<'a>(&'a self) -> Option<&'a T> {
+        if self.len() == 0 {
+            Option::None
+        } else {
+            Option::Some(&self[self.len() - 1])
+        }
     }
 }
 
@@ -192,6 +184,260 @@ impl<T: Ord> VecSort<T> for Vec<T> {
         while index < count {
             self.push(values[index].take().unwrap());
             index = index + 1;
+        }
+    }
+}
+
+/// Slice inspection has the same borrowing contract as vector inspection.
+impl<T> VecAccess<T> for [T] {
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+    fn get<'a>(&'a self, index: usize) -> Option<&'a T> {
+        if index < self.len() {
+            Option::Some(&self[index])
+        } else {
+            Option::None
+        }
+    }
+    fn first<'a>(&'a self) -> Option<&'a T> {
+        if self.len() == 0 {
+            Option::None
+        } else {
+            Option::Some(&self[0usize])
+        }
+    }
+    fn last<'a>(&'a self) -> Option<&'a T> {
+        if self.len() == 0 {
+            Option::None
+        } else {
+            Option::Some(&self[self.len() - 1])
+        }
+    }
+}
+impl<T: PartialEq> VecContains<T> for [T] {
+    fn contains(&self, value: &T) -> bool {
+        let mut index = 0usize;
+        while index < self.len() {
+            if self[index] == *value {
+                return true;
+            }
+            index += 1;
+        }
+        false
+    }
+}
+
+pub trait VecAccessMut<T> {
+    fn get_mut<'a>(&'a mut self, index: usize) -> Option<&'a mut T>;
+    fn last_mut<'a>(&'a mut self) -> Option<&'a mut T>;
+}
+impl<T> VecAccessMut<T> for Vec<T> {
+    fn get_mut<'a>(&'a mut self, index: usize) -> Option<&'a mut T> {
+        if index < self.len() {
+            Option::Some(&mut self[index])
+        } else {
+            Option::None
+        }
+    }
+    fn last_mut<'a>(&'a mut self) -> Option<&'a mut T> {
+        let len = self.len();
+        if len == 0 {
+            Option::None
+        } else {
+            Option::Some(&mut self[len - 1])
+        }
+    }
+}
+impl<T> VecAccessMut<T> for [T] {
+    fn get_mut<'a>(&'a mut self, index: usize) -> Option<&'a mut T> {
+        if index < self.len() {
+            Option::Some(&mut self[index])
+        } else {
+            Option::None
+        }
+    }
+    fn last_mut<'a>(&'a mut self) -> Option<&'a mut T> {
+        let len = self.len();
+        if len == 0 {
+            Option::None
+        } else {
+            Option::Some(&mut self[len - 1])
+        }
+    }
+}
+
+pub trait SliceClone<T: Clone> {
+    fn to_vec(&self) -> Vec<T>;
+}
+impl<T: Clone> SliceClone<T> for [T] {
+    fn to_vec(&self) -> Vec<T> {
+        let mut result: Vec<T> = Vec::new();
+        let mut index = 0usize;
+        while index < self.len() {
+            result.push(self[index].clone());
+            index += 1;
+        }
+        result
+    }
+}
+
+pub trait SequencePrefix<T: PartialEq> {
+    fn starts_with(&self, prefix: &[T]) -> bool;
+}
+impl<T: PartialEq> SequencePrefix<T> for [T] {
+    fn starts_with(&self, prefix: &[T]) -> bool {
+        if prefix.len() > self.len() {
+            return false;
+        }
+        let mut index = 0usize;
+        while index < prefix.len() {
+            if !(self[index] == prefix[index]) {
+                return false;
+            }
+            index += 1;
+        }
+        true
+    }
+}
+impl<T: PartialEq> SequencePrefix<T> for Vec<T> {
+    fn starts_with(&self, prefix: &[T]) -> bool {
+        if prefix.len() > self.len() {
+            return false;
+        }
+        let mut index = 0usize;
+        while index < prefix.len() {
+            if !(self[index] == prefix[index]) {
+                return false;
+            }
+            index += 1;
+        }
+        true
+    }
+}
+
+pub trait SliceCopy<T: Copy> {
+    fn copy_from_slice(&mut self, source: &[T]);
+}
+impl<T: Copy> SliceCopy<T> for [T] {
+    fn copy_from_slice(&mut self, source: &[T]) {
+        assert!(self.len() == source.len());
+        let mut index = 0usize;
+        while index < self.len() {
+            self[index] = source[index];
+            index += 1;
+        }
+    }
+}
+
+pub trait VecClear<T> {
+    fn clear(&mut self);
+    fn truncate(&mut self, length: usize);
+}
+impl<T> VecClear<T> for Vec<T> {
+    fn clear(&mut self) {
+        self.retain(|_| false);
+    }
+    fn truncate(&mut self, length: usize) {
+        if length >= self.len() {
+            return;
+        }
+        let mut index = 0usize;
+        self.retain(|_| {
+            let keep = index < length;
+            index += 1;
+            keep
+        });
+    }
+}
+
+/// A four-way lexicographic result: less, equal, greater, or unordered.
+/// Relational operators are used directly so custom equality does not affect order.
+#[allow(clippy::neg_cmp_op_on_partial_ord)]
+pub fn __lkj_slice_order<T: PartialOrd>(left: &[T], right: &[T]) -> i32 {
+    let mut index = 0usize;
+    while index < left.len() && index < right.len() {
+        if left[index] < right[index] {
+            return -1i32;
+        }
+        if left[index] > right[index] {
+            return 1i32;
+        }
+        if !(left[index] <= right[index]) {
+            return 2i32;
+        }
+        index += 1;
+    }
+    if left.len() < right.len() {
+        -1i32
+    } else if left.len() > right.len() {
+        1i32
+    } else {
+        0i32
+    }
+}
+
+pub fn __lkj_vec_order<T: PartialOrd>(left: &Vec<T>, right: &Vec<T>) -> i32 {
+    __lkj_slice_order(&left[..], &right[..])
+}
+
+pub fn __lkj_slice_equal<T: PartialEq>(left: &[T], right: &[T]) -> bool {
+    if left.len() != right.len() {
+        return false;
+    }
+    let mut index = 0usize;
+    while index < left.len() {
+        if !(left[index] == right[index]) {
+            return false;
+        }
+        index += 1;
+    }
+    true
+}
+
+/// Split borrows the original elements and evaluates the predicate once per element.
+pub struct SliceSplit<'a, T, F> {
+    items: &'a [T],
+    predicate: F,
+    start: usize,
+    done: bool,
+}
+impl<'a, T, F: FnMut(&T) -> bool> crate::iter::Iterator for SliceSplit<'a, T, F> {
+    type Item = &'a [T];
+    fn next(&mut self) -> Option<&'a [T]> {
+        if self.done {
+            return Option::None;
+        }
+        let items = self.items;
+        let start = self.start;
+        let mut end = start;
+        while end < items.len() {
+            if (self.predicate)(&items[end]) {
+                self.start = end + 1;
+                return Option::Some(&items[start..end]);
+            }
+            end += 1;
+        }
+        self.done = true;
+        Option::Some(&items[start..])
+    }
+}
+impl<'a, T, F: FnMut(&T) -> bool> crate::iter::IntoIterator for SliceSplit<'a, T, F> {
+    type IntoIter = Self;
+    fn into_iter(self) -> Self {
+        self
+    }
+}
+pub trait SliceSplitSource<T> {
+    fn split<'a, F: FnMut(&T) -> bool>(&'a self, predicate: F) -> SliceSplit<'a, T, F>;
+}
+impl<T> SliceSplitSource<T> for [T] {
+    fn split<'a, F: FnMut(&T) -> bool>(&'a self, predicate: F) -> SliceSplit<'a, T, F> {
+        SliceSplit {
+            items: self,
+            predicate,
+            start: 0,
+            done: false,
         }
     }
 }

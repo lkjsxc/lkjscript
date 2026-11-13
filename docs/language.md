@@ -14,11 +14,16 @@ receiver's width; the argument must have the same integer type. The checked_add,
 checked_sub and checked_mul methods are ordinary source-library implementations
 returning Some(result) or None on overflow for all ten supported integer types.
 Both operands evaluate once in receiver-then-argument order. Ordinary arithmetic
-operators remain checked and trap on overflow. Booleans and Unicode scalar
+operators remain checked and trap on overflow. Arithmetic, bitwise and unary
+operators forward one shared reference to a primitive scalar. Shift counts may
+have a different integer width; negative or out-of-range counts trap before any
+count narrowing. Booleans and Unicode scalar
 characters are distinct from integers. Characters
 occupy four bytes; surrogate code points and values above U+10FFFF are rejected.
 Characters compare by scalar value, cast to integers, and can be constructed by
-casting u8. Other integer-to-character casts and character arithmetic reject.
+casting u8. char::from_u32 returns Some for Unicode scalar values and None for
+surrogates or values above U+10FFFF. Other integer-to-character casts and
+character arithmetic reject.
 Character patterns include scalar ranges and account for the surrogate gap.
 Expressions evaluate
 left to right; logical operators short circuit. Assignment and the supported
@@ -43,7 +48,9 @@ Statements and tails after an unconditional return are still checked. `if let`
 and `while let` lower to ordinary matches and loops. `let else` requires its
 failure branch to diverge and extends borrowed initializer temporaries through
 the binding scope. Result/Option `?` branches to ordinary early return; Result
-error types must currently be equal. Loops accept a value on `break`, unified
+errors either retain the same type or convert &str to the canonical source String
+through its ordinary constructor. General From evidence is not implemented.
+Loops accept a value on `break`, unified
 across their exit edges. Struct update evaluates explicit fields in source order,
 then the base once, transferring only the remaining fields.
 
@@ -259,9 +266,12 @@ remains future work.
 
 Text and character helpers live in source. Supported text operations include
 prefix/suffix tests, contains/find/rfind, ASCII case conversion/comparison,
-repeat and replace. A source Pattern trait shares the implementation for text
+repeat and replace, bytes/chars, LF/CRLF lines, strip_prefix, split_once and text
+split (including an empty pattern). Checked decimal parse covers all ten integer
+primitives and rejects malformed or out-of-range input. These iterators retain
+borrowed storage through ordinary source view types. A source Pattern trait shares the implementation for text
 and character needles. Character helpers include UTF-8/UTF-16 lengths, ASCII
-predicates and case conversion, Unicode whitespace, and to_string. General
+predicates and case conversion, Unicode whitespace/control checks, to_digit, and to_string. General
 Unicode case conversion is not implemented. Range slicing follows the checked
 view and UTF-8 endpoint contract above.
 
@@ -319,10 +329,12 @@ clone method cannot replace the generic Clone contract.
 Repeated Vec literals evaluate their element and count once,
 clone all but the final element, and move the original last; a zero count still
 evaluates and destroys the supplied value. This expands through a source helper
-constrained by Clone. Ordered BTreeMap storage is a sorted Vec, with logarithmic
-lookup and linear insertion/removal. BTreeSet reuses that map's ordering and
-storage. Their shared iterators preserve sorted key order; maps also expose keys
-and values. Map clear destroys entries in key order.
+constrained by Clone. Ordered BTreeMap storage uses an indexed AVL arena with
+logarithmic lookup, insertion and removal. BTreeSet reuses that map's ordering
+and storage. Shared and owned iterators preserve sorted key order; maps expose
+keys, values, first_key_value, pop_first and retain. Sets provide first/pop_first.
+Map clear and partially consumed owned iterators destroy entries in key order.
+Clone, Default and semantic equality operate independently of arena shape.
 
 Shared collection iteration is ordinary source. Iterator declares Item and next;
 IntoIterator declares an iterator type constrained by Iterator. The iter method on vectors and slices,
@@ -353,8 +365,10 @@ owned by the iterator. Receiver expressions execute before predicate constructio
 Owned value expressions provide writable temporary receiver storage, including
 projected fields and indexed elements. This does not change the mutability of
 named bindings or permission through shared references.
-Owned/exclusive collection iteration, Sum/FromIterator and the broader adapter
-library remain separate work.
+Owned Vec, Option, map and set iteration are implemented. find borrows each item
+for its predicate and returns the owned matching item; position consumes items
+and returns a zero-based index. Exclusive collection iteration, Sum/FromIterator
+and the broader adapter library remain separate work.
 
 The explicit static-lifetime subset covers wholly static function outputs,
 including view aggregates. K records `ReturnSource::Static` and checks every live
@@ -801,12 +815,11 @@ No generated engine implements a step counter or per-operation allowance.
 
 The source library implements Option/Result with conditional Clone, Copy,
 PartialEq and Eq derives, byte operations, UTF-8 validation,
-String, vector cloning and equality, ordering for integer/bool elements, and part
-of the BTreeMap API. Vector cloning and equality execute ordinary source loops
+String, vector/slice cloning and equality, structural ordering, and the
+implemented ordered-map/set APIs. Vector cloning and equality execute ordinary source loops
 using the element Clone or PartialEq contract; allocation/storage still use the
 existing memory primitives.
-BTreeMap uses sorted Vec entries with logarithmic lookup and linear insertion or
-removal. String constructors validate bytes and its private representation is
+BTreeMap uses an indexed AVL arena with logarithmic lookup, insertion and removal. String constructors validate bytes and its private representation is
 protected across modules. The library loads through ordinary module scopes.
 Bootstrap byte provisioning lives in `bridge/library.rs`; a compiler source
 bundle supplies its own library files without hidden fallback.
@@ -983,3 +996,17 @@ located alternatives: owned values, indices, or separate local views.
 The ordered map uses an owned AVL node arena with index links and free-slot reuse.
 Insertion, lookup and removal follow tree height; ordered iteration and clear/drop
 preserve key order. This is library source, not a new trusted primitive.
+
+## First compiler consumer additions
+
+Derived structural ordering executes ordinary checked K for nominal fields and
+enum declaration order. Arrays, slices and vectors compare lexicographically.
+Floating-point unordered results stop comparison at the decisive field and make
+all four ordering relations false. Ordering does not use custom PartialEq as an
+equality oracle. Borrowed str compares UTF-8 bytes; String uses its owned bytes.
+
+Slice access includes is_empty, get/first/last and mutable counterparts; to_vec
+clones in order, starts_with borrows elements, and copy_from_slice requires Copy
+and equal lengths. Predicate split returns borrowed groups, including empty
+groups at adjacent/endpoint delimiters. Vec clear/truncate drop removed elements
+in forward order. These are source library operations over existing K storage.

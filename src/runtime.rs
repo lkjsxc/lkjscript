@@ -23,21 +23,21 @@ pub(crate) enum Primitive {
     DropStep,
 }
 impl Primitive {
-    fn declarations() -> Vec<(&'static str, usize, Self)> {
+    fn declarations() -> Vec<(String, usize, Self)> {
         vec![
-            ("raw_load8", 1, Self::Load8),
-            ("raw_load64", 1, Self::Load64),
-            ("raw_store8", 2, Self::Store8),
-            ("raw_store64", 2, Self::Store64),
-            ("raw_memory_size", 0, Self::MemorySize),
-            ("raw_memory_grow", 1, Self::MemoryGrow),
-            ("raw_memory_copy", 3, Self::MemoryCopy),
-            ("raw_heap_tip", 0, Self::HeapTip),
-            ("raw_set_heap_tip", 1, Self::SetHeapTip),
-            ("raw_classes", 0, Self::Classes),
-            ("raw_set_classes", 1, Self::SetClasses),
-            ("raw_fail", 0, Self::Fail),
-            ("raw_drop_step", 2, Self::DropStep),
+            ("raw_load8".to_string(), 1, Self::Load8),
+            ("raw_load64".to_string(), 1, Self::Load64),
+            ("raw_store8".to_string(), 2, Self::Store8),
+            ("raw_store64".to_string(), 2, Self::Store64),
+            ("raw_memory_size".to_string(), 0, Self::MemorySize),
+            ("raw_memory_grow".to_string(), 1, Self::MemoryGrow),
+            ("raw_memory_copy".to_string(), 3, Self::MemoryCopy),
+            ("raw_heap_tip".to_string(), 0, Self::HeapTip),
+            ("raw_set_heap_tip".to_string(), 1, Self::SetHeapTip),
+            ("raw_classes".to_string(), 0, Self::Classes),
+            ("raw_set_classes".to_string(), 1, Self::SetClasses),
+            ("raw_fail".to_string(), 0, Self::Fail),
+            ("raw_drop_step".to_string(), 2, Self::DropStep),
         ]
     }
     fn code(self) -> Code {
@@ -95,12 +95,20 @@ impl Primitive {
     }
 }
 
-const ENTRIES: [(lower::RuntimeFunction, &str); 4] = [
-    (lower::RuntimeFunction::Allocate, "allocate"),
-    (lower::RuntimeFunction::Release, "release"),
-    (lower::RuntimeFunction::DropDispatch, "drop_walk"),
-    (lower::RuntimeFunction::Utf8Validate, "utf8_validate"),
-];
+fn entry_declaration(slot: usize) -> (lower::RuntimeFunction, String) {
+    match slot {
+        0 => (lower::RuntimeFunction::Allocate, "allocate".to_string()),
+        1 => (lower::RuntimeFunction::Release, "release".to_string()),
+        2 => (
+            lower::RuntimeFunction::DropDispatch,
+            "drop_walk".to_string(),
+        ),
+        _ => (
+            lower::RuntimeFunction::Utf8Validate,
+            "utf8_validate".to_string(),
+        ),
+    }
+}
 
 /// The fields are private: a checked user program is not a source runtime.
 pub struct Runtime {
@@ -126,16 +134,14 @@ fn word(program: &k::Program, ty: usize) -> bool {
 /// No filename, attribute or declaration spelling alone grants user authority.
 pub fn seal(checked: CheckedProgram) -> Result<Runtime, Diagnostic> {
     let program = checked.program();
-    let names: BTreeMap<&str, usize> = program
-        .functions
-        .iter()
-        .enumerate()
-        .map(|(index, function)| (function.name.as_str(), index))
-        .collect();
+    let mut names: BTreeMap<String, usize> = BTreeMap::new();
+    for index in 0usize..program.functions.len() {
+        names.insert(program.functions[index].name.clone(), index);
+    }
     let mut primitives = BTreeMap::new();
     for (name, parameters, primitive) in Primitive::declarations() {
         let index = *names
-            .get(name)
+            .get(&name)
             .ok_or_else(|| problem(&format!("missing runtime primitive {name}")))?;
         let function = &program.functions[index];
         if function.params != parameters
@@ -159,9 +165,10 @@ pub fn seal(checked: CheckedProgram) -> Result<Runtime, Diagnostic> {
         primitives.insert(index, primitive);
     }
     let mut entries = [0; 4];
-    for (slot, (role, name)) in ENTRIES.iter().enumerate() {
+    for slot in 0usize..4usize {
+        let (role, name) = entry_declaration(slot);
         let index = *names
-            .get(name)
+            .get(&name)
             .ok_or_else(|| problem(&format!("missing runtime entry {name}")))?;
         let function = &program.functions[index];
         if function.params != role.signature().parameters.len()
@@ -206,6 +213,7 @@ pub fn seal(checked: CheckedProgram) -> Result<Runtime, Diagnostic> {
                 | Op::Return { .. }
                 | Op::BreakTo { .. }
                 | Op::ContinueTo { .. } => true,
+                Op::Intrinsic { name, .. } => name == "cast",
                 Op::Read { place, .. }
                 | Op::Assign { place, .. }
                 | Op::Drop { place }
@@ -256,7 +264,8 @@ impl Runtime {
     /// the bytes and compare this source on K and every production encoder.
     pub fn model_program(&self, drop_steps: &[usize]) -> Result<lower::Program, String> {
         let mut functions = Vec::new();
-        for (role, _) in ENTRIES {
+        for slot in 0usize..4usize {
+            let (role, _) = entry_declaration(slot);
             functions.push(Function {
                 name: "runtime entry".to_string(),
                 signature: role.signature(),
@@ -285,6 +294,15 @@ impl Runtime {
             }
             table.push(4 + index);
         }
+        let mut exports = Vec::new();
+        for index in 0usize..self.functions.len() {
+            if !self.primitives.contains_key(&index) {
+                exports.push(lower::Export {
+                    name: format!("fn:{}", self.functions[index].name),
+                    function: 4usize + index,
+                });
+            }
+        }
         let mut program = lower::Program {
             layout: lower::Layouts { types: Vec::new() },
             imports: Vec::new(),
@@ -307,16 +325,7 @@ impl Runtime {
                     mutable: true,
                 },
             ],
-            exports: self
-                .functions
-                .iter()
-                .enumerate()
-                .filter(|(index, _)| !self.primitives.contains_key(index))
-                .map(|(index, function)| lower::Export {
-                    name: format!("fn:{}", function.name),
-                    function: 4 + index,
-                })
-                .collect(),
+            exports,
             table,
             data: Vec::new(),
             data_offset: 8,
@@ -341,7 +350,8 @@ impl Runtime {
             .ok_or("runtime function index overflow")?;
         for function in &self.functions {
             let mut code = function.code.clone();
-            for instruction in &mut code.instructions {
+            for position in 0usize..code.instructions.len() {
+                let instruction = &mut code.instructions[position];
                 if let Instruction::Call(index) = instruction {
                     if *index < 4 || *index >= end {
                         return Err(
@@ -361,8 +371,9 @@ impl Runtime {
                 code,
             });
         }
-        for (slot, index) in self.entries.iter().enumerate() {
-            let (role, name) = ENTRIES[slot];
+        for slot in 0usize..self.entries.len() {
+            let index = self.entries[slot];
+            let (role, name) = entry_declaration(slot);
             let signature = role.signature();
             let entry = program
                 .functions
@@ -373,9 +384,10 @@ impl Runtime {
                     "runtime entry {name} has an incompatible lowered signature"
                 ));
             }
-            let mut instructions: Vec<_> = (0..signature.parameters.len())
-                .map(Instruction::LocalGet)
-                .collect();
+            let mut instructions: Vec<Instruction> = Vec::new();
+            for parameter in 0usize..signature.parameters.len() {
+                instructions.push(Instruction::LocalGet(parameter));
+            }
             instructions.push(Instruction::Call(base + index));
             instructions.push(Instruction::End);
             entry.code = Code {

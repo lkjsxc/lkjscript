@@ -238,7 +238,7 @@ pub struct Storage {
 }
 impl Storage {
     pub fn words(self) -> usize {
-        usize::from(self.bytes).div_ceil(8)
+        (self.bytes as usize + 7usize) / 8usize
     }
     pub fn word(self, index: usize) -> Storage {
         assert!(index < self.words());

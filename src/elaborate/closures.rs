@@ -999,7 +999,7 @@ impl Builder<'_, '_> {
             body: Vec::new(),
             test: false,
         };
-        let live: Facts = function.locals.iter().map(|_| true).collect();
+        let live = Facts::filled(function.locals.len(), true);
         let references = Facts::new(live.len());
         let bindings = function.locals[1..param_count]
             .iter()

@@ -2,7 +2,9 @@
 //! Searches, insertion and removal take logarithmic tree height; vacant slots
 //! are reused. Shared cursors follow parent links in key order.
 use crate::Option;
+use crate::iter::Iterator;
 
+#[derive(Clone)]
 pub struct BTreeMap<K, V> {
     nodes: Vec<Node<K, V>>,
     root: usize,
@@ -10,11 +12,13 @@ pub struct BTreeMap<K, V> {
     count: usize,
 }
 
+#[derive(Clone)]
 struct Pair<K, V> {
     key: K,
     value: V,
 }
 
+#[derive(Clone)]
 struct Node<K, V> {
     entry: Option<Pair<K, V>>,
     left: usize,
@@ -196,6 +200,46 @@ impl<K, V> BTreeMap<K, V> {
         self.root = 0;
         self.vacant = 0;
         self.count = 0;
+    }
+    pub fn first_key_value(&self) -> Option<(&K, &V)> {
+        let index = self.first_node(self.root);
+        if index == 0 {
+            Option::None
+        } else {
+            match &self.nodes[index].entry {
+                Option::Some(entry) => Option::Some((&entry.key, &entry.value)),
+                Option::None => unreachable!(),
+            }
+        }
+    }
+    pub fn pop_first(&mut self) -> Option<(K, V)> {
+        let index = self.first_node(self.root);
+        if index == 0 {
+            Option::None
+        } else {
+            let entry = self.remove_node(index);
+            Option::Some((entry.key, entry.value))
+        }
+    }
+    pub fn retain<F: FnMut(&K, &mut V) -> bool>(&mut self, mut predicate: F) {
+        let mut index = self.first_node(self.root);
+        while index != 0 {
+            let next = self.successor(index);
+            let has_two_children = self.nodes[index].left != 0 && self.nodes[index].right != 0;
+            let keep = match &mut self.nodes[index].entry {
+                Option::Some(entry) => predicate(&entry.key, &mut entry.value),
+                Option::None => unreachable!(),
+            };
+            if keep {
+                index = next;
+            } else {
+                self.remove_node(index);
+                // Removing an internal entry moves its successor into this slot.
+                if !has_two_children {
+                    index = next;
+                }
+            }
+        }
     }
     pub fn iter<'a>(&'a self) -> Iter<'a, K, V> {
         Iter {
@@ -381,5 +425,65 @@ impl<'a, K, V> crate::iter::IntoIterator for Values<'a, K, V> {
     type IntoIter = Self;
     fn into_iter(self) -> Self {
         self
+    }
+}
+
+impl<K, V> crate::prelude::Default for BTreeMap<K, V> {
+    fn default() -> BTreeMap<K, V> {
+        BTreeMap::new()
+    }
+}
+
+impl<K: Ord, V: PartialEq> PartialEq for BTreeMap<K, V> {
+    fn eq(&self, other: &Self) -> bool {
+        if self.len() != other.len() {
+            return false;
+        }
+        let mut left = self.iter();
+        let mut right = other.iter();
+        loop {
+            match (left.next(), right.next()) {
+                (crate::Option::Some((ak, av)), crate::Option::Some((bk, bv))) => {
+                    if ak != bk || av != bv {
+                        return false;
+                    }
+                }
+                (crate::Option::None, crate::Option::None) => return true,
+                _ => return false,
+            }
+        }
+    }
+}
+impl<K: Ord, V: Eq> Eq for BTreeMap<K, V> {}
+
+/// Owned iteration takes entries in key order without rebalancing the tree.
+pub struct IntoIter<K, V> {
+    map: BTreeMap<K, V>,
+    next: usize,
+}
+impl<K, V> crate::iter::Iterator for IntoIter<K, V> {
+    type Item = (K, V);
+    fn next(&mut self) -> Option<(K, V)> {
+        if self.next == 0 {
+            return Option::None;
+        }
+        let index = self.next;
+        self.next = self.map.successor(index);
+        let entry = self.map.nodes[index].entry.take().unwrap();
+        self.map.count = self.map.count - 1usize;
+        Option::Some((entry.key, entry.value))
+    }
+}
+impl<K, V> crate::iter::IntoIterator for IntoIter<K, V> {
+    type IntoIter = Self;
+    fn into_iter(self) -> Self {
+        self
+    }
+}
+impl<K, V> crate::iter::IntoIterator for BTreeMap<K, V> {
+    type IntoIter = IntoIter<K, V>;
+    fn into_iter(self) -> IntoIter<K, V> {
+        let next = self.first_node(self.root);
+        IntoIter { map: self, next }
     }
 }

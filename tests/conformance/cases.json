@@ -6464,5 +6464,222 @@
     "status": 101,
     "ending": "normal",
     "rust": true
+  },
+  {
+    "id": "try_string_error",
+    "file": "pass/try_string_error.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
+  },
+  {
+    "id": "integer_mixed_shifts",
+    "file": "pass/integer_mixed_shifts.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
+  },
+  {
+    "id": "try_error_named_string",
+    "file": "fail/try_error_named_string.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": true,
+    "rustAccept": false,
+    "pending": false
+  },
+  {
+    "id": "integer_shift_wide_amount",
+    "file": "trap/integer_shift_wide_amount.rs",
+    "kind": "trap",
+    "code": "R0001"
+  },
+  {
+    "id": "integer_shift_negative_amount",
+    "file": "trap/integer_shift_negative_amount.rs",
+    "kind": "trap",
+    "code": "R0001"
+  },
+  {
+    "id": "integer_shift_width",
+    "file": "trap/integer_shift_width.rs",
+    "kind": "trap",
+    "code": "R0001"
+  },
+  {
+    "id": "primitive_borrowed_binary",
+    "file": "pass/primitive_borrowed_binary.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
+  },
+  {
+    "id": "primitive_reference_unary",
+    "file": "pass/primitive_reference_unary.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "collection_clone_default_equal",
+    "file": "pass/collection_clone_default_equal.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "kc_map_err_input_coercion",
+    "file": "pass/kc_map_err_input_coercion.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "kc_map_err_wrong_input",
+    "file": "fail/kc_map_err_wrong_input.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "pending": false,
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0631"
+  },
+  {
+    "id": "kc_slice_helpers",
+    "file": "pass/kc_slice_helpers.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
+  },
+  {
+    "id": "kc_iterator_search",
+    "file": "pass/kc_iterator_search.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
+  },
+  {
+    "id": "kc_text_views",
+    "file": "pass/kc_text_views.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
+  },
+  {
+    "id": "kc_integer_parse",
+    "file": "pass/kc_integer_parse.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
+  },
+  {
+    "id": "checked_unicode_scalar",
+    "file": "pass/checked_unicode_scalar.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
+  },
+  {
+    "id": "inferred_collection_constructor",
+    "file": "pass/inferred_collection_constructor.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
+  },
+  {
+    "id": "kc_slice_copy_mismatch",
+    "file": "pass/kc_slice_copy_mismatch.rs",
+    "kind": "trap",
+    "entry": "probe",
+    "code": "R0005",
+    "rust": false,
+    "pending": false
+  },
+  {
+    "id": "ordered_map_owned_retain",
+    "file": "pass/ordered_map_owned_retain.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
+  },
+  {
+    "id": "kc_slice_split",
+    "file": "pass/kc_slice_split.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
+  },
+  {
+    "id": "derived_order_nominal",
+    "file": "pass/derived_order_nominal.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
+  },
+  {
+    "id": "derived_order_partial",
+    "file": "pass/derived_order_partial.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
+  },
+  {
+    "id": "ordering_operand_evaluation",
+    "file": "pass/ordering_operand_evaluation.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
+  },
+  {
+    "id": "derived_order_text_views",
+    "file": "pass/derived_order_text_views.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
+  },
+  {
+    "id": "vec_truncate_drop_order",
+    "file": "output/vec_truncate_drop_order.rs",
+    "kind": "output",
+    "hex": "6403040565010266",
+    "ending": "normal",
+    "rust": true,
+    "pending": false
+  },
+  {
+    "id": "char_to_digit_low_radix",
+    "file": "output/char_to_digit_low_radix.rs",
+    "kind": "output",
+    "hex": "6c6f77",
+    "ending": "R0004",
+    "rust": true,
+    "pending": false
+  },
+  {
+    "id": "char_to_digit_high_radix",
+    "file": "output/char_to_digit_high_radix.rs",
+    "kind": "output",
+    "hex": "68696768",
+    "ending": "R0004",
+    "rust": true,
+    "pending": false
   }
 ]

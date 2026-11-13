@@ -23,7 +23,7 @@ impl Builder<'_, '_> {
             return Err(err(
                 span,
                 "E_TYPE",
-                "source Vec helper signature differs from its operation",
+                "source sequence helper signature differs from its operation",
             ));
         }
         let destination = self.temp(result);
@@ -114,7 +114,7 @@ impl Compiler<'_> {
             return Err(err(
                 span,
                 "E_TYPE",
-                "source Vec helper requires one element type parameter",
+                "source sequence helper requires one element type parameter",
             ));
         }
         let mut substitutions = BTreeMap::new();
@@ -122,11 +122,28 @@ impl Compiler<'_> {
         let function = self.instantiate(source, substitutions)?;
         let vector = self.intern(String::new(), k::TypeKind::Vec { inner: element });
         let reference = self.reference(vector, false);
+        let slice = self.intern(
+            String::new(),
+            k::TypeKind::Slice {
+                inner: element,
+                mutable: false,
+            },
+        );
+        let slice_reference = self.reference(slice, false);
         let (parameters, result) = match name {
             "__lkj_vec_clone" => (vec![reference], vector),
             "__lkj_vec_equal" => (vec![reference, reference], k::BOOL),
+            "__lkj_vec_order" => (vec![reference, reference], k::I32),
+            "__lkj_slice_equal" => (vec![slice_reference, slice_reference], k::BOOL),
+            "__lkj_slice_order" => (vec![slice_reference, slice_reference], k::I32),
             "__lkj_vec_repeat" => (vec![element, k::U64], vector),
-            _ => return Err(err(span, "E_TYPE", "unknown source Vec helper operation")),
+            _ => {
+                return Err(err(
+                    span,
+                    "E_TYPE",
+                    "unknown source sequence helper operation",
+                ));
+            }
         };
         let contract = &self.functions[function];
         if contract.params != parameters.len()
@@ -140,7 +157,7 @@ impl Compiler<'_> {
             return Err(err(
                 span,
                 "E_TYPE",
-                "source Vec helper signature differs from its operation",
+                "source sequence helper signature differs from its operation",
             ));
         }
         Ok(function)

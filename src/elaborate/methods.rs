@@ -67,6 +67,8 @@ pub(super) fn direct(receiver: Receiver, name: &str) -> Option<Direct> {
             | "is_ascii_hexdigit"
             | "is_ascii_whitespace"
             | "is_whitespace"
+            | "is_control"
+            | "to_digit"
             | "to_ascii_lowercase"
             | "to_ascii_uppercase"
             | "to_string",

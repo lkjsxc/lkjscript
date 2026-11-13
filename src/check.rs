@@ -3,7 +3,6 @@ use crate::diagnostic::{Diagnostic, Span};
 use crate::facts::Facts;
 use crate::k::*;
 use std::collections::{BTreeMap, BTreeSet};
-use std::rc::Rc;
 
 mod io;
 pub(crate) mod scoped;
@@ -238,6 +237,27 @@ struct Loans {
     parents: BTreeMap<usize, BTreeSet<Place>>,
     effects: BTreeMap<scoped::EffectId, BTreeSet<Place>>,
 }
+// The compiler needs default map slots, not an Entry sum type. Keep the stored
+// relation owned and make each lookup explicit in the source subset.
+fn get_or_default<'a, K: Ord + Clone, V: Default>(
+    map: &'a mut BTreeMap<K, V>,
+    key: K,
+) -> &'a mut V {
+    if !map.contains_key(&key) {
+        map.insert(key.clone(), V::default());
+    }
+    map.get_mut(&key).expect("inserted map entry")
+}
+fn get_or_insert<'a, K: Ord + Clone, V>(
+    map: &'a mut BTreeMap<K, V>,
+    key: K,
+    value: V,
+) -> &'a mut V {
+    if !map.contains_key(&key) {
+        map.insert(key.clone(), value);
+    }
+    map.get_mut(&key).expect("inserted map entry")
+}
 fn remove_index<K: Ord>(map: &mut BTreeMap<K, BTreeSet<Place>>, key: &K, place: &Place) {
     if let Some(entries) = map.get_mut(key) {
         entries.remove(place);
@@ -250,33 +270,19 @@ impl Loans {
     fn push(&mut self, loan: Loan) {
         let holder = loan.holder.clone();
         self.remove(&holder);
-        self.holders
-            .entry(holder.local)
-            .or_default()
-            .insert(holder.clone());
+        get_or_default(&mut self.holders, holder.local).insert(holder.clone());
         for source in &loan.sources {
-            self.targets
-                .entry(source.origin.root.clone())
-                .or_default()
-                .insert(holder.clone());
+            get_or_default(&mut self.targets, source.origin.root.clone()).insert(holder.clone());
             if loan.mutable {
-                self.mutable_targets
-                    .entry(source.origin.root.clone())
-                    .or_default()
+                get_or_default(&mut self.mutable_targets, source.origin.root.clone())
                     .insert(holder.clone());
             }
         }
         for parent in &loan.parents {
-            self.parents
-                .entry(parent.local)
-                .or_default()
-                .insert(holder.clone());
+            get_or_default(&mut self.parents, parent.local).insert(holder.clone());
         }
         for effect in &loan.effects {
-            self.effects
-                .entry(*effect)
-                .or_default()
-                .insert(holder.clone());
+            get_or_default(&mut self.effects, *effect).insert(holder.clone());
         }
         self.values.insert(holder, loan);
     }
@@ -298,13 +304,11 @@ impl Loans {
         Some(loan)
     }
     fn remove_place(&mut self, place: &Place) {
-        let holders: Vec<_> = self
-            .for_holder(place.local)
-            .filter(|loan| within(&loan.holder, place))
-            .map(|loan| loan.holder.clone())
-            .collect();
+        let holders = self.for_holder(place.local);
         for holder in holders {
-            self.remove(&holder);
+            if within(&holder, place) {
+                self.remove(&holder);
+            }
         }
     }
     fn extend(&mut self, loans: Vec<Loan>) {
@@ -315,37 +319,43 @@ impl Loans {
     fn get(&self, holder: &Place) -> Option<&Loan> {
         self.values.get(holder)
     }
-    fn for_holder(&self, local: usize) -> impl Iterator<Item = &Loan> {
-        self.holders
-            .get(&local)
-            .into_iter()
-            .flatten()
-            .map(|holder| &self.values[holder])
+    // Return owned keys so callers can inspect or mutate the loan table without
+    // storing references in an owned collection or naming an opaque iterator.
+    fn for_holder(&self, local: usize) -> Vec<Place> {
+        let mut result = Vec::new();
+        if let Some(holders) = self.holders.get(&local) {
+            for holder in holders {
+                result.push(holder.clone());
+            }
+        }
+        result
     }
-    fn for_target(&self, root: &Root, mutable_only: bool) -> impl Iterator<Item = &Loan> {
+    fn for_target(&self, root: &Root, mutable_only: bool) -> Vec<Place> {
         let index = if mutable_only {
             &self.mutable_targets
         } else {
             &self.targets
         };
-        index
-            .get(root)
-            .into_iter()
-            .flatten()
-            .map(|holder| &self.values[holder])
+        let mut result = Vec::new();
+        if let Some(holders) = index.get(root) {
+            for holder in holders {
+                result.push(holder.clone());
+            }
+        }
+        result
     }
     fn remap_parents(&mut self, from: &Place, to: &Place) {
-        let holders: Vec<_> = self
-            .parents
-            .get(&from.local)
-            .into_iter()
-            .flatten()
-            .cloned()
-            .collect();
+        let mut holders: Vec<Place> = Vec::new();
+        if let Some(parents) = self.parents.get(&from.local) {
+            for parent in parents {
+                holders.push(parent.clone());
+            }
+        }
         for holder in holders {
             let mut loan = self.remove(&holder).unwrap();
-            for parent in &mut loan.parents {
-                *parent = rebase(parent, from, to);
+            for index in 0..loan.parents.len() {
+                let parent = rebase(&loan.parents[index], from, to);
+                loan.parents[index] = parent;
             }
             self.push(loan);
         }
@@ -389,7 +399,7 @@ struct State {
     maybe_live: Facts,
     moved: Vec<Place>,
     definitely_moved: Vec<Place>,
-    views: Rc<Vec<bool>>,
+    views: Vec<bool>,
     site: Option<(usize, usize)>,
     loans: Loans,
     effects: scoped::Effects,
@@ -425,15 +435,42 @@ fn holder_origin(place: &Place) -> Origin {
         projections: place.projections.clone(),
     }
 }
+fn dedup_adjacent<T: PartialEq>(values: &mut Vec<T>) {
+    let original = std::mem::replace(values, Vec::new());
+    let mut distinct: Vec<T> = Vec::new();
+    for value in original {
+        if distinct.is_empty() || !distinct[distinct.len() - 1].eq(&value) {
+            distinct.push(value);
+        }
+    }
+    *values = distinct;
+}
+fn site_history(site: Option<(usize, usize)>) -> Vec<(usize, usize)> {
+    let mut result: Vec<(usize, usize)> = Vec::new();
+    if let Some(site) = site {
+        result.push(site);
+    }
+    result
+}
 fn normalize_sources(sources: &mut Vec<SourceBound>) {
     sources.sort();
     // A bound subsumes the exact source with the same prefix.
-    sources.dedup_by(|a, b| a.origin == b.origin);
+    let original = std::mem::replace(sources, Vec::new());
+    let mut distinct: Vec<SourceBound> = Vec::new();
+    for source in original {
+        if distinct.is_empty() || distinct[distinct.len() - 1].origin != source.origin {
+            distinct.push(source);
+        }
+    }
+    *sources = distinct;
 }
 fn source_origins(sources: &[SourceBound]) -> Vec<Origin> {
-    let mut origins: Vec<_> = sources.iter().map(|source| source.origin.clone()).collect();
+    let mut origins: Vec<Origin> = Vec::new();
+    for source in sources {
+        origins.push(source.origin.clone());
+    }
     origins.sort();
-    origins.dedup();
+    dedup_adjacent(&mut origins);
     origins
 }
 fn overlaps_sources(a: &[SourceBound], b: &[SourceBound]) -> bool {
@@ -450,7 +487,11 @@ fn resolve_origin(state: &State, place: &Place) -> ResolvedOrigin {
         origin: holder_origin(place),
         exact: true,
     };
-    let mut pending = vec![(initial, Vec::<Place>::new(), BTreeSet::new())];
+    let mut pending = vec![(
+        initial,
+        Vec::<Place>::new(),
+        BTreeSet::<scoped::EffectId>::new(),
+    )];
     let mut permissions = Vec::new();
     let mut sources = Vec::new();
     let mut parents = Vec::new();
@@ -497,7 +538,9 @@ fn resolve_origin(state: &State, place: &Place) -> ResolvedOrigin {
             if state.absent_references.contains(&loan.holder) {
                 absent = true;
             }
-            effects.extend(&loan.effects);
+            for effect in &loan.effects {
+                effects.insert(*effect);
+            }
             for bound in &loan.sources {
                 let mut next = bound.clone();
                 if next.exact {
@@ -516,7 +559,7 @@ fn resolve_origin(state: &State, place: &Place) -> ResolvedOrigin {
     }
     normalize_sources(&mut sources);
     ResolvedOrigin {
-        effects: scoped::common_permissions(permissions.iter()),
+        effects: scoped::common_permissions(&permissions),
         sources,
         parents,
         absent,
@@ -547,7 +590,7 @@ fn invalidate(state: &mut State, targets: &[Origin]) {
         .retain(|tag| !targets.iter().any(|target| affects_tag(target, tag)));
     state
         .predicates
-        .retain(|_, tag| !targets.iter().any(|target| affects_tag(target, tag)));
+        .retain(|_: &usize, tag: &mut Tag| !targets.iter().any(|target| affects_tag(target, tag)));
 }
 fn tag_at(state: &State, targets: &[Origin], witness: &Place) -> Option<usize> {
     state
@@ -681,7 +724,7 @@ fn valid_leaf_contract(types: &[Type], function: &Function, leaves: &[ReturnLeaf
     if leaves.len() != paths.len() {
         return false;
     }
-    let mut seen = BTreeSet::new();
+    let mut seen: BTreeSet<Vec<Projection>> = BTreeSet::new();
     for leaf in leaves {
         if !seen.insert(leaf.projections.clone()) {
             return false;
@@ -706,7 +749,7 @@ fn valid_leaf_contract(types: &[Type], function: &Function, leaves: &[ReturnLeaf
                 if inputs.is_empty() {
                     return false;
                 }
-                let mut selectors = BTreeSet::new();
+                let mut selectors: BTreeSet<Place> = BTreeSet::new();
                 for input in inputs {
                     let Some(input) =
                         parameter_leaf_source(types, function, input.index, &input.projections)
@@ -748,7 +791,9 @@ fn common_origin(loans: &[Loan], line: usize) -> Result<Option<ResolvedOrigin>, 
     }
     let mut sources = Vec::new();
     let mut parents = Vec::new();
+    let mut effects = loans[0].effects.clone();
     for loan in loans {
+        effects = scoped::intersect_permissions(&effects, &loan.effects);
         if loan.mutable
             && loan
                 .sources
@@ -766,30 +811,30 @@ fn common_origin(loans: &[Loan], line: usize) -> Result<Option<ResolvedOrigin>, 
     }
     normalize_sources(&mut sources);
     Ok(Some(ResolvedOrigin {
-        effects: scoped::common_permissions(loans.iter().map(|loan| &loan.effects)),
+        effects,
         sources,
         parents,
         absent: false,
     }))
 }
 fn validate_view(loans: &[Loan], line: usize) -> Result<(), Diagnostic> {
-    let mut indexed: BTreeMap<Root, Vec<&Loan>> = BTreeMap::new();
-    for loan in loans {
-        let roots: BTreeSet<_> = loan
-            .sources
-            .iter()
-            .map(|source| source.origin.root.clone())
-            .collect();
+    let mut indexed: BTreeMap<Root, Vec<usize>> = BTreeMap::new();
+    for (index, loan) in loans.iter().enumerate() {
+        let mut roots: BTreeSet<Root> = BTreeSet::new();
+        for source in &loan.sources {
+            roots.insert(source.origin.root.clone());
+        }
         if loan.mutable && roots.contains(&Root::Static) {
             return Err(error(line, "E_BORROW", "static storage is immutable"));
         }
         for root in roots {
-            indexed.entry(root).or_default().push(loan);
+            get_or_default(&mut indexed, root).push(index);
         }
     }
     for a in loans.iter().filter(|loan| loan.mutable) {
         for source in &a.sources {
-            for b in &indexed[&source.origin.root] {
+            for index in indexed.get(&source.origin.root).expect("indexed loan root") {
+                let b = &loans[*index];
                 if a.holder != b.holder
                     && !exclusive_variants(&a.holder, &b.holder)
                     && overlaps_sources(&a.sources, &b.sources)
@@ -881,7 +926,7 @@ fn carried_provenance(
             }
             if !resolved.sources.is_empty() {
                 result.loans.push(Loan {
-                    created: state.site.into_iter().collect(),
+                    created: site_history(state.site),
                     holder,
                     sources: resolved.sources,
                     mutable,
@@ -936,28 +981,36 @@ fn mapped_call_provenance(
                 };
                 let value = carried_provenance(state, types, function, &input, &holder, line)?;
                 absent |= !value.absent.is_empty();
-                selected.extend(value.loans);
+                for loan in value.loans {
+                    selected.push(loan);
+                }
             }
             let effects = state.effects.selection_permissions(&selected);
             for loan in selected {
-                sources.extend(loan.sources);
-                parents.extend(loan.parents);
-                created.extend(loan.created);
+                for source in loan.sources {
+                    sources.push(source);
+                }
+                for parent in loan.parents {
+                    parents.push(parent);
+                }
+                for site in loan.created {
+                    created.push(site);
+                }
             }
             if !sources.is_empty() {
                 if !exact {
-                    for source in &mut sources {
-                        source.exact = false;
+                    for index in 0..sources.len() {
+                        sources[index].exact = false;
                     }
                 }
                 normalize_sources(&mut sources);
                 parents.sort();
-                parents.dedup();
+                dedup_adjacent(&mut parents);
                 if !exact {
-                    created = state.site.into_iter().collect();
+                    created = site_history(state.site);
                 }
                 created.sort();
-                created.dedup();
+                dedup_adjacent(&mut created);
                 result.loans.push(Loan {
                     created,
                     holder: holder.clone(),
@@ -988,7 +1041,7 @@ fn mapped_call_provenance(
         }
         if static_source {
             result.loans.push(Loan {
-                created: state.site.into_iter().collect(),
+                created: site_history(state.site),
                 holder,
                 sources: vec![SourceBound {
                     origin: Origin {
@@ -1014,7 +1067,9 @@ fn remove_provenance(state: &mut State, place: &Place) {
 }
 fn install_provenance(state: &mut State, value: Provenance) {
     state.loans.extend(value.loans);
-    state.absent_references.extend(value.absent);
+    for absent in value.absent {
+        state.absent_references.push(absent);
+    }
 }
 fn storage_place(target: &Origin, fallback: &Place) -> Place {
     match target.root {
@@ -1055,7 +1110,10 @@ fn check_external_write(
 }
 fn validate_stored_view(state: &State, target: &Origin, line: usize) -> Result<(), Diagnostic> {
     if let Root::Local(local) = target.root {
-        let loans: Vec<Loan> = state.loans.for_holder(local).cloned().collect();
+        let mut loans = Vec::new();
+        for holder in state.loans.for_holder(local) {
+            loans.push(state.loans.get(&holder).unwrap().clone());
+        }
         validate_view(&loans, line)?;
     }
     Ok(())
@@ -1064,9 +1122,10 @@ fn remap_parents(state: &mut State, from: &Place, to: &Place) {
     state.loans.remap_parents(from, to);
 }
 fn remap_carried(loans: &mut [Loan], from: &Place, to: &Place) {
-    for loan in loans {
-        for parent in &mut loan.parents {
-            *parent = rebase(parent, from, to);
+    for index in 0..loans.len() {
+        for parent in 0..loans[index].parents.len() {
+            let next = rebase(&loans[index].parents[parent], from, to);
+            loans[index].parents[parent] = next;
         }
     }
 }
@@ -1106,12 +1165,15 @@ fn loan_description(types: &[Type], function: &Function, loan: &Loan) -> String 
     let location = if loan.created.is_empty() {
         "supplied by a function parameter".to_string()
     } else {
-        let places: Vec<_> = loan
-            .created
-            .iter()
-            .map(|(line, column)| format!("{}:{}", line, column))
-            .collect();
-        format!("created at {}", places.join(" or "))
+        let mut location = "created at ".to_string();
+        for index in 0..loan.created.len() {
+            if index != 0 {
+                location.push_str(" or ");
+            }
+            let (line, column) = loan.created[index];
+            location.push_str(&format!("{}:{}", line, column));
+        }
+        location
     };
     format!(
         "{} borrow held by {} ({})",
@@ -1163,10 +1225,10 @@ fn loan_use(
             );
             problem
         })?;
-    let mut candidates = BTreeSet::new();
+    let mut candidates: BTreeSet<Place> = BTreeSet::new();
     for source in &loan.sources {
-        for other in state.loans.for_target(&source.origin.root, !mutable) {
-            candidates.insert(other.holder.clone());
+        for holder in state.loans.for_target(&source.origin.root, !mutable) {
+            candidates.insert(holder);
         }
     }
     for holder in candidates {
@@ -1208,7 +1270,7 @@ fn access(
     line: usize,
 ) -> Result<(), Diagnostic> {
     let optional_root = (mode == 2 || mode == 3) && place.projections.is_empty();
-    if !state.live[place.local] && !optional_root {
+    if !state.live.at(place.local) && !optional_root {
         return Err(error(
             line,
             "E_MOVE",
@@ -1229,7 +1291,7 @@ fn access(
             let _ = carried_provenance(state, types, function, &prefix, &prefix, line)?;
         }
         if let Projection::Index(index) = projection {
-            if !state.live[*index] {
+            if !state.live.at(*index) {
                 return Err(error(line, "E_MOVE", "index is uninitialized or moved"));
             }
         }
@@ -1266,7 +1328,7 @@ fn access(
             return Err(error(line, "E_BORROW", "static storage is immutable"));
         }
         if let Root::Local(local) = target.root {
-            if !state.live[local] && !(optional_root && local == place.local) {
+            if !state.live.at(local) && !(optional_root && local == place.local) {
                 return Err(error(
                     line,
                     "E_MOVE",
@@ -1298,22 +1360,24 @@ fn access(
     let value_ty = place_type(types, function, place).unwrap();
     let view_owner =
         mode != 3 && state.views[value_ty] && !matches!(types[value_ty].kind, TypeKind::Ref { .. });
-    let mut candidates = BTreeSet::new();
+    let mut candidates: BTreeSet<Place> = BTreeSet::new();
     for target in &targets {
-        for loan in state.loans.for_target(&target.root, !write) {
-            candidates.insert(loan.holder.clone());
+        for holder in state.loans.for_target(&target.root, !write) {
+            candidates.insert(holder);
         }
         if write && view_owner {
             if let Root::Local(local) = target.root {
                 if let Some(holders) = state.loans.parents.get(&local) {
-                    candidates.extend(holders.iter().cloned());
+                    for holder in holders {
+                        candidates.insert(holder.clone());
+                    }
                 }
             }
         }
     }
     for parent in &parents {
-        for loan in state.loans.for_target(&Root::Local(parent.local), !write) {
-            candidates.insert(loan.holder.clone());
+        for holder in state.loans.for_target(&Root::Local(parent.local), !write) {
+            candidates.insert(holder);
         }
     }
     for holder in candidates {
@@ -1436,7 +1500,7 @@ fn forget(state: &mut State, local: usize) {
     state.predicates.remove(&local);
 }
 fn put(state: &mut State, local: usize, line: usize) -> Result<(), Diagnostic> {
-    if state.maybe_live[local] {
+    if state.maybe_live.at(local) {
         return Err(error(line, "E_K", "destination may still own a value"));
     }
     state.live.set(local, true);
@@ -1464,7 +1528,7 @@ fn validate_merge(
         .union(&a.maybe_live.symmetric_difference(&b.maybe_live));
     if let Some(local) = changed.indices_from(0).next() {
         let place = place_name(types, function, &Place::local(local));
-        let message = if a.live[local] && !b.live[local] {
+        let message = if a.live.at(local) && !b.live.at(local) {
             format!(
                 "loop backedge leaves {} uninitialized or moved before the next iteration",
                 place
@@ -1480,14 +1544,14 @@ fn validate_merge(
     if let Some(place) = a
         .moved
         .iter()
-        .chain(&b.moved)
-        .find(|place| a.moved.contains(place) != b.moved.contains(place))
+        .chain(b.moved.iter())
+        .find(|place| a.moved.contains(*place) != b.moved.contains(*place))
         .or_else(|| {
             a.definitely_moved
                 .iter()
-                .chain(&b.definitely_moved)
+                .chain(b.definitely_moved.iter())
                 .find(|place| {
-                    a.definitely_moved.contains(place) != b.definitely_moved.contains(place)
+                    a.definitely_moved.contains(*place) != b.definitely_moved.contains(*place)
                 })
         })
     {
@@ -1521,18 +1585,16 @@ fn merge(mut a: State, b: State) -> State {
     // inactive, their join has no live reference at that leaf. Keep explicit
     // absence after the branch tags disappear. A genuinely active holder on
     // either incoming path retains the ordinary conservative union.
-    let absent: Vec<_> = a
-        .loans
-        .values
-        .values()
-        .filter(|loan| {
-            !loan_active(&a, loan)
-                && b.loans
-                    .get(&loan.holder)
-                    .is_none_or(|other| !loan_active(&b, other))
-        })
-        .map(|loan| loan.holder.clone())
-        .collect();
+    let mut absent: Vec<Place> = Vec::new();
+    for loan in a.loans.values.values() {
+        if !loan_active(&a, loan)
+            && b.loans
+                .get(&loan.holder)
+                .is_none_or(|other| !loan_active(&b, other))
+        {
+            absent.push(loan.holder.clone());
+        }
+    }
     for holder in absent {
         a.loans.remove(&holder);
         a.absent_references.push(holder);
@@ -1553,15 +1615,15 @@ fn merge(mut a: State, b: State) -> State {
         normalize_sources(&mut joined.sources);
         joined.parents.extend_from_slice(&loan.parents);
         joined.parents.sort();
-        joined.parents.dedup();
+        dedup_adjacent(&mut joined.parents);
         joined.created.extend_from_slice(&loan.created);
         joined.created.sort();
-        joined.created.dedup();
+        dedup_adjacent(&mut joined.created);
         a.loans.push(joined);
     }
     a.absent_references.extend_from_slice(&b.absent_references);
     a.absent_references.sort();
-    a.absent_references.dedup();
+    dedup_adjacent(&mut a.absent_references);
     a.live = a.live.intersection(&b.live);
     a.maybe_live = a.maybe_live.union(&b.maybe_live);
     for place in &b.moved {
@@ -1574,7 +1636,7 @@ fn merge(mut a: State, b: State) -> State {
     a.effects.join(&b.effects);
     a.tags.retain(|tag| b.tags.contains(tag));
     a.predicates
-        .retain(|local, tag| b.predicates.get(local) == Some(tag));
+        .retain(|local: &usize, tag: &mut Tag| b.predicates.get(local) == Some(&*tag));
     a
 }
 fn local_type(function: &Function, local: usize, line: usize) -> Result<usize, Diagnostic> {
@@ -1635,11 +1697,25 @@ fn check_intrinsic(
     let bytes_ref = |t: usize| {
         matches!(types[t].kind,
         TypeKind::Ref { inner, mutable: false } if matches!(types[inner].kind,
-            TypeKind::Slice { inner: U8, mutable: false }))
+            TypeKind::Slice { inner: byte, mutable: false } if byte == U8))
     };
     let valid = match name {
         _ if io::signature(types, dt, &ts, name).is_some() => {
             io::signature(types, dt, &ts, name).unwrap()
+        }
+        "char_from_u32" => {
+            ts.len() == 1
+                && matches!(
+                    types[ts[0]].kind,
+                    TypeKind::Int {
+                        bits: 32,
+                        signed: false
+                    }
+                )
+                && matches!(&types[dt].kind, TypeKind::Enum { variants, .. }
+                    if variants.len() == 2 && variants[0].name == "None" && variants[0].fields.is_empty()
+                    && variants[1].name == "Some" && variants[1].fields.len() == 1
+                    && matches!(types[variants[1].fields[0].ty].kind, TypeKind::Char))
         }
         "str_len" => ts.len() == 1 && text_ref(ts[0]) && dt == U64,
         "str_as_bytes" => ts.len() == 1 && text_ref(ts[0]) && bytes_ref(dt),
@@ -1779,7 +1855,7 @@ fn check_shape(
                         return Err(error(line, "E_TYPE", "text literal contains invalid UTF-8"));
                     }
                 }
-                TypeKind::Array { inner: U8, len } if len == bytes.len() => {}
+                TypeKind::Array { inner, len } if inner == U8 && len == bytes.len() => {}
                 _ => {
                     return Err(error(
                         line,
@@ -1792,10 +1868,8 @@ fn check_shape(
         Op::Int { dst, value } => match &types[ty(*dst)?].kind {
             TypeKind::Bool if *value == 0 || *value == 1 => {}
             TypeKind::Char
-                if u32::try_from(*value)
-                    .ok()
-                    .and_then(char::from_u32)
-                    .is_some() => {}
+                if *value >= 0 && *value <= 0x10ffff && !(*value >= 0xd800 && *value <= 0xdfff) => {
+            }
             TypeKind::Int { bits, signed } => {
                 if *bits < 64 {
                     let min = if *signed { -(1_i64 << (*bits - 1)) } else { 0 };
@@ -2026,37 +2100,41 @@ fn check_shape(
             if t != ty(*right)? {
                 return Err(error(line, "E_TYPE", "binary operand types differ"));
             }
-            let comparison = ["==", "!=", "<", "<=", ">", ">="].contains(&op.as_str());
+            let comparison = matches!(op.as_str(), "==" | "!=" | "<" | "<=" | ">" | ">=");
             if ty(*dst)? != if comparison { BOOL } else { t } {
                 return Err(error(line, "E_TYPE", "binary result type differs"));
             }
             let allowed = match types[t].kind {
-                TypeKind::Bool => ["==", "!=", "&", "|", "^", "&&", "||"].contains(&op.as_str()),
+                TypeKind::Bool => {
+                    matches!(op.as_str(), "==" | "!=" | "&" | "|" | "^" | "&&" | "||")
+                }
                 TypeKind::Char => comparison,
-                TypeKind::Int { .. } => [
-                    "+",
-                    "-",
-                    "*",
-                    "/",
-                    "%",
-                    "&",
-                    "|",
-                    "^",
-                    "<<",
-                    ">>",
-                    "==",
-                    "!=",
-                    "<",
-                    "<=",
-                    ">",
-                    ">=",
-                    "wrapping_add",
-                    "wrapping_sub",
-                    "wrapping_mul",
-                ]
-                .contains(&op.as_str()),
+                TypeKind::Int { .. } => matches!(
+                    op.as_str(),
+                    "+" | "-"
+                        | "*"
+                        | "/"
+                        | "%"
+                        | "&"
+                        | "|"
+                        | "^"
+                        | "<<"
+                        | ">>"
+                        | "=="
+                        | "!="
+                        | "<"
+                        | "<="
+                        | ">"
+                        | ">="
+                        | "wrapping_add"
+                        | "wrapping_sub"
+                        | "wrapping_mul"
+                ),
                 TypeKind::F64 => {
-                    ["+", "-", "*", "/", "==", "!=", "<", "<=", ">", ">="].contains(&op.as_str())
+                    matches!(
+                        op.as_str(),
+                        "+" | "-" | "*" | "/" | "==" | "!=" | "<" | "<=" | ">" | ">="
+                    )
                 }
                 _ => false,
             };
@@ -2204,21 +2282,23 @@ fn call_borrows(
                         local,
                         projections: target.projections.clone(),
                     };
-                    for loan in state.loans.for_holder(local) {
+                    for holder in state.loans.for_holder(local) {
+                        let loan = state.loans.get(&holder).unwrap();
                         if within(&loan.holder, &base) {
-                            let entry = used
-                                .entry(loan.holder.clone())
-                                .or_insert((loan.clone(), false));
+                            let entry = get_or_insert(
+                                &mut used,
+                                loan.holder.clone(),
+                                (loan.clone(), false),
+                            );
                             entry.1 |= mutable && loan.mutable;
                         }
                     }
                 }
             }
         } else {
-            for loan in state.loans.for_holder(*arg) {
-                let entry = used
-                    .entry(loan.holder.clone())
-                    .or_insert((loan.clone(), false));
+            for holder in state.loans.for_holder(*arg) {
+                let loan = state.loans.get(&holder).unwrap();
+                let entry = get_or_insert(&mut used, loan.holder.clone(), (loan.clone(), false));
                 entry.1 |= loan.mutable;
             }
         }
@@ -2229,7 +2309,9 @@ fn call_borrows(
         }
         loan_use(state, types, function, loan, *mutable, line)?;
         if *mutable {
-            changed.extend(source_origins(&loan.sources));
+            for source in source_origins(&loan.sources) {
+                changed.push(source);
+            }
         }
     }
     invalidate(state, &changed);
@@ -2304,7 +2386,7 @@ fn check_function_body(
                 projections,
             };
             state.loans.push(Loan {
-                created: state.site.into_iter().collect(),
+                created: site_history(state.site),
                 holder: Place {
                     local: i,
                     projections: path,
@@ -2320,7 +2402,8 @@ fn check_function_body(
         }
     }
     let input_regions = scoped::InputRegions::new(&state, types, function, scope)?;
-    if let Some(pass) = locals.as_deref_mut() {
+    if let Some(pass) = locals.as_mut() {
+        let pass = &mut **pass;
         pass.entry(scope, &input_regions, &mut state, types, function)?;
     }
     // Keep the exact permitted source leaves. A common root alone would allow
@@ -2328,15 +2411,18 @@ fn check_function_body(
     let return_origins = match &function.return_source {
         Some(ReturnSource::Parameter { index, projections }) => {
             let place = parameter_source(types, function, *index, projections).unwrap();
-            carried_provenance(&state, types, function, &place, &place, 1)?
-                .loans
-                .into_iter()
-                .flat_map(|loan| loan.sources.into_iter().map(|source| source.origin))
-                .collect::<Vec<_>>()
+            let provenance = carried_provenance(&state, types, function, &place, &place, 1)?;
+            let mut origins: Vec<Origin> = Vec::new();
+            for loan in provenance.loans {
+                for source in loan.sources {
+                    origins.push(source.origin);
+                }
+            }
+            origins
         }
         _ => Vec::new(),
     };
-    let mut leaf_origins = BTreeMap::new();
+    let mut leaf_origins: BTreeMap<Vec<Projection>, Vec<SourceBound>> = BTreeMap::new();
     if let Some(ReturnSource::Leaves(leaves)) = &function.return_source {
         for leaf in leaves {
             if let LeafOrigin::Inputs { inputs, .. } = &leaf.origin {
@@ -2351,14 +2437,14 @@ fn check_function_body(
                     .unwrap();
                     let value = carried_provenance(&state, types, function, &input, &input, 1)?;
                     for loan in value.loans {
-                        if let Some(observation) = observation.as_deref_mut() {
-                            observation
-                                .inputs
-                                .entry(selector.clone())
-                                .or_default()
+                        if let Some(observation) = observation.as_mut() {
+                            let observation = &mut **observation;
+                            get_or_default(&mut observation.inputs, selector.clone())
                                 .extend_from_slice(&loan.sources);
                         }
-                        sources.extend(loan.sources);
+                        for source in loan.sources {
+                            sources.push(source);
+                        }
                     }
                 }
                 normalize_sources(&mut sources);
@@ -2377,7 +2463,8 @@ fn check_function_body(
         state.site = *site;
         check_shape(program, facts, function, instruction)?;
         if state.reachable {
-            if let Some(pass) = locals.as_deref_mut() {
+            if let Some(pass) = locals.as_mut() {
+                let pass = &mut **pass;
                 pass.before(program, function, &state, instruction_index)?;
             }
         }
@@ -2451,13 +2538,20 @@ fn check_function_body(
                     Op::BreakTo { depth } | Op::ContinueTo { depth } => depth,
                     _ => 0,
                 };
-                if controls
-                    .iter()
-                    .rev()
-                    .filter(|control| control.is_loop)
-                    .nth(depth)
-                    .is_none()
-                {
+                let mut remaining = depth;
+                let mut cursor = controls.len();
+                let mut found = false;
+                while cursor != 0 {
+                    cursor -= 1;
+                    if controls[cursor].is_loop {
+                        if remaining == 0 {
+                            found = true;
+                            break;
+                        }
+                        remaining -= 1;
+                    }
+                }
+                if !found {
                     return Err(error(
                         line,
                         "E_K",
@@ -2474,7 +2568,7 @@ fn check_function_body(
             Op::Text { dst, .. } => {
                 put(&mut state, *dst, line)?;
                 state.loans.push(Loan {
-                    created: state.site.into_iter().collect(),
+                    created: site_history(state.site),
                     holder: Place::local(*dst),
                     sources: vec![SourceBound {
                         origin: Origin {
@@ -2545,7 +2639,7 @@ fn check_function_body(
                 let resolved = resolve_origin(&state, place);
                 put(&mut state, *dst, line)?;
                 state.loans.push(Loan {
-                    created: state.site.into_iter().collect(),
+                    created: site_history(state.site),
                     holder: Place::local(*dst),
                     sources: resolved.sources,
                     mutable: *mutable,
@@ -2566,11 +2660,11 @@ fn check_function_body(
                 consume(&mut state, types, function, *start, line)?;
                 consume(&mut state, types, function, *end, line)?;
                 put(&mut state, *dst, line)?;
-                for source in &mut resolved.sources {
-                    source.exact = false;
+                for index in 0..resolved.sources.len() {
+                    resolved.sources[index].exact = false;
                 }
                 state.loans.push(Loan {
-                    created: state.site.into_iter().collect(),
+                    created: site_history(state.site),
                     holder: Place::local(*dst),
                     sources: resolved.sources,
                     mutable: *mutable,
@@ -2579,7 +2673,7 @@ fn check_function_body(
                 });
             }
             Op::Assign { place, src } => {
-                if !place.projections.is_empty() || state.maybe_live[place.local] {
+                if !place.projections.is_empty() || state.maybe_live.at(place.local) {
                     access(
                         &state,
                         types,
@@ -2590,7 +2684,7 @@ fn check_function_body(
                         line,
                     )?;
                 }
-                if state.maybe_live[place.local]
+                if state.maybe_live.at(place.local)
                     && place.projections.is_empty()
                     && !function.locals[place.local].mutable
                 {
@@ -2599,7 +2693,7 @@ fn check_function_body(
                 let resolved = resolve_origin(&state, place);
                 let targets = source_origins(&resolved.sources);
                 let absent = if place.projections.is_empty() {
-                    !state.maybe_live[place.local]
+                    !state.maybe_live.at(place.local)
                 } else {
                     state.definitely_moved.iter().any(|moved| moved == place)
                 };
@@ -2665,10 +2759,10 @@ fn check_function_body(
             }
             Op::Drop { place } | Op::DropIf { place } => {
                 let conditional = matches!(instruction.op, Op::DropIf { .. });
-                if !state.live[place.local]
+                if !state.live.at(place.local)
                     && !(conditional
                         && place.projections.is_empty()
-                        && state.maybe_live[place.local])
+                        && state.maybe_live.at(place.local))
                 {
                     if conditional && place.projections.is_empty() {
                         continue;
@@ -2682,7 +2776,7 @@ fn check_function_body(
                         ),
                     ));
                 }
-                if let Some(moved) = state.moved.iter().find(|moved| within(place, moved)) {
+                if let Some(moved) = state.moved.iter().find(|moved| within(place, *moved)) {
                     if !conditional || moved != place {
                         return Err(error(
                             line,
@@ -2730,7 +2824,8 @@ fn check_function_body(
                             "custom drop requires every field to be initialized",
                         ));
                     }
-                    for loan in state.loans.for_holder(place.local) {
+                    for holder in state.loans.for_holder(place.local) {
+                        let loan = state.loans.get(&holder).unwrap();
                         if within(&loan.holder, place) {
                             loan_use(&state, types, function, loan, loan.mutable, line)?;
                         }
@@ -2839,7 +2934,7 @@ fn check_function_body(
                                 }
                             }
                             returned.loans.push(Loan {
-                                created: state.site.into_iter().collect(),
+                                created: site_history(state.site),
                                 holder,
                                 sources: bounds,
                                 mutable,
@@ -2855,7 +2950,7 @@ fn check_function_body(
                                 projections: Vec::new(),
                             };
                             returned.loans.push(Loan {
-                                created: state.site.into_iter().collect(),
+                                created: site_history(state.site),
                                 holder,
                                 sources: vec![SourceBound {
                                     origin: target.clone(),
@@ -2907,8 +3002,12 @@ fn check_function_body(
                     let from = Place::local(*field);
                     let field_value =
                         carried_provenance(&state, types, function, &from, &to, line)?;
-                    carried.loans.extend(field_value.loans);
-                    carried.absent.extend(field_value.absent);
+                    for loan in field_value.loans {
+                        carried.loans.push(loan);
+                    }
+                    for absent in field_value.absent {
+                        carried.absent.push(absent);
+                    }
                     transfers.push((from, to));
                 }
                 if let Op::Variant { variant, .. } = instruction.op {
@@ -3088,13 +3187,14 @@ fn check_function_body(
                         match &leaf.origin {
                             LeafOrigin::Static => {
                                 !loan.mutable
-                                    && loan
-                                        .sources
-                                        .iter()
-                                        .all(|source| source.origin.root == Root::Static)
+                                    && loan.sources.iter().all(|source: &SourceBound| {
+                                        source.origin.root == Root::Static
+                                    })
                             }
                             LeafOrigin::Inputs { exact, .. } => {
-                                let expected = &leaf_origins[&leaf.projections];
+                                let expected = leaf_origins
+                                    .get(&leaf.projections)
+                                    .expect("declared result leaf");
                                 if *exact {
                                     !loan.sources.is_empty()
                                         && loan
@@ -3148,11 +3248,9 @@ fn check_function_body(
                             "returned view differs from its declared source",
                         ));
                     }
-                    if let Some(observation) = observation.as_deref_mut() {
-                        observation
-                            .outputs
-                            .entry(loan.holder.projections.clone())
-                            .or_default()
+                    if let Some(observation) = observation.as_mut() {
+                        let observation = &mut **observation;
+                        get_or_default(&mut observation.outputs, loan.holder.projections.clone())
                             .extend_from_slice(&loan.sources);
                     }
                 }
@@ -3171,14 +3269,17 @@ fn check_function_body(
                     Op::BreakTo { depth } | Op::ContinueTo { depth } => depth,
                     _ => 0,
                 };
-                let index = controls
-                    .iter()
-                    .enumerate()
-                    .rev()
-                    .filter(|(_, control)| control.is_loop)
-                    .nth(depth)
-                    .unwrap()
-                    .0;
+                let mut remaining = depth;
+                let mut index = controls.len();
+                loop {
+                    index -= 1;
+                    if controls[index].is_loop {
+                        if remaining == 0 {
+                            break;
+                        }
+                        remaining -= 1;
+                    }
+                }
                 let control = &mut controls[index];
                 if matches!(instruction.op, Op::Continue | Op::ContinueTo { .. }) {
                     validate_merge(&control.entry, &state, types, function, line)?;
@@ -3186,7 +3287,9 @@ fn check_function_body(
                         state = control.entry.clone();
                         control.breaks.clear();
                         pc = control.start;
-                        controls.truncate(index + 1);
+                        while controls.len() > index + 1 {
+                            controls.pop();
+                        }
                         continue;
                     }
                 } else {
@@ -3198,7 +3301,8 @@ fn check_function_body(
             Op::If { .. } | Op::Else | Op::End | Op::Loop => {}
         }
         if state.reachable {
-            if let Some(pass) = locals.as_deref_mut() {
+            if let Some(pass) = locals.as_mut() {
+                let pass = &mut **pass;
                 pass.after(scope, &input_regions, &mut state, instruction_index)?;
             }
         }
@@ -3267,7 +3371,7 @@ fn reference_containment(types: &[Type]) -> Vec<bool> {
 // Shared graph facts are computed once per checker invocation. Ref is a
 // descriptor boundary: its referent is not part of the owned drop tree.
 struct TypeFacts {
-    views: Rc<Vec<bool>>,
+    views: Vec<bool>,
     destructors: Vec<bool>,
     release_shells: Vec<bool>,
 }
@@ -3311,7 +3415,7 @@ impl TypeFacts {
             }
         }
         Self {
-            views: Rc::new(reference_containment(&program.types)),
+            views: reference_containment(&program.types),
             destructors,
             release_shells,
         }
@@ -3332,7 +3436,7 @@ fn check_types(types: &[Type]) -> Result<(), Diagnostic> {
         let mut children = direct_children(&ty.kind);
         match &ty.kind {
             TypeKind::Int { bits, .. } => {
-                if ![8, 16, 32, 64].contains(bits) {
+                if !matches!(*bits, 8 | 16 | 32 | 64) {
                     return Err(error(1, "E_K", "unsupported integer representation"));
                 }
             }
@@ -3431,9 +3535,9 @@ fn check_types(types: &[Type]) -> Result<(), Diagnostic> {
 
 fn check_structure(program: &Program) -> Result<(), Diagnostic> {
     check_types(&program.types)?;
-    let mut function_names = BTreeSet::new();
+    let mut function_names: BTreeSet<String> = BTreeSet::new();
     for function in &program.functions {
-        if !function_names.insert(function.name.as_str()) {
+        if !function_names.insert(function.name.clone()) {
             return Err(error(1, "E_K", "duplicate function name"));
         }
         if function.params > function.locals.len() || function.result >= program.types.len() {
@@ -3562,8 +3666,9 @@ fn observed_return_contract(
         }
         problem
     })?;
-    let mut leaves = original.clone();
-    for leaf in &mut leaves {
+    let mut leaves: Vec<ReturnLeaf> = original.clone();
+    for index in 0..leaves.len() {
+        let leaf = &mut leaves[index];
         let LeafOrigin::Inputs { inputs, .. } = &leaf.origin else {
             continue;
         };
@@ -3572,7 +3677,7 @@ fn observed_return_contract(
         };
         if actual
             .iter()
-            .all(|source| source.origin.root == Root::Static)
+            .all(|source: &SourceBound| source.origin.root == Root::Static)
         {
             leaf.origin = LeafOrigin::Static;
             continue;
@@ -3585,14 +3690,14 @@ fn observed_return_contract(
         else {
             unreachable!()
         };
-        let mut selected = BTreeSet::new();
+        let mut selected: BTreeSet<InputLeaf> = BTreeSet::new();
         let mut exact = true;
         for source in actual {
             if source.origin.root == Root::Static {
                 exact = false;
                 continue;
             }
-            let mut best = None;
+            let mut best: Option<(&InputLeaf, &SourceBound)> = None;
             for input in inputs {
                 if let Some(bounds) = observation.inputs.get(input) {
                     for bound in bounds {
@@ -3635,10 +3740,11 @@ fn observed_return_contract(
             selected.insert(input.clone());
         }
         if !selected.is_empty() {
-            leaf.origin = LeafOrigin::Inputs {
-                inputs: selected.into_iter().collect(),
-                exact,
-            };
+            let mut inputs = Vec::new();
+            for input in selected {
+                inputs.push(input);
+            }
+            leaf.origin = LeafOrigin::Inputs { inputs, exact };
         }
     }
     Ok(Some(ReturnSource::Leaves(leaves)))
@@ -3652,11 +3758,12 @@ pub(crate) fn refine_return_contracts(
     program: &mut Program,
     functions: &BTreeSet<usize>,
 ) -> Vec<Diagnostic> {
-    let selected: BTreeSet<_> = functions
-        .iter()
-        .copied()
-        .filter(|index| program.functions[*index].return_source.is_some())
-        .collect();
+    let mut selected: BTreeSet<usize> = BTreeSet::new();
+    for index in functions {
+        if program.functions[*index].return_source.is_some() {
+            selected.insert(*index);
+        }
+    }
     if selected.is_empty() {
         return Vec::new();
     }
@@ -3670,34 +3777,38 @@ pub(crate) fn refine_return_contracts(
     let mut callers = BTreeMap::<usize, Vec<usize>>::new();
     let mut dependencies = BTreeMap::<usize, usize>::new();
     for index in &selected {
-        let called: BTreeSet<_> = program.functions[*index]
-            .body
-            .iter()
-            .filter_map(|instruction| match instruction.op {
-                Op::Call { function, .. } if selected.contains(&function) => Some(function),
-                _ => None,
-            })
-            .collect();
+        let mut called: BTreeSet<usize> = BTreeSet::new();
+        for instruction in &program.functions[*index].body {
+            if let Op::Call { function, .. } = instruction.op {
+                if selected.contains(&function) {
+                    called.insert(function);
+                }
+            }
+        }
         dependencies.insert(*index, called.len());
         for callee in called {
-            callers.entry(callee).or_default().push(*index);
+            get_or_default(&mut callers, callee).push(*index);
         }
     }
-    let mut ready: BTreeSet<_> = dependencies
-        .iter()
-        .filter_map(|(index, count)| (*count == 0).then_some(*index))
-        .collect();
+    let mut ready: BTreeSet<usize> = BTreeSet::new();
+    for (index, count) in &dependencies {
+        if *count == 0 {
+            ready.insert(*index);
+        }
+    }
     let mut problems = Vec::new();
     while let Some(index) = ready.pop_first() {
         match observed_return_contract(program, index, &facts) {
             Ok(source) => program.functions[index].return_source = source,
             Err(problem) => problems.push(problem),
         }
-        for caller in callers.get(&index).into_iter().flatten() {
-            let remaining = dependencies.get_mut(caller).unwrap();
-            *remaining -= 1;
-            if *remaining == 0 {
-                ready.insert(*caller);
+        if let Some(dependents) = callers.get(&index) {
+            for caller in dependents {
+                let remaining = dependencies.get_mut(caller).unwrap();
+                *remaining -= 1;
+                if *remaining == 0 {
+                    ready.insert(*caller);
+                }
             }
         }
     }

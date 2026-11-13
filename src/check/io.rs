@@ -7,7 +7,7 @@ fn authority(types: &[Type], ty: usize, kind: &TypeKind) -> bool {
 }
 fn bytes(types: &[Type], ty: usize, mutable: bool) -> bool {
     matches!(types[ty].kind, TypeKind::Ref { inner, mutable: m } if m == mutable
-        && matches!(types[inner].kind, TypeKind::Slice { inner: U8, mutable: false }))
+        && matches!(types[inner].kind, TypeKind::Slice { inner: byte, mutable: false } if byte == U8))
 }
 fn opened(types: &[Type], ty: usize, kind: &TypeKind) -> bool {
     match &types[ty].kind {

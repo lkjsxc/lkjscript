@@ -46,16 +46,26 @@ impl Builder<'_, '_> {
             .iter()
             .position(|variant| variant.name == failure_name)
             .unwrap();
-        if variants[failure]
-            .fields
-            .iter()
-            .map(|field| field.ty)
-            .ne(outputs[output_failure].fields.iter().map(|field| field.ty))
+        let input_fields = &variants[failure].fields;
+        let output_fields = &outputs[output_failure].fields;
+        let convert_text = input_fields.len() == 1
+            && output_fields.len() == 1
+            && self.library_string(output_fields[0].ty, span)
+            && matches!(
+                self.compiler.types[input_fields[0].ty].kind,
+                k::TypeKind::Ref { inner, mutable: false }
+                    if matches!(self.compiler.types[inner].kind, k::TypeKind::Str)
+            );
+        if !convert_text
+            && input_fields
+                .iter()
+                .map(|field| field.ty)
+                .ne(output_fields.iter().map(|field| field.ty))
         {
             return Err(err(
                 span,
                 "E_TYPE",
-                "? requires equal error types; error conversion is not implemented",
+                "? supports equal error types or &str into String; help: use map_err for another conversion",
             ));
         }
         let payload = variants[success].fields[0].ty;
@@ -108,16 +118,32 @@ impl Builder<'_, '_> {
         self.emit(k::Op::If { condition }, span.line);
         let mut fields = Vec::new();
         for index in 0..variants[failure].fields.len() {
-            fields.push(
-                self.read(
+            let value = self
+                .read(
                     k::Place {
                         local: source,
                         projections: vec![k::Projection::VariantField(failure, index)],
                     },
                     span.line,
                 )?
-                .0,
-            );
+                .0;
+            let value = if convert_text {
+                // This is an ordinary source-library allocation/copy, with no
+                // implicit coercion for Result constructors or assignments.
+                self.text_method(
+                    k::Place {
+                        local: value,
+                        projections: vec![k::Projection::Deref],
+                    },
+                    "to_string",
+                    &[],
+                    span,
+                )?
+                .0
+            } else {
+                value
+            };
+            fields.push(value);
         }
         let output = self.temp(result_ty);
         self.emit(

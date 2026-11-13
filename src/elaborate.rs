@@ -954,6 +954,23 @@ impl Compiler<'_> {
         Ok(())
     }
     fn compile_function(&mut self, index: usize, instance: &Instance) -> Result<k::Function> {
+        let source = &self.source.functions[instance.source];
+        let span = source.span;
+        let name = qualified(&source.module, &source.name);
+        self.compile_function_body(index, instance)
+            .map_err(|problem| {
+                if problem.line == 0 {
+                    err(
+                        span,
+                        &problem.code,
+                        &format!("{} in function {name}", problem.message),
+                    )
+                } else {
+                    problem
+                }
+            })
+    }
+    fn compile_function_body(&mut self, index: usize, instance: &Instance) -> Result<k::Function> {
         let definition = match self.definition_types.remove(&instance.source) {
             Some(definition) => definition,
             None => definition_types::infer(
@@ -974,7 +991,7 @@ impl Compiler<'_> {
             .enumerate()
             .map(|(i, l)| (l.name.clone(), i))
             .collect();
-        let live: Facts = function.locals.iter().map(|_| true).collect();
+        let live = Facts::filled(function.locals.len(), true);
         let references = Facts::new(live.len());
         let scope = self.names.scope(&source.module);
         let mut builder = Builder {
@@ -1274,7 +1291,7 @@ impl Builder<'_, '_> {
     }
     fn emit(&mut self, op: k::Op, line: usize) {
         if let k::Op::Assign { place, src } = &op {
-            if self.live[place.local] && place.local != *src {
+            if self.live.at(place.local) && place.local != *src {
                 if let Some(t) = place_type(&self.compiler.types, self.function, place) {
                     if !matches!(
                         self.compiler.types[t].kind,
@@ -1320,7 +1337,7 @@ impl Builder<'_, '_> {
                         // already have moved. Its flag controls destruction at
                         // this assignment; other fields and owners stay live.
                         let destruction =
-                            if place.projections.is_empty() && self.definite_live[place.local] {
+                            if place.projections.is_empty() && self.definite_live.at(place.local) {
                                 k::Op::Drop {
                                     place: place.clone(),
                                 }
@@ -1435,7 +1452,7 @@ impl Builder<'_, '_> {
         }
     }
     fn cleanup_place(&mut self, place: k::Place, line: usize) {
-        let op = if place.projections.is_empty() && self.definite_live[place.local] {
+        let op = if place.projections.is_empty() && self.definite_live.at(place.local) {
             k::Op::Drop { place }
         } else {
             k::Op::DropIf { place }
@@ -1707,7 +1724,7 @@ impl Builder<'_, '_> {
         let updated: Vec<_> = self.reference_updates.indices_from(start).collect();
         for local in updated {
             self.reference_updates.set(local, false);
-            if !self.references[local] {
+            if !self.references.at(local) {
                 continue;
             }
             let name = &self.function.locals[local].name;
@@ -1733,9 +1750,9 @@ impl Builder<'_, '_> {
             let (_, locals) = schedule.deadlines.pop_first().unwrap();
             schedule.pending.extend(locals);
         }
-        schedule.pending.retain(|local| self.references[*local]);
+        schedule.pending.retain(|local| self.references.at(*local));
         self.drop_unused_references(schedule.pending.clone(), line);
-        schedule.pending.retain(|local| self.references[*local]);
+        schedule.pending.retain(|local| self.references.at(*local));
         self.reference_schedules.insert(key, schedule);
     }
     fn bind_name(
@@ -2360,40 +2377,31 @@ impl Builder<'_, '_> {
                     let place = self.place(id)?;
                     return self.read(place, line);
                 }
-                let (src, ty) = self.expr(value, expected)?;
+                let (src, ty) = self.primitive_operand(value, expected, node.span)?;
                 let dst = self.temp(ty);
                 self.emit(k::Op::Unary { dst, op, src }, line);
                 Ok((dst, ty))
             }
             a::Expr::Binary { op, left, right } => {
+                if op == "<<" || op == ">>" {
+                    return self.shift_expr(&op, left, right, expected, node.span);
+                }
                 if op == "&&" || op == "||" {
                     return self.short_circuit(&op, left, right, line);
                 }
                 if op == "==" || op == "!=" {
                     return self.equality_expr(&op, left, right, node.span);
                 }
-                if ["==", "!=", "<", "<=", ">", ">="].contains(&op.as_str()) {
-                    if self.compiler.contracts.is_some() {
-                        if let Some(value) = self.generic_comparison(&op, left, right, node.span)? {
-                            return Ok(value);
-                        }
-                    }
-                    if let Some(value) = self.string_ordering(&op, left, right, node.span)? {
-                        return Ok(value);
-                    }
-                    if let Some(t) = self.hint(left).or_else(|| self.hint(right)) {
-                        if let k::TypeKind::Vec { inner } = self.compiler.types[t].kind {
-                            return self.vector_compare(&op, left, right, inner, node.span);
-                        }
-                    }
+                if matches!(op.as_str(), "<" | "<=" | ">" | ">=") {
+                    return self.ordering_expr(&op, left, right, node.span);
                 }
-                let comparison = ["==", "!=", "<", "<=", ">", ">="].contains(&op.as_str());
                 let operand = self
                     .hint(left)
                     .or_else(|| self.hint(right))
-                    .or(if comparison { None } else { expected });
-                let (left, ty) = self.expr(left, operand)?;
-                let (right, rt) = self.expr(right, Some(ty))?;
+                    .or(expected)
+                    .map(|ty| self.primitive_value_type(ty));
+                let (left, ty) = self.primitive_operand(left, operand, node.span)?;
+                let (right, rt) = self.primitive_operand(right, Some(ty), node.span)?;
                 if ty != rt {
                     return Err(err(
                         node.span,
@@ -2405,30 +2413,7 @@ impl Builder<'_, '_> {
                         ),
                     ));
                 }
-                if ty == k::BOOL && matches!(op.as_str(), "<" | "<=" | ">" | ">=") {
-                    let negated = self.temp(k::BOOL);
-                    self.emit(
-                        k::Op::Unary {
-                            dst: negated,
-                            op: "!".to_string(),
-                            src: if op == "<" || op == "<=" { left } else { right },
-                        },
-                        line,
-                    );
-                    let dst = self.temp(k::BOOL);
-                    self.emit(
-                        k::Op::Binary {
-                            dst,
-                            op: if op == "<" || op == ">" { "&" } else { "|" }.to_string(),
-                            left: negated,
-                            right: if op == "<" || op == "<=" { right } else { left },
-                        },
-                        line,
-                    );
-                    return Ok((dst, k::BOOL));
-                }
-                let result = if comparison { k::BOOL } else { ty };
-                let dst = self.temp(result);
+                let dst = self.temp(ty);
                 self.emit(
                     k::Op::Binary {
                         dst,
@@ -2438,7 +2423,7 @@ impl Builder<'_, '_> {
                     },
                     line,
                 );
-                Ok((dst, result))
+                Ok((dst, ty))
             }
             a::Expr::Assign { op, place, value } => {
                 self.assignment_expr(&op, place, value, node.span)
@@ -2510,7 +2495,7 @@ impl Builder<'_, '_> {
                 );
                 let dst = self.temp(ty);
                 self.emit(k::Op::Array { dst, elements }, line);
-                if self.live[v.0] {
+                if self.live.at(v.0) {
                     self.emit(
                         k::Op::Drop {
                             place: k::Place::local(v.0),
@@ -2699,74 +2684,6 @@ impl Builder<'_, '_> {
             span.line,
         );
         Ok((dst, ty))
-    }
-    fn vector_compare(
-        &mut self,
-        op: &str,
-        left: usize,
-        right: usize,
-        inner: usize,
-        span: a::Span,
-    ) -> Result<(usize, usize)> {
-        let lp = self.addressable(left)?;
-        let l = self.borrow(lp, false, span.line)?.0;
-        let rp = self.addressable(right)?;
-        let r = self.borrow(rp, false, span.line)?.0;
-        self.vector_compare_values(op, l, r, inner, span)
-    }
-    fn vector_compare_values(
-        &mut self,
-        op: &str,
-        l: usize,
-        r: usize,
-        inner: usize,
-        span: a::Span,
-    ) -> Result<(usize, usize)> {
-        if !matches!(
-            self.compiler.types[inner].kind,
-            k::TypeKind::Int { .. } | k::TypeKind::Bool
-        ) {
-            return Err(err(
-                span,
-                "E_UNSUPPORTED",
-                "vector ordering currently requires integer or bool elements",
-            ));
-        }
-        let index = self
-            .compiler
-            .names
-            .sequence_function("__lkj_vec_compare", span)?;
-        let mut sub = BTreeMap::new();
-        sub.insert("T".to_string(), inner);
-        let function = self.compiler.instantiate(index, sub)?;
-        let comparison = self.temp(k::I32);
-        self.emit(
-            k::Op::Call {
-                dst: comparison,
-                function,
-                args: vec![l, r],
-            },
-            span.line,
-        );
-        let zero = self.temp(k::I32);
-        self.emit(
-            k::Op::Int {
-                dst: zero,
-                value: 0,
-            },
-            span.line,
-        );
-        let dst = self.temp(k::BOOL);
-        self.emit(
-            k::Op::Binary {
-                dst,
-                op: op.to_string(),
-                left: comparison,
-                right: zero,
-            },
-            span.line,
-        );
-        Ok((dst, k::BOOL))
     }
     fn short_circuit(
         &mut self,
@@ -3207,6 +3124,37 @@ impl Builder<'_, '_> {
                 "E_UNSUPPORTED",
                 "structured task scopes are not implemented yet",
             ));
+        }
+        if path.declaration.is_none()
+            && (path.name == "char::from_u32" || path.name == "std::char::from_u32")
+        {
+            if !path.args.is_empty() || args.len() != 1 {
+                return Err(err(
+                    span,
+                    "E_TYPE",
+                    "char::from_u32 requires one u32 argument",
+                ));
+            }
+            let integer = self.compiler.type_names["u32"];
+            let value = self.expr(args[0], Some(integer))?;
+            let character = self.compiler.type_names["char"];
+            let path = self
+                .compiler
+                .names
+                .library_type("prelude", "Option", span)?;
+            let mut substitutions = BTreeMap::new();
+            substitutions.insert("T".to_string(), character);
+            let result = self.compiler.named_type(&path, &substitutions, span)?;
+            let destination = self.temp(result);
+            self.emit(
+                k::Op::Intrinsic {
+                    dst: destination,
+                    name: "char_from_u32".to_string(),
+                    args: vec![value.0],
+                },
+                span.line,
+            );
+            return Ok((destination, result));
         }
         if path.declaration.is_none() && path.name == "std::str::from_utf8" {
             if !path.args.is_empty() {
@@ -3829,10 +3777,20 @@ impl Builder<'_, '_> {
         }
         let direct = methods::direct(methods::receiver(&self.compiler.types[base].kind), name);
         if direct == Some(methods::Direct::Character) {
-            if !args.is_empty() || !_types.is_empty() {
-                return Err(err(span, "E_TYPE", "character method takes no arguments"));
+            let count = if name == "to_digit" { 1 } else { 0 };
+            if args.len() != count || !_types.is_empty() {
+                return Err(err(
+                    span,
+                    "E_TYPE",
+                    "character method argument count differs",
+                ));
             }
             let value = self.read(target, span.line)?.0;
+            let mut arguments = vec![value];
+            if name == "to_digit" {
+                let integer = self.compiler.type_names["u32"];
+                arguments.push(self.expr(args[0], Some(integer))?.0);
+            }
             let source =
                 self.compiler
                     .names
@@ -3844,7 +3802,7 @@ impl Builder<'_, '_> {
                 k::Op::Call {
                     dst,
                     function,
-                    args: vec![value],
+                    args: arguments,
                 },
                 span.line,
             );
@@ -4494,7 +4452,7 @@ impl Builder<'_, '_> {
                 );
                 self.cleanup(start, Some(target), span.line);
                 let extended = extends_scrutinee && self.compiler.has_view(self.ty(target));
-                if !existing && !extended && self.live[original.local] {
+                if !existing && !extended && self.live.at(original.local) {
                     self.cleanup_place(original.clone(), span.line);
                 }
                 // An arm's new bindings are out of scope here. Preserve the

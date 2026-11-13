@@ -15,6 +15,11 @@ pub(super) struct Views {
     routes: BTreeMap<usize, BTreeMap<Vec<Projection>, BTreeMap<Route, usize>>>,
     records: Vec<(Place, Place)>,
 }
+enum Work {
+    Visit(Place),
+    Follow { source: Place, route: usize },
+    Leave(usize),
+}
 impl Views {
     pub(super) fn new(scope: &Scope) -> Self {
         let mut result = Self::default();
@@ -38,33 +43,23 @@ impl Views {
         result
     }
     pub(super) fn demand(&mut self, place: Place, region: Region, created: (usize, usize)) {
-        self.demands
-            .entry(place)
-            .or_default()
-            .entry(region)
-            .or_insert(created);
+        let regions = get_or_default(&mut self.demands, place);
+        get_or_insert(regions, region, created);
     }
     pub(super) fn declare(&mut self, place: Place, region: Region, created: (usize, usize)) {
-        self.declarations
-            .entry(place.clone())
-            .or_default()
-            .insert(region.clone(), created);
+        get_or_default(&mut self.declarations, place.clone()).insert(region.clone(), created);
         self.demand(place, region, created);
     }
     pub(super) fn transfer(&mut self, from: &Place, to: &Place, descendants: bool, bounded: bool) {
-        let routes = self
-            .routes
-            .entry(to.local)
-            .or_default()
-            .entry(to.projections.clone())
-            .or_default();
+        let paths = get_or_default(&mut self.routes, to.local);
+        let routes = get_or_default(paths, to.projections.clone());
         let route = Route {
             from: from.clone(),
             descendants,
             bounded,
         };
-        if let std::collections::btree_map::Entry::Vacant(entry) = routes.entry(route) {
-            entry.insert(self.records.len());
+        if !routes.contains_key(&route) {
+            routes.insert(route, self.records.len());
             self.records.push((to.clone(), from.clone()));
         }
     }
@@ -99,12 +94,7 @@ impl Views {
         types: &[Type],
         function: &Function,
     ) -> Result<(), Diagnostic> {
-        enum Work {
-            Visit(Place),
-            Follow { source: Place, route: usize },
-            Leave(usize),
-        }
-        let mut seen = BTreeSet::new();
+        let mut seen: BTreeSet<(Place, Region)> = BTreeSet::new();
         for (place, requirements) in &self.demands {
             for (required, created) in requirements {
                 let problem = |code, message: &str| {
@@ -126,11 +116,14 @@ impl Views {
                             if seen.contains(&(source.clone(), required.clone())) {
                                 continue;
                             }
-                            let prior = positions.entry(route).or_default();
+                            let prior: &mut Vec<usize> = get_or_default(&mut positions, route);
                             // Compose the actual compatible cycle. P -> P S
                             // can grow indefinitely; a longer intermediate path
                             // that fails a later prefix is merely a finite route.
-                            if prior.iter().any(|start| self.grows(&active[*start..])) {
+                            if prior
+                                .iter()
+                                .any(|start: &usize| self.grows(&active[*start..]))
+                            {
                                 return Err(problem(
                                     "E_UNSUPPORTED",
                                     "recursive typed-view projection transport needs a region equation",
@@ -150,7 +143,7 @@ impl Views {
                     if let Some(declared) = self.declarations.get(&place) {
                         if let Some((region, location)) = declared
                             .iter()
-                            .find(|(region, _)| !scope.outlives(region, required))
+                            .find(|(region, _)| !scope.outlives(*region, required))
                         {
                             return Err(problem(
                                 "E_BORROW",
@@ -164,8 +157,12 @@ impl Views {
                     let Some(routes) = self.routes.get(&place.local) else {
                         continue;
                     };
+                    let mut prefix = Vec::new();
                     for cut in 0..=place.projections.len() {
-                        let Some(edges) = routes.get(&place.projections[..cut]) else {
+                        if cut != 0 {
+                            prefix.push(place.projections[cut - 1].clone());
+                        }
+                        let Some(edges) = routes.get(&prefix) else {
                             continue;
                         };
                         let suffix = &place.projections[cut..];

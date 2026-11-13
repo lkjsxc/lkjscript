@@ -471,6 +471,7 @@ impl<'a> Resolver<'a> {
                 | "mem::replace"
                 | "std::thread::scope"
                 | "std::str::from_utf8"
+                | "std::char::from_u32"
         ) && self
             .lookup_lexical(scope, parts[0], Namespace::Type, span)
             .is_none()
@@ -574,11 +575,6 @@ impl<'a> Resolver<'a> {
                     binding = self.lookup(*std_scope, "String", Namespace::Type);
                 }
             }
-            if binding.is_none() && parts[0] == "__lkj_vec_compare" {
-                if let Some(std_scope) = self.modules.get("$std::sequence") {
-                    binding = self.lookup(*std_scope, parts[0], Namespace::Value);
-                }
-            }
             if binding.is_none()
                 && (builtin(parts[0])
                     || matches!(
@@ -590,6 +586,7 @@ impl<'a> Resolver<'a> {
                             | "scope"
                             | "std::thread::scope"
                             | "std::str::from_utf8"
+                            | "std::char::from_u32"
                     ))
             {
                 return Ok(Some(Resolved::intrinsic(path.to_string())));

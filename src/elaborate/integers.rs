@@ -126,3 +126,136 @@ impl Builder<'_, '_> {
         Ok(Some((dst, ty)))
     }
 }
+
+impl Builder<'_, '_> {
+    pub(super) fn primitive_value_type(&self, ty: usize) -> usize {
+        match self.compiler.types[ty].kind {
+            k::TypeKind::Ref {
+                inner,
+                mutable: false,
+            } if matches!(
+                self.compiler.types[inner].kind,
+                k::TypeKind::Bool | k::TypeKind::Int { .. } | k::TypeKind::F64
+            ) =>
+            {
+                inner
+            }
+            _ => ty,
+        }
+    }
+
+    pub(super) fn primitive_operand(
+        &mut self,
+        expression: usize,
+        expected: Option<usize>,
+        span: a::Span,
+    ) -> Result<(usize, usize)> {
+        let borrowed = self
+            .inferred
+            .expressions
+            .get(&expression)
+            .copied()
+            .or_else(|| self.hint(expression))
+            .is_some_and(|ty| self.primitive_value_type(ty) != ty);
+        let value = self.expr(expression, if borrowed { None } else { expected })?;
+        if self.primitive_value_type(value.1) != value.1 {
+            self.read(
+                k::Place {
+                    local: value.0,
+                    projections: vec![k::Projection::Deref],
+                },
+                span.line,
+            )
+        } else {
+            Ok(value)
+        }
+    }
+
+    pub(super) fn shift_expr(
+        &mut self,
+        operation: &str,
+        left: usize,
+        right: usize,
+        expected: Option<usize>,
+        span: a::Span,
+    ) -> Result<(usize, usize)> {
+        let expected = self
+            .hint(left)
+            .or(expected)
+            .map(|ty| self.primitive_value_type(ty));
+        let (left, ty) = self.primitive_operand(left, expected, span)?;
+        let (mut right, rt) = self.primitive_operand(right, None, span)?;
+        if !matches!(self.compiler.types[ty].kind, k::TypeKind::Int { .. })
+            || !matches!(self.compiler.types[rt].kind, k::TypeKind::Int { .. })
+        {
+            return Err(err(span, "E_TYPE", "shift operands must be integers"));
+        }
+        if ty != rt {
+            let k::TypeKind::Int { bits, .. } = self.compiler.types[ty].kind else {
+                unreachable!()
+            };
+            let k::TypeKind::Int {
+                bits: right_bits, ..
+            } = self.compiler.types[rt].kind
+            else {
+                unreachable!()
+            };
+            if right_bits > bits {
+                // Validate before narrowing: an invalid amount such as 256_u64
+                // must not turn into a valid zero when shifted into a u8 value.
+                // Casting a negative amount to u64 also preserves its invalidity.
+                // An ordinary checked K shift provides the arithmetic trap.
+                let amount = self.temp(k::U64);
+                self.emit(
+                    k::Op::Intrinsic {
+                        dst: amount,
+                        name: "cast".to_string(),
+                        args: vec![right],
+                    },
+                    span.line,
+                );
+                let zero = self.temp(k::U64);
+                self.emit(
+                    k::Op::Int {
+                        dst: zero,
+                        value: 0,
+                    },
+                    span.line,
+                );
+                let check_amount = self.read(k::Place::local(amount), span.line)?.0;
+                let checked = self.temp(k::U64);
+                self.emit(
+                    k::Op::Binary {
+                        dst: checked,
+                        op: "<<".to_string(),
+                        left: zero,
+                        right: check_amount,
+                    },
+                    span.line,
+                );
+                right = amount;
+            }
+            let amount = self.temp(ty);
+            self.emit(
+                k::Op::Intrinsic {
+                    dst: amount,
+                    name: "cast".to_string(),
+                    args: vec![right],
+                },
+                span.line,
+            );
+            right = amount;
+        }
+        let dst = self.temp(ty);
+        self.emit(
+            k::Op::Binary {
+                dst,
+                op: operation.to_string(),
+                left,
+                right,
+            },
+            span.line,
+        );
+        Ok((dst, ty))
+    }
+}

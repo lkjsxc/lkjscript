@@ -24,6 +24,12 @@ pub(super) enum BuiltinMethod {
     CloneFrom,
     Eq,
     Ne,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+    // Private comparison classification: -1, 0, 1, or 2 (unordered).
+    Order,
 }
 
 impl BuiltinMethod {
@@ -33,6 +39,10 @@ impl BuiltinMethod {
             "clone_from" => Some(Self::CloneFrom),
             "eq" => Some(Self::Eq),
             "ne" => Some(Self::Ne),
+            "lt" => Some(Self::Lt),
+            "le" => Some(Self::Le),
+            "gt" => Some(Self::Gt),
+            "ge" => Some(Self::Ge),
             _ => None,
         }
     }
@@ -43,6 +53,11 @@ impl BuiltinMethod {
             Self::CloneFrom => "clone_from",
             Self::Eq => "eq",
             Self::Ne => "ne",
+            Self::Lt => "lt",
+            Self::Le => "le",
+            Self::Gt => "gt",
+            Self::Ge => "ge",
+            Self::Order => "$order",
         }
     }
 
@@ -50,6 +65,7 @@ impl BuiltinMethod {
         match self {
             Self::Clone | Self::CloneFrom => "Clone",
             Self::Eq | Self::Ne => "PartialEq",
+            Self::Lt | Self::Le | Self::Gt | Self::Ge | Self::Order => "PartialOrd",
         }
     }
 
@@ -61,7 +77,8 @@ impl BuiltinMethod {
         match self {
             Self::Clone => receiver,
             Self::CloneFrom => k::UNIT,
-            Self::Eq | Self::Ne => k::BOOL,
+            Self::Eq | Self::Ne | Self::Lt | Self::Le | Self::Gt | Self::Ge => k::BOOL,
+            Self::Order => k::I32,
         }
     }
 }
@@ -1027,51 +1044,6 @@ impl Compiler<'_> {
 }
 
 impl super::Builder<'_, '_> {
-    pub(super) fn generic_comparison_place(&mut self, expression: usize) -> Result<k::Place> {
-        if matches!(&self.compiler.source.exprs[expression].kind,a::Expr::Unary{op,..} if op=="*") {
-            self.place(expression)
-        } else {
-            self.addressable(expression)
-        }
-    }
-
-    pub(super) fn generic_comparison(
-        &mut self,
-        operation: &str,
-        left: usize,
-        right: usize,
-        span: a::Span,
-    ) -> Result<Option<(usize, usize)>> {
-        let Some(ty) = self.hint(left).or_else(|| self.hint(right)) else {
-            return Ok(None);
-        };
-        if !self.compiler.depends_on_rigid(ty) {
-            return Ok(None);
-        }
-        let contract = self.compiler.comparison_contract(ty, operation, span)?;
-        let lp = self.generic_comparison_place(left)?;
-        let lt = super::place_type(&self.compiler.types, self.function, &lp)
-            .ok_or_else(|| err(span, "E_TYPE", "invalid comparison operand"))?;
-        let left = self.borrow(lp, false, span.line)?.0;
-        let rp = self.generic_comparison_place(right)?;
-        let rt = super::place_type(&self.compiler.types, self.function, &rp)
-            .ok_or_else(|| err(span, "E_TYPE", "invalid comparison operand"))?;
-        if lt != ty || rt != ty {
-            return Err(err(span, "E_TYPE", "comparison operand types differ"));
-        }
-        let right = self.borrow(rp, false, span.line)?.0;
-        let dst = self.temp(k::BOOL);
-        self.emit(
-            k::Op::Call {
-                dst,
-                function: contract,
-                args: vec![left, right],
-            },
-            span.line,
-        );
-        Ok(Some((dst, k::BOOL)))
-    }
-
     fn builtin_method(
         &mut self,
         target: &k::Place,

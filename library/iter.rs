@@ -241,6 +241,8 @@ pub trait IteratorExt<I: Iterator> {
     fn inspect<F: FnMut(&I::Item)>(self, function: F) -> Inspect<I, F>;
     fn any<F: FnMut(I::Item) -> bool>(&mut self, predicate: F) -> bool;
     fn all<F: FnMut(I::Item) -> bool>(&mut self, predicate: F) -> bool;
+    fn find<F: FnMut(&I::Item) -> bool>(&mut self, predicate: F) -> Option<I::Item>;
+    fn position<F: FnMut(I::Item) -> bool>(&mut self, predicate: F) -> Option<usize>;
 }
 impl<I: Iterator> IteratorExt<I> for I {
     fn enumerate(self) -> Enumerate<I> {
@@ -281,6 +283,12 @@ impl<I: Iterator> IteratorExt<I> for I {
     }
     fn all<F: FnMut(I::Item) -> bool>(&mut self, predicate: F) -> bool {
         all(self, predicate)
+    }
+    fn find<F: FnMut(&I::Item) -> bool>(&mut self, predicate: F) -> Option<I::Item> {
+        find(self, predicate)
+    }
+    fn position<F: FnMut(I::Item) -> bool>(&mut self, predicate: F) -> Option<usize> {
+        position(self, predicate)
     }
 }
 
@@ -475,5 +483,61 @@ impl<T> Drop for IntoIter<T> {
         while self.items.len() > 0 {
             self.items.pop();
         }
+    }
+}
+
+/// Search consumes each visited item, including the matching item.
+pub fn find<I: Iterator, F: FnMut(&I::Item) -> bool>(
+    iterator: &mut I,
+    mut predicate: F,
+) -> Option<I::Item> {
+    loop {
+        match iterator.next() {
+            Some(value) => {
+                if predicate(&value) {
+                    return Some(value);
+                }
+            }
+            None => return None,
+        }
+    }
+}
+pub fn position<I: Iterator, F: FnMut(I::Item) -> bool>(
+    iterator: &mut I,
+    mut predicate: F,
+) -> Option<usize> {
+    let mut index = 0usize;
+    loop {
+        match iterator.next() {
+            Some(value) => {
+                if predicate(value) {
+                    return Some(index);
+                }
+                index += 1;
+            }
+            None => return None,
+        }
+    }
+}
+
+pub struct OptionIter<T> {
+    value: Option<T>,
+}
+impl<T> Iterator for OptionIter<T> {
+    type Item = T;
+    fn next(&mut self) -> Option<T> {
+        self.value.take()
+    }
+}
+impl<T> IntoIterator for Option<T> {
+    type IntoIter = OptionIter<T>;
+    fn into_iter(self) -> OptionIter<T> {
+        OptionIter { value: self }
+    }
+}
+impl<T> IntoIterator for OptionIter<T> {
+    type IntoIter = Self;
+    fn into_iter(self) -> Self {
+        self
     }
 }

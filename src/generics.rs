@@ -1669,7 +1669,7 @@ fn trait_requirements(
         match &ty.kind {
             TypeKind::Unit | TypeKind::Bool | TypeKind::Char | TypeKind::Int { .. } => {}
             TypeKind::Str => {
-                if !automatic {
+                if !automatic && !comparison {
                     return None;
                 }
             }
@@ -2259,6 +2259,14 @@ fn symbolic_bound(
             | "i64" | "i128" | "isize" | "char" => {}
             "f64" | "f32" => {
                 if name == "Eq" || name == "Ord" {
+                    return false;
+                }
+            }
+            "str" => {
+                if !matches!(
+                    name.as_str(),
+                    "PartialEq" | "Eq" | "PartialOrd" | "Ord" | "Send" | "Sync"
+                ) {
                     return false;
                 }
             }

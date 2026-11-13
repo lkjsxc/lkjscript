@@ -18,7 +18,7 @@ pub(super) fn host_for(name: &str) -> Option<HostFunction> {
     })
 }
 pub(super) fn import(host: HostFunction) -> Import {
-    let parameters = match host {
+    let parameters: usize = match host {
         HostFunction::ArgumentCount => 0,
         HostFunction::ArgumentLength | HostFunction::SetExitStatus | HostFunction::HandleClose => 1,
         HostFunction::StdinRead | HostFunction::DirectoryOpen => 2,

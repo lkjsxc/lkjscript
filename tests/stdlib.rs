@@ -20,7 +20,7 @@ mod rust_map;
 pub mod rust_prelude;
 pub use rust_prelude::{Option, Result};
 mod prelude {
-    pub use super::rust_prelude::Option;
+    pub use super::rust_prelude::{Default, Option};
 }
 #[path = "../library/integer.rs"]
 #[allow(dead_code)]

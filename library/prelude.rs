@@ -1,8 +1,12 @@
 //! The source prelude. These enums own their payloads and work with affine values.
 pub use crate::integer::{ByteAscii, CheckedArithmetic, ScalarOrder};
 pub use crate::iter::{IntoIterator, IterSource, Iterator, IteratorExt};
-pub use crate::sequence::{VecAccess, VecContains, VecExtend, VecMutate, VecSort};
-#[derive(Clone, Copy, PartialEq, Eq)]
+pub use crate::sequence::{
+    SequencePrefix, SliceClone, SliceCopy, SliceSplitSource, VecAccess, VecAccessMut, VecClear,
+    VecContains, VecExtend, VecMutate, VecSort,
+};
+pub use crate::str::{ParseInteger, TextView};
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Option<T> {
     None,
     Some(T),

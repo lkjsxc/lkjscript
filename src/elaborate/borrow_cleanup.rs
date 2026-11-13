@@ -205,7 +205,7 @@ impl Builder<'_, '_> {
         self.reference_updates = self.reference_updates.union(&changed);
         self.references = self.references.union(&state.references);
         for (local, parents) in &state.carriers {
-            if state.live[*local] {
+            if state.live.at(*local) {
                 let mut combined = self.carriers.get(local).cloned().unwrap_or_default();
                 combined.extend(parents);
                 self.set_dependencies(*local, combined);
@@ -224,7 +224,7 @@ impl Builder<'_, '_> {
             if self.dependents.get(local).is_some_and(|children| {
                 children
                     .iter()
-                    .any(|child| self.live[*child] && !candidates.contains(child))
+                    .any(|child| self.live.at(*child) && !candidates.contains(child))
             }) {
                 pending.push(*local);
             }

@@ -176,3 +176,80 @@ impl Infer<'_, '_> {
         Ok(true)
     }
 }
+
+impl Infer<'_, '_> {
+    // A unique inherent associated header supplies equations for an omitted
+    // owner type. Eligibility remains a later obligation of the normal selector.
+    pub(super) fn associated_header(
+        &mut self,
+        path: &a::Path,
+        arguments: &[Variable],
+        scope: a::ModuleId,
+        span: a::Span,
+    ) -> Result<Option<Variable>> {
+        let Some((owner, name)) = path.name.rsplit_once("::") else {
+            return Ok(None);
+        };
+        let Some(declaration) = path.declaration else {
+            return Ok(None);
+        };
+        if !path.args.is_empty()
+            || !matches!(
+                self.source.declarations[declaration].item,
+                a::Item::Struct(_) | a::Item::Enum(_)
+            )
+        {
+            return Ok(None);
+        }
+        let mut candidates = Vec::new();
+        for index in self
+            .implementations
+            .method_candidates_by_head(Some(owner), name)
+        {
+            let implementation = &self.source.impls[index];
+            if implementation.trait_ty.is_some() {
+                continue;
+            }
+            for method in &implementation.methods {
+                let function = &self.source.functions[*method];
+                if function.name == name
+                    && function.params.first().is_none_or(|p| p.name != "self")
+                    && function.params.len() == arguments.len()
+                    && crate::resolve::visible(
+                        self.source,
+                        self.names.scope(&function.module),
+                        function.public,
+                        scope,
+                    )
+                {
+                    candidates.push((index, *method));
+                }
+            }
+        }
+        let [(implementation, method)] = candidates.as_slice() else {
+            return Ok(None);
+        };
+        let implementation = self.source.impls[*implementation].clone();
+        let method = *method;
+        let mut environment = BTreeMap::new();
+        for parameter in &implementation.generics {
+            if !parameter.lifetime {
+                environment.insert(parameter.name.clone(), self.unknown());
+            }
+        }
+        let target = self.source_type(implementation.target, &environment)?;
+        if !matches!(self.shape(target), Some(Shape::Nominal(found, _)) if found == declaration) {
+            return Ok(None);
+        }
+        environment.insert("Self".to_string(), target);
+        self.parameter_equations(&implementation.generics, &mut environment, false)?;
+        Ok(Some(self.header_signature(
+            method,
+            &[],
+            arguments,
+            environment,
+            0,
+            span,
+        )?))
+    }
+}

@@ -67,7 +67,7 @@ impl Assembler {
         self.bytes.extend_from_slice(bytes);
     }
     fn rex(&mut self, wide: bool, r: u8, b: u8) {
-        let prefix = 0x40 | (u8::from(wide) * 8) | (((r >> 3) & 1) * 4) | ((b >> 3) & 1);
+        let prefix = 0x40 | ((wide as u8) * 8) | (((r >> 3) & 1) * 4) | ((b >> 3) & 1);
         if prefix != 0x40 {
             self.bytes.push(prefix);
         }
@@ -83,7 +83,7 @@ impl Assembler {
         self.rex(true, 0, reg);
         self.bytes.push(0xb8 | (reg & 7));
         let at = self.bytes.len();
-        self.raw(&value.to_le_bytes());
+        append_word(&mut self.bytes, value, 8);
         at
     }
     fn address(&mut self, reg: u8, label: Label) {
@@ -91,19 +91,22 @@ impl Assembler {
         self.references.push((at, label));
     }
     fn memory(&mut self, opcode: &[u8], reg: u8, base: u8, offset: i64, wide: bool) {
-        if let Ok(offset) = i32::try_from(offset) {
+        if offset >= -2147483648 && offset <= 2147483647 {
             self.rex(wide, reg, base);
             self.raw(opcode);
             self.bytes.push(0x80 | ((reg & 7) << 3) | (base & 7));
             if base & 7 == 4 {
                 self.bytes.push(0x24);
             }
-            self.raw(&offset.to_le_bytes());
+            append_word(&mut self.bytes, offset as u64, 4);
         } else {
-            let temporary = [R10, R11, R9]
-                .into_iter()
-                .find(|r| *r != reg && *r != base)
-                .unwrap();
+            let temporary = if R10 != reg && R10 != base {
+                R10
+            } else if R11 != reg && R11 != base {
+                R11
+            } else {
+                R9
+            };
             self.immediate(temporary, offset as u64);
             self.rr(0x01, temporary, base, true);
             self.memory(opcode, reg, temporary, 0, wide);
@@ -153,7 +156,7 @@ impl Assembler {
     fn finish(mut self) -> Result<Vec<u8>> {
         for (at, label) in self.references {
             let address = self.labels[label].ok_or("unbound native code label")?;
-            self.bytes[at..at + 8].copy_from_slice(&address.to_le_bytes());
+            put64(&mut self.bytes, at, address);
         }
         Ok(self.bytes)
     }
@@ -270,10 +273,14 @@ fn startup_extents(a: &mut Assembler, p: Platform, initial: u64) {
 // Format traps without allocating or using the exhausted language stack. R8
 // moves backward through a 128-byte buffer; the maximum record is 81 bytes.
 fn diagnostic_text(a: &mut Assembler, text: &str) {
-    for byte in text.bytes().rev() {
+    let bytes = text.as_bytes();
+    let mut index = bytes.len();
+    while index > 0 {
+        index -= 1;
+        let byte = bytes[index];
         a.immediate(A, 1);
         a.rr(0x29, R8, A, true);
-        a.immediate(A, u64::from(byte));
+        a.immediate(A, byte as u64);
         a.memory(&[0x88], A, R8, 0, false);
     }
 }
@@ -287,7 +294,7 @@ fn diagnostic_decimal(a: &mut Assembler, minimum: u64) {
     a.raw(&[0x48, 0xf7, 0xf1]); // unsigned rdx:rax / rcx
     a.rr(0x29, R8, R10, true);
     a.rr(0x01, R9, R10, true);
-    a.immediate(SI, u64::from(b'0'));
+    a.immediate(SI, b'0' as u64);
     a.rr(0x01, D, SI, true);
     a.memory(&[0x88], D, R8, 0, false);
     a.test(A, true);
@@ -377,7 +384,7 @@ fn platform(
     a.load(SI, GLOBALS, HEAP_RESERVED);
     a.immediate(D, 0);
     a.immediate(R10, 0x4022);
-    a.immediate(R8, u64::MAX);
+    a.immediate(R8, 18446744073709551615_u64);
     a.immediate(R9, 0);
     a.syscall();
     a.immediate(C, (-4095i64) as u64);
@@ -396,7 +403,7 @@ fn platform(
     a.load(SI, GLOBALS, STACK_RESERVED);
     a.immediate(D, 3);
     a.immediate(R10, 0x4022);
-    a.immediate(R8, u64::MAX);
+    a.immediate(R8, 18446744073709551615_u64);
     a.immediate(R9, 0);
     a.syscall();
     a.immediate(C, (-4095i64) as u64);
@@ -453,7 +460,7 @@ fn platform(
         let exit = a.label();
         a.bind(writing);
         a.immediate(A, 1);
-        a.immediate(DI, u64::from(fd));
+        a.immediate(DI, fd as u64);
         a.syscall();
         a.test(A, true);
         a.condition(14, exit);
@@ -478,7 +485,7 @@ fn platform(
 
     a.bind(p.grow); // rdi: extra logical pages. Return former pages or -1.
     a.mov(R9, DI);
-    a.immediate(C, u64::MAX >> 16);
+    a.immediate(C, 18446744073709551615_u64 >> 16);
     a.compare(R9, C);
     let failed = a.label();
     let grown = a.label();
@@ -508,7 +515,7 @@ fn platform(
     a.shift(A, 5, 16);
     a.ret();
     a.bind(failed);
-    a.immediate(A, u64::MAX);
+    a.immediate(A, 18446744073709551615_u64);
     a.ret();
 
     a.bind(p.copy); // rdi, rsi, rdx: destination/source/count heap offsets.
@@ -709,12 +716,13 @@ impl Body<'_> {
                 self.a.raw(to_xmm0);
                 self.a.raw(&[0x66, 0x0f, 0x2e, 0xc0]);
                 self.a.condition(10, zero);
+                // Exact IEEE-754 encodings of -2^63, 2^63 and 2^64.
                 if op == I64TruncSatF64S {
-                    self.a.immediate(C, (-9223372036854775808.0f64).to_bits());
+                    self.a.immediate(C, 0xc3e0000000000000_u64);
                     self.a.raw(to_xmm1);
                     self.a.raw(compare);
                     self.a.condition(6, minimum);
-                    self.a.immediate(C, 9223372036854775808.0f64.to_bits());
+                    self.a.immediate(C, 0x43e0000000000000_u64);
                     self.a.raw(to_xmm1);
                     self.a.raw(compare);
                     self.a.condition(3, maximum);
@@ -724,11 +732,11 @@ impl Body<'_> {
                     self.a.raw(&[0x0f, 0x57, 0xc9]);
                     self.a.raw(compare);
                     self.a.condition(6, zero);
-                    self.a.immediate(C, 18446744073709551616.0f64.to_bits());
+                    self.a.immediate(C, 0x43f0000000000000_u64);
                     self.a.raw(to_xmm1);
                     self.a.raw(compare);
                     self.a.condition(3, maximum);
-                    self.a.immediate(C, 9223372036854775808.0f64.to_bits());
+                    self.a.immediate(C, 0x43e0000000000000_u64);
                     self.a.raw(to_xmm1);
                     self.a.raw(compare);
                     let small = self.a.label();
@@ -746,15 +754,15 @@ impl Body<'_> {
                 self.a.immediate(A, 0);
                 self.a.jump(end);
                 self.a.bind(minimum);
-                self.a.immediate(A, i64::MIN as u64);
+                self.a.immediate(A, 0x8000000000000000_u64);
                 self.a.jump(end);
                 self.a.bind(maximum);
                 self.a.immediate(
                     A,
                     if op == I64TruncSatF64S {
-                        i64::MAX as u64
+                        0x7fffffffffffffff_u64
                     } else {
-                        u64::MAX
+                        18446744073709551615_u64
                     },
                 );
                 self.a.bind(end);
@@ -836,7 +844,12 @@ impl Body<'_> {
             Instruction::Loop(result) => return self.begin(RegionKind::Loop, *result),
             Instruction::If(result) => return self.begin(RegionKind::If, *result),
             Instruction::Else => {
-                let region = self.regions.last_mut().ok_or("lowered else without if")?;
+                let index = self
+                    .regions
+                    .len()
+                    .checked_sub(1)
+                    .ok_or("lowered else without if")?;
+                let region = &mut self.regions[index];
                 if region.kind != RegionKind::If || region.has_else {
                     return Err("invalid lowered else".to_string());
                 }
@@ -864,7 +877,7 @@ impl Body<'_> {
                         } else {
                             region.entered
                         });
-                self.height = region.height + usize::from(region.result.is_some());
+                self.height = region.height + if region.result.is_some() { 1 } else { 0 };
                 if region.kind == RegionKind::Function && self.reachable {
                     self.result(region.result)?;
                 }
@@ -877,7 +890,7 @@ impl Body<'_> {
         }
         match instruction {
             Instruction::I32(value) => {
-                self.a.immediate(A, u64::from(*value as u32));
+                self.a.immediate(A, *value as u32 as u64);
                 self.push(A);
             }
             Instruction::I64(value) => {
@@ -929,7 +942,7 @@ impl Body<'_> {
                 self.a.immediate(C, *offset);
                 self.a.rr(0x01, A, C, true);
                 self.a.condition(2, self.p.memory_fault);
-                self.a.immediate(C, u64::from(*bytes));
+                self.a.immediate(C, *bytes as u64);
                 self.p.range(self.a, A, C);
                 self.a.rr(0x01, A, HEAP, true);
                 match (*bytes, *signed) {
@@ -950,7 +963,7 @@ impl Body<'_> {
                 self.a.immediate(D, *offset);
                 self.a.rr(0x01, A, D, true);
                 self.a.condition(2, self.p.memory_fault);
-                self.a.immediate(D, u64::from(*bytes));
+                self.a.immediate(D, *bytes as u64);
                 self.p.range(self.a, A, D);
                 self.a.rr(0x01, A, HEAP, true);
                 match bytes {
@@ -984,14 +997,21 @@ impl Body<'_> {
                 } else {
                     region.end
                 };
-                let result_slot =
-                    (!loop_target && region.result.is_some()).then_some(region.height);
+                let result_slot = if !loop_target && region.result.is_some() {
+                    Some(region.height)
+                } else {
+                    None
+                };
                 if !loop_target {
                     region.end_reachable = true;
                 }
                 // A conditional branch carries its result only on its taken edge.
                 // The not-taken edge retains all values beneath the condition.
-                let skipped = (*conditional && result_slot.is_some()).then(|| self.a.label());
+                let skipped = if *conditional && result_slot.is_some() {
+                    Some(self.a.label())
+                } else {
+                    None
+                };
                 if *conditional {
                     self.a.test(A, false);
                     if let Some(label) = skipped {
@@ -1039,7 +1059,13 @@ impl Body<'_> {
                 self.a.address(C, self.p.table);
                 self.a.rr(0x01, A, C, true);
                 self.a.load(C, A, 8);
-                self.a.immediate(D, self.signature_ids[signature]);
+                self.a.immediate(
+                    D,
+                    *self
+                        .signature_ids
+                        .get(signature)
+                        .expect("interned signature"),
+                );
                 self.a.compare(C, D);
                 self.a.condition(5, self.p.memory_fault);
                 self.a.load(R11, A, 0);
@@ -1107,7 +1133,7 @@ fn function(
         .checked_add(function.code.instructions.len())
         .and_then(|n| n.checked_add(1))
         .and_then(|n| n.checked_mul(8))
-        .filter(|n| *n < i64::MAX as usize)
+        .filter(|n| *n < 0x7fffffffffffffff_usize)
         .ok_or("native frame exceeds signed offset representation")?;
     a.bind(functions[program.imports.len() + index]);
     let required = a.immediate(A, 0);
@@ -1153,19 +1179,42 @@ fn function(
         return Err("unfinished lowered control region".to_string());
     }
     let frame = ((locals + body.maximum) as u64 * 8 + 15) & !15;
-    body.a.bytes[allocated..allocated + 8].copy_from_slice(&frame.to_le_bytes());
-    body.a.bytes[required..required + 8].copy_from_slice(&(frame + 24).to_le_bytes());
+    put64(&mut body.a.bytes, allocated, frame);
+    put64(&mut body.a.bytes, required, frame + 24);
     Ok(())
 }
 
+// The ELF and x86 encodings are little-endian irrespective of the build host.
+// Use one byte loop for fixed-width writes rather than host conversion arrays.
+fn put_word(bytes: &mut [u8], at: usize, value: u64, count: usize) {
+    let mut index = 0;
+    while index < count {
+        bytes[at + index] = (value >> (index * 8)) as u8;
+        index += 1;
+    }
+}
+fn append_word(bytes: &mut Vec<u8>, value: u64, count: usize) {
+    let mut index = 0;
+    while index < count {
+        bytes.push((value >> (index * 8)) as u8);
+        index += 1;
+    }
+}
+fn copy_bytes(target: &mut [u8], at: usize, source: &[u8]) {
+    let mut index = 0;
+    while index < source.len() {
+        target[at + index] = source[index];
+        index += 1;
+    }
+}
 fn put16(bytes: &mut [u8], at: usize, value: u16) {
-    bytes[at..at + 2].copy_from_slice(&value.to_le_bytes());
+    put_word(bytes, at, value as u64, 2);
 }
 fn put32(bytes: &mut [u8], at: usize, value: u32) {
-    bytes[at..at + 4].copy_from_slice(&value.to_le_bytes());
+    put_word(bytes, at, value as u64, 4);
 }
 fn put64(bytes: &mut [u8], at: usize, value: u64) {
-    bytes[at..at + 8].copy_from_slice(&value.to_le_bytes());
+    put_word(bytes, at, value, 8);
 }
 fn segment(bytes: &mut [u8], at: usize, flags: u32, offset: u64, size: u64) {
     put32(bytes, at, 1);
@@ -1178,12 +1227,13 @@ fn segment(bytes: &mut [u8], at: usize, flags: u32, offset: u64, size: u64) {
     put64(bytes, at + 48, 4096);
 }
 pub fn encode(program: &Program, entry: Entry) -> Result<Vec<u8>> {
-    let mut signatures = program
-        .imports
-        .iter()
-        .map(|i| i.signature.clone())
-        .collect::<Vec<_>>();
-    signatures.extend(program.functions.iter().map(|f| f.signature.clone()));
+    let mut signatures: Vec<Signature> = Vec::new();
+    for import in &program.imports {
+        signatures.push(import.signature.clone());
+    }
+    for function in &program.functions {
+        signatures.push(function.signature.clone());
+    }
     let selected = signatures
         .get(entry.function)
         .ok_or("native entry is not a function")?;
@@ -1206,16 +1256,20 @@ pub fn encode(program: &Program, entry: Entry) -> Result<Vec<u8>> {
     {
         return Err("missing lowered trap globals".to_string());
     }
-    let mut ids = BTreeMap::new();
+    let mut ids: BTreeMap<Signature, u64> = BTreeMap::new();
     for signature in &signatures {
         let next = ids.len() as u64;
-        ids.entry(signature.clone()).or_insert(next);
+        if !ids.contains_key(signature) {
+            ids.insert(signature.clone(), next);
+        }
     }
     for f in &program.functions {
         for instruction in &f.code.instructions {
             if let Instruction::CallIndirect(signature) = instruction {
                 let next = ids.len() as u64;
-                ids.entry(signature.clone()).or_insert(next);
+                if !ids.contains_key(signature) {
+                    ids.insert(signature.clone(), next);
+                }
             }
         }
     }
@@ -1255,10 +1309,14 @@ pub fn encode(program: &Program, entry: Entry) -> Result<Vec<u8>> {
             .ok_or("invalid lowered table function")?;
         table_references.push((data.len(), functions[*index]));
         data.extend_from_slice(&[0u8; 8]);
-        data.extend_from_slice(&ids[signature].to_le_bytes());
+        append_word(
+            &mut data,
+            *ids.get(signature).expect("interned signature"),
+            8,
+        );
     }
     a.data_label(p.signal_action, data_offset + data.len());
-    data.extend_from_slice(&1u64.to_le_bytes());
+    append_word(&mut data, 1, 8);
     data.extend_from_slice(&[0u8; 24]);
     a.data_label(p.system_info, data_offset + data.len());
     data.extend_from_slice(&[0u8; 112]);
@@ -1267,8 +1325,10 @@ pub fn encode(program: &Program, entry: Entry) -> Result<Vec<u8>> {
     a.data_label(p.diagnostic_buffer, data_offset + data.len());
     data.extend_from_slice(&[0u8; 128]);
     p.io.data(&mut a, &mut data, data_offset);
-    for argument in entry.arguments.iter().rev() {
-        data.extend_from_slice(&argument.to_le_bytes());
+    let mut argument = entry.arguments.len();
+    while argument > 0 {
+        argument -= 1;
+        append_word(&mut data, entry.arguments[argument] as u64, 8);
     }
     a.data_label(
         p.arguments,
@@ -1285,7 +1345,11 @@ pub fn encode(program: &Program, entry: Entry) -> Result<Vec<u8>> {
     }
     let code = a.finish()?;
     let mut output = vec![0u8; data_offset + data.len()];
-    output[..16].copy_from_slice(&[0x7f, b'E', b'L', b'F', 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    copy_bytes(
+        &mut output,
+        0,
+        &[0x7f, b'E', b'L', b'F', 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    );
     put16(&mut output, 16, 2);
     put16(&mut output, 18, 62);
     put32(&mut output, 20, 1);
@@ -1296,7 +1360,7 @@ pub fn encode(program: &Program, entry: Entry) -> Result<Vec<u8>> {
     put16(&mut output, 56, 2);
     segment(&mut output, 64, 5, 0, data_offset as u64);
     segment(&mut output, 120, 6, data_offset as u64, data.len() as u64);
-    output[CODE_OFFSET..CODE_OFFSET + code.len()].copy_from_slice(&code);
-    output[data_offset..].copy_from_slice(&data);
+    copy_bytes(&mut output, CODE_OFFSET, &code);
+    copy_bytes(&mut output, data_offset, &data);
     Ok(output)
 }

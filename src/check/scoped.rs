@@ -22,7 +22,8 @@ pub(crate) fn invariant_path(types: &[Type], mut ty: usize, path: &[Projection])
         {
             return true;
         }
-        let Some(next) = projected_type(types, ty, std::slice::from_ref(projection)) else {
+        let one = [projection.clone()];
+        let Some(next) = projected_type(types, ty, &one) else {
             return false;
         };
         ty = next;
@@ -30,7 +31,7 @@ pub(crate) fn invariant_path(types: &[Type], mut ty: usize, path: &[Projection])
     false
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct Region {
     pub scope: usize,
     pub name: String,
@@ -68,30 +69,32 @@ impl Scope {
         if source == required || source.is_static() {
             return true;
         }
-        let mut pending = vec![source];
-        let mut seen = BTreeSet::new();
+        let mut pending = vec![source.clone()];
+        let mut seen: BTreeSet<Region> = BTreeSet::new();
         while let Some(region) = pending.pop() {
-            if !seen.insert(region) {
+            if !seen.insert(region.clone()) {
                 continue;
             }
-            if let Some(next) = self.outlives.get(region) {
+            if let Some(next) = self.outlives.get(&region) {
                 if next.contains(required) {
                     return true;
                 }
-                pending.extend(next);
+                for next_region in next {
+                    pending.push(next_region.clone());
+                }
             }
         }
         false
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum EffectKind {
     Call,
     Local,
     LocalInput,
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) struct EffectId {
     kind: EffectKind,
     instruction: usize,
@@ -116,10 +119,7 @@ impl Effects {
             normalize_sources(&mut effect.sources);
         }
         for source in &effect.sources {
-            self.roots
-                .entry(source.origin.root.clone())
-                .or_default()
-                .insert(id);
+            get_or_default(&mut self.roots, source.origin.root.clone()).insert(id);
         }
         self.values.insert(id, effect);
     }
@@ -146,14 +146,19 @@ impl Effects {
     // permission remains valid only if every overlapping alternative has that
     // permission; an unrelated alternative cannot revoke or create authority.
     pub(super) fn selection_permissions(&self, loans: &[Loan]) -> BTreeSet<EffectId> {
-        let candidates: BTreeSet<_> = loans
-            .iter()
-            .flat_map(|loan| loan.effects.iter().copied())
-            .collect();
-        candidates
-            .into_iter()
-            .filter(|id| loans.iter().all(|loan| self.permits(id, loan)))
-            .collect()
+        let mut candidates: BTreeSet<EffectId> = BTreeSet::new();
+        for loan in loans {
+            for id in &loan.effects {
+                candidates.insert(*id);
+            }
+        }
+        let mut permitted: BTreeSet<EffectId> = BTreeSet::new();
+        for id in candidates {
+            if loans.iter().all(|loan| self.permits(&id, loan)) {
+                permitted.insert(id);
+            }
+        }
+        permitted
     }
     pub(super) fn check(
         &self,
@@ -162,17 +167,19 @@ impl Effects {
         mutable: bool,
         line: usize,
     ) -> Result<(), Diagnostic> {
-        let mut candidates = BTreeSet::new();
+        let mut candidates: BTreeSet<EffectId> = BTreeSet::new();
         for source in sources {
             if let Some(ids) = self.roots.get(&source.origin.root) {
-                candidates.extend(ids);
+                for id in ids {
+                    candidates.insert(*id);
+                }
             }
         }
         for id in candidates {
-            if permissions.contains(id) {
+            if permissions.contains(&id) {
                 continue;
             }
-            let effect = &self.values[id];
+            let effect = self.values.get(&id).expect("indexed effect");
             if (mutable || effect.mutable) && overlaps_sources(sources, &effect.sources) {
                 return Err(error(
                     line,
@@ -218,31 +225,36 @@ impl InputRegions {
         let Some(scope) = scope else {
             return Ok(result);
         };
-        let parameters = scope.parameters.iter().chain(
-            scope
-                .guarantees
-                .iter()
-                .flat_map(|(input, regions)| regions.iter().map(move |region| (input, region))),
-        );
-        for (input, region) in parameters {
-            let place = Place {
-                local: input.index,
-                projections: input.projections.clone(),
-            };
-            let provenance = carried_provenance(state, types, function, &place, &place, 1)?;
-            for loan in provenance.loans {
-                for source in loan.sources {
-                    result
-                        .roots
-                        .entry(source.origin.root)
-                        .or_default()
-                        .entry(source.origin.projections)
-                        .or_default()
-                        .insert(region.clone());
-                }
+        for (input, region) in &scope.parameters {
+            result.record(state, types, function, input, region)?;
+        }
+        for (input, regions) in &scope.guarantees {
+            for region in regions {
+                result.record(state, types, function, input, region)?;
             }
         }
         Ok(result)
+    }
+    fn record(
+        &mut self,
+        state: &State,
+        types: &[Type],
+        function: &Function,
+        input: &InputLeaf,
+        region: &Region,
+    ) -> Result<(), Diagnostic> {
+        let place = Place {
+            local: input.index,
+            projections: input.projections.clone(),
+        };
+        let provenance = carried_provenance(state, types, function, &place, &place, 1)?;
+        for loan in provenance.loans {
+            for source in loan.sources {
+                let paths = get_or_default(&mut self.roots, source.origin.root);
+                get_or_default(paths, source.origin.projections).insert(region.clone());
+            }
+        }
+        Ok(())
     }
     fn proves(&self, source: &SourceBound, required: &Region, scope: &Scope) -> bool {
         if source.origin.root == Root::Static {
@@ -251,17 +263,16 @@ impl InputRegions {
         let Some(paths) = self.roots.get(&source.origin.root) else {
             return false;
         };
-        let mut path = source.origin.projections.as_slice();
+        let mut path = source.origin.projections.clone();
         loop {
-            if let Some(regions) = paths.get(path) {
+            if let Some(regions) = paths.get(&path) {
                 return regions
                     .iter()
                     .any(|region| scope.outlives(region, required));
             }
-            let Some((_, parent)) = path.split_last() else {
+            if path.pop().is_none() {
                 return false;
-            };
-            path = parent;
+            }
         }
     }
     pub(super) fn before_call(
@@ -356,18 +367,20 @@ fn stored_holders(state: &State, place: &Place) -> Vec<Place> {
                 local,
                 projections: resolved.sources[0].origin.projections.clone(),
             };
-            return state
-                .loans
-                .get(&holder)
-                .map(|_| vec![holder])
-                .unwrap_or_default();
+            return if state.loans.get(&holder).is_some() {
+                vec![holder]
+            } else {
+                Vec::new()
+            };
         }
     }
-    resolved
-        .parents
-        .into_iter()
-        .filter(|holder| state.loans.get(holder).is_some())
-        .collect()
+    let mut holders: Vec<Place> = Vec::new();
+    for holder in resolved.parents {
+        if state.loans.get(&holder).is_some() {
+            holders.push(holder);
+        }
+    }
+    holders
 }
 
 #[derive(Default)]
@@ -382,36 +395,42 @@ impl Retained {
         returned: &mut Provenance,
     ) -> Result<(), Diagnostic> {
         let line = call.state.site.map_or(1, |site| site.0);
-        for loan in &mut returned.loans {
-            let inputs = match &callee.return_source {
-                Some(ReturnSource::Leaves(leaves)) => leaves
-                    .iter()
-                    .find(|leaf| leaf.projections == loan.holder.projections)
-                    .and_then(|leaf| match &leaf.origin {
-                        LeafOrigin::Inputs { inputs, .. } => Some(inputs.clone()),
-                        LeafOrigin::Static => None,
-                    })
-                    .unwrap_or_default(),
+        for index in 0..returned.loans.len() {
+            let loan = &mut returned.loans[index];
+            let mut inputs: Vec<InputLeaf> = Vec::new();
+            match &callee.return_source {
+                Some(ReturnSource::Leaves(leaves)) => {
+                    for leaf in leaves {
+                        if leaf.projections == loan.holder.projections {
+                            if let LeafOrigin::Inputs {
+                                inputs: declared, ..
+                            } = &leaf.origin
+                            {
+                                inputs = declared.clone();
+                            }
+                            break;
+                        }
+                    }
+                }
                 Some(ReturnSource::Parameter { index, projections }) => {
                     let source = Place {
                         local: *index,
                         projections: projections.clone(),
                     };
                     let ty = place_type(call.types, callee, &source).unwrap();
-                    reference_paths(call.types, ty)
-                        .into_iter()
-                        .map(|(path, _)| {
-                            let mut projections = projections.clone();
-                            projections.extend(path);
-                            InputLeaf {
-                                index: *index,
-                                projections,
-                            }
-                        })
-                        .collect()
+                    for (path, _) in reference_paths(call.types, ty) {
+                        let mut selected = projections.clone();
+                        for projection in path {
+                            selected.push(projection);
+                        }
+                        inputs.push(InputLeaf {
+                            index: *index,
+                            projections: selected,
+                        });
+                    }
                 }
-                _ => Vec::new(),
-            };
+                _ => {}
+            }
             for (id, effect, retained_input, _) in &self.values {
                 if !overlaps_sources(&loan.sources, &effect.sources) {
                     continue;
@@ -461,17 +480,19 @@ impl Retained {
             // Reusing a static call site does not renew its older descendants'
             // authority. Suspend matching old grants before granting the newly
             // returned descendants. The reverse index visits only grantees.
-            let holders: Vec<_> = state
-                .loans
-                .effects
-                .get(&id)
-                .into_iter()
-                .flatten()
-                .filter(|holder| {
-                    overlaps_sources(&state.loans.values[*holder].sources, &effect.sources)
-                })
-                .cloned()
-                .collect();
+            let mut holders: Vec<Place> = Vec::new();
+            if let Some(grantees) = state.loans.effects.get(&id) {
+                for holder in grantees {
+                    let loan = state
+                        .loans
+                        .values
+                        .get(holder)
+                        .expect("indexed effect holder");
+                    if overlaps_sources(&loan.sources, &effect.sources) {
+                        holders.push(holder.clone());
+                    }
+                }
+            }
             for holder in holders {
                 let mut loan = state.loans.remove(&holder).unwrap();
                 loan.effects.remove(&id);
@@ -499,24 +520,44 @@ pub(super) fn join_permissions(
 ) -> BTreeSet<EffectId> {
     let mut candidates = next.effects.clone();
     if let Some(prior) = prior {
-        candidates.extend(&prior.effects);
+        for id in &prior.effects {
+            candidates.insert(*id);
+        }
     }
-    candidates
-        .into_iter()
-        .filter(|id| prior.is_none_or(|loan| left.permits(id, loan)) && right.permits(id, next))
-        .collect()
+    let mut permitted = BTreeSet::new();
+    for id in candidates {
+        let left_permits = match prior {
+            Some(loan) => left.permits(&id, loan),
+            None => true,
+        };
+        if left_permits && right.permits(&id, next) {
+            permitted.insert(id);
+        }
+    }
+    permitted
 }
 
-pub(super) fn common_permissions<'a>(
-    values: impl Iterator<Item = &'a BTreeSet<EffectId>>,
+pub(super) fn intersect_permissions(
+    left: &BTreeSet<EffectId>,
+    right: &BTreeSet<EffectId>,
 ) -> BTreeSet<EffectId> {
-    let mut values = values;
-    let Some(first) = values.next() else {
+    let mut result: BTreeSet<EffectId> = BTreeSet::new();
+    for id in left {
+        if right.contains(id) {
+            result.insert(*id);
+        }
+    }
+    result
+}
+pub(super) fn common_permissions(values: &[BTreeSet<EffectId>]) -> BTreeSet<EffectId> {
+    if values.is_empty() {
         return BTreeSet::new();
-    };
-    values.fold(first.clone(), |prior, next| {
-        prior.intersection(next).copied().collect()
-    })
+    }
+    let mut result = values[0].clone();
+    for next in &values[1..] {
+        result = intersect_permissions(&result, next);
+    }
+    result
 }
 
 /// The generic verifier consumes these diagnostics. This API never returns the
@@ -533,30 +574,33 @@ pub(crate) fn check_definitions(
     }
     let facts = TypeFacts::new(program);
     let mut problems = Vec::new();
-    let mut waiting = BTreeMap::new();
+    let mut waiting: BTreeMap<usize, usize> = BTreeMap::new();
     let mut parents = BTreeMap::<usize, BTreeSet<usize>>::new();
     for (index, scope) in scopes {
-        let children: BTreeSet<_> = scope
-            .constructions
-            .values()
-            .flatten()
-            .map(|construction| construction.function)
-            .filter(|child| scopes.contains_key(child))
-            .collect();
+        let mut children: BTreeSet<usize> = BTreeSet::new();
+        for constructions in scope.constructions.values() {
+            for construction in constructions {
+                if scopes.contains_key(&construction.function) {
+                    children.insert(construction.function);
+                }
+            }
+        }
         waiting.insert(*index, children.len());
         for child in children {
-            parents.entry(child).or_default().insert(*index);
+            get_or_default(&mut parents, child).insert(*index);
         }
     }
-    let mut ready: BTreeSet<_> = waiting
-        .iter()
-        .filter_map(|(index, count)| (*count == 0).then_some(*index))
-        .collect();
+    let mut ready: BTreeSet<usize> = BTreeSet::new();
+    for (index, count) in &waiting {
+        if *count == 0 {
+            ready.insert(*index);
+        }
+    }
     let mut captures = BTreeMap::<usize, Vec<Annotation>>::new();
-    let mut checked = BTreeSet::new();
+    let mut checked: BTreeSet<usize> = BTreeSet::new();
     while let Some(index) = ready.pop_first() {
         let function = &program.functions[index];
-        let mut scope = scopes[&index].clone();
+        let mut scope = scopes.get(&index).expect("scheduled scope").clone();
         for (instruction, constructions) in &scope.constructions {
             for construction in constructions {
                 if let Some(requirements) = captures.get(&construction.function) {
@@ -567,11 +611,7 @@ pub(crate) fn check_definitions(
                             .place
                             .projections
                             .extend_from_slice(&requirement.place.projections);
-                        scope
-                            .annotations
-                            .checkpoints
-                            .entry(*instruction)
-                            .or_default()
+                        get_or_default(&mut scope.annotations.checkpoints, *instruction)
                             .push(annotation);
                     }
                 }
@@ -587,7 +627,7 @@ pub(crate) fn check_definitions(
             let mut site = None;
             let mut observation = locals::Observation::new(&scope, &program.types, function);
             let mut observed = LocalPass::Observe(&mut observation);
-            check_function_body(
+            let result = check_function_body(
                 program,
                 function,
                 &facts,
@@ -595,49 +635,62 @@ pub(crate) fn check_definitions(
                 None,
                 None,
                 Some(&mut observed),
-            )
-            .and_then(|()| {
-                site = None;
-                let requirements = observation.finish(&scope, &program.types, function)?;
-                let contract = requirements.capture_contract(&mut scope, &program.types, function);
-                captures.insert(index, contract);
-                let mut checked = LocalPass::Verify {
-                    requirements: &requirements,
-                    changed: Vec::new(),
-                };
-                check_function_body(
-                    program,
-                    function,
-                    &facts,
-                    &mut site,
-                    None,
-                    Some(&scope),
-                    Some(&mut checked),
-                )
-            })
-            .map_err(|mut problem| {
-                if let Some((line, column)) = site {
-                    if problem.line == line {
-                        problem.column = column;
+            );
+            let result = match result {
+                Ok(()) => {
+                    site = None;
+                    match observation.finish(&scope, &program.types, function) {
+                        Ok(requirements) => {
+                            let contract =
+                                requirements.capture_contract(&mut scope, &program.types, function);
+                            captures.insert(index, contract);
+                            let mut checked = LocalPass::Verify {
+                                requirements: &requirements,
+                                changed: Vec::new(),
+                            };
+                            check_function_body(
+                                program,
+                                function,
+                                &facts,
+                                &mut site,
+                                None,
+                                Some(&scope),
+                                Some(&mut checked),
+                            )
+                        }
+                        Err(problem) => Err(problem),
                     }
                 }
-                problem
-            })
+                Err(problem) => Err(problem),
+            };
+            match result {
+                Err(mut problem) => {
+                    if let Some((line, column)) = site {
+                        if problem.line == line {
+                            problem.column = column;
+                        }
+                    }
+                    Err(problem)
+                }
+                Ok(()) => Ok(()),
+            }
         };
         if let Err(mut problem) = result {
             problem.file = function.file;
             problems.push(problem);
         }
         checked.insert(index);
-        for parent in parents.get(&index).into_iter().flatten() {
-            let count = waiting.get_mut(parent).unwrap();
-            *count -= 1;
-            if *count == 0 {
-                ready.insert(*parent);
+        if let Some(dependents) = parents.get(&index) {
+            for parent in dependents {
+                let count = waiting.get_mut(parent).unwrap();
+                *count -= 1;
+                if *count == 0 {
+                    ready.insert(*parent);
+                }
             }
         }
     }
-    for index in scopes.keys().filter(|index| !checked.contains(index)) {
+    for index in scopes.keys().filter(|index| !checked.contains(*index)) {
         let mut problem = error(
             1,
             "E_UNSUPPORTED",

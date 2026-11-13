@@ -26,7 +26,7 @@ contracts to preserve a convenient host-language API.
 ## The K compiler first
 
 `src/kc_lib.rs` selects the same production files used by the complete compiler:
-K representation/text, safety checking, persistent facts, lowering, native
+K representation/text, safety checking, packed owned facts, lowering, native
 encoding and runtime sealing, plus shared diagnostics. It has no source parser,
 elaborator or source loader. `kc::compile` consumes program K and runtime K. The
 runtime is checked before its narrow raw interface is sealed; the host cannot
@@ -46,24 +46,41 @@ The observations to reach are:
 4. Record elapsed time and peak memory beside B0 for the same work.
 
 There is one compiler implementation, selected twice. No per-file acceptance
-ritual substitutes for this result. Afterward apply the same two-way rule to the
-front end, reach the three-build identity, and retain an owned seed compiler for
-the next build. Removing Cargo is an observed hand-over, not a renamed bootstrap.
+ritual substitutes for this result. Afterward measure the front-end census before choosing between a port by the
+two-way rule and a new front end written in the language. Either route must
+produce B0-identical K text on conformance and its own source. Reach the
+three-build identity and retain an owned seed compiler for the next build. Removing Cargo is an observed hand-over, not a renamed bootstrap.
 
 ## Order and execution
 
-Unblock ordinary text, collections, configuration and diagnostics first. Keep
-artifacts independent of build-host resources: execution-time Linux controls
-supply budgets, and traps identify their source and resource. Then give World
-arguments, input, error output, status and directory-relative file capabilities.
-These are prerequisites for an independently running K compiler.
+1. Reach the complete K compiler ownership verdict and record its rejections
+   before fixing them. Declaration blockers must be named and located; partial
+   coverage counts do not measure distance.
+2. Make the small native top-operand improvement, encode array repeats compactly,
+   and remove unreachable functions before native encoding. Use the existing gate.
+3. Correct allocator payload classes, tip growth and the heap/stack split. Give
+   the stack its own visible control. An ordinary program whose data comfortably
+   fits memory must work under run defaults; gate generators keep explicit budgets.
+4. Shard conformance batches and adopt direct K mutation with reproducible seeds,
+   separate outcome classes and saved records. Align resource-trap classification
+   between native and K for unbounded recursion.
+5. Build kc1/kc2, verify the fixed point, and record time and peak memory beside B0.
+6. Profile kc and remove its largest measured cost first. No speed ratio is an
+   acceptance requirement.
+7. Measure and choose the front-end route; do not put unrelated front-end width
+   ahead of these consumers.
 
-Profile that compiler and remove the largest runtime cost. A source ordered map
-with logarithmic insertion can precede self-compilation because it is already a
-compiler dependency. No prescribed speed ratio is a language requirement. Native
-and K remain independent execution checks; obsolete encoders and hosts are gone.
+The encoder belongs to the trusted base. Local operand caching can stay small
+there; inlining, propagation and dead-copy removal belong in ordinary K-to-K
+passes. Re-check their output and discard a rejected change. Compare native on
+optimized K with the independent machine on the original K to catch wrong values.
+A rejected optimizer must never become a route around the K checker.
+
+The source Rust oracle protects today's surface. The checker, independent K
+machine and direct K generators survive a different surface or tool-written K.
+A pure seeded K generator is a natural second self-built daily tool after kc.
 New semantic tests are source/K data; Rust-specific bootstrap observations remain
-only while they protect a real boundary and are migrated when their subject changes.
+only while they protect a real boundary and migrate when that subject changes.
 
 ## Durable semantic choices
 

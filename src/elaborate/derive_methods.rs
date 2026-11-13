@@ -68,10 +68,46 @@ impl Compiler<'_> {
             let helper = match method {
                 BuiltinMethod::Clone => Some("__lkj_vec_clone"),
                 BuiltinMethod::Eq => Some("__lkj_vec_equal"),
+                BuiltinMethod::Order => Some("__lkj_vec_order"),
                 _ => None,
             };
             if let Some(helper) = helper {
                 return self.sequence_instance(helper, inner, span);
+            }
+        }
+        if let k::TypeKind::Slice { inner, .. } = self.types[receiver].kind {
+            let helper = match method {
+                BuiltinMethod::Eq => Some("__lkj_slice_equal"),
+                BuiltinMethod::Order => Some("__lkj_slice_order"),
+                _ => None,
+            };
+            if let Some(helper) = helper {
+                return self.sequence_instance(helper, inner, span);
+            }
+        }
+        if matches!(self.types[receiver].kind, k::TypeKind::Str) {
+            let helper = match method {
+                BuiltinMethod::Eq => Some(("__lkj_eq", k::BOOL)),
+                BuiltinMethod::Order => Some(("__lkj_compare", k::I32)),
+                _ => None,
+            };
+            if let Some((name, result)) = helper {
+                let source = self.names.library_function("str", name, span)?;
+                let function = self.instantiate(source, BTreeMap::new())?;
+                let reference = self.reference(receiver, false);
+                let signature = &self.functions[function];
+                if signature.params != 2
+                    || signature.result != result
+                    || signature.locals[0].ty != reference
+                    || signature.locals[1].ty != reference
+                {
+                    return Err(err(
+                        span,
+                        "E_TYPE",
+                        "source text comparison signature differs from its operation",
+                    ));
+                }
+                return Ok(function);
             }
         }
         if method == BuiltinMethod::CloneFrom
@@ -189,6 +225,10 @@ impl Compiler<'_> {
         match instance.method {
             BuiltinMethod::Clone => body.clone_value(instance.receiver)?,
             BuiltinMethod::Eq => body.equal_value(instance.receiver)?,
+            BuiltinMethod::Order => body.order_value(instance.receiver)?,
+            BuiltinMethod::Lt | BuiltinMethod::Le | BuiltinMethod::Gt | BuiltinMethod::Ge => {
+                body.relation_value(instance.receiver, instance.method)?;
+            }
             BuiltinMethod::Ne => {
                 let equal = body.compiler.builtin_operation(
                     instance.receiver,
@@ -254,6 +294,7 @@ impl Generated<'_, '_> {
         match &op {
             k::Op::Read { dst, .. }
             | k::Op::Borrow { dst, .. }
+            | k::Op::SliceBorrow { dst, .. }
             | k::Op::Int { dst, .. }
             | k::Op::Unit { dst }
             | k::Op::TagTest { dst, .. } => self.live[*dst] = true,
@@ -284,6 +325,12 @@ impl Generated<'_, '_> {
             k::Op::Unary { dst, src, .. } => {
                 self.live[*src] = false;
                 self.live[*dst] = true;
+            }
+            k::Op::Assign { place, src } => {
+                self.live[*src] = false;
+                if place.projections.is_empty() {
+                    self.live[place.local] = true;
+                }
             }
             k::Op::Drop { place } | k::Op::DropIf { place } => {
                 if place.projections.is_empty() {
@@ -494,6 +541,249 @@ impl Generated<'_, '_> {
         Ok(())
     }
 
+    fn integer(&mut self, value: i32) -> usize {
+        let result = self.local(k::I32);
+        self.emit(k::Op::Int {
+            dst: result,
+            value: i64::from(value),
+        });
+        result
+    }
+
+    fn finish_order(&mut self, value: i32) {
+        let result = self.integer(value);
+        self.finish(result);
+    }
+
+    fn binary(&mut self, operation: &str, left: usize, right: usize) -> usize {
+        let result = self.local(k::BOOL);
+        self.emit(k::Op::Binary {
+            dst: result,
+            op: operation.to_string(),
+            left,
+            right,
+        });
+        result
+    }
+
+    fn return_order_if(&mut self, condition: usize, value: i32) {
+        self.emit(k::Op::If { condition });
+        let entry = self.live.clone();
+        self.finish_order(value);
+        self.emit(k::Op::End);
+        self.restored(entry);
+    }
+
+    fn order_places(&mut self, left: k::Place, right: k::Place, ty: usize) -> Result<usize> {
+        let function = self
+            .compiler
+            .builtin_operation(ty, BuiltinMethod::Order, self.span)?;
+        let left = self.borrow(left, ty);
+        let right = self.borrow(right, ty);
+        Ok(self.call(function, vec![left, right]))
+    }
+
+    // Return the first non-equal classification, including unordered. Equality
+    // is an ordering result here; a custom PartialEq implementation is irrelevant.
+    fn decisive_order(&mut self, compared: usize) {
+        let inspect = self.read(k::Place::local(compared), k::I32);
+        let zero = self.integer(0);
+        let condition = self.binary("!=", inspect, zero);
+        self.emit(k::Op::If { condition });
+        let entry = self.live.clone();
+        self.finish(compared);
+        self.emit(k::Op::End);
+        self.restored(entry);
+        self.emit(k::Op::Drop {
+            place: k::Place::local(compared),
+        });
+    }
+
+    fn order_fields(&mut self, fields: &[k::Field], variant: Option<usize>) -> Result<()> {
+        for (index, field) in fields.iter().enumerate() {
+            let projection = variant.map_or(k::Projection::Field(index), |variant| {
+                k::Projection::VariantField(variant, index)
+            });
+            let compared = self.order_places(
+                Self::projected(0, projection.clone()),
+                Self::projected(1, projection),
+                field.ty,
+            )?;
+            self.decisive_order(compared);
+        }
+        Ok(())
+    }
+
+    fn enum_rank(&mut self, parameter: usize, variants: usize) -> usize {
+        let rank = self.index(0);
+        self.function.locals[rank].mutable = true;
+        for variant in 1..variants {
+            let condition = self.local(k::BOOL);
+            self.emit(k::Op::TagTest {
+                dst: condition,
+                place: k::Place::local(parameter),
+                variant,
+            });
+            self.emit(k::Op::If { condition });
+            let entry = self.live.clone();
+            let value = self.index(variant);
+            self.emit(k::Op::Assign {
+                place: k::Place::local(rank),
+                src: value,
+            });
+            self.emit(k::Op::End);
+            self.restored(entry);
+        }
+        rank
+    }
+
+    fn order_value(&mut self, ty: usize) -> Result<()> {
+        match self.compiler.types[ty].kind.clone() {
+            k::TypeKind::Unit => self.finish_order(0),
+            k::TypeKind::Bool => {
+                let left = self.read(Self::referent(0), ty);
+                let right = self.read(Self::referent(1), ty);
+                let equal = self.binary("==", left, right);
+                self.return_order_if(equal, 0);
+                let left = self.read(Self::referent(0), ty);
+                self.return_order_if(left, 1);
+                self.finish_order(-1);
+            }
+            k::TypeKind::Char | k::TypeKind::Int { .. } | k::TypeKind::F64 => {
+                for (operation, value) in [("<", -1), (">", 1)] {
+                    let left = self.read(Self::referent(0), ty);
+                    let right = self.read(Self::referent(1), ty);
+                    let condition = self.binary(operation, left, right);
+                    self.return_order_if(condition, value);
+                }
+                if ty == k::F64 {
+                    let left = self.read(Self::referent(0), ty);
+                    let right = self.read(Self::referent(1), ty);
+                    let equal = self.binary("==", left, right);
+                    self.return_order_if(equal, 0);
+                    self.finish_order(2);
+                } else {
+                    self.finish_order(0);
+                }
+            }
+            k::TypeKind::Struct { fields, .. } => {
+                self.order_fields(&fields, None)?;
+                self.finish_order(0);
+            }
+            k::TypeKind::Enum { variants, .. } => {
+                let left = self.enum_rank(0, variants.len());
+                let right = self.enum_rank(1, variants.len());
+                for (operation, value) in [("<", -1), (">", 1)] {
+                    let left_value = self.read(k::Place::local(left), k::U64);
+                    let right_value = self.read(k::Place::local(right), k::U64);
+                    let condition = self.binary(operation, left_value, right_value);
+                    self.return_order_if(condition, value);
+                }
+                self.emit(k::Op::Drop {
+                    place: k::Place::local(left),
+                });
+                self.emit(k::Op::Drop {
+                    place: k::Place::local(right),
+                });
+                for (variant, value) in variants.iter().enumerate() {
+                    let condition = self.local(k::BOOL);
+                    self.emit(k::Op::TagTest {
+                        dst: condition,
+                        place: k::Place::local(0),
+                        variant,
+                    });
+                    self.emit(k::Op::If { condition });
+                    let outer = self.live.clone();
+                    let condition = self.local(k::BOOL);
+                    self.emit(k::Op::TagTest {
+                        dst: condition,
+                        place: k::Place::local(1),
+                        variant,
+                    });
+                    self.emit(k::Op::If { condition });
+                    self.order_fields(&value.fields, Some(variant))?;
+                    self.finish_order(0);
+                    self.emit(k::Op::End);
+                    self.emit(k::Op::End);
+                    self.restored(outer);
+                }
+                self.emit(k::Op::Trap {
+                    message: "invalid enum discriminant".to_string(),
+                });
+            }
+            k::TypeKind::Ref { inner, .. } | k::TypeKind::Box { inner } => {
+                let compared = self.order_places(
+                    Self::projected(0, k::Projection::Deref),
+                    Self::projected(1, k::Projection::Deref),
+                    inner,
+                )?;
+                self.finish(compared);
+            }
+            k::TypeKind::Array { inner, .. } => {
+                let slice = self.compiler.intern(
+                    String::new(),
+                    k::TypeKind::Slice {
+                        inner,
+                        mutable: false,
+                    },
+                );
+                let reference = self.compiler.reference(slice, false);
+                let left = self.local(reference);
+                self.emit(k::Op::SliceBorrow {
+                    dst: left,
+                    place: Self::referent(0),
+                    mutable: false,
+                });
+                let right = self.local(reference);
+                self.emit(k::Op::SliceBorrow {
+                    dst: right,
+                    place: Self::referent(1),
+                    mutable: false,
+                });
+                let function =
+                    self.compiler
+                        .sequence_instance("__lkj_slice_order", inner, self.span)?;
+                let compared = self.call(function, vec![left, right]);
+                self.finish(compared);
+            }
+            _ => {
+                return Err(err(
+                    self.span,
+                    "E_UNSUPPORTED",
+                    "PartialOrd has no executable implementation for this storage type",
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn relation_value(&mut self, ty: usize, method: BuiltinMethod) -> Result<()> {
+        let order = self
+            .compiler
+            .builtin_operation(ty, BuiltinMethod::Order, self.span)?;
+        let compared = self.call(order, vec![0, 1]);
+        let (operation, constant) = match method {
+            BuiltinMethod::Lt => ("==", -1),
+            BuiltinMethod::Le => ("<=", 0),
+            BuiltinMethod::Gt => ("==", 1),
+            BuiltinMethod::Ge => ("!=", -1),
+            _ => unreachable!(),
+        };
+        // Unordered is false for every relation, including >=.
+        let inspect = self.read(k::Place::local(compared), k::I32);
+        let unordered = self.integer(2);
+        let condition = self.binary("==", inspect, unordered);
+        self.emit(k::Op::If { condition });
+        let entry = self.live.clone();
+        self.finish_bool(false);
+        self.emit(k::Op::End);
+        self.restored(entry);
+        let value = self.integer(constant);
+        let result = self.binary(operation, compared, value);
+        self.finish(result);
+        Ok(())
+    }
+
     fn equal_places(&mut self, left: k::Place, right: k::Place, ty: usize) -> Result<usize> {
         let function = self
             .compiler
@@ -623,11 +913,9 @@ impl Builder<'_, '_> {
         name: &str,
         span: a::Span,
     ) -> Result<bool> {
-        let required = if matches!(name, "clone" | "clone_from") {
-            "Clone"
-        } else {
-            "PartialEq"
-        };
+        let required = BuiltinMethod::named(name)
+            .ok_or_else(|| err(span, "E_TYPE", "unknown builtin trait method"))?
+            .required();
         let builtin = self.compiler.satisfies_bound(receiver, required);
         let mut declared_trait = false;
         for implementation in self.compiler.source.impls.clone() {

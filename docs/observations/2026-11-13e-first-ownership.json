@@ -1,0 +1,26 @@
+{
+  "observed_utc": "2026-11-13T16:04:55Z",
+  "base_revision": "777d438925be0d76f850b4e55e6f187484248bb2",
+  "state": "working tree before any observed ownership repairs",
+  "command": "target/release/lkjscript check --census src/kc_lib.rs",
+  "unsupported": 0,
+  "type_or_library_blockers": 0,
+  "first_borrow_diagnostics": 12,
+  "source_bodies_attempted": 823,
+  "instantiated_k_bodies": null,
+  "count_caveat": "The census source-body attempt count is not an instantiated K count. Each failing body reports its first ownership diagnostic; later repairs can reveal further sites.",
+  "sites": [
+    "src/native.rs:600:30: E_BORROW self.* conflicts with exclusive borrow held by $ (created at 600:9)",
+    "src/native.rs:604:26: E_BORROW self.* conflicts with exclusive borrow held by $ (created at 604:9)",
+    "src/native.rs:904:36: E_BORROW self.* conflicts with exclusive borrow held by $ (created at 904:17)",
+    "src/lower.rs:1322:17: E_BORROW self.* conflicts with shared borrow held by from (created at 1320:28)",
+    "src/check.rs:265:13: E_BORROW map.* conflicts with exclusive borrow held by entries (created at 262:28)",
+    "src/check/scoped/locals.rs:251:17: E_BORROW self.* conflicts with shared borrow held by $::Some.0 (created at 249:36)",
+    "src/check/scoped/locals.rs:460:25: E_BORROW self.* conflicts with shared borrow held by $::Some.0 (created at 457:40)",
+    "src/lower.rs:2389:13: E_BORROW active conflicts with shared borrow held by $::Some.0 (created at 2385:45)",
+    "src/k_text.rs:445:40: E_BORROW enumeration conflicts with exclusive borrow held by $ (created at 432:27)",
+    "src/check.rs:2968:50: E_BORROW holder conflicts with shared borrow held by $.items (created at 2963:35)",
+    "src/check.rs:3682:13: E_BORROW leaf.*.origin conflicts with shared borrow held by $ (created at 3672:49)",
+    "src/check/scoped.rs:642:27: E_BORROW observation conflicts with exclusive borrow held by observed::Observe.0 (created at 629:51)"
+  ]
+}

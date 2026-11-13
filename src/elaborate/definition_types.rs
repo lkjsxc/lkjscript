@@ -345,6 +345,11 @@ enum Obligation {
         result: Variable,
         span: a::Span,
     },
+    Unary {
+        source: Variable,
+        result: Variable,
+        span: a::Span,
+    },
     Deref {
         source: Variable,
         result: Variable,
@@ -671,7 +676,12 @@ impl Infer<'_, '_> {
         }
         match (self.shape(from), self.shape(to)) {
             (Some(Shape::Ref(_, _)), None) => true,
-            (Some(Shape::Ref(_, _)), Some(Shape::Ref(_, inner))) => self.shape(inner).is_none(),
+            (Some(Shape::Ref(_, source)), Some(Shape::Ref(_, target))) => {
+                // An unannotated callable input may acquire its actual referent
+                // from the enclosing method. Do not infer str from &input before
+                // map_err (for example) supplies String and its ordinary coercion.
+                self.shape(source).is_none() || self.shape(target).is_none()
+            }
             _ => false,
         }
     }
@@ -1353,7 +1363,13 @@ impl Infer<'_, '_> {
                     });
                     result
                 } else {
-                    value
+                    let result = self.operation_type();
+                    self.obligation(Obligation::Unary {
+                        source: value,
+                        result,
+                        span,
+                    });
+                    result
                 }
             }
             a::Expr::Binary { op, left, right } => {
@@ -1373,13 +1389,30 @@ impl Infer<'_, '_> {
                             .map_err(|problem| context(problem, "equality operand types differ"))?;
                     }
                     self.atom("bool")
-                } else {
+                } else if matches!(op.as_str(), "<" | "<=" | ">" | ">=") {
                     self.unify(left, right, span)?;
-                    if matches!(op.as_str(), "<" | "<=" | ">" | ">=") {
-                        self.atom("bool")
-                    } else {
-                        left
+                    self.atom("bool")
+                } else {
+                    // Primitive operators forward one shared reference layer.
+                    // Keep that choice delayed until both operand shapes are
+                    // known, just as for unary scalar operations.
+                    let left_value = self.operation_type();
+                    self.obligation(Obligation::Unary {
+                        source: left,
+                        result: left_value,
+                        span,
+                    });
+                    let right_value = self.operation_type();
+                    self.obligation(Obligation::Unary {
+                        source: right,
+                        result: right_value,
+                        span,
+                    });
+                    if op != "<<" && op != ">>" {
+                        self.unify(left_value, right_value, span)?;
                     }
+                    // A shift amount keeps its own integer type.
+                    left_value
                 }
             }
             a::Expr::Assign { place, value, .. } => {
@@ -1429,6 +1462,27 @@ impl Infer<'_, '_> {
                             self.shaped(Shape::Vec(inner))
                         }
                     } else if path.declaration.is_none()
+                        && matches!(path.name.as_str(), "char::from_u32" | "std::char::from_u32")
+                    {
+                        if values.len() != 1 || !path.args.is_empty() {
+                            return Err(err(
+                                span,
+                                "E_TYPE",
+                                "char::from_u32 requires one u32 argument",
+                            ));
+                        }
+                        let integer = self.atom("u32");
+                        self.coerce(values[0], integer, span)?;
+                        let character = self.atom("char");
+                        let option = self
+                            .names
+                            .library_type("prelude", "Option", span)?
+                            .declaration
+                            .ok_or_else(|| {
+                                err(span, "E_TYPE", "Option declaration is unavailable")
+                            })?;
+                        self.shaped(Shape::Nominal(option, vec![character]))
+                    } else if path.declaration.is_none()
                         && matches!(path.name.as_str(), "drop" | "std::mem::drop")
                     {
                         self.atom("()")
@@ -1436,6 +1490,13 @@ impl Infer<'_, '_> {
                         path.declaration.map(|id| self.source.declarations[id].item)
                     {
                         self.call_signature(index, &path.args, &values, span)?
+                    } else if let Some(result) = self.associated_header(
+                        &path,
+                        &values,
+                        self.source.exprs[callee].scope,
+                        span,
+                    )? {
+                        result
                     } else {
                         let fields: Vec<_> = values
                             .iter()
@@ -1761,8 +1822,8 @@ impl Infer<'_, '_> {
                 arguments,
                 result,
                 span,
-                ..
-            } => return self.solve_callable(id, receiver, arguments, result, span),
+                produced,
+            } => return self.solve_callable(id, receiver, arguments, result, span, produced),
             Obligation::Coercion {
                 source,
                 target,
@@ -1843,9 +1904,63 @@ impl Infer<'_, '_> {
                 }
                 self.unify(result, arguments[0], span)?;
                 if arity == 2 {
-                    self.unify(arguments[1], output_arguments[1], span)?;
+                    // Rust's Result question mark converts its error through
+                    // From. The source String conversion is the concrete case
+                    // used by the K compiler; other differing errors still need
+                    // explicit map_err until general From evidence is supported.
+                    let text_output = matches!(
+                        self.shape(output_arguments[1]),
+                        Some(Shape::Nominal(declaration, _))
+                            if self.source.declarations[declaration].name == "$std::string::String"
+                    );
+                    let text_input = match self.shape(arguments[1]) {
+                        Some(Shape::Ref(false, inner)) => {
+                            if text_output && self.shape(inner).is_none() {
+                                self.watch(inner, id);
+                                return Ok(false);
+                            }
+                            matches!(self.shape(inner), Some(Shape::Atom(name)) if name == "str")
+                        }
+                        None if text_output => {
+                            // Argument coercions can still resolve the error to
+                            // &str. Do not force it to String before they run.
+                            self.watch(arguments[1], id);
+                            return Ok(false);
+                        }
+                        _ => false,
+                    };
+                    if !(text_input && text_output) {
+                        self.unify(arguments[1], output_arguments[1], span)?;
+                    }
                 }
             }
+            Obligation::Unary {
+                source,
+                result,
+                span,
+            } => match self.shape(source) {
+                Some(Shape::Ref(false, inner)) => match self.shape(inner) {
+                    Some(Shape::Atom(name))
+                        if name == "bool" || name == "f64" || integer_name(&name) =>
+                    {
+                        self.unify(result, inner, span)?
+                    }
+                    None => {
+                        self.watch(inner, id);
+                        return Ok(false);
+                    }
+                    _ => self.unify(result, source, span)?,
+                },
+                None => {
+                    if self.definition.nodes[self.definition.root(source)].integer {
+                        self.unify(result, source, span)?;
+                    } else {
+                        self.watch(source, id);
+                        return Ok(false);
+                    }
+                }
+                _ => self.unify(result, source, span)?,
+            },
             Obligation::Deref {
                 source,
                 result,
@@ -1958,6 +2073,16 @@ impl Infer<'_, '_> {
                 }
                 let primitive = shape.primitive();
                 let direct = super::methods::direct(primitive, &name);
+                if direct == Some(super::methods::Direct::Character) {
+                    let function =
+                        self.names
+                            .library_function("char", &format!("__lkj_{name}"), span)?;
+                    let mut values = vec![base];
+                    values.extend_from_slice(&arguments);
+                    let output = self.call_signature(function, &types, &values, span)?;
+                    self.unify(result, output, span)?;
+                    return Ok(true);
+                }
                 if direct.is_none()
                     && self.census_contextual_complete(base, &name)
                     && self.contextual_header(
@@ -2062,6 +2187,7 @@ impl Infer<'_, '_> {
                     } => Some(*result),
                     Obligation::Projection { result, .. }
                     | Obligation::Try { result, .. }
+                    | Obligation::Unary { result, .. }
                     | Obligation::Deref { result, .. }
                     | Obligation::Index { result, .. }
                     | Obligation::Field { result, .. }

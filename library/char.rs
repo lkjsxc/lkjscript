@@ -72,3 +72,28 @@ pub fn __lkj_to_string(value: char) -> String {
     result.push(value);
     result
 }
+
+pub fn __lkj_is_control(value: char) -> bool {
+    let code = value as u32;
+    code <= 0x1fu32 || (code >= 0x7fu32 && code <= 0x9fu32)
+}
+pub fn __lkj_to_digit(value: char, radix: u32) -> crate::Option<u32> {
+    if radix < 2u32 || radix > 36u32 {
+        panic!("to_digit: invalid radix");
+    }
+    let code = value as u32;
+    let digit = if code >= 48u32 && code <= 57u32 {
+        code - 48u32
+    } else if code >= 65u32 && code <= 90u32 {
+        code - 65u32 + 10u32
+    } else if code >= 97u32 && code <= 122u32 {
+        code - 97u32 + 10u32
+    } else {
+        return crate::Option::None;
+    };
+    if digit < radix {
+        crate::Option::Some(digit)
+    } else {
+        crate::Option::None
+    }
+}

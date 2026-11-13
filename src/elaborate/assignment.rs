@@ -100,18 +100,18 @@ impl Builder<'_, '_> {
             test: false,
         };
         let mut bindings = Bindings::default();
-        let mut live = Vec::new();
-        let mut definite_live = Vec::new();
-        let mut written = Vec::new();
+        let mut live = Facts::default();
+        let mut definite_live = Facts::default();
+        let mut written = Facts::default();
         for (name, original) in &self.bindings.entries {
             let local = function.locals.len();
             function
                 .locals
                 .push(self.function.locals[*original].clone());
             bindings.push((name.clone(), local));
-            live.push(self.live[*original]);
-            definite_live.push(self.definite_live[*original]);
-            written.push(self.written[*original]);
+            live.push(self.live.at(*original));
+            definite_live.push(self.definite_live.at(*original));
+            written.push(self.written.at(*original));
         }
         let references = Facts::new(function.locals.len());
         let loops = self
@@ -156,9 +156,9 @@ impl Builder<'_, '_> {
                 assignment_types,
                 range_borrows: BTreeMap::new(),
                 inferred: self.inferred.clone(),
-                live: live.into_iter().collect(),
-                definite_live: definite_live.into_iter().collect(),
-                written: written.into_iter().collect(),
+                live,
+                definite_live,
+                written,
                 loops,
                 reachable: self.reachable,
             };
@@ -197,7 +197,7 @@ impl Builder<'_, '_> {
         self.guard_write(&place, span)?;
         if place.projections.is_empty()
             && !self.function.locals[place.local].mutable
-            && self.written[place.local]
+            && self.written.at(place.local)
         {
             return Err(err(span, "E_TYPE", "assignment to an immutable binding"));
         }

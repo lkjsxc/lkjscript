@@ -25,7 +25,7 @@ pub(crate) struct Environment {
 }
 
 type Demands = BTreeMap<Origin, BTreeMap<Region, (usize, usize)>>;
-type Paths = Rc<Vec<(Vec<Projection>, bool)>>;
+type Paths = Vec<(Vec<Projection>, bool)>;
 
 pub(in super::super) struct Observation {
     annotations: Annotations,
@@ -61,6 +61,12 @@ fn storage(state: &State, place: &Place, line: usize) -> Result<Vec<Origin>, Dia
 impl Observation {
     pub(in super::super) fn new(scope: &Scope, types: &[Type], function: &Function) -> Self {
         let annotations = &scope.annotations;
+        let mut parameter_references: BTreeSet<usize> = BTreeSet::new();
+        for index in 0..function.params {
+            if matches!(types[function.locals[index].ty].kind, TypeKind::Ref { .. }) {
+                parameter_references.insert(index);
+            }
+        }
         let mut result = Self {
             annotations: annotations.clone(),
             indirect: BTreeMap::new(),
@@ -72,45 +78,32 @@ impl Observation {
             changed: Vec::new(),
             views: super::views::Views::new(scope),
             invariant: BTreeMap::new(),
-            parameter_references: (0..function.params)
-                .filter(|index| {
-                    matches!(types[function.locals[*index].ty].kind, TypeKind::Ref { .. })
-                })
-                .collect(),
+            parameter_references,
             calls: scope.calls.clone(),
             results: scope.results.clone(),
         };
         for annotation in &annotations.bindings {
             if annotation.place.projections.contains(&Projection::Deref) {
-                result
-                    .indirect
-                    .entry(annotation.place.local)
-                    .or_default()
+                get_or_default(&mut result.indirect, annotation.place.local)
                     .push(annotation.clone());
             } else {
                 let node = Origin {
                     root: Root::Local(annotation.place.local),
                     projections: annotation.place.projections.clone(),
                 };
-                result
-                    .declared
-                    .entry(node.clone())
-                    .or_default()
+                get_or_default(&mut result.declared, node.clone())
                     .insert(annotation.region.clone());
-                result
-                    .demands
-                    .entry(node)
-                    .or_default()
+                get_or_default(&mut result.demands, node)
                     .insert(annotation.region.clone(), annotation.created);
             }
         }
         result
     }
     fn paths(&mut self, types: &[Type], ty: usize) -> Paths {
-        self.paths
-            .entry(ty)
-            .or_insert_with(|| Rc::new(reference_paths(types, ty)))
-            .clone()
+        if !self.paths.contains_key(&ty) {
+            self.paths.insert(ty, reference_paths(types, ty));
+        }
+        self.paths.get(&ty).expect("cached reference paths").clone()
     }
     fn canonical_place(&self, node: &Origin) -> Option<Place> {
         let local = match node.root {
@@ -132,22 +125,14 @@ impl Observation {
         );
         for node in storage(state, &annotation.place, annotation.created.0)? {
             if annotation.invariant {
-                self.declared
-                    .entry(node.clone())
-                    .or_default()
-                    .insert(annotation.region.clone());
-                self.invariant
-                    .entry(node.clone())
-                    .or_default()
-                    .insert(annotation.region.clone());
+                get_or_default(&mut self.declared, node.clone()).insert(annotation.region.clone());
+                get_or_default(&mut self.invariant, node.clone()).insert(annotation.region.clone());
                 if let Some(place) = self.canonical_place(&node) {
                     self.views
                         .declare(place, annotation.region.clone(), annotation.created);
                 }
             }
-            self.demands
-                .entry(node)
-                .or_default()
+            get_or_default(&mut self.demands, node)
                 .insert(annotation.region.clone(), annotation.created);
         }
         Ok(())
@@ -163,10 +148,10 @@ impl Observation {
         let sources = storage(state, from, line);
         for destination in storage(state, to, line)? {
             if let Ok(sources) = &sources {
-                self.edges
-                    .entry(destination)
-                    .or_default()
-                    .extend(sources.clone());
+                let edges = get_or_default(&mut self.edges, destination);
+                for source in sources {
+                    edges.insert(source.clone());
+                }
             } else {
                 self.blocked.insert(destination, line);
             }
@@ -220,7 +205,7 @@ impl Observation {
             );
         }
         let mut prefix = Place::local(place.local);
-        let mut descriptors = Vec::new();
+        let mut descriptors: Vec<(Place, bool)> = Vec::new();
         for projection in &place.projections {
             if *projection == Projection::Deref {
                 if let TypeKind::Ref { mutable, .. } =
@@ -234,7 +219,7 @@ impl Observation {
         // Shared descriptors can be copied independently of their carrier.
         // Reborrowing an exclusive stored descriptor also needs the issuing
         // carrier's region, up to that first independently copyable descriptor.
-        for (descriptor, mutable) in descriptors.into_iter().rev() {
+        while let Some((descriptor, mutable)) = descriptors.pop() {
             self.edge(state, &descriptor, &Place::local(dst), line)?;
             if !mutable {
                 break;
@@ -464,11 +449,14 @@ impl Observation {
         Ok(())
     }
     fn after(&mut self, state: &State) -> Result<(), Diagnostic> {
-        let roots: BTreeSet<_> = self.changed.iter().map(|place| place.local).collect();
+        let mut roots: BTreeSet<usize> = BTreeSet::new();
+        for place in &self.changed {
+            roots.insert(place.local);
+        }
         for root in roots {
             if let Some(annotations) = self.indirect.get(&root).cloned() {
                 for annotation in annotations {
-                    if state.live[annotation.place.local] {
+                    if state.live.at(annotation.place.local) {
                         self.seed(state, &annotation)?;
                     }
                 }
@@ -483,15 +471,12 @@ impl Observation {
         function: &Function,
     ) -> Result<Requirements, Diagnostic> {
         self.views.check(scope, types, function)?;
-        let mut pending: Vec<_> = self
-            .demands
-            .iter()
-            .flat_map(|(node, regions)| {
-                regions
-                    .iter()
-                    .map(|(region, site)| (node.clone(), region.clone(), *site))
-            })
-            .collect();
+        let mut pending: Vec<(Origin, Region, (usize, usize))> = Vec::new();
+        for (node, regions) in &self.demands {
+            for (region, site) in regions {
+                pending.push((node.clone(), region.clone(), *site));
+            }
+        }
         while let Some((node, region, site)) = pending.pop() {
             if let Some(line) = self.blocked.get(&node) {
                 return Err(error(
@@ -500,9 +485,16 @@ impl Observation {
                     "named local regions need an exact descriptor storage contract",
                 ));
             }
-            if self.declared.get(&node).is_some_and(|declared| {
-                declared.iter().any(|prior| !scope.outlives(prior, &region))
-            }) {
+            let mut outlives = true;
+            if let Some(declared) = self.declared.get(&node) {
+                for prior in declared {
+                    if !scope.outlives(prior, &region) {
+                        outlives = false;
+                        break;
+                    }
+                }
+            }
+            if !outlives {
                 let mut problem = error(
                     site.0,
                     "E_BORROW",
@@ -516,7 +508,7 @@ impl Observation {
             }
             if let Some(sources) = self.edges.get(&node) {
                 for source in sources {
-                    let required = self.demands.entry(source.clone()).or_default();
+                    let required = get_or_default(&mut self.demands, source.clone());
                     if !required.contains_key(&region) {
                         required.insert(region.clone(), site);
                         pending.push((source.clone(), region.clone(), site));
@@ -524,25 +516,21 @@ impl Observation {
                 }
             }
         }
-        let mut count = 0;
-        let mut values = BTreeMap::new();
+        let mut count = 0usize;
+        let mut values: BTreeMap<Root, BTreeMap<Vec<Projection>, Vec<Constraint>>> =
+            BTreeMap::new();
         for (node, regions) in self.demands {
-            let constraints = regions
-                .into_iter()
-                .map(|(region, created)| {
-                    let id = count;
-                    count += 1;
-                    Constraint {
-                        id,
-                        region,
-                        created,
-                    }
-                })
-                .collect();
-            values
-                .entry(node.root)
-                .or_insert_with(BTreeMap::new)
-                .insert(node.projections, constraints);
+            let mut constraints: Vec<Constraint> = Vec::new();
+            for (region, created) in regions {
+                let id = count;
+                count += 1;
+                constraints.push(Constraint {
+                    id,
+                    region,
+                    created,
+                });
+            }
+            get_or_default(&mut values, node.root).insert(node.projections, constraints);
         }
         Ok(Requirements {
             values,
@@ -573,11 +561,14 @@ fn parameter_place(function: &Function, types: &[Type], node: &Origin) -> Option
             }
             projections.extend_from_slice(&node.projections);
             let place = Place { local, projections };
-            matches!(
+            if matches!(
                 types[place_type(types, function, &place)?].kind,
                 TypeKind::Ref { .. }
-            )
-            .then_some(place)
+            ) {
+                Some(place)
+            } else {
+                None
+            }
         }
         _ => None,
     }
@@ -623,14 +614,14 @@ impl Requirements {
                     continue;
                 }
                 for requirement in requirements {
-                    scope
-                        .guarantees
-                        .entry(InputLeaf {
+                    get_or_default(
+                        &mut scope.guarantees,
+                        InputLeaf {
                             index: 0,
                             projections: place.projections.clone(),
-                        })
-                        .or_default()
-                        .insert(requirement.region.clone());
+                        },
+                    )
+                    .insert(requirement.region.clone());
                     contract.push(Annotation {
                         place: Place {
                             local: 0,
@@ -755,19 +746,25 @@ impl Requirements {
         changed: &[Place],
         index: usize,
     ) -> Result<(), Diagnostic> {
-        let mut loans = BTreeMap::new();
+        let mut loans: BTreeMap<Place, Loan> = BTreeMap::new();
         for place in changed {
             let Some(paths) = self.values.get(&Root::Local(place.local)) else {
                 continue;
             };
-            for loan in state.loans.for_holder(place.local) {
+            for holder in state.loans.for_holder(place.local) {
+                let loan = state.loans.get(&holder).unwrap();
                 if within(&loan.holder, place) && paths.contains_key(&loan.holder.projections) {
                     loans.insert(loan.holder.clone(), loan.clone());
                 }
             }
         }
         for (holder, loan) in loans {
-            let requirements = &self.values[&Root::Local(holder.local)][&holder.projections];
+            let requirements = self
+                .values
+                .get(&Root::Local(holder.local))
+                .expect("declared local requirements")
+                .get(&holder.projections)
+                .expect("declared projection requirements");
             self.retain(
                 &RetentionContext {
                     scope,

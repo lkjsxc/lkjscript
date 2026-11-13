@@ -1,211 +1,59 @@
-//! Persistent compiler facts. Sharing is an implementation choice, not a language
-//! capacity limit: the tree grows with the highest declared local.
-use std::ops::Index;
-use std::rc::Rc;
+//! Compiler facts packed into words. Bits at or beyond len are zero and words
+//! holds exactly ceil(len / 64) entries, so derived equality is semantic equality.
+//! Snapshots copy the words rather than retaining shared nodes.
 
-type Link = Option<Rc<Node>>;
-
-#[derive(Clone)]
-enum Node {
-    Word(u64),
-    Branch { left: Link, right: Link },
-}
-
-/// A boolean vector whose snapshots share untouched words and subtrees.
-#[derive(Clone, Default)]
+#[derive(Clone, Default, PartialEq, Eq)]
 pub(crate) struct Facts {
-    root: Link,
-    depth: usize,
+    words: Vec<u64>,
     len: usize,
 }
 
-fn depth_for(len: usize) -> usize {
-    if len <= 64 {
-        0
-    } else {
-        (usize::BITS - ((len - 1) / 64).leading_zeros()) as usize
-    }
+fn word_count(len: usize) -> usize {
+    len / 64 + if len % 64 == 0 { 0 } else { 1 }
 }
 
-fn equal(a: &Link, b: &Link) -> bool {
-    match (a, b) {
-        (None, None) => true,
-        (Some(a), Some(b)) => {
-            if Rc::ptr_eq(a, b) {
-                return true;
-            }
-            match (&**a, &**b) {
-                (Node::Word(a), Node::Word(b)) => a == b,
-                (
-                    Node::Branch {
-                        left: al,
-                        right: ar,
-                    },
-                    Node::Branch {
-                        left: bl,
-                        right: br,
-                    },
-                ) => equal(al, bl) && equal(ar, br),
-                _ => false,
-            }
-        }
-        _ => false,
+// The caller supplies a nonzero word. A fixed binary search uses only the
+// ordinary integer operations available to the compiler itself.
+fn highest_bit(mut word: u64) -> usize {
+    let mut bit = 0usize;
+    if word >> 32u64 != 0 {
+        word >>= 32u64;
+        bit += 32;
     }
-}
-
-fn same_node(a: &Link, b: &Link) -> bool {
-    match (a, b) {
-        (None, None) => true,
-        (Some(a), Some(b)) => Rc::ptr_eq(a, b),
-        _ => false,
+    if word >> 16u64 != 0 {
+        word >>= 16u64;
+        bit += 16;
     }
-}
-
-// Combine shared subtrees directly; work is proportional to changed branches.
-// kind: 0 intersection, 1 union, 2 symmetric difference.
-fn combine(a: &Link, b: &Link, kind: u8) -> Link {
-    match (a, b) {
-        (None, None) => None,
-        (None, Some(_)) => {
-            if kind == 0 {
-                None
-            } else {
-                b.clone()
-            }
-        }
-        (Some(_), None) => {
-            if kind == 0 {
-                None
-            } else {
-                a.clone()
-            }
-        }
-        (Some(left), Some(right)) => {
-            if Rc::ptr_eq(left, right) {
-                return if kind == 2 { None } else { a.clone() };
-            }
-            let node = match (&**left, &**right) {
-                (Node::Word(av), Node::Word(bv)) => {
-                    let value = match kind {
-                        0 => av & bv,
-                        1 => av | bv,
-                        _ => av ^ bv,
-                    };
-                    if value == 0 {
-                        return None;
-                    }
-                    if value == *av {
-                        return a.clone();
-                    }
-                    if value == *bv {
-                        return b.clone();
-                    }
-                    Node::Word(value)
-                }
-                (
-                    Node::Branch {
-                        left: al,
-                        right: ar,
-                    },
-                    Node::Branch {
-                        left: bl,
-                        right: br,
-                    },
-                ) => {
-                    let left = combine(al, bl, kind);
-                    let right = combine(ar, br, kind);
-                    if left.is_none() && right.is_none() {
-                        return None;
-                    }
-                    if same_node(&left, al) && same_node(&right, ar) {
-                        return a.clone();
-                    }
-                    if same_node(&left, bl) && same_node(&right, br) {
-                        return b.clone();
-                    }
-                    Node::Branch { left, right }
-                }
-                _ => unreachable!(),
-            };
-            Some(Rc::new(node))
-        }
+    if word >> 8u64 != 0 {
+        word >>= 8u64;
+        bit += 8;
     }
-}
-
-fn set_word(link: &mut Link, depth: usize, index: usize, bit: u64, value: bool) {
-    if link.is_none() {
-        if !value {
-            return;
-        }
-        *link = Some(Rc::new(if depth == 0 {
-            Node::Word(0)
-        } else {
-            Node::Branch {
-                left: None,
-                right: None,
-            }
-        }));
+    if word >> 4u64 != 0 {
+        word >>= 4u64;
+        bit += 4;
     }
-    let node = Rc::make_mut(link.as_mut().unwrap());
-    let empty = match node {
-        Node::Word(word) => {
-            if value {
-                *word |= bit;
-            } else {
-                *word &= !bit;
-            }
-            *word == 0
-        }
-        Node::Branch { left, right } => {
-            let next = if index & (1usize << (depth - 1)) == 0 {
-                left
-            } else {
-                right
-            };
-            set_word(next, depth - 1, index, bit, value);
-            match node {
-                Node::Branch { left, right } => left.is_none() && right.is_none(),
-                _ => unreachable!(),
-            }
-        }
-    };
-    if empty {
-        *link = None;
+    if word >> 2u64 != 0 {
+        word >>= 2u64;
+        bit += 2;
     }
-}
-
-/// Remove a suffix. Entire subtrees outside the prefix disappear in one step.
-fn retain_prefix(link: &mut Link, depth: usize, word: usize, bits: usize) {
-    let Some(root) = link else { return };
-    let node = Rc::make_mut(root);
-    let empty = match node {
-        Node::Word(value) => {
-            *value &= if bits == 0 { 0 } else { (1u64 << bits) - 1 };
-            *value == 0
-        }
-        Node::Branch { left, right } => {
-            let half = 1usize << (depth - 1);
-            if word < half {
-                *right = None;
-                retain_prefix(left, depth - 1, word, bits);
-            } else {
-                retain_prefix(right, depth - 1, word - half, bits);
-            }
-            left.is_none() && right.is_none()
-        }
-    };
-    if empty {
-        *link = None;
+    if word >> 1u64 != 0 {
+        bit += 1;
     }
+    bit
 }
 
 impl Facts {
     pub(crate) fn new(len: usize) -> Self {
         Self {
-            root: None,
-            depth: depth_for(len),
+            words: vec![0u64; word_count(len)],
             len,
         }
+    }
+
+    pub(crate) fn filled(len: usize, value: bool) -> Self {
+        let mut result = Self::default();
+        result.resize(len, value);
+        result
     }
 
     pub(crate) fn len(&self) -> usize {
@@ -216,43 +64,27 @@ impl Facts {
         if index >= self.len {
             return None;
         }
-        let mut link = &self.root;
-        let mut depth = self.depth;
-        while let Some(node) = link {
-            match &**node {
-                Node::Word(word) => return Some(word & (1u64 << (index % 64)) != 0),
-                Node::Branch { left, right } => {
-                    depth -= 1;
-                    link = if (index / 64) & (1usize << depth) == 0 {
-                        left
-                    } else {
-                        right
-                    };
-                }
-            }
-        }
-        Some(false)
+        Some(self.words[index / 64] & (1u64 << ((index % 64) as u64)) != 0)
+    }
+
+    pub(crate) fn at(&self, index: usize) -> bool {
+        self.get(index).expect("local index out of bounds")
     }
 
     pub(crate) fn set(&mut self, index: usize, value: bool) {
         assert!(index < self.len);
-        if self[index] != value {
-            set_word(
-                &mut self.root,
-                self.depth,
-                index / 64,
-                1u64 << (index % 64),
-                value,
-            );
+        let bit = 1u64 << ((index % 64) as u64);
+        if value {
+            self.words[index / 64] |= bit;
+        } else {
+            self.words[index / 64] &= !bit;
         }
     }
 
     pub(crate) fn push(&mut self, value: bool) {
         let index = self.len;
-        self.resize(
-            self.len.checked_add(1).expect("local index overflow"),
-            false,
-        );
+        let len = self.len.checked_add(1).expect("local index overflow");
+        self.resize(len, false);
         self.set(index, value);
     }
 
@@ -262,15 +94,9 @@ impl Facts {
             return;
         }
         let old_len = self.len;
-        let depth = depth_for(len);
-        while self.depth < depth {
-            if self.root.is_some() {
-                self.root = Some(Rc::new(Node::Branch {
-                    left: self.root.take(),
-                    right: None,
-                }));
-            }
-            self.depth += 1;
+        let count = word_count(len);
+        while self.words.len() < count {
+            self.words.push(0u64);
         }
         self.len = len;
         if value {
@@ -284,35 +110,34 @@ impl Facts {
         if len >= self.len {
             return;
         }
-        if len == 0 {
-            self.root = None;
-            self.depth = 0;
-            self.len = 0;
-            return;
+        let count = word_count(len);
+        while self.words.len() > count {
+            self.words.pop();
         }
-        retain_prefix(&mut self.root, self.depth, len / 64, len % 64);
-        let depth = depth_for(len);
-        while self.depth > depth {
-            self.root = match &self.root {
-                Some(root) => match &**root {
-                    Node::Branch { left, .. } => left.clone(),
-                    Node::Word(_) => unreachable!(),
-                },
-                None => None,
-            };
-            self.depth -= 1;
+        if len % 64 != 0 {
+            let last = self.words.len() - 1;
+            self.words[last] &= !0u64 >> ((64 - len % 64) as u64);
         }
         self.len = len;
     }
 
     fn combined(&self, other: &Self, kind: u8) -> Self {
-        let len = self.len.max(other.len);
-        let mut a = self.clone();
-        let mut b = other.clone();
-        a.resize(len, false);
-        b.resize(len, false);
-        a.root = combine(&a.root, &b.root, kind);
-        a
+        let mut result = self.clone();
+        result.resize(self.len.max(other.len), false);
+        for index in 0..result.words.len() {
+            let left = result.words[index];
+            let right = if index < other.words.len() {
+                other.words[index]
+            } else {
+                0u64
+            };
+            result.words[index] = match kind {
+                0 => left & right,
+                1 => left | right,
+                _ => left ^ right,
+            };
+        }
+        result
     }
 
     pub(crate) fn intersection(&self, other: &Self) -> Self {
@@ -328,96 +153,45 @@ impl Facts {
     }
 
     pub(crate) fn any(&self) -> bool {
-        self.root.is_some()
+        self.words.iter().any(|word| *word != 0)
     }
 
-    /// Live indices at or above start, in reverse declaration order. This skips
-    /// entire empty subtrees rather than scanning historical local slots.
+    /// Live indices at or above start, in reverse declaration order. Empty words
+    /// are skipped without visiting each local slot.
     pub(crate) fn indices_from(&self, start: usize) -> Indices<'_> {
-        let mut pending = Vec::new();
-        if start < self.len {
-            if let Some(root) = &self.root {
-                pending.push((&**root, 0, self.depth));
-            }
-        }
         Indices {
-            pending,
-            word: 0,
-            base: 0,
+            words: &self.words,
+            end: self.len,
             start,
         }
     }
 }
 
-impl PartialEq for Facts {
-    fn eq(&self, other: &Self) -> bool {
-        self.len == other.len && equal(&self.root, &other.root)
-    }
-}
-impl Eq for Facts {}
-
-impl Index<usize> for Facts {
-    type Output = bool;
-    fn index(&self, index: usize) -> &bool {
-        if self.get(index).expect("local index out of bounds") {
-            &true
-        } else {
-            &false
-        }
-    }
-}
-
-impl FromIterator<bool> for Facts {
-    fn from_iter<I: IntoIterator<Item = bool>>(values: I) -> Self {
-        let mut result = Self::default();
-        for value in values {
-            result.push(value);
-        }
-        result
-    }
-}
-
 pub(crate) struct Indices<'a> {
-    pending: Vec<(&'a Node, usize, usize)>,
-    word: u64,
-    base: usize,
+    words: &'a [u64],
+    end: usize,
     start: usize,
 }
 impl Iterator for Indices<'_> {
     type Item = usize;
     fn next(&mut self) -> Option<usize> {
-        loop {
-            if self.word != 0 {
-                let bit = 63 - self.word.leading_zeros() as usize;
-                self.word &= !(1u64 << bit);
-                let index = self.base * 64 + bit;
-                if index < self.start {
-                    self.pending.clear();
-                    self.word = 0;
-                    return None;
-                }
-                return Some(index);
-            }
-            let (node, base, depth) = self.pending.pop()?;
-            if base + (1usize << depth) <= self.start / 64 {
+        while self.end > self.start {
+            let index = self.end - 1;
+            let base = index - index % 64;
+            let word = self.words[index / 64] & (!0u64 >> ((63 - index % 64) as u64));
+            if word == 0 {
+                self.end = base;
                 continue;
             }
-            match node {
-                Node::Word(word) => {
-                    self.word = *word;
-                    self.base = base;
-                }
-                Node::Branch { left, right } => {
-                    if let Some(left) = left {
-                        self.pending.push((&**left, base, depth - 1));
-                    }
-                    if let Some(right) = right {
-                        self.pending
-                            .push((&**right, base + (1usize << (depth - 1)), depth - 1));
-                    }
-                }
+            let found = base + highest_bit(word);
+            if found < self.start {
+                self.end = self.start;
+                return None;
             }
+            self.end = found;
+            return Some(found);
         }
+        None
     }
 }
 
@@ -435,8 +209,8 @@ mod tests {
         facts.set(4096, false);
         facts.resize(1_000_001, false);
         facts.set(1_000_000, true);
-        assert!(original[4096]);
-        assert!(!facts[4096]);
+        assert!(original.at(4096));
+        assert!(!facts.at(4096));
         assert_eq!(
             facts.indices_from(64).collect::<Vec<_>>(),
             vec![1_000_000, 8192, 4095, 64]
@@ -447,13 +221,13 @@ mod tests {
         facts.truncate(64);
         assert_eq!(facts.indices_from(0).collect::<Vec<_>>(), vec![63, 0]);
         facts.resize(8193, false);
-        assert!(!facts[64]);
-        assert!(!facts[8192]);
-        assert!(original[8192]);
+        assert!(!facts.at(64));
+        assert!(!facts.at(8192));
+        assert!(original.at(8192));
     }
 
     #[test]
-    fn sparse_facts_match_boolean_model_at_word_and_tree_boundaries() {
+    fn sparse_facts_match_boolean_model_at_word_boundaries() {
         let mut facts = Facts::default();
         let mut model = Vec::new();
         let mut seed = 0x8413_u64;
@@ -482,12 +256,12 @@ mod tests {
             );
             assert_eq!(facts.any(), model.iter().any(|value| *value));
             for (index, value) in model.iter().enumerate() {
-                assert_eq!(facts[index], *value);
+                assert_eq!(facts.at(index), *value);
             }
         }
     }
     #[test]
-    fn combinations_match_independent_bits_across_tree_boundaries() {
+    fn combinations_match_independent_bits_across_word_boundaries() {
         let mut left = Facts::new(257);
         let mut right = Facts::new(130);
         for i in 0..257 {
@@ -508,7 +282,7 @@ mod tests {
                 let a = i % 3 == 0 || i % 11 == 0;
                 let b = i < 130 && (i % 7 == 0 || i % 11 == 0);
                 assert_eq!(
-                    actual[i],
+                    actual.at(i),
                     match kind {
                         0 => a && b,
                         1 => a || b,
