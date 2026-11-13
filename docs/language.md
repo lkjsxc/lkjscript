@@ -253,7 +253,16 @@ implementation. Temporary values retain statement destruction order. Debug,
 floating formatting, dynamic widths and precision remain unsupported.
 
 Option and Result have canonical source declarations with standard option/result
-module re-exports. Repeated Vec literals evaluate their element and count once,
+module re-exports. Their source methods include shared/exclusive views, owned
+and/or, and transpose. Option also supplies xor, zip/unzip, flatten, replace,
+insert and get_or_insert. Owned arguments retain source evaluation and destruction
+order even when their payload is not selected. Returned views preserve their
+owner and exclusivity requirements. Option::expect has the same value and trap
+outcome contract as unwrap; its supplied message is evaluated but currently does
+not replace the fixed trap text. Some nested generic receiver expressions still
+need explicit type annotations before a method call.
+
+Repeated Vec literals evaluate their element and count once,
 clone all but the final element, and move the original last; a zero count still
 evaluates and destroys the supplied value. This expands through a source helper
 constrained by Clone. Ordered BTreeMap storage is a sorted Vec, with logarithmic
@@ -281,7 +290,11 @@ bounds, associated types and instantiated arguments are validated. Send, Sync an
 Data predicates are derived structurally; Data excludes capabilities. Generic
 parameter-flow strongly connected components reject expanding instantiation.
 Aliases participate in these checks. Bounds with extra type arguments remain
-unsupported. Method calls resolve to concrete function applications.
+unsupported. Method calls resolve to concrete function applications. Callable
+bounds such as F: FnMut(I::Item) prepare associated substitutions from I's declared
+trait evidence before checking the callable signature. Generic parameter
+source order does not hide that evidence; missing, ambiguous and incompatible
+associated bounds still reject.
 
 Generic function, impl-method and trait-default bodies are checked even when
 never instantiated. Definition checking reuses production elaboration and K
@@ -460,12 +473,22 @@ possible presence cannot justify a read. Writes that change reference inventory
 need one exact destination identity, not merely a conservative alias footprint.
 Loop backedges still require equality until an inclusion contract is implemented.
 
+A by-value enum parameter initially carries reference templates for every
+alternative. An exact checked tag witness excludes holders below the other
+variants from conflicts. A borrowed witness does not prove that every possible
+referent has the same tag. Tag invalidation restores conservative activity. At a
+join, a holder moved on one edge and proven inactive on the other contributes
+absence; losing the tag must not revive it. A holder live on any feasible edge
+still participates in the join.
+
 The checker validates all type references, signatures and operation shapes,
 including dead code, then checks ownership through each function. Variant payload
 access needs a proven tag. Moving, dropping or replacing a payload field preserves
 the enclosing discriminant proof; replacing the enum, its tag witness or an
-ancestor invalidates it, including predicates saved before a branch. A loop back
-edge must reproduce entry ownership state.
+ancestor invalidates it, including predicates saved before a branch. Writing or
+moving an index local used by the actual witness also invalidates that proof;
+changing an old index does not retarget an already-created borrowed pointer.
+A loop back edge must reproduce entry ownership state.
 Return and break edges must carry correct live owners and loans; no fixed-point
 iteration is used. Local storage or a local reference carrier cannot become the
 source of an escaping view. The checker performs no source inference or trait
@@ -639,10 +662,13 @@ blocked regions and observed name/type/trait dependencies; blocked method bodies
 are not counted as successfully resolved. Missing imports can explain dependent
 unresolved type names.
 
-The bootstrap batch command compiles each case once. K uses a fresh machine per
-case; Node loads fresh modules in one process through the same engine and byte
-writer implementation. Native cases execute standalone images after compilation
-inside the batch process. Cases retain their own output bytes and termination
-classes. Rust reference output is cached by generated source, generator/seed,
-compiler version and flags. Generators and reduced failures are source records;
-detailed measurements remain under target/.
+The bootstrap batch command accepts one route or a comma-separated list of routes.
+It checks each source once and shares lowering between encoders. K uses a fresh
+machine per case; Node loads fresh modules in one process through the same engine
+and byte writer implementation. Native cases execute separate standalone images.
+Cases retain their own output bytes and termination classes. A batch watchdog
+measures missing progress, not total duration; Node-only module preparation is
+reported separately and cannot substitute for an execution result. Rust reference
+output is cached by generated source, generator/seed, compiler version and flags.
+Generators and reduced failures are source records; detailed measurements remain
+under target/.

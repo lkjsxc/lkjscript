@@ -5,7 +5,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { run } from '../process.mjs';
-import { runCases } from '../batch.mjs';
+import { runRoutes } from '../batch.mjs';
 import { oracleCache, packResult, unpackResult } from '../oracle.mjs';
 const [binary='target/debug/lkjscript',seedText='601',countText='50',output='target/generators']=process.argv.slice(2);
 const bin=path.resolve(binary), seed=BigInt(seedText), count=Number(countText);
@@ -75,7 +75,7 @@ if(built.error||built.status!==0) {process.stderr.write(built.stderr||String(bui
 
 const results=[];for(let i=0;i<count;i++)results.push(packResult(await run(rustBinary,[String(i)],{encoding:null})));return results;
 });
-const actualResults={};for(const engine of engines)actualResults[engine]=await runCases(bin,sourceFiles.map(path=>({path})),{engine,output:dir,encoding:null});
+const actualResults=await runRoutes(bin,sourceFiles.map(path=>({path})),{engines,output:dir,encoding:null});
 const tally=Object.fromEntries(engines.map(engine=>[engine,{}])),failures=[];
 for(let i=0;i<count;i++) {
  const reference=unpackResult(references[i],null);

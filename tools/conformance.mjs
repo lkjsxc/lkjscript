@@ -4,29 +4,24 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { run as runProcess } from './process.mjs';
-import { runCases } from './batch.mjs';
+import { runRoutes } from './batch.mjs';
 import { oracleCache, packResult, unpackResult } from './oracle.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const binary = path.resolve(root, process.env.LKJSCRIPT_BIN || process.argv[2] || 'target/debug/lkjscript');
-const engine = process.env.LKJ_ENGINE || 'native';
+const engines = (process.env.LKJ_ENGINES || process.env.LKJ_ENGINE || 'native').split(',');
 const fixtures = path.join(root, 'tests/conformance');
 const cases = JSON.parse(fs.readFileSync(path.join(fixtures, 'cases.json'), 'utf8'));
-const out = path.join(root, 'target/conformance', engine);
+const out = path.join(root, 'target/conformance', engines.join('-'));
 fs.mkdirSync(out, { recursive: true });
 const timeout = Number(process.env.LKJ_TEST_TIMEOUT_MS || 30000);
 function run(command, args, options = {}) {
     return runProcess(command, args, { cwd: root, encoding: 'utf8', timeout, maxBuffer: 4 * 1024 * 1024, ...options });
 }
 function diagnostic(result) {
-    return (result.stderr || result.stdout || result.error?.message || '').toString().trim();
+    return [result.stderr, result.stdout, result.error?.message].map(value => value?.toString().trim()).find(Boolean) || '';
 }
 function succeeded(result) { return !result.error && result.status === 0; }
-function fail(message) { failures.push(message); }
-const failures = [];
-const pending = [];
-let passed = 0;
-let rustCompared = 0;
 const started = performance.now();
 
 // One Rust build contains every comparable positive case, including planned
@@ -60,7 +55,12 @@ const referenceResults = await oracleCache({suite:'conformance',harness,flags:'2
  }
  return results;
 });
-const actualResults = await runCases(binary,cases.map(c=>({path:path.join(fixtures,c.file),entry:c.entry,mode:c.kind==='run'||c.kind==='output'?'run':'check'})),{engine,output:out,encoding:null});
+const actualRoutes = await runRoutes(binary,cases.map(c=>({path:path.join(fixtures,c.file),entry:c.entry,mode:c.kind==='run'||c.kind==='output'?'run':'check'})),{engines,output:out,encoding:null});
+for (const engine of engines) {
+const actualResults = actualRoutes[engine];
+const failures = [], pending = [];
+const fail = message => failures.push(message);
+let passed = 0, rustCompared = 0;
 
 for (const c of cases) {
     const source = path.join(fixtures, c.file);
@@ -115,7 +115,7 @@ for (const c of cases) {
         if (c.rust) {
             const reference = unpackResult(referenceResults[c.id]);
             if (!succeeded(reference) || reference.stdout.trim() !== actual) {
-                fail(c.id + ': rustc/Node disagreement: ' + diagnostic(reference) + ' result=' + reference.stdout?.trim());
+                fail(c.id + ': rustc/' + engine + ' disagreement: ' + diagnostic(reference) + ' result=' + reference.stdout?.trim());
                 continue;
             }
             rustCompared++;
@@ -134,4 +134,5 @@ const seconds = ((performance.now() - started) / 1000).toFixed(2);
 process.stdout.write('conformance (' + engine + '): ' + passed + ' passed, ' + pending.length + ' pending, ' + failures.length + ' failed; ' + rustCompared + ' rustc comparisons; ' + seconds + ' s\n');
 for (const message of pending) process.stdout.write('PENDING ' + message + '\n');
 for (const message of failures) process.stderr.write('FAIL ' + message + '\n');
-if (failures.length !== 0) process.exit(1);
+if (failures.length !== 0) process.exitCode = 1;
+}

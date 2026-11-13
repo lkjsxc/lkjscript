@@ -1402,19 +1402,15 @@ pub(crate) struct ImplementationWitness {
 /// A generic or non-nominal target stays in the fallback set.
 pub(crate) struct ImplementationIndex {
     by_trait: BTreeMap<TraitIdentity, Candidates>,
+    by_method: BTreeMap<String, Candidates>,
 }
 impl ImplementationIndex {
     pub(crate) fn new(source: &Program) -> Result<Self, Diagnostic> {
         let mut index = Self {
             by_trait: BTreeMap::new(),
+            by_method: BTreeMap::new(),
         };
         for (id, implementation) in source.impls.iter().enumerate() {
-            let Some(trait_type) = implementation.trait_ty else {
-                continue;
-            };
-            let Type::Path(path) = &source.types[trait_type].kind else {
-                continue;
-            };
             let mut terms = Vec::new();
             let mut next = 0;
             let environment = variables(source, &implementation.generics, &mut terms, &mut next);
@@ -1428,25 +1424,35 @@ impl ImplementationIndex {
                 }
                 _ => None,
             };
-            index
-                .by_trait
-                .entry(bound_identity(source, path))
-                .or_default()
-                .insert(head, id);
+            if let Some(trait_type) = implementation.trait_ty {
+                if let Type::Path(path) = &source.types[trait_type].kind {
+                    index
+                        .by_trait
+                        .entry(bound_identity(source, path))
+                        .or_default()
+                        .insert(head.clone(), id);
+                }
+            }
+            let mut methods = BTreeSet::new();
+            for method in &implementation.methods {
+                let name = &source.functions[*method].name;
+                if methods.insert(name) {
+                    index
+                        .by_method
+                        .entry(name.clone())
+                        .or_default()
+                        .insert(head.clone(), id);
+                }
+            }
         }
         Ok(index)
     }
-    pub(crate) fn candidates(
-        &self,
-        types: &[crate::k::Type],
-        applications: &BTreeMap<usize, (String, Vec<usize>)>,
+    fn receiver_head<'a>(
+        types: &'a [crate::k::Type],
+        applications: &'a BTreeMap<usize, (String, Vec<usize>)>,
         ty: usize,
-        bound: &TraitIdentity,
-    ) -> Vec<usize> {
-        let Some(candidates) = self.by_trait.get(bound) else {
-            return Vec::new();
-        };
-        let head = if let Some((name, _)) = applications.get(&ty) {
+    ) -> Option<&'a str> {
+        if let Some((name, _)) = applications.get(&ty) {
             Some(name.as_str())
         } else {
             match &types[ty].kind {
@@ -1455,8 +1461,39 @@ impl ImplementationIndex {
                 _ if !types[ty].name.is_empty() => Some(types[ty].name.as_str()),
                 _ => None,
             }
-        };
-        candidates.matching(head)
+        }
+    }
+    pub(crate) fn candidates(
+        &self,
+        types: &[crate::k::Type],
+        applications: &BTreeMap<usize, (String, Vec<usize>)>,
+        ty: usize,
+        bound: &TraitIdentity,
+    ) -> Vec<usize> {
+        self.by_trait
+            .get(bound)
+            .map_or_else(Vec::new, |candidates| {
+                candidates.matching(Self::receiver_head(types, applications, ty))
+            })
+    }
+    /// A method name and nominal receiver exclude unrelated implementations;
+    /// generic and structural targets still require the complete matcher.
+    pub(crate) fn method_candidates(
+        &self,
+        types: &[crate::k::Type],
+        applications: &BTreeMap<usize, (String, Vec<usize>)>,
+        ty: usize,
+        name: &str,
+    ) -> Vec<usize> {
+        let mut values = self
+            .by_method
+            .get(name)
+            .map_or_else(Vec::new, |candidates| {
+                candidates.matching(Self::receiver_head(types, applications, ty))
+            });
+        // Preserve source-order diagnostics when fallback and nominal entries mix.
+        values.sort_unstable();
+        values
     }
 }
 

@@ -17,12 +17,24 @@ step rust cargo test --quiet
 step lint cargo clippy --quiet --all-targets -- -D warnings
 step build cargo build --quiet
 check_binary="${CARGO_TARGET_DIR:-target}/debug/lkjscript"
-# Independent processes have separate case directories. Batching amortizes each
-# compiler/engine startup; parallel suites use the host's available cores.
+# Each source is checked once for all routes. Independent suites have separate
+# directories and share the host's available execution slots.
 mkdir -p target/gate
 check_pids=()
 check_logs=()
+check_waited=0
+check_failed=0
+check_jobs="${LKJ_GATE_JOBS:-$(node -p 'require("node:os").availableParallelism()')}"
+if [[ ! "$check_jobs" =~ ^[1-9][0-9]*$ ]]; then
+    echo 'LKJ_GATE_JOBS must be a positive integer' >&2
+    exit 1
+fi
+wait_oldest() {
+    if ! wait "${check_pids[$check_waited]}"; then check_failed=1; fi
+    check_waited=$((check_waited + 1))
+}
 parallel_step() {
+    if ((${#check_pids[@]} - check_waited >= check_jobs)); then wait_oldest; fi
     local log="target/gate/$1.log"
     (step "$@") >"$log" 2>&1 &
     check_pids+=("$!")
@@ -30,21 +42,15 @@ parallel_step() {
 }
 parallel_started_ns=$(date +%s%N)
 check_engines_text="${LKJ_GATE_ENGINES:-native,k}"
-IFS=, read -r -a check_engines <<< "$check_engines_text"
-for engine in "${check_engines[@]}"; do
-    parallel_step "conformance-$engine" env LKJ_ENGINE="$engine" node tools/conformance.mjs "$check_binary"
-    parallel_step "values-$engine" env LKJ_ENGINE="$engine" node tools/generators/value.mjs "$check_binary" 601 100 "target/generators/$engine"
-    parallel_step "verdicts-$engine" env LKJ_ENGINE="$engine" node tools/generators/verdict.mjs "$check_binary" 601 100 "target/generators/$engine"
-done
+parallel_step conformance env LKJ_ENGINES="$check_engines_text" node tools/conformance.mjs "$check_binary"
+parallel_step values env LKJ_ENGINES="$check_engines_text" node tools/generators/value.mjs "$check_binary" 601 100
+parallel_step verdicts env LKJ_ENGINES="$check_engines_text" node tools/generators/verdict.mjs "$check_binary" 601 100
 parallel_step output env LKJ_ENGINES="$check_engines_text" node tools/generators/output.mjs "$check_binary" 601 50
 parallel_step drops env LKJ_ENGINES="$check_engines_text" ONE_SIDED=1 node tools/generators/drops.mjs "$check_binary" 1201 100
-parallel_step sugars env LKJ_ENGINES="$check_engines_text" node tools/generators/sugar.mjs "$check_binary" 1301 75
+parallel_step sugars env LKJ_ENGINES="$check_engines_text" node tools/generators/sugar.mjs "$check_binary" 1301 84
 parallel_step closures env LKJ_ENGINES="$check_engines_text" node tools/generators/closures.mjs "$check_binary" 1501 28
-check_failed=0
-for i in "${!check_pids[@]}"; do
-    if ! wait "${check_pids[$i]}"; then check_failed=1; fi
-    cat "${check_logs[$i]}"
-done
+while ((check_waited < ${#check_pids[@]})); do wait_oldest; done
+for log in "${check_logs[@]}"; do cat "$log"; done
 parallel_elapsed_ns=$(($(date +%s%N)-parallel_started_ns))
 awk -v elapsed_ns="$parallel_elapsed_ns" 'BEGIN { printf "Gate parallel suites: %.3f s\n", elapsed_ns / 1000000000 }'
 if ((check_failed)); then exit 1; fi

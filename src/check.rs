@@ -500,10 +500,19 @@ fn origin(state: &State, place: &Place) -> (Vec<Origin>, Vec<Place>) {
     (source_origins(&resolved.sources), resolved.parents)
 }
 fn affects_tag(target: &Origin, tag: &Tag) -> bool {
-    tag.target.iter().any(|tested| {
-        target.projections.len() <= tested.projections.len() && overlaps(target, tested)
-    }) || (target.projections.len() <= tag.witness.projections.len()
-        && overlaps(target, &holder_origin(&tag.witness)))
+    // Index operands in the witness are read again at each projection. A
+    // changed operand retargets that witness even though its owner is intact.
+    // Indices in resolved origins may instead describe an address captured by
+    // an earlier borrow; they do not retarget a fixed pointer witness.
+    let retargeted = matches!(&target.root, Root::Local(local)
+        if tag.witness.projections.iter().any(|projection|
+            matches!(projection, Projection::Index(index) if index == local)));
+    retargeted
+        || tag.target.iter().any(|tested| {
+            target.projections.len() <= tested.projections.len() && overlaps(target, tested)
+        })
+        || (target.projections.len() <= tag.witness.projections.len()
+            && overlaps(target, &holder_origin(&tag.witness)))
 }
 fn invalidate(state: &mut State, targets: &[Origin]) {
     state
@@ -1077,6 +1086,27 @@ fn loan_description(types: &[Type], function: &Function, loan: &Loan) -> String 
         location
     )
 }
+/// An enum parameter initially has provenance for every alternative. A checked
+/// tag proves only the alternatives below that exact witness inactive; it does
+/// not prove that every possible referent of a borrowed witness has that tag.
+/// Keep the inventory so invalidation and joins restore conservative activity.
+fn loan_active(state: &State, loan: &Loan) -> bool {
+    if !loan
+        .holder
+        .projections
+        .iter()
+        .any(|projection| matches!(projection, Projection::VariantField(_, _)))
+    {
+        return true;
+    }
+    !state.tags.iter().any(|tag| {
+        within(&loan.holder, &tag.witness)
+            && matches!(
+                loan.holder.projections.get(tag.witness.projections.len()),
+                Some(Projection::VariantField(variant, _)) if *variant != tag.variant
+            )
+    })
+}
 fn loan_use(
     state: &State,
     types: &[Type],
@@ -1085,6 +1115,9 @@ fn loan_use(
     mutable: bool,
     line: usize,
 ) -> Result<(), Diagnostic> {
+    if !loan_active(state, loan) {
+        return Ok(());
+    }
     let mut candidates = BTreeSet::new();
     for source in &loan.sources {
         for other in state.loans.for_target(&source.origin.root, !mutable) {
@@ -1093,7 +1126,8 @@ fn loan_use(
     }
     for holder in candidates {
         let other = state.loans.get(&holder).unwrap();
-        if other.holder == loan.holder
+        if !loan_active(state, other)
+            || other.holder == loan.holder
             || loan.parents.contains(&other.holder)
             || exclusive_variants(&loan.holder, &other.holder)
         {
@@ -1223,7 +1257,7 @@ fn access(
     }
     for holder in candidates {
         let loan = state.loans.get(&holder).unwrap();
-        if loan.holder == *place || parents.contains(&loan.holder) {
+        if !loan_active(state, loan) || loan.holder == *place || parents.contains(&loan.holder) {
             continue;
         }
         if (write || loan.mutable)
@@ -1421,7 +1455,27 @@ fn merge(mut a: State, b: State) -> State {
     if !b.reachable {
         return a;
     }
+    // A parameter carries templates for every enum alternative. When one
+    // branch moved a holder and the other proves that holder's variant absent,
+    // their join has no live reference at that leaf. Keep explicit absence;
+    // do not revive the inactive template after the branch tags disappear.
+    // Templates present on both paths retain the ordinary conservative union.
+    let absent: Vec<_> = a
+        .loans
+        .values
+        .values()
+        .filter(|loan| b.loans.get(&loan.holder).is_none() && !loan_active(&a, loan))
+        .map(|loan| loan.holder.clone())
+        .collect();
+    for holder in absent {
+        a.loans.remove(&holder);
+        a.absent_references.push(holder);
+    }
     for loan in b.loans.values.values() {
+        if a.loans.get(&loan.holder).is_none() && !loan_active(&b, loan) {
+            a.absent_references.push(loan.holder.clone());
+            continue;
+        }
         let mut joined = if let Some(previous) = a.loans.get(&loan.holder) {
             previous.clone()
         } else {
@@ -2026,6 +2080,9 @@ fn call_borrows(
         }
     }
     for (loan, mutable) in used.values() {
+        if !loan_active(state, loan) {
+            continue;
+        }
         loan_use(state, types, function, loan, *mutable, line)?;
         if *mutable {
             changed.extend(source_origins(&loan.sources));

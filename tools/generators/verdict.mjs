@@ -6,13 +6,13 @@
 import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { run } from '../process.mjs';
-import { runCases } from '../batch.mjs';
+import { runRoutes } from '../batch.mjs';
 import { oracleCache } from '../oracle.mjs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 const [binary, seedS = '601', countS = '100', output = 'target/generators'] = process.argv.slice(2);
 const bin = path.resolve(binary || 'target/debug/lkjscript');
-const engine = process.env.LKJ_ENGINE || 'native';
+const engines = (process.env.LKJ_ENGINES || process.env.LKJ_ENGINE || 'native').split(',');
 const sh = (c, a) => (spawnSync(c, a, { encoding: 'utf8' }).stdout || '').trim();
 // Capture identities before execution so later edits cannot relabel this run.
 const metadata = { sha256: createHash('sha256').update(fs.readFileSync(new URL(import.meta.url))).update(fs.readFileSync(new URL('../process.mjs', import.meta.url))).digest('hex'), binarySha256: createHash('sha256').update(fs.readFileSync(bin)).digest('hex'), compilerDirty: sh('git', ['status', '--porcelain', '--untracked-files=no']) !== '', compiler: sh('git', ['-C', path.dirname(fs.realpathSync(bin)), 'rev-parse', 'HEAD']) || 'unknown', rustc: sh('rustc', ['--version']), node: process.version };
@@ -105,7 +105,9 @@ if (second.status !== 0) { console.log('second rustc build failed:\n' + second.s
 
 const results=[];for(let i=0;i<N;i++){let rust;if(rejected.has(i))rust={k:'reject',code:rejected.get(i)};else{const r=await run(dir+'/ok',[String(i)],{encoding:'utf8',timeout:10000});const m=r.stderr.match(/panicked at [^:\n]+:\d+:\d+:\n(.*)/);rust=r.status===0?{k:'value',v:r.stdout.trim()}:r.status===101&&m?{k:'trap',kind:rustKind(m[1])}:{k:'abnormal'};}if(rust.k==='abnormal')throw new Error('abnormal Rust oracle');results.push(rust);}return results;
 });
-const actualResults=await runCases(bin,srcs.map((_,i)=>({path:dir+'/c'+i+'.rs',entry:'probe'})),{engine,output:dir,timeout:20000});
+const actualRoutes=await runRoutes(bin,srcs.map((_,i)=>({path:dir+'/c'+i+'.rs',entry:'probe'})),{engines,output:dir,timeout:20000});
+for(const engine of engines) {
+const actualResults=actualRoutes[engine];
 const tally = {}; const pairs = {}; const show = []; const bump = (o, c) => { o[c] = (o[c] || 0) + 1; };
 for (let i = 0; i < N; i++) {
   const rust = references[i];
@@ -129,7 +131,8 @@ for (let i = 0; i < N; i++) {
 const record = { generator: 'verdict', engine, ...metadata, rustFlags: { verdict: '--edition=2024 --error-format=short -A warnings --emit=metadata', execution: '--edition=2024 -C overflow-checks=yes -A warnings' }, seed: seedS, programs: N, ...tally, rejectCodePairs: pairs };
 fs.mkdirSync(output, {recursive: true});
 fs.appendFileSync(path.join(output, 'runs.jsonl'), JSON.stringify(record) + '\n');
-console.log(JSON.stringify(record)); fs.writeFileSync(`${dir}/report.txt`, show.join('\n') + '\n');
+console.log(JSON.stringify(record)); fs.writeFileSync(`${dir}/report-${engine}.txt`, show.join('\n') + '\n');
 
 const fatal = Object.keys(tally).some(key => /DIFFERS|VALUE-VS-TRAP|ACCEPTS-RUST-REJECTED|crash|timeout|oracle|generator|other-line|machine-error/.test(key));
 if (fatal) process.exitCode = 1;
+}

@@ -7,7 +7,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { run } from '../process.mjs';
-import { runCases } from '../batch.mjs';
+import { runRoutes } from '../batch.mjs';
 import { oracleCache, packResult, unpackResult } from '../oracle.mjs';
 const [binArg, seedS = '1', countS = '100', outArg = 'target/generators'] = process.argv.slice(2);
 const bin = path.resolve(binArg); const repo = path.resolve(path.dirname(fs.realpathSync(bin)), '../..');
@@ -146,7 +146,7 @@ if (rc.status !== 0) { for (const l of rc.stderr.split('\n')) { const m = l.matc
 const outputs=[];for(let i=0;i<N;i++)outputs.push(invalid.has(i)?null:packResult(await run(dir+'/oracle',[String(i)],{encoding:null,timeout:20000})));return {invalid:[...invalid],outputs};
 });
 const invalid=new Map(referenceData.invalid);
-const actualResults={};for(const engine of engines)actualResults[engine]=await runCases(bin,srcs.map((_,i)=>({path:dir+'/c'+i+'.rs'})),{engine,output:dir,encoding:null,timeout:30000});
+const actualResults=await runRoutes(bin,srcs.map((_,i)=>({path:dir+'/c'+i+'.rs'})),{engines,output:dir,encoding:null,timeout:30000});
 const tally = Object.fromEntries(engines.map(engine=>[engine,{}])); const show = []; const bump = (o, c) => { o[c] = (o[c] || 0) + 1; }; let generatorInvalid = 0;
 const hex = b => Buffer.from(b).toString('hex').replace(/(..)/g, '$1 ').trim();
 for (let i = 0; i < N; i++) {

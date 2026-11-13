@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { run } from '../process.mjs';
-import { runCases } from '../batch.mjs';
+import { runRoutes } from '../batch.mjs';
 import { oracleCache, packResult, unpackResult } from '../oracle.mjs';
 const [binary='target/debug/lkjscript',seed='1501',countText='80',output='target/generators']=process.argv.slice(2);
 const count=Number(countText),bin=path.resolve(binary),dir=path.resolve(output,`closures-${seed}`);
@@ -116,8 +116,9 @@ function ending(result){
  return result.stderr.toString().match(/\bM_[A-Z_]+\b/)?.[0]||'trap-or-crash';
 }
 const tallies={},failures=[];
+const routes=await runRoutes(bin,files.map(path=>({path})),{engines,output:dir,encoding:null});
 for(const engine of engines){
- const results=await runCases(bin,files.map(path=>({path})),{engine,output:dir,encoding:null});tallies[engine]={};
+ const results=routes[engine];tallies[engine]={};
  for(let index=0;index<count;index++){
   const source=results[index*2],expanded=results[index*2+1],a=ending(source),b=ending(expanded);
   let category=a!=='normal'?'source-'+a:b!=='normal'?'expansion-'+b:source.stdout.equals(expanded.stdout)?'equal-output':'different-output';

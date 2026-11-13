@@ -1,0 +1,47 @@
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "&mut i64" ref mut 3
+type "Either" enum move
+variant "Left" "value" 7
+variant "Right" "value" 7
+endtype
+fn "wrong" 2 3
+local "value" 8 let
+local "replacement" 8 let
+local "condition" 1 let
+local "result" 3 let
+@1 tag-test 2 0 1
+@2 drop 0
+@3 read 0 move 1
+@4 if 2
+@5 read 3 copy 0 variant 1 0 deref
+@6 drop 0
+@7 return 3
+@8 else
+@9 trap "unreachable"
+@10 end
+endfn
+fn "probe" 0 3
+local "left" 3 mut
+local "right" 3 mut
+local "a" 7 let
+local "b" 7 let
+local "original" 8 let
+local "replacement" 8 let
+local "result" 3 let
+@11 int 0 20
+@12 int 1 22
+@13 borrow 2 mut 0
+@14 borrow 3 mut 1
+@15 variant 4 1 2
+@16 variant 5 0 3
+@17 call 6 0 4 5
+@18 drop 1
+@19 drop 0
+@20 return 6
+endfn

@@ -284,13 +284,20 @@ impl Compiler<'_> {
             let ty = self.rigid_type(&parameter.name);
             substitutions.insert(parameter.name.clone(), ty);
         }
-        for parameter in parameters {
-            if parameter.lifetime {
-                continue;
-            }
-            let ty = substitutions[&parameter.name];
-            for bound in &parameter.bounds {
-                self.assume_bound(ty, *bound, substitutions)?;
+        // Associated identities come from declared trait bounds. Establish all
+        // of them before a callable signature resolves a sibling's I::Item,
+        // regardless of the source order of generic parameter declarations.
+        for callable in [false, true] {
+            for parameter in parameters {
+                if parameter.lifetime {
+                    continue;
+                }
+                let ty = substitutions[&parameter.name];
+                for bound in &parameter.bounds {
+                    if self.is_callable_bound(*bound) == callable {
+                        self.assume_bound(ty, *bound, substitutions)?;
+                    }
+                }
             }
         }
         Ok(())
@@ -531,20 +538,11 @@ impl Compiler<'_> {
         Ok(result)
     }
 
-    pub(super) fn prepare_associated(
+    pub(super) fn prepare_parameter_associated(
         &mut self,
-        index: usize,
+        parameters: &[a::GenericParam],
         substitutions: &mut BTreeMap<String, usize>,
     ) -> Result<()> {
-        let function = self.source.functions[index].clone();
-        let owner = match self.source.function_owner(a::FunctionId { index }) {
-            a::FunctionOwner::Implementation(owner) => Some(owner.index),
-            _ => None,
-        };
-        let mut parameters = function.generics.clone();
-        if let Some(owner) = owner {
-            parameters.extend(self.source.impls[owner].generics.clone());
-        }
         for parameter in parameters {
             if parameter.lifetime {
                 continue;
@@ -559,8 +557,8 @@ impl Compiler<'_> {
             {
                 continue;
             }
-            for bound in parameter.bounds {
-                let path = match &self.source.types[bound].kind {
+            for bound in &parameter.bounds {
+                let path = match &self.source.types[*bound].kind {
                     a::Type::Path(path) if path.args.is_empty() => path,
                     _ => continue,
                 };
@@ -601,6 +599,24 @@ impl Compiler<'_> {
                 }
             }
         }
+        Ok(())
+    }
+
+    pub(super) fn prepare_associated(
+        &mut self,
+        index: usize,
+        substitutions: &mut BTreeMap<String, usize>,
+    ) -> Result<()> {
+        let function = self.source.functions[index].clone();
+        let owner = match self.source.function_owner(a::FunctionId { index }) {
+            a::FunctionOwner::Implementation(owner) => Some(owner.index),
+            _ => None,
+        };
+        let mut parameters = function.generics.clone();
+        if let Some(owner) = owner {
+            parameters.extend(self.source.impls[owner].generics.clone());
+        }
+        self.prepare_parameter_associated(&parameters, substitutions)?;
         if let Some(owner) = owner {
             let mut environment = substitutions.clone();
             if !environment.contains_key("Self") {

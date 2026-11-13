@@ -2432,5 +2432,163 @@
     "code": "E_BORROW",
     "rust": true,
     "rustAccept": false
+  },
+  {
+    "id": "associated_callable_bounds",
+    "file": "pass/associated_callable_bounds.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "source_iterator_adapter",
+    "file": "pass/source_iterator_adapter.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "enum_reference_alternatives",
+    "file": "pass/enum_reference_alternatives.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "enum_alternative_join",
+    "file": "k/enum_alternative_join.k",
+    "kind": "run",
+    "value": "42"
+  },
+  {
+    "id": "callable_associated_missing_bound",
+    "file": "fail/callable_associated_missing_bound.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0220"
+  },
+  {
+    "id": "callable_associated_ambiguous",
+    "file": "fail/callable_associated_ambiguous.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0221"
+  },
+  {
+    "id": "callable_associated_wrong_signature",
+    "file": "fail/callable_associated_wrong_signature.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0599"
+  },
+  {
+    "id": "enum_wrong_tag",
+    "file": "k/enum_wrong_tag.k",
+    "kind": "reject",
+    "code": "E_TYPE"
+  },
+  {
+    "id": "enum_join_loses_tag",
+    "file": "k/enum_join_loses_tag.k",
+    "kind": "reject",
+    "code": "E_TYPE"
+  },
+  {
+    "id": "enum_stale_tag",
+    "file": "k/enum_stale_tag.k",
+    "kind": "reject",
+    "code": "E_TYPE"
+  },
+  {
+    "id": "enum_live_join_conflict",
+    "file": "k/enum_live_join_conflict.k",
+    "kind": "reject",
+    "code": "E_BORROW"
+  },
+  {
+    "id": "option_result_combinators",
+    "file": "pass/option_result_combinators.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "option_result_views",
+    "file": "pass/option_result_views.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "option_view_owner_write",
+    "file": "fail/option_view_owner_write.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0506"
+  },
+  {
+    "id": "result_view_exclusive_alias",
+    "file": "fail/result_view_exclusive_alias.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0499"
+  },
+  {
+    "id": "option_insert_view_conflict",
+    "file": "fail/option_insert_view_conflict.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0499"
+  },
+  {
+    "id": "option_view_escape",
+    "file": "fail/option_view_escape.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0597"
+  },
+  {
+    "id": "enum_fixed_pointer_tag",
+    "file": "k/enum_fixed_pointer_tag.k",
+    "kind": "run",
+    "value": "42"
+  },
+  {
+    "id": "enum_indexed_predicate_stale",
+    "file": "k/enum_indexed_predicate_stale.k",
+    "kind": "reject",
+    "code": "E_TYPE"
+  },
+  {
+    "id": "enum_indexed_tag_stale",
+    "file": "k/enum_indexed_tag_stale.k",
+    "kind": "reject",
+    "code": "E_TYPE"
+  },
+  {
+    "id": "enum_indexed_alias_stale",
+    "file": "k/enum_indexed_alias_stale.k",
+    "kind": "reject",
+    "code": "E_TYPE"
+  },
+  {
+    "id": "enum_indexed_move_stale",
+    "file": "k/enum_indexed_move_stale.k",
+    "kind": "reject",
+    "code": "E_TYPE"
   }
 ]

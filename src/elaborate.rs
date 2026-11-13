@@ -756,6 +756,21 @@ impl Compiler<'_> {
         parameters: &[a::GenericParam],
         sub: &BTreeMap<String, usize>,
     ) -> Result<()> {
+        // Method selection checks implementation bounds before it instantiates
+        // the selected method. Callable signatures need the same concrete
+        // associated substitutions that ordinary function instantiation uses.
+        let mut prepared;
+        let sub = if parameters
+            .iter()
+            .flat_map(|parameter| &parameter.bounds)
+            .any(|bound| self.is_callable_bound(*bound))
+        {
+            prepared = sub.clone();
+            self.prepare_parameter_associated(parameters, &mut prepared)?;
+            &prepared
+        } else {
+            sub
+        };
         for parameter in parameters {
             if parameter.lifetime {
                 continue;
@@ -3194,8 +3209,14 @@ impl Builder<'_, '_> {
         Ok((dst, ty))
     }
     fn has_declared_method(&mut self, base: usize, name: &str, span: a::Span) -> Result<bool> {
-        let implementations = self.compiler.source.impls.clone();
-        for implementation in implementations {
+        let implementations = self.compiler.implementations.method_candidates(
+            &self.compiler.types,
+            &self.compiler.applications,
+            base,
+            name,
+        );
+        for index in implementations {
+            let implementation = self.compiler.source.impls[index].clone();
             if !implementation
                 .methods
                 .iter()
@@ -3258,7 +3279,14 @@ impl Builder<'_, '_> {
             let mut sub = BTreeMap::new();
             sub.insert("Self".to_string(), string);
             let mut selected = None;
-            for implementation in self.compiler.source.impls.clone() {
+            let implementations = self.compiler.implementations.method_candidates(
+                &self.compiler.types,
+                &self.compiler.applications,
+                string,
+                "from_str",
+            );
+            for index in implementations {
+                let implementation = self.compiler.source.impls[index].clone();
                 if implementation.trait_ty.is_none()
                     && self.compiler.resolve(implementation.target, &sub).ok() == Some(string)
                 {
@@ -3625,8 +3653,14 @@ impl Builder<'_, '_> {
                 let mut inherent_candidates = Vec::new();
                 let mut unavailable_trait = false;
                 let mut private_trait = false;
-                let impls = self.compiler.source.impls.clone();
-                for im in impls {
+                let impls = self.compiler.implementations.method_candidates(
+                    &self.compiler.types,
+                    &self.compiler.applications,
+                    base,
+                    name,
+                );
+                for index in impls {
+                    let im = self.compiler.source.impls[index].clone();
                     let mut sub = BTreeMap::new();
                     if !self.infer_type_matches(im.target, base, &mut sub)? {
                         continue;

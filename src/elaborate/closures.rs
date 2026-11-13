@@ -207,6 +207,11 @@ impl Compiler<'_> {
             .or_else(|| self.closures.assumptions.get(&ty).cloned())
     }
 
+    pub(super) fn is_callable_bound(&self, bound: a::TypeId) -> bool {
+        matches!(&self.source.types[bound].kind, a::Type::Path(path)
+            if path.declaration.is_none() && Kind::named(&path.name).is_some())
+    }
+
     pub(super) fn callable_bound(
         &mut self,
         ty: usize,

@@ -7,9 +7,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { run } from '../process.mjs';
-import { runCases } from '../batch.mjs';
+import { runRoutes } from '../batch.mjs';
 import { oracleCache, packResult, unpackResult } from '../oracle.mjs';
-const [binary='target/debug/lkjscript',seedText='1301',countText='75',output='target/generators']=process.argv.slice(2);
+const [binary='target/debug/lkjscript',seedText='1301',countText='84',output='target/generators']=process.argv.slice(2);
 const bin=path.resolve(binary),count=Number(countText),dir=path.resolve(output,`sugar-${seedText}`);
 const engines=(process.env.LKJ_ENGINES||'native,k').split(',');
 const compareRust=process.env.LKJ_SUGAR_RUST!=='0';
@@ -24,7 +24,7 @@ fn make(world: &mut World, byte: u8) -> M { tick(world, byte+100); M { out: worl
 function pair(index){
  const a=1+random(50),b=1+random(50),c=1+random(50),marker=60+random(30),yes=random(2)===0?'true':'false';
  let sugar='',expanded='',sugarHelpers='',expandedHelpers='';let family,rustSugar=true;
- switch(index%25){
+ switch(index%28){
   case 0:{family='if-let';const value=`if ${yes} { Some(make(&mut world,${a}u8)) } else { None }`;
    sugar=`if let Some(m) = ${value} { tick(&mut world,${marker}u8); drop(m); } else { tick(&mut world,${b}u8); }`;
    expanded=`match ${value} { Some(m) => { tick(&mut world,${marker}u8); drop(m); }, None => tick(&mut world,${b}u8) }`;break;}
@@ -128,6 +128,70 @@ fn shown(world:&mut World)->Shown{Shown{owner:make(world,${a}u8),value:${b}i64}}
    sugar='let mut text=String::new();let result=write!(&mut text,"before{}after",Bad);assert!(result.is_err());let mut out=world.stdout();out.write(text.as_bytes());';
    expanded='let mut text=String::new();text.push_str("before");text.push_str("!");let mut out=world.stdout();out.write(text.as_bytes());';break;}
 
+  case 25:{family='option-owned-combinators';
+   const other=random(2)===0?'true':'false';
+   sugarHelpers=expandedHelpers=`fn left(world:&mut World)->Option<M>{tick(world,${marker}u8);if ${yes}{Some(make(world,${a}u8))}else{None}}
+fn right(world:&mut World)->Option<M>{tick(world,${marker+1}u8);if ${other}{Some(make(world,${b}u8))}else{None}}
+`;
+   expandedHelpers+=`fn expanded_and(left:Option<M>,right:Option<M>)->Option<M>{match left{Some(_)=>right,None=>None}}
+fn expanded_or(left:Option<M>,right:Option<M>)->Option<M>{match left{Some(value)=>Some(value),None=>right}}
+fn expanded_xor(left:Option<M>,right:Option<M>)->Option<M>{match(left,right){(Some(value),None)=>Some(value),(None,Some(value))=>Some(value),_=>None}}
+fn expanded_zip(left:Option<M>,right:Option<M>)->Option<(M,M)>{match(left,right){(Some(left),Some(right))=>Some((left,right)),_=>None}}
+fn expanded_flatten(value:Option<Option<M>>)->Option<M>{match value{Some(value)=>value,None=>None}}
+fn expanded_unzip(value:Option<(M,M)>)->(Option<M>,Option<M>){match value{Some((left,right))=>(Some(left),Some(right)),None=>(None,None)}}
+`;
+   for(const method of ['and','or','xor','zip']){
+    sugar+=`{let value=left(&mut world).${method}(right(&mut world));tick(&mut world,${marker}u8);drop(value);}`;
+    expanded+=`{let value=expanded_${method}(left(&mut world),right(&mut world));tick(&mut world,${marker}u8);drop(value);}`;
+   }
+   const nested=`if ${other}{Some(left(&mut world))}else{None}`;
+   sugar+=`{let value=(${nested}).flatten();tick(&mut world,${marker}u8);drop(value);}`;
+   expanded+=`{let value=expanded_flatten(${nested});tick(&mut world,${marker}u8);drop(value);}`;
+   const pair=`if ${yes}{Some((make(&mut world,${a}u8),make(&mut world,${b}u8)))}else{None}`;
+   sugar+=`{let value=(${pair}).unzip();tick(&mut world,${marker}u8);drop(value);}`;
+   expanded+=`{let value=expanded_unzip(${pair});tick(&mut world,${marker}u8);drop(value);}`;break;}
+  case 26:{family='result-owned-combinators';const other=random(2)===0?'true':'false';
+   sugarHelpers=expandedHelpers=`fn result(world:&mut World,yes:bool,tag:u8)->Result<M,M>{let value=make(world,tag);if yes{Ok(value)}else{Err(value)}}
+`;
+   expandedHelpers+=`fn expanded_and(left:Result<M,M>,right:Result<M,M>)->Result<M,M>{match left{Ok(_)=>right,Err(error)=>Err(error)}}
+fn expanded_or(left:Result<M,M>,right:Result<M,M>)->Result<M,M>{match left{Ok(value)=>Ok(value),Err(_)=>right}}
+fn expanded_option_transpose(value:Option<Result<M,M>>)->Result<Option<M>,M>{match value{Some(Ok(value))=>Ok(Some(value)),Some(Err(error))=>Err(error),None=>Ok(None)}}
+fn expanded_result_transpose(value:Result<Option<M>,M>)->Option<Result<M,M>>{match value{Ok(Some(value))=>Some(Ok(value)),Ok(None)=>None,Err(error)=>Some(Err(error))}}
+`;
+   for(const method of ['and','or']){
+    const left=`result(&mut world,${yes},${a}u8)`,right=`result(&mut world,${other},${b}u8)`;
+    sugar+=`{let value=${left}.${method}(${right});tick(&mut world,${marker}u8);drop(value);}`;
+    expanded+=`{let value=expanded_${method}(${left},${right});tick(&mut world,${marker}u8);drop(value);}`;
+   }
+   const option=`if ${yes}{Some(result(&mut world,${other},${c}u8))}else{None}`;
+   sugar+=`{let value=(${option}).transpose();tick(&mut world,${marker}u8);drop(value);}`;
+   expanded+=`{let value=expanded_option_transpose(${option});tick(&mut world,${marker}u8);drop(value);}`;
+   const value=`if ${yes}{Ok(if ${other}{Some(make(&mut world,${a}u8))}else{None})}else{Err(make(&mut world,${b}u8))}`;
+   sugar+=`{let value=(${value}).transpose();tick(&mut world,${marker}u8);drop(value);}`;
+   expanded+=`{let value=expanded_result_transpose(${value});tick(&mut world,${marker}u8);drop(value);}`;break;}
+  case 27:{family='option-result-view-combinators';
+   expandedHelpers=`fn view(value:&Option<M>)->Option<&M>{match value{Some(value)=>Some(value),None=>None}}
+fn view_mut(value:&mut Option<M>)->Option<&mut M>{match value{Some(value)=>Some(value),None=>None}}
+fn insert(value:&mut Option<M>,next:M)->&mut M{*value=Some(next);match value{Some(value)=>value,None=>unreachable!()}}
+fn get_or_insert(value:&mut Option<M>,next:M)->&mut M{if value.is_none(){*value=Some(next);}match value{Some(value)=>value,None=>unreachable!()}}
+fn result_view(value:&Result<M,M>)->Result<&M,&M>{match value{Ok(value)=>Ok(value),Err(error)=>Err(error)}}
+fn result_view_mut(value:&mut Result<M,M>)->Result<&mut M,&mut M>{match value{Ok(value)=>Ok(value),Err(error)=>Err(error)}}
+`;
+   const prefix=`let mut value=if ${yes}{Some(make(&mut world,${a}u8))}else{None};`;
+   const read=value=>`match ${value}{Some(value)=>tick(&mut world,value.b),None=>tick(&mut world,${marker}u8)}`;
+   const change=value=>`match ${value}{Some(value)=>{value.b=${b}u8;},None=>()}`;
+   sugar=prefix+read('value.as_ref()')+change('value.as_mut()');
+   expanded=prefix+read('view(&value)')+change('view_mut(&mut value)');
+   sugar+=`{let value=value.get_or_insert(make(&mut world,${c}u8));tick(&mut world,value.b);}`;
+   expanded+=`{let value=get_or_insert(&mut value,make(&mut world,${c}u8));tick(&mut world,value.b);}`;
+   sugar+=`{let value=value.insert(make(&mut world,${a}u8));value.b=${b}u8;tick(&mut world,value.b);}`;
+   expanded+=`{let value=insert(&mut value,make(&mut world,${a}u8));value.b=${b}u8;tick(&mut world,value.b);}`;
+   sugar+=`let old=value.replace(make(&mut world,${c}u8));drop(old);`;
+   expanded+=`let old=std::mem::replace(&mut value,Some(make(&mut world,${c}u8)));drop(old);`;
+   const result=`let mut result:Result<M,M>=if ${yes}{Ok(make(&mut world,${a}u8))}else{Err(make(&mut world,${b}u8))};`;
+   sugar+=result+`match result.as_ref(){Ok(value)|Err(value)=>tick(&mut world,value.b)}match result.as_mut(){Ok(value)|Err(value)=>{value.b=${c}u8;}}`;
+   expanded+=result+`match result_view(&result){Ok(value)|Err(value)=>tick(&mut world,value.b)}match result_view_mut(&mut result){Ok(value)|Err(value)=>{value.b=${c}u8;}}`;break;}
+
  }
  const tail=`\ntick(&mut world,${90+random(10)}u8);`+(random(9)===0?' assert!(false);':'');
  return {family,rustSugar,sugar:prelude+sugarHelpers+'\npub fn main(mut world:World) {\n'+sugar+tail+'\n}\n',expanded:prelude+expandedHelpers+'\npub fn main(mut world:World) {\n'+expanded+tail+'\n}\n'};
@@ -158,8 +222,9 @@ function ending(result,rust=false){
  const code=text.match(rust?/LKJ_RUST_TRAP (R[0-9]+)/:/: (R[0-9]+)\b/)?.[1];return code?(Number(code.slice(1))>=16?'R0004':code):'crash';
 }
 const tally={},failures=[];
+const routes=await runRoutes(bin,files.map(path=>({path})),{engines,output:dir,encoding:null});
 for(const engine of engines){
- const results=await runCases(bin,files.map(path=>({path})),{engine,output:dir,encoding:null});tally[engine]={};
+ const results=routes[engine];tally[engine]={};
  for(let i=0;i<count;i++){
   const sugar=results[2*i],expanded=results[2*i+1],a=ending(sugar),b=ending(expanded);
   let category=a.startsWith('rejected:')?'sugar-'+a:b.startsWith('rejected:')?'expansion-'+b:a!==b?'different-ending':!sugar.stdout.equals(expanded.stdout)?'different-output':a==='normal'?'equal-output-exit':a.startsWith('R')?'equal-output-trap':a;

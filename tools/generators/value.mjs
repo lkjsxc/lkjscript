@@ -5,13 +5,13 @@
 import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { run } from '../process.mjs';
-import { runCases } from '../batch.mjs';
+import { runRoutes } from '../batch.mjs';
 import { oracleCache } from '../oracle.mjs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 const [binary, seedS = '601', countS = '100', output = 'target/generators'] = process.argv.slice(2);
 const bin = path.resolve(binary || 'target/debug/lkjscript');
-const engine = process.env.LKJ_ENGINE || 'native';
+const engines = (process.env.LKJ_ENGINES || process.env.LKJ_ENGINE || 'native').split(',');
 const sh = (c, a) => (spawnSync(c, a, { encoding: 'utf8' }).stdout || '').trim();
 // Capture identities before execution so later edits cannot relabel this run.
 const metadata = { sha256: createHash('sha256').update(fs.readFileSync(new URL(import.meta.url))).update(fs.readFileSync(new URL('../process.mjs', import.meta.url))).digest('hex'), binarySha256: createHash('sha256').update(fs.readFileSync(bin)).digest('hex'), compilerDirty: sh('git', ['status', '--porcelain', '--untracked-files=no']) !== '', compiler: sh('git', ['-C', path.dirname(fs.realpathSync(bin)), 'rev-parse', 'HEAD']) || 'unknown', rustc: sh('rustc', ['--version']), node: process.version };
@@ -138,8 +138,7 @@ async function rustRun(i) {
   if (r.status === 101 && m) return { k: 'trap', kind: rustKind(m[2]), line: Number(m[1]) - start[i], text: m[2] };
   return { k: 'abnormal', text: 'status ' + r.status };
 }
-async function lkRun(i) {
-  const l = actualResults[i];
+function lkRun(l) {
   const text = (l.stdout + l.stderr).trim().split('\n')[0] || '';
   if (l.error || l.signal) return { k: l.error?.code === 'ETIMEDOUT' ? 'timeout' : 'crash', text };
   if (l.status === 0) return { k: 'value', v: text, text };
@@ -155,10 +154,12 @@ if (rc.status !== 0) { console.log('oracle failed:\n' + rc.stderr.split('\n').sl
 
 const results=[];for(let i=0;i<N;i++){const result=await rustRun(i);if(result.k==='abnormal')throw new Error('abnormal Rust oracle: '+result.text);results.push(result);}return results;
 });
-const actualResults=await runCases(bin,srcs.map((_,i)=>({path:dir+'/c'+i+'.rs',entry:'probe'})),{engine,output:dir,timeout:20000});
+const actualRoutes=await runRoutes(bin,srcs.map((_,i)=>({path:dir+'/c'+i+'.rs',entry:'probe'})),{engines,output:dir,timeout:20000});
+for(const engine of engines) {
+const actualResults=actualRoutes[engine];
 const tally = {}; const show = []; const bump = c => { tally[c] = (tally[c] || 0) + 1; };
 for (let i = 0; i < N; i++) {
-  const r = references[i], l = await lkRun(i); let cls;
+  const r = references[i], l = lkRun(actualResults[i]); let cls;
   if (r.k === 'abnormal') cls = 'oracle-abnormal';
   else if (l.k === 'timeout' || l.k === 'crash') cls = l.k;
   else if (l.k === 'machine-error') cls = 'machine-error:' + l.code;
@@ -172,7 +173,8 @@ for (let i = 0; i < N; i++) {
 const record = { generator: 'value', engine, ...metadata, rustFlags: FLAGS.join(' '), seed: seedS, programs: N, ...tally };
 fs.mkdirSync(output, {recursive: true});
 fs.appendFileSync(path.join(output, 'runs.jsonl'), JSON.stringify(record) + '\n');
-console.log(JSON.stringify(record)); fs.writeFileSync(`${dir}/report.txt`, show.join('\n') + '\n');
+console.log(JSON.stringify(record)); fs.writeFileSync(`${dir}/report-${engine}.txt`, show.join('\n') + '\n');
 
 const fatal = Object.keys(tally).some(key => /DIFFERS|VALUE-VS-TRAP|ACCEPTS-RUST-REJECTED|crash|timeout|oracle|generator|other-line|machine-error/.test(key));
 if (fatal) process.exitCode = 1;
+}

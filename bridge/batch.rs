@@ -1,5 +1,5 @@
-//! Test host batching. Case failures are data; only protocol/host failures stop
-//! the batch. Each case has a fresh compiler, machine, and module instance.
+//! Batch each source once, then execute it with fresh state on every route.
+//! Case failures are data; only protocol/host failures stop the batch.
 use super::*;
 
 fn quoted(text: &str) -> String {
@@ -16,9 +16,10 @@ fn hex(bytes: &[u8]) -> String {
     }
     out
 }
-fn record(index: usize, checked: bool, status: i32, stdout: &[u8], stderr: &str) {
+fn record(index: usize, engine: &str, checked: bool, status: i32, stdout: &[u8], stderr: &str) {
     println!(
-        "{{\"index\":{index},\"checkStatus\":{},\"status\":{status},\"stdoutHex\":\"{}\",\"stderr\":{}}}",
+        "{{\"index\":{index},\"engine\":{},\"checkStatus\":{},\"status\":{status},\"stdoutHex\":\"{}\",\"stderr\":{}}}",
+        quoted(engine),
         if checked { 0 } else { 1 },
         hex(stdout),
         quoted(stderr)
@@ -33,18 +34,21 @@ impl machine::Host for Output {
     }
 }
 pub fn run(argv: &[String]) -> Result<(), String> {
+    let usage =
+        "E_USAGE batch <manifest.tsv|directory> [--engine native|k|node | --engines native,k,node]";
     let Some(manifest) = argv.first() else {
-        return Err("E_USAGE batch <manifest.tsv|directory> [--engine node|k|native]".to_string());
+        return Err(usage.to_string());
     };
-    let engine = if argv.len() == 3 && argv[1] == "--engine" {
-        argv[2].as_str()
-    } else if argv.len() == 1 {
-        "k"
-    } else {
-        return Err("E_USAGE batch <manifest.tsv|directory> [--engine node|k|native]".to_string());
+    let engines = match argv.len() {
+        1 => vec!["k"],
+        3 if argv[1] == "--engine" => vec![argv[2].as_str()],
+        3 if argv[1] == "--engines" => argv[2].split(',').collect(),
+        _ => return Err(usage.to_string()),
     };
-    if !["node", "k", "native"].contains(&engine) {
-        return Err("E_USAGE engine is node, k or native".to_string());
+    for (index, engine) in engines.iter().enumerate() {
+        if !["native", "k", "node"].contains(engine) || engines[..index].contains(engine) {
+            return Err("E_USAGE engines must be distinct names from native,k,node".to_string());
+        }
     }
     let requests = if Path::new(manifest).is_dir() {
         let mut files = fs::read_dir(manifest)
@@ -81,7 +85,7 @@ pub fn run(argv: &[String]) -> Result<(), String> {
                 entry: (!columns[1].is_empty()).then(|| columns[1].to_string()),
                 path: columns[2].to_string(),
                 output: None,
-                engine: engine.to_string(),
+                engine: engines[0].to_string(),
                 census: false,
                 unchecked: false,
             };
@@ -89,101 +93,129 @@ pub fn run(argv: &[String]) -> Result<(), String> {
             let checked = match compile(&args.path, false, &mut timings) {
                 Ok(value) => value,
                 Err(error) => {
-                    record(index, false, 1, &[], &error);
+                    for engine in &engines {
+                        record(index, engine, false, 1, &[], &error);
+                    }
                     continue;
                 }
             };
             if args.verb == "check" {
-                record(index, true, 0, &[], "");
+                for engine in &engines {
+                    record(index, engine, true, 0, &[], "");
+                }
+                timings.done();
                 continue;
             }
             let program = checked.program();
             let entry = match entries(program, &args) {
                 Ok(entries) => entries[0],
                 Err(error) => {
-                    record(index, true, 1, &[], &error);
+                    for engine in &engines {
+                        record(index, engine, true, 1, &[], &error);
+                    }
                     continue;
                 }
             };
-            if engine == "native" {
-                let lowered = match native::lower(&checked) {
-                    Ok(value) => value,
-                    Err(error) => {
-                        record(index, true, 1, &[], &format!("E_EMIT {error}"));
-                        continue;
-                    }
-                };
-                let bytes = match native::image(&lowered, program, entry, true) {
-                    Ok(value) => value,
-                    Err(error) => {
-                        record(index, true, 1, &[], &format!("E_EMIT {error}"));
-                        continue;
-                    }
-                };
-                let path = directory.join(format!("{index}.elf"));
-                native::save(&path, &bytes)?;
-                match native::execute(&path, &lowered, &args.path, true) {
-                    Ok(mut outcome) => {
-                        if let Some(error) = outcome.error {
-                            record(index, true, 1, &outcome.stdout, &error);
-                        } else {
-                            let value = match native::scalar(
-                                program,
-                                &program.functions[entry],
-                                outcome.value,
-                            ) {
-                                Ok(value) => value,
-                                Err(error) => {
-                                    record(index, true, 1, &outcome.stdout, &error);
-                                    continue;
-                                }
-                            };
-                            outcome.stdout.extend_from_slice(scalar(value).as_bytes());
-                            record(index, true, 0, &outcome.stdout, "");
+            // Layout, glue and runtime linking are route independent too.
+            let lowered = engines
+                .iter()
+                .any(|engine| *engine != "k")
+                .then(|| timings.measure("lower", || native::lower(&checked)));
+            for engine in &engines {
+                if *engine == "k" {
+                    let mut output = Output::default();
+                    match timings
+                        .measure("machine", || machine::run(program, entry, &[], &mut output))
+                    {
+                        Ok(result) => {
+                            output.0.extend_from_slice(scalar(result.value).as_bytes());
+                            record(index, engine, true, 0, &output.0, "");
                         }
-                    }
-                    Err(error) => record(index, true, 1, &[], &error),
-                }
-            } else if engine == "k" {
-                let mut output = Output::default();
-                match machine::run(program, entry, &[], &mut output) {
-                    Ok(result) => {
-                        output.0.extend_from_slice(scalar(result.value).as_bytes());
-                        record(index, true, 0, &output.0, "");
-                    }
-                    Err(error) => record(
-                        index,
-                        true,
-                        1,
-                        &output.0,
-                        &format!(
-                            "{}:{}: {} {}",
-                            args.path,
-                            error.line,
-                            error.code(),
-                            error.message
-                        ),
-                    ),
-                }
-            } else {
-                let function = &program.functions[entry];
-                let world = entry_world(program, function)?;
-                let bytes = match wasm::emit(&checked) {
-                    Ok(bytes) => bytes,
-                    Err(error) => {
-                        record(
+                        Err(error) => record(
                             index,
+                            engine,
                             true,
                             1,
-                            &[],
-                            &format!("{}:1:1: E_EMIT {error}", args.path),
-                        );
+                            &output.0,
+                            &format!(
+                                "{}:{}: {} {}",
+                                args.path,
+                                error.line,
+                                error.code(),
+                                error.message
+                            ),
+                        ),
+                    }
+                    continue;
+                }
+                let lowered = match lowered.as_ref().expect("encoded route has lowering") {
+                    Ok(value) => value,
+                    Err(error) => {
+                        record(index, engine, true, 1, &[], &format!("E_EMIT {error}"));
                         continue;
                     }
                 };
-                let module = directory.join(format!("{index}.wasm"));
-                fs::write(&module, bytes).map_err(|e| format!("E_IO {e}"))?;
-                jobs.push(format!("{{\"index\":{index},\"path\":{},\"source\":{},\"entry\":{},\"kind\":{},\"args\":[{}]}}",quoted(&module.to_string_lossy()),quoted(&args.path),quoted(&function.name),quoted(result_kind(program,function)),if world {"\"1\""} else {""}));
+                if *engine == "native" {
+                    let bytes = match timings.measure("native_encode", || {
+                        native::image(lowered, program, entry, true)
+                    }) {
+                        Ok(value) => value,
+                        Err(error) => {
+                            record(index, engine, true, 1, &[], &format!("E_EMIT {error}"));
+                            continue;
+                        }
+                    };
+                    let path = directory.join(format!("{index}.elf"));
+                    native::save(&path, &bytes)?;
+                    match timings.measure("native_run", || {
+                        native::execute(&path, lowered, &args.path, true)
+                    }) {
+                        Ok(mut outcome) => {
+                            if let Some(error) = outcome.error {
+                                record(index, engine, true, 1, &outcome.stdout, &error);
+                            } else {
+                                let value = match native::scalar(
+                                    program,
+                                    &program.functions[entry],
+                                    outcome.value,
+                                ) {
+                                    Ok(value) => value,
+                                    Err(error) => {
+                                        record(index, engine, true, 1, &outcome.stdout, &error);
+                                        continue;
+                                    }
+                                };
+                                outcome.stdout.extend_from_slice(scalar(value).as_bytes());
+                                record(index, engine, true, 0, &outcome.stdout, "");
+                            }
+                        }
+                        Err(error) => record(index, engine, true, 1, &[], &error),
+                    }
+                } else {
+                    let function = &program.functions[entry];
+                    let world = entry_world(program, function)?;
+                    let bytes = match timings.measure("wasm_encode", || wasm::encode(lowered)) {
+                        Ok(bytes) => bytes,
+                        Err(error) => {
+                            record(
+                                index,
+                                engine,
+                                true,
+                                1,
+                                &[],
+                                &format!("{}:1:1: E_EMIT {error}", args.path),
+                            );
+                            continue;
+                        }
+                    };
+                    let module = directory.join(format!("{index}.wasm"));
+                    fs::write(&module, bytes).map_err(|e| format!("E_IO {e}"))?;
+                    jobs.push(format!("{{\"index\":{index},\"path\":{},\"source\":{},\"entry\":{},\"kind\":{},\"args\":[{}]}}",quoted(&module.to_string_lossy()),quoted(&args.path),quoted(&function.name),quoted(result_kind(program,function)),if world {"\"1\""} else {""}));
+                    if engines.len() == 1 {
+                        // Node executes the prepared modules together afterward.
+                        println!("{{\"prepared\":{index}}}");
+                    }
+                }
             }
             timings.done();
         }

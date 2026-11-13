@@ -3,7 +3,9 @@
 Run `node tools/conformance.mjs` after building the compiler. The default route
 is native Linux x86-64; `LKJ_ENGINE=k` selects the independent machine and
 `LKJ_ENGINE=node` selects WebAssembly. `LKJSCRIPT_BIN` selects a compiler.
-The routine gate runs native and K; a three-route run uses
+`LKJ_ENGINES=native,k,node` checks each source once and executes it independently
+on all three routes. Lowering is shared by the two encoders. The routine gate
+runs native and K; a three-route run uses
 `LKJ_GATE_ENGINES=native,k,node bash tools/check.sh`.
 
 Source cases expose an ordinary `probe` function with a printable scalar result,
@@ -26,5 +28,9 @@ also produce explicit expansions, providing a reference that does not depend on
 Rust accepting the surface form. Keep seeds and reduced failures in Git; the
 runner writes detailed output and reference caches under `target/`.
 
-Process time and output envelopes belong to the test runners. They impose no
-language limits.
+Batch deadlines measure lack of completed cases, not total batch duration.
+A Node-only batch reports module preparation before running its modules together;
+preparation is never counted as a successful result. Missing/duplicate results and
+host failures fail the suite. Independent suites use the available host cores;
+`LKJ_GATE_JOBS` may select fewer concurrent suites. Process time and output
+envelopes belong to test runners and impose no language limits.
