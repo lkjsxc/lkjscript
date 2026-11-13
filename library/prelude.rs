@@ -212,3 +212,102 @@ impl<T, U> Option<(T, U)> {
         }
     }
 }
+impl<T> Option<T> {
+    pub fn map<U, F: FnOnce(T) -> U>(self, function: F) -> Option<U> {
+        match self {
+            Option::Some(value) => Option::Some(function(value)),
+            Option::None => Option::None,
+        }
+    }
+    pub fn map_or<U, F: FnOnce(T) -> U>(self, default: U, function: F) -> U {
+        match self {
+            Option::Some(value) => function(value),
+            Option::None => default,
+        }
+    }
+    pub fn map_or_else<U, D: FnOnce() -> U, F: FnOnce(T) -> U>(self, default: D, function: F) -> U {
+        match self {
+            Option::Some(value) => function(value),
+            Option::None => default(),
+        }
+    }
+    pub fn and_then<U, F: FnOnce(T) -> Option<U>>(self, function: F) -> Option<U> {
+        match self {
+            Option::Some(value) => function(value),
+            Option::None => Option::None,
+        }
+    }
+    pub fn or_else<F: FnOnce() -> Option<T>>(self, function: F) -> Option<T> {
+        match self {
+            Option::Some(value) => Option::Some(value),
+            Option::None => function(),
+        }
+    }
+    pub fn unwrap_or_else<F: FnOnce() -> T>(self, function: F) -> T {
+        match self {
+            Option::Some(value) => value,
+            Option::None => function(),
+        }
+    }
+    pub fn filter<P: FnOnce(&T) -> bool>(self, predicate: P) -> Option<T> {
+        match self {
+            Option::Some(value) => {
+                if predicate(&value) {
+                    Option::Some(value)
+                } else {
+                    Option::None
+                }
+            }
+            Option::None => Option::None,
+        }
+    }
+}
+
+impl<T, E> Result<T, E> {
+    pub fn map<U, F: FnOnce(T) -> U>(self, function: F) -> Result<U, E> {
+        match self {
+            Result::Ok(value) => Result::Ok(function(value)),
+            Result::Err(error) => Result::Err(error),
+        }
+    }
+    pub fn map_err<U, F: FnOnce(E) -> U>(self, function: F) -> Result<T, U> {
+        match self {
+            Result::Ok(value) => Result::Ok(value),
+            Result::Err(error) => Result::Err(function(error)),
+        }
+    }
+    pub fn map_or<U, F: FnOnce(T) -> U>(self, default: U, function: F) -> U {
+        match self {
+            Result::Ok(value) => function(value),
+            Result::Err(_) => default,
+        }
+    }
+    pub fn map_or_else<U, D: FnOnce(E) -> U, F: FnOnce(T) -> U>(
+        self,
+        default: D,
+        function: F,
+    ) -> U {
+        match self {
+            Result::Ok(value) => function(value),
+            Result::Err(error) => default(error),
+        }
+    }
+    pub fn and_then<U, F: FnOnce(T) -> Result<U, E>>(self, function: F) -> Result<U, E> {
+        match self {
+            Result::Ok(value) => function(value),
+            Result::Err(error) => Result::Err(error),
+        }
+    }
+    pub fn or_else<U, F: FnOnce(E) -> Result<T, U>>(self, function: F) -> Result<T, U> {
+        match self {
+            Result::Ok(value) => Result::Ok(value),
+            Result::Err(error) => function(error),
+        }
+    }
+    pub fn unwrap_or_else<F: FnOnce(E) -> T>(self, function: F) -> T {
+        match self {
+            Result::Ok(value) => value,
+            Result::Err(error) => function(error),
+        }
+    }
+}

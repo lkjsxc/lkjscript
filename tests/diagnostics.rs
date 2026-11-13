@@ -395,3 +395,18 @@ fn independent_typed_bodies_reach_ownership_after_peer_type_failure() {
         assert!(text.contains(&format!(": {code} ")), "{text}");
     }
 }
+
+#[test]
+fn retained_callable_effect_names_the_place_and_both_sites() {
+    let output = Command::new(env!("CARGO_BIN_EXE_lkjscript"))
+        .args([
+            "check",
+            "tests/conformance/fail/named_callable_scalar_effect.rs",
+        ])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let text = String::from_utf8(output.stderr).unwrap();
+    assert!(text.contains(":3:5: E_BORROW value.*:"), "{text}");
+    assert!(text.contains("created at 2:18"), "{text}");
+}

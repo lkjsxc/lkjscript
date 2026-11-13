@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto';
 import { run } from '../process.mjs';
 import { runRoutes } from '../batch.mjs';
 import { oracleCache, packResult, unpackResult } from '../oracle.mjs';
-const [binary='target/debug/lkjscript',seed='1501',countText='80',output='target/generators']=process.argv.slice(2);
+const [binary='target/debug/lkjscript',seed='1501',countText='88',output='target/generators']=process.argv.slice(2);
 const count=Number(countText),bin=path.resolve(binary),dir=path.resolve(output,`closures-${seed}`);
 const engines=(process.env.LKJ_ENGINES||'native,k').split(','),rust=process.env.LKJ_CLOSURE_RUST!=='0';
 let state=BigInt(seed)||1n;
@@ -22,7 +22,7 @@ fn see(value:&M)->u8 {value.byte}
 function pair(index){
  const a=97+random(10),b=107+random(10),x=1+random(10),y=1+random(10),calls=1+random(4),mark=48+random(10);
  let source='',expanded='',sourceHelpers='',expandedHelpers='',family;
- switch(index%18){
+ switch(index%22){
  case 0:{family='shared-two-roots';const prefix=`let first=${x}u8;let second=${y}u8;`;
   sourceHelpers='fn apply<F:Fn(u8)->u8>(f:F,value:u8)->u8{f(value)}';
   expandedHelpers="struct Capture<'a,'b>{first:&'a u8,second:&'b u8} fn invoke(value:&Capture<'_,'_>,argument:u8)->u8{argument+*value.first+*value.second}";
@@ -107,6 +107,30 @@ function pair(index){
   sourceHelpers='fn next<I:Iterator>(iterator:&mut I)->Option<I::Item>{iterator.next()}';
   source=prefix+'let first=next(&mut iterator).unwrap();let second=next(&mut iterator).unwrap();drop(iterator);tick(&mut world,*first);tick(&mut world,*second);';
   expanded=prefix+'let first=iterator.next().unwrap();let second=iterator.next().unwrap();drop(iterator);tick(&mut world,*first);tick(&mut world,*second);';break;}
+ case 18:{family='same-type-factory-shared-origin';const some=random(2)===0,prefix=`let first=${x}u8;let second=${y}u8;`;
+  sourceHelpers='fn choose<T,F:FnOnce()->T>(value:Option<T>,make:F)->T{match value{Some(value)=>value,None=>make()}}';
+  expandedHelpers="struct Capture<'a>{value:&'a u8} fn invoke<'a>(c:Capture<'a>)->&'a u8{c.value} fn choose<'a>(value:Option<&'a u8>,make:Capture<'a>)->&'a u8{match value{Some(value)=>value,None=>invoke(make)}}";
+  const option=some?'Some(&first)':'None';
+  source=prefix+'let value:Option<&u8>='+option+';let captured=&second;let answer=choose(value,move||captured);tick(&mut world,*answer);';
+  expanded=prefix+'let value:Option<&u8>='+option+';let answer=choose(value,Capture{value:&second});tick(&mut world,*answer);';break;}
+ case 19:{family='same-type-factory-mutable-origin';const some=random(2)===0,prefix=`let mut first=${x}u8;let mut second=${y}u8;`;
+  sourceHelpers='fn choose<T,F:FnOnce()->T>(value:Option<T>,make:F)->T{match value{Some(value)=>value,None=>make()}}';
+  expandedHelpers="struct Capture<'a>{value:&'a mut u8} fn invoke<'a>(c:Capture<'a>)->&'a mut u8{let moved=c.value;moved} fn choose<'a>(value:Option<&'a mut u8>,make:Capture<'a>)->&'a mut u8{match value{Some(value)=>value,None=>invoke(make)}}";
+  const option=some?'Some(&mut first)':'None';
+  source=prefix+'let value:Option<&mut u8>='+option+';let captured=&mut second;let answer=choose(value,move||captured);';
+  expanded=prefix+'let value:Option<&mut u8>='+option+';let answer=choose(value,Capture{value:&mut second});';
+  const finish='*answer=*answer+1u8;tick(&mut world,*answer);drop(answer);tick(&mut world,first);tick(&mut world,second);';source+=finish;expanded+=finish;break;}
+ case 20:{family='inferred-optional-mutable-captures';const choice=random(3),prefix=`let mut first=${x}u8;let mut second=${y}u8;let choice=${choice}u8;`;
+  expandedHelpers="struct Capture<'a>{choice:u8,first:&'a mut u8,second:&'a mut u8} fn invoke<'a>(c:Capture<'a>)->Option<&'a mut u8>{match c.choice{0=>None,1=>Some(c.first),_=>Some(c.second)}}";
+  source=prefix+'let a=&mut first;let b=&mut second;let f=move||match choice{0=>None,1=>Some(a),_=>Some(b)};let result=f();';
+  expanded=prefix+'let result=invoke(Capture{choice,first:&mut first,second:&mut second});';
+  const finish='match result{Some(answer)=>{*answer=*answer+1u8;tick(&mut world,*answer);},None=>tick(&mut world,0u8)}tick(&mut world,first);tick(&mut world,second);';source+=finish;expanded+=finish;break;}
+ case 21:{family='inferred-break-mutable-captures';const choice=random(2)===0,prefix=`let mut first=${x}u8;let mut second=${y}u8;let choice=${choice};`;
+  expandedHelpers="struct Capture<'a>{choice:bool,first:&'a mut u8,second:&'a mut u8} fn invoke<'a>(c:Capture<'a>)->&'a mut u8{if c.choice{c.first}else{c.second}}";
+  source=prefix+'let a=&mut first;let b=&mut second;let f=move||loop{if choice{break a;}break b;};let answer=f();';
+  expanded=prefix+'let answer=invoke(Capture{choice,first:&mut first,second:&mut second});';
+  const finish='*answer=*answer+1u8;tick(&mut world,*answer);drop(answer);tick(&mut world,first);tick(&mut world,second);';source+=finish;expanded+=finish;break;}
+
  }
  const end=`tick(&mut world,${mark}u8);`;
  return {family,source:prelude+sourceHelpers+'\npub fn main(mut world:World){'+source+end+'}\n',expanded:prelude+expandedHelpers+'\npub fn main(mut world:World){'+expanded+end+'}\n'};

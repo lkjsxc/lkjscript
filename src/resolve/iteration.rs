@@ -187,7 +187,11 @@ impl Expansion<'_> {
     }
 }
 
-pub(super) fn expand(program: &mut Program, resolver: &Resolver<'_>) -> Result<()> {
+pub(super) fn expand_recover(
+    program: &mut Program,
+    resolver: &Resolver<'_>,
+    failed: &mut impl FnMut(ExprId, Diagnostic) -> Result<()>,
+) -> Result<()> {
     let mut helpers = None;
     // Appended source nodes contain no collection-for. Original ids and spans
     // remain stable for diagnostics, imports, and definition evidence.
@@ -220,7 +224,13 @@ pub(super) fn expand(program: &mut Program, resolver: &Resolver<'_>) -> Result<(
             }
         } else {
             if helpers.is_none() {
-                helpers = Some(Helpers::new(resolver, node.span)?);
+                match Helpers::new(resolver, node.span) {
+                    Ok(ready) => helpers = Some(ready),
+                    Err(problem) => {
+                        failed(id, problem)?;
+                        continue;
+                    }
+                }
             }
             expansion.collection(id, pattern, iterator, body, helpers.as_ref().unwrap())
         };

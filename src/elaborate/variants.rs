@@ -1,5 +1,5 @@
 //! Source variant shapes and declaration-ordered enum payload construction.
-use super::{Builder, Result, a, err, k};
+use super::{Builder, ExpressionContext, Result, a, err, k};
 use std::collections::BTreeMap;
 
 impl Builder<'_, '_> {
@@ -62,9 +62,10 @@ impl Builder<'_, '_> {
         path: &a::Path,
         values: &[(String, usize)],
         style: a::VariantStyle,
-        expected: Option<usize>,
+        context: ExpressionContext,
         span: a::Span,
     ) -> Result<Option<(usize, usize)>> {
+        let expected = context.expected;
         let Some(name) = self.variant_name(path) else {
             return Ok(None);
         };
@@ -121,6 +122,9 @@ impl Builder<'_, '_> {
             return Err(err(span, "E_TYPE", "variant constructor is missing fields"));
         }
         let mut coercion_substitutions = target.substitutions.clone();
+        if let Some(inferred) = context.inferred {
+            self.constrain_constructor_from_type(&mut target, inferred, span)?;
+        }
         // Known field types constrain unsuffixed literals without evaluating any
         // initializer out of source order.
         for ((_, expression), field) in values.iter().zip(&positions) {

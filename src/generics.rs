@@ -1421,47 +1421,69 @@ pub(crate) struct ImplementationIndex {
     by_method: BTreeMap<String, Candidates>,
 }
 impl ImplementationIndex {
-    pub(crate) fn new(source: &Program) -> Result<Self, Diagnostic> {
-        let mut index = Self {
+    fn empty() -> Self {
+        Self {
             by_trait: BTreeMap::new(),
             by_method: BTreeMap::new(),
-        };
-        for (id, implementation) in source.impls.iter().enumerate() {
-            let mut terms = Vec::new();
-            let mut next = 0;
-            let environment = variables(source, &implementation.generics, &mut terms, &mut next);
-            let target = signature_type(source, implementation.target, &environment, &mut terms)?;
-            let head = match &terms[target] {
-                Term::Named(name, _)
-                    if !matches!(name.as_str(), "&" | "&mut" | "[]" | "tuple" | "fn" | "!")
-                        && !name.starts_with("[;") =>
-                {
-                    Some(name.clone())
-                }
-                _ => None,
-            };
-            if let Some(trait_type) = implementation.trait_ty {
-                if let Type::Path(path) = &source.types[trait_type].kind {
-                    index
-                        .by_trait
-                        .entry(bound_identity(source, path))
-                        .or_default()
-                        .insert(head.clone(), id);
-                }
-            }
-            let mut methods = BTreeSet::new();
-            for method in &implementation.methods {
-                let name = &source.functions[*method].name;
-                if methods.insert(name) {
-                    index
-                        .by_method
-                        .entry(name.clone())
-                        .or_default()
-                        .insert(head.clone(), id);
+        }
+    }
+    pub(crate) fn new(source: &Program) -> Result<Self, Diagnostic> {
+        let mut index = Self::empty();
+        for id in 0..source.impls.len() {
+            index.insert(source, id)?;
+        }
+        Ok(index)
+    }
+    pub(crate) fn for_diagnostics(
+        source: &Program,
+        available: &[bool],
+    ) -> (Self, Vec<(usize, Diagnostic)>) {
+        let mut index = Self::empty();
+        let mut problems = Vec::new();
+        for (id, ready) in available.iter().enumerate() {
+            if *ready {
+                if let Err(problem) = index.insert(source, id) {
+                    problems.push((id, problem));
                 }
             }
         }
-        Ok(index)
+        (index, problems)
+    }
+    fn insert(&mut self, source: &Program, id: usize) -> Result<(), Diagnostic> {
+        let implementation = &source.impls[id];
+        let mut terms = Vec::new();
+        let mut next = 0;
+        let environment = variables(source, &implementation.generics, &mut terms, &mut next);
+        let target = signature_type(source, implementation.target, &environment, &mut terms)?;
+        let head = match &terms[target] {
+            Term::Named(name, _)
+                if !matches!(name.as_str(), "&" | "&mut" | "[]" | "tuple" | "fn" | "!")
+                    && !name.starts_with("[;") =>
+            {
+                Some(name.clone())
+            }
+            _ => None,
+        };
+        if let Some(trait_type) = implementation.trait_ty {
+            if let Type::Path(path) = &source.types[trait_type].kind {
+                self.by_trait
+                    .entry(bound_identity(source, path))
+                    .or_default()
+                    .insert(head.clone(), id);
+            }
+        }
+        let mut methods = BTreeSet::new();
+        for method in &implementation.methods {
+            let name = &source.functions[*method].name;
+            if methods.insert(name) {
+                self.by_method
+                    .entry(name.clone())
+                    .or_default()
+                    .insert(head.clone(), id);
+            }
+        }
+
+        Ok(())
     }
     fn receiver_head<'a>(
         types: &'a [crate::k::Type],
@@ -1501,12 +1523,15 @@ impl ImplementationIndex {
         ty: usize,
         name: &str,
     ) -> Vec<usize> {
+        self.method_candidates_by_head(Self::receiver_head(types, applications, ty), name)
+    }
+    /// Definition inference uses the same canonical candidate filter before K
+    /// types exist. This query supplies no implementation or bound authority.
+    pub(crate) fn method_candidates_by_head(&self, head: Option<&str>, name: &str) -> Vec<usize> {
         let mut values = self
             .by_method
             .get(name)
-            .map_or_else(Vec::new, |candidates| {
-                candidates.matching(Self::receiver_head(types, applications, ty))
-            });
+            .map_or_else(Vec::new, |candidates| candidates.matching(head));
         // Preserve source-order diagnostics when fallback and nominal entries mix.
         values.sort_unstable();
         values
@@ -1585,7 +1610,7 @@ fn trait_requirements(
     if bound == "Data" {
         let mut children = Vec::new();
         match &ty.kind {
-            TypeKind::World => return None,
+            TypeKind::World | TypeKind::Stdout => return None,
             TypeKind::Ref { inner, .. }
             | TypeKind::Slice { inner, .. }
             | TypeKind::Vec { inner }
@@ -1933,6 +1958,12 @@ mod bound_tests {
 }
 
 fn alias_cycles(source: &Program) -> Result<(), Diagnostic> {
+    match alias_cycle_problems(source).into_iter().next() {
+        Some((_, problem)) => Err(problem),
+        None => Ok(()),
+    }
+}
+pub(crate) fn alias_cycle_problems(source: &Program) -> Vec<(usize, Diagnostic)> {
     let mut names = BTreeMap::new();
     for i in 0..source.aliases.len() {
         names.insert(
@@ -1968,12 +1999,15 @@ fn alias_cycles(source: &Program) -> Result<(), Diagnostic> {
         }
     }
     let groups = components(source.aliases.len(), &edges);
+    let mut problems = BTreeMap::new();
     for edge in edges {
         if groups[edge.from] == groups[edge.to] {
-            return Err(Diagnostic::new(edge.span, "E_TYPE", "recursive type alias"));
+            problems
+                .entry(edge.from)
+                .or_insert_with(|| Diagnostic::new(edge.span, "E_TYPE", "recursive type alias"));
         }
     }
-    Ok(())
+    problems.into_iter().collect()
 }
 #[derive(Clone)]
 enum Normalize {

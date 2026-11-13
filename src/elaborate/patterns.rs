@@ -952,10 +952,57 @@ impl Builder<'_, '_> {
         }
         Ok(())
     }
-    /// A successful pattern only needs witnesses for projections that bind.
+    // A selected constructor proves its tag even when it binds no fields.
+    // Preserve that evidence on unit-variant exits so a join cannot revive a
+    // reference template that is absent on every feasible branch.
+    fn establish_pattern_shells(
+        &mut self,
+        plan: &PatternPlan,
+        root: usize,
+        place: k::Place,
+        line: usize,
+    ) -> BTreeSet<(k::Place, usize)> {
+        let mut established = BTreeSet::new();
+        let mut pending = vec![(root, place)];
+        while let Some((id, place)) = pending.pop() {
+            match &plan.nodes[id].kind {
+                PatternKind::Deref(inner) => {
+                    let mut nested = place;
+                    nested.projections.push(k::Projection::Deref);
+                    pending.push((*inner, nested));
+                }
+                PatternKind::Product(fields) | PatternKind::Variant { fields, .. } => {
+                    if let PatternKind::Variant { tag, .. } = &plan.nodes[id].kind {
+                        if established.insert((place.clone(), *tag)) {
+                            self.establish_pattern_tag(place.clone(), *tag, line);
+                        }
+                    }
+                    for (projection, child) in fields.iter().rev() {
+                        let mut nested = place.clone();
+                        nested.projections.push(projection.clone());
+                        pending.push((*child, nested));
+                    }
+                }
+                // Alternative-specific tags are established along the selected
+                // binding path; an unselected alternative grants no evidence.
+                PatternKind::Or(_) => {}
+                _ => {}
+            }
+        }
+        established
+    }
+
+    /// Binding projections additionally establish tags inside uniform or-patterns.
     /// Alternatives may differ in tests while sharing exactly these places.
     fn establish_bindings(&mut self, bindings: &[PatternBinding], line: usize) {
-        let mut established = BTreeSet::new();
+        self.establish_binding_tags(bindings, &mut BTreeSet::new(), line);
+    }
+    fn establish_binding_tags(
+        &mut self,
+        bindings: &[PatternBinding],
+        established: &mut BTreeSet<(k::Place, usize)>,
+        line: usize,
+    ) {
         for binding in bindings {
             let mut place = k::Place::local(binding.place.local);
             for projection in &binding.place.projections {
@@ -975,7 +1022,7 @@ impl Builder<'_, '_> {
         place: k::Place,
         line: usize,
     ) -> Result<()> {
-        self.bind_pattern_choice(plan, id, place, None, line)
+        self.bind_pattern_choice(plan, id, place, None, true, line)
     }
     pub(super) fn bind_pattern_choice(
         &mut self,
@@ -983,6 +1030,7 @@ impl Builder<'_, '_> {
         id: usize,
         place: k::Place,
         choices: Option<&PatternChoices>,
+        read_shells: bool,
         line: usize,
     ) -> Result<()> {
         if plan.has_or(id) && !plan.uniform_bindings(id, place.clone()) {
@@ -1003,8 +1051,16 @@ impl Builder<'_, '_> {
             };
             return self.bind_pattern_tree(plan, id, place, &targets, line);
         }
-        let bindings = plan.bindings(id, place);
-        self.establish_bindings(&bindings, line);
+        let bindings = plan.bindings(id, place.clone());
+        // Guarded matches use tests cached before any guard. A guard may move
+        // an otherwise unbound scrutinee, so supplementary tag reads are valid
+        // only on the ordinary path. Binding projections still need witnesses.
+        let mut established = if read_shells {
+            self.establish_pattern_shells(plan, id, place, line)
+        } else {
+            BTreeSet::new()
+        };
+        self.establish_binding_tags(&bindings, &mut established, line);
         for binding in bindings {
             let value = match binding.borrow {
                 Some(mutable) => self.borrow(binding.place, mutable, line)?,

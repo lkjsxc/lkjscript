@@ -58,6 +58,7 @@ pub fn parse_bundle_report(bundle: &SourceBundle) -> SourceReport {
         diagnostics.append(&mut report.diagnostics);
         report.diagnostics = diagnostics;
         report.blocked.push(BlockedRegion {
+            domain: None,
             path: bundle.root.clone(),
             span: Span::default(),
             kind: "source bundle".to_string(),
@@ -149,6 +150,7 @@ pub fn load_report<F: FnMut(&str) -> std::result::Result<Option<String>, String>
                 };
                 error.path = path.clone();
                 blocked.push(BlockedRegion {
+                    domain: None,
                     path: path.clone(),
                     span: Span::default(),
                     kind: "file".to_string(),
@@ -176,6 +178,7 @@ pub fn load_report<F: FnMut(&str) -> std::result::Result<Option<String>, String>
             );
             error.path = path.clone();
             blocked.push(BlockedRegion {
+                domain: None,
                 path: path.clone(),
                 span: Span::default(),
                 kind: "file".to_string(),
@@ -238,6 +241,7 @@ pub fn load_report<F: FnMut(&str) -> std::result::Result<Option<String>, String>
                 (first, second) => {
                     for error in [first.err(), second.err()].into_iter().flatten() {
                         blocked.push(BlockedRegion {
+                            domain: None,
                             path: error.path.clone(),
                             span: module.span,
                             kind: "module".to_string(),
@@ -257,6 +261,7 @@ pub fn load_report<F: FnMut(&str) -> std::result::Result<Option<String>, String>
                         &format!("both {direct} and {nested} define module {}", module.name),
                     );
                     blocked.push(BlockedRegion {
+                        domain: None,
                         path: error.path.clone(),
                         span: module.span,
                         kind: "module".to_string(),
@@ -275,6 +280,7 @@ pub fn load_report<F: FnMut(&str) -> std::result::Result<Option<String>, String>
                         &format!("module {} needs {direct} or {nested}", module.name),
                     );
                     blocked.push(BlockedRegion {
+                        domain: None,
                         path: error.path.clone(),
                         span: module.span,
                         kind: "module".to_string(),
@@ -289,6 +295,7 @@ pub fn load_report<F: FnMut(&str) -> std::result::Result<Option<String>, String>
     }
     if !diagnostics.is_empty() {
         blocked.push(BlockedRegion {
+            domain: None,
             path: root.to_string(),
             span: Span::default(),
             kind: "semantic phase".to_string(),

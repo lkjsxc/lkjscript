@@ -6,6 +6,8 @@ use std::process::Command;
 fn capabilities_cannot_be_fabricated_by_source_or_raw_k() {
     for text in [
         "fn probe() -> World { 42 }",
+        "fn probe(mut world: World) { let out = world.stdout::<i64>(); }",
+        "fn probe(mut world: World) { let mut out = world.stdout(); out.write::<i64>(&[42u8]); }",
         "fn probe() -> Stdout { Stdout {} }",
         "fn probe(mut world: World) { let other: World = world; let again: World = world; }",
         "fn probe(mut world: World) { let mut out: Stdout = world.stdout(); let copied: Stdout = out.clone(); }",

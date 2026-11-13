@@ -75,14 +75,22 @@ fn print_census(source: &source::SourceReport) {
     );
     println!("TOTAL\t{}\tblocked", census.blocked.values().sum::<usize>());
     println!("\nsemantic dependency\tcount\tcategory");
-    let semantic = diagnostics::semantic_census(source);
+    let report = diagnostics::semantic_report(source);
+    let semantic = report.counts();
     for (kind, count) in &semantic {
         println!("{kind}\t{count}\tsemantic");
     }
     println!("TOTAL\t{}\tsemantic", semantic.values().sum::<usize>());
-    if !source.blocked.is_empty() {
+    println!("\nsemantic phase\tcount\tcategory");
+    for (phase, count) in &report.coverage {
+        println!("{phase}\t{count}\tcoverage");
+    }
+    for (phase, count) in report.blocked_counts() {
+        println!("{phase}\t{count}\tblocked");
+    }
+    if !source.blocked.is_empty() || !report.blocked.is_empty() {
         println!(
-            "Method and trait body resolution remains incomplete in blocked regions. Missing imports may account for dependent names."
+            "Coverage counts each phase separately. Blocked analysis makes no claim that a name, method, or trait is absent."
         );
     }
 }
@@ -100,6 +108,7 @@ fn analysis_failure(
     );
     if let Some(reason) = blocked {
         source.blocked.push(diagnostics::BlockedRegion {
+            domain: None,
             path: path.to_string(),
             span: lkjscript::ast::Span {
                 file: 0,

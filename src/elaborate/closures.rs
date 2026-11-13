@@ -65,14 +65,20 @@ struct Closure {
     plans: Option<Vec<CapturePlan>>,
     function: Option<usize>,
 }
+#[derive(Clone)]
+pub(super) struct RegionBound {
+    pub(super) scope: usize,
+    pub(super) arguments: Vec<a::TypeId>,
+}
 type ClosureKey = (a::ExprId, Vec<usize>, Vec<(String, usize)>);
 #[derive(Default)]
 pub(super) struct Catalog {
     keys: BTreeMap<ClosureKey, usize>,
     entries: BTreeMap<usize, Closure>,
     pub(super) assumptions: BTreeMap<usize, Signature>,
-    assumed_functions: BTreeMap<usize, usize>,
-    wrappers: BTreeMap<(usize, Kind), usize>,
+    pub(super) assumed_functions: BTreeMap<usize, usize>,
+    pub(super) region_bounds: BTreeMap<usize, Vec<RegionBound>>,
+    pub(super) wrappers: BTreeMap<(usize, Kind), usize>,
     pub(super) checked_functions: BTreeSet<usize>,
     pub(super) evidence: Evidence,
 }
@@ -278,6 +284,67 @@ impl Compiler<'_> {
         }
     }
 
+    pub(super) fn callable_region_bounds(&self, mut ty: usize) -> Vec<RegionBound> {
+        loop {
+            if let Some(bounds) = self.closures.region_bounds.get(&ty) {
+                return bounds.clone();
+            }
+            if let Some(closure) = self.closures.entries.get(&ty) {
+                let a::Expr::Closure { params, .. } = &self.source.exprs[closure.expression].kind
+                else {
+                    unreachable!()
+                };
+                return vec![RegionBound {
+                    scope: closure.source_function,
+                    arguments: params.iter().map(|parameter| parameter.ty).collect(),
+                }];
+            }
+            if let k::TypeKind::Ref { inner, .. } = self.types[ty].kind {
+                ty = inner;
+            } else {
+                return Vec::new();
+            }
+        }
+    }
+    fn check_fresh_callable_inputs(
+        &self,
+        ty: usize,
+        parameters: &[a::TypeId],
+        span: a::Span,
+    ) -> Result<()> {
+        use super::origins::Label;
+        let Some(signature) = self.callable_signature(ty) else {
+            return Ok(());
+        };
+        for bound in self.callable_region_bounds(ty) {
+            for ((formal, actual), concrete) in parameters
+                .iter()
+                .zip(&bound.arguments)
+                .zip(&signature.arguments)
+            {
+                let actual: BTreeMap<_, _> = self
+                    .region_leaves(bound.scope, *actual, *concrete)
+                    .into_iter()
+                    .map(|leaf| (leaf.path, leaf.label))
+                    .collect();
+                for leaf in self.region_leaves(bound.scope, *formal, *concrete) {
+                    if matches!(leaf.label, Label::Elided)
+                        && actual
+                            .get(&leaf.path)
+                            .is_some_and(|label| !matches!(label, Label::Elided | Label::Unknown))
+                    {
+                        return Err(err(
+                            span,
+                            "E_TRAIT",
+                            "fixed-region callable does not establish a fresh higher-ranked input",
+                        ));
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub(super) fn is_callable_bound(&self, bound: a::TypeId) -> bool {
         matches!(&self.source.types[bound].kind, a::Type::Path(path)
             if path.declaration.is_none() && Kind::named(&path.name).is_some())
@@ -304,8 +371,8 @@ impl Compiler<'_> {
             return Err(err(span, "E_TYPE", "callable arguments require a tuple"));
         };
         let arguments = parameters
-            .into_iter()
-            .map(|parameter| self.resolve(parameter, substitutions))
+            .iter()
+            .map(|parameter| self.resolve(*parameter, substitutions))
             .collect::<Result<Vec<_>>>()?;
         let result = self.resolve(path.args[1], substitutions)?;
         let signature = self.callable_signature(ty).ok_or_else(|| {
@@ -333,6 +400,7 @@ impl Compiler<'_> {
                 ),
             ));
         }
+        self.check_fresh_callable_inputs(ty, &parameters, span)?;
         Ok(true)
     }
 
@@ -356,6 +424,16 @@ impl Compiler<'_> {
         let a::Type::Tuple(parameters) = self.source.types[path.args[0]].kind.clone() else {
             return Err(err(span, "E_TYPE", "callable arguments require a tuple"));
         };
+        if let Some(contracts) = &self.contracts {
+            self.closures
+                .region_bounds
+                .entry(ty)
+                .or_default()
+                .push(RegionBound {
+                    scope: contracts.active_scope,
+                    arguments: parameters.clone(),
+                });
+        }
         let arguments = parameters
             .into_iter()
             .map(|parameter| self.resolve(parameter, substitutions))
@@ -863,8 +941,8 @@ impl Builder<'_, '_> {
             moved,
             params,
             patterns,
+            result: declared_result,
             body,
-            ..
         } = self.compiler.source.exprs[entry.expression].kind.clone()
         else {
             unreachable!()
@@ -926,6 +1004,7 @@ impl Builder<'_, '_> {
                 file: span.file,
                 compiler: self.compiler,
                 function: &mut function,
+                return_annotated: declared_result.is_some(),
                 sub: entry.substitutions.clone(),
                 bindings,
                 guard_aliases: BTreeMap::new(),
@@ -960,7 +1039,7 @@ impl Builder<'_, '_> {
                 }
                 builder.bind_pattern_plan(&plan, root, k::Place::local(index + 1), span.line)?;
             }
-            let result = builder.expr(body, Some(entry.signature.result))?;
+            let result = builder.return_value(body)?;
             if builder.reachable {
                 if result.1 != entry.signature.result {
                     return Err(err(span, "E_TYPE", "closure result type differs"));

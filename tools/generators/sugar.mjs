@@ -9,7 +9,8 @@ import { createHash } from 'node:crypto';
 import { run } from '../process.mjs';
 import { runRoutes } from '../batch.mjs';
 import { oracleCache, packResult, unpackResult } from '../oracle.mjs';
-const [binary='target/debug/lkjscript',seedText='1301',countText='126',output='target/generators']=process.argv.slice(2);
+import { combinatorPair } from './combinators.mjs';
+const [binary='target/debug/lkjscript',seedText='1301',countText='147',output='target/generators']=process.argv.slice(2);
 const bin=path.resolve(binary),count=Number(countText),dir=path.resolve(output,`sugar-${seedText}`);
 const engines=(process.env.LKJ_ENGINES||'native,k').split(',');
 const compareRust=process.env.LKJ_SUGAR_RUST!=='0';
@@ -25,7 +26,7 @@ const rangeExpansion="fn invalid_range(world:&mut World,bytes:&[u8]){let invalid
 function pair(index){
  const a=1+random(50),b=1+random(50),c=1+random(50),marker=60+random(30),yes=random(2)===0?'true':'false';
  let sugar='',expanded='',sugarHelpers='',expandedHelpers='';let family,rustSugar=true;
- switch(index%42){
+ switch(index%49){
   case 0:{family='if-let';const value=`if ${yes} { Some(make(&mut world,${a}u8)) } else { None }`;
    sugar=`if let Some(m) = ${value} { tick(&mut world,${marker}u8); drop(m); } else { tick(&mut world,${b}u8); }`;
    expanded=`match ${value} { Some(m) => { tick(&mut world,${marker}u8); drop(m); }, None => tick(&mut world,${b}u8) }`;break;}
@@ -270,6 +271,9 @@ fn result_view_mut(value:&mut Result<M,M>)->Result<&mut M,&mut M>{match value{Ok
    sugar=prefix+'for (key,value) in &map{tick(&mut world,*key);tick(&mut world,value.b);}for key in map.keys(){tick(&mut world,*key);}for value in map.values(){tick(&mut world,value.b);}for value in &set{tick(&mut world,*value);}';
    expanded=prefix+'let mut key=1u8;while key<=2{tick(&mut world,key);tick(&mut world,map.get(&key).unwrap().b);key=key+1;}tick(&mut world,1);tick(&mut world,2);tick(&mut world,map.get(&1u8).unwrap().b);tick(&mut world,map.get(&2u8).unwrap().b);tick(&mut world,1);tick(&mut world,2);';break;}
 
+  case 42:case 43:case 44:case 45:case 46:case 47:case 48:{
+   ({family,sugar,expanded,sugarHelpers,expandedHelpers}=combinatorPair(index%49-42,random));break;}
+
  }
  const tail=`\ntick(&mut world,${90+random(10)}u8);`+(random(9)===0?' assert!(false);':'');
  return {family,rustSugar,sugar:prelude+sugarHelpers+'\npub fn main(mut world:World) {\n'+sugar+tail+'\n}\n',expanded:prelude+expandedHelpers+'\npub fn main(mut world:World) {\n'+expanded+tail+'\n}\n'};
@@ -277,7 +281,7 @@ fn result_view_mut(value:&mut Result<M,M>)->Result<&mut M,&mut M>{match value{Ok
 fs.mkdirSync(dir,{recursive:true});
 const pairs=Array.from({length:count},(_,i)=>pair(i)),files=[];
 for(let i=0;i<count;i++)for(const variant of ['sugar','expanded']){const file=path.join(dir,`${i}-${variant}.rs`);fs.writeFileSync(file,pairs[i][variant]);files.push(file);}
-const generatorHash=createHash('sha256').update(fs.readFileSync(new URL(import.meta.url))).digest('hex');
+const generatorHash=createHash('sha256').update(fs.readFileSync(new URL(import.meta.url))).update(fs.readFileSync(new URL('./combinators.mjs',import.meta.url))).digest('hex');
 let references;
 if(compareRust){
  let source='#![allow(warnings)]\nmod host {\n'+fs.readFileSync('bridge/output.rs','utf8')+'\n}\n';

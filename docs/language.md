@@ -280,8 +280,13 @@ Option and Result have canonical source declarations with standard option/result
 module re-exports. Their source methods include shared/exclusive views, owned
 and/or, and transpose. Option also supplies xor, zip/unzip, flatten, replace,
 insert and get_or_insert. Owned arguments retain source evaluation and destruction
-order even when their payload is not selected. Returned views preserve their
-owner and exclusivity requirements. Option::expect has the same value and trap
+order even when their payload is not selected. Both types provide source
+map, map_or, map_or_else, and_then, or_else and unwrap_or_else; Option also has
+filter and Result has map_err. Eager defaults are evaluated before the call;
+lazy defaults invoke their callable only on the selected alternative. Every
+unused callable and payload still cleans up in source order. filter borrows its
+payload for the predicate, then returns or destroys the original owned value.
+Returned views preserve their owner and exclusivity requirements. Option::expect has the same value and trap
 outcome contract as unwrap; its supplied message is evaluated but currently does
 not replace the fixed trap text. Some nested generic receiver expressions still
 need explicit type annotations before a method call.
@@ -419,6 +424,32 @@ parameters is not fully modeled at this generic boundary; concrete specializatio
 still receive full K provenance checks. This is not complete generic lifetime or
 external mutation-contract closure.
 
+Fixed input regions on callable bounds now have declaration-scoped proof
+obligations in the discarded definition-verification program. Reference leaves
+are followed through aliases, tuples and nominal fields. Each actual source must
+outlive the required region using input-region facts and declared or implied
+outlives edges; a local owner's lifetime cannot establish a universal input region.
+Helper calls transport these requirements through their callable type arguments,
+including fixed leaves of a type family. Explicitly fixed closure inputs do not
+satisfy a fresh higher-ranked callable input.
+
+A fixed callable input can retain a borrow independently of its result or the
+callable's destruction. Retained effects are indexed by source root. Access
+through a returned descendant requires the checked result's input-leaf selectors;
+source overlap alone grants no permission. Shared access to stored reference
+descriptors preserves the exact current holder while keeping its reborrowed
+parent suspended. Reusing a call site revokes obsolete overlapping permissions.
+Branches retain every possible effect and only permissions justified on each
+relevant edge. Loop effects are replayed to a finite monotone fixed point; ordinary
+initialization and loan backedges still require their existing equality contract.
+
+These annotations are private diagnostic evidence. Text K cannot declare them,
+and their checking API returns no executable authority. Mutable access to stored
+reference origins still needs a mutation contract and is explicitly unsupported
+at opaque calls. Named lifetime annotations on local bindings are not yet fully
+enforced; the retained no-call reduction demonstrates that remaining definition
+gap. General output/capture origin families remain unfinished.
+
 ## Closures
 
 Closures are anonymous environment structs plus ordinary K functions. Their
@@ -440,6 +471,22 @@ environment has ordinary Copy eligibility and cleanup. Last-use cleanup may end
 only its reference capture leaves while owned captures remain alive to their
 lexical destruction point.
 
+Inferred return types constrain expression shape without creating a reborrow
+context. A bare captured mutable reference therefore moves out of an inferred
+closure result and requires FnOnce. This distinction is preserved through
+constructors, tuples, if/match, loop breaks and explicit return statements.
+Declared return annotations keep their ordinary coercion behavior. An inferred
+struct-update base supplies type equations, not an annotation for its fields.
+Partially inferred return annotations still need per-position coercion evidence;
+contextual FnOnce demands are not yet used to permit escaping reborrows of
+captured references. These remain explicit reduced gaps.
+
+Ordinary visible inherent method headers can supply closure argument equations
+when one unconditional, unspecialized header applies at the exact nominal
+receiver head. This is contextual inference, not method selection: visibility,
+prerequisites, inherent priority, ambiguity and callable kind are checked by the
+ordinary selector. Bounded or ambiguous candidates do not establish that context.
+
 Ordinary shared or mutable closure calls do not lend references to owned
 environment storage. Returned references must come from captured reference
 origins, explicit arguments or static storage. Every result leaf has its own
@@ -458,7 +505,22 @@ require a fuller origin inventory and remain a named unsupported boundary.
 Returning closures through impl Trait, lending closures, dynamic function
 objects and concurrency scope APIs remain unfinished.
 
+An ordinary selected constructor establishes its tag even when it binds no fields.
+Guarded matches retain their cached pure tests: a guard may consume an unbound
+scrutinee, so only required binding projections reread its storage after a guard.
+At a join, a reference template proven inactive on every feasible predecessor
+remains absent after individual tag facts disappear. A holder active on any
+incoming edge still participates in ownership and borrow checks.
+
 ## K and checking
+
+Dropping a proven tree of scalar and reference descriptors can release its old
+descriptor storage while descendants continue to refer to external owners.
+Eligibility is computed once for the type graph and excludes every owned
+destructor. Actual loans into the released storage still conflict. Replacement,
+assignment and custom destruction retain their original parent restrictions.
+The K machine checks the same programs independently.
+
 
 K is a monomorphic program of explicit types, function signatures, local slots,
 places, instructions and structured control. It distinguishes copies, moves,
@@ -683,7 +745,7 @@ lowered globals and terminate the selected route; the host translates that
 record after the trap. Trapping requires no application I/O authority.
 Ordinary source cannot declare host imports or construct capabilities from scalars.
 Ambient filesystem, environment and print operations are rejected. World-derived
-standard output is specified below. Other capabilities, closures and structured
+standard output is specified below. Other capabilities and structured
 task scopes remain unimplemented.
 
 ## World and byte output
@@ -725,9 +787,21 @@ construction and ownership checking even if a peer fails. Diagnostic-only trap
 bodies retain known signatures for dependent checks; the saved error list
 prevents such a program from becoming an emitted artifact. Unsupported source
 forms are enumerated across parsed regions. The census separates syntax sites,
-blocked regions and observed name/type/trait dependencies; blocked method bodies
-are not counted as successfully resolved. Missing imports can explain dependent
-unresolved type names.
+blocked regions and observed name/type/method/trait dependencies, with phase
+coverage and dependency blockers reported separately. It retains real source
+declaration identities and uses an indexed dependency worklist to recover
+independent bodies. A known field type remains available when a different field
+blocks its enclosing layout. Source type observations never fabricate that layout.
+
+Closed structural bodies with complete nongeneric dependencies can reach ordinary
+K construction and ownership checking in the diagnostic pass. Unknown nominal,
+generic, callable, constant or region contracts remain ownership blockers.
+The public recovery result contains observations and locations only; it cannot
+supply checked K or authorize emission. Missing modules and excluded implementation
+domains prevent method-absence claims. An unresolved import can affect trait
+visibility, but it cannot add an implementation to an otherwise complete supplied
+source graph. Existing candidates whose visibility or prerequisites are unknown
+remain blocked. A method's spelling alone is not evidence that it resolves.
 
 The bootstrap batch command accepts one route or a comma-separated list of routes.
 It checks each source once and shares lowering between encoders. K uses a fresh

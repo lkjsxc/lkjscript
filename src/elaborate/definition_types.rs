@@ -4,7 +4,9 @@
 use super::{Bindings, Compiler, Result, a, err, is_copy, k};
 use std::collections::{BTreeMap, VecDeque};
 
+pub(super) mod census;
 mod closures;
+mod method_headers;
 mod source_types;
 
 type Variable = usize;
@@ -73,6 +75,7 @@ pub(super) struct DefinitionTypes {
     expressions: BTreeMap<a::ExprId, Variable>,
     bindings: BTreeMap<a::PatternId, Variable>,
     closures: BTreeMap<a::ExprId, closures::Closure>,
+    unresolved_paths: Vec<(a::ExprId, a::Diagnostic)>,
 }
 #[derive(Default)]
 pub(super) struct Types {
@@ -320,6 +323,8 @@ enum Obligation {
     Method {
         receiver: Variable,
         name: String,
+        types: Vec<a::TypeId>,
+        scope: a::ModuleId,
         arguments: Vec<Variable>,
         result: Variable,
         span: a::Span,
@@ -331,6 +336,8 @@ struct Infer<'a, 'b> {
     callable_parameters: BTreeMap<String, (Vec<Variable>, Variable)>,
     source: &'a a::Program,
     names: &'b crate::resolve::Resolver<'a>,
+    implementations: &'b crate::generics::ImplementationIndex,
+    census: Option<&'b super::census::Context>,
     definition: DefinitionTypes,
     bindings: Bindings,
     environment: BTreeMap<String, Variable>,
@@ -759,8 +766,24 @@ impl Infer<'_, '_> {
         values: &[Variable],
         span: a::Span,
     ) -> Result<Variable> {
+        self.header_signature(index, type_args, values, BTreeMap::new(), 0, span)
+    }
+    fn header_signature(
+        &mut self,
+        index: usize,
+        type_args: &[a::TypeId],
+        values: &[Variable],
+        mut environment: BTreeMap<String, Variable>,
+        first: usize,
+        span: a::Span,
+    ) -> Result<Variable> {
+        if let Some(problem) = self
+            .census
+            .and_then(|context| context.readiness.signature_problem(index))
+        {
+            return Err(problem.clone());
+        }
         let function = self.source.functions[index].clone();
-        let mut environment = BTreeMap::new();
         let parameters: Vec<_> = function.generics.iter().filter(|p| !p.lifetime).collect();
         let outer = self.environment.clone();
         for (i, parameter) in parameters.iter().enumerate() {
@@ -771,7 +794,7 @@ impl Infer<'_, '_> {
             };
             environment.insert(parameter.name.clone(), value);
         }
-        for (parameter, value) in function.params.iter().zip(values) {
+        for (parameter, value) in function.params[first..].iter().zip(values) {
             let expected = self.source_type(parameter.ty, &environment)?;
             self.coerce(*value, expected, span)?;
         }
@@ -1103,6 +1126,7 @@ impl Infer<'_, '_> {
                 if let Some(value) = self.bindings.get(&path.name) {
                     value
                 } else {
+                    self.census_path(id, &path)?;
                     match self.names.value_path(node.scope, &path, span) {
                         Ok(path) => {
                             if let Some(declaration) = path.declaration {
@@ -1119,7 +1143,10 @@ impl Infer<'_, '_> {
                                 self.blocked()
                             }
                         }
-                        Err(_) => self.blocked(),
+                        Err(problem) => {
+                            self.definition.unresolved_paths.push((id, problem));
+                            self.blocked()
+                        }
                     }
                 }
             }
@@ -1220,10 +1247,12 @@ impl Infer<'_, '_> {
                     values.push(self.expr(*arg)?);
                 }
                 let path = match &self.source.exprs[callee].kind {
-                    a::Expr::Path(path) if self.bindings.get(&path.name).is_none() => self
-                        .names
-                        .value_path(self.source.exprs[callee].scope, path, span)
-                        .ok(),
+                    a::Expr::Path(path) if self.bindings.get(&path.name).is_none() => {
+                        self.census_path(callee, path)?;
+                        self.names
+                            .value_path(self.source.exprs[callee].scope, path, span)
+                            .ok()
+                    }
                     _ => None,
                 };
                 if let Some(path) = path {
@@ -1291,16 +1320,16 @@ impl Infer<'_, '_> {
                 for arg in args {
                     arguments.push(self.expr(arg)?);
                 }
-                let result = self.blocked();
-                if types.is_empty() {
-                    self.obligation(Obligation::Method {
-                        receiver,
-                        name,
-                        arguments,
-                        result,
-                        span,
-                    });
-                }
+                let result = self.operation_type();
+                self.obligation(Obligation::Method {
+                    receiver,
+                    name,
+                    types,
+                    scope: node.scope,
+                    arguments,
+                    result,
+                    span,
+                });
                 result
             }
             a::Expr::Field { value, name } => {
@@ -1723,13 +1752,30 @@ impl Infer<'_, '_> {
             Obligation::Method {
                 receiver,
                 name,
+                types,
+                scope,
                 arguments,
                 result,
                 span,
             } => {
-                let Some((_, shape)) = self.strip_references(receiver, id) else {
+                let Some((base, shape)) = self.strip_references(receiver, id) else {
                     return Ok(false);
                 };
+                if self.census_inherent_complete(base, &name)
+                    && self.inherent_header(
+                        base,
+                        &name,
+                        &types,
+                        &arguments,
+                        result,
+                        (scope, span),
+                    )?
+                {
+                    return Ok(true);
+                }
+                if !types.is_empty() {
+                    return Ok(false);
+                }
                 match (name.as_str(), shape) {
                     ("wrapping_add" | "wrapping_sub" | "wrapping_mul", Shape::Atom(atom))
                         if integer_name(&atom) && arguments.len() == 1 =>
@@ -1866,7 +1912,18 @@ impl Infer<'_, '_> {
 pub(super) fn infer(
     source: &a::Program,
     names: &crate::resolve::Resolver<'_>,
+    implementations: &crate::generics::ImplementationIndex,
     index: usize,
+) -> Result<DefinitionTypes> {
+    infer_available(source, names, implementations, index, None)
+}
+
+pub(super) fn infer_available(
+    source: &a::Program,
+    names: &crate::resolve::Resolver<'_>,
+    implementations: &crate::generics::ImplementationIndex,
+    index: usize,
+    census: Option<&super::census::Context>,
 ) -> Result<DefinitionTypes> {
     let function = source.functions[index].clone();
     let mut inference = Infer {
@@ -1875,11 +1932,14 @@ pub(super) fn infer(
         callable_parameters: BTreeMap::new(),
         source,
         names,
+        implementations,
+        census,
         definition: DefinitionTypes {
             nodes: Vec::new(),
             expressions: BTreeMap::new(),
             bindings: BTreeMap::new(),
             closures: BTreeMap::new(),
+            unresolved_paths: Vec::new(),
         },
         bindings: Bindings::default(),
         environment: BTreeMap::new(),

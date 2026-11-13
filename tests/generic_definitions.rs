@@ -86,6 +86,33 @@ fn structural_obligations_reach_rigid_children() {
 }
 
 #[test]
+fn data_excludes_typed_capabilities_through_structural_children() {
+    for capability in ["World", "Stdout"] {
+        for shape in [
+            capability.to_string(),
+            format!("&{capability}"),
+            format!("Box<{capability}>"),
+            format!("Vec<{capability}>"),
+            format!("[{capability};1]"),
+            format!("({capability},)"),
+            format!("Holder<{capability}>"),
+            format!("Maybe<{capability}>"),
+        ] {
+            let declarations = "struct Holder<T>{value:T} enum Maybe<T>{None,Some(T)}";
+            rejected(
+                &format!(
+                    "{declarations} fn need<T:Data>(value:T){{}} fn unused<U>(value:{shape}){{need(value);}}"
+                ),
+                "E_TRAIT",
+            );
+            accepted(&format!(
+                "struct {capability}{{value:i64}} {declarations} fn need<T:Data>(value:T){{}} fn ordinary<U>(value:{shape}){{need(value);}}"
+            ));
+        }
+    }
+}
+
+#[test]
 fn declared_trait_methods_use_their_signatures() {
     accepted("trait Score{fn score(&self)->i64;} fn good<T:Score>(x:&T)->i64{x.score()}");
     rejected(

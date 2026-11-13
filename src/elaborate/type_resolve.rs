@@ -185,6 +185,20 @@ impl Compiler<'_> {
                     environment,
                     span,
                 } => {
+                    if self.diagnostic_functions.is_some()
+                        && path.declaration.is_some_and(|id| {
+                            matches!(
+                                self.source.declarations[id].item,
+                                a::Item::Struct(_) | a::Item::Enum(_)
+                            )
+                        })
+                    {
+                        return Err(err(
+                            span,
+                            "E_BLOCKED",
+                            "nominal layout requires its complete declaration contracts",
+                        ));
+                    }
                     let bindings = &work.environments[environment];
                     if self.names.generic_path(&path, span) {
                         if !path.args.is_empty() {

@@ -526,6 +526,7 @@ impl Builder<'_, '_> {
             range: None,
             result: None,
             result_typed: true,
+            result_expected: None,
             exits: Vec::new(),
         });
         self.emit(k::Op::Loop, line);

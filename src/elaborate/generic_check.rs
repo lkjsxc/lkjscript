@@ -85,6 +85,7 @@ pub(super) type MethodSelections = BTreeMap<a::ExprId, MethodSelection>;
 
 #[derive(Default)]
 pub(super) struct Contracts {
+    pub(super) active_scope: usize,
     pub(super) rigid: BTreeMap<usize, BTreeSet<TraitIdentity>>,
     // (rigid receiver, resolved trait declaration) -> associated-type identities.
     traits: BTreeMap<(usize, usize), BTreeMap<String, usize>>,
@@ -227,6 +228,8 @@ pub(super) fn validate_report(
     }
     let mut refinement = compiler.closures.checked_functions.clone();
     refinement.extend(&compiler.return_inference);
+    let (scopes, scoped_problems) = compiler.scoped_definitions(&checked_roots);
+    problems.extend(scoped_problems);
     let mut program = k::Program {
         types: compiler.types,
         functions: compiler.functions,
@@ -236,6 +239,7 @@ pub(super) fn validate_report(
         &mut program,
         &refinement,
     ));
+    problems.extend(crate::check::scoped::check_definitions(&program, &scopes));
     if let Err(errors) = crate::check::check_all(program) {
         problems.extend(errors);
     }
@@ -415,6 +419,7 @@ impl Compiler<'_> {
     }
 
     fn definition_parameters(&mut self, index: usize) -> Result<BTreeMap<String, usize>> {
+        self.contracts.as_mut().unwrap().active_scope = index;
         let function = self.source.functions[index].clone();
         let mut substitutions = BTreeMap::new();
         let owner = self.source.function_owner(a::FunctionId { index });

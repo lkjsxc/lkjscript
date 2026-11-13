@@ -1,6 +1,8 @@
 //! Rust-compatible syntax to explicit K. Inference lives here; K trusts none of it.
 mod assignment;
 mod borrow_cleanup;
+pub(crate) mod census;
+mod census_ownership;
 mod closures;
 mod constructors;
 mod definition_types;
@@ -10,12 +12,14 @@ mod diagnostic_inference;
 mod generic_check;
 mod inference;
 mod integers;
+mod methods;
 mod operators;
 mod origins;
 mod output;
 mod pattern_choices;
 mod patterns;
 mod ranges;
+mod scoped_calls;
 mod sequences;
 mod static_lifetimes;
 mod sugars;
@@ -82,6 +86,7 @@ struct Compiler<'a> {
     closures: closures::Catalog,
     trait_proofs: Option<trait_proofs::Session>,
     return_inference: BTreeSet<usize>,
+    diagnostic_functions: Option<&'a BTreeSet<usize>>,
 }
 
 fn first_problem(problems: Vec<a::Diagnostic>) -> a::Diagnostic {
@@ -124,7 +129,8 @@ pub fn infer_resolved_report(
     crate::generics::validate(source).map_err(|error| vec![error])?;
     static_lifetimes::outputs(source).map_err(|error| vec![error])?;
     let compiler = Compiler::new(source).map_err(|error| vec![error])?;
-    let inferred = diagnostic_inference::infer_all(source, &compiler.names);
+    let inferred =
+        diagnostic_inference::infer_all(source, &compiler.names, &compiler.implementations);
     let (evidence, mut problems) = generic_check::validate_report(source, inferred.definitions)
         .map_err(|error| {
             let mut errors = inferred.problems.clone();
@@ -297,10 +303,21 @@ fn elaborate_definitions(
 
 impl<'a> Compiler<'a> {
     fn new(source: &'a a::Program) -> Result<Self> {
+        Ok(Self::with_indexes(
+            source,
+            crate::resolve::Resolver::new(source)?,
+            crate::generics::ImplementationIndex::new(source)?,
+        ))
+    }
+    fn with_indexes(
+        source: &'a a::Program,
+        names: crate::resolve::Resolver<'a>,
+        implementations: crate::generics::ImplementationIndex,
+    ) -> Self {
         let mut c = Compiler {
             source,
-            names: crate::resolve::Resolver::new(source)?,
-            implementations: crate::generics::ImplementationIndex::new(source)?,
+            names,
+            implementations,
             field_positions: source
                 .structs
                 .iter()
@@ -348,6 +365,7 @@ impl<'a> Compiler<'a> {
             closures: closures::Catalog::default(),
             trait_proofs: None,
             return_inference: BTreeSet::new(),
+            diagnostic_functions: None,
         };
         for i in 0..c.types.len() {
             c.type_names.insert(c.types[i].name.clone(), i);
@@ -384,7 +402,7 @@ impl<'a> Compiler<'a> {
         for positions in c.uses.values_mut() {
             positions.sort_unstable();
         }
-        Ok(c)
+        c
     }
 }
 
@@ -604,17 +622,18 @@ impl Compiler<'_> {
         source: &a::Function,
         locals: &[k::Local],
         result: usize,
+        substitutions: &BTreeMap<String, usize>,
     ) -> Result<(Option<k::ReturnSource>, bool)> {
         if !self.has_view(result) {
             return Ok((None, false));
         }
-        if let Some(leaves) = self.return_leaf_contract(source_index, source, locals, result)? {
-            return Ok((Some(k::ReturnSource::Leaves(leaves)), false));
-        }
         if let Some(leaves) =
-            self.produced_return_leaf_contract(source_index, source, locals, result)
+            self.produced_return_leaf_contract(source_index, source, locals, result, substitutions)
         {
             return Ok((Some(k::ReturnSource::Leaves(leaves)), true));
+        }
+        if let Some(leaves) = self.return_leaf_contract(source_index, source, locals, result)? {
+            return Ok((Some(k::ReturnSource::Leaves(leaves)), false));
         }
         if static_lifetimes::has_static(self.source, source.result) {
             return Ok((Some(k::ReturnSource::Static), false));
@@ -712,6 +731,16 @@ impl Compiler<'_> {
         ))
     }
     fn instantiate(&mut self, index: usize, mut sub: BTreeMap<String, usize>) -> Result<usize> {
+        if self
+            .diagnostic_functions
+            .is_some_and(|functions| !functions.contains(&index))
+        {
+            return Err(err(
+                self.source.functions[index].span,
+                "E_BLOCKED",
+                "callee contracts are outside the available ownership region",
+            ));
+        }
         self.prepare_associated(index, &mut sub)?;
         let source = self.source.functions[index].clone();
         let key = (
@@ -745,7 +774,8 @@ impl Compiler<'_> {
             });
         }
         let result = self.resolve(source.result, &sub)?;
-        let (return_source, infer_return) = self.return_source(index, &source, &locals, result)?;
+        let (return_source, infer_return) =
+            self.return_source(index, &source, &locals, result, &sub)?;
         let id = self.functions.len();
         if infer_return {
             self.return_inference.insert(id);
@@ -902,7 +932,12 @@ impl Compiler<'_> {
     fn compile_function(&mut self, index: usize, instance: &Instance) -> Result<k::Function> {
         let definition = match self.definition_types.remove(&instance.source) {
             Some(definition) => definition,
-            None => definition_types::infer(self.source, &self.names, instance.source)?,
+            None => definition_types::infer(
+                self.source,
+                &self.names,
+                &self.implementations,
+                instance.source,
+            )?,
         };
         let inferred = definition.instantiate(self, &instance.substitutions);
         self.definition_types.insert(instance.source, definition);
@@ -924,6 +959,7 @@ impl Compiler<'_> {
             file: source.span.file,
             compiler: self,
             function: &mut function,
+            return_annotated: true,
             sub: instance.substitutions.clone(),
             bindings,
             guard_aliases: BTreeMap::new(),
@@ -1018,12 +1054,25 @@ struct Snapshot {
     carriers: borrow_cleanup::Dependencies,
     dependents: borrow_cleanup::Dependencies,
 }
+#[derive(Clone, Copy, Default)]
+struct ExpressionContext {
+    // Source annotations and declared parameter types permit a reborrow.
+    expected: Option<usize>,
+    // Solved types constrain shape without changing whether a place moves.
+    inferred: Option<usize>,
+}
+impl ExpressionContext {
+    fn ty(self) -> Option<usize> {
+        self.expected.or(self.inferred)
+    }
+}
 struct LoopScope {
     synthetic: bool,
     start: usize,
     range: Option<(usize, usize, bool)>,
     result: Option<usize>,
     result_typed: bool,
+    result_expected: Option<usize>,
     exits: Vec<Snapshot>,
 }
 struct Builder<'a, 'b> {
@@ -1032,6 +1081,7 @@ struct Builder<'a, 'b> {
     file: a::FileId,
     compiler: &'a mut Compiler<'b>,
     function: &'a mut k::Function,
+    return_annotated: bool,
     sub: BTreeMap<String, usize>,
     bindings: Bindings,
     guard_aliases: BTreeMap<String, k::Place>,
@@ -1758,6 +1808,20 @@ impl Builder<'_, '_> {
         }
     }
     fn block(&mut self, id: usize, expected: Option<usize>) -> Result<(usize, usize)> {
+        self.block_with_context(
+            id,
+            ExpressionContext {
+                expected,
+                inferred: None,
+            },
+        )
+    }
+    fn block_with_context(
+        &mut self,
+        id: usize,
+        context: ExpressionContext,
+    ) -> Result<(usize, usize)> {
+        let expected = context.expected;
         let block = self.compiler.source.blocks[id].clone();
         let start = self.live.len();
         let bindings = self.bindings.len();
@@ -1840,7 +1904,7 @@ impl Builder<'_, '_> {
                 for local in 0..self.live.len() {
                     self.set_live(local, true);
                 }
-                let value = self.expr(tail, expected)?;
+                let value = self.expr_with_inference(tail, expected, context.inferred)?;
                 if let Some(ty) = expected {
                     if value.1 != ty {
                         return Err(err(
@@ -1855,7 +1919,7 @@ impl Builder<'_, '_> {
         }
         let result = if self.reachable {
             if let Some(tail) = block.tail {
-                self.expr(tail, expected)?
+                self.expr_with_inference(tail, expected, context.inferred)?
             } else {
                 self.unit(block.span.line)
             }
@@ -1865,6 +1929,12 @@ impl Builder<'_, '_> {
         self.cleanup(start, Some(result.0), block.span.line);
         self.bindings.truncate(bindings);
         Ok(result)
+    }
+    // Inferred closure results constrain types without creating a reborrow site.
+    // A declared return annotation keeps its ordinary coercion behavior.
+    fn return_value(&mut self, id: usize) -> Result<(usize, usize)> {
+        let result = self.function.result;
+        self.expr_with_inference(id, self.return_annotated.then_some(result), Some(result))
     }
     fn expr(&mut self, id: usize, expected: Option<usize>) -> Result<(usize, usize)> {
         self.expr_with_inference(id, expected, None)
@@ -1890,11 +1960,7 @@ impl Builder<'_, '_> {
         // A solved type is not by itself a coercion site. In particular a bare
         // mutable reference binding moves its value; it must not acquire the
         // automatic reborrow used at an explicitly typed argument or binding.
-        // Reference-bearing constructor inference stays on the existing path
-        // until the typed form records each coercion separately.
-        let inferred = inferred
-            .or_else(|| self.inferred.expressions.get(&id).copied())
-            .filter(|ty| !self.compiler.has_view(*ty));
+        let inferred = inferred.or_else(|| self.inferred.expressions.get(&id).copied());
         let reference_context = expected.is_some_and(|target| {
             matches!(self.compiler.types[target].kind, k::TypeKind::Ref { .. })
         });
@@ -1933,9 +1999,15 @@ impl Builder<'_, '_> {
                 self.read(place, line)?
             }
         } else {
-            self.expr_inner(id, expected.or(inferred))?
+            self.expr_inner(id, ExpressionContext { expected, inferred })?
         };
-        self.coerce_value(value, expected, self.compiler.source.exprs[id].span)
+        // A solved target may require a conversion after evaluation. It does
+        // not create the place reborrow above: an inferred &mut value moves.
+        self.coerce_value(
+            value,
+            expected.or(inferred),
+            self.compiler.source.exprs[id].span,
+        )
     }
     // Apply a declared reference conversion after evaluating its operand once.
     // This does not reborrow a source binding that has already been moved.
@@ -2034,7 +2106,10 @@ impl Builder<'_, '_> {
         self.emit(k::Op::Int { dst, value }, span.line);
         Ok((dst, ty))
     }
-    fn expr_inner(&mut self, id: usize, expected: Option<usize>) -> Result<(usize, usize)> {
+    fn expr_inner(&mut self, id: usize, context: ExpressionContext) -> Result<(usize, usize)> {
+        let expected = context
+            .expected
+            .or(context.inferred.filter(|ty| !self.compiler.has_view(*ty)));
         if let Some(place) = self.capture_aliases.get(&id).cloned() {
             return self.read(place, self.compiler.source.exprs[id].span.line);
         }
@@ -2112,18 +2187,25 @@ impl Builder<'_, '_> {
                     .names
                     .value_path(node.scope, &path, node.span)?;
                 if let Some(a::Item::Constant(index)) = self.compiler.declaration_item(&path) {
+                    if self.compiler.diagnostic_functions.is_some() {
+                        return Err(err(
+                            node.span,
+                            "E_BLOCKED",
+                            "constant initializer requires its complete dependency checks",
+                        ));
+                    }
                     let constant = self.compiler.source.constants[index].clone();
                     let t = self.compiler.resolve(constant.ty, &self.sub)?;
                     return self.expr(constant.value, Some(t));
                 }
                 if let Some(value) =
-                    self.construct_variant(&path, &[], a::VariantStyle::Unit, expected, node.span)?
+                    self.construct_variant(&path, &[], a::VariantStyle::Unit, context, node.span)?
                 {
                     return Ok(value);
                 }
                 if let Some(a::Item::Struct(index)) = self.compiler.declaration_item(&path) {
                     if self.compiler.source.structs[index].unit {
-                        return self.construct_struct(&path, &[], None, expected, node.span);
+                        return self.construct_struct(&path, &[], None, context, node.span);
                     }
                 }
                 Err(err(
@@ -2243,7 +2325,7 @@ impl Builder<'_, '_> {
                 );
                 Ok((dst, t))
             }
-            a::Expr::Call { callee, args } => self.call(callee, &args, expected, node.span),
+            a::Expr::Call { callee, args } => self.call(callee, &args, context, node.span),
             a::Expr::Method {
                 receiver,
                 name,
@@ -2251,7 +2333,7 @@ impl Builder<'_, '_> {
                 args,
             } => self.method(id, receiver, &name, &types, &args, node.span),
             a::Expr::Struct { path, fields, base } => {
-                self.construct_struct(&path, &fields, base, expected, node.span)
+                self.construct_struct(&path, &fields, base, context, node.span)
             }
             a::Expr::Array(elements) => self.array_expr(&elements, expected, node.span),
             a::Expr::Repeat { value, count } => {
@@ -2313,7 +2395,13 @@ impl Builder<'_, '_> {
                 let mut fields = Vec::new();
                 let mut values = Vec::new();
                 for (i, item) in items.iter().enumerate() {
-                    let v = self.expr(*item, None)?;
+                    let field_type = |ty: usize| match &self.compiler.types[ty].kind {
+                        k::TypeKind::Struct { fields, .. } => fields.get(i).map(|field| field.ty),
+                        _ => None,
+                    };
+                    let declared = context.expected.and_then(field_type);
+                    let inferred = context.inferred.and_then(field_type);
+                    let v = self.expr_with_inference(*item, declared, inferred)?;
                     fields.push(k::Field {
                         name: i.to_string(),
                         ty: v.1,
@@ -2339,25 +2427,25 @@ impl Builder<'_, '_> {
                 );
                 Ok((dst, ty))
             }
-            a::Expr::Block(block) => self.block(block, expected),
+            a::Expr::Block(block) => self.block_with_context(block, context),
             a::Expr::If {
                 condition,
                 then_block,
                 otherwise,
-            } => self.if_expr(condition, then_block, otherwise, expected, line),
+            } => self.if_expr(condition, then_block, otherwise, context, line),
             a::Expr::While { condition, body } => {
-                self.while_expr(Some(condition), body, None, line)
+                self.while_expr(Some(condition), body, ExpressionContext::default(), line)
             }
-            a::Expr::Loop { body } => self.while_expr(None, body, expected, line),
+            a::Expr::Loop { body } => self.while_expr(None, body, context, line),
             a::Expr::For {
                 pattern,
                 iterator,
                 body,
             } => self.for_expr(pattern, iterator, body, line),
-            a::Expr::Match { value, arms } => self.match_expr(value, &arms, expected, node.span),
+            a::Expr::Match { value, arms } => self.match_expr(value, &arms, context, node.span),
             a::Expr::Return(value) => {
                 let result = if let Some(v) = value {
-                    self.expr(v, Some(self.function.result))?
+                    self.return_value(v)?
                 } else {
                     self.unit(line)
                 };
@@ -2372,10 +2460,15 @@ impl Builder<'_, '_> {
                     .rposition(|scope| !scope.synthetic)
                     .ok_or_else(|| err(node.span, "E_TYPE", "break outside loop"))?;
                 let scope = &self.loops[index];
-                let (start, result, typed) = (scope.start, scope.result, scope.result_typed);
+                let (start, result, typed, declared) = (
+                    scope.start,
+                    scope.result,
+                    scope.result_typed,
+                    scope.result_expected,
+                );
                 if let Some(result) = result {
                     let value = if let Some(value) = value {
-                        self.expr(value, if typed { Some(self.ty(result)) } else { None })?
+                        self.expr_with_inference(value, declared, typed.then_some(self.ty(result)))?
                     } else {
                         self.unit(line)
                     };
@@ -2595,15 +2688,16 @@ impl Builder<'_, '_> {
         condition: usize,
         then_block: usize,
         otherwise: Option<usize>,
-        expected: Option<usize>,
+        context: ExpressionContext,
         line: usize,
     ) -> Result<(usize, usize)> {
+        let expected = context.ty();
         let (condition, _) = self.expr(condition, Some(k::BOOL))?;
         self.emit(k::Op::If { condition }, line);
         let state = self.snapshot();
         let before = self.live.len();
         let bindings = self.bindings.len();
-        let first = self.block(then_block, expected)?;
+        let first = self.block_with_context(then_block, context)?;
         let first_reachable = self.reachable;
         let result = self.local(
             expected.unwrap_or(if first_reachable { first.1 } else { k::UNIT }),
@@ -2625,13 +2719,12 @@ impl Builder<'_, '_> {
         self.restore(&state);
         self.bindings.truncate(bindings);
         let second = if let Some(other) = otherwise {
-            self.expr(
+            self.expr_with_inference(
                 other,
-                if first_reachable {
-                    Some(self.ty(result))
-                } else {
-                    expected
-                },
+                context.expected,
+                context
+                    .inferred
+                    .or_else(|| first_reachable.then_some(self.ty(result))),
             )?
         } else {
             self.unit(line)
@@ -2729,9 +2822,10 @@ impl Builder<'_, '_> {
         &mut self,
         condition: Option<usize>,
         body: usize,
-        expected: Option<usize>,
+        context: ExpressionContext,
         line: usize,
     ) -> Result<(usize, usize)> {
+        let expected = context.ty();
         let result = if condition.is_none() {
             Some(self.local(expected.unwrap_or(k::UNIT), "$loop", true))
         } else {
@@ -2745,6 +2839,7 @@ impl Builder<'_, '_> {
             range: None,
             result,
             result_typed: expected.is_some(),
+            result_expected: context.expected,
             exits: Vec::new(),
         });
         self.emit(k::Op::Loop, line);
@@ -2849,6 +2944,7 @@ impl Builder<'_, '_> {
             range: Some((counter, finish, inclusive)),
             result: None,
             result_typed: true,
+            result_expected: None,
             exits: Vec::new(),
         });
         self.emit(k::Op::Loop, line);
@@ -2950,9 +3046,12 @@ impl Builder<'_, '_> {
         &mut self,
         callee: usize,
         args: &[usize],
-        expected: Option<usize>,
+        context: ExpressionContext,
         span: a::Span,
     ) -> Result<(usize, usize)> {
+        let expected = context
+            .expected
+            .or(context.inferred.filter(|ty| !self.compiler.has_view(*ty)));
         let path = match self.compiler.source.exprs[callee].kind.clone() {
             a::Expr::Path(p)
                 if self.binding(&p.name).is_some()
@@ -3130,7 +3229,7 @@ impl Builder<'_, '_> {
             .map(|(index, expression)| (index.to_string(), *expression))
             .collect();
         if let Some(value) =
-            self.construct_variant(&path, &fields, a::VariantStyle::Tuple, expected, span)?
+            self.construct_variant(&path, &fields, a::VariantStyle::Tuple, context, span)?
         {
             return Ok(value);
         }
@@ -3143,7 +3242,7 @@ impl Builder<'_, '_> {
                     "named struct constructor requires fields",
                 ));
             }
-            return self.construct_struct(&path, &fields, None, expected, span);
+            return self.construct_struct(&path, &fields, None, context, span);
         }
         let mut initial_sub = BTreeMap::new();
         let mut associated = None;
@@ -3304,6 +3403,9 @@ impl Builder<'_, '_> {
             let value =
                 self.coerce_value(value, parameter, self.compiler.source.exprs[args[i]].span)?;
             values.push(value.0);
+        }
+        if let Some(inferred) = context.inferred {
+            self.infer_type_matches(target.result, inferred, &mut sub)?;
         }
         let function = self.compiler.instantiate(index, sub)?;
         let ty = self.compiler.functions[function].result;
@@ -3557,25 +3659,8 @@ impl Builder<'_, '_> {
         if let Some(value) = self.generic_method(expression, &target, base, name, _types, args)? {
             return Ok(value);
         }
-        if matches!(self.compiler.types[base].kind, k::TypeKind::Char)
-            && matches!(
-                name,
-                "len_utf8"
-                    | "len_utf16"
-                    | "is_ascii"
-                    | "is_ascii_digit"
-                    | "is_ascii_uppercase"
-                    | "is_ascii_lowercase"
-                    | "is_ascii_alphabetic"
-                    | "is_ascii_alphanumeric"
-                    | "is_ascii_hexdigit"
-                    | "is_ascii_whitespace"
-                    | "is_whitespace"
-                    | "to_ascii_lowercase"
-                    | "to_ascii_uppercase"
-                    | "to_string"
-            )
-        {
+        let direct = methods::direct(methods::receiver(&self.compiler.types[base].kind), name);
+        if direct == Some(methods::Direct::Character) {
             if !args.is_empty() || !_types.is_empty() {
                 return Err(err(span, "E_TYPE", "character method takes no arguments"));
             }
@@ -3597,26 +3682,7 @@ impl Builder<'_, '_> {
             );
             return Ok((dst, ty));
         }
-        if matches!(self.compiler.types[base].kind, k::TypeKind::Str)
-            && matches!(
-                name,
-                "len"
-                    | "is_empty"
-                    | "as_bytes"
-                    | "to_string"
-                    | "starts_with"
-                    | "ends_with"
-                    | "contains"
-                    | "find"
-                    | "rfind"
-                    | "replace"
-                    | "repeat"
-                    | "is_ascii"
-                    | "eq_ignore_ascii_case"
-                    | "to_ascii_lowercase"
-                    | "to_ascii_uppercase"
-            )
-        {
+        if direct == Some(methods::Direct::Text) {
             if !_types.is_empty() {
                 return Err(err(
                     span,
@@ -3626,11 +3692,7 @@ impl Builder<'_, '_> {
             }
             return self.text_method(target, name, args, span);
         }
-        if matches!(
-            self.compiler.types[base].kind,
-            k::TypeKind::World | k::TypeKind::Stdout
-        ) && matches!(name, "stdout" | "write")
-        {
+        if direct == Some(methods::Direct::Output) {
             if !_types.is_empty() {
                 return Err(err(span, "E_TYPE", "output methods take no type arguments"));
             }
@@ -3654,13 +3716,8 @@ impl Builder<'_, '_> {
                 return self.builtin_trait_method(&target, base, name, _types, args, span);
             }
         }
-        match name {
-            "as_slice" | "as_mut_slice"
-                if matches!(
-                    self.compiler.types[base].kind,
-                    k::TypeKind::Vec { .. } | k::TypeKind::Array { .. }
-                ) =>
-            {
+        match direct {
+            Some(methods::Direct::Slice) => {
                 if !args.is_empty() {
                     return Err(err(span, "E_TYPE", "slice projection takes no arguments"));
                 }
@@ -3688,12 +3745,7 @@ impl Builder<'_, '_> {
                 );
                 Ok((dst, ty))
             }
-            "len"
-                if matches!(
-                    self.compiler.types[base].kind,
-                    k::TypeKind::Vec { .. } | k::TypeKind::Slice { .. } | k::TypeKind::Array { .. }
-                ) =>
-            {
+            Some(methods::Direct::Length) => {
                 if !args.is_empty() {
                     return Err(err(span, "E_TYPE", "len takes no arguments"));
                 }
@@ -3709,7 +3761,7 @@ impl Builder<'_, '_> {
                 );
                 Ok((dst, k::U64))
             }
-            "push" if matches!(self.compiler.types[base].kind, k::TypeKind::Vec { .. }) => {
+            Some(methods::Direct::Push) => {
                 if args.len() != 1 {
                     return Err(err(span, "E_TYPE", "push takes one argument"));
                 }
@@ -3730,7 +3782,7 @@ impl Builder<'_, '_> {
                 );
                 Ok((dst, k::UNIT))
             }
-            "pop" if matches!(self.compiler.types[base].kind, k::TypeKind::Vec { .. }) => {
+            Some(methods::Direct::Pop) => {
                 if !args.is_empty() {
                     return Err(err(span, "E_TYPE", "pop takes no arguments"));
                 }
@@ -3879,17 +3931,20 @@ impl Builder<'_, '_> {
         path: &a::Path,
         fields: &[(String, usize)],
         base: Option<usize>,
-        expected: Option<usize>,
+        context: ExpressionContext,
         span: a::Span,
     ) -> Result<(usize, usize)> {
         if base.is_none() {
             if let Some(value) =
-                self.construct_variant(path, fields, a::VariantStyle::Named, expected, span)?
+                self.construct_variant(path, fields, a::VariantStyle::Named, context, span)?
             {
                 return Ok(value);
             }
         }
-        let expected = expected.or_else(|| base.and_then(|base| self.hint(base)));
+        let expected = context.expected;
+        let inferred = context
+            .inferred
+            .or_else(|| base.and_then(|base| self.hint(base)));
         let mut target = self
             .constructor_target(path, expected, span)?
             .ok_or_else(|| err(span, "E_TYPE", "constructor requires a struct declaration"))?;
@@ -3926,6 +3981,9 @@ impl Builder<'_, '_> {
             return Err(err(span, "E_TYPE", "struct constructor is missing fields"));
         }
         let mut coercion_substitutions = target.substitutions.clone();
+        if let Some(inferred) = inferred {
+            self.constrain_constructor_from_type(&mut target, inferred, span)?;
+        }
         // Infer from known types before evaluating initializers. Unsuffixed
         // literals then receive the same constraints regardless of field order.
         for ((_, expression), field) in fields.iter().zip(&positions) {
@@ -4147,9 +4205,10 @@ impl Builder<'_, '_> {
         &mut self,
         value: usize,
         arms: &[a::Arm],
-        expected: Option<usize>,
+        context: ExpressionContext,
         span: a::Span,
     ) -> Result<(usize, usize)> {
+        let expected = context.ty();
         let hint = self.hint(value).or_else(|| self.pattern_hint(arms));
         let existing = match &self.compiler.source.exprs[value].kind {
             a::Expr::Path(path) => {
@@ -4243,9 +4302,14 @@ impl Builder<'_, '_> {
                 *pattern,
                 original.clone(),
                 choices.as_ref(),
+                cache.is_none(),
                 arm.span.line,
             )?;
-            let value = self.expr(arm.value, expected.or(result.map(|id| self.ty(id))))?;
+            let value = self.expr_with_inference(
+                arm.value,
+                context.expected,
+                context.inferred.or(result.map(|id| self.ty(id))),
+            )?;
             if self.reachable && !exhausted {
                 let target = if let Some(target) = result {
                     target

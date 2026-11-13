@@ -97,8 +97,10 @@ impl Builder<'_, '_> {
         args: &[usize],
         span: a::Span,
     ) -> Result<Option<(usize, usize)>> {
-        if !matches!(self.compiler.types[ty].kind, k::TypeKind::Int { .. })
-            || !matches!(name, "wrapping_add" | "wrapping_sub" | "wrapping_mul")
+        if super::methods::direct(
+            super::methods::receiver(&self.compiler.types[ty].kind),
+            name,
+        ) != Some(super::methods::Direct::Wrapping)
         {
             return Ok(None);
         }

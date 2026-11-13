@@ -4,11 +4,12 @@ use super::{Compiler, Result, a, k};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
-enum Label {
+pub(super) enum Label {
     Lifetime(String),
     Parameter(String, Vec<k::Projection>),
     Associated(String, Vec<k::Projection>),
     Static,
+    Elided,
     Unknown,
 }
 #[derive(Clone, Default)]
@@ -17,7 +18,27 @@ struct Environment {
     lifetimes: BTreeMap<String, String>,
 }
 type SignatureChild = (usize, usize, Vec<k::Projection>);
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum LeafPurpose {
+    Outputs,
+    Inputs,
+    Regions,
+}
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum BorrowAccess {
+    Owned,
+    Shared,
+    Mutable,
+}
+pub(super) struct RegionLeaf {
+    pub(super) path: Vec<k::Projection>,
+    pub(super) label: Label,
+    pub(super) preserve: bool,
+    pub(super) mutable_storage: bool,
+}
 struct Leaf {
+    borrowed: bool,
+    mutable_storage: bool,
     path: Vec<k::Projection>,
     label: Label,
     transport: bool,
@@ -63,6 +84,45 @@ impl Compiler<'_> {
         concrete: usize,
         input: bool,
     ) -> Vec<Leaf> {
+        self.signature_leaf_inventory(
+            source,
+            source_index,
+            syntax,
+            concrete,
+            if input {
+                LeafPurpose::Inputs
+            } else {
+                LeafPurpose::Outputs
+            },
+        )
+    }
+
+    pub(super) fn region_leaves(
+        &self,
+        source_index: usize,
+        syntax: usize,
+        concrete: usize,
+    ) -> Vec<RegionLeaf> {
+        let source = &self.source.functions[source_index];
+        self.signature_leaf_inventory(source, source_index, syntax, concrete, LeafPurpose::Regions)
+            .into_iter()
+            .map(|leaf| RegionLeaf {
+                path: leaf.path,
+                label: leaf.label,
+                preserve: leaf.borrowed,
+                mutable_storage: leaf.mutable_storage,
+            })
+            .collect()
+    }
+
+    fn signature_leaf_inventory(
+        &self,
+        source: &a::Function,
+        source_index: usize,
+        syntax: usize,
+        concrete: usize,
+        purpose: LeafPurpose,
+    ) -> Vec<Leaf> {
         let mut parameters: BTreeSet<String> = source
             .generics
             .iter()
@@ -83,9 +143,10 @@ impl Compiler<'_> {
                 .insert("Self".to_string(), (implementation.target, 0));
         }
         let mut environments = vec![root];
-        let mut pending = vec![(syntax, concrete, 0usize, Vec::new(), false)];
+        let mut pending = vec![(syntax, concrete, 0usize, Vec::new(), BorrowAccess::Owned)];
         let mut result = Vec::new();
-        while let Some((syntax, concrete, environment, path, borrowed)) = pending.pop() {
+        while let Some((syntax, concrete, environment, path, access)) = pending.pop() {
+            let borrowed = access != BorrowAccess::Owned;
             let (syntax, environment) =
                 substituted(self.source, &environments, syntax, environment);
             if !self.has_view(concrete) {
@@ -104,22 +165,29 @@ impl Compiler<'_> {
                     let label = if name == "'static" {
                         Label::Static
                     } else if name.is_empty() || name == "'_" {
-                        Label::Unknown
+                        Label::Elided
                     } else {
                         Label::Lifetime(name)
                     };
-                    if !borrowed || !mutable {
+                    if !borrowed || !mutable || purpose == LeafPurpose::Regions {
                         result.push(Leaf {
+                            borrowed,
+                            mutable_storage: access == BorrowAccess::Mutable,
                             path: path.clone(),
                             label,
                             transport: false,
                             mutable: *mutable,
                         });
                     }
-                    if input && self.has_view(*inner) {
+                    if purpose != LeafPurpose::Outputs && self.has_view(*inner) {
                         let mut nested = path;
                         nested.push(k::Projection::Deref);
-                        pending.push((*syntax_inner, *inner, environment, nested, true));
+                        let access = if access == BorrowAccess::Shared || !mutable {
+                            BorrowAccess::Shared
+                        } else {
+                            BorrowAccess::Mutable
+                        };
+                        pending.push((*syntax_inner, *inner, environment, nested, access));
                     }
                 }
                 (a::Type::Tuple(syntax_fields), k::TypeKind::Struct { fields, .. })
@@ -128,7 +196,7 @@ impl Compiler<'_> {
                     for (index, (syntax, field)) in syntax_fields.iter().zip(fields).enumerate() {
                         let mut nested = path.clone();
                         nested.push(k::Projection::Field(index));
-                        pending.push((*syntax, field.ty, environment, nested, borrowed));
+                        pending.push((*syntax, field.ty, environment, nested, access));
                     }
                 }
                 (a::Type::Path(named), _)
@@ -136,12 +204,14 @@ impl Compiler<'_> {
                 {
                     for (relative, mutable) in crate::check::reference_paths(&self.types, concrete)
                     {
-                        if borrowed && mutable {
+                        if borrowed && mutable && purpose != LeafPurpose::Regions {
                             continue;
                         }
                         let mut leaf_path = path.clone();
                         leaf_path.extend_from_slice(&relative);
                         result.push(Leaf {
+                            borrowed,
+                            mutable_storage: access == BorrowAccess::Mutable,
                             path: leaf_path,
                             label: Label::Parameter(named.name.clone(), relative),
                             transport: !borrowed,
@@ -157,12 +227,14 @@ impl Compiler<'_> {
                 {
                     for (relative, mutable) in crate::check::reference_paths(&self.types, concrete)
                     {
-                        if borrowed && mutable {
+                        if borrowed && mutable && purpose != LeafPurpose::Regions {
                             continue;
                         }
                         let mut leaf_path = path.clone();
                         leaf_path.extend_from_slice(&relative);
                         result.push(Leaf {
+                            borrowed,
+                            mutable_storage: access == BorrowAccess::Mutable,
                             path: leaf_path,
                             label: Label::Associated(named.name.clone(), relative),
                             transport: !borrowed,
@@ -254,7 +326,7 @@ impl Compiler<'_> {
                     for (syntax, concrete, suffix) in children {
                         let mut nested_path = path.clone();
                         nested_path.extend(suffix);
-                        pending.push((syntax, concrete, nested_id, nested_path, borrowed));
+                        pending.push((syntax, concrete, nested_id, nested_path, access));
                     }
                 }
                 _ => {
@@ -263,6 +335,8 @@ impl Compiler<'_> {
                         let mut leaf_path = path.clone();
                         leaf_path.extend(relative);
                         result.push(Leaf {
+                            borrowed,
+                            mutable_storage: access == BorrowAccess::Mutable,
                             path: leaf_path,
                             label: Label::Unknown,
                             transport: false,
@@ -292,7 +366,7 @@ impl Compiler<'_> {
                 .all(|leaf| matches!(leaf.label, Label::Static))
             || outputs
                 .iter()
-                .any(|leaf| matches!(leaf.label, Label::Unknown))
+                .any(|leaf| matches!(leaf.label, Label::Unknown | Label::Elided))
         {
             return Ok(None);
         }
@@ -315,7 +389,7 @@ impl Compiler<'_> {
         for leaf in outputs {
             let origin = match &leaf.label {
                 Label::Static => k::LeafOrigin::Static,
-                Label::Unknown => return Ok(None),
+                Label::Unknown | Label::Elided => return Ok(None),
                 label => {
                     let Some(candidates) = inputs.get(label) else {
                         return Ok(None);
@@ -345,6 +419,48 @@ impl Compiler<'_> {
         Ok(Some(mappings))
     }
 
+    fn callable_produced_labels(
+        &self,
+        source_index: usize,
+        source: &a::Function,
+        substitutions: &BTreeMap<String, usize>,
+    ) -> BTreeSet<Label> {
+        let mut parameters = source.generics.clone();
+        if let a::FunctionOwner::Implementation(owner) = self.source.function_owner(a::FunctionId {
+            index: source_index,
+        }) {
+            parameters.extend(self.source.impls[owner.index].generics.clone());
+        }
+        let mut produced = BTreeSet::new();
+        for parameter in parameters {
+            let Some(ty) = substitutions.get(&parameter.name) else {
+                continue;
+            };
+            let Some(signature) = self.callable_signature(*ty) else {
+                continue;
+            };
+            for bound in parameter.bounds {
+                if !self.is_callable_bound(bound) {
+                    continue;
+                }
+                let a::Type::Path(path) = &self.source.types[bound].kind else {
+                    unreachable!()
+                };
+                let Some(output) = path.args.get(1) else {
+                    continue;
+                };
+                for leaf in
+                    self.signature_leaves(source, source_index, *output, signature.result, false)
+                {
+                    if matches!(leaf.label, Label::Parameter(_, _) | Label::Associated(_, _)) {
+                        produced.insert(leaf.label);
+                    }
+                }
+            }
+        }
+        produced
+    }
+
     /// A produced type/associated family has no positional relationship to an
     /// unrelated input family. Enumerate admissible concrete input leaves as an
     /// upper bound; ordinary body checking will establish the actual selectors.
@@ -354,6 +470,7 @@ impl Compiler<'_> {
         source: &a::Function,
         locals: &[k::Local],
         result: usize,
+        substitutions: &BTreeMap<String, usize>,
     ) -> Option<Vec<k::ReturnLeaf>> {
         let outputs = self.signature_leaves(source, source_index, source.result, result, false);
         if !outputs
@@ -361,7 +478,7 @@ impl Compiler<'_> {
             .any(|leaf| matches!(leaf.label, Label::Parameter(_, _) | Label::Associated(_, _)))
             || outputs
                 .iter()
-                .any(|leaf| matches!(leaf.label, Label::Unknown))
+                .any(|leaf| matches!(leaf.label, Label::Unknown | Label::Elided))
         {
             return None;
         }
@@ -380,6 +497,8 @@ impl Compiler<'_> {
                 });
             }
         }
+        let produced = self.callable_produced_labels(source_index, source, substitutions);
+        let mut widened = false;
         let mut mappings = Vec::new();
         for leaf in outputs {
             let origin = if matches!(leaf.label, Label::Static) {
@@ -395,12 +514,13 @@ impl Compiler<'_> {
                     })
                     .map(|candidate| candidate.input.clone())
                     .collect();
-                if !matching.is_empty() {
+                if !matching.is_empty() && !produced.contains(&leaf.label) {
                     k::LeafOrigin::Inputs {
                         inputs: matching,
                         exact: family,
                     }
                 } else if family {
+                    widened = true;
                     let candidates: BTreeSet<_> = inputs
                         .values()
                         .flatten()
@@ -427,6 +547,6 @@ impl Compiler<'_> {
                 origin,
             });
         }
-        Some(mappings)
+        widened.then_some(mappings)
     }
 }

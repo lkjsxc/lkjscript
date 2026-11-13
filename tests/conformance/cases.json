@@ -348,30 +348,28 @@
   },
   {
     "id": "data_bound",
-    "file": "pending/data_bound.rs",
+    "file": "fail/data_bound.rs",
     "kind": "reject",
-    "code": "E_CAPABILITY",
-    "pending": true,
+    "code": "E_TRAIT",
     "rust": false,
-    "rustAccept": false,
     "entry": "main"
   },
   {
     "id": "capability_callback",
-    "file": "pending/capability_callback.rs",
-    "kind": "run",
-    "value": "42",
-    "pending": true,
-    "rust": false,
+    "file": "output/capability_callback.rs",
+    "kind": "output",
+    "hex": "34320a",
+    "ending": "normal",
+    "rust": true,
     "entry": "main"
   },
   {
     "id": "stored_task",
-    "file": "pending/stored_task.rs",
-    "kind": "run",
-    "value": "42",
-    "pending": true,
-    "rust": false,
+    "file": "output/stored_task.rs",
+    "kind": "output",
+    "hex": "34320a",
+    "ending": "normal",
+    "rust": true,
     "entry": "main"
   },
   {
@@ -3431,5 +3429,486 @@
     "rust": false,
     "entry": "probe",
     "code": "E_UNSUPPORTED"
+  },
+  {
+    "id": "closure_combinators",
+    "file": "pass/closure_combinators.rs",
+    "kind": "run",
+    "entry": "probe",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "combinator_nominal_identity",
+    "file": "pass/combinator_nominal_identity.rs",
+    "kind": "run",
+    "entry": "probe",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "combinator_view_origins",
+    "file": "pass/combinator_view_origins.rs",
+    "kind": "run",
+    "entry": "probe",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "method_callable_context",
+    "file": "pass/method_callable_context.rs",
+    "kind": "run",
+    "entry": "probe",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "method_context_shadowed_trait",
+    "file": "pass/method_context_shadowed_trait.rs",
+    "kind": "run",
+    "entry": "probe",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "option_filter_borrows",
+    "file": "pass/option_filter_borrows.rs",
+    "kind": "run",
+    "entry": "probe",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "closure_combinator_defaults",
+    "file": "output/closure_combinator_defaults.rs",
+    "kind": "output",
+    "ending": "normal",
+    "rust": true,
+    "hex": "5a6b557d4c7460101946075a557d4c74691046195b6b557d4c7460101946075b6b557d4c7469191046075c"
+  },
+  {
+    "id": "closure_combinator_filter",
+    "file": "output/closure_combinator_filter.rs",
+    "kind": "output",
+    "ending": "normal",
+    "rust": true,
+    "hex": "5a664f77631302465a4f7713465b664f771346025b664f776313460262"
+  },
+  {
+    "id": "combinator_capture_escape",
+    "file": "fail/combinator_capture_escape.rs",
+    "kind": "reject",
+    "entry": "probe",
+    "rust": true,
+    "rustCode": "E0597",
+    "code": "E_BORROW"
+  },
+  {
+    "id": "combinator_consumed_callable",
+    "file": "fail/combinator_consumed_callable.rs",
+    "kind": "reject",
+    "entry": "probe",
+    "rust": true,
+    "rustCode": "E0382",
+    "code": "E_MOVE"
+  },
+  {
+    "id": "combinator_duplicate_mutable",
+    "file": "fail/combinator_duplicate_mutable.rs",
+    "kind": "reject",
+    "entry": "probe",
+    "rust": true,
+    "rustCode": "E0382",
+    "code": "E_MOVE"
+  },
+  {
+    "id": "combinator_filter_escape",
+    "file": "fail/combinator_filter_escape.rs",
+    "kind": "reject",
+    "entry": "probe",
+    "rust": true,
+    "rustCode": "E0521",
+    "code": "E_BORROW"
+  },
+  {
+    "id": "combinator_input_escape",
+    "file": "fail/combinator_input_escape.rs",
+    "kind": "reject",
+    "entry": "probe",
+    "rust": true,
+    "rustCode": "E0597",
+    "code": "E_BORROW"
+  },
+  {
+    "id": "combinator_mutable_alias",
+    "file": "fail/combinator_mutable_alias.rs",
+    "kind": "reject",
+    "entry": "probe",
+    "rust": true,
+    "rustCode": "E0506",
+    "code": "E_BORROW"
+  },
+  {
+    "id": "combinator_wrong_argument",
+    "file": "fail/combinator_wrong_argument.rs",
+    "kind": "reject",
+    "entry": "probe",
+    "rust": true,
+    "rustCode": "E0631",
+    "code": "E_TYPE"
+  },
+  {
+    "id": "combinator_wrong_result",
+    "file": "fail/combinator_wrong_result.rs",
+    "kind": "reject",
+    "entry": "probe",
+    "rust": true,
+    "rustCode": "E0308",
+    "code": "E_TYPE"
+  },
+  {
+    "id": "method_context_inherent_precedence",
+    "file": "fail/method_context_inherent_precedence.rs",
+    "kind": "reject",
+    "entry": "probe",
+    "rust": true,
+    "rustCode": "E0631",
+    "code": "E_TYPE"
+  },
+  {
+    "id": "method_context_missing_bound",
+    "file": "fail/method_context_missing_bound.rs",
+    "kind": "reject",
+    "entry": "probe",
+    "rust": true,
+    "rustCode": "E0599",
+    "code": "E_TRAIT"
+  },
+  {
+    "id": "method_context_private",
+    "file": "fail/method_context_private.rs",
+    "kind": "reject",
+    "entry": "probe",
+    "rust": true,
+    "rustCode": "E0624",
+    "code": "E_PRIVACY"
+  },
+  {
+    "id": "callable_factory_origins",
+    "file": "pass/callable_factory_origins.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "callable_factory_mutable_origin",
+    "file": "pass/callable_factory_mutable_origin.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "closure_inferred_mutable_capture",
+    "file": "pass/closure_inferred_mutable_capture.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "closure_inferred_return_shapes",
+    "file": "pass/closure_inferred_return_shapes.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "callable_factory_capture_escape",
+    "file": "fail/callable_factory_capture_escape.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustCode": "E0597"
+  },
+  {
+    "id": "closure_annotated_mutable_capture",
+    "file": "fail/closure_annotated_mutable_capture.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true
+  },
+  {
+    "id": "closure_mutable_capture_second_call",
+    "file": "fail/closure_mutable_capture_second_call.rs",
+    "kind": "reject",
+    "code": "E_MOVE",
+    "rust": true,
+    "rustCode": "E0382"
+  },
+  {
+    "id": "closure_mutable_capture_fnmut",
+    "file": "fail/closure_mutable_capture_fnmut.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "rust": true,
+    "rustCode": "E0507"
+  },
+  {
+    "id": "reborrowed_descriptor_shell",
+    "file": "k/reborrowed_descriptor_shell.k",
+    "kind": "run",
+    "value": "42"
+  },
+  {
+    "id": "borrowed_descriptor_shell",
+    "file": "k/borrowed_descriptor_shell.k",
+    "kind": "reject",
+    "code": "E_BORROW"
+  },
+  {
+    "id": "reborrowed_shell_custom_drop",
+    "file": "k/reborrowed_shell_custom_drop.k",
+    "kind": "reject",
+    "code": "E_BORROW"
+  },
+  {
+    "id": "reborrowed_shell_nested_drop",
+    "file": "k/reborrowed_shell_nested_drop.k",
+    "kind": "reject",
+    "code": "E_BORROW"
+  },
+  {
+    "id": "reborrowed_shell_replace",
+    "file": "k/reborrowed_shell_replace.k",
+    "kind": "reject",
+    "code": "E_BORROW"
+  },
+  {
+    "id": "named_callable_shared_effect",
+    "file": "fail/named_callable_shared_effect.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustCode": "E0506"
+  },
+  {
+    "id": "named_callable_alias_effect",
+    "file": "fail/named_callable_alias_effect.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustCode": "E0506"
+  },
+  {
+    "id": "named_callable_nominal_effect",
+    "file": "fail/named_callable_nominal_effect.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustCode": "E0506"
+  },
+  {
+    "id": "named_callable_tuple_effect",
+    "file": "fail/named_callable_tuple_effect.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustCode": "E0506"
+  },
+  {
+    "id": "named_callable_local_input",
+    "file": "fail/named_callable_local_input.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustCode": "E0597"
+  },
+  {
+    "id": "named_callable_nested_local",
+    "file": "fail/named_callable_nested_local.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustCode": "E0597"
+  },
+  {
+    "id": "named_callable_missing_outlives",
+    "file": "fail/named_callable_missing_outlives.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true
+  },
+  {
+    "id": "named_callable_second_region",
+    "file": "fail/named_callable_second_region.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true
+  },
+  {
+    "id": "named_callable_result_borrow",
+    "file": "fail/named_callable_result_borrow.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustCode": "E0506"
+  },
+  {
+    "id": "named_callable_scalar_effect",
+    "file": "fail/named_callable_scalar_effect.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustCode": "E0506"
+  },
+  {
+    "id": "named_callable_helper_effect",
+    "file": "fail/named_callable_helper_effect.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustCode": "E0506"
+  },
+  {
+    "id": "named_callable_helper_local",
+    "file": "fail/named_callable_helper_local.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustCode": "E0597"
+  },
+  {
+    "id": "named_callable_fresh_bound",
+    "file": "fail/named_callable_fresh_bound.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "rust": true,
+    "rustCode": "E0277"
+  },
+  {
+    "id": "named_callable_loop_effect",
+    "file": "fail/named_callable_loop_effect.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustCode": "E0506"
+  },
+  {
+    "id": "named_callable_continue_effect",
+    "file": "fail/named_callable_continue_effect.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustCode": "E0506"
+  },
+  {
+    "id": "named_callable_branch_effect",
+    "file": "fail/named_callable_branch_effect.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustCode": "E0506"
+  },
+  {
+    "id": "named_callable_result_parent",
+    "file": "fail/named_callable_result_parent.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustCode": "E0506"
+  },
+  {
+    "id": "named_callable_stored_parent",
+    "file": "fail/named_callable_stored_parent.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustCode": "E0506"
+  },
+  {
+    "id": "named_callable_stored_nominal_parent",
+    "file": "fail/named_callable_stored_nominal_parent.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustCode": "E0506"
+  },
+  {
+    "id": "named_closure_fresh_bound",
+    "file": "fail/named_closure_fresh_bound.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "rust": true
+  },
+  {
+    "id": "named_alias_closure_fresh_bound",
+    "file": "fail/named_alias_closure_fresh_bound.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "rust": true
+  },
+  {
+    "id": "named_callable_type_family_effect",
+    "file": "fail/named_callable_type_family_effect.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustCode": "E0506"
+  },
+  {
+    "id": "named_callable_outlives",
+    "file": "pass/named_callable_outlives.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "named_callable_shared_read",
+    "file": "pass/named_callable_shared_read.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "named_callable_shared_loop",
+    "file": "pass/named_callable_shared_loop.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "fresh_callable_repeated_mutable",
+    "file": "pass/fresh_callable_repeated_mutable.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "named_callable_stored_holder",
+    "file": "pass/named_callable_stored_holder.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "named_callable_authorized_result",
+    "file": "pass/named_callable_authorized_result.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "enum_inactive_join",
+    "file": "pass/enum_inactive_join.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "enum_active_join",
+    "file": "fail/enum_active_join.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustCode": "E0503"
   }
 ]

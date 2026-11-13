@@ -1,7 +1,7 @@
 //! Rust-compatible surface reader. The syntax tree is an arena, not a recursive tree.
 pub(crate) mod formatting;
 use crate::ast::*;
-use crate::diagnostics::BlockedRegion;
+use crate::diagnostics::{BlockedRegion, RecoveryDomain, RecoveryOwner};
 use std::collections::BTreeSet;
 
 #[derive(Clone, PartialEq, Eq)]
@@ -437,6 +437,7 @@ pub fn parse_file_report(
                 items: Vec::new(),
                 diagnostics: vec![error],
                 blocked: vec![BlockedRegion {
+                    domain: None,
                     path: program.files[file].path.clone(),
                     span,
                     kind: "file".to_string(),
@@ -557,7 +558,34 @@ impl Parser {
         }
     }
 
-    fn recover_region(&mut self, start: usize, kind: &str, error: Diagnostic) {
+    fn recovery_domain(&self, owner: Option<RecoveryOwner>) -> RecoveryDomain {
+        let kind = self.token().text.clone();
+        let name = if matches!(
+            kind.as_str(),
+            "fn" | "struct" | "enum" | "trait" | "type" | "const" | "mod"
+        ) {
+            self.tokens
+                .get(self.at + 1)
+                .filter(|token| token.kind == TokenKind::Ident)
+                .map(|token| token.text.clone())
+        } else {
+            None
+        };
+        RecoveryDomain {
+            scope: self.scope,
+            kind,
+            name,
+            owner,
+        }
+    }
+
+    fn recover_region(
+        &mut self,
+        start: usize,
+        kind: &str,
+        error: Diagnostic,
+        domain: Option<RecoveryDomain>,
+    ) {
         let span = self.tokens[start].span;
         let code = error.code.clone();
         self.record(error);
@@ -649,6 +677,7 @@ impl Parser {
             extent.end = self.tokens[at - 1].span.end;
         }
         self.blocked.push(BlockedRegion {
+            domain,
             path: self.program.files[span.file].path.clone(),
             span: extent,
             kind: kind.to_string(),
@@ -811,12 +840,14 @@ impl Parser {
             let start = self.at;
             let scope = self.scope;
             let module = self.module.clone();
+            let mut domain = None;
             let result = (|| {
                 let attrs = self.attrs()?;
                 if self.token().kind == TokenKind::End {
                     return Ok(None);
                 }
                 let public = self.visibility()?;
+                domain = Some(self.recovery_domain(None));
                 self.item(attrs, public).map(Some)
             })();
             match result {
@@ -825,7 +856,7 @@ impl Parser {
                 Err(error) => {
                     self.scope = scope;
                     self.module = module;
-                    self.recover_region(start, "item", error);
+                    self.recover_region(start, "item", error, domain);
                 }
             }
         }
@@ -1675,8 +1706,11 @@ impl Parser {
                 return Err(self.err("unterminated trait"));
             }
             let start = self.at;
+            let mut domain = None;
             let result = (|| {
                 let attrs = self.attrs()?;
+                domain =
+                    Some(self.recovery_domain(Some(RecoveryOwner::Trait { name: name.clone() })));
                 if self.is("fn") {
                     methods.push(self.function(attrs, Visibility::Private)?);
                 } else if self.is("type") {
@@ -1687,7 +1721,7 @@ impl Parser {
                 Ok(())
             })();
             if let Err(error) = result {
-                self.recover_region(start, "item", error);
+                self.recover_region(start, "item", error, domain);
             }
         }
         self.expect("}")?;
@@ -1727,9 +1761,13 @@ impl Parser {
                 return Err(self.err("unterminated impl"));
             }
             let start = self.at;
+            let mut domain = None;
             let result = (|| {
                 let attrs = self.attrs()?;
                 let public = self.visibility()?;
+                domain = Some(
+                    self.recovery_domain(Some(RecoveryOwner::Implementation { target, trait_ty })),
+                );
                 if self.is("fn") {
                     methods.push(self.function(attrs, public)?);
                 } else if self.is("type") {
@@ -1740,7 +1778,7 @@ impl Parser {
                 Ok(())
             })();
             if let Err(error) = result {
-                self.recover_region(start, "item", error);
+                self.recover_region(start, "item", error, domain);
             }
         }
         self.expect("}")?;
@@ -1848,7 +1886,7 @@ impl Parser {
                 Err(error) => {
                     self.scope = scope;
                     self.module = module;
-                    self.recover_region(start, "statement", error);
+                    self.recover_region(start, "statement", error, None);
                 }
             }
         }

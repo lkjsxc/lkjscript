@@ -124,6 +124,7 @@ impl Builder<'_, '_> {
                 exits: Vec::new(),
                 result: None,
                 result_typed: true,
+                result_expected: scope.result_expected,
             })
             .collect();
         // The memo belongs to this one function instance. Nested probes share
@@ -137,6 +138,7 @@ impl Builder<'_, '_> {
                 file: self.file,
                 compiler: self.compiler,
                 function: &mut function,
+                return_annotated: self.return_annotated,
                 sub: self.sub.clone(),
                 bindings,
                 guard_aliases: BTreeMap::new(),
