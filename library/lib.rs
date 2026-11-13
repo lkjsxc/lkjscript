@@ -1,9 +1,10 @@
 //! Source standard library, also buildable by rustc during bootstrap.
 mod prelude;
-pub use prelude::{Option, Result};
+pub use prelude::{IntoIterator, IterSource, Iterator, Option, Result};
 pub mod bytes;
 pub mod char;
 pub mod fmt;
+pub mod iter;
 mod ordered_map;
 mod ordered_set;
 pub mod str;

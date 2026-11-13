@@ -99,6 +99,13 @@ impl Primitive {
     }
 }
 
+const ENTRIES: [(lower::RuntimeFunction, &str); 4] = [
+    (lower::RuntimeFunction::Allocate, "allocate"),
+    (lower::RuntimeFunction::Release, "release"),
+    (lower::RuntimeFunction::DropDispatch, "drop_walk"),
+    (lower::RuntimeFunction::Utf8Validate, "utf8_validate"),
+];
+
 /// The fields are private: a checked user program is not a source runtime.
 pub struct Runtime {
     checked: CheckedProgram,
@@ -161,21 +168,20 @@ pub fn prepare(bundle: &SourceBundle) -> Result<Runtime, Diagnostic> {
         primitives.insert(index, primitive);
     }
     let mut entries = [0; 4];
-    for (slot, name) in ["allocate", "release", "drop_walk", "utf8_validate"]
-        .iter()
-        .enumerate()
-    {
+    for (slot, (role, name)) in ENTRIES.iter().enumerate() {
         let index = *names
             .get(name)
             .ok_or_else(|| problem(bundle, &format!("missing runtime entry {name}")))?;
         let function = &program.functions[index];
-        if function.params != 1
+        if function.params != role.signature().parameters.len()
             || !word(program, function.result)
-            || !word(program, function.locals[0].ty)
+            || function.locals[..function.params]
+                .iter()
+                .any(|local| !word(program, local.ty))
         {
             return Err(problem(
                 bundle,
-                &format!("runtime entry {name} must take and return one word"),
+                &format!("runtime entry {name} has the wrong signature"),
             ));
         }
         entries[slot] = index;
@@ -260,15 +266,10 @@ impl Runtime {
     /// the bytes and compare this source on K and every production encoder.
     pub fn model_program(&self, drop_steps: &[usize]) -> Result<lower::Program, String> {
         let mut functions = Vec::new();
-        for role in [
-            lower::RuntimeFunction::Allocate,
-            lower::RuntimeFunction::Release,
-            lower::RuntimeFunction::DropDispatch,
-            lower::RuntimeFunction::Utf8Validate,
-        ] {
+        for (role, _) in ENTRIES {
             functions.push(Function {
                 name: "runtime entry".to_string(),
-                signature: Signature::words(1),
+                signature: role.signature(),
                 role: lower::FunctionRole::Runtime(role),
                 code: Code {
                     locals: Vec::new(),
@@ -371,13 +372,25 @@ impl Runtime {
             });
         }
         for (slot, index) in self.entries.iter().enumerate() {
-            program.functions[slot].code = Code {
+            let (role, name) = ENTRIES[slot];
+            let signature = role.signature();
+            let entry = program
+                .functions
+                .get_mut(slot)
+                .ok_or("missing runtime entry slot")?;
+            if entry.role != lower::FunctionRole::Runtime(role) || entry.signature != signature {
+                return Err(format!(
+                    "runtime entry {name} has an incompatible lowered signature"
+                ));
+            }
+            let mut instructions: Vec<_> = (0..signature.parameters.len())
+                .map(Instruction::LocalGet)
+                .collect();
+            instructions.push(Instruction::Call(base + index));
+            instructions.push(Instruction::End);
+            entry.code = Code {
                 locals: Vec::new(),
-                instructions: vec![
-                    Instruction::LocalGet(0),
-                    Instruction::Call(base + index),
-                    Instruction::End,
-                ],
+                instructions,
             };
         }
         Ok(())

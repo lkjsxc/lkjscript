@@ -157,9 +157,8 @@ pub fn valid_utf8_bytes(data: u64, length: u64) -> u64 {
     if remaining == 0 { 1 } else { 0 }
 }
 
-pub fn utf8_validate(input: u64) -> u64 {
-    let slice = raw_load64(input);
-    valid_utf8_bytes(raw_load64(slice), raw_load64(slice + 8))
+pub fn utf8_validate(data: u64, length: u64) -> u64 {
+    valid_utf8_bytes(data, length)
 }
 
 // Each cleanup frame is {value, type, next_child, child_type}. Glue yields one

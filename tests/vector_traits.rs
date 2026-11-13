@@ -197,6 +197,7 @@ fn rust_observations(source: &str, probes: &[&str]) -> Vec<(String, i64)> {
     let mut rust = String::new();
     for (module, file) in [
         ("prelude", "prelude.rs"),
+        ("iter", "iter.rs"),
         ("bytes", "bytes.rs"),
         ("string", "string.rs"),
         ("str", "str.rs"),

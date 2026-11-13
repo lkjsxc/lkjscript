@@ -95,7 +95,7 @@ fn source_runtime_reuse_growth_copy_utf8_and_cleanup_agree_with_its_k_model() {
         assert_eq!(
             bits(value(
                 &runtime,
-                "valid_utf8_bytes",
+                "utf8_validate",
                 &[4096, bytes.len() as u64],
                 &mut memory
             )),
@@ -121,7 +121,7 @@ fn source_runtime_reuse_growth_copy_utf8_and_cleanup_agree_with_its_k_model() {
         if(e['fn:probe_allocator']()!==42n||e['fn:probe_drop']()!==42n)throw Error('runtime model probe');
         const cases={cases:?},expected={expected:?};
         for(let i=0;i<cases.length;i++){{new Uint8Array(e.memory.buffer).set(cases[i],4096);
-            if(e['fn:valid_utf8_bytes'](4096n,BigInt(cases[i].length))!==BigInt(expected[i]))throw Error('UTF8 '+i);}}
+            if(e['fn:utf8_validate'](4096n,BigInt(cases[i].length))!==BigInt(expected[i]))throw Error('UTF8 '+i);}}
         let trapped=false;try{{e['fn:probe_overflow']()}}catch(error){{trapped=error instanceof WebAssembly.RuntimeError}}
         if(!trapped||e.__lkj_trap_code.value!==6n)throw Error('allocation overflow');
     "#
@@ -152,4 +152,11 @@ fn raw_names_in_ordinary_source_do_not_grant_runtime_authority() {
         .text
         .replacen("panic!(\"unsealed runtime primitive\")", "0", 1);
     assert!(runtime::prepare(&bundle(replaced)).is_err());
+    let wrong_entry = input.files[0].text.replace(
+        "pub fn utf8_validate(data: u64, length: u64) -> u64 {\n    valid_utf8_bytes(data, length)\n}",
+        "pub fn utf8_validate(data: u64) -> u64 { valid_utf8_bytes(data, 0) }",
+    );
+    let error = runtime::prepare(&bundle(wrong_entry)).err().unwrap();
+    assert_eq!(error.code, "E_RUNTIME");
+    assert!(error.message.contains("utf8_validate"));
 }

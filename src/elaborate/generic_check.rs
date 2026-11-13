@@ -492,6 +492,7 @@ impl Compiler<'_> {
         mut environment: BTreeMap<String, usize>,
     ) -> Result<BTreeMap<String, usize>> {
         let implementation = self.source.impls[index].clone();
+        self.prepare_callable_arguments(&implementation.generics, &mut environment)?;
         let mut pending = implementation.associated.clone();
         if let Some(trait_type) = implementation.trait_ty {
             if let a::Type::Path(path) = &self.source.types[trait_type].kind {
@@ -616,6 +617,7 @@ impl Compiler<'_> {
         if let Some(owner) = owner {
             parameters.extend(self.source.impls[owner].generics.clone());
         }
+        self.prepare_callable_arguments(&parameters, substitutions)?;
         self.prepare_parameter_associated(&parameters, substitutions)?;
         if let Some(owner) = owner {
             let mut environment = substitutions.clone();
@@ -1213,9 +1215,25 @@ impl super::Builder<'_, '_> {
         let first = self
             .compiler
             .resolve(definition.params[0].ty, &substitutions)?;
-        let receiver = match self.compiler.types[first].kind {
-            k::TypeKind::Ref { mutable, .. } => self.borrow(target.clone(), mutable, span.line)?,
-            _ => self.read(target.clone(), span.line)?,
+        let receiver = if first == base {
+            // A by-value Self may itself be a reference. Reborrowing it would
+            // change the declared receiver from Self to &Self (or &mut Self).
+            self.read(target.clone(), span.line)?
+        } else if let k::TypeKind::Ref { inner, mutable } = self.compiler.types[first].kind {
+            if inner != base {
+                return Err(err(
+                    span,
+                    "E_TYPE",
+                    "method receiver differs from its implementation target",
+                ));
+            }
+            self.borrow(target.clone(), mutable, span.line)?
+        } else {
+            return Err(err(
+                span,
+                "E_TYPE",
+                "method receiver differs from its implementation target",
+            ));
         };
         let mut values = vec![receiver.0];
         for (parameter, argument) in definition.params[1..].iter().zip(args) {

@@ -539,6 +539,12 @@ impl Infer<'_, '_> {
         }
     }
     fn coercion_pending(&self, from: Variable, to: Variable) -> bool {
+        // A known scalar target fixes the type even when its producer is still
+        // awaiting a method/projection contract. No reference coercion can
+        // change that choice; propagate it before numeric fallback.
+        if matches!(self.shape(to), Some(Shape::Atom(_))) {
+            return false;
+        }
         if self.pending_operation(from) || self.pending_operation(to) {
             return true;
         }

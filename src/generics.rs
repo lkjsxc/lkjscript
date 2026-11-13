@@ -1,10 +1,11 @@
 //! Global source rules for coherence and finite generic instantiation.
 //! The executable K checker still checks concrete function and witness types.
+mod signature_bounds;
 use crate::ast::*;
 use crate::names::qualified;
 use std::collections::{BTreeMap, BTreeSet};
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum Term {
     Unknown,
     Variable(usize),
@@ -1170,20 +1171,7 @@ fn impl_arguments(
                 }
             }
             Type::Ref { mutable, inner, .. } => {
-                if let Type::Slice(element) = source.types[*inner].kind {
-                    if let TypeKind::Slice {
-                        mutable: actual_mutable,
-                        inner: actual_inner,
-                    } = actual_type.kind
-                    {
-                        if *mutable != actual_mutable {
-                            return None;
-                        }
-                        work.push((element, actual_inner));
-                    } else {
-                        return None;
-                    }
-                } else if let TypeKind::Ref {
+                if let TypeKind::Ref {
                     mutable: actual_mutable,
                     inner: actual_inner,
                 } = actual_type.kind
@@ -1191,6 +1179,17 @@ fn impl_arguments(
                     if *mutable != actual_mutable {
                         return None;
                     }
+                    work.push((*inner, actual_inner));
+                } else {
+                    return None;
+                }
+            }
+            Type::Slice(inner) => {
+                if let TypeKind::Slice {
+                    inner: actual_inner,
+                    ..
+                } = actual_type.kind
+                {
                     work.push((*inner, actual_inner));
                 } else {
                     return None;
@@ -2290,6 +2289,7 @@ fn associated_dependencies(source: &Program, ty: TypeId, env: &BTreeMap<String, 
     true
 }
 fn signatures(source: &Program) -> Result<(), Diagnostic> {
+    let implementations = ImplementationIndex::new(source)?;
     for implementation in &source.impls {
         let trait_id = match implementation.trait_ty {
             Some(id) => id,
@@ -2329,7 +2329,14 @@ fn signatures(source: &Program) -> Result<(), Diagnostic> {
             let concrete = expected_env[&generic.name];
             for bound in &generic.bounds {
                 let b = signature_type(source, *bound, &expected_env, &mut terms)?;
-                if !symbolic_bound(&mut terms, concrete, b, &known) {
+                if !signature_bounds::prove(
+                    source,
+                    &implementations,
+                    &mut terms,
+                    concrete,
+                    b,
+                    &known,
+                )? {
                     return Err(Diagnostic::new(
                         implementation.span,
                         "E_TRAIT",
@@ -2383,7 +2390,14 @@ fn signatures(source: &Program) -> Result<(), Diagnostic> {
             if let Some(concrete) = expected_env.get(&format!("Self::{}", associated.name)) {
                 for constraint in &associated.bounds {
                     let b = signature_type(source, *constraint, &expected_env, &mut terms)?;
-                    if !symbolic_bound(&mut terms, *concrete, b, &known) {
+                    if !signature_bounds::prove(
+                        source,
+                        &implementations,
+                        &mut terms,
+                        *concrete,
+                        b,
+                        &known,
+                    )? {
                         return Err(Diagnostic::new(
                             implementation.span,
                             "E_TRAIT",
@@ -2455,7 +2469,14 @@ fn signatures(source: &Program) -> Result<(), Diagnostic> {
                 let ty = aenv[&g.name];
                 for b in &g.bounds {
                     let bound = signature_type(source, *b, &aenv, &mut terms)?;
-                    if !symbolic_bound(&mut terms, ty, bound, &available) {
+                    if !signature_bounds::prove(
+                        source,
+                        &implementations,
+                        &mut terms,
+                        ty,
+                        bound,
+                        &available,
+                    )? {
                         return Err(Diagnostic::new(
                             actual.span,
                             "E_TRAIT",

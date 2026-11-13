@@ -207,6 +207,74 @@ impl Compiler<'_> {
             .or_else(|| self.closures.assumptions.get(&ty).cloned())
     }
 
+    fn callable_type_signature(&self, mut ty: usize) -> Option<Signature> {
+        while let k::TypeKind::Ref { inner, .. } = self.types[ty].kind {
+            ty = inner;
+        }
+        self.closures
+            .entries
+            .get(&ty)
+            .map(|entry| entry.signature.clone())
+            .or_else(|| self.closures.assumptions.get(&ty).cloned())
+    }
+
+    /// A callable bound determines types even when its output parameter does
+    /// not occur in the receiver or a value argument. Binding these equations
+    /// confers no callable/ownership authority; bounds and concrete K still
+    /// validate the selected signature and body independently.
+    pub(super) fn prepare_callable_arguments(
+        &mut self,
+        parameters: &[a::GenericParam],
+        substitutions: &mut BTreeMap<String, usize>,
+    ) -> Result<()> {
+        loop {
+            let before = substitutions.len();
+            for parameter in parameters {
+                let Some(ty) = substitutions.get(&parameter.name).copied() else {
+                    continue;
+                };
+                let Some(signature) = self.callable_type_signature(ty) else {
+                    continue;
+                };
+                for bound in &parameter.bounds {
+                    if !self.is_callable_bound(*bound) {
+                        continue;
+                    }
+                    let a::Type::Path(path) = self.source.types[*bound].kind.clone() else {
+                        unreachable!()
+                    };
+                    if path.args.len() != 2 {
+                        continue;
+                    }
+                    let a::Type::Tuple(arguments) = self.source.types[path.args[0]].kind.clone()
+                    else {
+                        continue;
+                    };
+                    if arguments.len() != signature.arguments.len() {
+                        continue;
+                    }
+                    let pairs = std::iter::once((path.args[1], signature.result)).chain(
+                        arguments
+                            .into_iter()
+                            .zip(signature.arguments.iter().copied()),
+                    );
+                    for (pattern, actual) in pairs {
+                        if !self.infer_type_bindings(pattern, actual, substitutions)? {
+                            return Err(err(
+                                self.source.types[*bound].span,
+                                "E_TYPE",
+                                "callable bound type arguments disagree",
+                            ));
+                        }
+                    }
+                }
+            }
+            if substitutions.len() == before {
+                return Ok(());
+            }
+        }
+    }
+
     pub(super) fn is_callable_bound(&self, bound: a::TypeId) -> bool {
         matches!(&self.source.types[bound].kind, a::Type::Path(path)
             if path.declaration.is_none() && Kind::named(&path.name).is_some())

@@ -15,8 +15,14 @@ use bytes as rust_bytes;
 mod rust_map;
 #[path = "../library/prelude.rs"]
 #[allow(dead_code)]
-mod rust_prelude;
+pub mod rust_prelude;
 pub use rust_prelude::{Option, Result};
+mod prelude {
+    pub use super::rust_prelude::Option;
+}
+#[path = "../library/iter.rs"]
+#[allow(dead_code)]
+mod iter;
 
 fn compile(text: &str, _library: &str) -> k::CheckedProgram {
     let text = format!("use std::bytes::*; use std::collections::BTreeMap;\n{text}");

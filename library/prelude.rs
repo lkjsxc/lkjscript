@@ -1,4 +1,5 @@
 //! The source prelude. These enums own their payloads and work with affine values.
+pub use crate::iter::{IntoIterator, IterSource, Iterator};
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Option<T> {
     None,

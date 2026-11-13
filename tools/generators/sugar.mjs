@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto';
 import { run } from '../process.mjs';
 import { runRoutes } from '../batch.mjs';
 import { oracleCache, packResult, unpackResult } from '../oracle.mjs';
-const [binary='target/debug/lkjscript',seedText='1301',countText='84',output='target/generators']=process.argv.slice(2);
+const [binary='target/debug/lkjscript',seedText='1301',countText='96',output='target/generators']=process.argv.slice(2);
 const bin=path.resolve(binary),count=Number(countText),dir=path.resolve(output,`sugar-${seedText}`);
 const engines=(process.env.LKJ_ENGINES||'native,k').split(',');
 const compareRust=process.env.LKJ_SUGAR_RUST!=='0';
@@ -24,7 +24,7 @@ fn make(world: &mut World, byte: u8) -> M { tick(world, byte+100); M { out: worl
 function pair(index){
  const a=1+random(50),b=1+random(50),c=1+random(50),marker=60+random(30),yes=random(2)===0?'true':'false';
  let sugar='',expanded='',sugarHelpers='',expandedHelpers='';let family,rustSugar=true;
- switch(index%28){
+ switch(index%32){
   case 0:{family='if-let';const value=`if ${yes} { Some(make(&mut world,${a}u8)) } else { None }`;
    sugar=`if let Some(m) = ${value} { tick(&mut world,${marker}u8); drop(m); } else { tick(&mut world,${b}u8); }`;
    expanded=`match ${value} { Some(m) => { tick(&mut world,${marker}u8); drop(m); }, None => tick(&mut world,${b}u8) }`;break;}
@@ -191,6 +191,29 @@ fn result_view_mut(value:&mut Result<M,M>)->Result<&mut M,&mut M>{match value{Ok
    const result=`let mut result:Result<M,M>=if ${yes}{Ok(make(&mut world,${a}u8))}else{Err(make(&mut world,${b}u8))};`;
    sugar+=result+`match result.as_ref(){Ok(value)|Err(value)=>tick(&mut world,value.b)}match result.as_mut(){Ok(value)|Err(value)=>{value.b=${c}u8;}}`;
    expanded+=result+`match result_view(&result){Ok(value)|Err(value)=>tick(&mut world,value.b)}match result_view_mut(&mut result){Ok(value)|Err(value)=>{value.b=${c}u8;}}`;break;}
+
+  case 28:{family='collection-for-cleanup';
+   const prefix=`let values=vec![make(&mut world,${a}u8),make(&mut world,${b}u8)];`;
+   const body=`let local=make(&mut world,${c}u8);tick(&mut world,item.b);if ${yes}{continue;}tick(&mut world,${marker}u8);drop(local);`;
+   expandedHelpers='fn expanded_into<I:IntoIterator>(value:I)->I::IntoIter{value.into_iter()}\nfn expanded_next<I:Iterator>(value:&mut I)->Option<I::Item>{value.next()}\n';
+   sugar=prefix+`for item in &values{${body}}`;
+   expanded=prefix+`match expanded_into(&values){mut iterator=>{while true{match expanded_next(&mut iterator){Some(mut next)=>{let item=next;let _:()={${body}};},None=>break}}}}`;break;}
+  case 29:{family='temporary-iterable-controls';
+   const source=`fn values(world:&mut World)->Vec<M>{tick(world,${marker}u8);vec![make(world,${a}u8),make(world,${b}u8)]}\n`;
+   const body=`let local=make(world,${c}u8);tick(world,item.b);if mode==0{continue;}if mode==1{break;}if mode==2{return;}drop(local);`;
+   const finish=`tick(world,${marker+1}u8);}\n`;
+   sugarHelpers=source+'fn visit(world:&mut World,mode:u8){for item in &values(world){'+body+'}'+finish;
+   expandedHelpers=source+'fn expanded_into<I:IntoIterator>(value:I)->I::IntoIter{value.into_iter()}\nfn expanded_next<I:Iterator>(value:&mut I)->Option<I::Item>{value.next()}\n'+
+    'fn visit(world:&mut World,mode:u8){match expanded_into(&values(world)){mut iterator=>{while true{match expanded_next(&mut iterator){Some(mut next)=>{let item=next;let _:()={'+body+'};},None=>break}}}}'+finish;
+   sugar=expanded='visit(&mut world,0);visit(&mut world,1);visit(&mut world,2);visit(&mut world,3);';break;}
+  case 30:{family='iterator-value-pattern';
+   const prefix=`let values=vec![(${a}u8,${b}u8),(${b}u8,${c}u8)];`,body='tick(&mut world,*left);tick(&mut world,*right);';
+   expandedHelpers='fn expanded_into<I:IntoIterator>(value:I)->I::IntoIter{value.into_iter()}\nfn expanded_next<I:Iterator>(value:&mut I)->Option<I::Item>{value.next()}\n';
+   sugar=prefix+`for (left,right) in values.iter(){${body}}`;
+   expanded=prefix+`match expanded_into(values.iter()){mut iterator=>{while true{match expanded_next(&mut iterator){Some(mut next)=>{let (left,right)=next;let _:()={${body}};},None=>break}}}}`;break;}
+  case 31:{family='range-binding-pattern';const start=random(5),end=start+1+random(5);
+   sugar=`for ref mut value in ${start}i64..${end}i64{*value=*value+10;tick(&mut world,*value as u8);}for _ in 0i64..3i64{tick(&mut world,${marker}u8);}`;
+   expanded=`let mut counter=${start}i64;while counter<${end}i64{let mut item=counter;let ref mut value=item;*value=*value+10;tick(&mut world,*value as u8);counter=counter+1;}let mut index=0i64;while index<3i64{tick(&mut world,${marker}u8);index=index+1;}`;break;}
 
  }
  const tail=`\ntick(&mut world,${90+random(10)}u8);`+(random(9)===0?' assert!(false);':'');

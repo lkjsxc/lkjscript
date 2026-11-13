@@ -320,6 +320,16 @@ fn arguments(args: &[String]) -> Result<Arguments, String> {
     Ok(result)
 }
 fn entry_world(program: &k::Program, function: &k::Function) -> Result<bool, String> {
+    if !matches!(
+        program.types[function.result].kind,
+        k::TypeKind::Unit
+            | k::TypeKind::Bool
+            | k::TypeKind::Char
+            | k::TypeKind::Int { .. }
+            | k::TypeKind::F64
+    ) {
+        return Err("E_ENTRY host entry result must be unit or a scalar".to_string());
+    }
     if function.params == 0 {
         return Ok(false);
     }
@@ -334,27 +344,34 @@ fn entry_world(program: &k::Program, function: &k::Function) -> Result<bool, Str
     Err("E_ENTRY entry takes no arguments or exactly one World".to_string())
 }
 fn entries(program: &k::Program, args: &Arguments) -> Result<Vec<usize>, String> {
-    if args.verb == "test" {
-        return Ok(program
+    let selected: Vec<_> = if args.verb == "test" {
+        program
             .functions
             .iter()
             .enumerate()
             .filter_map(|(id, f)| f.test.then_some(id))
-            .collect());
-    }
-    let entry = args.entry.clone().unwrap_or_else(|| {
-        if program.functions.iter().any(|f| f.name == "main") {
-            "main".to_string()
-        } else {
-            "probe".to_string()
+            .collect()
+    } else {
+        let entry = args.entry.clone().unwrap_or_else(|| {
+            if program.functions.iter().any(|f| f.name == "main") {
+                "main".to_string()
+            } else {
+                "probe".to_string()
+            }
+        });
+        program
+            .functions
+            .iter()
+            .position(|f| f.name == entry)
+            .map(|id| vec![id])
+            .ok_or_else(|| format!("E_ENTRY unknown function {entry}"))?
+    };
+    if !args.unchecked {
+        for index in &selected {
+            entry_world(program, &program.functions[*index])?;
         }
-    });
-    program
-        .functions
-        .iter()
-        .position(|f| f.name == entry)
-        .map(|id| vec![id])
-        .ok_or_else(|| format!("E_ENTRY unknown function {entry}"))
+    }
+    Ok(selected)
 }
 fn result_kind(program: &k::Program, function: &k::Function) -> &'static str {
     match program.types[function.result].kind {

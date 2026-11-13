@@ -1,5 +1,6 @@
 //! Module and declaration identity. Later phases consume resolved paths, never bare-name guesses.
 mod import_scopes;
+mod iteration;
 use crate::ast::*;
 use crate::names::qualified;
 use import_scopes::ImportScopes;
@@ -935,6 +936,7 @@ pub fn resolve(source: &Program) -> Result<Program> {
             resolver.resolve_path(node.scope, path, Namespace::Type, node.span)?;
         }
     }
+    iteration::expand(&mut result, &resolver)?;
     result.declarations = resolver.declarations;
     result.function_owners = resolver
         .function_owners
@@ -956,6 +958,18 @@ impl Resolver<'_> {
     }
 
     pub fn value_path(&self, scope: ModuleId, path: &Path, span: Span) -> Result<Path> {
+        // Resolved expression paths include compiler-generated source sugar.
+        // Their declaration identity must not be looked up again by spelling.
+        if let Some(declaration) = path.declaration {
+            if self.declarations.get(declaration).is_none() {
+                return Err(Diagnostic::new(
+                    span,
+                    "E_NAME",
+                    "resolved value declaration is missing",
+                ));
+            }
+            return Ok(path.clone());
+        }
         let mut path = path.clone();
         self.resolve_path(scope, &mut path, Namespace::Value, span)?;
         Ok(path)
@@ -1048,10 +1062,27 @@ impl Resolver<'_> {
                 }
             }
             let Some(parent) = self.import_scopes.parent(owner) else {
-                return false;
+                break;
             };
             owner = parent;
         }
+        let Some(prelude) = self.modules.get("$std::prelude") else {
+            return false;
+        };
+        self.trait_names
+            .get(&(*prelude, declaration))
+            .is_some_and(|names| {
+                names.iter().any(|name| {
+                    self.path(scope, name, Namespace::Type, span, true)
+                        .ok()
+                        .flatten()
+                        .is_some_and(|resolved| {
+                            resolved
+                                .binding
+                                .is_some_and(|binding| binding.declaration == declaration)
+                        })
+                })
+            })
     }
     pub fn declaration_visible(&self, scope: ModuleId, declaration: DeclarationId) -> bool {
         let item = &self.declarations[declaration];

@@ -176,6 +176,15 @@ pub enum RuntimeFunction {
     DropDispatch,
     Utf8Validate,
 }
+impl RuntimeFunction {
+    /// The common runtime ABI; encoders do not adapt these signatures.
+    pub fn signature(self) -> Signature {
+        Signature::words(match self {
+            Self::Utf8Validate => 2,
+            Self::Allocate | Self::Release | Self::DropDispatch => 1,
+        })
+    }
+}
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum FunctionRole {
     Source,
@@ -207,13 +216,27 @@ pub struct Export {
     pub name: String,
     pub function: usize,
 }
-/// Storage of one source value. Aggregates and owned containers use a pointer
-/// here; their separate payload layouts are recorded below. Registers retain
-/// 64-bit values, so memory width never changes arithmetic or call semantics.
+/// Storage of one K value. Aggregates and owned containers use one pointer;
+/// references to unsized slices/text store an inline data/count pair. Each word
+/// is an I64 in registers. Scalar memory accesses retain their natural width.
 #[derive(Clone, Copy)]
 pub struct Storage {
     pub bytes: u8,
+    pub alignment: u8,
     pub signed: bool,
+}
+impl Storage {
+    pub fn words(self) -> usize {
+        usize::from(self.bytes).div_ceil(8)
+    }
+    pub fn word(self, index: usize) -> Storage {
+        assert!(index < self.words());
+        Storage {
+            bytes: self.bytes.min(8),
+            alignment: self.alignment.min(8),
+            signed: self.signed,
+        }
+    }
 }
 pub struct AggregateLayout {
     pub bytes: u64,

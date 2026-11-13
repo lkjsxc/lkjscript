@@ -5,7 +5,9 @@ is native Linux x86-64; `LKJ_ENGINE=k` selects the independent machine and
 `LKJ_ENGINE=node` selects WebAssembly. `LKJSCRIPT_BIN` selects a compiler.
 `LKJ_ENGINES=native,k,node` checks each source once and executes it independently
 on all three routes. Lowering is shared by the two encoders. The routine gate
-runs native and K; a three-route run uses
+runs native and K using the optimized compiler with release overflow checks.
+Full debug Rust tests remain in the gate and overlap the independent suites.
+A three-route run uses
 `LKJ_GATE_ENGINES=native,k,node bash tools/check.sh`.
 
 Source cases expose an ordinary `probe` function with a printable scalar result,

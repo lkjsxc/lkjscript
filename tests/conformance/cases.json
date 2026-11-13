@@ -2590,5 +2590,180 @@
     "file": "k/enum_indexed_move_stale.k",
     "kind": "reject",
     "code": "E_TYPE"
+  },
+  {
+    "id": "inline_view_values",
+    "file": "pass/inline_view_values.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "inline_view_output",
+    "file": "output/inline_view_output.rs",
+    "kind": "output",
+    "hex": "41426364656667cebb",
+    "ending": "normal",
+    "rust": true
+  },
+  {
+    "id": "inline_view_slots",
+    "file": "pass/inline_view_slots.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "callable_output_inference",
+    "file": "pass/callable_output_inference.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "callable_output_disagreement",
+    "file": "fail/callable_output_disagreement.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": true,
+    "rustCode": "E0308"
+  },
+  {
+    "id": "associated_nominal_bound",
+    "file": "pass/associated_nominal_bound.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "byvalue_reference_receiver",
+    "file": "pass/byvalue_reference_receiver.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "iteration_declaration_identity",
+    "file": "pass/iteration_declaration_identity.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "shared_iteration",
+    "file": "pass/shared_iteration.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "associated_bound_prerequisite",
+    "file": "fail/associated_bound_prerequisite.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "pending": false,
+    "rust": true,
+    "rustCode": "E0277"
+  },
+  {
+    "id": "associated_bound_rigid",
+    "file": "fail/associated_bound_rigid.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "pending": false,
+    "rust": true,
+    "rustCode": "E0277"
+  },
+  {
+    "id": "associated_bound_cycle",
+    "file": "fail/associated_bound_cycle.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "pending": false,
+    "rust": true,
+    "rustCode": "E0275"
+  },
+  {
+    "id": "associated_bound_identity",
+    "file": "fail/associated_bound_identity.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "pending": false,
+    "rust": true,
+    "rustCode": "E0277"
+  },
+  {
+    "id": "byvalue_reference_move",
+    "file": "fail/byvalue_reference_move.rs",
+    "kind": "reject",
+    "code": "E_MOVE",
+    "pending": false,
+    "rust": true,
+    "rustCode": "E0382"
+  },
+  {
+    "id": "for_refutable_item",
+    "file": "fail/for_refutable_item.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "pending": false,
+    "rust": true,
+    "rustCode": "E0005"
+  },
+  {
+    "id": "for_borrowed_mutation",
+    "file": "fail/for_borrowed_mutation.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true,
+    "rustCode": "E0502"
+  },
+  {
+    "id": "for_borrowed_drop",
+    "file": "fail/for_borrowed_drop.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true,
+    "rustCode": "E0505"
+  },
+  {
+    "id": "for_break_value",
+    "file": "fail/for_break_value.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "pending": false,
+    "rust": true,
+    "rustCode": "E0571"
+  },
+  {
+    "id": "for_nonunit_body",
+    "file": "fail/for_nonunit_body.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "pending": false,
+    "rust": true,
+    "rustCode": "E0308"
+  },
+  {
+    "id": "iteration_temporary_order",
+    "file": "output/iteration_temporary_order.rs",
+    "kind": "output",
+    "hex": "506566820b1e820c1e01023c506566830b1f01023d506566840b200102506566850b21850c2101023f5a",
+    "pending": false,
+    "rust": true,
+    "ending": "normal"
+  },
+  {
+    "id": "inline_view_spills",
+    "file": "pass/inline_view_spills.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
   }
 ]

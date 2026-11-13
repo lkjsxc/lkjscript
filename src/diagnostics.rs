@@ -1,5 +1,5 @@
 //! Reporting data does not carry checked K and cannot authorize emission.
-use crate::ast::{Expr, Pattern, Span, Type};
+use crate::ast::{Expr, Span, Type};
 use crate::source::SourceReport;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -37,19 +37,6 @@ pub fn census(report: &SourceReport) -> Census {
     let program = &report.program;
     for node in &program.exprs {
         let kind = match &node.kind {
-            Expr::For {
-                iterator, pattern, ..
-            } => {
-                if !matches!(program.exprs[*iterator].kind, Expr::Range { .. }) {
-                    recognized.push(("collection iteration", program.exprs[*iterator].span));
-                    sites.insert((node.span.file, node.span.line, node.span.column));
-                }
-                if !matches!(program.patterns[*pattern].kind, Pattern::Bind { .. }) {
-                    recognized.push(("for binding pattern", program.patterns[*pattern].span));
-                    sites.insert((node.span.file, node.span.line, node.span.column));
-                }
-                None
-            }
             Expr::Index { index, .. }
                 if matches!(program.exprs[*index].kind, Expr::Range { .. }) =>
             {

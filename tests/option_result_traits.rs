@@ -217,12 +217,20 @@ fn directory() -> std::path::PathBuf {
     path
 }
 
+fn rust_library(directory: &std::path::Path, prelude: &str) -> String {
+    std::fs::write(directory.join("prelude.rs"), prelude).unwrap();
+    std::fs::write(
+        directory.join("iter.rs"),
+        include_str!("../library/iter.rs"),
+    )
+    .unwrap();
+    "#[path=\"prelude.rs\"]mod prelude;#[path=\"iter.rs\"]mod iter;use prelude::{Option,Result};\n"
+        .to_string()
+}
+
 fn rust_oracle(source: &str, prelude: &str, probes: &[&str]) -> String {
     let directory = directory();
-    std::fs::write(directory.join("prelude.rs"), prelude).unwrap();
-    let mut main = String::from(
-        "#[path=\"prelude.rs\"]mod owned_prelude;use owned_prelude::{Option,Result};\n",
-    );
+    let mut main = rust_library(&directory, prelude);
     main.push_str(source);
     main.push_str("\nfn main(){\n");
     for probe in probes {
@@ -362,8 +370,8 @@ fn supplied_prelude_bytes_control_behavior_and_diagnostics() {
 
 fn rust_checks(source: &str, prelude: &str, accepted: bool) {
     let directory = directory();
-    std::fs::write(directory.join("prelude.rs"), prelude).unwrap();
-    std::fs::write(directory.join("case.rs"), format!("#[path=\"prelude.rs\"]mod owned_prelude;use owned_prelude::{{Option,Result}};\n{source}")).unwrap();
+    let modules = rust_library(&directory, prelude);
+    std::fs::write(directory.join("case.rs"), format!("{modules}{source}")).unwrap();
     let output = Command::new("rustc")
         .args([
             "--edition=2024",

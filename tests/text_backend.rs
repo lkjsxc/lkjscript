@@ -164,7 +164,8 @@ fn literal(name: &str, value: &str) -> k::Function {
 
 fn buffer_functions() -> Vec<k::Function> {
     let mut body = vec![intrinsic(0, "vec_new", &[])];
-    for _ in 0..4 {
+    // A live16-byte allocation can also hold a raw two-word view result.
+    for _ in 0..16 {
         body.extend([
             k::Op::Borrow {
                 dst: 1,
@@ -306,32 +307,39 @@ fn literal_pool_is_immutable_deduplicated_and_separate_from_heap() {
     let script = format!(
         r#"
         let end=0;
+        // The hidden output address is backed by a live source allocation;
+        // neither address0 nor the immutable text region is writable scratch.
+        const outputOwner=e['fn:buffer']();
+        const initial=new DataView(e.memory.buffer);
+        const outputHeader=Number(initial.getBigUint64(Number(outputOwner),true));
+        const output=Number(initial.getBigUint64(outputHeader,true));
+        if(initial.getBigUint64(outputHeader+8,true)<16n)throw Error('output extent');
         function inspect(name,expected){{
-            const pointer=e['fn:'+name]();
+            if(e['fn:'+name](BigInt(output))!==0n)throw Error('indirect result marker');
             const view=new DataView(e.memory.buffer);
-            const header=Number(view.getBigUint64(Number(pointer),true));
-            const data=Number(view.getBigUint64(header,true));
-            const length=Number(view.getBigUint64(header+8,true));
+            const data=Number(view.getBigUint64(output,true));
+            const length=Number(view.getBigUint64(output+8,true));
             if(length!==expected.length)throw Error(name+' length '+length);
-            if(view.getBigUint64(header+16,true)!==BigInt(length))throw Error('capacity');
             for(let i=0;i<length;i++)if(view.getUint8(data+i)!==expected[i])throw Error(name+' byte '+i);
             end=Math.max(end,data+length);
-            return pointer;
+            return BigInt(data);
         }}
         inspect('empty',[]);
         const text=inspect('unicode',{unicode_bytes:?});
         if(inspect('duplicate',{unicode_bytes:?})!==text)throw Error('literal not pooled');
         inspect('large',Array.from(Buffer.from('λ'.repeat(40000))));
         if(e.memory.buffer.byteLength<131072)throw Error('static data did not initialize extra page');
+        if(output<end)throw Error('output slot overlaps immutable bytes');
         const saved=Buffer.from(new Uint8Array(e.memory.buffer,0,end));
         for(let i=0;i<1000;i++){{
-            if(e['fn:copy_holder']()!==text)throw Error('copy changed text identity');
+            if(inspect('copy_holder',{unicode_bytes:?})!==text)throw Error('copy changed text identity');
             if(e['fn:text_length']()!=={unicode_len}n||e['fn:bytes_length']()!=={unicode_len}n)throw Error('view length');
             const buffer=e['fn:buffer']();
             if(buffer<BigInt(end))throw Error('heap overlaps static data');
             e['fn:release'](buffer);
         }}
         if(!saved.equals(Buffer.from(new Uint8Array(e.memory.buffer,0,end))))throw Error('literal storage was modified or released');
+        e['fn:release'](outputOwner);
         "#,
         unicode_bytes = unicode.as_bytes(),
         unicode_len = unicode.len(),
@@ -421,7 +429,7 @@ fn runtime_utf8_validation_matches_rust_at_encoding_boundaries() {
         function verify(bytes){{
             view.setBigUint64(header+8,BigInt(bytes.length),true);
             for(let i=0;i<bytes.length;i++)view.setUint8(data+i,bytes[i]);
-            const actual=e['fn:validate'](slot);
+            const actual=e['fn:validate'](BigInt(data),BigInt(bytes.length));
             const answer=BigInt((expected[index>>3]>>(index&7))&1);
             if(actual!==answer)throw Error('UTF8 '+bytes+' expected '+answer+' got '+actual);
             index++;

@@ -6,7 +6,7 @@ mod bootstrap_library;
 mod bytes;
 #[path = "../library/prelude.rs"]
 #[allow(dead_code)]
-mod rust_prelude;
+pub mod rust_prelude;
 #[path = "../library/string.rs"]
 #[allow(dead_code)]
 mod rust_string;
@@ -17,6 +17,12 @@ mod string {
     pub use super::rust_string::String;
 }
 pub use rust_prelude::{Option, Result};
+mod prelude {
+    pub use super::rust_prelude::Option;
+}
+#[path = "../library/iter.rs"]
+#[allow(dead_code)]
+mod iter;
 
 use lkjscript::compiler;
 use lkjscript::source::{SourceBundle, SourceInput};

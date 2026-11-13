@@ -71,9 +71,21 @@ impl Builder<'_, '_> {
         }
     }
 
+    pub(super) fn infer_type_matches(
+        &mut self,
+        pattern: a::TypeId,
+        actual: usize,
+        substitutions: &mut BTreeMap<String, usize>,
+    ) -> Result<bool> {
+        self.compiler
+            .infer_type_bindings(pattern, actual, substitutions)
+    }
+}
+
+impl Compiler<'_> {
     /// A candidate trial can fail to match without making the source invalid.
     /// Unification writes its inferred bindings only when the whole trial succeeds.
-    pub(super) fn infer_type_matches(
+    pub(super) fn infer_type_bindings(
         &mut self,
         pattern: a::TypeId,
         actual: usize,
@@ -110,11 +122,11 @@ impl Builder<'_, '_> {
                     actual,
                     environment,
                 } => {
-                    let node = self.compiler.source.types[pattern].clone();
+                    let node = self.source.types[pattern].clone();
                     match node.kind {
                         a::Type::Path(path) => {
                             if path.args.is_empty()
-                                && self.compiler.names.is_type_parameter(&path, node.span)
+                                && self.names.is_type_parameter(&path, node.span)
                             {
                                 if let Some(existing) = environments[environment].get(&path.name) {
                                     if *existing != actual {
@@ -130,15 +142,14 @@ impl Builder<'_, '_> {
                                 .iter()
                                 .copied()
                                 .filter(|id| {
-                                    !matches!(&self.compiler.source.types[*id].kind,
+                                    !matches!(&self.source.types[*id].kind,
                                     a::Type::Path(path) if path.name.starts_with('\''))
                                 })
                                 .collect();
-                            let declaration = path
-                                .declaration
-                                .map(|id| self.compiler.source.declarations[id].item);
+                            let declaration =
+                                path.declaration.map(|id| self.source.declarations[id].item);
                             if let Some(a::Item::Alias(index)) = declaration {
-                                let alias = self.compiler.source.aliases[index].clone();
+                                let alias = self.source.aliases[index].clone();
                                 let parameters: Vec<_> = alias
                                     .generics
                                     .iter()
@@ -155,9 +166,7 @@ impl Builder<'_, '_> {
                                 let caller = environments[environment].clone();
                                 let mut bindings = BTreeMap::new();
                                 for (parameter, argument) in parameters.iter().zip(&arguments) {
-                                    if let Some(ty) =
-                                        self.compiler.resolve_if_known(*argument, &caller)?
-                                    {
+                                    if let Some(ty) = self.resolve_if_known(*argument, &caller)? {
                                         bindings.insert(parameter.clone(), ty);
                                     }
                                 }
@@ -176,11 +185,8 @@ impl Builder<'_, '_> {
                                 });
                                 continue;
                             }
-                            if let Some((name, actual_arguments)) =
-                                self.compiler.applications.get(&actual)
-                            {
-                                let actual_declaration =
-                                    self.compiler.declaration_names.get(name).copied();
+                            if let Some((name, actual_arguments)) = self.applications.get(&actual) {
+                                let actual_declaration = self.declaration_names.get(name).copied();
                                 if path.declaration.is_some()
                                     && path.declaration == actual_declaration
                                     && arguments.len() == actual_arguments.len()
@@ -198,12 +204,11 @@ impl Builder<'_, '_> {
                                     }
                                 }
                             } else if path.declaration.is_none() && arguments.len() == 1 {
-                                let inner =
-                                    match (&self.compiler.types[actual].kind, path.name.as_str()) {
-                                        (k::TypeKind::Vec { inner }, "Vec")
-                                        | (k::TypeKind::Box { inner }, "Box") => Some(*inner),
-                                        _ => None,
-                                    };
+                                let inner = match (&self.types[actual].kind, path.name.as_str()) {
+                                    (k::TypeKind::Vec { inner }, "Vec")
+                                    | (k::TypeKind::Box { inner }, "Box") => Some(*inner),
+                                    _ => None,
+                                };
                                 if let Some(actual) = inner {
                                     pending.push(Work::Match {
                                         pattern: arguments[0],
@@ -214,8 +219,7 @@ impl Builder<'_, '_> {
                             }
                         }
                         a::Type::Ref { inner, .. } => {
-                            if let k::TypeKind::Ref { inner: actual, .. } =
-                                self.compiler.types[actual].kind
+                            if let k::TypeKind::Ref { inner: actual, .. } = self.types[actual].kind
                             {
                                 pending.push(Work::Match {
                                     pattern: inner,
@@ -226,7 +230,7 @@ impl Builder<'_, '_> {
                         }
                         a::Type::Slice(inner) => {
                             if let k::TypeKind::Slice { inner: actual, .. } =
-                                self.compiler.types[actual].kind
+                                self.types[actual].kind
                             {
                                 pending.push(Work::Match {
                                     pattern: inner,
@@ -237,7 +241,7 @@ impl Builder<'_, '_> {
                         }
                         a::Type::Array { inner, .. } => {
                             if let k::TypeKind::Array { inner: actual, .. } =
-                                self.compiler.types[actual].kind
+                                self.types[actual].kind
                             {
                                 pending.push(Work::Match {
                                     pattern: inner,
@@ -247,9 +251,8 @@ impl Builder<'_, '_> {
                             }
                         }
                         a::Type::Tuple(elements) => {
-                            if !self.compiler.applications.contains_key(&actual) {
-                                if let k::TypeKind::Struct { fields, .. } =
-                                    &self.compiler.types[actual].kind
+                            if !self.applications.contains_key(&actual) {
+                                if let k::TypeKind::Struct { fields, .. } = &self.types[actual].kind
                                 {
                                     if elements.len() == fields.len() {
                                         for (pattern, field) in

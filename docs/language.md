@@ -268,8 +268,18 @@ evaluates and destroys the supplied value. This expands through a source helper
 constrained by Clone. Ordered BTreeMap storage is a sorted Vec, with logarithmic
 lookup and linear insertion/removal. BTreeSet reuses that map's ordering and
 storage; its current source API is new/len/is_empty/contains/insert/remove/clear.
-Map clear destroys entries in key order. Iterator and range-view APIs remain
-separate work.
+Map clear destroys entries in key order.
+
+Shared collection iteration is ordinary source. Iterator declares Item and next;
+IntoIterator declares an iterator type constrained by Iterator. The iter method on vectors and slices,
+borrowed Vec/slice iteration and iterator values use those resolved
+declarations. Collection for lowers to an outer match holding iterable temporaries,
+a while loop, a next call and an irrefutable let binding for each item. Break,
+continue, early return and ordinary completion preserve item and iterator cleanup.
+Refutable item patterns and non-unit bodies are rejected. Numeric range loops use
+the same binding subsystem. No iteration K operation or nominal-type shortcut is
+required. Owned/exclusive collection iteration, range views and the broader
+adapter library remain separate work.
 
 The explicit static-lifetime subset covers wholly static function outputs,
 including view aggregates. K records `ReturnSource::Static` and checks every live
@@ -390,7 +400,10 @@ order; projections within one captured root follow field order.
 
 Fn, FnMut and FnOnce select shared, mutable and consuming calls statically.
 Generic callable bounds are checked under rigid assumptions; specialization
-retains that selection. Inferred/contextual parameters, irrefutable parameter
+retains that selection. The declared callable input/output equations can infer
+otherwise missing type parameters, including a result parameter used only by a
+callable bound. These equations grant no new origin authority, and the completed
+bound signature is validated separately. Inferred/contextual parameters, irrefutable parameter
 patterns, nested closures and borrowed callable adapters are supported. The
 environment has ordinary Copy eligibility and cleanup. Last-use cleanup may end
 only its reference capture leaves while owned captures remain alive to their
@@ -541,8 +554,19 @@ limit. Source-local count does not determine the permanent Wasm-local count.
 
 Struct payloads align fields at their natural widths; enum payloads additionally
 carry a tag. Vec and array storage has data, length and capacity words, with
-element strides from the one layout contract. A Vec<u8> element occupies one byte. Whole-storage slice projections borrow that header without a
-separate allocation. Moved heap slots are cleared so partial cleanup skips them.
+element strides from the one layout contract. A Vec<u8> element occupies one byte.
+References to slices and text are inline data/count pairs: 16 bytes aligned to
+eight. Sized references remain one word; a reference to a stored slice reference
+points to that pair. Aggregate fields and copies preserve both words. Whole-storage
+projections read data and length directly, with no separate descriptor allocation.
+
+The common lowering flattens view parameters into scalar words. A view result
+uses a caller-owned two-word output slot supplied as the last lowered argument;
+the callee stores both words before releasing its frame. Scalar-only calls retain
+their existing ABI. Raw exports use that lowered ABI. The command-line host accepts
+only unit/scalar entry results and either no arguments or one World capability;
+internal calls can still return views. UTF-8 validation and byte output receive
+data/count directly. Moved heap slots are cleared so partial cleanup skips them.
 These layouts are implementation details, not an exposed source API.
 
 Generated functions export as `fn:<K-name>`, avoiding a collision with the

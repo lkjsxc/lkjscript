@@ -23,18 +23,34 @@ impl Layouts {
             let storage = match ty.kind {
                 TypeKind::Unit | TypeKind::Bool => Storage {
                     bytes: 1,
+                    alignment: 1,
                     signed: false,
                 },
                 TypeKind::Char => Storage {
                     bytes: 4,
+                    alignment: 4,
                     signed: false,
                 },
                 TypeKind::Int { bits, signed } => Storage {
                     bytes: bits / 8,
+                    alignment: bits / 8,
                     signed,
                 },
+                TypeKind::Ref { inner, .. }
+                    if matches!(
+                        program.types[inner].kind,
+                        TypeKind::Slice { .. } | TypeKind::Str
+                    ) =>
+                {
+                    Storage {
+                        bytes: 16,
+                        alignment: 8,
+                        signed: false,
+                    }
+                }
                 _ => Storage {
                     bytes: 8,
+                    alignment: 8,
                     signed: false,
                 },
             };
@@ -66,8 +82,8 @@ impl Layouts {
         let mut offsets = Vec::new();
         for field in fields {
             let storage = self.storage(field.ty);
-            extent = aligned(extent, storage.bytes)?;
-            alignment = alignment.max(storage.bytes);
+            extent = aligned(extent, storage.alignment)?;
+            alignment = alignment.max(storage.alignment);
             offsets.push(extent);
             extent = extent
                 .checked_add(u64::from(storage.bytes))
@@ -119,6 +135,71 @@ fn store_value(out: &mut Code, storage: Storage, offset: u64) {
         offset,
     });
 }
+// A K value may occupy multiple scalar words. These memory helpers are the
+// same for locals, fields and return slots; no encoder sees a wide scalar load.
+fn load_storage(out: &mut Code, storage: Storage, offset: u64, scratch: usize) {
+    if storage.words() == 1 {
+        load_value(out, storage, offset);
+    } else {
+        set(out, scratch);
+        for word in 0..storage.words() {
+            get(out, scratch);
+            load_value(out, storage.word(word), offset + word as u64 * 8);
+        }
+    }
+}
+fn store_storage(out: &mut Code, storage: Storage, offset: u64, scratch: usize) {
+    if storage.words() == 1 {
+        store_value(out, storage, offset);
+    } else {
+        // The current multiword representation is the data/count pair. The
+        // destination address has its own scratch slot after those words.
+        for word in (0..storage.words()).rev() {
+            set(out, scratch + word);
+        }
+        set(out, scratch + storage.words());
+        for word in 0..storage.words() {
+            get(out, scratch + storage.words());
+            get(out, scratch + word);
+            store_value(out, storage.word(word), offset + word as u64 * 8);
+        }
+    }
+}
+
+struct FunctionAbi {
+    parameters: Vec<usize>,
+    words: usize,
+    result_slot: Option<usize>,
+}
+impl FunctionAbi {
+    fn new(layout: &Layouts, function: &KFunction) -> Result<Self, String> {
+        let mut parameters = Vec::new();
+        let mut words = 0usize;
+        for local in &function.locals[..function.params] {
+            parameters.push(words);
+            words = words
+                .checked_add(layout.storage(local.ty).words())
+                .ok_or("lowered parameter count exceeds host representation")?;
+        }
+        let result_slot = if layout.storage(function.result).words() > 1 {
+            let slot = words;
+            words = words
+                .checked_add(1)
+                .ok_or("lowered result-slot parameter exceeds host representation")?;
+            Some(slot)
+        } else {
+            None
+        };
+        Ok(Self {
+            parameters,
+            words,
+            result_slot,
+        })
+    }
+    fn signature(&self) -> Signature {
+        Signature::words(self.words)
+    }
+}
 fn begin_if(out: &mut Code) {
     out.extend_from_slice(&[Instruction::If(None)]);
 }
@@ -140,10 +221,8 @@ const DROP_RUN: usize = 2;
 const UTF8_VALIDATE: usize = 3;
 const FIRST_USER: usize = 4;
 
-// The immutable region precedes the allocator. Each distinct literal has a
-// header-pointer cell, a {data, length, capacity} header, then contiguous UTF-8 bytes.
-// A text reference uses the same outer cell as an ordinary shared slice reference.
-// No owned value points to this region, so neither copying nor cleanup frees it.
+// The immutable region precedes the allocator and stores UTF-8 bytes only.
+// Text values carry their byte offset and count directly; no descriptor is owned.
 struct TextPool {
     offsets: BTreeMap<Vec<u8>, u64>,
     data: Vec<u8>,
@@ -162,9 +241,7 @@ impl TextPool {
                     }
                     let length = u64::try_from(bytes.len())
                         .map_err(|_| "text length exceeds the 64-bit address representation")?;
-                    let extent = length
-                        .checked_add(32)
-                        .ok_or("static text extent exceeds the 64-bit address representation")?;
+                    let extent = length;
                     let padded = aligned(pool.data.len() as u64, 8)?;
                     let padded = usize::try_from(padded)
                         .map_err(|_| "static text exceeds the host representation")?;
@@ -183,9 +260,6 @@ impl TextPool {
                     pool.data
                         .try_reserve(extent)
                         .map_err(|_| "allocation failed while lowering static text")?;
-                    for value in [address + 8, address + 32, length, length] {
-                        pool.data.extend_from_slice(&value.to_le_bytes());
-                    }
                     pool.data.extend_from_slice(bytes);
                     pool.offsets.insert(bytes.clone(), address);
                 }
@@ -228,38 +302,40 @@ struct Body<'a> {
     scratch: usize,
     frame: usize,
     frame_bytes: u64,
+    result_slot: Option<usize>,
     controls: Vec<Control>,
     messages: &'a [String],
     texts: &'a TextPool,
     runtime: usize,
 }
 impl<'a> Body<'a> {
-    fn read(&mut self, local: usize) {
+    fn read_word(&mut self, local: usize, word: usize) {
+        let storage = self.layout.storage(self.function.locals[local].ty);
         match self.slots[local] {
             Slot::Frame(offset) => {
                 get(&mut self.code, self.frame);
-                load_value(
-                    &mut self.code,
-                    self.layout.storage(self.function.locals[local].ty),
-                    offset,
-                );
+                load_value(&mut self.code, storage.word(word), offset + word as u64 * 8);
             }
-            Slot::Register(register) => get(&mut self.code, register),
+            Slot::Register(register) => get(&mut self.code, register + word),
+        }
+    }
+    fn read(&mut self, local: usize) {
+        for word in 0..self.layout.storage(self.function.locals[local].ty).words() {
+            self.read_word(local, word);
         }
     }
     fn write_value(&mut self, local: usize) {
-        match self.slots[local] {
-            Slot::Frame(offset) => {
-                set(&mut self.code, self.scratch + 7);
-                get(&mut self.code, self.frame);
-                get(&mut self.code, self.scratch + 7);
-                store_value(
-                    &mut self.code,
-                    self.layout.storage(self.function.locals[local].ty),
-                    offset,
-                );
+        let storage = self.layout.storage(self.function.locals[local].ty);
+        for word in (0..storage.words()).rev() {
+            match self.slots[local] {
+                Slot::Frame(offset) => {
+                    set(&mut self.code, self.scratch + 7);
+                    get(&mut self.code, self.frame);
+                    get(&mut self.code, self.scratch + 7);
+                    store_value(&mut self.code, storage.word(word), offset + word as u64 * 8);
+                }
+                Slot::Register(register) => set(&mut self.code, register + word),
             }
-            Slot::Register(register) => set(&mut self.code, register),
         }
     }
     fn initialized(&mut self, local: usize, present: bool) {
@@ -351,21 +427,30 @@ impl<'a> Body<'a> {
                     self.code.push(Instruction::Scalar(ScalarOp::I64Add));
                 }
                 Projection::Index(index) => {
+                    let slice = matches!(self.program.types[ty].kind, TypeKind::Slice { .. });
                     ty = match self.program.types[ty].kind {
                         TypeKind::Vec { inner }
                         | TypeKind::Slice { inner, .. }
                         | TypeKind::Array { inner, .. } => inner,
                         _ => unreachable!("K index type"),
                     };
-                    tee(&mut self.code, self.scratch + 4);
-                    load(&mut self.code, 8);
-                    set(&mut self.code, self.scratch + 5);
+                    if slice {
+                        // An unsized place is already data,count on the stack.
+                        set(&mut self.code, self.scratch + 5);
+                        set(&mut self.code, self.scratch + 4);
+                    } else {
+                        tee(&mut self.code, self.scratch + 4);
+                        load(&mut self.code, 8);
+                        set(&mut self.code, self.scratch + 5);
+                        get(&mut self.code, self.scratch + 4);
+                        load(&mut self.code, 0);
+                        set(&mut self.code, self.scratch + 4);
+                    }
                     self.read(*index);
                     get(&mut self.code, self.scratch + 5);
-                    self.code.push(Instruction::Scalar(ScalarOp::I64GeU)); // i64.ge_u
+                    self.code.push(Instruction::Scalar(ScalarOp::I64GeU));
                     trap_if(&mut self.code, 3, line);
                     get(&mut self.code, self.scratch + 4);
-                    load(&mut self.code, 0);
                     self.read(*index);
                     constant(&mut self.code, i64::from(self.layout.storage(ty).bytes));
                     self.code.push(Instruction::Scalar(ScalarOp::I64Mul));
@@ -373,8 +458,13 @@ impl<'a> Body<'a> {
                 }
             }
             i += 1;
-            if i < place.projections.len() {
-                load_value(&mut self.code, self.layout.storage(ty), 0);
+            if i < place.projections.len()
+                && !matches!(
+                    self.program.types[ty].kind,
+                    TypeKind::Slice { .. } | TypeKind::Str
+                )
+            {
+                load_storage(&mut self.code, self.layout.storage(ty), 0, self.scratch + 6);
             }
         }
         ty
@@ -385,7 +475,7 @@ impl<'a> Body<'a> {
             self.function.locals[place.local].ty
         } else {
             let ty = self.address(place, line);
-            load_value(&mut self.code, self.layout.storage(ty), 0);
+            load_storage(&mut self.code, self.layout.storage(ty), 0, self.scratch + 6);
             ty
         }
     }
@@ -702,6 +792,7 @@ impl<'a> Body<'a> {
             }
             Op::Text { dst, bytes } => {
                 constant(&mut self.code, self.texts.offsets[bytes] as i64);
+                constant(&mut self.code, bytes.len() as i64);
                 self.write(*dst);
             }
             Op::Unit { dst } => {
@@ -722,7 +813,12 @@ impl<'a> Body<'a> {
                 }
             }
             Op::SliceBorrow { dst, place, .. } => {
-                self.address(place, line);
+                self.read_place(place, line);
+                set(&mut self.code, self.scratch + 4);
+                get(&mut self.code, self.scratch + 4);
+                load(&mut self.code, 0);
+                get(&mut self.code, self.scratch + 4);
+                load(&mut self.code, 8);
                 self.write(*dst);
             }
             Op::Array { dst, elements } => {
@@ -753,7 +849,12 @@ impl<'a> Body<'a> {
                     self.read(*dst);
                     load(&mut self.code, 0);
                     self.read(elements[i]);
-                    store_value(&mut self.code, storage, i as u64 * u64::from(storage.bytes));
+                    store_storage(
+                        &mut self.code,
+                        storage,
+                        i as u64 * u64::from(storage.bytes),
+                        self.scratch + 6,
+                    );
                     i += 1;
                 }
             }
@@ -769,7 +870,7 @@ impl<'a> Body<'a> {
                 } else {
                     let ty = self.address(place, line);
                     self.read(*src);
-                    store_value(&mut self.code, self.layout.storage(ty), 0);
+                    store_storage(&mut self.code, self.layout.storage(ty), 0, self.scratch + 6);
                 }
             }
             Op::Drop { place } => self.drop_place(place, false, line),
@@ -854,8 +955,17 @@ impl<'a> Body<'a> {
                 for arg in args {
                     self.read(*arg);
                 }
+                let wide = self.layout.storage(self.function.locals[*dst].ty).words() > 1;
+                if wide {
+                    self.address(&Place::local(*dst), line);
+                }
                 call(&mut self.code, (FIRST_USER + self.runtime) + *function);
-                self.write(*dst);
+                if wide {
+                    self.code.push(Instruction::Drop);
+                    self.initialized(*dst, true);
+                } else {
+                    self.write(*dst);
+                }
             }
             Op::If { condition } => {
                 self.read(*condition);
@@ -908,7 +1018,19 @@ impl<'a> Body<'a> {
                 });
             }
             Op::Return { src } => {
-                self.read(*src);
+                if let Some(slot) = self.result_slot {
+                    get(&mut self.code, slot);
+                    self.read(*src);
+                    store_storage(
+                        &mut self.code,
+                        self.layout.storage(self.function.result),
+                        0,
+                        self.scratch + 6,
+                    );
+                    constant(&mut self.code, 0);
+                } else {
+                    self.read(*src);
+                }
                 set(&mut self.code, self.scratch + 6);
                 if self.frame_bytes != 0 {
                     get(&mut self.code, self.frame);
@@ -943,10 +1065,11 @@ impl<'a> Body<'a> {
                 while i < fields.len() {
                     self.read(*dst);
                     self.read(fields[i]);
-                    store_value(
+                    store_storage(
                         &mut self.code,
                         self.layout.storage(self.function.locals[fields[i]].ty),
                         self.layout.payload(ty, tag).fields[i],
+                        self.scratch + 6,
                     );
                     i += 1;
                 }
@@ -992,14 +1115,8 @@ impl<'a> Body<'a> {
                 self.write(dst);
             }
             "stdout_write" => {
-                // Byte vectors, arrays and text now share the host byte ABI.
+                // The capability-derived import receives the view's data/count.
                 self.read(args[1]);
-                load(&mut self.code, 0);
-                set(&mut self.code, self.scratch);
-                get(&mut self.code, self.scratch);
-                load(&mut self.code, 0);
-                get(&mut self.code, self.scratch);
-                load(&mut self.code, 8);
                 constant(&mut self.code, line as i64);
                 call(&mut self.code, 0);
                 self.write(dst);
@@ -1094,18 +1211,20 @@ impl<'a> Body<'a> {
             "replace" => {
                 self.read(args[0]);
                 tee(&mut self.code, self.scratch + 3);
-                load_value(
+                load_storage(
                     &mut self.code,
                     self.layout.storage(self.function.locals[dst].ty),
                     0,
+                    self.scratch + 6,
                 );
                 self.write(dst);
                 get(&mut self.code, self.scratch + 3);
                 self.read(args[1]);
-                store_value(
+                store_storage(
                     &mut self.code,
                     self.layout.storage(self.function.locals[args[1]].ty),
                     0,
+                    self.scratch + 6,
                 );
             }
 
@@ -1118,10 +1237,11 @@ impl<'a> Body<'a> {
                 self.write(dst);
                 self.read(dst);
                 self.read(args[0]);
-                store_value(
+                store_storage(
                     &mut self.code,
                     self.layout.storage(self.function.locals[args[0]].ty),
                     0,
+                    self.scratch + 6,
                 );
             }
             "box_get" => {
@@ -1132,10 +1252,11 @@ impl<'a> Body<'a> {
                 ) {
                     load(&mut self.code, 0);
                 }
-                load_value(
+                load_storage(
                     &mut self.code,
                     self.layout.storage(self.function.locals[dst].ty),
                     0,
+                    self.scratch + 6,
                 );
                 self.write(dst);
             }
@@ -1199,11 +1320,13 @@ impl<'a> Body<'a> {
                 store(&mut self.code, 0);
                 self.read(dst);
                 get(&mut self.code, self.scratch + 3);
-                load_value(&mut self.code, storage, 0);
-                store_value(&mut self.code, storage, field);
+                load_storage(&mut self.code, storage, 0, self.scratch + 6);
+                store_storage(&mut self.code, storage, field, self.scratch + 6);
                 get(&mut self.code, self.scratch + 3);
-                constant(&mut self.code, 0);
-                store_value(&mut self.code, storage, 0);
+                for _ in 0..storage.words() {
+                    constant(&mut self.code, 0);
+                }
+                store_storage(&mut self.code, storage, 0, self.scratch + 6);
                 self.code.push(Instruction::End);
             }
 
@@ -1277,7 +1400,7 @@ impl<'a> Body<'a> {
                 self.code.push(Instruction::Scalar(ScalarOp::I64Mul));
                 self.code.push(Instruction::Scalar(ScalarOp::I64Add));
                 self.read(args[1]);
-                store_value(&mut self.code, storage, 0);
+                store_storage(&mut self.code, storage, 0, self.scratch + 6);
                 get(&mut self.code, self.scratch + 4);
                 get(&mut self.code, self.scratch + 5);
                 constant(&mut self.code, 1);
@@ -1290,7 +1413,12 @@ impl<'a> Body<'a> {
                 self.read(args[0]);
                 let ty = match self.program.types[self.function.locals[args[0]].ty].kind {
                     TypeKind::Ref { inner, .. } => {
-                        load_value(&mut self.code, self.layout.storage(inner), 0);
+                        load_storage(
+                            &mut self.code,
+                            self.layout.storage(inner),
+                            0,
+                            self.scratch + 6,
+                        );
                         inner
                     }
                     _ => self.function.locals[args[0]].ty,
@@ -1305,14 +1433,12 @@ impl<'a> Body<'a> {
             }
 
             "str_as_bytes" => {
-                // Both shared views retain the original header cell and origin.
+                // Both shared views transport the same data/count and checked origin.
                 self.read(args[0]);
                 self.write(dst);
             }
             "str_len" => {
-                self.read(args[0]);
-                load(&mut self.code, 0);
-                load(&mut self.code, 8);
+                self.read_word(args[0], 1);
                 self.write(dst);
             }
             "str_from_utf8" => {
@@ -1342,10 +1468,11 @@ impl<'a> Body<'a> {
                 self.read(dst);
                 constant(&mut self.code, error_bytes as i64);
                 call(&mut self.code, ALLOC + self.runtime);
-                store_value(
+                store_storage(
                     &mut self.code,
                     self.layout.storage(error_ty),
                     self.layout.payload(result_ty, Some(1)).fields[0],
+                    self.scratch + 6,
                 );
                 self.code.push(Instruction::Else);
                 self.read(dst);
@@ -1353,22 +1480,32 @@ impl<'a> Body<'a> {
                 store(&mut self.code, 0);
                 self.read(dst);
                 self.read(args[0]);
-                store_value(
+                store_storage(
                     &mut self.code,
                     self.layout.storage(variants[0].fields[0].ty),
                     self.layout.payload(result_ty, Some(0)).fields[0],
+                    self.scratch + 6,
                 );
                 self.code.push(Instruction::End);
             }
             "vec_len" => {
-                self.read(args[0]);
-                if matches!(
-                    self.program.types[self.function.locals[args[0]].ty].kind,
-                    TypeKind::Ref { .. }
-                ) {
-                    load(&mut self.code, 0);
+                if self
+                    .layout
+                    .storage(self.function.locals[args[0]].ty)
+                    .words()
+                    > 1
+                {
+                    self.read_word(args[0], 1);
+                } else {
+                    self.read(args[0]);
+                    if matches!(
+                        self.program.types[self.function.locals[args[0]].ty].kind,
+                        TypeKind::Ref { .. }
+                    ) {
+                        load(&mut self.code, 0);
+                    }
+                    load(&mut self.code, 8);
                 }
-                load(&mut self.code, 8);
                 self.write(dst);
             }
             "drop" => {
@@ -1405,9 +1542,8 @@ fn heap_type(kind: &TypeKind) -> bool {
             | TypeKind::Array { .. }
     )
 }
-// Legacy runtime algorithms expressed as ordinary lowered functions. These
-// builders are retained for the first backend split; runtime source replaces
-// them through a separate, sealed compilation contract. They emit no bytes.
+// Layout-dependent copy and drop glue is ordinary lowered code. Allocation,
+// release, drop dispatch and UTF-8 validation are linked from the source runtime.
 fn copy_fields(
     b: &mut Code,
     program: &KProgram,
@@ -1417,6 +1553,16 @@ fn copy_fields(
     offsets: &[u64],
 ) {
     for (field, offset) in fields.iter().zip(offsets) {
+        if layout.storage(field.ty).words() > 1 {
+            get(b, 1);
+            constant(b, *offset as i64);
+            b.push(Instruction::Scalar(ScalarOp::I64Add));
+            get(b, 0);
+            constant(b, *offset as i64);
+            b.push(Instruction::Scalar(ScalarOp::I64Add));
+            copy_cell(b, program, runtime, layout, field.ty);
+            continue;
+        }
         get(b, 1);
         get(b, 0);
         load_value(b, layout.storage(field.ty), *offset);
@@ -1425,9 +1571,35 @@ fn copy_fields(
     }
 }
 
+// The destination and source cell addresses are already on the stack. Wide
+// references copy their metadata directly; scalar owned values use their glue.
+fn copy_cell(b: &mut Code, program: &KProgram, runtime: usize, layout: &Layouts, ty: usize) {
+    let storage = layout.storage(ty);
+    if storage.words() > 1 {
+        constant(b, i64::from(storage.bytes));
+        b.push(Instruction::MemoryCopy);
+    } else {
+        load_value(b, storage, 0);
+        call(b, helper_index(program, runtime, ty, true));
+        store_value(b, storage, 0);
+    }
+}
+
 fn copy_helper(program: &KProgram, runtime: usize, layout: &Layouts, ty: usize) -> Code {
     let mut b = Code::words(5);
     let kind = &program.types[ty].kind;
+    if layout.storage(ty).words() > 1 {
+        let storage = layout.storage(ty);
+        let output = storage.words();
+        for word in 0..storage.words() {
+            get(&mut b, output);
+            get(&mut b, word);
+            store_value(&mut b, storage.word(word), word as u64 * 8);
+        }
+        constant(&mut b, 0);
+        b.push(Instruction::End);
+        return b;
+    }
     if !heap_type(kind) {
         get(&mut b, 0);
         b.push(Instruction::End);
@@ -1484,9 +1656,7 @@ fn copy_helper(program: &KProgram, runtime: usize, layout: &Layouts, ty: usize) 
             call(&mut b, ALLOC + runtime);
             tee(&mut b, 1);
             get(&mut b, 0);
-            load_value(&mut b, layout.storage(*inner), 0);
-            call(&mut b, helper_index(program, runtime, *inner, true));
-            store_value(&mut b, layout.storage(*inner), 0);
+            copy_cell(&mut b, program, runtime, layout, *inner);
         }
         TypeKind::Vec { inner } | TypeKind::Array { inner, .. } => {
             let inner = *inner;
@@ -1533,9 +1703,7 @@ fn copy_helper(program: &KProgram, runtime: usize, layout: &Layouts, ty: usize) 
             constant(&mut b, i64::from(layout.storage(inner).bytes));
             b.push(Instruction::Scalar(ScalarOp::I64Mul));
             b.push(Instruction::Scalar(ScalarOp::I64Add));
-            load_value(&mut b, layout.storage(inner), 0);
-            call(&mut b, helper_index(program, runtime, inner, true));
-            store_value(&mut b, layout.storage(inner), 0);
+            copy_cell(&mut b, program, runtime, layout, inner);
             get(&mut b, 4);
             constant(&mut b, 1);
             b.push(Instruction::Scalar(ScalarOp::I64Add));
@@ -1772,6 +1940,7 @@ enum Slot {
 }
 
 struct LocalLayout {
+    abi: FunctionAbi,
     slots: Vec<Slot>,
     registers: usize,
     frame_bytes: u64,
@@ -1806,7 +1975,9 @@ fn local_layout(
     function: &KFunction,
 ) -> Result<LocalLayout, String> {
     let n = function.locals.len();
+    let abi = FunctionAbi::new(representations, function)?;
     let mut addressed = vec![false; n];
+    let mut frame_required = vec![false; n];
     let mut ranges = vec![(usize::MAX, 0); n];
     let mut loops: Vec<LiveLoop> = Vec::new();
     let mut loop_at = vec![None; function.body.len()];
@@ -1814,6 +1985,11 @@ fn local_layout(
     let mut current_loop = None;
     for (at, instruction) in function.body.iter().enumerate() {
         loop_at[at] = current_loop;
+        if let Op::Call { dst, .. } = &instruction.op {
+            if representations.storage(function.locals[*dst].ty).words() > 1 {
+                frame_required[*dst] = true;
+            }
+        }
         match &instruction.op {
             Op::Int { dst, .. }
             | Op::Float { dst, .. }
@@ -1826,9 +2002,7 @@ fn local_layout(
             | Op::SliceBorrow { dst, place, .. } => {
                 touch_local(&mut ranges, *dst, at);
                 touch_place(&mut ranges, place, at);
-                if matches!(instruction.op, Op::Borrow { .. } | Op::SliceBorrow { .. })
-                    && place.projections.is_empty()
-                {
+                if matches!(instruction.op, Op::Borrow { .. }) && place.projections.is_empty() {
                     addressed[place.local] = true;
                 }
             }
@@ -1916,15 +2090,16 @@ fn local_layout(
     let mut frame_bytes = 0_u64;
     let mut starts = Vec::new();
     for local in 0..n {
-        if addressed[local] {
-            let width = representations.storage(function.locals[local].ty).bytes;
-            let offset = aligned(frame_bytes, width)?;
+        if addressed[local] || (local < function.params && frame_required[local]) {
+            let storage = representations.storage(function.locals[local].ty);
+            let width = storage.bytes;
+            let offset = aligned(frame_bytes, storage.alignment)?;
             slots[local] = Slot::Frame(offset);
             frame_bytes = offset
                 .checked_add(u64::from(width))
                 .ok_or("local frame extent overflow")?;
         } else if local < function.params {
-            slots[local] = Slot::Register(local);
+            slots[local] = Slot::Register(abi.parameters[local]);
         } else if ranges[local].0 != usize::MAX {
             let first = ranges[local].0;
             let mut enclosing = loop_at[ranges[local].1];
@@ -1940,36 +2115,50 @@ fn local_layout(
     }
     starts.sort_unstable();
     let mut active: BTreeSet<(usize, usize)> = BTreeSet::new();
-    let mut available_registers = Vec::new();
-    let mut available_frames: [Vec<u64>; 4] = [Vec::new(), Vec::new(), Vec::new(), Vec::new()];
-    let mut registers = function.params;
+    let mut available_registers: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+    let mut available_frames: BTreeMap<u8, Vec<u64>> = BTreeMap::new();
+    let mut registers = abi.words;
     for (first, local) in starts {
         while let Some(&(last, previous)) = active.first() {
             if last >= first {
                 break;
             }
             active.pop_first();
+            let storage = representations.storage(function.locals[previous].ty);
             match slots[previous] {
-                Slot::Register(register) => available_registers.push(register),
-                Slot::Frame(offset) => {
-                    let width = representations.storage(function.locals[previous].ty).bytes;
-                    available_frames[width.trailing_zeros() as usize].push(offset);
-                }
+                Slot::Register(register) => available_registers
+                    .entry(storage.words())
+                    .or_default()
+                    .push(register),
+                Slot::Frame(offset) => available_frames
+                    .entry(storage.bytes)
+                    .or_default()
+                    .push(offset),
             }
         }
-        let width = representations.storage(function.locals[local].ty).bytes;
-        slots[local] = if let Some(register) = available_registers.pop() {
+        let storage = representations.storage(function.locals[local].ty);
+        let available = if frame_required[local] {
+            None
+        } else {
+            available_registers
+                .get_mut(&storage.words())
+                .and_then(Vec::pop)
+        };
+        slots[local] = if let Some(register) = available {
             Slot::Register(register)
-        } else if registers - function.params < REGISTER_POOL {
+        } else if !frame_required[local] && registers - abi.words + storage.words() <= REGISTER_POOL
+        {
             let register = registers;
-            registers += 1;
+            registers = registers
+                .checked_add(storage.words())
+                .ok_or("lowered register count overflow")?;
             Slot::Register(register)
-        } else if let Some(offset) = available_frames[width.trailing_zeros() as usize].pop() {
+        } else if let Some(offset) = available_frames.get_mut(&storage.bytes).and_then(Vec::pop) {
             Slot::Frame(offset)
         } else {
-            let offset = aligned(frame_bytes, width)?;
+            let offset = aligned(frame_bytes, storage.alignment)?;
             frame_bytes = offset
-                .checked_add(u64::from(width))
+                .checked_add(u64::from(storage.bytes))
                 .ok_or("local frame extent overflow")?;
             Slot::Frame(offset)
         };
@@ -1977,6 +2166,7 @@ fn local_layout(
     }
     let frame_bytes = aligned(frame_bytes, 8)?;
     Ok(LocalLayout {
+        abi,
         slots,
         registers,
         frame_bytes,
@@ -1992,13 +2182,20 @@ fn function_body(
     texts: &TextPool,
 ) -> Result<Code, String> {
     let layout = local_layout(program, representations, function)?;
+    let extra_words = function
+        .locals
+        .iter()
+        .map(|local| representations.storage(local.ty).words())
+        .max()
+        .unwrap_or(1)
+        - 1;
     let mut drop_flags = BTreeMap::new();
     for instruction in &function.body {
         if let Op::DropIf { place } = &instruction.op {
             if place.projections.is_empty() && !drop_flags.contains_key(&place.local) {
                 let flag = layout
                     .registers
-                    .checked_add(9)
+                    .checked_add(9 + extra_words)
                     .and_then(|first| first.checked_add(drop_flags.len()))
                     .ok_or("lowered local index exceeds the host representation")?;
                 drop_flags.insert(place.local, flag);
@@ -2014,14 +2211,15 @@ fn function_body(
         slots: layout.slots,
         drop_flags,
         scratch: layout.registers,
-        frame: layout.registers + 8,
+        frame: layout.registers + 8 + extra_words,
         frame_bytes: layout.frame_bytes,
+        result_slot: layout.abi.result_slot,
         controls: Vec::new(),
         messages,
         texts,
         runtime,
     };
-    body.code.locals = vec![ValueType::I64; layout.registers - function.params + 9];
+    body.code.locals = vec![ValueType::I64; layout.registers - layout.abi.words + 9 + extra_words];
     body.code.locals.extend(vec![ValueType::I32; flag_count]);
     if flag_count != 0 {
         for local in 0..function.params {
@@ -2034,13 +2232,12 @@ fn function_body(
         set(&mut body.code, body.frame);
         for i in 0..function.params {
             if let Slot::Frame(offset) = body.slots[i] {
+                let storage = representations.storage(function.locals[i].ty);
                 get(&mut body.code, body.frame);
-                get(&mut body.code, i);
-                store_value(
-                    &mut body.code,
-                    representations.storage(function.locals[i].ty),
-                    offset,
-                );
+                for word in 0..storage.words() {
+                    get(&mut body.code, layout.abi.parameters[i] + word);
+                }
+                store_storage(&mut body.code, storage, offset, body.scratch + 6);
             }
         }
     }
@@ -2095,7 +2292,7 @@ pub fn lower(
     ] {
         functions.push(Function {
             name: name.to_string(),
-            signature: Signature::words(1),
+            signature: role.signature(),
             role: FunctionRole::Runtime(role),
             code: Code {
                 locals: Vec::new(),
@@ -2106,7 +2303,7 @@ pub fn lower(
     for function in &program.functions {
         functions.push(Function {
             name: function.name.clone(),
-            signature: Signature::words(function.params),
+            signature: FunctionAbi::new(&layout, function)?.signature(),
             role: FunctionRole::Source,
             code: function_body(program, &layout, runtime, function, &messages, &texts)?,
         });
@@ -2119,7 +2316,10 @@ pub fn lower(
                     if copying { "copy" } else { "drop" },
                     program.types[ty].name
                 ),
-                signature: Signature::words(1),
+                signature: Signature::words(
+                    layout.storage(ty).words()
+                        + usize::from(copying && layout.storage(ty).words() > 1),
+                ),
                 role: if copying {
                     FunctionRole::CopyGlue
                 } else {
@@ -2240,7 +2440,7 @@ pub fn lower_runtime_functions(checked: &CheckedProgram) -> Result<Vec<Function>
         }
         functions.push(Function {
             name: function.name.clone(),
-            signature: Signature::words(function.params),
+            signature: FunctionAbi::new(&layout, function)?.signature(),
             role: FunctionRole::RuntimeSource,
             code,
         });

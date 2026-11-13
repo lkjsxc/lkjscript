@@ -766,6 +766,7 @@ impl Compiler<'_> {
             .any(|bound| self.is_callable_bound(*bound))
         {
             prepared = sub.clone();
+            self.prepare_callable_arguments(parameters, &mut prepared)?;
             self.prepare_parameter_associated(parameters, &mut prepared)?;
             &prepared
         } else {
