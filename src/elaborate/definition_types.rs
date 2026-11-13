@@ -7,6 +7,8 @@ use std::collections::{BTreeMap, VecDeque};
 pub(super) mod census;
 mod closures;
 mod method_headers;
+mod pattern_equations;
+mod projection_equations;
 mod source_types;
 
 type Variable = usize;
@@ -19,6 +21,7 @@ fn context(mut problem: a::Diagnostic, message: &str) -> a::Diagnostic {
 enum Shape {
     Atom(String),
     Rigid(String),
+    Projected(a::DeclarationId, String),
     Source(a::TypeId),
     Vec(Variable),
     Box(Variable),
@@ -38,6 +41,20 @@ impl Shape {
             }
             Self::Tuple(v) | Self::Nominal(_, v) | Self::Closure(_, v) => v.clone(),
             _ => Vec::new(),
+        }
+    }
+    fn primitive(&self) -> super::methods::Receiver {
+        use super::methods::Receiver;
+        match self {
+            Self::Atom(name) if integer_name(name) => Receiver::Integer,
+            Self::Atom(name) if name == "char" => Receiver::Character,
+            Self::Atom(name) if name == "str" => Receiver::Text,
+            Self::Atom(name) if name == "World" => Receiver::World,
+            Self::Atom(name) if name == "Stdout" => Receiver::Stdout,
+            Self::Vec(_) => Receiver::Vector,
+            Self::Array(_, _) => Receiver::Array,
+            Self::Slice(_) => Receiver::Slice,
+            _ => Receiver::Other,
         }
     }
     fn integer(&self) -> bool {
@@ -172,7 +189,7 @@ impl DefinitionTypes {
                         )?)
                     }
                 }
-                Shape::Rigid(name) => substitutions.get(&name).copied(),
+                Shape::Rigid(name) | Shape::Projected(_, name) => substitutions.get(&name).copied(),
                 Shape::Source(source) => compiler.resolve_if_known(source, substitutions)?,
                 Shape::Vec(_) => {
                     Some(compiler.intern(String::new(), k::TypeKind::Vec { inner: values[0] }))
@@ -285,6 +302,23 @@ fn parameters(source: &a::Program, declaration: a::DeclarationId) -> Vec<String>
 }
 #[derive(Clone)]
 enum Obligation {
+    PatternTest {
+        pattern: a::PatternId,
+        subject: Variable,
+    },
+    Pattern {
+        pattern: a::PatternId,
+        subject: Variable,
+        mode: Option<bool>,
+        names: Vec<(String, Variable)>,
+    },
+    Projection {
+        receiver: Variable,
+        declaration: a::DeclarationId,
+        member: String,
+        result: Variable,
+        span: a::Span,
+    },
     Callable {
         receiver: Variable,
         arguments: Vec<Variable>,
@@ -334,6 +368,7 @@ struct Infer<'a, 'b> {
     source_function: usize,
     capture_frames: Vec<closures::Frame>,
     callable_parameters: BTreeMap<String, (Vec<Variable>, Variable)>,
+    projections: Vec<BTreeMap<(a::DeclarationId, String), Variable>>,
     source: &'a a::Program,
     names: &'b crate::resolve::Resolver<'a>,
     implementations: &'b crate::generics::ImplementationIndex,
@@ -363,6 +398,7 @@ impl Infer<'_, '_> {
             producers: if blocked { 1 } else { 0 },
         });
         self.waiting.push(Vec::new());
+        self.projections.push(BTreeMap::new());
         id
     }
     fn unknown(&mut self) -> Variable {
@@ -420,7 +456,12 @@ impl Infer<'_, '_> {
             self.queued[id] = true;
         }
     }
-    fn join_roots(&mut self, mut a: Variable, mut b: Variable, shape: Option<Shape>) {
+    fn join_roots(
+        &mut self,
+        mut a: Variable,
+        mut b: Variable,
+        shape: Option<Shape>,
+    ) -> Vec<(Variable, Variable)> {
         if self.definition.nodes[a].rank < self.definition.nodes[b].rank {
             std::mem::swap(&mut a, &mut b);
         }
@@ -437,6 +478,13 @@ impl Infer<'_, '_> {
         for id in waiting {
             self.enqueue(id);
         }
+        let mut equations = Vec::new();
+        for (key, value) in std::mem::take(&mut self.projections[b]) {
+            if let Some(previous) = self.projections[a].insert(key, value) {
+                equations.push((previous, value));
+            }
+        }
+        equations
     }
     fn unify(&mut self, left: Variable, right: Variable, span: a::Span) -> Result<()> {
         let mut pending = vec![(left, right)];
@@ -459,9 +507,13 @@ impl Infer<'_, '_> {
                     .is_some_and(|shape| !shape.integer())
             {
                 // Opaque generic projections stay with the original type checker.
-                if matches!(sa, Some(Shape::Rigid(_) | Shape::Source(_)))
-                    || matches!(sb, Some(Shape::Rigid(_) | Shape::Source(_)))
-                {
+                if matches!(
+                    sa,
+                    Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Source(_))
+                ) || matches!(
+                    sb,
+                    Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Source(_))
+                ) {
                     continue;
                 }
                 return Err(err(
@@ -479,31 +531,31 @@ impl Infer<'_, '_> {
                             "inference would require an infinite type",
                         ));
                     }
-                    self.join_roots(a, b, sa.or(sb));
+                    pending.extend(self.join_roots(a, b, sa.or(sb)));
                 }
                 (Some(Shape::Vec(x)), Some(Shape::Vec(y)))
                 | (Some(Shape::Box(x)), Some(Shape::Box(y)))
                 | (Some(Shape::Slice(x)), Some(Shape::Slice(y))) => {
                     pending.push((*x, *y));
-                    self.join_roots(a, b, sa);
+                    pending.extend(self.join_roots(a, b, sa));
                 }
                 (Some(Shape::Array(x, nx)), Some(Shape::Array(y, ny))) if nx == ny => {
                     pending.push((*x, *y));
-                    self.join_roots(a, b, sa);
+                    pending.extend(self.join_roots(a, b, sa));
                 }
                 (Some(Shape::Ref(mx, x)), Some(Shape::Ref(my, y))) if mx == my => {
                     pending.push((*x, *y));
-                    self.join_roots(a, b, sa);
+                    pending.extend(self.join_roots(a, b, sa));
                 }
                 (Some(Shape::Tuple(xs)), Some(Shape::Tuple(ys))) if xs.len() == ys.len() => {
                     pending.extend(xs.iter().copied().zip(ys.iter().copied()));
-                    self.join_roots(a, b, sa);
+                    pending.extend(self.join_roots(a, b, sa));
                 }
                 (Some(Shape::Nominal(nx, xs)), Some(Shape::Nominal(ny, ys)))
                     if nx == ny && xs.len() == ys.len() =>
                 {
                     pending.extend(xs.iter().copied().zip(ys.iter().copied()));
-                    self.join_roots(a, b, sa);
+                    pending.extend(self.join_roots(a, b, sa));
                 }
                 (Some(Shape::Nominal(left, _)), Some(Shape::Nominal(right, _)))
                     if left != right =>
@@ -518,13 +570,13 @@ impl Infer<'_, '_> {
                         ),
                     ));
                 }
-                (Some(Shape::Rigid(_) | Shape::Source(_)), _)
-                | (_, Some(Shape::Rigid(_) | Shape::Source(_))) => {
+                (Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Source(_)), _)
+                | (_, Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Source(_))) => {
                     if sa == sb {
-                        self.join_roots(a, b, sa);
+                        pending.extend(self.join_roots(a, b, sa));
                     }
                 }
-                _ if sa == sb => self.join_roots(a, b, sa),
+                _ if sa == sb => pending.extend(self.join_roots(a, b, sa)),
                 _ => {
                     return Err(err(
                         span,
@@ -603,7 +655,9 @@ impl Infer<'_, '_> {
         while let Some(Shape::Box(inner)) = self.shape(from) {
             if matches!(
                 self.shape(to),
-                None | Some(Shape::Box(_) | Shape::Rigid(_) | Shape::Source(_))
+                None | Some(
+                    Shape::Box(_) | Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Source(_)
+                )
             ) {
                 break;
             }
@@ -794,20 +848,22 @@ impl Infer<'_, '_> {
             };
             environment.insert(parameter.name.clone(), value);
         }
+        self.parameter_equations(&function.generics, &mut environment, false)?;
         for (parameter, value) in function.params[first..].iter().zip(values) {
             let expected = self.source_type(parameter.ty, &environment)?;
             self.coerce(*value, expected, span)?;
         }
-        for parameter in &function.generics {
-            if let Some(receiver) = environment.get(&parameter.name).copied() {
-                for bound in &parameter.bounds {
-                    self.callable_bound(receiver, *bound, &environment)?;
-                }
-            }
-        }
         self.source_type(function.result, &environment)
     }
     fn constrain_pattern(&mut self, pattern: a::PatternId, mut subject: Variable) -> Result<()> {
+        if matches!(
+            self.source.patterns[pattern].kind,
+            a::Pattern::Literal(_) | a::Pattern::Range { .. }
+        ) && self.pattern_test_pending(subject)
+        {
+            self.obligation(Obligation::PatternTest { pattern, subject });
+            return Ok(());
+        }
         while let Some(Shape::Ref(_, inner)) = self.shape(subject) {
             subject = inner;
         }
@@ -847,6 +903,10 @@ impl Infer<'_, '_> {
         mut value: Variable,
         mut mode: Option<bool>,
     ) -> Result<()> {
+        if self.pattern_pending(pattern, value) {
+            self.defer_pattern(pattern, value, mode);
+            return Ok(());
+        }
         let node = self.source.patterns[pattern].clone();
         // Structural patterns follow references and carry the resulting binding
         // mode down to their fields; a bare binding preserves its subject type.
@@ -1576,6 +1636,30 @@ impl Infer<'_, '_> {
     }
     fn solve_obligation(&mut self, id: usize, obligation: Obligation) -> Result<bool> {
         match obligation {
+            Obligation::PatternTest { pattern, subject } => {
+                if self.pattern_test_pending(subject) {
+                    self.watch_shape(subject, id);
+                    return Ok(false);
+                }
+                self.constrain_pattern(pattern, subject)?;
+            }
+            Obligation::Pattern {
+                pattern,
+                subject,
+                mode,
+                names,
+            } => {
+                return self.solve_pattern(id, pattern, subject, mode, names);
+            }
+            Obligation::Projection {
+                receiver,
+                declaration,
+                member,
+                result,
+                span,
+            } => {
+                return self.solve_projection(id, receiver, declaration, &member, result, span);
+            }
             Obligation::Callable {
                 receiver,
                 arguments,
@@ -1616,7 +1700,10 @@ impl Infer<'_, '_> {
                     return Ok(false);
                 };
                 let Shape::Nominal(declaration, arguments) = shape else {
-                    if matches!(shape, Shape::Rigid(_) | Shape::Source(_)) {
+                    if matches!(
+                        shape,
+                        Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Source(_)
+                    ) {
                         return Ok(false);
                     }
                     return Err(err(
@@ -1773,8 +1860,35 @@ impl Infer<'_, '_> {
                 {
                     return Ok(true);
                 }
+                let primitive = shape.primitive();
+                let direct = super::methods::direct(primitive, &name);
+                if direct.is_none()
+                    && self.census_contextual_complete(base, &name)
+                    && self.contextual_header(
+                        base,
+                        &name,
+                        &types,
+                        &arguments,
+                        result,
+                        (id, scope, span),
+                    )?
+                {
+                    return Ok(true);
+                }
                 if !types.is_empty() {
                     return Ok(false);
+                }
+                // The same primitive inventory drives construction and inference.
+                if direct == Some(super::methods::Direct::Output) {
+                    let output = match primitive {
+                        super::methods::Receiver::World if arguments.is_empty() => {
+                            self.atom("Stdout")
+                        }
+                        super::methods::Receiver::Stdout if arguments.len() == 1 => self.atom("()"),
+                        _ => return Ok(false),
+                    };
+                    self.unify(result, output, span)?;
+                    return Ok(true);
                 }
                 match (name.as_str(), shape) {
                     ("wrapping_add" | "wrapping_sub" | "wrapping_mul", Shape::Atom(atom))
@@ -1827,7 +1941,9 @@ impl Infer<'_, '_> {
             self.queued[id] = false;
             if let Some(obligation) = self.obligations[id].clone() {
                 let result = match &obligation {
-                    Obligation::Coercion { .. }
+                    Obligation::PatternTest { .. }
+                    | Obligation::Pattern { .. }
+                    | Obligation::Coercion { .. }
                     | Obligation::Callable {
                         produced: false, ..
                     } => None,
@@ -1836,7 +1952,8 @@ impl Infer<'_, '_> {
                         result,
                         ..
                     } => Some(*result),
-                    Obligation::Try { result, .. }
+                    Obligation::Projection { result, .. }
+                    | Obligation::Try { result, .. }
                     | Obligation::Deref { result, .. }
                     | Obligation::Index { result, .. }
                     | Obligation::Field { result, .. }
@@ -1930,6 +2047,7 @@ pub(super) fn infer_available(
         source_function: index,
         capture_frames: Vec::new(),
         callable_parameters: BTreeMap::new(),
+        projections: Vec::new(),
         source,
         names,
         implementations,
@@ -1991,14 +2109,27 @@ pub(super) fn infer_available(
                 .insert(parameter.name.clone(), variable);
         }
     }
-    let environment = inference.environment.clone();
-    for parameter in &function.generics {
-        if let Some(receiver) = environment.get(&parameter.name).copied() {
-            for bound in &parameter.bounds {
-                inference.callable_bound(receiver, *bound, &environment)?;
+    let mut environment = inference.environment.clone();
+    match source.function_owner(a::FunctionId { index }) {
+        a::FunctionOwner::Implementation(owner) => {
+            let implementation = source.impls[owner.index].clone();
+            inference.parameter_equations(&implementation.generics, &mut environment, true)?;
+            if let Some(bound) = implementation.trait_ty {
+                let receiver = environment["Self"];
+                inference.trait_equations(receiver, "Self", bound, &mut environment, true)?;
             }
         }
+        a::FunctionOwner::Trait(owner) => {
+            inference.parameter_equations(
+                &source.traits[owner.index].generics,
+                &mut environment,
+                true,
+            )?;
+        }
+        a::FunctionOwner::Free => {}
     }
+    inference.parameter_equations(&function.generics, &mut environment, true)?;
+    inference.environment = environment.clone();
     inference.result = inference.source_type(function.result, &environment)?;
     for parameter in &function.params {
         let ty = inference.source_type(parameter.ty, &environment)?;

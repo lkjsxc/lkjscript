@@ -262,7 +262,8 @@ prefix/suffix tests, contains/find/rfind, ASCII case conversion/comparison,
 repeat and replace. A source Pattern trait shares the implementation for text
 and character needles. Character helpers include UTF-8/UTF-16 lengths, ASCII
 predicates and case conversion, Unicode whitespace, and to_string. General
-Unicode case conversion and range slicing are not implemented.
+Unicode case conversion is not implemented. Range slicing follows the checked
+view and UTF-8 endpoint contract above.
 
 Formatting macros resolve argument expressions once in source order and lower
 to ordinary calls into source String/Formatter traits. The supported format
@@ -291,6 +292,30 @@ outcome contract as unwrap; its supplied message is evaluated but currently does
 not replace the fixed trap text. Some nested generic receiver expressions still
 need explicit type annotations before a method call.
 
+Option additionally supplies consuming is_some_and/is_none_or predicates and
+ok_or/ok_or_else conversion to Result. Predicates execute only for Some; the
+None result is respectively false/true. ok_or evaluates its error argument
+before the call, while ok_or_else invokes its factory only for None. Unused
+arguments and captures retain ordinary function/branch destruction order.
+Returned views retain the actual selected input or factory origin.
+Option<&T> and Option<&mut T> additionally provide copied under Copy and cloned
+under Clone. copied reads the payload without invoking Clone; cloned invokes the
+trait operation exactly once for Some and never for None. The returned owned
+value is independent where cloning makes ownership, while any references inside
+that value still retain their actual external origins.
+
+Vec shared access and search also live in source. is_empty compares length with
+zero; get returns None for every index at or beyond length, including usize::MAX;
+first uses the zero-index case. Their returned elements retain the collection's
+shared owner footprint. contains requires PartialEq separately, borrows elements
+and its query, and visits elements in order until equality succeeds. It invokes
+eq rather than an independently overridden ne, and neither copies nor consumes
+an element. Receiver/query/index expressions retain left-to-right evaluation.
+extend_from_slice requires Clone, visits the shared input in order, and appends
+one independent clone per element. Empty input performs no clones. It preserves
+existing target elements and the source remains usable. A same-spelled inherent
+clone method cannot replace the generic Clone contract.
+
 Repeated Vec literals evaluate their element and count once,
 clone all but the final element, and move the original last; a zero count still
 evaluates and destroys the supplied value. This expands through a source helper
@@ -311,8 +336,25 @@ required. Borrowed map/set iteration uses the same source protocols. enumerate,
 skip, take and zip are source adapters; chain currently requires two identical
 iterator types so Item equality follows from the type contract. Adapters retain
 the underlying owners and release items/iterators on exhaustion or early exit.
-Owned/exclusive collection iteration and the broader adapter library remain
-separate work.
+map, filter, filter_map and inspect are ordinary source structs containing the
+iterator and callable. Their next methods follow the underlying iterator on
+every call, including a Some after a preceding None; they do not silently fuse
+an iterator. filter and inspect borrow each item for a fresh callback input;
+map and filter_map transfer ownership into the callback. Rejected filter items,
+unused captures and partially consumed adapters retain ordinary cleanup order.
+fold and for_each consume items in order and stop at the first None. The fold
+accumulator is an ordinary owned value passed through each call.
+any and all borrow the iterator mutably, pass each item by value to FnMut, and
+stop at the first decisive predicate result or None. Empty input returns false
+for any and true for all. The next call resumes after the consumed decisive item;
+a temporary None does not permanently fuse the iterator. The predicate and its
+captures are destroyed when the consumer returns; remaining iterator items stay
+owned by the iterator. Receiver expressions execute before predicate construction.
+Owned value expressions provide writable temporary receiver storage, including
+projected fields and indexed elements. This does not change the mutability of
+named bindings or permission through shared references.
+Owned/exclusive collection iteration, Sum/FromIterator and the broader adapter
+library remain separate work.
 
 The explicit static-lifetime subset covers wholly static function outputs,
 including view aggregates. K records `ReturnSource::Static` and checks every live
@@ -324,6 +366,12 @@ A named shared output lifetime with no source input is universal: elaboration
 records an explicit static K contract and the body must satisfy it. Inactive enum
 reference leaves satisfy that contract too. A call with no active input reference
 leaves may still return static data; it does not prove the output leaves absent.
+
+Ancestor-restricted visibility such as `pub(in super::super)` and
+`pub(in crate::outer)` resolves once to a module identity in the declaring crate.
+Only an actual ancestor can be named; imports and aliases do not redefine that
+region. Fields, methods and re-exports use the existing access and widening
+checks. External files and the source library retain their own module identities.
 
 ## Generic declarations and traits
 
@@ -341,6 +389,15 @@ associated bounds still reject. Implementation prerequisite solving separates
 input/output type equations, ordinary child trait proofs and full callable
 signature validation. A pending or cyclic nonstructural goal is never a proof;
 associated projections consume the checked child witnesses.
+
+Inference indexes associated equations by the receiver variable, canonical
+trait declaration and associated member. Same-spelled members of different
+traits cannot become one rigid type. A unique structurally compatible
+implementation can contribute conditional type equations, but those equations
+provide no trait or lifetime proof. Ordinary selection still checks the
+implementation's prerequisites. Unresolved caller types are not specialized to
+make a candidate fit. Contextual method headers and primitive result contracts
+supply argument shape; final method, callable and provenance checks still apply.
 
 Generic function, impl-method and trait-default bodies are checked even when
 never instantiated. Definition checking reuses production elaboration and K
@@ -446,9 +503,52 @@ initialization and loan backedges still require their existing equality contract
 These annotations are private diagnostic evidence. Text K cannot declare them,
 and their checking API returns no executable authority. Mutable access to stored
 reference origins still needs a mutation contract and is explicitly unsupported
-at opaque calls. Named lifetime annotations on local bindings are not yet fully
-enforced; the retained no-call reduction demonstrates that remaining definition
-gap. General output/capture origin families remain unfinished.
+at opaque calls. General output/capture origin families remain unfinished.
+
+A named lifetime on a local type is checked at definition time, including unused
+lifetime-only functions and rigid generic definitions. Each active reference
+stored in the binding must outlive the declared region. This includes delayed
+initialization, destructuring, aliases, fields, replacement and a later Some
+after None. Retained loans survive moving, dropping or replacing the descriptor;
+the current holder and its checked descendants keep their ordinary permissions.
+An elided annotation permits the existing shorter reborrow. An undeclared
+lifetime is a source error, including in unreachable source.
+
+An annotation on borrowed descriptor storage constrains its earlier and later
+contents. The ordinary checker observes exact storage and transfer identities;
+a backward worklist propagates region requirements, then the private verifier
+checks all reachable stores from entry. These observations only add restrictions.
+Fresh reborrows must establish their issuing reference chain as well as their
+referent origin. Moving or copying an existing descriptor preserves its original
+contract. External reference-bearing writes retain the ordinary K mutation rule.
+
+Typed views separately retain the declared regions of their visible reference
+leaves. A shared view of a descriptor can shorten what is obtained through that
+view without shortening the original descriptor. Mutable nested views preserve
+invariance and constrain the stored descriptor as well. Requirements follow
+checked value transfers, borrows, constructor fields and exact call-result
+selectors. Named output types, elided outputs tied to their input or borrowed
+receiver, and fixed callable inputs apply the same declared-view check. A longer
+source origin alone does not override a shorter declared view. Bounded projected
+call results and growing recursive projection equations remain explicit
+unsupported cases; finite projection cycles use a visited worklist.
+Explicit generic type arguments containing named reference regions, including
+regions hidden in concrete aliases, currently require a checked type-instantiation
+contract and report E_UNSUPPORTED. This boundary covers free and method calls,
+qualified paths, constructors and patterns. Inferred arguments, scalar arguments and
+explicit elided reference arguments retain their existing behavior.
+
+Annotation metadata belongs to its compiling body and uses actual local,
+projection and instruction identities. Discarded type probes publish no caller
+metadata. A closure body can request a named region for an exact captured leaf;
+every construction must prove that requirement from its actual capture source.
+The body is checked under only those per-leaf input guarantees. CapturePlan remapping transforms both
+places and metadata. Concrete type equality never establishes a source region.
+
+Owning reference-bearing collections retain their existing unsupported boundary.
+Named reference leaves inside borrowed slice elements are also rejected until
+a collection reference inventory exists. No private source annotation can alter
+the meaning or acceptance of a parsed K program.
 
 ## Closures
 
@@ -481,11 +581,14 @@ Partially inferred return annotations still need per-position coercion evidence;
 contextual FnOnce demands are not yet used to permit escaping reborrows of
 captured references. These remain explicit reduced gaps.
 
-Ordinary visible inherent method headers can supply closure argument equations
-when one unconditional, unspecialized header applies at the exact nominal
-receiver head. This is contextual inference, not method selection: visibility,
-prerequisites, inherent priority, ambiguity and callable kind are checked by the
-ordinary selector. Bounded or ambiguous candidates do not establish that context.
+Unique visible structurally compatible method headers can supply conditional
+closure argument equations. Primitive methods use their shared typed inventory
+before competing trait headers; ordinary selection still proves visibility,
+prerequisites, inherent priority, ambiguity and callable kind. Ambiguous or
+incomplete candidate domains supply no contextual evidence. Partial census
+recovery does not turn an unresolved trait import into proof of a unique method.
+Structural parameter patterns wait for the subject's reference shape rather than
+forcing an unresolved associated Item into an owned tuple.
 
 Ordinary shared or mutable closure calls do not lend references to owned
 environment storage. Returned references must come from captured reference

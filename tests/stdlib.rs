@@ -26,6 +26,9 @@ mod integer;
 #[path = "../library/iter.rs"]
 #[allow(dead_code)]
 mod iter;
+#[path = "../library/sequence.rs"]
+#[allow(dead_code)]
+mod sequence;
 
 fn compile(text: &str, _library: &str) -> k::CheckedProgram {
     let text = format!("use std::bytes::*; use std::collections::BTreeMap;\n{text}");

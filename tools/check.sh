@@ -52,7 +52,7 @@ parallel_step values env LKJ_ENGINES="$check_engines_text" node tools/generators
 parallel_step verdicts env LKJ_ENGINES="$check_engines_text" node tools/generators/verdict.mjs "$check_binary" 601 100
 parallel_step output env LKJ_ENGINES="$check_engines_text" node tools/generators/output.mjs "$check_binary" 601 50
 parallel_step drops env LKJ_ENGINES="$check_engines_text" ONE_SIDED=1 node tools/generators/drops.mjs "$check_binary" 1201 100
-parallel_step sugars env LKJ_ENGINES="$check_engines_text" node tools/generators/sugar.mjs "$check_binary" 1301 147
+parallel_step sugars env LKJ_ENGINES="$check_engines_text" node tools/generators/sugar.mjs "$check_binary" 1301 216
 parallel_step closures env LKJ_ENGINES="$check_engines_text" node tools/generators/closures.mjs "$check_binary" 1501 44
 while ((check_waited < ${#check_pids[@]})); do wait_oldest; done
 for log in "${check_logs[@]}"; do cat "$log"; done

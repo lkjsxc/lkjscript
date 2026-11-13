@@ -467,6 +467,8 @@ pub enum Visibility {
     Private,
     Parent,
     Crate,
+    /// An explicit restriction to an ancestor module in this program.
+    Restricted(ModuleId),
     Public,
 }
 

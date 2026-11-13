@@ -351,3 +351,70 @@ fn declared_generic_bounds_make_trait_methods_available() {
         7,
     );
 }
+
+#[test]
+fn ancestor_visibility_uses_external_module_identity() {
+    run(
+        &[
+            ("main.rs", "mod outer;fn probe()->i64{outer::choose()}"),
+            (
+                "outer/mod.rs",
+                "pub mod inner;pub fn choose()->i64{let token=inner::Token{value:40};token.read()+inner::increment()}",
+            ),
+            (
+                "outer/inner.rs",
+                "pub mod leaf;pub(in crate::outer) use self::leaf::Token;pub(in super) fn increment()->i64{leaf::increment()}",
+            ),
+            (
+                "outer/inner/leaf.rs",
+                "pub(in super::super) struct Token{pub(in crate::outer) value:i64}impl Token{pub(in super::super) fn read(&self)->i64{self.value}}pub(in self) fn hidden()->i64{2}pub(in super::super::inner) fn increment()->i64{hidden()}",
+            ),
+        ],
+        42,
+    );
+}
+
+#[test]
+fn ancestor_visibility_preserves_library_root_and_cloned_scopes() {
+    for (root, allowed) in [
+        ("fn probe()->i64{std::inside::read()}", true),
+        ("fn probe()->i64{std::inside::deep::hidden()}", false),
+    ] {
+        let files = [
+            ("main.rs", root),
+            ("$std/lib.rs", "pub mod inside;"),
+            (
+                "$std/inside.rs",
+                "pub mod deep;pub fn read()->i64{deep::hidden()}",
+            ),
+            (
+                "$std/inside/deep.rs",
+                "pub(in crate::inside) fn hidden()->i64{42}",
+            ),
+        ];
+        let bundle = source::SourceBundle {
+            library: Some("$std/lib.rs".to_string()),
+            root: "main.rs".to_string(),
+            files: files
+                .iter()
+                .map(|(path, text)| source::SourceInput {
+                    path: path.to_string(),
+                    text: text.to_string(),
+                })
+                .collect(),
+        };
+        let parsed = source::parse_bundle(&bundle).unwrap();
+        let cloned = parsed.clone();
+        let result = elaborate::elaborate(&cloned).and_then(check::check);
+        if allowed {
+            native::assert_values(&result.unwrap(), &[("probe", 42)]);
+        } else {
+            let error = match result {
+                Ok(_) => panic!("source-library restriction leaked into the user crate"),
+                Err(error) => error,
+            };
+            assert_eq!(error.code, "E_PRIVACY");
+            assert!(error.message.contains("hidden"), "{error:?}");
+        }
+    }
+}

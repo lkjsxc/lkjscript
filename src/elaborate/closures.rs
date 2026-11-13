@@ -328,10 +328,10 @@ impl Compiler<'_> {
                     .map(|leaf| (leaf.path, leaf.label))
                     .collect();
                 for leaf in self.region_leaves(bound.scope, *formal, *concrete) {
-                    if matches!(leaf.label, Label::Elided)
-                        && actual
-                            .get(&leaf.path)
-                            .is_some_and(|label| !matches!(label, Label::Elided | Label::Unknown))
+                    if matches!(leaf.label, Label::Elided { .. })
+                        && actual.get(&leaf.path).is_some_and(|label| {
+                            !matches!(label, Label::Elided { .. } | Label::Unknown)
+                        })
                     {
                         return Err(err(
                             span,
@@ -929,6 +929,15 @@ impl Builder<'_, '_> {
         }
         let dst = self.local(ty, "$", true);
         self.emit(k::Op::Struct { dst, fields }, span.line);
+        let function = self.compiler.closures.entries[&ty].function.unwrap();
+        self.scoped_body
+            .constructions
+            .entry(self.function.body.len())
+            .or_default()
+            .push(crate::check::scoped::Construction {
+                function,
+                place: k::Place::local(dst),
+            });
         Ok((dst, ty))
     }
 
@@ -997,6 +1006,7 @@ impl Builder<'_, '_> {
             .enumerate()
             .map(|(i, local)| (local.name.clone(), i + 1))
             .collect::<Bindings>();
+        let mut scoped_body;
         {
             let mut builder = Builder {
                 source_function: entry.source_function,
@@ -1005,6 +1015,8 @@ impl Builder<'_, '_> {
                 compiler: self.compiler,
                 function: &mut function,
                 return_annotated: declared_result.is_some(),
+                scoped_body: super::scoped_locals::Body::default(),
+                typed_bindings: Vec::new(),
                 sub: entry.substitutions.clone(),
                 bindings,
                 guard_aliases: BTreeMap::new(),
@@ -1026,6 +1038,15 @@ impl Builder<'_, '_> {
                 loops: Vec::new(),
                 reachable: true,
             };
+            for (index, parameter) in params.iter().enumerate() {
+                let annotations =
+                    builder.fixed_annotation(parameter.ty, &k::Place::local(index + 1))?;
+                builder.scoped_body.parameters.extend(annotations);
+            }
+            if let Some(syntax) = declared_result {
+                builder.scoped_body.results =
+                    builder.fixed_regions(syntax, entry.signature.result)?;
+            }
             for (index, pattern) in patterns.iter().enumerate() {
                 let mut plan = super::patterns::PatternPlan::default();
                 let ty = entry.signature.arguments[index];
@@ -1047,6 +1068,7 @@ impl Builder<'_, '_> {
                 builder.cleanup(0, Some(result.0), span.line);
                 builder.emit(k::Op::Return { src: result.0 }, span.line);
             }
+            scoped_body = std::mem::take(&mut builder.scoped_body);
         }
         let (mut kind, mut plans) = (Kind::Shared, Vec::<CapturePlan>::new());
         for instruction in &function.body {
@@ -1162,12 +1184,9 @@ impl Builder<'_, '_> {
             Kind::Mutable => self.compiler.reference(ty, true),
             Kind::Once => ty,
         };
-        for instruction in &mut function.body {
-            let Some(place) = operation_place_mut(&mut instruction.op) else {
-                continue;
-            };
+        let remap = |place: &mut k::Place| -> Result<()> {
             if place.local < param_count || place.local >= param_count + entry.variables.len() {
-                continue;
+                return Ok(());
             }
             let source = place.local - param_count;
             let (field, plan) = plans
@@ -1190,10 +1209,28 @@ impl Builder<'_, '_> {
                 local: 0,
                 projections,
             };
+            Ok(())
+        };
+        for instruction in &mut function.body {
+            if let Some(place) = operation_place_mut(&mut instruction.op) {
+                remap(place)?;
+            }
         }
+        for place in scoped_body.places_mut() {
+            remap(place)?;
+        }
+        scoped_body.environment = Some(crate::check::scoped::Environment {
+            prefix: if kind == Kind::Once {
+                Vec::new()
+            } else {
+                vec![k::Projection::Deref]
+            },
+        });
+        scoped_body.source_scope = Some(entry.source_function);
         function.return_source = self.compiler.callable_return_source(&function, span)?;
         let index = self.compiler.functions.len();
         self.compiler.functions.push(function);
+        self.compiler.scoped_bodies.insert(index, scoped_body);
         self.compiler.closures.checked_functions.insert(index);
         let prepared = self.compiler.closures.entries.get_mut(&ty).unwrap();
         prepared.signature.kind = kind;

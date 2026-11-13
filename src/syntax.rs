@@ -811,7 +811,9 @@ impl Parser {
             return Ok(Visibility::Private);
         }
         let visibility = if self.take("(") {
-            let v = if self.take("crate") {
+            let v = if self.take("in") {
+                self.restricted_visibility()?
+            } else if self.take("crate") {
                 Visibility::Crate
             } else if self.take("self") {
                 Visibility::Private
@@ -829,6 +831,68 @@ impl Parser {
             Visibility::Public
         };
         Ok(visibility)
+    }
+
+    fn restricted_visibility(&mut self) -> Result<Visibility, Diagnostic> {
+        let span = self.token().span;
+        let mut root = self.scope;
+        if self.take("crate") {
+            root = self.program.scopes[self.scope].crate_root;
+        } else if self.take("self") {
+        } else if self.take("super") {
+            loop {
+                root = self.program.scopes[root].parent.ok_or_else(|| {
+                    Diagnostic::new(span, "E_PRIVACY", "visibility path has no parent module")
+                })?;
+                if !self.is("::")
+                    || !self
+                        .tokens
+                        .get(self.at + 1)
+                        .is_some_and(|token| token.text == "super")
+                {
+                    break;
+                }
+                self.at += 2;
+            }
+        } else {
+            return Err(Diagnostic::new(
+                span,
+                "E_PARSE",
+                "visibility path must start with crate, self, or super",
+            ));
+        }
+        let mut path = self.program.scopes[root].path.clone();
+        while self.take("::") {
+            let segment = self.ident()?;
+            if matches!(segment.as_str(), "crate" | "self" | "super" | "Self") {
+                return Err(Diagnostic::new(
+                    span,
+                    "E_PARSE",
+                    "visibility path qualifiers must precede module names",
+                ));
+            }
+            if !path.is_empty() {
+                path.push_str("::");
+            }
+            path.push_str(&segment);
+        }
+        // Module ancestors exist before either inline or external-file bodies
+        // are parsed. Matching their identities never follows a use alias.
+        let mut ancestor = Some(self.scope);
+        while let Some(scope) = ancestor {
+            let module = &self.program.scopes[scope];
+            if module.path == path
+                && module.crate_root == self.program.scopes[self.scope].crate_root
+            {
+                return Ok(Visibility::Restricted(scope));
+            }
+            ancestor = module.parent;
+        }
+        Err(Diagnostic::new(
+            span,
+            "E_PRIVACY",
+            "visibility path must name an ancestor module in this crate",
+        ))
     }
 
     fn items(&mut self, nested: bool) -> Result<Vec<Item>, Diagnostic> {
@@ -1971,6 +2035,20 @@ impl Parser {
                 let output = self.add_expr(Expr::Tuple(result), start);
                 let wildcard = self.add_pattern(Pattern::Wild, start);
                 let initializer = if let Some(ty) = ty {
+                    // The generated tail reads the typed binding after its
+                    // initializer. Keep that ordering in lexical use positions
+                    // so reference cleanup cannot run before the tail read.
+                    let initializer_span = self.program.exprs[value].span;
+                    let block_span = self.finish_span(start);
+                    let tail_span = Span {
+                        start: initializer_span.end,
+                        end: initializer_span.end,
+                        ..initializer_span
+                    };
+                    let binding_span = Span {
+                        end: initializer_span.end,
+                        ..start
+                    };
                     let name = format!("$let_else{}", self.program.exprs.len());
                     let binding = self.add_pattern(
                         Pattern::Bind {
@@ -1987,7 +2065,7 @@ impl Parser {
                             name,
                             args: Vec::new(),
                         }),
-                        start,
+                        tail_span,
                     );
                     let block = self.program.blocks.len();
                     self.program.blocks.push(Block {
@@ -1995,12 +2073,12 @@ impl Parser {
                             pattern: binding,
                             ty: Some(ty),
                             value: Some(value),
-                            span: start,
+                            span: binding_span,
                         }],
                         tail: Some(path),
-                        span: start,
+                        span: block_span,
                     });
-                    self.add_expr(Expr::Block(block), start)
+                    self.add_expr(Expr::Block(block), block_span)
                 } else {
                     value
                 };

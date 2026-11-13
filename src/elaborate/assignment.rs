@@ -139,6 +139,8 @@ impl Builder<'_, '_> {
                 compiler: self.compiler,
                 function: &mut function,
                 return_annotated: self.return_annotated,
+                scoped_body: super::scoped_locals::Body::default(),
+                typed_bindings: Vec::new(),
                 sub: self.sub.clone(),
                 bindings,
                 guard_aliases: BTreeMap::new(),

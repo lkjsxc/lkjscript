@@ -163,8 +163,15 @@ impl Infer<'_, '_> {
                                 .into_iter()
                                 .zip(arguments)
                             {
+                                aliases
+                                    .retain(|name, _| !name.starts_with(&format!("{parameter}::")));
                                 aliases.insert(parameter, value);
                             }
+                            self.parameter_equations(
+                                &self.source.aliases[index].generics.clone(),
+                                &mut aliases,
+                                false,
+                            )?;
                             let environment = environments.len();
                             environments.push(Cow::Owned(aliases));
                             pending.push(Work::Source {

@@ -233,6 +233,14 @@ pub trait IteratorExt<I: Iterator> {
     fn skip(self, remaining: usize) -> Skip<I>;
     fn zip<J: IntoIterator>(self, right: J) -> Zip<I, J::IntoIter>;
     fn chain(self, right: I) -> Chain<I>;
+    fn fold<B, F: FnMut(B, I::Item) -> B>(self, initial: B, function: F) -> B;
+    fn for_each<F: FnMut(I::Item)>(self, function: F);
+    fn map<B, F: FnMut(I::Item) -> B>(self, function: F) -> Map<I, F>;
+    fn filter<F: FnMut(&I::Item) -> bool>(self, predicate: F) -> Filter<I, F>;
+    fn filter_map<B, F: FnMut(I::Item) -> Option<B>>(self, function: F) -> FilterMap<I, F>;
+    fn inspect<F: FnMut(&I::Item)>(self, function: F) -> Inspect<I, F>;
+    fn any<F: FnMut(I::Item) -> bool>(&mut self, predicate: F) -> bool;
+    fn all<F: FnMut(I::Item) -> bool>(&mut self, predicate: F) -> bool;
 }
 impl<I: Iterator> IteratorExt<I> for I {
     fn enumerate(self) -> Enumerate<I> {
@@ -250,4 +258,180 @@ impl<I: Iterator> IteratorExt<I> for I {
     fn chain(self, right: I) -> Chain<I> {
         chain(self, right)
     }
+    fn fold<B, F: FnMut(B, I::Item) -> B>(self, initial: B, function: F) -> B {
+        fold(self, initial, function)
+    }
+    fn for_each<F: FnMut(I::Item)>(self, function: F) {
+        for_each(self, function)
+    }
+    fn map<B, F: FnMut(I::Item) -> B>(self, function: F) -> Map<I, F> {
+        map(self, function)
+    }
+    fn filter<F: FnMut(&I::Item) -> bool>(self, predicate: F) -> Filter<I, F> {
+        filter(self, predicate)
+    }
+    fn filter_map<B, F: FnMut(I::Item) -> Option<B>>(self, function: F) -> FilterMap<I, F> {
+        filter_map(self, function)
+    }
+    fn inspect<F: FnMut(&I::Item)>(self, function: F) -> Inspect<I, F> {
+        inspect(self, function)
+    }
+    fn any<F: FnMut(I::Item) -> bool>(&mut self, predicate: F) -> bool {
+        any(self, predicate)
+    }
+    fn all<F: FnMut(I::Item) -> bool>(&mut self, predicate: F) -> bool {
+        all(self, predicate)
+    }
+}
+
+pub struct Map<I, F> {
+    iterator: I,
+    function: F,
+}
+pub fn map<I: Iterator, B, F: FnMut(I::Item) -> B>(iterator: I, function: F) -> Map<I, F> {
+    Map { iterator, function }
+}
+impl<I: Iterator, B, F: FnMut(I::Item) -> B> Iterator for Map<I, F> {
+    type Item = B;
+    fn next(&mut self) -> Option<B> {
+        match self.iterator.next() {
+            Some(value) => Some((self.function)(value)),
+            None => None,
+        }
+    }
+}
+pub struct Filter<I, F> {
+    iterator: I,
+    predicate: F,
+}
+pub fn filter<I: Iterator, F: FnMut(&I::Item) -> bool>(iterator: I, predicate: F) -> Filter<I, F> {
+    Filter {
+        iterator,
+        predicate,
+    }
+}
+impl<I: Iterator, F: FnMut(&I::Item) -> bool> Iterator for Filter<I, F> {
+    type Item = I::Item;
+    fn next(&mut self) -> Option<I::Item> {
+        loop {
+            match self.iterator.next() {
+                Some(value) => {
+                    if (self.predicate)(&value) {
+                        return Some(value);
+                    }
+                }
+                None => return None,
+            }
+        }
+    }
+}
+pub struct FilterMap<I, F> {
+    iterator: I,
+    function: F,
+}
+pub fn filter_map<I: Iterator, B, F: FnMut(I::Item) -> Option<B>>(
+    iterator: I,
+    function: F,
+) -> FilterMap<I, F> {
+    FilterMap { iterator, function }
+}
+impl<I: Iterator, B, F: FnMut(I::Item) -> Option<B>> Iterator for FilterMap<I, F> {
+    type Item = B;
+    fn next(&mut self) -> Option<B> {
+        loop {
+            match self.iterator.next() {
+                Some(value) => match (self.function)(value) {
+                    Some(output) => return Some(output),
+                    None => (),
+                },
+                None => return None,
+            }
+        }
+    }
+}
+pub struct Inspect<I, F> {
+    iterator: I,
+    function: F,
+}
+pub fn inspect<I: Iterator, F: FnMut(&I::Item)>(iterator: I, function: F) -> Inspect<I, F> {
+    Inspect { iterator, function }
+}
+impl<I: Iterator, F: FnMut(&I::Item)> Iterator for Inspect<I, F> {
+    type Item = I::Item;
+    fn next(&mut self) -> Option<I::Item> {
+        match self.iterator.next() {
+            Some(value) => {
+                (self.function)(&value);
+                Some(value)
+            }
+            None => None,
+        }
+    }
+}
+
+impl<I: Iterator, B, F: FnMut(I::Item) -> B> IntoIterator for Map<I, F> {
+    type IntoIter = Self;
+    fn into_iter(self) -> Self {
+        self
+    }
+}
+
+impl<I: Iterator, F: FnMut(&I::Item) -> bool> IntoIterator for Filter<I, F> {
+    type IntoIter = Self;
+    fn into_iter(self) -> Self {
+        self
+    }
+}
+
+impl<I: Iterator, B, F: FnMut(I::Item) -> Option<B>> IntoIterator for FilterMap<I, F> {
+    type IntoIter = Self;
+    fn into_iter(self) -> Self {
+        self
+    }
+}
+
+impl<I: Iterator, F: FnMut(&I::Item)> IntoIterator for Inspect<I, F> {
+    type IntoIter = Self;
+    fn into_iter(self) -> Self {
+        self
+    }
+}
+
+/// Consume a sequence in order, carrying the checked accumulator through each call.
+pub fn fold<I: Iterator, B, F: FnMut(B, I::Item) -> B>(
+    mut iterator: I,
+    mut accumulator: B,
+    mut function: F,
+) -> B {
+    while let Some(value) = iterator.next() {
+        accumulator = function(accumulator, value);
+    }
+    accumulator
+}
+
+/// Call the consumer once for each item; iterator and callback own their cleanup.
+pub fn for_each<I: Iterator, F: FnMut(I::Item)>(mut iterator: I, mut function: F) {
+    while let Some(value) = iterator.next() {
+        function(value);
+    }
+}
+
+/// Stop at the first true predicate or None, leaving later items in the iterator.
+pub fn any<I: Iterator, F: FnMut(I::Item) -> bool>(iterator: &mut I, mut predicate: F) -> bool {
+    while let Some(value) = iterator.next() {
+        if predicate(value) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Stop at the first false predicate or None; an empty traversal is true.
+pub fn all<I: Iterator, F: FnMut(I::Item) -> bool>(iterator: &mut I, mut predicate: F) -> bool {
+    while let Some(value) = iterator.next() {
+        if !predicate(value) {
+            return false;
+        }
+    }
+    true
 }

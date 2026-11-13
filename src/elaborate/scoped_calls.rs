@@ -48,7 +48,7 @@ fn normalize(requirements: Vec<Requirement>) -> Vec<Requirement> {
 }
 
 impl Compiler<'_> {
-    fn scoped_parameters(&self, index: usize) -> Vec<&a::GenericParam> {
+    pub(super) fn scoped_parameters(&self, index: usize) -> Vec<&a::GenericParam> {
         let mut parameters: Vec<_> = self.source.functions[index].generics.iter().collect();
         match self.source.function_owner(a::FunctionId { index }) {
             a::FunctionOwner::Implementation(owner) => {
@@ -80,26 +80,79 @@ impl Compiler<'_> {
         }
         edges
     }
-    fn source_scope(&self, instance: &Instance, function: &k::Function) -> Scope {
+    fn source_scope(&self, instance: &Instance, function: &k::Function) -> Result<Scope> {
         let source = &self.source.functions[instance.source];
         let mut scope = Scope {
             outlives: self.region_edges(instance.source),
             ..Scope::default()
         };
+        let mut elisions = BTreeMap::new();
+        let mut input_regions = BTreeMap::new();
         for (index, parameter) in source.params.iter().enumerate() {
             let leaves =
                 self.region_leaves(instance.source, parameter.ty, function.locals[index].ty);
             for (leaf_index, leaf) in leaves.into_iter().enumerate() {
-                let region = named_region(instance.source, &leaf.label).unwrap_or_else(|| {
+                let region = if let Some(named) = named_region(instance.source, &leaf.label) {
+                    named
+                } else if matches!(leaf.label, Label::Elided { .. }) {
+                    elisions
+                        .entry(leaf.label.clone())
+                        .or_insert_with(|| {
+                            region(instance.source, &format!("@input{index}:leaf{leaf_index}"))
+                        })
+                        .clone()
+                } else {
                     region(instance.source, &format!("@input{index}:leaf{leaf_index}"))
-                });
-                scope.parameters.insert(
-                    k::InputLeaf {
-                        index,
-                        projections: leaf.path,
-                    },
-                    region,
+                };
+                if matches!(
+                    leaf.label,
+                    Label::Lifetime(_) | Label::Static | Label::Elided { .. }
+                ) {
+                    input_regions.insert(leaf.label.clone(), region.clone());
+                }
+                let input = k::InputLeaf {
+                    index,
+                    projections: leaf.path,
+                };
+                scope.parameter_sites.insert(
+                    input.clone(),
+                    (
+                        self.source.types[parameter.ty].span.line,
+                        self.source.types[parameter.ty].span.column,
+                    ),
                 );
+                scope.parameters.insert(input, region);
+            }
+        }
+        let elided_result = self
+            .return_elision(instance.source, &function.locals, function.result)?
+            .and_then(|label| input_regions.get(&label).cloned());
+        for leaf in self.region_leaves(instance.source, source.result, function.result) {
+            let required = if matches!(leaf.label, Label::Elided { .. }) {
+                Some(elided_result.clone().ok_or_else(|| {
+                    err(
+                        self.source.types[source.result].span,
+                        "E_BORROW",
+                        "elided output region needs one source region or a borrowed receiver",
+                    )
+                })?)
+            } else {
+                named_region(instance.source, &leaf.label)
+            };
+            if let Some(region) = required {
+                scope.results.push(crate::check::scoped::ResultLeaf {
+                    invariant: crate::check::scoped::invariant_path(
+                        &self.types,
+                        function.result,
+                        &leaf.path,
+                    ),
+                    projections: leaf.path,
+                    region,
+                    created: (
+                        self.source.types[source.result].span.line,
+                        self.source.types[source.result].span.column,
+                    ),
+                });
             }
         }
         // A nested reference in a well-formed input must outlive the reference
@@ -123,7 +176,7 @@ impl Compiler<'_> {
                 }
             }
         }
-        scope
+        Ok(scope)
     }
     fn opaque_callable(&self, mut ty: usize) -> Option<usize> {
         loop {
@@ -203,8 +256,8 @@ impl Compiler<'_> {
                             let Some(actual_label) = actual_leaves.get(&leaf.path) else {
                                 continue;
                             };
-                            if matches!(leaf.label, Label::Elided)
-                                && !matches!(actual_label, Label::Elided | Label::Unknown)
+                            if matches!(leaf.label, Label::Elided { .. })
+                                && !matches!(actual_label, Label::Elided { .. } | Label::Unknown)
                             {
                                 return Err(err(
                                     self.source.types[*bound].span,
@@ -292,6 +345,9 @@ impl Compiler<'_> {
         &self,
         checked: &BTreeSet<usize>,
     ) -> (BTreeMap<usize, Scope>, Vec<a::Diagnostic>) {
+        if checked.is_empty() {
+            return (BTreeMap::new(), Vec::new());
+        }
         let instances: BTreeMap<_, _> = self
             .pending_functions
             .iter()
@@ -334,12 +390,34 @@ impl Compiler<'_> {
                 calls.insert(*function, requirements);
             }
         }
+        for (function, body) in &self.scoped_bodies {
+            if !body.parameters.is_empty() {
+                calls
+                    .entry(*function)
+                    .or_default()
+                    .extend(body.parameters.iter().map(|parameter| Requirement {
+                        argument: parameter.place.local,
+                        projections: parameter.place.projections.clone(),
+                        region: parameter.region.clone(),
+                        preserve: parameter.place.projections.contains(&k::Projection::Deref),
+                        // Concrete closure bodies receive the ordinary external-store
+                        // identity check; this is not an opaque mutation promise.
+                        mutable_storage: false,
+                    }));
+            }
+        }
         let mut scopes = BTreeMap::new();
         let mut problems = Vec::new();
         for function_index in checked {
             let function = &self.functions[*function_index];
             let mut scope = if let Some(instance) = instances.get(function_index) {
-                self.source_scope(instance, function)
+                match self.source_scope(instance, function) {
+                    Ok(scope) => scope,
+                    Err(problem) => {
+                        problems.push(problem);
+                        continue;
+                    }
+                }
             } else if let Some(ty) = opaque.get(function_index) {
                 // Internal borrowed-callable wrappers forward exactly these
                 // declared arguments. Their caller must prove the same regions.
@@ -363,6 +441,33 @@ impl Compiler<'_> {
                 // or a coincidentally equal source variable name.
                 Scope::default()
             };
+            if let Some(body) = self.scoped_bodies.get(function_index) {
+                if let Some(owner) = body.source_scope {
+                    scope.outlives.extend(self.region_edges(owner));
+                }
+                for parameter in &body.parameters {
+                    scope.parameter_sites.insert(
+                        k::InputLeaf {
+                            index: parameter.place.local,
+                            projections: parameter.place.projections.clone(),
+                        },
+                        parameter.created,
+                    );
+                    scope.parameters.insert(
+                        k::InputLeaf {
+                            index: parameter.place.local,
+                            projections: parameter.place.projections.clone(),
+                        },
+                        parameter.region.clone(),
+                    );
+                }
+                if body.environment.is_some() {
+                    scope.results = body.results.clone();
+                }
+                scope.annotations = body.annotations.clone();
+                scope.constructions = body.constructions.clone();
+                scope.environment = body.environment.clone();
+            }
             for (instruction_index, instruction) in function.body.iter().enumerate() {
                 let k::Op::Call {
                     function: target, ..
@@ -381,7 +486,12 @@ impl Compiler<'_> {
                     scope.calls.insert(instruction_index, requirements.clone());
                 }
             }
-            if !scope.calls.is_empty() {
+            if !scope.calls.is_empty()
+                || !scope.annotations.bindings.is_empty()
+                || !scope.annotations.checkpoints.is_empty()
+                || !scope.constructions.is_empty()
+                || scope.environment.is_some()
+            {
                 scopes.insert(*function_index, scope);
             }
         }

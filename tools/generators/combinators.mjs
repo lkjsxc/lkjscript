@@ -46,3 +46,45 @@ export function combinatorPair(index,random){
  }
  return{family:'closure-combinators-'+methods.join('-'),sugar,expanded,sugarHelpers,expandedHelpers:sugarHelpers+expandedHelpers};
 }
+
+const optionExtras=['is_some_and','is_none_or','ok_or','ok_or_else'];
+export function optionExtraPair(index,random){
+ const method=optionExtras[index],tag=1+random(9),errorTag=21+random(9),cutoff=tag+random(2);
+ const common='fn extra_input(world:&mut World,yes:bool,b:u8)->Option<M>{tick(world,60u8);if yes{Some(make(world,b))}else{None}}\n';
+ const helpers={
+  is_some_and:'fn expanded<T,F:FnOnce(T)->bool>(value:Option<T>,function:F)->bool{match value{Some(value)=>function(value),None=>false}}',
+  is_none_or:'fn expanded<T,F:FnOnce(T)->bool>(value:Option<T>,function:F)->bool{match value{Some(value)=>function(value),None=>true}}',
+  ok_or:'fn expanded<T,E>(value:Option<T>,error:E)->Result<T,E>{match value{Some(value)=>Ok(value),None=>Err(error)}}',
+  ok_or_else:'fn expanded<T,E,F:FnOnce()->E>(value:Option<T>,function:F)->Result<T,E>{match value{Some(value)=>Ok(value),None=>Err(function())}}',
+ };
+ let sugar='',expanded='';
+ for(const yes of [true,false]){
+  const input='extra_input(&mut world,'+yes+','+tag+'u8)';
+  const trap=random(7)===0?'assert!(false);':'';
+  const predicate=method==='is_some_and'||method==='is_none_or';
+  const body=predicate?'let answer=value.b<'+cutoff+'u8;drop(capture);answer':'capture';
+  const argument=method==='ok_or'?'make(&mut world,'+errorTag+'u8)':
+   '{tick(&mut world,70u8);let capture=make(&mut world,'+errorTag+'u8);let mut out:Stdout=world.stdout();move|'+(predicate?'value:M':'')+'|{out.write(&[80u8]);'+trap+body+'}}';
+  const tail=predicate?'if answer{tick(&mut world,1u8);}else{tick(&mut world,0u8);}':
+   'match answer{Ok(value)=>{tick(&mut world,10u8);tick(&mut world,value.b);},Err(error)=>{tick(&mut world,11u8);tick(&mut world,error.b);}}';
+  sugar+='{let answer='+input+'.'+method+'('+argument+');tick(&mut world,90u8);'+tail+'}';
+  expanded+='{let answer=expanded('+input+','+argument+');tick(&mut world,90u8);'+tail+'}';
+ }
+ return{family:'option-'+method,sugar,expanded,sugarHelpers:common,expandedHelpers:common+helpers[method]+'\n'};
+}
+
+export function optionViewPair(index,random) {
+ const method=index===0?'copied':'cloned', mutable=random(2)===0;
+ const value=1+random(30),present=random(2)===0,fail=random(3)===0;
+ const ref=mutable?'&mut ':'&';
+ const common=`#[derive(Copy)] struct C{value:u8,fail:bool}
+impl Clone for C{fn clone(&self)->Self{assert!(!self.fail);C{value:self.value+1u8,fail:false}}}
+fn input<'a>(world:&mut World,value:&'a ${mutable?'mut ':''}C,present:bool)->Option<&'a ${mutable?'mut ':''}C>{tick(world,87u8);if present{Some(value)}else{None}}
+`;
+ const expandedHelper=`fn convert<T:${index===0?'Copy':'Clone'}>(value:Option<${ref}T>)->Option<T>{match value{Some(value)=>Some(${index===0?'*value':'(*value).clone()'}),None=>None}}
+`;
+ const prefix=`let owner=make(&mut world,${value}u8);let mut value=C{value:${value}u8,fail:${fail}};`;
+ const input=`input(&mut world,${ref}value,${present})`;
+ const tail='tick(&mut world,88u8);value.value=0;match answer{Some(value)=>tick(&mut world,value.value),None=>tick(&mut world,89u8)}drop(owner);tick(&mut world,90u8);';
+ return {family:'option-reference-'+method,sugarHelpers:common,expandedHelpers:common+expandedHelper,sugar:prefix+'let answer='+input+'.'+method+'();'+tail,expanded:prefix+'let answer=convert('+input+');'+tail};
+}

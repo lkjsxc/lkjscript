@@ -20,6 +20,7 @@ mod pattern_choices;
 mod patterns;
 mod ranges;
 mod scoped_calls;
+mod scoped_locals;
 mod sequences;
 mod static_lifetimes;
 mod sugars;
@@ -84,6 +85,7 @@ struct Compiler<'a> {
     method_selections: generic_check::MethodSelections,
     definition_types: BTreeMap<usize, definition_types::DefinitionTypes>,
     closures: closures::Catalog,
+    scoped_bodies: BTreeMap<usize, scoped_locals::Body>,
     trait_proofs: Option<trait_proofs::Session>,
     return_inference: BTreeSet<usize>,
     diagnostic_functions: Option<&'a BTreeSet<usize>>,
@@ -289,6 +291,9 @@ fn elaborate_definitions(
     }
     let mut refinement = c.closures.checked_functions.clone();
     refinement.extend(&c.return_inference);
+    let scoped_roots = c.scoped_bodies.keys().copied().collect();
+    let (scopes, scoped_problems) = c.scoped_definitions(&scoped_roots);
+    problems.extend(scoped_problems);
     let mut program = k::Program {
         types: c.types,
         functions: c.functions,
@@ -298,6 +303,7 @@ fn elaborate_definitions(
         &mut program,
         &refinement,
     ));
+    problems.extend(crate::check::scoped::check_definitions(&program, &scopes));
     Ok(program)
 }
 
@@ -363,6 +369,7 @@ impl<'a> Compiler<'a> {
             method_selections: BTreeMap::new(),
             definition_types: BTreeMap::new(),
             closures: closures::Catalog::default(),
+            scoped_bodies: BTreeMap::new(),
             trait_proofs: None,
             return_inference: BTreeSet::new(),
             diagnostic_functions: None,
@@ -627,6 +634,7 @@ impl Compiler<'_> {
         if !self.has_view(result) {
             return Ok((None, false));
         }
+        self.return_elision(source_index, locals, result)?;
         if let Some(leaves) =
             self.produced_return_leaf_contract(source_index, source, locals, result, substitutions)
         {
@@ -960,6 +968,8 @@ impl Compiler<'_> {
             compiler: self,
             function: &mut function,
             return_annotated: true,
+            scoped_body: scoped_locals::Body::default(),
+            typed_bindings: Vec::new(),
             sub: instance.substitutions.clone(),
             bindings,
             guard_aliases: BTreeMap::new(),
@@ -994,6 +1004,11 @@ impl Compiler<'_> {
             }
             builder.cleanup(0, Some(result.0), source.span.line);
             builder.emit(k::Op::Return { src: result.0 }, source.span.line);
+        }
+        let body = std::mem::take(&mut builder.scoped_body);
+        drop(builder);
+        if !body.is_empty() {
+            self.scoped_bodies.insert(index, body);
         }
         Ok(function)
     }
@@ -1082,6 +1097,8 @@ struct Builder<'a, 'b> {
     compiler: &'a mut Compiler<'b>,
     function: &'a mut k::Function,
     return_annotated: bool,
+    scoped_body: scoped_locals::Body,
+    typed_bindings: Vec<crate::check::scoped::Annotation>,
     sub: BTreeMap<String, usize>,
     bindings: Bindings,
     guard_aliases: BTreeMap<String, k::Place>,
@@ -1657,6 +1674,10 @@ impl Builder<'_, '_> {
             a::Expr::Unary { op, .. } if op == "*" => self.place_with_mutability(id, mutable),
             _ => {
                 let v = self.expr(id, None)?;
+                // Value expressions create writable temporary storage. This
+                // does not change a named binding or permission through a
+                // reference. Range borrows still follow the requested mode.
+                self.function.locals[v.0].mutable = true;
                 Ok(k::Place::local(v.0))
             }
         }
@@ -1701,7 +1722,13 @@ impl Builder<'_, '_> {
         schedule.pending.retain(|local| self.references[*local]);
         self.reference_schedules.insert(key, schedule);
     }
-    fn bind_name(&mut self, name: String, mutable: bool, value: (usize, usize), line: usize) {
+    fn bind_name(
+        &mut self,
+        name: String,
+        mutable: bool,
+        value: (usize, usize),
+        line: usize,
+    ) -> usize {
         let dst = self.local(value.1, &name, mutable);
         self.emit(
             k::Op::Assign {
@@ -1711,6 +1738,7 @@ impl Builder<'_, '_> {
             line,
         );
         self.bindings.push((name, dst));
+        dst
     }
 
     fn bind(&mut self, pattern: usize, value: (usize, usize), line: usize) -> Result<()> {
@@ -1727,7 +1755,8 @@ impl Builder<'_, '_> {
                 } else {
                     value
                 };
-                self.bind_name(name, mutable, val, line);
+                let destination = self.bind_name(name, mutable, val, line);
+                self.annotation_binding(&k::Place::local(value.0), destination, by_ref);
                 Ok(())
             }
             a::Pattern::Wild => {
@@ -1802,7 +1831,8 @@ impl Builder<'_, '_> {
     fn cleanup_temporaries(&mut self, start: usize, line: usize) {
         let locals: Vec<_> = self.live.indices_from(start).collect();
         for local in locals {
-            if self.function.locals[local].name.starts_with('$') {
+            let name = &self.function.locals[local].name;
+            if name.starts_with('$') && self.binding(name) != Some(local) {
                 self.cleanup_place(k::Place::local(local), line);
             }
         }
@@ -1853,7 +1883,7 @@ impl Builder<'_, '_> {
                     if let Some(value) = value {
                         let before = self.live.len();
                         let extends = self.extends_temporary(value, pattern);
-                        self.pattern_initializer(pattern, value, expected, span.line)?;
+                        self.pattern_initializer(pattern, value, expected, ty, span.line)?;
                         if !extends {
                             self.cleanup_temporaries(before, span.line);
                         }
@@ -1865,6 +1895,7 @@ impl Builder<'_, '_> {
                             })?;
                             let local = self.local(t, &name, mutable);
                             self.bindings.push((name, local));
+                            self.annotation_uninitialized(ty.unwrap(), local)?;
                         } else {
                             return Err(err(span, "E_UNSUPPORTED", "uninitialized destructuring"));
                         }
@@ -2110,10 +2141,22 @@ impl Builder<'_, '_> {
         let expected = context
             .expected
             .or(context.inferred.filter(|ty| !self.compiler.has_view(*ty)));
-        if let Some(place) = self.capture_aliases.get(&id).cloned() {
-            return self.read(place, self.compiler.source.exprs[id].span.line);
-        }
         let node = self.compiler.source.exprs[id].clone();
+        match &node.kind {
+            a::Expr::Path(path) | a::Expr::Struct { path, .. } => {
+                self.explicit_type_arguments(&path.args, node.span)?
+            }
+            a::Expr::Method { types, .. } => self.explicit_type_arguments(types, node.span)?,
+            a::Expr::Call { callee, .. } => {
+                if let a::Expr::Path(path) = &self.compiler.source.exprs[*callee].kind {
+                    self.explicit_type_arguments(&path.args, node.span)?;
+                }
+            }
+            _ => {}
+        }
+        if let Some(place) = self.capture_aliases.get(&id).cloned() {
+            return self.read(place, node.span.line);
+        }
         let line = node.span.line;
         match node.kind {
             a::Expr::Int(text) => self.integer(&text, expected, false, node.span),

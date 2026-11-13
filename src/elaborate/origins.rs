@@ -9,13 +9,13 @@ pub(super) enum Label {
     Parameter(String, Vec<k::Projection>),
     Associated(String, Vec<k::Projection>),
     Static,
-    Elided,
+    Elided { site: usize, parameter: usize },
     Unknown,
 }
 #[derive(Clone, Default)]
 struct Environment {
     types: BTreeMap<String, (usize, usize)>,
-    lifetimes: BTreeMap<String, String>,
+    lifetimes: BTreeMap<String, Label>,
 }
 type SignatureChild = (usize, usize, Vec<k::Projection>);
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -68,12 +68,26 @@ fn substituted(
     }
     (syntax, environment)
 }
-fn lifetime(environments: &[Environment], environment: usize, name: &str) -> String {
+fn lifetime(
+    environments: &[Environment],
+    environment: usize,
+    name: &str,
+    site: usize,
+    parameter: usize,
+) -> Label {
     environments[environment]
         .lifetimes
         .get(name)
         .cloned()
-        .unwrap_or_else(|| name.to_string())
+        .unwrap_or_else(|| {
+            if name == "'static" {
+                Label::Static
+            } else if name.is_empty() || name == "'_" {
+                Label::Elided { site, parameter }
+            } else {
+                Label::Lifetime(name.to_string())
+            }
+        })
 }
 impl Compiler<'_> {
     fn signature_leaves(
@@ -161,14 +175,7 @@ impl Compiler<'_> {
                     },
                     k::TypeKind::Ref { inner, mutable },
                 ) => {
-                    let name = lifetime(&environments, environment, name);
-                    let label = if name == "'static" {
-                        Label::Static
-                    } else if name.is_empty() || name == "'_" {
-                        Label::Elided
-                    } else {
-                        Label::Lifetime(name)
-                    };
+                    let label = lifetime(&environments, environment, name, syntax, 0);
                     if !borrowed || !mutable || purpose == LeafPurpose::Regions {
                         result.push(Leaf {
                             borrowed,
@@ -298,21 +305,37 @@ impl Compiler<'_> {
                         };
                     let mut nested = Environment::default();
                     let mut arguments = named.args.iter().peekable();
-                    for parameter in parameters {
+                    for (parameter_index, parameter) in parameters.iter().enumerate() {
                         if parameter.lifetime {
                             let name = if let Some(argument) = arguments.peek() {
-                                if let a::Type::Path(path) = &self.source.types[**argument].kind {
+                                let argument = **argument;
+                                if let a::Type::Path(path) = &self.source.types[argument].kind {
                                     if path.name.starts_with('\'') {
                                         arguments.next();
-                                        lifetime(&environments, environment, &path.name)
+                                        lifetime(
+                                            &environments,
+                                            environment,
+                                            &path.name,
+                                            argument,
+                                            0,
+                                        )
                                     } else {
-                                        String::new()
+                                        Label::Elided {
+                                            site: syntax,
+                                            parameter: parameter_index,
+                                        }
                                     }
                                 } else {
-                                    String::new()
+                                    Label::Elided {
+                                        site: syntax,
+                                        parameter: parameter_index,
+                                    }
                                 }
                             } else {
-                                String::new()
+                                Label::Elided {
+                                    site: syntax,
+                                    parameter: parameter_index,
+                                }
                             };
                             nested.lifetimes.insert(parameter.name.clone(), name);
                         } else if let Some(argument) = arguments.next() {
@@ -349,6 +372,49 @@ impl Compiler<'_> {
         result
     }
 
+    pub(super) fn return_elision(
+        &self,
+        source_index: usize,
+        locals: &[k::Local],
+        result: usize,
+    ) -> Result<Option<Label>> {
+        let source = &self.source.functions[source_index];
+        if !self
+            .region_leaves(source_index, source.result, result)
+            .iter()
+            .any(|leaf| matches!(leaf.label, Label::Elided { .. }))
+        {
+            return Ok(None);
+        }
+        let mut regions = BTreeSet::new();
+        for (index, parameter) in source.params.iter().enumerate() {
+            for leaf in self.region_leaves(source_index, parameter.ty, locals[index].ty) {
+                if !matches!(
+                    leaf.label,
+                    Label::Lifetime(_) | Label::Static | Label::Elided { .. }
+                ) {
+                    continue;
+                }
+                if index == 0
+                    && parameter.name == "self"
+                    && leaf.path.is_empty()
+                    && matches!(self.types[locals[0].ty].kind, k::TypeKind::Ref { .. })
+                {
+                    return Ok(Some(leaf.label));
+                }
+                regions.insert(leaf.label);
+            }
+        }
+        if regions.len() == 1 {
+            return Ok(regions.pop_first());
+        }
+        Err(super::err(
+            self.source.types[source.result].span,
+            "E_BORROW",
+            "elided output region needs one source region or a borrowed receiver",
+        ))
+    }
+
     pub(super) fn return_leaf_contract(
         &self,
         source_index: usize,
@@ -366,7 +432,7 @@ impl Compiler<'_> {
                 .all(|leaf| matches!(leaf.label, Label::Static))
             || outputs
                 .iter()
-                .any(|leaf| matches!(leaf.label, Label::Unknown | Label::Elided))
+                .any(|leaf| matches!(leaf.label, Label::Unknown | Label::Elided { .. }))
         {
             return Ok(None);
         }
@@ -389,7 +455,7 @@ impl Compiler<'_> {
         for leaf in outputs {
             let origin = match &leaf.label {
                 Label::Static => k::LeafOrigin::Static,
-                Label::Unknown | Label::Elided => return Ok(None),
+                Label::Unknown | Label::Elided { .. } => return Ok(None),
                 label => {
                     let Some(candidates) = inputs.get(label) else {
                         return Ok(None);
@@ -478,7 +544,7 @@ impl Compiler<'_> {
             .any(|leaf| matches!(leaf.label, Label::Parameter(_, _) | Label::Associated(_, _)))
             || outputs
                 .iter()
-                .any(|leaf| matches!(leaf.label, Label::Unknown | Label::Elided))
+                .any(|leaf| matches!(leaf.label, Label::Unknown | Label::Elided { .. }))
         {
             return None;
         }

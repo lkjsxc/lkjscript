@@ -381,6 +381,12 @@ impl Builder<'_, '_> {
         borrow: Option<bool>,
     ) -> Result<usize> {
         let node = self.compiler.source.patterns[pattern].clone();
+        if let a::Pattern::Path(path)
+        | a::Pattern::Variant { path, .. }
+        | a::Pattern::Struct { path, .. } = &node.kind
+        {
+            self.explicit_type_arguments(&path.args, node.span)?;
+        }
         // Match ergonomics follow references only for structural/literal forms.
         if !matches!(
             node.kind,
@@ -883,11 +889,17 @@ impl Builder<'_, '_> {
     ) -> Result<()> {
         match &plan.nodes[id].kind {
             PatternKind::Bind { name, borrow, .. } => {
+                let binding_source = place.clone();
                 let value = match borrow {
                     Some(mutable) => self.borrow(place, *mutable, line)?,
                     None if targets.guard => self.borrow(place, false, line)?,
                     None => self.read(place, line)?,
                 };
+                self.annotation_binding(
+                    &binding_source,
+                    targets.destinations[name],
+                    borrow.is_some(),
+                );
                 self.emit(
                     k::Op::Assign {
                         place: k::Place::local(targets.destinations[name]),
@@ -1062,11 +1074,13 @@ impl Builder<'_, '_> {
         };
         self.establish_binding_tags(&bindings, &mut established, line);
         for binding in bindings {
+            let source = binding.place.clone();
             let value = match binding.borrow {
                 Some(mutable) => self.borrow(binding.place, mutable, line)?,
                 None => self.read(binding.place, line)?,
             };
-            self.bind_name(binding.name, binding.mutable, value, line);
+            let destination = self.bind_name(binding.name, binding.mutable, value, line);
+            self.annotation_binding(&source, destination, binding.borrow.is_some());
         }
         Ok(())
     }

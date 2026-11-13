@@ -921,7 +921,7 @@ fn mapped_call_provenance(
             let mut sources = Vec::new();
             let mut parents = Vec::new();
             let mut created = Vec::new();
-            let mut permissions = Vec::new();
+            let mut selected = Vec::new();
             let mut absent = false;
             for input in inputs {
                 let input = Place {
@@ -930,12 +930,13 @@ fn mapped_call_provenance(
                 };
                 let value = carried_provenance(state, types, function, &input, &holder, line)?;
                 absent |= !value.absent.is_empty();
-                for loan in value.loans {
-                    sources.extend(loan.sources);
-                    parents.extend(loan.parents);
-                    created.extend(loan.created);
-                    permissions.push(loan.effects);
-                }
+                selected.extend(value.loans);
+            }
+            let effects = state.effects.selection_permissions(&selected);
+            for loan in selected {
+                sources.extend(loan.sources);
+                parents.extend(loan.parents);
+                created.extend(loan.created);
             }
             if !sources.is_empty() {
                 if !exact {
@@ -957,7 +958,7 @@ fn mapped_call_provenance(
                     sources,
                     mutable,
                     parents,
-                    effects: scoped::common_permissions(permissions.iter()),
+                    effects,
                 });
                 if absent && optional {
                     result.absent.push(holder);
@@ -2245,14 +2246,16 @@ fn check_function_scoped(
     scope: Option<&scoped::Scope>,
 ) -> Result<(), Diagnostic> {
     let mut site = None;
-    check_function_body(program, function, facts, &mut site, None, scope).map_err(|mut problem| {
-        if let Some((line, column)) = site {
-            if problem.line == line {
-                problem.column = column;
+    check_function_body(program, function, facts, &mut site, None, scope, None).map_err(
+        |mut problem| {
+            if let Some((line, column)) = site {
+                if problem.line == line {
+                    problem.column = column;
+                }
             }
-        }
-        problem
-    })
+            problem
+        },
+    )
 }
 fn check_function_body(
     program: &Program,
@@ -2261,6 +2264,7 @@ fn check_function_body(
     site: &mut Option<(usize, usize)>,
     mut observation: Option<&mut ReturnObservation>,
     scope: Option<&scoped::Scope>,
+    mut locals: Option<&mut scoped::LocalPass<'_>>,
 ) -> Result<(), Diagnostic> {
     let types = &program.types;
     let mut state = State {
@@ -2306,6 +2310,9 @@ fn check_function_body(
         }
     }
     let input_regions = scoped::InputRegions::new(&state, types, function, scope)?;
+    if let Some(pass) = locals.as_deref_mut() {
+        pass.entry(scope, &input_regions, &mut state, types, function)?;
+    }
     // Keep the exact permitted source leaves. A common root alone would allow
     // a borrow of an unrelated scalar field to impersonate a stored reference.
     let return_origins = match &function.return_source {
@@ -2359,6 +2366,11 @@ fn check_function_body(
         *site = Some((line, instruction.column));
         state.site = *site;
         check_shape(program, facts, function, instruction)?;
+        if state.reachable {
+            if let Some(pass) = locals.as_deref_mut() {
+                pass.before(program, function, &state, instruction_index)?;
+            }
+        }
         match &instruction.op {
             Op::Else => {
                 let control = controls
@@ -3175,6 +3187,11 @@ fn check_function_body(
             Op::Trap { .. } => state.reachable = false,
             Op::If { .. } | Op::Else | Op::End | Op::Loop => {}
         }
+        if state.reachable {
+            if let Some(pass) = locals.as_deref_mut() {
+                pass.after(scope, &input_regions, &mut state, instruction_index)?;
+            }
+        }
     }
     if !controls.is_empty() {
         return Err(error(1, "E_K", "unclosed control block"));
@@ -3523,6 +3540,7 @@ fn observed_return_contract(
         facts,
         &mut site,
         Some(&mut observation),
+        None,
         None,
     )
     .map_err(|mut problem| {

@@ -18,6 +18,10 @@ for (const c of cases) {
     if (!kinds.has(c.kind)) throw new Error('unknown conformance kind: ' + c.kind);
     if (ids.has(c.id)) throw new Error('duplicate conformance id: ' + c.id);
     ids.add(c.id);
+    if (c.kind === 'output' && (!c.rust || typeof c.hex !== 'string' || !/^(?:[0-9a-fA-F]{2})*$/.test(c.hex)
+        || (c.ending !== 'normal' && !/^R[0-9]{4}$/.test(c.ending)))) {
+        throw new Error('output cases need a Rust oracle, hexadecimal bytes and an explicit ending: ' + c.id);
+    }
     if (c.kind === 'trap' && (c.rust || !/^R[0-9]{4}$/.test(c.code))) {
         throw new Error('trap cases need a runtime code and no Rust oracle; use output for Rust trap comparisons: ' + c.id);
     }
@@ -50,21 +54,28 @@ harness += '_ => std::process::exit(2), } }\n';
 const oracleSource = path.join(out, 'oracle.rs');
 const oracle = path.join(out, 'oracle');
 fs.writeFileSync(oracleSource, harness);
-const referenceResults = await oracleCache({suite:'conformance',harness,flags:'2024 overflow-checks=yes opt-level=1',negative:cases.filter(c=>c.rust&&c.kind!=='run'&&c.kind!=='output').map(c=>[c.id,Boolean(c.world),c.rustCode,fs.readFileSync(path.join(fixtures,c.file),'utf8')])},async()=>{
+const referenceResults = await oracleCache({suite:'conformance-positive',harness,flags:'2024 overflow-checks=yes opt-level=1'},async()=>{
  const compiled=await run('rustc',['--edition=2024','-C','overflow-checks=yes','-C','opt-level=1','-A','warnings',oracleSource,'-o',oracle]);
  if(!succeeded(compiled))throw new Error('Rust oracle did not build: '+diagnostic(compiled));
  const results={};
- for(const c of cases.filter(c=>c.rust)) {
-  let negativeSource=path.join(fixtures,c.file);
-  if(c.kind==='reject'&&c.world){
-   negativeSource=path.join(out,c.id+'.rs');
-   fs.writeFileSync(negativeSource,'mod __lkj_host {\n'+fs.readFileSync(path.join(root,'bridge/output.rs'),'utf8')+'\n}\nmod case {\n'+fs.readFileSync(path.join(fixtures,c.file),'utf8')+'\nuse crate::__lkj_host::{World,Stdout};\n}\n');
-  }
-  const result=c.kind==='run'||c.kind==='output'?await run(oracle,[c.id],{encoding:null}):await run('rustc',['--edition=2024','--crate-type=lib','--emit=metadata','-A','warnings',negativeSource,'-o',path.join(out,c.id+'.rmeta')],{encoding:null});
-  results[c.id]=packResult(result);
- }
+ for(const c of rustCases)results[c.id]=packResult(await run(oracle,[c.id],{encoding:null}));
  return results;
 });
+// A new rejection fixture must not invalidate every unchanged Rust rejection.
+// Cache each source with its complete host wrapper and the actual compiler flags.
+const negativeFlags=['--edition=2024','--crate-type=lib','--emit=metadata','-A','warnings'];
+for(const c of cases.filter(c=>c.rust&&c.kind!=='run'&&c.kind!=='output')){
+ let negativeSource=path.join(fixtures,c.file);
+ let source=fs.readFileSync(negativeSource,'utf8');
+ if(c.kind==='reject'&&c.world){
+  negativeSource=path.join(out,c.id+'.rs');
+  source='mod __lkj_host {\n'+fs.readFileSync(path.join(root,'bridge/output.rs'),'utf8')+'\n}\nmod case {\n'+source+'\nuse crate::__lkj_host::{World,Stdout};\n}\n';
+  fs.writeFileSync(negativeSource,source);
+ }
+ referenceResults[c.id]=await oracleCache({suite:'conformance-rejection',file:c.file,source,flags:negativeFlags},async()=>packResult(
+  await run('rustc',[...negativeFlags,negativeSource,'-o',path.join(out,c.id+'.rmeta')],{encoding:null})
+ ));
+}
 const actualRoutes = await runRoutes(binary,cases.map(c=>({path:path.join(fixtures,c.file),entry:c.entry,mode:c.kind==='reject'?'check':'run'})),{engines,output:out,encoding:null});
 for (const engine of engines) {
 const actualResults = actualRoutes[engine];

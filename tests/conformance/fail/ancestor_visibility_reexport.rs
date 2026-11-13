@@ -1,0 +1,5 @@
+mod outer {
+    pub mod inner { pub(in crate::outer) fn value() -> i64 { 42 } }
+    pub use self::inner::value;
+}
+pub fn probe() -> i64 { 0 }

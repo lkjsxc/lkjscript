@@ -78,6 +78,7 @@ fn region(program: &Program, scope: ModuleId, visibility: Visibility) -> Option<
         Visibility::Crate => Some(program.scopes[scope].crate_root),
         Visibility::Parent => program.scopes[scope].parent,
         Visibility::Private => Some(scope),
+        Visibility::Restricted(ancestor) => Some(ancestor),
     }
 }
 pub fn visible(program: &Program, owner: ModuleId, visibility: Visibility, from: ModuleId) -> bool {

@@ -24,10 +24,9 @@ transport preserves bounded incoming provenance. Loop backedges remain equality
 checks; reference-bearing writes still need an exact destination identity.
 Exact enum tag witnesses exclude inactive reference templates, and joins retain
 absence when a holder was moved on one edge and impossible on the other. A live
-holder on either feasible edge still conflicts. A new direct-K probe exposed a
-stale tag after changing an indexed witness; tags and saved predicates now track
-that index dependency. An already-captured pointer retains its fixed-address
-proof. The independent machine rejects all eight new forged-K negatives.
+holder on either feasible edge still conflicts. Tags and saved predicates track their
+index dependencies. An already-captured pointer retains its fixed-address proof.
+The independent machine rejects the retained forged-K negatives.
 
 Closures now lower to ordinary capture structs and statically selected
 Fn/FnMut/FnOnce functions. Shared, mutable, owned, nested, disjoint-field and
@@ -59,9 +58,11 @@ for loops over borrowed Vec/slice values and iterator values now lower to ordina
 source Iterator/IntoIterator calls, match, while and irrefutable let. The outer match
 keeps iterable temporaries alive; items and iterators clean up on every exit. Range
 loop binding patterns share that subsystem. Shared map/set iteration and source
-enumerate, skip, take, zip and same-type chain adapters now run. General iterator
-Item equality, owned/exclusive collection iteration and closure-taking adapters
-remain further work. Option/Result have source
+enumerate, skip, take, zip and same-type chain adapters now run. Source map/filter/filter_map/inspect adapters and fold/for_each consumers now
+compose with contextual Item/callable equations. The source any/all consumers
+short-circuit while retaining iterator position; temporary receivers are writable
+without changing named binding or shared-reference permissions. General associated Item equality
+and owned/exclusive collection iteration remain further work. Option/Result have source
 shared/exclusive views and owned combinators, including and/or, transpose,
 zip/unzip, flatten and in-place Option replacement/insertion. expect preserves
 the value/trap outcome but currently retains unwrap's fixed trap message.
@@ -104,12 +105,17 @@ serves the bootstrap compiler, not emitted programs. Source type inference now
 uses explicit traversal frames after the unchanged small-stack capacity test
 exposed recursion through deeply nested nominal types.
 
-Fourteen closure-taking Option/Result combinators now run as ordinary source:
+Seventeen closure-taking Option/Result combinators now run as ordinary source:
 map/map_or/map_or_else/and_then/or_else/unwrap_or_else on both, Option::filter,
-and Result::map_err. Default evaluation, short-circuiting and cleanup agree with
-independent expansions. Unique visible unconditional inherent headers can supply
+is_some_and/is_none_or/ok_or_else, and Result::map_err. Eager Option::ok_or also
+converts to Result. Option reference payloads support copied/cloned for both
+shared and mutable inputs under their respective Copy/Clone contracts.
+Default evaluation, short-circuiting and cleanup agree with
+independent expansions. Unique visible structurally compatible method headers can supply conditional
 closure argument equations; ordinary selection still proves visibility,
-prerequisites, precedence and callable kind.
+prerequisites, precedence and callable kind. Associated projections retain their
+canonical trait identity. Primitive signatures precede competing trait context,
+and incomplete census visibility cannot establish a unique method.
 
 Inferred closure results constrain expression shape without creating reborrow
 sites. Captured mutable references move through tuples, constructors, branches,
@@ -126,13 +132,29 @@ them to a finite monotone fixed point. Private annotations can only add diagnost
 parsed K cannot grant itself this authority. Mutable access to stored origins
 remains unsupported at opaque calls. General source-region safety is unfinished.
 
+Named local lifetime annotations now constrain every active store, including
+late initialization, aliases, fields, replacement and previously absent enum
+payloads. Checked storage transfers propagate requirements through earlier and
+later contents. Unused lifetime-only and generic definitions receive the same
+obligations. Closure construction proves exact captured-region requirements;
+body-owned metadata cannot escape discarded type probes. Declared views retain
+their own region restrictions across aliases and calls; mutable nested views
+preserve invariance. Result checks honor named and elided input/receiver regions.
+Ordinary K remains the independent concrete safety gate. Named borrowed slice-element inventories and
+external stored-origin mutation remain explicit boundaries.
+
+Vec is_empty/get/first/contains and extend_from_slice are ordinary library source.
+Shared views retain their owner; search uses element eq in order; extension clones
+in order under the declared Clone contract. Typed let-else bindings now survive
+statement temporary cleanup by their actual lexical binding identity.
+
 Destructor-free scalar/reference descriptor trees can be released while descendants
 borrow external owners. Actual addressed descriptor storage and custom/owned
 destructors retain ordinary protection. Ordinary selected constructors establish
 empty-variant evidence; joins discard templates inactive on every feasible edge.
 Guarded patterns still use cached pure tests when a guard consumes the scrutinee.
 
-Modern callback and stored-task programs print through captured Stdout. Data now
+Callback and stored-task programs print through captured Stdout. Data now
 excludes both intrinsic World and Stdout through structural containers; ordinary
 same-spelled types retain their identity. Retained-borrow errors name the place
 and both source locations.
@@ -146,125 +168,135 @@ regions cannot establish missing declarations.
 
 ## Observations and commands
 
-`B=target/debug/lkjscript`. Final candidate
-`R=target/contracts-final/lkjscript`, SHA-256
-`0040ff5280fb14bb6499792c5f843e9bb6585f564d1e53f7674961c573426c8d`.
-Details are disposable under target/. Timings use existing build/reference caches.
-
-The expanded execution/scaling freeze is `G=target/contracts-snapshot/lkjscript`,
-SHA-256 `5a236cc112dcdf14cc6a448f501cd9aa4812a1b88ed107f3de9499779aff1912`.
-The final delta filters private census artifacts, excludes Stdout from Data,
-adds places to retained-effect errors, and activates three stale capability
-fixtures. Final gate/conformance use R's state; larger generator/scale observations
-below explicitly use G.
+Final release snapshot: `R=target/collections-verified/lkjscript`, SHA-256
+`9057a0dcc5dfeaf96aafba1f9eddb4bee20d7f43f05c147e0dd97d8f20d2eab1`. The source tree and binary were
+unchanged during the final census and scale checks. Details remain disposable
+under target/. The routine timing below uses existing build/reference caches.
 
 | Observation | Command and seed | Result |
 | --- | --- | --- |
-| Routine native/K gate | `bash tools/check.sh` | **15.328 s**; 435 Cargo tests; 489 conformance passes, 4 pending, 397 Rust comparisons per route |
-| Gate parts | same command | format 0.412 s; host 0.062 s; release 0.026 s; Rust 14.757 s; lint 0.041 s; overlapping suites 14.808 s |
-| Suite parts | same command | conformance 8.753 s; values 2.989 s; verdicts 2.457 s; output 1.357 s; drops 2.901 s; sugars 6.953 s; closures 2.701 s |
-| All-route conformance | `LKJ_ENGINES=native,k,node node tools/conformance.mjs R` | **489 passes, 4 pending, 397 Rust comparisons** per route |
-| Independent examples, each route | `LKJ_ENGINE=native node tools/corpus.mjs G`; repeat with k/node | idioms **26/30**; ownership **26/30**; rejected **16/16** |
-| Values, all routes | `LKJ_ENGINES=native,k,node node tools/generators/value.mjs G 601 100` | 92 equal values; 8 equal traps |
-| Verdicts, all routes | `LKJ_ENGINES=native,k,node node tools/generators/verdict.mjs G 601 100` | 73 both reject; 26 equal values; 1 valid E_BORROW rejection |
-| Output, all routes | `LKJ_ENGINES=native,k,node node tools/generators/output.mjs G 601 50` | 39 equal normal exits; 11 equal traps |
+| Routine native/K gate | `bash tools/check.sh` | **16.414 s**; **439 Cargo tests**; 607 conformance passes, 4 pending, 514 Rust comparisons per route |
+| Gate parts | same command | format 0.442 s; host 0.061 s; release 0.027 s; Rust 15.811 s; lint 0.043 s; overlapping suites 15.861 s |
+| Suite parts | same command | conformance 13.192 s; values 3.104 s; verdicts 3.165 s; output 1.593 s; drops 3.523 s; sugars 12.748 s; closures 2.659 s |
+| Full all-route gate | `LKJ_GATE_ENGINES=native,k,node bash tools/check.sh` | **37.201 s**, including 14.079 s release rebuild and 21.024 s Rust tests/rebuild; all required checks pass |
+| All-route conformance | all-route gate; replay with `LKJ_ENGINES=native,k,node node tools/conformance.mjs "$R"` | **607 passes, 4 pending, 514 Rust comparisons** per route |
+| Independent examples, each route | `LKJ_ENGINE=native node tools/corpus.mjs "$R"`; repeat with k/node | idioms **26/30**; ownership **26/30**; rejected **16/16** |
+| Values, all routes | all-route gate; `LKJ_ENGINES=native,k,node node tools/generators/value.mjs "$R" 601 100` | 92 equal values; 8 equal traps |
+| Verdicts, all routes | all-route gate; `LKJ_ENGINES=native,k,node node tools/generators/verdict.mjs "$R" 601 100` | 73 both reject; 26 equal values; 1 valid E_BORROW rejection |
+| Output, all routes | all-route gate; `LKJ_ENGINES=native,k,node node tools/generators/output.mjs "$R" 601 50` | 39 equal normal exits; 11 equal traps |
 | Destruction, all routes | commands below: 1101–1104, 400 each; one-sided 1201, 300 | **1,900 equal outputs per route**; zero rejections or invalid cases |
-| Sugar/expansion pairs, all routes | `LKJ_ENGINES=native,k,node node tools/generators/sugar.mjs G 1901 147 target/contracts-next/sugars` | 122 equal normal exits; 25 equal traps; 49 families |
-| Closure/environment pairs, all routes | `LKJ_ENGINES=native,k,node node tools/generators/closures.mjs G 1501 176 target/contracts-next/closures` | **176 equal outputs per route**; 22 families |
-| Routine sugars, native/K | gate: 1301, 147 pairs | 117 equal normal exits; 30 equal traps |
+| Sugar/expansion pairs, all routes | all-route gate; `LKJ_ENGINES=native,k,node node tools/generators/sugar.mjs "$R" 1301 216` | **182 equal normal exits; 34 equal traps; 72 families** |
+| Closure/environment pairs, all routes | `LKJ_ENGINES=native,k,node node tools/generators/closures.mjs "$R" 1501 176 target/collections-verified/final-closures` | **176 equal outputs per route**; 22 families |
 | Routine closures, native/K | gate: 1501, 44 pairs | 44 equal outputs |
 | Routine destruction, native/K | gate: ONE_SIDED=1, 1201, 100 programs | 100 equal outputs |
 | Outside must-reject programs | included in conformance | all 26 reject, including r01/r02/r13/r17/r18/r19 |
 
-Other generated outcome classes are zero. The original b16 Option::map idiom now runs.
+Other generated outcome classes are zero. The gate now runs 216 sugar pairs and
+611 conformance cases, an increase of 69 pairs and 118 cases since the preceding
+checkpoint.
+Its 16.414 s warm time is slightly above the original 16 s reference; the
+performance objective has not been met in this observation.
 
 ```sh
-LKJ_ENGINES=native,k,node node tools/generators/drops.mjs G 1101 400 target/contracts-next/drops
+R=target/collections-verified/lkjscript
+LKJ_ENGINES=native,k,node node tools/generators/drops.mjs "$R" 1101 400 target/collections-verified/final-drops
 # Repeat for seeds 1102, 1103 and 1104.
-LKJ_ENGINES=native,k,node ONE_SIDED=1 node tools/generators/drops.mjs G 1201 300 target/contracts-next/drops
+LKJ_ENGINES=native,k,node ONE_SIDED=1 node tools/generators/drops.mjs "$R" 1201 300 target/collections-verified/final-drops
 ```
 
-Rust checks all 147 expansions and 141 sugar forms. Six compact 32-way stress forms
-exceed Rust's observed compilation envelope; all lkjscript routes and expansions
-execute them, and smaller equivalents remain Rust-checked. Closure pairs compare
-independently emitted environments and Rust. Caches include generator/source/seed
-and compiler identity. Every case starts with fresh execution state.
+Rust checks all 216 expansions and 210 sugar forms. Six compact 32-way stress
+forms exceed Rust's observed compilation envelope; all lkjscript routes and
+expansions execute them, and smaller equivalents remain Rust-checked. Closure
+pairs compare independently emitted environments and Rust. Caches include
+generator/source/seed and compiler identity. Conformance caches each Rust
+rejection source separately, including the host wrapper and flags; adding a
+fixture no longer invalidates every unchanged negative reference.
 
 The batch host checks once for requested routes and shares lowering while keeping
 execution independent. Optimized suites overlap the full debug Rust tests/lint.
-Timeouts require missing progress rather than merely a long batch. Direct-K trap
-fixtures must report exact runtime codes. CI was green at the preceding d8d83251
-checkpoint; each publication receives its own CI inspection.
+Timeouts require missing progress rather than merely a long batch. Every case
+starts with fresh execution state; direct-K traps require exact runtime codes.
+The retained named-local, typed-view, elision, capture, temporary-receiver and
+selected-result permission cases are required conformance checks. The overlap
+permission negative is rejected by the earlier ordinary borrow check; it is not
+evidence that the later private grant filter was reached.
 
 ### Compiler census
 
-Commands use final R and the same declared source library:
+Commands use final R and the same declared source library. The archived original
+source bytes were verified against Git:
 
 ```sh
 mkdir -p target/contracts-next/census-base
 git archive 80cd198a src | tar -x -C target/contracts-next/census-base
-R check --census target/contracts-next/census-base/src/lib.rs
-R check --census src/lib.rs
+"$R" check --census target/contracts-next/census-base/src/lib.rs
+"$R" check --census src/lib.rs
 ```
 
 | Unsupported syntax | Original sources | Current sources |
 | --- | ---: | ---: |
-| Anonymous impl Trait forms | 0 | 7 |
-| **Recognized unsupported sites** | **0** | **7** |
-| Separate syntax blocked regions | 3 | 16 |
+| Anonymous impl Trait forms | 0 | 8 |
+| **Recognized unsupported sites** | **0** | **8** |
+| Separate syntax blocked observations | 3 | 19 |
 
-The original sources still have two parse errors in associated Item equalities.
-Current sources also have parameter-pattern parse failures. Zero recognized
-unsupported forms does not establish complete parsing or compilation.
+All ten ancestor-restricted visibility sites now parse and resolve. The original
+sources still skip two associated Item-equality bounds. Syntax blockers comprise
+2 original / 18 current skipped items plus one semantic-phase marker for each.
+Zero recognized unsupported forms does not establish complete parsing or compilation.
 
-The second table reaches independent bodies previously blocked behind shared
-dependencies. Counts are observed diagnostic sites; incomplete regions remain
-separate.
+The second table reaches independent bodies behind incomplete shared
+dependencies. Counts are observed diagnostic sites, with blockers kept separate.
 
 | Observed semantic diagnostics | Original sources | Current sources |
 | --- | ---: | ---: |
-| Receiver-qualified missing methods | 281 | 390 |
-| Source-type diagnostics | 92 | 148 |
-| Names/imports | 19 | 32 |
-| **Total** | **392** | **570** |
-| Distinct receiver/method pairs | 57 | 76 |
+| Receiver-qualified missing methods | 155 | 270 |
+| Source-type diagnostics | 104 | 187 |
+| Names/imports | 19 | 37 |
+| **Total** | **278** | **494** |
+| Distinct receiver/method pairs | 54 | 71 |
 
-Source-type findings include inference/coercion limitations while reading the
-Rust-valid compiler; they need reductions before assignment to library work.
-Current coverage: 1,343 bodies present, 1,334 attempted, 1,150 returned inference
-facts, 148 failed, 36 blocked. Only 21 closed structural bodies reached ownership
-construction. Returning inference facts is weaker than proving a body. Overlapping
-blocked phase observations are 1,322 layout/ownership, 4,822 method lookup,
-13 resolution and 45 source types. The CLI retains reasons and locations.
+Source-type findings include inference/coercion limitations in the Rust-valid
+compiler; reduce them before assigning library work. The current declared source
+graph contains 1,432 bodies: 1,421 attempted, 1,192 returning inference facts,
+187 failed, 42 blocked. Only 21 closed structural bodies reached ownership
+construction. Returning inference facts is weaker than proving a body.
+Overlapping blocked-phase observations are 1,411 layout/ownership, 4,616 method
+lookup, 14 resolution and 53 source types; these are not additional feature counts.
 
 | Library family | Original missing-method sites | Current sites | Next work |
 | --- | ---: | ---: | --- |
-| Vec | 190 | 232 | is_empty/get/first/contains, then extension and element algorithms |
-| Option | 23 | 43 | ok_or_else/is_some_and/is_none_or; exact lazy/drop behavior |
-| Ordered map/set | 13 | 32 | Entry retention; disjoint origins for exclusive iteration |
-| Iterator adapters | 7 | 12 | Source I/F structs; checked Item/callable equations |
-| String/str | 18 | 27 | UTF-8-aware chars, splitting and trimming |
-| Scalar helpers | 24 | 44 | Source comparisons/classifiers; explicit bit contracts |
-| Slice | 6 | 0 | Original input retains first/to_vec gaps |
+| Vec | 47 | 90 | Extend under checked Item equality; then element mutation algorithms |
+| Source iterator types | 40 | 64 | FromIterator/collect, copied, find and further adapters |
+| Scalars | 24 | 41 | Source comparisons/classifiers; explicit bit contracts |
+| Ordered map/set | 12 | 36 | Entry retention and exclusive iteration contracts |
+| String/str | 18 | 22 | UTF-8-aware chars, splitting and trimming |
+| Option | 3 | 9 | Default-based extraction and dereference views |
+| Result | 5 | 5 | is_ok_and |
+| Other receivers | 2 | 3 | Resolve each declaration and its trait requirements |
+| Slice/array | 4 | 0 | Original input still exposes to_vec |
 
-Leading current sites: Vec::is_empty 68, get 45, extend 39, extend_from_slice 23,
-contains 15, first 8; BTreeMap::entry 23; Option::ok_or_else 22, is_some_and 13,
-is_none_or 4. Four Vec access/search helpers cover 136 observed sites.
-Rc, Cow, VecDeque, Index, Default, FromIterator, Range and i128 remain separate
-declaration/contract dependencies. Blocked uses provide no absence claims.
+Leading current pairs: Vec::extend 53, BTreeMap::entry 30, Map::collect 25 and
+Iter::copied 15. Across all receivers, collect has 30 sites and copied 17.
+The two original skipped bounds are IntoIterator<Item = bool> and
+IntoIterator<Item = (String, usize)>. Rc, Cow, VecDeque, Index, Default,
+FromIterator, Range and i128 remain declaration/contract dependencies.
+Blocked uses provide no absence claims; an unobserved method is not proved implemented.
 
 ### Scaling and native capacity
 
-On G: `node tools/scale/run.mjs G --families traits,refs,variants,fields
---sizes 2000,4000,8000 --repeat 3 --out target/scale/contracts-checkpoint`.
-These deterministic families have no random seed. Median check milliseconds:
+Quiet final-R command:
+`node tools/scale/run.mjs "$R" --families traits,refs,variants,fields
+--sizes 2000,4000,8000 --repeat 3 --verb check --engine native
+--out target/collections-verified/scale`.
+These deterministic families have no random seed. All 36 checks passed.
+Median whole-command check milliseconds:
 
 | Family | 2,000 / 4,000 / 8,000 | Ratios per doubling |
 | --- | --- | --- |
-| Traits | 165.745 / 333.746 / 680.559 | 2.014 / 2.039 |
-| Shared references | 66.309 / 113.839 / 213.743 | 1.717 / 1.878 |
-| Enum variants | 72.105 / 126.702 / 251.237 | 1.757 / 1.983 |
-| Struct fields | 50.784 / 81.462 / 144.651 | 1.604 / 1.776 |
+| Traits | 178.177 / 345.786 / 690.093 | 1.941 / 1.996 |
+| Shared references | 70.433 / 118.621 / 225.644 | 1.684 / 1.902 |
+| Enum variants | 76.108 / 135.542 / 255.729 | 1.781 / 1.887 |
+| Struct fields | 57.095 / 87.920 / 153.055 | 1.540 / 1.741 |
 
 The following capacity observations belong to the 5ee9930d native checkpoint,
 not a new maximum run of the expanded front end. They used release snapshot
@@ -305,7 +337,7 @@ and any colocated unit tests; line counts are not weighted proof obligations.
 
 | Responsibility | Lines |
 | --- | ---: |
-| K contract and safety gate | 6,522 |
+| K contract and safety gate | 7,792 |
 | Lowering, layout and lowered contract | 2,838 |
 | Source runtime and raw-memory binding | 597 |
 | WebAssembly encoder and metadata | 413 |
@@ -328,20 +360,23 @@ No new maximum run is claimed for this expanded front end. The old hand-built
 runtime, Node worker/retries and Linux main-stack adjustment are gone.
 Rust compiler thread reservation still supports recursive bootstrap paths.
 
-Named lifetime annotations on locals still have a definition-site gap: the
-retained named_local_region_duration reduction is accepted unused while Rust
-rejects it. An annotation on borrowed descriptor storage can constrain earlier
-and later assignments, so a forward-only check is insufficient. General opaque
-output/capture families and mutation of stored reference origins also remain
-open. Concrete specializations receive complete K provenance checks.
+Named local annotations and shortened typed views now have definition-site
+checks, including unused bodies, storage history, closure construction, fixed
+calls and named/elided results. Explicit generic type arguments containing named
+reference regions still need a type-instantiation contract and reject explicitly.
+Opaque callable output/capture families, external stored-origin mutation, named
+slice-element inventories and recursive projected view equations remain open.
+Concrete specializations still receive the independent K provenance checks.
 
-Other retained reductions cover bounded Option mutation precision, generic
-iterator stored-origin forwarding, same-region mutable tuple results, partial
-closure return annotations, contextual FnOnce reborrows and an unannotated
-Stdout capture. Four conformance cases remain pending: three concurrency imports
-and one opaque impl return. Owned reference-bearing containers, loop inclusion
-and general exclusive iteration still need contracts. One valid generated
-verdict remains rejected.
+Other retained reductions cover bounded Option mutation precision, absent-variant
+reference choice, Copy-reference Option cleanup, generic iterator stored-origin
+forwarding, same-region mutable tuple results, partial closure result annotations,
+contextual FnOnce reborrows, array-to-slice method receiver coercion and the
+pre-existing direct as_mut_slice promotion gap through a nested range projection.
+Four conformance cases remain pending: three concurrency imports and one opaque
+impl return. Owned reference-bearing containers, loop inclusion and general
+exclusive iteration still need contracts. One valid generated verdict remains
+rejected. The reduced named-local and inferred-Stdout gaps are now required tests.
 
 Definition plans cover inference and rigid method evidence. Borrow/copy/coercion
 construction, control, cleanup and part of instance construction still use the
@@ -349,13 +384,14 @@ existing elaborator. The recovered semantic table is partial. Compiler closure,
 declared file capabilities, the three-build hand-over test and removal of
 Rust/Node from compiler development remain future work.
 
-**Next action:** enforce named regions on local annotations through real binding
-and instruction identities, all stores (including replace and indirect storage
-history), and checked closure construction. Keep metadata private and
-transactional. In parallel, add ordinary Vec access/search helpers and
-closure-taking iterator adapters; solve associated Item/context equations
-without bypassing trait or origin proofs. Then address loop inclusion and
-reference-bearing collection ownership.
+**Next action:** check associated-type equalities in trait bounds and the explicit
+IntoIterator/Iterator Item relationship using canonical declaration identities
+and the existing region obligations. Then implement source Extend, FromIterator,
+Copied and Sum over that contract; do not infer equality from coincident concrete
+types. The compiler's skipped Item-equality bounds and the observed extend,
+collect and copied sites are the immediate probes. Continue explicit generic
+region contexts, opaque output/capture contracts, loop inclusion and
+reference-bearing collection ownership as separate stated obligations.
 
 `run file.rs --engine native|k|node` selects execution; `batch cases.tsv --engine
 native|k|node` selects one route; `batch cases.tsv --engines native,k,node`

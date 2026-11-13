@@ -2480,7 +2480,7 @@
     "id": "callable_associated_wrong_signature",
     "file": "fail/callable_associated_wrong_signature.rs",
     "kind": "reject",
-    "code": "E_TRAIT",
+    "code": "E_TYPE",
     "rust": true,
     "rustAccept": false,
     "rustCode": "E0599"
@@ -2883,7 +2883,7 @@
     "id": "callable_prerequisite_signature",
     "file": "fail/callable_prerequisite_signature.rs",
     "kind": "reject",
-    "code": "E_TRAIT",
+    "code": "E_TYPE",
     "pending": false,
     "rust": true,
     "rustCode": "E0631"
@@ -3910,5 +3910,1001 @@
     "code": "E_BORROW",
     "rust": true,
     "rustCode": "E0503"
+  },
+  {
+    "id": "option_predicates",
+    "file": "pass/option_predicates.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "option_result_conversion_views",
+    "file": "pass/option_result_conversion_views.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "option_result_conversion_mutable",
+    "file": "pass/option_result_conversion_mutable.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "option_predicate_result",
+    "file": "fail/option_predicate_result.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0308"
+  },
+  {
+    "id": "option_factory_arity",
+    "file": "fail/option_factory_arity.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0593"
+  },
+  {
+    "id": "option_factory_escape",
+    "file": "fail/option_factory_escape.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0597"
+  },
+  {
+    "id": "option_predicate_consumed",
+    "file": "fail/option_predicate_consumed.rs",
+    "kind": "reject",
+    "code": "E_MOVE",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0382"
+  },
+  {
+    "id": "vec_access",
+    "file": "pass/vec_access.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "vec_access_order",
+    "file": "output/vec_access_order.rs",
+    "kind": "output",
+    "ending": "normal",
+    "rust": true,
+    "hex": "6869585905040563"
+  },
+  {
+    "id": "vec_contains_order",
+    "file": "output/vec_contains_order.rs",
+    "kind": "output",
+    "ending": "normal",
+    "rust": true,
+    "hex": "656667586f0b4101020363"
+  },
+  {
+    "id": "vec_first_order",
+    "file": "output/vec_first_order.rs",
+    "kind": "output",
+    "ending": "normal",
+    "rust": true,
+    "hex": "676869580303040563"
+  },
+  {
+    "id": "vec_contains_left_trap",
+    "file": "output/vec_contains_left_trap.rs",
+    "kind": "output",
+    "ending": "R0005",
+    "rust": true,
+    "hex": "66675870"
+  },
+  {
+    "id": "vec_get_mutate_owner",
+    "file": "fail/vec_get_mutate_owner.rs",
+    "kind": "reject",
+    "rust": true,
+    "rustCode": "E0502",
+    "code": "E_BORROW",
+    "rustAccept": false
+  },
+  {
+    "id": "vec_first_drop_owner",
+    "file": "fail/vec_first_drop_owner.rs",
+    "kind": "reject",
+    "rust": true,
+    "rustCode": "E0505",
+    "code": "E_BORROW",
+    "rustAccept": false
+  },
+  {
+    "id": "vec_get_escape_owner",
+    "file": "fail/vec_get_escape_owner.rs",
+    "kind": "reject",
+    "rust": true,
+    "rustCode": "E0515",
+    "code": "E_BORROW",
+    "rustAccept": false
+  },
+  {
+    "id": "vec_contains_missing_eq",
+    "file": "fail/vec_contains_missing_eq.rs",
+    "kind": "reject",
+    "rust": true,
+    "rustCode": "E0277",
+    "code": "E_TRAIT",
+    "rustAccept": false
+  },
+  {
+    "id": "vec_contains_unbounded",
+    "file": "fail/vec_contains_unbounded.rs",
+    "kind": "reject",
+    "rust": true,
+    "rustCode": "E0277",
+    "code": "E_TRAIT",
+    "rustAccept": false
+  },
+  {
+    "id": "vec_get_nested_owner",
+    "file": "fail/vec_get_nested_owner.rs",
+    "kind": "reject",
+    "rust": true,
+    "rustCode": "E0505",
+    "code": "E_BORROW",
+    "rustAccept": false
+  },
+  {
+    "id": "vec_extend_slice",
+    "file": "pass/vec_extend_slice.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "vec_extend_missing_clone",
+    "file": "fail/vec_extend_missing_clone.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0599"
+  },
+  {
+    "id": "vec_extend_unbounded",
+    "file": "fail/vec_extend_unbounded.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0599"
+  },
+  {
+    "id": "vec_extend_self",
+    "file": "fail/vec_extend_self.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0502"
+  },
+  {
+    "id": "vec_extend_live_view",
+    "file": "fail/vec_extend_live_view.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0502"
+  },
+  {
+    "id": "iterator_closure_pipeline",
+    "file": "pass/iterator_closure_pipeline.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "iterator_closure_views",
+    "file": "pass/iterator_closure_views.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "iterator_projection_identity",
+    "file": "pass/iterator_projection_identity.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "iterator_contextual_header",
+    "file": "pass/iterator_contextual_header.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "capability_inferred_closure",
+    "file": "pass/capability_inferred_closure.rs",
+    "kind": "output",
+    "hex": "34320a",
+    "pending": false,
+    "rust": true,
+    "ending": "normal"
+  },
+  {
+    "id": "iterator_callback_consumed",
+    "file": "fail/iterator_callback_consumed.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "pending": false,
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "iterator_filter_fixed_input",
+    "file": "fail/iterator_filter_fixed_input.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "pending": false,
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "iterator_filter_retained_input",
+    "file": "fail/iterator_filter_retained_input.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "iterator_projection_wrong_trait",
+    "file": "fail/iterator_projection_wrong_trait.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "pending": false,
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "iterator_contextual_patterns",
+    "file": "pass/iterator_contextual_patterns.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "capability_primitive_method_priority",
+    "file": "pass/capability_primitive_method_priority.rs",
+    "kind": "output",
+    "hex": "2a",
+    "pending": false,
+    "rust": true,
+    "ending": "normal"
+  },
+  {
+    "id": "vector_primitive_method_priority",
+    "file": "pass/vector_primitive_method_priority.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "let_else_reference_annotation",
+    "file": "pass/let_else_reference_annotation.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "named_local_let_else",
+    "file": "fail/named_local_let_else.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0506"
+  },
+  {
+    "id": "named_local_duration",
+    "file": "fail/named_local_duration.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true,
+    "rustCode": "E0506"
+  },
+  {
+    "id": "named_local_delayed",
+    "file": "fail/named_local_delayed.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true,
+    "rustCode": "E0506"
+  },
+  {
+    "id": "named_local_replacement_old_parent",
+    "file": "fail/named_local_replacement_old_parent.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true,
+    "rustCode": "E0506"
+  },
+  {
+    "id": "named_local_replacement_new_parent",
+    "file": "fail/named_local_replacement_new_parent.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true,
+    "rustCode": "E0506"
+  },
+  {
+    "id": "named_local_alias_store",
+    "file": "fail/named_local_alias_store.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "named_local_replace_store",
+    "file": "fail/named_local_replace_store.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "named_local_field_store",
+    "file": "fail/named_local_field_store.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "named_local_absent_store",
+    "file": "fail/named_local_absent_store.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "named_local_storage_history",
+    "file": "fail/named_local_storage_history.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true,
+    "rustCode": "E0597"
+  },
+  {
+    "id": "named_local_storage_region",
+    "file": "fail/named_local_storage_region.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "named_local_shortened",
+    "file": "fail/named_local_shortened.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "named_local_shortened_absence",
+    "file": "fail/named_local_shortened_absence.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "named_local_nominal",
+    "file": "fail/named_local_nominal.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true,
+    "rustCode": "E0506"
+  },
+  {
+    "id": "named_local_wildcard",
+    "file": "fail/named_local_wildcard.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true,
+    "rustCode": "E0506"
+  },
+  {
+    "id": "named_local_unknown",
+    "file": "fail/named_local_unknown.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "pending": false,
+    "rust": true,
+    "rustCode": "E0261"
+  },
+  {
+    "id": "named_local_closure_short_capture",
+    "file": "fail/named_local_closure_short_capture.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true,
+    "rustCode": "E0597"
+  },
+  {
+    "id": "named_local_closure_reborrow",
+    "file": "fail/named_local_closure_reborrow.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true,
+    "rustCode": "E0506"
+  },
+  {
+    "id": "named_local_issuing_parent",
+    "file": "fail/named_local_issuing_parent.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "named_local_parent_reuse",
+    "file": "fail/named_local_parent_reuse.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true,
+    "rustCode": "E0506"
+  },
+  {
+    "id": "named_local_unused_generic",
+    "file": "fail/named_local_unused_generic.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true,
+    "rustCode": "E0499"
+  },
+  {
+    "id": "named_local_impl_region",
+    "file": "fail/named_local_impl_region.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true,
+    "rustCode": "E0506"
+  },
+  {
+    "id": "named_local_loop",
+    "file": "fail/named_local_loop.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true,
+    "rustCode": "E0506"
+  },
+  {
+    "id": "named_local_regions",
+    "file": "pass/named_local_regions.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "named_local_cleanup",
+    "file": "output/named_local_cleanup.rs",
+    "kind": "output",
+    "hex": "413161",
+    "ending": "normal",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "k_local_reference_duration",
+    "file": "k/local_reference_duration.k",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": false
+  },
+  {
+    "id": "named_local_probe_isolation",
+    "file": "pass/named_local_probe_isolation.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "named_local_probe_capture",
+    "file": "fail/named_local_probe_capture.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true,
+    "rustCode": "E0597"
+  },
+  {
+    "id": "ancestor_visibility",
+    "file": "pass/ancestor_visibility.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "ancestor_visibility_outside",
+    "file": "fail/ancestor_visibility_outside.rs",
+    "kind": "reject",
+    "code": "E_PRIVACY",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0603"
+  },
+  {
+    "id": "ancestor_visibility_field",
+    "file": "fail/ancestor_visibility_field.rs",
+    "kind": "reject",
+    "code": "E_PRIVACY",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0616"
+  },
+  {
+    "id": "ancestor_visibility_method",
+    "file": "fail/ancestor_visibility_method.rs",
+    "kind": "reject",
+    "code": "E_PRIVACY",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0624"
+  },
+  {
+    "id": "ancestor_visibility_reexport",
+    "file": "fail/ancestor_visibility_reexport.rs",
+    "kind": "reject",
+    "code": "E_PRIVACY",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0364"
+  },
+  {
+    "id": "ancestor_visibility_crate_reexport",
+    "file": "fail/ancestor_visibility_crate_reexport.rs",
+    "kind": "reject",
+    "code": "E_PRIVACY",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0364"
+  },
+  {
+    "id": "ancestor_visibility_sibling",
+    "file": "fail/ancestor_visibility_sibling.rs",
+    "kind": "reject",
+    "code": "E_PRIVACY",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0742"
+  },
+  {
+    "id": "ancestor_visibility_descendant",
+    "file": "fail/ancestor_visibility_descendant.rs",
+    "kind": "reject",
+    "code": "E_PRIVACY",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0742"
+  },
+  {
+    "id": "ancestor_visibility_alias",
+    "file": "fail/ancestor_visibility_alias.rs",
+    "kind": "reject",
+    "code": "E_PRIVACY",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0433"
+  },
+  {
+    "id": "ancestor_visibility_excess_super",
+    "file": "fail/ancestor_visibility_excess_super.rs",
+    "kind": "reject",
+    "code": "E_PRIVACY",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0433"
+  },
+  {
+    "id": "ancestor_visibility_cross_crate",
+    "file": "fail/ancestor_visibility_cross_crate.rs",
+    "kind": "reject",
+    "code": "E_PARSE",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "ancestor_visibility_enum_field",
+    "file": "fail/ancestor_visibility_enum_field.rs",
+    "kind": "reject",
+    "code": "E_PARSE",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0449"
+  },
+  {
+    "id": "option_copied_cloned",
+    "file": "pass/option_copied_cloned.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "option_copied_nested_view",
+    "file": "pass/option_copied_nested_view.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "option_copied_affine",
+    "file": "fail/option_copied_affine.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0277"
+  },
+  {
+    "id": "option_cloned_missing_trait",
+    "file": "fail/option_cloned_missing_trait.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0277"
+  },
+  {
+    "id": "option_copied_view_escape",
+    "file": "fail/option_copied_view_escape.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0515"
+  },
+  {
+    "id": "option_cloned_view_escape",
+    "file": "fail/option_cloned_view_escape.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0515"
+  },
+  {
+    "id": "iterator_reducers",
+    "file": "pass/iterator_reducers.rs",
+    "kind": "run",
+    "rust": true,
+    "value": "42",
+    "pending": false
+  },
+  {
+    "id": "iterator_reducers_nonfused",
+    "file": "pass/iterator_reducers_nonfused.rs",
+    "kind": "run",
+    "rust": true,
+    "value": "42",
+    "pending": false
+  },
+  {
+    "id": "iterator_any_order",
+    "file": "output/iterator_any_order.rs",
+    "kind": "output",
+    "rust": true,
+    "hex": "5068696a6b5851a25a3e075a3e065a3e053ec85a04045aca5b5363",
+    "ending": "normal"
+  },
+  {
+    "id": "iterator_all_nonfused_order",
+    "file": "output/iterator_all_nonfused_order.rs",
+    "kind": "output",
+    "rust": true,
+    "hex": "506768695851a35a3f055a3fc85a04045a03035b5363",
+    "ending": "normal"
+  },
+  {
+    "id": "iterator_any_owned_order",
+    "file": "output/iterator_any_owned_order.rs",
+    "kind": "output",
+    "rust": true,
+    "hex": "5066676851a45a40045a4003405b02c85363",
+    "ending": "normal"
+  },
+  {
+    "id": "iterator_all_predicate_trap",
+    "file": "output/iterator_all_predicate_trap.rs",
+    "kind": "output",
+    "rust": true,
+    "hex": "5065666751a55a41",
+    "ending": "R0005"
+  },
+  {
+    "id": "iterator_reducer_fn_once",
+    "file": "fail/iterator_reducer_fn_once.rs",
+    "kind": "reject",
+    "rust": true,
+    "rustAccept": false,
+    "code": "E_TRAIT",
+    "rustCode": "E0507"
+  },
+  {
+    "id": "iterator_reducer_wrong_item",
+    "file": "fail/iterator_reducer_wrong_item.rs",
+    "kind": "reject",
+    "rust": true,
+    "rustAccept": false,
+    "code": "E_TYPE",
+    "rustCode": "E0631"
+  },
+  {
+    "id": "iterator_reducer_wrong_result",
+    "file": "fail/iterator_reducer_wrong_result.rs",
+    "kind": "reject",
+    "rust": true,
+    "rustAccept": false,
+    "code": "E_TYPE",
+    "rustCode": "E0308"
+  },
+  {
+    "id": "iterator_reducer_owner_mutation",
+    "file": "fail/iterator_reducer_owner_mutation.rs",
+    "kind": "reject",
+    "rust": true,
+    "rustAccept": false,
+    "code": "E_BORROW",
+    "rustCode": "E0502"
+  },
+  {
+    "id": "iterator_reducer_receiver_conflict",
+    "file": "fail/iterator_reducer_receiver_conflict.rs",
+    "kind": "reject",
+    "rust": true,
+    "rustAccept": false,
+    "code": "E_BORROW",
+    "rustCode": "E0499"
+  },
+  {
+    "id": "temporary_mutable_receiver",
+    "file": "pass/temporary_mutable_receiver.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "temporary_receiver_immutable",
+    "file": "fail/temporary_receiver_immutable.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0596"
+  },
+  {
+    "id": "temporary_receiver_shared",
+    "file": "fail/temporary_receiver_shared.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0596"
+  },
+  {
+    "id": "temporary_receiver_immutable_field",
+    "file": "fail/temporary_receiver_immutable_field.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0596"
+  },
+  {
+    "id": "temporary_receiver_shared_mutable",
+    "file": "fail/temporary_receiver_shared_mutable.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0596"
+  },
+  {
+    "id": "typed_view_copy",
+    "file": "fail/typed_view_copy.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "typed_view_nominal",
+    "file": "fail/typed_view_nominal.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "typed_view_field_region",
+    "file": "fail/typed_view_field_region.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "typed_view_fixed_call",
+    "file": "fail/typed_view_fixed_call.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "typed_view_return",
+    "file": "fail/typed_view_return.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "typed_view_elided_return",
+    "file": "fail/typed_view_elided_return.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "typed_view_closure_return",
+    "file": "fail/typed_view_closure_return.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "typed_view_invariant_parameter",
+    "file": "fail/typed_view_invariant_parameter.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "typed_view_invariant_storage",
+    "file": "fail/typed_view_invariant_storage.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "elided_alias_ambiguity",
+    "file": "fail/elided_alias_ambiguity.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "elided_nominal_ambiguity",
+    "file": "fail/elided_nominal_ambiguity.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "named_type_argument",
+    "file": "fail/named_type_argument.rs",
+    "kind": "reject",
+    "code": "E_UNSUPPORTED",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "named_constructor_type_argument",
+    "file": "fail/named_constructor_type_argument.rs",
+    "kind": "reject",
+    "code": "E_UNSUPPORTED",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "named_method_type_argument",
+    "file": "fail/named_method_type_argument.rs",
+    "kind": "reject",
+    "code": "E_UNSUPPORTED",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "named_pattern_type_argument",
+    "file": "fail/named_pattern_type_argument.rs",
+    "kind": "reject",
+    "code": "E_UNSUPPORTED",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "named_local_capture_replacement",
+    "file": "fail/named_local_capture_replacement.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0597"
+  },
+  {
+    "id": "typed_view_regions",
+    "file": "pass/typed_view_regions.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "scoped_scalar_result_write",
+    "file": "pass/scoped_scalar_result_write.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "scoped_selected_result_parent",
+    "file": "fail/scoped_selected_result_parent.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0506"
+  },
+  {
+    "id": "scoped_selected_result_overlap",
+    "file": "fail/scoped_selected_result_overlap.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0499"
   }
 ]

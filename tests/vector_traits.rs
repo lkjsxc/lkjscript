@@ -660,3 +660,18 @@ pub fn derived_holder()->i64 {
         &expected,
     );
 }
+
+#[test]
+fn source_access_and_search_traits_are_exercised_explicitly_by_rust() {
+    let observations = rust_observations(
+        include_str!("fixtures/vec_source_helpers.rs"),
+        &["source_vec_helpers_probe", "source_vec_extend_probe"],
+    );
+    assert_eq!(
+        observations,
+        vec![
+            ("source_vec_helpers_probe".to_string(), 42),
+            ("source_vec_extend_probe".to_string(), 42)
+        ]
+    );
+}

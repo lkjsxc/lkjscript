@@ -9,8 +9,11 @@ import { createHash } from 'node:crypto';
 import { run } from '../process.mjs';
 import { runRoutes } from '../batch.mjs';
 import { oracleCache, packResult, unpackResult } from '../oracle.mjs';
-import { combinatorPair } from './combinators.mjs';
-const [binary='target/debug/lkjscript',seedText='1301',countText='147',output='target/generators']=process.argv.slice(2);
+import { combinatorPair, optionExtraPair, optionViewPair } from './combinators.mjs';
+import { sequencePair, extendSlicePair } from './sequence.mjs';
+import { iteratorClosurePair } from './iterator_closures.mjs';
+import { iteratorReducerPair } from './iterator_reducers.mjs';
+const [binary='target/debug/lkjscript',seedText='1301',countText='216',output='target/generators']=process.argv.slice(2);
 const bin=path.resolve(binary),count=Number(countText),dir=path.resolve(output,`sugar-${seedText}`);
 const engines=(process.env.LKJ_ENGINES||'native,k').split(',');
 const compareRust=process.env.LKJ_SUGAR_RUST!=='0';
@@ -26,7 +29,7 @@ const rangeExpansion="fn invalid_range(world:&mut World,bytes:&[u8]){let invalid
 function pair(index){
  const a=1+random(50),b=1+random(50),c=1+random(50),marker=60+random(30),yes=random(2)===0?'true':'false';
  let sugar='',expanded='',sugarHelpers='',expandedHelpers='';let family,rustSugar=true;
- switch(index%49){
+ switch(index%72){
   case 0:{family='if-let';const value=`if ${yes} { Some(make(&mut world,${a}u8)) } else { None }`;
    sugar=`if let Some(m) = ${value} { tick(&mut world,${marker}u8); drop(m); } else { tick(&mut world,${b}u8); }`;
    expanded=`match ${value} { Some(m) => { tick(&mut world,${marker}u8); drop(m); }, None => tick(&mut world,${b}u8) }`;break;}
@@ -36,7 +39,10 @@ function pair(index){
   case 2:{family='let-else';const header='fn take(world: &mut World, yes: bool) -> Option<M> { ';const value=`if yes { Some(make(world,${a}u8)) } else { None }`;const tail=` tick(world,${marker}u8); Some(m) }`;
    sugarHelpers=header+`let Some(m) = (${value}) else { tick(world,${b}u8); return None; };`+tail;
    expandedHelpers=header+`let m = match ${value} { Some(m) => m, None => { tick(world,${b}u8); return None; } };`+tail;
-   sugar=expanded=`let answer=take(&mut world,${yes}); tick(&mut world,${c}u8); drop(answer);`;break;}
+   sugar=expanded=`let answer=take(&mut world,${yes}); tick(&mut world,${c}u8); drop(answer);`;
+   const shared=`let mut cell=${a}u8;`,referenceTail=`*slot=*slot+1u8;drop(slot);tick(&mut world,cell);`;
+   sugar+=shared+'let Some(slot):Option<&mut u8>=Some(&mut cell) else{return};'+referenceTail;
+   expanded+=shared+'let input:Option<&mut u8>=Some(&mut cell);let slot=match input{Some(slot)=>slot,None=>return};'+referenceTail;break;}
   case 3:{family='result-question';const header=`fn step(world: &mut World, yes: bool) -> Result<M,M> { let input: Result<M,M> = if yes { Ok(make(world,${a}u8)) } else { Err(make(world,${b}u8)) }; `;const tail=` tick(world,${marker}u8); Ok(m) }`;
    sugarHelpers=header+'let m = input?;'+tail;
    expandedHelpers=header+'let m = match input { Ok(m) => m, Err(e) => return Err(e) };'+tail;
@@ -272,7 +278,20 @@ fn result_view_mut(value:&mut Result<M,M>)->Result<&mut M,&mut M>{match value{Ok
    expanded=prefix+'let mut key=1u8;while key<=2{tick(&mut world,key);tick(&mut world,map.get(&key).unwrap().b);key=key+1;}tick(&mut world,1);tick(&mut world,2);tick(&mut world,map.get(&1u8).unwrap().b);tick(&mut world,map.get(&2u8).unwrap().b);tick(&mut world,1);tick(&mut world,2);';break;}
 
   case 42:case 43:case 44:case 45:case 46:case 47:case 48:{
-   ({family,sugar,expanded,sugarHelpers,expandedHelpers}=combinatorPair(index%49-42,random));break;}
+   ({family,sugar,expanded,sugarHelpers,expandedHelpers}=combinatorPair(index%72-42,random));break;}
+
+  case 49:case 50:case 51:case 52:{
+   ({family,sugar,expanded,sugarHelpers,expandedHelpers}=optionExtraPair(index%72-49,random));break;}
+
+  case 53:case 54:case 55:case 56:{
+   ({family,sugar,expanded,sugarHelpers,expandedHelpers}=sequencePair(index%72-53,random));break;}
+  case 57:case 58:case 59:case 60:case 61:case 62:{
+   ({family,sugar,expanded,sugarHelpers,expandedHelpers}=iteratorClosurePair(index%72-57,random));break;}
+  case 63:{({family,sugar,expanded,sugarHelpers,expandedHelpers}=extendSlicePair(random));break;}
+  case 64:case 65:case 66:case 67:case 68:case 69:{
+   ({family,sugar,expanded,sugarHelpers,expandedHelpers}=iteratorReducerPair(index%72-64,random));break;}
+  case 70:case 71:{
+   ({family,sugar,expanded,sugarHelpers,expandedHelpers}=optionViewPair(index%72-70,random));break;}
 
  }
  const tail=`\ntick(&mut world,${90+random(10)}u8);`+(random(9)===0?' assert!(false);':'');
@@ -281,7 +300,7 @@ fn result_view_mut(value:&mut Result<M,M>)->Result<&mut M,&mut M>{match value{Ok
 fs.mkdirSync(dir,{recursive:true});
 const pairs=Array.from({length:count},(_,i)=>pair(i)),files=[];
 for(let i=0;i<count;i++)for(const variant of ['sugar','expanded']){const file=path.join(dir,`${i}-${variant}.rs`);fs.writeFileSync(file,pairs[i][variant]);files.push(file);}
-const generatorHash=createHash('sha256').update(fs.readFileSync(new URL(import.meta.url))).update(fs.readFileSync(new URL('./combinators.mjs',import.meta.url))).digest('hex');
+const generatorHash=createHash('sha256').update(fs.readFileSync(new URL(import.meta.url))).update(fs.readFileSync(new URL('./combinators.mjs',import.meta.url))).update(fs.readFileSync(new URL('./sequence.mjs',import.meta.url))).update(fs.readFileSync(new URL('./iterator_closures.mjs',import.meta.url))).update(fs.readFileSync(new URL('./iterator_reducers.mjs',import.meta.url))).digest('hex');
 let references;
 if(compareRust){
  let source='#![allow(warnings)]\nmod host {\n'+fs.readFileSync('bridge/output.rs','utf8')+'\n}\n';

@@ -182,3 +182,11 @@ fn recovered_names_propagate_through_resolved_globs_without_beating_strong_bindi
     }
     assert!(observed(&report, "shadow::independent", "E_TYPE"));
 }
+
+#[test]
+fn uncertain_trait_visibility_cannot_select_a_contextual_header() {
+    let report = analyze("contextual_trait_import");
+    assert!(observed(&report, "independent", "E_TYPE"));
+    assert!(!observed(&report, "dependent", "E_TYPE"));
+    assert!(blocked(&report, "dependent", "method lookup"));
+}

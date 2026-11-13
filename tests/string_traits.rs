@@ -26,6 +26,9 @@ mod integer;
 #[path = "../library/iter.rs"]
 #[allow(dead_code)]
 mod iter;
+#[path = "../library/sequence.rs"]
+#[allow(dead_code)]
+mod sequence;
 
 use lkjscript::compiler;
 use lkjscript::source::{SourceBundle, SourceInput};

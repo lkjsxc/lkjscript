@@ -1,6 +1,7 @@
 //! The source prelude. These enums own their payloads and work with affine values.
 pub use crate::integer::CheckedArithmetic;
 pub use crate::iter::{IntoIterator, IterSource, Iterator, IteratorExt};
+pub use crate::sequence::{VecAccess, VecContains, VecExtend};
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Option<T> {
     None,
@@ -78,6 +79,34 @@ impl<T> Option<T> {
 
     pub fn is_none(&self) -> bool {
         !self.is_some()
+    }
+
+    pub fn is_some_and<F: FnOnce(T) -> bool>(self, predicate: F) -> bool {
+        match self {
+            Option::Some(value) => predicate(value),
+            Option::None => false,
+        }
+    }
+
+    pub fn is_none_or<F: FnOnce(T) -> bool>(self, predicate: F) -> bool {
+        match self {
+            Option::Some(value) => predicate(value),
+            Option::None => true,
+        }
+    }
+
+    pub fn ok_or<E>(self, error: E) -> Result<T, E> {
+        match self {
+            Option::Some(value) => Result::Ok(value),
+            Option::None => Result::Err(error),
+        }
+    }
+
+    pub fn ok_or_else<E, F: FnOnce() -> E>(self, error: F) -> Result<T, E> {
+        match self {
+            Option::Some(value) => Result::Ok(value),
+            Option::None => Result::Err(error()),
+        }
     }
 
     pub fn unwrap(self) -> T {
@@ -308,6 +337,42 @@ impl<T, E> Result<T, E> {
         match self {
             Result::Ok(value) => value,
             Result::Err(error) => function(error),
+        }
+    }
+}
+
+impl<'a, T: Copy> Option<&'a T> {
+    pub fn copied(self) -> Option<T> {
+        match self {
+            Option::Some(value) => Option::Some(*value),
+            Option::None => Option::None,
+        }
+    }
+}
+
+impl<'a, T: Clone> Option<&'a T> {
+    pub fn cloned(self) -> Option<T> {
+        match self {
+            Option::Some(value) => Option::Some((*value).clone()),
+            Option::None => Option::None,
+        }
+    }
+}
+
+impl<'a, T: Copy> Option<&'a mut T> {
+    pub fn copied(self) -> Option<T> {
+        match self {
+            Option::Some(value) => Option::Some(*value),
+            Option::None => Option::None,
+        }
+    }
+}
+
+impl<'a, T: Clone> Option<&'a mut T> {
+    pub fn cloned(self) -> Option<T> {
+        match self {
+            Option::Some(value) => Option::Some((*value).clone()),
+            Option::None => Option::None,
         }
     }
 }

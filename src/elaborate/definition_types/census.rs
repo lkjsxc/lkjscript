@@ -56,7 +56,9 @@ impl DefinitionTypes {
                 Shape::Array(_, _) => Receiver::Array,
                 Shape::Tuple(_) => Receiver::Tuple,
                 Shape::Rigid(name) => Receiver::Rigid(name),
-                Shape::Source(_) | Shape::Closure(_, _) | Shape::Never => return None,
+                Shape::Projected(_, _) | Shape::Source(_) | Shape::Closure(_, _) | Shape::Never => {
+                    return None;
+                }
             });
         }
     }
@@ -96,6 +98,27 @@ impl Infer<'_, '_> {
             }
         }
         Ok(())
+    }
+    pub(super) fn census_trait_visibility_complete(
+        &self,
+        scope: a::ModuleId,
+        span: a::Span,
+    ) -> bool {
+        self.census.is_none_or(|context| {
+            self.names
+                .uncertain_trait_import(&context.imports, scope, span)
+                .is_none()
+        })
+    }
+    pub(super) fn census_contextual_complete(&self, variable: Variable, name: &str) -> bool {
+        let Some(context) = self.census else {
+            return true;
+        };
+        let head = self.shape_head(variable);
+        context
+            .domains
+            .method_problem(head.as_deref(), name, false)
+            .is_none()
     }
     pub(super) fn census_inherent_complete(&self, variable: Variable, name: &str) -> bool {
         let Some(context) = self.census else {

@@ -562,7 +562,7 @@ fn reinitializing_an_absent_enum_leaf_restores_its_loan() {
         enum Maybe<'a> { None, Some(&'a i64) }
         fn inspect(value: &mut Maybe<'_>) {}
         fn leak<'a>(external: &'a i64) -> Maybe<'a> {
-            let mut value: Maybe<'a> = Maybe::None;
+            let mut value: Maybe<'_> = Maybe::None;
             inspect(&mut value);
             let local: i64 = 7;
             value = Maybe::Some(&local);

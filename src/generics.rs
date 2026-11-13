@@ -1514,6 +1514,17 @@ impl ImplementationIndex {
                 candidates.matching(Self::receiver_head(types, applications, ty))
             })
     }
+    /// Source inference uses this filter only to add conditional type equations.
+    /// Final implementation selection and prerequisite proofs remain separate.
+    pub(crate) fn trait_candidates_by_head(
+        &self,
+        trait_index: usize,
+        head: Option<&str>,
+    ) -> Vec<usize> {
+        self.by_trait
+            .get(&TraitIdentity::Declared(trait_index))
+            .map_or_else(Vec::new, |candidates| candidates.matching(head))
+    }
     /// A method name and nominal receiver exclude unrelated implementations;
     /// generic and structural targets still require the complete matcher.
     pub(crate) fn method_candidates(

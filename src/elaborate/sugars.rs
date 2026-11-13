@@ -150,14 +150,23 @@ impl Builder<'_, '_> {
         pattern: usize,
         expression: usize,
         expected: Option<usize>,
+        annotation: Option<a::TypeId>,
         line: usize,
     ) -> Result<()> {
         if matches!(
             self.compiler.source.patterns[pattern].kind,
             a::Pattern::Bind { by_ref: false, .. }
-        ) {
+        ) || (matches!(
+            self.compiler.source.patterns[pattern].kind,
+            a::Pattern::Wild
+        ) && expected
+            .is_some_and(|ty| matches!(self.compiler.types[ty].kind, k::TypeKind::Ref { .. })))
+        {
             let value = self.expr(expression, expected)?;
-            return self.bind(pattern, value, line);
+            self.annotation_initializer(annotation, k::Place::local(value.0))?;
+            let result = self.bind(pattern, value, line);
+            self.typed_bindings.clear();
+            return result;
         }
         let existing = match &self.compiler.source.exprs[expression].kind {
             a::Expr::Path(path) => {
@@ -196,6 +205,9 @@ impl Builder<'_, '_> {
                 "let binding requires an irrefutable pattern",
             ));
         }
-        self.bind_pattern_plan(&plan, root, place, line)
+        self.annotation_initializer(annotation, place.clone())?;
+        let result = self.bind_pattern_plan(&plan, root, place, line);
+        self.typed_bindings.clear();
+        result
     }
 }

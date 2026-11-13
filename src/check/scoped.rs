@@ -2,6 +2,33 @@
 //! These annotations cannot create CheckedProgram authority or alter parsed K.
 //! A fixed source region may retain a call argument after its descriptor dies.
 use super::*;
+mod locals;
+mod views;
+pub(super) use locals::LocalPass;
+pub(crate) use locals::{Annotation, Annotations, Construction, Environment};
+
+#[derive(Clone)]
+pub(crate) struct ResultLeaf {
+    pub projections: Vec<Projection>,
+    pub region: Region,
+    pub created: (usize, usize),
+    pub invariant: bool,
+}
+
+pub(crate) fn invariant_path(types: &[Type], mut ty: usize, path: &[Projection]) -> bool {
+    for projection in path {
+        if *projection == Projection::Deref
+            && matches!(types[ty].kind, TypeKind::Ref { mutable: true, .. })
+        {
+            return true;
+        }
+        let Some(next) = projected_type(types, ty, std::slice::from_ref(projection)) else {
+            return false;
+        };
+        ty = next;
+    }
+    false
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct Region {
@@ -24,11 +51,17 @@ pub(crate) struct Requirement {
     pub preserve: bool,
     pub mutable_storage: bool,
 }
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(crate) struct Scope {
     pub parameters: BTreeMap<InputLeaf, Region>,
+    pub parameter_sites: BTreeMap<InputLeaf, (usize, usize)>,
+    pub guarantees: BTreeMap<InputLeaf, BTreeSet<Region>>,
     pub outlives: BTreeMap<Region, BTreeSet<Region>>,
     pub calls: BTreeMap<usize, Vec<Requirement>>,
+    pub results: Vec<ResultLeaf>,
+    pub annotations: Annotations,
+    pub constructions: BTreeMap<usize, Vec<Construction>>,
+    pub environment: Option<Environment>,
 }
 impl Scope {
     fn outlives(&self, source: &Region, required: &Region) -> bool {
@@ -53,7 +86,14 @@ impl Scope {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum EffectKind {
+    Call,
+    Local,
+    LocalInput,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) struct EffectId {
+    kind: EffectKind,
     instruction: usize,
     requirement: usize,
 }
@@ -102,6 +142,19 @@ impl Effects {
                 .get(id)
                 .is_none_or(|effect| !overlaps_sources(&loan.sources, &effect.sources))
     }
+    // A checked result may select among disjoint input leaves. Its existing
+    // permission remains valid only if every overlapping alternative has that
+    // permission; an unrelated alternative cannot revoke or create authority.
+    pub(super) fn selection_permissions(&self, loans: &[Loan]) -> BTreeSet<EffectId> {
+        let candidates: BTreeSet<_> = loans
+            .iter()
+            .flat_map(|loan| loan.effects.iter().copied())
+            .collect();
+        candidates
+            .into_iter()
+            .filter(|id| loans.iter().all(|loan| self.permits(id, loan)))
+            .collect()
+    }
     pub(super) fn check(
         &self,
         sources: &[SourceBound],
@@ -125,7 +178,7 @@ impl Effects {
                     line,
                     "E_BORROW",
                     &format!(
-                        "access conflicts with {} call borrow retained for {} (created at {}:{})",
+                        "access conflicts with {} borrow retained for {} (created at {}:{})",
                         if effect.mutable {
                             "exclusive"
                         } else {
@@ -165,7 +218,13 @@ impl InputRegions {
         let Some(scope) = scope else {
             return Ok(result);
         };
-        for (input, region) in &scope.parameters {
+        let parameters = scope.parameters.iter().chain(
+            scope
+                .guarantees
+                .iter()
+                .flat_map(|(input, regions)| regions.iter().map(move |region| (input, region))),
+        );
+        for (input, region) in parameters {
             let place = Place {
                 local: input.index,
                 projections: input.projections.clone(),
@@ -197,7 +256,7 @@ impl InputRegions {
             if let Some(regions) = paths.get(path) {
                 return regions
                     .iter()
-                    .all(|region| scope.outlives(region, required));
+                    .any(|region| scope.outlives(region, required));
             }
             let Some((_, parent)) = path.split_last() else {
                 return false;
@@ -260,6 +319,7 @@ impl InputRegions {
                 {
                     retained.values.push((
                         EffectId {
+                            kind: EffectKind::Call,
                             instruction,
                             requirement: index,
                         },
@@ -473,12 +533,118 @@ pub(crate) fn check_definitions(
     }
     let facts = TypeFacts::new(program);
     let mut problems = Vec::new();
+    let mut waiting = BTreeMap::new();
+    let mut parents = BTreeMap::<usize, BTreeSet<usize>>::new();
     for (index, scope) in scopes {
-        let function = &program.functions[*index];
-        if let Err(mut problem) = check_function_scoped(program, function, &facts, Some(scope)) {
+        let children: BTreeSet<_> = scope
+            .constructions
+            .values()
+            .flatten()
+            .map(|construction| construction.function)
+            .filter(|child| scopes.contains_key(child))
+            .collect();
+        waiting.insert(*index, children.len());
+        for child in children {
+            parents.entry(child).or_default().insert(*index);
+        }
+    }
+    let mut ready: BTreeSet<_> = waiting
+        .iter()
+        .filter_map(|(index, count)| (*count == 0).then_some(*index))
+        .collect();
+    let mut captures = BTreeMap::<usize, Vec<Annotation>>::new();
+    let mut checked = BTreeSet::new();
+    while let Some(index) = ready.pop_first() {
+        let function = &program.functions[index];
+        let mut scope = scopes[&index].clone();
+        for (instruction, constructions) in &scope.constructions {
+            for construction in constructions {
+                if let Some(requirements) = captures.get(&construction.function) {
+                    for requirement in requirements {
+                        let mut annotation = requirement.clone();
+                        annotation.place = construction.place.clone();
+                        annotation
+                            .place
+                            .projections
+                            .extend_from_slice(&requirement.place.projections);
+                        scope
+                            .annotations
+                            .checkpoints
+                            .entry(*instruction)
+                            .or_default()
+                            .push(annotation);
+                    }
+                }
+            }
+        }
+        let result = if scope.annotations.bindings.is_empty()
+            && scope.annotations.checkpoints.is_empty()
+            && scope.results.is_empty()
+            && scope.calls.is_empty()
+        {
+            Ok(())
+        } else {
+            let mut site = None;
+            let mut observation = locals::Observation::new(&scope, &program.types, function);
+            let mut observed = LocalPass::Observe(&mut observation);
+            check_function_body(
+                program,
+                function,
+                &facts,
+                &mut site,
+                None,
+                None,
+                Some(&mut observed),
+            )
+            .and_then(|()| {
+                site = None;
+                let requirements = observation.finish(&scope, &program.types, function)?;
+                let contract = requirements.capture_contract(&mut scope, &program.types, function);
+                captures.insert(index, contract);
+                let mut checked = LocalPass::Verify {
+                    requirements: &requirements,
+                    changed: Vec::new(),
+                };
+                check_function_body(
+                    program,
+                    function,
+                    &facts,
+                    &mut site,
+                    None,
+                    Some(&scope),
+                    Some(&mut checked),
+                )
+            })
+            .map_err(|mut problem| {
+                if let Some((line, column)) = site {
+                    if problem.line == line {
+                        problem.column = column;
+                    }
+                }
+                problem
+            })
+        };
+        if let Err(mut problem) = result {
             problem.file = function.file;
             problems.push(problem);
         }
+        checked.insert(index);
+        for parent in parents.get(&index).into_iter().flatten() {
+            let count = waiting.get_mut(parent).unwrap();
+            *count -= 1;
+            if *count == 0 {
+                ready.insert(*parent);
+            }
+        }
+    }
+    for index in scopes.keys().filter(|index| !checked.contains(index)) {
+        let mut problem = error(
+            1,
+            "E_UNSUPPORTED",
+            "recursive closure construction needs an explicit captured-region contract",
+        );
+        problem.file = program.functions[*index].file;
+        problems.push(problem);
     }
     problems
 }

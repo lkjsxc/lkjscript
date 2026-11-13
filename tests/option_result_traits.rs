@@ -220,6 +220,11 @@ fn directory() -> std::path::PathBuf {
 fn rust_library(directory: &std::path::Path, prelude: &str) -> String {
     std::fs::write(directory.join("prelude.rs"), prelude).unwrap();
     std::fs::write(
+        directory.join("sequence.rs"),
+        include_str!("../library/sequence.rs"),
+    )
+    .unwrap();
+    std::fs::write(
         directory.join("iter.rs"),
         include_str!("../library/iter.rs"),
     )
@@ -229,7 +234,7 @@ fn rust_library(directory: &std::path::Path, prelude: &str) -> String {
         include_str!("../library/integer.rs"),
     )
     .unwrap();
-    "#[path=\"prelude.rs\"]mod prelude;#[path=\"iter.rs\"]mod iter;#[path=\"integer.rs\"]mod integer;use prelude::{Option,Result};\n"
+    "#[path=\"prelude.rs\"]mod prelude;#[path=\"iter.rs\"]mod iter;#[path=\"integer.rs\"]mod integer;#[path=\"sequence.rs\"]mod sequence;use prelude::{Option,Result};\n"
         .to_string()
 }
 

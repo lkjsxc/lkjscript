@@ -1,6 +1,9 @@
 //! Source standard library, also buildable by rustc during bootstrap.
 mod prelude;
-pub use prelude::{CheckedArithmetic, IntoIterator, IterSource, Iterator, IteratorExt, Option, Result};
+pub use prelude::{
+    CheckedArithmetic, IntoIterator, IterSource, Iterator, IteratorExt, Option, Result,
+    VecAccess, VecContains, VecExtend,
+};
 pub mod bytes;
 pub mod char;
 pub mod fmt;
