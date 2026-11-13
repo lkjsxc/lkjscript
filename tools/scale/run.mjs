@@ -12,7 +12,7 @@ const sizes = option('--sizes', '8000,16000,32000').split(',').map(Number);
 const families = option('--families', 'funcs,ifs,match,boxes,vecs').split(',');
 const repeats = Number(option('--repeat', '3'));
 const verb = option('--verb', 'check');
-const engine = option('--engine', 'node');
+const engine = option('--engine', 'native');
 const out = path.resolve(option('--out', 'target/scale'));
 const timeout = Number(option('--timeout-ms', '180000'));
 fs.mkdirSync(out, {recursive: true});
@@ -30,7 +30,7 @@ for (const family of families) {
     for (let i = 0; i < repeats; i++) {
       const command = [verb, source];
       if (verb === 'run') command.push('--entry','probe','--engine',engine);
-      if (verb === 'build') command.push('-o',path.join(out, `${family}-${n}.wasm`));
+      if (verb === 'build') command.push('-o',path.join(out, `${family}-${n}.elf`));
       const start = performance.now();
       const result = await run(binary, command, {timeout, sampleMemory:true, env:{...process.env,LKJSCRIPT_TIMINGS:'1'}});
       const ms = performance.now()-start;
@@ -48,7 +48,7 @@ for (const family of families) {
     const stageNames = new Set(samples.flatMap(x=>x.stages.flatMap(s=>Object.keys(s).filter(k=>k.endsWith('_ms')))));
     const stageMedians = Object.fromEntries([...stageNames].map(name=>[name,median(samples.flatMap(x=>x.stages.filter(s=>name in s).map(s=>s[name])))]));
     const record = {...context,family,n,source_bytes:Buffer.byteLength(text),outcome:'ok',median_ms:Number(ms.toFixed(3)),ratio:previous ? Number((ms/previous).toFixed(3)) : null,sampled_peak_tree_rss_bytes:median(samples.map(x=>x.sampled_peak_tree_rss_bytes)),stages:stageMedians};
-    if (verb === 'build') record.emitted_bytes = fs.statSync(path.join(out, `${family}-${n}.wasm`)).size;
+    if (verb === 'build') record.emitted_bytes = fs.statSync(path.join(out, `${family}-${n}.elf`)).size;
     previous = ms;
     console.log(JSON.stringify(record)); fs.appendFileSync(path.join(out,'runs.jsonl'),JSON.stringify(record)+'\n');
   }

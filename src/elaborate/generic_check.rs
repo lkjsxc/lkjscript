@@ -895,6 +895,104 @@ impl Compiler<'_> {
         Ok(checked)
     }
 
+    pub(super) fn static_contract(
+        &mut self,
+        base: usize,
+        name: &str,
+        expression: a::ExprId,
+        span: a::Span,
+    ) -> Result<Option<Instance>> {
+        if self.contracts.is_some() {
+            let candidates: Vec<_> = self
+                .declared_methods(base, name)?
+                .into_iter()
+                .filter(|candidate| {
+                    self.source.functions[candidate.method]
+                        .params
+                        .first()
+                        .is_none_or(|p| p.name != "self")
+                })
+                .collect();
+            if candidates.len() > 1 {
+                return Err(err(
+                    span,
+                    "E_TRAIT",
+                    &format!(
+                        "associated function {name} is ambiguous between declared trait bounds"
+                    ),
+                ));
+            }
+            if let Some(witness) = candidates.into_iter().next() {
+                self.method_selections.insert(
+                    expression,
+                    MethodSelection {
+                        dereferences: 0,
+                        target: MethodTarget::Trait(TraitIdentity::Declared(witness.declaration)),
+                    },
+                );
+                return Ok(Some(Instance {
+                    source: witness.method,
+                    substitutions: witness.substitutions,
+                }));
+            }
+        } else if let Some(MethodSelection {
+            target: MethodTarget::Trait(identity),
+            ..
+        }) = self.method_selections.get(&expression).cloned()
+        {
+            if !self.satisfies_identity(base, &identity) {
+                return Err(err(
+                    span,
+                    "E_TRAIT",
+                    "associated function receiver lacks its checked trait bound",
+                ));
+            }
+            if let Some(witness) = self.implementation_witness(base, &identity) {
+                if let Some(source) = self.source.impls[witness.implementation]
+                    .methods
+                    .iter()
+                    .copied()
+                    .find(|index| self.source.functions[*index].name == name)
+                {
+                    let mut substitutions = witness.substitutions;
+                    substitutions.insert("Self".to_string(), base);
+                    return Ok(Some(Instance {
+                        source,
+                        substitutions,
+                    }));
+                }
+            }
+            return Err(err(
+                span,
+                "E_UNSUPPORTED",
+                &format!("selected associated function {name} has no executable implementation"),
+            ));
+        }
+        Ok(None)
+    }
+
+    pub(super) fn record_static_contract(
+        &mut self,
+        called: usize,
+        source: usize,
+        substitutions: BTreeMap<String, usize>,
+    ) {
+        if let a::FunctionOwner::Trait(owner) =
+            self.source.function_owner(a::FunctionId { index: source })
+        {
+            if let Some(contracts) = &mut self.contracts {
+                contracts.methods.insert(
+                    called,
+                    MethodWitness {
+                        declaration: owner.index,
+                        method: source,
+                        substitutions,
+                    },
+                );
+            }
+        }
+    }
+
     fn declared_methods(&mut self, base: usize, name: &str) -> Result<Vec<MethodWitness>> {
         let Some(contracts) = &self.contracts else {
             return Ok(Vec::new());
@@ -1209,7 +1307,10 @@ impl super::Builder<'_, '_> {
             self.infer_type(parameter.ty, value.1, &mut substitutions)?;
             values.push(value.0);
         }
-        let called = self.compiler.instantiate(index, substitutions)?;
+        let called = self
+            .compiler
+            .instantiate(index, substitutions)
+            .map_err(|problem| super::at_use_site(problem, span))?;
         let result = self.compiler.functions[called].result;
         let dst = self.temp(result);
         self.emit(

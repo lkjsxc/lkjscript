@@ -85,7 +85,7 @@ pub struct Local {
 }
 #[derive(Clone, PartialEq)]
 pub enum Op {
-    /// Immutable UTF-8 bytes with module-long storage. The checker validates bytes.
+    /// Immutable module-long bytes: a UTF-8 str or an exact-length u8 array.
     Text {
         dst: usize,
         bytes: Vec<u8>,

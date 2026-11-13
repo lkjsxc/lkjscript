@@ -1,38 +1,29 @@
 # Conformance
 
-Run `node tools/conformance.mjs` after building the compiler. The default route
-is native Linux x86-64; `LKJ_ENGINE=k` selects the independent machine and
-`LKJ_ENGINE=node` selects WebAssembly. `LKJSCRIPT_BIN` selects a compiler.
-`LKJ_ENGINES=native,k,node` checks each source once and executes it independently
-on all three routes. Lowering is shared by the two encoders. The routine gate
-runs native and K using the optimized compiler with release overflow checks.
-Full debug Rust tests remain in the gate and overlap the independent suites.
-A three-route run uses
-`LKJ_GATE_ENGINES=native,k,node bash tools/check.sh`.
+`node tools/conformance.mjs target/release/lkjscript` runs source/K case data.
+`LKJ_ENGINES=native,k` shares source checking and runs both independent execution
+routes. The routine gate uses those routes, Rust reference comparisons, and
+seeded value/verdict/output/destruction/sugar/closure generators.
 
-Source cases expose an ordinary `probe` function with a printable scalar result,
-or a World-taking `main` that writes bytes. Direct K fixtures exercise the
-safety contract without the source front end. Each batch case has fresh program
-state. The Rust oracle builds comparable positive cases together with overflow
-checks enabled; cached references include source and compiler identity.
-Rejection cases also check Rust's verdict and recorded reason code where applicable.
+`cases.json` declares expected values, output bytes, trap/diagnostic codes and
+optional trap lines. Source values expose a public `probe`; capability cases have
+a World-taking `main`. Direct K fixtures reach the independent safety gate.
+The Rust oracle checks comparable source behavior with overflow checks enabled.
+Pending source cases count as pending only for E_UNSUPPORTED/E_PARSE; a wrong
+result, unrelated diagnostic or incomplete process result fails the suite.
 
-`cases.json` records the intended result or diagnostic, whether Rust can
-express the case, and whether the lkjscript feature is still pending.
-A pending case counts as pending only after an explicit `E_UNSUPPORTED` or
-`E_PARSE` diagnostic. Acceptance with a wrong result, acceptance of a rejection
-case, or an unrelated diagnostic fails the suite. Remove the pending flag as a
-feature becomes implemented. Capability callback examples under `pending/`
-remain proposals until their library interfaces and contracts become concrete.
+Cases are regression evidence, not a score for language width. New features follow
+real compiler/tool consumers and fresh outside programs. Migrated backend cases
+preserve arithmetic edges, storage/copy/drop behavior and UTF-8 boundaries after
+removal of the WebAssembly host. Engine layout assertions disappeared with that
+engine; ordinary allocation/refusal checks use the native boundary fixtures.
 
-The seeded generators compare bytes and termination. Sugar and closure generators
-also produce explicit expansions, providing a reference that does not depend on
-Rust accepting the surface form. Keep seeds and reduced failures in Git; the
-runner writes detailed output and reference caches under `target/`.
+Each case receives fresh execution state. A missing-progress watchdog, subprocess
+memory budgets and output envelopes are test-runner choices, never acceptance
+limits. LKJ_GATE_JOBS controls parallel suite count. LKJ_RUN_MEMORY_BYTES changes
+the program runner's budget; LKJ_TEST_MEMORY_BYTES changes generator subprocess
+budgets. Seeds, expected observations and reduced failures stay in Git; disposable
+outputs and cached Rust comparisons stay under target/.
 
-Batch deadlines measure lack of completed cases, not total batch duration.
-A Node-only batch reports module preparation before running its modules together;
-preparation is never counted as a successful result. Missing/duplicate results and
-host failures fail the suite. Independent suites use the available host cores;
-`LKJ_GATE_JOBS` may select fewer concurrent suites. Process time and output
-envelopes belong to test runners and impose no language limits.
+`node tools/kc.mjs` compares the cargo-built independent K compiler with B0 over
+this data. That boundary comparison must not be called self-compilation.

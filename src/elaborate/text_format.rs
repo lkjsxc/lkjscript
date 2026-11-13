@@ -4,6 +4,31 @@ use super::{Builder, Result, a, err, k, place_type};
 use crate::syntax::formatting::{self, Part, Specification};
 use std::collections::BTreeMap;
 impl Builder<'_, '_> {
+    pub(super) fn text_equality_values(
+        &mut self,
+        operation: &str,
+        left: usize,
+        right: usize,
+        span: a::Span,
+    ) -> Result<(usize, usize)> {
+        let equal =
+            self.source_library_call("str", "__lkj_eq", BTreeMap::new(), vec![left, right], span)?;
+        if operation == "==" {
+            Ok(equal)
+        } else {
+            let dst = self.temp(k::BOOL);
+            self.emit(
+                k::Op::Unary {
+                    dst,
+                    op: "!".to_string(),
+                    src: equal.0,
+                },
+                span.line,
+            );
+            Ok((dst, k::BOOL))
+        }
+    }
+
     pub(super) fn source_library_call(
         &mut self,
         module: &str,

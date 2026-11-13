@@ -435,3 +435,45 @@ pub fn all<I: Iterator, F: FnMut(I::Item) -> bool>(iterator: &mut I, mut predica
     }
     true
 }
+
+/// Owned iteration reverses the storage once so every next is a constant-time pop.
+/// Remaining items are explicitly destroyed in source order when iteration ends.
+pub struct IntoIter<T> {
+    items: Vec<T>,
+}
+pub fn owned<T>(mut values: Vec<T>) -> IntoIter<T> {
+    let mut items: Vec<T> = Vec::new();
+    while values.len() > 0 {
+        items.push(values.pop().unwrap());
+    }
+    IntoIter { items }
+}
+impl<T> Iterator for IntoIter<T> {
+    type Item = T;
+    fn next(&mut self) -> Option<T> {
+        if self.items.len() == 0 {
+            None
+        } else {
+            Some(self.items.pop().unwrap())
+        }
+    }
+}
+impl<T> IntoIterator for IntoIter<T> {
+    type IntoIter = Self;
+    fn into_iter(self) -> Self {
+        self
+    }
+}
+impl<T> IntoIterator for Vec<T> {
+    type IntoIter = IntoIter<T>;
+    fn into_iter(self) -> IntoIter<T> {
+        owned(self)
+    }
+}
+impl<T> Drop for IntoIter<T> {
+    fn drop(&mut self) {
+        while self.items.len() > 0 {
+            self.items.pop();
+        }
+    }
+}

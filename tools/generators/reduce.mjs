@@ -217,14 +217,14 @@ function writeAtomic(file, content) {
 
 export function createEvaluator(binary, options = {}) {
   const engine = options.engine || 'node', entry = options.entry || 'probe', profile = options.profile || 'verdict';
-  if (!['node', 'k'].includes(engine) || !['value', 'verdict', 'output'].includes(profile)) throw new Error('invalid engine or profile');
+  if (!['native', 'k'].includes(engine) || !['value', 'verdict', 'output'].includes(profile)) throw new Error('invalid engine or profile');
   if (!/^[A-Za-z_][A-Za-z0-9_]*(::[A-Za-z_][A-Za-z0-9_]*)*$/.test(entry)) throw new Error('entry must be a Rust path');
   fs.mkdirSync(path.join(root, 'target'), {recursive: true});
   const directory = fs.mkdtempSync(path.join(root, 'target/reduce-'));
   const frozen = path.join(directory, 'lkjscript'), sourceFile = path.join(directory, 'case.rs');
   const rustSource = path.join(directory, 'oracle.rs'), rustCase = path.join(directory, 'oracle_case.rs'), oracle = path.join(directory, 'oracle');
   fs.copyFileSync(binary, frozen); fs.chmodSync(frozen, 0o700);
-  const runtimeFiles = ['bridge/run.mjs', 'bridge/output.mjs', 'bridge/output.rs', 'tools/process.mjs']
+  const runtimeFiles = ['bridge/output.rs', 'tools/process.mjs']
     .filter(file => fs.existsSync(path.join(root, file)));
   const runtimeHashes = Object.fromEntries(runtimeFiles.map(file => [file, hash(fs.readFileSync(path.join(root, file)))]));
   const shim = path.join(directory, 'output.rs');
@@ -272,12 +272,12 @@ export function createEvaluator(binary, options = {}) {
 }
 
 const usage = 'usage: node tools/generators/reduce.mjs <binary> <source.rs> <output.rs>'
-  + ' [--engine node|k] [--entry probe] [--category auto|CLASS]'
+  + ' [--engine native|k] [--entry probe] [--category auto|CLASS]'
   + ' [--profile verdict|value|output] [--timeout milliseconds]\n';
 async function main() {
   const args = process.argv.slice(2);
   if (args.includes('--help')) { process.stdout.write(usage); return; }
-  const positional = [], options = {engine: 'node', category: 'auto', profile: 'verdict'};
+  const positional = [], options = {engine: 'native', category: 'auto', profile: 'verdict'};
   for (let i = 0; i < args.length; i++) {
     if (!args[i].startsWith('--')) { positional.push(args[i]); continue; }
     const name = args[i].slice(2);

@@ -116,3 +116,82 @@ impl<T: Clone> VecExtend<T> for Vec<T> {
         }
     }
 }
+
+/// Mutation visits values in their original order and keeps affine ownership.
+pub trait VecMutate<T> {
+    fn retain<F: FnMut(&T) -> bool>(&mut self, predicate: F);
+}
+impl<T> VecMutate<T> for Vec<T> {
+    // Explicit replacement uses the declared primitive; mem::take is not provided.
+    #[allow(clippy::mem_replace_with_default)]
+    fn retain<F: FnMut(&T) -> bool>(&mut self, mut predicate: F) {
+        let mut remaining = crate::iter::owned(std::mem::replace(self, Vec::new()));
+        while let Option::Some(value) = crate::iter::__lkj_next(&mut remaining) {
+            if predicate(&value) {
+                self.push(value);
+            }
+        }
+    }
+}
+
+/// Stable merge sorting requires only checked indexing and owned Option slots.
+/// Each pass is linear; the number of passes grows logarithmically with length.
+pub trait VecSort<T: Ord> {
+    fn sort(&mut self);
+}
+impl<T: Ord> VecSort<T> for Vec<T> {
+    #[allow(clippy::mem_replace_with_default)]
+    fn sort(&mut self) {
+        let mut remaining = crate::iter::owned(std::mem::replace(self, Vec::new()));
+        let mut values: Vec<Option<T>> = Vec::new();
+        while let Option::Some(value) = crate::iter::__lkj_next(&mut remaining) {
+            values.push(Option::Some(value));
+        }
+        let count = values.len();
+        let mut width = 1usize;
+        while width < count {
+            let mut merged: Vec<Option<T>> = Vec::new();
+            let mut start = 0usize;
+            while start < count {
+                let left_count = if width < count - start {
+                    width
+                } else {
+                    count - start
+                };
+                let middle = start + left_count;
+                let right_count = if width < count - middle {
+                    width
+                } else {
+                    count - middle
+                };
+                let end = middle + right_count;
+                let mut left = start;
+                let mut right = middle;
+                while left < middle || right < end {
+                    let use_left = if left == middle {
+                        false
+                    } else if right == end {
+                        true
+                    } else {
+                        *values[left].as_ref().unwrap() <= *values[right].as_ref().unwrap()
+                    };
+                    if use_left {
+                        merged.push(values[left].take());
+                        left = left + 1;
+                    } else {
+                        merged.push(values[right].take());
+                        right = right + 1;
+                    }
+                }
+                start = end;
+            }
+            values = merged;
+            width = if width > count / 2 { count } else { width * 2 };
+        }
+        let mut index = 0usize;
+        while index < count {
+            self.push(values[index].take().unwrap());
+            index = index + 1;
+        }
+    }
+}

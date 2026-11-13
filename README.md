@@ -1,10 +1,10 @@
 # lkjscript
 
-A language designed for coherent ownership, explicit meaning and reliable work
-by agents. Generation two uses Rust-compatible source, an independently checked K
-core, one lowered representation and a source runtime. Cargo builds the bootstrap
-compiler. Its default output runs as static Linux x86-64 machine code without
-Node, libc or a dynamic loader.
+A Rust-compatible subset for reliable work by agents, with affine ownership,
+explicit capabilities and an independently checked K core. Cargo builds the
+bootstrap compiler. Its output is static Linux x86-64 machine code without Node,
+libc or a dynamic loader. The project is moving toward an owned compiler and tools;
+the production K compiler is the first self-compilation target.
 
 ```sh
 cargo build --release
@@ -14,35 +14,44 @@ cargo build --release
 bash tools/check.sh
 ```
 
-Source text in Git is the durable program. `check` is silent on success; `run`
-preserves World output and prints scalar entry results; `build` writes an ELF;
-`test` runs `#[test]` functions. `--engine k` selects the independent execution
-model. `--engine node` selects the optional memory64 WebAssembly route.
-`k` writes readable K; `trusted` lists implementation boundaries. See
-[language](docs/language.md), [status](docs/status.md) and
-[representation and host constraints](docs/limits.md).
+`check` is silent on success; `run` preserves World output and prints scalar
+entry results; `build` writes an ELF; `test` runs test functions. `--engine k`
+selects the independent execution model. `k` writes readable K, `runtime-k`
+exports the prepared source runtime, and `trusted` lists implementation boundaries.
+Native artifacts take execution extents from Linux at startup. Runner budgets
+are explicit host controls; they do not restrict accepted source.
 
-The runnable subset includes affine ownership with conditional initialization,
-multi-root views, per-leaf call origins, custom Drop, generics and traits, arrays,
-slices, Box and Vec. Patterns, guards, or-patterns, question-mark, struct update and
-value-producing breaks lower through the existing K operations. World-derived
-output is explicit. The source library loads through real module scopes with
-declaration identity, imports, visibility and prelude shadowing.
+The runnable subset includes conditional initialization, multi-root local views,
+per-leaf call origins, custom Drop, generics and traits, arrays, slices, Box and
+Vec. Patterns, guards, question-mark, closures and value-producing breaks lower
+through ordinary K operations. The source library provides text, iterators,
+formatting, ordered maps and collection algorithms. Heap containers own their
+contents; stored relationships use indices or owned values. World-derived
+output is explicit. Arguments, input and directory-relative files are the next
+capability work.
 
-The compiler takes declared source, library and runtime inputs. Natural-width
-layout, copy/drop/equality glue and runtime calls are applied once before
-encoding. Allocation, growth, UTF-8 validation and the iterative cleanup walker
-are source functions. Native and WebAssembly execute that same runtime; K keeps
-an independent owner model. Generic bodies are checked under declared constraints
-with method selections retained through specialization. Derived Clone/equality
-and source Option/Result, String and Vec traits execute.
+The compiler takes declared source, library and runtime inputs. Layout,
+copy/drop/equality glue and runtime calls are applied once. Allocation, growth,
+UTF-8 validation and cleanup are source functions. Native execution and the K
+machine provide independent semantic checks. A separate cargo-built `kc` uses
+the production K checker, lowering and native encoder without linking the source
+front end:
 
-The production binary encoders, canonical-name helper, JSON encoder and complete
-K representation module also run through the ordinary language pipeline, with
-Rust comparisons and source mutations. Closures lower to capture structs and statically selected Fn/FnMut/FnOnce calls;
-character/text operations, repeated vectors and formatting use source-library
-contracts. Complete generic witness/lifetime contracts, collection iteration,
-range slicing, task scopes and compiler self-compilation remain unfinished.
+```sh
+./target/release/lkjscript k examples/hello.rs > target/hello.k
+./target/release/lkjscript runtime-k > target/runtime.k
+./target/release/kc target/hello.k --runtime target/runtime.k -o target/hello-kc
+node tools/kc.mjs
+```
 
-Generation one is preserved on the `generation-one` branch. Its compiler, store,
-services and formats are frozen and are not generation-two dependencies.
+That boundary now has byte-identity observations; it is not yet a self-built
+compiler. [Status](docs/status.md) records current evidence and open obligations.
+[Direction](docs/direction.md) defines the consumer-led route out of Rust;
+[language](docs/language.md) describes the implemented contract and
+[constraints](docs/limits.md) records representation and execution boundaries.
+
+New semantic tests are source/K data. The gate compares native and K results
+with Rust under the declared host, exercises generated programs and checks the
+K-to-ELF boundary. WebAssembly and its Node execution host have been removed.
+Node remains temporary test orchestration. Generation one is preserved on its
+branch and is not a generation-two dependency.

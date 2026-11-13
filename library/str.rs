@@ -192,3 +192,11 @@ pub fn __lkj_replace<P: Pattern>(value: &str, pattern: P, replacement: &str) -> 
     }
     String::from_utf8(result).unwrap()
 }
+
+/// UTF-8 equality compares bytes; no allocation or locale affects the result.
+pub fn __lkj_eq(left: &str, right: &str) -> bool {
+    if left.len() != right.len() {
+        return false;
+    }
+    matches_bytes(left.as_bytes(), right.as_bytes(), 0usize)
+}

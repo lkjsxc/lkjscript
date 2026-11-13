@@ -29,7 +29,7 @@ Reproduce the original generated case, then reduce it:
 node tools/generators/verdict.mjs target/debug/lkjscript 601 2 target/generators
 node tools/generators/reduce.mjs target/debug/lkjscript \
   target/generators/verdict-601/c1.rs target/reduced/verdict-601-c1.rs \
-  --engine node --entry probe --category rejects-valid:E_BORROW --timeout 2000
+  --engine native --entry probe --category rejects-valid:E_BORROW --timeout 2000
 ```
 
 The reducer removes balanced statements or items, trying larger deletions first,

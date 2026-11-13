@@ -24,7 +24,7 @@ fn compiler_stack_does_not_reserve_all_memory_before_checking() {
 #[test]
 fn host_entries_reject_view_results_before_running_any_route() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    for engine in ["native", "k", "node"] {
+    for engine in ["native", "k"] {
         let output = Command::new(env!("CARGO_BIN_EXE_lkjscript"))
             .arg("run")
             .arg(root.join("tests/conformance/pass/inline_view_values.rs"))

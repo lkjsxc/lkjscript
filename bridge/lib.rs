@@ -8,20 +8,9 @@ mod language;
 
 pub(crate) use language::facts;
 pub use language::{
-    ast, check, diagnostics, elaborate, encoding, generics, json, k, k_text, lower, names, native,
-    resolve, runtime, source, syntax,
+    ast, check, diagnostic, diagnostics, elaborate, generics, json, k, k_text, kc, lower, names,
+    native, resolve, runtime_memory, source, syntax,
 };
-
-/// Bootstrap convenience; the pure encoder only consumes an explicit lowered program.
-pub mod wasm {
-    pub use crate::language::wasm::encode;
-    pub fn emit(checked: &crate::k::CheckedProgram) -> Result<Vec<u8>, String> {
-        encode(&crate::lower::lower(
-            checked,
-            crate::bootstrap_runtime::get()?,
-        )?)
-    }
-}
 
 /// Preserve the public compiler boundary while isolating Rust resource setup.
 pub mod compiler {
@@ -63,3 +52,15 @@ pub mod compiler {
 }
 
 pub use language::machine;
+
+/// Rust bootstrap preparation of the declared runtime source.
+/// The K compiler itself only seals already checked K.
+pub mod runtime {
+    pub use crate::language::runtime::*;
+    pub use crate::language::runtime_memory::{Memory, MemoryFault};
+    pub fn prepare(
+        bundle: &crate::source::SourceBundle,
+    ) -> Result<Runtime, crate::ast::Diagnostic> {
+        seal(crate::compiler::check_bundle(bundle)?)
+    }
+}

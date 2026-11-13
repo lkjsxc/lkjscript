@@ -5,7 +5,7 @@ mod bootstrap_library;
 use lkjscript::source::{SourceBundle, SourceInput};
 #[path = "support/native.rs"]
 mod native;
-use lkjscript::{compiler, syntax, wasm};
+use lkjscript::{compiler, syntax};
 use std::process::Command;
 
 fn check(source: &str) -> Result<lkjscript::k::CheckedProgram, lkjscript::ast::Diagnostic> {
@@ -218,7 +218,12 @@ pub fn probe()->i64 {
             "{name}"
         );
     }
-    let artifact = wasm::emit(&checked).unwrap();
+    let artifact = lkjscript::kc::emit(
+        &checked,
+        lkjscript::bootstrap_runtime::get().unwrap(),
+        "probe",
+    )
+    .unwrap();
     for marker in [b"$rigid".as_slice(), b"$contract".as_slice()] {
         assert!(
             !artifact

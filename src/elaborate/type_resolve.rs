@@ -286,6 +286,7 @@ impl Compiler<'_> {
                     let len = len.replace('_', "").parse::<usize>().map_err(|_| {
                         err(span, "E_TYPE", "array length must be an integer literal")
                     })?;
+                    self.check_owned_element(inner, span)?;
                     let id = self.intern(String::new(), k::TypeKind::Array { inner, len });
                     work.values.push(id);
                 }
@@ -425,6 +426,7 @@ impl Compiler<'_> {
             if args.len() != 1 {
                 return Err(err(span, "E_TYPE", "collection requires one type argument"));
             }
+            self.check_owned_element(args[0], span)?;
             let kind = if path.name == "Vec" {
                 k::TypeKind::Vec { inner: args[0] }
             } else {
@@ -508,7 +510,8 @@ impl Compiler<'_> {
         for (parameter, argument) in type_parameters.iter().zip(&args) {
             bindings.insert(parameter.name.clone(), *argument);
         }
-        self.bounds(parameters, &bindings)?;
+        self.bounds(parameters, &bindings)
+            .map_err(|problem| super::at_use_site(problem, span))?;
         let environment = work.environment(bindings);
         if let Some(a::Item::Alias(index)) = item {
             work.pending.push(Work::Alias { key });

@@ -138,7 +138,7 @@ fn duplicate_and_unsupported_derives_are_not_ignored() {
         "E_TRAIT",
         "duplicate derive Clone",
     );
-    for name in ["Debug", "Default", "Hash", "Unknown"] {
+    for name in ["Debug", "Hash", "Unknown"] {
         rejected(
             &format!("#[derive({name})] struct Item;"),
             "E_UNSUPPORTED",

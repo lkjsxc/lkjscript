@@ -1,13 +1,9 @@
 //! The host supplies a declared source runtime separately from user input.
 //! Preparing that bundle is the sole authority to replace raw primitive stubs.
 //! Ordinary source names, imports and K text cannot request this substitution.
-mod memory;
-use crate::ast::{Diagnostic, Span};
+use crate::diagnostic::{Diagnostic, Span};
 use crate::k::{self, CheckedProgram, Op, TypeKind};
 use crate::lower::{self, Code, Function, Instruction, Signature};
-use crate::source::SourceBundle;
-pub(crate) use memory::Action as MemoryAction;
-pub use memory::{Memory, MemoryFault};
 use std::collections::BTreeMap;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -88,7 +84,7 @@ impl Primitive {
             Self::SetHeapTip => vec![LocalGet(0), GlobalSet(0), I64(0)],
             Self::Classes => vec![GlobalGet(1)],
             Self::SetClasses => vec![LocalGet(0), GlobalSet(1), I64(0)],
-            Self::Fail => vec![I64(6), GlobalSet(2), I64(0), GlobalSet(3), Unreachable],
+            Self::Fail => vec![I64(6), GlobalSet(2), Unreachable],
             Self::DropStep => vec![LocalGet(0), LocalGet(1), CallIndirect(Signature::words(1))],
         };
         instructions.push(End);
@@ -113,10 +109,8 @@ pub struct Runtime {
     entries: [usize; 4],
     functions: Vec<Function>,
 }
-fn problem(bundle: &SourceBundle, message: &str) -> Diagnostic {
-    let mut error = Diagnostic::new(Span::default(), "E_RUNTIME", message);
-    error.path = bundle.root.clone();
-    error
+fn problem(message: &str) -> Diagnostic {
+    Diagnostic::new(Span::default(), "E_RUNTIME", message)
 }
 fn word(program: &k::Program, ty: usize) -> bool {
     matches!(
@@ -130,8 +124,7 @@ fn word(program: &k::Program, ty: usize) -> bool {
 
 /// Runtime source is checked normally, then its narrow raw interface is sealed.
 /// No filename, attribute or declaration spelling alone grants user authority.
-pub fn prepare(bundle: &SourceBundle) -> Result<Runtime, Diagnostic> {
-    let checked = crate::compiler::check_bundle(bundle)?;
+pub fn seal(checked: CheckedProgram) -> Result<Runtime, Diagnostic> {
     let program = checked.program();
     let names: BTreeMap<&str, usize> = program
         .functions
@@ -143,7 +136,7 @@ pub fn prepare(bundle: &SourceBundle) -> Result<Runtime, Diagnostic> {
     for (name, parameters, primitive) in Primitive::declarations() {
         let index = *names
             .get(name)
-            .ok_or_else(|| problem(bundle, &format!("missing runtime primitive {name}")))?;
+            .ok_or_else(|| problem(&format!("missing runtime primitive {name}")))?;
         let function = &program.functions[index];
         if function.params != parameters
             || !word(program, function.result)
@@ -151,19 +144,17 @@ pub fn prepare(bundle: &SourceBundle) -> Result<Runtime, Diagnostic> {
                 .iter()
                 .any(|local| !word(program, local.ty))
         {
-            return Err(problem(
-                bundle,
-                &format!("runtime primitive {name} has the wrong signature"),
-            ));
+            return Err(problem(&format!(
+                "runtime primitive {name} has the wrong signature"
+            )));
         }
         if !matches!(
             function.body.first().map(|instruction| &instruction.op),
             Some(Op::Trap { .. })
         ) {
-            return Err(problem(
-                bundle,
-                &format!("runtime primitive {name} must be an ordinary trapping stub"),
-            ));
+            return Err(problem(&format!(
+                "runtime primitive {name} must be an ordinary trapping stub"
+            )));
         }
         primitives.insert(index, primitive);
     }
@@ -171,7 +162,7 @@ pub fn prepare(bundle: &SourceBundle) -> Result<Runtime, Diagnostic> {
     for (slot, (role, name)) in ENTRIES.iter().enumerate() {
         let index = *names
             .get(name)
-            .ok_or_else(|| problem(bundle, &format!("missing runtime entry {name}")))?;
+            .ok_or_else(|| problem(&format!("missing runtime entry {name}")))?;
         let function = &program.functions[index];
         if function.params != role.signature().parameters.len()
             || !word(program, function.result)
@@ -179,10 +170,9 @@ pub fn prepare(bundle: &SourceBundle) -> Result<Runtime, Diagnostic> {
                 .iter()
                 .any(|local| !word(program, local.ty))
         {
-            return Err(problem(
-                bundle,
-                &format!("runtime entry {name} has the wrong signature"),
-            ));
+            return Err(problem(&format!(
+                "runtime entry {name} has the wrong signature"
+            )));
         }
         entries[slot] = index;
     }
@@ -194,7 +184,6 @@ pub fn prepare(bundle: &SourceBundle) -> Result<Runtime, Diagnostic> {
             )
         }) {
             return Err(problem(
-                bundle,
                 "the raw runtime must use scalar locals; recursive runtime allocation is forbidden",
             ));
         }
@@ -224,18 +213,15 @@ pub fn prepare(bundle: &SourceBundle) -> Result<Runtime, Diagnostic> {
                 _ => false,
             };
             if !scalar {
-                return Err(problem(
-                    bundle,
-                    &format!(
-                        "runtime function {} must use scalar operations and the sealed raw interface",
-                        function.name
-                    ),
-                ));
+                return Err(problem(&format!(
+                    "runtime function {} must use scalar operations and the sealed raw interface",
+                    function.name
+                )));
             }
         }
     }
     let mut functions =
-        lower::lower_runtime_functions(&checked).map_err(|message| problem(bundle, &message))?;
+        lower::lower_runtime_functions(&checked).map_err(|message| problem(&message))?;
     for (index, primitive) in &primitives {
         functions[*index].code = primitive.code();
     }
@@ -248,6 +234,10 @@ pub fn prepare(bundle: &SourceBundle) -> Result<Runtime, Diagnostic> {
 }
 
 impl Runtime {
+    /// The declared runtime K, suitable for an independent K compiler input.
+    pub fn checked_program(&self) -> &k::Program {
+        self.checked.program()
+    }
     pub(crate) fn checked(&self) -> &CheckedProgram {
         &self.checked
     }

@@ -1,7 +1,7 @@
 //! The source prelude. These enums own their payloads and work with affine values.
-pub use crate::integer::CheckedArithmetic;
+pub use crate::integer::{ByteAscii, CheckedArithmetic, ScalarOrder};
 pub use crate::iter::{IntoIterator, IterSource, Iterator, IteratorExt};
-pub use crate::sequence::{VecAccess, VecContains, VecExtend};
+pub use crate::sequence::{VecAccess, VecContains, VecExtend, VecMutate, VecSort};
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Option<T> {
     None,
@@ -375,4 +375,108 @@ impl<'a, T: Clone> Option<&'a mut T> {
             Option::None => Option::None,
         }
     }
+}
+
+/// An ordinary source contract for a canonical initial value.
+pub trait Default {
+    fn default() -> Self;
+}
+
+impl Default for bool {
+    fn default() -> bool {
+        false
+    }
+}
+
+impl Default for char {
+    fn default() -> char {
+        '\0'
+    }
+}
+
+impl Default for u8 {
+    fn default() -> u8 {
+        0u8
+    }
+}
+
+impl Default for u16 {
+    fn default() -> u16 {
+        0u16
+    }
+}
+
+impl Default for u32 {
+    fn default() -> u32 {
+        0u32
+    }
+}
+
+impl Default for u64 {
+    fn default() -> u64 {
+        0u64
+    }
+}
+
+impl Default for usize {
+    fn default() -> usize {
+        0usize
+    }
+}
+
+impl Default for i8 {
+    fn default() -> i8 {
+        0i8
+    }
+}
+
+impl Default for i16 {
+    fn default() -> i16 {
+        0i16
+    }
+}
+
+impl Default for i32 {
+    fn default() -> i32 {
+        0i32
+    }
+}
+
+impl Default for i64 {
+    fn default() -> i64 {
+        0i64
+    }
+}
+
+impl Default for isize {
+    fn default() -> isize {
+        0isize
+    }
+}
+
+impl Default for f64 {
+    fn default() -> f64 {
+        0.0
+    }
+}
+
+impl<T> Default for Vec<T> {
+    fn default() -> Vec<T> {
+        Vec::new()
+    }
+}
+impl<T> Default for Option<T> {
+    fn default() -> Option<T> {
+        Option::None
+    }
+}
+impl Default for crate::string::String {
+    fn default() -> crate::string::String {
+        crate::string::String::new()
+    }
+}
+
+// Derive expansion resolves this declaration by standard-library identity.
+pub fn __lkj_default<T: Default>() -> T {
+    T::default()
 }

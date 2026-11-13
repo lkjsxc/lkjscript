@@ -13,14 +13,12 @@ static EXECUTION: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 struct Image(PathBuf);
 impl Image {
-    fn new(
-        name: &str,
-        program: &lower::Program,
-        entry: usize,
-        arguments: Vec<i64>,
-        stack: u64,
-        heap: u64,
-    ) -> Self {
+    fn command(&self) -> Command {
+        let mut command = Command::new("prlimit");
+        command.arg("--as=268435456").arg(&self.0);
+        command
+    }
+    fn new(name: &str, program: &lower::Program, entry: usize, arguments: Vec<i64>) -> Self {
         let directory = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/native-platform");
         std::fs::create_dir_all(&directory).unwrap();
         let path = directory.join(format!("{}-{name}.elf", std::process::id()));
@@ -31,17 +29,13 @@ impl Image {
                 arguments,
                 result_fd: Some(2),
             },
-            native::Resources {
-                stack_bytes: stack,
-                heap_bytes: heap,
-            },
         )
         .unwrap();
         std::fs::write(&path, bytes).unwrap();
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
         Self(path)
     }
-    fn source(name: &str, text: &str, entry: &str, stack: u64, heap: u64) -> Self {
+    fn source(name: &str, text: &str, entry: &str) -> Self {
         let mut files = bootstrap_library::standard_library();
         files.push(source::SourceInput {
             path: name.to_string(),
@@ -61,7 +55,7 @@ impl Image {
             .unwrap()
             .function;
         let arguments = if entry == "main" { vec![1] } else { vec![] };
-        Self::new(name, &program, function, arguments, stack, heap)
+        Self::new(name, &program, function, arguments)
     }
 }
 impl Drop for Image {
@@ -87,41 +81,24 @@ fn packet(output: Output) -> [u64; 3] {
 }
 
 #[test]
-fn owned_stack_and_heap_exhaustion_return_defined_traps() {
-    let _execution = EXECUTION.lock().unwrap();
-    for (name, text, stack, heap) in [
-        ("stack", include_str!("native/stack.rs"), 4096, 65536),
-        ("heap", include_str!("native/heap.rs"), 1048576, 65536),
-    ] {
-        let image = Image::source(name, text, "probe", stack, heap);
-        assert_eq!(
-            packet(Command::new(&image.0).output().unwrap())[0],
-            6,
-            "{name}"
-        );
-    }
-}
-
-#[test]
 fn broken_and_closed_output_return_the_source_line_without_sigpipe() {
     let _execution = EXECUTION.lock().unwrap();
-    let image = Image::source(
-        "output",
-        include_str!("native/output.rs"),
-        "main",
-        1048576,
-        1048576,
-    );
+    let image = Image::source("output", include_str!("native/output.rs"), "main");
     let (writer, reader) = UnixStream::pair().unwrap();
     drop(reader);
     let writer: OwnedFd = writer.into();
-    let broken = Command::new(&image.0)
+    let broken = image
+        .command()
         .stdout(Stdio::from(writer))
         .stderr(Stdio::piped())
         .output()
         .unwrap();
     let closed = Command::new("sh")
-        .args(["-c", "exec 1>&-; exec \"$1\"", "native-output"])
+        .args([
+            "-c",
+            "ulimit -v 262144; exec 1>&-; exec \"$1\"",
+            "native-output",
+        ])
         .arg(&image.0)
         .output()
         .unwrap();
@@ -181,7 +158,7 @@ fn conditional_block_results_preserve_the_not_taken_operand_stack() {
         trap_messages: vec![],
     };
     for (condition, expected) in [(0, 42), (1, 31), (1i64 << 32, 42)] {
-        let image = Image::new("branch", &program, 0, vec![condition], 4096, 65536);
+        let image = Image::new("branch", &program, 0, vec![condition]);
         assert_eq!(
             packet(Command::new(&image.0).output().unwrap()),
             [0, expected, 0]
@@ -220,7 +197,7 @@ fn prepared_source_runtime_probes_run_through_the_native_encoder() {
             .find(|e| e.name == format!("fn:{name}"))
             .unwrap()
             .function;
-        let image = Image::new(name, &program, entry, vec![], 1048576, 16777216);
+        let image = Image::new(name, &program, entry, vec![]);
         let result = packet(Command::new(&image.0).output().unwrap());
         assert_eq!((result[0], result[1]), (status, value), "{name}");
     }

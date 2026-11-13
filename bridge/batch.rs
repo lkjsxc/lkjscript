@@ -34,8 +34,7 @@ impl machine::Host for Output {
     }
 }
 pub fn run(argv: &[String]) -> Result<(), String> {
-    let usage =
-        "E_USAGE batch <manifest.tsv|directory> [--engine native|k|node | --engines native,k,node]";
+    let usage = "E_USAGE batch <manifest.tsv|directory> [--engine native|k | --engines native,k]";
     let Some(manifest) = argv.first() else {
         return Err(usage.to_string());
     };
@@ -46,8 +45,8 @@ pub fn run(argv: &[String]) -> Result<(), String> {
         _ => return Err(usage.to_string()),
     };
     for (index, engine) in engines.iter().enumerate() {
-        if !["native", "k", "node"].contains(engine) || engines[..index].contains(engine) {
-            return Err("E_USAGE engines must be distinct names from native,k,node".to_string());
+        if !["native", "k"].contains(engine) || engines[..index].contains(engine) {
+            return Err("E_USAGE engines must be distinct names from native,k".to_string());
         }
     }
     let requests = if Path::new(manifest).is_dir() {
@@ -74,7 +73,6 @@ pub fn run(argv: &[String]) -> Result<(), String> {
         .join(std::process::id().to_string());
     fs::create_dir_all(&directory).map_err(|e| format!("E_IO {e}"))?;
     let result = (|| {
-        let mut jobs = Vec::new();
         for (index, row) in requests.lines().enumerate() {
             let columns: Vec<_> = row.splitn(3, '\t').collect();
             if columns.len() != 3 || !["check", "run"].contains(&columns[0]) {
@@ -191,50 +189,11 @@ pub fn run(argv: &[String]) -> Result<(), String> {
                         }
                         Err(error) => record(index, engine, true, 1, &[], &error),
                     }
-                } else {
-                    let function = &program.functions[entry];
-                    let world = entry_world(program, function)?;
-                    let bytes = match timings.measure("wasm_encode", || wasm::encode(lowered)) {
-                        Ok(bytes) => bytes,
-                        Err(error) => {
-                            record(
-                                index,
-                                engine,
-                                true,
-                                1,
-                                &[],
-                                &format!("{}:1:1: E_EMIT {error}", args.path),
-                            );
-                            continue;
-                        }
-                    };
-                    let module = directory.join(format!("{index}.wasm"));
-                    fs::write(&module, bytes).map_err(|e| format!("E_IO {e}"))?;
-                    jobs.push(format!("{{\"index\":{index},\"path\":{},\"source\":{},\"entry\":{},\"kind\":{},\"args\":[{}]}}",quoted(&module.to_string_lossy()),quoted(&args.path),quoted(&function.name),quoted(result_kind(program,function)),if world {"\"1\""} else {""}));
-                    if engines.len() == 1 {
-                        // Node executes the prepared modules together afterward.
-                        println!("{{\"prepared\":{index}}}");
-                    }
                 }
             }
             timings.done();
         }
-        if !jobs.is_empty() {
-            let path = directory.join("modules.json");
-            fs::write(&path, format!("[{}]", jobs.join(","))).map_err(|e| format!("E_IO {e}"))?;
-            let mut command = Command::new("node");
-            command
-                .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("tools/wasm-batch.mjs"))
-                .arg(path);
-            host_process::prepare_child(&mut command);
-            if !command
-                .status()
-                .map_err(|e| format!("E_HOST Node: {e}"))?
-                .success()
-            {
-                return Err("E_HOST module batch did not complete".to_string());
-            }
-        }
+
         Ok(())
     })();
     let _ = fs::remove_dir_all(&directory);

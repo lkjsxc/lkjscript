@@ -1,5 +1,5 @@
 //! Independent execution of raw K over an independently owned heap and explicit work
-//! stack. This model neither invokes the checker nor uses WebAssembly lowering.
+//! stack. This model neither invokes the checker nor uses native lowering.
 mod scalar;
 use crate::k::{self, Op, Place, Program, Projection, TypeKind};
 use std::collections::{BTreeMap, BTreeSet};
@@ -176,7 +176,7 @@ struct Flow {
 
 struct RuntimeState<'a> {
     runtime: &'a crate::runtime::Runtime,
-    memory: &'a mut crate::runtime::Memory,
+    memory: &'a mut crate::runtime_memory::Memory,
 }
 struct Machine<'a, H: Host> {
     program: &'a Program,
@@ -193,7 +193,7 @@ struct Machine<'a, H: Host> {
     frames: usize,
     peak_frames: usize,
     flow: Vec<Option<Flow>>,
-    texts: BTreeMap<Vec<u8>, Location>,
+    texts: BTreeMap<(usize, Vec<u8>), Location>,
     site: Site,
     result: Option<Scalar>,
 }
@@ -897,7 +897,7 @@ impl<H: Host> Machine<'_, H> {
         &mut self,
         function: usize,
         arguments: &[(usize, Value)],
-    ) -> Result<Option<crate::runtime::MemoryAction>, RunError> {
+    ) -> Result<Option<crate::runtime_memory::Action>, RunError> {
         let Some(primitive) = self
             .runtime
             .as_ref()
@@ -926,7 +926,7 @@ impl<H: Host> Machine<'_, H> {
             .memory
             .invoke(primitive, &words);
         action.map(Some).map_err(|fault| {
-            if fault == crate::runtime::MemoryFault::Allocation {
+            if fault == crate::runtime_memory::MemoryFault::Allocation {
                 self.trap(6, fault.message())
             } else {
                 self.invalid(fault.message())
@@ -959,21 +959,35 @@ impl<H: Host> Machine<'_, H> {
         let mut locals = Vec::new();
         locals
             .try_reserve(declaration.locals.len())
-            .map_err(|_| self.trap(6, "allocation failed"))?;
+            .map_err(|_| self.trap(8, "stack extent exhausted"))?;
         for local in &declaration.locals {
-            locals.push(self.allocate(local.ty, None, false)?);
+            let location = self.allocate(local.ty, None, false).map_err(|error| {
+                if error.kind == ErrorKind::Trap(6) {
+                    self.trap(8, "stack extent exhausted")
+                } else {
+                    error
+                }
+            })?;
+            locals.push(location);
         }
         for (index, (_, value)) in args.into_iter().enumerate() {
             self.put(locals[index], value)?;
         }
-        self.work.push(Work::Frame(Frame {
+        self.push_work(Work::Frame(Frame {
             function,
             pc: 0,
             locals,
             return_to,
-        }));
+        }))?;
         self.frames += 1;
         self.peak_frames = self.peak_frames.max(self.frames);
+        Ok(())
+    }
+    fn push_work(&mut self, work: Work) -> Result<(), RunError> {
+        self.work
+            .try_reserve(1)
+            .map_err(|_| self.trap(8, "stack extent exhausted"))?;
+        self.work.push(work);
         Ok(())
     }
     fn scalar_result(&self, ty: usize, value: &Value) -> Result<Scalar, RunError> {
@@ -1102,10 +1116,10 @@ impl<H: Host> Machine<'_, H> {
                 let mut access = work.access.clone();
                 access.writable = true;
                 let value = self.borrow(&access, access.ty, true)?;
-                self.work.push(Work::Drop(DropWork {
+                self.push_work(Work::Drop(DropWork {
                     custom: false,
                     ..work
-                }));
+                }))?;
                 self.push_frame(function, vec![(parameter, value)], ReturnTo::Discard)?;
                 return Ok(());
             }
@@ -1121,7 +1135,7 @@ impl<H: Host> Machine<'_, H> {
         }
         for child in children.into_iter().rev() {
             let ty = self.cell(child)?.ty;
-            self.work.push(Work::Drop(DropWork {
+            self.push_work(Work::Drop(DropWork {
                 access: Access {
                     extent: None,
                     cell: child,
@@ -1133,7 +1147,7 @@ impl<H: Host> Machine<'_, H> {
                 release: true,
                 optional: true,
                 site: work.site,
-            }));
+            }))?;
         }
         Ok(())
     }
@@ -1475,9 +1489,6 @@ impl<H: Host> Machine<'_, H> {
             }
             Op::Unit { dst } => self.put_local(&frame, dst, Value::Unit)?,
             Op::Text { dst, bytes } => {
-                if std::str::from_utf8(&bytes).is_err() {
-                    return Err(self.invalid("text literal is not UTF-8"));
-                }
                 let TypeKind::Ref {
                     inner,
                     mutable: false,
@@ -1486,10 +1497,21 @@ impl<H: Host> Machine<'_, H> {
                     return Err(self.invalid("text literal needs a shared str reference"));
                 };
                 let inner = *inner;
-                if !matches!(self.kind(inner)?, TypeKind::Str) {
-                    return Err(self.invalid("text literal referent is not str"));
+                match self.kind(inner)? {
+                    TypeKind::Str => {
+                        if std::str::from_utf8(&bytes).is_err() {
+                            return Err(self.invalid("text literal is not UTF-8"));
+                        }
+                    }
+                    TypeKind::Array { inner: k::U8, len } if *len == bytes.len() => {}
+                    _ => {
+                        return Err(
+                            self.invalid("byte constant requires str or an exact-length u8 array")
+                        );
+                    }
                 }
-                let cell = match self.texts.get(&bytes) {
+                let key = (inner, bytes.clone());
+                let cell = match self.texts.get(&key) {
                     Some(cell) => *cell,
                     None => {
                         let mut elements = Vec::new();
@@ -1501,7 +1523,7 @@ impl<H: Host> Machine<'_, H> {
                             )?);
                         }
                         let cell = self.allocate(inner, Some(Value::Sequence(elements)), true)?;
-                        self.texts.insert(bytes, cell);
+                        self.texts.insert(key, cell);
                         cell
                     }
                 };
@@ -1661,14 +1683,14 @@ impl<H: Host> Machine<'_, H> {
                 let optional = matches!(instruction.op, Op::DropIf { .. });
                 let access = self.resolve(&frame, place)?;
                 let site = self.site;
-                self.work.push(Work::Frame(frame));
-                self.work.push(Work::Drop(DropWork {
+                self.push_work(Work::Frame(frame))?;
+                self.push_work(Work::Drop(DropWork {
                     access,
                     custom: true,
                     release: false,
                     optional,
                     site,
-                }));
+                }))?;
                 return Ok(());
             }
             Op::Unary { dst, op, src } => {
@@ -1730,10 +1752,10 @@ impl<H: Host> Machine<'_, H> {
                     values.push(self.take_local(&frame, arg)?);
                 }
                 match self.runtime_call(function, &values)? {
-                    Some(crate::runtime::MemoryAction::Value(value)) => {
+                    Some(crate::runtime_memory::Action::Value(value)) => {
                         self.put(destination.cell, Value::Bits(value))?;
                     }
-                    Some(crate::runtime::MemoryAction::Call { function, argument }) => {
+                    Some(crate::runtime_memory::Action::Call { function, argument }) => {
                         let target = self
                             .program
                             .functions
@@ -1752,7 +1774,7 @@ impl<H: Host> Machine<'_, H> {
                             return Err(self.invalid("runtime cleanup signature differs"));
                         }
                         let argument = (target.locals[0].ty, Value::Bits(argument));
-                        self.work.push(Work::Frame(frame));
+                        self.push_work(Work::Frame(frame))?;
                         self.push_frame(
                             function,
                             vec![argument],
@@ -1761,7 +1783,7 @@ impl<H: Host> Machine<'_, H> {
                         return Ok(());
                     }
                     None => {
-                        self.work.push(Work::Frame(frame));
+                        self.push_work(Work::Frame(frame))?;
                         self.push_frame(function, values, ReturnTo::Cell(destination.cell))?;
                         return Ok(());
                     }
@@ -1877,7 +1899,7 @@ impl<H: Host> Machine<'_, H> {
                 return Err(self.trap(code, &message));
             }
         }
-        self.work.push(Work::Frame(frame));
+        self.push_work(Work::Frame(frame))?;
         Ok(())
     }
 }
@@ -1900,7 +1922,7 @@ pub fn run_runtime<H: Host>(
     runtime: &crate::runtime::Runtime,
     entry: usize,
     args: &[u64],
-    memory: &mut crate::runtime::Memory,
+    memory: &mut crate::runtime_memory::Memory,
     host: &mut H,
 ) -> Result<RunResult, RunError> {
     run_inner(

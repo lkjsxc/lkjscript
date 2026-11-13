@@ -1,5 +1,6 @@
 //! Static Linux x86-64 encoding of the shared lowered program.
-//! Heap and stack reservations are explicit host inputs. Language values use
+//! Heap and stack extents are selected at process startup from Linux controls.
+//! Language values use
 //! frame slots; only the platform primitives below issue system calls.
 use crate::lower::{HostFunction, Instruction, Program, ScalarOp, Signature, ValueType};
 use std::collections::BTreeMap;
@@ -8,10 +9,6 @@ pub struct Entry {
     pub function: usize,
     pub arguments: Vec<i64>,
     pub result_fd: Option<u32>,
-}
-pub struct Resources {
-    pub stack_bytes: u64,
-    pub heap_bytes: u64,
 }
 const IMAGE_BASE: u64 = 0x400000;
 const CODE_OFFSET: usize = 4096;
@@ -163,6 +160,7 @@ impl Assembler {
 struct Platform {
     trap: Label,
     exhausted: Label,
+    stack_exhausted: Label,
     memory_fault: Label,
     grow: Label,
     copy: Label,
@@ -173,6 +171,9 @@ struct Platform {
     arguments: Label,
     stdout: Label,
     signal_action: Label,
+    system_info: Label,
+    resource_limit: Label,
+    diagnostic_buffer: Label,
     trap_code: usize,
     trap_line: usize,
 }
@@ -181,6 +182,7 @@ impl Platform {
         Self {
             trap: a.label(),
             exhausted: a.label(),
+            stack_exhausted: a.label(),
             memory_fault: a.label(),
             grow: a.label(),
             copy: a.label(),
@@ -191,6 +193,9 @@ impl Platform {
             arguments: a.label(),
             stdout: a.label(),
             signal_action: a.label(),
+            system_info: a.label(),
+            resource_limit: a.label(),
+            diagnostic_buffer: a.label(),
             trap_code: program.trap_code_global,
             trap_line: program.trap_line_global,
         }
@@ -218,6 +223,125 @@ impl Platform {
     }
 }
 
+/// Linux x86-64 sysinfo and prlimit64 have fixed ABI layouts. Resource readings
+/// occur in the artifact process, before its own heap and stack are mapped. Each
+/// gets a quarter of the tighter physical/address-space extent; the other half
+/// remains available for the image, initial process stack and host mappings.
+fn startup_extents(a: &mut Assembler, p: Platform, initial: u64) {
+    a.immediate(A, 99); // sysinfo
+    a.address(DI, p.system_info);
+    a.syscall();
+    a.test(A, true);
+    a.condition(8, p.exhausted);
+    a.load(A, DI, 32); // totalram, excluding swap
+    a.memory(&[0x8b], C, DI, 104, false); // mem_unit: u32
+    a.raw(&[0x48, 0x0f, 0xaf, 0xc1]); // imul rax, rcx
+    a.condition(0, p.exhausted);
+    a.mov(R9, A);
+    a.immediate(A, 302); // prlimit64(0, RLIMIT_AS, NULL, &old)
+    a.immediate(DI, 0);
+    a.immediate(SI, 9);
+    a.immediate(D, 0);
+    a.address(R10, p.resource_limit);
+    a.syscall();
+    a.test(A, true);
+    a.condition(8, p.exhausted);
+    a.load(A, R10, 0);
+    a.compare(A, R9);
+    let physical = a.label();
+    a.condition(3, physical);
+    a.mov(R9, A);
+    a.bind(physical);
+    a.shift(R9, 5, 2);
+    a.immediate(A, !65535_u64);
+    a.rr(0x21, R9, A, true);
+    a.immediate(A, initial.max(65536));
+    a.compare(R9, A);
+    a.condition(2, p.exhausted);
+    a.store(GLOBALS, HEAP_RESERVED, R9);
+    a.store(GLOBALS, STACK_RESERVED, R9);
+}
+
+// Format traps without allocating or using the exhausted language stack. R8
+// moves backward through a 128-byte buffer; the maximum record is 81 bytes.
+fn diagnostic_text(a: &mut Assembler, text: &str) {
+    for byte in text.bytes().rev() {
+        a.immediate(A, 1);
+        a.rr(0x29, R8, A, true);
+        a.immediate(A, u64::from(byte));
+        a.memory(&[0x88], A, R8, 0, false);
+    }
+}
+fn diagnostic_decimal(a: &mut Assembler, minimum: u64) {
+    a.immediate(C, 10);
+    a.immediate(R9, 0);
+    a.immediate(R10, 1);
+    let digit = a.label();
+    a.bind(digit);
+    a.immediate(D, 0);
+    a.raw(&[0x48, 0xf7, 0xf1]); // unsigned rdx:rax / rcx
+    a.rr(0x29, R8, R10, true);
+    a.rr(0x01, R9, R10, true);
+    a.immediate(SI, u64::from(b'0'));
+    a.rr(0x01, D, SI, true);
+    a.memory(&[0x88], D, R8, 0, false);
+    a.test(A, true);
+    a.condition(5, digit);
+    a.immediate(SI, minimum);
+    a.compare(R9, SI);
+    a.condition(2, digit);
+}
+fn standalone_diagnostic(a: &mut Assembler, p: Platform) {
+    let complete = a.label();
+    a.load(A, GLOBALS, PACKET);
+    a.test(A, true);
+    a.condition(4, complete);
+    a.address(R8, p.diagnostic_buffer);
+    a.immediate(C, 128);
+    a.rr(0x01, R8, C, true);
+    diagnostic_text(a, "\n");
+    a.load(A, GLOBALS, PACKET);
+    a.immediate(C, 8);
+    a.compare(A, C);
+    let heap = a.label();
+    let line = a.label();
+    a.condition(5, heap);
+    diagnostic_text(a, " (stack extent exhausted)");
+    a.jump(line);
+    a.bind(heap);
+    a.immediate(C, 6);
+    a.compare(A, C);
+    a.condition(5, line);
+    diagnostic_text(a, " (heap allocation failed)");
+    a.bind(line);
+    a.load(A, GLOBALS, PACKET + 16);
+    diagnostic_decimal(a, 1);
+    diagnostic_text(a, " at line ");
+    a.load(A, GLOBALS, PACKET);
+    diagnostic_decimal(a, 4);
+    diagnostic_text(a, "R");
+    a.mov(SI, R8);
+    a.address(D, p.diagnostic_buffer);
+    a.immediate(A, 128);
+    a.rr(0x01, D, A, true);
+    a.rr(0x29, D, SI, true);
+    let writing = a.label();
+    a.bind(writing);
+    a.immediate(A, 1);
+    a.immediate(DI, 2);
+    a.syscall();
+    a.immediate(C, (-4_i64) as u64);
+    a.compare(A, C);
+    a.condition(4, writing);
+    a.test(A, true);
+    a.condition(14, complete);
+    a.rr(0x01, SI, A, true);
+    a.rr(0x29, D, A, true);
+    a.test(D, true);
+    a.condition(5, writing);
+    a.bind(complete);
+}
+
 fn platform(
     a: &mut Assembler,
     p: Platform,
@@ -226,9 +350,13 @@ fn platform(
     functions: &[Label],
     initial: u64,
 ) {
-    // Startup performs only memory reservation and capability setup.
+    // Startup performs only resource observation and capability setup. The ELF
+    // contains no observation of the machine that compiled it.
     a.address(GLOBALS, p.context);
-    if !program.imports.is_empty() || entry.result_fd.is_some() {
+    a.immediate(A, 1);
+    a.store(GLOBALS, Platform::global(p.trap_line), A);
+    startup_extents(a, p, initial);
+    {
         a.immediate(A, 13);
         a.immediate(DI, 13);
         a.address(SI, p.signal_action);
@@ -267,7 +395,7 @@ fn platform(
     a.syscall();
     a.immediate(C, (-4095i64) as u64);
     a.compare(A, C);
-    a.condition(3, p.exhausted);
+    a.condition(3, p.stack_exhausted);
     a.mov(STACK, A);
     a.load(C, GLOBALS, STACK_RESERVED);
     a.rr(0x01, A, C, true);
@@ -288,7 +416,13 @@ fn platform(
     a.jump(p.complete);
 
     a.bind(p.exhausted);
-    p.failure(a, 6, 0);
+    a.immediate(A, 6);
+    a.store(GLOBALS, Platform::global(p.trap_code), A);
+    a.jump(p.trap);
+    a.bind(p.stack_exhausted);
+    a.immediate(A, 8);
+    a.store(GLOBALS, Platform::global(p.trap_code), A);
+    a.jump(p.trap);
     a.bind(p.memory_fault);
     p.failure(a, 3, 0);
     a.bind(p.trap);
@@ -321,6 +455,8 @@ fn platform(
         a.test(D, true);
         a.condition(5, writing);
         a.bind(exit);
+    } else {
+        standalone_diagnostic(a, p);
     }
     a.load(DI, GLOBALS, PACKET);
     a.test(DI, true);
@@ -1000,9 +1136,9 @@ fn function(
     let required = a.immediate(A, 0);
     a.mov(C, SP);
     a.rr(0x29, C, A, true);
-    a.condition(2, p.exhausted);
+    a.condition(2, p.stack_exhausted);
     a.compare(C, STACK);
-    a.condition(2, p.exhausted);
+    a.condition(2, p.stack_exhausted);
     a.raw(&[0x55]);
     a.mov(BP, SP);
     let allocated = a.immediate(A, 0);
@@ -1064,7 +1200,7 @@ fn segment(bytes: &mut [u8], at: usize, flags: u32, offset: u64, size: u64) {
     put64(bytes, at + 40, size);
     put64(bytes, at + 48, 4096);
 }
-pub fn encode(program: &Program, entry: Entry, resources: Resources) -> Result<Vec<u8>> {
+pub fn encode(program: &Program, entry: Entry) -> Result<Vec<u8>> {
     let mut signatures = program
         .imports
         .iter()
@@ -1081,11 +1217,6 @@ pub fn encode(program: &Program, entry: Entry, resources: Resources) -> Result<V
         .minimum_memory_pages
         .checked_mul(65536)
         .ok_or("native initial heap extent overflow")?;
-    let heap = resources.heap_bytes & !65535;
-    let stack = resources.stack_bytes & !4095;
-    if initial > heap || stack < 4096 {
-        return Err("declared native reservations do not cover initialization".to_string());
-    }
     if program
         .data_offset
         .checked_add(program.data.len() as u64)
@@ -1134,8 +1265,6 @@ pub fn encode(program: &Program, entry: Entry, resources: Resources) -> Result<V
     }
     let data_offset = (CODE_OFFSET + a.bytes.len() + 4095) & !4095;
     let mut data = vec![0u8; CONTEXT_GLOBALS as usize + program.globals.len() * 8];
-    put64(&mut data, HEAP_RESERVED as usize, heap);
-    put64(&mut data, STACK_RESERVED as usize, stack);
     put64(&mut data, HEAP_USED as usize, initial);
     for (i, global) in program.globals.iter().enumerate() {
         put64(
@@ -1158,6 +1287,12 @@ pub fn encode(program: &Program, entry: Entry, resources: Resources) -> Result<V
     a.data_label(p.signal_action, data_offset + data.len());
     data.extend_from_slice(&1u64.to_le_bytes());
     data.extend_from_slice(&[0u8; 24]);
+    a.data_label(p.system_info, data_offset + data.len());
+    data.extend_from_slice(&[0u8; 112]);
+    a.data_label(p.resource_limit, data_offset + data.len());
+    data.extend_from_slice(&[0u8; 16]);
+    a.data_label(p.diagnostic_buffer, data_offset + data.len());
+    data.extend_from_slice(&[0u8; 128]);
     for argument in entry.arguments.iter().rev() {
         data.extend_from_slice(&argument.to_le_bytes());
     }

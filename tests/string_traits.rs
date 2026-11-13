@@ -4,6 +4,8 @@ mod bootstrap_library;
 #[path = "../library/bytes.rs"]
 #[allow(dead_code)]
 mod bytes;
+#[path = "support/native.rs"]
+mod native;
 #[path = "../library/prelude.rs"]
 #[allow(dead_code)]
 pub mod rust_prelude;
@@ -33,8 +35,6 @@ mod sequence;
 use lkjscript::compiler;
 use lkjscript::source::{SourceBundle, SourceInput};
 use rust_string::String as OwnedString;
-use std::io::Write;
-use std::process::{Command, Stdio};
 
 const STRING: &str = include_str!("../library/string.rs");
 const BYTE_COMPARISON: &str = r#"
@@ -69,30 +69,12 @@ fn bundle(root: &str, string_source: &str) -> SourceBundle {
     }
 }
 
-fn run(artifact: &[u8], expected: &[(&str, usize)]) {
-    let mut script = String::from(
-        "const chunks=[];process.stdin.on('data',b=>chunks.push(b));process.stdin.on('end',async()=>{try{const {instance}=await WebAssembly.instantiate(Buffer.concat(chunks),{lkjscript:{trap(c,l){throw Error('trap '+c+':'+l)}}});",
-    );
-    for (entry, value) in expected {
-        script.push_str(&format!(
-            "{{const actual=instance.exports['fn:{entry}']();if(actual!=={value}n)throw Error('{entry}: expected {value}, got '+actual);}}"
-        ));
-    }
-    script.push_str("}catch(e){console.error(e);process.exitCode=1}})");
-    let mut child = Command::new("node")
-        .arg("-e")
-        .arg(script)
-        .stdin(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    child.stdin.take().unwrap().write_all(artifact).unwrap();
-    let output = child.wait_with_output().unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+fn run(program: &lkjscript::k::CheckedProgram, expected: &[(&str, usize)]) {
+    let observations = expected
+        .iter()
+        .map(|(name, value)| (*name, i64::try_from(*value).unwrap()))
+        .collect::<Vec<_>>();
+    native::assert_values(program, &observations);
 }
 
 fn inputs() -> Vec<String> {
@@ -211,7 +193,7 @@ fn clones_and_clone_from_match_rust_over_every_byte_and_keep_independent_owners(
         expect_bytes(&mut source, &mut check, "target", &target);
         source.push_str("0\n}\n");
     }
-    let artifact = compiler::compile(&bundle(&source, STRING)).unwrap();
+    let artifact = compiler::check_bundle(&bundle(&source, STRING)).unwrap();
     let expected: Vec<_> = entries.iter().map(|entry| (entry.as_str(), 0)).collect();
     run(&artifact, &expected);
 
@@ -257,7 +239,7 @@ fn equality_methods_match_rust_and_borrow_both_owners() {
             source.push_str("0\n}\n");
         }
     }
-    let artifact = compiler::compile(&bundle(&source, STRING)).unwrap();
+    let artifact = compiler::check_bundle(&bundle(&source, STRING)).unwrap();
     let expected: Vec<_> = entries.iter().map(|entry| (entry.as_str(), 0)).collect();
     run(&artifact, &expected);
 }
@@ -291,7 +273,7 @@ pub fn generic_probe() -> usize {
 }
 "#
     );
-    let artifact = compiler::compile(&bundle(&source, STRING)).unwrap();
+    let artifact = compiler::check_bundle(&bundle(&source, STRING)).unwrap();
     run(&artifact, &[("generic_probe", 0)]);
 }
 
@@ -349,7 +331,7 @@ pub fn differing_operator()->usize {
 }
 "#
     );
-    let original = compiler::compile(&bundle(&source, STRING)).unwrap();
+    let original = compiler::check_bundle(&bundle(&source, STRING)).unwrap();
     run(
         &original,
         &[
@@ -368,8 +350,11 @@ pub fn differing_operator()->usize {
         "append_bytes(&mut bytes, \"changed\".as_bytes());",
     );
     assert_ne!(STRING, changed_clone);
-    let clone_artifact = compiler::compile(&bundle(&source, &changed_clone)).unwrap();
-    assert_ne!(original, clone_artifact);
+    let clone_artifact = compiler::check_bundle(&bundle(&source, &changed_clone)).unwrap();
+    assert_ne!(
+        lkjscript::k_text::write(original.program()),
+        lkjscript::k_text::write(clone_artifact.program())
+    );
     run(
         &clone_artifact,
         &[
@@ -388,8 +373,11 @@ pub fn differing_operator()->usize {
         "false",
     );
     assert_ne!(STRING, changed_equality);
-    let equality_artifact = compiler::compile(&bundle(&source, &changed_equality)).unwrap();
-    assert_ne!(original, equality_artifact);
+    let equality_artifact = compiler::check_bundle(&bundle(&source, &changed_equality)).unwrap();
+    assert_ne!(
+        lkjscript::k_text::write(original.program()),
+        lkjscript::k_text::write(equality_artifact.program())
+    );
     run(
         &equality_artifact,
         &[
@@ -405,8 +393,11 @@ pub fn differing_operator()->usize {
     );
     let changed_ne = STRING.replace("!self.eq(other)", "false");
     assert_ne!(STRING, changed_ne);
-    let ne_artifact = compiler::compile(&bundle(&source, &changed_ne)).unwrap();
-    assert_ne!(original, ne_artifact);
+    let ne_artifact = compiler::check_bundle(&bundle(&source, &changed_ne)).unwrap();
+    assert_ne!(
+        lkjscript::k_text::write(original.program()),
+        lkjscript::k_text::write(ne_artifact.program())
+    );
     run(
         &ne_artifact,
         &[
@@ -424,11 +415,12 @@ fn invalid_production_clone_mutation_reports_the_library_file() {
         "append_bytes(&mut bytes, true);",
     );
     assert_ne!(STRING, changed);
-    let error = compiler::compile(&bundle(
+    let error = compiler::check_bundle(&bundle(
         "fn probe()->usize{String::from_str(\"owned\").clone().len()}",
         &changed,
     ))
-    .unwrap_err();
+    .err()
+    .unwrap();
     assert_eq!(error.code, "E_TYPE", "{error:?}");
     assert_eq!(error.path, "$std/string.rs", "{error:?}");
 }
@@ -503,7 +495,7 @@ pub fn custom_probe()->i64 {
     copy_value(&left)+equal_value(&left,&right)+unequal_value(&left,&right)
 }
 "#;
-    let artifact = compiler::compile(&bundle(declarations, STRING)).unwrap();
+    let artifact = compiler::check_bundle(&bundle(declarations, STRING)).unwrap();
     run(&artifact, &[("custom_probe", 152)]);
     for source in [
         "trait Clone{fn clone(&self)->i64;} fn wrong<T:Clone>(value:&T)->T{value.clone()}",

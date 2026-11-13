@@ -1,11 +1,11 @@
 //! The production canonical-name helper executes with the owned UTF-8 library.
 #[path = "../bridge/library.rs"]
 mod bootstrap_library;
+#[path = "support/native.rs"]
+mod native_test;
 
 use lkjscript::source::{SourceBundle, SourceInput};
 use lkjscript::{compiler, names};
-use std::io::Write;
-use std::process::{Command, Stdio};
 
 const NAMES: &str = include_str!("../src/names.rs");
 
@@ -44,30 +44,16 @@ fn bundle(module: &str, cases: &[(String, String)]) -> SourceBundle {
     }
 }
 
-fn run(bytes: &[u8], expected: &[usize]) {
-    let mut script = String::from(
-        "const chunks=[];process.stdin.on('data',b=>chunks.push(b));process.stdin.on('end',async()=>{try{const {instance}=await WebAssembly.instantiate(Buffer.concat(chunks),{lkjscript:{trap(c,l){throw Error('trap '+c+':'+l)}}});",
-    );
-    for (index, expected) in expected.iter().enumerate() {
-        script.push_str(&format!(
-            "{{const actual=instance.exports['fn:compare_{index}']();if(actual!=={expected}n)throw Error('case {index}: '+actual);}}"
-        ));
-    }
-    script.push_str("}catch(e){console.error(e);process.exitCode=1}})");
-    let mut child = Command::new("node")
-        .arg("-e")
-        .arg(script)
-        .stdin(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    child.stdin.take().unwrap().write_all(bytes).unwrap();
-    let output = child.wait_with_output().unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+fn run(checked: &lkjscript::k::CheckedProgram, expected: &[usize]) {
+    let names: Vec<_> = (0..expected.len())
+        .map(|index| format!("compare_{index}"))
+        .collect();
+    let values: Vec<_> = names
+        .iter()
+        .zip(expected)
+        .map(|(name, value)| (name.as_str(), *value as i64))
+        .collect();
+    native_test::assert_values(checked, &values);
 }
 
 #[test]
@@ -81,7 +67,7 @@ fn production_qualified_names_match_rust_over_every_output_byte() {
         (ascii.clone(), ascii),
         ("module_segment::".repeat(256), "水😀".repeat(256)),
     ];
-    let artifact = compiler::compile(&bundle(NAMES, &cases)).unwrap();
+    let artifact = compiler::check_bundle(&bundle(NAMES, &cases)).unwrap();
     run(&artifact, &vec![0; cases.len()]);
 }
 
@@ -91,11 +77,14 @@ fn changing_the_production_join_changes_generated_behavior() {
         (String::new(), "leaf".to_string()),
         ("module".to_string(), "leaf".to_string()),
     ];
-    let original = compiler::compile(&bundle(NAMES, &cases)).unwrap();
+    let original = compiler::check_bundle(&bundle(NAMES, &cases)).unwrap();
     let changed = NAMES.replace("push_str(\"::\")", "push_str(\":\")");
     assert_ne!(NAMES, changed);
-    let mutated = compiler::compile(&bundle(&changed, &cases)).unwrap();
-    assert_ne!(original, mutated);
+    let mutated = compiler::check_bundle(&bundle(&changed, &cases)).unwrap();
+    assert_ne!(
+        lkjscript::k_text::write(original.program()),
+        lkjscript::k_text::write(mutated.program())
+    );
     run(&original, &[0, 0]);
     run(&mutated, &[0, 1]);
 }
@@ -105,7 +94,9 @@ fn invalid_production_join_mutation_is_checked() {
     let changed = NAMES.replace("result.push_str(name)", "result.push_str(1i64)");
     assert_ne!(NAMES, changed);
     let cases = vec![("module".to_string(), "leaf".to_string())];
-    let error = compiler::compile(&bundle(&changed, &cases)).unwrap_err();
+    let error = compiler::check_bundle(&bundle(&changed, &cases))
+        .err()
+        .unwrap();
     assert_eq!(error.code, "E_TYPE", "{error:?}");
     assert_eq!(error.path, "names.rs");
 }

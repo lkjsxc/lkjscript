@@ -26,13 +26,3 @@ pub fn get() -> Result<&'static Runtime, String> {
         .as_ref()
         .map_err(Clone::clone)
 }
-
-/// Reservations are host resource inputs, shared by every emitted native image.
-pub fn resources() -> Result<crate::native::Resources, String> {
-    let extent = crate::compiler_stack::reservation().map_err(|error| error.to_string())? as u64;
-    let extent = extent & !65535;
-    Ok(crate::native::Resources {
-        stack_bytes: extent,
-        heap_bytes: extent,
-    })
-}

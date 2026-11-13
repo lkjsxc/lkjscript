@@ -171,6 +171,9 @@ impl DefinitionTypes {
                 known.insert(id, None);
                 continue;
             }
+            if matches!(shape, Shape::Vec(_) | Shape::Box(_) | Shape::Array(..)) {
+                compiler.check_owned_element(values[0], span)?;
+            }
             let ty = match shape {
                 Shape::Atom(name) => {
                     if let Some(ty) = compiler.type_names.get(&name) {
@@ -431,6 +434,55 @@ impl Infer<'_, '_> {
     fn shape(&self, v: Variable) -> Option<Shape> {
         self.definition.shape(v)
     }
+    fn display_variable(&self, variable: Variable) -> String {
+        fn render(infer: &Infer<'_, '_>, variable: Variable) -> String {
+            match infer.shape(variable) {
+                None => "_".to_string(),
+                Some(Shape::Atom(name) | Shape::Rigid(name)) => name,
+                Some(Shape::Vec(inner)) => format!("Vec<{}>", render(infer, inner)),
+                Some(Shape::Box(inner)) => format!("Box<{}>", render(infer, inner)),
+                Some(Shape::Ref(mutable, inner)) => format!(
+                    "&{}{}",
+                    if mutable { "mut " } else { "" },
+                    render(infer, inner)
+                ),
+                Some(Shape::Slice(inner)) => format!("[{}]", render(infer, inner)),
+                Some(Shape::Array(inner, len)) => format!("[{}; {len}]", render(infer, inner)),
+                Some(Shape::Tuple(fields)) => format!(
+                    "({})",
+                    fields
+                        .iter()
+                        .map(|ty| render(infer, *ty))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+                Some(Shape::Nominal(declaration, args)) => {
+                    let name = infer.source.declarations[declaration]
+                        .name
+                        .trim_start_matches("$std::");
+                    if args.is_empty() {
+                        name.to_string()
+                    } else {
+                        format!(
+                            "{name}<{}>",
+                            args.iter()
+                                .map(|ty| render(infer, *ty))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        )
+                    }
+                }
+                Some(Shape::Projected(_, member)) => format!("associated type {member}"),
+                Some(Shape::Source(id)) => match &infer.source.types[id].kind {
+                    a::Type::Path(path) => path.name.clone(),
+                    _ => "declared type".to_string(),
+                },
+                Some(Shape::Closure(..)) => "closure".to_string(),
+                Some(Shape::Never) => "!".to_string(),
+            }
+        }
+        render(self, variable)
+    }
     fn never(&self, v: Variable) -> bool {
         self.shape(v) == Some(Shape::Never)
     }
@@ -581,7 +633,11 @@ impl Infer<'_, '_> {
                     return Err(err(
                         span,
                         "E_TYPE",
-                        "inference constraints require different types",
+                        &format!(
+                            "type mismatch: expected {}, found {}; help: make the expression and its declared context use the same type",
+                            self.display_variable(right),
+                            self.display_variable(left)
+                        ),
                     ));
                 }
             }
@@ -647,6 +703,18 @@ impl Infer<'_, '_> {
         }
     }
     fn coerce_referents(&mut self, mut from: Variable, to: Variable, span: a::Span) -> Result<()> {
+        if matches!(self.shape(to), Some(Shape::Atom(name)) if name == "str") {
+            if let Some(Shape::Nominal(declaration, _)) = self.shape(from) {
+                if self
+                    .names
+                    .library_type("string", "String", span)?
+                    .declaration
+                    == Some(declaration)
+                {
+                    return Ok(());
+                }
+            }
+        }
         if let Some(Shape::Slice(element)) = self.shape(to) {
             if let Some(Shape::Vec(source) | Shape::Array(source, _)) = self.shape(from) {
                 return self.unify(source, element, span);
@@ -864,13 +932,36 @@ impl Infer<'_, '_> {
             self.obligation(Obligation::PatternTest { pattern, subject });
             return Ok(());
         }
+        let node = self.source.patterns[pattern].clone();
+        if let a::Pattern::Ref { inner, .. } = &node.kind {
+            if let Some(Shape::Ref(_, referent)) = self.shape(subject) {
+                return self.constrain_pattern(*inner, referent);
+            }
+            return self.constrain_pattern(*inner, subject);
+        }
+        if let a::Pattern::Or(patterns) = &node.kind {
+            for pattern in patterns {
+                self.constrain_pattern(*pattern, subject)?;
+            }
+            return Ok(());
+        }
+        if let a::Pattern::Literal(expression) = &node.kind {
+            if matches!(self.source.exprs[*expression].kind, a::Expr::String(_)) {
+                let value = self.expr(*expression)?;
+                return self.unify(subject, value, node.span);
+            }
+        }
         while let Some(Shape::Ref(_, inner)) = self.shape(subject) {
             subject = inner;
         }
-        let node = self.source.patterns[pattern].clone();
         match node.kind {
             a::Pattern::Literal(expression) => {
-                let value = self.expr(expression)?;
+                let mut value = self.expr(expression)?;
+                // Literal patterns compare referents, including the implicit
+                // shared reference carried by a string literal.
+                while let Some(Shape::Ref(_, inner)) = self.shape(value) {
+                    value = inner;
+                }
                 self.unify(subject, value, node.span)?;
             }
             a::Pattern::Range { start, end, .. } => {

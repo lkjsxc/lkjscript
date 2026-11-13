@@ -11,7 +11,7 @@ impl Builder<'_, '_> {
         )
     }
 
-    fn library_string(&self, ty: usize, span: a::Span) -> bool {
+    pub(super) fn library_string(&self, ty: usize, span: a::Span) -> bool {
         let Some((name, _)) = self.compiler.applications.get(&ty) else {
             return false;
         };

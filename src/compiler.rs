@@ -1,9 +1,9 @@
 //! The compiler core consumes declared source bytes and returns artifacts or diagnostics.
 //! Filesystem access, process startup and bootstrap input packing belong to the host.
-use crate::ast::{Diagnostic, Program, Span};
+use crate::ast::{Diagnostic, Program};
 use crate::k::CheckedProgram;
 use crate::source::SourceBundle;
-use crate::{check, elaborate, lower, runtime::Runtime, source, wasm};
+use crate::{check, elaborate, kc, runtime::Runtime, source};
 
 fn locate(program: &Program, mut problem: Diagnostic) -> Diagnostic {
     if problem.path.is_empty() {
@@ -26,15 +26,21 @@ pub fn check_bundle(bundle: &SourceBundle) -> Result<CheckedProgram, Diagnostic>
     check_source(&program)
 }
 
-/// Compile the declared closure to the current memory64 WebAssembly target.
+/// Compile declared source and a checked runtime to native Linux x86-64 bytes.
 /// This entry performs no host I/O and has no hidden compilation service.
 pub fn compile(bundle: &SourceBundle, runtime: &Runtime) -> Result<Vec<u8>, Diagnostic> {
     let checked = check_bundle(bundle)?;
-    lower::lower(&checked, runtime)
-        .and_then(|program| wasm::encode(&program))
-        .map_err(|message| {
-            let mut problem = Diagnostic::new(Span::default(), "E_EMIT", &message);
+    let mut entry = "probe";
+    for function in &checked.program().functions {
+        if function.name == "main" {
+            entry = "main";
+            break;
+        }
+    }
+    kc::emit(&checked, runtime, entry).map_err(|mut problem| {
+        if problem.path.is_empty() {
             problem.path = bundle.root.clone();
-            problem
-        })
+        }
+        problem
+    })
 }

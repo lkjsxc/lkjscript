@@ -225,12 +225,14 @@ const FIRST_USER: usize = 4;
 // Text values carry their byte offset and count directly; no descriptor is owned.
 struct TextPool {
     offsets: BTreeMap<Vec<u8>, u64>,
+    arrays: BTreeMap<Vec<u8>, u64>,
     data: Vec<u8>,
 }
 impl TextPool {
     fn collect(program: &KProgram) -> Result<Self, String> {
         let mut pool = Self {
             offsets: BTreeMap::new(),
+            arrays: BTreeMap::new(),
             data: Vec::new(),
         };
         for function in &program.functions {
@@ -262,6 +264,42 @@ impl TextPool {
                         .map_err(|_| "allocation failed while lowering static text")?;
                     pool.data.extend_from_slice(bytes);
                     pool.offsets.insert(bytes.clone(), address);
+                }
+            }
+        }
+        // Sized array references address an immutable value slot containing
+        // the ordinary array descriptor. Their bytes share the literal pool.
+        for function in &program.functions {
+            for instruction in &function.body {
+                if let Op::Text { dst, bytes } = &instruction.op {
+                    let TypeKind::Ref { inner, .. } = program.types[function.locals[*dst].ty].kind
+                    else {
+                        unreachable!()
+                    };
+                    if !matches!(program.types[inner].kind, TypeKind::Array { .. })
+                        || pool.arrays.contains_key(bytes)
+                    {
+                        continue;
+                    }
+                    let padded = usize::try_from(aligned(pool.data.len() as u64, 8)?)
+                        .map_err(|_| "static byte array exceeds host representation")?;
+                    pool.data.resize(padded, 0);
+                    let address = pool.heap_start()?;
+                    let descriptor = address
+                        .checked_add(8)
+                        .ok_or("static byte array exceeds address representation")?;
+                    pool.data
+                        .try_reserve(32)
+                        .map_err(|_| "allocation failed while lowering byte constant")?;
+                    for value in [
+                        descriptor,
+                        pool.offsets[bytes],
+                        bytes.len() as u64,
+                        bytes.len() as u64,
+                    ] {
+                        pool.data.extend_from_slice(&value.to_le_bytes());
+                    }
+                    pool.arrays.insert(bytes.clone(), address);
                 }
             }
         }
@@ -307,6 +345,7 @@ struct Body<'a> {
     messages: &'a [String],
     texts: &'a TextPool,
     runtime: usize,
+    source_lines: bool,
 }
 impl<'a> Body<'a> {
     fn read_word(&mut self, local: usize, word: usize) {
@@ -871,6 +910,25 @@ impl<'a> Body<'a> {
         self.write(dst);
     }
     fn emit(&mut self, op: &Op, line: usize) -> Result<(), String> {
+        // Calls and generated allocation/copy/drop glue inherit the user operation.
+        // Scalar runtime internals preserve that location instead of replacing it.
+        if self.source_lines
+            && matches!(
+                op,
+                Op::Call { .. }
+                    | Op::Read { .. }
+                    | Op::Assign { .. }
+                    | Op::Drop { .. }
+                    | Op::DropIf { .. }
+                    | Op::Intrinsic { .. }
+                    | Op::Array { .. }
+                    | Op::Struct { .. }
+                    | Op::Variant { .. }
+            )
+        {
+            constant(&mut self.code, line as i64);
+            self.code.push(Instruction::GlobalSet(3));
+        }
         self.consume_inputs(op);
         match op {
             Op::Int { dst, value } => {
@@ -882,8 +940,17 @@ impl<'a> Body<'a> {
                 self.write(*dst);
             }
             Op::Text { dst, bytes } => {
-                constant(&mut self.code, self.texts.offsets[bytes] as i64);
-                constant(&mut self.code, bytes.len() as i64);
+                let TypeKind::Ref { inner, .. } =
+                    self.program.types[self.function.locals[*dst].ty].kind
+                else {
+                    unreachable!()
+                };
+                if matches!(self.program.types[inner].kind, TypeKind::Array { .. }) {
+                    constant(&mut self.code, self.texts.arrays[bytes] as i64);
+                } else {
+                    constant(&mut self.code, self.texts.offsets[bytes] as i64);
+                    constant(&mut self.code, bytes.len() as i64);
+                }
                 self.write(*dst);
             }
             Op::Unit { dst } => {
@@ -2293,6 +2360,7 @@ fn function_body(
     function: &KFunction,
     messages: &[String],
     texts: &TextPool,
+    source_lines: bool,
 ) -> Result<Code, String> {
     let layout = local_layout(program, representations, function)?;
     let extra_words = function
@@ -2331,6 +2399,7 @@ fn function_body(
         messages,
         texts,
         runtime,
+        source_lines,
     };
     body.code.locals = vec![ValueType::I64; layout.registers - layout.abi.words + 9 + extra_words];
     body.code.locals.extend(vec![ValueType::I32; flag_count]);
@@ -2340,6 +2409,14 @@ fn function_body(
         }
     }
     if layout.frame_bytes != 0 {
+        if source_lines {
+            let line = function
+                .body
+                .first()
+                .map_or(1, |instruction| instruction.line);
+            constant(&mut body.code, line as i64);
+            body.code.push(Instruction::GlobalSet(3));
+        }
         constant(&mut body.code, layout.frame_bytes as i64);
         call(&mut body.code, ALLOC + runtime);
         set(&mut body.code, body.frame);
@@ -2418,7 +2495,7 @@ pub fn lower(
             name: function.name.clone(),
             signature: FunctionAbi::new(&layout, function)?.signature(),
             role: FunctionRole::Source,
-            code: function_body(program, &layout, runtime, function, &messages, &texts)?,
+            code: function_body(program, &layout, runtime, function, &messages, &texts, true)?,
         });
     }
     for ty in 0..program.types.len() {
@@ -2518,6 +2595,7 @@ pub fn lower_runtime_functions(checked: &CheckedProgram) -> Result<Vec<Function>
     let layout = Layouts::new(program)?;
     let texts = TextPool {
         offsets: BTreeMap::new(),
+        arrays: BTreeMap::new(),
         data: Vec::new(),
     };
     let messages = Vec::new();
@@ -2547,7 +2625,7 @@ pub fn lower_runtime_functions(checked: &CheckedProgram) -> Result<Vec<Function>
                 }
             }
         }
-        let code = function_body(program, &layout, 0, function, &trap_messages, &texts)?;
+        let code = function_body(program, &layout, 0, function, &trap_messages, &texts, false)?;
         if code.instructions.iter().any(|instruction| matches!(instruction, Instruction::Call(index) if *index < FIRST_USER || *index >= FIRST_USER + program.functions.len())) {
             return Err("runtime source function requires ordinary heap glue".to_string());
         }

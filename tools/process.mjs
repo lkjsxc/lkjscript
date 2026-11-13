@@ -5,6 +5,7 @@
 // their protocol emits only completed cases or prepared modules, never program output.
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import path from 'node:path';
 const active = new Set();
 function stop(child) {
   if (!child.pid) return;
@@ -16,12 +17,25 @@ for (const [signal, status] of [['SIGINT', 130], ['SIGTERM', 143]]) {
 }
 export function run(command, args, options = {}) {
   const { timeout = Number(process.env.LKJ_TEST_TIMEOUT_MS || 30000),
-    maxBuffer = 32 * 1024 * 1024, encoding = 'utf8', sampleMemory = false, idleTimeout = 0, ...spawnOptions } = options;
+    maxBuffer = 32 * 1024 * 1024, encoding = 'utf8', sampleMemory = false, idleTimeout = 0,
+    memoryBytes = process.env.LKJ_TEST_MEMORY_BYTES || (path.basename(command) === 'rustc' ? '8589934592' : '2147483648'), ...spawnOptions } = options;
   if (![timeout, idleTimeout].every(value => Number.isFinite(value) && value >= 0)) throw new Error('invalid process timeout');
   return new Promise(resolve => {
     const stdout = [], stderr = [];
     let size = 0, error;
-    const child = spawn(command, args, { ...spawnOptions, detached: process.platform !== 'win32',
+    // Programs under test, including Rust references, inherit an explicit Linux
+    // address-space envelope. Capacity probes opt into a larger value or
+    // LKJ_TEST_MEMORY_BYTES=unlimited. Node only orchestrates tests and reserves
+    // a large V8 address cage; generated programs never execute inside it.
+    const budget = String(memoryBytes);
+    if (budget !== 'unlimited' && (!/^[1-9][0-9]*$/.test(budget) || BigInt(budget) > 18446744073709551615n)) {
+      throw new Error('LKJ_TEST_MEMORY_BYTES must be positive bytes or unlimited');
+    }
+    const node = ['node', 'nodejs'].includes(path.basename(command));
+    const executable = process.platform === 'linux' ? 'prlimit' : command;
+    const arguments_ = process.platform === 'linux'
+      ? ['--core=0', ...(node || budget === 'unlimited' ? [] : ['--as=' + budget]), '--', command, ...args] : args;
+    const child = spawn(executable, arguments_, { ...spawnOptions, detached: process.platform !== 'win32',
       stdio: ['ignore', 'pipe', 'pipe'] });
     active.add(child);
     let peakTreeRss = 0;

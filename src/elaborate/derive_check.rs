@@ -38,6 +38,26 @@ pub(super) fn validate(compiler: &mut Compiler<'_>) -> Result<()> {
                 continue;
             }
             for bound in &attr.args {
+                if bound == "Default" {
+                    if !matches!(item.item, a::Item::Struct(_)) {
+                        return Err(err(
+                            attr.span,
+                            "E_UNSUPPORTED",
+                            "derive Default on enums needs an explicit default variant; help: write an explicit Default implementation",
+                        ));
+                    }
+                    let standard = compiler
+                        .names
+                        .library_type("prelude", "Default", attr.span)?
+                        .declaration;
+                    let generated = source.impls.iter().find(|implementation| {
+                        implementation.span == item.span && matches!(&source.types[implementation.target].kind, a::Type::Path(path) if path.declaration == Some(declaration))
+                    });
+                    if generated.and_then(|implementation| implementation.trait_ty).is_none_or(|ty| !matches!(&source.types[ty].kind, a::Type::Path(path) if path.declaration == standard)) {
+                        return Err(err(attr.span, "E_TRAIT", "derive Default requires the standard Default trait; help: avoid shadowing std at this derive"));
+                    }
+                    continue;
+                }
                 if !matches!(
                     bound.as_str(),
                     "Copy" | "Clone" | "PartialEq" | "Eq" | "PartialOrd" | "Ord"

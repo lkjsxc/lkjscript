@@ -28,37 +28,7 @@ pub enum FunctionOwner {
     Trait(TraitId),
 }
 
-#[derive(Clone, Copy, Default, PartialEq, Eq)]
-pub struct Span {
-    pub file: FileId,
-    pub start: usize,
-    pub end: usize,
-    pub line: usize,
-    pub column: usize,
-}
-
-#[derive(Clone, PartialEq, Eq)]
-pub struct Diagnostic {
-    pub path: String,
-    pub file: FileId,
-    pub line: usize,
-    pub column: usize,
-    pub code: String,
-    pub message: String,
-}
-
-impl Diagnostic {
-    pub fn new(span: Span, code: &str, message: &str) -> Diagnostic {
-        Diagnostic {
-            path: String::new(),
-            file: span.file,
-            line: span.line,
-            column: span.column,
-            code: code.to_string(),
-            message: message.to_string(),
-        }
-    }
-}
+pub use crate::diagnostic::{Diagnostic, Span};
 
 #[derive(Clone)]
 pub struct Path {

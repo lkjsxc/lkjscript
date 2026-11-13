@@ -1,5 +1,5 @@
 //! Generic definitions are checked under rigid parameters before specialization.
-use lkjscript::{check, elaborate, k, syntax, wasm};
+use lkjscript::{check, elaborate, k, syntax};
 
 fn compile(source: &str) -> Result<k::CheckedProgram, lkjscript::ast::Diagnostic> {
     let parsed = syntax::parse(source).expect("definition fixture must parse");
@@ -196,7 +196,15 @@ fn abstract_verification_cannot_leak_into_an_executable() {
             .iter()
             .all(|function| !function.name.starts_with("$contract:"))
     );
-    assert!(!wasm::emit(&checked).unwrap().is_empty());
+    assert!(
+        !lkjscript::kc::emit(
+            &checked,
+            lkjscript::bootstrap_runtime::get().unwrap(),
+            "probe"
+        )
+        .unwrap()
+        .is_empty()
+    );
 }
 
 #[test]

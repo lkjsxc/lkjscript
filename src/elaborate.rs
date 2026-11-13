@@ -26,6 +26,7 @@ mod static_lifetimes;
 mod sugars;
 mod text_format;
 mod trait_proofs;
+mod type_display;
 mod type_resolve;
 mod variants;
 
@@ -39,6 +40,9 @@ use std::collections::{BTreeMap, BTreeSet};
 type Result<T> = std::result::Result<T, a::Diagnostic>;
 fn err(span: a::Span, code: &str, message: &str) -> a::Diagnostic {
     a::Diagnostic::new(span, code, message)
+}
+fn at_use_site(problem: a::Diagnostic, span: a::Span) -> a::Diagnostic {
+    a::Diagnostic::new(span, &problem.code, &problem.message)
 }
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum TypeKey {
@@ -859,7 +863,7 @@ impl Compiler<'_> {
                     return Err(err(
                         parameter.span,
                         "E_TRAIT",
-                        &format!("{} does not implement {}", self.types[ty].name, bound),
+                        &format!("{} does not implement {}", self.display_type(ty), bound),
                     ));
                 }
             }
@@ -2064,6 +2068,40 @@ impl Builder<'_, '_> {
                     self.compiler.types[value.1].kind.clone(),
                 ) {
                     if !want_mut || have_mut {
+                        if !want_mut
+                            && matches!(self.compiler.types[want].kind, k::TypeKind::Str)
+                            && self.library_string(have, span)
+                        {
+                            let argument = if have_mut {
+                                self.borrow(
+                                    k::Place {
+                                        local: value.0,
+                                        projections: vec![k::Projection::Deref],
+                                    },
+                                    false,
+                                    span.line,
+                                )?
+                                .0
+                            } else {
+                                value.0
+                            };
+                            let result = self.source_library_call(
+                                "string",
+                                "__lkj_as_str",
+                                BTreeMap::new(),
+                                vec![argument],
+                                span,
+                            )?;
+                            if have_mut {
+                                self.emit(
+                                    k::Op::Drop {
+                                        place: k::Place::local(value.0),
+                                    },
+                                    span.line,
+                                );
+                            }
+                            return Ok(result);
+                        }
                         let mut inner = have;
                         let mut place = k::Place {
                             local: value.0,
@@ -2183,6 +2221,19 @@ impl Builder<'_, '_> {
                     },
                     line,
                 );
+                Ok((dst, ty))
+            }
+            a::Expr::Bytes(bytes) => {
+                let inner = self.compiler.intern(
+                    String::new(),
+                    k::TypeKind::Array {
+                        inner: k::U8,
+                        len: bytes.len(),
+                    },
+                );
+                let ty = self.compiler.reference(inner, false);
+                let dst = self.temp(ty);
+                self.emit(k::Op::Text { dst, bytes }, line);
                 Ok((dst, ty))
             }
             a::Expr::Bool(value) => {
@@ -2315,6 +2366,9 @@ impl Builder<'_, '_> {
                             return Ok(value);
                         }
                     }
+                    if let Some(value) = self.string_ordering(&op, left, right, node.span)? {
+                        return Ok(value);
+                    }
                     if let Some(t) = self.hint(left).or_else(|| self.hint(right)) {
                         if let k::TypeKind::Vec { inner } = self.compiler.types[t].kind {
                             return self.vector_compare(&op, left, right, inner, node.span);
@@ -2334,9 +2388,32 @@ impl Builder<'_, '_> {
                         "E_TYPE",
                         &format!(
                             "binary operand types differ: {} and {}",
-                            self.compiler.types[ty].name, self.compiler.types[rt].name
+                            self.compiler.display_type(ty),
+                            self.compiler.display_type(rt)
                         ),
                     ));
+                }
+                if ty == k::BOOL && matches!(op.as_str(), "<" | "<=" | ">" | ">=") {
+                    let negated = self.temp(k::BOOL);
+                    self.emit(
+                        k::Op::Unary {
+                            dst: negated,
+                            op: "!".to_string(),
+                            src: if op == "<" || op == "<=" { left } else { right },
+                        },
+                        line,
+                    );
+                    let dst = self.temp(k::BOOL);
+                    self.emit(
+                        k::Op::Binary {
+                            dst,
+                            op: if op == "<" || op == ">" { "&" } else { "|" }.to_string(),
+                            left: negated,
+                            right: if op == "<" || op == "<=" { right } else { left },
+                        },
+                        line,
+                    );
+                    return Ok((dst, k::BOOL));
                 }
                 let result = if comparison { k::BOOL } else { ty };
                 let dst = self.temp(result);
@@ -2593,6 +2670,7 @@ impl Builder<'_, '_> {
         }
         let inner =
             inner.ok_or_else(|| err(span, "E_TYPE", "empty array needs an element type"))?;
+        self.compiler.check_owned_element(inner, span)?;
         let ty = self.compiler.intern(
             format!("[{};{}]", self.compiler.types[inner].name, elements.len()),
             k::TypeKind::Array {
@@ -3221,6 +3299,7 @@ impl Builder<'_, '_> {
                 )?
             } else if boxed && args.len() == 1 {
                 let value = self.expr(args[0], None)?;
+                self.compiler.check_owned_element(value.1, span)?;
                 let t = self.compiler.intern(
                     format!("Box<{}>", self.compiler.types[value.1].name),
                     k::TypeKind::Box { inner: value.1 },
@@ -3312,12 +3391,20 @@ impl Builder<'_, '_> {
                     .ok()
             };
             if let Some(t) = target_type {
-                let impls = self.compiler.implementations.method_candidates(
-                    &self.compiler.types,
-                    &self.compiler.applications,
-                    t,
-                    method,
-                );
+                if let Some(instance) = self.compiler.static_contract(t, method, callee, span)? {
+                    associated = Some(instance.source);
+                    initial_sub = instance.substitutions;
+                }
+                let impls = if associated.is_some() {
+                    Vec::new()
+                } else {
+                    self.compiler.implementations.method_candidates(
+                        &self.compiler.types,
+                        &self.compiler.applications,
+                        t,
+                        method,
+                    )
+                };
                 let mut candidates = Vec::new();
                 let mut inherent = Vec::new();
                 let mut prerequisite_problem = None;
@@ -3386,7 +3473,12 @@ impl Builder<'_, '_> {
                 }
             }
         };
-        if associated.is_some() {
+        if associated.is_some()
+            && !matches!(
+                self.compiler.source.function_owner(a::FunctionId { index }),
+                a::FunctionOwner::Trait(_)
+            )
+        {
             self.compiler.method_access(index, self.scope, span)?;
         }
         let target = self.compiler.source.functions[index].clone();
@@ -3450,7 +3542,28 @@ impl Builder<'_, '_> {
         if let Some(inferred) = context.inferred {
             self.infer_type_matches(target.result, inferred, &mut sub)?;
         }
-        let function = self.compiler.instantiate(index, sub)?;
+        let function = self
+            .compiler
+            .instantiate(index, sub.clone())
+            .map_err(|problem| at_use_site(problem, span))?;
+        self.compiler.record_static_contract(function, index, sub);
+        for (position, value) in values.iter().enumerate() {
+            let expected = self.compiler.functions[function].locals[position].ty;
+            let actual = self.ty(*value);
+            if actual != expected {
+                return Err(err(
+                    self.compiler.source.exprs[args[position]].span,
+                    "E_TYPE",
+                    &format!(
+                        "argument {} of {} expects {}, found {}; help: pass a value with the declared parameter type",
+                        position + 1,
+                        target.name,
+                        self.compiler.display_type(expected),
+                        self.compiler.display_type(actual)
+                    ),
+                ));
+            }
+        }
         let ty = self.compiler.functions[function].result;
         let dst = self.temp(ty);
         self.emit(
@@ -3944,7 +4057,11 @@ impl Builder<'_, '_> {
                         } else {
                             "E_TRAIT"
                         },
-                        "method resolution requires one implementation",
+                        &format!(
+                            "method {name} on {} has {} applicable implementations; help: use an implemented method or write an explicit loop",
+                            self.compiler.display_type(base),
+                            candidates.len()
+                        ),
                     ));
                 }
                 let (index, sub) = candidates[0].clone();
@@ -4145,19 +4262,14 @@ impl Builder<'_, '_> {
                 if args.len() < 2 {
                     return Err(err(span, "E_TYPE", "assertion needs two operands"));
                 }
-                let t = self.hint(args[0]).or_else(|| self.hint(args[1]));
-                let (left, ty) = self.expr(args[0], t)?;
-                let (right, _) = self.expr(args[1], Some(ty))?;
-                let condition = self.temp(k::BOOL);
-                self.emit(
-                    k::Op::Binary {
-                        dst: condition,
-                        op: if name == "assert_eq" { "==" } else { "!=" }.to_string(),
-                        left,
-                        right,
-                    },
-                    span.line,
-                );
+                let condition = self
+                    .equality_expr(
+                        if name == "assert_eq" { "==" } else { "!=" },
+                        args[0],
+                        args[1],
+                        span,
+                    )?
+                    .0;
                 let dst = self.temp(k::UNIT);
                 self.emit(
                     k::Op::Intrinsic {

@@ -2,12 +2,13 @@
 //! consumers, executes through the ordinary source/library pipeline.
 #[path = "../bridge/library.rs"]
 mod bootstrap_library;
+#[path = "support/native.rs"]
+mod native_test;
 
 use lkjscript::compiler;
 use lkjscript::source::{SourceBundle, SourceInput};
-use std::io::Write;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 const K: &str = include_str!("../src/k.rs");
@@ -34,12 +35,22 @@ impl Drop for Temporary {
 
 struct Observation {
     rust: String,
-    wasm: String,
+    name: String,
+    arguments: Vec<i64>,
 }
-fn call(name: &str, rust_arguments: &str, wasm_arguments: &str) -> Observation {
+fn call(name: &str, rust_arguments: &str, _abi_arguments: &str) -> Observation {
     Observation {
         rust: format!("{name}({rust_arguments})"),
-        wasm: format!("e['fn:{name}']({wasm_arguments})"),
+        name: name.to_string(),
+        arguments: rust_arguments
+            .split(',')
+            .filter(|value| !value.trim().is_empty())
+            .map(|value| match value.trim() {
+                "true" => 1,
+                "false" => 0,
+                value => value.parse().unwrap(),
+            })
+            .collect(),
     }
 }
 fn observations() -> Vec<Observation> {
@@ -143,39 +154,21 @@ fn rust_results(module: &str, cases: &[Observation]) -> Vec<i64> {
     assert_eq!(values.len(), cases.len());
     values
 }
-fn run(artifact: &[u8], cases: &[Observation], expected: &[i64]) {
+fn run(checked: &lkjscript::k::CheckedProgram, cases: &[Observation], expected: &[i64]) {
     assert_eq!(cases.len(), expected.len());
-    let mut script = String::from(
-        "const chunks=[];process.stdin.on('data',b=>chunks.push(b));process.stdin.on('end',async()=>{try{const {instance}=await WebAssembly.instantiate(Buffer.concat(chunks),{lkjscript:{trap(c,l){throw Error('trap '+c+':'+l)}}});const e=instance.exports;",
-    );
-    for (index, (case, expected)) in cases.iter().zip(expected).enumerate() {
-        script.push_str(&format!(
-            "{{const actual={};if(actual!=={expected}n)throw Error('observation {index}: '+actual+' != {expected}');}}",
-            case.wasm
-        ));
-    }
-    script.push_str("}catch(error){console.error(error);process.exitCode=1}})");
-    let mut child = Command::new("node")
-        .args(["-e", &script])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    child.stdin.take().unwrap().write_all(artifact).unwrap();
-    let result = child.wait_with_output().unwrap();
-    assert!(
-        result.status.success(),
-        "{}",
-        String::from_utf8_lossy(&result.stderr)
-    );
+    let calls: Vec<_> = cases
+        .iter()
+        .zip(expected)
+        .map(|(case, value)| (case.name.as_str(), case.arguments.as_slice(), *value))
+        .collect();
+    native_test::assert_calls(checked, &calls);
 }
 
 #[test]
 fn entire_production_k_module_executes_cloning_equality_and_representation_access() {
     let cases = observations();
     let expected = rust_results(K, &cases);
-    let artifact = compiler::compile(&bundle(K)).unwrap();
+    let artifact = compiler::check_bundle(&bundle(K)).unwrap();
     run(&artifact, &cases, &expected);
 }
 
@@ -195,9 +188,12 @@ fn production_k_body_mutations_change_artifacts_and_results() {
     let changed_values = rust_results(&changed, &cases);
     assert_eq!(original_values, vec![65, 42]);
     assert_eq!(changed_values, vec![63, 43]);
-    let original = compiler::compile(&bundle(K)).unwrap();
-    let mutated = compiler::compile(&bundle(&changed)).unwrap();
-    assert_ne!(original, mutated);
+    let original = compiler::check_bundle(&bundle(K)).unwrap();
+    let mutated = compiler::check_bundle(&bundle(&changed)).unwrap();
+    assert_ne!(
+        lkjscript::k_text::write(original.program()),
+        lkjscript::k_text::write(mutated.program())
+    );
     run(&original, &cases, &original_values);
     run(&mutated, &cases, &changed_values);
 }
@@ -206,7 +202,7 @@ fn production_k_body_mutations_change_artifacts_and_results() {
 fn invalid_production_k_body_mutation_reports_its_original_file() {
     let changed = K.replacen("bits: 32,", "bits: true,", 1);
     assert_ne!(changed, K);
-    let error = compiler::compile(&bundle(&changed)).unwrap_err();
+    let error = compiler::check_bundle(&bundle(&changed)).err().unwrap();
     assert_eq!(error.code, "E_TYPE", "{error:?}");
     assert_eq!(error.path, "src/k.rs", "{error:?}");
 }

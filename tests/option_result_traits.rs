@@ -2,11 +2,12 @@
 //! compiler. Rust executes the identical prelude bytes and probe definitions.
 #[path = "../bridge/library.rs"]
 mod bootstrap_library;
+#[path = "support/native.rs"]
+mod native;
 
 use lkjscript::compiler;
 use lkjscript::source::{SourceBundle, SourceInput};
-use std::io::Write;
-use std::process::{Command, Stdio};
+use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 const PRELUDE: &str = include_str!("../library/prelude.rs");
@@ -218,6 +219,13 @@ fn directory() -> std::path::PathBuf {
 }
 
 fn rust_library(directory: &std::path::Path, prelude: &str) -> String {
+    for (name, contents) in [
+        ("string.rs", include_str!("../library/string.rs")),
+        ("str.rs", include_str!("../library/str.rs")),
+        ("bytes.rs", include_str!("../library/bytes.rs")),
+    ] {
+        std::fs::write(directory.join(name), contents).unwrap();
+    }
     std::fs::write(directory.join("prelude.rs"), prelude).unwrap();
     std::fs::write(
         directory.join("sequence.rs"),
@@ -234,7 +242,7 @@ fn rust_library(directory: &std::path::Path, prelude: &str) -> String {
         include_str!("../library/integer.rs"),
     )
     .unwrap();
-    "#[path=\"prelude.rs\"]mod prelude;#[path=\"iter.rs\"]mod iter;#[path=\"integer.rs\"]mod integer;#[path=\"sequence.rs\"]mod sequence;use prelude::{Option,Result};\n"
+    "#[path=\"prelude.rs\"]mod prelude;#[path=\"iter.rs\"]mod iter;#[path=\"integer.rs\"]mod integer;#[path=\"sequence.rs\"]mod sequence;#[path=\"string.rs\"]mod string;#[path=\"str.rs\"]mod str;#[path=\"bytes.rs\"]mod bytes;use prelude::{Option,Result};\n"
         .to_string()
 }
 
@@ -276,33 +284,8 @@ fn rust_oracle(source: &str, prelude: &str, probes: &[&str]) -> String {
     String::from_utf8(output.stdout).unwrap()
 }
 
-fn run_node(artifact: &[u8], expected: &str) {
-    let mut observations = String::new();
-    for row in expected.lines() {
-        let fields: Vec<_> = row.split_whitespace().collect();
-        assert_eq!(fields.len(), 2);
-        observations.push_str(&format!(
-            "if(instance.exports['fn:{}']()!=={}n)throw Error('{} differs');",
-            fields[0], fields[1], fields[0]
-        ));
-    }
-    let script = format!(
-        "const chunks=[];process.stdin.on('data',b=>chunks.push(b));process.stdin.on('end',async()=>{{try{{const {{instance}}=await WebAssembly.instantiate(Buffer.concat(chunks),{{lkjscript:{{trap(c,l){{throw Error('trap '+c+':'+l)}}}}}});{observations}}}catch(e){{console.error(e);process.exitCode=1}}}})"
-    );
-    let mut child = Command::new("node")
-        .arg("-e")
-        .arg(script)
-        .stdin(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    child.stdin.take().unwrap().write_all(artifact).unwrap();
-    let output = child.wait_with_output().unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+fn run_native(program: &lkjscript::k::CheckedProgram, expected: &str) {
+    native::assert_rows(program, expected);
 }
 
 #[test]
@@ -322,52 +305,61 @@ fn prelude_traits_execute_with_the_same_production_source_under_rust() {
     ];
     let expected = rust_oracle(COMMON, PRELUDE, &probes);
     assert_eq!(expected.lines().count(), probes.len());
-    let artifact =
-        compiler::compile(&bundle(COMMON, PRELUDE)).unwrap_or_else(|error| panic!("{error:?}"));
-    run_node(&artifact, &expected);
+    let artifact = compiler::check_bundle(&bundle(COMMON, PRELUDE))
+        .unwrap_or_else(|error| panic!("{error:?}"));
+    run_native(&artifact, &expected);
 }
 
 #[test]
 fn selected_source_clone_and_equality_bodies_change_derived_behavior() {
     let probes = ["mutation_clone_probe", "mutation_equality_probe"];
-    let baseline =
-        compiler::compile(&bundle(COMMON, PRELUDE)).unwrap_or_else(|error| panic!("{error:?}"));
+    let baseline = compiler::check_bundle(&bundle(COMMON, PRELUDE))
+        .unwrap_or_else(|error| panic!("{error:?}"));
     let expected = rust_oracle(COMMON, PRELUDE, &probes);
-    run_node(&baseline, &expected);
+    run_native(&baseline, &expected);
     let clone_mutation = COMMON.replace(
         "generation:self.generation+1",
         "generation:self.generation+7",
     );
-    let clone_artifact = compiler::compile(&bundle(&clone_mutation, PRELUDE))
+    let clone_artifact = compiler::check_bundle(&bundle(&clone_mutation, PRELUDE))
         .unwrap_or_else(|error| panic!("{error:?}"));
-    assert_ne!(clone_artifact, baseline);
+    assert_ne!(
+        lkjscript::k_text::write(clone_artifact.program()),
+        lkjscript::k_text::write(baseline.program())
+    );
     let clone_expected = rust_oracle(&clone_mutation, PRELUDE, &probes);
     assert_ne!(clone_expected, expected);
-    run_node(&clone_artifact, &clone_expected);
+    run_native(&clone_artifact, &clone_expected);
     let equality_mutation = COMMON.replace(
         "fn eq(&self,other:&Self)->bool{*self.value==*other.value}",
         "fn eq(&self,other:&Self)->bool{true}",
     );
-    let equality_artifact = compiler::compile(&bundle(&equality_mutation, PRELUDE))
+    let equality_artifact = compiler::check_bundle(&bundle(&equality_mutation, PRELUDE))
         .unwrap_or_else(|error| panic!("{error:?}"));
-    assert_ne!(equality_artifact, baseline);
+    assert_ne!(
+        lkjscript::k_text::write(equality_artifact.program()),
+        lkjscript::k_text::write(baseline.program())
+    );
     let equality_expected = rust_oracle(&equality_mutation, PRELUDE, &probes);
     assert_ne!(equality_expected, expected);
-    run_node(&equality_artifact, &equality_expected);
+    run_native(&equality_artifact, &equality_expected);
 }
 
 #[test]
 fn supplied_prelude_bytes_control_behavior_and_diagnostics() {
     let source =
         "pub fn probe()->i64{let value=Option::Some(42i64).clone();if value.is_some(){1}else{0}}";
-    let baseline =
-        compiler::compile(&bundle(source, PRELUDE)).unwrap_or_else(|error| panic!("{error:?}"));
+    let baseline = compiler::check_bundle(&bundle(source, PRELUDE))
+        .unwrap_or_else(|error| panic!("{error:?}"));
     let mutation = PRELUDE.replace("Option::Some(_) => true,", "Option::Some(_) => false,");
-    let altered =
-        compiler::compile(&bundle(source, &mutation)).unwrap_or_else(|error| panic!("{error:?}"));
-    assert_ne!(baseline, altered);
-    run_node(&baseline, &rust_oracle(source, PRELUDE, &["probe"]));
-    run_node(&altered, &rust_oracle(source, &mutation, &["probe"]));
+    let altered = compiler::check_bundle(&bundle(source, &mutation))
+        .unwrap_or_else(|error| panic!("{error:?}"));
+    assert_ne!(
+        lkjscript::k_text::write(baseline.program()),
+        lkjscript::k_text::write(altered.program())
+    );
+    run_native(&baseline, &rust_oracle(source, PRELUDE, &["probe"]));
+    run_native(&altered, &rust_oracle(source, &mutation, &["probe"]));
     let invalid = PRELUDE.replace("Option::Some(_) => true,", "Option::Some(_) => 1i64,");
     match compiler::check_bundle(&bundle(source, &invalid)) {
         Ok(_) => panic!("ill-typed production prelude was accepted"),

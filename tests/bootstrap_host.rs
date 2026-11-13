@@ -39,58 +39,6 @@ fn run_source(name: &str, text: &str, verb: &str) -> Output {
 }
 
 #[test]
-fn compiler_bridge_handles_deep_expression_and_error_on_small_calling_stack() {
-    const CHILD: &str = "LKJSCRIPT_STACK_BRIDGE_CHILD";
-    if std::env::var_os(CHILD).is_some() {
-        std::thread::Builder::new()
-            .stack_size(2 * 1024 * 1024)
-            .spawn(|| {
-                let depth = 4096;
-                let source = format!("fn probe() -> bool {{ {}true }}", "!".repeat(depth));
-                let bytes = compiler::compile(&bundle(source)).unwrap();
-                let path = file("deep-expression", "wasm");
-                fs::write(&path, bytes).unwrap();
-                let output = Command::new("node")
-                    .arg(root().join("bridge/run.mjs"))
-                    .arg(&path)
-                    .args(["probe", "bool"])
-                    .output()
-                    .unwrap();
-                fs::remove_file(path).unwrap();
-                assert!(
-                    output.status.success(),
-                    "{}",
-                    String::from_utf8_lossy(&output.stderr)
-                );
-                assert_eq!(output.stdout, b"true\n");
-                let malformed = format!("fn probe() -> bool {{ {}", "!".repeat(depth));
-                let error = compiler::compile(&bundle(malformed)).unwrap_err();
-                assert_eq!(error.code, "E_PARSE");
-                assert_eq!(error.path, "stack/main.rs");
-            })
-            .unwrap()
-            .join()
-            .unwrap();
-        return;
-    }
-    let output = Command::new(std::env::current_exe().unwrap())
-        .args([
-            "--exact",
-            "compiler_bridge_handles_deep_expression_and_error_on_small_calling_stack",
-            "--nocapture",
-        ])
-        .env(CHILD, "1")
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "{}{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-}
-
-#[test]
 fn compiler_bridge_respects_a_host_address_space_envelope() {
     const CHILD: &str = "LKJSCRIPT_ADDRESS_SPACE_CHILD";
     if std::env::var_os(CHILD).is_some() {

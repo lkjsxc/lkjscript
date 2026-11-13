@@ -1,5 +1,5 @@
 //! Text K is a flat instruction listing for inspection and adversarial checks.
-use crate::ast::{Diagnostic, Span};
+use crate::diagnostic::{Diagnostic, Span};
 use crate::k::*;
 
 type Result<T> = std::result::Result<T, Diagnostic>;

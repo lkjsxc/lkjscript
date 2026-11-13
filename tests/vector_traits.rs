@@ -1,11 +1,12 @@
 //! Production Vec helpers run through both Rust and the ordinary source bundle.
 #[path = "../bridge/library.rs"]
 mod bootstrap_library;
+#[path = "support/native.rs"]
+mod native;
 
 use lkjscript::source::{SourceBundle, SourceInput};
 use lkjscript::{compiler, syntax};
-use std::io::Write;
-use std::process::{Command, Stdio};
+use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 const SEQUENCE: &str = include_str!("../library/sequence.rs");
@@ -165,30 +166,12 @@ fn bundle(root: &str, sequence: &str) -> SourceBundle {
     }
 }
 
-fn run(artifact: &[u8], expected: &[(String, i64)]) {
-    let mut script = String::from(
-        "const chunks=[];process.stdin.on('data',b=>chunks.push(b));process.stdin.on('end',async()=>{try{const {instance}=await WebAssembly.instantiate(Buffer.concat(chunks),{lkjscript:{trap(c,l){throw Error('trap '+c+':'+l)}}});",
-    );
-    for (entry, value) in expected {
-        script.push_str(&format!(
-            "{{const actual=instance.exports['fn:{entry}']();if(actual!=={value}n)throw Error('{entry}: expected {value}, got '+actual);}}"
-        ));
-    }
-    script.push_str("}catch(e){console.error(e);process.exitCode=1}})");
-    let mut child = Command::new("node")
-        .arg("-e")
-        .arg(script)
-        .stdin(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    child.stdin.take().unwrap().write_all(artifact).unwrap();
-    let output = child.wait_with_output().unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+fn run(program: &lkjscript::k::CheckedProgram, expected: &[(String, i64)]) {
+    let observations = expected
+        .iter()
+        .map(|(name, value)| (name.as_str(), *value))
+        .collect::<Vec<_>>();
+    native::assert_values(program, &observations);
 }
 
 fn rust_observations(source: &str, probes: &[&str]) -> Vec<(String, i64)> {
@@ -275,7 +258,7 @@ fn owned_vectors_and_exact_helpers_match_rust_with_affine_elements() {
         "{expected:?}"
     );
     let root = format!("use std::{{__lkj_vec_clone,__lkj_vec_equal}};\n{COMMON}");
-    let artifact = compiler::compile(&bundle(&root, SEQUENCE)).unwrap();
+    let artifact = compiler::check_bundle(&bundle(&root, SEQUENCE)).unwrap();
     run(&artifact, &expected);
 }
 
@@ -312,7 +295,7 @@ pub fn vector_rule()->i64 {
     expected.push(("vector_rule".to_string(), 0));
     let root = format!("use std::{{__lkj_vec_equal}};\n{source}");
     run(
-        &compiler::compile(&bundle(&root, SEQUENCE)).unwrap(),
+        &compiler::check_bundle(&bundle(&root, SEQUENCE)).unwrap(),
         &expected,
     );
 }
@@ -350,7 +333,7 @@ fn cloned_string_vectors_preserve_every_byte_after_original_cleanup() {
     assert_eq!(expected[0].1, 0);
     let root = format!("use std::{{__lkj_vec_clone,__lkj_vec_equal}};\n{source}");
     run(
-        &compiler::compile(&bundle(&root, SEQUENCE)).unwrap(),
+        &compiler::check_bundle(&bundle(&root, SEQUENCE)).unwrap(),
         &expected,
     );
 }
@@ -417,7 +400,7 @@ pub fn probe()->i64 {
 }
 "#;
     run(
-        &compiler::compile(&bundle(source, SEQUENCE)).unwrap(),
+        &compiler::check_bundle(&bundle(source, SEQUENCE)).unwrap(),
         &[("probe".to_string(), 42)],
     );
     let parsed = syntax::parse(source).unwrap();
@@ -513,7 +496,7 @@ pub fn scope_probe()->i64 {
     let expected = rust_observations(source, &["scope_probe"]);
     assert_eq!(expected[0].1, 51);
     run(
-        &compiler::compile(&bundle(source, SEQUENCE)).unwrap(),
+        &compiler::check_bundle(&bundle(source, SEQUENCE)).unwrap(),
         &expected,
     );
 
@@ -526,7 +509,7 @@ pub fn only_source_trait()->i64 {
 }
 "#;
     run(
-        &compiler::compile(&bundle(without_builtin, SEQUENCE)).unwrap(),
+        &compiler::check_bundle(&bundle(without_builtin, SEQUENCE)).unwrap(),
         &[("only_source_trait".to_string(), 9)],
     );
 }
@@ -547,7 +530,7 @@ pub fn ne_probe()->i64 {
     if left.ne(&right) {1} else {0}
 }
 "#;
-    let original = compiler::compile(&bundle(root, SEQUENCE)).unwrap();
+    let original = compiler::check_bundle(&bundle(root, SEQUENCE)).unwrap();
     run(
         &original,
         &[
@@ -561,13 +544,19 @@ pub fn ne_probe()->i64 {
         "result.push(source[0].clone());",
     );
     assert_ne!(clone_changed, SEQUENCE);
-    let cloned = compiler::compile(&bundle(root, &clone_changed)).unwrap();
-    assert_ne!(cloned, original);
+    let cloned = compiler::check_bundle(&bundle(root, &clone_changed)).unwrap();
+    assert_ne!(
+        lkjscript::k_text::write(cloned.program()),
+        lkjscript::k_text::write(original.program())
+    );
     run(&cloned, &[("clone_probe".to_string(), 44)]);
     let equality_changed = SEQUENCE.replace("if !(left[index] == right[index]) {", "if false {");
     assert_ne!(equality_changed, SEQUENCE);
-    let compared = compiler::compile(&bundle(root, &equality_changed)).unwrap();
-    assert_ne!(compared, original);
+    let compared = compiler::check_bundle(&bundle(root, &equality_changed)).unwrap();
+    assert_ne!(
+        lkjscript::k_text::write(compared.program()),
+        lkjscript::k_text::write(original.program())
+    );
     run(
         &compared,
         &[("eq_probe".to_string(), 1), ("ne_probe".to_string(), 0)],
@@ -578,11 +567,12 @@ pub fn ne_probe()->i64 {
 fn invalid_sequence_source_mutation_keeps_the_library_diagnostic() {
     let changed = SEQUENCE.replace("result.push(source[index].clone());", "result.push(true);");
     assert_ne!(changed, SEQUENCE);
-    let error = compiler::compile(&bundle(
+    let error = compiler::check_bundle(&bundle(
         "fn probe(){let values:Vec<i64>=Vec::new();values.clone();}",
         &changed,
     ))
-    .unwrap_err();
+    .err()
+    .unwrap();
     assert_eq!(error.code, "E_TYPE", "{error:?}");
     assert_eq!(error.path, "$std/sequence.rs", "{error:?}");
 }
@@ -656,7 +646,7 @@ pub fn derived_holder()->i64 {
     let expected = rust_observations(source, &["derived_holder"]);
     assert_eq!(expected[0].1, 0);
     run(
-        &compiler::compile(&bundle(source, SEQUENCE)).unwrap(),
+        &compiler::check_bundle(&bundle(source, SEQUENCE)).unwrap(),
         &expected,
     );
 }

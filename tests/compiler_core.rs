@@ -1,8 +1,8 @@
 //! The compiler-core boundary is driven by declared source and library bytes.
 use lkjscript::compiler;
 use lkjscript::source::{SourceBundle, SourceInput};
-use std::io::Write;
-use std::process::{Command, Stdio};
+use std::os::unix::fs::PermissionsExt;
+use std::process::Command;
 
 fn bundle(value: i64) -> SourceBundle {
     SourceBundle {
@@ -11,7 +11,7 @@ fn bundle(value: i64) -> SourceBundle {
         files: vec![
             SourceInput {
                 path: "main.rs".to_string(),
-                text: "mod child; pub fn probe()->i64 { child::answer() }".to_string(),
+                text: "mod child; pub fn main(mut world:World) { let mut out=world.stdout(); out.write(&[child::answer() as u8]); }".to_string(),
             },
             SourceInput {
                 path: "child.rs".to_string(),
@@ -26,29 +26,23 @@ fn bundle(value: i64) -> SourceBundle {
 }
 
 fn run(bytes: &[u8], expected: i64) {
-    let script = format!(
-        "const chunks=[];process.stdin.on('data',b=>chunks.push(b));\
-         process.stdin.on('end',async()=>{{try{{\
-         const {{instance}}=await WebAssembly.instantiate(Buffer.concat(chunks),\
-         {{lkjscript:{{trap(c,l){{throw Error('trap '+c+':'+l)}}}}}});\
-         const result=instance.exports['fn:probe']();\
-         if(result!=={expected}n)throw Error('expected {expected}, got '+result);\
-         }}catch(e){{console.error(e);process.exitCode=1}}}});"
-    );
-    let mut child = Command::new("node")
-        .arg("-e")
-        .arg(script)
-        .stdin(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
+    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("target/compiler-core");
+    std::fs::create_dir_all(&directory).unwrap();
+    let path = directory.join(format!("{}-{expected}.elf", std::process::id()));
+    std::fs::write(&path, bytes).unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let output = Command::new("prlimit")
+        .arg("--as=268435456")
+        .arg(&path)
+        .output()
         .unwrap();
-    child.stdin.take().unwrap().write_all(bytes).unwrap();
-    let result = child.wait_with_output().unwrap();
+    std::fs::remove_file(path).unwrap();
     assert!(
-        result.status.success(),
+        output.status.success(),
         "{}",
-        String::from_utf8_lossy(&result.stderr)
+        String::from_utf8_lossy(&output.stderr)
     );
+    assert_eq!(output.stdout, vec![expected as u8]);
 }
 
 #[test]

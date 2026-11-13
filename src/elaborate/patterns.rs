@@ -387,11 +387,19 @@ impl Builder<'_, '_> {
         {
             self.explicit_type_arguments(&path.args, node.span)?;
         }
+        // A string pattern already has type &str; another implicit dereference
+        // would wrongly accept a Rust-invalid &&str scrutinee.
+        let string_literal = matches!(node.kind, a::Pattern::Literal(value) if matches!(self.compiler.source.exprs[value].kind, a::Expr::String(_)));
         // Match ergonomics follow references only for structural/literal forms.
-        if !matches!(
-            node.kind,
-            a::Pattern::Bind { .. } | a::Pattern::Wild | a::Pattern::Ref { .. } | a::Pattern::Or(_)
-        ) {
+        if !string_literal
+            && !matches!(
+                node.kind,
+                a::Pattern::Bind { .. }
+                    | a::Pattern::Wild
+                    | a::Pattern::Ref { .. }
+                    | a::Pattern::Or(_)
+            )
+        {
             if let k::TypeKind::Ref { inner, mutable } = self.compiler.types[ty].kind {
                 let mode = Some(borrow.unwrap_or(true) && mutable);
                 let child = self.prepare_pattern_inner(plan, pattern, inner, mode)?;
@@ -426,7 +434,9 @@ impl Builder<'_, '_> {
                         &self.compiler.types[ty].kind
                     ),
                     (a::Expr::Bool(_), k::TypeKind::Bool) | (a::Expr::Float(_), k::TypeKind::F64)
-                ) {
+                ) && !(string_literal
+                    && matches!(self.compiler.types[ty].kind, k::TypeKind::Ref { inner, mutable: false } if matches!(self.compiler.types[inner].kind, k::TypeKind::Str)))
+                {
                     return Err(err(
                         node.span,
                         "E_TYPE",
@@ -757,6 +767,14 @@ impl Builder<'_, '_> {
                 self.pattern_condition(plan, *inner, place)
             }
             PatternKind::Literal(expression) => {
+                if matches!(
+                    self.compiler.source.exprs[*expression].kind,
+                    a::Expr::String(_)
+                ) {
+                    let left = self.read(place, line)?.0;
+                    let right = self.expr(*expression, Some(self.ty(left)))?.0;
+                    return Ok(self.text_equality_values("==", left, right, node.span)?.0);
+                }
                 let left = self.read(place, line)?.0;
                 let right = self.expr(*expression, Some(node.ty))?.0;
                 let dst = self.temp(k::BOOL);

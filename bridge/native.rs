@@ -1,4 +1,4 @@
-//! The Rust bootstrap supplies code bytes, memory reservations and output/result
+//! The Rust bootstrap supplies code bytes, execution budgets and output/result
 //! capabilities. The ELF itself has no Rust, Node, loader or libc dependency.
 use super::*;
 use lkjscript::{bootstrap_runtime, lower};
@@ -33,7 +33,6 @@ pub fn image(
             arguments: if world { vec![1] } else { Vec::new() },
             result_fd: if packet { Some(2) } else { None },
         },
-        bootstrap_runtime::resources()?,
     )
 }
 pub fn save(path: &Path, bytes: &[u8]) -> Result<(), String> {
@@ -48,7 +47,8 @@ fn trap_message(program: &lower::Program, code: u64) -> &str {
         3 => "index out of bounds",
         4 => "explicit trap",
         5 => "assertion failed",
-        6 => "allocation failed",
+        6 => "heap allocation failed",
+        8 => "stack extent exhausted",
         7 => "host output failure",
         _ => program
             .trap_messages
@@ -70,7 +70,7 @@ pub fn execute(
             Stdio::inherit()
         })
         .stderr(Stdio::piped());
-    host_process::prepare_child(&mut command);
+    host_process::prepare_native_child(&mut command)?;
     let output = command
         .output()
         .map_err(|error| format!("E_HOST native: {error}"))?;

@@ -1,72 +1,87 @@
 # Direction
 
-Language design comes first: types, generics, trait evidence, ownership, lifetimes,
-effects and concurrency that compose soundly. Reliable agent development is second;
-applications are probes. The project eventually owns its compiler, runtime,
-library and tools without Rust or Node. No compatibility with past versions is owed.
+lkjscript is a Rust-compatible subset chosen for reliable work by agents. It is
+not a promise to approximate all of Rust. Accepted surface behavior is compared
+with Rust under the declared capability/trap host. A deliberate rejection that
+names the supported rewrite is useful; an unpredictable checker is not.
+Language design comes first, reliable agent development second. The project will
+own its compiler, runtime, library and tools without Rust or Node. No backward
+compatibility with previous versions is required.
 
-Work by dependency, then general usefulness, corpus frequency and cost. Compiler
-file order is not a roadmap. A census locates missing constructs and blocked
-regions; acceptance counts do not establish self-compilation. The milestone is
-execution of the real compiler and library graph with declared host inputs.
+## Consumers and the two-way rule
 
-Resolve uses by identity. Infer and check definitions under declared assumptions,
-record choices once, then instantiate and lower the recorded form. Migrate each
-responsibility behind compiler::compile while retaining one runnable route. The
-independent K checker remains a trust boundary. The separately implemented K machine
-is an execution route and a counterexample search for checking and lowering.
+The production K compiler is the first consumer, repository tools second, and
+the source front end third. Fresh independent programs test whether these users
+have hidden an ordinary gap. A spent corpus is retained as regression evidence,
+not a width score. Count actual remaining compiler diagnostics, including code
+added in the same change; recovered census observations are partial evidence.
 
-Ownership facts need distinct joins: initialization weakens to maybe, possible
-reference holders unite, and authority originates only from checked borrows.
-Conditional cleanup preserves destructor order. Loop invariants are supplied by
-construction and checked by inclusion. Origin-variable call contracts must precede
-general reference-bearing mutation. These are designs until language.md says they
-are implemented; initialization joins now weaken, possible loan holders unite, and loop backedges remain conservative.
+When a consumer needs a missing form, choose the cheaper sound change. Add
+ordinary surface forms that use existing K or source library code. Rewrite the
+compiler when supporting a rare form would add trusted primitives, checker rules
+or reference contracts. Preserve source behavior and verification either way.
+Prefer plainer trusted code and explicit owned indices over extending reference
+contracts to preserve a convenient host-language API.
 
-World-derived output and an independent K machine are available. Prioritize
-front-end width over new trusted rules: patterns and question-mark first, then
-source-library text and collections, then closures and iteration behind multi-root
-view and origin-variable call contracts. Remove measured lookup and loan scans
-as those constructs multiply their use. Preserve
-per-leaf provenance, exact versus bounded sources and reborrow-parent distinctions.
-No arbitrary acceptance ceilings or source-depth cutoff. Recursive and explicit
-work stacks are both implementation choices, judged on acceptance and measurements.
+## The K compiler first
 
-Keep the Rust bootstrap and Node route explicit. The source compiler boundary takes
-declared source/library bytes and returns artifacts or diagnostics. Resource setup
-belongs to host adapters. A scoped fixed point requires C0's language pipeline to
-emit W1 from the actual closure, then W1 to emit identical W2 with the same inputs,
-plus conformance and source-sensitivity checks. Native closure and a rebuild without
-Rust/Node are later, separate observations. Do not remove shared-host tools.
+`src/kc_lib.rs` selects the same production files used by the complete compiler:
+K representation/text, safety checking, persistent facts, lowering, native
+encoding and runtime sealing, plus shared diagnostics. It has no source parser,
+elaborator or source loader. `kc::compile` consumes program K and runtime K. The
+runtime is checked before its narrow raw interface is sealed; the host cannot
+silently inject different source/runtime inputs into a pure compiler call.
 
-Conformance compares bytes and termination; seeded generators search combinations;
-forged K reaches the safety gate directly; shared source-sensitivity probes protect
-source ownership. Keep reduced failures and exact commands. Measure each available
-stage and name fused stages honestly. Unexplained growth is a defect. External test
-process envelopes never become language semantics.
+The source front end produces K. The complete compiler's pure `compile` entry
+produces native ELF. `lkjscript runtime-k` exports the prepared runtime as a
+declared input. The separately cargo-built `kc` demonstrates this boundary but
+does not establish any self-compilation claim.
 
-## Owned execution
+The observations to reach are:
 
-Checked K lowers once to an explicit target-independent layout and operation
-form. Copy, destruction and equality glue are functions in that form. Natural
-scalar widths and one source runtime supply allocation, growth and UTF-8; raw
-memory operations belong only to the runtime module. WebAssembly and x86-64
-encoders consume the same lowered operations. The native Linux ELF uses no libc;
-system calls derive from capabilities. Stack and heap exhaustion have defined
-traps and must not require retries or an engine-imposed extent.
+1. The real K compiler source checks and B0 emits kc1.
+2. kc1 gives B0's verdict for direct K and the K of every accepted conformance
+   source, and emits identical ELF bytes on acceptance.
+3. kc1 given its own K emits kc2; kc2 and kc1 are byte-identical.
+4. Record elapsed time and peak memory beside B0 for the same work.
 
-Native conformance, generators and the requested capacity probes now agree.
-The stack/worker bridge is deleted and the routine gate uses native and K.
-WebAssembly remains only as a thin encoder. The million-function chain,
-non-tail recursion and large list are observations, not acceptance ceilings.
+There is one compiler implementation, selected twice. No per-file acceptance
+ritual substitutes for this result. Afterward apply the same two-way rule to the
+front end, reach the three-build identity, and retain an owned seed compiler for
+the next build. Removing Cargo is an observed hand-over, not a renamed bootstrap.
 
-After compiler closure, retain the previous native compiler as a committed seed
-that builds its successor. The hand-over observation is three builds of the same
-declared inputs producing identical bytes: the Rust-built compiler, the compiler
-running on K, and the self-built native compiler. This is a future contract, not
-a claim that compiler closure or the fixed point has been reached.
+## Order and execution
 
-File access should derive from a World directory capability restricted beneath
-its root. Compiler inputs remain an explicit declared set. The trust ledger in
-status tracks what must be correct for accepted concrete programs to be safe;
-physical size is an audit aid rather than a proof.
+Unblock ordinary text, collections, configuration and diagnostics first. Keep
+artifacts independent of build-host resources: execution-time Linux controls
+supply budgets, and traps identify their source and resource. Then give World
+arguments, input, error output, status and directory-relative file capabilities.
+These are prerequisites for an independently running K compiler.
+
+Profile that compiler and remove the largest runtime cost. A source ordered map
+with logarithmic insertion can precede self-compilation because it is already a
+compiler dependency. No prescribed speed ratio is a language requirement. Native
+and K remain independent execution checks; obsolete encoders and hosts are gone.
+New semantic tests are source/K data; Rust-specific bootstrap observations remain
+only while they protect a real boundary and are migrated when their subject changes.
+
+## Durable semantic choices
+
+K is the semantic language; the Rust-compatible surface is today's bootstrap
+and oracle dialect. A later agent-oriented surface or tool-written K can be a
+new producer without replacing the trusted core. Nothing below K requires Rust
+source concepts.
+
+Views live in locals, parameters, results and view aggregates; heap containers
+own their contents. An index or owned value expresses a stored relationship.
+Extensions to that discipline require a consumer and an explicit trust cost.
+
+Capabilities express effects. A function without authority in its arguments or
+captures has no ambient input/output. World grants authority explicitly; file
+operations must remain beneath their directory root. Value results are then
+reusable from declared inputs, with resource traps treated separately.
+
+Generators are pure seed-to-source programs and are candidates for the next
+self-built tools. Their Node orchestration is a temporary development dependency.
+Concurrency and speculative reference contracts remain parked until a real
+consumer needs them.

@@ -4909,5 +4909,1459 @@
     "rust": true,
     "rustAccept": false,
     "rustCode": "E0499"
+  },
+  {
+    "id": "backend_copy_probe",
+    "kind": "run",
+    "file": "migrated/backend_copy_probe.rs",
+    "value": "7",
+    "rust": true
+  },
+  {
+    "id": "backend_vec_probe",
+    "kind": "run",
+    "file": "migrated/backend_vec_probe.rs",
+    "value": "1999",
+    "rust": true
+  },
+  {
+    "id": "backend_array_probe",
+    "kind": "run",
+    "file": "migrated/backend_array_probe.rs",
+    "value": "109",
+    "rust": true
+  },
+  {
+    "id": "backend_drop_probe",
+    "kind": "run",
+    "file": "migrated/backend_drop_probe.rs",
+    "value": "10",
+    "rust": true
+  },
+  {
+    "id": "backend_probe",
+    "kind": "run",
+    "file": "migrated/backend_probe.rs",
+    "value": "20000",
+    "rust": true
+  },
+  {
+    "id": "backend_cleanup_1",
+    "kind": "run",
+    "file": "migrated/backend_cleanup_1.rs",
+    "value": "20000",
+    "rust": true
+  },
+  {
+    "id": "backend_cleanup_3",
+    "kind": "run",
+    "file": "migrated/backend_cleanup_3.rs",
+    "value": "20000",
+    "rust": true
+  },
+  {
+    "id": "backend_loop_slots",
+    "kind": "run",
+    "file": "migrated/backend_loop_slots.rs",
+    "value": "14862",
+    "rust": true
+  },
+  {
+    "id": "backend_drop_order_0",
+    "kind": "trap",
+    "file": "migrated/backend_drop_order_0.rs",
+    "code": "R0016",
+    "line": 4
+  },
+  {
+    "id": "backend_drop_order_1",
+    "kind": "trap",
+    "file": "migrated/backend_drop_order_1.rs",
+    "code": "R0016",
+    "line": 4
+  },
+  {
+    "id": "backend_drop_order_2",
+    "kind": "trap",
+    "file": "migrated/backend_drop_order_2.rs",
+    "code": "R0016",
+    "line": 4
+  },
+  {
+    "id": "alias_cycle_0",
+    "kind": "reject",
+    "file": "migrated/alias_cycle_0.rs",
+    "code": "E_TYPE",
+    "rust": true
+  },
+  {
+    "id": "alias_cycle_1",
+    "kind": "reject",
+    "file": "migrated/alias_cycle_1.rs",
+    "code": "E_TYPE",
+    "rust": true
+  },
+  {
+    "id": "integer_2_0_0",
+    "kind": "run",
+    "file": "migrated/integer_2_0_0.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_2_0_1",
+    "kind": "run",
+    "file": "migrated/integer_2_0_1.k",
+    "value": "1"
+  },
+  {
+    "id": "integer_2_0_2",
+    "kind": "run",
+    "file": "migrated/integer_2_0_2.k",
+    "value": "1"
+  },
+  {
+    "id": "integer_2_0_3",
+    "kind": "run",
+    "file": "migrated/integer_2_0_3.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_2_0_4",
+    "kind": "run",
+    "file": "migrated/integer_2_0_4.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_2_0_5",
+    "kind": "run",
+    "file": "migrated/integer_2_0_5.k",
+    "value": "-1"
+  },
+  {
+    "id": "integer_2_0_6",
+    "kind": "run",
+    "file": "migrated/integer_2_0_6.k",
+    "value": "-2"
+  },
+  {
+    "id": "integer_2_0_7",
+    "kind": "run",
+    "file": "migrated/integer_2_0_7.k",
+    "value": "2"
+  },
+  {
+    "id": "integer_2_0_8",
+    "kind": "run",
+    "file": "migrated/integer_2_0_8.k",
+    "value": "4"
+  },
+  {
+    "id": "integer_2_0_9",
+    "kind": "trap",
+    "file": "migrated/integer_2_0_9.k",
+    "code": "R0001"
+  },
+  {
+    "id": "integer_2_0_10",
+    "kind": "trap",
+    "file": "migrated/integer_2_0_10.k",
+    "code": "R0001"
+  },
+  {
+    "id": "integer_2_0_11",
+    "kind": "run",
+    "file": "migrated/integer_2_0_11.k",
+    "value": "510"
+  },
+  {
+    "id": "integer_2_0_12",
+    "kind": "run",
+    "file": "migrated/integer_2_0_12.k",
+    "value": "1"
+  },
+  {
+    "id": "integer_2_1_0",
+    "kind": "run",
+    "file": "migrated/integer_2_1_0.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_2_1_1",
+    "kind": "run",
+    "file": "migrated/integer_2_1_1.k",
+    "value": "1"
+  },
+  {
+    "id": "integer_2_1_2",
+    "kind": "run",
+    "file": "migrated/integer_2_1_2.k",
+    "value": "-1"
+  },
+  {
+    "id": "integer_2_1_3",
+    "kind": "run",
+    "file": "migrated/integer_2_1_3.k",
+    "value": "-2"
+  },
+  {
+    "id": "integer_2_1_4",
+    "kind": "run",
+    "file": "migrated/integer_2_1_4.k",
+    "value": "-2"
+  },
+  {
+    "id": "integer_2_1_5",
+    "kind": "run",
+    "file": "migrated/integer_2_1_5.k",
+    "value": "1"
+  },
+  {
+    "id": "integer_2_1_6",
+    "kind": "run",
+    "file": "migrated/integer_2_1_6.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_2_1_7",
+    "kind": "run",
+    "file": "migrated/integer_2_1_7.k",
+    "value": "-2"
+  },
+  {
+    "id": "integer_2_1_8",
+    "kind": "run",
+    "file": "migrated/integer_2_1_8.k",
+    "value": "-4"
+  },
+  {
+    "id": "integer_2_1_9",
+    "kind": "run",
+    "file": "migrated/integer_2_1_9.k",
+    "value": "2147483645"
+  },
+  {
+    "id": "integer_2_1_10",
+    "kind": "run",
+    "file": "migrated/integer_2_1_10.k",
+    "value": "-2147483647"
+  },
+  {
+    "id": "integer_2_1_11",
+    "kind": "run",
+    "file": "migrated/integer_2_1_11.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_2_1_12",
+    "kind": "run",
+    "file": "migrated/integer_2_1_12.k",
+    "value": "-3"
+  },
+  {
+    "id": "integer_2_2_0",
+    "kind": "run",
+    "file": "migrated/integer_2_2_0.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_2_2_1",
+    "kind": "run",
+    "file": "migrated/integer_2_2_1.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_2_2_2",
+    "kind": "run",
+    "file": "migrated/integer_2_2_2.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_2_2_3",
+    "kind": "run",
+    "file": "migrated/integer_2_2_3.k",
+    "value": "-1"
+  },
+  {
+    "id": "integer_2_2_4",
+    "kind": "run",
+    "file": "migrated/integer_2_2_4.k",
+    "value": "-1"
+  },
+  {
+    "id": "integer_2_2_5",
+    "kind": "run",
+    "file": "migrated/integer_2_2_5.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_2_2_6",
+    "kind": "run",
+    "file": "migrated/integer_2_2_6.k",
+    "value": "1"
+  },
+  {
+    "id": "integer_2_2_7",
+    "kind": "run",
+    "file": "migrated/integer_2_2_7.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_2_2_8",
+    "kind": "run",
+    "file": "migrated/integer_2_2_8.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_2_2_9",
+    "kind": "trap",
+    "file": "migrated/integer_2_2_9.k",
+    "code": "R0001"
+  },
+  {
+    "id": "integer_2_2_10",
+    "kind": "trap",
+    "file": "migrated/integer_2_2_10.k",
+    "code": "R0001"
+  },
+  {
+    "id": "integer_2_2_11",
+    "kind": "run",
+    "file": "migrated/integer_2_2_11.k",
+    "value": "65025"
+  },
+  {
+    "id": "integer_2_2_12",
+    "kind": "run",
+    "file": "migrated/integer_2_2_12.k",
+    "value": "-2"
+  },
+  {
+    "id": "integer_2_3_0",
+    "kind": "trap",
+    "file": "migrated/integer_2_3_0.k",
+    "code": "R0002"
+  },
+  {
+    "id": "integer_2_3_1",
+    "kind": "trap",
+    "file": "migrated/integer_2_3_1.k",
+    "code": "R0002"
+  },
+  {
+    "id": "integer_2_3_2",
+    "kind": "run",
+    "file": "migrated/integer_2_3_2.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_2_3_3",
+    "kind": "run",
+    "file": "migrated/integer_2_3_3.k",
+    "value": "-1"
+  },
+  {
+    "id": "integer_2_3_4",
+    "kind": "run",
+    "file": "migrated/integer_2_3_4.k",
+    "value": "-1"
+  },
+  {
+    "id": "integer_2_3_5",
+    "kind": "run",
+    "file": "migrated/integer_2_3_5.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_2_3_6",
+    "kind": "run",
+    "file": "migrated/integer_2_3_6.k",
+    "value": "1"
+  },
+  {
+    "id": "integer_2_3_7",
+    "kind": "run",
+    "file": "migrated/integer_2_3_7.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_2_3_8",
+    "kind": "run",
+    "file": "migrated/integer_2_3_8.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_2_3_9",
+    "kind": "run",
+    "file": "migrated/integer_2_3_9.k",
+    "value": "1073741823"
+  },
+  {
+    "id": "integer_2_3_10",
+    "kind": "trap",
+    "file": "migrated/integer_2_3_10.k",
+    "code": "R0001"
+  },
+  {
+    "id": "integer_2_3_11",
+    "kind": "run",
+    "file": "migrated/integer_2_3_11.k",
+    "value": "1"
+  },
+  {
+    "id": "integer_2_3_12",
+    "kind": "run",
+    "file": "migrated/integer_2_3_12.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_2_4_0",
+    "kind": "trap",
+    "file": "migrated/integer_2_4_0.k",
+    "code": "R0002"
+  },
+  {
+    "id": "integer_2_4_1",
+    "kind": "trap",
+    "file": "migrated/integer_2_4_1.k",
+    "code": "R0002"
+  },
+  {
+    "id": "integer_2_4_2",
+    "kind": "run",
+    "file": "migrated/integer_2_4_2.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_2_4_3",
+    "kind": "run",
+    "file": "migrated/integer_2_4_3.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_2_4_4",
+    "kind": "run",
+    "file": "migrated/integer_2_4_4.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_2_4_5",
+    "kind": "run",
+    "file": "migrated/integer_2_4_5.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_2_4_6",
+    "kind": "run",
+    "file": "migrated/integer_2_4_6.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_2_4_7",
+    "kind": "run",
+    "file": "migrated/integer_2_4_7.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_2_4_8",
+    "kind": "run",
+    "file": "migrated/integer_2_4_8.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_2_4_9",
+    "kind": "run",
+    "file": "migrated/integer_2_4_9.k",
+    "value": "1"
+  },
+  {
+    "id": "integer_2_4_10",
+    "kind": "trap",
+    "file": "migrated/integer_2_4_10.k",
+    "code": "R0001"
+  },
+  {
+    "id": "integer_2_4_11",
+    "kind": "run",
+    "file": "migrated/integer_2_4_11.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_2_4_12",
+    "kind": "run",
+    "file": "migrated/integer_2_4_12.k",
+    "value": "-1"
+  },
+  {
+    "id": "integer_3_0_0",
+    "kind": "run",
+    "file": "migrated/integer_3_0_0.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_3_0_1",
+    "kind": "run",
+    "file": "migrated/integer_3_0_1.k",
+    "value": "1"
+  },
+  {
+    "id": "integer_3_0_2",
+    "kind": "run",
+    "file": "migrated/integer_3_0_2.k",
+    "value": "1"
+  },
+  {
+    "id": "integer_3_0_3",
+    "kind": "run",
+    "file": "migrated/integer_3_0_3.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_3_0_4",
+    "kind": "trap",
+    "file": "migrated/integer_3_0_4.k",
+    "code": "R0001"
+  },
+  {
+    "id": "integer_3_0_5",
+    "kind": "trap",
+    "file": "migrated/integer_3_0_5.k",
+    "code": "R0001"
+  },
+  {
+    "id": "integer_3_0_6",
+    "kind": "run",
+    "file": "migrated/integer_3_0_6.k",
+    "value": "-2"
+  },
+  {
+    "id": "integer_3_0_7",
+    "kind": "run",
+    "file": "migrated/integer_3_0_7.k",
+    "value": "-9223372036854775806"
+  },
+  {
+    "id": "integer_3_0_8",
+    "kind": "run",
+    "file": "migrated/integer_3_0_8.k",
+    "value": "4611686018427387908"
+  },
+  {
+    "id": "integer_3_0_9",
+    "kind": "run",
+    "file": "migrated/integer_3_0_9.k",
+    "value": "2147483649"
+  },
+  {
+    "id": "integer_3_0_10",
+    "kind": "run",
+    "file": "migrated/integer_3_0_10.k",
+    "value": "-2147483649"
+  },
+  {
+    "id": "integer_3_0_11",
+    "kind": "run",
+    "file": "migrated/integer_3_0_11.k",
+    "value": "510"
+  },
+  {
+    "id": "integer_3_0_12",
+    "kind": "run",
+    "file": "migrated/integer_3_0_12.k",
+    "value": "1"
+  },
+  {
+    "id": "integer_3_1_0",
+    "kind": "run",
+    "file": "migrated/integer_3_1_0.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_3_1_1",
+    "kind": "run",
+    "file": "migrated/integer_3_1_1.k",
+    "value": "1"
+  },
+  {
+    "id": "integer_3_1_2",
+    "kind": "run",
+    "file": "migrated/integer_3_1_2.k",
+    "value": "-1"
+  },
+  {
+    "id": "integer_3_1_3",
+    "kind": "run",
+    "file": "migrated/integer_3_1_3.k",
+    "value": "-2"
+  },
+  {
+    "id": "integer_3_1_4",
+    "kind": "run",
+    "file": "migrated/integer_3_1_4.k",
+    "value": "9223372036854775806"
+  },
+  {
+    "id": "integer_3_1_5",
+    "kind": "run",
+    "file": "migrated/integer_3_1_5.k",
+    "value": "-9223372036854775807"
+  },
+  {
+    "id": "integer_3_1_6",
+    "kind": "run",
+    "file": "migrated/integer_3_1_6.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_3_1_7",
+    "kind": "trap",
+    "file": "migrated/integer_3_1_7.k",
+    "code": "R0001"
+  },
+  {
+    "id": "integer_3_1_8",
+    "kind": "run",
+    "file": "migrated/integer_3_1_8.k",
+    "value": "4611686018427387900"
+  },
+  {
+    "id": "integer_3_1_9",
+    "kind": "run",
+    "file": "migrated/integer_3_1_9.k",
+    "value": "2147483645"
+  },
+  {
+    "id": "integer_3_1_10",
+    "kind": "run",
+    "file": "migrated/integer_3_1_10.k",
+    "value": "-2147483647"
+  },
+  {
+    "id": "integer_3_1_11",
+    "kind": "run",
+    "file": "migrated/integer_3_1_11.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_3_1_12",
+    "kind": "run",
+    "file": "migrated/integer_3_1_12.k",
+    "value": "-3"
+  },
+  {
+    "id": "integer_3_2_0",
+    "kind": "run",
+    "file": "migrated/integer_3_2_0.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_3_2_1",
+    "kind": "run",
+    "file": "migrated/integer_3_2_1.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_3_2_2",
+    "kind": "run",
+    "file": "migrated/integer_3_2_2.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_3_2_3",
+    "kind": "run",
+    "file": "migrated/integer_3_2_3.k",
+    "value": "-1"
+  },
+  {
+    "id": "integer_3_2_4",
+    "kind": "run",
+    "file": "migrated/integer_3_2_4.k",
+    "value": "9223372036854775807"
+  },
+  {
+    "id": "integer_3_2_5",
+    "kind": "trap",
+    "file": "migrated/integer_3_2_5.k",
+    "code": "R0001"
+  },
+  {
+    "id": "integer_3_2_6",
+    "kind": "run",
+    "file": "migrated/integer_3_2_6.k",
+    "value": "1"
+  },
+  {
+    "id": "integer_3_2_7",
+    "kind": "trap",
+    "file": "migrated/integer_3_2_7.k",
+    "code": "R0001"
+  },
+  {
+    "id": "integer_3_2_8",
+    "kind": "trap",
+    "file": "migrated/integer_3_2_8.k",
+    "code": "R0001"
+  },
+  {
+    "id": "integer_3_2_9",
+    "kind": "run",
+    "file": "migrated/integer_3_2_9.k",
+    "value": "4294967294"
+  },
+  {
+    "id": "integer_3_2_10",
+    "kind": "run",
+    "file": "migrated/integer_3_2_10.k",
+    "value": "2147483648"
+  },
+  {
+    "id": "integer_3_2_11",
+    "kind": "run",
+    "file": "migrated/integer_3_2_11.k",
+    "value": "65025"
+  },
+  {
+    "id": "integer_3_2_12",
+    "kind": "run",
+    "file": "migrated/integer_3_2_12.k",
+    "value": "-2"
+  },
+  {
+    "id": "integer_3_3_0",
+    "kind": "trap",
+    "file": "migrated/integer_3_3_0.k",
+    "code": "R0002"
+  },
+  {
+    "id": "integer_3_3_1",
+    "kind": "trap",
+    "file": "migrated/integer_3_3_1.k",
+    "code": "R0002"
+  },
+  {
+    "id": "integer_3_3_2",
+    "kind": "run",
+    "file": "migrated/integer_3_3_2.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_3_3_3",
+    "kind": "run",
+    "file": "migrated/integer_3_3_3.k",
+    "value": "-1"
+  },
+  {
+    "id": "integer_3_3_4",
+    "kind": "run",
+    "file": "migrated/integer_3_3_4.k",
+    "value": "9223372036854775807"
+  },
+  {
+    "id": "integer_3_3_5",
+    "kind": "trap",
+    "file": "migrated/integer_3_3_5.k",
+    "code": "R0001"
+  },
+  {
+    "id": "integer_3_3_6",
+    "kind": "run",
+    "file": "migrated/integer_3_3_6.k",
+    "value": "1"
+  },
+  {
+    "id": "integer_3_3_7",
+    "kind": "run",
+    "file": "migrated/integer_3_3_7.k",
+    "value": "-4611686018427387904"
+  },
+  {
+    "id": "integer_3_3_8",
+    "kind": "run",
+    "file": "migrated/integer_3_3_8.k",
+    "value": "1152921504606846976"
+  },
+  {
+    "id": "integer_3_3_9",
+    "kind": "run",
+    "file": "migrated/integer_3_3_9.k",
+    "value": "1073741823"
+  },
+  {
+    "id": "integer_3_3_10",
+    "kind": "run",
+    "file": "migrated/integer_3_3_10.k",
+    "value": "2147483648"
+  },
+  {
+    "id": "integer_3_3_11",
+    "kind": "run",
+    "file": "migrated/integer_3_3_11.k",
+    "value": "1"
+  },
+  {
+    "id": "integer_3_3_12",
+    "kind": "run",
+    "file": "migrated/integer_3_3_12.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_3_4_0",
+    "kind": "trap",
+    "file": "migrated/integer_3_4_0.k",
+    "code": "R0002"
+  },
+  {
+    "id": "integer_3_4_1",
+    "kind": "trap",
+    "file": "migrated/integer_3_4_1.k",
+    "code": "R0002"
+  },
+  {
+    "id": "integer_3_4_2",
+    "kind": "run",
+    "file": "migrated/integer_3_4_2.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_3_4_3",
+    "kind": "run",
+    "file": "migrated/integer_3_4_3.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_3_4_4",
+    "kind": "run",
+    "file": "migrated/integer_3_4_4.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_3_4_5",
+    "kind": "trap",
+    "file": "migrated/integer_3_4_5.k",
+    "code": "R0001"
+  },
+  {
+    "id": "integer_3_4_6",
+    "kind": "run",
+    "file": "migrated/integer_3_4_6.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_3_4_7",
+    "kind": "run",
+    "file": "migrated/integer_3_4_7.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_3_4_8",
+    "kind": "run",
+    "file": "migrated/integer_3_4_8.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_3_4_9",
+    "kind": "run",
+    "file": "migrated/integer_3_4_9.k",
+    "value": "1"
+  },
+  {
+    "id": "integer_3_4_10",
+    "kind": "run",
+    "file": "migrated/integer_3_4_10.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_3_4_11",
+    "kind": "run",
+    "file": "migrated/integer_3_4_11.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_3_4_12",
+    "kind": "run",
+    "file": "migrated/integer_3_4_12.k",
+    "value": "-1"
+  },
+  {
+    "id": "integer_4_0_0",
+    "kind": "run",
+    "file": "migrated/integer_4_0_0.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_4_0_1",
+    "kind": "run",
+    "file": "migrated/integer_4_0_1.k",
+    "value": "1"
+  },
+  {
+    "id": "integer_4_0_2",
+    "kind": "run",
+    "file": "migrated/integer_4_0_2.k",
+    "value": "1"
+  },
+  {
+    "id": "integer_4_0_3",
+    "kind": "trap",
+    "file": "migrated/integer_4_0_3.k",
+    "code": "R0001"
+  },
+  {
+    "id": "integer_4_0_4",
+    "kind": "run",
+    "file": "migrated/integer_4_0_4.k",
+    "value": "9223372036854775808"
+  },
+  {
+    "id": "integer_4_0_5",
+    "kind": "trap",
+    "file": "migrated/integer_4_0_5.k",
+    "code": "R0001"
+  },
+  {
+    "id": "integer_4_0_6",
+    "kind": "trap",
+    "file": "migrated/integer_4_0_6.k",
+    "code": "R0001"
+  },
+  {
+    "id": "integer_4_0_7",
+    "kind": "run",
+    "file": "migrated/integer_4_0_7.k",
+    "value": "9223372036854775810"
+  },
+  {
+    "id": "integer_4_0_8",
+    "kind": "run",
+    "file": "migrated/integer_4_0_8.k",
+    "value": "4611686018427387908"
+  },
+  {
+    "id": "integer_4_0_9",
+    "kind": "run",
+    "file": "migrated/integer_4_0_9.k",
+    "value": "2147483649"
+  },
+  {
+    "id": "integer_4_0_10",
+    "kind": "trap",
+    "file": "migrated/integer_4_0_10.k",
+    "code": "R0001"
+  },
+  {
+    "id": "integer_4_0_11",
+    "kind": "run",
+    "file": "migrated/integer_4_0_11.k",
+    "value": "510"
+  },
+  {
+    "id": "integer_4_0_12",
+    "kind": "trap",
+    "file": "migrated/integer_4_0_12.k",
+    "code": "R0001"
+  },
+  {
+    "id": "integer_4_1_0",
+    "kind": "run",
+    "file": "migrated/integer_4_1_0.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_4_1_1",
+    "kind": "run",
+    "file": "migrated/integer_4_1_1.k",
+    "value": "1"
+  },
+  {
+    "id": "integer_4_1_2",
+    "kind": "trap",
+    "file": "migrated/integer_4_1_2.k",
+    "code": "R0001"
+  },
+  {
+    "id": "integer_4_1_3",
+    "kind": "run",
+    "file": "migrated/integer_4_1_3.k",
+    "value": "18446744073709551614"
+  },
+  {
+    "id": "integer_4_1_4",
+    "kind": "run",
+    "file": "migrated/integer_4_1_4.k",
+    "value": "9223372036854775806"
+  },
+  {
+    "id": "integer_4_1_5",
+    "kind": "trap",
+    "file": "migrated/integer_4_1_5.k",
+    "code": "R0001"
+  },
+  {
+    "id": "integer_4_1_6",
+    "kind": "run",
+    "file": "migrated/integer_4_1_6.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_4_1_7",
+    "kind": "run",
+    "file": "migrated/integer_4_1_7.k",
+    "value": "9223372036854775806"
+  },
+  {
+    "id": "integer_4_1_8",
+    "kind": "run",
+    "file": "migrated/integer_4_1_8.k",
+    "value": "4611686018427387900"
+  },
+  {
+    "id": "integer_4_1_9",
+    "kind": "run",
+    "file": "migrated/integer_4_1_9.k",
+    "value": "2147483645"
+  },
+  {
+    "id": "integer_4_1_10",
+    "kind": "trap",
+    "file": "migrated/integer_4_1_10.k",
+    "code": "R0001"
+  },
+  {
+    "id": "integer_4_1_11",
+    "kind": "run",
+    "file": "migrated/integer_4_1_11.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_4_1_12",
+    "kind": "run",
+    "file": "migrated/integer_4_1_12.k",
+    "value": "18446744073709551613"
+  },
+  {
+    "id": "integer_4_2_0",
+    "kind": "run",
+    "file": "migrated/integer_4_2_0.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_4_2_1",
+    "kind": "run",
+    "file": "migrated/integer_4_2_1.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_4_2_2",
+    "kind": "run",
+    "file": "migrated/integer_4_2_2.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_4_2_3",
+    "kind": "run",
+    "file": "migrated/integer_4_2_3.k",
+    "value": "18446744073709551615"
+  },
+  {
+    "id": "integer_4_2_4",
+    "kind": "run",
+    "file": "migrated/integer_4_2_4.k",
+    "value": "9223372036854775807"
+  },
+  {
+    "id": "integer_4_2_5",
+    "kind": "trap",
+    "file": "migrated/integer_4_2_5.k",
+    "code": "R0001"
+  },
+  {
+    "id": "integer_4_2_6",
+    "kind": "trap",
+    "file": "migrated/integer_4_2_6.k",
+    "code": "R0001"
+  },
+  {
+    "id": "integer_4_2_7",
+    "kind": "trap",
+    "file": "migrated/integer_4_2_7.k",
+    "code": "R0001"
+  },
+  {
+    "id": "integer_4_2_8",
+    "kind": "trap",
+    "file": "migrated/integer_4_2_8.k",
+    "code": "R0001"
+  },
+  {
+    "id": "integer_4_2_9",
+    "kind": "run",
+    "file": "migrated/integer_4_2_9.k",
+    "value": "4294967294"
+  },
+  {
+    "id": "integer_4_2_10",
+    "kind": "trap",
+    "file": "migrated/integer_4_2_10.k",
+    "code": "R0001"
+  },
+  {
+    "id": "integer_4_2_11",
+    "kind": "run",
+    "file": "migrated/integer_4_2_11.k",
+    "value": "65025"
+  },
+  {
+    "id": "integer_4_2_12",
+    "kind": "trap",
+    "file": "migrated/integer_4_2_12.k",
+    "code": "R0001"
+  },
+  {
+    "id": "integer_4_3_0",
+    "kind": "trap",
+    "file": "migrated/integer_4_3_0.k",
+    "code": "R0002"
+  },
+  {
+    "id": "integer_4_3_1",
+    "kind": "trap",
+    "file": "migrated/integer_4_3_1.k",
+    "code": "R0002"
+  },
+  {
+    "id": "integer_4_3_2",
+    "kind": "run",
+    "file": "migrated/integer_4_3_2.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_4_3_3",
+    "kind": "run",
+    "file": "migrated/integer_4_3_3.k",
+    "value": "18446744073709551615"
+  },
+  {
+    "id": "integer_4_3_4",
+    "kind": "run",
+    "file": "migrated/integer_4_3_4.k",
+    "value": "9223372036854775807"
+  },
+  {
+    "id": "integer_4_3_5",
+    "kind": "run",
+    "file": "migrated/integer_4_3_5.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_4_3_6",
+    "kind": "run",
+    "file": "migrated/integer_4_3_6.k",
+    "value": "1"
+  },
+  {
+    "id": "integer_4_3_7",
+    "kind": "run",
+    "file": "migrated/integer_4_3_7.k",
+    "value": "4611686018427387904"
+  },
+  {
+    "id": "integer_4_3_8",
+    "kind": "run",
+    "file": "migrated/integer_4_3_8.k",
+    "value": "1152921504606846976"
+  },
+  {
+    "id": "integer_4_3_9",
+    "kind": "run",
+    "file": "migrated/integer_4_3_9.k",
+    "value": "1073741823"
+  },
+  {
+    "id": "integer_4_3_10",
+    "kind": "run",
+    "file": "migrated/integer_4_3_10.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_4_3_11",
+    "kind": "run",
+    "file": "migrated/integer_4_3_11.k",
+    "value": "1"
+  },
+  {
+    "id": "integer_4_3_12",
+    "kind": "run",
+    "file": "migrated/integer_4_3_12.k",
+    "value": "9223372036854775807"
+  },
+  {
+    "id": "integer_4_4_0",
+    "kind": "trap",
+    "file": "migrated/integer_4_4_0.k",
+    "code": "R0002"
+  },
+  {
+    "id": "integer_4_4_1",
+    "kind": "trap",
+    "file": "migrated/integer_4_4_1.k",
+    "code": "R0002"
+  },
+  {
+    "id": "integer_4_4_2",
+    "kind": "run",
+    "file": "migrated/integer_4_4_2.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_4_4_3",
+    "kind": "run",
+    "file": "migrated/integer_4_4_3.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_4_4_4",
+    "kind": "run",
+    "file": "migrated/integer_4_4_4.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_4_4_5",
+    "kind": "run",
+    "file": "migrated/integer_4_4_5.k",
+    "value": "9223372036854775808"
+  },
+  {
+    "id": "integer_4_4_6",
+    "kind": "run",
+    "file": "migrated/integer_4_4_6.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_4_4_7",
+    "kind": "run",
+    "file": "migrated/integer_4_4_7.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_4_4_8",
+    "kind": "run",
+    "file": "migrated/integer_4_4_8.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_4_4_9",
+    "kind": "run",
+    "file": "migrated/integer_4_4_9.k",
+    "value": "1"
+  },
+  {
+    "id": "integer_4_4_10",
+    "kind": "run",
+    "file": "migrated/integer_4_4_10.k",
+    "value": "18446744071562067968"
+  },
+  {
+    "id": "integer_4_4_11",
+    "kind": "run",
+    "file": "migrated/integer_4_4_11.k",
+    "value": "0"
+  },
+  {
+    "id": "integer_4_4_12",
+    "kind": "run",
+    "file": "migrated/integer_4_4_12.k",
+    "value": "1"
+  },
+  {
+    "id": "backend_nan_negation",
+    "kind": "run",
+    "file": "migrated/backend_nan_negation.k",
+    "value": "NaN"
+  },
+  {
+    "id": "backend_u8_complement",
+    "kind": "run",
+    "file": "migrated/backend_u8_complement.k",
+    "value": "127"
+  },
+  {
+    "id": "backend_infinity_i32",
+    "kind": "run",
+    "file": "migrated/backend_infinity_i32.k",
+    "value": "2147483647"
+  },
+  {
+    "id": "backend_negative_float_u8",
+    "kind": "run",
+    "file": "migrated/backend_negative_float_u8.k",
+    "value": "0"
+  },
+  {
+    "id": "backend_negative_infinity_i64",
+    "kind": "run",
+    "file": "migrated/backend_negative_infinity_i64.k",
+    "value": "-9223372036854775808"
+  },
+  {
+    "id": "backend_nan_i64",
+    "kind": "run",
+    "file": "migrated/backend_nan_i64.k",
+    "value": "0"
+  },
+  {
+    "id": "backend_export_0",
+    "kind": "run",
+    "file": "migrated/backend_export_0.k",
+    "value": "41",
+    "entry": "memory"
+  },
+  {
+    "id": "backend_export_1",
+    "kind": "run",
+    "file": "migrated/backend_export_1.k",
+    "value": "42",
+    "entry": "fn:memory"
+  },
+  {
+    "id": "library_everyday_scalars",
+    "file": "pass/library_everyday_scalars.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "vec_owned_algorithms",
+    "file": "pass/vec_owned_algorithms.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "string_map_keys",
+    "file": "pass/string_map_keys.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "static_text_storage",
+    "file": "pass/static_text_storage.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "vec_owned_drop_order",
+    "file": "output/vec_owned_drop_order.rs",
+    "kind": "output",
+    "hex": "0b010c02030463",
+    "ending": "normal",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "vec_retain_order",
+    "file": "output/vec_retain_order.rs",
+    "kind": "output",
+    "hex": "0b0c020d0e04010363",
+    "ending": "normal",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "utf8_encoding_boundaries",
+    "file": "output/utf8_encoding_boundaries.rs",
+    "kind": "output",
+    "hex": "ffffffffffffffffffffffffffffffff03000000000000000000000000000000fcffffffffffffffffffffffffffffff07000000000000000000000000000000f8ffffffffffffffffffffffffffffff0f000000000000000000000000000000f0ffffffffffffffffffffffffffffff1f000000000000000000000000000000e0ffffffffffffffffffffffffffffff3f000000000000000000000000000000c0ffffffffffffffffffffffffffffff7f00000000000000000000000000000080ffffffffffffffffffffffffffffffff00000000000000000000000000000000ffffffffffffffffffffffffffffffff01000000000000000000000000000000feffffffffffffffffffffffffffffff03000000000000000000000000000000fcffffffffffffffffffffffffffffff07000000000000000000000000000000f8ffffffffffffffffffffffffffffff0f000000000000000000000000000000f0ffffffffffffffffffffffffffffff1f000000000000000000000000000000e0ffffffffffffffffffffffffffffff3f000000000000000000000000000000c0ffffffffffffffffffffffffffffff7f00000000000000000000000000000080ffffffffffffffffffffffffffffffff00000000000000000000000000000000ffffffffffffffffffffffffffffffff01000000000000000000000000000000feffffffffffffffffffffffffffffff03000000000000000000000000000000fcffffffffffffffffffffffffffffff07000000000000000000000000000000f8ffffffffffffffffffffffffffffff0f000000000000000000000000000000f0ffffffffffffffffffffffffffffff1f000000000000000000000000000000e0ffffffffffffffffffffffffffffff3f000000000000000000000000000000c0ffffffffffffffffffffffffffffff7f00000000000000000000000000000080ffffffffffffffffffffffffffffffff00000000000000000000000000000000ffffffffffffffffffffffffffffffff01000000000000000000000000000000feffffffffffffffffffffffffffffff03000000000000000000000000000000fcffffffffffffffffffffffffffffff07000000000000000000000000000000f8ffffffffffffffffffffffffffffff0f000000000000000000000000000000f0ffffffffffffffffffffffffffffff1f000000000000000000000000000000e0ffffffffffffffffffffffffffffff3f000000000000000000000000000000c0ffffffffffffffffffffffffffffff7f00000000000000000000000000000080ffffffffffffffffffffffffffffffff00000000000000000000000000000000ffffffffffffffffffffffffffffffff01000000000000000000000000000000feffffffffffffffffffffffffffffff03000000000000000000000000000000fcffffffffffffffffffffffffffffff07000000000000000000000000000000f8ffffffffffffffffffffffffffffff0f000000000000000000000000000000f0ffffffffffffffffffffffffffffff1f000000000000000000000000000000e0ffffffffffffffffffffffffffffff3f000000000000000000000000000000c0ffffffffffffffffffffffffffffff7f00000000000000000000000000000080ffffffffffffffffffffffffffffffff00000000000000000000000000000000ffffffffffffffffffffffffffffffff01000000000000000000000000000000feffffffffffffffffffffffffffffff03000000000000000000000000000000fcffffffffffffffffffffffffffffff07000000000000000000000000000000f8ffffffffffffffffffffffffffffff0f000000000000000000000000000000f0ffffffffffffffffffffffffffffff1f000000000000000000000000000000e0ffffffffffffffffffffffffffffff3f000000000000000000000000000000c0ffffffffffffffffffffffffffffff7f00000000000000000000000000000080ffffffffffffffffffffffffffffffff00000000000000000000000000000000ffffffffffffffffffffffffffffffff01000000000000000000000000000000feffffffffffffffffffffffffffffff03000000000000000000000000000000fcffffffffffffffffffffffffffffff07000000000000000000000000000000f8ffffffffffffffffffffffffffffff0f000000000000000000000000000000f0ffffffffffffffffffffffffffffff1f000000000000000000000000000000e0ffffffffffffffffffffffffffffff3f000000000000000000000000000000c0ffffffffffffffffffffffffffffff7f00000000000000000000000000000080ffffffffffffffffffffffffffffffff00000000000000000000000000000000ffffffffffffffffffffffffffffffff01000000000000000000000000000000feffffffffffffffffffffffffffffff03000000000000000000000000000000fcffffffffffffffffffffffffffffff07000000000000000000000000000000f8ffffffffffffffffffffffffffffff0f000000000000000000000000000000f0ffffffffffffffffffffffffffffff1f000000000000000000000000000000e0ffffffffffffffffffffffffffffff3f000000000000000000000000000000c0ffffffffffffffffffffffffffffff7f00000000000000000000000000000080ffffffffffffffffffffffffffffffff00000000000000000000000000000000ffffffffffffffffffffffffffffffff01000000000000000000000000000000feffffffffffffffffffffffffffffff03000000000000000000000000000000fcffffffffffffffffffffffffffffff07000000000000000000000000000000f8ffffffffffffffffffffffffffffff0f000000000000000000000000000000f0ffffffffffffffffffffffffffffff1f000000000000000000000000000000e0ffffffffffffffffffffffffffffff3f000000000000000000000000000000c0ffffffffffffffffffffffffffffff7f00000000000000000000000000000080ffffffffffffffffffffffffffffffff00000000000000000000000000000000ffffffffffffffffffffffffffffffff01000000000000000000000000000000feffffffffffffffffffffffffffffff03000000000000000000000000000000fcffffffffffffffffffffffffffffff07000000000000000000000000000000f8ffffffffffffffffffffffffffffff0f000000000000000000000000000000f0ffffffffffffffffffffffffffffff1f000000000000000000000000000000e0ffffffffffffffffffffffffffffff3f000000000000000000000000000000c0ffffffffffffffffffffffffffffff7f00000000000000000000000000000080ffffffffffffffffffffffffffffffff00000000000000000000000000000000ffffffffffffffffffffffffffffffff01000000000000000000000000000000feffffffffffffffffffffffffffffff03000000000000000000000000000000fcffffffffffffffffffffffffffffff07000000000000000000000000000000f8ffffffffffffffffffffffffffffff0f000000000000000000000000000000f0ffffffffffffffffffffffffffffff1f000000000000000000000000000000e0ffffffffffffffffffffffffffffff3f000000000000000000000000000000c0ffffffffffffffffffffffffffffff7f00000000000000000000000000000080ffffffffffffffffffffffffffffffff00000000000000000000000000000000ffffffffffffffffffffffffffffffff01000000000000000000000000000000feffffffffffffffffffffffffffffff03000000000000000000000000000000fcffffffffffffffffffffffffffffff07000000000000000000000000000000f8ffffffffffffffffffffffffffffff0f000000000000000000000000000000f0ffffffffffffffffffffffffffffff1f000000000000000000000000000000e0ffffffffffffffffffffffffffffff3f000000000000000000000000000000c0ffffffffffffffffffffffffffffff7f00000000000000000000000000000080ffffffffffffffffffffffffffffffff00000000000000000000000000000000ffffffffffffffffffffffffffffffff01000000000000000000000000000000feffffffffffffffffffffffffffffff03000000000000000000000000000000fcffffffffffffffffffffffffffffff07000000000000000000000000000000f8ffffffffffffffffffffffffffffff0f000000000000000000000000000000f0ffffffffffffffffffffffffffffff1f000000000000000000000000000000e0ffffffffffffffffffffffffffffff3f000000000000000000000000000000c0ffffffffffffffffffffffffffffff7f00000000000000000000000000000080ffffffffffffffffffffffffffffffff00000000000000000000000000000000ffffffffffffffffffffffffffffffff01000000000000000000000000000000feffffffffffffffffffffffffffffff03000000000000000000000000000000fcffffffffffffffffffffffffffffff07000000000000000000000000000000f8ffffffffffffffffffffffffffffff0f000000000000000000000000000000f0ffffffffffffffffffffffffffffff1f000000000000000000000000000000e0ffffffffffffffffffffffffffffff3f000000000000000000000000000000c0ffffffffffffffffffffffffffffff7f00000000000000000000000000000080ffffffffffffffffffffffffffffffff00000000000000000000000000000000ffffffffffffffffffffffffffffffff01000000000000000000000000000000feffffffffffffffffffffffffffffff03000000000000000000000000000000fcffffffffffffffffffffffffffffff07000000000000000000000000000000f8ffffffffffffffffffffffffffffff0f000000000000000000000000000000f0ffffffffffffffffffffffffffffff1f000000000000000000000000000000e0ffffffffffffffffffffffffffffff3f000000000000000000000000000000c0ffffffffffffffffffffffffffffff7f00000000000000000000000000000080ffffffffffffffffffffffffffffffff00000000000000000000000000000000ffffffffffffffffffffffffffffffff01000000000000000000000000000000feffffffffffffffffffffffffffffff03000000000000000000000000000000fcffffffffffffffffffffffffffffff07000000000000000000000000000000f8ffffffffffffffffffffffffffffff0f000000000000000000000000000000f0ffffffffffffffffffffffffffffff1f000000000000000000000000000000e0ffffffffffffffffffffffffffffff3f000000000000000000000000000000c0ffffffffffffffffffffffffffffff7f00000000000000000000000000000080ffffffffffffffffffffffffffffffff00000000000000000000000000000000ffffffffffffffffffffffffffffffff01000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000f0ffffffffffffff0f0000000000000000000000000000000000000000000000e0ffffffffffffff1f0000000000000000000000000000000000000000000000c0ffffffffffffff3f000000000000000000000000000000000000000000000080ffffffffffffff7f000000000000000000000000000000000000000000000000ffffffffffffffff000000000000000000000000000000000000000000000000feffffffffffffff010000000000000000000000000000000000000000000000fcffffffffffffff030000000000000000000000000000000000000000000000f8ffffffffffffff070000000000000000000000000000000000000000000000f0ffffffffffffff0f0000000000000000000000000000000000000000000000e0ffffffffffffff1f0000000000000000000000000000000000000000000000c0ffffffffffffff3f000000000000000000000000000000000000000000000080ffffffffffffff7f000000000000000000000000000000000000000000000000ffffffffffffffff000000000000000000000000000000000000000000000000feffffffffffffff010000000000000000000000000000000000000000000000fcffffffffffffff030000000000000000000000000000000000000000000000f8ffffffffffffff070000000000000000000000000000000000000000000000f0ffffffffffffff0f0000000000000000000000000000000000000000000000e0ffffffffffffff1f0000000000000000000000000000000000000000000000c0ffffffffffffff3f000000000000000000000000000000000000000000000080ffffffffffffff7f000000000000000000000000000000000000000000000000ffffffffffffffff000000000000000000000000000000000000000000000000feffffffffffffff010000000000000000000000000000000000000000000000fcffffffffffffff030000000000000000000000000000000000000000000000f8ffffffffffffff070000000000000000000000000000000000000000000000f0ffffffffffffff0f0000000000000000000000000000000000000000000000e0ffffffffffffff1f0000000000000000000000000000000000000000000000c0ffffffffffffff3f000000000000000000000000000000000000000000000080ffffffffffffff7f000000000000000000000000000000000000000000000000ffffffffffffffff000000000000000000000000000000000000000000000000feffffffffffffff0100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc00000000000000000000000000000000cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc00000000000000000000000000000000cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000f003",
+    "ending": "normal",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "ordered_map_arena",
+    "file": "pass/ordered_map_arena.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "ordered_map_drop_order",
+    "file": "output/ordered_map_drop_order.rs",
+    "kind": "output",
+    "hex": "0302011604000563",
+    "ending": "normal",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "everyday_surface_text",
+    "kind": "run",
+    "file": "pass/everyday_surface_text.rs",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "everyday_surface_bytes",
+    "kind": "run",
+    "file": "pass/everyday_surface_bytes.rs",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "everyday_surface_cfg",
+    "kind": "run",
+    "file": "pass/everyday_surface_cfg.rs",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "everyday_surface_default",
+    "kind": "run",
+    "file": "pass/everyday_surface_default.rs",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "byte_constant_wrong_extent",
+    "kind": "reject",
+    "file": "k/byte_constant_wrong_extent.k",
+    "code": "E_TYPE"
+  },
+  {
+    "id": "byte_constant_mutable",
+    "kind": "reject",
+    "file": "k/byte_constant_mutable.k",
+    "code": "E_TYPE"
+  },
+  {
+    "id": "string_pattern_nested_reference",
+    "kind": "reject",
+    "file": "fail/string_pattern_nested_reference.rs",
+    "code": "E_TYPE",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0308"
+  },
+  {
+    "id": "unsupported_cfg_field",
+    "file": "fail/unsupported_cfg_field.rs",
+    "kind": "reject",
+    "code": "E_UNSUPPORTED",
+    "pending": false,
+    "rust": true,
+    "rustAccept": true
+  },
+  {
+    "id": "unsupported_cfg_inner",
+    "file": "fail/unsupported_cfg_inner.rs",
+    "kind": "reject",
+    "code": "E_UNSUPPORTED",
+    "pending": false,
+    "rust": true,
+    "rustAccept": true
   }
 ]

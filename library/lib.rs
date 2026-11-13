@@ -1,8 +1,8 @@
 //! Source standard library, also buildable by rustc during bootstrap.
 mod prelude;
 pub use prelude::{
-    CheckedArithmetic, IntoIterator, IterSource, Iterator, IteratorExt, Option, Result,
-    VecAccess, VecContains, VecExtend,
+    CheckedArithmetic, IntoIterator, IterSource, Iterator, IteratorExt, Option, Result, VecAccess,
+    VecContains, VecExtend,
 };
 pub mod bytes;
 pub mod char;
@@ -36,4 +36,8 @@ pub mod option {
 pub mod result {
     pub use crate::prelude::Result;
     pub use crate::prelude::Result::{Err, Ok};
+}
+
+pub mod default {
+    pub use crate::prelude::{__lkj_default, Default};
 }

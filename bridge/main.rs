@@ -1,6 +1,6 @@
 //! Rust-only bootstrap host. Replace by lkjscript World once the compiler self-compiles.
 use lkjscript::{
-    ast::Diagnostic, check, diagnostics, elaborate, k, k_text, machine, resolve, source, wasm,
+    ast::Diagnostic, check, diagnostics, elaborate, k, k_text, machine, resolve, source,
 };
 mod batch;
 mod library;
@@ -21,6 +21,54 @@ mod host_process {
     unsafe extern "C" {
         fn prctl(option: i32, ...) -> i32;
         fn getppid() -> i32;
+        fn prlimit(pid: i32, resource: u32, new: *const Limit, old: *mut Limit) -> i32;
+    }
+    #[repr(C)]
+    struct Limit {
+        current: u64,
+        maximum: u64,
+    }
+
+    /// A runner budget is host policy, not a property of the accepted source.
+    /// An explicit environment setting can enlarge it or inherit Linux's full
+    /// extent; a tighter limit imposed by the operator always remains effective.
+    pub fn prepare_native_child(command: &mut Command) -> Result<(), String> {
+        prepare_budgeted_child(command, 268435456).map(|_| ())
+    }
+    fn prepare_budgeted_child(command: &mut Command, default: u64) -> Result<u64, String> {
+        let text = std::env::var("LKJ_RUN_MEMORY_BYTES").unwrap_or_else(|_| default.to_string());
+        let budget = if text == "unlimited" {
+            u64::MAX
+        } else {
+            text.parse::<u64>().ok().filter(|n| *n > 0).ok_or_else(|| {
+                "E_HOST LKJ_RUN_MEMORY_BYTES must be positive bytes or unlimited".to_string()
+            })?
+        };
+        prepare_child(command);
+        unsafe {
+            command.pre_exec(move || {
+                let mut limit = Limit {
+                    current: 0,
+                    maximum: 0,
+                };
+                if prlimit(0, 9, std::ptr::null(), &mut limit) != 0 {
+                    return Err(io::Error::last_os_error());
+                }
+                let no_core = Limit {
+                    current: 0,
+                    maximum: 0,
+                };
+                if prlimit(0, 4, &no_core, std::ptr::null_mut()) != 0 {
+                    return Err(io::Error::last_os_error());
+                }
+                limit.current = limit.current.min(budget);
+                if prlimit(0, 9, &limit, std::ptr::null_mut()) != 0 {
+                    return Err(io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+        Ok(budget)
     }
 
     pub fn prepare_child(command: &mut Command) {
@@ -38,6 +86,72 @@ mod host_process {
                 Ok(())
             });
         }
+    }
+
+    /// The Rust K model runs in a fresh process so its allocator cannot consume
+    /// the compiler host. Compile/check-only commands have no runner budget.
+    /// Batch keeps its streaming protocol and gets one process envelope.
+    pub fn model_worker() -> Result<Option<std::process::ExitCode>, String> {
+        use std::io::Write;
+        use std::os::unix::process::ExitStatusExt;
+        use std::process::{ExitCode, Stdio};
+        if std::env::var("LKJ_MODEL_WORKER").as_deref() == Ok("1") {
+            return Ok(None);
+        }
+        let argv = std::env::args().skip(1).collect::<Vec<_>>();
+        let Some(verb) = argv.first() else {
+            return Ok(None);
+        };
+        let selected = argv.windows(2).find_map(|pair| {
+            if pair[0] == "--engine" || pair[0] == "--engines" {
+                Some(pair[1].as_str())
+            } else {
+                None
+            }
+        });
+        let runs_model = if verb == "batch" {
+            selected
+                .unwrap_or("k")
+                .split(',')
+                .any(|engine| engine == "k")
+        } else {
+            (verb == "run" || verb == "test") && selected == Some("k")
+        };
+        if !runs_model {
+            return Ok(None);
+        }
+        let executable = std::env::current_exe().map_err(|error| format!("E_HOST {error}"))?;
+        let mut command = Command::new(executable);
+        command
+            .args(&argv)
+            .env("LKJ_MODEL_WORKER", "1")
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::piped());
+        let budget = prepare_budgeted_child(&mut command, 536870912)?;
+        let output = command
+            .output()
+            .map_err(|error| format!("E_HOST K worker: {error}"))?;
+        std::io::stderr()
+            .write_all(&output.stderr)
+            .map_err(|error| format!("E_HOST {error}"))?;
+        if let Some(signal) = output.status.signal() {
+            let text = String::from_utf8_lossy(&output.stderr);
+            if signal == 6
+                && text.contains("memory allocation of ")
+                && text.contains(" bytes failed")
+            {
+                return Err(format!(
+                    "E_HOST K worker exhausted its Linux address-space budget ({budget} bytes); Rust allocator failure has no source location"
+                ));
+            }
+            return Err(format!(
+                "E_HOST K worker terminated by signal {signal} under Linux address-space budget {budget} bytes"
+            ));
+        }
+        Ok(Some(
+            ExitCode::from(output.status.code().unwrap_or(1) as u8),
+        ))
     }
 }
 
@@ -268,7 +382,7 @@ struct Arguments {
 }
 fn arguments(args: &[String]) -> Result<Arguments, String> {
     if args.len() < 2 {
-        return Err("usage: lkjscript check|run|test|build|k <source> [--census] [--engine native|k|node] [--entry name] [-o artifact]".to_string());
+        return Err("usage: lkjscript check|run|test|build|k <source> [--census] [--engine native|k] [--entry name] [-o artifact]".to_string());
     }
     let mut result = Arguments {
         verb: args[1].clone(),
@@ -309,8 +423,8 @@ fn arguments(args: &[String]) -> Result<Arguments, String> {
     {
         return Err("E_USAGE expected check|run|test|build|k and a source path".to_string());
     }
-    if !["node", "k", "native"].contains(&result.engine.as_str()) {
-        return Err("E_USAGE engine is node, k or native".to_string());
+    if !["k", "native"].contains(&result.engine.as_str()) {
+        return Err("E_USAGE engine is native or k".to_string());
     }
     if result.unchecked
         && (result.engine != "k"
@@ -382,35 +496,6 @@ fn entries(program: &k::Program, args: &Arguments) -> Result<Vec<usize>, String>
     }
     Ok(selected)
 }
-fn result_kind(program: &k::Program, function: &k::Function) -> &'static str {
-    match program.types[function.result].kind {
-        k::TypeKind::Unit => "unit",
-        k::TypeKind::Bool => "bool",
-        k::TypeKind::Char => "char",
-        k::TypeKind::F64 => "f64",
-        k::TypeKind::Int { signed: false, .. } => "u64",
-        _ => "i64",
-    }
-}
-fn execute(module: &Path, entry: &str, kind: &str, world: bool) -> Result<(), String> {
-    let mut command = Command::new("node");
-    command
-        .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("bridge/run.mjs"))
-        .arg(module)
-        .arg(entry)
-        .arg(kind);
-    if world {
-        command.arg("1");
-    }
-    host_process::prepare_child(&mut command);
-    // Inherited output preserves streaming/backpressure and detects host failure
-    // inside the write operation. A failed engine already reports its diagnostic.
-    let status = command.status().map_err(|e| format!("E_HOST Node: {e}"))?;
-    if !status.success() {
-        return Err(String::new());
-    }
-    Ok(())
-}
 fn scalar(value: machine::Scalar) -> String {
     match value {
         machine::Scalar::Unit => String::new(),
@@ -468,9 +553,16 @@ fn execute_machine(
 }
 fn run() -> Result<(), String> {
     let argv: Vec<String> = std::env::args().collect();
+    if argv.len() == 2 && argv[1] == "runtime-k" {
+        print!(
+            "{}",
+            k_text::write(lkjscript::bootstrap_runtime::get()?.checked_program())
+        );
+        return Ok(());
+    }
     if argv.len() == 2 && argv[1] == "trusted" {
         println!(
-            "source meaning: src/syntax.rs, src/resolve.rs, src/generics.rs, src/elaborate/\nK safety gate: src/k.rs, src/check.rs\nlayout and lowering: src/lower.rs, src/lower/ir.rs\nsource runtime and sealed raw binding: library/runtime.rs, src/runtime.rs\nnative ELF encoder and Linux entry: src/native.rs\nWebAssembly encoder: src/wasm.rs\nindependent models: src/machine.rs, src/machine/scalar.rs, src/runtime/memory.rs\nRust host and declared source provisioning: bridge/\nRust output oracle: bridge/output.rs\nphysical size ledger: node tools/trust.mjs"
+            "source meaning: src/syntax.rs, src/resolve.rs, src/generics.rs, src/elaborate/\nK safety gate: src/k.rs, src/check.rs\nlayout and lowering: src/lower.rs, src/lower/ir.rs\nsource runtime and sealed raw binding: library/runtime.rs, src/runtime.rs\nnative ELF encoder and Linux entry: src/native.rs\nindependent models: src/machine.rs, src/machine/scalar.rs, src/runtime_memory.rs\nRust host and declared source provisioning: bridge/\nRust output oracle: bridge/output.rs\nphysical size ledger: node tools/trust.mjs"
         );
         return Ok(());
     }
@@ -503,58 +595,20 @@ fn run() -> Result<(), String> {
         timings.done();
         return Ok(());
     }
-    if args.engine == "native" {
-        native::run(&checked, &args, &mut timings)?;
-        timings.done();
-        return Ok(());
-    }
-    let bytes = timings
-        .measure("emit", || wasm::emit(&checked))
-        .map_err(|e| format!("{}:1:1: E_EMIT {e}", args.path))?;
-    timings.count("emitted_bytes", bytes.len());
-    let temporary = args.verb != "build";
-    let output = if temporary {
-        let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/run");
-        fs::create_dir_all(&directory).map_err(|e| format!("E_IO {e}"))?;
-        directory.join(format!("{}.wasm", std::process::id()))
-    } else {
-        PathBuf::from(args.output.clone().unwrap_or_else(|| {
-            Path::new(&args.path)
-                .with_extension("wasm")
-                .to_string_lossy()
-                .into_owned()
-        }))
-    };
-    fs::write(&output, bytes).map_err(|e| format!("E_IO {}: {e}", output.display()))?;
-    let result: Result<(), String> = if args.verb == "build" {
-        Ok(())
-    } else {
-        let program = checked.program();
-        (|| {
-            for entry in entries(program, &args)? {
-                let function = &program.functions[entry];
-                execute(
-                    &output,
-                    &function.name,
-                    if args.verb == "test" {
-                        "unit"
-                    } else {
-                        result_kind(program, function)
-                    },
-                    entry_world(program, function)?,
-                )?;
-            }
-            Ok(())
-        })()
-    };
-    if temporary {
-        let _ = fs::remove_file(&output);
-    }
-    result?;
+    native::run(&checked, &args, &mut timings)?;
     timings.done();
     Ok(())
 }
+
 fn main() -> ExitCode {
+    match host_process::model_worker() {
+        Ok(Some(status)) => return status,
+        Ok(None) => {}
+        Err(error) => {
+            eprintln!("{error}");
+            return ExitCode::FAILURE;
+        }
+    }
     let result = lkjscript::compiler_stack::run(run)
         .map_err(|error| format!("E_HOST {error}"))
         .and_then(|result| result);

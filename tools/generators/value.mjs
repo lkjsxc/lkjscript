@@ -168,7 +168,7 @@ for (let i = 0; i < N; i++) {
   else if (r.k === 'trap' && l.k === 'trap') cls = r.kind !== l.kind ? 'TRAP-KIND-DIFFERS' : r.line !== l.line ? 'trap-same-kind-other-line' : 'trap-equal';
   else cls = 'VALUE-VS-TRAP';
   bump(cls);
-  if (cls !== 'value-equal' && cls !== 'trap-equal') show.push(`${dir}/c${i} ${cls} rust=${r.k === 'value' ? r.v : r.k === 'trap' ? r.kind + '@' + r.line + ' ' + r.text : r.text} lkj=${(l.text || '').replace(/^\S*\.(rs|wasm):/, '').slice(0, 150)}`);
+  if (cls !== 'value-equal' && cls !== 'trap-equal') show.push(`${dir}/c${i} ${cls} rust=${r.k === 'value' ? r.v : r.k === 'trap' ? r.kind + '@' + r.line + ' ' + r.text : r.text} lkj=${(l.text || '').replace(/^\S*\.(rs|elf):/, '').slice(0, 150)}`);
 }
 const record = { generator: 'value', engine, ...metadata, rustFlags: FLAGS.join(' '), seed: seedS, programs: N, ...tally };
 fs.mkdirSync(output, {recursive: true});

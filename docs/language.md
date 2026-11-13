@@ -718,8 +718,8 @@ search. Only CheckedProgram reaches the backend; later stages rely on that gate.
 ## Memory and execution
 
 Checked K lowers to target-independent typed operations with layout, calls and
-copy/drop/equality glue explicit. WebAssembly and native encoders consume this
-form without consulting K.
+copy/drop/equality glue explicit. The native encoder consumes this form without
+consulting K. The independent K machine executes the checked representation directly.
 Memory scalars use their natural one-, two-, four- or eight-byte widths; signed
 loads extend correctly. Registers and pointers retain 64-bit representations.
 F64 retains its bit representation and canonical NaNs after arithmetic.
@@ -738,27 +738,35 @@ The host supplies runtime source separately from application source. Runtime
 preparation checks ordinary scalar K, validates the trapping primitive signatures,
 and seals a small raw load/store/grow/copy/glue-call interface. Ordinary names or
 imports cannot request those substitutions. Allocation, release, growth, the
-cleanup walker and UTF-8 validation are source functions shared by both encoders.
+cleanup walker and UTF-8 validation are source functions. The K compiler takes
+this runtime as checked K input, without invoking the source front end.
 The K runtime model executes those same functions against an independent raw arena;
 the normal K machine keeps its separate typed heap as the application model.
 The raw-memory invariants of the source allocator and glue still belong to the
 trusted implementation; ordinary type checking alone does not establish them.
 
-Native output is a static Linux x86-64 ELF without libc, a dynamic loader or Node.
-Each lowered local/operand occupies a frame slot. Entry reserves stack and heap
-address ranges from explicit host resource inputs; prologues check stack bounds,
-and memory growth commits pages inside the heap reservation. Reservation or
-growth refusal and checked extent exhaustion trap R0006. Linux can still kill
-an overcommitted process under system-wide memory pressure. World-derived stdout
-is the only application I/O import; partial writes and EINTR are handled, and
-closed/broken output reports R0007 at its source line. Runtime mapping and exit
-operations are private to entry code. The bootstrap can request a separate result
-packet capability; standalone artifacts write only their declared World output.
+Native output is a static Linux x86-64 ELF without libc or a dynamic loader.
+Build-host resource measurements never enter its bytes. Startup reads physical
+memory (excluding swap) and RLIMIT_AS, then reserves stack and heap within the
+available execution extent. Prologues check stack exhaustion (R0008); heap
+mapping/growth refusal and allocation exhaustion report R0006. Standalone traps
+write their code and source line to stderr and exit unsuccessfully. Linux may
+still kill a process under physical/cgroup memory pressure; ordinary operator
+budgets belong to execution, not source acceptance.
 
-Lowering reuses physical Wasm locals across nonoverlapping lifetimes. Additional
-live values spill into a growing memory64 frame; address-taken values have stable
-frame slots. The physical register pool is an optimization, not an acceptance
-limit. Source-local count does not determine the permanent Wasm-local count.
+The runner supplies a default 256 MiB address-space budget for native children
+and a 512 MiB budget for a fresh K worker, preserving tighter inherited limits.
+LKJ_RUN_MEMORY_BYTES selects explicit bytes or unlimited. Some infallible Rust
+allocations in the K host can still abort; the parent reports that host failure
+without inventing a source location. Fallible K frame and heap paths distinguish
+R0008 and R0006 at their instruction lines. The generator subprocess budget is
+2 GiB for test executables and 8 GiB for rustc compilation/linking, configurable
+with LKJ_TEST_MEMORY_BYTES; Node orchestration is
+excluded from this address-space setting because its VM reserves a large cage.
+
+Lowering reuses local storage across nonoverlapping lifetimes. Address-taken
+values have stable frame slots; remaining live storage grows with the program.
+Local-slot allocation is an optimization and introduces no acceptance limit.
 
 Struct payloads align fields at their natural widths; enum payloads additionally
 carry a tag. Vec and array storage has data, length and capacity words, with
@@ -777,8 +785,7 @@ internal calls can still return views. UTF-8 validation and byte output receive
 data/count directly. Moved heap slots are cleared so partial cleanup skips them.
 These layouts are implementation details, not an exposed source API.
 
-Generated functions export as `fn:<K-name>`, avoiding a collision with the
-`memory` export. The optional Node route executes this encoding. The independent K
+Lowered functions retain `fn:<K-name>` entry identities. The independent K
 machine executes checked K directly over its own heap, explicit call/control/drop
 stacks, initialization states and exact storage/loan identities. It validates
 reference tags and active variants on actual access and distinguishes M_* machine
@@ -804,7 +811,9 @@ bundle supplies its own library files without hidden fallback.
 `std::mem::replace` transfers ownership through an exclusive reference. Vec/Box
 and memory operations remain trusted intrinsics until their source layer lands.
 
-`compiler::compile(&SourceBundle)` is the source-to-Wasm compiler-core entry.
+`compiler::compile(&SourceBundle)` is the bootstrap source-to-native entry.
+The pure core additionally receives its declared Runtime; `kc::compile` consumes
+program K, runtime K and an entry name without source-front-end dependencies.
 `compiler::check_bundle` uses the same production checking pipeline. These entries
 perform no host I/O. Their existence and input-mutation tests do not establish
 self-compilation.
@@ -837,7 +846,7 @@ program or a compiler-core fixed point.
 `src/check.rs` is the K checker; `src/k.rs` defines its inputs and checked result.
 `src/lower.rs` owns layout, glue and the explicit lowered operations.
 `library/runtime.rs` owns source runtime algorithms; `src/runtime.rs` seals and links
-the raw interface. `src/wasm.rs` and `src/native.rs` encode the same lowered program.
+the raw interface. `src/native.rs` encodes the lowered program as static ELF.
 `bridge/` supplies bootstrap file/process/command-line access and declared runtime
 and library source. `lkjscript trusted` lists these boundaries; `tools/trust.mjs`
 reports their physical sizes.
@@ -868,9 +877,9 @@ Only checked `world_stdout` and `stdout_write` K operations grant and use this
 interface. Source code cannot name a host import or forge either operation's
 required value. Pure programs do not import the output operation.
 
-The WebAssembly host boundary receives a packed byte pointer, length and source
-line. It checks the entire range without overflowing, copies chunks before
-writing, loops on partial writes and retains no bytes or pointer after returning.
+The native host boundary receives a byte pointer, length and source line. It
+checks the range without overflowing, handles partial writes and EINTR, and
+retains no bytes or pointer after returning.
 Byte storage is already contiguous under the common layout contract; the host
 API does not depend on a source aggregate representation. Zero-length writes produce no bytes. An invalid range, zero-byte
 write or operating-system write failure traps with `R0007` (host output failure).
@@ -906,13 +915,32 @@ visibility, but it cannot add an implementation to an otherwise complete supplie
 source graph. Existing candidates whose visibility or prerequisites are unknown
 remain blocked. A method's spelling alone is not evidence that it resolves.
 
-The bootstrap batch command accepts one route or a comma-separated list of routes.
-It checks each source once and shares lowering between encoders. K uses a fresh
-machine per case; Node loads fresh modules in one process through the same engine
-and byte writer implementation. Native cases execute separate standalone images.
-Cases retain their own output bytes and termination classes. A batch watchdog
-measures missing progress, not total duration; Node-only module preparation is
-reported separately and cannot substitute for an execution result. Rust reference
-output is cached by generated source, generator/seed, compiler version and flags.
-Generators and reduced failures are source records; detailed measurements remain
-under target/.
+The bootstrap batch command accepts native, K, or both. It checks each source
+once. K uses fresh machine state per case inside its bounded worker; native cases
+execute separate images. Every case retains its own bytes and termination class.
+The batch watchdog measures missing progress, not total duration. Missing,
+duplicate or incomplete results fail the suite. Rust reference outputs are cached
+by source, seed, compiler version and flags. Semantic cases are source/K data;
+source-sensitivity bootstrap tests remain while their exact source identity is
+relevant. Detailed measurements remain under target/.
+
+## Consumer-driven surface additions
+
+Non-test compilation evaluates cfg(test) as false, including nested all/any/not
+conditions; excluded declarations never reach name resolution. Derived Default
+is an ordinary generated implementation using field defaults under declared
+trait bounds. Text equality and string-literal patterns follow Rust's reference
+matching depth. String references coerce to str at declared argument and receiver
+sites. Byte-string literals have static shared references to exact-size byte
+arrays; the K constant contract checks their type and extent.
+
+The source library provides String ordering/from conversion, scalar ASCII tests
+and min/max, owned Vec iteration, stable sort and retain. Source bodies specify
+method behavior and destruction order. General From/Into evidence and exclusive
+iter_mut still need their real generic/provenance contracts; they are not claimed
+by the implemented conveniences. Arrays and Vec/Box of views still reject with
+located alternatives: owned values, indices, or separate local views.
+
+The ordered map uses an owned AVL node arena with index links and free-slot reuse.
+Insertion, lookup and removal follow tree height; ordered iteration and clear/drop
+preserve key order. This is library source, not a new trusted primitive.

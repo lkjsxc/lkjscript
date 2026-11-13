@@ -269,3 +269,95 @@ impl CheckedArithmetic for isize {
         }
     }
 }
+
+/// Total-order selection consumes one operand and returns the selected value.
+/// Ties follow Rust: min returns the first value; max returns the second.
+pub trait ScalarOrder: Ord {
+    fn min(self, other: Self) -> Self;
+    fn max(self, other: Self) -> Self;
+}
+impl<T: Ord> ScalarOrder for T {
+    fn min(self, other: T) -> T {
+        if self <= other { self } else { other }
+    }
+    fn max(self, other: T) -> T {
+        if self > other { self } else { other }
+    }
+}
+
+/// ASCII byte operations are independent of Unicode and locale tables.
+pub trait ByteAscii {
+    fn is_ascii(&self) -> bool;
+    fn is_ascii_digit(&self) -> bool;
+    fn is_ascii_uppercase(&self) -> bool;
+    fn is_ascii_lowercase(&self) -> bool;
+    fn is_ascii_alphabetic(&self) -> bool;
+    fn is_ascii_alphanumeric(&self) -> bool;
+    fn is_ascii_hexdigit(&self) -> bool;
+    fn is_ascii_whitespace(&self) -> bool;
+    fn is_ascii_control(&self) -> bool;
+    fn is_ascii_punctuation(&self) -> bool;
+    fn is_ascii_graphic(&self) -> bool;
+    fn to_ascii_lowercase(&self) -> u8;
+    fn to_ascii_uppercase(&self) -> u8;
+    fn eq_ignore_ascii_case(&self, other: &u8) -> bool;
+}
+impl ByteAscii for u8 {
+    fn is_ascii(&self) -> bool {
+        *self < 128u8
+    }
+    fn is_ascii_digit(&self) -> bool {
+        *self >= b'0' && *self <= b'9'
+    }
+    fn is_ascii_uppercase(&self) -> bool {
+        *self >= b'A' && *self <= b'Z'
+    }
+    fn is_ascii_lowercase(&self) -> bool {
+        *self >= b'a' && *self <= b'z'
+    }
+    fn is_ascii_alphabetic(&self) -> bool {
+        self.is_ascii_uppercase() || self.is_ascii_lowercase()
+    }
+    fn is_ascii_alphanumeric(&self) -> bool {
+        self.is_ascii_alphabetic() || self.is_ascii_digit()
+    }
+    fn is_ascii_hexdigit(&self) -> bool {
+        self.is_ascii_digit()
+            || (*self >= b'a' && *self <= b'f')
+            || (*self >= b'A' && *self <= b'F')
+    }
+    fn is_ascii_whitespace(&self) -> bool {
+        *self == 9u8 || *self == 10u8 || *self == 12u8 || *self == 13u8 || *self == 32u8
+    }
+    fn is_ascii_control(&self) -> bool {
+        *self < 32u8 || *self == 127u8
+    }
+    fn is_ascii_punctuation(&self) -> bool {
+        (*self >= 33u8 && *self <= 47u8)
+            || (*self >= 58u8 && *self <= 64u8)
+            || (*self >= 91u8 && *self <= 96u8)
+            || (*self >= 123u8 && *self <= 126u8)
+    }
+    fn is_ascii_graphic(&self) -> bool {
+        *self >= 33u8 && *self <= 126u8
+    }
+    fn to_ascii_lowercase(&self) -> u8 {
+        if self.is_ascii_uppercase() {
+            *self + 32u8
+        } else {
+            *self
+        }
+    }
+    fn to_ascii_uppercase(&self) -> u8 {
+        if self.is_ascii_lowercase() {
+            *self - 32u8
+        } else {
+            *self
+        }
+    }
+    // Calling eq_ignore_ascii_case here would recurse through this source impl.
+    #[allow(clippy::manual_ignore_case_cmp)]
+    fn eq_ignore_ascii_case(&self, other: &u8) -> bool {
+        self.to_ascii_lowercase() == other.to_ascii_lowercase()
+    }
+}

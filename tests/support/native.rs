@@ -130,7 +130,6 @@ pub fn assert_calls(checked: &k::CheckedProgram, calls: &[(&str, &[i64], i64)]) 
             arguments: vec![],
             result_fd: Some(2),
         },
-        bootstrap_runtime::resources().unwrap(),
     )
     .unwrap();
     let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("target/semantic-tests");
@@ -147,7 +146,7 @@ pub fn assert_calls(checked: &k::CheckedProgram, calls: &[(&str, &[i64], i64)]) 
         let mut child = Command::new("/bin/sh")
             .args([
                 "-c",
-                "cat > \"$1\" && chmod 700 \"$1\" && exec \"$1\"",
+                "ulimit -v 262144; cat > \"$1\" && chmod 700 \"$1\" && exec \"$1\"",
                 "native-semantic-test",
             ])
             .arg(&path)

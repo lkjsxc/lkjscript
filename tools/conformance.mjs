@@ -111,7 +111,8 @@ for (const c of cases) {
         const code = result.stderr.toString().match(/: (R[0-9]+)\b/)?.[1];
         const expected = Buffer.from(c.hex || '', 'hex');
         if (result.error || result.signal || result.status === 0 || code !== c.code
-            || !result.stdout.equals(expected)) {
+            || !result.stdout.equals(expected)
+            || (c.line !== undefined && !result.stderr.toString().includes(`:${c.line}: ${c.code} `))) {
             fail(c.id + ': expected ' + c.code + ' and output ' + expected.toString('hex')
                 + ', got ' + diagnostic(result));
             continue;

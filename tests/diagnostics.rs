@@ -170,7 +170,7 @@ fn build_does_not_emit_an_artifact_from_recovered_syntax() {
     let directory = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/diagnostic-tests");
     fs::create_dir_all(&directory).unwrap();
     let path = directory.join(format!("{}-invalid.rs", std::process::id()));
-    let output_path = path.with_extension("wasm");
+    let output_path = path.with_extension("elf");
     let _ = fs::remove_file(&output_path);
     fs::write(&path, "fn broken() { let = 1; } fn probe() -> i64 { 42 }").unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_lkjscript"))
@@ -309,7 +309,7 @@ fn cli_collects_independent_errors_marks_blocking_and_never_emits() {
         .join("diagnostic-cli");
     std::fs::create_dir_all(&dir).unwrap();
     let input = dir.join("independent.rs");
-    let output = dir.join("invalid.wasm");
+    let output = dir.join("invalid.elf");
     std::fs::write(
         &input,
         "fn first() -> i64 { true }\nfn second() -> bool { 1i64 }\n",

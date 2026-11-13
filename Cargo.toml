@@ -12,6 +12,11 @@ path = "bridge/lib.rs"
 name = "lkjscript"
 path = "bridge/main.rs"
 
+[[bin]]
+name = "kc"
+path = "bridge/kc.rs"
+test = false
+
 [profile.release]
 overflow-checks = true
 

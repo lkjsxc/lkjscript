@@ -12,8 +12,8 @@ export async function runRoutes(binary, cases, {
     ...options
 } = {}) {
     if (!engines.length || new Set(engines).size !== engines.length
-        || engines.some(engine => !['native', 'k', 'node'].includes(engine))) {
-        throw new Error('batch engines must be distinct names from native,k,node');
+        || engines.some(engine => !['native', 'k'].includes(engine))) {
+        throw new Error('batch engines must be distinct names from native,k');
     }
     fs.mkdirSync(output, { recursive: true });
     const manifest = path.resolve(output, process.pid + '-' + serial++ + '.tsv');
@@ -30,20 +30,10 @@ export async function runRoutes(binary, cases, {
         fs.rmSync(manifest, { force: true });
     }
     const routes = Object.fromEntries(engines.map(engine => [engine, new Array(cases.length)]));
-    const prepared = new Set();
     for (const line of result.stdout.split('\n').filter(Boolean)) {
         let record;
         try { record = JSON.parse(line); }
         catch { throw new Error('invalid batch output: ' + line); }
-        if (Object.hasOwn(record, 'prepared')) {
-            if (engines.length !== 1 || engines[0] !== 'node' || Object.keys(record).length !== 1
-                || !Number.isInteger(record.prepared) || record.prepared < 0
-                || record.prepared >= cases.length || prepared.has(record.prepared)) {
-                throw new Error('invalid batch preparation record');
-            }
-            prepared.add(record.prepared);
-            continue;
-        }
         const results = Object.hasOwn(routes, record.engine) ? routes[record.engine] : undefined;
         if (!results || !Number.isInteger(record.index) || record.index < 0
             || record.index >= cases.length || results[record.index]) {

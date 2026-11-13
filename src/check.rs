@@ -1,5 +1,5 @@
 //! The single gate for explicit K. Each structured edge has an ownership state.
-use crate::ast::{Diagnostic, Span};
+use crate::diagnostic::{Diagnostic, Span};
 use crate::facts::Facts;
 use crate::k::*;
 use std::collections::{BTreeMap, BTreeSet};
@@ -1766,17 +1766,31 @@ fn check_shape(
     };
     match &instruction.op {
         Op::Text { dst, bytes } => {
-            if !matches!(types[ty(*dst)?].kind, TypeKind::Ref { inner, mutable: false }
-                if matches!(types[inner].kind, TypeKind::Str))
-            {
+            let TypeKind::Ref {
+                inner,
+                mutable: false,
+            } = types[ty(*dst)?].kind
+            else {
                 return Err(error(
                     line,
                     "E_TYPE",
-                    "text literal requires an immutable text reference",
+                    "byte constant requires an immutable reference",
                 ));
-            }
-            if std::str::from_utf8(bytes).is_err() {
-                return Err(error(line, "E_TYPE", "text literal contains invalid UTF-8"));
+            };
+            match types[inner].kind {
+                TypeKind::Str => {
+                    if std::str::from_utf8(bytes).is_err() {
+                        return Err(error(line, "E_TYPE", "text literal contains invalid UTF-8"));
+                    }
+                }
+                TypeKind::Array { inner: U8, len } if len == bytes.len() => {}
+                _ => {
+                    return Err(error(
+                        line,
+                        "E_TYPE",
+                        "byte constant requires str or an exact-length u8 array",
+                    ));
+                }
             }
         }
         Op::Int { dst, value } => match &types[ty(*dst)?].kind {

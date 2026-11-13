@@ -2,6 +2,7 @@
 use crate::Result;
 use crate::bytes::{append_bytes, starts_with, valid_utf8};
 
+#[derive(PartialOrd, Ord)]
 pub struct String {
     bytes: Vec<u8>,
 }
@@ -21,6 +22,10 @@ impl String {
         } else {
             Result::Err(FromUtf8Error { bytes })
         }
+    }
+
+    pub fn from(value: &str) -> String {
+        String::from_str(value)
     }
 
     pub fn from_str(value: &str) -> String {
@@ -164,4 +169,27 @@ pub fn __lkj_new() -> String {
 // Range syntax resolves this declaration, preserving the source String invariant.
 pub fn __lkj_as_str(value: &String) -> &str {
     value.as_str()
+}
+
+/// Canonical lexical String ordering uses its UTF-8 bytes, as Rust does.
+pub fn __lkj_compare(left: &String, right: &String) -> i32 {
+    let left = left.as_bytes();
+    let right = right.as_bytes();
+    let mut index = 0usize;
+    while index < left.len() && index < right.len() {
+        if left[index] < right[index] {
+            return -1;
+        }
+        if left[index] > right[index] {
+            return 1;
+        }
+        index = index + 1;
+    }
+    if left.len() < right.len() {
+        -1
+    } else if left.len() > right.len() {
+        1
+    } else {
+        0
+    }
 }

@@ -14,7 +14,7 @@ fn kib(line: &str) -> Option<usize> {
 
 fn cgroup_extent(name: &str, mut extent: usize) -> usize {
     // A cgroup can inherit a tighter bound from any parent. Missing/v1 metadata
-    // leaves the physical/swap observation intact; it is not a guessed quota.
+    // leaves the physical-memory observation intact; it is not a guessed quota.
     let Ok(groups) = fs::read_to_string("/proc/self/cgroup") else {
         return extent;
     };
@@ -43,16 +43,7 @@ pub fn reservation() -> io::Result<usize> {
         .find(|line| line.starts_with("MemTotal:"))
         .and_then(kib)
         .ok_or_else(|| io::Error::other("cannot read physical memory extent"))?;
-    let swap = memory
-        .lines()
-        .find(|line| line.starts_with("SwapTotal:"))
-        .and_then(kib)
-        .ok_or_else(|| io::Error::other("cannot read swap extent"))?;
-    let mut extent = cgroup_extent("memory.max", physical)
-        .checked_add(cgroup_extent("memory.swap.max", swap))
-        .ok_or_else(|| {
-            io::Error::other("memory and swap extents overflow the host address type")
-        })?;
+    let mut extent = cgroup_extent("memory.max", physical);
     let limits = fs::read_to_string("/proc/self/limits")?;
     if let Some(limit) = limits
         .lines()

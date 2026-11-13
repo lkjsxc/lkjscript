@@ -1,11 +1,11 @@
-//! The production trap-metadata JSON encoder executes from its actual source.
+//! The production batch-protocol JSON encoder executes from its actual source.
 #[path = "../bridge/library.rs"]
 mod bootstrap_library;
 
 use lkjscript::source::{SourceBundle, SourceInput};
-use lkjscript::{check, compiler, json, k, wasm};
-use std::io::Write;
-use std::process::{Command, Stdio};
+use lkjscript::{compiler, json};
+use std::os::unix::fs::PermissionsExt;
+use std::process::Command;
 
 const JSON: &str = include_str!("../src/json.rs");
 
@@ -24,6 +24,11 @@ fn bundle(module: &str, cases: &[String]) -> SourceBundle {
              }}\n"
         ));
     }
+    root.push_str("pub fn main(mut world:World) { let mut out=world.stdout();\n");
+    for index in 0..cases.len() {
+        root.push_str(&format!("let value=encode_{index}();out.write(&value);\n"));
+    }
+    root.push_str("}\n");
     let mut files = bootstrap_library::standard_library();
     files.extend([
         SourceInput {
@@ -42,27 +47,29 @@ fn bundle(module: &str, cases: &[String]) -> SourceBundle {
     }
 }
 
-fn run(artifact: &[u8], observations: &str) {
-    let script = format!(
-        "const chunks=[];process.stdin.on('data',b=>chunks.push(b));process.stdin.on('end',async()=>{{try{{\
-         const {{module,instance}}=await WebAssembly.instantiate(Buffer.concat(chunks),{{lkjscript:{{trap(c,l){{throw Error('trap '+c+':'+l)}}}}}});\
-         const e=instance.exports;{observations}\
-         }}catch(error){{console.error(error);process.exitCode=1}}}});"
-    );
-    let mut child = Command::new("node")
-        .args(["-e", &script])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("Node is required for generated component execution");
-    child.stdin.take().unwrap().write_all(artifact).unwrap();
-    let result = child.wait_with_output().unwrap();
+fn run(artifact: &[u8]) -> Vec<u8> {
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("target/json-component");
+    std::fs::create_dir_all(&directory).unwrap();
+    let path = directory.join(format!(
+        "{}-{}.elf",
+        std::process::id(),
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
+    std::fs::write(&path, artifact).unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let output = Command::new("prlimit")
+        .arg("--as=268435456")
+        .arg(&path)
+        .output()
+        .unwrap();
+    std::fs::remove_file(path).unwrap();
     assert!(
-        result.status.success(),
+        output.status.success(),
         "{}",
-        String::from_utf8_lossy(&result.stderr)
+        String::from_utf8_lossy(&output.stderr)
     );
+    output.stdout
 }
 
 fn hex(bytes: &[u8]) -> String {
@@ -81,37 +88,19 @@ fn rust_output(input: &str) -> Vec<u8> {
 fn compare_outputs(artifact: &[u8], cases: &[String], outputs: &[Vec<u8>], valid: &[bool]) {
     assert_eq!(cases.len(), outputs.len());
     assert_eq!(cases.len(), valid.len());
-    let mut script = r#"
-        function readOutput(header){
-            const view=new DataView(e.memory.buffer);
-            const data=Number(view.getBigUint64(Number(header),true));
-            const length=Number(view.getBigUint64(Number(header)+8,true));
-            return Buffer.from(new Uint8Array(e.memory.buffer,data,length));
-        }
-        function verify(index,expected,input,valid){
-            const owner=e['fn:encode_'+index]();
-            const actual=readOutput(owner);
-            e['fn:release'](owner);
-            if(!actual.equals(Buffer.from(expected,'hex')))throw Error('output bytes differ: '+index);
-            if(valid){
-                const decoded=JSON.parse(actual.toString('utf8'));
-                if(!Array.isArray(decoded)||decoded.length!==2||decoded[1]!=='tail')throw Error('append structure: '+index);
-                if(!Buffer.from(decoded[0],'utf8').equals(Buffer.from(input,'hex')))throw Error('JSON round trip: '+index);
-            }else{
-                let rejected=false;
-                try{JSON.parse(actual.toString('utf8'))}catch(error){rejected=error instanceof SyntaxError}
-                if(!rejected)throw Error('mutated control byte was not rejected by JSON parser');
-            }
-        }
-    "#.to_string();
-    for (index, ((input, expected), valid)) in cases.iter().zip(outputs).zip(valid).enumerate() {
-        script.push_str(&format!(
-            "verify({index},'{}','{}',{valid});",
-            hex(expected),
-            hex(input.as_bytes())
-        ));
+    let expected: Vec<u8> = outputs.iter().flatten().copied().collect();
+    assert_eq!(run(artifact), expected);
+    // The reference JSON parser verifies the bytes, not a second execution engine.
+    let mut script = String::new();
+    for (index, ((input, output), valid)) in cases.iter().zip(outputs).zip(valid).enumerate() {
+        script.push_str(&format!("{{const text=Buffer.from('{}','hex').toString('utf8');let value;let parsed=true;try{{value=JSON.parse(text)}}catch{{parsed=false}}if(parsed!=={valid})throw Error('validity {index}');if(parsed&&(!Array.isArray(value)||value.length!==2||value[1]!=='tail'||Buffer.from(value[0],'utf8').toString('hex')!=='{}'))throw Error('round trip {index}');}}",hex(output),hex(input.as_bytes())));
     }
-    run(artifact, &script);
+    let result = Command::new("node").args(["-e", &script]).output().unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
 }
 
 fn cases() -> Vec<String> {
@@ -156,63 +145,6 @@ fn production_json_encoder_executes_and_round_trips_every_output_byte() {
     let expected: Vec<Vec<u8>> = cases.iter().map(|input| rust_output(input)).collect();
     let artifact = compiler::compile(&bundle(JSON, &cases)).unwrap();
     compare_outputs(&artifact, &cases, &expected, &vec![true; cases.len()]);
-}
-
-#[test]
-fn production_emitter_uses_the_shared_json_encoder_for_trap_metadata() {
-    let cases = cases();
-    let functions = cases
-        .iter()
-        .enumerate()
-        .map(|(index, message)| k::Function {
-            file: 0,
-            name: format!("metadata_{index}"),
-            params: 0,
-            result: k::UNIT,
-            return_source: None,
-            locals: Vec::new(),
-            body: vec![k::Instruction {
-                column: 1,
-                op: k::Op::Trap {
-                    message: message.clone(),
-                },
-                line: 1,
-            }],
-            test: false,
-        })
-        .collect();
-    let checked = check::check(k::Program {
-        types: k::primitives(),
-        functions,
-        destructors: Vec::new(),
-    })
-    .unwrap();
-    let artifact = wasm::emit(&checked).unwrap();
-    let mut expected = vec![b'['];
-    for (index, input) in cases.iter().enumerate() {
-        if index != 0 {
-            expected.push(b',');
-        }
-        json::write_string(&mut expected, input);
-    }
-    expected.push(b']');
-    let mut script = format!(
-        "const sections=WebAssembly.Module.customSections(module,'lkjscript.traps');\
-         if(sections.length!==1)throw Error('trap metadata missing');\
-         const actual=Buffer.from(sections[0]);\
-         if(!actual.equals(Buffer.from('{}','hex')))throw Error('trap metadata bytes differ');\
-         const messages=JSON.parse(actual.toString('utf8'));\
-         if(messages.length!=={})throw Error('trap message count');",
-        hex(&expected),
-        cases.len()
-    );
-    for (index, input) in cases.iter().enumerate() {
-        script.push_str(&format!(
-            "if(!Buffer.from(messages[{index}],'utf8').equals(Buffer.from('{}','hex')))throw Error('trap message {index}');",
-            hex(input.as_bytes())
-        ));
-    }
-    run(&artifact, &script);
 }
 
 #[test]

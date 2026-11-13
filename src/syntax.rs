@@ -1,4 +1,5 @@
 //! Rust-compatible surface reader. The syntax tree is an arena, not a recursive tree.
+mod default;
 pub(crate) mod formatting;
 use crate::ast::*;
 use crate::diagnostics::{BlockedRegion, RecoveryDomain, RecoveryOwner};
@@ -537,6 +538,7 @@ struct Parser {
 }
 
 enum BlockPart {
+    Skipped,
     Statement(Stmt),
     Tail(ExprId),
 }
@@ -799,12 +801,157 @@ impl Parser {
                 span: self.finish_span(span),
             };
             if inner {
+                if attr.name == "cfg" {
+                    return Err(Diagnostic::new(
+                        attr.span,
+                        "E_UNSUPPORTED",
+                        "inner cfg attributes are not supported; help: put #[cfg(...)] on an enclosing module or declaration",
+                    ));
+                }
                 self.program.attrs.push(attr);
             } else {
                 attrs.push(attr);
             }
         }
         Ok(attrs)
+    }
+    fn enabled(&self, attrs: &[Attribute]) -> Result<bool, Diagnostic> {
+        fn predicate(args: &[String], at: &mut usize, span: Span) -> Result<bool, Diagnostic> {
+            let Some(name) = args.get(*at) else {
+                return Err(Diagnostic::new(span, "E_PARSE", "missing cfg predicate"));
+            };
+            *at += 1;
+            if matches!(name.as_str(), "all" | "any" | "not") {
+                if args.get(*at).map(String::as_str) != Some("(") {
+                    return Err(Diagnostic::new(
+                        span,
+                        "E_PARSE",
+                        "cfg combinator needs parentheses",
+                    ));
+                }
+                *at += 1;
+                let mut values = Vec::new();
+                while args.get(*at).is_some_and(|part| part != ")") {
+                    values.push(predicate(args, at, span)?);
+                }
+                if args.get(*at).map(String::as_str) != Some(")") {
+                    return Err(Diagnostic::new(
+                        span,
+                        "E_PARSE",
+                        "unterminated cfg predicate",
+                    ));
+                }
+                *at += 1;
+                return match name.as_str() {
+                    "all" => Ok(values.iter().all(|value| *value)),
+                    "any" => Ok(values.iter().any(|value| *value)),
+                    "not" if values.len() == 1 => Ok(!values[0]),
+                    _ => Err(Diagnostic::new(
+                        span,
+                        "E_PARSE",
+                        "cfg not needs exactly one predicate",
+                    )),
+                };
+            }
+            if args.get(*at).map(String::as_str) == Some("=") {
+                *at += 1;
+                let Some(value) = args.get(*at) else {
+                    return Err(Diagnostic::new(span, "E_PARSE", "missing cfg value"));
+                };
+                *at += 1;
+                return match name.as_str() {
+                    "target_os" => Ok(value == "linux"),
+                    "target_arch" => Ok(value == "x86_64"),
+                    "target_family" => Ok(value == "unix"),
+                    "target_pointer_width" => Ok(value == "64"),
+                    "target_endian" => Ok(value == "little"),
+                    "feature" => Ok(false),
+                    _ => Err(Diagnostic::new(
+                        span,
+                        "E_UNSUPPORTED",
+                        &format!(
+                            "cfg predicate {name} is not supported; help: use test, target_os, target_arch, target_family, target_pointer_width or target_endian"
+                        ),
+                    )),
+                };
+            }
+            match name.as_str() {
+                "test" | "windows" | "false" => Ok(false),
+                "unix" | "true" => Ok(true),
+                _ => Err(Diagnostic::new(
+                    span,
+                    "E_UNSUPPORTED",
+                    &format!(
+                        "cfg predicate {name} is not supported; help: use #[cfg(test)] for test-only declarations"
+                    ),
+                )),
+            }
+        }
+        for attr in attrs {
+            if attr.name == "cfg" {
+                let mut at = 0;
+                let value = predicate(&attr.args, &mut at, attr.span)?;
+                if at != attr.args.len() {
+                    return Err(Diagnostic::new(
+                        attr.span,
+                        "E_PARSE",
+                        "cfg needs exactly one predicate",
+                    ));
+                }
+                if !value {
+                    return Ok(false);
+                }
+            }
+        }
+        Ok(true)
+    }
+    // Disabled declarations do not contribute names, bodies or recovery sites.
+    // Only balanced tokens are needed, just as for Rust conditional compilation.
+    fn skip_disabled(&mut self) -> Result<(), Diagnostic> {
+        let mut delimiters = Vec::new();
+        let mut braced_item = false;
+        while self.token().kind != TokenKind::End {
+            let token = self.token();
+            if delimiters.is_empty()
+                && matches!(
+                    token.text.as_str(),
+                    "fn" | "struct" | "enum" | "trait" | "impl" | "mod"
+                )
+            {
+                braced_item = true;
+            }
+            if token.kind == TokenKind::Symbol {
+                match token.text.as_str() {
+                    "(" | "[" | "{" => delimiters.push(token.text.clone()),
+                    ")" | "]" | "}" => {
+                        let expected = match token.text.as_str() {
+                            ")" => "(",
+                            "]" => "[",
+                            _ => "{",
+                        };
+                        if delimiters.last().map(String::as_str) != Some(expected) {
+                            return Err(self.err("unbalanced disabled declaration"));
+                        }
+                        delimiters.pop();
+                        if expected == "{" && delimiters.is_empty() && braced_item {
+                            self.at += 1;
+                            return Ok(());
+                        }
+                    }
+                    ";" if delimiters.is_empty() => {
+                        self.at += 1;
+                        return Ok(());
+                    }
+                    _ => {}
+                }
+            }
+            self.at += 1;
+        }
+        if delimiters.is_empty() {
+            Ok(())
+        } else {
+            Err(self.err("unterminated disabled declaration"))
+        }
     }
     fn visibility(&mut self) -> Result<Visibility, Diagnostic> {
         if !self.take("pub") {
@@ -905,8 +1052,14 @@ impl Parser {
             let scope = self.scope;
             let module = self.module.clone();
             let mut domain = None;
+            let mut disabled = false;
             let result = (|| {
                 let attrs = self.attrs()?;
+                if !self.enabled(&attrs)? {
+                    self.skip_disabled()?;
+                    disabled = true;
+                    return Ok(None);
+                }
                 if self.token().kind == TokenKind::End {
                     return Ok(None);
                 }
@@ -916,6 +1069,7 @@ impl Parser {
             })();
             match result {
                 Ok(Some(item)) => items.push(item),
+                Ok(None) if disabled => continue,
                 Ok(None) => break,
                 Err(error) => {
                     self.scope = scope;
@@ -1607,7 +1761,15 @@ impl Parser {
         let mut fields = Vec::new();
         while !self.is(end) {
             let span = self.token().span;
-            let _attrs = self.attrs()?;
+            for attr in self.attrs()? {
+                if attr.name == "cfg" {
+                    return Err(Diagnostic::new(
+                        attr.span,
+                        "E_UNSUPPORTED",
+                        "conditional fields are not supported; help: put #[cfg(...)] on the whole struct or enum declaration",
+                    ));
+                }
+            }
             let public = self.visibility()?;
             let name = if named {
                 let n = self.ident()?;
@@ -1664,6 +1826,7 @@ impl Parser {
             public,
             span: self.finish_span(span),
         });
+        self.derive_default(id)?;
         Ok(id)
     }
     fn enumeration(
@@ -1773,6 +1936,10 @@ impl Parser {
             let mut domain = None;
             let result = (|| {
                 let attrs = self.attrs()?;
+                if !self.enabled(&attrs)? {
+                    self.skip_disabled()?;
+                    return Ok(());
+                }
                 domain =
                     Some(self.recovery_domain(Some(RecoveryOwner::Trait { name: name.clone() })));
                 if self.is("fn") {
@@ -1828,6 +1995,10 @@ impl Parser {
             let mut domain = None;
             let result = (|| {
                 let attrs = self.attrs()?;
+                if !self.enabled(&attrs)? {
+                    self.skip_disabled()?;
+                    return Ok(());
+                }
                 let public = self.visibility()?;
                 domain = Some(
                     self.recovery_domain(Some(RecoveryOwner::Implementation { target, trait_ty })),
@@ -1942,6 +2113,7 @@ impl Parser {
             let scope = self.scope;
             let module = self.module.clone();
             match self.block_part() {
+                Ok(BlockPart::Skipped) => {}
                 Ok(BlockPart::Statement(statement)) => statements.push(statement),
                 Ok(BlockPart::Tail(expression)) => {
                     tail = Some(expression);
@@ -2124,6 +2296,10 @@ impl Parser {
             || self.is("#")
         {
             let attrs = self.attrs()?;
+            if !self.enabled(&attrs)? {
+                self.skip_disabled()?;
+                return Ok(BlockPart::Skipped);
+            }
             let public = self.visibility()?;
             let item = self.item(attrs, public)?;
             return Ok(BlockPart::Statement(Stmt::Item(item)));
