@@ -1,11 +1,12 @@
 //! Resolved identities and lexical shadows remain local to a compilation.
-use lkjscript::compiler;
-use lkjscript::source::{SourceBundle, SourceInput};
-use std::io::Write;
-use std::process::{Command, Stdio};
+use lkjscript::k;
+#[path = "support/native.rs"]
+mod native;
 
-fn compile(source: &str) -> Vec<u8> {
-    compiler::compile(&SourceBundle {
+use lkjscript::source::{SourceBundle, SourceInput};
+
+fn compile(source: &str) -> k::CheckedProgram {
+    native::check(&SourceBundle {
         root: "lookup.rs".to_string(),
         library: None,
         files: vec![SourceInput {
@@ -13,33 +14,10 @@ fn compile(source: &str) -> Vec<u8> {
             text: source.to_string(),
         }],
     })
-    .unwrap()
 }
 
-fn run(bytes: &[u8], expected: i64) {
-    let script = format!(
-        "const chunks=[];process.stdin.on('data',b=>chunks.push(b));\
-         process.stdin.on('end',async()=>{{try{{\
-         const {{instance}}=await WebAssembly.instantiate(Buffer.concat(chunks),\
-         {{lkjscript:{{trap(c,l){{throw Error('trap '+c+':'+l)}}}}}});\
-         const result=instance.exports['fn:probe']();\
-         if(result!=={expected}n)throw Error('expected {expected}, got '+result);\
-         }}catch(e){{console.error(e);process.exitCode=1}}}});"
-    );
-    let mut child = Command::new("node")
-        .arg("-e")
-        .arg(script)
-        .stdin(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    child.stdin.take().unwrap().write_all(bytes).unwrap();
-    let result = child.wait_with_output().unwrap();
-    assert!(
-        result.status.success(),
-        "{}",
-        String::from_utf8_lossy(&result.stderr)
-    );
+fn run(checked: &k::CheckedProgram, expected: i64) {
+    native::assert_values(checked, &[("probe", expected)]);
 }
 
 #[test]

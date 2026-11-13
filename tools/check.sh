@@ -38,7 +38,8 @@ for engine in "${check_engines[@]}"; do
 done
 parallel_step output env LKJ_ENGINES="$check_engines_text" node tools/generators/output.mjs "$check_binary" 601 50
 parallel_step drops env LKJ_ENGINES="$check_engines_text" ONE_SIDED=1 node tools/generators/drops.mjs "$check_binary" 1201 100
-parallel_step sugars env LKJ_ENGINES="$check_engines_text" node tools/generators/sugar.mjs "$check_binary" 1301 60
+parallel_step sugars env LKJ_ENGINES="$check_engines_text" node tools/generators/sugar.mjs "$check_binary" 1301 75
+parallel_step closures env LKJ_ENGINES="$check_engines_text" node tools/generators/closures.mjs "$check_binary" 1501 28
 check_failed=0
 for i in "${!check_pids[@]}"; do
     if ! wait "${check_pids[$i]}"; then check_failed=1; fi

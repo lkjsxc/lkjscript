@@ -43,3 +43,19 @@ pub fn __lkj_vec_equal<T: PartialEq>(left: &Vec<T>, right: &Vec<T>) -> bool {
     }
     true
 }
+
+// Clone the first count-1 elements and move the original into the last slot.
+// The element expression is evaluated even when count is zero.
+pub fn __lkj_vec_repeat<T: Clone>(value: T, count: usize) -> Vec<T> {
+    let mut result: Vec<T> = Vec::new();
+    if count == 0 {
+        return result;
+    }
+    let mut remaining = count - 1;
+    while remaining > 0 {
+        result.push(value.clone());
+        remaining = remaining - 1;
+    }
+    result.push(value);
+    result
+}

@@ -9,7 +9,7 @@ import { oracleCache, packResult, unpackResult } from './oracle.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const binary = path.resolve(root, process.env.LKJSCRIPT_BIN || process.argv[2] || 'target/debug/lkjscript');
-const engine = process.env.LKJ_ENGINE || 'node';
+const engine = process.env.LKJ_ENGINE || 'native';
 const fixtures = path.join(root, 'tests/conformance');
 const cases = JSON.parse(fs.readFileSync(path.join(fixtures, 'cases.json'), 'utf8'));
 const out = path.join(root, 'target/conformance', engine);

@@ -104,10 +104,20 @@ pub fn execute(
         error,
     })
 }
-pub fn scalar(program: &k::Program, function: &k::Function, value: u64) -> machine::Scalar {
-    match program.types[function.result].kind {
+pub fn scalar(
+    program: &k::Program,
+    function: &k::Function,
+    value: u64,
+) -> Result<machine::Scalar, String> {
+    Ok(match program.types[function.result].kind {
         k::TypeKind::Unit => machine::Scalar::Unit,
         k::TypeKind::Bool => machine::Scalar::Bool(value != 0),
+        k::TypeKind::Char => machine::Scalar::Char(
+            u32::try_from(value)
+                .ok()
+                .and_then(char::from_u32)
+                .ok_or_else(|| "E_HOST native image returned an invalid character".to_string())?,
+        ),
         k::TypeKind::F64 => machine::Scalar::F64 { bits: value },
         k::TypeKind::Int { bits, signed } => machine::Scalar::Int {
             value,
@@ -119,7 +129,7 @@ pub fn scalar(program: &k::Program, function: &k::Function, value: u64) -> machi
             bits: 64,
             signed: true,
         },
-    }
+    })
 }
 pub fn run(
     checked: &k::CheckedProgram,
@@ -160,7 +170,7 @@ pub fn run(
             if args.verb != "test" {
                 std::io::stdout()
                     .write_all(
-                        super::scalar(scalar(meaning, &meaning.functions[entry], outcome.value))
+                        super::scalar(scalar(meaning, &meaning.functions[entry], outcome.value)?)
                             .as_bytes(),
                     )
                     .map_err(|error| format!("E_IO {error}"))?;

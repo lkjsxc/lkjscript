@@ -147,6 +147,7 @@ pub struct Struct {
     pub generics: Vec<GenericParam>,
     pub fields: Vec<Field>,
     pub tuple: bool,
+    pub unit: bool,
     pub attrs: Vec<Attribute>,
     pub public: Visibility,
     pub span: Span,
@@ -360,6 +361,7 @@ pub enum Expr {
     Closure {
         moved: bool,
         params: Vec<Param>,
+        patterns: Vec<PatternId>,
         result: Option<TypeId>,
         body: ExprId,
     },

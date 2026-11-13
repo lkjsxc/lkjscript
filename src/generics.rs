@@ -1161,17 +1161,6 @@ fn impl_arguments(
                                 return None;
                             }
                         }
-                        (
-                            TypeKind::Int {
-                                bits: 64,
-                                signed: false,
-                            },
-                            "u64" | "usize",
-                        ) => {
-                            if !args.is_empty() {
-                                return None;
-                            }
-                        }
                         _ => {
                             if !args.is_empty() || actual_type.name.as_str() != name {
                                 return None;
@@ -1435,11 +1424,7 @@ impl ImplementationIndex {
                     if !matches!(name.as_str(), "&" | "&mut" | "[]" | "tuple" | "fn" | "!")
                         && !name.starts_with("[;") =>
                 {
-                    Some(if name == "usize" {
-                        "u64".to_string()
-                    } else {
-                        name.clone()
-                    })
+                    Some(name.clone())
                 }
                 _ => None,
             };
@@ -1471,7 +1456,7 @@ impl ImplementationIndex {
                 _ => None,
             }
         };
-        candidates.matching(head.map(|name| if name == "usize" { "u64" } else { name }))
+        candidates.matching(head)
     }
 }
 
@@ -1610,7 +1595,7 @@ fn trait_requirements(
         let mut children = Vec::new();
         let mut structural = true;
         match &ty.kind {
-            TypeKind::Unit | TypeKind::Bool | TypeKind::Int { .. } => {}
+            TypeKind::Unit | TypeKind::Bool | TypeKind::Char | TypeKind::Int { .. } => {}
             TypeKind::Str => {
                 if !automatic {
                     return None;

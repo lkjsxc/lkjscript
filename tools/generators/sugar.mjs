@@ -9,9 +9,9 @@ import { createHash } from 'node:crypto';
 import { run } from '../process.mjs';
 import { runCases } from '../batch.mjs';
 import { oracleCache, packResult, unpackResult } from '../oracle.mjs';
-const [binary='target/debug/lkjscript',seedText='1301',countText='52',output='target/generators']=process.argv.slice(2);
+const [binary='target/debug/lkjscript',seedText='1301',countText='75',output='target/generators']=process.argv.slice(2);
 const bin=path.resolve(binary),count=Number(countText),dir=path.resolve(output,`sugar-${seedText}`);
-const engines=(process.env.LKJ_ENGINES||'k,node').split(',');
+const engines=(process.env.LKJ_ENGINES||'native,k').split(',');
 const compareRust=process.env.LKJ_SUGAR_RUST!=='0';
 let state=BigInt(seedText)||1n;
 function random(n){state^=(state<<13n)&0xffffffffffffffffn;state^=state>>7n;state^=(state<<17n)&0xffffffffffffffffn;return Number(state%BigInt(n));}
@@ -24,7 +24,7 @@ fn make(world: &mut World, byte: u8) -> M { tick(world, byte+100); M { out: worl
 function pair(index){
  const a=1+random(50),b=1+random(50),c=1+random(50),marker=60+random(30),yes=random(2)===0?'true':'false';
  let sugar='',expanded='',sugarHelpers='',expandedHelpers='';let family,rustSugar=true;
- switch(index%20){
+ switch(index%25){
   case 0:{family='if-let';const value=`if ${yes} { Some(make(&mut world,${a}u8)) } else { None }`;
    sugar=`if let Some(m) = ${value} { tick(&mut world,${marker}u8); drop(m); } else { tick(&mut world,${b}u8); }`;
    expanded=`match ${value} { Some(m) => { tick(&mut world,${marker}u8); drop(m); }, None => tick(&mut world,${b}u8) }`;break;}
@@ -101,6 +101,33 @@ function pair(index){
    const prefix=`let value=((${values.map(n=>n+'i64').join(',')}),make(&mut world,${a}u8));`;
    sugar=prefix+`match value { ((${values.map(()=>'0|0').join(',')}),m)|(_,m) if {tick(&mut world,${marker}u8);true}=>drop(m),_=>tick(&mut world,${b}u8) }`;
    expanded=prefix+`let m=value.1;tick(&mut world,${marker}u8);drop(m);`;break;}
+  case 20:{family='repeated-vector';const length=random(5);sugarHelpers=expandedHelpers=`struct CloneMark{v:u8}
+impl Clone for CloneMark{fn clone(&self)->Self{CloneMark{v:self.v+1u8}}}
+fn element(world:&mut World)->CloneMark{tick(world,${a+100}u8);CloneMark{v:${a}u8}}
+fn count(world:&mut World)->usize{tick(world,${marker}u8);${length}usize}
+`;
+   sugar='let values=vec![element(&mut world);count(&mut world)];';
+   expanded='let value=element(&mut world);let size=count(&mut world);let mut values:Vec<CloneMark>=Vec::new();if size>0{let mut index=1usize;while index<size{values.push(value.clone());index=index+1;}values.push(value);}else{drop(value);}';
+   const visit='let mut index=0usize;while index<values.len(){tick(&mut world,values[index].v);index=index+1;}';sugar+=visit;expanded+=visit;break;}
+  case 21:{family='unicode-character-encoding';const scalars=[0,0x7f,0x80,0x7ff,0x800,0xd7ff,0xe000,0xffff,0x10000,0x10ffff],chosen=Array.from({length:3},()=>scalars[random(scalars.length)]),bytes=[...Buffer.from(String.fromCodePoint(...chosen))];
+   sugar='let mut text=String::new();'+chosen.map(code=>`text.push('\\u{${code.toString(16)}}');`).join('')+'let mut out=world.stdout();out.write(text.as_bytes());';
+   expanded=`let bytes:Vec<u8>=vec![${bytes.map(byte=>byte+'u8').join(',')}];let mut out=world.stdout();out.write(&bytes);`;break;}
+
+  case 22:{family='format-appends';const left=-(1+random(50)),right=1+random(50);sugarHelpers=expandedHelpers='fn argument(world:&mut World,mark:u8,value:i64)->i64{tick(world,mark);value}\n';
+   const first=`argument(&mut world,${a}u8,${left}i64)`,second=`argument(&mut world,${b}u8,${right}i64)`;
+   sugar=`let label="水";let text=format!("{{{label:😀^5}}}:{1:04}:{0}:{1:x}",${first},${second});let mut out=world.stdout();out.write(text.as_bytes());`;
+   const expected='{😀😀水😀😀}:'+String(right).padStart(4,'0')+':'+left+':'+right.toString(16);
+   expanded=`let first=${first};let second=${second};let mut text=String::new();text.push_str(${JSON.stringify(expected)});let mut out=world.stdout();out.write(text.as_bytes());`;break;}
+  case 23:{family='display-temporary-cleanup';sugarHelpers=expandedHelpers=`struct Shown{owner:M,value:i64}
+impl std::fmt::Display for Shown{fn fmt(&self,f:&mut std::fmt::Formatter)->std::fmt::Result{write!(f,"[{}]",self.value)}}
+fn shown(world:&mut World)->Shown{Shown{owner:make(world,${a}u8),value:${b}i64}}
+`;
+   sugar=`let text=format!("{0}-{0}",shown(&mut world));tick(&mut world,${marker}u8);let mut out=world.stdout();out.write(text.as_bytes());`;
+   expanded=`let value=shown(&mut world);let mut text=String::new();text.push_str("[${b}]-[${b}]");drop(value);tick(&mut world,${marker}u8);let mut out=world.stdout();out.write(text.as_bytes());`;break;}
+  case 24:{family='format-error-stops-appends';sugarHelpers=expandedHelpers='use std::fmt::Write;\nstruct Bad;\nimpl std::fmt::Display for Bad{fn fmt(&self,f:&mut std::fmt::Formatter)->std::fmt::Result{f.write_str("!").unwrap();Err(std::fmt::Error)}}\n';
+   sugar='let mut text=String::new();let result=write!(&mut text,"before{}after",Bad);assert!(result.is_err());let mut out=world.stdout();out.write(text.as_bytes());';
+   expanded='let mut text=String::new();text.push_str("before");text.push_str("!");let mut out=world.stdout();out.write(text.as_bytes());';break;}
+
  }
  const tail=`\ntick(&mut world,${90+random(10)}u8);`+(random(9)===0?' assert!(false);':'');
  return {family,rustSugar,sugar:prelude+sugarHelpers+'\npub fn main(mut world:World) {\n'+sugar+tail+'\n}\n',expanded:prelude+expandedHelpers+'\npub fn main(mut world:World) {\n'+expanded+tail+'\n}\n'};

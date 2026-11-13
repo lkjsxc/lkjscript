@@ -445,6 +445,7 @@ impl Compiler<'_> {
         }
         let declaration = path
             .declaration
+            .filter(|id| self.source.declarations[*id].name == path.name)
             .or_else(|| self.declaration_names.get(&path.name).copied());
         let item = declaration.map(|id| self.source.declarations[id].item);
         if args.is_empty() {

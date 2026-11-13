@@ -1,7 +1,7 @@
 //! Reference-bearing values must preserve every live loan across transfers.
-use lkjscript::{ast::Diagnostic, check, elaborate, k, syntax, wasm};
-use std::io::Write;
-use std::process::{Command, Stdio};
+#[path = "support/native.rs"]
+mod native;
+use lkjscript::{check, elaborate, k, source, syntax};
 
 fn source_program(source: &str) -> k::Program {
     let parsed = syntax::parse(source).expect("regression source must parse");
@@ -21,32 +21,17 @@ fn accept(program: k::Program) {
     }
 }
 
-fn run(source: &str, expected: i64) {
-    let checked = check::check(source_program(source))
-        .unwrap_or_else(|diagnostic: Diagnostic| panic!("{diagnostic:?}"));
-    let bytes = wasm::emit(&checked).unwrap();
-    let script = format!(
-        "const chunks=[];process.stdin.on('data',b=>chunks.push(b));\
-         process.stdin.on('end',async()=>{{try{{\
-         const {{instance}}=await WebAssembly.instantiate(Buffer.concat(chunks),\
-         {{lkjscript:{{trap(c,l){{throw Error('trap '+c+':'+l)}}}}}});\
-         const value=instance.exports['fn:probe']();\
-         if(value!=={expected}n)throw Error('expected {expected}, got '+value);\
-         }}catch(e){{console.error(e);process.exitCode=1}}}});"
-    );
-    let mut child = Command::new("node")
-        .arg("-e")
-        .arg(script)
-        .stdin(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    child.stdin.take().unwrap().write_all(&bytes).unwrap();
-    let output = child.wait_with_output().unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
+fn run(text: &str, expected: i64) {
+    native::assert_bundle(
+        &source::SourceBundle {
+            root: "provenance.rs".to_string(),
+            library: None,
+            files: vec![source::SourceInput {
+                path: "provenance.rs".to_string(),
+                text: text.to_string(),
+            }],
+        },
+        &[("probe", expected)],
     );
 }
 

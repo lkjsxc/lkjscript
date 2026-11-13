@@ -128,7 +128,10 @@ impl Builder<'_, '_> {
         } else {
             let (left_place, target) = self.equality_referent(left_place, operand_type);
             match self.compiler.types[target].kind.clone() {
-                k::TypeKind::Bool | k::TypeKind::Int { .. } | k::TypeKind::F64 => {
+                k::TypeKind::Bool
+                | k::TypeKind::Char
+                | k::TypeKind::Int { .. }
+                | k::TypeKind::F64 => {
                     // Read scalars before evaluating the right expression. A
                     // later assignment must not change the left operand value.
                     let left = self.read(left_place, span.line)?.0;

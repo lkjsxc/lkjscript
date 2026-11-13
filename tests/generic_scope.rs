@@ -4,8 +4,9 @@ mod bootstrap_library;
 
 use lkjscript::source::{SourceBundle, SourceInput};
 use lkjscript::{compiler, k};
-use std::io::Write;
-use std::process::{Command, Stdio};
+#[path = "support/native.rs"]
+mod native;
+use std::process::Command;
 
 fn bundle(source: &str, library: bool) -> SourceBundle {
     let mut files = if library {
@@ -34,28 +35,7 @@ fn check(bundle: &SourceBundle) -> k::CheckedProgram {
 }
 
 fn execute(bundle: &SourceBundle, expected: i64) {
-    let checked = check(bundle);
-    let artifact = lkjscript::wasm::emit(&checked).unwrap();
-    let script = format!(
-        "const chunks=[];process.stdin.on('data',b=>chunks.push(b));process.stdin.on('end',async()=>{{try{{\
-         const {{instance}}=await WebAssembly.instantiate(Buffer.concat(chunks),{{lkjscript:{{trap(c,l){{throw Error('trap '+c+':'+l)}}}}}});\
-         const actual=instance.exports['fn:probe']();if(actual!=={expected}n)throw Error('result '+actual);\
-         }}catch(error){{console.error(error);process.exitCode=1}}}});"
-    );
-    let mut child = Command::new("node")
-        .args(["-e", &script])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    child.stdin.take().unwrap().write_all(&artifact).unwrap();
-    let result = child.wait_with_output().unwrap();
-    assert!(
-        result.status.success(),
-        "{}",
-        String::from_utf8_lossy(&result.stderr)
-    );
+    native::assert_bundle(bundle, &[("probe", expected)]);
 }
 
 fn reject(source: &str) {

@@ -3,38 +3,17 @@
 mod bootstrap_library;
 
 use lkjscript::source::{SourceBundle, SourceInput};
+#[path = "support/native.rs"]
+mod native;
 use lkjscript::{compiler, syntax, wasm};
-use std::io::Write;
-use std::process::{Command, Stdio};
+use std::process::Command;
 
 fn check(source: &str) -> Result<lkjscript::k::CheckedProgram, lkjscript::ast::Diagnostic> {
     compiler::check_source(&syntax::parse(source).expect("fixture parses"))
 }
 
-fn run(artifact: &[u8], entries: &[(&str, i64)]) {
-    let mut script = String::from(
-        "const chunks=[];process.stdin.on('data',b=>chunks.push(b));process.stdin.on('end',async()=>{try{const {instance}=await WebAssembly.instantiate(Buffer.concat(chunks),{lkjscript:{trap(c,l){throw Error('trap '+c+':'+l)}}});",
-    );
-    for (name, expected) in entries {
-        script.push_str(&format!(
-            "{{const actual=instance.exports['fn:{name}']();if(actual!=={expected}n)throw Error('{name}: expected {expected}, got '+actual);}}"
-        ));
-    }
-    script.push_str("}catch(e){console.error(e);process.exitCode=1}})");
-    let mut process = Command::new("node")
-        .arg("-e")
-        .arg(script)
-        .stdin(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    process.stdin.take().unwrap().write_all(artifact).unwrap();
-    let output = process.wait_with_output().unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+fn run(checked: &lkjscript::k::CheckedProgram, entries: &[(&str, i64)]) {
+    native::assert_values(checked, entries);
 }
 
 fn rust_oracle(source: &str, entries: &[(&str, i64)]) {
@@ -112,7 +91,7 @@ pub fn direct_score()->i64{Item{value:0}.score()}
 "#;
     let checked = check(source).unwrap();
     run(
-        &wasm::emit(&checked).unwrap(),
+        &checked,
         &[
             ("selected_clone", 1),
             ("direct_clone", 2),
@@ -150,7 +129,7 @@ pub fn scored_reference()->i64 {
 "#;
     let checked = check(source).unwrap();
     run(
-        &wasm::emit(&checked).unwrap(),
+        &checked,
         &[("cloned_reference", 42), ("scored_reference", 43)],
     );
     rust_oracle(
@@ -171,10 +150,7 @@ pub fn selected()->i64{scored(&Wrapper{value:0i64})}
 pub fn direct()->i64{Wrapper{value:0i64}.score()}
 "#;
     let checked = check(source).unwrap();
-    run(
-        &wasm::emit(&checked).unwrap(),
-        &[("selected", 1), ("direct", 2)],
-    );
+    run(&checked, &[("selected", 1), ("direct", 2)]);
     rust_oracle(source, &[("selected", 1), ("direct", 2)]);
 }
 
@@ -182,7 +158,7 @@ pub fn direct()->i64{Wrapper{value:0i64}.score()}
 fn concrete_specialization_executes_a_derived_clone() {
     let source = "#[derive(Clone)] struct Item{value:Box<i64>} fn copied<T:Clone>(value:&T)->T{value.clone()} pub fn probe()->i64{let value=Item{value:Box::new(42)};let copy=copied(&value);drop(value);*copy.value}";
     let checked = check(source).unwrap();
-    run(&wasm::emit(&checked).unwrap(), &[("probe", 42)]);
+    run(&checked, &[("probe", 42)]);
     rust_oracle(source, &[("probe", 42)]);
 }
 
@@ -199,10 +175,7 @@ pub fn updated()->i64{let mut left=Item(1);let right=Item(42);update(&mut left,&
 pub fn defaults()->i64{if different(&Item(1),&Item(2)) && same(&42i64,&42i64){42}else{0}}
 "#;
     let checked = check(source).unwrap();
-    run(
-        &wasm::emit(&checked).unwrap(),
-        &[("updated", 42), ("defaults", 42)],
-    );
+    run(&checked, &[("updated", 42), ("defaults", 42)]);
     rust_oracle(source, &[("updated", 42), ("defaults", 42)]);
 }
 
@@ -253,7 +226,7 @@ pub fn probe()->i64 {
                 .any(|window| window == marker)
         );
     }
-    run(&artifact, &[("probe", 42)]);
+    run(&checked, &[("probe", 42)]);
 }
 
 // A cyclic K reference type exercises the projection representation without

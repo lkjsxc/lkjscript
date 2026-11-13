@@ -9,7 +9,7 @@ import { runCases } from '../batch.mjs';
 import { oracleCache, packResult, unpackResult } from '../oracle.mjs';
 const [binary='target/debug/lkjscript',seedText='601',countText='50',output='target/generators']=process.argv.slice(2);
 const bin=path.resolve(binary), seed=BigInt(seedText), count=Number(countText);
-const engines=(process.env.LKJ_ENGINES || 'node,k').split(',');
+const engines=(process.env.LKJ_ENGINES || 'native,k').split(',');
 let state=seed||1n;
 function random(n) {state^=(state<<13n)&0xffffffffffffffffn;state^=state>>7n;state^=(state<<17n)&0xffffffffffffffffn;return Number(state%BigInt(n));}
 const hash=file=>createHash('sha256').update(fs.readFileSync(file)).digest('hex');

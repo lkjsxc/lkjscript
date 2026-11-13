@@ -511,6 +511,10 @@ pub fn read(text: &str) -> Result<Program> {
                         exact(&words, 3, line)?;
                         TypeKind::Bool
                     }
+                    "char" => {
+                        exact(&words, 3, line)?;
+                        TypeKind::Char
+                    }
                     "f64" => {
                         exact(&words, 3, line)?;
                         TypeKind::F64
@@ -819,6 +823,7 @@ pub fn write(program: &Program) -> String {
         match &ty.kind {
             TypeKind::Unit => text.push_str("unit"),
             TypeKind::Bool => text.push_str("bool"),
+            TypeKind::Char => text.push_str("char"),
             TypeKind::F64 => text.push_str("f64"),
             TypeKind::Str => text.push_str("str"),
             TypeKind::World => text.push_str("world"),

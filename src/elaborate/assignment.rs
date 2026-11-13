@@ -73,6 +73,9 @@ impl Builder<'_, '_> {
     }
 
     fn assignment_type(&mut self, expression: usize) -> Result<usize> {
+        if let Some(ty) = self.inferred.expressions.get(&expression) {
+            return Ok(*ty);
+        }
         if let Some(ty) = self.assignment_types.get(&expression) {
             return Ok(*ty);
         }
@@ -138,6 +141,8 @@ impl Builder<'_, '_> {
                 bindings,
                 guard_aliases: BTreeMap::new(),
                 guard_shells: Vec::new(),
+                capture_aliases: self.capture_aliases.clone(),
+                capture_locals: self.capture_locals.clone(),
                 active_span: self.active_span,
                 reference_updates: references.clone(),
                 reference_schedules: BTreeMap::new(),

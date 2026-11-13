@@ -5,8 +5,9 @@ mod bootstrap_library;
 
 use lkjscript::compiler;
 use lkjscript::source::{SourceBundle, SourceInput};
-use std::io::Write;
-use std::process::{Command, Stdio};
+#[path = "support/native.rs"]
+mod native;
+use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 static NEXT: AtomicUsize = AtomicUsize::new(0);
@@ -165,31 +166,6 @@ fn rust(source: &str, executable: bool) -> (std::path::PathBuf, std::process::Ou
     let result = command.arg(input).arg("-o").arg(output).output().unwrap();
     (directory, result)
 }
-fn run_node(artifact: &[u8], expected: &str) {
-    let mut observations = String::new();
-    for row in expected.lines() {
-        let fields: Vec<_> = row.split_whitespace().collect();
-        assert_eq!(fields.len(), 2);
-        observations.push_str(&format!("{{const actual=instance.exports['fn:{}']();if(actual!=={}n)throw Error('{}: expected {}, got '+actual);}}",fields[0],fields[1],fields[0],fields[1]));
-    }
-    let script = format!(
-        "const chunks=[];process.stdin.on('data',b=>chunks.push(b));process.stdin.on('end',async()=>{{try{{const {{instance}}=await WebAssembly.instantiate(Buffer.concat(chunks),{{lkjscript:{{trap(c,l){{throw Error('trap '+c+':'+l)}}}}}});{observations}}}catch(e){{console.error(e);process.exitCode=1}}}})"
-    );
-    let mut child = Command::new("node")
-        .arg("-e")
-        .arg(script)
-        .stdin(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    child.stdin.take().unwrap().write_all(artifact).unwrap();
-    let output = child.wait_with_output().unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-}
 #[test]
 fn projected_assignment_matches_rust_ownership_and_evaluation_order() {
     let probes = [
@@ -230,9 +206,7 @@ fn same_source(source: &str, probes: &[&str]) {
     );
     let expected = String::from_utf8(oracle.stdout).unwrap();
     assert_eq!(expected.lines().count(), probes.len());
-    let artifact =
-        compiler::compile(&bundle(source)).unwrap_or_else(|problem| panic!("{problem:?}"));
-    run_node(&artifact, &expected);
+    native::assert_rows(&native::check(&bundle(source)), &expected);
     std::fs::remove_dir_all(directory).unwrap();
 }
 fn rejects(source: &str, reason: &str, rust_codes: &[&str]) {

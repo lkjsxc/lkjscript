@@ -55,7 +55,18 @@ encoders consume the same lowered operations. The native Linux ELF uses no libc;
 system calls derive from capabilities. Stack and heap exhaustion have defined
 traps and must not require retries or an engine-imposed extent.
 
-Keep the working Node route until native conformance, generators and capacity
-probes agree with the K model. Then delete the stack/worker bridge and run the
-routine gate on native and K. The million-function chain, non-tail recursion and
-large list are observations to reproduce, not new acceptance ceilings.
+Native conformance, generators and the requested capacity probes now agree.
+The stack/worker bridge is deleted and the routine gate uses native and K.
+WebAssembly remains only as a thin encoder. The million-function chain,
+non-tail recursion and large list are observations, not acceptance ceilings.
+
+After compiler closure, retain the previous native compiler as a committed seed
+that builds its successor. The hand-over observation is three builds of the same
+declared inputs producing identical bytes: the Rust-built compiler, the compiler
+running on K, and the self-built native compiler. This is a future contract, not
+a claim that compiler closure or the fixed point has been reached.
+
+File access should derive from a World directory capability restricted beneath
+its root. Compiler inputs remain an explicit declared set. The trust ledger in
+status tracks what must be correct for accepted concrete programs to be safe;
+physical size is an audit aid rather than a proof.

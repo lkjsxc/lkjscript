@@ -97,6 +97,7 @@ pub(super) struct Contracts {
 pub(super) struct DefinitionEvidence {
     pub(super) methods: MethodSelections,
     pub(super) types: BTreeMap<usize, super::definition_types::DefinitionTypes>,
+    pub(super) closures: super::closures::Evidence,
 }
 
 pub(super) fn validate_report(
@@ -125,6 +126,7 @@ pub(super) fn validate_report(
         return Ok((
             DefinitionEvidence {
                 methods: MethodSelections::default(),
+                closures: super::closures::Evidence::default(),
                 types: compiler.definition_types,
             },
             Vec::new(),
@@ -172,6 +174,8 @@ pub(super) fn validate_report(
     // of the callee. Each production definition has its own rigid root above;
     // nongeneric free functions still go through the normal concrete pipeline.
     let declared: BTreeSet<usize> = compiler.instance_names.values().copied().collect();
+    checked_roots.extend(&compiler.closures.checked_functions);
+    let callable_functions = compiler.assumed_callable_functions();
     let builtin_methods = compiler.validate_builtin_methods()?;
     let contracts = compiler.contracts.as_ref().unwrap();
     for (index, function) in compiler.functions.iter_mut().enumerate() {
@@ -200,7 +204,8 @@ pub(super) fn validate_report(
                 ));
             }
         }
-        let builtin = builtin_methods.contains(&index)
+        let builtin = callable_functions.contains(&index)
+            || builtin_methods.contains(&index)
             || contracts.comparisons.values().any(|value| *value == index);
         if !declared.contains(&index) && !builtin {
             return Err(err(
@@ -220,17 +225,22 @@ pub(super) fn validate_report(
             line: 1,
         }];
     }
-    let program = k::Program {
+    let mut program = k::Program {
         types: compiler.types,
         functions: compiler.functions,
         destructors: compiler.destructors,
     };
+    problems.extend(crate::check::refine_return_contracts(
+        &mut program,
+        &compiler.closures.checked_functions,
+    ));
     if let Err(errors) = crate::check::check_all(program) {
         problems.extend(errors);
     }
     Ok((
         DefinitionEvidence {
             methods: compiler.method_selections,
+            closures: compiler.closures.evidence,
             types: compiler.definition_types,
         },
         problems,
@@ -304,11 +314,16 @@ impl Compiler<'_> {
         &mut self,
         ty: usize,
         first: a::TypeId,
-        _substitutions: &BTreeMap<String, usize>,
+        substitutions: &BTreeMap<String, usize>,
     ) -> Result<()> {
         let mut pending = vec![first];
         while let Some(id) = pending.pop() {
             let node = self.source.types[id].clone();
+            if let a::Type::Path(path) = &node.kind {
+                if self.assume_callable(ty, path, substitutions, node.span)? {
+                    continue;
+                }
+            }
             let path = match node.kind {
                 a::Type::Path(path) if path.args.is_empty() => path,
                 a::Type::Path(path) if path.name.starts_with('\'') => continue,
@@ -1236,7 +1251,7 @@ impl super::Builder<'_, '_> {
         if let Some(method) = proven {
             // A blanket source implementation can supply another method even
             // without an explicit bound. Do not silently choose the builtin.
-            if self.has_declared_method(base, name)? {
+            if self.has_declared_method(base, name, span)? {
                 return Err(err(
                     span,
                     "E_TRAIT",
@@ -1257,7 +1272,7 @@ impl super::Builder<'_, '_> {
             if let Some(method) = builtin {
                 // Preserve ordinary source implementation lookup, including
                 // blanket implementations of a distinct same-spelled method.
-                if !self.has_declared_method(base, name)? {
+                if !self.has_declared_method(base, name, span)? {
                     return Err(err(
                         span,
                         "E_TRAIT",

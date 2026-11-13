@@ -5,8 +5,9 @@ mod bootstrap_library;
 
 use lkjscript::compiler;
 use lkjscript::source::{SourceBundle, SourceInput};
-use std::io::Write;
-use std::process::{Command, Stdio};
+#[path = "support/native.rs"]
+mod native;
+use std::process::Command;
 
 const SOURCE: &str = r#"
 mod misleading {
@@ -212,26 +213,6 @@ fn rejects(source: &str, code: &str, reason: &str) {
     }
 }
 
-fn run_node(bytes: &[u8], observations: &str) {
-    let script = format!(
-        "const chunks=[];process.stdin.on('data',b=>chunks.push(b));process.stdin.on('end',async()=>{{try{{const {{instance}}=await WebAssembly.instantiate(Buffer.concat(chunks),{{lkjscript:{{trap(c,l){{throw Error('trap '+c+':'+l)}}}}}});{observations}}}catch(e){{console.error(e);process.exitCode=1}}}})"
-    );
-    let mut child = Command::new("node")
-        .arg("-e")
-        .arg(script)
-        .stdin(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    child.stdin.take().unwrap().write_all(bytes).unwrap();
-    let output = child.wait_with_output().unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-}
-
 #[test]
 fn equality_matches_the_same_rust_source() {
     let probes = [
@@ -286,21 +267,8 @@ fn equality_matches_the_same_rust_source() {
         String::from_utf8_lossy(&oracle.stderr)
     );
     let expected = String::from_utf8(oracle.stdout).unwrap();
-    let mut observations = String::new();
-    let mut count = 0;
-    for row in expected.lines() {
-        let fields: Vec<_> = row.split_whitespace().collect();
-        assert_eq!(fields.len(), 2);
-        observations.push_str(&format!(
-            "if(instance.exports['fn:{}']()!=={}n)throw Error('{} differs');",
-            fields[0], fields[1], fields[0]
-        ));
-        count += 1;
-    }
-    assert_eq!(count, probes.len());
-    let artifact =
-        compiler::compile(&bundle(SOURCE)).unwrap_or_else(|problem| panic!("{problem:?}"));
-    run_node(&artifact, &observations);
+    assert_eq!(expected.lines().count(), probes.len());
+    native::assert_rows(&native::check(&bundle(SOURCE)), &expected);
     std::fs::remove_dir_all(directory).unwrap();
 }
 
@@ -368,9 +336,5 @@ fn lhs_borrow_is_live_while_rhs_is_evaluated() {
 #[test]
 fn derived_comparisons_execute_and_keep_owners_usable() {
     let source = "#[derive(PartialEq)] struct Value{number:i64} pub fn probe()->i64{let left=Value{number:21};let right=Value{number:21};if !(left==right)||left!=right{return 0;}left.number+right.number}";
-    let artifact = compiler::compile(&bundle(source)).unwrap_or_else(|error| panic!("{error:?}"));
-    run_node(
-        &artifact,
-        "if(instance.exports['fn:probe']()!==42n)throw Error('derived equality differs');",
-    );
+    native::assert_bundle(&bundle(source), &[("probe", 42)]);
 }

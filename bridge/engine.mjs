@@ -5,6 +5,7 @@ import { writeBytes } from './output.mjs';
 const messages={1:'integer overflow',2:'division by zero',3:'index out of bounds',4:'explicit trap',5:'assertion failed',6:'allocation failed',7:'host output failure'};
 export function describe(problem) {return {message:problem instanceof Error?problem.message:String(problem),code:problem.code??'E_ENGINE',line:problem.line??0};}
 export function resultText(result,kind) {
+ if(kind==='char')return String.fromCodePoint(Number(result))+'\n';
  if(kind==='f64'){const data=new DataView(new ArrayBuffer(8));data.setBigUint64(0,BigInt.asUintN(64,result),true);return String(data.getFloat64(0,true))+'\n';}
  if(kind==='bool')return (result===0n?'false':'true')+'\n';
  if(kind==='unit'||kind==='--unit')return '';

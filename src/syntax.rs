@@ -1,4 +1,5 @@
 //! Rust-compatible surface reader. The syntax tree is an arena, not a recursive tree.
+pub(crate) mod formatting;
 use crate::ast::*;
 use crate::diagnostics::BlockedRegion;
 use std::collections::BTreeSet;
@@ -1545,6 +1546,7 @@ impl Parser {
         let mut generics = self.generics()?;
         self.where_clause(&mut generics)?;
         let tuple = self.take("(");
+        let unit = !tuple && !self.is("{");
         let fields;
         if tuple {
             fields = self.fields(false, ")")?;
@@ -1562,6 +1564,7 @@ impl Parser {
             generics,
             fields,
             tuple,
+            unit,
             attrs,
             public,
             span: self.finish_span(span),
@@ -1798,7 +1801,18 @@ impl Parser {
         if self.take("::") {
             return self.use_tree(format!("{path}::"), public, span);
         }
-        let alias = if self.take("as") { self.ident()? } else { name };
+        let alias = if self.take("as") {
+            self.ident()?
+        } else if name == "self" && !prefix.is_empty() {
+            prefix
+                .trim_end_matches("::")
+                .rsplit("::")
+                .next()
+                .unwrap()
+                .to_string()
+        } else {
+            name
+        };
         self.capability_path(&path)?;
         self.program.uses.push(Use {
             module: self.module.clone(),
@@ -2520,15 +2534,22 @@ impl Parser {
         if self.is("move") || self.is("|") || self.is("||") {
             let moved = self.take("move");
             let mut params = Vec::new();
+            let mut patterns = Vec::new();
             if !self.take("||") {
                 self.expect("|")?;
                 while !self.is("|") {
                     let start = self.token().span;
-                    let mutable = self.take("mut");
-                    if self.is("(") || self.is("&") || self.is("[") {
-                        return Err(self.unsupported("closure parameter patterns"));
-                    }
-                    let name = self.ident()?;
+                    let pattern = self.pattern_atom()?;
+                    let (name, mutable) = match &self.program.patterns[pattern].kind {
+                        Pattern::Bind {
+                            name,
+                            mutable,
+                            by_ref: false,
+                            ..
+                        } => (name.clone(), *mutable),
+                        _ => (format!("$closure_arg{}", params.len()), false),
+                    };
+                    patterns.push(pattern);
                     let ty = if self.take(":") { self.ty()? } else { 0 };
                     params.push(Param {
                         name,
@@ -2552,6 +2573,7 @@ impl Parser {
                 Expr::Closure {
                     moved,
                     params,
+                    patterns,
                     result,
                     body,
                 },
@@ -2608,6 +2630,8 @@ impl Parser {
                 || path.name == "panic"
                 || path.name == "vec"
                 || path.name == "format"
+                || path.name == "write"
+                || path.name == "writeln"
                 || path.name == "matches"
                 || path.name == "unreachable"
                 || path.name == "debug_assert"
@@ -2675,6 +2699,9 @@ impl Parser {
                 }
             }
             self.expect(end)?;
+            if matches!(path.name.as_str(), "format" | "write" | "writeln") {
+                self.normalize_format(&path.name, &mut args, span)?;
+            }
             return Ok(self.add_expr(
                 Expr::Macro {
                     name: path.name,
@@ -2716,6 +2743,153 @@ impl Parser {
             return Ok(self.add_expr(Expr::Struct { path, fields, base }, self.finish_span(span)));
         }
         Ok(self.add_expr(Expr::Path(path), self.finish_span(span)))
+    }
+    fn normalize_format(
+        &mut self,
+        name: &str,
+        args: &mut Vec<ExprId>,
+        span: Span,
+    ) -> Result<(), Diagnostic> {
+        let format_index = usize::from(name == "write" || name == "writeln");
+        if name == "writeln" && args.len() == 1 {
+            let literal = self.add_expr(Expr::String(String::new()), span);
+            args.push(literal);
+        }
+        let Some(&literal) = args.get(format_index) else {
+            return Err(Diagnostic::new(
+                span,
+                "E_FORMAT",
+                "format macro requires a literal format string",
+            ));
+        };
+        let Expr::String(text) = self.program.exprs[literal].kind.clone() else {
+            return Err(Diagnostic::new(
+                span,
+                "E_FORMAT",
+                "format argument must be a string literal",
+            ));
+        };
+        let mut parts = formatting::parse(&text, span)?;
+        let offset = format_index + 1;
+        let count = args.len() - offset;
+        let mut named = std::collections::BTreeMap::new();
+        let mut seen_named = false;
+        for index in 0..count {
+            if let Expr::Assign { op, place, value } =
+                self.program.exprs[args[offset + index]].kind.clone()
+            {
+                if op == "=" {
+                    if let Expr::Path(path) = &self.program.exprs[place].kind {
+                        if path.declaration.is_none() && !path.name.contains("::") {
+                            if named.insert(path.name.clone(), index).is_some() {
+                                return Err(Diagnostic::new(
+                                    span,
+                                    "E_FORMAT",
+                                    "format argument name is repeated",
+                                ));
+                            }
+                            args[offset + index] = value;
+                            self.program.exprs[place].kind = Expr::Tuple(Vec::new());
+                            seen_named = true;
+                            continue;
+                        }
+                    }
+                }
+            }
+            if seen_named {
+                return Err(Diagnostic::new(
+                    span,
+                    "E_FORMAT",
+                    "positional format argument follows a named argument",
+                ));
+            }
+        }
+        let mut used = vec![false; count];
+        let mut automatic = 0usize;
+        let mut normalized = String::new();
+        for part in &mut parts {
+            match part {
+                formatting::Part::Text(text) => {
+                    normalized.push_str(&text.replace('{', "{{").replace('}', "}}"));
+                }
+                formatting::Part::Value {
+                    argument, spelling, ..
+                } => {
+                    let index = if argument.is_empty() {
+                        let index = automatic;
+                        automatic += 1;
+                        if index >= count {
+                            return Err(Diagnostic::new(
+                                span,
+                                "E_FORMAT",
+                                "format argument index is out of bounds",
+                            ));
+                        }
+                        index
+                    } else if argument.bytes().all(|value| value.is_ascii_digit()) {
+                        let index = argument.parse::<usize>().map_err(|_| {
+                            Diagnostic::new(
+                                span,
+                                "E_FORMAT",
+                                "format argument index does not fit usize",
+                            )
+                        })?;
+                        if index >= count {
+                            return Err(Diagnostic::new(
+                                span,
+                                "E_FORMAT",
+                                "format argument index is out of bounds",
+                            ));
+                        }
+                        index
+                    } else if let Some(index) = named.get(argument) {
+                        *index
+                    } else {
+                        let index = args.len() - offset;
+                        let value = self.add_expr(
+                            Expr::Path(Path {
+                                declaration: None,
+                                name: argument.clone(),
+                                args: Vec::new(),
+                            }),
+                            span,
+                        );
+                        args.push(value);
+                        named.insert(argument.clone(), index);
+                        index
+                    };
+                    if index >= args.len() - offset {
+                        return Err(Diagnostic::new(
+                            span,
+                            "E_FORMAT",
+                            "format argument index is out of bounds",
+                        ));
+                    }
+                    if index < count {
+                        used[index] = true;
+                    }
+                    normalized.push('{');
+                    normalized.push_str(&index.to_string());
+                    if !spelling.is_empty() {
+                        normalized.push(':');
+                        normalized.push_str(spelling);
+                    }
+                    normalized.push('}');
+                }
+            }
+        }
+        if used.iter().any(|used| !*used) {
+            return Err(Diagnostic::new(
+                span,
+                "E_FORMAT",
+                "format argument is never used",
+            ));
+        }
+        if name == "writeln" {
+            normalized.push('\n');
+        }
+        args[format_index] = self.add_expr(Expr::String(normalized), span);
+        Ok(())
     }
     fn pattern(&mut self) -> Result<PatternId, Diagnostic> {
         self.take("|");

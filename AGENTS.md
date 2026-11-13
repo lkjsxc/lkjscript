@@ -5,8 +5,8 @@ result. Use corpus/census evidence; do not resume a file-by-file source campaign
 compiler, runtime, library and tools, eventually without Rust or Node. Applications
 are probes; historical architecture and backward compatibility are not goals.
 
-Rust-compatible source, explicit checked meaning and memory64 WebAssembly are
-current strategies. Reconsider them when measured obstacles justify an executable
+Rust-compatible source, explicit checked meaning and owned Linux x86-64 output are
+current strategies. WebAssembly remains an optional thin encoder. Reconsider them when measured obstacles justify an executable
 transition. Preserve the current runnable path while replacing its parts. The
 first self-compilation target is the complete compiler core with declared source,
 library and host-buffer inputs, not a syntax-only file count or a second toy core.
@@ -43,8 +43,8 @@ duplicate specifications and permanent superseded production implementations.
 
 Choose width by trust cost. Surface forms lower to existing K where possible;
 validate sugars against independently generated expansions as well as rustc.
-Treat the existing stack bridge as finished. Separate checked-K lowering, layout,
-explicit glue and source runtime before adding an owned native encoder; do not
-assemble another runtime by hand. Prefer printing conformance programs and direct
+Keep one checked-K lowering/layout contract, explicit glue and source runtime
+for both native and WebAssembly encoding. The Node stack/worker bridge is deleted;
+do not rebuild it or assemble another runtime by hand. Prefer printing conformance programs and direct
 K fixtures over large Rust harnesses. Keep seeds and reduced failures in Git,
 commands beside measurements in status, and detailed run output under target/.

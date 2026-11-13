@@ -1,0 +1,1 @@
+mod first { pub struct Value {pub n:i64} pub trait Read {fn read(&self)->i64;} impl Read for Value {fn read(&self)->i64{self.n}}} mod second {pub struct Value {pub n:i64} pub trait Read {fn read(&self)->i64;} impl Read for Value {fn read(&self)->i64{self.n}}} use first::Read as _; use second::Read as _; pub fn probe()->i64{first::Value {n:20}.read()+second::Value {n:22}.read()}

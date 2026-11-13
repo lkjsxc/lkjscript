@@ -2,8 +2,9 @@
 use lkjscript::ast::Diagnostic;
 use lkjscript::source::{SourceBundle, SourceInput};
 use lkjscript::{compiler, k};
-use std::io::Write;
-use std::process::{Command, Stdio};
+#[path = "support/native.rs"]
+mod native;
+use std::process::Command;
 
 const COMMON_SOURCE: &str = r#"
 pub fn u8_direct(value: u8) -> i64 {
@@ -148,26 +149,6 @@ fn rejected(text: &str, code: &str, reason: &str) {
     }
 }
 
-fn run_node(bytes: &[u8], observations: &str) {
-    let script = format!(
-        "const chunks=[];process.stdin.on('data',b=>chunks.push(b));process.stdin.on('end',async()=>{{try{{const {{instance}}=await WebAssembly.instantiate(Buffer.concat(chunks),{{lkjscript:{{trap(c,l){{throw Error('trap '+c+':'+l)}}}}}});{observations}}}catch(e){{console.error(e);process.exitCode=1}}}})"
-    );
-    let mut child = Command::new("node")
-        .arg("-e")
-        .arg(script)
-        .stdin(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("Node is required for range-pattern execution");
-    child.stdin.take().unwrap().write_all(bytes).unwrap();
-    let output = child.wait_with_output().unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-}
-
 #[test]
 fn exhaustive_integer_domains_and_boundaries_match_the_same_rust_source() {
     let directory =
@@ -200,26 +181,22 @@ fn exhaustive_integer_domains_and_boundaries_match_the_same_rust_source() {
         String::from_utf8_lossy(&oracle.stderr)
     );
     let expected = String::from_utf8(oracle.stdout).unwrap();
-    let mut rows = String::new();
-    let mut count = 0;
+    let mut rows = Vec::new();
     for line in expected.lines() {
-        let columns: Vec<_> = line.split_whitespace().collect();
+        let columns = line.split_whitespace().collect::<Vec<_>>();
         assert_eq!(columns.len(), 3, "unexpected oracle line: {line}");
-        rows.push_str(&format!(
-            "['{}','{}','{}'],",
-            columns[0], columns[1], columns[2]
+        rows.push((
+            columns[0],
+            [columns[1].parse::<i128>().unwrap() as i64],
+            columns[2].parse::<i64>().unwrap(),
         ));
-        count += 1;
     }
-    assert_eq!(count, 256 * 9 + 8 * 3 + 7 * 2 + 3 * 3);
-    let bytes =
-        compiler::compile(&bundle(COMMON_SOURCE)).unwrap_or_else(|error| panic!("{error:?}"));
-    run_node(
-        &bytes,
-        &format!(
-            "for(const [name,input,expected]of[{rows}]){{const result=instance.exports['fn:'+name](BigInt(input));if(result!==BigInt(expected))throw Error(name+'('+input+'): expected '+expected+', got '+result);}}"
-        ),
-    );
+    assert_eq!(rows.len(), 256 * 9 + 8 * 3 + 7 * 2 + 3 * 3);
+    let calls = rows
+        .iter()
+        .map(|(name, input, expected)| (*name, input.as_slice(), *expected))
+        .collect::<Vec<_>>();
+    native::assert_calls(&native::check(&bundle(COMMON_SOURCE)), &calls);
     std::fs::remove_dir_all(directory).unwrap();
 }
 

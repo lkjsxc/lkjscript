@@ -12,7 +12,7 @@ import { oracleCache, packResult, unpackResult } from '../oracle.mjs';
 const [binArg, seedS = '1', countS = '100', outArg = 'target/generators'] = process.argv.slice(2);
 const bin = path.resolve(binArg); const repo = path.resolve(path.dirname(fs.realpathSync(bin)), '../..');
 const ONE_SIDED = Number(process.env.ONE_SIDED || 6);
-const engines=(process.env.LKJ_ENGINES||'node,k').split(',');
+const engines=(process.env.LKJ_ENGINES || 'native,k').split(',');
 const generatorHash=createHash('sha256').update(fs.readFileSync(new URL(import.meta.url))).digest('hex');
 const binarySha256=createHash('sha256').update(fs.readFileSync(bin)).digest('hex');
 let state = (BigInt(seedS) * 0x9E3779B97F4A7C15n & 0xFFFFFFFFFFFFFFFFn) || 1n;

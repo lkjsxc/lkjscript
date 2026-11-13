@@ -126,15 +126,7 @@ fn census_uses_parsed_constructs_and_ignores_comments_and_literal_text() {
     let report = source::parse_bundle_report(&input);
     assert!(report.diagnostics.is_empty(), "{:?}", report.diagnostics);
     let census = diagnostics::census(&report);
-    for kind in [
-        "char literal",
-        "closure",
-        "format!",
-        "collection iteration",
-        "range slicing",
-        "repeated Vec literal",
-        "function pointer",
-    ] {
+    for kind in ["collection iteration", "range slicing", "function pointer"] {
         assert_eq!(
             census.unsupported.get(kind),
             Some(&1),
@@ -142,7 +134,10 @@ fn census_uses_parsed_constructs_and_ignores_comments_and_literal_text() {
             census.unsupported
         );
     }
-    assert_eq!(census.unsupported.len(), 7);
+    assert_eq!(census.unsupported.len(), 3);
+    for supported in ["char literal", "closure", "format!", "repeated Vec literal"] {
+        assert!(!census.unsupported.contains_key(supported));
+    }
     assert!(census.blocked.is_empty());
 }
 
@@ -355,7 +350,10 @@ fn census_counts_semantic_diagnostics_and_their_parsed_site_once() {
             "fn consume(callback: fn(i64) -> i64) {}",
             "function pointer",
         ),
-        ("fn probe() { let closure = |x: i64| x; }", "closure"),
+        (
+            "fn probe() { let values: [i64; 3] = [1, 2, 3]; let view = &values[1..3]; }",
+            "range slicing",
+        ),
         (
             "fn probe() { let v: Vec<i64> = Vec::new(); for x in &v {} }",
             "collection iteration",

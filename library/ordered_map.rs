@@ -25,6 +25,10 @@ impl<K: Ord, V> BTreeMap<K, V> {
         self.entries.len() == 0
     }
 
+    pub fn clear(&mut self) {
+        self.entries = Vec::new();
+    }
+
     fn lower_bound(&self, key: &K) -> usize {
         let mut low: usize = 0;
         let mut high: usize = self.entries.len();

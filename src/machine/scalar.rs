@@ -18,6 +18,7 @@ pub(super) fn normalize(value: u64, bits: u8, signed: bool) -> u64 {
 fn integer(kind: &TypeKind) -> Result<(u8, bool), NumberError> {
     match kind {
         TypeKind::Bool => Ok((1, false)),
+        TypeKind::Char => Ok((32, false)),
         TypeKind::Int { bits, signed } if [8, 16, 32, 64].contains(bits) => Ok((*bits, *signed)),
         _ => Err(NumberError::Invalid("operation requires a scalar integer")),
     }
@@ -32,6 +33,9 @@ fn float(value: f64) -> u64 {
 }
 
 pub(super) fn unary(kind: &TypeKind, op: &str, value: u64) -> Result<u64, NumberError> {
+    if matches!(kind, TypeKind::Char) {
+        return Err(NumberError::Invalid("invalid character unary operation"));
+    }
     if matches!(kind, TypeKind::F64) {
         return match op {
             "-" => Ok(float(-f64::from_bits(value))),
@@ -55,6 +59,9 @@ pub(super) fn unary(kind: &TypeKind, op: &str, value: u64) -> Result<u64, Number
 }
 
 pub(super) fn binary(kind: &TypeKind, op: &str, a: u64, b: u64) -> Result<u64, NumberError> {
+    if matches!(kind, TypeKind::Char) && !["==", "!=", "<", "<=", ">", ">="].contains(&op) {
+        return Err(NumberError::Invalid("invalid character binary operation"));
+    }
     if matches!(kind, TypeKind::F64) {
         let (a, b) = (f64::from_bits(a), f64::from_bits(b));
         return Ok(match op {
@@ -182,9 +189,18 @@ pub(super) fn cast(from: &TypeKind, to: &TypeKind, value: u64) -> Result<u64, Nu
             };
             Ok(value)
         }
-        (TypeKind::Int { .. } | TypeKind::Bool, TypeKind::Int { bits, signed }) => {
-            Ok(normalize(value, *bits, *signed))
-        }
+        (
+            TypeKind::Int {
+                bits: 8,
+                signed: false,
+            }
+            | TypeKind::Char,
+            TypeKind::Char,
+        ) => Ok(value),
+        (
+            TypeKind::Int { .. } | TypeKind::Bool | TypeKind::Char,
+            TypeKind::Int { bits, signed },
+        ) => Ok(normalize(value, *bits, *signed)),
         _ => Err(NumberError::Invalid("invalid scalar cast")),
     }
 }

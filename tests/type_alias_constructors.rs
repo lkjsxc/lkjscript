@@ -1,8 +1,9 @@
 //! Transparent type aliases preserve constructor identity, inference, and privacy.
 use lkjscript::compiler;
 use lkjscript::source::{SourceBundle, SourceInput};
-use std::io::Write;
-use std::process::{Command, Stdio};
+#[path = "support/native.rs"]
+mod native;
+use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 static NEXT: AtomicUsize = AtomicUsize::new(0);
@@ -32,7 +33,7 @@ fn directory() -> std::path::PathBuf {
 }
 
 fn accepted(files: &[(&str, &str)], probes: &[(&str, i64)]) {
-    let artifact = compiler::compile(&bundle(files)).unwrap_or_else(|error| panic!("{error:?}"));
+    let checked = native::check(&bundle(files));
     let directory = directory();
     for (path, source) in files {
         let path = directory.join(path);
@@ -73,29 +74,7 @@ fn accepted(files: &[(&str, &str)], probes: &[(&str, i64)]) {
     );
     std::fs::remove_dir_all(directory).unwrap();
 
-    let mut script = String::from(
-        "const chunks=[];process.stdin.on('data',b=>chunks.push(b));process.stdin.on('end',async()=>{try{const {instance}=await WebAssembly.instantiate(Buffer.concat(chunks),{lkjscript:{trap(c,l){throw Error('trap '+c+':'+l)}}});",
-    );
-    for (name, expected) in probes {
-        script.push_str(&format!(
-            "{{const actual=instance.exports['fn:{name}']();if(actual!=={expected}n)throw Error('{name}: expected {expected}, got '+actual);}}"
-        ));
-    }
-    script.push_str("}catch(e){console.error(e);process.exitCode=1}})");
-    let mut node = Command::new("node")
-        .arg("-e")
-        .arg(script)
-        .stdin(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    node.stdin.take().unwrap().write_all(&artifact).unwrap();
-    let result = node.wait_with_output().unwrap();
-    assert!(
-        result.status.success(),
-        "{}",
-        String::from_utf8_lossy(&result.stderr)
-    );
+    native::assert_values(&checked, probes);
 }
 
 fn rejected(source: &str, code: &str, reason: &str, rust_reason: &str) {

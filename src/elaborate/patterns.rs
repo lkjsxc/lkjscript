@@ -202,9 +202,17 @@ impl PatternPlan {
 struct Domain {
     maximum: u64,
     sign: u64,
+    character: bool,
 }
 impl Domain {
     fn new(kind: &k::TypeKind) -> Option<Self> {
+        if matches!(kind, k::TypeKind::Char) {
+            return Some(Self {
+                maximum: 0x10ffff - 0x800,
+                sign: 0,
+                character: true,
+            });
+        }
         if let k::TypeKind::Int { bits, signed } = kind {
             Some(Self {
                 maximum: if *bits == 64 {
@@ -213,13 +221,23 @@ impl Domain {
                     (1u64 << bits) - 1
                 },
                 sign: if *signed { 1u64 << (bits - 1) } else { 0 },
+                character: false,
             })
         } else {
             None
         }
     }
     fn rank(self, value: i64) -> u64 {
-        (value as u64 & self.maximum) ^ self.sign
+        if self.character {
+            let value = value as u64;
+            if value >= 0xe000 {
+                value - 0x800
+            } else {
+                value
+            }
+        } else {
+            (value as u64 & self.maximum) ^ self.sign
+        }
     }
 }
 pub(super) fn positional_fields(
@@ -279,6 +297,9 @@ impl Builder<'_, '_> {
                         id = *value;
                     }
                 }
+                if matches!(self.compiler.source.exprs[id].kind, a::Expr::Char(_)) {
+                    return self.compiler.type_names.get("char").copied();
+                }
                 if let a::Expr::Int(text) = &self.compiler.source.exprs[id].kind {
                     if let Some(ty) = integers::suffix_type(&self.compiler.type_names, text) {
                         return Some(ty);
@@ -290,6 +311,16 @@ impl Builder<'_, '_> {
     }
     fn integer_pattern(&self, expression: usize, ty: usize) -> Result<i64> {
         let node = &self.compiler.source.exprs[expression];
+        if matches!(self.compiler.types[ty].kind, k::TypeKind::Char) {
+            return match node.kind {
+                a::Expr::Char(value) => Ok(value as i64),
+                _ => Err(err(
+                    node.span,
+                    "E_TYPE",
+                    "character pattern requires a character literal",
+                )),
+            };
+        }
         let (text, negative) = match &node.kind {
             a::Expr::Int(text) => (text, false),
             a::Expr::Unary { op, value } if op == "-" => {

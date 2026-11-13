@@ -4,6 +4,9 @@
 use super::{Bindings, Compiler, Result, a, err, is_copy, k};
 use std::collections::{BTreeMap, VecDeque};
 
+mod closures;
+mod source_types;
+
 type Variable = usize;
 fn context(mut problem: a::Diagnostic, message: &str) -> a::Diagnostic {
     problem.message = format!("{message}: {}", problem.message);
@@ -22,6 +25,7 @@ enum Shape {
     Array(Variable, usize),
     Tuple(Vec<Variable>),
     Nominal(a::DeclarationId, Vec<Variable>),
+    Closure(a::ExprId, Vec<Variable>),
     Never,
 }
 impl Shape {
@@ -30,7 +34,7 @@ impl Shape {
             Self::Vec(v) | Self::Box(v) | Self::Ref(_, v) | Self::Slice(v) | Self::Array(v, _) => {
                 vec![*v]
             }
-            Self::Tuple(v) | Self::Nominal(_, v) => v.clone(),
+            Self::Tuple(v) | Self::Nominal(_, v) | Self::Closure(_, v) => v.clone(),
             _ => Vec::new(),
         }
     }
@@ -68,6 +72,7 @@ pub(super) struct DefinitionTypes {
     nodes: Vec<Node>,
     expressions: BTreeMap<a::ExprId, Variable>,
     bindings: BTreeMap<a::PatternId, Variable>,
+    closures: BTreeMap<a::ExprId, closures::Closure>,
 }
 #[derive(Default)]
 pub(super) struct Types {
@@ -233,6 +238,28 @@ impl DefinitionTypes {
                         span,
                     )?)
                 }
+                Shape::Closure(expression, _) => {
+                    let closure = &self.closures[&expression];
+                    let capture_count = closure.captures.len();
+                    let captures = closure
+                        .captures
+                        .iter()
+                        .zip(&values)
+                        .map(|(capture, ty)| super::closures::VariableCapture {
+                            name: capture.name.clone(),
+                            ty: *ty,
+                            uses: capture.uses.clone(),
+                        })
+                        .collect();
+                    Some(compiler.closure_type(
+                        expression,
+                        closure.source_function,
+                        substitutions,
+                        captures,
+                        values[capture_count..values.len() - 1].to_vec(),
+                        *values.last().unwrap(),
+                    ))
+                }
                 Shape::Never => None,
             };
             known.insert(id, ty);
@@ -255,12 +282,20 @@ fn parameters(source: &a::Program, declaration: a::DeclarationId) -> Vec<String>
 }
 #[derive(Clone)]
 enum Obligation {
+    Callable {
+        receiver: Variable,
+        arguments: Vec<Variable>,
+        result: Variable,
+        span: a::Span,
+        produced: bool,
+    },
     Coercion {
         source: Variable,
         target: Variable,
         span: a::Span,
     },
     Try {
+        target: Variable,
         source: Variable,
         result: Variable,
         span: a::Span,
@@ -290,6 +325,9 @@ enum Obligation {
     },
 }
 struct Infer<'a, 'b> {
+    source_function: usize,
+    capture_frames: Vec<closures::Frame>,
+    callable_parameters: BTreeMap<String, (Vec<Variable>, Variable)>,
     source: &'a a::Program,
     names: &'b crate::resolve::Resolver<'a>,
     definition: DefinitionTypes,
@@ -583,99 +621,6 @@ impl Infer<'_, '_> {
             }
         }
     }
-    fn source_type(
-        &mut self,
-        id: a::TypeId,
-        environment: &BTreeMap<String, Variable>,
-    ) -> Result<Variable> {
-        let node = self.source.types[id].clone();
-        Ok(match node.kind {
-            a::Type::Infer => self.unknown(),
-            a::Type::Never => self.shaped(Shape::Never),
-            a::Type::Ref { mutable, inner, .. } => {
-                let inner = self.source_type(inner, environment)?;
-                self.shaped(Shape::Ref(mutable, inner))
-            }
-            a::Type::Slice(inner) => {
-                let inner = self.source_type(inner, environment)?;
-                self.shaped(Shape::Slice(inner))
-            }
-            a::Type::Array { inner, len } => {
-                let inner = self.source_type(inner, environment)?;
-                match len.replace('_', "").parse::<usize>() {
-                    Ok(len) => self.shaped(Shape::Array(inner, len)),
-                    Err(_) => self.blocked(),
-                }
-            }
-            a::Type::Tuple(fields) => {
-                let mut values = Vec::new();
-                for field in fields {
-                    values.push(self.source_type(field, environment)?);
-                }
-                if values.is_empty() {
-                    self.atom("()")
-                } else {
-                    self.shaped(Shape::Tuple(values))
-                }
-            }
-            a::Type::Path(path) => {
-                if path.declaration.is_none() && path.args.is_empty() {
-                    if let Some(value) = environment.get(&path.name) {
-                        return Ok(*value);
-                    }
-                    if integer_name(&path.name)
-                        || matches!(
-                            path.name.as_str(),
-                            "bool" | "f64" | "str" | "World" | "Stdout"
-                        )
-                    {
-                        return Ok(self.atom(&path.name));
-                    }
-                    if path.name.contains("::") {
-                        return Ok(self.blocked());
-                    }
-                }
-                let mut arguments = Vec::new();
-                for arg in &path.args {
-                    if !matches!(&self.source.types[*arg].kind, a::Type::Path(path) if path.name.starts_with('\''))
-                    {
-                        arguments.push(self.source_type(*arg, environment)?);
-                    }
-                }
-                if path.declaration.is_none() && arguments.len() == 1 {
-                    if path.name == "Vec" {
-                        return Ok(self.shaped(Shape::Vec(arguments[0])));
-                    }
-                    if path.name == "Box" {
-                        return Ok(self.shaped(Shape::Box(arguments[0])));
-                    }
-                }
-                if let Some(declaration) = path.declaration {
-                    if let a::Item::Alias(index) = self.source.declarations[declaration].item {
-                        let mut aliases = environment.clone();
-                        for (parameter, value) in parameters(self.source, declaration)
-                            .into_iter()
-                            .zip(arguments)
-                        {
-                            aliases.insert(parameter, value);
-                        }
-                        return self.source_type(self.source.aliases[index].ty, &aliases);
-                    }
-                    if matches!(
-                        self.source.declarations[declaration].item,
-                        a::Item::Struct(_) | a::Item::Enum(_)
-                    ) {
-                        self.shaped(Shape::Nominal(declaration, arguments))
-                    } else {
-                        self.shaped(Shape::Source(id))
-                    }
-                } else {
-                    self.shaped(Shape::Source(id))
-                }
-            }
-            a::Type::Function { .. } => self.blocked(),
-        })
-    }
     fn nominal_environment(
         &self,
         declaration: a::DeclarationId,
@@ -822,6 +767,13 @@ impl Infer<'_, '_> {
         for (parameter, value) in function.params.iter().zip(values) {
             let expected = self.source_type(parameter.ty, &environment)?;
             self.coerce(*value, expected, span)?;
+        }
+        for parameter in &function.generics {
+            if let Some(receiver) = environment.get(&parameter.name).copied() {
+                for bound in &parameter.bounds {
+                    self.callable_bound(receiver, *bound, &environment)?;
+                }
+            }
         }
         self.source_type(function.result, &environment)
     }
@@ -1128,6 +1080,7 @@ impl Infer<'_, '_> {
                 None => self.fresh(None, true, false),
             },
             a::Expr::Bool(_) => self.atom("bool"),
+            a::Expr::Char(_) => self.atom("char"),
             a::Expr::Float(_) => self.atom("f64"),
             a::Expr::String(_) => {
                 let inner = self.atom("str");
@@ -1139,6 +1092,7 @@ impl Infer<'_, '_> {
                 self.shaped(Shape::Ref(false, array))
             }
             a::Expr::Path(path) => {
+                self.capture_path(id, &path.name);
                 if let Some(value) = self.bindings.get(&path.name) {
                     value
                 } else {
@@ -1300,9 +1254,25 @@ impl Infer<'_, '_> {
                             .unwrap_or_else(|| self.blocked())
                     }
                 } else {
-                    self.blocked()
+                    let receiver = self.expr(callee)?;
+                    let result = self.operation_type();
+                    self.obligation(Obligation::Callable {
+                        receiver,
+                        arguments: values,
+                        result,
+                        span,
+                        produced: true,
+                    });
+                    result
                 }
             }
+            a::Expr::Closure {
+                params,
+                patterns,
+                result,
+                body,
+                ..
+            } => self.closure_expression(id, &params, &patterns, result, body)?,
             a::Expr::Method {
                 receiver,
                 name,
@@ -1487,6 +1457,33 @@ impl Infer<'_, '_> {
                 self.shaped(Shape::Never)
             }
             a::Expr::Continue => self.shaped(Shape::Never),
+            a::Expr::Macro {
+                name,
+                args,
+                separator,
+            } if name == "vec" => {
+                let element = self.unknown();
+                if separator == ";" {
+                    if args.len() != 2 {
+                        return Err(err(
+                            span,
+                            "E_TYPE",
+                            "Vec repetition requires an element and count",
+                        ));
+                    }
+                    let value = self.expr(args[0])?;
+                    self.coerce(value, element, span)?;
+                    let count = self.expr(args[1])?;
+                    let size = self.atom("usize");
+                    self.coerce(count, size, span)?;
+                } else {
+                    for arg in args {
+                        let value = self.expr(arg)?;
+                        self.coerce(value, element, span)?;
+                    }
+                }
+                self.shaped(Shape::Vec(element))
+            }
             a::Expr::Macro { name, args, .. } => {
                 for arg in args {
                     self.expr(arg)?;
@@ -1501,6 +1498,7 @@ impl Infer<'_, '_> {
                 let source = self.expr(value)?;
                 let result = self.operation_type();
                 self.obligation(Obligation::Try {
+                    target: self.result,
                     source,
                     result,
                     span,
@@ -1530,6 +1528,13 @@ impl Infer<'_, '_> {
     }
     fn solve_obligation(&mut self, id: usize, obligation: Obligation) -> Result<bool> {
         match obligation {
+            Obligation::Callable {
+                receiver,
+                arguments,
+                result,
+                span,
+                ..
+            } => return self.solve_callable(id, receiver, arguments, result, span),
             Obligation::Coercion {
                 source,
                 target,
@@ -1553,6 +1558,7 @@ impl Infer<'_, '_> {
                 self.coerce_known(source, target, span)?;
             }
             Obligation::Try {
+                target,
                 source,
                 result,
                 span,
@@ -1586,8 +1592,8 @@ impl Infer<'_, '_> {
                 if arguments.len() != arity {
                     return Err(err(span, "E_TYPE", "question-mark type arguments differ"));
                 }
-                let Some(output_shape) = self.shape(self.result) else {
-                    self.watch(self.result, id);
+                let Some(output_shape) = self.shape(target) else {
+                    self.watch(target, id);
                     return Ok(false);
                 };
                 let Shape::Nominal(output, output_arguments) = output_shape else {
@@ -1731,7 +1737,15 @@ impl Infer<'_, '_> {
             self.queued[id] = false;
             if let Some(obligation) = self.obligations[id].clone() {
                 let result = match &obligation {
-                    Obligation::Coercion { .. } => None,
+                    Obligation::Coercion { .. }
+                    | Obligation::Callable {
+                        produced: false, ..
+                    } => None,
+                    Obligation::Callable {
+                        produced: true,
+                        result,
+                        ..
+                    } => Some(*result),
                     Obligation::Try { result, .. }
                     | Obligation::Deref { result, .. }
                     | Obligation::Index { result, .. }
@@ -1812,12 +1826,16 @@ pub(super) fn infer(
 ) -> Result<DefinitionTypes> {
     let function = source.functions[index].clone();
     let mut inference = Infer {
+        source_function: index,
+        capture_frames: Vec::new(),
+        callable_parameters: BTreeMap::new(),
         source,
         names,
         definition: DefinitionTypes {
             nodes: Vec::new(),
             expressions: BTreeMap::new(),
             bindings: BTreeMap::new(),
+            closures: BTreeMap::new(),
         },
         bindings: Bindings::default(),
         environment: BTreeMap::new(),
@@ -1870,6 +1888,13 @@ pub(super) fn infer(
         }
     }
     let environment = inference.environment.clone();
+    for parameter in &function.generics {
+        if let Some(receiver) = environment.get(&parameter.name).copied() {
+            for bound in &parameter.bounds {
+                inference.callable_bound(receiver, *bound, &environment)?;
+            }
+        }
+    }
     inference.result = inference.source_type(function.result, &environment)?;
     for parameter in &function.params {
         let ty = inference.source_type(parameter.ty, &environment)?;

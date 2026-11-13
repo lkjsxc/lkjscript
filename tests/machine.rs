@@ -571,3 +571,30 @@ fn strict_and_conditional_drops_have_independent_static_and_dynamic_checks() {
         fails(raw, fault);
     }
 }
+
+#[test]
+fn shared_reference_copy_keeps_real_carrier_and_exclusive_parent_conflicts() {
+    for (text, line) in [
+        (
+            include_str!("conformance/k/borrowed_reference_carrier_drop.k"),
+            6,
+        ),
+        (
+            include_str!("conformance/k/shared_reborrow_parent_write.k"),
+            9,
+        ),
+    ] {
+        let program = lkjscript::k_text::read(text).unwrap();
+        let diagnostic = lkjscript::check::check(program.clone()).err().unwrap();
+        assert_eq!(diagnostic.code, "E_BORROW");
+        let error = machine::run(&program, 0, &[], &mut Vec::new())
+            .err()
+            .unwrap();
+        assert!(
+            error.kind == ErrorKind::Machine(MachineError::ConflictingAccess),
+            "{}",
+            error.message
+        );
+        assert_eq!(error.line, line);
+    }
+}

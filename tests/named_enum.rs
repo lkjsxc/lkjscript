@@ -2,8 +2,9 @@
 use lkjscript::ast::Diagnostic;
 use lkjscript::source::{SourceBundle, SourceInput};
 use lkjscript::{check, compiler, k};
-use std::io::Write;
-use std::process::{Command, Stdio};
+#[path = "support/native.rs"]
+mod native;
+use std::process::Command;
 
 const ROOT: &str = r#"
 mod a;
@@ -178,26 +179,6 @@ fn rejects(text: &str, code: &str, reason: &str) {
     }
 }
 
-fn run_node(bytes: &[u8], observations: &str) {
-    let script = format!(
-        "const chunks=[];process.stdin.on('data',b=>chunks.push(b));process.stdin.on('end',async()=>{{try{{const {{instance}}=await WebAssembly.instantiate(Buffer.concat(chunks),{{lkjscript:{{trap(c,l){{throw Error('trap '+c+':'+l)}}}}}});{observations}}}catch(e){{console.error(e);process.exitCode=1}}}})"
-    );
-    let mut child = Command::new("node")
-        .arg("-e")
-        .arg(script)
-        .stdin(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    child.stdin.take().unwrap().write_all(bytes).unwrap();
-    let output = child.wait_with_output().unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-}
-
 #[test]
 fn named_construction_matching_and_cleanup_match_the_same_rust_sources() {
     let probes = [
@@ -253,21 +234,11 @@ fn named_construction_matching_and_cleanup_match_the_same_rust_sources() {
         String::from_utf8_lossy(&oracle.stderr)
     );
     let expected = String::from_utf8(oracle.stdout).unwrap();
-    let mut script = String::new();
-    let mut observed = 0;
-    for row in expected.lines() {
-        let parts: Vec<_> = row.split_whitespace().collect();
-        assert_eq!(parts.len(), 2, "{row}");
-        script.push_str(&format!(
-            "if(instance.exports['fn:{}']()!=={}n)throw Error('{} result differs');",
-            parts[0], parts[1], parts[0]
-        ));
-        observed += 1;
-    }
-    assert_eq!(observed, probes.len());
-    let bytes = compiler::compile(&bundle(&[("main.rs", ROOT), ("a.rs", A), ("b.rs", B)]))
-        .unwrap_or_else(|error| panic!("{error:?}"));
-    run_node(&bytes, &script);
+    assert_eq!(expected.lines().count(), probes.len());
+    native::assert_rows(
+        &native::check(&bundle(&[("main.rs", ROOT), ("a.rs", A), ("b.rs", B)])),
+        &expected,
+    );
     std::fs::remove_dir_all(directory).unwrap();
 }
 

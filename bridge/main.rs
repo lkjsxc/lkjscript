@@ -360,6 +360,7 @@ fn result_kind(program: &k::Program, function: &k::Function) -> &'static str {
     match program.types[function.result].kind {
         k::TypeKind::Unit => "unit",
         k::TypeKind::Bool => "bool",
+        k::TypeKind::Char => "char",
         k::TypeKind::F64 => "f64",
         k::TypeKind::Int { signed: false, .. } => "u64",
         _ => "i64",
@@ -388,6 +389,7 @@ fn scalar(value: machine::Scalar) -> String {
     match value {
         machine::Scalar::Unit => String::new(),
         machine::Scalar::Bool(value) => format!("{value}\n"),
+        machine::Scalar::Char(value) => format!("{value}\n"),
         machine::Scalar::Int {
             value,
             bits,
@@ -431,23 +433,9 @@ fn execute_machine(
         timings.count("machine_peak_frames", result.peak_frames);
         timings.count("machine_peak_cells", result.peak_cells);
         if args.verb != "test" {
-            match result.value {
-                machine::Scalar::Unit => {}
-                machine::Scalar::Bool(value) => println!("{value}"),
-                machine::Scalar::Int {
-                    value,
-                    bits,
-                    signed,
-                } => {
-                    if signed {
-                        let shift = 64 - u32::from(bits);
-                        println!("{}", ((value << shift) as i64) >> shift);
-                    } else {
-                        println!("{value}");
-                    }
-                }
-                machine::Scalar::F64 { bits } => println!("{}", f64::from_bits(bits)),
-            }
+            std::io::stdout()
+                .write_all(scalar(result.value).as_bytes())
+                .map_err(|error| format!("E_IO {error}"))?;
         }
     }
     Ok(())

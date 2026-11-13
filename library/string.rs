@@ -33,6 +33,59 @@ impl String {
         append_bytes(&mut self.bytes, value.as_bytes());
     }
 
+    pub fn push(&mut self, value: char) {
+        let code = value as u32;
+        if code < 0x80u32 {
+            self.bytes.push(code as u8);
+        } else if code < 0x800u32 {
+            self.bytes.push(((code >> 6) | 0xc0u32) as u8);
+            self.bytes.push(((code & 0x3fu32) | 0x80u32) as u8);
+        } else if code < 0x10000u32 {
+            self.bytes.push(((code >> 12) | 0xe0u32) as u8);
+            self.bytes.push((((code >> 6) & 0x3fu32) | 0x80u32) as u8);
+            self.bytes.push(((code & 0x3fu32) | 0x80u32) as u8);
+        } else {
+            self.bytes.push(((code >> 18) | 0xf0u32) as u8);
+            self.bytes.push((((code >> 12) & 0x3fu32) | 0x80u32) as u8);
+            self.bytes.push((((code >> 6) & 0x3fu32) | 0x80u32) as u8);
+            self.bytes.push(((code & 0x3fu32) | 0x80u32) as u8);
+        }
+    }
+
+    pub fn starts_with<P: crate::str::Pattern>(&self, pattern: P) -> bool {
+        crate::str::__lkj_starts_with(self.as_str(), pattern)
+    }
+    pub fn ends_with<P: crate::str::Pattern>(&self, pattern: P) -> bool {
+        crate::str::__lkj_ends_with(self.as_str(), pattern)
+    }
+    pub fn contains<P: crate::str::Pattern>(&self, pattern: P) -> bool {
+        crate::str::__lkj_contains(self.as_str(), pattern)
+    }
+    pub fn find<P: crate::str::Pattern>(&self, pattern: P) -> crate::Option<usize> {
+        crate::str::__lkj_find(self.as_str(), pattern)
+    }
+    pub fn rfind<P: crate::str::Pattern>(&self, pattern: P) -> crate::Option<usize> {
+        crate::str::__lkj_rfind(self.as_str(), pattern)
+    }
+    pub fn is_ascii(&self) -> bool {
+        crate::str::__lkj_is_ascii(self.as_str())
+    }
+    pub fn to_ascii_lowercase(&self) -> String {
+        crate::str::__lkj_to_ascii_lowercase(self.as_str())
+    }
+    pub fn to_ascii_uppercase(&self) -> String {
+        crate::str::__lkj_to_ascii_uppercase(self.as_str())
+    }
+    pub fn eq_ignore_ascii_case(&self, other: &str) -> bool {
+        crate::str::__lkj_eq_ignore_ascii_case(self.as_str(), other)
+    }
+    pub fn repeat(&self, count: usize) -> String {
+        crate::str::__lkj_repeat(self.as_str(), count)
+    }
+    pub fn replace<P: crate::str::Pattern>(&self, pattern: P, replacement: &str) -> String {
+        crate::str::__lkj_replace(self.as_str(), pattern, replacement)
+    }
+
     pub fn to_string(&self) -> String {
         self.clone()
     }
@@ -101,4 +154,9 @@ impl FromUtf8Error {
     pub fn into_bytes(self) -> Vec<u8> {
         self.bytes
     }
+}
+
+// Resolved compiler helpers retain the same source String implementation.
+pub fn __lkj_new() -> String {
+    String::new()
 }

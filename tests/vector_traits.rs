@@ -199,6 +199,7 @@ fn rust_observations(source: &str, probes: &[&str]) -> Vec<(String, i64)> {
         ("prelude", "prelude.rs"),
         ("bytes", "bytes.rs"),
         ("string", "string.rs"),
+        ("str", "str.rs"),
         ("sequence", "sequence.rs"),
     ] {
         let path = format!("{root}/library/{file}");
@@ -425,7 +426,7 @@ pub fn probe()->i64 {
     assert!(
         error
             .message
-            .contains("source sequence library is not loaded"),
+            .contains("source library module $std::sequence is not loaded"),
         "{error:?}"
     );
 }
@@ -588,14 +589,16 @@ fn invalid_sequence_source_mutation_keeps_the_library_diagnostic() {
 fn weakened_library_helpers_cannot_grant_missing_element_contracts() {
     let clone_start = SEQUENCE.find("pub fn __lkj_vec_clone").unwrap();
     let equality_start = SEQUENCE.find("pub fn __lkj_vec_equal").unwrap();
+    let repeat_start = SEQUENCE.find("pub fn __lkj_vec_repeat").unwrap();
     let weak_clone = format!(
         "{}pub fn __lkj_vec_clone<T>(_source:&Vec<T>)->Vec<T>{{Vec::new()}}\n{}",
         &SEQUENCE[..clone_start],
         &SEQUENCE[equality_start..]
     );
     let weak_equality = format!(
-        "{}pub fn __lkj_vec_equal<T>(_left:&Vec<T>,_right:&Vec<T>)->bool{{true}}\n",
-        &SEQUENCE[..equality_start]
+        "{}pub fn __lkj_vec_equal<T>(_left:&Vec<T>,_right:&Vec<T>)->bool{{true}}\n{}",
+        &SEQUENCE[..equality_start],
+        &SEQUENCE[repeat_start..]
     );
     for (changed, source, required) in [
         (

@@ -39,9 +39,10 @@ and source Option/Result, String and Vec traits execute.
 
 The production binary encoders, canonical-name helper, JSON encoder and complete
 K representation module also run through the ordinary language pipeline, with
-Rust comparisons and source mutations. Complete generic witness/lifetime
-contracts, closures, collection iteration, task scopes and compiler
-self-compilation remain unfinished.
+Rust comparisons and source mutations. Closures lower to capture structs and statically selected Fn/FnMut/FnOnce calls;
+character/text operations, repeated vectors and formatting use source-library
+contracts. Complete generic witness/lifetime contracts, collection iteration,
+range slicing, task scopes and compiler self-compilation remain unfinished.
 
 Generation one is preserved on the `generation-one` branch. Its compiler, store,
 services and formats are frozen and are not generation-two dependencies.

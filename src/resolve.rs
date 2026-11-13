@@ -1,7 +1,9 @@
 //! Module and declaration identity. Later phases consume resolved paths, never bare-name guesses.
+mod import_scopes;
 use crate::ast::*;
 use crate::names::qualified;
-use std::collections::BTreeMap;
+use import_scopes::ImportScopes;
+use std::collections::{BTreeMap, BTreeSet};
 
 type Result<T> = std::result::Result<T, Diagnostic>;
 #[derive(Clone)]
@@ -10,6 +12,26 @@ struct Binding {
     target: String,
     scope: ModuleId,
     public: Visibility,
+    glob: bool,
+    ambiguous: bool,
+}
+struct Resolved {
+    name: String,
+    binding: Option<Binding>,
+}
+impl Resolved {
+    fn intrinsic(name: String) -> Self {
+        Self {
+            name,
+            binding: None,
+        }
+    }
+    fn item(binding: Binding) -> Self {
+        Self {
+            name: binding.target.clone(),
+            binding: Some(binding),
+        }
+    }
 }
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Namespace {
@@ -21,7 +43,11 @@ pub struct Resolver<'a> {
     declarations: Vec<Declaration>,
     names: BTreeMap<(ModuleId, String, Namespace), Binding>,
     modules: BTreeMap<String, ModuleId>,
+    alternatives: BTreeMap<(ModuleId, String, Namespace), Vec<Binding>>,
     generic_ranges: Vec<(Span, Vec<String>)>,
+    import_scopes: ImportScopes,
+    trait_names: BTreeMap<(usize, DeclarationId), BTreeSet<String>>,
+    anonymous_traits: BTreeSet<(usize, DeclarationId)>,
     // Only an unresolved input needs a newly built relation. Resolved inputs
     // retain the program's authoritative table without constructing another.
     function_owners: Option<Vec<FunctionOwner>>,
@@ -165,12 +191,17 @@ impl<'a> Resolver<'a> {
             declarations: Vec::new(),
             names: BTreeMap::new(),
             modules: BTreeMap::new(),
+            alternatives: BTreeMap::new(),
             generic_ranges: Vec::new(),
+            import_scopes: ImportScopes::default(),
+            trait_names: BTreeMap::new(),
+            anonymous_traits: BTreeSet::new(),
             function_owners,
         };
         for (id, scope) in program.scopes.iter().enumerate() {
             result.modules.insert(scope.path.clone(), id);
         }
+        result.import_scopes = ImportScopes::new(program, &result.modules)?;
         for item in &program.impls {
             result.generics(item.span, &item.generics);
         }
@@ -303,6 +334,12 @@ impl<'a> Resolver<'a> {
             public,
             span,
         });
+        if ty && matches!(item, Item::Trait(_)) {
+            self.trait_names
+                .entry((scope, declaration))
+                .or_default()
+                .insert(name.to_string());
+        }
         for (enabled, namespace) in [(ty, Namespace::Type), (value, Namespace::Value)] {
             if enabled {
                 let key = (scope, name.to_string(), namespace);
@@ -315,6 +352,8 @@ impl<'a> Resolver<'a> {
                             target: qualified(path, name),
                             scope,
                             public,
+                            glob: false,
+                            ambiguous: false,
                         },
                     )
                     .is_some()
@@ -330,6 +369,16 @@ impl<'a> Resolver<'a> {
         Ok(())
     }
     fn access(&self, binding: &Binding, from: ModuleId, span: Span) -> Result<()> {
+        if binding.ambiguous {
+            return Err(Diagnostic::new(
+                span,
+                "E_NAME",
+                &format!(
+                    "ambiguous glob import {}",
+                    binding.target.rsplit("::").next().unwrap()
+                ),
+            ));
+        }
         if !visible(self.program, binding.scope, binding.public, from) {
             return Err(Diagnostic::new(
                 span,
@@ -344,6 +393,38 @@ impl<'a> Resolver<'a> {
             .get(&(scope, name.to_string(), namespace))
             .cloned()
     }
+    fn lookup_owner(
+        &self,
+        scope: ModuleId,
+        name: &str,
+        namespace: Namespace,
+        span: Span,
+    ) -> Option<usize> {
+        let mut owner = self.import_scopes.at(scope, span);
+        loop {
+            if self
+                .names
+                .contains_key(&(owner, name.to_string(), namespace))
+            {
+                return Some(owner);
+            }
+            owner = self.import_scopes.parent(owner)?;
+        }
+    }
+    fn lookup_lexical(
+        &self,
+        scope: ModuleId,
+        name: &str,
+        namespace: Namespace,
+        span: Span,
+    ) -> Option<Binding> {
+        self.lookup_owner(scope, name, namespace, span)
+            .and_then(|owner| {
+                self.names
+                    .get(&(owner, name.to_string(), namespace))
+                    .cloned()
+            })
+    }
     fn path(
         &self,
         scope: ModuleId,
@@ -351,13 +432,16 @@ impl<'a> Resolver<'a> {
         namespace: Namespace,
         span: Span,
         prelude: bool,
-    ) -> Result<Option<(String, Option<DeclarationId>)>> {
+    ) -> Result<Option<Resolved>> {
         let parts: Vec<_> = path.split("::").collect();
         if parts.is_empty() {
             return Ok(None);
         }
-        if self.generic(span, parts[0]) {
-            return Ok(Some((path.to_string(), None)));
+        let local_type = self
+            .lookup_owner(scope, parts[0], Namespace::Type, span)
+            .is_some_and(|owner| owner >= self.program.scopes.len());
+        if !local_type && self.generic(span, parts[0]) {
+            return Ok(Some(Resolved::intrinsic(path.to_string())));
         }
         if matches!(
             path,
@@ -366,11 +450,11 @@ impl<'a> Resolver<'a> {
                 | "mem::replace"
                 | "std::thread::scope"
                 | "std::str::from_utf8"
-        ) && !self
-            .names
-            .contains_key(&(scope, parts[0].to_string(), Namespace::Type))
+        ) && self
+            .lookup_lexical(scope, parts[0], Namespace::Type, span)
+            .is_none()
         {
-            return Ok(Some((path.to_string(), None)));
+            return Ok(Some(Resolved::intrinsic(path.to_string())));
         }
         let mut at = 0;
         let mut current = scope;
@@ -399,7 +483,11 @@ impl<'a> Resolver<'a> {
         } else {
             namespace
         };
-        let mut binding = self.lookup(current, parts[at], first_namespace);
+        let mut binding = if rooted {
+            self.lookup(current, parts[at], first_namespace)
+        } else {
+            self.lookup_lexical(current, parts[at], first_namespace, span)
+        };
         if binding.is_none() && !rooted && parts[at] == "std" && self.modules.contains_key("$std") {
             current = self.modules["$std"];
             at += 1;
@@ -417,13 +505,17 @@ impl<'a> Resolver<'a> {
                 _ => None,
             };
             if let Some(name) = intrinsic {
-                return Ok(Some((name.to_string(), None)));
+                return Ok(Some(Resolved::intrinsic(name.to_string())));
             }
             if remaining.starts_with("vec::Vec::") {
-                return Ok(Some((remaining.replacen("vec::", "", 1), None)));
+                return Ok(Some(Resolved::intrinsic(
+                    remaining.replacen("vec::", "", 1),
+                )));
             }
             if remaining.starts_with("boxed::Box::") {
-                return Ok(Some((remaining.replacen("boxed::", "", 1), None)));
+                return Ok(Some(Resolved::intrinsic(
+                    remaining.replacen("boxed::", "", 1),
+                )));
             }
             binding = self.lookup(
                 current,
@@ -445,8 +537,12 @@ impl<'a> Resolver<'a> {
                 } else {
                     "Result"
                 };
-                if let Some((owner, id)) = self.path(scope, owner, Namespace::Type, span, true)? {
-                    return Ok(Some((format!("{owner}::{}", parts[0]), id)));
+                if let Some(mut owner) = self.path(scope, owner, Namespace::Type, span, true)? {
+                    owner.name = format!("{}::{}", owner.name, parts[0]);
+                    if let Some(binding) = &mut owner.binding {
+                        binding.target = owner.name.clone();
+                    }
+                    return Ok(Some(owner));
                 }
             }
             if let Some(std_scope) = self.modules.get("$std::prelude") {
@@ -475,7 +571,7 @@ impl<'a> Resolver<'a> {
                             | "std::str::from_utf8"
                     ))
             {
-                return Ok(Some((path.to_string(), None)));
+                return Ok(Some(Resolved::intrinsic(path.to_string())));
             }
         }
         let mut binding = match binding {
@@ -502,15 +598,13 @@ impl<'a> Resolver<'a> {
                     at += 1;
                 }
                 Item::Struct(_) | Item::Enum(_) | Item::Alias(_) | Item::Trait(_) => {
-                    return Ok(Some((
-                        format!("{}::{}", binding.target, parts[at..].join("::")),
-                        Some(binding.declaration),
-                    )));
+                    binding.target = format!("{}::{}", binding.target, parts[at..].join("::"));
+                    return Ok(Some(Resolved::item(binding)));
                 }
                 _ => return Ok(None),
             }
         }
-        Ok(Some((binding.target.clone(), Some(binding.declaration))))
+        Ok(Some(Resolved::item(binding)))
     }
     fn resolve_path(
         &self,
@@ -519,9 +613,9 @@ impl<'a> Resolver<'a> {
         namespace: Namespace,
         span: Span,
     ) -> Result<()> {
-        if let Some((name, declaration)) = self.path(scope, &path.name, namespace, span, true)? {
-            path.name = name;
-            path.declaration = declaration;
+        if let Some(resolved) = self.path(scope, &path.name, namespace, span, true)? {
+            path.name = resolved.name;
+            path.declaration = resolved.binding.map(|binding| binding.declaration);
             Ok(())
         } else {
             Err(Diagnostic::new(
@@ -531,99 +625,241 @@ impl<'a> Resolver<'a> {
             ))
         }
     }
+    fn wider_binding(&self, incoming: &Binding, previous: &Binding) -> bool {
+        match (
+            region(self.program, incoming.scope, incoming.public),
+            region(self.program, previous.scope, previous.public),
+        ) {
+            (None, Some(_)) => true,
+            (Some(next), Some(old)) => next != old && within(self.program, old, next),
+            _ => false,
+        }
+    }
     fn import_binding(
         &mut self,
         use_item: &Use,
         scope: ModuleId,
         name: &str,
         ns: Namespace,
-        declaration: DeclarationId,
-        target_name: &str,
+        source: &Binding,
     ) -> Result<bool> {
-        let target = &self.declarations[declaration];
-        let target_region = region(self.program, target.scope, target.public);
+        let owner = self.import_scopes.import_owner(use_item, scope);
+        let key = (owner, name.to_string(), ns);
+        if use_item.glob && self.names.get(&key).is_some_and(|binding| !binding.glob) {
+            return Ok(false);
+        }
+        let target_region = region(self.program, source.scope, source.public);
         let use_region = region(self.program, scope, use_item.public);
         let export_allowed = match (target_region, use_region) {
             (None, _) => true,
             (Some(_), None) => false,
             (Some(target), Some(user)) => within(self.program, user, target),
         };
-        if !export_allowed {
+        if !export_allowed && !use_item.glob {
             return Err(Diagnostic::new(
                 use_item.span,
                 "E_PRIVACY",
-                "re-export is wider than the declaration's visibility",
+                "re-export is wider than the imported binding's visibility",
             ));
         }
-        let key = (scope, name.to_string(), ns);
-        if let Some(previous) = self.names.get(&key) {
-            if previous.declaration == declaration && previous.target == target_name {
+        let declaration = source.declaration;
+        let target = &self.declarations[declaration];
+        if name == "_" {
+            return Ok(ns == Namespace::Type
+                && matches!(target.item, Item::Trait(_))
+                && self.anonymous_traits.insert((owner, declaration)));
+        }
+        if ns == Namespace::Type && matches!(target.item, Item::Trait(_)) {
+            self.trait_names
+                .entry((owner, declaration))
+                .or_default()
+                .insert(name.to_string());
+        }
+        let incoming = Binding {
+            declaration,
+            target: source.target.clone(),
+            scope: if export_allowed { scope } else { source.scope },
+            public: if export_allowed {
+                use_item.public
+            } else {
+                source.public
+            },
+            glob: use_item.glob,
+            ambiguous: false,
+        };
+        if let Some(previous) = self.names.get(&key).cloned() {
+            let same = previous.declaration == declaration && previous.target == source.target;
+            if !previous.glob {
+                if same {
+                    return Ok(false);
+                }
+                return Err(Diagnostic::new(
+                    use_item.span,
+                    "E_NAME",
+                    &format!("ambiguous import {name}"),
+                ));
+            }
+            if !use_item.glob {
+                self.names.insert(key.clone(), incoming);
+                self.alternatives.remove(&key);
+                return Ok(true);
+            }
+            if same {
+                if self.wider_binding(&incoming, &previous) {
+                    self.names.insert(
+                        key,
+                        Binding {
+                            ambiguous: previous.ambiguous,
+                            ..incoming
+                        },
+                    );
+                    return Ok(true);
+                }
                 return Ok(false);
             }
-            return Err(Diagnostic::new(
-                use_item.span,
-                "E_NAME",
-                &format!("ambiguous import {name}"),
-            ));
+            if let Some(position) = self.alternatives.get(&key).and_then(|bindings| {
+                bindings.iter().position(|binding| {
+                    binding.declaration == declaration && binding.target == source.target
+                })
+            }) {
+                let previous = &self.alternatives[&key][position];
+                if self.wider_binding(&incoming, previous) {
+                    self.alternatives.get_mut(&key).unwrap()[position] = incoming;
+                    return Ok(true);
+                }
+                return Ok(false);
+            }
+            self.alternatives
+                .entry(key.clone())
+                .or_default()
+                .push(incoming);
+            self.names.get_mut(&key).unwrap().ambiguous = true;
+            return Ok(true);
         }
-        self.names.insert(
-            key,
-            Binding {
-                declaration,
-                target: target_name.to_string(),
-                scope,
-                public: use_item.public,
-            },
-        );
+        self.names.insert(key, incoming);
         Ok(true)
+    }
+    fn module_members(
+        &self,
+        target: ModuleId,
+        scope: ModuleId,
+    ) -> Vec<(String, Namespace, Binding)> {
+        let mut entries = Vec::new();
+        for (key, binding) in self
+            .names
+            .range((target, String::new(), Namespace::Type)..)
+            .take_while(|((owner, _, _), _)| *owner == target)
+        {
+            if visible(self.program, binding.scope, binding.public, scope) {
+                entries.push((key.1.clone(), key.2, binding.clone()));
+            }
+            if let Some(alternatives) = self.alternatives.get(key) {
+                for binding in alternatives {
+                    if visible(self.program, binding.scope, binding.public, scope) {
+                        entries.push((key.1.clone(), key.2, binding.clone()));
+                    }
+                }
+            }
+        }
+        entries
+    }
+    fn module_anchor(&self, scope: ModuleId, path: &str, span: Span) -> Result<Option<ModuleId>> {
+        if path == "crate" {
+            return Ok(Some(self.program.scopes[scope].crate_root));
+        }
+        if path == "self" {
+            return Ok(Some(scope));
+        }
+        if path == "std"
+            && self
+                .lookup_lexical(scope, "std", Namespace::Type, span)
+                .is_none()
+        {
+            return Ok(self.modules.get("$std").copied());
+        }
+        if !path.is_empty() && path.split("::").all(|part| part == "super") {
+            let mut current = scope;
+            for _ in path.split("::") {
+                current = self.program.scopes[current]
+                    .parent
+                    .ok_or_else(|| Diagnostic::new(span, "E_NAME", "super has no parent module"))?;
+            }
+            return Ok(Some(current));
+        }
+        Ok(None)
     }
     fn import_one(&mut self, index: usize) -> Result<(bool, bool)> {
         let import = self.program.uses[index].clone();
         let scope = self.modules[&import.module];
         let mut changed = false;
         if import.glob {
-            let resolved = self.path(scope, &import.path, Namespace::Type, import.span, false)?;
-            let id = match resolved {
-                Some((_, Some(id))) => id,
-                _ => return Ok((false, false)),
-            };
-            let target = match self.declarations[id].item {
-                Item::Module(m) => self.program.modules[m].scope,
-                _ => {
-                    return Err(Diagnostic::new(
-                        import.span,
-                        "E_UNSUPPORTED",
-                        "glob imports currently require a module",
-                    ));
+            let mut target = self.module_anchor(scope, &import.path, import.span)?;
+            let mut enum_target = None;
+            if target.is_none() {
+                let resolved =
+                    self.path(scope, &import.path, Namespace::Type, import.span, false)?;
+                let binding = match resolved.and_then(|resolved| resolved.binding) {
+                    Some(binding) => binding,
+                    None => return Ok((false, false)),
+                };
+                let declaration = &self.declarations[binding.declaration];
+                match declaration.item {
+                    Item::Module(index) => target = Some(self.program.modules[index].scope),
+                    Item::Enum(index) if binding.target == declaration.name => {
+                        enum_target = Some((index, binding));
+                    }
+                    _ => {
+                        return Err(Diagnostic::new(
+                            import.span,
+                            "E_IMPORT",
+                            "glob import requires a module or enum",
+                        ));
+                    }
                 }
+            }
+            if target == Some(self.import_scopes.import_owner(&import, scope)) {
+                return Err(Diagnostic::new(
+                    import.span,
+                    "E_IMPORT",
+                    "a module cannot glob-import itself",
+                ));
+            }
+            let entries: Vec<_> = if let Some(target) = target {
+                self.module_members(target, scope)
+            } else if let Some((index, binding)) = enum_target {
+                self.program.enums[index]
+                    .variants
+                    .iter()
+                    .flat_map(|variant| {
+                        [Namespace::Type, Namespace::Value].into_iter().map({
+                            let mut binding = binding.clone();
+                            binding.target = qualified(&binding.target, &variant.name);
+                            move |namespace| (variant.name.clone(), namespace, binding.clone())
+                        })
+                    })
+                    .collect()
+            } else {
+                return Ok((false, false));
             };
-            let entries: Vec<_> = self
-                .names
-                .iter()
-                .filter(|((s, _, _), b)| {
-                    *s == target && visible(self.program, b.scope, b.public, scope)
-                })
-                .map(|((_, n, ns), b)| (n.clone(), *ns, b.declaration, b.target.clone()))
-                .collect();
-            for (name, ns, id, target) in entries {
-                changed |= self.import_binding(&import, scope, &name, ns, id, &target)?;
+            for (name, namespace, binding) in entries {
+                changed |= self.import_binding(&import, scope, &name, namespace, &binding)?;
             }
             Ok((changed, true))
         } else {
             let mut found = false;
             for ns in [Namespace::Type, Namespace::Value] {
-                if let Some((target, Some(id))) =
-                    self.path(scope, &import.path, ns, import.span, false)?
+                if let Some(binding) = self
+                    .path(scope, &import.path, ns, import.span, false)?
+                    .and_then(|resolved| resolved.binding)
                 {
                     found = true;
-                    changed |=
-                        self.import_binding(&import, scope, &import.alias, ns, id, &target)?;
+                    changed |= self.import_binding(&import, scope, &import.alias, ns, &binding)?;
                 }
             }
             if !found
                 && self
                     .path(scope, &import.path, Namespace::Type, import.span, true)?
-                    .is_some_and(|(_, id)| id.is_none())
+                    .is_some_and(|resolved| resolved.binding.is_none())
             {
                 return Err(Diagnostic::new(
                     import.span,
@@ -635,14 +871,11 @@ impl<'a> Resolver<'a> {
         }
     }
     fn imports(&mut self) -> Vec<Diagnostic> {
-        let mut problems = BTreeMap::new();
         loop {
+            let mut problems = BTreeMap::new();
             let mut unresolved = Vec::new();
             let mut changed = false;
             for index in 0..self.program.uses.len() {
-                if problems.contains_key(&index) {
-                    continue;
-                }
                 match self.import_one(index) {
                     Ok((updated, found)) => {
                         changed |= updated;
@@ -667,10 +900,9 @@ impl<'a> Resolver<'a> {
                         ),
                     );
                 }
-                break;
+                return problems.into_values().collect();
             }
         }
-        problems.into_values().collect()
     }
 }
 
@@ -733,7 +965,7 @@ impl Resolver<'_> {
     }
     pub fn type_name(&self, scope: ModuleId, name: &str, span: Span) -> Result<String> {
         self.path(scope, name, Namespace::Type, span, true)?
-            .map(|(name, _)| name)
+            .map(|resolved| resolved.name)
             .ok_or_else(|| Diagnostic::new(span, "E_NAME", &format!("unresolved type {name}")))
     }
     pub fn prelude_type(&self, name: &str, span: Span) -> Result<String> {
@@ -757,12 +989,13 @@ impl Resolver<'_> {
         self.resolve_path(scope, &mut path, Namespace::Type, span)?;
         Ok(path)
     }
-    pub fn sequence_function(&self, name: &str, span: Span) -> Result<usize> {
-        let scope = self.modules.get("$std::sequence").copied().ok_or_else(|| {
+    pub fn library_function(&self, module: &str, name: &str, span: Span) -> Result<usize> {
+        let module = format!("$std::{module}");
+        let scope = self.modules.get(&module).copied().ok_or_else(|| {
             Diagnostic::new(
                 span,
                 "E_UNSUPPORTED",
-                "source sequence library is not loaded",
+                &format!("source library module {module} is not loaded"),
             )
         })?;
         let path = self.value_path(
@@ -775,28 +1008,50 @@ impl Resolver<'_> {
             span,
         )?;
         let declaration = path.declaration.ok_or_else(|| {
-            Diagnostic::new(
-                span,
-                "E_NAME",
-                "source sequence helper is not a declaration",
-            )
+            Diagnostic::new(span, "E_NAME", "source library helper is not a declaration")
         })?;
         match self.declarations[declaration].item {
             Item::Function(index) => Ok(index),
             _ => Err(Diagnostic::new(
                 span,
                 "E_TYPE",
-                "source sequence helper is not a function",
+                "source library helper is not a function",
             )),
         }
     }
-    pub fn trait_in_scope(&self, scope: ModuleId, declaration: DeclarationId) -> bool {
-        self.names.iter().any(|((owner, _, namespace), binding)| {
-            *owner == scope
-                && *namespace == Namespace::Type
-                && binding.declaration == declaration
-                && visible(self.program, binding.scope, binding.public, scope)
-        })
+    pub fn sequence_function(&self, name: &str, span: Span) -> Result<usize> {
+        self.library_function("sequence", name, span)
+    }
+    pub fn trait_in_scope(&self, scope: ModuleId, declaration: DeclarationId, span: Span) -> bool {
+        let mut owner = self.import_scopes.at(scope, span);
+        loop {
+            if self.anonymous_traits.contains(&(owner, declaration)) {
+                return true;
+            }
+            if let Some(names) = self.trait_names.get(&(owner, declaration)) {
+                for name in names {
+                    if self.lookup_owner(scope, name, Namespace::Type, span) != Some(owner) {
+                        continue;
+                    }
+                    let key = (owner, name.clone(), Namespace::Type);
+                    if self.names.get(&key).is_some_and(|binding| {
+                        binding.declaration == declaration
+                            && visible(self.program, binding.scope, binding.public, scope)
+                    }) || self.alternatives.get(&key).is_some_and(|bindings| {
+                        bindings.iter().any(|binding| {
+                            binding.declaration == declaration
+                                && visible(self.program, binding.scope, binding.public, scope)
+                        })
+                    }) {
+                        return true;
+                    }
+                }
+            }
+            let Some(parent) = self.import_scopes.parent(owner) else {
+                return false;
+            };
+            owner = parent;
+        }
     }
     pub fn declaration_visible(&self, scope: ModuleId, declaration: DeclarationId) -> bool {
         let item = &self.declarations[declaration];

@@ -6,7 +6,7 @@ import { run } from './process.mjs';
 import { runCases } from './batch.mjs';
 import { oracleCache,packResult,unpackResult } from './oracle.mjs';
 const binary=path.resolve(process.argv[2]||'target/debug/lkjscript');
-const engine=process.env.LKJ_ENGINE||'node';
+const engine=process.env.LKJ_ENGINE || 'native';
 const suites=process.argv.slice(3);if(!suites.length)suites.push('idioms','ownership','rejected');
 const out=path.resolve('target/corpus');fs.mkdirSync(out,{recursive:true});
 let fatal=false;

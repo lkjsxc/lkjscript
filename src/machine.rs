@@ -62,6 +62,7 @@ impl RunError {
 pub enum Scalar {
     Unit,
     Bool(bool),
+    Char(char),
     Int { value: u64, bits: u8, signed: bool },
     F64 { bits: u64 },
 }
@@ -548,6 +549,14 @@ impl<H: Host> Machine<'_, H> {
                         let next = self.reference_access(reference)?;
                         access.writable =
                             *mutable && (access.permissions.is_empty() || access.writable);
+                        // Following a shared reference copies its independent permission.
+                        // Reading its descriptor was checked above; the descriptor's
+                        // carrier need not stay borrowed. The reference's own parents
+                        // still preserve any exclusive ancestor. Mutable references
+                        // cannot be copied, so their carrier path remains a parent.
+                        if !*mutable {
+                            access.permissions.clear();
+                        }
                         access.permissions.extend_from_slice(&next.permissions);
                         access.cell = next.cell;
                         access.ty = *inner;
@@ -648,6 +657,10 @@ impl<H: Host> Machine<'_, H> {
             match (self.kind(ty)?, value) {
                 (TypeKind::Unit, Value::Unit) => true,
                 (TypeKind::Bool, Value::Bits(value)) => *value <= 1,
+                (TypeKind::Char, Value::Bits(value)) => u32::try_from(*value)
+                    .ok()
+                    .and_then(char::from_u32)
+                    .is_some(),
                 (TypeKind::Int { bits, signed }, Value::Bits(value))
                     if [8, 16, 32, 64].contains(bits) =>
                 {
@@ -725,7 +738,11 @@ impl<H: Host> Machine<'_, H> {
                 continue;
             }
             match self.kind(ty)? {
-                TypeKind::Unit | TypeKind::Bool | TypeKind::Int { .. } | TypeKind::F64 => {}
+                TypeKind::Unit
+                | TypeKind::Bool
+                | TypeKind::Char
+                | TypeKind::Int { .. }
+                | TypeKind::F64 => {}
                 TypeKind::Ref { mutable: false, .. } => {}
                 TypeKind::Array { inner, .. } => pending.push(*inner),
                 TypeKind::Struct { fields, copy: true } => {
@@ -928,6 +945,11 @@ impl<H: Host> Machine<'_, H> {
         match (self.kind(ty)?, value) {
             (TypeKind::Unit, Value::Unit) => Ok(Scalar::Unit),
             (TypeKind::Bool, Value::Bits(value)) => Ok(Scalar::Bool(*value != 0)),
+            (TypeKind::Char, Value::Bits(value)) => u32::try_from(*value)
+                .ok()
+                .and_then(char::from_u32)
+                .map(Scalar::Char)
+                .ok_or_else(|| self.invalid("invalid character result")),
             (TypeKind::Int { bits, signed }, Value::Bits(value)) => Ok(Scalar::Int {
                 value: *value,
                 bits: *bits,
@@ -1821,7 +1843,7 @@ fn run_inner<'a, H: Host>(
         for (local, argument) in function.locals.iter().zip(args) {
             if !matches!(
                 machine.kind(local.ty)?,
-                TypeKind::Bool | TypeKind::Int { .. } | TypeKind::F64
+                TypeKind::Bool | TypeKind::Char | TypeKind::Int { .. } | TypeKind::F64
             ) {
                 return Err(machine.invalid("raw host arguments may only be scalar values"));
             }

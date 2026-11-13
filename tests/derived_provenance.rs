@@ -4,8 +4,9 @@ mod bootstrap_library;
 
 use lkjscript::compiler;
 use lkjscript::source::{SourceBundle, SourceInput};
-use std::io::Write;
-use std::process::{Command, Stdio};
+#[path = "support/native.rs"]
+mod native;
+use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 static NEXT: AtomicUsize = AtomicUsize::new(0);
@@ -231,30 +232,9 @@ fn same_source(source: &str, probes: &[&str]) {
         "{}",
         String::from_utf8_lossy(&observed.stderr)
     );
-    let artifact =
-        compiler::compile(&bundle(source)).unwrap_or_else(|problem| panic!("{problem:?}"));
-    let mut script = String::from(
-        "const chunks=[];process.stdin.on('data',b=>chunks.push(b));process.stdin.on('end',async()=>{try{const {instance}=await WebAssembly.instantiate(Buffer.concat(chunks),{lkjscript:{trap(c,l){throw Error('trap '+c+':'+l)}}});",
-    );
-    for name in probes {
-        script.push_str(&format!(
-            "if(instance.exports['fn:{name}']()!==0n)throw Error('{name} failed');"
-        ));
-    }
-    script.push_str("}catch(e){console.error(e);process.exitCode=1}})");
-    let mut child = Command::new("node")
-        .arg("-e")
-        .arg(script)
-        .stdin(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    child.stdin.take().unwrap().write_all(&artifact).unwrap();
-    let output = child.wait_with_output().unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
+    native::assert_bundle(
+        &bundle(source),
+        &probes.iter().map(|name| (*name, 0)).collect::<Vec<_>>(),
     );
     std::fs::remove_dir_all(directory).unwrap();
 }

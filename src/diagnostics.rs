@@ -37,8 +37,6 @@ pub fn census(report: &SourceReport) -> Census {
     let program = &report.program;
     for node in &program.exprs {
         let kind = match &node.kind {
-            Expr::Closure { .. } => Some("closure"),
-            Expr::Char(_) => Some("char literal"),
             Expr::For {
                 iterator, pattern, ..
             } => {
@@ -59,10 +57,6 @@ pub fn census(report: &SourceReport) -> Census {
                 sites.insert((span.file, span.line, span.column));
                 Some("range slicing")
             }
-            Expr::Macro {
-                name, separator, ..
-            } if name == "vec" && separator == ";" => Some("repeated Vec literal"),
-            Expr::Macro { name, .. } if name == "format" => Some("format!"),
             _ => None,
         };
         if let Some(kind) = kind {

@@ -127,14 +127,18 @@ pub fn run(argv: &[String]) -> Result<(), String> {
                         if let Some(error) = outcome.error {
                             record(index, true, 1, &outcome.stdout, &error);
                         } else {
-                            outcome.stdout.extend_from_slice(
-                                scalar(native::scalar(
-                                    program,
-                                    &program.functions[entry],
-                                    outcome.value,
-                                ))
-                                .as_bytes(),
-                            );
+                            let value = match native::scalar(
+                                program,
+                                &program.functions[entry],
+                                outcome.value,
+                            ) {
+                                Ok(value) => value,
+                                Err(error) => {
+                                    record(index, true, 1, &outcome.stdout, &error);
+                                    continue;
+                                }
+                            };
+                            outcome.stdout.extend_from_slice(scalar(value).as_bytes());
                             record(index, true, 0, &outcome.stdout, "");
                         }
                     }

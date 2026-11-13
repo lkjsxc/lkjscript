@@ -256,12 +256,32 @@ impl Builder<'_, '_> {
             .collect();
         while let Some(local) = ready.pop_last() {
             let parents = self.carriers.get(&local).cloned().unwrap_or_default();
-            self.emit(
-                k::Op::Drop {
-                    place: k::Place::local(local),
-                },
-                line,
-            );
+            let fields = self.compiler.closure_reference_fields(self.ty(local));
+            if fields.is_empty() {
+                self.emit(
+                    k::Op::Drop {
+                        place: k::Place::local(local),
+                    },
+                    line,
+                );
+            } else {
+                // Release only capture descriptors after the final call. Owned
+                // fields retain their lexical destructor point and drop order.
+                for field in fields {
+                    self.emit(
+                        k::Op::DropIf {
+                            place: k::Place {
+                                local,
+                                projections: vec![k::Projection::Field(field)],
+                            },
+                        },
+                        line,
+                    );
+                }
+                self.references.set(local, false);
+                self.reference_updates.set(local, false);
+                self.remove_dependencies(local);
+            }
             for parent in parents {
                 if let Some(count) = dependents.get_mut(&parent) {
                     *count -= 1;

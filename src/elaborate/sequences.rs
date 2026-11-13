@@ -38,6 +38,32 @@ impl Builder<'_, '_> {
         Ok((destination, result))
     }
 
+    pub(super) fn vector_repeat(
+        &mut self,
+        value: usize,
+        count: usize,
+        element: usize,
+        span: a::Span,
+    ) -> Result<(usize, usize)> {
+        if !self.compiler.satisfies_bound(element, "Clone") {
+            return Err(err(
+                span,
+                "E_TRAIT",
+                "Vec repetition requires element Clone",
+            ));
+        }
+        let vector = self
+            .compiler
+            .intern(String::new(), k::TypeKind::Vec { inner: element });
+        self.sequence_call(
+            "__lkj_vec_repeat",
+            element,
+            vec![value, count],
+            vector,
+            span,
+        )
+    }
+
     pub(super) fn vector_equality_values(
         &mut self,
         operation: &str,
@@ -97,18 +123,19 @@ impl Compiler<'_> {
         let vector = self.intern(String::new(), k::TypeKind::Vec { inner: element });
         let reference = self.reference(vector, false);
         let (parameters, result) = match name {
-            "__lkj_vec_clone" => (1, vector),
-            "__lkj_vec_equal" => (2, k::BOOL),
+            "__lkj_vec_clone" => (vec![reference], vector),
+            "__lkj_vec_equal" => (vec![reference, reference], k::BOOL),
+            "__lkj_vec_repeat" => (vec![element, k::U64], vector),
             _ => return Err(err(span, "E_TYPE", "unknown source Vec helper operation")),
         };
         let contract = &self.functions[function];
-        if contract.params != parameters
+        if contract.params != parameters.len()
             || contract.result != result
             || contract
                 .locals
                 .iter()
-                .take(parameters)
-                .any(|local| local.ty != reference)
+                .zip(&parameters)
+                .any(|(local, expected)| local.ty != *expected)
         {
             return Err(err(
                 span,

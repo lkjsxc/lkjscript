@@ -3,9 +3,10 @@
 mod bootstrap_library;
 
 use lkjscript::source::{SourceBundle, SourceInput};
-use lkjscript::{check, compiler, k, k_text, wasm};
-use std::io::Write;
-use std::process::{Command, Stdio};
+#[path = "support/native.rs"]
+mod native;
+use lkjscript::{check, compiler, k, k_text};
+use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 static NEXT: AtomicUsize = AtomicUsize::new(0);
@@ -60,24 +61,8 @@ fn rust_metadata(source: &str) -> std::process::Output {
     output
 }
 
-fn run(bytes: &[u8], expected: i64) {
-    let script = format!(
-        "const chunks=[];process.stdin.on('data',b=>chunks.push(b));process.stdin.on('end',async()=>{{try{{const {{instance}}=await WebAssembly.instantiate(Buffer.concat(chunks),{{lkjscript:{{trap(c,l){{throw Error('trap '+c+':'+l)}}}}}});const value=instance.exports['fn:probe']();if(value!=={expected}n)throw Error('expected {expected}, got '+value);}}catch(e){{console.error(e);process.exitCode=1}}}})"
-    );
-    let mut child = Command::new("node")
-        .arg("-e")
-        .arg(script)
-        .stdin(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    child.stdin.take().unwrap().write_all(bytes).unwrap();
-    let output = child.wait_with_output().unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+fn run(checked: &k::CheckedProgram, expected: i64) {
+    native::assert_values(checked, &[("probe", expected)]);
 }
 
 fn reference(inner: usize) -> k::TypeKind {
@@ -393,7 +378,7 @@ fn reborrowing_a_call_result_does_not_narrow_its_owner_footprint() {
 #[test]
 fn direct_k_reborrow_preserves_an_opaque_call_footprint_after_carrier_drop() {
     let valid = check::check(call_reborrow(false)).unwrap();
-    run(&wasm::emit(&valid).unwrap(), 2);
+    run(&valid, 2);
     let error = check::check(call_reborrow(true))
         .err()
         .expect("K must retain the borrowed whole-owner footprint");
@@ -444,7 +429,7 @@ pub fn probe()->usize {
         String::from_utf8_lossy(&rust.stderr)
     );
     run(
-        &compiler::compile(&bundle(source)).unwrap_or_else(|error| panic!("{error:?}")),
+        &compiler::check_bundle(&bundle(source)).unwrap_or_else(|error| panic!("{error:?}")),
         6,
     );
 }
@@ -540,7 +525,7 @@ fn bounded_reference_writes_cannot_erase_sibling_provenance_before_drop() {
 fn bounded_scalar_writes_preserve_sibling_loans_and_destructor_inputs() {
     for replace in [true, false] {
         let valid = check::check(bounded_write(replace, false, false)).unwrap();
-        run(&wasm::emit(&valid).unwrap(), 0);
+        run(&valid, 0);
         let error = check::check(bounded_write(replace, false, true))
             .err()
             .expect("a scalar write must retain its sibling reference loans");

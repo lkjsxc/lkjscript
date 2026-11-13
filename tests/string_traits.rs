@@ -10,6 +10,12 @@ mod rust_prelude;
 #[path = "../library/string.rs"]
 #[allow(dead_code)]
 mod rust_string;
+#[path = "../library/str.rs"]
+#[allow(dead_code)]
+mod str;
+mod string {
+    pub use super::rust_string::String;
+}
 pub use rust_prelude::{Option, Result};
 
 use lkjscript::compiler;

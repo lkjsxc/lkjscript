@@ -3,9 +3,9 @@
 mod bootstrap_library;
 
 use lkjscript::ast::Diagnostic;
-use lkjscript::{check, compiler, k, k_text, source, wasm};
-use std::io::Write;
-use std::process::{Command, Stdio};
+use lkjscript::{check, compiler, k, k_text, source};
+#[path = "support/native.rs"]
+mod native;
 
 const STR: usize = 7;
 const TEXT: usize = 8;
@@ -659,27 +659,6 @@ fn source_rejected(text: &str, code: &str) {
     }
 }
 
-fn run(checked: k::CheckedProgram, observations: &str) {
-    let bytes = wasm::emit(&checked).expect("checked text K must emit");
-    let script = format!(
-        "const chunks=[];process.stdin.on('data',b=>chunks.push(b));process.stdin.on('end',async()=>{{try{{const {{instance}}=await WebAssembly.instantiate(Buffer.concat(chunks),{{lkjscript:{{trap(c,l){{throw Error('trap '+c+':'+l)}}}}}});{observations}}}catch(e){{console.error(e);process.exitCode=1}}}})"
-    );
-    let mut child = Command::new("node")
-        .arg("-e")
-        .arg(script)
-        .stdin(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    child.stdin.take().unwrap().write_all(&bytes).unwrap();
-    let output = child.wait_with_output().unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-}
-
 #[test]
 fn source_literal_returns_and_byte_views_survive_local_reference_cleanup() {
     let source = r#"
@@ -691,10 +670,7 @@ fn source_literal_returns_and_byte_views_survive_local_reference_cleanup() {
             view[0] as i64 + view[9] as i64
         }
     "#;
-    run(
-        checked_source(source),
-        "if(instance.exports['fn:probe']()!==193n)throw Error('static byte view lost its data');",
-    );
+    native::assert_values(&checked_source(source), &[("probe", 193)]);
 }
 
 #[test]
@@ -732,10 +708,7 @@ fn source_string_copying_and_append_preserve_literals_and_borrowed_views() {
             text.len() as i64 + text.as_bytes()[0] as i64
         }
     "#;
-    run(
-        checked_source(source),
-        "for(let i=0;i<10;i++){if(instance.exports['fn:probe']()!==197n)throw Error('owned text changed literal storage');}",
-    );
+    native::assert_values(&checked_source(source), &[("probe", 197); 10]);
 }
 
 #[test]
@@ -748,10 +721,7 @@ fn source_aggregate_static_references_return_through_a_checked_call() {
             pair.left.len() as i64 + pair.right.len() as i64
         }
     "#;
-    run(
-        checked_source(source),
-        "if(instance.exports['fn:probe']()!==9n)throw Error('static aggregate call lost its views');",
-    );
+    native::assert_values(&checked_source(source), &[("probe", 9)]);
 }
 
 #[test]
@@ -810,10 +780,7 @@ fn source_static_literals_can_share_a_shorter_dynamic_view_lifetime() {
             pair.prefix.len() as i64 + pair.value.len() as i64
         }
     "#;
-    run(
-        checked_source(source),
-        "if(instance.exports['fn:probe']()!==9n)throw Error('mixed static/dynamic source lifetime');",
-    );
+    native::assert_values(&checked_source(source), &[("probe", 9)]);
 }
 
 #[test]
@@ -840,10 +807,7 @@ fn a_user_utf8_function_is_selected_by_its_resolved_declaration() {
         }
         pub fn probe() -> i64 { std::str::from_utf8(41) }
     "#;
-    run(
-        checked_source(source),
-        "if(instance.exports['fn:probe']()!==42n)throw Error('user from_utf8 declaration was hijacked');",
-    );
+    native::assert_values(&checked_source(source), &[("probe", 42)]);
 }
 
 #[test]
@@ -873,8 +837,5 @@ fn source_generic_trait_calls_preserve_static_result_contracts() {
         fn via<T:Text>(value: &T) -> &'static str { value.get() }
         pub fn probe() -> i64 { via(&1i64).len() as i64 }
     "#;
-    run(
-        checked_source(source),
-        "if(instance.exports['fn:probe']()!==7n)throw Error('static generic trait result lost its contract');",
-    );
+    native::assert_values(&checked_source(source), &[("probe", 7)]);
 }

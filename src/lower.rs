@@ -25,6 +25,10 @@ impl Layouts {
                     bytes: 1,
                     signed: false,
                 },
+                TypeKind::Char => Storage {
+                    bytes: 4,
+                    signed: false,
+                },
                 TypeKind::Int { bits, signed } => Storage {
                     bytes: bits / 8,
                     signed,
@@ -493,6 +497,7 @@ impl<'a> Body<'a> {
         let (bits, signed) = match self.program.types[ty].kind {
             TypeKind::Int { bits, signed } => (bits, signed),
             TypeKind::Bool => (1, false),
+            TypeKind::Char => (32, false),
             _ => return Err("non-numeric K binary operation".to_string()),
         };
         self.read(left);
@@ -1012,6 +1017,14 @@ impl<'a> Body<'a> {
                 self.read(args[0]);
                 match (from, to) {
                     (TypeKind::F64, TypeKind::F64) => {}
+                    (
+                        TypeKind::Int {
+                            bits: 8,
+                            signed: false,
+                        }
+                        | TypeKind::Char,
+                        TypeKind::Char,
+                    ) => {}
                     (TypeKind::Int { signed, .. }, TypeKind::F64) => {
                         self.code.push(if *signed {
                             Instruction::Scalar(ScalarOp::F64ConvertI64S)

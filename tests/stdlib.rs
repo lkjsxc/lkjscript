@@ -1,9 +1,10 @@
 #[path = "../bridge/library.rs"]
 mod bootstrap_library;
-// Existing Rust library behavior and Node execution are compared on the same probes.
-use lkjscript::{check, elaborate, source, wasm};
-use std::io::Write;
-use std::process::{Command, Stdio};
+// Existing Rust library behavior and native execution use the same probes.
+#[path = "support/native.rs"]
+mod native;
+use lkjscript::{k, source};
+use std::process::Command;
 
 #[path = "../library/bytes.rs"]
 #[allow(dead_code)]
@@ -17,7 +18,7 @@ mod rust_map;
 mod rust_prelude;
 pub use rust_prelude::{Option, Result};
 
-fn compile(text: &str, _library: &str) -> Vec<u8> {
+fn compile(text: &str, _library: &str) -> k::CheckedProgram {
     let text = format!("use std::bytes::*; use std::collections::BTreeMap;\n{text}");
     let mut files = bootstrap_library::standard_library();
     files.push(source::SourceInput {
@@ -29,35 +30,11 @@ fn compile(text: &str, _library: &str) -> Vec<u8> {
         library: Some("$std/lib.rs".to_string()),
         files,
     };
-    let parsed = source::parse_bundle(&bundle).unwrap();
-    let program = elaborate::elaborate(&parsed).unwrap();
-    wasm::emit(&check::check(program).unwrap()).unwrap()
+    native::check(&bundle)
 }
 
-fn run_node(bytes: &[u8], entry: &str, expected: i64) {
-    let code = format!(
-        "const chunks=[];process.stdin.on('data',b=>chunks.push(b));\
-         process.stdin.on('end',async()=>{{try{{\
-         const {{instance}}=await WebAssembly.instantiate(Buffer.concat(chunks),\
-         {{lkjscript:{{trap(c,l){{throw Error('trap '+c+':'+l)}}}}}});\
-         const value=instance.exports['fn:{entry}']();\
-         if(value!=={expected}n)throw Error('expected {expected}, got '+value);\
-         }}catch(e){{console.error(e);process.exitCode=1}}}});"
-    );
-    let mut child = Command::new("node")
-        .arg("-e")
-        .arg(code)
-        .stdin(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    child.stdin.take().unwrap().write_all(bytes).unwrap();
-    let result = child.wait_with_output().unwrap();
-    assert!(
-        result.status.success(),
-        "{}",
-        String::from_utf8_lossy(&result.stderr)
-    );
+fn run(checked: &k::CheckedProgram, entry: &str, expected: i64) {
+    native::assert_values(checked, &[(entry, expected)]);
 }
 
 #[test]
@@ -83,7 +60,7 @@ fn option_and_result_own_affine_payloads() {
     let value = held.unwrap();
     let absent: rust_prelude::Option<i64> = rust_prelude::Option::None;
     let expected = rust_prelude::Result::<i64, i64>::Ok(*value + absent.unwrap_or(5)).unwrap();
-    run_node(&compile(source, ""), "prelude_probe", expected);
+    run(&compile(source, ""), "prelude_probe", expected);
 }
 
 #[test]
@@ -107,7 +84,7 @@ fn byte_readers_match_rust() {
     assert!(rust_bytes::valid_utf8(&bytes));
     assert!(!rust_bytes::valid_utf8(&[237, 160, 128]));
     let expected = rust_bytes::find_byte(&bytes, 67).unwrap() as i64 + bytes.len() as i64;
-    run_node(
+    run(
         &compile(source, include_str!("../library/bytes.rs")),
         "bytes_probe",
         expected,
@@ -153,7 +130,7 @@ fn ordered_map_inserts_replaces_and_removes_affine_values() {
     };
     let removed = map.remove(&1).unwrap();
     let expected = *previous + *removed + map.len() as i64 + observed + changed;
-    run_node(
+    run(
         &compile(source, include_str!("../library/ordered_map.rs")),
         "map_probe",
         expected,
@@ -163,6 +140,12 @@ fn ordered_map_inserts_replaces_and_removes_affine_values() {
 #[path = "../library/string.rs"]
 #[allow(dead_code)]
 mod rust_string;
+#[path = "../library/str.rs"]
+#[allow(dead_code)]
+mod str;
+mod string {
+    pub use super::rust_string::String;
+}
 
 #[test]
 fn strings_validate_and_project_borrowed_bytes() {
@@ -200,7 +183,7 @@ fn strings_validate_and_project_borrowed_bytes() {
         include_str!("../library/bytes.rs"),
         include_str!("../library/string.rs")
     );
-    run_node(&compile(source, &library), "string_probe", expected);
+    run(&compile(source, &library), "string_probe", expected);
 }
 
 #[test]
@@ -264,5 +247,5 @@ fn byte_vector_keys_use_source_lexicographic_order() {
         include_str!("../library/ordered_map.rs"),
         include_str!("../library/sequence.rs")
     );
-    run_node(&compile(source, &library), "byte_keys_probe", expected);
+    run(&compile(source, &library), "byte_keys_probe", expected);
 }

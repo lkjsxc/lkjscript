@@ -173,6 +173,7 @@ fn kind_value(kind: &k::TypeKind) -> i64 {
     match kind {
         k::TypeKind::Unit => 1,
         k::TypeKind::Bool => 2,
+        k::TypeKind::Char => 5,
         k::TypeKind::Int { bits, signed } => *bits as i64 * 2 + flag(signed),
         k::TypeKind::F64 => 3,
         k::TypeKind::Struct { fields, copy } => {

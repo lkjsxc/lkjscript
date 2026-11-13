@@ -11,9 +11,15 @@ pub fn standard_library() -> Vec<SourceInput> {
         ("$std/bytes.rs", include_str!("../library/bytes.rs")),
         ("$std/string.rs", include_str!("../library/string.rs")),
         ("$std/str.rs", include_str!("../library/str.rs")),
+        ("$std/char.rs", include_str!("../library/char.rs")),
+        ("$std/fmt.rs", include_str!("../library/fmt.rs")),
         (
             "$std/ordered_map.rs",
             include_str!("../library/ordered_map.rs"),
+        ),
+        (
+            "$std/ordered_set.rs",
+            include_str!("../library/ordered_set.rs"),
         ),
     ]
     .into_iter()

@@ -31,7 +31,11 @@ pub fn is_copy(types: &[Type], ty: usize) -> bool {
         }
         seen[current] = true;
         match &types[current].kind {
-            TypeKind::Unit | TypeKind::Bool | TypeKind::Int { .. } | TypeKind::F64 => {}
+            TypeKind::Unit
+            | TypeKind::Bool
+            | TypeKind::Char
+            | TypeKind::Int { .. }
+            | TypeKind::F64 => {}
             TypeKind::Ref { mutable, .. } | TypeKind::Slice { mutable, .. } => {
                 if *mutable {
                     return false;
@@ -1023,7 +1027,7 @@ fn remap_carried(loans: &mut [Loan], from: &Place, to: &Place) {
         }
     }
 }
-fn place_writable(types: &[Type], function: &Function, place: &Place) -> bool {
+pub(crate) fn place_writable(types: &[Type], function: &Function, place: &Place) -> bool {
     let mut writable = function.locals[place.local].mutable;
     let mut blocked = false;
     let mut ty = function.locals[place.local].ty;
@@ -1595,7 +1599,15 @@ fn check_intrinsic(
         "cast" => {
             ts.len() == 1
                 && match (&types[ts[0]].kind, &types[dt].kind) {
-                    (TypeKind::Bool, TypeKind::Int { .. }) => true,
+                    (TypeKind::Bool | TypeKind::Char, TypeKind::Int { .. }) => true,
+                    (
+                        TypeKind::Int {
+                            bits: 8,
+                            signed: false,
+                        },
+                        TypeKind::Char,
+                    )
+                    | (TypeKind::Char, TypeKind::Char) => true,
                     (
                         TypeKind::Int { .. } | TypeKind::F64,
                         TypeKind::Int { .. } | TypeKind::F64,
@@ -1652,6 +1664,11 @@ fn check_shape(
         }
         Op::Int { dst, value } => match &types[ty(*dst)?].kind {
             TypeKind::Bool if *value == 0 || *value == 1 => {}
+            TypeKind::Char
+                if u32::try_from(*value)
+                    .ok()
+                    .and_then(char::from_u32)
+                    .is_some() => {}
             TypeKind::Int { bits, signed } => {
                 if *bits < 64 {
                     let min = if *signed { -(1_i64 << (*bits - 1)) } else { 0 };
@@ -1834,6 +1851,7 @@ fn check_shape(
             }
             let allowed = match types[t].kind {
                 TypeKind::Bool => ["==", "!=", "&", "|", "^", "&&", "||"].contains(&op.as_str()),
+                TypeKind::Char => comparison,
                 TypeKind::Int { .. } => [
                     "+", "-", "*", "/", "%", "&", "|", "^", "<<", ">>", "==", "!=", "<", "<=", ">",
                     ">=",
@@ -2017,13 +2035,19 @@ fn call_borrows(
     Ok(())
 }
 
+#[derive(Default)]
+struct ReturnObservation {
+    inputs: BTreeMap<InputLeaf, Vec<SourceBound>>,
+    outputs: BTreeMap<Vec<Projection>, Vec<SourceBound>>,
+}
+
 fn check_function(
     program: &Program,
     function: &Function,
     views: &Rc<Vec<bool>>,
 ) -> Result<(), Diagnostic> {
     let mut site = None;
-    check_function_body(program, function, views, &mut site).map_err(|mut problem| {
+    check_function_body(program, function, views, &mut site, None).map_err(|mut problem| {
         if let Some((line, column)) = site {
             if problem.line == line {
                 problem.column = column;
@@ -2037,6 +2061,7 @@ fn check_function_body(
     function: &Function,
     views: &Rc<Vec<bool>>,
     site: &mut Option<(usize, usize)>,
+    mut observation: Option<&mut ReturnObservation>,
 ) -> Result<(), Diagnostic> {
     let types = &program.types;
     let mut state = State {
@@ -2097,12 +2122,23 @@ fn check_function_body(
         for leaf in leaves {
             if let LeafOrigin::Inputs { inputs, .. } = &leaf.origin {
                 let mut sources = Vec::new();
-                for input in inputs {
-                    let input =
-                        parameter_leaf_source(types, function, input.index, &input.projections)
-                            .unwrap();
+                for selector in inputs {
+                    let input = parameter_leaf_source(
+                        types,
+                        function,
+                        selector.index,
+                        &selector.projections,
+                    )
+                    .unwrap();
                     let value = carried_provenance(&state, types, function, &input, &input, 1)?;
                     for loan in value.loans {
+                        if let Some(observation) = observation.as_deref_mut() {
+                            observation
+                                .inputs
+                                .entry(selector.clone())
+                                .or_default()
+                                .extend_from_slice(&loan.sources);
+                        }
                         sources.extend(loan.sources);
                     }
                 }
@@ -2821,6 +2857,13 @@ fn check_function_body(
                             "returned view differs from its declared source",
                         ));
                     }
+                    if let Some(observation) = observation.as_deref_mut() {
+                        observation
+                            .outputs
+                            .entry(loan.holder.projections.clone())
+                            .or_default()
+                            .extend_from_slice(&loan.sources);
+                    }
                 }
                 consume(&mut state, types, function, *src, line)?;
                 if state.maybe_live.any() {
@@ -3125,6 +3168,143 @@ fn check_structure(program: &Program) -> Result<(), Diagnostic> {
         }
     }
     Ok(())
+}
+
+/// Observe a fully validated function's return provenance to refine an
+/// already valid explicit leaf contract. This is inference data, never checked
+/// program authority. Emission still requires check/check_all on the final K.
+fn observed_return_contract(
+    program: &Program,
+    index: usize,
+    views: &Rc<Vec<bool>>,
+) -> Result<Option<ReturnSource>, Diagnostic> {
+    let function = &program.functions[index];
+    let Some(ReturnSource::Leaves(original)) = &function.return_source else {
+        return Ok(function.return_source.clone());
+    };
+    let mut site = None;
+    let mut observation = ReturnObservation::default();
+    check_function_body(program, function, views, &mut site, Some(&mut observation)).map_err(
+        |mut problem| {
+            problem.file = function.file;
+            if let Some((line, column)) = site {
+                if problem.line == line {
+                    problem.column = column;
+                }
+            }
+            problem
+        },
+    )?;
+    let mut leaves = original.clone();
+    for leaf in &mut leaves {
+        let LeafOrigin::Inputs { inputs, .. } = &leaf.origin else {
+            continue;
+        };
+        let Some(actual) = observation.outputs.get(&leaf.projections) else {
+            continue;
+        };
+        if actual
+            .iter()
+            .all(|source| source.origin.root == Root::Static)
+        {
+            leaf.origin = LeafOrigin::Static;
+            continue;
+        }
+        let output = projected_type(&program.types, function.result, &leaf.projections).unwrap();
+        let TypeKind::Ref {
+            inner: output_inner,
+            ..
+        } = program.types[output].kind
+        else {
+            unreachable!()
+        };
+        let mut selected = BTreeSet::new();
+        let mut exact = true;
+        for source in actual {
+            if source.origin.root == Root::Static {
+                exact = false;
+                continue;
+            }
+            let mut best = None;
+            for input in inputs {
+                if let Some(bounds) = observation.inputs.get(input) {
+                    for bound in bounds {
+                        if bound.origin.root == source.origin.root
+                            && is_prefix(&bound.origin.projections, &source.origin.projections)
+                            && best.as_ref().is_none_or(
+                                |(_, prior): &(&InputLeaf, &SourceBound)| {
+                                    bound.origin.projections.len() > prior.origin.projections.len()
+                                },
+                            )
+                        {
+                            best = Some((input, bound));
+                        }
+                    }
+                }
+            }
+            let Some((input, bound)) = best else {
+                return Err(error(
+                    1,
+                    "E_BORROW",
+                    "return observation is outside its validated input contract",
+                ));
+            };
+            let input_ty = place_type(
+                &program.types,
+                function,
+                &Place {
+                    local: input.index,
+                    projections: input.projections.clone(),
+                },
+            )
+            .unwrap();
+            let TypeKind::Ref {
+                inner: input_inner, ..
+            } = program.types[input_ty].kind
+            else {
+                unreachable!()
+            };
+            exact &= source == bound && output_inner == input_inner;
+            selected.insert(input.clone());
+        }
+        if !selected.is_empty() {
+            leaf.origin = LeafOrigin::Inputs {
+                inputs: selected.into_iter().collect(),
+                exact,
+            };
+        }
+    }
+    Ok(Some(ReturnSource::Leaves(leaves)))
+}
+
+/// Complete inference for generated callable bodies after their shared graph
+/// exists. Each body is fully validated before observation; this function never
+/// creates CheckedProgram. Shared graph validation and reference containment are
+/// computed once, and the ordinary final gate checks every refined contract.
+pub(crate) fn refine_return_contracts(
+    program: &mut Program,
+    functions: &BTreeSet<usize>,
+) -> Vec<Diagnostic> {
+    let selected: Vec<_> = functions
+        .iter()
+        .copied()
+        .filter(|index| program.functions[*index].return_source.is_some())
+        .collect();
+    if selected.is_empty() {
+        return Vec::new();
+    }
+    if let Err(problem) = check_structure(program) {
+        return vec![problem];
+    }
+    let views = Rc::new(reference_containment(&program.types));
+    let mut problems = Vec::new();
+    for index in selected {
+        match observed_return_contract(program, index, &views) {
+            Ok(source) => program.functions[index].return_source = source,
+            Err(problem) => problems.push(problem),
+        }
+    }
+    problems
 }
 
 /// The shared type/signature graph must be valid before independent body checks.

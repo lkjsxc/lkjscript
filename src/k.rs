@@ -3,6 +3,8 @@
 pub enum TypeKind {
     Unit,
     Bool,
+    /// A Unicode scalar value: 0..=0x10ffff excluding 0xd800..=0xdfff.
+    Char,
     Int {
         bits: u8,
         signed: bool,
@@ -199,7 +201,7 @@ pub struct Instruction {
     pub column: usize,
 }
 /// An input selector names one stored reference leaf in a parameter value.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct InputLeaf {
     pub index: usize,
     pub projections: Vec<Projection>,

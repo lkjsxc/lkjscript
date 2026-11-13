@@ -420,6 +420,7 @@ impl Generated<'_, '_> {
             kind,
             k::TypeKind::Unit
                 | k::TypeKind::Bool
+                | k::TypeKind::Char
                 | k::TypeKind::Int { .. }
                 | k::TypeKind::F64
                 | k::TypeKind::Ref { mutable: false, .. }
@@ -541,7 +542,7 @@ impl Generated<'_, '_> {
     fn equal_value(&mut self, ty: usize) -> Result<()> {
         match self.compiler.types[ty].kind.clone() {
             k::TypeKind::Unit => self.finish_bool(true),
-            k::TypeKind::Bool | k::TypeKind::Int { .. } | k::TypeKind::F64 => {
+            k::TypeKind::Bool | k::TypeKind::Char | k::TypeKind::Int { .. } | k::TypeKind::F64 => {
                 let left = self.read(Self::referent(0), ty);
                 let right = self.read(Self::referent(1), ty);
                 let result = self.local(k::BOOL);
@@ -657,7 +658,7 @@ impl Builder<'_, '_> {
                 .resolve(implementation.target, &substitutions)
                 .ok()
                 != Some(receiver)
-                || !self.trait_available(&implementation, receiver)
+                || !self.trait_available(&implementation, receiver, span)
                 || self
                     .compiler
                     .bounds(&implementation.generics, &substitutions)

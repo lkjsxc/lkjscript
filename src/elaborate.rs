@@ -1,6 +1,7 @@
 //! Rust-compatible syntax to explicit K. Inference lives here; K trusts none of it.
 mod assignment;
 mod borrow_cleanup;
+mod closures;
 mod constructors;
 mod definition_types;
 mod derive_check;
@@ -17,6 +18,7 @@ mod patterns;
 mod sequences;
 mod static_lifetimes;
 mod sugars;
+mod text_format;
 mod type_resolve;
 mod variants;
 
@@ -75,6 +77,7 @@ struct Compiler<'a> {
     contracts: Option<generic_check::Contracts>,
     method_selections: generic_check::MethodSelections,
     definition_types: BTreeMap<usize, definition_types::DefinitionTypes>,
+    closures: closures::Catalog,
 }
 
 fn first_problem(problems: Vec<a::Diagnostic>) -> a::Diagnostic {
@@ -188,6 +191,7 @@ fn elaborate_definitions(
 ) -> Result<k::Program> {
     c.method_selections = evidence.methods;
     c.definition_types = evidence.types;
+    c.closures.evidence = evidence.closures;
     let empty = BTreeMap::new();
     for s in &source.structs {
         if s.generics.is_empty() {
@@ -273,11 +277,16 @@ fn elaborate_definitions(
             next += 1;
         }
     }
-    Ok(k::Program {
+    let mut program = k::Program {
         types: c.types,
         functions: c.functions,
         destructors: c.destructors,
-    })
+    };
+    problems.extend(crate::check::refine_return_contracts(
+        &mut program,
+        &c.closures.checked_functions,
+    ));
+    Ok(program)
 }
 
 impl<'a> Compiler<'a> {
@@ -330,6 +339,7 @@ impl<'a> Compiler<'a> {
             contracts: None,
             method_selections: BTreeMap::new(),
             definition_types: BTreeMap::new(),
+            closures: closures::Catalog::default(),
         };
         for i in 0..c.types.len() {
             c.type_names.insert(c.types[i].name.clone(), i);
@@ -349,6 +359,12 @@ impl<'a> Compiler<'a> {
             });
             c.type_names.insert(name.to_string(), id);
         }
+        let character = c.types.len();
+        c.types.push(k::Type {
+            name: "char".to_string(),
+            kind: k::TypeKind::Char,
+        });
+        c.type_names.insert("char".to_string(), character);
         for node in &source.exprs {
             if let a::Expr::Path(path) = &node.kind {
                 c.uses
@@ -735,7 +751,11 @@ impl Compiler<'_> {
         });
         Ok(id)
     }
-    fn bounds(&self, parameters: &[a::GenericParam], sub: &BTreeMap<String, usize>) -> Result<()> {
+    fn bounds(
+        &mut self,
+        parameters: &[a::GenericParam],
+        sub: &BTreeMap<String, usize>,
+    ) -> Result<()> {
         for parameter in parameters {
             if parameter.lifetime {
                 continue;
@@ -744,6 +764,11 @@ impl Compiler<'_> {
                 .get(&parameter.name)
                 .ok_or_else(|| err(parameter.span, "E_TYPE", "cannot infer generic argument"))?;
             for id in &parameter.bounds {
+                if let a::Type::Path(path) = self.source.types[*id].kind.clone() {
+                    if self.callable_bound(ty, &path, sub, parameter.span)? {
+                        continue;
+                    }
+                }
                 let (bound, identity) = match &self.source.types[*id].kind {
                     a::Type::Path(p) if p.args.is_empty() => (
                         p.name.as_str(),
@@ -868,6 +893,8 @@ impl Compiler<'_> {
             bindings,
             guard_aliases: BTreeMap::new(),
             guard_shells: Vec::new(),
+            capture_aliases: BTreeMap::new(),
+            capture_locals: std::collections::BTreeSet::new(),
             active_span: source.span,
             reference_updates: references.clone(),
             reference_schedules: BTreeMap::new(),
@@ -912,17 +939,18 @@ impl Bindings {
         self.visible
             .entry(binding.0.clone())
             .or_default()
-            .push(binding.1);
+            .push(self.entries.len());
         self.entries.push(binding);
     }
     fn len(&self) -> usize {
         self.entries.len()
     }
+    fn entry(&self, name: &str) -> Option<(usize, usize)> {
+        let entry = *self.visible.get(name)?.last()?;
+        Some((entry, self.entries[entry].1))
+    }
     fn get(&self, name: &str) -> Option<usize> {
-        self.visible
-            .get(name)
-            .and_then(|locals| locals.last())
-            .copied()
+        self.entry(name).map(|(_, value)| value)
     }
     fn truncate(&mut self, len: usize) {
         while self.entries.len() > len {
@@ -972,6 +1000,8 @@ struct Builder<'a, 'b> {
     bindings: Bindings,
     guard_aliases: BTreeMap<String, k::Place>,
     guard_shells: Vec<k::Place>,
+    capture_aliases: BTreeMap<a::ExprId, k::Place>,
+    capture_locals: std::collections::BTreeSet<usize>,
     active_span: a::Span,
     references: Facts,
     reference_updates: Facts,
@@ -1032,7 +1062,7 @@ impl Builder<'_, '_> {
         }
         false
     }
-    fn trait_available(&self, implementation: &a::Impl, base: usize) -> bool {
+    fn trait_available(&self, implementation: &a::Impl, base: usize, span: a::Span) -> bool {
         let ty = match implementation.trait_ty {
             Some(t) => t,
             None => return true,
@@ -1045,7 +1075,11 @@ impl Builder<'_, '_> {
             Some(id) => id,
             None => return true,
         };
-        if self.compiler.names.trait_in_scope(self.scope, declaration) {
+        if self
+            .compiler
+            .names
+            .trait_in_scope(self.scope, declaration, span)
+        {
             return true;
         }
         let function = &self.compiler.source.functions[self.source_function];
@@ -1105,10 +1139,14 @@ impl Builder<'_, '_> {
         self.definite_live.set(local, live);
         let reference = live
             && !self.function.locals[local].name.starts_with('$')
-            && matches!(
+            && !self.capture_locals.contains(&local)
+            && (matches!(
                 self.compiler.types[self.ty(local)].kind,
                 k::TypeKind::Ref { .. }
-            );
+            ) || !self
+                .compiler
+                .closure_reference_fields(self.ty(local))
+                .is_empty());
         self.references.set(local, reference);
         if reference {
             self.reference_updates.set(local, true);
@@ -1264,7 +1302,7 @@ impl Builder<'_, '_> {
     fn cleanup(&mut self, start: usize, except: Option<usize>, line: usize) {
         let locals: Vec<_> = self.live.indices_from(start).collect();
         for i in locals {
-            if Some(i) != except {
+            if Some(i) != except && !self.capture_locals.contains(&i) {
                 self.cleanup_place(k::Place::local(i), line);
             }
         }
@@ -1379,6 +1417,9 @@ impl Builder<'_, '_> {
         Ok((dst, rt))
     }
     fn hint(&mut self, id: usize) -> Option<usize> {
+        if let Some(place) = self.capture_aliases.get(&id) {
+            return place_type(&self.compiler.types, self.function, place);
+        }
         if let Some(ty) = self.inferred.expressions.get(&id) {
             if !self.compiler.has_view(*ty) {
                 return Some(*ty);
@@ -1392,6 +1433,7 @@ impl Builder<'_, '_> {
                 .or_else(|| self.binding(&p.name).map(|i| self.ty(i))),
             a::Expr::Cast { ty, .. } => self.compiler.resolve(ty, &self.sub).ok(),
             a::Expr::Bool(_) => Some(k::BOOL),
+            a::Expr::Char(_) => self.compiler.type_names.get("char").copied(),
             a::Expr::Float(_) => Some(k::F64),
             a::Expr::Int(s) => {
                 for (name, t) in &self.compiler.type_names {
@@ -1437,6 +1479,9 @@ impl Builder<'_, '_> {
         }
     }
     fn place(&mut self, id: usize) -> Result<k::Place> {
+        if let Some(place) = self.capture_aliases.get(&id) {
+            return Ok(place.clone());
+        }
         let node = self.compiler.source.exprs[id].clone();
         match node.kind {
             a::Expr::Path(path) => self
@@ -1489,11 +1534,16 @@ impl Builder<'_, '_> {
         }
     }
     fn addressable(&mut self, id: usize) -> Result<k::Place> {
-        match self.compiler.source.exprs[id].kind {
-            a::Expr::Path(_)
-            | a::Expr::Field { .. }
-            | a::Expr::Index { .. }
-            | a::Expr::Unary { .. } => self.place(id),
+        match &self.compiler.source.exprs[id].kind {
+            a::Expr::Path(path)
+                if self.capture_aliases.contains_key(&id)
+                    || self.binding(&path.name).is_some()
+                    || self.guard_aliases.contains_key(&path.name) =>
+            {
+                self.place(id)
+            }
+            a::Expr::Field { .. } | a::Expr::Index { .. } => self.place(id),
+            a::Expr::Unary { op, .. } if op == "*" => self.place(id),
             _ => {
                 let v = self.expr(id, None)?;
                 Ok(k::Place::local(v.0))
@@ -1707,6 +1757,7 @@ impl Builder<'_, '_> {
                     }
                     self.cleanup(before, None, block.span.line);
                 }
+                a::Stmt::Item(a::Item::Use(_)) => {}
                 a::Stmt::Item(_) => {
                     return Err(err(
                         block.span,
@@ -1788,7 +1839,9 @@ impl Builder<'_, '_> {
         });
         let place_expression = match &self.compiler.source.exprs[id].kind {
             a::Expr::Path(path) => {
-                self.binding(&path.name).is_some() || self.guard_aliases.contains_key(&path.name)
+                self.capture_aliases.contains_key(&id)
+                    || self.binding(&path.name).is_some()
+                    || self.guard_aliases.contains_key(&path.name)
             }
             a::Expr::Field { .. } | a::Expr::Index { .. } => true,
             a::Expr::Unary { op, .. } => op == "*",
@@ -1915,10 +1968,25 @@ impl Builder<'_, '_> {
         Ok((dst, ty))
     }
     fn expr_inner(&mut self, id: usize, expected: Option<usize>) -> Result<(usize, usize)> {
+        if let Some(place) = self.capture_aliases.get(&id).cloned() {
+            return self.read(place, self.compiler.source.exprs[id].span.line);
+        }
         let node = self.compiler.source.exprs[id].clone();
         let line = node.span.line;
         match node.kind {
             a::Expr::Int(text) => self.integer(&text, expected, false, node.span),
+            a::Expr::Char(value) => {
+                let ty = self.compiler.type_names["char"];
+                let dst = self.temp(ty);
+                self.emit(
+                    k::Op::Int {
+                        dst,
+                        value: value as i64,
+                    },
+                    line,
+                );
+                Ok((dst, ty))
+            }
             a::Expr::String(text) => {
                 let inner = self.compiler.intern(String::new(), k::TypeKind::Str);
                 let ty = self.compiler.reference(inner, false);
@@ -1986,6 +2054,11 @@ impl Builder<'_, '_> {
                 {
                     return Ok(value);
                 }
+                if let Some(a::Item::Struct(index)) = self.compiler.declaration_item(&path) {
+                    if self.compiler.source.structs[index].unit {
+                        return self.construct_struct(&path, &[], None, expected, node.span);
+                    }
+                }
                 Err(err(
                     node.span,
                     "E_TYPE",
@@ -1997,13 +2070,17 @@ impl Builder<'_, '_> {
                 self.read(place, line)
             }
             a::Expr::Borrow { mutable, value } => {
-                let place = if matches!(
-                    self.compiler.source.exprs[value].kind,
-                    a::Expr::Path(_)
-                        | a::Expr::Field { .. }
-                        | a::Expr::Index { .. }
-                        | a::Expr::Unary { .. }
-                ) {
+                let is_place = match &self.compiler.source.exprs[value].kind {
+                    a::Expr::Path(path) => {
+                        self.capture_aliases.contains_key(&value)
+                            || self.binding(&path.name).is_some()
+                            || self.guard_aliases.contains_key(&path.name)
+                    }
+                    a::Expr::Field { .. } | a::Expr::Index { .. } => true,
+                    a::Expr::Unary { op, .. } => op == "*",
+                    _ => false,
+                };
+                let place = if is_place {
                     self.place(value)?
                 } else {
                     let inner = expected.and_then(|t| match self.compiler.types[t].kind {
@@ -2285,11 +2362,7 @@ impl Builder<'_, '_> {
                 args,
                 separator,
             } => self.macro_expr(&name, &args, &separator, expected, node.span),
-            a::Expr::Closure { .. } => Err(err(
-                node.span,
-                "E_UNSUPPORTED",
-                "closures are not implemented yet",
-            )),
+            a::Expr::Closure { .. } => self.closure_expression(id, node.span),
             _ => Err(err(
                 node.span,
                 "E_UNSUPPORTED",
@@ -2814,25 +2887,18 @@ impl Builder<'_, '_> {
         span: a::Span,
     ) -> Result<(usize, usize)> {
         let path = match self.compiler.source.exprs[callee].kind.clone() {
-            a::Expr::Path(p) if self.binding(&p.name).is_some() => {
-                return Err(err(
-                    span,
-                    "E_UNSUPPORTED",
-                    "calling a local function value is not implemented",
-                ));
+            a::Expr::Path(p)
+                if self.binding(&p.name).is_some()
+                    || self.capture_aliases.contains_key(&callee) =>
+            {
+                return self.callable_call(callee, args, expected, span);
             }
             a::Expr::Path(p) => self.compiler.names.value_path(
                 self.compiler.source.exprs[callee].scope,
                 &p,
                 span,
             )?,
-            _ => {
-                return Err(err(
-                    span,
-                    "E_UNSUPPORTED",
-                    "indirect calls are not implemented yet",
-                ));
-            }
+            _ => return self.callable_call(callee, args, expected, span),
         };
         let line = span.line;
         if path.declaration.is_none() && (path.name == "scope" || path.name == "std::thread::scope")
@@ -3045,7 +3111,7 @@ impl Builder<'_, '_> {
                     }
                     sub.insert("Self".to_string(), t);
                     if self.compiler.resolve(im.target, &sub).ok() == Some(t) {
-                        if !self.trait_available(&im, t) {
+                        if !self.trait_available(&im, t, span) {
                             continue;
                         }
                         self.compiler.bounds(&im.generics, &sub)?;
@@ -3127,7 +3193,7 @@ impl Builder<'_, '_> {
         );
         Ok((dst, ty))
     }
-    fn has_declared_method(&mut self, base: usize, name: &str) -> Result<bool> {
+    fn has_declared_method(&mut self, base: usize, name: &str, span: a::Span) -> Result<bool> {
         let implementations = self.compiler.source.impls.clone();
         for implementation in implementations {
             if !implementation
@@ -3147,7 +3213,7 @@ impl Builder<'_, '_> {
                 .resolve(implementation.target, &substitutions)
                 .ok()
                 == Some(base)
-                && self.trait_available(&implementation, base)
+                && self.trait_available(&implementation, base, span)
                 && self
                     .compiler
                     .bounds(&implementation.generics, &substitutions)
@@ -3166,6 +3232,22 @@ impl Builder<'_, '_> {
         args: &[usize],
         span: a::Span,
     ) -> Result<(usize, usize)> {
+        if matches!(
+            name,
+            "starts_with"
+                | "ends_with"
+                | "contains"
+                | "find"
+                | "rfind"
+                | "replace"
+                | "repeat"
+                | "is_ascii"
+                | "eq_ignore_ascii_case"
+                | "to_ascii_lowercase"
+                | "to_ascii_uppercase"
+        ) {
+            return self.source_text_method(target, name, args, span);
+        }
         if !args.is_empty() {
             return Err(err(span, "E_TYPE", "text method takes no arguments"));
         }
@@ -3334,8 +3416,65 @@ impl Builder<'_, '_> {
         if let Some(value) = self.generic_method(expression, &target, base, name, _types, args)? {
             return Ok(value);
         }
+        if matches!(self.compiler.types[base].kind, k::TypeKind::Char)
+            && matches!(
+                name,
+                "len_utf8"
+                    | "len_utf16"
+                    | "is_ascii"
+                    | "is_ascii_digit"
+                    | "is_ascii_uppercase"
+                    | "is_ascii_lowercase"
+                    | "is_ascii_alphabetic"
+                    | "is_ascii_alphanumeric"
+                    | "is_ascii_hexdigit"
+                    | "is_ascii_whitespace"
+                    | "is_whitespace"
+                    | "to_ascii_lowercase"
+                    | "to_ascii_uppercase"
+                    | "to_string"
+            )
+        {
+            if !args.is_empty() || !_types.is_empty() {
+                return Err(err(span, "E_TYPE", "character method takes no arguments"));
+            }
+            let value = self.read(target, span.line)?.0;
+            let source =
+                self.compiler
+                    .names
+                    .library_function("char", &format!("__lkj_{name}"), span)?;
+            let function = self.compiler.instantiate(source, BTreeMap::new())?;
+            let ty = self.compiler.functions[function].result;
+            let dst = self.temp(ty);
+            self.emit(
+                k::Op::Call {
+                    dst,
+                    function,
+                    args: vec![value],
+                },
+                span.line,
+            );
+            return Ok((dst, ty));
+        }
         if matches!(self.compiler.types[base].kind, k::TypeKind::Str)
-            && matches!(name, "len" | "is_empty" | "as_bytes" | "to_string")
+            && matches!(
+                name,
+                "len"
+                    | "is_empty"
+                    | "as_bytes"
+                    | "to_string"
+                    | "starts_with"
+                    | "ends_with"
+                    | "contains"
+                    | "find"
+                    | "rfind"
+                    | "replace"
+                    | "repeat"
+                    | "is_ascii"
+                    | "eq_ignore_ascii_case"
+                    | "to_ascii_lowercase"
+                    | "to_ascii_uppercase"
+            )
         {
             if !_types.is_empty() {
                 return Err(err(
@@ -3502,7 +3641,7 @@ impl Builder<'_, '_> {
                             {
                                 continue;
                             }
-                            if !self.trait_available(&im, base) {
+                            if !self.trait_available(&im, base, span) {
                                 unavailable_trait = true;
                                 if let Some(ty) = im.trait_ty {
                                     if let a::Type::Path(path) =
@@ -3728,6 +3867,7 @@ impl Builder<'_, '_> {
         span: a::Span,
     ) -> Result<(usize, usize)> {
         match name {
+            "format" | "write" | "writeln" => self.format_macro(name, args, span),
             "assert" => {
                 if args.is_empty() {
                     return Err(err(span, "E_TYPE", "assert needs a condition"));
@@ -3782,17 +3922,22 @@ impl Builder<'_, '_> {
                 Ok(self.unit(span.line))
             }
             "vec" => {
-                if separator == ";" {
-                    return Err(err(
-                        span,
-                        "E_UNSUPPORTED",
-                        "repeated Vec literals are not implemented yet",
-                    ));
-                }
                 let inner = expected.and_then(|t| match self.compiler.types[t].kind {
                     k::TypeKind::Vec { inner } => Some(inner),
                     _ => None,
                 });
+                if separator == ";" {
+                    if args.len() != 2 {
+                        return Err(err(
+                            span,
+                            "E_TYPE",
+                            "Vec repetition requires an element and count",
+                        ));
+                    }
+                    let value = self.expr(args[0], inner)?;
+                    let count = self.expr(args[1], Some(k::U64))?;
+                    return self.vector_repeat(value.0, count.0, value.1, span);
+                }
                 let mut values = Vec::new();
                 let mut inferred = inner;
                 for arg in args {

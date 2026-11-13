@@ -196,7 +196,7 @@
     "file": "pass/borrowed_closure.rs",
     "kind": "run",
     "value": "42",
-    "pending": true,
+    "pending": false,
     "rust": true
   },
   {
@@ -1971,6 +1971,465 @@
     "file": "fail/tuple_rest_extra_field.rs",
     "kind": "reject",
     "code": "E_TYPE",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "import_enum_glob",
+    "file": "pass/import_enum_glob.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "import_parent_glob",
+    "file": "pass/import_parent_glob.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "import_glob_precedence",
+    "file": "pass/import_glob_precedence.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "import_unused_glob_ambiguity",
+    "file": "pass/import_unused_glob_ambiguity.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "import_local_root_glob",
+    "file": "pass/import_local_root_glob.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "import_local_scopes",
+    "file": "pass/import_local_scopes.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "import_local_traits",
+    "file": "pass/import_local_traits.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "char_scalars",
+    "file": "pass/char_scalars.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "vec_repeat",
+    "file": "pass/vec_repeat.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "char_entry",
+    "file": "pass/char_entry.rs",
+    "kind": "run",
+    "value": "水",
+    "rust": true
+  },
+  {
+    "id": "import_enum_glob_private",
+    "file": "fail/import_enum_glob_private.rs",
+    "kind": "reject",
+    "code": "E_PRIVACY",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0603"
+  },
+  {
+    "id": "import_glob_ambiguous",
+    "file": "fail/import_glob_ambiguous.rs",
+    "kind": "reject",
+    "code": "E_NAME",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0659"
+  },
+  {
+    "id": "import_module_self",
+    "file": "fail/import_module_self.rs",
+    "kind": "reject",
+    "code": "E_IMPORT",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0432"
+  },
+  {
+    "id": "import_local_leak",
+    "file": "fail/import_local_leak.rs",
+    "kind": "reject",
+    "code": "E_NAME",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0425"
+  },
+  {
+    "id": "import_local_trait_leak",
+    "file": "fail/import_local_trait_leak.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0599"
+  },
+  {
+    "id": "import_variant_type",
+    "file": "fail/import_variant_type.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0573"
+  },
+  {
+    "id": "import_alias_variant_type",
+    "file": "fail/import_alias_variant_type.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "char_integer_cast",
+    "file": "fail/char_integer_cast.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "char_arithmetic",
+    "file": "fail/char_arithmetic.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "char_surrogate",
+    "file": "k/char_surrogate.k",
+    "kind": "reject",
+    "code": "E_TYPE"
+  },
+  {
+    "id": "char_above_unicode",
+    "file": "k/char_above_unicode.k",
+    "kind": "reject",
+    "code": "E_TYPE"
+  },
+  {
+    "id": "char_forbidden_cast",
+    "file": "k/char_forbidden_cast.k",
+    "kind": "reject",
+    "code": "E_TYPE"
+  },
+  {
+    "id": "shared_reference_carrier_cleanup",
+    "file": "k/shared_reference_carrier_cleanup.k",
+    "kind": "run",
+    "value": "42"
+  },
+  {
+    "id": "shared_reference_exclusive_ancestor",
+    "file": "k/shared_reference_exclusive_ancestor.k",
+    "kind": "run",
+    "value": "42"
+  },
+  {
+    "id": "borrowed_reference_carrier_drop",
+    "file": "k/borrowed_reference_carrier_drop.k",
+    "kind": "reject",
+    "code": "E_BORROW"
+  },
+  {
+    "id": "shared_reborrow_parent_write",
+    "file": "k/shared_reborrow_parent_write.k",
+    "kind": "reject",
+    "code": "E_BORROW"
+  },
+  {
+    "id": "import_anonymous_traits",
+    "file": "pass/import_anonymous_traits.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "import_local_type",
+    "file": "pass/import_local_type.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "import_public_parent_glob",
+    "file": "pass/import_public_parent_glob.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "import_private_glob_reexport",
+    "file": "fail/import_private_glob_reexport.rs",
+    "kind": "reject",
+    "code": "E_PRIVACY",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0603"
+  },
+  {
+    "id": "import_private_alias_glob",
+    "file": "fail/import_private_alias_glob.rs",
+    "kind": "reject",
+    "code": "E_PRIVACY",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0603"
+  },
+  {
+    "id": "import_private_alias_reexport",
+    "file": "fail/import_private_alias_reexport.rs",
+    "kind": "reject",
+    "code": "E_PRIVACY",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0365"
+  },
+  {
+    "id": "source_formatting",
+    "file": "pass/source_formatting.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "source_text_methods",
+    "file": "pass/source_text_methods.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "standard_enum_modules",
+    "file": "pass/standard_enum_modules.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "format_named_shadow",
+    "file": "pass/format_named_shadow.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "format_unicode_width",
+    "file": "pass/format_unicode_width.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "format_result_error",
+    "file": "pass/format_result_error.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "primitive_trait_identity",
+    "file": "pass/primitive_trait_identity.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "ordered_set",
+    "file": "pass/ordered_set.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "format_missing_argument",
+    "file": "fail/format_missing_argument.rs",
+    "kind": "reject",
+    "code": "E_FORMAT",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "format_unused_argument",
+    "file": "fail/format_unused_argument.rs",
+    "kind": "reject",
+    "code": "E_FORMAT",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "format_write_trait_scope",
+    "file": "fail/format_write_trait_scope.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "format_debug_unsupported",
+    "file": "fail/format_debug_unsupported.rs",
+    "kind": "reject",
+    "code": "E_UNSUPPORTED",
+    "rust": false
+  },
+  {
+    "id": "format_precision_unsupported",
+    "file": "fail/format_precision_unsupported.rs",
+    "kind": "reject",
+    "code": "E_UNSUPPORTED",
+    "rust": false
+  },
+  {
+    "id": "ordered_clear",
+    "file": "output/ordered_clear.rs",
+    "kind": "output",
+    "hex": "61626321",
+    "ending": "normal",
+    "rust": true
+  },
+  {
+    "id": "closure_environments",
+    "file": "pass/closure_environments.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "closure_capture_drop_order",
+    "file": "pass/closure_capture_drop_order.rs",
+    "kind": "output",
+    "hex": "413161",
+    "ending": "normal",
+    "rust": true
+  },
+  {
+    "id": "closure_capture_drop_order_expanded",
+    "file": "pass/closure_capture_drop_order_expanded.rs",
+    "kind": "output",
+    "hex": "413161",
+    "ending": "normal",
+    "rust": true
+  },
+  {
+    "id": "closure_captured_field_conflict",
+    "file": "fail/closure_captured_field_conflict.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "closure_consuming_requires_fnonce",
+    "file": "fail/closure_consuming_requires_fnonce.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "closure_generic_consumption",
+    "file": "fail/closure_generic_consumption.rs",
+    "kind": "reject",
+    "code": "E_MOVE",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "closure_immutable_capture_write",
+    "file": "fail/closure_immutable_capture_write.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "closure_local_escape",
+    "file": "fail/closure_local_escape.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "closure_mutable_requires_fnmut",
+    "file": "fail/closure_mutable_requires_fnmut.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "closure_mutable_result_alias",
+    "file": "fail/closure_mutable_result_alias.rs",
+    "kind": "reject",
+    "code": "E_MOVE",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "closure_mutable_result_conflict",
+    "file": "fail/closure_mutable_result_conflict.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "closure_once_called_twice",
+    "file": "fail/closure_once_called_twice.rs",
+    "kind": "reject",
+    "code": "E_MOVE",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "closure_owned_borrow_escape",
+    "file": "fail/closure_owned_borrow_escape.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "closure_refutable_parameter",
+    "file": "fail/closure_refutable_parameter.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "closure_shared_capture_conflict",
+    "file": "fail/closure_shared_capture_conflict.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
     "rust": true,
     "rustAccept": false
   }

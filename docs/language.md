@@ -9,7 +9,12 @@ The surface is Rust-compatible. Integer literal fallback is i32; annotations and
 suffixes retain distinct types, including usize/u64 and isize/i64. Arithmetic is
 checked. Signed minimum literals are accepted; out-of-range integer and non-finite
 floating literals are rejected. Explicit casts follow Rust conversion behavior.
-Named wrapping operations remain source-library work. Booleans are distinct from integers. Expressions evaluate
+Named wrapping operations remain source-library work. Booleans and Unicode scalar characters are distinct from integers. Characters
+occupy four bytes; surrogate code points and values above U+10FFFF are rejected.
+Characters compare by scalar value, cast to integers, and can be constructed by
+casting u8. Other integer-to-character casts and character arithmetic reject.
+Character patterns include scalar ranges and account for the surrogate gap.
+Expressions evaluate
 left to right; logical operators short circuit. Assignment and the supported
 primitive compound assignments evaluate the RHS before the destination and its
 index expressions; compound assignment then reads the destination value. Each
@@ -36,7 +41,7 @@ error types must currently be equal. Loops accept a value on `break`, unified
 across their exit edges. Struct update evaluates explicit fields in source order,
 then the base once, transferring only the remaining fields.
 
-Integer and byte literal patterns support inclusive, half-open and open ranges:
+Integer, byte and character literal patterns support inclusive, half-open and open ranges:
 `a..=b`, `a..b`, `a..`, `..b` and `..=b`. Endpoints share ordinary integer literal
 type, suffix, radix, sign and overflow checks. Empty/reversed ranges reject.
 Exhaustiveness unions closed intervals over the concrete integer domain, including
@@ -96,7 +101,17 @@ Explicit, omitted and inferred alias arguments can constrain fixed, reordered
 and nested field types. A type alias does not introduce a tuple constructor in
 the value namespace; a use alias can refer to the original tuple constructor.
 Nested alias targets participate in the same structural type constraints as their
-expanded constructors.
+expanded constructors. An enum variant is a constructor or pattern, never a type;
+resolved suffixes cannot reuse the nominal identity of their enclosing enum.
+
+Module and enum glob imports preserve binding visibility. Explicit declarations
+and imports shadow globs; unused glob ambiguities are tolerated and a conflicting
+use is diagnosed. Public globs retain private binding restrictions instead of
+making a private alias public. Function/block imports apply throughout their
+lexical block, including nested blocks, and do not leak to neighboring functions.
+Qualified module paths keep their module meaning. Anonymous trait imports
+(`use Trait as _`) add method evidence without introducing a name.
+
 Generic parameter binding uses its original lexical/file scope. It shadows an
 unrelated declaration, while qualified paths keep their declaration identity.
 Substitution, inference, coherence and implementation selection do not turn a
@@ -212,11 +227,40 @@ returns the source Result with `Ok(&str)` or `Err(Utf8Error)`. The error is an
 opaque marker; byte-position/error-length reporting is not implemented. Successful
 conversion borrows the original storage. No unchecked source conversion exists.
 String keeps its private Vec bytes and implements Clone, clone_from, PartialEq,
-Eq, `push_str`, `to_string` and `as_str` in source. Cloning copies already-valid
+Eq, `push`, `push_str`, `to_string` and `as_str` in source. Cloning copies already-valid
 bytes directly; clone_from reuses the target buffer when capacity suffices.
 Equality compares byte length and contents. `as_str`
 currently validates on conversion; retained UTF-8 evidence for avoiding that scan
 remains future work.
+
+Text and character helpers live in source. Supported text operations include
+prefix/suffix tests, contains/find/rfind, ASCII case conversion/comparison,
+repeat and replace. A source Pattern trait shares the implementation for text
+and character needles. Character helpers include UTF-8/UTF-16 lengths, ASCII
+predicates and case conversion, Unicode whitespace, and to_string. General
+Unicode case conversion and range slicing are not implemented.
+
+Formatting macros resolve argument expressions once in source order and lower
+to ordinary calls into source String/Formatter traits. The supported format
+language includes Display, integer x/X/b/o, positional/named/captured arguments,
+escaped braces, fixed width, Unicode fill, alignment, signs, prefixes and zero
+padding. Explicit zero width remains distinct from absent width for custom
+Display implementations. write!/writeln! currently target source String and
+Formatter; String requires Write in scope. Arbitrary user Write sinks remain
+unimplemented. These macros preserve formatter errors and stop
+before later formatting operations; format! traps on a failed formatting
+implementation. Temporary values retain statement destruction order. Debug,
+floating formatting, dynamic widths and precision remain unsupported.
+
+Option and Result have canonical source declarations with standard option/result
+module re-exports. Repeated Vec literals evaluate their element and count once,
+clone all but the final element, and move the original last; a zero count still
+evaluates and destroys the supplied value. This expands through a source helper
+constrained by Clone. Ordered BTreeMap storage is a sorted Vec, with logarithmic
+lookup and linear insertion/removal. BTreeSet reuses that map's ordering and
+storage; its current source API is new/len/is_empty/contains/insert/remove/clear.
+Map clear destroys entries in key order. Iterator and range-view APIs remain
+separate work.
 
 The explicit static-lifetime subset covers wholly static function outputs,
 including view aggregates. K records `ReturnSource::Static` and checks every live
@@ -320,6 +364,37 @@ contract is unfinished. Reference-bearing content hidden inside arbitrary type
 parameters is not fully modeled at this generic boundary; concrete specializations
 still receive full K provenance checks. This is not complete generic lifetime or
 external mutation-contract closure.
+
+## Closures
+
+Closures are anonymous environment structs plus ordinary K functions. Their
+capture requirements come from the body operations; source binding identity and
+capture order determine fields, including disjoint field captures. Owned captures
+move into the environment. Shared and mutable captures use existing loans, and
+unique immutable access to a captured mutable-reference binding retains the
+exclusive descriptor relationship. Capture destruction follows source capture
+order; projections within one captured root follow field order.
+
+Fn, FnMut and FnOnce select shared, mutable and consuming calls statically.
+Generic callable bounds are checked under rigid assumptions; specialization
+retains that selection. Inferred/contextual parameters, irrefutable parameter
+patterns, nested closures and borrowed callable adapters are supported. The
+environment has ordinary Copy eligibility and cleanup. Last-use cleanup may end
+only its reference capture leaves while owned captures remain alive to their
+lexical destruction point.
+
+Ordinary shared or mutable closure calls do not lend references to owned
+environment storage. Returned references must come from captured reference
+origins, explicit arguments or static storage. Every result leaf has its own
+contract. Return inference observes the ordinary checker's validated provenance,
+narrows the initial allowed input set, then submits the resulting program to
+independent complete K validation. These observations carry no execution
+authority. Disjoint mutable result leaves remain disjoint across a call; shared
+results may outlive a copied reference's environment while their referents remain
+live. Explicit reference results hidden behind an opaque generic callable still
+require a fuller origin inventory and remain a named unsupported boundary.
+Returning closures through impl Trait, lending closures, dynamic function
+objects and concurrency scope APIs remain unfinished.
 
 ## K and checking
 
