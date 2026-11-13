@@ -1,0 +1,24 @@
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+fn "probe" 0 5
+local "left" 5 let
+local "right" 5 let
+local "added" 5 let
+local "factor" 5 let
+local "product" 5 let
+local "two" 5 let
+local "answer" 5 let
+@1 int 0 250
+@2 int 1 10
+@3 binary 2 "wrapping_add" 0 1
+@4 int 3 11
+@5 binary 4 "wrapping_mul" 2 3
+@6 int 5 2
+@7 binary 6 "wrapping_sub" 4 5
+@8 return 6
+endfn

@@ -126,15 +126,8 @@ fn census_uses_parsed_constructs_and_ignores_comments_and_literal_text() {
     let report = source::parse_bundle_report(&input);
     assert!(report.diagnostics.is_empty(), "{:?}", report.diagnostics);
     let census = diagnostics::census(&report);
-    for kind in ["range slicing", "function pointer"] {
-        assert_eq!(
-            census.unsupported.get(kind),
-            Some(&1),
-            "{kind}: {:?}",
-            census.unsupported
-        );
-    }
-    assert_eq!(census.unsupported.len(), 2);
+    assert_eq!(census.unsupported.get("function pointer"), Some(&1));
+    assert_eq!(census.unsupported.len(), 1);
     for supported in [
         "char literal",
         "closure",
@@ -142,6 +135,7 @@ fn census_uses_parsed_constructs_and_ignores_comments_and_literal_text() {
         "repeated Vec literal",
         "collection iteration",
         "for binding pattern",
+        "range slicing",
     ] {
         assert!(!census.unsupported.contains_key(supported));
     }
@@ -356,10 +350,6 @@ fn census_counts_semantic_diagnostics_and_their_parsed_site_once() {
         (
             "fn consume(callback: fn(i64) -> i64) {}",
             "function pointer",
-        ),
-        (
-            "fn probe() { let values: [i64; 3] = [1, 2, 3]; let view = &values[1..3]; }",
-            "range slicing",
         ),
         (
             "fn probe() { let v: Vec<i64> = Vec::new(); for x in &v {} }",

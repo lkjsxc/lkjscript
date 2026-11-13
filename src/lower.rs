@@ -383,6 +383,10 @@ impl<'a> Body<'a> {
                 }
             }
             Op::If { condition } => self.initialized(*condition, false),
+            Op::ViewRange { start, end, .. } => {
+                self.initialized(*start, false);
+                self.initialized(*end, false);
+            }
             _ => {}
         }
     }
@@ -779,6 +783,93 @@ impl<'a> Body<'a> {
         self.write(dst);
         Ok(())
     }
+    fn view_range(&mut self, dst: usize, place: &Place, bounds: (usize, usize, bool), line: usize) {
+        let (start, end, inclusive) = bounds;
+        let source = crate::check::place_type(&self.program.types, self.function, place)
+            .expect("checked range place");
+        let stride = match self.program.types[source].kind {
+            TypeKind::Vec { inner } | TypeKind::Array { inner, .. } => {
+                self.read_place(place, line);
+                set(&mut self.code, self.scratch + 4);
+                get(&mut self.code, self.scratch + 4);
+                load(&mut self.code, 0);
+                get(&mut self.code, self.scratch + 4);
+                load(&mut self.code, 8);
+                self.layout.storage(inner).bytes
+            }
+            TypeKind::Slice { inner, .. } => {
+                self.address(place, line);
+                self.layout.storage(inner).bytes
+            }
+            TypeKind::Str => {
+                self.address(place, line);
+                1
+            }
+            _ => unreachable!("checked range source"),
+        };
+        set(&mut self.code, self.scratch + 5);
+        set(&mut self.code, self.scratch + 4);
+        self.read(end);
+        tee(&mut self.code, self.scratch + 1);
+        get(&mut self.code, self.scratch + 5);
+        self.code.push(Instruction::Scalar(if inclusive {
+            ScalarOp::I64GeU
+        } else {
+            ScalarOp::I64GtU
+        }));
+        trap_if(&mut self.code, 3, line);
+        if inclusive {
+            get(&mut self.code, self.scratch + 1);
+            constant(&mut self.code, 1);
+            self.code.push(Instruction::Scalar(ScalarOp::I64Add));
+            set(&mut self.code, self.scratch + 1);
+        }
+        self.read(start);
+        get(&mut self.code, self.scratch + 1);
+        self.code.push(Instruction::Scalar(ScalarOp::I64GtU));
+        trap_if(&mut self.code, 3, line);
+        if matches!(self.program.types[source].kind, TypeKind::Str) {
+            for endpoint in [Some(start), None] {
+                if let Some(endpoint) = endpoint {
+                    self.read(endpoint);
+                } else {
+                    get(&mut self.code, self.scratch + 1);
+                }
+                set(&mut self.code, self.scratch + 2);
+                get(&mut self.code, self.scratch + 2);
+                self.code.push(Instruction::Scalar(ScalarOp::I64Eqz));
+                self.code.push(Instruction::Scalar(ScalarOp::I32Eqz));
+                get(&mut self.code, self.scratch + 2);
+                get(&mut self.code, self.scratch + 5);
+                self.code.push(Instruction::Scalar(ScalarOp::I64LtU));
+                self.code.push(Instruction::Scalar(ScalarOp::I32And));
+                begin_if(&mut self.code);
+                get(&mut self.code, self.scratch + 4);
+                get(&mut self.code, self.scratch + 2);
+                self.code.push(Instruction::Scalar(ScalarOp::I64Add));
+                self.code.push(Instruction::Load {
+                    bytes: 1,
+                    signed: false,
+                    offset: 0,
+                });
+                constant(&mut self.code, 0xc0);
+                self.code.push(Instruction::Scalar(ScalarOp::I64And));
+                constant(&mut self.code, 0x80);
+                self.code.push(Instruction::Scalar(ScalarOp::I64Eq));
+                trap_if(&mut self.code, 3, line);
+                self.code.push(Instruction::End);
+            }
+        }
+        get(&mut self.code, self.scratch + 4);
+        self.read(start);
+        constant(&mut self.code, i64::from(stride));
+        self.code.push(Instruction::Scalar(ScalarOp::I64Mul));
+        self.code.push(Instruction::Scalar(ScalarOp::I64Add));
+        get(&mut self.code, self.scratch + 1);
+        self.read(start);
+        self.code.push(Instruction::Scalar(ScalarOp::I64Sub));
+        self.write(dst);
+    }
     fn emit(&mut self, op: &Op, line: usize) -> Result<(), String> {
         self.consume_inputs(op);
         match op {
@@ -820,6 +911,16 @@ impl<'a> Body<'a> {
                 get(&mut self.code, self.scratch + 4);
                 load(&mut self.code, 8);
                 self.write(*dst);
+            }
+            Op::ViewRange {
+                dst,
+                place,
+                start,
+                end,
+                inclusive,
+                ..
+            } => {
+                self.view_range(*dst, place, (*start, *end, *inclusive), line);
             }
             Op::Array { dst, elements } => {
                 let TypeKind::Array { inner, .. } =
@@ -2005,6 +2106,18 @@ fn local_layout(
                 if matches!(instruction.op, Op::Borrow { .. }) && place.projections.is_empty() {
                     addressed[place.local] = true;
                 }
+            }
+            Op::ViewRange {
+                dst,
+                place,
+                start,
+                end,
+                ..
+            } => {
+                touch_local(&mut ranges, *dst, at);
+                touch_place(&mut ranges, place, at);
+                touch_local(&mut ranges, *start, at);
+                touch_local(&mut ranges, *end, at);
             }
             Op::Array { dst, elements }
             | Op::Struct {

@@ -7,6 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 enum Label {
     Lifetime(String),
     Parameter(String, Vec<k::Projection>),
+    Associated(String, Vec<k::Projection>),
     Static,
     Unknown,
 }
@@ -143,6 +144,27 @@ impl Compiler<'_> {
                         result.push(Leaf {
                             path: leaf_path,
                             label: Label::Parameter(named.name.clone(), relative),
+                            transport: !borrowed,
+                            mutable,
+                        });
+                    }
+                }
+                (a::Type::Path(named), _)
+                    if named.declaration.is_none()
+                        && named.name.split_once("::").is_some_and(|(owner, _)| {
+                            owner == "Self" || parameters.contains(owner)
+                        }) =>
+                {
+                    for (relative, mutable) in crate::check::reference_paths(&self.types, concrete)
+                    {
+                        if borrowed && mutable {
+                            continue;
+                        }
+                        let mut leaf_path = path.clone();
+                        leaf_path.extend_from_slice(&relative);
+                        result.push(Leaf {
+                            path: leaf_path,
+                            label: Label::Associated(named.name.clone(), relative),
                             transport: !borrowed,
                             mutable,
                         });
@@ -298,7 +320,7 @@ impl Compiler<'_> {
                     let Some(candidates) = inputs.get(label) else {
                         return Ok(None);
                     };
-                    let exact = matches!(label, Label::Parameter(_, _));
+                    let exact = matches!(label, Label::Parameter(_, _) | Label::Associated(_, _));
                     let candidates: Vec<_> = candidates
                         .iter()
                         .filter(|candidate| {
@@ -321,5 +343,90 @@ impl Compiler<'_> {
             });
         }
         Ok(Some(mappings))
+    }
+
+    /// A produced type/associated family has no positional relationship to an
+    /// unrelated input family. Enumerate admissible concrete input leaves as an
+    /// upper bound; ordinary body checking will establish the actual selectors.
+    pub(super) fn produced_return_leaf_contract(
+        &self,
+        source_index: usize,
+        source: &a::Function,
+        locals: &[k::Local],
+        result: usize,
+    ) -> Option<Vec<k::ReturnLeaf>> {
+        let outputs = self.signature_leaves(source, source_index, source.result, result, false);
+        if !outputs
+            .iter()
+            .any(|leaf| matches!(leaf.label, Label::Parameter(_, _) | Label::Associated(_, _)))
+            || outputs
+                .iter()
+                .any(|leaf| matches!(leaf.label, Label::Unknown))
+        {
+            return None;
+        }
+        let mut inputs = BTreeMap::<Label, Vec<Candidate>>::new();
+        for (index, parameter) in source.params.iter().enumerate() {
+            for leaf in
+                self.signature_leaves(source, source_index, parameter.ty, locals[index].ty, true)
+            {
+                inputs.entry(leaf.label).or_default().push(Candidate {
+                    input: k::InputLeaf {
+                        index,
+                        projections: leaf.path,
+                    },
+                    transport: leaf.transport,
+                    mutable: leaf.mutable,
+                });
+            }
+        }
+        let mut mappings = Vec::new();
+        for leaf in outputs {
+            let origin = if matches!(leaf.label, Label::Static) {
+                k::LeafOrigin::Static
+            } else {
+                let family = matches!(leaf.label, Label::Parameter(_, _) | Label::Associated(_, _));
+                let matching: Vec<_> = inputs
+                    .get(&leaf.label)
+                    .into_iter()
+                    .flatten()
+                    .filter(|candidate| {
+                        (!family || candidate.transport) && (!leaf.mutable || candidate.mutable)
+                    })
+                    .map(|candidate| candidate.input.clone())
+                    .collect();
+                if !matching.is_empty() {
+                    k::LeafOrigin::Inputs {
+                        inputs: matching,
+                        exact: family,
+                    }
+                } else if family {
+                    let candidates: BTreeSet<_> = inputs
+                        .values()
+                        .flatten()
+                        .filter(|candidate| !leaf.mutable || candidate.mutable)
+                        .map(|candidate| candidate.input.clone())
+                        .collect();
+                    if candidates.is_empty() {
+                        if leaf.mutable {
+                            return None;
+                        }
+                        k::LeafOrigin::Static
+                    } else {
+                        k::LeafOrigin::Inputs {
+                            inputs: candidates.into_iter().collect(),
+                            exact: false,
+                        }
+                    }
+                } else {
+                    return None;
+                }
+            };
+            mappings.push(k::ReturnLeaf {
+                projections: leaf.path,
+                origin,
+            });
+        }
+        Some(mappings)
     }
 }

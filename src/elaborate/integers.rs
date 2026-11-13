@@ -1,5 +1,5 @@
 //! Integer constants share one typed validation path in expressions and patterns.
-use super::{Result, a, err, k};
+use super::{Builder, Result, a, err, k};
 use std::collections::BTreeMap;
 
 const SUFFIXES: [&str; 10] = [
@@ -85,4 +85,42 @@ pub(super) fn literal(
         magnitude as i64
     };
     Ok((value, ty))
+}
+
+impl Builder<'_, '_> {
+    pub(super) fn wrapping_method(
+        &mut self,
+        place: &k::Place,
+        ty: usize,
+        name: &str,
+        types: &[usize],
+        args: &[usize],
+        span: a::Span,
+    ) -> Result<Option<(usize, usize)>> {
+        if !matches!(self.compiler.types[ty].kind, k::TypeKind::Int { .. })
+            || !matches!(name, "wrapping_add" | "wrapping_sub" | "wrapping_mul")
+        {
+            return Ok(None);
+        }
+        if args.len() != 1 || !types.is_empty() {
+            return Err(err(
+                span,
+                "E_TYPE",
+                "wrapping arithmetic takes one value of the same integer type",
+            ));
+        }
+        let left = self.read(place.clone(), span.line)?.0;
+        let right = self.expr(args[0], Some(ty))?.0;
+        let dst = self.temp(ty);
+        self.emit(
+            k::Op::Binary {
+                dst,
+                op: name.to_string(),
+                left,
+                right,
+            },
+            span.line,
+        );
+        Ok(Some((dst, ty)))
+    }
 }

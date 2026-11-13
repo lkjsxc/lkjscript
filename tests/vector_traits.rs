@@ -198,6 +198,7 @@ fn rust_observations(source: &str, probes: &[&str]) -> Vec<(String, i64)> {
     for (module, file) in [
         ("prelude", "prelude.rs"),
         ("iter", "iter.rs"),
+        ("integer", "integer.rs"),
         ("bytes", "bytes.rs"),
         ("string", "string.rs"),
         ("str", "str.rs"),

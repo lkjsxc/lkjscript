@@ -108,3 +108,87 @@ impl<K: Ord, V> BTreeMap<K, V> {
         Option::Some(removed.value)
     }
 }
+
+/// A shared cursor over entries in key order. Item borrows outlive the cursor.
+pub struct Iter<'a, K, V> {
+    entries: &'a [Entry<K, V>],
+    index: usize,
+}
+
+impl<K, V> BTreeMap<K, V> {
+    pub fn iter<'a>(&'a self) -> Iter<'a, K, V> {
+        Iter {
+            entries: self.entries.as_slice(),
+            index: 0,
+        }
+    }
+    pub fn keys<'a>(&'a self) -> Keys<'a, K, V> {
+        Keys { inner: self.iter() }
+    }
+    pub fn values<'a>(&'a self) -> Values<'a, K, V> {
+        Values { inner: self.iter() }
+    }
+}
+
+impl<'a, K, V> crate::iter::Iterator for Iter<'a, K, V> {
+    type Item = (&'a K, &'a V);
+    fn next(&mut self) -> Option<(&'a K, &'a V)> {
+        if self.index == self.entries.len() {
+            return Option::None;
+        }
+        let index = self.index;
+        self.index = index + 1;
+        let entry = &self.entries[index];
+        Option::Some((&entry.key, &entry.value))
+    }
+}
+impl<'a, K, V> crate::iter::IntoIterator for Iter<'a, K, V> {
+    type IntoIter = Self;
+    fn into_iter(self) -> Self {
+        self
+    }
+}
+impl<'a, K, V> crate::iter::IntoIterator for &'a BTreeMap<K, V> {
+    type IntoIter = Iter<'a, K, V>;
+    fn into_iter(self) -> Iter<'a, K, V> {
+        self.iter()
+    }
+}
+
+pub struct Keys<'a, K, V> {
+    inner: Iter<'a, K, V>,
+}
+impl<'a, K, V> crate::iter::Iterator for Keys<'a, K, V> {
+    type Item = &'a K;
+    fn next(&mut self) -> Option<&'a K> {
+        match self.inner.next() {
+            Option::Some((key, _)) => Option::Some(key),
+            Option::None => Option::None,
+        }
+    }
+}
+impl<'a, K, V> crate::iter::IntoIterator for Keys<'a, K, V> {
+    type IntoIter = Self;
+    fn into_iter(self) -> Self {
+        self
+    }
+}
+
+pub struct Values<'a, K, V> {
+    inner: Iter<'a, K, V>,
+}
+impl<'a, K, V> crate::iter::Iterator for Values<'a, K, V> {
+    type Item = &'a V;
+    fn next(&mut self) -> Option<&'a V> {
+        match self.inner.next() {
+            Option::Some((_, value)) => Option::Some(value),
+            Option::None => Option::None,
+        }
+    }
+}
+impl<'a, K, V> crate::iter::IntoIterator for Values<'a, K, V> {
+    type IntoIter = Self;
+    fn into_iter(self) -> Self {
+        self
+    }
+}

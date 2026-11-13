@@ -59,9 +59,9 @@ fn match_terms(
     terms: &[Term],
     pairs: Vec<Goal>,
     flexible: &BTreeSet<usize>,
+    mut substitutions: BTreeMap<usize, usize>,
 ) -> Option<BTreeMap<usize, usize>> {
     let mut pending = pairs;
-    let mut substitutions = BTreeMap::new();
     while let Some((pattern, actual)) = pending.pop() {
         if let Term::Variable(variable) = terms[pattern] {
             if flexible.contains(&variable) {
@@ -96,6 +96,7 @@ fn prerequisites(
     index: &ImplementationIndex,
     terms: &mut Vec<Term>,
     (ty, bound): Goal,
+    known: &[Goal],
 ) -> Result<Option<Vec<Goal>>, Diagnostic> {
     let declaration = match &terms[bound] {
         Term::DeclaredTrait(declaration, args) if args.is_empty() => *declaration,
@@ -123,11 +124,85 @@ fn prerequisites(
             .collect();
         let target = signature_type(source, implementation.target, &environment, terms)?;
         let implemented = signature_type(source, trait_ty, &environment, terms)?;
-        let Some(substitutions) =
-            match_terms(terms, vec![(target, ty), (implemented, bound)], &flexible)
-        else {
+        let Some(mut substitutions) = match_terms(
+            terms,
+            vec![(target, ty), (implemented, bound)],
+            &flexible,
+            BTreeMap::new(),
+        ) else {
             continue;
         };
+        // Callable output equations may determine an implementation parameter
+        // absent from its nominal target. Only implementation variables are
+        // flexible; the caller's type/region variables remain rigid.
+        loop {
+            let before = substitutions.len();
+            let current: BTreeMap<_, _> = environment
+                .iter()
+                .map(|(name, id)| {
+                    let value = match terms[*id] {
+                        Term::Variable(variable) => {
+                            substitutions.get(&variable).copied().unwrap_or(*id)
+                        }
+                        _ => *id,
+                    };
+                    (name.clone(), value)
+                })
+                .collect();
+            for parameter in &implementation.generics {
+                if parameter.lifetime {
+                    continue;
+                }
+                let value = current[&parameter.name];
+                if matches!(terms[value], Term::Variable(variable) if flexible.contains(&variable))
+                {
+                    continue;
+                }
+                for constraint in &parameter.bounds {
+                    if !matches!(&source.types[*constraint].kind, Type::Path(path)
+                        if path.declaration.is_none() && matches!(path.name.as_str(), "Fn" | "FnMut" | "FnOnce"))
+                    {
+                        continue;
+                    }
+                    let pattern = signature_type(source, *constraint, &current, terms)?;
+                    let mut found: Option<BTreeMap<usize, usize>> = None;
+                    let mut ambiguous = false;
+                    for (known_ty, known_bound) in known {
+                        if !equivalent(terms, value, *known_ty) {
+                            continue;
+                        }
+                        let Some(candidate) = match_terms(
+                            terms,
+                            vec![(pattern, *known_bound)],
+                            &flexible,
+                            substitutions.clone(),
+                        ) else {
+                            continue;
+                        };
+                        if found.as_ref().is_some_and(|prior| {
+                            prior.len() != candidate.len()
+                                || prior.iter().any(|(variable, previous)| {
+                                    candidate
+                                        .get(variable)
+                                        .is_none_or(|next| !equivalent(terms, *previous, *next))
+                                })
+                        }) {
+                            ambiguous = true;
+                            break;
+                        }
+                        found = Some(candidate);
+                    }
+                    if !ambiguous {
+                        if let Some(found) = found {
+                            substitutions = found;
+                        }
+                    }
+                }
+            }
+            if substitutions.len() == before {
+                break;
+            }
+        }
         let mut environment = environment
             .into_iter()
             .map(|(name, id)| match terms[id] {
@@ -203,7 +278,7 @@ pub(super) fn prove(
             state.insert(goal, 2);
             continue;
         }
-        let Some(children) = prerequisites(source, index, terms, goal)? else {
+        let Some(children) = prerequisites(source, index, terms, goal, known)? else {
             state.insert(goal, 1);
             continue;
         };

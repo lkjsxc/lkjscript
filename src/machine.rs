@@ -79,8 +79,14 @@ pub struct RunResult {
 struct Location {
     index: usize,
 }
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct SequenceExtent {
+    start: usize,
+    count: usize,
+}
 #[derive(Clone)]
 struct Reference {
+    extent: Option<SequenceExtent>,
     target: Location,
     identity: Rc<()>,
     tag: usize,
@@ -119,6 +125,7 @@ struct Cell {
     immutable: bool,
 }
 struct Loan {
+    extent: Option<SequenceExtent>,
     target: Location,
     identity: Rc<()>,
     mutable: bool,
@@ -128,6 +135,7 @@ struct Loan {
 }
 #[derive(Clone)]
 struct Access {
+    extent: Option<SequenceExtent>,
     cell: Location,
     ty: usize,
     permissions: Vec<usize>,
@@ -399,7 +407,10 @@ impl<H: Host> Machine<'_, H> {
                 "loan tag belongs to another storage identity",
             ));
         }
-        if loan.target != reference.target || loan.mutable != reference.mutable {
+        if loan.target != reference.target
+            || loan.mutable != reference.mutable
+            || loan.extent != reference.extent
+        {
             return Err(self.invalid("reference tag differs from its borrow"));
         }
         if !self.same_occupant(reference.target, &reference.identity) {
@@ -408,12 +419,24 @@ impl<H: Host> Machine<'_, H> {
                 "reference points to a retired occupant of a reused slot",
             ));
         }
-        Ok(Access {
+        let unsized_view = matches!(
+            self.kind(reference.referent)?,
+            TypeKind::Slice { .. } | TypeKind::Str
+        );
+        if unsized_view != reference.extent.is_some() {
+            return Err(self.invalid("reference extent differs from its referent"));
+        }
+        let access = Access {
+            extent: reference.extent,
             cell: reference.target,
             ty: reference.referent,
             permissions: vec![reference.tag],
             writable: reference.mutable,
-        })
+        };
+        if unsized_view {
+            self.sequence(&access)?;
+        }
+        Ok(access)
     }
     fn borrow(
         &mut self,
@@ -428,6 +451,12 @@ impl<H: Host> Machine<'_, H> {
             ));
         }
         self.access(access, mutable, true)?;
+        let extent = if matches!(self.kind(referent)?, TypeKind::Slice { .. } | TypeKind::Str) {
+            let count = self.sequence(access)?.len();
+            Some(access.extent.unwrap_or(SequenceExtent { start: 0, count }))
+        } else {
+            None
+        };
         let tag = if let Some(tag) = self.free_tags.pop() {
             tag
         } else {
@@ -453,6 +482,7 @@ impl<H: Host> Machine<'_, H> {
         self.loans.insert(
             tag,
             Loan {
+                extent,
                 target: access.cell,
                 identity: identity.clone(),
                 mutable,
@@ -462,6 +492,7 @@ impl<H: Host> Machine<'_, H> {
             },
         );
         Ok(Value::Reference(Reference {
+            extent,
             target: access.cell,
             identity,
             tag,
@@ -530,6 +561,7 @@ impl<H: Host> Machine<'_, H> {
             .ok_or_else(|| self.invalid("local index is not declared"))?;
         let declaration = &self.program.functions[frame.function].locals[local];
         Ok(Access {
+            extent: None,
             cell,
             ty: declaration.ty,
             permissions: Vec::new(),
@@ -559,9 +591,11 @@ impl<H: Host> Machine<'_, H> {
                         }
                         access.permissions.extend_from_slice(&next.permissions);
                         access.cell = next.cell;
+                        access.extent = next.extent;
                         access.ty = *inner;
                     }
                     (TypeKind::Box { inner }, Value::Box(child)) => {
+                        access.extent = None;
                         access.cell = *child;
                         access.ty = *inner;
                     }
@@ -579,6 +613,7 @@ impl<H: Host> Machine<'_, H> {
                             .get(*index)
                             .ok_or_else(|| self.invalid("unknown field"))?
                             .ty;
+                        access.extent = None;
                         access.cell = *values
                             .get(*index)
                             .ok_or_else(|| self.invalid("missing field storage"))?;
@@ -604,6 +639,7 @@ impl<H: Host> Machine<'_, H> {
                             .and_then(|variant| variant.fields.get(*index))
                             .ok_or_else(|| self.invalid("unknown variant field"))?
                             .ty;
+                        access.extent = None;
                         access.cell = *fields
                             .get(*index)
                             .ok_or_else(|| self.invalid("missing variant storage"))?;
@@ -625,13 +661,12 @@ impl<H: Host> Machine<'_, H> {
                         | TypeKind::Slice { inner, .. } => *inner,
                         _ => return Err(self.invalid("indexing requires a collection")),
                     };
-                    let Value::Sequence(elements) = value else {
-                        return Err(self.invalid("collection has no element storage"));
-                    };
+                    let elements = self.sequence(&access)?;
                     access.cell = *usize::try_from(*index)
                         .ok()
                         .and_then(|index| elements.get(index))
                         .ok_or_else(|| self.trap(3, "index out of bounds"))?;
+                    access.extent = None;
                     access.ty = inner;
                 }
             }
@@ -1088,6 +1123,7 @@ impl<H: Host> Machine<'_, H> {
             let ty = self.cell(child)?.ty;
             self.work.push(Work::Drop(DropWork {
                 access: Access {
+                    extent: None,
                     cell: child,
                     ty,
                     permissions: Vec::new(),
@@ -1120,14 +1156,27 @@ impl<H: Host> Machine<'_, H> {
         }
         Ok(values)
     }
+    fn sequence(&self, access: &Access) -> Result<&[Location], RunError> {
+        let Value::Sequence(elements) = self.value(access.cell)? else {
+            return Err(self.invalid("view requires sequence storage"));
+        };
+        let extent = access.extent.unwrap_or(SequenceExtent {
+            start: 0,
+            count: elements.len(),
+        });
+        extent
+            .start
+            .checked_add(extent.count)
+            .and_then(|end| elements.get(extent.start..end))
+            .ok_or_else(|| self.invalid("reference extent exceeds sequence storage"))
+    }
     fn bytes(&self, access: &Access) -> Result<Vec<u8>, RunError> {
         self.access(access, false, true)?;
-        let Value::Sequence(elements) = self.value(access.cell)? else {
-            return Err(self.invalid("byte view requires sequence storage"));
-        };
+        let elements = self.sequence(access)?;
         let mut bytes = Vec::new();
         for element in elements {
             let element_access = Access {
+                extent: None,
                 cell: *element,
                 ty: k::U8,
                 permissions: access.permissions.clone(),
@@ -1204,10 +1253,7 @@ impl<H: Host> Machine<'_, H> {
             "vec_len" | "str_len" if values.len() == 1 => {
                 let access = reference(0, self)?;
                 self.access(&access, false, true)?;
-                let Value::Sequence(elements) = self.value(access.cell)? else {
-                    return Err(self.invalid("length requires collection storage"));
-                };
-                Value::Bits(elements.len() as u64)
+                Value::Bits(self.sequence(&access)?.len() as u64)
             }
             "vec_push" if values.len() == 2 => {
                 let access = reference(0, self)?;
@@ -1460,6 +1506,7 @@ impl<H: Host> Machine<'_, H> {
                     }
                 };
                 let access = Access {
+                    extent: None,
                     cell,
                     ty: inner,
                     permissions: Vec::new(),
@@ -1514,6 +1561,81 @@ impl<H: Host> Machine<'_, H> {
                 } else if inner != source.ty {
                     return Err(self.invalid("borrow referent type differs"));
                 }
+                let reference = self.borrow(&source, inner, mutable)?;
+                self.put_local(&frame, dst, reference)?;
+            }
+            Op::ViewRange {
+                dst,
+                ref place,
+                start,
+                end,
+                inclusive,
+                mutable,
+            } => {
+                let mut source = self.resolve(&frame, place)?;
+                let TypeKind::Ref {
+                    inner,
+                    mutable: expected,
+                } = self.kind(self.local(&frame, dst)?.ty)?
+                else {
+                    return Err(self.invalid("range result must be a reference"));
+                };
+                let inner = *inner;
+                if *expected != mutable {
+                    return Err(self.invalid("range mutability differs"));
+                }
+                let text = matches!(self.kind(source.ty)?, TypeKind::Str);
+                match self.kind(source.ty)? {
+                    TypeKind::Vec { inner: item }
+                    | TypeKind::Array { inner: item, .. }
+                    | TypeKind::Slice { inner: item, .. } => {
+                        if !matches!(self.kind(inner)?, TypeKind::Slice { inner: result, .. } if item == result)
+                        {
+                            return Err(self.invalid("range element type differs"));
+                        }
+                    }
+                    TypeKind::Str if !mutable && matches!(self.kind(inner)?, TypeKind::Str) => {}
+                    _ => return Err(self.invalid("range source or result type differs")),
+                }
+                if self.local(&frame, start)?.ty != k::U64 || self.local(&frame, end)?.ty != k::U64
+                {
+                    return Err(self.invalid("range bounds must be usize"));
+                }
+                self.access(&source, mutable, true)?;
+                let (_, Value::Bits(start)) = self.take_local(&frame, start)? else {
+                    return Err(self.invalid("range start is not scalar"));
+                };
+                let (_, Value::Bits(mut end)) = self.take_local(&frame, end)? else {
+                    return Err(self.invalid("range end is not scalar"));
+                };
+                let elements = self.sequence(&source)?;
+                let count = elements.len() as u64;
+                if inclusive {
+                    if end >= count {
+                        return Err(self.trap(3, "range out of bounds"));
+                    }
+                    end += 1;
+                }
+                if start > end || end > count {
+                    return Err(self.trap(3, "range out of bounds"));
+                }
+                if text {
+                    for endpoint in [start, end] {
+                        if endpoint != 0 && endpoint < count {
+                            let cell = elements[endpoint as usize];
+                            let Value::Bits(byte) = self.value(cell)? else {
+                                return Err(self.invalid("text boundary is not a byte"));
+                            };
+                            if byte & 0xc0 == 0x80 {
+                                return Err(self.trap(3, "range endpoint is not a UTF-8 boundary"));
+                            }
+                        }
+                    }
+                }
+                source.extent = Some(SequenceExtent {
+                    start: source.extent.map_or(0, |extent| extent.start) + start as usize,
+                    count: (end - start) as usize,
+                });
                 let reference = self.borrow(&source, inner, mutable)?;
                 self.put_local(&frame, dst, reference)?;
             }
@@ -1908,6 +2030,7 @@ mod tests {
         };
         let old = checked(machine.allocate(k::I64, Some(Value::Bits(1)), false));
         let old_access = Access {
+            extent: None,
             cell: old,
             ty: k::I64,
             permissions: Vec::new(),
@@ -1929,6 +2052,7 @@ mod tests {
         assert!(error.kind == ErrorKind::Machine(MachineError::DanglingReference));
         checked(machine.release_reference(&stale));
         let access = Access {
+            extent: None,
             cell: replacement,
             ty: k::I64,
             permissions: Vec::new(),

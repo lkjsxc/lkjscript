@@ -160,3 +160,8 @@ impl FromUtf8Error {
 pub fn __lkj_new() -> String {
     String::new()
 }
+
+// Range syntax resolves this declaration, preserving the source String invariant.
+pub fn __lkj_as_str(value: &String) -> &str {
+    value.as_str()
+}

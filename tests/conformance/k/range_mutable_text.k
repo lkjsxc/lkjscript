@@ -1,0 +1,26 @@
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "str" str
+type "&str" ref shared 7
+type "[u8]" slice shared 5
+type "&[u8]" ref shared 9
+type "&mutstr" ref mut 7
+fn "probe" 0 4
+local "text" 8 let
+local "start" 4 let
+local "end" 4 let
+local "view" 11 let
+local "length" 4 let
+@1 text 0 cebbf09fa680
+@2 int 1 0
+@3 int 2 6
+@4 view-range 3 mut exclusive 1 2 0 deref
+@5 intrinsic 4 "str_len" 3
+@6 drop 0
+@7 return 4
+endfn

@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto';
 import { run } from '../process.mjs';
 import { runRoutes } from '../batch.mjs';
 import { oracleCache, packResult, unpackResult } from '../oracle.mjs';
-const [binary='target/debug/lkjscript',seedText='1301',countText='96',output='target/generators']=process.argv.slice(2);
+const [binary='target/debug/lkjscript',seedText='1301',countText='126',output='target/generators']=process.argv.slice(2);
 const bin=path.resolve(binary),count=Number(countText),dir=path.resolve(output,`sugar-${seedText}`);
 const engines=(process.env.LKJ_ENGINES||'native,k').split(',');
 const compareRust=process.env.LKJ_SUGAR_RUST!=='0';
@@ -21,10 +21,11 @@ struct P { a: M, b: M }
 fn tick(world: &mut World, byte: u8) { let mut out = world.stdout(); out.write(&[byte]); }
 fn make(world: &mut World, byte: u8) -> M { tick(world, byte+100); M { out: world.stdout(), b: byte } }
 `;
+const rangeExpansion="fn invalid_range(world:&mut World,bytes:&[u8]){let invalid=bytes.len();tick(world,bytes[invalid]);}\nfn print_range(world:&mut World,bytes:&[u8],start:usize,mut end:usize,inclusive:bool,text:bool){\n if inclusive{if end>=bytes.len(){invalid_range(world,bytes);}end=end+1;}\n if start>end||end>bytes.len(){invalid_range(world,bytes);}\n if text{if start<bytes.len()&&(bytes[start]&192u8)==128u8{invalid_range(world,bytes);}if end<bytes.len()&&(bytes[end]&192u8)==128u8{invalid_range(world,bytes);}}\n let mut index=start;while index<end{tick(world,bytes[index]);index=index+1;}\n}\n";
 function pair(index){
  const a=1+random(50),b=1+random(50),c=1+random(50),marker=60+random(30),yes=random(2)===0?'true':'false';
  let sugar='',expanded='',sugarHelpers='',expandedHelpers='';let family,rustSugar=true;
- switch(index%32){
+ switch(index%42){
   case 0:{family='if-let';const value=`if ${yes} { Some(make(&mut world,${a}u8)) } else { None }`;
    sugar=`if let Some(m) = ${value} { tick(&mut world,${marker}u8); drop(m); } else { tick(&mut world,${b}u8); }`;
    expanded=`match ${value} { Some(m) => { tick(&mut world,${marker}u8); drop(m); }, None => tick(&mut world,${b}u8) }`;break;}
@@ -214,6 +215,60 @@ fn result_view_mut(value:&mut Result<M,M>)->Result<&mut M,&mut M>{match value{Ok
   case 31:{family='range-binding-pattern';const start=random(5),end=start+1+random(5);
    sugar=`for ref mut value in ${start}i64..${end}i64{*value=*value+10;tick(&mut world,*value as u8);}for _ in 0i64..3i64{tick(&mut world,${marker}u8);}`;
    expanded=`let mut counter=${start}i64;while counter<${end}i64{let mut item=counter;let ref mut value=item;*value=*value+10;tick(&mut world,*value as u8);counter=counter+1;}let mut index=0i64;while index<3i64{tick(&mut world,${marker}u8);index=index+1;}`;break;}
+
+  case 32:{family='shared-range-forms';const shape=random(3),kind=['u8','u16','i64','char','M'][random(5)],form=random(6),bounds=[[1,3],[0,3],[1,4],[0,4],[1,3],[0,3]][form],range=['1..3','..3','1..','..','1..=2','..=2'][form];
+   const values=[a,b,c,marker].map(n=>kind==='M'?'make(&mut world,'+n+'u8)':kind==='char'?"'\\u{"+n.toString(16)+"}'":n+kind).join(',');
+   const prefix=shape===0?'let values=vec!['+values+'];':shape===1?'let values=['+values+'];':'let storage=['+values+'];let values:&['+kind+']=&storage;';
+   const value=name=>kind==='M'?name+'.b':name+' as u8';
+   sugar=prefix+'let selected=&values['+range+'];let mut index=0usize;while index<selected.len(){tick(&mut world,'+value('selected[index]')+');index=index+1;}';
+   expanded=prefix+'let whole:&['+kind+']='+(shape===2?'values':'&values')+';let mut index='+bounds[0]+'usize;while index<'+bounds[1]+'usize{tick(&mut world,'+value('whole[index]')+');index=index+1;}';break;}
+  case 33:{family='mutable-nested-ranges';const shape=random(3),kind=['u8','u16','i64'][random(3)],values='0'+kind+',1'+kind+',2'+kind+',3'+kind;
+   const prefix=shape===0?'let mut values=vec!['+values+'];':shape===1?'let mut values=['+values+'];':'let mut storage=['+values+'];let values:&mut['+kind+']=&mut storage;';
+   sugar=prefix+'{let selected=&mut values[1..];let nested=&mut selected[..2];nested[0]='+a+kind+';nested[1]='+b+kind+';}';
+   expanded=prefix+'{let whole:&mut['+kind+']=&mut '+(shape===2?'*values':'values')+';whole[1]='+a+kind+';whole[2]='+b+kind+';}';
+   const visit='let mut index=0usize;while index<values.len(){tick(&mut world,values[index] as u8);index=index+1;}';sugar+=visit;expanded+=visit;break;}
+  case 34:{family='utf8-text-range';const bounds=[[1,7],[1,3],[3,7],[3,3],[2,3],[1,2],[4,7],[8,8],[0,9],[7,3]][random(10)];
+   const prefix='let text='+(random(2)?'"aλ🦀z".to_string()':'"aλ🦀z"')+';let start='+bounds[0]+'usize;let end='+bounds[1]+'usize;';
+   sugar=prefix+'let selected=&text[start..end];let mut out=world.stdout();out.write(selected.as_bytes());';
+   expandedHelpers=rangeExpansion;
+   expanded=prefix+'print_range(&mut world,text.as_bytes(),start,end,false,true);';break;}
+  case 35:{family='returned-captured-range';const prefix='let values=vec!['+a+'u8,'+b+'u8,'+c+'u8,'+marker+'u8];let captured=||selected(&values);let view=captured();drop(captured);';
+   sugarHelpers="fn selected<'a>(bytes:&'a[u8])->&'a[u8]{&bytes[1..3]}\n";
+   expandedHelpers="struct Chosen<'a>{data:&'a[u8],start:usize,end:usize}\nfn selected<'a>(bytes:&'a[u8])->Chosen<'a>{Chosen{data:bytes,start:1,end:3}}\n";
+   sugar=prefix+'for item in view{tick(&mut world,*item);}';
+   expanded=prefix+'let mut index=view.start;while index<view.end{tick(&mut world,view.data[index]);index=index+1;}';break;}
+  case 36:{family='range-operand-order';const shape=random(3),mutable=random(2)===0,referent=shape===0?'[u8;4]':shape===1?'Vec<u8>':'[u8]',mode=mutable?'mut ':'';
+   const source="fn source<'a>(world:&mut World,values:&'a "+mode+referent+")->&'a "+mode+referent+'{tick(world,'+marker+'u8);values}\nfn start(world:&mut World)->usize{tick(world,'+(marker+1)+'u8);1}\nfn end(world:&mut World)->usize{tick(world,'+(marker+2)+'u8);3}\n';
+   sugarHelpers=expandedHelpers=source;
+   const prefix='let '+(mutable?'mut ':'')+'values='+(shape===1?'vec!':'')+'['+a+'u8,'+b+'u8,'+c+'u8,'+marker+'u8];',base='source(&mut world,&'+mode+'values)';
+   sugar=prefix+'{let selected=&'+mode+base+'[start(&mut world)..end(&mut world)];'+(mutable?'selected[0]='+a+'u8;':'')+'let mut index=0usize;while index<selected.len(){tick(&mut world,selected[index]);index=index+1;}}';
+   expanded=prefix+'{let whole='+base+';let left=start(&mut world);let right=end(&mut world);'+(mutable?'whole[left]='+a+'u8;':'')+'let mut index=left;while index<right{tick(&mut world,whole[index]);index=index+1;}}';break;}
+  case 37:{family='range-bounds-trap';const choices=[['0','4',false],['4','4',false],['2','1',false],['0','18446744073709551615',true],['3','2',true],['0','2',true],['3','3',false],['0','0',false],['0','3',false],['4','3',true]],bound=choices[random(choices.length)];
+   const prefix='let bytes=vec!['+a+'u8,'+b+'u8,'+c+'u8];let start='+bound[0]+'usize;let end='+bound[1]+'usize;';
+   sugar=prefix+'let selected=&bytes[start..'+(bound[2]?'=':'')+'end];let mut out=world.stdout();out.write(selected);';
+   expandedHelpers=rangeExpansion;
+   expanded=prefix+'print_range(&mut world,&bytes,start,end,'+bound[2]+',false);';break;}
+
+  case 38:{family='iterator-enumerate-skip-take';const skip=random(5),limit=random(5);
+   sugarHelpers=expandedHelpers=`struct Trace{values:Vec<M>,out:Stdout,tag:u8}\nimpl Drop for Trace{fn drop(&mut self){self.out.write(&[self.tag+1]);}}\nimpl Iterator for Trace{type Item=M;fn next(&mut self)->Option<M>{self.out.write(&[self.tag]);self.values.pop()}}\nfn traced(world:&mut World,tag:u8)->Trace{Trace{values:vec![make(world,${a}u8),make(world,${b}u8),make(world,${c}u8)],out:world.stdout(),tag}}\n`;
+   const body=`tick(&mut world,index as u8);tick(&mut world,value.b);if ${yes}{break;}drop(value);`;
+   sugar=`let mut iterator=traced(&mut world,70).skip(${skip}usize).take(${limit}usize).enumerate();while let Some((index,value))=iterator.next(){${body}}tick(&mut world,${marker}u8);drop(iterator);`;
+   expanded=`let mut iterator=traced(&mut world,70);let mut skipping=${skip}usize;let mut remaining=${limit}usize;let mut index=0usize;loop{if remaining==0{break;}remaining=remaining-1;let mut ended=false;while skipping>0{skipping=skipping-1;match iterator.next(){Some(value)=>drop(value),None=>{skipping=0;ended=true;break;}}}let next:Option<M>=if ended{None}else{iterator.next()};match next{Some(value)=>{${body}index=index+1;},None=>break}}tick(&mut world,${marker}u8);drop(iterator);`;break;}
+  case 39:{family='iterator-zip-next-order';const left=random(4),right=random(4);
+   sugarHelpers=expandedHelpers=`struct Trace{values:Vec<M>,out:Stdout,tag:u8}\nimpl Drop for Trace{fn drop(&mut self){self.out.write(&[self.tag+1]);}}\nimpl Iterator for Trace{type Item=M;fn next(&mut self)->Option<M>{self.out.write(&[self.tag]);self.values.pop()}}\nfn traced(world:&mut World,tag:u8,count:usize)->Trace{let mut values:Vec<M>=Vec::new();let mut index=0usize;while index<count{values.push(make(world,${a}u8+index as u8));index=index+1;}Trace{values,out:world.stdout(),tag}}\n`;
+   const body=`tick(&mut world,x.b);tick(&mut world,y.b);drop(y);drop(x);if ${yes}{break;}`;
+   // Take imposes no effective limit but supplies the source IntoIterator contract.
+   sugar=`let mut iterator=traced(&mut world,70,${left}usize).zip(traced(&mut world,80,${right}usize).take(9));while let Some((x,y))=iterator.next(){${body}}let last=iterator.next();drop(last);tick(&mut world,${marker}u8);drop(iterator);`;
+   expanded=`let mut left=traced(&mut world,70,${left}usize);let mut right=traced(&mut world,80,${right}usize);loop{match left.next(){Some(x)=>match right.next(){Some(y)=>{${body}},None=>{drop(x);break;}},None=>break}}let last=match left.next(){Some(x)=>match right.next(){Some(y)=>Some((x,y)),None=>{drop(x);None}},None=>None};drop(last);tick(&mut world,${marker}u8);drop(left);drop(right);`;break;}
+  case 40:{family='iterator-chain-exhaustion';const left=random(4),right=random(4);
+   sugarHelpers=expandedHelpers=`struct Trace{values:Vec<M>,out:Stdout,tag:u8}\nimpl Drop for Trace{fn drop(&mut self){self.out.write(&[self.tag+1]);}}\nimpl Iterator for Trace{type Item=M;fn next(&mut self)->Option<M>{self.out.write(&[self.tag]);self.values.pop()}}\nfn traced(world:&mut World,tag:u8,count:usize)->Trace{let mut values:Vec<M>=Vec::new();let mut index=0usize;while index<count{values.push(make(world,${a}u8+index as u8));index=index+1;}Trace{values,out:world.stdout(),tag}}\n`;
+   const body=`tick(&mut world,value.b);drop(value);if ${yes}{break;}`;
+   sugar=`let mut iterator=traced(&mut world,70,${left}usize).chain(traced(&mut world,80,${right}usize));while let Some(value)=iterator.next(){${body}}tick(&mut world,${marker}u8);drop(iterator);`;
+   expanded=`let mut left=Some(traced(&mut world,70,${left}usize));let mut right=traced(&mut world,80,${right}usize);loop{let mut next:Option<M>=None;match left.as_mut(){Some(iterator)=>{next=iterator.next();},None=>()}if next.is_none(){left=None;next=right.next();}match next{Some(value)=>{${body}},None=>break}}tick(&mut world,${marker}u8);drop(left);drop(right);`;break;}
+  case 41:{family='ordered-collection-iteration';
+   const prefix=`let mut map:std::collections::BTreeMap<u8,M>=std::collections::BTreeMap::new();map.insert(2u8,make(&mut world,${b}u8));map.insert(1u8,make(&mut world,${a}u8));let mut set:std::collections::BTreeSet<u8>=std::collections::BTreeSet::new();set.insert(2u8);set.insert(1u8);set.insert(2u8);`;
+   sugar=prefix+'for (key,value) in &map{tick(&mut world,*key);tick(&mut world,value.b);}for key in map.keys(){tick(&mut world,*key);}for value in map.values(){tick(&mut world,value.b);}for value in &set{tick(&mut world,*value);}';
+   expanded=prefix+'let mut key=1u8;while key<=2{tick(&mut world,key);tick(&mut world,map.get(&key).unwrap().b);key=key+1;}tick(&mut world,1);tick(&mut world,2);tick(&mut world,map.get(&1u8).unwrap().b);tick(&mut world,map.get(&2u8).unwrap().b);tick(&mut world,1);tick(&mut world,2);';break;}
 
  }
  const tail=`\ntick(&mut world,${90+random(10)}u8);`+(random(9)===0?' assert!(false);':'');

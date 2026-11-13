@@ -85,7 +85,9 @@ fn operation_place(operation: &k::Op) -> Option<(&k::Place, Kind)> {
         k::Op::Read { place, moving, .. } => {
             Some((place, if *moving { Kind::Once } else { Kind::Shared }))
         }
-        k::Op::Borrow { place, mutable, .. } | k::Op::SliceBorrow { place, mutable, .. } => Some((
+        k::Op::Borrow { place, mutable, .. }
+        | k::Op::SliceBorrow { place, mutable, .. }
+        | k::Op::ViewRange { place, mutable, .. } => Some((
             place,
             if *mutable {
                 Kind::Mutable
@@ -105,6 +107,7 @@ fn operation_place_mut(operation: &mut k::Op) -> Option<&mut k::Place> {
         k::Op::Read { place, .. }
         | k::Op::Borrow { place, .. }
         | k::Op::SliceBorrow { place, .. }
+        | k::Op::ViewRange { place, .. }
         | k::Op::Assign { place, .. }
         | k::Op::Drop { place }
         | k::Op::DropIf { place }
@@ -936,6 +939,7 @@ impl Builder<'_, '_> {
                 carriers: BTreeMap::new(),
                 dependents: BTreeMap::new(),
                 assignment_types: BTreeMap::new(),
+                range_borrows: BTreeMap::new(),
                 inferred: self.inferred.clone(),
                 written: live.clone(),
                 definite_live: live.clone(),

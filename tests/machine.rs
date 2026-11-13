@@ -598,3 +598,60 @@ fn shared_reference_copy_keeps_real_carrier_and_exclusive_parent_conflicts() {
         assert_eq!(error.line, line);
     }
 }
+
+#[test]
+fn range_views_validate_types_loans_and_utf8_without_the_checker() {
+    for (text, expected) in [
+        (
+            include_str!("conformance/k/range_wrong_bound.k"),
+            ErrorKind::Machine(MachineError::InvalidK),
+        ),
+        (
+            include_str!("conformance/k/range_wrong_source.k"),
+            ErrorKind::Machine(MachineError::InvalidK),
+        ),
+        (
+            include_str!("conformance/k/range_wrong_element.k"),
+            ErrorKind::Machine(MachineError::InvalidK),
+        ),
+        (
+            include_str!("conformance/k/range_immutable_mut.k"),
+            ErrorKind::Machine(MachineError::ConflictingAccess),
+        ),
+        (
+            include_str!("conformance/k/range_consumed_bound.k"),
+            ErrorKind::Machine(MachineError::DoubleDrop),
+        ),
+        (
+            include_str!("conformance/k/range_live_owner_drop.k"),
+            ErrorKind::Machine(MachineError::ConflictingAccess),
+        ),
+        (
+            include_str!("conformance/k/range_owner_write.k"),
+            ErrorKind::Machine(MachineError::ConflictingAccess),
+        ),
+        (
+            include_str!("conformance/k/range_mutable_text.k"),
+            ErrorKind::Machine(MachineError::InvalidK),
+        ),
+        (
+            include_str!("conformance/k/range_end_past.k"),
+            ErrorKind::Trap(3),
+        ),
+        (
+            include_str!("conformance/k/range_utf8_start.k"),
+            ErrorKind::Trap(3),
+        ),
+    ] {
+        let program = lkjscript::k_text::read(text).unwrap();
+        let error = machine::run(&program, 0, &[], &mut Vec::new())
+            .err()
+            .unwrap();
+        assert!(
+            error.kind == expected,
+            "{}: {}",
+            error.code(),
+            error.message
+        );
+    }
+}

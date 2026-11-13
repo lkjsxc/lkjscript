@@ -7,7 +7,9 @@ pub struct BTreeSet<T> {
 
 impl<T: Ord> BTreeSet<T> {
     pub fn new() -> BTreeSet<T> {
-        BTreeSet { entries: BTreeMap::new() }
+        BTreeSet {
+            entries: BTreeMap::new(),
+        }
     }
     pub fn len(&self) -> usize {
         self.entries.len()
@@ -26,5 +28,19 @@ impl<T: Ord> BTreeSet<T> {
     }
     pub fn clear(&mut self) {
         self.entries.clear();
+    }
+}
+
+/// Set iteration shares the map's key cursor and ordering.
+pub type Iter<'a, T> = crate::ordered_map::Keys<'a, T, ()>;
+impl<T> BTreeSet<T> {
+    pub fn iter<'a>(&'a self) -> Iter<'a, T> {
+        self.entries.keys()
+    }
+}
+impl<'a, T> crate::iter::IntoIterator for &'a BTreeSet<T> {
+    type IntoIter = Iter<'a, T>;
+    fn into_iter(self) -> Iter<'a, T> {
+        self.iter()
     }
 }

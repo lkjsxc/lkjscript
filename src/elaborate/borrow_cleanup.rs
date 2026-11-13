@@ -94,7 +94,9 @@ impl Builder<'_, '_> {
 
     pub(super) fn record_carriers(&mut self, operation: &k::Op) {
         match operation {
-            k::Op::Borrow { dst, place, .. } | k::Op::SliceBorrow { dst, place, .. } => {
+            k::Op::Borrow { dst, place, .. }
+            | k::Op::SliceBorrow { dst, place, .. }
+            | k::Op::ViewRange { dst, place, .. } => {
                 let dependencies = self.storage_dependencies(place);
                 self.set_dependencies(*dst, dependencies);
             }

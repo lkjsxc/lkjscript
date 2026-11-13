@@ -9,7 +9,13 @@ The surface is Rust-compatible. Integer literal fallback is i32; annotations and
 suffixes retain distinct types, including usize/u64 and isize/i64. Arithmetic is
 checked. Signed minimum literals are accepted; out-of-range integer and non-finite
 floating literals are rejected. Explicit casts follow Rust conversion behavior.
-Named wrapping operations remain source-library work. Booleans and Unicode scalar characters are distinct from integers. Characters
+Integer wrapping_add, wrapping_sub and wrapping_mul use modulo arithmetic at the
+receiver's width; the argument must have the same integer type. The checked_add,
+checked_sub and checked_mul methods are ordinary source-library implementations
+returning Some(result) or None on overflow for all ten supported integer types.
+Both operands evaluate once in receiver-then-argument order. Ordinary arithmetic
+operators remain checked and trap on overflow. Booleans and Unicode scalar
+characters are distinct from integers. Characters
 occupy four bytes; surrogate code points and values above U+10FFFF are rejected.
 Characters compare by scalar value, cast to integers, and can be constructed by
 casting u8. Other integer-to-character casts and character arithmetic reject.
@@ -143,7 +149,25 @@ repeated generic input candidates map to explicit alternatives. Exact transport
 of a bounded input keeps its conservative footprint; it cannot forge exact storage.
 Borrow endings and cleanup are explicit in K.
 Whole-array/Vec slice projections, view structs and implicit mutable reborrowing
-are implemented.
+are implemented. Generic arguments declared as &[T] or &mut [T] can infer T from
+an array or vector reference, including through transparent aliases. This is an
+argument reference coercion; trait matching retains exact type equations. A bare
+generic T still moves a mutable reference instead of creating an implicit reborrow.
+
+Range indexing supports start..end, ..end, start.., .., start..=end and ..=end on
+vectors, arrays, slices, str and the canonical source String. Base, start and end
+evaluate once in that order, with the source borrow established before the bounds.
+String uses its ordinary source as_str implementation. Shared and mutable slice
+ranges preserve the original owner's lifetime and parent loans; mutable text
+ranges remain unsupported. Nested ranges compose their extents. A range keeps a
+conservative owner footprint even when empty; numeric bounds do not establish
+that two mutable ranges are disjoint.
+
+Exclusive ranges require start <= end <= length. Inclusive ranges require
+end < length before adding one, then start <= end + 1. Text endpoints must also
+be UTF-8 boundaries. Invalid ranges and text boundaries trap R0003. An inclusive
+range such as 4..=3 at length 4 is empty; a maximum endpoint is checked before
+addition and cannot wrap.
 
 Every initialized reference leaf has checked source provenance. Inactive enum
 alternatives carry explicit absence evidence. Moves, construction, assignment,
@@ -267,8 +291,8 @@ clone all but the final element, and move the original last; a zero count still
 evaluates and destroys the supplied value. This expands through a source helper
 constrained by Clone. Ordered BTreeMap storage is a sorted Vec, with logarithmic
 lookup and linear insertion/removal. BTreeSet reuses that map's ordering and
-storage; its current source API is new/len/is_empty/contains/insert/remove/clear.
-Map clear destroys entries in key order.
+storage. Their shared iterators preserve sorted key order; maps also expose keys
+and values. Map clear destroys entries in key order.
 
 Shared collection iteration is ordinary source. Iterator declares Item and next;
 IntoIterator declares an iterator type constrained by Iterator. The iter method on vectors and slices,
@@ -278,8 +302,12 @@ a while loop, a next call and an irrefutable let binding for each item. Break,
 continue, early return and ordinary completion preserve item and iterator cleanup.
 Refutable item patterns and non-unit bodies are rejected. Numeric range loops use
 the same binding subsystem. No iteration K operation or nominal-type shortcut is
-required. Owned/exclusive collection iteration, range views and the broader
-adapter library remain separate work.
+required. Borrowed map/set iteration uses the same source protocols. enumerate,
+skip, take and zip are source adapters; chain currently requires two identical
+iterator types so Item equality follows from the type contract. Adapters retain
+the underlying owners and release items/iterators on exhaustion or early exit.
+Owned/exclusive collection iteration and the broader adapter library remain
+separate work.
 
 The explicit static-lifetime subset covers wholly static function outputs,
 including view aggregates. K records `ReturnSource::Static` and checks every live
@@ -304,7 +332,10 @@ unsupported. Method calls resolve to concrete function applications. Callable
 bounds such as F: FnMut(I::Item) prepare associated substitutions from I's declared
 trait evidence before checking the callable signature. Generic parameter
 source order does not hide that evidence; missing, ambiguous and incompatible
-associated bounds still reject.
+associated bounds still reject. Implementation prerequisite solving separates
+input/output type equations, ordinary child trait proofs and full callable
+signature validation. A pending or cyclic nonstructural goal is never a proof;
+associated projections consume the checked child witnesses.
 
 Generic function, impl-method and trait-default bodies are checked even when
 never instantiated. Definition checking reuses production elaboration and K
@@ -417,7 +448,12 @@ narrows the initial allowed input set, then submits the resulting program to
 independent complete K validation. These observations carry no execution
 authority. Disjoint mutable result leaves remain disjoint across a call; shared
 results may outlive a copied reference's environment while their referents remain
-live. Explicit reference results hidden behind an opaque generic callable still
+live. Generic and associated result families can likewise begin with explicit
+per-leaf candidate bounds and refine from fully checked concrete body returns.
+Acyclic callees refine before callers; recursive groups retain conservative
+contracts. The final complete K check validates every resulting mapping. These
+concrete observations do not prove an unused generic definition's hidden effects.
+Explicit reference results hidden behind an opaque generic callable still
 require a fuller origin inventory and remain a named unsupported boundary.
 Returning closures through impl Trait, lending closures, dynamic function
 objects and concurrency scope APIs remain unfinished.
@@ -452,6 +488,13 @@ creation, value transport, calls and control flow. A textually dead descriptor
 remains live while another live value needs its storage. Dead reference chains
 are dropped in dependency order; K independently verifies every emitted drop.
 Concrete trait method selection is represented by an explicit function call.
+Bounded slice/text views use ViewRange, written in text K as
+`view-range DST shared|mut exclusive|inclusive START END PLACE`. Bounds are
+separate consumed usize values; element and result reference types must match.
+Every source root and parent loan survives with a bounded footprint. The K
+machine independently tracks sequence start/count and checks UTF-8 endpoints;
+common lowering computes inline data/count using existing scalar operations.
+No range-specific runtime function or encoder operation is required.
 K has a readable/writable text form accepted by `check` for direct tests.
 Instructions preserve source lines and columns (`@line:column`; `@line` reads
 as column 1). Ownership errors name the place, conflicting holder and loan

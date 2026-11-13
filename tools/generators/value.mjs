@@ -175,6 +175,8 @@ fs.mkdirSync(output, {recursive: true});
 fs.appendFileSync(path.join(output, 'runs.jsonl'), JSON.stringify(record) + '\n');
 console.log(JSON.stringify(record)); fs.writeFileSync(`${dir}/report-${engine}.txt`, show.join('\n') + '\n');
 
-const fatal = Object.keys(tally).some(key => /DIFFERS|VALUE-VS-TRAP|ACCEPTS-RUST-REJECTED|crash|timeout|oracle|generator|other-line|machine-error/.test(key));
+// These generated families are implemented. A valid-source rejection is a
+// regression too; keep its outcome class, but never let it silently pass the gate.
+const fatal = Object.keys(tally).some(key => key !== 'value-equal' && key !== 'trap-equal');
 if (fatal) process.exitCode = 1;
 }

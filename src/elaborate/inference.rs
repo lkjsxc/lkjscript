@@ -4,11 +4,19 @@
 use super::{Builder, Compiler, Result, a, err, k};
 use std::collections::BTreeMap;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum MatchMode {
+    Exact,
+    Argument,
+    Referent,
+}
+
 enum Work {
     Match {
         pattern: a::TypeId,
         actual: usize,
         environment: usize,
+        mode: MatchMode,
     },
     AliasArguments {
         arguments: Vec<a::TypeId>,
@@ -91,11 +99,33 @@ impl Compiler<'_> {
         actual: usize,
         substitutions: &mut BTreeMap<String, usize>,
     ) -> Result<bool> {
+        self.infer_bindings(pattern, actual, substitutions, MatchMode::Exact)
+    }
+
+    /// Infer through the reference coercions admitted at an argument site.
+    /// Implementation/callable matching keeps exact structural equations.
+    pub(super) fn infer_argument_bindings(
+        &mut self,
+        pattern: a::TypeId,
+        actual: usize,
+        substitutions: &mut BTreeMap<String, usize>,
+    ) -> Result<bool> {
+        self.infer_bindings(pattern, actual, substitutions, MatchMode::Argument)
+    }
+
+    fn infer_bindings(
+        &mut self,
+        pattern: a::TypeId,
+        actual: usize,
+        substitutions: &mut BTreeMap<String, usize>,
+        mode: MatchMode,
+    ) -> Result<bool> {
         let mut environments = vec![substitutions.clone()];
         let mut pending = vec![Work::Match {
             pattern,
             actual,
             environment: 0,
+            mode,
         }];
         while let Some(work) = pending.pop() {
             match work {
@@ -113,6 +143,7 @@ impl Compiler<'_> {
                                 pattern: argument,
                                 actual,
                                 environment: caller_environment,
+                                mode: MatchMode::Exact,
                             });
                         }
                     }
@@ -121,6 +152,7 @@ impl Compiler<'_> {
                     pattern,
                     actual,
                     environment,
+                    mode,
                 } => {
                     let node = self.source.types[pattern].clone();
                     match node.kind {
@@ -182,6 +214,7 @@ impl Compiler<'_> {
                                     pattern: alias.ty,
                                     actual,
                                     environment: alias_environment,
+                                    mode,
                                 });
                                 continue;
                             }
@@ -200,6 +233,7 @@ impl Compiler<'_> {
                                             pattern,
                                             actual,
                                             environment,
+                                            mode: MatchMode::Exact,
                                         });
                                     }
                                 }
@@ -214,6 +248,7 @@ impl Compiler<'_> {
                                         pattern: arguments[0],
                                         actual,
                                         environment,
+                                        mode: MatchMode::Exact,
                                     });
                                 }
                             }
@@ -225,17 +260,29 @@ impl Compiler<'_> {
                                     pattern: inner,
                                     actual,
                                     environment,
+                                    mode: if mode == MatchMode::Argument {
+                                        MatchMode::Referent
+                                    } else {
+                                        MatchMode::Exact
+                                    },
                                 });
                             }
                         }
                         a::Type::Slice(inner) => {
-                            if let k::TypeKind::Slice { inner: actual, .. } =
-                                self.types[actual].kind
-                            {
+                            let element = match (&self.types[actual].kind, mode) {
+                                (k::TypeKind::Slice { inner, .. }, _) => Some(*inner),
+                                (
+                                    k::TypeKind::Vec { inner } | k::TypeKind::Array { inner, .. },
+                                    MatchMode::Referent,
+                                ) => Some(*inner),
+                                _ => None,
+                            };
+                            if let Some(actual) = element {
                                 pending.push(Work::Match {
                                     pattern: inner,
                                     actual,
                                     environment,
+                                    mode: MatchMode::Exact,
                                 });
                             }
                         }
@@ -247,6 +294,7 @@ impl Compiler<'_> {
                                     pattern: inner,
                                     actual,
                                     environment,
+                                    mode: MatchMode::Exact,
                                 });
                             }
                         }
@@ -262,6 +310,7 @@ impl Compiler<'_> {
                                                 pattern,
                                                 actual: field.ty,
                                                 environment,
+                                                mode: MatchMode::Exact,
                                             });
                                         }
                                     }

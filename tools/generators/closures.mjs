@@ -22,7 +22,7 @@ fn see(value:&M)->u8 {value.byte}
 function pair(index){
  const a=97+random(10),b=107+random(10),x=1+random(10),y=1+random(10),calls=1+random(4),mark=48+random(10);
  let source='',expanded='',sourceHelpers='',expandedHelpers='',family;
- switch(index%14){
+ switch(index%18){
  case 0:{family='shared-two-roots';const prefix=`let first=${x}u8;let second=${y}u8;`;
   sourceHelpers='fn apply<F:Fn(u8)->u8>(f:F,value:u8)->u8{f(value)}';
   expandedHelpers="struct Capture<'a,'b>{first:&'a u8,second:&'b u8} fn invoke(value:&Capture<'_,'_>,argument:u8)->u8{argument+*value.first+*value.second}";
@@ -87,6 +87,26 @@ function pair(index){
   expandedHelpers='struct Capture{left:M,right:M,middle:M}';
   source=prefix+'let f=move||{see(&pair.right);see(&middle);see(&pair.left)};drop(f);';
   expanded=prefix+'let f=Capture{left:pair.left,right:pair.right,middle};drop(f);';break;}
+ case 14:{family='generic-result-origin';const captured=random(2)===0,prefix=`let first=${x}u8;let second=${y}u8;`;
+  sourceHelpers='fn apply<A,B,F:FnOnce(A)->B>(f:F,value:A)->B{f(value)}';
+  expandedHelpers="struct Capture<'a>{value:&'a u8} fn invoke<'a,'b>(c:Capture<'a>,argument:&'b u8)->&"+(captured?"'a":"'b")+" u8{"+(captured?'c.value':'let _=*c.value;argument')+"}";
+  source=prefix+'let captured=&first;let answer=apply(move|argument:&u8|{'+(captured?'captured':'let _=*captured;argument')+'},&second);tick(&mut world,*answer);';
+  expanded=prefix+'let answer=invoke(Capture{value:&first},&second);tick(&mut world,*answer);';break;}
+ case 15:{family='generic-unrelated-short-capture';const prefix=`let first=${x}u8;let answer:&u8;`;
+  sourceHelpers='fn apply<A,B,F:FnOnce(A)->B>(f:F,value:A)->B{f(value)}';
+  expandedHelpers="struct Capture<'a>{value:&'a u8} fn invoke<'a,'b>(c:Capture<'b>,argument:&'a u8)->&'a u8{let _=*c.value;argument}";
+  source=prefix+`{let short=${y}u8;let captured=&short;answer=apply(move|argument:&u8|{let _=*captured;argument},&first);}tick(&mut world,*answer);`;
+  expanded=prefix+`{let short=${y}u8;answer=invoke(Capture{value:&short},&first);}tick(&mut world,*answer);`;break;}
+ case 16:{family='generic-mutable-leaf-permutation';const prefix=`let mut first=${x}u8;let mut second=${y}u8;`;
+  sourceHelpers='fn apply<A,B,F:FnOnce(A)->B>(f:F,value:A)->B{f(value)}';
+  expandedHelpers="fn invoke<'a,'b>(pair:(&'a mut u8,&'b mut u8))->(&'b mut u8,&'a mut u8){(pair.1,pair.0)}";
+  source=prefix+'let answer=apply(|pair:(&mut u8,&mut u8)|(pair.1,pair.0),(&mut first,&mut second));';
+  expanded=prefix+'let answer=invoke((&mut first,&mut second));';
+  const finish='*answer.0=*answer.0+1u8;*answer.1=*answer.1+2u8;tick(&mut world,*answer.0);tick(&mut world,*answer.1);drop(answer);tick(&mut world,first);tick(&mut world,second);';source+=finish;expanded+=finish;break;}
+ case 17:{family='associated-item-held-origins';const prefix=`let values=vec![${x}u8,${y}u8];let mut iterator=values.iter();`;
+  sourceHelpers='fn next<I:Iterator>(iterator:&mut I)->Option<I::Item>{iterator.next()}';
+  source=prefix+'let first=next(&mut iterator).unwrap();let second=next(&mut iterator).unwrap();drop(iterator);tick(&mut world,*first);tick(&mut world,*second);';
+  expanded=prefix+'let first=iterator.next().unwrap();let second=iterator.next().unwrap();drop(iterator);tick(&mut world,*first);tick(&mut world,*second);';break;}
  }
  const end=`tick(&mut world,${mark}u8);`;
  return {family,source:prelude+sourceHelpers+'\npub fn main(mut world:World){'+source+end+'}\n',expanded:prelude+expandedHelpers+'\npub fn main(mut world:World){'+expanded+end+'}\n'};

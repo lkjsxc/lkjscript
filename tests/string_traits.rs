@@ -20,6 +20,9 @@ pub use rust_prelude::{Option, Result};
 mod prelude {
     pub use super::rust_prelude::Option;
 }
+#[path = "../library/integer.rs"]
+#[allow(dead_code)]
+mod integer;
 #[path = "../library/iter.rs"]
 #[allow(dead_code)]
 mod iter;

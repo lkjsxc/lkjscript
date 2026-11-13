@@ -41,7 +41,7 @@ impl Builder<'_, '_> {
 
     /// Transparent aliases preserve the outer reference constructor even when
     /// its referent is still generic. Each alias has its own lexical environment.
-    fn declared_reference_shape(
+    pub(super) fn declared_reference_shape(
         &self,
         mut ty: a::TypeId,
         substitutions: &BTreeMap<String, usize>,

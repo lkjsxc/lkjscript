@@ -12,6 +12,16 @@ const binary = path.resolve(root, process.env.LKJSCRIPT_BIN || process.argv[2] |
 const engines = (process.env.LKJ_ENGINES || process.env.LKJ_ENGINE || 'native').split(',');
 const fixtures = path.join(root, 'tests/conformance');
 const cases = JSON.parse(fs.readFileSync(path.join(fixtures, 'cases.json'), 'utf8'));
+const kinds = new Set(['run', 'output', 'reject', 'trap']);
+const ids = new Set();
+for (const c of cases) {
+    if (!kinds.has(c.kind)) throw new Error('unknown conformance kind: ' + c.kind);
+    if (ids.has(c.id)) throw new Error('duplicate conformance id: ' + c.id);
+    ids.add(c.id);
+    if (c.kind === 'trap' && (c.rust || !/^R[0-9]{4}$/.test(c.code))) {
+        throw new Error('trap cases need a runtime code and no Rust oracle; use output for Rust trap comparisons: ' + c.id);
+    }
+}
 const out = path.join(root, 'target/conformance', engines.join('-'));
 fs.mkdirSync(out, { recursive: true });
 const timeout = Number(process.env.LKJ_TEST_TIMEOUT_MS || 30000);
@@ -55,7 +65,7 @@ const referenceResults = await oracleCache({suite:'conformance',harness,flags:'2
  }
  return results;
 });
-const actualRoutes = await runRoutes(binary,cases.map(c=>({path:path.join(fixtures,c.file),entry:c.entry,mode:c.kind==='run'||c.kind==='output'?'run':'check'})),{engines,output:out,encoding:null});
+const actualRoutes = await runRoutes(binary,cases.map(c=>({path:path.join(fixtures,c.file),entry:c.entry,mode:c.kind==='reject'?'check':'run'})),{engines,output:out,encoding:null});
 for (const engine of engines) {
 const actualResults = actualRoutes[engine];
 const failures = [], pending = [];
@@ -82,7 +92,16 @@ for (const c of cases) {
         continue;
     }
 
-    if (c.kind === 'output') {
+    if (c.kind === 'trap') {
+        const code = result.stderr.toString().match(/: (R[0-9]+)\b/)?.[1];
+        const expected = Buffer.from(c.hex || '', 'hex');
+        if (result.error || result.signal || result.status === 0 || code !== c.code
+            || !result.stdout.equals(expected)) {
+            fail(c.id + ': expected ' + c.code + ' and output ' + expected.toString('hex')
+                + ', got ' + diagnostic(result));
+            continue;
+        }
+    } else if (c.kind === 'output') {
         const actual = result;
         const reference = unpackResult(referenceResults[c.id],null);
         const normalKind = code => Number(code.slice(1)) >= 16 ? 'R0004' : code;

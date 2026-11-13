@@ -284,6 +284,14 @@ fn instruction(words: &[String], line: usize) -> Result<Instruction> {
             mutable: flag(words, 3, "mut", "shared", line)?,
             place: place(words, 4, line)?,
         },
+        "view-range" => Op::ViewRange {
+            dst: number(words, 2, line)?,
+            mutable: flag(words, 3, "mut", "shared", line)?,
+            inclusive: flag(words, 4, "inclusive", "exclusive", line)?,
+            start: number(words, 5, line)?,
+            end: number(words, 6, line)?,
+            place: place(words, 7, line)?,
+        },
         "borrow" => Op::Borrow {
             dst: number(words, 2, line)?,
             mutable: flag(words, 3, "mut", "shared", line)?,
@@ -750,6 +758,21 @@ fn write_instruction(text: &mut String, instruction: &Instruction) {
             ));
             write_place(text, place);
         }
+        Op::ViewRange {
+            dst,
+            place,
+            start,
+            end,
+            inclusive,
+            mutable,
+        } => {
+            text.push_str(&format!(
+                "view-range {dst} {} {} {start} {end}",
+                if *mutable { "mut" } else { "shared" },
+                if *inclusive { "inclusive" } else { "exclusive" },
+            ));
+            write_place(text, place);
+        }
         Op::Assign { place, src } => {
             text.push_str(&format!("assign {src}"));
             write_place(text, place);
@@ -1030,6 +1053,14 @@ mod tests {
     #[test]
     fn all_instruction_shapes_round_trip() {
         let ops = vec![
+            Op::ViewRange {
+                dst: 3,
+                place: Place::local(0),
+                start: 1,
+                end: 2,
+                inclusive: true,
+                mutable: false,
+            },
             Op::Int { dst: 0, value: -1 },
             Op::Float { dst: 0, bits: 42 },
             Op::Unit { dst: 0 },

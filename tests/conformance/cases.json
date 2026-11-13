@@ -2765,5 +2765,671 @@
     "kind": "run",
     "value": "42",
     "rust": true
+  },
+  {
+    "id": "generic_view_arguments",
+    "file": "pass/generic_view_arguments.rs",
+    "kind": "run",
+    "rust": true,
+    "value": "42"
+  },
+  {
+    "id": "generic_view_argument_order",
+    "file": "output/generic_view_argument_order.rs",
+    "kind": "output",
+    "rust": true,
+    "hex": "41424344",
+    "ending": "normal"
+  },
+  {
+    "id": "generic_view_argument_move",
+    "file": "fail/generic_view_argument_move.rs",
+    "kind": "reject",
+    "rust": true,
+    "code": "E_MOVE",
+    "rustCode": "E0382"
+  },
+  {
+    "id": "generic_view_argument_mutability",
+    "file": "fail/generic_view_argument_mutability.rs",
+    "kind": "reject",
+    "rust": true,
+    "code": "E_TYPE",
+    "rustCode": "E0308"
+  },
+  {
+    "id": "generic_view_argument_trait",
+    "file": "fail/generic_view_argument_trait.rs",
+    "kind": "reject",
+    "rust": true,
+    "code": "E_TRAIT",
+    "rustCode": "E0277"
+  },
+  {
+    "id": "generic_view_argument_types",
+    "file": "fail/generic_view_argument_types.rs",
+    "kind": "reject",
+    "rust": true,
+    "code": "E_TYPE",
+    "rustCode": "E0308"
+  },
+  {
+    "id": "integer_arithmetic_modes",
+    "file": "pass/integer_arithmetic_modes.rs",
+    "kind": "run",
+    "value": "8034312209100913927",
+    "rust": true
+  },
+  {
+    "id": "integer_arithmetic_order",
+    "file": "output/integer_arithmetic_order.rs",
+    "kind": "output",
+    "hex": "4142434445",
+    "ending": "normal",
+    "rust": true
+  },
+  {
+    "id": "integer_wrapping_k",
+    "file": "k/integer_wrapping.k",
+    "kind": "run",
+    "value": "42",
+    "rust": false
+  },
+  {
+    "id": "integer_wrapping_bool",
+    "file": "k/integer_wrapping_bool.k",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": false
+  },
+  {
+    "id": "integer_wrapping_unknown",
+    "file": "k/integer_wrapping_unknown.k",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": false
+  },
+  {
+    "id": "callable_trait_prerequisites",
+    "file": "pass/callable_trait_prerequisites.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "generic_callable_origins",
+    "file": "pass/generic_callable_origins.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "generic_mutable_result_transport",
+    "file": "pass/generic_mutable_result_transport.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "iterator_item_origins",
+    "file": "pass/iterator_item_origins.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "callable_prerequisite_signature",
+    "file": "fail/callable_prerequisite_signature.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "pending": false,
+    "rust": true,
+    "rustCode": "E0631"
+  },
+  {
+    "id": "callable_prerequisite_output_bound",
+    "file": "fail/callable_prerequisite_output_bound.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "pending": false,
+    "rust": true,
+    "rustCode": "E0277"
+  },
+  {
+    "id": "callable_prerequisite_kind",
+    "file": "fail/callable_prerequisite_kind.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "pending": false,
+    "rust": true,
+    "rustCode": "E0525"
+  },
+  {
+    "id": "callable_associated_output_bound",
+    "file": "fail/callable_associated_output_bound.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "pending": false,
+    "rust": true,
+    "rustCode": "E0277"
+  },
+  {
+    "id": "generic_callable_capture_escape",
+    "file": "fail/generic_callable_capture_escape.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true,
+    "rustCode": "E0597"
+  },
+  {
+    "id": "generic_callable_mutable_alias",
+    "file": "fail/generic_callable_mutable_alias.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true,
+    "rustCode": "E0499"
+  },
+  {
+    "id": "iterator_item_owner_drop",
+    "file": "fail/iterator_item_owner_drop.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true,
+    "rustCode": "E0505"
+  },
+  {
+    "id": "iterator_adapters",
+    "kind": "run",
+    "file": "pass/iterator_adapters.rs",
+    "entry": "probe",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "iterator_adapter_exhaustion",
+    "kind": "run",
+    "file": "pass/iterator_adapter_exhaustion.rs",
+    "entry": "probe",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "ordered_collection_iteration",
+    "kind": "run",
+    "file": "pass/ordered_collection_iteration.rs",
+    "entry": "probe",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "inapplicable_blanket_method",
+    "kind": "run",
+    "file": "pass/inapplicable_blanket_method.rs",
+    "entry": "probe",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "iterator_adapter_identity",
+    "kind": "reject",
+    "file": "fail/iterator_adapter_identity.rs",
+    "code": "E_TRAIT",
+    "rust": true,
+    "rustCode": "E0599"
+  },
+  {
+    "id": "iterator_adapter_item",
+    "kind": "reject",
+    "file": "fail/iterator_adapter_item.rs",
+    "code": "E_TYPE",
+    "rust": true,
+    "rustCode": "E0271"
+  },
+  {
+    "id": "iterator_adapter_prerequisite",
+    "kind": "reject",
+    "file": "fail/iterator_adapter_prerequisite.rs",
+    "code": "E_TRAIT",
+    "rust": true,
+    "rustCode": "E0277"
+  },
+  {
+    "id": "ordered_iterator_mutation",
+    "kind": "reject",
+    "file": "fail/ordered_iterator_mutation.rs",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustCode": "E0502"
+  },
+  {
+    "id": "ordered_iterator_owner_drop",
+    "kind": "reject",
+    "file": "fail/ordered_iterator_owner_drop.rs",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustCode": "E0505"
+  },
+  {
+    "id": "associated_function_prerequisite",
+    "kind": "reject",
+    "file": "fail/associated_function_prerequisite.rs",
+    "code": "E_TRAIT",
+    "rust": true,
+    "rustCode": "E0599"
+  },
+  {
+    "id": "range_slices",
+    "file": "pass/range_slices.rs",
+    "kind": "run",
+    "rust": true,
+    "entry": "probe",
+    "value": "42"
+  },
+  {
+    "id": "range_mutable",
+    "file": "pass/range_mutable.rs",
+    "kind": "run",
+    "rust": true,
+    "entry": "probe",
+    "value": "42"
+  },
+  {
+    "id": "range_text",
+    "file": "pass/range_text.rs",
+    "kind": "run",
+    "rust": true,
+    "entry": "probe",
+    "value": "42"
+  },
+  {
+    "id": "range_captured_views",
+    "file": "pass/range_captured_views.rs",
+    "kind": "run",
+    "rust": true,
+    "entry": "probe",
+    "value": "42"
+  },
+  {
+    "id": "output_range_operand_order",
+    "file": "output/range_operand_order.rs",
+    "kind": "output",
+    "rust": true,
+    "hex": "415345424356534542434c534542434d534541585944",
+    "ending": "normal"
+  },
+  {
+    "id": "output_range_end_past",
+    "file": "output/range_end_past.rs",
+    "kind": "output",
+    "rust": true,
+    "hex": "52",
+    "ending": "R0003"
+  },
+  {
+    "id": "output_range_start_past",
+    "file": "output/range_start_past.rs",
+    "kind": "output",
+    "rust": true,
+    "hex": "52",
+    "ending": "R0003"
+  },
+  {
+    "id": "output_range_reversed",
+    "file": "output/range_reversed.rs",
+    "kind": "output",
+    "rust": true,
+    "hex": "52",
+    "ending": "R0003"
+  },
+  {
+    "id": "output_range_inclusive_max",
+    "file": "output/range_inclusive_max.rs",
+    "kind": "output",
+    "rust": true,
+    "hex": "52",
+    "ending": "R0003"
+  },
+  {
+    "id": "output_range_utf8_start",
+    "file": "output/range_utf8_start.rs",
+    "kind": "output",
+    "rust": true,
+    "hex": "52",
+    "ending": "R0003"
+  },
+  {
+    "id": "output_range_utf8_end",
+    "file": "output/range_utf8_end.rs",
+    "kind": "output",
+    "rust": true,
+    "hex": "52",
+    "ending": "R0003"
+  },
+  {
+    "id": "output_range_text_reversed",
+    "file": "output/range_text_reversed.rs",
+    "kind": "output",
+    "rust": true,
+    "hex": "52",
+    "ending": "R0003"
+  },
+  {
+    "id": "output_range_text_end_past",
+    "file": "output/range_text_end_past.rs",
+    "kind": "output",
+    "rust": true,
+    "hex": "52",
+    "ending": "R0003"
+  },
+  {
+    "id": "output_range_text_start_past",
+    "file": "output/range_text_start_past.rs",
+    "kind": "output",
+    "rust": true,
+    "hex": "52",
+    "ending": "R0003"
+  },
+  {
+    "id": "output_range_panic_category",
+    "file": "output/range_panic_category.rs",
+    "kind": "output",
+    "rust": true,
+    "hex": "52",
+    "ending": "R0004"
+  },
+  {
+    "id": "range_array_mutable_read",
+    "file": "fail/range_array_mutable_read.rs",
+    "kind": "reject",
+    "rust": true,
+    "code": "E_BORROW",
+    "rustCode": "E0502"
+  },
+  {
+    "id": "range_array_shared_mutate",
+    "file": "fail/range_array_shared_mutate.rs",
+    "kind": "reject",
+    "rust": true,
+    "code": "E_BORROW",
+    "rustCode": "E0506"
+  },
+  {
+    "id": "range_disjoint_mutable",
+    "file": "fail/range_disjoint_mutable.rs",
+    "kind": "reject",
+    "rust": true,
+    "code": "E_BORROW",
+    "rustCode": "E0499"
+  },
+  {
+    "id": "range_empty_keeps_borrow",
+    "file": "fail/range_empty_keeps_borrow.rs",
+    "kind": "reject",
+    "rust": true,
+    "code": "E_BORROW",
+    "rustCode": "E0499"
+  },
+  {
+    "id": "range_explicit_shared_method",
+    "file": "fail/range_explicit_shared_method.rs",
+    "kind": "reject",
+    "rust": true,
+    "code": "E_BORROW",
+    "rustCode": "E0596"
+  },
+  {
+    "id": "range_immutable_method",
+    "file": "fail/range_immutable_method.rs",
+    "kind": "reject",
+    "rust": true,
+    "code": "E_BORROW",
+    "rustCode": "E0596"
+  },
+  {
+    "id": "range_method_array_bound_read",
+    "file": "fail/range_method_array_bound_read.rs",
+    "kind": "reject",
+    "rust": true,
+    "code": "E_BORROW",
+    "rustCode": "E0502"
+  },
+  {
+    "id": "range_method_slice_bound_read",
+    "file": "fail/range_method_slice_bound_read.rs",
+    "kind": "reject",
+    "rust": true,
+    "code": "E_BORROW",
+    "rustCode": "E0502"
+  },
+  {
+    "id": "range_method_vec_bound_read",
+    "file": "fail/range_method_vec_bound_read.rs",
+    "kind": "reject",
+    "rust": true,
+    "code": "E_BORROW",
+    "rustCode": "E0502"
+  },
+  {
+    "id": "range_shadowed_string",
+    "file": "fail/range_shadowed_string.rs",
+    "kind": "reject",
+    "rust": true,
+    "code": "E_TYPE",
+    "rustCode": "E0608"
+  },
+  {
+    "id": "range_slice_mutable_read",
+    "file": "fail/range_slice_mutable_read.rs",
+    "kind": "reject",
+    "rust": true,
+    "code": "E_BORROW",
+    "rustCode": "E0502"
+  },
+  {
+    "id": "range_slice_shared_mutate",
+    "file": "fail/range_slice_shared_mutate.rs",
+    "kind": "reject",
+    "rust": true,
+    "code": "E_BORROW",
+    "rustCode": "E0506"
+  },
+  {
+    "id": "range_vec_mutable_read",
+    "file": "fail/range_vec_mutable_read.rs",
+    "kind": "reject",
+    "rust": true,
+    "code": "E_BORROW",
+    "rustCode": "E0502"
+  },
+  {
+    "id": "range_vec_shared_mutate",
+    "file": "fail/range_vec_shared_mutate.rs",
+    "kind": "reject",
+    "rust": true,
+    "code": "E_BORROW",
+    "rustCode": "E0502"
+  },
+  {
+    "id": "k_range_full_extent",
+    "file": "k/range_full_extent.k",
+    "kind": "run",
+    "rust": false,
+    "entry": "probe",
+    "value": "3"
+  },
+  {
+    "id": "k_range_inclusive_empty",
+    "file": "k/range_inclusive_empty.k",
+    "kind": "run",
+    "rust": false,
+    "entry": "probe",
+    "value": "0"
+  },
+  {
+    "id": "k_range_empty",
+    "file": "k/range_empty.k",
+    "kind": "run",
+    "rust": false,
+    "entry": "probe",
+    "value": "0"
+  },
+  {
+    "id": "k_range_end_past",
+    "file": "k/range_end_past.k",
+    "kind": "trap",
+    "rust": false,
+    "entry": "probe",
+    "code": "R0003"
+  },
+  {
+    "id": "k_range_reversed",
+    "file": "k/range_reversed.k",
+    "kind": "trap",
+    "rust": false,
+    "entry": "probe",
+    "code": "R0003"
+  },
+  {
+    "id": "k_range_inclusive_max",
+    "file": "k/range_inclusive_max.k",
+    "kind": "trap",
+    "rust": false,
+    "entry": "probe",
+    "code": "R0003"
+  },
+  {
+    "id": "k_range_wrong_bound",
+    "file": "k/range_wrong_bound.k",
+    "kind": "reject",
+    "rust": false,
+    "entry": "probe",
+    "code": "E_TYPE"
+  },
+  {
+    "id": "k_range_wrong_source",
+    "file": "k/range_wrong_source.k",
+    "kind": "reject",
+    "rust": false,
+    "entry": "probe",
+    "code": "E_TYPE"
+  },
+  {
+    "id": "k_range_wrong_element",
+    "file": "k/range_wrong_element.k",
+    "kind": "reject",
+    "rust": false,
+    "entry": "probe",
+    "code": "E_TYPE"
+  },
+  {
+    "id": "k_range_immutable_mut",
+    "file": "k/range_immutable_mut.k",
+    "kind": "reject",
+    "rust": false,
+    "entry": "probe",
+    "code": "E_BORROW"
+  },
+  {
+    "id": "k_range_consumed_bound",
+    "file": "k/range_consumed_bound.k",
+    "kind": "reject",
+    "rust": false,
+    "entry": "probe",
+    "code": "E_MOVE"
+  },
+  {
+    "id": "k_range_live_owner_drop",
+    "file": "k/range_live_owner_drop.k",
+    "kind": "reject",
+    "rust": false,
+    "entry": "probe",
+    "code": "E_BORROW"
+  },
+  {
+    "id": "k_range_nested_call",
+    "file": "k/range_nested_call.k",
+    "kind": "run",
+    "rust": false,
+    "entry": "probe",
+    "value": "42"
+  },
+  {
+    "id": "k_range_forged_exact",
+    "file": "k/range_forged_exact.k",
+    "kind": "reject",
+    "rust": false,
+    "entry": "probe",
+    "code": "E_BORROW"
+  },
+  {
+    "id": "k_range_mutable",
+    "file": "k/range_mutable.k",
+    "kind": "run",
+    "rust": false,
+    "entry": "probe",
+    "value": "42"
+  },
+  {
+    "id": "k_range_owner_write",
+    "file": "k/range_owner_write.k",
+    "kind": "reject",
+    "rust": false,
+    "entry": "probe",
+    "code": "E_BORROW"
+  },
+  {
+    "id": "k_range_utf8",
+    "file": "k/range_utf8.k",
+    "kind": "run",
+    "rust": false,
+    "entry": "probe",
+    "value": "4"
+  },
+  {
+    "id": "k_range_utf8_inclusive",
+    "file": "k/range_utf8_inclusive.k",
+    "kind": "run",
+    "rust": false,
+    "entry": "probe",
+    "value": "4"
+  },
+  {
+    "id": "k_range_utf8_start",
+    "file": "k/range_utf8_start.k",
+    "kind": "trap",
+    "rust": false,
+    "entry": "probe",
+    "code": "R0003"
+  },
+  {
+    "id": "k_range_utf8_end",
+    "file": "k/range_utf8_end.k",
+    "kind": "trap",
+    "rust": false,
+    "entry": "probe",
+    "code": "R0003"
+  },
+  {
+    "id": "k_range_utf8_empty_middle",
+    "file": "k/range_utf8_empty_middle.k",
+    "kind": "trap",
+    "rust": false,
+    "entry": "probe",
+    "code": "R0003"
+  },
+  {
+    "id": "k_range_mutable_text",
+    "file": "k/range_mutable_text.k",
+    "kind": "reject",
+    "rust": false,
+    "entry": "probe",
+    "code": "E_UNSUPPORTED"
   }
 ]

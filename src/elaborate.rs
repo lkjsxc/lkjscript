@@ -15,10 +15,12 @@ mod origins;
 mod output;
 mod pattern_choices;
 mod patterns;
+mod ranges;
 mod sequences;
 mod static_lifetimes;
 mod sugars;
 mod text_format;
+mod trait_proofs;
 mod type_resolve;
 mod variants;
 
@@ -27,7 +29,7 @@ use crate::check::{borrowed_projection, is_copy, place_type};
 use crate::facts::Facts;
 use crate::k;
 use crate::names::qualified;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 type Result<T> = std::result::Result<T, a::Diagnostic>;
 fn err(span: a::Span, code: &str, message: &str) -> a::Diagnostic {
@@ -78,6 +80,8 @@ struct Compiler<'a> {
     method_selections: generic_check::MethodSelections,
     definition_types: BTreeMap<usize, definition_types::DefinitionTypes>,
     closures: closures::Catalog,
+    trait_proofs: Option<trait_proofs::Session>,
+    return_inference: BTreeSet<usize>,
 }
 
 fn first_problem(problems: Vec<a::Diagnostic>) -> a::Diagnostic {
@@ -277,6 +281,8 @@ fn elaborate_definitions(
             next += 1;
         }
     }
+    let mut refinement = c.closures.checked_functions.clone();
+    refinement.extend(&c.return_inference);
     let mut program = k::Program {
         types: c.types,
         functions: c.functions,
@@ -284,7 +290,7 @@ fn elaborate_definitions(
     };
     problems.extend(crate::check::refine_return_contracts(
         &mut program,
-        &c.closures.checked_functions,
+        &refinement,
     ));
     Ok(program)
 }
@@ -340,6 +346,8 @@ impl<'a> Compiler<'a> {
             method_selections: BTreeMap::new(),
             definition_types: BTreeMap::new(),
             closures: closures::Catalog::default(),
+            trait_proofs: None,
+            return_inference: BTreeSet::new(),
         };
         for i in 0..c.types.len() {
             c.type_names.insert(c.types[i].name.clone(), i);
@@ -596,15 +604,20 @@ impl Compiler<'_> {
         source: &a::Function,
         locals: &[k::Local],
         result: usize,
-    ) -> Result<Option<k::ReturnSource>> {
+    ) -> Result<(Option<k::ReturnSource>, bool)> {
         if !self.has_view(result) {
-            return Ok(None);
+            return Ok((None, false));
         }
         if let Some(leaves) = self.return_leaf_contract(source_index, source, locals, result)? {
-            return Ok(Some(k::ReturnSource::Leaves(leaves)));
+            return Ok((Some(k::ReturnSource::Leaves(leaves)), false));
+        }
+        if let Some(leaves) =
+            self.produced_return_leaf_contract(source_index, source, locals, result)
+        {
+            return Ok((Some(k::ReturnSource::Leaves(leaves)), true));
         }
         if static_lifetimes::has_static(self.source, source.result) {
-            return Ok(Some(k::ReturnSource::Static));
+            return Ok((Some(k::ReturnSource::Static), false));
         }
         let lifetimes = self.lifetimes(source.result);
         if lifetimes.len() > 1 {
@@ -644,9 +657,9 @@ impl Compiler<'_> {
             // Every live shared leaf therefore needs static backing; inactive
             // enum leaves also satisfy this explicit K contract.
             if !lifetimes.is_empty() && crate::check::shared_view(&self.types, result) {
-                return Ok(Some(k::ReturnSource::Static));
+                return Ok((Some(k::ReturnSource::Static), false));
             }
-            return Ok(None);
+            return Ok((None, false));
         };
         let mut dereferences = 0;
         let mut selected = locals[index].ty;
@@ -690,10 +703,13 @@ impl Compiler<'_> {
                 "projected return sources require shared reference leaves; exclusive reborrows retain their outer lifetime",
             ));
         }
-        Ok(Some(k::ReturnSource::Parameter {
-            index,
-            projections: vec![k::Projection::Deref; dereferences],
-        }))
+        Ok((
+            Some(k::ReturnSource::Parameter {
+                index,
+                projections: vec![k::Projection::Deref; dereferences],
+            }),
+            false,
+        ))
     }
     fn instantiate(&mut self, index: usize, mut sub: BTreeMap<String, usize>) -> Result<usize> {
         self.prepare_associated(index, &mut sub)?;
@@ -729,8 +745,11 @@ impl Compiler<'_> {
             });
         }
         let result = self.resolve(source.result, &sub)?;
-        let return_source = self.return_source(index, &source, &locals, result)?;
+        let (return_source, infer_return) = self.return_source(index, &source, &locals, result)?;
         let id = self.functions.len();
+        if infer_return {
+            self.return_inference.insert(id);
+        }
         self.instance_names.insert(key, id);
         self.pending_functions.push((
             id,
@@ -918,6 +937,7 @@ impl Compiler<'_> {
             carriers: BTreeMap::new(),
             dependents: BTreeMap::new(),
             assignment_types: BTreeMap::new(),
+            range_borrows: BTreeMap::new(),
             inferred,
             written: live.clone(),
             definite_live: live.clone(),
@@ -1025,6 +1045,7 @@ struct Builder<'a, 'b> {
     carriers: borrow_cleanup::Dependencies,
     dependents: borrow_cleanup::Dependencies,
     assignment_types: BTreeMap<usize, usize>,
+    range_borrows: BTreeMap<usize, usize>,
     inferred: std::rc::Rc<definition_types::Types>,
     live: Facts,
     definite_live: Facts,
@@ -1246,6 +1267,13 @@ impl Builder<'_, '_> {
                 }
                 self.set_live(*dst, true);
             }
+            k::Op::ViewRange {
+                dst, start, end, ..
+            } => {
+                self.set_live(*start, false);
+                self.set_live(*end, false);
+                self.set_live(*dst, true);
+            }
             k::Op::Assign { place, src } => {
                 self.set_live(*src, false);
                 self.set_live(place.local, true);
@@ -1408,6 +1436,7 @@ impl Builder<'_, '_> {
     }
     fn borrow(&mut self, place: k::Place, mutable: bool, line: usize) -> Result<(usize, usize)> {
         if mutable {
+            self.promote_range_place(&place, self.active_span)?;
             self.guard_write(&place, self.active_span)?;
         }
         let ty = place_type(&self.compiler.types, self.function, &place).ok_or_else(|| {
@@ -1479,10 +1508,15 @@ impl Builder<'_, '_> {
                     _ => None,
                 }
             }
-            a::Expr::Index { value, .. } => {
+            a::Expr::Index { value, index } => {
                 let mut t = self.hint(value)?;
                 while let k::TypeKind::Ref { inner, .. } = self.compiler.types[t].kind {
                     t = inner;
+                }
+                if self.is_range(index) {
+                    return self
+                        .range_referent(t, self.compiler.source.exprs[id].span)
+                        .ok();
                 }
                 match self.compiler.types[t].kind {
                     k::TypeKind::Vec { inner }
@@ -1495,6 +1529,9 @@ impl Builder<'_, '_> {
         }
     }
     fn place(&mut self, id: usize) -> Result<k::Place> {
+        self.place_with_mutability(id, false)
+    }
+    fn place_with_mutability(&mut self, id: usize, mutable: bool) -> Result<k::Place> {
         if let Some(place) = self.capture_aliases.get(&id) {
             return Ok(place.clone());
         }
@@ -1507,12 +1544,12 @@ impl Builder<'_, '_> {
                 .or_else(|| self.binding(&path.name).map(k::Place::local))
                 .ok_or_else(|| err(node.span, "E_TYPE", &format!("unknown value {}", path.name))),
             a::Expr::Unary { op, value } if op == "*" => {
-                let mut place = self.addressable(value)?;
+                let mut place = self.addressable_with_mutability(value, mutable)?;
                 place.projections.push(k::Projection::Deref);
                 Ok(place)
             }
             a::Expr::Field { value, name } => {
-                let mut place = self.addressable(value)?;
+                let mut place = self.addressable_with_mutability(value, mutable)?;
                 let mut ty = place_type(&self.compiler.types, self.function, &place)
                     .ok_or_else(|| err(node.span, "E_TYPE", "invalid field base"))?;
                 while let k::TypeKind::Ref { inner, .. } | k::TypeKind::Box { inner } =
@@ -1535,7 +1572,10 @@ impl Builder<'_, '_> {
                 }
             }
             a::Expr::Index { value, index } => {
-                let mut place = self.addressable(value)?;
+                if self.is_range(index) {
+                    return self.range_place(value, index, mutable, node.span);
+                }
+                let mut place = self.addressable_with_mutability(value, mutable)?;
                 let mut ty = place_type(&self.compiler.types, self.function, &place)
                     .ok_or_else(|| err(node.span, "E_TYPE", "invalid index base"))?;
                 while let k::TypeKind::Ref { inner, .. } = self.compiler.types[ty].kind {
@@ -1550,16 +1590,21 @@ impl Builder<'_, '_> {
         }
     }
     fn addressable(&mut self, id: usize) -> Result<k::Place> {
+        self.addressable_with_mutability(id, false)
+    }
+    fn addressable_with_mutability(&mut self, id: usize, mutable: bool) -> Result<k::Place> {
         match &self.compiler.source.exprs[id].kind {
             a::Expr::Path(path)
                 if self.capture_aliases.contains_key(&id)
                     || self.binding(&path.name).is_some()
                     || self.guard_aliases.contains_key(&path.name) =>
             {
-                self.place(id)
+                self.place_with_mutability(id, mutable)
             }
-            a::Expr::Field { .. } | a::Expr::Index { .. } => self.place(id),
-            a::Expr::Unary { op, .. } if op == "*" => self.place(id),
+            a::Expr::Field { .. } | a::Expr::Index { .. } => {
+                self.place_with_mutability(id, mutable)
+            }
+            a::Expr::Unary { op, .. } if op == "*" => self.place_with_mutability(id, mutable),
             _ => {
                 let v = self.expr(id, None)?;
                 Ok(k::Place::local(v.0))
@@ -1890,6 +1935,16 @@ impl Builder<'_, '_> {
         } else {
             self.expr_inner(id, expected.or(inferred))?
         };
+        self.coerce_value(value, expected, self.compiler.source.exprs[id].span)
+    }
+    // Apply a declared reference conversion after evaluating its operand once.
+    // This does not reborrow a source binding that has already been moved.
+    fn coerce_value(
+        &mut self,
+        value: (usize, usize),
+        expected: Option<usize>,
+        span: a::Span,
+    ) -> Result<(usize, usize)> {
         if let Some(target) = expected {
             if target != value.1 {
                 if let (
@@ -1923,13 +1978,13 @@ impl Builder<'_, '_> {
                                         place,
                                         mutable: want_mut,
                                     },
-                                    self.compiler.source.exprs[id].span.line,
+                                    span.line,
                                 );
                                 self.emit(
                                     k::Op::Drop {
                                         place: k::Place::local(value.0),
                                     },
-                                    self.compiler.source.exprs[id].span.line,
+                                    span.line,
                                 );
                                 return Ok((dst, target));
                             }
@@ -1945,16 +2000,12 @@ impl Builder<'_, '_> {
                             }
                         }
                         if inner == want {
-                            let result = self.borrow(
-                                place,
-                                want_mut,
-                                self.compiler.source.exprs[id].span.line,
-                            )?;
+                            let result = self.borrow(place, want_mut, span.line)?;
                             self.emit(
                                 k::Op::Drop {
                                     place: k::Place::local(value.0),
                                 },
-                                self.compiler.source.exprs[id].span.line,
+                                span.line,
                             );
                             return Ok(result);
                         }
@@ -2097,7 +2148,7 @@ impl Builder<'_, '_> {
                     _ => false,
                 };
                 let place = if is_place {
-                    self.place(value)?
+                    self.place_with_mutability(value, mutable)?
                 } else {
                     let inner = expected.and_then(|t| match self.compiler.types[t].kind {
                         k::TypeKind::Ref { inner, .. } => Some(inner),
@@ -3119,34 +3170,63 @@ impl Builder<'_, '_> {
                     .ok()
             };
             if let Some(t) = target_type {
-                let impls = self.compiler.source.impls.clone();
-                for im in impls {
+                let impls = self.compiler.implementations.method_candidates(
+                    &self.compiler.types,
+                    &self.compiler.applications,
+                    t,
+                    method,
+                );
+                let mut candidates = Vec::new();
+                let mut inherent = Vec::new();
+                let mut prerequisite_problem = None;
+                for index in impls {
+                    let im = self.compiler.source.impls[index].clone();
+                    let methods: Vec<_> = im
+                        .methods
+                        .iter()
+                        .copied()
+                        .filter(|candidate| {
+                            let function = &self.compiler.source.functions[*candidate];
+                            function.name == method
+                                && function.params.first().is_none_or(|p| p.name != "self")
+                        })
+                        .collect();
+                    if methods.is_empty() {
+                        continue;
+                    }
                     let mut sub = BTreeMap::new();
                     if !self.infer_type_matches(im.target, t, &mut sub)? {
                         continue;
                     }
                     sub.insert("Self".to_string(), t);
-                    if self.compiler.resolve(im.target, &sub).ok() == Some(t) {
-                        if !self.trait_available(&im, t, span) {
-                            continue;
-                        }
-                        self.compiler.bounds(&im.generics, &sub)?;
-                        for candidate in im.methods {
-                            let f = &self.compiler.source.functions[candidate];
-                            if f.name == method && f.params.first().is_none_or(|p| p.name != "self")
-                            {
-                                if associated.is_some() {
-                                    return Err(err(
-                                        span,
-                                        "E_TRAIT",
-                                        "ambiguous associated function",
-                                    ));
-                                }
-                                associated = Some(candidate);
-                                initial_sub = sub.clone();
-                            }
+                    if self.compiler.resolve(im.target, &sub).ok() != Some(t)
+                        || !self.trait_available(&im, t, span)
+                    {
+                        continue;
+                    }
+                    if let Err(problem) = self.compiler.bounds(&im.generics, &sub) {
+                        prerequisite_problem.get_or_insert(problem);
+                        continue;
+                    }
+                    for candidate in methods {
+                        if im.trait_ty.is_none() {
+                            inherent.push((candidate, sub.clone()));
+                        } else {
+                            candidates.push((candidate, sub.clone()));
                         }
                     }
+                }
+                if !inherent.is_empty() {
+                    candidates = inherent;
+                }
+                if candidates.len() > 1 {
+                    return Err(err(span, "E_TRAIT", "ambiguous associated function"));
+                }
+                if let Some((candidate, substitutions)) = candidates.pop() {
+                    associated = Some(candidate);
+                    initial_sub = substitutions;
+                } else if let Some(problem) = prerequisite_problem {
+                    return Err(problem);
                 }
             }
         }
@@ -3191,9 +3271,38 @@ impl Builder<'_, '_> {
         }
         let mut values = Vec::new();
         for i in 0..args.len() {
-            let parameter = self.compiler.resolve(target.params[i].ty, &sub).ok();
+            let declared = target.params[i].ty;
+            let mut parameter = self.compiler.resolve(declared, &sub).ok();
+            // A known context supplies its coercion before matching the operand.
+            // Only an unresolved declared reference shape needs early inference;
+            // a bare T still keeps ordinary move behavior.
+            if parameter.is_none() && self.declared_reference_shape(declared, &sub) {
+                if let Some(actual) = self
+                    .inferred
+                    .expressions
+                    .get(&args[i])
+                    .copied()
+                    .or_else(|| self.hint(args[i]))
+                {
+                    if !self
+                        .compiler
+                        .infer_argument_bindings(declared, actual, &mut sub)?
+                    {
+                        return Err(err(span, "E_TYPE", "generic argument types disagree"));
+                    }
+                }
+                parameter = self.compiler.resolve(declared, &sub).ok();
+            }
             let value = self.expr(args[i], parameter)?;
-            self.infer_type(target.params[i].ty, value.1, &mut sub)?;
+            if !self
+                .compiler
+                .infer_argument_bindings(declared, value.1, &mut sub)?
+            {
+                return Err(err(span, "E_TYPE", "generic argument types disagree"));
+            }
+            let parameter = self.compiler.resolve(declared, &sub).ok();
+            let value =
+                self.coerce_value(value, parameter, self.compiler.source.exprs[args[i]].span)?;
             values.push(value.0);
         }
         let function = self.compiler.instantiate(index, sub)?;
@@ -3442,6 +3551,9 @@ impl Builder<'_, '_> {
                 },
             );
         }
+        if let Some(value) = self.wrapping_method(&target, base, name, _types, args, span)? {
+            return Ok(value);
+        }
         if let Some(value) = self.generic_method(expression, &target, base, name, _types, args)? {
             return Ok(value);
         }
@@ -3654,6 +3766,7 @@ impl Builder<'_, '_> {
                 let mut inherent_candidates = Vec::new();
                 let mut unavailable_trait = false;
                 let mut private_trait = false;
+                let mut prerequisite_problem = None;
                 let impls = self.compiler.implementations.method_candidates(
                     &self.compiler.types,
                     &self.compiler.applications,
@@ -3689,7 +3802,10 @@ impl Builder<'_, '_> {
                                 }
                                 continue;
                             }
-                            self.compiler.bounds(&im.generics, &sub)?;
+                            if let Err(problem) = self.compiler.bounds(&im.generics, &sub) {
+                                prerequisite_problem.get_or_insert(problem);
+                                continue;
+                            }
                             for method in &im.methods {
                                 if self.compiler.source.functions[*method].name == name {
                                     if im.trait_ty.is_none() {
@@ -3704,6 +3820,11 @@ impl Builder<'_, '_> {
                 }
                 if !inherent_candidates.is_empty() {
                     candidates = inherent_candidates;
+                }
+                if candidates.is_empty() {
+                    if let Some(problem) = prerequisite_problem {
+                        return Err(problem);
+                    }
                 }
                 if candidates.is_empty() && unavailable_trait {
                     return Err(err(

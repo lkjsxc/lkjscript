@@ -5,7 +5,7 @@
 //! neither helper discovery nor field type traversal recurses on the host stack.
 use super::generic_check::BuiltinMethod;
 use super::{Builder, Compiler, PendingFunction, Result, a, err, is_copy, k};
-use crate::generics::{TraitIdentity, implementation_witness};
+use crate::generics::TraitIdentity;
 use std::collections::BTreeMap;
 
 #[derive(Clone)]
@@ -43,17 +43,7 @@ impl Compiler<'_> {
         {
             return self.builtin_method_contract(receiver, method, span);
         }
-        let empty = BTreeMap::new();
-        let assumptions = self.contracts.as_ref().map_or(&empty, |c| &c.rigid);
-        if let Some(witness) = implementation_witness(
-            self.source,
-            &self.implementations,
-            &self.types,
-            &self.applications,
-            receiver,
-            &identity,
-            assumptions,
-        ) {
+        if let Some(witness) = self.implementation_witness(receiver, &identity) {
             let implementation = &self.source.impls[witness.implementation];
             if let Some(source) = implementation
                 .methods

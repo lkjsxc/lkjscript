@@ -225,6 +225,8 @@ pub(super) fn validate_report(
             line: 1,
         }];
     }
+    let mut refinement = compiler.closures.checked_functions.clone();
+    refinement.extend(&compiler.return_inference);
     let mut program = k::Program {
         types: compiler.types,
         functions: compiler.functions,
@@ -232,7 +234,7 @@ pub(super) fn validate_report(
     };
     problems.extend(crate::check::refine_return_contracts(
         &mut program,
-        &compiler.closures.checked_functions,
+        &refinement,
     ));
     if let Err(errors) = crate::check::check_all(program) {
         problems.extend(errors);
@@ -493,6 +495,7 @@ impl Compiler<'_> {
     ) -> Result<BTreeMap<String, usize>> {
         let implementation = self.source.impls[index].clone();
         self.prepare_callable_arguments(&implementation.generics, &mut environment)?;
+        self.prepare_parameter_associated(&implementation.generics, &mut environment)?;
         let mut pending = implementation.associated.clone();
         if let Some(trait_type) = implementation.trait_ty {
             if let a::Type::Path(path) = &self.source.types[trait_type].kind {
@@ -570,22 +573,7 @@ impl Compiler<'_> {
                 if self.source.traits[trait_index].associated.is_empty() {
                     continue;
                 }
-                let empty = BTreeMap::new();
-                let rigid = self
-                    .contracts
-                    .as_ref()
-                    .map(|contracts| &contracts.rigid)
-                    .unwrap_or(&empty);
-                let mut witness = crate::generics::implementation_witness(
-                    self.source,
-                    &self.implementations,
-                    &self.types,
-                    &self.applications,
-                    ty,
-                    &identity,
-                    rigid,
-                )
-                .ok_or_else(|| {
+                let mut witness = self.implementation_witness(ty, &identity).ok_or_else(|| {
                     err(
                         parameter.span,
                         "E_TRAIT",
@@ -631,33 +619,6 @@ impl Compiler<'_> {
             }
         }
         Ok(())
-    }
-
-    pub(super) fn satisfies_bound(&self, ty: usize, bound: &str) -> bool {
-        self.satisfies_identity(ty, &TraitIdentity::Builtin(bound.to_string()))
-    }
-
-    pub(super) fn satisfies_identity(&self, ty: usize, bound: &TraitIdentity) -> bool {
-        if let Some(contracts) = &self.contracts {
-            crate::generics::satisfies_under(
-                self.source,
-                &self.implementations,
-                &self.types,
-                &self.applications,
-                ty,
-                bound,
-                &contracts.rigid,
-            )
-        } else {
-            crate::generics::satisfies_resolved(
-                self.source,
-                &self.implementations,
-                &self.types,
-                &self.applications,
-                ty,
-                bound,
-            )
-        }
     }
 
     fn associated_identity(
@@ -831,8 +792,12 @@ impl Compiler<'_> {
         method: BuiltinMethod,
         span: a::Span,
     ) -> Result<usize> {
-        let contracts = self.contracts.as_ref().unwrap();
-        if !contracts.rigid.contains_key(&receiver)
+        if !self
+            .contracts
+            .as_ref()
+            .unwrap()
+            .rigid
+            .contains_key(&receiver)
             || !self.satisfies_bound(receiver, method.required())
         {
             return Err(err(
@@ -846,7 +811,7 @@ impl Compiler<'_> {
             ));
         }
         let key = (receiver, method);
-        if let Some(index) = contracts.builtin_methods.get(&key) {
+        if let Some(index) = self.contracts.as_ref().unwrap().builtin_methods.get(&key) {
             return Ok(*index);
         }
         let receiver_type = self.reference(receiver, method == BuiltinMethod::CloneFrom);
@@ -882,10 +847,10 @@ impl Compiler<'_> {
         Ok(index)
     }
 
-    fn validate_builtin_methods(&self) -> Result<BTreeSet<usize>> {
-        let contracts = self.contracts.as_ref().unwrap();
+    fn validate_builtin_methods(&mut self) -> Result<BTreeSet<usize>> {
+        let methods = self.contracts.as_ref().unwrap().builtin_methods.clone();
         let mut checked = BTreeSet::new();
-        for ((receiver, method), index) in &contracts.builtin_methods {
+        for ((receiver, method), index) in &methods {
             let function = &self.functions[*index];
             let signature_matches = function.params == method.arguments() + 1
                 && function.locals.len() == function.params
@@ -901,13 +866,19 @@ impl Compiler<'_> {
                         if inner == *receiver
                             && mutable == (parameter == 0 && *method == BuiltinMethod::CloneFrom))
                     });
-            if !contracts.rigid.contains_key(receiver)
+            let file = function.file;
+            if !self
+                .contracts
+                .as_ref()
+                .unwrap()
+                .rigid
+                .contains_key(receiver)
                 || !self.satisfies_bound(*receiver, method.required())
                 || !signature_matches
             {
                 return Err(err(
                     a::Span {
-                        file: function.file,
+                        file,
                         ..a::Span::default()
                     },
                     "E_GENERIC",
@@ -1082,16 +1053,7 @@ impl super::Builder<'_, '_> {
                 "specialized receiver lacks its checked trait contract",
             ));
         }
-        let rigid = BTreeMap::new();
-        let implementation = crate::generics::implementation_witness(
-            self.compiler.source,
-            &self.compiler.implementations,
-            &self.compiler.types,
-            &self.compiler.applications,
-            base,
-            identity,
-            &rigid,
-        );
+        let implementation = self.compiler.implementation_witness(base, identity);
         if let Some(witness) = implementation {
             let implementation = &self.compiler.source.impls[witness.implementation];
             if let Some(index) = implementation

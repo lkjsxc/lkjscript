@@ -308,6 +308,7 @@ enum Obligation {
     Index {
         source: Variable,
         result: Variable,
+        range: bool,
         span: a::Span,
     },
     Field {
@@ -1315,13 +1316,25 @@ impl Infer<'_, '_> {
             }
             a::Expr::Index { value, index } => {
                 let source = self.expr(value)?;
-                let index = self.expr(index)?;
                 let usize = self.atom("usize");
-                self.unify(index, usize, span)?;
+                let range = if let a::Expr::Range { start, end, .. } =
+                    self.source.exprs[index].kind.clone()
+                {
+                    for bound in [start, end].into_iter().flatten() {
+                        let bound = self.expr(bound)?;
+                        self.unify(bound, usize, span)?;
+                    }
+                    true
+                } else {
+                    let index = self.expr(index)?;
+                    self.unify(index, usize, span)?;
+                    false
+                };
                 let result = self.operation_type();
                 self.obligation(Obligation::Index {
                     source,
                     result,
+                    range,
                     span,
                 });
                 result
@@ -1638,6 +1651,7 @@ impl Infer<'_, '_> {
             Obligation::Index {
                 source,
                 result,
+                range,
                 span,
             } => {
                 let Some((_, shape)) = self.strip_references(source, id) else {
@@ -1645,7 +1659,24 @@ impl Infer<'_, '_> {
                 };
                 match shape {
                     Shape::Vec(inner) | Shape::Array(inner, _) | Shape::Slice(inner) => {
-                        self.unify(result, inner, span)?
+                        let selected = if range {
+                            self.shaped(Shape::Slice(inner))
+                        } else {
+                            inner
+                        };
+                        self.unify(result, selected, span)?
+                    }
+                    Shape::Atom(name) if range && name == "str" => {
+                        let text = self.atom("str");
+                        self.unify(result, text, span)?;
+                    }
+                    Shape::Nominal(declaration, _)
+                        if range
+                            && self.source.declarations[declaration].name
+                                == "$std::string::String" =>
+                    {
+                        let text = self.atom("str");
+                        self.unify(result, text, span)?;
                     }
                     _ => return Ok(false),
                 }
@@ -1700,6 +1731,13 @@ impl Infer<'_, '_> {
                     return Ok(false);
                 };
                 match (name.as_str(), shape) {
+                    ("wrapping_add" | "wrapping_sub" | "wrapping_mul", Shape::Atom(atom))
+                        if integer_name(&atom) && arguments.len() == 1 =>
+                    {
+                        let integer = self.atom(&atom);
+                        self.coerce(arguments[0], integer, span)?;
+                        self.unify(result, integer, span)?;
+                    }
                     ("len", Shape::Vec(_) | Shape::Slice(_) | Shape::Array(_, _))
                         if arguments.is_empty() =>
                     {

@@ -1,8 +1,10 @@
 //! Global source rules for coherence and finite generic instantiation.
 //! The executable K checker still checks concrete function and witness types.
+mod bound_solver;
 mod signature_bounds;
 use crate::ast::*;
 use crate::names::qualified;
+pub(crate) use bound_solver::{BoundContext, BoundSolver, BoundStep};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -1285,14 +1287,28 @@ pub(crate) fn bound_identity(source: &Program, path: &Path) -> TraitIdentity {
     }
 }
 
-#[derive(Clone)]
-struct Goal {
-    ty: usize,
-    bound: TraitIdentity,
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct Goal {
+    pub(crate) ty: usize,
+    pub(crate) bound: TraitIdentity,
 }
 struct Requirements {
     children: Vec<Goal>,
     structural: bool,
+    witness: Option<ImplementationWitness>,
+    infer: bool,
+    parameterized: Vec<(TypeId, usize)>,
+}
+impl Requirements {
+    fn structural(children: Vec<Goal>) -> Self {
+        Self {
+            children,
+            structural: true,
+            witness: None,
+            infer: false,
+            parameterized: Vec::new(),
+        }
+    }
 }
 
 /// A derived implementation covers its nominal constructor. Reuse the same
@@ -1392,6 +1408,7 @@ fn add_bound(source: &Program, id: TypeId, ty: usize, children: &mut Vec<Goal>) 
         false
     }
 }
+#[derive(Clone)]
 pub(crate) struct ImplementationWitness {
     pub(crate) implementation: usize,
     pub(crate) substitutions: BTreeMap<String, usize>,
@@ -1496,7 +1513,7 @@ impl ImplementationIndex {
     }
 }
 
-fn select_implementation(
+pub(crate) fn select_implementation(
     source: &Program,
     index: &ImplementationIndex,
     types: &[crate::k::Type],
@@ -1531,20 +1548,6 @@ fn select_implementation(
     }
     selected
 }
-pub(crate) fn implementation_witness(
-    source: &Program,
-    index: &ImplementationIndex,
-    types: &[crate::k::Type],
-    applications: &BTreeMap<usize, (String, Vec<usize>)>,
-    ty: usize,
-    bound: &TraitIdentity,
-    rigid: &BTreeMap<usize, BTreeSet<TraitIdentity>>,
-) -> Option<ImplementationWitness> {
-    if !satisfies_under(source, index, types, applications, ty, bound, rigid) {
-        return None;
-    }
-    select_implementation(source, index, types, applications, ty, bound)
-}
 
 fn trait_requirements(
     source: &Program,
@@ -1553,15 +1556,13 @@ fn trait_requirements(
     applications: &BTreeMap<usize, (String, Vec<usize>)>,
     goal: &Goal,
     rigid: &BTreeMap<usize, BTreeSet<TraitIdentity>>,
+    inferred: &BTreeMap<Goal, ImplementationWitness>,
 ) -> Option<Requirements> {
     use crate::k::TypeKind;
     let ty = types.get(goal.ty)?;
     if let Some(assumptions) = rigid.get(&goal.ty) {
         if assumptions.contains(&goal.bound) {
-            return Some(Requirements {
-                children: Vec::new(),
-                structural: true,
-            });
+            return Some(Requirements::structural(Vec::new()));
         }
         // An opaque parameter has no inferred builtin properties. User blanket
         // implementations can still prove declared traits through prerequisites.
@@ -1576,10 +1577,7 @@ fn trait_requirements(
     };
     if bound == "Copy" {
         return if crate::check::is_copy(types, goal.ty) {
-            Some(Requirements {
-                children: Vec::new(),
-                structural: true,
-            })
+            Some(Requirements::structural(Vec::new()))
         } else {
             None
         };
@@ -1618,10 +1616,7 @@ fn trait_requirements(
             }
             _ => {}
         }
-        return Some(Requirements {
-            children,
-            structural: true,
-        });
+        return Some(Requirements::structural(children));
     }
     let automatic = bound == "Send" || bound == "Sync";
     let comparison =
@@ -1702,16 +1697,34 @@ fn trait_requirements(
             }
         }
         if structural {
-            return Some(Requirements {
-                children,
-                structural: true,
-            });
+            return Some(Requirements::structural(children));
         }
     }
-    let selected = select_implementation(source, index, types, applications, goal.ty, &goal.bound)?;
+    let selected = match inferred.get(goal) {
+        Some(witness) => witness.clone(),
+        None => select_implementation(source, index, types, applications, goal.ty, &goal.bound)?,
+    };
     let implementation = &source.impls[selected.implementation];
-    let env = selected.substitutions;
+    let typed = implementation.generics.iter().any(|parameter| {
+        !parameter.lifetime
+            && (!selected.substitutions.contains_key(&parameter.name)
+                || parameter.bounds.iter().any(|bound| {
+                    matches!(&source.types[*bound].kind,
+                Type::Path(path) if !path.args.is_empty())
+                }))
+    });
+    if typed && !inferred.contains_key(goal) {
+        return Some(Requirements {
+            children: Vec::new(),
+            structural: false,
+            witness: Some(selected),
+            infer: true,
+            parameterized: Vec::new(),
+        });
+    }
+    let env = &selected.substitutions;
     let mut children = Vec::new();
+    let mut parameterized = Vec::new();
     for param in &implementation.generics {
         if param.lifetime {
             continue;
@@ -1719,20 +1732,23 @@ fn trait_requirements(
         let concrete = *env.get(&param.name)?;
         for constraint in &param.bounds {
             if !add_bound(source, *constraint, concrete, &mut children) {
-                return None;
+                parameterized.push((*constraint, concrete));
             }
         }
     }
     if let TraitIdentity::Declared(index) = goal.bound {
         for constraint in &source.traits[index].bounds {
             if !add_bound(source, *constraint, goal.ty, &mut children) {
-                return None;
+                parameterized.push((*constraint, goal.ty));
             }
         }
     }
     Some(Requirements {
         children,
         structural: false,
+        witness: Some(selected),
+        infer: false,
+        parameterized,
     })
 }
 
@@ -1789,57 +1805,20 @@ pub(crate) fn satisfies_under(
     bound: &TraitIdentity,
     rigid: &BTreeMap<usize, BTreeSet<TraitIdentity>>,
 ) -> bool {
-    let first = Goal {
-        ty,
-        bound: bound.clone(),
-    };
-    let mut state: BTreeMap<(usize, TraitIdentity), u8> = BTreeMap::new();
-    let mut structural: BTreeMap<(usize, TraitIdentity), bool> = BTreeMap::new();
-    let mut tasks = vec![(first.clone(), false, Vec::<Goal>::new())];
-    while let Some((goal, finish, children)) = tasks.pop() {
-        let key = (goal.ty, goal.bound.clone());
-        if finish {
-            if state.get(&key) == Some(&1) {
-                continue;
-            }
-            let mut valid = true;
-            for child in children {
-                let ck = (child.ty, child.bound);
-                match state.get(&ck) {
-                    Some(2) => {}
-                    Some(0) if structural.get(&ck) == Some(&true) => {}
-                    _ => {
-                        valid = false;
-                        break;
-                    }
-                }
-            }
-            state.insert(key, if valid { 2 } else { 1 });
-            continue;
-        }
-        if let Some(previous) = state.get(&key) {
-            if *previous == 0 && structural.get(&key) != Some(&true) {
-                state.insert(key, 1);
-            }
-            continue;
-        }
-        match trait_requirements(source, index, types, applications, &goal, rigid) {
-            None => {
-                state.insert(key, 1);
-            }
-            Some(requirements) => {
-                state.insert(key.clone(), 0);
-                structural.insert(key, requirements.structural);
-                tasks.push((goal, true, requirements.children.clone()));
-                let mut i = requirements.children.len();
-                while i > 0 {
-                    i -= 1;
-                    tasks.push((requirements.children[i].clone(), false, Vec::new()));
-                }
-            }
+    let mut solver = BoundSolver::new(ty, bound.clone());
+    loop {
+        match solver.advance(BoundContext {
+            source,
+            index,
+            types,
+            applications,
+            rigid,
+        }) {
+            BoundStep::Done(valid) => return valid,
+            BoundStep::Infer { goal, .. } => solver.inferred(goal, None),
+            BoundStep::Validate { goal, .. } => solver.validated(goal, None),
         }
     }
-    state.get(&(first.ty, first.bound)) == Some(&2)
 }
 
 #[cfg(test)]

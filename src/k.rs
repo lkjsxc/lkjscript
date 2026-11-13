@@ -116,6 +116,16 @@ pub enum Op {
         place: Place,
         mutable: bool,
     },
+    /// Borrow a checked subrange without narrowing its static alias footprint.
+    /// Bounds are consumed usize values; failure traps with the bounds code.
+    ViewRange {
+        dst: usize,
+        place: Place,
+        start: usize,
+        end: usize,
+        inclusive: bool,
+        mutable: bool,
+    },
     Array {
         dst: usize,
         elements: Vec<usize>,

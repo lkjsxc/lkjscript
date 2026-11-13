@@ -150,6 +150,7 @@ impl Builder<'_, '_> {
                 carriers: BTreeMap::new(),
                 dependents: BTreeMap::new(),
                 assignment_types,
+                range_borrows: BTreeMap::new(),
                 inferred: self.inferred.clone(),
                 live: live.into_iter().collect(),
                 definite_live: definite_live.into_iter().collect(),
@@ -157,15 +158,17 @@ impl Builder<'_, '_> {
                 loops,
                 reachable: self.reachable,
             };
-            let result = probe.place(expression).and_then(|place| {
-                place_type(&probe.compiler.types, probe.function, &place).ok_or_else(|| {
-                    err(
-                        probe.compiler.source.exprs[expression].span,
-                        "E_TYPE",
-                        "invalid assignment place",
-                    )
-                })
-            });
+            let result = probe
+                .place_with_mutability(expression, true)
+                .and_then(|place| {
+                    place_type(&probe.compiler.types, probe.function, &place).ok_or_else(|| {
+                        err(
+                            probe.compiler.source.exprs[expression].span,
+                            "E_TYPE",
+                            "invalid assignment place",
+                        )
+                    })
+                });
             (result, probe.assignment_types)
         };
         self.assignment_types = assignment_types;
@@ -186,7 +189,7 @@ impl Builder<'_, '_> {
         if incoming.1 != ty {
             return Err(err(span, "E_TYPE", "assignment type differs"));
         }
-        let place = self.place(place)?;
+        let place = self.place_with_mutability(place, true)?;
         self.guard_write(&place, span)?;
         if place.projections.is_empty()
             && !self.function.locals[place.local].mutable

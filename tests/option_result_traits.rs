@@ -224,7 +224,12 @@ fn rust_library(directory: &std::path::Path, prelude: &str) -> String {
         include_str!("../library/iter.rs"),
     )
     .unwrap();
-    "#[path=\"prelude.rs\"]mod prelude;#[path=\"iter.rs\"]mod iter;use prelude::{Option,Result};\n"
+    std::fs::write(
+        directory.join("integer.rs"),
+        include_str!("../library/integer.rs"),
+    )
+    .unwrap();
+    "#[path=\"prelude.rs\"]mod prelude;#[path=\"iter.rs\"]mod iter;#[path=\"integer.rs\"]mod integer;use prelude::{Option,Result};\n"
         .to_string()
 }
 

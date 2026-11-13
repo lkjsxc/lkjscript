@@ -1853,6 +1853,60 @@ fn check_shape(
                 return Err(error(line, "E_BORROW", "mutable slice of immutable place"));
             }
         }
+        Op::ViewRange {
+            dst,
+            place,
+            start,
+            end,
+            mutable,
+            ..
+        } => {
+            if ty(*start)? != U64 || ty(*end)? != U64 {
+                return Err(error(line, "E_TYPE", "range bounds must be usize"));
+            }
+            let source = place_ty(place)?;
+            let referent = match types[ty(*dst)?].kind {
+                TypeKind::Ref {
+                    inner,
+                    mutable: expected,
+                } if expected == *mutable => inner,
+                _ => {
+                    return Err(error(
+                        line,
+                        "E_TYPE",
+                        "range result needs a matching reference type",
+                    ));
+                }
+            };
+            match types[source].kind {
+                TypeKind::Vec { inner }
+                | TypeKind::Array { inner, .. }
+                | TypeKind::Slice { inner, .. } => {
+                    if !matches!(types[referent].kind, TypeKind::Slice { inner: element, .. } if inner == element)
+                    {
+                        return Err(error(line, "E_TYPE", "range result element type differs"));
+                    }
+                }
+                TypeKind::Str if !*mutable && matches!(types[referent].kind, TypeKind::Str) => {}
+                TypeKind::Str => {
+                    return Err(error(
+                        line,
+                        "E_TYPE",
+                        "text ranges require a shared str result",
+                    ));
+                }
+                _ => {
+                    return Err(error(
+                        line,
+                        "E_TYPE",
+                        "range source needs Vec, array, slice or str",
+                    ));
+                }
+            }
+            if *mutable && !place_writable(types, function, place) {
+                return Err(error(line, "E_BORROW", "mutable range of immutable place"));
+            }
+        }
         Op::Assign { place, src } => {
             if place_ty(place)? != ty(*src)? {
                 return Err(error(line, "E_TYPE", "assignment type differs"));
@@ -1907,8 +1961,25 @@ fn check_shape(
                 TypeKind::Bool => ["==", "!=", "&", "|", "^", "&&", "||"].contains(&op.as_str()),
                 TypeKind::Char => comparison,
                 TypeKind::Int { .. } => [
-                    "+", "-", "*", "/", "%", "&", "|", "^", "<<", ">>", "==", "!=", "<", "<=", ">",
+                    "+",
+                    "-",
+                    "*",
+                    "/",
+                    "%",
+                    "&",
+                    "|",
+                    "^",
+                    "<<",
+                    ">>",
+                    "==",
+                    "!=",
+                    "<",
+                    "<=",
+                    ">",
                     ">=",
+                    "wrapping_add",
+                    "wrapping_sub",
+                    "wrapping_mul",
                 ]
                 .contains(&op.as_str()),
                 TypeKind::F64 => {
@@ -2360,6 +2431,30 @@ fn check_function_body(
                 access(&state, types, function, place, *mutable, 0, line)?;
                 let resolved = resolve_origin(&state, place);
                 put(&mut state, *dst, line)?;
+                state.loans.push(Loan {
+                    created: state.site.into_iter().collect(),
+                    holder: Place::local(*dst),
+                    sources: resolved.sources,
+                    mutable: *mutable,
+                    parents: resolved.parents,
+                });
+            }
+            Op::ViewRange {
+                dst,
+                place,
+                start,
+                end,
+                mutable,
+                ..
+            } => {
+                access(&state, types, function, place, *mutable, 0, line)?;
+                let mut resolved = resolve_origin(&state, place);
+                consume(&mut state, types, function, *start, line)?;
+                consume(&mut state, types, function, *end, line)?;
+                put(&mut state, *dst, line)?;
+                for source in &mut resolved.sources {
+                    source.exact = false;
+                }
                 state.loans.push(Loan {
                     created: state.site.into_iter().collect(),
                     holder: Place::local(*dst),
@@ -3342,7 +3437,7 @@ pub(crate) fn refine_return_contracts(
     program: &mut Program,
     functions: &BTreeSet<usize>,
 ) -> Vec<Diagnostic> {
-    let selected: Vec<_> = functions
+    let selected: BTreeSet<_> = functions
         .iter()
         .copied()
         .filter(|index| program.functions[*index].return_source.is_some())
@@ -3354,11 +3449,41 @@ pub(crate) fn refine_return_contracts(
         return vec![problem];
     }
     let views = Rc::new(reference_containment(&program.types));
+    // A body may rely on a callee's validated mapping. Complete acyclic
+    // dependencies first; recursive groups keep their conservative contracts.
+    // The final independent gate still validates every function in the graph.
+    let mut callers = BTreeMap::<usize, Vec<usize>>::new();
+    let mut dependencies = BTreeMap::<usize, usize>::new();
+    for index in &selected {
+        let called: BTreeSet<_> = program.functions[*index]
+            .body
+            .iter()
+            .filter_map(|instruction| match instruction.op {
+                Op::Call { function, .. } if selected.contains(&function) => Some(function),
+                _ => None,
+            })
+            .collect();
+        dependencies.insert(*index, called.len());
+        for callee in called {
+            callers.entry(callee).or_default().push(*index);
+        }
+    }
+    let mut ready: BTreeSet<_> = dependencies
+        .iter()
+        .filter_map(|(index, count)| (*count == 0).then_some(*index))
+        .collect();
     let mut problems = Vec::new();
-    for index in selected {
+    while let Some(index) = ready.pop_first() {
         match observed_return_contract(program, index, &views) {
             Ok(source) => program.functions[index].return_source = source,
             Err(problem) => problems.push(problem),
+        }
+        for caller in callers.get(&index).into_iter().flatten() {
+            let remaining = dependencies.get_mut(caller).unwrap();
+            *remaining -= 1;
+            if *remaining == 0 {
+                ready.insert(*caller);
+            }
         }
     }
     problems

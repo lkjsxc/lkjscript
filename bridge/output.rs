@@ -32,7 +32,13 @@ pub fn enter(entry: fn(World)) {
             "R0001"
         } else if text.contains("divide by zero") || text.contains("divisor of zero") {
             "R0002"
-        } else if text.contains("index out of bounds") {
+        } else if text.contains("index out of bounds")
+            || text.contains("out of range for slice")
+            || text.contains("slice index starts at")
+            || text.contains("byte range starts at")
+            || text.contains("is not a char boundary")
+            || text.contains("is out of bounds for string")
+        {
             "R0003"
         } else if text.contains("assertion") {
             "R0005"

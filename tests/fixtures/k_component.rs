@@ -100,6 +100,7 @@ fn operation(which: usize, changed: bool) -> k::Op {
         26 => k::Op::DropIf { place: place(n) },
         27 => k::Op::BreakTo { depth: n },
         28 => k::Op::ContinueTo { depth: n },
+        29 => k::Op::ViewRange { dst:n, place:place(6), start:7, end:8, inclusive:true, mutable:false },
         _ => k::Op::Trap {
             message: if changed {
                 "changed".to_string()
@@ -129,6 +130,7 @@ fn operation_value(value: &k::Op) -> i64 {
             place,
             mutable,
         } => *dst as i64 + place.local as i64 + flag(mutable),
+        k::Op::ViewRange { dst, place, start, end, inclusive, mutable } => *dst as i64 + place.local as i64 + *start as i64 + *end as i64 + flag(inclusive) + flag(mutable),
         k::Op::Array { dst, elements } => *dst as i64 + elements[0] as i64 + elements[1] as i64,
         k::Op::Assign { place, src } => place.local as i64 + *src as i64,
         k::Op::Drop { place } => place.local as i64,
@@ -266,7 +268,7 @@ fn model() -> k::Program {
     });
     let mut body: Vec<k::Instruction> = Vec::new();
     let mut index: usize = 0;
-    while index < 29 {
+    while index < 30 {
         body.push(k::Instruction { column: 1,
             op: operation(index, false),
             line: 100 + index,

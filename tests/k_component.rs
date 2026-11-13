@@ -57,7 +57,7 @@ fn observations() -> Vec<Observation> {
     // Every production Op variant: clone followed by payload reads, equality,
     // and inequality after a payload/tag change. These Op values are data;
     // this component probe does not execute them as a checked K program.
-    for index in 0..29 {
+    for index in 0..30 {
         cases.push(call(
             "operation_snapshot",
             &index.to_string(),
