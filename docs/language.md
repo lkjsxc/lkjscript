@@ -749,7 +749,8 @@ Collection indexing checks bounds. Traps report a code and source line. The
 source runtime releases owned fields, arrays, boxes and vector elements. Its
 power-of-two payload classes reuse released blocks in constant free-list work.
 A block has at least 16 payload bytes and a separate 16-byte header, so a
-power-of-two Vec capacity fills its class. A block at the heap tip grows in
+power-of-two Vec capacity fills its class. The header retains its class index,
+so release does not recalculate it from capacity. A block at the heap tip grows in
 place; otherwise reallocation copies the old payload before releasing it.
 Heap commitment tries geometric capacity and then the exact required extent.
 Structural cleanup uses an explicit growable DFS stack, preserving custom-destructor-before-children and

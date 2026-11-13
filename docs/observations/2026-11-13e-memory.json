@@ -122,6 +122,6 @@
     },
     "worldObservations": 91,
     "note": "Jointly verified with the following gate-economy tooling checkpoint; no core changes between observations and this gate.",
-    "deepRecursionTest": "The 100000-deep test now selects64MiB stack and1GiB AS explicitly, retaining its original depth; it no longer relies on the former quarter-extent stack."
+    "deepRecursionTest": "The 100000-deep test now selects 64 MiB stack and 1 GiB AS explicitly, retaining its original depth; it no longer relies on the former quarter-extent stack."
   }
 }

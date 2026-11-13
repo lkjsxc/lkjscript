@@ -47,8 +47,9 @@ fn ensure_memory(end: u64) -> u64 {
 }
 
 // Size classes describe the payload, so a power-of-two Vec capacity fills its
-// class. Each block has a {capacity, next_free} header followed by at least 16
-// payload bytes. Headers add 16 bytes; payloads remain eight-byte aligned.
+// class. Each block has a {class, next_free} header followed by at least 16
+// payload bytes; class zero means 16 bytes, and each class doubles capacity.
+// Headers add 16 bytes; payloads remain eight-byte aligned.
 // Freed blocks are reused in constant list work. Tip growth keeps its address.
 fn classes() -> u64 {
     let old = raw_classes();
@@ -68,42 +69,35 @@ fn classes() -> u64 {
     base
 }
 
-fn payload_capacity(bytes: u64) -> u64 {
+fn payload_class(bytes: u64) -> u64 {
     let mut size: u64 = 16;
+    let mut class: u64 = 0;
     while size < bytes {
         if size > 9223372036854775807 {
             return raw_fail();
         }
         size = size * 2;
-    }
-    size
-}
-
-fn class_index(size: u64) -> u64 {
-    let mut extent: u64 = 16;
-    let mut class: u64 = 0;
-    while extent < size {
-        extent = extent * 2;
         class = class + 1;
     }
     class
 }
 
 pub fn allocate(bytes: u64) -> u64 {
-    let size = payload_capacity(bytes);
-    let head = classes() + class_index(size) * 8;
+    let class = payload_class(bytes);
+    let head = classes() + class * 8;
     let old = raw_load64(head);
     if old != 0 {
         raw_store64(head, raw_load64(old + 8));
         raw_store64(old + 8, 0);
         return old + 16;
     }
+    let size = 16u64 << class;
     let block = raw_heap_tip();
     let pointer = add_extent(block, 16);
     let end = add_extent(pointer, size);
     ensure_memory(end);
     raw_set_heap_tip(end);
-    raw_store64(block, size);
+    raw_store64(block, class);
     raw_store64(block + 8, 0);
     pointer
 }
@@ -115,15 +109,16 @@ pub fn reallocate(pointer: u64, bytes: u64) -> u64 {
     if pointer == 0 {
         return allocate(bytes);
     }
-    let old_size = raw_load64(pointer - 16);
+    let old_size = 16u64 << raw_load64(pointer - 16);
     if bytes <= old_size {
         return pointer;
     }
     if add_extent(pointer, old_size) == raw_heap_tip() {
-        let size = payload_capacity(bytes);
+        let class = payload_class(bytes);
+        let size = 16u64 << class;
         let end = add_extent(pointer, size);
         ensure_memory(end);
-        raw_store64(pointer - 16, size);
+        raw_store64(pointer - 16, class);
         raw_set_heap_tip(end);
         return pointer;
     }
@@ -138,8 +133,8 @@ pub fn release(pointer: u64) -> u64 {
         return 0;
     }
     let block = pointer - 16;
-    let size = raw_load64(block);
-    let head = raw_classes() + class_index(size) * 8;
+    let class = raw_load64(block);
+    let head = raw_classes() + class * 8;
     raw_store64(block + 8, raw_load64(head));
     raw_store64(head, block);
     0

@@ -41,7 +41,9 @@ The 2026-11-13e checkpoint reaches the four K-compiler observations below.
 The native World driver in src/kc_main.rs shares the same nine production
 modules; kc1, kc2 and kc3 have identical bytes, and its complete recorded corpus
 parity includes 562 K verdicts and 498 identical ELF artifacts. Timings and
-peak memory are recorded in observations/2026-11-13e-selfhost.json.
+peak memory are recorded in observations/2026-11-13e-selfhost.json. The first
+profile-driven allocator change preserves the fixed point and corpus parity;
+its current measurements are in observations/2026-11-13e-selfhost-class-index.json.
 
 The retained obligations and their measurements are:
 
@@ -52,10 +54,39 @@ The retained obligations and their measurements are:
 4. Record elapsed time and peak memory beside B0 for the same work.
 
 There is one compiler implementation, selected twice. No per-file acceptance
-ritual substitutes for this result. Afterward measure the front-end census before choosing between a port by the
-two-way rule and a new front end written in the language. Either route must
-produce B0-identical K text on conformance and its own source. Reach the
-three-build identity and retain an owned seed compiler for the next build. Removing Cargo is an observed hand-over, not a renamed bootstrap.
+ritual substitutes for this result. The native seed and its exact K/runtime
+inputs are retained independently of the build directory. Removing Cargo is an
+observed hand-over, not a renamed bootstrap.
+
+## Source front end: port
+
+The measured choice is to port the existing SourceBundle-to-K producer with the
+two-way rule. Its declared module closure adds 55 files / 31,703 physical lines
+to nine already-self-built K files. Physical totals include test text and do
+not measure porting distance.
+
+A temporary valid-Rust patch changed 15 files, adding 109 lines and deleting 91,
+without deleting or stubbing an existing compiler body. It crossed the observed
+declaration barriers and exposed 310 diagnostics: 149 type, 100 unsupported,
+48 borrow, eight trait and five name errors. This is a first-fault worklist of
+the modified probe, not a complete ownership verdict or an edit estimate.
+No K artifact or equivalence result is claimed for that patch. The complete
+boundary, blocker chain and caveats are in
+observations/2026-11-14-frontend-census.json.
+
+The AST already uses owned arenas and index relationships. The current
+algorithms preserve declaration/type/function/local numbering, instantiation and
+cleanup order, helper names and source locations. K text serializes these
+choices. A byte-identical replacement would have to recreate them while also
+rebuilding parsing, inference and ownership-sensitive lowering. The observed
+barriers do not justify that work or a new trusted K rule.
+
+Retain exact B0 K baselines before implementation. Deliberately port the rare
+declaration and representation forms; do not merge the census patch wholesale.
+Then recount actual body diagnostics, choosing ordinary library/frontend
+support or owned-value/index rewrites per family. Require B0-identical K on
+conformance and the producer's own source, then reach a source-producer fixed
+point. This is the next compiler obligation; unrelated width remains deferred.
 
 ## Order and execution
 
@@ -75,6 +106,14 @@ three-build identity and retain an owned seed compiler for the next build. Remov
    acceptance requirement.
 7. Measure and choose the front-end route; do not put unrelated front-end width
    ahead of these consumers.
+
+Steps 1–5 are complete at the recorded checkpoint. The actual self-build
+profile attributed 16% of self CPU to allocator class computation. Retaining
+the class in its existing header removes one helper and avoids recomputation
+on release; the same program K self-builds in 36.79 / 35.95 seconds, versus
+40.39 / 40.15 seconds before. Those two necessary generations show a 9.7% lower
+mean with unchanged peak memory to measurement precision. They are observations,
+not a speed threshold. Re-profile before selecting the next substantial change.
 
 The encoder belongs to the trusted base. Local operand caching can stay small
 there; inlining, propagation and dead-copy removal belong in ordinary K-to-K

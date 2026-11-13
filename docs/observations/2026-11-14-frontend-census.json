@@ -1,0 +1,258 @@
+{
+  "stage": "front-end port-versus-rewrite census",
+  "recommendation": "Port the existing SourceBundle-to-K producer with focused representation/API rewrites; do not start a wholesale replacement.",
+  "boundary": {
+    "entry": "source_to_k(&SourceBundle) -> Result<String, Diagnostic>",
+    "modules": [
+      "ast",
+      "check",
+      "diagnostic",
+      "diagnostics",
+      "elaborate",
+      "facts",
+      "generics",
+      "k",
+      "k_text",
+      "names",
+      "resolve",
+      "source",
+      "syntax"
+    ],
+    "omitted": [
+      "compiler::compile native emission adapter",
+      "json unused by source producer",
+      "kc",
+      "lower",
+      "native",
+      "runtime",
+      "machine",
+      "runtime_memory",
+      "all bridge host modules"
+    ],
+    "callGraph": [
+      "source::parse_bundle -> source::load_report -> syntax::parse_file_report",
+      "elaborate::elaborate -> resolve::resolve -> infer_resolved_report -> lower_definitions",
+      "check::check -> k_text::write"
+    ],
+    "sharedChecker": "The elaborator directly uses checker projection/copy/return-contract/scoped checks; check is an actual dependency, already self-built.",
+    "diagnosticSupport": "Diagnostics/recovery remain included because loader reports and inference context types depend on them. This is the declared module closure, not an optimizer-derived function reachability count."
+  },
+  "moduleTotals": {
+    "source producer": {
+      "files": 55,
+      "bytes": 1188442,
+      "physicalLines": 31703
+    },
+    "already self-built K compiler": {
+      "files": 9,
+      "bytes": 321303,
+      "physicalLines": 9127
+    }
+  },
+  "physicalLineCaveat": "Physical lines include cfg(test) sections in selected module files. No test-only external modules are selected. Line totals are inventory, not a porting-distance score.",
+  "firstBlocker": {
+    "file": "00-baseline",
+    "phase": "load_parse",
+    "originalLocation": "src/resolve.rs:948",
+    "blocker": "resolve_nodes failed: &mut impl FnMut(...)"
+  },
+  "stages": [
+    {
+      "file": "00-baseline",
+      "phase": "load_parse",
+      "originalLocation": "src/resolve.rs:948",
+      "blocker": "resolve_nodes failed: &mut impl FnMut(...)"
+    },
+    {
+      "file": "01-syntax",
+      "phase": "load_parse",
+      "originalLocation": "src/elaborate/definition_types/method_headers.rs:27 and 44",
+      "blocker": "two slice patterns exposed after parsing the enclosing signatures"
+    },
+    {
+      "file": "02-slices",
+      "phase": "resolve",
+      "originalLocation": "src/elaborate/scoped_locals.rs:55",
+      "blocker": "std::rc::Rc import"
+    },
+    {
+      "file": "03-owned",
+      "phase": "resolve",
+      "originalLocation": "src/elaborate/definition_types.rs:5",
+      "blocker": "std::collections::VecDeque import"
+    },
+    {
+      "file": "04-fifos",
+      "phase": "resolve",
+      "originalLocation": "src/elaborate/definition_types/source_types.rs:4",
+      "blocker": "std::borrow::Cow import"
+    },
+    {
+      "file": "05-environments",
+      "phase": "type",
+      "originalLocation": "src/elaborate/static_lifetimes.rs:71",
+      "blocker": "derive PartialOrd requires BTreeMap fields to implement PartialOrd"
+    },
+    {
+      "file": "06-key",
+      "phase": "type",
+      "originalLocation": "src/elaborate/closures.rs:7",
+      "blocker": "unused derive Debug"
+    },
+    {
+      "file": "07-debug",
+      "phase": "type",
+      "originalLocation": "src/elaborate/scoped_calls.rs:51",
+      "blocker": "scoped_parameters result Vec<&GenericParam> violates owned-container rule"
+    },
+    {
+      "file": "08-parameters",
+      "phase": "build_k",
+      "originalLocation": null,
+      "blocker": "independent body construction/checking reached; accumulated diagnostics prevent K output"
+    }
+  ],
+  "temporaryProbe": {
+    "filesChanged": 15,
+    "insertions": 109,
+    "deletions": 91,
+    "rustcMetadata": "baseline and final probe both passed rustc --edition=2024 --crate-type=lib --emit=metadata -A warnings",
+    "deletedOrStubbedBodies": 0,
+    "changes": [
+      "two impl-FnMut parameters become named generic parameters",
+      "four tuple parameters destructure inside the body; three single-element slice patterns use len/index checks",
+      "Bindings FromIterator becomes an explicit Vec-of-pairs constructor",
+      "mutable-place iterator becomes a fallible visitor; expression-ID iterator returns owned IDs; readiness helper accepts owned IDs",
+      "two Rc uses become owned immutable tables with clones",
+      "five Copy-item FIFO worklists use Vec plus read indices",
+      "Cow environment storage becomes owned maps",
+      "ordered environment interning uses an explicit tuple of owned sorted entries",
+      "unused Debug derive removed",
+      "scoped_parameters returns owned cloned GenericParam values"
+    ],
+    "caveats": [
+      "The temporary patch is for pricing only; it is not merged or gate-tested.",
+      "Rust validity does not establish K-text identity or runtime equivalence. No such comparison was performed.",
+      "Owned cloning, eager collection and FIFO storage change allocation/lifetime costs; no performance claim is made.",
+      "The visitor rewrite introduces a current associated-projection diagnostic at scoped_locals.rs:28. Counts are attached to this valid-Rust probe, not represented as diagnostics of the untouched tree.",
+      "One Environment::key helper body is added; no existing compiler body is omitted."
+    ]
+  },
+  "measured": {
+    "sourceBodyAttempts": 1375,
+    "sourceBodyCountMeaning": "complete pipeline attempted counts source functions with bodies in the loaded closure, including the supplied source library and source-generated methods; it is not a count of successful K bodies.",
+    "constructedKFunctionCount": null,
+    "kArtifactProduced": false,
+    "diagnostics": 310,
+    "byCode": {
+      "E_TYPE": 149,
+      "E_UNSUPPORTED": 100,
+      "E_BORROW": 48,
+      "E_NAME": 5,
+      "E_TRAIT": 8
+    },
+    "borrowFamilies": {
+      "owned containers of views": 19,
+      "exclusive borrow conflict": 20,
+      "drop through borrow/index": 1,
+      "shared borrow conflict": 7,
+      "move through borrow/index": 1
+    },
+    "unsupportedFamilies": {
+      "this expression form is not implemented yet": 4,
+      "local declarations are not implemented yet": 2,
+      "remove": 1,
+      "extend": 25,
+      "to_string": 2,
+      "trim_end_matches": 2,
+      "split": 3,
+      "rsplit": 2,
+      "range": 2,
+      "collect": 13,
+      "iter_mut": 2,
+      "partition_point": 1,
+      "entry": 12,
+      "unwrap_or_default": 5,
+      "then_some": 2,
+      "rposition": 1,
+      "flat_map": 1,
+      "strip_prefix": 1,
+      "split_off": 1,
+      "rev": 6,
+      "trim_start_matches": 1,
+      "resize": 1,
+      "copied": 2,
+      "into_iter": 1,
+      "as_deref": 5,
+      "rsplit_once": 1,
+      "then": 1
+    },
+    "typeFamilies": {
+      "type mismatch: expected str, found &str": 3,
+      "type mismatch: expected usize, found &str": 8,
+      "type mismatch: expected usize, found &(_, _, resolve::Namespace)": 1,
+      "type mismatch: expected string::String, found str": 16,
+      "type mismatch: expected usize, found &_": 16,
+      "type mismatch: expected &str, found string::String": 4,
+      "type mismatch: expected string::String, found &str": 1,
+      "type mismatch: expected usize, found &usize": 14,
+      "function result type differs: type mismatch: expected Vec<diagnostic::Diagnostic>, found diagnostic::Diagnostic": 3,
+      "type mismatch: expected usize, found &generics::Goal": 1,
+      "type mismatch: expected Vec<ast::GenericParam>, found [ast::GenericParam]": 3,
+      "type mismatch: expected &usize, found usize": 1,
+      "type mismatch: expected &string::String, found usize": 2,
+      "type mismatch: expected diagnostic::Diagnostic, found Vec<diagnostic::Diagnostic>": 1,
+      "collection element type needs an annotation": 3,
+      "variant requires its declared tuple or named fields": 1,
+      "uninitialized binding requires a type": 6,
+      "unknown function usize::from": 4,
+      "closure parameter or result type needs context": 19,
+      "unknown function $std::ordered_map::BTreeMap::new": 3,
+      "unknown value Vec::new": 2,
+      "type needs an annotation": 21,
+      "struct field maximum type differs": 1,
+      "unknown function i64::from": 3,
+      "empty array needs an element type": 2,
+      "unknown function $std::ordered_set::BTreeSet::new": 3,
+      "generic arguments disagree": 1,
+      "unknown function $std::ordered_set::BTreeSet::from": 1,
+      "unknown value $std::string::String::as_str": 1,
+      "unknown value usize::MAX": 1,
+      "constructor type arguments differ from expected type": 1,
+      "unknown value elaborate::first_problem": 2
+    },
+    "baselineRecoveredSemanticObservations": 326,
+    "baselineInterpretation": "Recovered observations while ordinary compilation stops at parsing; excluded from distance estimates.",
+    "finalSemanticCensusCount": 304,
+    "finalSemanticCensusDifference": "The semantic summary filters six unsupported expression/local-declaration diagnostics. The actual stderr contains 310 non-blocked diagnostics plus one E_BLOCKED summary."
+  },
+  "decisionEvidence": [
+    "The narrow 15-file probe crosses all observed item-level barriers without deleting a body or changing trusted K rules.",
+    "Half of the 100 unsupported diagnostics are extend (25), collect (13) and entry (12); most remaining methods use ordinary collections/text and existing K.",
+    "Of 48 borrow diagnostics, 19 forbid owned containers of views, 20 are exclusive conflicts, 7 shared conflicts, and 2 move/drop through a borrow/index.",
+    "The AST already stores edges as arena indices and most compiler state is owned. No observed blocker forces a new trusted K rule.",
+    "A byte-identical rewrite would still have to recover declaration/type/local/function numbering, instantiation order, cleanup order and source locations; current code preserves those decisions."
+  ],
+  "next": [
+    "Land only deliberate declaration/representation rewrites after review and an exact-K baseline is retained.",
+    "Treat type-context/map-index/borrowed-key and reusable library gaps as consumer-driven ordinary work; use explicit loops/helpers for rare iterator/entry/mutable-iterator patterns.",
+    "Replace heap views by owned IDs or values; separate receiver reads from mutable calls.",
+    "Recount after first faults are removed, then expose remaining ownership errors; do not interpret 310 as all remaining edits.",
+    "Compare K bytes on conformance and the compiler source, then complete source-producer self-build/fixed point."
+  ],
+  "provenance": {
+    "directory": "/home/coder/lkjscript-codex-20261114-frontend-census",
+    "manifest": "manifest.json",
+    "patch": "probe.diff",
+    "diagnostics": "08-diagnostics.json",
+    "binarySha256": "51ccc2786becf5262694947a66ccc5e7d820084be4fec09106eb67523fe0467e",
+    "adapterSha256": "84b72f19775b1fec2f1bd3ce72e3a83ce8075121a7878af49d2da428f4f84f9a"
+  },
+  "commands": {
+    "prepare": "node /home/coder/lkjscript-codex-20261114-frontend-census/prepare.mjs",
+    "probe": "Run scripts 01 through 08 in numeric order on a fresh copy of the saved baseline, running the saved b0 check --census probe/src/frontend.rs after each stage.",
+    "census": "LKJSCRIPT_TIMINGS=1 /home/coder/lkjscript-codex-20261114-frontend-census/b0 check --census /home/coder/lkjscript-codex-20261114-frontend-census/probe/src/frontend.rs",
+    "rustc": "rustc --edition=2024 --crate-type=lib --emit=metadata -A warnings /home/coder/lkjscript-codex-20261114-frontend-census/probe/src/frontend.rs -o /home/coder/lkjscript-codex-20261114-frontend-census/08-final.rmeta",
+    "diff": "diff -ru /home/coder/lkjscript-codex-20261114-frontend-census/baseline/src /home/coder/lkjscript-codex-20261114-frontend-census/probe/src"
+  }
+}
