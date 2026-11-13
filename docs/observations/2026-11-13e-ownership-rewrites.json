@@ -1,0 +1,78 @@
+{
+  "base_revision": "319cfeb80e8139b7df61e1bfff2a577d83af8d42",
+  "first_rejected_bodies": 12,
+  "source_rewrite_sites": 26,
+  "ownership_rule_changes": 0,
+  "source_bodies_attempted": 823,
+  "instantiated_k_bodies": 2960,
+  "k_instructions": 214157,
+  "remaining_diagnostics": 0,
+  "focused_tests": {
+    "checker": 34,
+    "scaling": 2,
+    "native": 3,
+    "k_text": 8
+  },
+  "elf_parity": [
+    {
+      "id": "arithmetic",
+      "status": 0,
+      "stderr": "",
+      "sha256": "570303747c3ac3938258f2eb8a6f4692e9ac5c4bb70fce839f39b41b9783fe64",
+      "identical": true
+    },
+    {
+      "id": "fibonacci",
+      "status": 0,
+      "stderr": "",
+      "sha256": "9889c7a671cad6c58ad44392e26843a45518a847041dbd535a28f395f79fa991",
+      "identical": true
+    },
+    {
+      "id": "recursive_box",
+      "status": 0,
+      "stderr": "",
+      "sha256": "49f764a01ecca44ec8d6412d76f1666d7de643b103542da01c53d3a5ec5d9cf6",
+      "identical": true
+    },
+    {
+      "id": "output_bytes",
+      "status": 0,
+      "stderr": "",
+      "sha256": "80ec6b0a514b1efb808c6d35ce3b0656f4c159a3360be10f506fe5d4abf68096",
+      "identical": true
+    },
+    {
+      "id": "float_boundaries",
+      "status": 0,
+      "stderr": "",
+      "sha256": "2690dad21f6a54b685db14fc28c1a950f878e77398246371585ea9718f3569fb",
+      "identical": true
+    },
+    {
+      "id": "integer_arithmetic_modes",
+      "status": 0,
+      "stderr": "",
+      "sha256": "4bf76e727aeff23b94bbee0b5ffa590e6de357e734bb5b2b48812a59d240fd8b",
+      "identical": true
+    },
+    {
+      "id": "float",
+      "status": 0,
+      "stderr": "",
+      "sha256": "fc6e5010c26705b6781c73fed6f29850e9316a8f974aacd3f509dc53921345c2",
+      "identical": true
+    }
+  ],
+  "full_gate": {
+    "seconds": 68.262,
+    "rust_tests": 413,
+    "clippy": "all targets clean",
+    "conformance_each_route": 880,
+    "rust_comparisons": 570,
+    "k_compiler_identical_artifacts": 496,
+    "world_observations": 91,
+    "generator_accepted_disagreements": 0,
+    "known_conservative_ownership_rejections": 1
+  }
+}

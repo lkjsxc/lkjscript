@@ -1320,9 +1320,9 @@ impl<'a> Body<'a> {
                 self.write(dst);
             }
             "cast" => {
+                self.read(args[0]);
                 let from = &self.program.types[self.function.locals[args[0]].ty].kind;
                 let to = &self.program.types[self.function.locals[dst].ty].kind;
-                self.read(args[0]);
                 match (from, to) {
                     (TypeKind::F64, TypeKind::F64) => {}
                     (
@@ -1464,10 +1464,12 @@ impl<'a> Body<'a> {
             }
             "vec_pop" => {
                 let output = self.function.locals[dst].ty;
-                let TypeKind::Enum { variants, .. } = &self.program.types[output].kind else {
-                    unreachable!()
+                let inner = {
+                    let TypeKind::Enum { variants, .. } = &self.program.types[output].kind else {
+                        unreachable!()
+                    };
+                    variants[1].fields[0].ty
                 };
-                let inner = variants[1].fields[0].ty;
                 let storage = self.layout.storage(inner);
                 let payload = self.layout.payload(output, Some(1));
                 let extent = payload.bytes;
@@ -1626,10 +1628,13 @@ impl<'a> Body<'a> {
 
             "char_from_u32" => {
                 let result_ty = self.function.locals[dst].ty;
-                let TypeKind::Enum { variants, .. } = &self.program.types[result_ty].kind else {
-                    unreachable!()
+                let character = {
+                    let TypeKind::Enum { variants, .. } = &self.program.types[result_ty].kind
+                    else {
+                        unreachable!()
+                    };
+                    variants[1].fields[0].ty
                 };
-                let character = variants[1].fields[0].ty;
                 let payload = self.layout.payload(result_ty, Some(1));
                 let bytes = payload.bytes;
                 let offset = payload.fields[0];
@@ -1675,10 +1680,13 @@ impl<'a> Body<'a> {
             }
             "str_from_utf8" => {
                 let result_ty = self.function.locals[dst].ty;
-                let TypeKind::Enum { variants, .. } = &self.program.types[result_ty].kind else {
-                    unreachable!()
+                let (value_ty, error_ty) = {
+                    let TypeKind::Enum { variants, .. } = &self.program.types[result_ty].kind
+                    else {
+                        unreachable!()
+                    };
+                    (variants[0].fields[0].ty, variants[1].fields[0].ty)
                 };
-                let error_ty = variants[1].fields[0].ty;
                 let result_bytes = self
                     .layout
                     .payload(result_ty, Some(0))
@@ -1714,7 +1722,7 @@ impl<'a> Body<'a> {
                 self.read(args[0]);
                 store_storage(
                     &mut self.code,
-                    self.layout.storage(variants[0].fields[0].ty),
+                    self.layout.storage(value_ty),
                     self.layout.payload(result_ty, Some(0)).fields[0],
                     self.scratch + 6,
                 );
@@ -2385,7 +2393,16 @@ fn local_layout(
     let mut available_frames: BTreeMap<u8, Vec<u64>> = BTreeMap::new();
     let mut registers = abi.words;
     for (first, local) in starts {
-        while let Some(&(last, previous)) = active.first() {
+        loop {
+            let earliest = {
+                match active.first() {
+                    Some(&(last, previous)) => Some((last, previous)),
+                    None => None,
+                }
+            };
+            let Some((last, previous)) = earliest else {
+                break;
+            };
             if last >= first {
                 break;
             }

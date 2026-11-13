@@ -429,7 +429,7 @@ pub fn read(text: &str) -> Result<Program> {
         if words.is_empty() {
             continue;
         }
-        if let Some(ty) = &mut enumeration {
+        if let Some(mut ty) = enumeration.take() {
             match words[0].as_str() {
                 "variant" => {
                     let variant = Variant {
@@ -439,16 +439,17 @@ pub fn read(text: &str) -> Result<Program> {
                     if let TypeKind::Enum { variants, .. } = &mut ty.kind {
                         variants.push(variant);
                     }
+                    enumeration = Some(ty);
                 }
                 "endtype" => {
                     exact(&words, 1, line)?;
-                    program.types.push(enumeration.take().unwrap());
+                    program.types.push(ty);
                 }
                 _ => return Err(error(line, "expected variant or endtype")),
             }
             continue;
         }
-        if let Some(function) = &mut current {
+        if let Some(mut function) = current.take() {
             match words[0].as_str() {
                 "local" => {
                     exact(&words, 4, line)?;
@@ -504,10 +505,12 @@ pub fn read(text: &str) -> Result<Program> {
                 }
                 "endfn" => {
                     exact(&words, 1, line)?;
-                    program.functions.push(current.take().unwrap());
+                    program.functions.push(function);
+                    continue;
                 }
                 _ => function.body.push(instruction(&words, line)?),
             }
+            current = Some(function);
             continue;
         }
         match words[0].as_str() {

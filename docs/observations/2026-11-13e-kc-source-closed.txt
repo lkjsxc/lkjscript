@@ -1,0 +1,10 @@
+kind	count	category
+TOTAL	0	unsupported
+TOTAL	0	blocked
+
+semantic dependency	count	category
+TOTAL	0	semantic
+
+semantic phase	count	category
+complete pipeline attempted	823	coverage
+LKJ_TIMING {"route":"compiler","stopped_stage":"done","total_ms":1200.7464240000002,"build_k_ms":228.052868,"check_ms":157.301593,"load_parse_ms":31.142549,"resolve_ms":19.084355000000002,"type_ms":170.819931,"instantiated_bodies":2960,"k_instructions":214157,"source_bytes":630676,"peak_rss_bytes":136597504}

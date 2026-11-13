@@ -246,7 +246,8 @@ impl Observation {
         index: usize,
     ) -> Result<(), Diagnostic> {
         self.changed.clear();
-        if let Some(annotations) = self.annotations.checkpoints.get(&index).cloned() {
+        let annotations = self.annotations.checkpoints.get(&index).cloned();
+        if let Some(annotations) = annotations {
             for annotation in annotations {
                 self.seed(state, &annotation)?;
             }
@@ -260,7 +261,8 @@ impl Observation {
             ..
         } = &instruction.op
         {
-            if let Some(requirements) = self.calls.get(&index).cloned() {
+            let requirements = self.calls.get(&index).cloned();
+            if let Some(requirements) = requirements {
                 for requirement in requirements {
                     let formal = &program.functions[*target];
                     let annotation = Annotation {
@@ -454,7 +456,8 @@ impl Observation {
             roots.insert(place.local);
         }
         for root in roots {
-            if let Some(annotations) = self.indirect.get(&root).cloned() {
+            let annotations = self.indirect.get(&root).cloned();
+            if let Some(annotations) = annotations {
                 for annotation in annotations {
                     if state.live.at(annotation.place.local) {
                         self.seed(state, &annotation)?;

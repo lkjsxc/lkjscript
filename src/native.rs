@@ -597,11 +597,13 @@ impl Body<'_> {
             .height
             .checked_sub(1)
             .ok_or("invalid lowered operand stack")?;
-        self.a.load(reg, BP, self.operand(self.height));
+        let offset = self.operand(self.height);
+        self.a.load(reg, BP, offset);
         Ok(())
     }
     fn push(&mut self, reg: u8) {
-        self.a.store(BP, self.operand(self.height), reg);
+        let offset = self.operand(self.height);
+        self.a.store(BP, offset, reg);
         self.height += 1;
         self.maximum = self.maximum.max(self.height);
     }
@@ -901,7 +903,8 @@ impl Body<'_> {
                 if *local >= self.locals {
                     return Err("invalid lowered local".to_string());
                 }
-                self.a.load(A, BP, self.offset(*local));
+                let offset = self.offset(*local);
+                self.a.load(A, BP, offset);
                 self.push(A);
             }
             Instruction::LocalSet(local) | Instruction::LocalTee(local) => {
@@ -909,7 +912,8 @@ impl Body<'_> {
                     return Err("invalid lowered local".to_string());
                 }
                 self.pop(A)?;
-                self.a.store(BP, self.offset(*local), A);
+                let offset = self.offset(*local);
+                self.a.store(BP, offset, A);
                 if matches!(instruction, Instruction::LocalTee(_)) {
                     self.push(A);
                 }
@@ -1025,8 +1029,10 @@ impl Body<'_> {
                         .height
                         .checked_sub(1)
                         .ok_or("missing lowered branch result")?;
-                    self.a.load(C, BP, self.operand(from));
-                    self.a.store(BP, self.operand(slot), C);
+                    let from_offset = self.operand(from);
+                    let slot_offset = self.operand(slot);
+                    self.a.load(C, BP, from_offset);
+                    self.a.store(BP, slot_offset, C);
                 }
                 if !conditional || skipped.is_some() {
                     self.a.jump(destination);
@@ -1039,14 +1045,18 @@ impl Body<'_> {
                 }
             }
             Instruction::Call(index) => {
-                let signature = self.signatures.get(*index).ok_or("invalid lowered call")?;
+                let (parameters, has_result) = {
+                    let signature = self.signatures.get(*index).ok_or("invalid lowered call")?;
+                    (signature.parameters.len(), signature.result.is_some())
+                };
                 self.height = self
                     .height
-                    .checked_sub(signature.parameters.len())
+                    .checked_sub(parameters)
                     .ok_or("lowered call operands missing")?;
-                self.a.lea(DI, BP, self.operand(self.height));
+                let offset = self.operand(self.height);
+                self.a.lea(DI, BP, offset);
                 self.a.call(self.functions[*index]);
-                if signature.result.is_some() {
+                if has_result {
                     self.push(A);
                 }
             }
@@ -1073,7 +1083,8 @@ impl Body<'_> {
                     .height
                     .checked_sub(signature.parameters.len())
                     .ok_or("lowered indirect operands missing")?;
-                self.a.lea(DI, BP, self.operand(self.height));
+                let offset = self.operand(self.height);
+                self.a.lea(DI, BP, offset);
                 self.a.call_register(R11);
                 if signature.result.is_some() {
                     self.push(A);

@@ -626,16 +626,18 @@ pub(crate) fn check_definitions(
         } else {
             let mut site = None;
             let mut observation = locals::Observation::new(&scope, &program.types, function);
-            let mut observed = LocalPass::Observe(&mut observation);
-            let result = check_function_body(
-                program,
-                function,
-                &facts,
-                &mut site,
-                None,
-                None,
-                Some(&mut observed),
-            );
+            let result = {
+                let mut observed = LocalPass::Observe(&mut observation);
+                check_function_body(
+                    program,
+                    function,
+                    &facts,
+                    &mut site,
+                    None,
+                    None,
+                    Some(&mut observed),
+                )
+            };
             let result = match result {
                 Ok(()) => {
                     site = None;

@@ -259,11 +259,14 @@ fn get_or_insert<'a, K: Ord + Clone, V>(
     map.get_mut(&key).expect("inserted map entry")
 }
 fn remove_index<K: Ord>(map: &mut BTreeMap<K, BTreeSet<Place>>, key: &K, place: &Place) {
-    if let Some(entries) = map.get_mut(key) {
+    let empty = if let Some(entries) = map.get_mut(key) {
         entries.remove(place);
-        if entries.is_empty() {
-            map.remove(key);
-        }
+        entries.is_empty()
+    } else {
+        false
+    };
+    if empty {
+        map.remove(key);
     }
 }
 impl Loans {
@@ -2862,120 +2865,127 @@ fn check_function_body(
                 function: called,
                 args,
             } => {
-                let call = scoped::CallContext {
-                    state: &state,
-                    function,
-                    types,
-                    instruction: instruction_index,
-                    args,
-                };
-                let retained = input_regions.before_call(scope, &call)?;
-                let callee = &program.functions[*called];
-                let mut returned = Provenance {
-                    loans: Vec::new(),
-                    absent: Vec::new(),
-                };
-                let source = match &callee.return_source {
-                    Some(ReturnSource::Parameter { index, projections }) => {
-                        let mut source =
-                            parameter_source(types, callee, *index, projections).unwrap();
-                        source.local = args[*index];
-                        let incoming =
-                            carried_provenance(&state, types, function, &source, &source, line)?;
-                        common_origin(&incoming.loans, line)?
-                    }
-                    Some(ReturnSource::Static) => Some(ResolvedOrigin {
-                        absent: false,
-                        sources: vec![SourceBound {
-                            origin: Origin {
-                                root: Root::Static,
-                                projections: Vec::new(),
-                            },
-                            exact: false,
-                        }],
-                        parents: Vec::new(),
-                        effects: BTreeSet::new(),
-                    }),
-                    None | Some(ReturnSource::Leaves(_)) => None,
-                };
-                if let Some(ReturnSource::Leaves(_)) = &callee.return_source {
-                    returned =
-                        mapped_call_provenance(&state, types, function, callee, args, *dst, line)?;
-                } else {
-                    for (projections, mutable) in reference_paths(types, callee.result) {
-                        let holder = Place {
-                            local: *dst,
-                            projections,
-                        };
-                        if let Some(source) = &source {
-                            if mutable
-                                && source
-                                    .sources
-                                    .iter()
-                                    .any(|bound| bound.origin.root == Root::Static)
-                            {
-                                return Err(error(
-                                    line,
-                                    "E_BORROW",
-                                    "static storage cannot supply an exclusive result",
-                                ));
-                            }
-                            // A call may select any descendant of its declared
-                            // input sources. No positional result-leaf mapping is
-                            // established by this contract.
-                            let mut bounds = Vec::new();
-                            for source in &source.sources {
-                                let bound = SourceBound {
-                                    origin: source.origin.clone(),
-                                    exact: false,
+                let (retained, returned) = {
+                    let call = scoped::CallContext {
+                        state: &state,
+                        function,
+                        types,
+                        instruction: instruction_index,
+                        args,
+                    };
+                    let retained = input_regions.before_call(scope, &call)?;
+                    let callee = &program.functions[*called];
+                    let mut returned = Provenance {
+                        loans: Vec::new(),
+                        absent: Vec::new(),
+                    };
+                    let source = match &callee.return_source {
+                        Some(ReturnSource::Parameter { index, projections }) => {
+                            let mut source =
+                                parameter_source(types, callee, *index, projections).unwrap();
+                            source.local = args[*index];
+                            let incoming = carried_provenance(
+                                &state, types, function, &source, &source, line,
+                            )?;
+                            common_origin(&incoming.loans, line)?
+                        }
+                        Some(ReturnSource::Static) => Some(ResolvedOrigin {
+                            absent: false,
+                            sources: vec![SourceBound {
+                                origin: Origin {
+                                    root: Root::Static,
+                                    projections: Vec::new(),
+                                },
+                                exact: false,
+                            }],
+                            parents: Vec::new(),
+                            effects: BTreeSet::new(),
+                        }),
+                        None | Some(ReturnSource::Leaves(_)) => None,
+                    };
+                    if let Some(ReturnSource::Leaves(_)) = &callee.return_source {
+                        returned = mapped_call_provenance(
+                            &state, types, function, callee, args, *dst, line,
+                        )?;
+                    } else {
+                        for (projections, mutable) in reference_paths(types, callee.result) {
+                            let holder = Place {
+                                local: *dst,
+                                projections,
+                            };
+                            if let Some(source) = &source {
+                                if mutable
+                                    && source
+                                        .sources
+                                        .iter()
+                                        .any(|bound| bound.origin.root == Root::Static)
+                                {
+                                    return Err(error(
+                                        line,
+                                        "E_BORROW",
+                                        "static storage cannot supply an exclusive result",
+                                    ));
+                                }
+                                // A call may select any descendant of its declared
+                                // input sources. No positional result-leaf mapping is
+                                // established by this contract.
+                                let mut bounds = Vec::new();
+                                for source in &source.sources {
+                                    let bound = SourceBound {
+                                        origin: source.origin.clone(),
+                                        exact: false,
+                                    };
+                                    if !bounds.contains(&bound) {
+                                        bounds.push(bound);
+                                    }
+                                }
+                                returned.loans.push(Loan {
+                                    created: site_history(state.site),
+                                    holder,
+                                    sources: bounds,
+                                    mutable,
+                                    parents: source.parents.clone(),
+                                    effects: source.effects.clone(),
+                                });
+                            } else if !mutable && callee.return_source.is_some() {
+                                // With no live input reference leaves, an initialized
+                                // shared result can only come from immutable static
+                                // storage. The callee's return check proves this case.
+                                let target = Origin {
+                                    root: Root::Static,
+                                    projections: Vec::new(),
                                 };
-                                if !bounds.contains(&bound) {
-                                    bounds.push(bound);
+                                returned.loans.push(Loan {
+                                    created: site_history(state.site),
+                                    holder,
+                                    sources: vec![SourceBound {
+                                        origin: target.clone(),
+                                        exact: false,
+                                    }],
+                                    mutable: false,
+                                    parents: Vec::new(),
+                                    effects: BTreeSet::new(),
+                                });
+                            } else {
+                                let absent = holder
+                                    .projections
+                                    .iter()
+                                    .any(|p| matches!(p, Projection::VariantField(_, _)));
+                                if absent {
+                                    returned.absent.push(holder);
+                                } else {
+                                    return Err(error(
+                                        line,
+                                        "E_BORROW",
+                                        "call result reference has no source provenance",
+                                    ));
                                 }
                             }
-                            returned.loans.push(Loan {
-                                created: site_history(state.site),
-                                holder,
-                                sources: bounds,
-                                mutable,
-                                parents: source.parents.clone(),
-                                effects: source.effects.clone(),
-                            });
-                        } else if !mutable && callee.return_source.is_some() {
-                            // With no live input reference leaves, an initialized
-                            // shared result can only come from immutable static
-                            // storage. The callee's return check proves this case.
-                            let target = Origin {
-                                root: Root::Static,
-                                projections: Vec::new(),
-                            };
-                            returned.loans.push(Loan {
-                                created: site_history(state.site),
-                                holder,
-                                sources: vec![SourceBound {
-                                    origin: target.clone(),
-                                    exact: false,
-                                }],
-                                mutable: false,
-                                parents: Vec::new(),
-                                effects: BTreeSet::new(),
-                            });
-                        } else if holder
-                            .projections
-                            .iter()
-                            .any(|p| matches!(p, Projection::VariantField(_, _)))
-                        {
-                            returned.absent.push(holder);
-                        } else {
-                            return Err(error(
-                                line,
-                                "E_BORROW",
-                                "call result reference has no source provenance",
-                            ));
                         }
                     }
-                }
-                retained.permit_results(&call, callee, &mut returned)?;
+                    retained.permit_results(&call, callee, &mut returned)?;
+                    (retained, returned)
+                };
                 call_borrows(&mut state, types, function, args, line)?;
                 for arg in args {
                     consume(&mut state, types, function, *arg, line)?;
@@ -3280,20 +3290,28 @@ fn check_function_body(
                         remaining -= 1;
                     }
                 }
-                let control = &mut controls[index];
-                if matches!(instruction.op, Op::Continue | Op::ContinueTo { .. }) {
-                    validate_merge(&control.entry, &state, types, function, line)?;
-                    if control.entry.effects.join(&state.effects) {
-                        state = control.entry.clone();
-                        control.breaks.clear();
-                        pc = control.start;
-                        while controls.len() > index + 1 {
-                            controls.pop();
+                let restart = {
+                    let control = &mut controls[index];
+                    if matches!(instruction.op, Op::Continue | Op::ContinueTo { .. }) {
+                        validate_merge(&control.entry, &state, types, function, line)?;
+                        if control.entry.effects.join(&state.effects) {
+                            state = control.entry.clone();
+                            control.breaks.clear();
+                            pc = control.start;
+                            true
+                        } else {
+                            false
                         }
-                        continue;
+                    } else {
+                        control.breaks.push(state.clone());
+                        false
                     }
-                } else {
-                    control.breaks.push(state.clone());
+                };
+                if restart {
+                    while controls.len() > index + 1 {
+                        controls.pop();
+                    }
+                    continue;
                 }
                 state.reachable = false;
             }
@@ -3668,83 +3686,101 @@ fn observed_return_contract(
     })?;
     let mut leaves: Vec<ReturnLeaf> = original.clone();
     for index in 0..leaves.len() {
-        let leaf = &mut leaves[index];
-        let LeafOrigin::Inputs { inputs, .. } = &leaf.origin else {
-            continue;
-        };
-        let Some(actual) = observation.outputs.get(&leaf.projections) else {
-            continue;
-        };
-        if actual
-            .iter()
-            .all(|source: &SourceBound| source.origin.root == Root::Static)
-        {
-            leaf.origin = LeafOrigin::Static;
-            continue;
-        }
-        let output = projected_type(&program.types, function.result, &leaf.projections).unwrap();
-        let TypeKind::Ref {
-            inner: output_inner,
-            ..
-        } = program.types[output].kind
-        else {
-            unreachable!()
-        };
-        let mut selected: BTreeSet<InputLeaf> = BTreeSet::new();
-        let mut exact = true;
-        for source in actual {
-            if source.origin.root == Root::Static {
-                exact = false;
+        let replacement: Option<LeafOrigin> = {
+            let leaf = &leaves[index];
+            let LeafOrigin::Inputs { inputs, .. } = &leaf.origin else {
                 continue;
-            }
-            let mut best: Option<(&InputLeaf, &SourceBound)> = None;
-            for input in inputs {
-                if let Some(bounds) = observation.inputs.get(input) {
-                    for bound in bounds {
-                        if bound.origin.root == source.origin.root
-                            && is_prefix(&bound.origin.projections, &source.origin.projections)
-                            && best.as_ref().is_none_or(
-                                |(_, prior): &(&InputLeaf, &SourceBound)| {
-                                    bound.origin.projections.len() > prior.origin.projections.len()
-                                },
-                            )
-                        {
-                            best = Some((input, bound));
+            };
+            let Some(actual) = observation.outputs.get(&leaf.projections) else {
+                continue;
+            };
+            if actual
+                .iter()
+                .all(|source: &SourceBound| source.origin.root == Root::Static)
+            {
+                Some(LeafOrigin::Static)
+            } else {
+                let output =
+                    projected_type(&program.types, function.result, &leaf.projections).unwrap();
+                let TypeKind::Ref {
+                    inner: output_inner,
+                    ..
+                } = program.types[output].kind
+                else {
+                    unreachable!()
+                };
+                let mut selected: BTreeSet<InputLeaf> = BTreeSet::new();
+                let mut exact = true;
+                for source in actual {
+                    if source.origin.root == Root::Static {
+                        exact = false;
+                        continue;
+                    }
+                    let mut best: Option<(usize, usize)> = None;
+                    let mut best_length = 0usize;
+                    for input_index in 0..inputs.len() {
+                        if let Some(bounds) = observation.inputs.get(&inputs[input_index]) {
+                            for bound_index in 0..bounds.len() {
+                                let bound = &bounds[bound_index];
+                                let length = bound.origin.projections.len();
+                                let better = best.is_none() || length > best_length;
+                                if bound.origin.root == source.origin.root
+                                    && is_prefix(
+                                        &bound.origin.projections,
+                                        &source.origin.projections,
+                                    )
+                                    && better
+                                {
+                                    best = Some((input_index, bound_index));
+                                    best_length = length;
+                                }
+                            }
                         }
                     }
+                    let Some((input_index, bound_index)) = best else {
+                        return Err(error(
+                            1,
+                            "E_BORROW",
+                            "return observation is outside its validated input contract",
+                        ));
+                    };
+                    let input = &inputs[input_index];
+                    let bounds = observation
+                        .inputs
+                        .get(input)
+                        .expect("selected input bounds");
+                    let bound = &bounds[bound_index];
+                    let input_ty = place_type(
+                        &program.types,
+                        function,
+                        &Place {
+                            local: input.index,
+                            projections: input.projections.clone(),
+                        },
+                    )
+                    .unwrap();
+                    let TypeKind::Ref {
+                        inner: input_inner, ..
+                    } = program.types[input_ty].kind
+                    else {
+                        unreachable!()
+                    };
+                    exact &= source == bound && output_inner == input_inner;
+                    selected.insert(input.clone());
+                }
+                if !selected.is_empty() {
+                    let mut inputs = Vec::new();
+                    for input in selected {
+                        inputs.push(input);
+                    }
+                    Some(LeafOrigin::Inputs { inputs, exact })
+                } else {
+                    None
                 }
             }
-            let Some((input, bound)) = best else {
-                return Err(error(
-                    1,
-                    "E_BORROW",
-                    "return observation is outside its validated input contract",
-                ));
-            };
-            let input_ty = place_type(
-                &program.types,
-                function,
-                &Place {
-                    local: input.index,
-                    projections: input.projections.clone(),
-                },
-            )
-            .unwrap();
-            let TypeKind::Ref {
-                inner: input_inner, ..
-            } = program.types[input_ty].kind
-            else {
-                unreachable!()
-            };
-            exact &= source == bound && output_inner == input_inner;
-            selected.insert(input.clone());
-        }
-        if !selected.is_empty() {
-            let mut inputs = Vec::new();
-            for input in selected {
-                inputs.push(input);
-            }
-            leaf.origin = LeafOrigin::Inputs { inputs, exact };
+        };
+        if let Some(origin) = replacement {
+            leaves[index].origin = origin;
         }
     }
     Ok(Some(ReturnSource::Leaves(leaves)))
