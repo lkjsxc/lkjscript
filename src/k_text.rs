@@ -462,10 +462,16 @@ pub fn read(text: &str) -> Result<Program> {
                         exact(&words, pivot + 1, line)?;
                         LeafOrigin::Static
                     } else {
-                        let input = place(&words, pivot + 1, line)?;
-                        LeafOrigin::Parameter {
-                            index: input.local,
-                            projections: input.projections,
+                        let mut inputs = Vec::new();
+                        for words in words[pivot + 1..].split(|word| word == "or") {
+                            let input = place(words, 0, line)?;
+                            inputs.push(InputLeaf {
+                                index: input.local,
+                                projections: input.projections,
+                            });
+                        }
+                        LeafOrigin::Inputs {
+                            inputs,
                             exact: words[pivot] == "exact",
                         }
                     };
@@ -884,14 +890,15 @@ pub fn write(program: &Program) -> String {
                 write_projections(&mut text, &leaf.projections);
                 match &leaf.origin {
                     LeafOrigin::Static => text.push_str(" static"),
-                    LeafOrigin::Parameter {
-                        index,
-                        projections,
-                        exact,
-                    } => {
+                    LeafOrigin::Inputs { inputs, exact } => {
                         text.push_str(if *exact { " exact " } else { " bound " });
-                        text.push_str(&index.to_string());
-                        write_projections(&mut text, projections);
+                        for (index, input) in inputs.iter().enumerate() {
+                            if index != 0 {
+                                text.push_str(" or ");
+                            }
+                            text.push_str(&input.index.to_string());
+                            write_projections(&mut text, &input.projections);
+                        }
                     }
                 }
                 text.push('\n');

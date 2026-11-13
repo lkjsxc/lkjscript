@@ -1,191 +1,220 @@
 # Status
 
-The Rust bootstrap checks monomorphic K and runs it through Node/WebAssembly or
-an independent K machine. Compiler closure, an owned native route, the fixed
-point and independence from Rust/Node remain unfinished. The next changes are
-ordered by their dependencies and trust cost, not by a session boundary.
+The Rust bootstrap checks monomorphic K, applies one layout/lowering contract,
+and runs static Linux x86-64 output by default. Native artifacts need neither
+Node nor libc. WebAssembly remains a thin optional encoder; the independent K
+machine remains the execution oracle. Compiler closure, the fixed point and
+independence of the compiler itself from Rust remain unfinished.
 
-## What runs
+## What now runs
 
-`?` with equal error types, `if let`, `while let`, diverging `let else`, nested
-patterns, binding modes, guards, or-patterns, struct update and value-producing
-`break` lower through the existing control and ownership mechanisms. Tag tests
-now name a place so nested affine payloads need not move before a match succeeds.
-Guard bindings freeze their original places until the guard decides; partial
-moves and cleanup preserve the original destruction points. Nested alternatives
-without bindings/guards share their pattern subtrees. Uniform binding paths and independent owned-value alternatives also share,
-including irrefutable or-let bindings. Guarded products and nonuniform reference
-bindings still need shared continuations; this is unfinished class 0 work.
-Guard shell restrictions protect tested places while permitting unrelated field
-writes. Targeted loop transfers preserve outer source control.
+Class 0 control and pattern width is installed: equal-error-type question-mark,
+if-let, while-let, diverging let-else, nested and rest patterns, binding modes,
+or-patterns, guards, struct update and value-producing break. Guarded products
+and nonuniform reference choices share their source tree and continuation.
+Cached pure tests skip impossible subtrees without enumerating their products.
+Effectful guards retry feasible alternatives in source order. No new ownership
+rule or K operation was needed for the final pattern work.
 
-Initialization joins track definite and possible owners and partial holes.
-Reads require definite initialization; explicit DropIf cleans possible owners at
-the original lexical point. Parent shells must exist before projected cleanup.
-Loan inventories and loop backedges retain equality until their own contracts
-land. View aggregates now carry independent roots. Per-result-leaf call maps
-validate exact input transport, bounded origins and static leaves; rigid generic
-T transport preserves its abstract leaf identities. A conditional owned field can join inside a reference-bearing aggregate
-when its reference inventory is unchanged. The conditional-move corpus case runs.
+Initialization joins intersect definite ownership and unite possible ownership.
+Conditional destruction preserves lexical destruction points. Reference-holder
+joins unite possible sources, parents and absence; every later access is checked
+against every possibility. Per-leaf call contracts carry exact or bounded input
+alternatives, including repeated generic inputs and named lifetimes. Exact
+transport preserves bounded incoming provenance. Loop backedges remain equality
+checks; reference-bearing writes still need an exact destination identity.
 
-Trait/implementation candidates, field lookups, loan roots, holder dependencies
-and scheduled last uses are indexed. Reference containment is cached. Independent
-well-typed bodies reach K checking after another body's error. The four-function
-probe reports type, unknown-name, borrow and move errors together. Ownership
-errors name the place and loan creation location and carry a real column.
-`check` reports every recognized unsupported site; errors never emit an artifact.
+The source runtime owns size-class allocation/release, growth, UTF-8 validation
+and the iterative cleanup walker. Prepared runtime source is checked normally;
+only its sealed raw interface gets primitive bodies. Ordinary raw function names
+do not confer authority. Native and Wasm consume the same explicit runtime/glue
+calls, natural-width layout and generated functions. K separately exercises the
+runtime source against a raw-memory model and keeps its typed application heap.
 
-The batch command compiles/runs a manifest or directory in one compiler process;
-Node loads the resulting modules in one process. Every case has fresh program
-state. Rust reference results are cached by source, generator/seed and rustc
-identity. Independent suites run in parallel. Detail belongs under `target/`;
-commands and seeds here are the record. Measurement diaries were removed.
+Native conformance, the generators and the requested capacity probes pass.
+Native stack/heap extent exhaustion and mapping refusal report R0006; broken
+stdout reports R0007 at the source line. The Node reservation worker and Linux
+main-stack adjustment are deleted. The remaining Rust compiler thread adapter
+serves the bootstrap compiler, not emitted programs.
 
 ## Observations and commands
 
-`B=target/debug/lkjscript` below. Scaling uses `R=target/release/lkjscript` after
-`cargo build --release`. These are observations of the current implementation,
-not a general soundness claim. Gate timing uses existing build artifacts and generator reference caches; the
-updated conformance manifest populated new Rust reference results.
+`B=target/debug/lkjscript`; `R=target/release/lkjscript` after
+`cargo build --release`. Details are disposable under `target/`.
+Gate timings use existing build artifacts/reference caches; new conformance
+references were populated during validation. Counts describe observations, not
+a general soundness proof.
 
-| Observation | Command | Result |
+| Observation | Command and seed | Result |
 | --- | --- | --- |
-| Integrated gate | `bash tools/check.sh` | 12.188 s; 412 Cargo tests; 209 conformance passes, 8 pending, 176 rustc comparisons per route |
-| Gate parts | same command | format 0.303 s, host 0.060 s, Rust tests 6.933 s, lint 0.039 s, build 0.024 s, parallel suites 4.822 s |
-| Independent examples, both routes | `LKJ_ENGINE=node node tools/corpus.mjs B`; repeat with `LKJ_ENGINE=k` | idioms 16/30; ownership 22/30; rejected 16/16 |
-| Values, each route | `LKJ_ENGINE=node node tools/generators/value.mjs B 601 100`; repeat with `k` | 92 equal values, 8 equal traps |
-| Verdicts, each route | `LKJ_ENGINE=node node tools/generators/verdict.mjs B 601 100`; repeat with `k` | 73 both reject ownership, 26 equal values, 1 valid E_BORROW rejection |
-| Output, each route | `node tools/generators/output.mjs B 601 50` | 39 equal normal exits, 11 equal traps |
-| Conditional destruction, each route | `ONE_SIDED=1 node tools/generators/drops.mjs B 1201 300` | 300 equal outputs; no invalid generator cases or rejections |
-| Sugar/expansion pairs, each route | `node tools/generators/sugar.mjs B 1301 52` | 46 equal normal exits, 6 equal traps; rustc agrees |
-| Additional sugar pairs, each route | `node tools/generators/sugar.mjs R 1302 130 target/width` | 116 equal normal exits, 14 equal traps; rustc agrees |
-| Outside must-reject probes, now permanent | `LKJ_ENGINE=node node tools/conformance.mjs B`; repeat with `k` | all 26 review fixtures rejected with recorded Rust codes, including r01/r02/r13/r17/r18/r19 |
+| Routine native/K gate | `bash tools/check.sh` | 14.360 s; 418 Cargo tests; 236 conformance passes, 8 pending, 194 Rust comparisons per route |
+| Gate parts | same command | format 0.332 s; host 0.064 s; Rust 7.223 s; lint 1.436 s; build 0.037 s; parallel suites 5.260 s |
+| Three-route integration | `LKJ_GATE_ENGINES=node,k,native bash tools/check.sh` | 234 passes, 8 pending and 192 Rust comparisons per route before the two final tuple-rest rejection fixtures |
+| Independent examples, each route | `LKJ_ENGINE=native node tools/corpus.mjs B`; repeat with `k` and `node` | idioms 17/30; ownership 26/30; rejected 16/16 |
+| Values, each route | `LKJ_ENGINE=native node tools/generators/value.mjs B 601 100`; repeat with `k,node` separately | 92 equal values; 8 equal traps |
+| Verdicts, each route | `LKJ_ENGINE=native node tools/generators/verdict.mjs B 601 100`; repeat with `k,node` separately | 73 both reject; 26 equal values; 1 valid E_BORROW rejection |
+| Output, each route | `LKJ_ENGINES=node,k,native node tools/generators/output.mjs B 601 50` | 39 equal normal exits; 11 equal traps |
+| Conditional destruction, each route | `LKJ_ENGINES=node,k,native ONE_SIDED=1 node tools/generators/drops.mjs B 1201 300 target/checkpoint-generators` | 300 equal outputs; no invalid generator cases or rejections |
+| Sugar/expansion pairs | `LKJ_ENGINES=node,k,native node tools/generators/sugar.mjs B 1501 60 target/width` | 55 equal normal exits; 5 equal traps on every route |
+| Routine sugar pairs | gate uses seed 1301, 60 pairs | 52 equal normal exits; 8 equal traps |
+| Outside must-reject programs | included in conformance | all 26 reject with recorded Rust reason codes, including r01/r02/r13/r17/r18/r19 |
 
-All other generated outcome classes in these runs are zero. The 32-way nested
-or-pattern stress exceeds the Rust reference compilation envelope; it remains
-on both lkjscript routes with an independently expanded 84-result case, while a
-5-way version and its expansion are Rust-checked. This is an oracle limitation,
-not a source acceptance bound. The routine gate
-uses 100 destructor programs at the same seed. Setting `LKJ_SUGAR_RUST=0` keeps
-the sugar/expansion oracle and removes only its Rust comparison. The expanded
-pair is emitted independently by the generator; it does not call the compiler's
-sugar lowering.
+Other generated outcome classes are zero. The 60 sugar pairs cover 20 families.
+Rust checks all 60 expansions and 54 sugar forms. The six compact 32-way stress
+forms exceed Rust's observed compilation envelope; they still run on all
+lkjscript routes, and smaller equivalents remain Rust-checked. This is an oracle
+limitation, not a source acceptance bound. The routine gate uses 100 destructor
+programs at seed 1201. Rust caches are keyed by generator/source/seed and compiler
+identity. Every case has fresh program state.
 
 ### Compiler census
 
-Command: `B check --census src/lib.rs`. The first table counts recognized syntax
-sites, including sites inside recoverable blocked regions. Source growth means
-this is not subtraction from the old 3,412-site source snapshot.
+Current command: `B check --census src/lib.rs`. For a fixed-source comparison:
 
-| Unsupported form | Sites |
-| --- | ---: |
-| Collection iteration | 563 |
-| Closures | 446 |
-| Closure parameter patterns | 45 |
-| `format!` | 174 |
-| `for` binding patterns | 149 |
-| Character literals | 88 |
-| Range slicing | 31 |
-| Repeated Vec literals | 30 |
-| `impl` forms | 2 |
-| Full range pattern | 1 |
-| **Total** | **1,529** |
+```sh
+mkdir -p target/census-base
+git archive 80cd198a src | tar -x -C target/census-base
+B check --census target/census-base/src/lib.rs
+```
 
-Blocked regions: 53 (46 statements, 6 items, 1 semantic phase).
+The original source snapshot now has **1,300** unsupported syntax sites. Current
+sources include the new native encoder, runtime and pattern implementation, and
+have **1,672**. This comparison keeps source growth separate from supported width.
 
-The same command now prints a second table of 477 semantic dependency sites.
-This is an inventory of the resolvable portion, not a complete library plan:
-missing imports account for some dependent names, and method/trait body analysis
-is still incomplete in blocked regions. Leading rows are below; the command
-prints every row and location-bearing diagnostics.
+| Unsupported syntax | Original sources | Current sources |
+| --- | ---: | ---: |
+| Collection iteration | 475 | 616 |
+| Closures | 375 | 487 |
+| Closure parameter patterns | 26 | 52 |
+| `for` binding patterns | 128 | 166 |
+| `format!` | 160 | 184 |
+| Character literals | 85 | 90 |
+| Range slicing | 24 | 42 |
+| Repeated Vec literals | 27 | 33 |
+| `impl` forms | 0 | 2 |
+| **Total** | **1,300** | **1,672** |
+
+Current blocked regions: 59 (52 statements, 6 items, 1 semantic phase).
+Original sources: 29 blocked regions. Class 0 forms no longer appear in either
+syntax table.
+
+The second census table has **565 semantic dependency sites** in current sources
+(413 on the original snapshot). It remains partial: missing imports explain some
+dependent names, and blocked method/trait bodies have not been resolved.
+The command prints every row and location; the leading rows are below.
 
 | Semantic dependency | Sites |
 | --- | ---: |
 | `Op::Return` | 40 |
 | `Type` | 39 |
 | `Op::Int` | 29 |
-| `Op::Drop` | 25 |
 | `BTreeSet` | 27 |
+| `Op::Drop` | 25 |
 | `Place` | 24 |
 | `Field` | 18 |
 | `Op::Borrow` | 18 |
 | `Op::Read` | 17 |
 | `TypeKind::Ref` | 14 |
-| Import `std::collections::BTreeSet` | 13 |
-| `std::result::Result` | 11 |
-| Other reported dependencies | 202 |
-| **Total** | **477** |
+| Import `std::collections::BTreeSet` | 14 |
+| `std::result::Result` | 12 |
+| Other reported dependencies | 288 |
+| **Total** | **565** |
 
-### Width scaling
+### Scaling and native capacity
 
-Command: `node tools/scale/run.mjs R --families traits,refs,variants,fields
---sizes 2000,4000,8000 --repeat 3 --out target/scale/indexed-checkpoint`.
-Values are median check milliseconds, then ratios per doubling. The variants row
-was remeasured with `--families variants --out target/scale/variants-sharing`
-after pruning out-of-scope arm write histories and reusing shared fact nodes.
+These release measurements used snapshot `8175eefa10a289e0`, saved as
+`target/owned-snapshot/lkjscript` (`S` below). The native encoder, lowering and
+runtime are unchanged since that snapshot; tuple-rest inference and bootstrap
+host cleanup were finalized afterward.
 
-| Family | 2,000 / 4,000 / 8,000 | Doubling ratios |
+Command: `node tools/scale/run.mjs S --families traits,refs,variants,fields
+--sizes 2000,4000,8000 --repeat 3 --out target/scale/owned-checkpoint`.
+Median check milliseconds and ratios per doubling:
+
+| Family | 2,000 / 4,000 / 8,000 | Ratios |
 | --- | --- | --- |
-| Trait implementations | 132.288 / 269.586 / 572.937 | 2.038 / 2.125 |
-| Live shared references | 42.657 / 81.761 / 171.361 | 1.917 / 2.096 |
-| Struct fields | 28.631 / 52.598 / 105.225 | 1.837 / 2.001 |
-| Enum variants | 49.197 / 93.748 / 189.673 | 1.906 / 2.023 |
+| Traits | 132.515 / 273.281 / 582.201 | 2.062 / 2.130 |
+| Shared references | 42.654 / 84.970 / 172.789 | 1.992 / 2.034 |
+| Enum variants | 47.514 / 95.484 / 194.620 | 2.010 / 2.038 |
+| Struct fields | 29.208 / 53.806 / 107.594 | 1.842 / 2.000 |
+
+Command for each deterministic row:
+`node tools/scale/owned.mjs S FAMILY SIZE --out target/owned/full`.
+These are the largest new native runs; every result assertion and phase marker
+completed, with no signal or trap.
+
+| Family / size | Compile | Standalone run | Peak run RSS |
+| --- | ---: | ---: | ---: |
+| `chain 1000000` | 17.835 s | 0.443 s | 1.017 GB |
+| `depth 100000000` non-tail calls | 0.010 s | 5.561 s | 15.999 GB |
+| `list 50000000` nodes | 0.011 s | 39.876 s | 26.189 GB |
+| `push 3000000` and sum | 0.009 s | 0.079 s | 0.068 GB |
+
+The million-function compilation peaked at 6.848 GB RSS and emitted 873,108,149
+bytes. List phases were 13.199 s construction, 2.446 s sum and 23.573 s destruction;
+whole-process time also includes final memory release. Sizes and available host
+memory are observations, not source limits.
+
+Comparable whole-command Fibonacci command, three interleaved samples per route:
+`S run /home/coder/lkjscript-claude-20261113/perf/fib.rs --engine native --entry probe`,
+then `--engine node`. Medians: native **76.358 ms**, thin Node **32.042 ms**;
+ratio **2.383**. Every run returned 2,178,309.
+
+No new maximum-capacity run was made on K or Node. Their earlier million-function
+K chain and 35-million-node complete Node list remain historical observations in
+limits, not evidence for the changed compiler or the now-thin Node host.
 
 ### Trust ledger
 
-Command: `node tools/trust.mjs`. Physical lines include comments and blanks; size
-is an audit aid, not a proof. The front end is trusted for source meaning while
-K independently checks concrete safety.
+Command: `node tools/trust.mjs`. Physical lines include comments and blanks.
 
 | Responsibility | Lines |
 | --- | ---: |
-| K contract and safety gate | 5,387 |
-| Layout, lowering, lowered contract and current runtime | 2,878 |
-| Wasm encoding and metadata | 418 |
-| Production host boundary | 988 |
-| Independent K model | 2,008 |
+| K contract and safety gate | 5,477 |
+| Layout, lowering and lowered contract | 2,489 |
+| Source runtime and sealed raw binding | 585 |
+| WebAssembly encoder and metadata | 413 |
+| Native encoder and Linux entry | 1,193 |
+| Production host boundary | 1,324 |
+| Independent K and raw-memory models | 2,252 |
 
-The model is an oracle, not a production prerequisite. Rust/Cargo, Node/V8 and
-Linux remain dependencies. Rewriting the allocator in source will still require
-its raw-memory invariants to be audited.
+The front end is trusted for source meaning; K independently checks concrete
+safety. The source runtime is checked, but its raw-memory invariants and bindings
+remain trusted. The models are oracles, not production prerequisites. Rust/Cargo
+still build the compiler. Linux runs native artifacts. Node remains in optional
+Wasm execution, existing backend-specific Rust tests and development tools.
 
-## Old paths and unfinished work
+## Old paths, limits and next action
 
-- Decision 3 step 1 is installed: checked K lowers to an explicit typed form,
-  one layout contract applies natural scalar/element widths, glue and runtime
-  calls are functions, and wasm.rs is a 353-line encoder. Runtime algorithms
-  remain constructed in lower.rs until the prepared source runtime passes its
-  integration gate. A native ELF encoder is being prepared; it is not installed.
-- No new route-capacity run was made for this checkpoint. The prior million-
-  function K run, 10-million-deep Node recursion and 35-million-node Node list
-  remain historical observations documented in limits.md. They are not evidence
-  for the changed compiler. The Node engine ceilings remain; the stack bridge is
-  frozen until it can be deleted.
-- Multi-root views and per-leaf origin transport are implemented. Holder
-  alternatives, ambiguous/repeated generic inputs, loop invariants and
-  reference-bearing containers still need their checked contracts. Closures
-  and collection iterators wait on the remaining contracts.
-- Pattern alternative products with guards/bindings, library breadth and full
-  semantic census recovery remain. One routine verdict still rejects valid
-  code with E_BORROW. The eight pending conformance cases concern closures,
-  concurrency imports and parameterized trait bounds.
-- Definition plans cover inference and rigid method evidence. Borrow/copy/
-  coercion construction, control, cleanup and part of instance construction
-  still use the existing elaborator. K is checked per concrete instance.
-- Rust Rc, Cargo, library packing, host/resource adapters, Rust harness formatting,
-  the rustc output shim and Node tools remain bootstrap responsibilities.
+Decision 3 steps 1–4 are installed and the requested native observations pass.
+The routine conformance/generator gate uses native and K. Wasm is a 348-line
+encoder; its backend-specific Rust harnesses still use Node. The old hand-built
+runtime bodies, Node worker/retries and Linux main-stack adjustment are gone.
+Rust compiler stack reservation remains necessary for recursive bootstrap
+compiler paths until compiler closure replaces that host responsibility.
 
-## Next action
+Closures and collection iteration are next, behind the installed multi-root and
+origin contracts; class 1 character/text/slicing/repeated-Vec/formatting width
+proceeds in parallel. Ordinary callables must not silently become lending
+closures. Loop inclusion contracts, reference-bearing containers and full generic
+witness closure remain open. One routine valid verdict is still rejected.
+Eight conformance cases remain pending for closures, concurrency imports and
+parameterized trait bounds.
 
-Link the prepared source allocator, growth, cleanup walker and UTF-8 validator
-through a sealed raw-memory interface; remove their constructed low-level bodies.
-Then encode the same lowered program as native ELF. In parallel, join alternative
-reference holders and complete shared guarded pattern continuations, then advance
-class 1 and closure/iteration breadth against the two census tables.
+Definition plans cover inference and rigid method evidence. Borrow/copy/coercion
+construction, control, cleanup and part of instance construction still use the
+existing elaborator; concrete K is checked independently. The semantic census
+still needs import/library resolution and body recovery before it is a complete
+library plan. Rust Rc, source packing, host/file adapters and test tools remain
+bootstrap responsibilities.
 
-`cargo build --release`; `bash tools/check.sh` is the routine gate.
-`lkjscript run file.rs --engine node|k --entry probe` selects execution;
-`batch cases.tsv --engine node|k` amortizes host startup; `build -o file.wasm`
-emits, `k` prints checked K and `check file.k` reaches the independent safety gate.
-`run file.k --engine k --unchecked-k` deliberately exposes forged K to the model.
-`LKJSCRIPT_TIMINGS=1` emits stage timings beneath the selected command.
+**Next action:** implement closure capture environments and statically selected
+Fn/FnMut/FnOnce calls, preserving partial capture cleanup and origin contracts;
+advance class 1 source library width and semantic name resolution in parallel.
+
+`run file.rs --engine native|k|node` selects execution; `batch cases.tsv --engine
+native|k|node` amortizes compilation startup. `build -o file` emits native ELF;
+`build --engine node -o file.wasm` emits Wasm. `k` prints checked K;
+`check file.k` reaches the independent safety gate. `run file.k --engine k
+--unchecked-k` exposes forged K to the model deliberately.
+`LKJSCRIPT_TIMINGS=1` reports the stages that actually ran.

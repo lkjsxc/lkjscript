@@ -1,0 +1,1 @@
+pub fn probe()->i64{let mut value=((0i64,32i64),(0i64,16i64),(0i64,8i64),(0i64,4i64),(0i64,2i64),(0i64,1i64));let mut seen=0i64;match value{((x0,_)|(_,x0),(x1,_)|(_,x1),(x2,_)|(_,x2),(x3,_)|(_,x3),(x4,_)|(_,x4),(x5,_)|(_,x5)) if {seen=seen+1;x0+x1+x2+x3+x4+x5==13}=>seen*1000+x0+x1+x2+x3+x4+x5,_=>-1}}

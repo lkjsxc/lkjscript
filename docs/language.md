@@ -49,19 +49,23 @@ patterns, reference binding modes, or-patterns and match guards execute in sourc
 order. Failed pattern tests and guards do not move payloads. Guard bindings are
 protected by shared loans until the guard succeeds; mutation or moving an affine
 binding in a guard is rejected. Overlapping or alternatives retry the guard in
-source order. Unguarded alternatives with uniform binding paths, and independent
-value-binding choices, share their source tree, including irrefutable let bindings.
+source order. All alternative products share their source tree and continuations,
+including guarded products, nonuniform reference bindings and irrefutable lets.
+Pure pattern tests are cached before guards; impossible subtrees are skipped.
+The selector retries feasible choices in source order without expanding a static
+Cartesian product. An effectful guard can still require visiting many choices.
 Guards cannot assign or mutably borrow a tested place or its ancestor; unrelated
 untested fields remain writable. Copy bindings are frozen too. A wildcard does
-not inspect storage. Guarded alternative products and nonuniform reference
-binding joins still need shared continuations; status records that code-growth
-defect. Targeted K loop transfers preserve enclosing source loops when lowering
-needs an internal loop; invalid depths reject even in unreachable K.
+not inspect storage. Discriminant-only later arms can use the cached test after
+a guard consumes an owner; any later payload access still requires ownership.
+Targeted K loop transfers preserve enclosing source loops when lowering needs an
+internal loop; invalid depths reject even in unreachable K.
 
 Enums retain distinct unit, tuple and named-field variant shapes. Named constructors
 evaluate initializers in written order and store payloads in declaration order.
-Named patterns support reordered fields, renamed/shorthand bindings, wildcards and
-rest patterns. Constructor and pattern fields are checked for names, completeness,
+Tuple and tuple-variant rest patterns select typed prefix/suffix fields. Unannotated
+let patterns preserve the initializer's reference binding mode. Named patterns support
+reordered fields, renamed/shorthand bindings, wildcards and rest patterns. Constructor and pattern fields are checked for names, completeness,
 duplicates, type and declared shape. Unit/empty-tuple variants also accept empty
 braces, as in the common Rust subset. Enum fields inherit enum visibility; explicit
 field visibility is invalid. Nonempty tuple numeric-brace syntax remains unsupported.
@@ -114,13 +118,14 @@ directly. Traps terminate the program without cleanup or recovery.
 References have local, parameter, or immutable static provenance. Mutable
 references are exclusive; fields can be borrowed disjointly. A view aggregate may
 contain independently rooted reference leaves. Each leaf retains its own source
-and parent dependencies. A result can declare a separate input leaf or immutable
-static origin for every output leaf; exact maps preserve the input referent while
-bounded maps permit its descendants. The checker requires complete, unique leaf
-coverage and validates calls and returns independently. Source rigid T input-to-T
-transport preserves its abstract leaf origins; equal concrete types alone do not
-authorize that correspondence. Named lifetimes map when each source is unique.
-Alternative input choices and repeated generic input candidates remain conservative.
+and parent dependencies. A result declares possible input leaves or an immutable
+static origin for every output leaf; exact maps preserve the selected input
+referent while bounded maps permit its descendants. The checker requires complete,
+unique output coverage and validates every possible source at calls and returns.
+Source rigid T input-to-T transport preserves its abstract leaf origins; equal
+concrete types alone do not authorize that correspondence. Named lifetimes and
+repeated generic input candidates map to explicit alternatives. Exact transport
+of a bounded input keeps its conservative footprint; it cannot forge exact storage.
 Borrow endings and cleanup are explicit in K.
 Whole-array/Vec slice projections, view structs and implicit mutable reborrowing
 are implemented.
@@ -364,7 +369,7 @@ paths through a reference or an indexed collection under `E_BORROW`. Replacement
 of such storage moves the old value through checked `replace` before destroying
 that separate owner, keeping the destination initialized.
 
-Wasm lowering maintains initialization flags for roots used by conditional
+Shared lowering maintains initialization flags for roots used by conditional
 destruction and clears moved owned payload slots. Consumed call arguments do not
 remain initialized merely because their old bits remain in a physical slot.
 K cannot supply a flag value. The independent machine tests its own cell state.
@@ -373,8 +378,12 @@ it does not move destruction to a branch join. Initialization joins intersect
 definite roots and union possible roots, with corresponding must/may projected
 holes. A later read requires definite initialization; overwriting a possible
 owner, strict destruction of a maybe-owner, projection through an absent shell
-and leaking a possible owner all reject. Reference inventories and loop
-backedges still require equality until their own contracts are implemented.
+and leaking a possible owner all reject. Branch joins unite possible reference
+holders, source bounds, parent dependencies and absence evidence. Loans are indexed
+under every possible root. A later access must be valid against every possibility;
+possible presence cannot justify a read. Writes that change reference inventory
+need one exact destination identity, not merely a conservative alias footprint.
+Loop backedges still require equality until an inclusion contract is implemented.
 
 The checker validates all type references, signatures and operation shapes,
 including dead code, then checks ownership through each function. Variant payload
@@ -390,17 +399,42 @@ search. Only CheckedProgram reaches the backend; later stages rely on that gate.
 ## Memory and execution
 
 Checked K lowers to target-independent typed operations with layout, calls and
-copy/drop glue explicit. The Wasm encoder consumes this form without consulting K.
+copy/drop/equality glue explicit. WebAssembly and native encoders consume this
+form without consulting K.
 Memory scalars use their natural one-, two-, four- or eight-byte widths; signed
 loads extend correctly. Registers and pointers retain 64-bit representations.
 F64 retains its bit representation and canonical NaNs after arithmetic.
 Collection indexing checks bounds. Traps report a code and source line. The
-reusable first-fit allocator and structural/custom drop release owned fields,
-arrays, boxes and vector elements. Structural cleanup uses an explicit growable
-DFS stack, preserving custom-destructor-before-children and declaration/element
-order. Moved fields are skipped. Copy helpers, recursive generated Clone/equality calls
-and explicit recursive source calls still use the engine stack. Loop-condition
-temporaries end before either loop edge, including index locals and owned receivers.
+source runtime releases owned fields, arrays, boxes and vector elements. Its
+power-of-two size classes reuse released blocks in constant free-list work;
+each block rounds payload plus a 16-byte header to a power of two, with a 32-byte minimum. Growth tries
+geometric capacity and then the exact required extent. Structural cleanup uses
+an explicit growable DFS stack, preserving custom-destructor-before-children and
+declaration/element order. Moved fields are skipped. Copy helpers, recursive
+generated Clone/equality calls and explicit recursive source calls use the selected
+route's call stack. Loop-condition temporaries end before either loop edge,
+including index locals and owned receivers.
+
+The host supplies runtime source separately from application source. Runtime
+preparation checks ordinary scalar K, validates the trapping primitive signatures,
+and seals a small raw load/store/grow/copy/glue-call interface. Ordinary names or
+imports cannot request those substitutions. Allocation, release, growth, the
+cleanup walker and UTF-8 validation are source functions shared by both encoders.
+The K runtime model executes those same functions against an independent raw arena;
+the normal K machine keeps its separate typed heap as the application model.
+The raw-memory invariants of the source allocator and glue still belong to the
+trusted implementation; ordinary type checking alone does not establish them.
+
+Native output is a static Linux x86-64 ELF without libc, a dynamic loader or Node.
+Each lowered local/operand occupies a frame slot. Entry reserves stack and heap
+address ranges from explicit host resource inputs; prologues check stack bounds,
+and memory growth commits pages inside the heap reservation. Reservation or
+growth refusal and checked extent exhaustion trap R0006. Linux can still kill
+an overcommitted process under system-wide memory pressure. World-derived stdout
+is the only application I/O import; partial writes and EINTR are handled, and
+closed/broken output reports R0007 at its source line. Runtime mapping and exit
+operations are private to entry code. The bootstrap can request a separate result
+packet capability; standalone artifacts write only their declared World output.
 
 Lowering reuses physical Wasm locals across nonoverlapping lifetimes. Additional
 live values spill into a growing memory64 frame; address-taken values have stable
@@ -414,12 +448,12 @@ separate allocation. Moved heap slots are cleared so partial cleanup skips them.
 These layouts are implementation details, not an exposed source API.
 
 Generated functions export as `fn:<K-name>`, avoiding a collision with the
-`memory` export. The Node route executes this encoding. The independent K
+`memory` export. The optional Node route executes this encoding. The independent K
 machine executes checked K directly over its own heap, explicit call/control/drop
 stacks, initialization states and exact storage/loan identities. It validates
 reference tags and active variants on actual access and distinguishes M_* machine
 errors from R* program traps. It shares neither the checker implementation nor
-WebAssembly lowering. This dynamic search is not a proof or a full Rust memory
+shared lowering. This dynamic search is not a proof or a full Rust memory
 model. The host prints scalar entry results; floating display formatting is route
 specific, while World output compares exact bytes.
 No generated engine implements a step counter or per-operation allowance.
@@ -471,14 +505,17 @@ are representation operations on K data, not execution of that data as a checked
 program or a compiler-core fixed point.
 
 `src/check.rs` is the K checker; `src/k.rs` defines its inputs and checked result.
-`src/wasm.rs` contains lowering/emission plus allocation and collection internals.
-`bridge/main.rs` supplies bootstrap file/process/command-line access and the trusted Linux main-stack shim;
-`bridge/run.mjs` instantiates on Node. `lkjscript trusted` lists these boundaries.
+`src/lower.rs` owns layout, glue and the explicit lowered operations.
+`library/runtime.rs` owns source runtime algorithms; `src/runtime.rs` seals and links
+the raw interface. `src/wasm.rs` and `src/native.rs` encode the same lowered program.
+`bridge/` supplies bootstrap file/process/command-line access and declared runtime
+and library source. `lkjscript trusted` lists these boundaries; `tools/trust.mjs`
+reports their physical sizes.
 
 Generated modules have no ambient imports. A module using a checked Stdout value
 imports only the byte writer. Language traps record a code and source line in
-module globals and execute WebAssembly unreachable; the host translates that
-record after the trap. Trapping requires no host authority.
+lowered globals and terminate the selected route; the host translates that
+record after the trap. Trapping requires no application I/O authority.
 Ordinary source cannot declare host imports or construct capabilities from scalars.
 Ambient filesystem, environment and print operations are rejected. World-derived
 standard output is specified below. Other capabilities, closures and structured
@@ -529,7 +566,8 @@ unresolved type names.
 
 The bootstrap batch command compiles each case once. K uses a fresh machine per
 case; Node loads fresh modules in one process through the same engine and byte
-writer implementation. Cases retain their own output bytes and termination
+writer implementation. Native cases execute standalone images after compilation
+inside the batch process. Cases retain their own output bytes and termination
 classes. Rust reference output is cached by generated source, generator/seed,
 compiler version and flags. Generators and reduced failures are source records;
 detailed measurements remain under target/.

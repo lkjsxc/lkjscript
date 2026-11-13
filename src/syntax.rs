@@ -2111,13 +2111,26 @@ impl Parser {
                 if self.is("await") {
                     return Err(self.unsupported("await"));
                 }
-                let name;
                 if self.token().kind == TokenKind::Number {
-                    name = self.token().text.clone();
+                    // In postfix position 0.1 denotes two tuple projections,
+                    // even though the lexer can read it as a decimal token.
+                    let text = self.token().text.clone();
+                    let mut indices = Vec::new();
+                    for part in text.split('.') {
+                        let index = part
+                            .replace('_', "")
+                            .parse::<usize>()
+                            .map_err(|_| self.err("tuple field requires a decimal index"))?;
+                        indices.push(index.to_string());
+                    }
                     self.at += 1;
-                } else {
-                    name = self.ident()?;
+                    for name in indices {
+                        left = self
+                            .add_expr(Expr::Field { value: left, name }, self.finish_span(span));
+                    }
+                    continue;
                 }
+                let name = self.ident()?;
                 let types = if self.take("::") {
                     self.generic_args()?
                 } else {
@@ -2776,6 +2789,19 @@ impl Parser {
             self.finish_span(span),
         ))
     }
+    fn tuple_pattern_field(&mut self) -> Result<PatternId, Diagnostic> {
+        if self.is("..")
+            && self
+                .tokens
+                .get(self.at + 1)
+                .is_some_and(|token| token.text == "," || token.text == ")")
+        {
+            let span = self.token().span;
+            self.at += 1;
+            return Ok(self.add_pattern(Pattern::Rest, span));
+        }
+        self.pattern()
+    }
     fn pattern_atom(&mut self) -> Result<PatternId, Diagnostic> {
         let span = self.token().span;
         if self.take("_") {
@@ -2793,14 +2819,17 @@ impl Parser {
             let mut fields = Vec::new();
             let mut comma = false;
             while !self.is(")") {
-                fields.push(self.pattern()?);
+                fields.push(self.tuple_pattern_field()?);
                 if !self.take(",") {
                     break;
                 }
                 comma = true;
             }
             self.expect(")")?;
-            if fields.len() == 1 && !comma {
+            if fields.len() == 1
+                && !comma
+                && !matches!(self.program.patterns[fields[0]].kind, Pattern::Rest)
+            {
                 return Ok(fields[0]);
             }
             return Ok(self.add_pattern(Pattern::Tuple(fields), self.finish_span(span)));
@@ -2831,7 +2860,7 @@ impl Parser {
         if self.take("(") {
             let mut fields = Vec::new();
             while !self.is(")") {
-                fields.push(self.pattern()?);
+                fields.push(self.tuple_pattern_field()?);
                 if !self.take(",") {
                     break;
                 }

@@ -138,14 +138,13 @@ impl Builder<'_, '_> {
                     Some(k::ReturnSource::Leaves(leaves)) => {
                         let mut dependencies = BTreeSet::new();
                         for leaf in leaves {
-                            if let k::LeafOrigin::Parameter {
-                                index, projections, ..
-                            } = &leaf.origin
-                            {
-                                dependencies.extend(self.value_dependencies(&k::Place {
-                                    local: args[*index],
-                                    projections: projections.clone(),
-                                }));
+                            if let k::LeafOrigin::Inputs { inputs, .. } = &leaf.origin {
+                                for input in inputs {
+                                    dependencies.extend(self.value_dependencies(&k::Place {
+                                        local: args[input.index],
+                                        projections: input.projections.clone(),
+                                    }));
+                                }
                             }
                         }
                         dependencies

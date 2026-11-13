@@ -196,13 +196,6 @@ impl Builder<'_, '_> {
                 "let binding requires an irrefutable pattern",
             ));
         }
-        if plan.has_or(root) && !self.pattern_bindings_share(&plan, root, place.clone()) {
-            return Err(err(
-                self.compiler.source.patterns[pattern].span,
-                "E_UNSUPPORTED",
-                "or-pattern in an irrefutable let binding needs a binding join",
-            ));
-        }
         self.bind_pattern_plan(&plan, root, place, line)
     }
 }

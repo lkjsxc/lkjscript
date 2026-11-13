@@ -165,9 +165,14 @@ struct Flow {
     jump: Vec<Option<usize>>,
 }
 
+struct RuntimeState<'a> {
+    runtime: &'a crate::runtime::Runtime,
+    memory: &'a mut crate::runtime::Memory,
+}
 struct Machine<'a, H: Host> {
     program: &'a Program,
     host: &'a mut H,
+    runtime: Option<RuntimeState<'a>>,
     cells: Vec<Cell>,
     free: Vec<usize>,
     live_cells: usize,
@@ -835,6 +840,46 @@ impl<H: Host> Machine<'_, H> {
             return Err(self.invalid("unclosed control block"));
         }
         Ok(Flow { jump })
+    }
+    fn runtime_call(
+        &mut self,
+        function: usize,
+        arguments: &[(usize, Value)],
+    ) -> Result<Option<crate::runtime::MemoryAction>, RunError> {
+        let Some(primitive) = self
+            .runtime
+            .as_ref()
+            .and_then(|state| state.runtime.primitive(function))
+        else {
+            return Ok(None);
+        };
+        let declaration = &self.program.functions[function];
+        if declaration.params != arguments.len() {
+            return Err(self.invalid("runtime primitive argument count differs"));
+        }
+        let mut words = Vec::new();
+        for (index, (ty, value)) in arguments.iter().enumerate() {
+            if *ty != declaration.locals[index].ty {
+                return Err(self.invalid("runtime primitive argument type differs"));
+            }
+            let Value::Bits(value) = value else {
+                return Err(self.invalid("runtime primitive argument is not a word"));
+            };
+            words.push(*value);
+        }
+        let action = self
+            .runtime
+            .as_mut()
+            .unwrap()
+            .memory
+            .invoke(primitive, &words);
+        action.map(Some).map_err(|fault| {
+            if fault == crate::runtime::MemoryFault::Allocation {
+                self.trap(6, fault.message())
+            } else {
+                self.invalid(fault.message())
+            }
+        })
     }
     fn push_frame(
         &mut self,
@@ -1540,9 +1585,43 @@ impl<H: Host> Machine<'_, H> {
                 for arg in args {
                     values.push(self.take_local(&frame, arg)?);
                 }
-                self.work.push(Work::Frame(frame));
-                self.push_frame(function, values, ReturnTo::Cell(destination.cell))?;
-                return Ok(());
+                match self.runtime_call(function, &values)? {
+                    Some(crate::runtime::MemoryAction::Value(value)) => {
+                        self.put(destination.cell, Value::Bits(value))?;
+                    }
+                    Some(crate::runtime::MemoryAction::Call { function, argument }) => {
+                        let target = self
+                            .program
+                            .functions
+                            .get(function)
+                            .ok_or_else(|| self.invalid("unknown runtime cleanup target"))?;
+                        if target.params != 1
+                            || target.result != destination.ty
+                            || !matches!(
+                                self.kind(target.locals[0].ty)?,
+                                TypeKind::Int {
+                                    bits: 64,
+                                    signed: false
+                                }
+                            )
+                        {
+                            return Err(self.invalid("runtime cleanup signature differs"));
+                        }
+                        let argument = (target.locals[0].ty, Value::Bits(argument));
+                        self.work.push(Work::Frame(frame));
+                        self.push_frame(
+                            function,
+                            vec![argument],
+                            ReturnTo::Cell(destination.cell),
+                        )?;
+                        return Ok(());
+                    }
+                    None => {
+                        self.work.push(Work::Frame(frame));
+                        self.push_frame(function, values, ReturnTo::Cell(destination.cell))?;
+                        return Ok(());
+                    }
+                }
             }
             Op::Struct { dst, ref fields }
             | Op::Variant {
@@ -1668,6 +1747,33 @@ pub fn run<H: Host>(
     args: &[u64],
     host: &mut H,
 ) -> Result<RunResult, RunError> {
+    run_inner(program, entry, args, host, None)
+}
+
+/// Exercise an explicitly sealed source runtime in a separate raw byte arena.
+/// Ordinary run never substitutes function bodies, even for identical names.
+pub fn run_runtime<H: Host>(
+    runtime: &crate::runtime::Runtime,
+    entry: usize,
+    args: &[u64],
+    memory: &mut crate::runtime::Memory,
+    host: &mut H,
+) -> Result<RunResult, RunError> {
+    run_inner(
+        runtime.checked().program(),
+        entry,
+        args,
+        host,
+        Some(RuntimeState { runtime, memory }),
+    )
+}
+fn run_inner<'a, H: Host>(
+    program: &'a Program,
+    entry: usize,
+    args: &[u64],
+    host: &'a mut H,
+    runtime: Option<RuntimeState<'a>>,
+) -> Result<RunResult, RunError> {
     let site = Site {
         function: entry,
         file: program
@@ -1679,6 +1785,7 @@ pub fn run<H: Host>(
     let mut machine = Machine {
         program,
         host,
+        runtime,
         cells: Vec::new(),
         free: Vec::new(),
         live_cells: 0,
@@ -1757,6 +1864,7 @@ mod tests {
         let mut machine = Machine {
             program: &program,
             host: &mut host,
+            runtime: None,
             cells: Vec::new(),
             free: Vec::new(),
             live_cells: 0,

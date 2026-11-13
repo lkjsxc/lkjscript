@@ -20,6 +20,12 @@ struct Leaf {
     path: Vec<k::Projection>,
     label: Label,
     transport: bool,
+    mutable: bool,
+}
+struct Candidate {
+    input: k::InputLeaf,
+    transport: bool,
+    mutable: bool,
 }
 fn substituted(
     source: &a::Program,
@@ -106,6 +112,7 @@ impl Compiler<'_> {
                             path: path.clone(),
                             label,
                             transport: false,
+                            mutable: *mutable,
                         });
                     }
                     if input && self.has_view(*inner) {
@@ -137,6 +144,7 @@ impl Compiler<'_> {
                             path: leaf_path,
                             label: Label::Parameter(named.name.clone(), relative),
                             transport: !borrowed,
+                            mutable,
                         });
                     }
                 }
@@ -228,13 +236,15 @@ impl Compiler<'_> {
                     }
                 }
                 _ => {
-                    for (relative, _) in crate::check::reference_paths(&self.types, concrete) {
+                    for (relative, mutable) in crate::check::reference_paths(&self.types, concrete)
+                    {
                         let mut leaf_path = path.clone();
                         leaf_path.extend(relative);
                         result.push(Leaf {
                             path: leaf_path,
                             label: Label::Unknown,
                             transport: false,
+                            mutable,
                         });
                     }
                 }
@@ -251,32 +261,32 @@ impl Compiler<'_> {
         result: usize,
     ) -> Result<Option<Vec<k::ReturnLeaf>>> {
         let outputs = self.signature_leaves(source, source_index, source.result, result, false);
-        let lifetimes: BTreeSet<_> = outputs
-            .iter()
-            .filter_map(|leaf| match &leaf.label {
-                Label::Lifetime(name) => Some(name.as_str()),
-                _ => None,
-            })
-            .collect();
-        // Preserve the established broad lifetime contract when it is sufficient.
-        // Exact transport is selected by a symbolic rigid parameter occurrence,
-        // never by equality of the concrete input and output types.
-        if lifetimes.len() <= 1
-            && !outputs
+        // Elided lifetimes retain the established elision rule. A rigid type
+        // variable transports its relative leaf paths even at equal concrete
+        // instantiations of otherwise unrelated type parameters.
+        if outputs.is_empty()
+            || outputs
                 .iter()
-                .any(|leaf| matches!(leaf.label, Label::Parameter(_, _)))
+                .all(|leaf| matches!(leaf.label, Label::Static))
+            || outputs
+                .iter()
+                .any(|leaf| matches!(leaf.label, Label::Unknown))
         {
             return Ok(None);
         }
-        let mut inputs: BTreeMap<Label, Vec<(usize, Vec<k::Projection>, bool)>> = BTreeMap::new();
+        let mut inputs: BTreeMap<Label, Vec<Candidate>> = BTreeMap::new();
         for (index, parameter) in source.params.iter().enumerate() {
             for leaf in
                 self.signature_leaves(source, source_index, parameter.ty, locals[index].ty, true)
             {
-                inputs
-                    .entry(leaf.label)
-                    .or_default()
-                    .push((index, leaf.path, leaf.transport));
+                inputs.entry(leaf.label).or_default().push(Candidate {
+                    input: k::InputLeaf {
+                        index,
+                        projections: leaf.path,
+                    },
+                    transport: leaf.transport,
+                    mutable: leaf.mutable,
+                });
             }
         }
         let mut mappings = Vec::new();
@@ -288,20 +298,20 @@ impl Compiler<'_> {
                     let Some(candidates) = inputs.get(label) else {
                         return Ok(None);
                     };
+                    let exact = matches!(label, Label::Parameter(_, _));
                     let candidates: Vec<_> = candidates
                         .iter()
-                        .filter(|(_, _, transport)| {
-                            !matches!(label, Label::Parameter(_, _)) || *transport
+                        .filter(|candidate| {
+                            (!exact || candidate.transport) && (!leaf.mutable || candidate.mutable)
                         })
+                        .map(|candidate| candidate.input.clone())
                         .collect();
-                    if candidates.len() != 1 {
+                    if candidates.is_empty() {
                         return Ok(None);
                     }
-                    let (index, projections, _) = candidates[0];
-                    k::LeafOrigin::Parameter {
-                        index: *index,
-                        projections: projections.clone(),
-                        exact: matches!(label, Label::Parameter(_, _)),
+                    k::LeafOrigin::Inputs {
+                        inputs: candidates,
+                        exact,
                     }
                 }
             };

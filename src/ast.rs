@@ -399,6 +399,8 @@ pub struct Arm {
 #[derive(Clone)]
 pub enum Pattern {
     Wild,
+    /// An omitted tuple/tuple-variant field span, expanded after arity is known.
+    Rest,
     Bind {
         name: String,
         mutable: bool,

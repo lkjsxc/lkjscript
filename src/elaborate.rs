@@ -12,6 +12,7 @@ mod integers;
 mod operators;
 mod origins;
 mod output;
+mod pattern_choices;
 mod patterns;
 mod sequences;
 mod static_lifetimes;
@@ -3009,29 +3010,7 @@ impl Builder<'_, '_> {
                     "named struct constructor requires fields",
                 ));
             }
-            let ty = self.compiler.named_type(&path, &self.sub, span)?;
-            let fields = match &self.compiler.types[ty].kind {
-                k::TypeKind::Struct { fields, .. } => fields.clone(),
-                _ => Vec::new(),
-            };
-            if fields.len() != args.len() {
-                return Err(err(span, "E_TYPE", "tuple struct field count differs"));
-            }
-            let mut values = Vec::new();
-            for i in 0..args.len() {
-                self.compiler
-                    .declared_field_access(&s, &s.fields[i], self.scope, span)?;
-                values.push(self.expr(args[i], Some(fields[i].ty))?.0);
-            }
-            let dst = self.temp(ty);
-            self.emit(
-                k::Op::Struct {
-                    dst,
-                    fields: values,
-                },
-                s.span.line,
-            );
-            return Ok((dst, ty));
+            return self.construct_struct(&path, &fields, None, expected, span);
         }
         let mut initial_sub = BTreeMap::new();
         let mut associated = None;
@@ -3904,22 +3883,16 @@ impl Builder<'_, '_> {
         let tested_places = roots
             .iter()
             .flat_map(|root| plan.tested_places(*root, original.clone()))
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
             .collect::<Vec<_>>();
-        let mut entries = Vec::new();
-        for (arm, root) in arms.iter().zip(roots) {
-            let alternatives = if plan.has_or(root)
-                && (arm.guard.is_some()
-                    || !self.pattern_bindings_share(&plan, root, original.clone()))
-            {
-                plan.alternatives(root)
-            } else {
-                vec![root]
-            };
-            for root in alternatives {
-                entries.push((arm, root));
-            }
-        }
         let start = self.live.len();
+        let cache = if arms.iter().any(|arm| arm.guard.is_some()) {
+            Some(self.prepare_pattern_cache(&plan, &roots, original.clone(), span.line)?)
+        } else {
+            None
+        };
+        let entries: Vec<_> = arms.iter().zip(roots).collect();
         let binding_count = self.bindings.len();
         let mut result: Option<usize> = None;
         let mut exit_state: Option<Snapshot> = None;
@@ -3931,20 +3904,46 @@ impl Builder<'_, '_> {
             )
         });
         for (arm, pattern) in &entries {
-            let mut condition = self.pattern_condition(&plan, *pattern, original.clone())?;
-            if let Some(guard) = arm.guard {
-                condition = self.pattern_guard(
-                    &plan,
-                    *pattern,
-                    original.clone(),
-                    guard,
-                    condition,
-                    &tested_places,
-                )?;
-            }
+            let test_start = self.live.len();
+            let mut choices = None;
+            let condition = if let Some(guard) = arm.guard {
+                let cache = cache.as_ref().unwrap();
+                if plan.has_or(*pattern) {
+                    let (condition, selected) = self.retry_pattern_guard(
+                        &plan,
+                        *pattern,
+                        original.clone(),
+                        guard,
+                        cache,
+                        &tested_places,
+                    )?;
+                    choices = Some(selected);
+                    condition
+                } else {
+                    let condition = self.cached_pattern_condition(&plan, *pattern, cache, None)?;
+                    self.pattern_guard(
+                        &plan,
+                        *pattern,
+                        original.clone(),
+                        guard,
+                        condition,
+                        &tested_places,
+                    )?
+                }
+            } else if let Some(cache) = &cache {
+                self.cached_pattern_condition(&plan, *pattern, cache, None)?
+            } else {
+                self.pattern_condition(&plan, *pattern, original.clone())?
+            };
             self.emit(k::Op::If { condition }, arm.span.line);
             let failure = self.snapshot();
-            self.bind_pattern_plan(&plan, *pattern, original.clone(), arm.span.line)?;
+            self.bind_pattern_choice(
+                &plan,
+                *pattern,
+                original.clone(),
+                choices.as_ref(),
+                arm.span.line,
+            )?;
             let value = self.expr(arm.value, expected.or(result.map(|id| self.ty(id))))?;
             if self.reachable && !exhausted {
                 let target = if let Some(target) = result {
@@ -3988,6 +3987,7 @@ impl Builder<'_, '_> {
                 exhausted = true;
             }
             self.restore(&failure);
+            self.cleanup(test_start, None, span.line);
             self.written.truncate(start);
             self.written.resize(self.function.locals.len(), false);
         }

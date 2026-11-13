@@ -21,7 +21,7 @@ reference holders unite, and authority originates only from checked borrows.
 Conditional cleanup preserves destructor order. Loop invariants are supplied by
 construction and checked by inclusion. Origin-variable call contracts must precede
 general reference-bearing mutation. These are designs until language.md says they
-are implemented; initialization joins now weaken; loan and loop joins remain conservative.
+are implemented; initialization joins now weaken, possible loan holders unite, and loop backedges remain conservative.
 
 World-derived output and an independent K machine are available. Prioritize
 front-end width over new trusted rules: patterns and question-mark first, then

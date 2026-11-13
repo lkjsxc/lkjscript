@@ -295,12 +295,11 @@
   },
   {
     "id": "view_two_origins",
-    "file": "fail/view_two_origins.rs",
-    "kind": "reject",
-    "code": "E_BORROW",
+    "file": "pass/view_two_origins.rs",
+    "kind": "run",
     "pending": false,
     "rust": true,
-    "rustAccept": true
+    "value": "42"
   },
   {
     "id": "trait_overlap",
@@ -1784,5 +1783,195 @@
     "kind": "run",
     "value": "84",
     "rust": true
+  },
+  {
+    "id": "holder_alternatives",
+    "file": "pass/holder_alternatives.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "conditional_reference_cleanup",
+    "file": "k/conditional_reference_cleanup.k",
+    "kind": "run",
+    "value": "42"
+  },
+  {
+    "id": "conditional_reference_owner_drop",
+    "file": "k/conditional_reference_owner_drop.k",
+    "kind": "reject",
+    "code": "E_BORROW"
+  },
+  {
+    "id": "alternative_reference_write_first",
+    "file": "fail/alternative_reference_write_first.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "alternative_reference_write_second",
+    "file": "fail/alternative_reference_write_second.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "alternative_reborrow_parent",
+    "file": "fail/alternative_reborrow_parent.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "float_boundaries",
+    "file": "pass/float_boundaries.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "generic_origin_selection",
+    "file": "pass/generic_origin_selection.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "per_leaf_input_alternatives",
+    "file": "k/per_leaf_input_alternatives.k",
+    "kind": "run",
+    "value": "42"
+  },
+  {
+    "id": "per_leaf_omitted_alternative",
+    "file": "k/per_leaf_omitted_alternative.k",
+    "kind": "reject",
+    "code": "E_BORROW"
+  },
+  {
+    "id": "per_leaf_duplicate_input",
+    "file": "k/per_leaf_duplicate_input.k",
+    "kind": "reject",
+    "code": "E_BORROW"
+  },
+  {
+    "id": "exact_transport_keeps_bound",
+    "file": "k/exact_transport_keeps_bound.k",
+    "kind": "reject",
+    "code": "E_BORROW"
+  },
+  {
+    "id": "alternative_call_write_second",
+    "file": "fail/alternative_call_write_second.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "conditional_reference_read",
+    "file": "k/conditional_reference_read.k",
+    "kind": "reject",
+    "code": "E_MOVE"
+  },
+  {
+    "id": "guard_cached_discriminant",
+    "file": "pass/guard_cached_discriminant.rs",
+    "kind": "run",
+    "value": "20",
+    "rust": true
+  },
+  {
+    "id": "or_guard_choices_value",
+    "file": "pass/or_guard_choices_value.rs",
+    "kind": "run",
+    "value": "14013",
+    "rust": true
+  },
+  {
+    "id": "or_guard_choices_ref",
+    "file": "pass/or_guard_choices_ref.rs",
+    "kind": "run",
+    "value": "14013",
+    "rust": true
+  },
+  {
+    "id": "or_guard_choices_mut",
+    "file": "pass/or_guard_choices_mut.rs",
+    "kind": "run",
+    "value": "14042",
+    "rust": true
+  },
+  {
+    "id": "or_guard_outer_controls",
+    "file": "pass/or_guard_outer_controls.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "or_guard_shared32",
+    "file": "pass/or_guard_shared32.rs",
+    "kind": "run",
+    "value": "1",
+    "rust": false,
+    "rustSkip": "The 32-way compact or-product exceeds the measured Rust oracle envelope; independently expanded and smaller forms remain Rust-checked."
+  },
+  {
+    "id": "or_guard_shared32_expanded",
+    "file": "pass/or_guard_shared32_expanded.rs",
+    "kind": "run",
+    "value": "1",
+    "rust": true
+  },
+  {
+    "id": "or_guard_infeasible32",
+    "file": "pass/or_guard_infeasible32.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": false,
+    "rustSkip": "The 32-way compact or-product exceeds the measured Rust oracle envelope; independently expanded and smaller forms remain Rust-checked."
+  },
+  {
+    "id": "or_guard_infeasible32_expanded",
+    "file": "pass/or_guard_infeasible32_expanded.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "tuple_rest_patterns",
+    "file": "pass/tuple_rest_patterns.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "borrowed_let_patterns",
+    "file": "pass/borrowed_let_patterns.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "tuple_multiple_rest",
+    "file": "fail/tuple_multiple_rest.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "tuple_rest_extra_field",
+    "file": "fail/tuple_rest_extra_field.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": true,
+    "rustAccept": false
   }
 ]

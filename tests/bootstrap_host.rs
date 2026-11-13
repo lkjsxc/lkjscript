@@ -110,7 +110,7 @@ fn compiler_bridge_respects_a_host_address_space_envelope() {
 }
 
 #[test]
-fn run_and_test_use_the_worker_for_non_tail_recursion_and_recursive_drop() {
+fn run_and_test_execute_owned_recursion_and_recursive_drop() {
     let output = run_source(
         "recursive-run",
         "
@@ -156,7 +156,7 @@ impl Drop for KillOnDrop {
 }
 
 #[test]
-fn killed_cli_does_not_leave_its_node_worker_running() {
+fn killed_cli_does_not_leave_its_native_child_running() {
     let path = file("cancelled-run", "rs");
     fs::write(&path, "fn main() { loop {} }").unwrap();
     let mut child = KillOnDrop(
@@ -170,15 +170,25 @@ fn killed_cli_does_not_leave_its_node_worker_running() {
     );
     let pid = child.0.id();
     let started = Instant::now();
-    let node = loop {
-        if let Ok(children) = fs::read_to_string(format!("/proc/{pid}/task/{pid}/children")) {
-            if let Some(node) = children.split_whitespace().next() {
-                break node.to_string();
+    let guest = loop {
+        // The compiler runs on its resource-sized thread; Linux records forked
+        // children under the creating task, not necessarily the main task.
+        let tasks = fs::read_dir(format!("/proc/{pid}/task")).unwrap();
+        let mut found = None;
+        for task in tasks.flatten() {
+            if let Ok(children) = fs::read_to_string(task.path().join("children")) {
+                if let Some(child) = children.split_whitespace().next() {
+                    found = Some(child.to_string());
+                    break;
+                }
             }
+        }
+        if let Some(child) = found {
+            break child;
         }
         assert!(
             started.elapsed() < Duration::from_secs(5),
-            "CLI never started Node"
+            "CLI never started its native child"
         );
         assert!(
             child.0.try_wait().unwrap().is_none(),
@@ -189,7 +199,7 @@ fn killed_cli_does_not_leave_its_node_worker_running() {
     child.0.kill().unwrap();
     child.0.wait().unwrap();
     loop {
-        let state = fs::read_to_string(format!("/proc/{node}/status"));
+        let state = fs::read_to_string(format!("/proc/{guest}/status"));
         if state.is_err()
             || state
                 .unwrap()
@@ -200,10 +210,15 @@ fn killed_cli_does_not_leave_its_node_worker_running() {
         }
         assert!(
             started.elapsed() < Duration::from_secs(5),
-            "Node survived its compiler parent"
+            "Native child survived its compiler parent"
         );
         std::thread::sleep(Duration::from_millis(5));
     }
     fs::remove_file(path).unwrap();
-    let _ = fs::remove_file(root().join(format!("target/run/{pid}.wasm")));
+    for entry in fs::read_dir(root().join("target/run")).unwrap().flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name.starts_with(&format!("{pid}-")) && name.ends_with(".elf") {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
 }

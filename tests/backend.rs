@@ -673,17 +673,17 @@ fn spare_memory_growth_failure_retries_exact_need_and_real_exhaustion_traps() {
     let checked = check::check(elaborate::elaborate(&parsed).unwrap()).unwrap();
     let bytes = wasm::emit(&checked).unwrap();
     run_node(&memory_maximum(&bytes, 3), "
-        const first=instance.exports.__test_allocate(96000n);
-        new DataView(instance.exports.memory.buffer).setBigInt64(Number(first)+95992,20n,true);
+        const first=instance.exports.__test_allocate(64000n);
+        new DataView(instance.exports.memory.buffer).setBigInt64(Number(first)+63992,20n,true);
         const second=instance.exports.__test_allocate(64000n);
         const view=new DataView(instance.exports.memory.buffer);
         view.setBigInt64(Number(second)+63992,22n,true);
-        if(view.getBigInt64(Number(first)+95992,true)+view.getBigInt64(Number(second)+63992,true)!==42n)
+        if(view.getBigInt64(Number(first)+63992,true)+view.getBigInt64(Number(second)+63992,true)!==42n)
             throw Error('growth corrupted live allocations');
         if(instance.exports.memory.buffer.byteLength!==3*65536)throw Error('exact retry did not reach third page');
     ");
     run_node(&memory_maximum(&bytes, 2), "
-        instance.exports.__test_allocate(96000n);
+        instance.exports.__test_allocate(64000n);
         let failed=false;
         try{instance.exports.__test_allocate(64000n)}catch(e){failed=e instanceof WebAssembly.RuntimeError}
         if(!failed||instance.exports.__lkj_trap_code.value!==6n)throw Error('real exhaustion did not report allocation failure');

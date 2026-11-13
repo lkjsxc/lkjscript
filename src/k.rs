@@ -198,13 +198,18 @@ pub struct Instruction {
     pub line: usize,
     pub column: usize,
 }
-/// A result reference leaf selects one declared input leaf or static storage.
+/// An input selector names one stored reference leaf in a parameter value.
+#[derive(Clone, PartialEq, Eq)]
+pub struct InputLeaf {
+    pub index: usize,
+    pub projections: Vec<Projection>,
+}
+/// Every result reference leaf selects a declared input alternative or static storage.
 #[derive(Clone, PartialEq, Eq)]
 pub enum LeafOrigin {
-    Parameter {
-        index: usize,
-        projections: Vec<Projection>,
-        /// Exact preserves the input referent; bounded permits a descendant.
+    Inputs {
+        inputs: Vec<InputLeaf>,
+        /// Exact preserves an input referent; bounded permits a descendant.
         exact: bool,
     },
     Static,

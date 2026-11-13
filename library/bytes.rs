@@ -34,57 +34,7 @@ pub fn append_bytes(target: &mut Vec<u8>, source: &[u8]) {
     }
 }
 
-fn continuation(byte: u8) -> bool {
-    byte >= 128 && byte < 192
-}
-
+// Validation uses the one source runtime through the checked text-view boundary.
 pub fn valid_utf8(bytes: &[u8]) -> bool {
-    let mut i: usize = 0;
-    while i < bytes.len() {
-        let first = bytes[i];
-        if first < 128 {
-            i = i + 1;
-        } else if first >= 194 && first <= 223 {
-            if bytes.len() - i < 2 {
-                return false;
-            }
-            if !continuation(bytes[i + 1]) {
-                return false;
-            }
-            i = i + 2;
-        } else if first >= 224 && first <= 239 {
-            if bytes.len() - i < 3 {
-                return false;
-            }
-            let second = bytes[i + 1];
-            if !continuation(second) || !continuation(bytes[i + 2]) {
-                return false;
-            }
-            if first == 224 && second < 160 {
-                return false;
-            }
-            if first == 237 && second >= 160 {
-                return false;
-            }
-            i = i + 3;
-        } else if first >= 240 && first <= 244 {
-            if bytes.len() - i < 4 {
-                return false;
-            }
-            let second = bytes[i + 1];
-            if !continuation(second) || !continuation(bytes[i + 2]) || !continuation(bytes[i + 3]) {
-                return false;
-            }
-            if first == 240 && second < 144 {
-                return false;
-            }
-            if first == 244 && second >= 144 {
-                return false;
-            }
-            i = i + 4;
-        } else {
-            return false;
-        }
-    }
-    true
+    std::str::from_utf8(bytes).is_ok()
 }

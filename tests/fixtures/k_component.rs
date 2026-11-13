@@ -422,9 +422,11 @@ pub fn return_source_snapshot(which: usize) -> i64 {
         let origin = if which == 5 {
             k::LeafOrigin::Static
         } else {
-            k::LeafOrigin::Parameter {
-                index: 11,
-                projections: vec![k::Projection::Deref, k::Projection::Field(7)],
+            k::LeafOrigin::Inputs {
+                inputs: vec![k::InputLeaf {
+                    index: 11,
+                    projections: vec![k::Projection::Deref, k::Projection::Field(7)],
+                }, k::InputLeaf { index: 13, projections: vec![k::Projection::Field(2)] }],
                 exact: which == 3,
             }
         };
@@ -450,8 +452,14 @@ pub fn return_source_snapshot(which: usize) -> i64 {
                     result = result + projections_value(&leaves[cursor].projections);
                     result = result + match &leaves[cursor].origin {
                         k::LeafOrigin::Static => 103,
-                        k::LeafOrigin::Parameter { index, projections, exact } => {
-                            *index as i64 + projections_value(projections) + flag(exact)
+                        k::LeafOrigin::Inputs { inputs, exact } => {
+                            let mut value = flag(exact);
+                            let mut index: usize = 0;
+                            while index < inputs.len() {
+                                value = value + inputs[index].index as i64 + projections_value(&inputs[index].projections);
+                                index = index + 1;
+                            }
+                            value
                         }
                     };
                     cursor = cursor + 1;

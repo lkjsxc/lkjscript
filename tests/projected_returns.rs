@@ -766,6 +766,7 @@ fn source_exclusive_leaf_projection_is_a_named_unsupported_boundary() {
 fn per_leaf_contract_text_preserves_exact_and_static_sources() {
     for fixture in [
         include_str!("conformance/k/per_leaf_transport.k"),
+        include_str!("conformance/k/per_leaf_input_alternatives.k"),
         include_str!("conformance/k/per_leaf_static_mix.k"),
     ] {
         let original = k_text::read(fixture).unwrap();

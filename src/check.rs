@@ -168,7 +168,7 @@ enum Root {
     Parameter(usize),
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct Origin {
     root: Root,
     projections: Vec<Projection>,
@@ -189,7 +189,7 @@ fn overlaps(a: &Origin, b: &Origin) -> bool {
 
 /// An exact referent path, or a bound that includes any descendant selected by
 /// a checked call. Projecting through a bound must not narrow its footprint.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct SourceBound {
     origin: Origin,
     exact: bool,
@@ -197,9 +197,8 @@ struct SourceBound {
 #[derive(Clone)]
 struct Loan {
     // Diagnostic metadata is deliberately excluded from semantic equality.
-    created: Option<(usize, usize)>,
+    created: Vec<(usize, usize)>,
     holder: Place,
-    target: Origin,
     sources: Vec<SourceBound>,
     mutable: bool,
     parents: Vec<Place>,
@@ -207,10 +206,9 @@ struct Loan {
 impl PartialEq for Loan {
     fn eq(&self, other: &Self) -> bool {
         self.holder == other.holder
-            && self.target == other.target
             && same_set(&self.sources, &other.sources)
             && self.mutable == other.mutable
-            && self.parents == other.parents
+            && same_set(&self.parents, &other.parents)
     }
 }
 impl Eq for Loan {}
@@ -241,15 +239,17 @@ impl Loans {
             .entry(holder.local)
             .or_default()
             .insert(holder.clone());
-        self.targets
-            .entry(loan.target.root.clone())
-            .or_default()
-            .insert(holder.clone());
-        if loan.mutable {
-            self.mutable_targets
-                .entry(loan.target.root.clone())
+        for source in &loan.sources {
+            self.targets
+                .entry(source.origin.root.clone())
                 .or_default()
                 .insert(holder.clone());
+            if loan.mutable {
+                self.mutable_targets
+                    .entry(source.origin.root.clone())
+                    .or_default()
+                    .insert(holder.clone());
+            }
         }
         for parent in &loan.parents {
             self.parents
@@ -262,9 +262,11 @@ impl Loans {
     fn remove(&mut self, holder: &Place) -> Option<Loan> {
         let loan = self.values.remove(holder)?;
         remove_index(&mut self.holders, &holder.local, holder);
-        remove_index(&mut self.targets, &loan.target.root, holder);
-        if loan.mutable {
-            remove_index(&mut self.mutable_targets, &loan.target.root, holder);
+        for source in &loan.sources {
+            remove_index(&mut self.targets, &source.origin.root, holder);
+            if loan.mutable {
+                remove_index(&mut self.mutable_targets, &source.origin.root, holder);
+            }
         }
         for parent in &loan.parents {
             remove_index(&mut self.parents, &parent.local, holder);
@@ -332,9 +334,9 @@ impl PartialEq for Loans {
 }
 impl Eq for Loans {}
 struct ResolvedOrigin {
-    target: Origin,
     sources: Vec<SourceBound>,
     parents: Vec<Place>,
+    absent: bool,
 }
 impl ResolvedOrigin {
     fn exact(&self) -> bool {
@@ -342,7 +344,7 @@ impl ResolvedOrigin {
     }
     fn storage(&self, fallback: &Place) -> Place {
         if self.exact() {
-            storage_place(&self.target, fallback)
+            storage_place(&self.sources[0].origin, fallback)
         } else {
             fallback.clone()
         }
@@ -350,7 +352,7 @@ impl ResolvedOrigin {
 }
 #[derive(Clone, PartialEq, Eq)]
 struct Tag {
-    target: Origin,
+    target: Vec<Origin>,
     witness: Place,
     variant: usize,
 }
@@ -396,29 +398,25 @@ fn holder_origin(place: &Place) -> Origin {
         projections: place.projections.clone(),
     }
 }
-fn source_target(sources: &[SourceBound]) -> Origin {
-    // Source sets are nonempty and have one dynamic root. Their construction is
-    // local to the checker; common_origin validates unions before installation.
-    let first = sources
+fn normalize_sources(sources: &mut Vec<SourceBound>) {
+    sources.sort();
+    // A bound subsumes the exact source with the same prefix.
+    sources.dedup_by(|a, b| a.origin == b.origin);
+}
+fn source_origins(sources: &[SourceBound]) -> Vec<Origin> {
+    let mut origins: Vec<_> = sources.iter().map(|source| source.origin.clone()).collect();
+    origins.sort();
+    origins.dedup();
+    origins
+}
+fn overlaps_sources(a: &[SourceBound], b: &[SourceBound]) -> bool {
+    a.iter()
+        .any(|a| b.iter().any(|b| overlaps(&a.origin, &b.origin)))
+}
+fn source_overlaps(sources: &[SourceBound], target: &Origin) -> bool {
+    sources
         .iter()
-        .find(|source| source.origin.root != Root::Static)
-        .unwrap_or(&sources[0]);
-    let mut target = first.origin.clone();
-    for source in sources {
-        if source.origin.root == Root::Static {
-            continue;
-        }
-        debug_assert!(source.origin.root == target.root);
-        let mut shared = 0;
-        while shared < target.projections.len()
-            && shared < source.origin.projections.len()
-            && target.projections[shared] == source.origin.projections[shared]
-        {
-            shared += 1;
-        }
-        target.projections.truncate(shared);
-    }
-    target
+        .any(|source| overlaps(&source.origin, target))
 }
 fn resolve_origin(state: &State, place: &Place) -> ResolvedOrigin {
     let initial = SourceBound {
@@ -428,6 +426,7 @@ fn resolve_origin(state: &State, place: &Place) -> ResolvedOrigin {
     let mut pending = vec![(initial, Vec::<Place>::new())];
     let mut sources = Vec::new();
     let mut parents = Vec::new();
+    let mut absent = false;
     while let Some((source, visited)) = pending.pop() {
         let mut found = None;
         if source.exact {
@@ -444,13 +443,17 @@ fn resolve_origin(state: &State, place: &Place) -> ResolvedOrigin {
                         continue;
                     }
                     if let Some(loan) = state.loans.get(&holder) {
-                        found = Some((index, loan));
+                        found = Some((index, Some(loan)));
+                        break;
+                    }
+                    if state.absent_references.contains(&holder) {
+                        found = Some((index, None));
                         break;
                     }
                 }
             }
         }
-        if let Some((index, loan)) = found {
+        if let Some((index, Some(loan))) = found {
             let mut visited = visited;
             visited.push(loan.holder.clone());
             for parent in &loan.parents {
@@ -463,6 +466,9 @@ fn resolve_origin(state: &State, place: &Place) -> ResolvedOrigin {
                     parents.push(parent.clone());
                 }
             }
+            if state.absent_references.contains(&loan.holder) {
+                absent = true;
+            }
             for bound in &loan.sources {
                 let mut next = bound.clone();
                 if next.exact {
@@ -472,37 +478,42 @@ fn resolve_origin(state: &State, place: &Place) -> ResolvedOrigin {
                 }
                 pending.push((next, visited.clone()));
             }
-        } else if !sources.contains(&source) {
+        } else if found.is_some() {
+            absent = true;
+        } else {
             sources.push(source);
         }
     }
+    normalize_sources(&mut sources);
     ResolvedOrigin {
-        target: source_target(&sources),
         sources,
         parents,
+        absent,
     }
 }
-fn origin(state: &State, place: &Place) -> (Origin, Vec<Place>) {
+fn origin(state: &State, place: &Place) -> (Vec<Origin>, Vec<Place>) {
     let resolved = resolve_origin(state, place);
-    (resolved.target, resolved.parents)
+    (source_origins(&resolved.sources), resolved.parents)
 }
 fn affects_tag(target: &Origin, tag: &Tag) -> bool {
-    // Changing payload storage leaves its enclosing discriminant intact. Both
-    // the enum target and the reference carrier witness are invalidated only by
-    // an operation on that storage or one of its ancestors.
-    (target.projections.len() <= tag.target.projections.len() && overlaps(target, &tag.target))
-        || (target.projections.len() <= tag.witness.projections.len()
-            && overlaps(target, &holder_origin(&tag.witness)))
+    tag.target.iter().any(|tested| {
+        target.projections.len() <= tested.projections.len() && overlaps(target, tested)
+    }) || (target.projections.len() <= tag.witness.projections.len()
+        && overlaps(target, &holder_origin(&tag.witness)))
 }
-fn invalidate(state: &mut State, target: &Origin) {
-    state.tags.retain(|tag| !affects_tag(target, tag));
-    state.predicates.retain(|_, tag| !affects_tag(target, tag));
+fn invalidate(state: &mut State, targets: &[Origin]) {
+    state
+        .tags
+        .retain(|tag| !targets.iter().any(|target| affects_tag(target, tag)));
+    state
+        .predicates
+        .retain(|_, tag| !targets.iter().any(|target| affects_tag(target, tag)));
 }
-fn tag_at(state: &State, target: &Origin, witness: &Place) -> Option<usize> {
+fn tag_at(state: &State, targets: &[Origin], witness: &Place) -> Option<usize> {
     state
         .tags
         .iter()
-        .find(|tag| tag.target == *target && tag.witness == *witness)
+        .find(|tag| same_set(&tag.target, targets) && tag.witness == *witness)
         .map(|tag| tag.variant)
 }
 fn set_tag(state: &mut State, tag: Tag) {
@@ -651,21 +662,27 @@ fn valid_leaf_contract(types: &[Type], function: &Function, leaves: &[ReturnLeaf
                     return false;
                 }
             }
-            LeafOrigin::Parameter {
-                index,
-                projections,
-                exact,
-            } => {
-                let Some(input) = parameter_leaf_source(types, function, *index, projections)
-                else {
+            LeafOrigin::Inputs { inputs, exact } => {
+                if inputs.is_empty() {
                     return false;
-                };
-                let ty = place_type(types, function, &input).unwrap();
-                let TypeKind::Ref { inner, mutable } = types[ty].kind else {
-                    return false;
-                };
-                if (output_mutable && !mutable) || (*exact && inner != output_inner) {
-                    return false;
+                }
+                let mut selectors = BTreeSet::new();
+                for input in inputs {
+                    let Some(input) =
+                        parameter_leaf_source(types, function, input.index, &input.projections)
+                    else {
+                        return false;
+                    };
+                    if !selectors.insert(input.clone()) {
+                        return false;
+                    }
+                    let ty = place_type(types, function, &input).unwrap();
+                    let TypeKind::Ref { inner, mutable } = types[ty].kind else {
+                        return false;
+                    };
+                    if (output_mutable && !mutable) || (*exact && inner != output_inner) {
+                        return false;
+                    }
                 }
             }
         }
@@ -686,82 +703,62 @@ fn exclusive_variants(a: &Place, b: &Place) -> bool {
     false
 }
 fn common_origin(loans: &[Loan], line: usize) -> Result<Option<ResolvedOrigin>, Diagnostic> {
-    // Static leaves can share any shorter dynamic lifetime. Keep every leaf in
-    // the provenance inventory while computing the dynamic root of a view.
-    let first = loans
-        .iter()
-        .find(|loan| loan.target.root != Root::Static)
-        .or_else(|| loans.first());
-    let Some(first) = first else {
+    if loans.is_empty() {
         return Ok(None);
-    };
-    let mut common = first.target.clone();
-    let mut parents = first.parents.clone();
+    }
+    let mut sources = Vec::new();
+    let mut parents = Vec::new();
     for loan in loans {
-        if loan.target.root == Root::Static {
-            if loan.mutable {
-                return Err(error(line, "E_BORROW", "static storage is immutable"));
-            }
-            continue;
-        }
-        if loan.target.root != common.root {
-            return Err(error(
-                line,
-                "E_BORROW",
-                "view must have one source lifetime",
-            ));
-        }
-        let mut count = 0;
-        while count < common.projections.len()
-            && count < loan.target.projections.len()
-            && common.projections[count] == loan.target.projections[count]
+        if loan.mutable
+            && loan
+                .sources
+                .iter()
+                .any(|source| source.origin.root == Root::Static)
         {
-            count += 1;
+            return Err(error(line, "E_BORROW", "static storage is immutable"));
         }
-        common.projections.truncate(count);
+        sources.extend_from_slice(&loan.sources);
         for parent in &loan.parents {
             if !parents.contains(parent) {
                 parents.push(parent.clone());
             }
         }
     }
-    let mut sources = Vec::new();
-    for loan in loans {
-        for source in &loan.sources {
-            if !sources.contains(source) {
-                sources.push(source.clone());
-            }
-        }
-    }
+    normalize_sources(&mut sources);
     Ok(Some(ResolvedOrigin {
-        target: common,
         sources,
         parents,
+        absent: false,
     }))
 }
 fn validate_view(loans: &[Loan], line: usize) -> Result<(), Diagnostic> {
-    // Every leaf has its own origins. Sharing an aggregate is not a reason to
-    // equate the dynamic roots of otherwise independent references.
-    if loans.iter().any(|loan| {
-        loan.mutable
-            && loan
-                .sources
-                .iter()
-                .any(|source| source.origin.root == Root::Static)
-    }) {
-        return Err(error(line, "E_BORROW", "static storage is immutable"));
+    let mut indexed: BTreeMap<Root, Vec<&Loan>> = BTreeMap::new();
+    for loan in loans {
+        let roots: BTreeSet<_> = loan
+            .sources
+            .iter()
+            .map(|source| source.origin.root.clone())
+            .collect();
+        if loan.mutable && roots.contains(&Root::Static) {
+            return Err(error(line, "E_BORROW", "static storage is immutable"));
+        }
+        for root in roots {
+            indexed.entry(root).or_default().push(loan);
+        }
     }
-    for (i, a) in loans.iter().enumerate() {
-        for b in &loans[i + 1..] {
-            if !exclusive_variants(&a.holder, &b.holder)
-                && overlaps(&a.target, &b.target)
-                && (a.mutable || b.mutable)
-            {
-                return Err(error(
-                    line,
-                    "E_BORROW",
-                    "view contains aliasing mutable references",
-                ));
+    for a in loans.iter().filter(|loan| loan.mutable) {
+        for source in &a.sources {
+            for b in &indexed[&source.origin.root] {
+                if a.holder != b.holder
+                    && !exclusive_variants(&a.holder, &b.holder)
+                    && overlaps_sources(&a.sources, &b.sources)
+                {
+                    return Err(error(
+                        line,
+                        "E_BORROW",
+                        "view contains aliasing mutable references",
+                    ));
+                }
             }
         }
     }
@@ -789,52 +786,67 @@ fn carried_provenance(
     if !state.views[value_ty] {
         return Ok(result);
     }
-    let paths = reference_paths(types, value_ty);
     let resolved = resolve_origin(state, from);
-    let target = &resolved.target;
-    let exact_storage = resolved.exact();
-    for (path, mutable) in paths {
+    for (path, mutable) in reference_paths(types, value_ty) {
         let mut holder = to.clone();
         holder.projections.extend_from_slice(&path);
-        if let Root::Local(local) = target.root
-            && exact_storage
-        {
+        let local_storage = if resolved.exact() {
+            match resolved.sources[0].origin.root {
+                Root::Local(local) => Some(local),
+                _ => None,
+            }
+        } else {
+            None
+        };
+        if let Some(local) = local_storage {
             let mut source = Place {
                 local,
-                projections: target.projections.clone(),
+                projections: resolved.sources[0].origin.projections.clone(),
             };
             source.projections.extend_from_slice(&path);
-            if let Some(loan) = state.loans.get(&source) {
-                let mut next = loan.clone();
-                next.holder = holder;
-                result.loans.push(next);
-            } else if source
+            let absent = source
                 .projections
                 .iter()
                 .any(|p| matches!(p, Projection::VariantField(_, _)))
-                && state.absent_references.contains(&source)
-            {
-                result.absent.push(holder);
-            } else {
+                && state.absent_references.contains(&source);
+            if let Some(loan) = state.loans.get(&source) {
+                let mut next = loan.clone();
+                next.holder = holder.clone();
+                result.loans.push(next);
+            } else if !absent {
                 return Err(error(
                     line,
                     "E_BORROW",
                     "reference-bearing value has incomplete source provenance",
                 ));
             }
+            if absent {
+                result.absent.push(holder);
+            }
         } else {
             let mut source = from.clone();
             source.projections.extend_from_slice(&path);
             source.projections.push(Projection::Deref);
             let resolved = resolve_origin(state, &source);
-            result.loans.push(Loan {
-                created: state.site,
-                holder,
-                target: resolved.target,
-                sources: resolved.sources,
-                mutable,
-                parents: resolved.parents,
-            });
+            if resolved.sources.is_empty() && !resolved.absent {
+                return Err(error(
+                    line,
+                    "E_BORROW",
+                    "reference-bearing value has incomplete source provenance",
+                ));
+            }
+            if resolved.absent {
+                result.absent.push(holder.clone());
+            }
+            if !resolved.sources.is_empty() {
+                result.loans.push(Loan {
+                    created: state.site.into_iter().collect(),
+                    holder,
+                    sources: resolved.sources,
+                    mutable,
+                    parents: resolved.parents,
+                });
+            }
         }
     }
     Ok(result)
@@ -864,59 +876,79 @@ fn mapped_call_provenance(
             local: dst,
             projections: leaf.projections.clone(),
         };
+        let optional = leaf
+            .projections
+            .iter()
+            .any(|p| matches!(p, Projection::VariantField(_, _)));
         let mut static_source = matches!(leaf.origin, LeafOrigin::Static);
-        if let LeafOrigin::Parameter {
-            index,
-            projections,
-            exact,
-        } = &leaf.origin
-        {
-            let input = Place {
-                local: args[*index],
-                projections: projections.clone(),
-            };
-            let mut value = carried_provenance(state, types, function, &input, &holder, line)?;
-            if let Some(mut loan) = value.loans.pop() {
-                loan.mutable = mutable;
-                if !*exact {
-                    for source in &mut loan.sources {
+        if let LeafOrigin::Inputs { inputs, exact } = &leaf.origin {
+            let mut sources = Vec::new();
+            let mut parents = Vec::new();
+            let mut created = Vec::new();
+            let mut absent = false;
+            for input in inputs {
+                let input = Place {
+                    local: args[input.index],
+                    projections: input.projections.clone(),
+                };
+                let value = carried_provenance(state, types, function, &input, &holder, line)?;
+                absent |= !value.absent.is_empty();
+                for loan in value.loans {
+                    sources.extend(loan.sources);
+                    parents.extend(loan.parents);
+                    created.extend(loan.created);
+                }
+            }
+            if !sources.is_empty() {
+                if !exact {
+                    for source in &mut sources {
                         source.exact = false;
                     }
-                    loan.created = state.site;
                 }
-                result.loans.push(loan);
+                normalize_sources(&mut sources);
+                parents.sort();
+                parents.dedup();
+                if !exact {
+                    created = state.site.into_iter().collect();
+                }
+                created.sort();
+                created.dedup();
+                result.loans.push(Loan {
+                    created,
+                    holder: holder.clone(),
+                    sources,
+                    mutable,
+                    parents,
+                });
+                if absent && optional {
+                    result.absent.push(holder);
+                }
                 continue;
             }
             if !*exact && !mutable {
-                // With no live selected input leaf, the checked body can only
-                // supply an immutable static reference on a returning path.
+                // A returning shared leaf with no live selected input can only
+                // come from immutable static storage, as checked in the body.
                 static_source = true;
-            } else if leaf
-                .projections
-                .iter()
-                .any(|p| matches!(p, Projection::VariantField(_, _)))
-            {
+            } else if optional {
                 result.absent.push(holder);
                 continue;
             } else {
                 return Err(error(
                     line,
                     "E_BORROW",
-                    "call cannot materialize a reference from an absent input leaf",
+                    "call cannot materialize a reference from absent input leaves",
                 ));
             }
         }
         if static_source {
-            let target = Origin {
-                root: Root::Static,
-                projections: Vec::new(),
-            };
             result.loans.push(Loan {
-                created: state.site,
+                created: state.site.into_iter().collect(),
                 holder,
-                target: target.clone(),
                 sources: vec![SourceBound {
-                    origin: target,
+                    origin: Origin {
+                        root: Root::Static,
+                        projections: Vec::new(),
+                    },
                     exact: false,
                 }],
                 mutable: false,
@@ -1024,9 +1056,15 @@ pub(crate) fn borrowed_projection(types: &[Type], function: &Function, place: &P
     false
 }
 fn loan_description(types: &[Type], function: &Function, loan: &Loan) -> String {
-    let location = match loan.created {
-        Some((line, column)) => format!("created at {}:{}", line, column),
-        None => "supplied by a function parameter".to_string(),
+    let location = if loan.created.is_empty() {
+        "supplied by a function parameter".to_string()
+    } else {
+        let places: Vec<_> = loan
+            .created
+            .iter()
+            .map(|(line, column)| format!("{}:{}", line, column))
+            .collect();
+        format!("created at {}", places.join(" or "))
     };
     format!(
         "{} borrow held by {} ({})",
@@ -1043,14 +1081,21 @@ fn loan_use(
     mutable: bool,
     line: usize,
 ) -> Result<(), Diagnostic> {
-    for other in state.loans.for_target(&loan.target.root, !mutable) {
+    let mut candidates = BTreeSet::new();
+    for source in &loan.sources {
+        for other in state.loans.for_target(&source.origin.root, !mutable) {
+            candidates.insert(other.holder.clone());
+        }
+    }
+    for holder in candidates {
+        let other = state.loans.get(&holder).unwrap();
         if other.holder == loan.holder
             || loan.parents.contains(&other.holder)
             || exclusive_variants(&loan.holder, &other.holder)
         {
             continue;
         }
-        if overlaps(&loan.target, &other.target) && (mutable || other.mutable) {
+        if (mutable || other.mutable) && overlaps_sources(&loan.sources, &other.sources) {
             return Err(error(
                 line,
                 "E_BORROW",
@@ -1114,35 +1159,40 @@ fn access(
         }
         prefix.projections.push(projection.clone());
     }
-    let (target, parents) = origin(state, place);
-    if write && target.root == Root::Static {
-        return Err(error(line, "E_BORROW", "static storage is immutable"));
+    let (targets, parents) = origin(state, place);
+    if targets.is_empty() {
+        return Err(error(line, "E_BORROW", "place has no reachable referent"));
     }
-    if let Root::Local(local) = target.root {
-        if !state.live[local] && !(optional_root && local == place.local) {
-            return Err(error(
-                line,
-                "E_MOVE",
-                &format!(
-                    "{} points to an owner that may be moved",
-                    place_name(types, function, place)
-                ),
-            ));
+    for target in &targets {
+        if write && target.root == Root::Static {
+            return Err(error(line, "E_BORROW", "static storage is immutable"));
         }
-        for moved in &state.moved {
-            if moved.local == local && path_overlaps(&moved.projections, &target.projections) {
-                let ancestor = is_prefix(&moved.projections, &target.projections)
-                    && moved.projections.len() < target.projections.len();
-                if mode == 0 || ancestor {
-                    return Err(error(
-                        line,
-                        "E_MOVE",
-                        &format!(
-                            "{} contains {} which may have been moved",
-                            place_name(types, function, place),
-                            place_name(types, function, moved)
-                        ),
-                    ));
+        if let Root::Local(local) = target.root {
+            if !state.live[local] && !(optional_root && local == place.local) {
+                return Err(error(
+                    line,
+                    "E_MOVE",
+                    &format!(
+                        "{} points to an owner that may be moved",
+                        place_name(types, function, place)
+                    ),
+                ));
+            }
+            for moved in &state.moved {
+                if moved.local == local && path_overlaps(&moved.projections, &target.projections) {
+                    let ancestor = is_prefix(&moved.projections, &target.projections)
+                        && moved.projections.len() < target.projections.len();
+                    if mode == 0 || ancestor {
+                        return Err(error(
+                            line,
+                            "E_MOVE",
+                            &format!(
+                                "{} contains {} which may have been moved",
+                                place_name(types, function, place),
+                                place_name(types, function, moved)
+                            ),
+                        ));
+                    }
                 }
             }
         }
@@ -1150,19 +1200,21 @@ fn access(
     let value_ty = place_type(types, function, place).unwrap();
     let view_owner = state.views[value_ty] && !matches!(types[value_ty].kind, TypeKind::Ref { .. });
     let mut candidates = BTreeSet::new();
-    for loan in state.loans.for_target(&target.root, !write) {
-        candidates.insert(loan.holder.clone());
+    for target in &targets {
+        for loan in state.loans.for_target(&target.root, !write) {
+            candidates.insert(loan.holder.clone());
+        }
+        if write && view_owner {
+            if let Root::Local(local) = target.root {
+                if let Some(holders) = state.loans.parents.get(&local) {
+                    candidates.extend(holders.iter().cloned());
+                }
+            }
+        }
     }
     for parent in &parents {
         for loan in state.loans.for_target(&Root::Local(parent.local), !write) {
             candidates.insert(loan.holder.clone());
-        }
-    }
-    if write && view_owner {
-        if let Root::Local(local) = target.root {
-            if let Some(holders) = state.loans.parents.get(&local) {
-                candidates.extend(holders.iter().cloned());
-            }
         }
     }
     for holder in candidates {
@@ -1170,7 +1222,11 @@ fn access(
         if loan.holder == *place || parents.contains(&loan.holder) {
             continue;
         }
-        if overlaps(&loan.target, &target) && (write || loan.mutable) {
+        if (write || loan.mutable)
+            && targets
+                .iter()
+                .any(|target| source_overlaps(&loan.sources, target))
+        {
             return Err(error(
                 line,
                 "E_BORROW",
@@ -1181,9 +1237,8 @@ fn access(
                 ),
             ));
         }
-        // Using a reference field also uses the storage containing that field.
         for parent in &parents {
-            if overlaps(&loan.target, &holder_origin(parent)) && (write || loan.mutable) {
+            if (write || loan.mutable) && source_overlaps(&loan.sources, &holder_origin(parent)) {
                 return Err(error(
                     line,
                     "E_BORROW",
@@ -1195,10 +1250,12 @@ fn access(
                 ));
             }
         }
-        // A child reborrow freezes a view that can use or drop its parent field.
         if write && view_owner && !within(&loan.holder, place) {
             for parent in &loan.parents {
-                if overlaps(&holder_origin(parent), &target) {
+                if targets
+                    .iter()
+                    .any(|target| overlaps(&holder_origin(parent), target))
+                {
                     return Err(error(
                         line,
                         "E_BORROW",
@@ -1276,7 +1333,7 @@ fn forget(state: &mut State, local: usize) {
     remove_provenance(state, &Place::local(local));
     state.moved.retain(|place| place.local != local);
     state.definitely_moved.retain(|place| place.local != local);
-    invalidate(state, &Origin::local(local));
+    invalidate(state, &[Origin::local(local)]);
     state.predicates.remove(&local);
 }
 fn put(state: &mut State, local: usize, line: usize) -> Result<(), Diagnostic> {
@@ -1286,69 +1343,99 @@ fn put(state: &mut State, local: usize, line: usize) -> Result<(), Diagnostic> {
     state.live.set(local, true);
     state.maybe_live.set(local, true);
     state.predicates.remove(&local);
-    invalidate(state, &Origin::local(local));
+    invalidate(state, &[Origin::local(local)]);
     Ok(())
 }
 fn same_set<T: PartialEq>(a: &[T], b: &[T]) -> bool {
     a.len() == b.len() && a.iter().all(|item| b.contains(item))
 }
-fn validate_merge(a: &State, b: &State, line: usize) -> Result<(), Diagnostic> {
-    if !a.reachable || !b.reachable {
-        return Ok(());
-    }
-    if a.live != b.live
-        || a.maybe_live != b.maybe_live
-        || !same_set(&a.definitely_moved, &b.definitely_moved)
-        || !same_set(&a.moved, &b.moved)
-        || a.loans != b.loans
-        || !same_set(&a.absent_references, &b.absent_references)
-    {
-        return Err(error(
-            line,
-            "E_MOVE",
-            "branches must leave the same owners and borrows",
-        ));
-    }
-    Ok(())
-}
-fn merge(
-    mut a: State,
-    b: State,
+fn validate_merge(
+    a: &State,
+    b: &State,
     types: &[Type],
     function: &Function,
     line: usize,
-) -> Result<State, Diagnostic> {
-    if !a.reachable {
-        return Ok(b);
-    }
-    if !b.reachable {
-        return Ok(a);
-    }
-    if a.loans != b.loans || !same_set(&a.absent_references, &b.absent_references) {
-        return Err(error(
-            line,
-            "E_BORROW",
-            "branches must preserve the same reference holders and origins",
-        ));
+) -> Result<(), Diagnostic> {
+    if !a.reachable || !b.reachable {
+        return Ok(());
     }
     let changed = a
         .live
         .symmetric_difference(&b.live)
         .union(&a.maybe_live.symmetric_difference(&b.maybe_live));
-    if changed
-        .indices_from(0)
-        .any(|local| a.views[function.locals[local].ty])
-        || a.moved.iter().chain(b.moved.iter()).any(|place| {
-            a.views[place_type(types, function, place).unwrap()]
-                && (a.moved.contains(place) != b.moved.contains(place))
+    if let Some(local) = changed.indices_from(0).next() {
+        let place = place_name(types, function, &Place::local(local));
+        let message = if a.live[local] && !b.live[local] {
+            format!(
+                "loop backedge leaves {} uninitialized or moved before the next iteration",
+                place
+            )
+        } else {
+            format!(
+                "loop backedge changes initialization of {}; the loop entry state must be restored",
+                place
+            )
+        };
+        return Err(error(line, "E_MOVE", &message));
+    }
+    if let Some(place) = a
+        .moved
+        .iter()
+        .chain(&b.moved)
+        .find(|place| a.moved.contains(place) != b.moved.contains(place))
+        .or_else(|| {
+            a.definitely_moved
+                .iter()
+                .chain(&b.definitely_moved)
+                .find(|place| {
+                    a.definitely_moved.contains(place) != b.definitely_moved.contains(place)
+                })
         })
     {
         return Err(error(
             line,
-            "E_BORROW",
-            "conditional initialization of a reference-bearing owner needs holder joins",
+            "E_MOVE",
+            &format!(
+                "loop backedge changes initialization of {}; the loop entry state must be restored",
+                place_name(types, function, place)
+            ),
         ));
     }
+    if a.loans != b.loans || !same_set(&a.absent_references, &b.absent_references) {
+        return Err(error(
+            line,
+            "E_BORROW",
+            "loop backedge changes the reference holders or origins required at loop entry",
+        ));
+    }
+    Ok(())
+}
+fn merge(mut a: State, b: State) -> State {
+    if !a.reachable {
+        return b;
+    }
+    if !b.reachable {
+        return a;
+    }
+    for loan in b.loans.values.values() {
+        let mut joined = if let Some(previous) = a.loans.get(&loan.holder) {
+            previous.clone()
+        } else {
+            loan.clone()
+        };
+        joined.sources.extend_from_slice(&loan.sources);
+        normalize_sources(&mut joined.sources);
+        joined.parents.extend_from_slice(&loan.parents);
+        joined.parents.sort();
+        joined.parents.dedup();
+        joined.created.extend_from_slice(&loan.created);
+        joined.created.sort();
+        joined.created.dedup();
+        a.loans.push(joined);
+    }
+    a.absent_references.extend_from_slice(&b.absent_references);
+    a.absent_references.sort();
+    a.absent_references.dedup();
     a.live = a.live.intersection(&b.live);
     a.maybe_live = a.maybe_live.union(&b.maybe_live);
     for place in &b.moved {
@@ -1361,7 +1448,7 @@ fn merge(
     a.tags.retain(|tag| b.tags.contains(tag));
     a.predicates
         .retain(|local, tag| b.predicates.get(local) == Some(tag));
-    Ok(a)
+    a
 }
 fn local_type(function: &Function, local: usize, line: usize) -> Result<usize, Diagnostic> {
     function
@@ -1879,7 +1966,7 @@ fn call_borrows(
     args: &[usize],
     line: usize,
 ) -> Result<(), Diagnostic> {
-    let mut used = Vec::new();
+    let mut used: BTreeMap<Place, (Loan, bool)> = BTreeMap::new();
     let mut changed = Vec::new();
     for arg in args {
         let value = Place::local(*arg);
@@ -1891,36 +1978,42 @@ fn call_borrows(
                 projections: vec![Projection::Deref],
             };
             access(state, types, function, &place, mutable, 0, line)?;
-            let target = origin(state, &place).0;
+            let targets = origin(state, &place).0;
             if mutable {
-                changed.push(target.clone());
+                changed.extend_from_slice(&targets);
             }
-            if let Root::Local(local) = target.root {
-                let base = Place {
-                    local,
-                    projections: target.projections.clone(),
-                };
-                for loan in state.loans.for_holder(local) {
-                    if within(&loan.holder, &base) {
-                        used.push((loan.clone(), mutable && loan.mutable));
+            for target in &targets {
+                if let Root::Local(local) = target.root {
+                    let base = Place {
+                        local,
+                        projections: target.projections.clone(),
+                    };
+                    for loan in state.loans.for_holder(local) {
+                        if within(&loan.holder, &base) {
+                            let entry = used
+                                .entry(loan.holder.clone())
+                                .or_insert((loan.clone(), false));
+                            entry.1 |= mutable && loan.mutable;
+                        }
                     }
                 }
             }
         } else {
             for loan in state.loans.for_holder(*arg) {
-                used.push((loan.clone(), loan.mutable));
+                let entry = used
+                    .entry(loan.holder.clone())
+                    .or_insert((loan.clone(), false));
+                entry.1 |= loan.mutable;
             }
         }
     }
-    for (loan, mutable) in &used {
+    for (loan, mutable) in used.values() {
         loan_use(state, types, function, loan, *mutable, line)?;
         if *mutable {
-            changed.push(loan.target.clone());
+            changed.extend(source_origins(&loan.sources));
         }
     }
-    for target in changed {
-        invalidate(state, &target);
-    }
+    invalidate(state, &changed);
     Ok(())
 }
 
@@ -1972,7 +2065,7 @@ fn check_function_body(
                 projections,
             };
             state.loans.push(Loan {
-                created: state.site,
+                created: state.site.into_iter().collect(),
                 holder: Place {
                     local: i,
                     projections: path,
@@ -1981,7 +2074,6 @@ fn check_function_body(
                     origin: target.clone(),
                     exact: true,
                 }],
-                target,
                 mutable,
                 parents: Vec::new(),
             });
@@ -2003,17 +2095,18 @@ fn check_function_body(
     let mut leaf_origins = BTreeMap::new();
     if let Some(ReturnSource::Leaves(leaves)) = &function.return_source {
         for leaf in leaves {
-            if let LeafOrigin::Parameter {
-                index, projections, ..
-            } = &leaf.origin
-            {
-                let input = parameter_leaf_source(types, function, *index, projections).unwrap();
-                let value = carried_provenance(&state, types, function, &input, &input, 1)?;
-                let sources = value
-                    .loans
-                    .into_iter()
-                    .flat_map(|loan| loan.sources)
-                    .collect::<Vec<_>>();
+            if let LeafOrigin::Inputs { inputs, .. } = &leaf.origin {
+                let mut sources = Vec::new();
+                for input in inputs {
+                    let input =
+                        parameter_leaf_source(types, function, input.index, &input.projections)
+                            .unwrap();
+                    let value = carried_provenance(&state, types, function, &input, &input, 1)?;
+                    for loan in value.loans {
+                        sources.extend(loan.sources);
+                    }
+                }
+                normalize_sources(&mut sources);
                 leaf_origins.insert(leaf.projections.clone(), sources);
             }
         }
@@ -2041,20 +2134,14 @@ fn check_function_body(
                     .ok_or_else(|| error(line, "E_K", "end outside control"))?;
                 if control.is_loop {
                     if state.reachable {
-                        validate_merge(&control.entry, &state, line)?;
+                        validate_merge(&control.entry, &state, types, function, line)?;
                     }
                     state.reachable = false;
                     for exit in control.breaks {
-                        state = merge(state, exit, types, function, line)?;
+                        state = merge(state, exit);
                     }
                 } else {
-                    state = merge(
-                        state,
-                        control.then_state.unwrap_or(control.entry),
-                        types,
-                        function,
-                        line,
-                    )?;
+                    state = merge(state, control.then_state.unwrap_or(control.entry));
                 }
                 continue;
             }
@@ -2111,12 +2198,8 @@ fn check_function_body(
             Op::Text { dst, .. } => {
                 put(&mut state, *dst, line)?;
                 state.loans.push(Loan {
-                    created: state.site,
+                    created: state.site.into_iter().collect(),
                     holder: Place::local(*dst),
-                    target: Origin {
-                        root: Root::Static,
-                        projections: Vec::new(),
-                    },
                     sources: vec![SourceBound {
                         origin: Origin {
                             root: Root::Static,
@@ -2164,7 +2247,7 @@ fn check_function_body(
                     set_tag(
                         &mut state,
                         Tag {
-                            target: Origin::local(*dst),
+                            target: vec![Origin::local(*dst)],
                             witness: Place::local(*dst),
                             variant,
                         },
@@ -2185,9 +2268,8 @@ fn check_function_body(
                 let resolved = resolve_origin(&state, place);
                 put(&mut state, *dst, line)?;
                 state.loans.push(Loan {
-                    created: state.site,
+                    created: state.site.into_iter().collect(),
                     holder: Place::local(*dst),
-                    target: resolved.target,
                     sources: resolved.sources,
                     mutable: *mutable,
                     parents: resolved.parents,
@@ -2212,7 +2294,7 @@ fn check_function_body(
                     return Err(error(line, "E_TYPE", "assignment to an immutable local"));
                 }
                 let resolved = resolve_origin(&state, place);
-                let target = &resolved.target;
+                let targets = source_origins(&resolved.sources);
                 let absent = if place.projections.is_empty() {
                     !state.maybe_live[place.local]
                 } else {
@@ -2237,13 +2319,15 @@ fn check_function_body(
                 let destination = resolved.storage(place);
                 let mut carried =
                     carried_provenance(&state, types, function, &source, &destination, line)?;
-                check_external_write(target, &destination, &carried, line)?;
-                let known_tag = tag_at(&state, &Origin::local(*src), &Place::local(*src));
+                for target in &targets {
+                    check_external_write(target, &destination, &carried, line)?;
+                }
+                let known_tag = tag_at(&state, &[Origin::local(*src)], &Place::local(*src));
                 let predicate = state.predicates.get(src).cloned();
                 remap_parents(&mut state, &source, &destination);
                 remap_carried(&mut carried.loans, &source, &destination);
                 consume(&mut state, types, function, *src, line)?;
-                invalidate(&mut state, target);
+                invalidate(&mut state, &targets);
                 state.live.set(place.local, true);
                 state.maybe_live.set(place.local, true);
                 state.definitely_moved.retain(|moved| {
@@ -2254,10 +2338,10 @@ fn check_function_body(
                     !(moved.local == place.local
                         && is_prefix(&place.projections, &moved.projections))
                 });
-                if matches!(target.root, Root::Local(_)) {
+                if resolved.exact() && matches!(targets[0].root, Root::Local(_)) {
                     remove_provenance(&mut state, &destination);
                     install_provenance(&mut state, carried);
-                    validate_stored_view(&state, target, line)?;
+                    validate_stored_view(&state, &targets[0], line)?;
                 }
                 if place.projections.is_empty() {
                     state.predicates.remove(&place.local);
@@ -2269,7 +2353,7 @@ fn check_function_body(
                     set_tag(
                         &mut state,
                         Tag {
-                            target: target.clone(),
+                            target: targets.clone(),
                             witness: place.clone(),
                             variant,
                         },
@@ -2387,10 +2471,7 @@ fn check_function_body(
                         common_origin(&incoming.loans, line)?
                     }
                     Some(ReturnSource::Static) => Some(ResolvedOrigin {
-                        target: Origin {
-                            root: Root::Static,
-                            projections: Vec::new(),
-                        },
+                        absent: false,
                         sources: vec![SourceBound {
                             origin: Origin {
                                 root: Root::Static,
@@ -2438,9 +2519,8 @@ fn check_function_body(
                                 }
                             }
                             returned.loans.push(Loan {
-                                created: state.site,
+                                created: state.site.into_iter().collect(),
                                 holder,
-                                target: source.target.clone(),
                                 sources: bounds,
                                 mutable,
                                 parents: source.parents.clone(),
@@ -2454,13 +2534,12 @@ fn check_function_body(
                                 projections: Vec::new(),
                             };
                             returned.loans.push(Loan {
-                                created: state.site,
+                                created: state.site.into_iter().collect(),
                                 holder,
                                 sources: vec![SourceBound {
                                     origin: target.clone(),
                                     exact: false,
                                 }],
-                                target,
                                 mutable: false,
                                 parents: Vec::new(),
                             });
@@ -2533,7 +2612,7 @@ fn check_function_body(
                     set_tag(
                         &mut state,
                         Tag {
-                            target: Origin::local(*dst),
+                            target: vec![Origin::local(*dst)],
                             witness: Place::local(*dst),
                             variant,
                         },
@@ -2600,18 +2679,20 @@ fn check_function_body(
                             "reference-bearing write through an opaque call needs an exact destination contract",
                         ));
                     }
-                    let target = &resolved.target;
+                    let targets = source_origins(&resolved.sources);
                     let stored = resolved.storage(&place);
                     let destination = Place::local(*dst);
                     let mut returned =
                         carried_provenance(&state, types, function, &place, &destination, line)?;
-                    let old_tag = tag_at(&state, target, &stored);
+                    let old_tag = tag_at(&state, &targets, &stored);
                     let incoming = if name == "replace" {
                         let source = Place::local(args[1]);
                         let value =
                             carried_provenance(&state, types, function, &source, &stored, line)?;
-                        check_external_write(target, &stored, &value, line)?;
-                        let tag = tag_at(&state, &Origin::local(args[1]), &source);
+                        for target in &targets {
+                            check_external_write(target, &stored, &value, line)?;
+                        }
+                        let tag = tag_at(&state, &[Origin::local(args[1])], &source);
                         Some((source, value, tag))
                     } else {
                         None
@@ -2625,16 +2706,16 @@ fn check_function_body(
                         for arg in args {
                             consume(&mut state, types, function, *arg, line)?;
                         }
-                        if matches!(target.root, Root::Local(_)) {
+                        if resolved.exact() && matches!(targets[0].root, Root::Local(_)) {
                             remove_provenance(&mut state, &stored);
                             install_provenance(&mut state, value);
-                            validate_stored_view(&state, target, line)?;
+                            validate_stored_view(&state, &targets[0], line)?;
                         }
                         if let Some(variant) = tag {
                             set_tag(
                                 &mut state,
                                 Tag {
-                                    target: target.clone(),
+                                    target: targets.clone(),
                                     witness: stored,
                                     variant,
                                 },
@@ -2651,7 +2732,7 @@ fn check_function_body(
                         set_tag(
                             &mut state,
                             Tag {
-                                target: Origin::local(*dst),
+                                target: vec![Origin::local(*dst)],
                                 witness: destination,
                                 variant,
                             },
@@ -2685,10 +2766,14 @@ fn check_function_body(
                                         .iter()
                                         .all(|source| source.origin.root == Root::Static)
                             }
-                            LeafOrigin::Parameter { exact, .. } => {
+                            LeafOrigin::Inputs { exact, .. } => {
                                 let expected = &leaf_origins[&leaf.projections];
                                 if *exact {
-                                    same_set(&loan.sources, expected)
+                                    !loan.sources.is_empty()
+                                        && loan
+                                            .sources
+                                            .iter()
+                                            .all(|source| expected.contains(source))
                                 } else {
                                     !loan.sources.is_empty()
                                         && loan.sources.iter().all(|bound| {
@@ -2759,7 +2844,7 @@ fn check_function_body(
                     .nth(depth)
                     .unwrap();
                 if matches!(instruction.op, Op::Continue | Op::ContinueTo { .. }) {
-                    validate_merge(&control.entry, &state, line)?;
+                    validate_merge(&control.entry, &state, types, function, line)?;
                 } else {
                     control.breaks.push(state.clone());
                 }
@@ -4180,7 +4265,7 @@ mod tests {
     }
 
     #[test]
-    fn one_view_cannot_combine_two_source_roots() {
+    fn broad_return_contract_cannot_hide_a_second_parameter_root() {
         let mut types = with_ref(false);
         types.push(Type {
             name: "PairView".to_string(),

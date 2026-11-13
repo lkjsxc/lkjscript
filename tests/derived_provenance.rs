@@ -357,9 +357,7 @@ fn generated_cloning_preserves_exclusive_parent_and_trait_requirements() {
 }
 
 #[test]
-fn conditional_view_joins_remain_an_explicit_conservative_boundary() {
-    // This Rust-valid join fails without Clone or derives. Keep the precision
-    // limit visible while generated operations use branch-local return probes.
+fn conditional_view_joins_preserve_present_and_absent_reference_leaves() {
     let source = r#"
 struct Numbers { left:i64, right:i64 }
 enum Maybe<'a> { Empty, Full{left:&'a i64,right:&'a i64} }
@@ -369,21 +367,14 @@ fn optional<'a>(values:&'a Numbers,present:bool)->Maybe<'a> {
     } else {Maybe::Empty};
     carrier
 }
+pub fn conditional_views()->i64 {
+    let numbers=Numbers{left:20,right:22};
+    let first=optional(&numbers,true);
+    let second=optional(&numbers,false);
+    let a=match first {Maybe::Full{left,right}=>*left+*right,Maybe::Empty=>0};
+    let b=match second {Maybe::Full{left,right}=>*left+*right,Maybe::Empty=>0};
+    a+b-42
+}
 "#;
-    let problem = compiler::check_bundle(&bundle(source))
-        .err()
-        .expect("view join precision has not been implemented");
-    assert_eq!(problem.code, "E_BORROW", "{problem:?}");
-    assert!(
-        problem
-            .message
-            .contains("branches must preserve the same reference holders and origins"),
-        "{problem:?}"
-    );
-    let rust = rust_metadata(source);
-    assert!(
-        rust.status.success(),
-        "{}",
-        String::from_utf8_lossy(&rust.stderr)
-    );
+    same_source(source, &["conditional_views"]);
 }

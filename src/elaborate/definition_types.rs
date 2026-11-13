@@ -896,15 +896,48 @@ impl Infer<'_, '_> {
                 self.bindings.push((name, value));
             }
             a::Pattern::Tuple(fields) => {
-                let values: Vec<_> = fields.iter().map(|_| self.unknown()).collect();
+                let rest = fields
+                    .iter()
+                    .any(|field| matches!(self.source.patterns[*field].kind, a::Pattern::Rest));
+                let values = if rest {
+                    match self.shape(value) {
+                        Some(Shape::Tuple(values)) => values,
+                        Some(Shape::Atom(name)) if name == "()" => Vec::new(),
+                        None => {
+                            // A method without a known result contract stays
+                            // blocked; concrete pattern construction checks arity.
+                            for field in fields {
+                                if !matches!(self.source.patterns[field].kind, a::Pattern::Rest) {
+                                    let unknown = self.blocked();
+                                    self.bind_pattern_mode(field, unknown, mode)?;
+                                }
+                            }
+                            return Ok(());
+                        }
+                        _ => {
+                            return Err(err(
+                                node.span,
+                                "E_TYPE",
+                                "tuple rest pattern requires a tuple",
+                            ));
+                        }
+                    }
+                } else {
+                    fields.iter().map(|_| self.unknown()).collect()
+                };
                 let tuple = if values.is_empty() {
                     self.atom("()")
                 } else {
                     self.shaped(Shape::Tuple(values.clone()))
                 };
                 self.unify(value, tuple, node.span)?;
-                for (field, value) in fields.into_iter().zip(values) {
-                    self.bind_pattern_mode(field, value, mode)?;
+                for (index, field) in super::patterns::positional_fields(
+                    self.source,
+                    &fields,
+                    values.len(),
+                    node.span,
+                )? {
+                    self.bind_pattern_mode(field, values[index], mode)?;
                 }
             }
             a::Pattern::Ref { mutable, inner } => {
@@ -914,11 +947,33 @@ impl Infer<'_, '_> {
                 self.bind_pattern_mode(inner, pointee, None)?;
             }
             a::Pattern::Variant { path, fields } => {
-                let fields: Vec<_> = fields
-                    .into_iter()
-                    .enumerate()
-                    .map(|(i, pattern)| (i.to_string(), pattern))
-                    .collect();
+                let path = if path.declaration.is_some() {
+                    path
+                } else {
+                    self.names.value_path(node.scope, &path, node.span)?
+                };
+                let count = if let Some(nominal) = self.constructor(&path, &[], node.span)? {
+                    if let Some(Shape::Nominal(declaration, _)) = self.shape(nominal) {
+                        match self.source.declarations[declaration].item {
+                            a::Item::Struct(index) => self.source.structs[index].fields.len(),
+                            a::Item::Enum(_) => path
+                                .name
+                                .rsplit_once("::")
+                                .and_then(|(_, name)| self.enum_variant_fields(declaration, name))
+                                .map_or(0, |fields| fields.len()),
+                            _ => fields.len(),
+                        }
+                    } else {
+                        fields.len()
+                    }
+                } else {
+                    fields.len()
+                };
+                let fields =
+                    super::patterns::positional_fields(self.source, &fields, count, node.span)?
+                        .into_iter()
+                        .map(|(index, pattern)| (index.to_string(), pattern))
+                        .collect::<Vec<_>>();
                 self.bind_nominal_pattern(&path, &fields, value, mode, node.scope, node.span)?;
             }
             a::Pattern::Struct { path, fields, .. } => {
@@ -1025,13 +1080,18 @@ impl Infer<'_, '_> {
                     span,
                 } => {
                     let environment = self.environment.clone();
+                    let initializer = value.map(|value| self.expr(value)).transpose()?;
                     let subject = match ty {
-                        Some(ty) => self.source_type(ty, &environment)?,
-                        None => self.unknown(),
+                        Some(ty) => {
+                            let subject = self.source_type(ty, &environment)?;
+                            if let Some(value) = initializer {
+                                self.coerce(value, subject, span)?;
+                            }
+                            subject
+                        }
+                        None => initializer.unwrap_or_else(|| self.unknown()),
                     };
-                    if let Some(value) = value {
-                        let value = self.expr(value)?;
-                        self.coerce(value, subject, span)?;
+                    if let Some(value) = initializer {
                         diverges |= self.never(value);
                     }
                     self.definition.bindings.insert(pattern, subject);

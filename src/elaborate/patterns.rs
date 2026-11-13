@@ -1,5 +1,6 @@
 //! Typed pattern plans share their source subtrees. Testing precedes binding:
 //! no failed test or failed guard moves a payload from the scrutinee.
+use super::pattern_choices::PatternChoices;
 use super::{Builder, Result, a, err, integers, k};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -33,9 +34,9 @@ pub(super) enum PatternKind {
 }
 #[derive(Clone)]
 pub(super) struct PatternNode {
-    ty: usize,
-    span: a::Span,
-    kind: PatternKind,
+    pub(super) ty: usize,
+    pub(super) span: a::Span,
+    pub(super) kind: PatternKind,
 }
 #[derive(Default)]
 pub(super) struct PatternPlan {
@@ -48,6 +49,17 @@ pub(super) struct PatternBinding {
     pub(super) borrow: Option<bool>,
     pub(super) ty: usize,
     pub(super) place: k::Place,
+}
+pub(super) struct PatternGuardInput<'a> {
+    pub(super) expression: usize,
+    pub(super) condition: usize,
+    pub(super) tested: &'a [k::Place],
+    pub(super) choices: Option<&'a PatternChoices>,
+}
+struct BindingTargets<'a> {
+    destinations: &'a BTreeMap<String, usize>,
+    guard: bool,
+    choices: Option<&'a PatternChoices>,
 }
 impl PatternPlan {
     fn add(&mut self, ty: usize, span: a::Span, kind: PatternKind) -> usize {
@@ -146,59 +158,6 @@ impl PatternPlan {
         }
         true
     }
-    /// Guard retries retain Rust's left-to-right alternative order. The source
-    /// plans remain shared: only the selecting product nodes are constructed.
-    pub(super) fn alternatives(&mut self, root: usize) -> Vec<usize> {
-        let node = self.nodes[root].clone();
-        match node.kind {
-            PatternKind::Or(alternatives) => {
-                let mut result = Vec::new();
-                for id in alternatives {
-                    result.extend(self.alternatives(id));
-                }
-                result
-            }
-            PatternKind::Deref(inner) => self
-                .alternatives(inner)
-                .into_iter()
-                .map(|inner| self.add(node.ty, node.span, PatternKind::Deref(inner)))
-                .collect(),
-            PatternKind::Product(fields) | PatternKind::Variant { fields, .. } => {
-                let tag = if let PatternKind::Variant { tag, .. } = self.nodes[root].kind {
-                    Some(tag)
-                } else {
-                    None
-                };
-                let mut products: Vec<Vec<(k::Projection, usize)>> = vec![Vec::new()];
-                for (projection, id) in fields {
-                    let alternatives = self.alternatives(id);
-                    let mut next = Vec::new();
-                    for prefix in products {
-                        for alternative in &alternatives {
-                            let mut product = prefix.clone();
-                            product.push((projection.clone(), *alternative));
-                            next.push(product);
-                        }
-                    }
-                    products = next;
-                }
-                products
-                    .into_iter()
-                    .map(|fields| {
-                        self.add(
-                            node.ty,
-                            node.span,
-                            match tag {
-                                Some(tag) => PatternKind::Variant { tag, fields },
-                                None => PatternKind::Product(fields),
-                            },
-                        )
-                    })
-                    .collect()
-            }
-            _ => vec![root],
-        }
-    }
     pub(super) fn bindings(&self, root: usize, place: k::Place) -> Vec<PatternBinding> {
         let mut result = Vec::new();
         let mut pending = vec![(root, place)];
@@ -262,6 +221,42 @@ impl Domain {
     fn rank(self, value: i64) -> u64 {
         (value as u64 & self.maximum) ^ self.sign
     }
+}
+pub(super) fn positional_fields(
+    source: &a::Program,
+    fields: &[usize],
+    count: usize,
+    span: a::Span,
+) -> Result<Vec<(usize, usize)>> {
+    let mut rest = None;
+    for (index, pattern) in fields.iter().enumerate() {
+        if matches!(source.patterns[*pattern].kind, a::Pattern::Rest) {
+            if rest.replace(index).is_some() {
+                return Err(err(span, "E_TYPE", "tuple pattern has more than one rest"));
+            }
+        }
+    }
+    let explicit = fields.len() - usize::from(rest.is_some());
+    if explicit > count || (rest.is_none() && explicit != count) {
+        return Err(err(
+            span,
+            "E_TYPE",
+            "constructor pattern field count differs",
+        ));
+    }
+    let mut positions = Vec::new();
+    for (index, pattern) in fields.iter().enumerate() {
+        if Some(index) == rest {
+            continue;
+        }
+        let field = if rest.is_some_and(|rest| index > rest) {
+            count - (fields.len() - index)
+        } else {
+            index
+        };
+        positions.push((field, *pattern));
+    }
+    Ok(positions)
 }
 impl Builder<'_, '_> {
     pub(super) fn pattern_hint(&self, arms: &[a::Arm]) -> Option<usize> {
@@ -368,6 +363,13 @@ impl Builder<'_, '_> {
         }
         let kind = match node.kind {
             a::Pattern::Wild => PatternKind::Any,
+            a::Pattern::Rest => {
+                return Err(err(
+                    node.span,
+                    "E_TYPE",
+                    "rest pattern requires tuple fields",
+                ));
+            }
             a::Pattern::Bind {
                 name,
                 mutable,
@@ -496,21 +498,16 @@ impl Builder<'_, '_> {
                     {
                         fields.clone()
                     }
-                    k::TypeKind::Unit if fields.is_empty() => Vec::new(),
+                    k::TypeKind::Unit => Vec::new(),
                     _ => return Err(err(node.span, "E_TYPE", "tuple pattern requires a tuple")),
                 };
-                if fields.len() != declared.len() {
-                    return Err(err(
-                        node.span,
-                        "E_TYPE",
-                        "tuple pattern field count differs",
-                    ));
-                }
                 let mut children = Vec::new();
-                for (index, (pattern, field)) in fields.into_iter().zip(declared).enumerate() {
+                for (index, pattern) in
+                    positional_fields(self.compiler.source, &fields, declared.len(), node.span)?
+                {
                     children.push((
                         k::Projection::Field(index),
-                        self.prepare_pattern_inner(plan, pattern, field.ty, borrow)?,
+                        self.prepare_pattern_inner(plan, pattern, declared[index].ty, borrow)?,
                     ));
                 }
                 PatternKind::Product(children)
@@ -585,22 +582,17 @@ impl Builder<'_, '_> {
                         }
                         (None, fields.clone())
                     };
-                if fields.len() != declared.len() {
-                    return Err(err(
-                        node.span,
-                        "E_TYPE",
-                        "constructor pattern field count differs",
-                    ));
-                }
                 let mut children = Vec::new();
-                for (index, (pattern, field)) in fields.into_iter().zip(declared).enumerate() {
+                for (index, pattern) in
+                    positional_fields(self.compiler.source, &fields, declared.len(), node.span)?
+                {
                     let projection = match tag {
                         Some(tag) => k::Projection::VariantField(tag, index),
                         None => k::Projection::Field(index),
                     };
                     children.push((
                         projection,
-                        self.prepare_pattern_inner(plan, pattern, field.ty, borrow)?,
+                        self.prepare_pattern_inner(plan, pattern, declared[index].ty, borrow)?,
                     ));
                 }
                 match tag {
@@ -825,19 +817,6 @@ impl Builder<'_, '_> {
         }
         Ok(result)
     }
-    pub(super) fn pattern_bindings_share(
-        &self,
-        plan: &PatternPlan,
-        id: usize,
-        place: k::Place,
-    ) -> bool {
-        plan.uniform_bindings(id, place.clone())
-            || plan
-                .bindings(id, place)
-                .iter()
-                .all(|binding| binding.borrow.is_none() && !self.compiler.has_view(binding.ty))
-    }
-
     fn establish_pattern_tag(&mut self, place: k::Place, tag: usize, line: usize) {
         let condition = self.temp(k::BOOL);
         self.emit(
@@ -862,25 +841,25 @@ impl Builder<'_, '_> {
     }
 
     /// Select each shared or subtree independently, then reach one arm body.
-    /// The destinations carry values without reference origins; reference joins
-    /// are handled only when all alternatives bind the same original places.
+    /// K checks each destination's reference alternatives at every join.
     fn bind_pattern_tree(
         &mut self,
         plan: &PatternPlan,
         id: usize,
         place: k::Place,
-        destinations: &BTreeMap<String, usize>,
+        targets: &BindingTargets<'_>,
         line: usize,
     ) -> Result<()> {
         match &plan.nodes[id].kind {
             PatternKind::Bind { name, borrow, .. } => {
                 let value = match borrow {
                     Some(mutable) => self.borrow(place, *mutable, line)?,
+                    None if targets.guard => self.borrow(place, false, line)?,
                     None => self.read(place, line)?,
                 };
                 self.emit(
                     k::Op::Assign {
-                        place: k::Place::local(destinations[name]),
+                        place: k::Place::local(targets.destinations[name]),
                         src: value.0,
                     },
                     line,
@@ -889,7 +868,7 @@ impl Builder<'_, '_> {
             PatternKind::Deref(inner) => {
                 let mut place = place;
                 place.projections.push(k::Projection::Deref);
-                self.bind_pattern_tree(plan, *inner, place, destinations, line)?;
+                self.bind_pattern_tree(plan, *inner, place, targets, line)?;
             }
             PatternKind::Product(fields) | PatternKind::Variant { fields, .. } => {
                 if let PatternKind::Variant { tag, .. } = &plan.nodes[id].kind {
@@ -898,17 +877,23 @@ impl Builder<'_, '_> {
                 for (projection, child) in fields {
                     let mut field = place.clone();
                     field.projections.push(projection.clone());
-                    self.bind_pattern_tree(plan, *child, field, destinations, line)?;
+                    self.bind_pattern_tree(plan, *child, field, targets, line)?;
                 }
             }
             PatternKind::Or(alternatives) => {
                 let start = self.live.len();
                 let mut exit = None;
-                for alternative in alternatives {
-                    let condition = self.pattern_condition(plan, *alternative, place.clone())?;
+                for (index, alternative) in alternatives.iter().enumerate() {
+                    let condition = if let Some(choice) =
+                        targets.choices.and_then(|choices| choices.slots.get(&id))
+                    {
+                        self.pattern_choice_equals(choice.position, index, line)?
+                    } else {
+                        self.pattern_condition(plan, *alternative, place.clone())?
+                    };
                     self.emit(k::Op::If { condition }, line);
                     let failure = self.snapshot();
-                    self.bind_pattern_tree(plan, *alternative, place.clone(), destinations, line)?;
+                    self.bind_pattern_tree(plan, *alternative, place.clone(), targets, line)?;
                     self.cleanup(start, None, line);
                     self.written.truncate(start);
                     self.written.resize(self.function.locals.len(), false);
@@ -959,6 +944,16 @@ impl Builder<'_, '_> {
         place: k::Place,
         line: usize,
     ) -> Result<()> {
+        self.bind_pattern_choice(plan, id, place, None, line)
+    }
+    pub(super) fn bind_pattern_choice(
+        &mut self,
+        plan: &PatternPlan,
+        id: usize,
+        place: k::Place,
+        choices: Option<&PatternChoices>,
+        line: usize,
+    ) -> Result<()> {
         if plan.has_or(id) && !plan.uniform_bindings(id, place.clone()) {
             let mut destinations = BTreeMap::new();
             for binding in plan.bindings(id, place.clone()) {
@@ -970,7 +965,12 @@ impl Builder<'_, '_> {
                 destinations.insert(binding.name.clone(), destination);
                 self.bindings.push((binding.name, destination));
             }
-            return self.bind_pattern_tree(plan, id, place, &destinations, line);
+            let targets = BindingTargets {
+                destinations: &destinations,
+                guard: false,
+                choices,
+            };
+            return self.bind_pattern_tree(plan, id, place, &targets, line);
         }
         let bindings = plan.bindings(id, place);
         self.establish_bindings(&bindings, line);
@@ -992,7 +992,32 @@ impl Builder<'_, '_> {
         condition: usize,
         tested: &[k::Place],
     ) -> Result<usize> {
+        self.pattern_guard_with_choices(
+            plan,
+            id,
+            place,
+            PatternGuardInput {
+                expression: guard,
+                condition,
+                tested,
+                choices: None,
+            },
+        )
+    }
+    pub(super) fn pattern_guard_with_choices(
+        &mut self,
+        plan: &PatternPlan,
+        id: usize,
+        place: k::Place,
+        input: PatternGuardInput<'_>,
+    ) -> Result<usize> {
         let line = plan.nodes[id].span.line;
+        let PatternGuardInput {
+            expression: guard,
+            condition,
+            tested,
+            choices,
+        } = input;
         let result = self.local(k::BOOL, "$guard", true);
         let no = self.pattern_boolean(false, line);
         self.emit(
@@ -1008,28 +1033,51 @@ impl Builder<'_, '_> {
         let names = self.bindings.len();
         let aliases = self.guard_aliases.clone();
         let shells = self.guard_shells.len();
-        let bindings = plan.bindings(id, place);
-        self.establish_bindings(&bindings, line);
+        let bindings = plan.bindings(id, place.clone());
+        let mut destinations = BTreeMap::new();
+        for binding in &bindings {
+            let ty = self
+                .compiler
+                .reference(binding.ty, binding.borrow.unwrap_or(false));
+            let destination = self.local(ty, "$guard_binding", false);
+            destinations.insert(binding.name.clone(), destination);
+        }
+        if !bindings.is_empty() {
+            if plan.uniform_bindings(id, place.clone()) {
+                self.establish_bindings(&bindings, line);
+                for binding in &bindings {
+                    let value =
+                        self.borrow(binding.place.clone(), binding.borrow.unwrap_or(false), line)?;
+                    self.emit(
+                        k::Op::Assign {
+                            place: k::Place::local(destinations[&binding.name]),
+                            src: value.0,
+                        },
+                        line,
+                    );
+                }
+            } else {
+                let targets = BindingTargets {
+                    destinations: &destinations,
+                    guard: true,
+                    choices,
+                };
+                self.bind_pattern_tree(plan, id, place, &targets, line)?;
+            }
+        }
         for binding in bindings {
+            let local = destinations[&binding.name];
             if binding.borrow.is_none() {
-                // Every by-value guard binding is read through a shared loan,
-                // including Copy values. Moving happens only after success.
-                let frozen = self.borrow(binding.place.clone(), false, line)?.0;
                 self.guard_aliases.insert(
                     binding.name,
                     k::Place {
-                        local: frozen,
+                        local,
                         projections: vec![k::Projection::Deref],
                     },
                 );
             } else {
-                let value = match binding.borrow {
-                    Some(mutable) => self.borrow(binding.place.clone(), mutable, line)?,
-                    None => self.read(binding.place.clone(), line)?,
-                };
-                self.bind_name(binding.name.clone(), false, value, line);
+                self.bindings.push((binding.name.clone(), local));
                 if binding.borrow == Some(true) {
-                    let local = self.binding(&binding.name).unwrap();
                     let frozen = self.borrow(k::Place::local(local), false, line)?.0;
                     self.guard_aliases.insert(
                         binding.name,

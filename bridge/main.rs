@@ -4,73 +4,38 @@ use lkjscript::{
 };
 mod batch;
 mod library;
+mod native;
 mod timing;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
-/// Linux-only bootstrap host code; source programs cannot call these operations.
+/// Bootstrap child lifetime management; source programs cannot call these operations.
 #[allow(unsafe_code)]
-mod host_stack {
+mod host_process {
     use std::io;
     use std::os::unix::process::CommandExt;
     use std::process::Command;
 
-    #[derive(Clone, Copy)]
-    #[repr(C)]
-    pub struct Limits {
-        current: u64,
-        maximum: u64,
-    }
-    const RLIMIT_STACK: i32 = 3;
     unsafe extern "C" {
-        fn getrlimit(resource: i32, limits: *mut Limits) -> i32;
-        fn setrlimit(resource: i32, limits: *const Limits) -> i32;
         fn prctl(option: i32, ...) -> i32;
         fn getppid() -> i32;
     }
 
-    pub fn configure(memory: usize) -> io::Result<Limits> {
-        let mut original = Limits {
-            current: 0,
-            maximum: 0,
-        };
-        // Linux x86-64 rlimit is two u64 fields; the pointer is valid and writable.
-        if unsafe { getrlimit(RLIMIT_STACK, &mut original) } != 0 {
-            return Err(io::Error::last_os_error());
-        }
-        let growing = Limits {
-            current: (memory as u64).max(original.current).min(original.maximum),
-            maximum: original.maximum,
-        };
-        // Preserve the host's hard extent. Linux commits stack pages on growth.
-        if unsafe { setrlimit(RLIMIT_STACK, &growing) } != 0 {
-            return Err(io::Error::last_os_error());
-        }
-        Ok(original)
-    }
-
-    pub fn prepare_child(command: &mut Command, original: Limits) {
+    pub fn prepare_child(command: &mut Command) {
         let parent = std::process::id() as i32;
-        // Only async-signal-safe syscalls and error capture run after fork.
-        // Node must not inherit an enormous default pthread stack reservation.
+        // Only async-signal-safe syscalls run after fork. Process-group timeout
+        // handling normally kills children too; this also covers parent death.
         unsafe {
             command.pre_exec(move || {
-                // PR_SET_PDEATHSIG=1, SIGTERM=15. Killing a timed-out CLI must
-                // also terminate Node and all of its in-process workers.
                 if prctl(1, 15_usize, 0_usize, 0_usize, 0_usize) != 0 {
                     return Err(io::Error::last_os_error());
                 }
-                // Close the race where the parent died before prctl ran.
                 if getppid() != parent {
                     return Err(io::Error::from_raw_os_error(3));
                 }
-                if setrlimit(RLIMIT_STACK, &original) == 0 {
-                    Ok(())
-                } else {
-                    Err(io::Error::last_os_error())
-                }
+                Ok(())
             });
         }
     }
@@ -294,14 +259,14 @@ struct Arguments {
 }
 fn arguments(args: &[String]) -> Result<Arguments, String> {
     if args.len() < 2 {
-        return Err("usage: lkjscript check|run|test|build|k <source> [--census] [--engine node|k] [--entry name] [-o module.wasm]".to_string());
+        return Err("usage: lkjscript check|run|test|build|k <source> [--census] [--engine native|k|node] [--entry name] [-o artifact]".to_string());
     }
     let mut result = Arguments {
         verb: args[1].clone(),
         path: String::new(),
         entry: None,
         output: None,
-        engine: "node".to_string(),
+        engine: "native".to_string(),
         census: false,
         unchecked: false,
     };
@@ -335,8 +300,8 @@ fn arguments(args: &[String]) -> Result<Arguments, String> {
     {
         return Err("E_USAGE expected check|run|test|build|k and a source path".to_string());
     }
-    if !["node", "k"].contains(&result.engine.as_str()) {
-        return Err("E_USAGE engine is node or k".to_string());
+    if !["node", "k", "native"].contains(&result.engine.as_str()) {
+        return Err("E_USAGE engine is node, k or native".to_string());
     }
     if result.unchecked
         && (result.engine != "k"
@@ -400,13 +365,7 @@ fn result_kind(program: &k::Program, function: &k::Function) -> &'static str {
         _ => "i64",
     }
 }
-fn execute(
-    module: &Path,
-    entry: &str,
-    kind: &str,
-    world: bool,
-    child_stack: host_stack::Limits,
-) -> Result<(), String> {
+fn execute(module: &Path, entry: &str, kind: &str, world: bool) -> Result<(), String> {
     let mut command = Command::new("node");
     command
         .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("bridge/run.mjs"))
@@ -416,14 +375,33 @@ fn execute(
     if world {
         command.arg("1");
     }
-    host_stack::prepare_child(&mut command, child_stack);
+    host_process::prepare_child(&mut command);
     // Inherited output preserves streaming/backpressure and detects host failure
-    // inside the write operation. A failed worker already reports its diagnostic.
+    // inside the write operation. A failed engine already reports its diagnostic.
     let status = command.status().map_err(|e| format!("E_HOST Node: {e}"))?;
     if !status.success() {
         return Err(String::new());
     }
     Ok(())
+}
+fn scalar(value: machine::Scalar) -> String {
+    match value {
+        machine::Scalar::Unit => String::new(),
+        machine::Scalar::Bool(value) => format!("{value}\n"),
+        machine::Scalar::Int {
+            value,
+            bits,
+            signed,
+        } => {
+            if signed {
+                let shift = 64 - u32::from(bits);
+                format!("{}\n", ((value << shift) as i64) >> shift)
+            } else {
+                format!("{value}\n")
+            }
+        }
+        machine::Scalar::F64 { bits } => format!("{}\n", f64::from_bits(bits)),
+    }
 }
 struct StandardOutput;
 impl machine::Host for StandardOutput {
@@ -474,16 +452,16 @@ fn execute_machine(
     }
     Ok(())
 }
-fn run(child_stack: host_stack::Limits) -> Result<(), String> {
+fn run() -> Result<(), String> {
     let argv: Vec<String> = std::env::args().collect();
     if argv.len() == 2 && argv[1] == "trusted" {
         println!(
-            "source/resolve/type/K: src/\nindependent K interpreter: src/machine.rs, src/machine/scalar.rs\nRust host, resource setup and source packing: bridge/lib.rs, bridge/compiler_stack.rs, bridge/main.rs, bridge/library.rs\nNode host and byte boundary: bridge/run.mjs, bridge/output.mjs\nRust output oracle: bridge/output.rs"
+            "source meaning: src/syntax.rs, src/resolve.rs, src/generics.rs, src/elaborate/\nK safety gate: src/k.rs, src/check.rs\nlayout and lowering: src/lower.rs, src/lower/ir.rs\nsource runtime and sealed raw binding: library/runtime.rs, src/runtime.rs\nnative ELF encoder and Linux entry: src/native.rs\nWebAssembly encoder: src/wasm.rs\nindependent models: src/machine.rs, src/machine/scalar.rs, src/runtime/memory.rs\nRust host and declared source provisioning: bridge/\nRust output oracle: bridge/output.rs\nphysical size ledger: node tools/trust.mjs"
         );
         return Ok(());
     }
     if argv.get(1).is_some_and(|verb| verb == "batch") {
-        return batch::run(&argv[2..], child_stack);
+        return batch::run(&argv[2..]);
     }
     let args = arguments(&argv)?;
     let mut timings = timing::Timings::new();
@@ -508,6 +486,11 @@ fn run(child_stack: host_stack::Limits) -> Result<(), String> {
     }
     if args.engine == "k" && args.verb != "build" {
         execute_machine(checked.program(), &args, &mut timings)?;
+        timings.done();
+        return Ok(());
+    }
+    if args.engine == "native" {
+        native::run(&checked, &args, &mut timings)?;
         timings.done();
         return Ok(());
     }
@@ -545,7 +528,6 @@ fn run(child_stack: host_stack::Limits) -> Result<(), String> {
                         result_kind(program, function)
                     },
                     entry_world(program, function)?,
-                    child_stack,
                 )?;
             }
             Ok(())
@@ -559,27 +541,9 @@ fn run(child_stack: host_stack::Limits) -> Result<(), String> {
     Ok(())
 }
 fn main() -> ExitCode {
-    // Grow the main Linux stack from physical memory and swap, preserving the
-    // host hard extent. Unlike a pthread stack, its mapping expands on demand.
-    let memory = fs::read_to_string("/proc/meminfo").ok().and_then(|s| {
-        let mut total = 0_usize;
-        for line in s.lines() {
-            if line.starts_with("MemTotal:") || line.starts_with("SwapTotal:") {
-                total = total.checked_add(
-                    line.split_whitespace()
-                        .nth(1)?
-                        .parse::<usize>()
-                        .ok()?
-                        .checked_mul(1024)?,
-                )?;
-            }
-        }
-        if total == 0 { None } else { Some(total) }
-    });
-    let result = memory
-        .ok_or_else(|| "E_HOST cannot read memory and swap extents from /proc/meminfo".to_string())
-        .and_then(|memory| host_stack::configure(memory).map_err(|error| format!("E_HOST {error}")))
-        .and_then(run);
+    let result = lkjscript::compiler_stack::run(run)
+        .map_err(|error| format!("E_HOST {error}"))
+        .and_then(|result| result);
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {

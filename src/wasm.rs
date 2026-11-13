@@ -182,11 +182,6 @@ fn code(body: &Code, signatures: &BTreeMap<Signature, usize>) -> Result<Vec<u8>,
     Ok(out)
 }
 
-/// Compatibility entry for checked callers; all target-independent work is in lower.
-pub fn emit(checked: &crate::k::CheckedProgram) -> Result<Vec<u8>, String> {
-    encode(&crate::lower::lower(checked)?)
-}
-
 pub fn encode(program: &Program) -> Result<Vec<u8>, String> {
     let function_count = program
         .imports

@@ -32,38 +32,19 @@ impl machine::Host for Output {
         Ok(())
     }
 }
-fn scalar(value: machine::Scalar) -> String {
-    match value {
-        machine::Scalar::Unit => String::new(),
-        machine::Scalar::Bool(value) => format!("{value}\n"),
-        machine::Scalar::Int {
-            value,
-            bits,
-            signed,
-        } => {
-            if signed {
-                let shift = 64 - u32::from(bits);
-                format!("{}\n", ((value << shift) as i64) >> shift)
-            } else {
-                format!("{value}\n")
-            }
-        }
-        machine::Scalar::F64 { bits } => format!("{}\n", f64::from_bits(bits)),
-    }
-}
-pub fn run(argv: &[String], child_stack: host_stack::Limits) -> Result<(), String> {
+pub fn run(argv: &[String]) -> Result<(), String> {
     let Some(manifest) = argv.first() else {
-        return Err("E_USAGE batch <manifest.tsv|directory> [--engine node|k]".to_string());
+        return Err("E_USAGE batch <manifest.tsv|directory> [--engine node|k|native]".to_string());
     };
     let engine = if argv.len() == 3 && argv[1] == "--engine" {
         argv[2].as_str()
     } else if argv.len() == 1 {
         "k"
     } else {
-        return Err("E_USAGE batch <manifest.tsv|directory> [--engine node|k]".to_string());
+        return Err("E_USAGE batch <manifest.tsv|directory> [--engine node|k|native]".to_string());
     };
-    if !["node", "k"].contains(&engine) {
-        return Err("E_USAGE engine is node or k".to_string());
+    if !["node", "k", "native"].contains(&engine) {
+        return Err("E_USAGE engine is node, k or native".to_string());
     }
     let requests = if Path::new(manifest).is_dir() {
         let mut files = fs::read_dir(manifest)
@@ -124,7 +105,42 @@ pub fn run(argv: &[String], child_stack: host_stack::Limits) -> Result<(), Strin
                     continue;
                 }
             };
-            if engine == "k" {
+            if engine == "native" {
+                let lowered = match native::lower(&checked) {
+                    Ok(value) => value,
+                    Err(error) => {
+                        record(index, true, 1, &[], &format!("E_EMIT {error}"));
+                        continue;
+                    }
+                };
+                let bytes = match native::image(&lowered, program, entry, true) {
+                    Ok(value) => value,
+                    Err(error) => {
+                        record(index, true, 1, &[], &format!("E_EMIT {error}"));
+                        continue;
+                    }
+                };
+                let path = directory.join(format!("{index}.elf"));
+                native::save(&path, &bytes)?;
+                match native::execute(&path, &lowered, &args.path, true) {
+                    Ok(mut outcome) => {
+                        if let Some(error) = outcome.error {
+                            record(index, true, 1, &outcome.stdout, &error);
+                        } else {
+                            outcome.stdout.extend_from_slice(
+                                scalar(native::scalar(
+                                    program,
+                                    &program.functions[entry],
+                                    outcome.value,
+                                ))
+                                .as_bytes(),
+                            );
+                            record(index, true, 0, &outcome.stdout, "");
+                        }
+                    }
+                    Err(error) => record(index, true, 1, &[], &error),
+                }
+            } else if engine == "k" {
                 let mut output = Output::default();
                 match machine::run(program, entry, &[], &mut output) {
                     Ok(result) => {
@@ -174,7 +190,7 @@ pub fn run(argv: &[String], child_stack: host_stack::Limits) -> Result<(), Strin
             command
                 .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("tools/wasm-batch.mjs"))
                 .arg(path);
-            host_stack::prepare_child(&mut command, child_stack);
+            host_process::prepare_child(&mut command);
             if !command
                 .status()
                 .map_err(|e| format!("E_HOST Node: {e}"))?

@@ -1395,300 +1395,6 @@ fn heap_type(kind: &TypeKind) -> bool {
 // Legacy runtime algorithms expressed as ordinary lowered functions. These
 // builders are retained for the first backend split; runtime source replaces
 // them through a separate, sealed compilation contract. They emit no bytes.
-fn allocator() -> Code {
-    // A block stores its byte extent and the next free block before the payload.
-    // First fit reuses released blocks. The memory grows only when none fits.
-    let mut b = Code::words(8);
-    get(&mut b, 0);
-    constant(&mut b, 7);
-    b.push(Instruction::Scalar(ScalarOp::I64Add));
-    tee(&mut b, 1);
-    get(&mut b, 0);
-    b.push(Instruction::Scalar(ScalarOp::I64LtU));
-    trap_if(&mut b, 6, 0);
-    get(&mut b, 1);
-    constant(&mut b, -8);
-    b.push(Instruction::Scalar(ScalarOp::I64And));
-    set(&mut b, 0);
-    get(&mut b, 0);
-    b.push(Instruction::Scalar(ScalarOp::I64Eqz));
-    begin_if(&mut b);
-    constant(&mut b, 8);
-    set(&mut b, 0);
-    b.push(Instruction::End);
-    b.extend_from_slice(&[Instruction::GlobalGet(1)]);
-    set(&mut b, 2);
-    constant(&mut b, 0);
-    set(&mut b, 3);
-    b.extend_from_slice(&[Instruction::Block(None), Instruction::Loop(None)]);
-    get(&mut b, 2);
-    b.push(Instruction::Scalar(ScalarOp::I64Eqz));
-    b.extend_from_slice(&[Instruction::Branch {
-        depth: 1,
-        conditional: true,
-    }]);
-    get(&mut b, 2);
-    load(&mut b, 0);
-    get(&mut b, 0);
-    b.push(Instruction::Scalar(ScalarOp::I64GeU));
-    begin_if(&mut b);
-    get(&mut b, 2);
-    load(&mut b, 8);
-    set(&mut b, 4);
-    get(&mut b, 3);
-    b.push(Instruction::Scalar(ScalarOp::I64Eqz));
-    begin_if(&mut b);
-    get(&mut b, 4);
-    b.extend_from_slice(&[Instruction::GlobalSet(1)]);
-    b.push(Instruction::Else);
-    get(&mut b, 3);
-    get(&mut b, 4);
-    store(&mut b, 8);
-    b.push(Instruction::End);
-    get(&mut b, 2);
-    constant(&mut b, 16);
-    b.push(Instruction::Scalar(ScalarOp::I64Add));
-    b.push(Instruction::Return);
-    b.push(Instruction::End);
-    get(&mut b, 2);
-    set(&mut b, 3);
-    get(&mut b, 2);
-    load(&mut b, 8);
-    set(&mut b, 2);
-    b.extend_from_slice(&[
-        Instruction::Branch {
-            depth: 0,
-            conditional: false,
-        },
-        Instruction::End,
-        Instruction::End,
-    ]);
-    b.extend_from_slice(&[Instruction::GlobalGet(0)]);
-    set(&mut b, 1);
-    get(&mut b, 0);
-    constant(&mut b, 16);
-    b.push(Instruction::Scalar(ScalarOp::I64Add));
-    tee(&mut b, 4);
-    get(&mut b, 0);
-    b.push(Instruction::Scalar(ScalarOp::I64LtU));
-    trap_if(&mut b, 6, 0);
-    get(&mut b, 1);
-    get(&mut b, 4);
-    b.push(Instruction::Scalar(ScalarOp::I64Add));
-    tee(&mut b, 5);
-    get(&mut b, 1);
-    b.push(Instruction::Scalar(ScalarOp::I64LtU));
-    trap_if(&mut b, 6, 0);
-    get(&mut b, 5);
-    constant(&mut b, 65535);
-    b.push(Instruction::Scalar(ScalarOp::I64Add));
-    tee(&mut b, 6);
-    get(&mut b, 5);
-    b.push(Instruction::Scalar(ScalarOp::I64LtU));
-    trap_if(&mut b, 6, 0);
-    get(&mut b, 6);
-    constant(&mut b, 16);
-    b.push(Instruction::Scalar(ScalarOp::I64ShrU));
-    set(&mut b, 6);
-    get(&mut b, 6);
-    b.extend_from_slice(&[Instruction::MemorySize]);
-    b.push(Instruction::Scalar(ScalarOp::I64GtU));
-    begin_if(&mut b);
-    // Capacity grows geometrically. A host may refuse spare pages while the
-    // exact request still fits, so a failed reservation retries only the need.
-    // This amortizes memory.grow and its host/GC work without a target quota.
-    b.extend_from_slice(&[Instruction::MemorySize]);
-    tee(&mut b, 7);
-    constant(&mut b, 2);
-    b.push(Instruction::Scalar(ScalarOp::I64Mul));
-    tee(&mut b, 8);
-    get(&mut b, 7);
-    b.push(Instruction::Scalar(ScalarOp::I64LtU));
-    get(&mut b, 8);
-    get(&mut b, 6);
-    b.push(Instruction::Scalar(ScalarOp::I64LtU));
-    b.push(Instruction::Scalar(ScalarOp::I32Or));
-    begin_if(&mut b);
-    get(&mut b, 6);
-    set(&mut b, 8);
-    b.push(Instruction::End);
-    get(&mut b, 8);
-    get(&mut b, 7);
-    b.push(Instruction::Scalar(ScalarOp::I64Sub));
-    b.extend_from_slice(&[Instruction::MemoryGrow]);
-    constant(&mut b, -1);
-    b.push(Instruction::Scalar(ScalarOp::I64Eq));
-    begin_if(&mut b);
-    get(&mut b, 6);
-    get(&mut b, 7);
-    b.push(Instruction::Scalar(ScalarOp::I64Sub));
-    b.extend_from_slice(&[Instruction::MemoryGrow]);
-    constant(&mut b, -1);
-    b.push(Instruction::Scalar(ScalarOp::I64Eq));
-    trap_if(&mut b, 6, 0);
-    b.push(Instruction::End);
-    b.push(Instruction::End);
-    get(&mut b, 5);
-    b.extend_from_slice(&[Instruction::GlobalSet(0)]);
-    get(&mut b, 1);
-    get(&mut b, 0);
-    store(&mut b, 0);
-    get(&mut b, 1);
-    constant(&mut b, 0);
-    store(&mut b, 8);
-    get(&mut b, 1);
-    constant(&mut b, 16);
-    b.push(Instruction::Scalar(ScalarOp::I64Add));
-    b.push(Instruction::End);
-    b
-}
-fn deallocator() -> Code {
-    let mut b = Code::words(1);
-    get(&mut b, 0);
-    b.push(Instruction::Scalar(ScalarOp::I64Eqz));
-    begin_if(&mut b);
-    constant(&mut b, 0);
-    b.push(Instruction::Return);
-    b.push(Instruction::End);
-    get(&mut b, 0);
-    constant(&mut b, 16);
-    b.push(Instruction::Scalar(ScalarOp::I64Sub));
-    set(&mut b, 1);
-    get(&mut b, 1);
-    b.extend_from_slice(&[Instruction::GlobalGet(1)]);
-    store(&mut b, 8);
-    get(&mut b, 1);
-    b.extend_from_slice(&[Instruction::GlobalSet(1)]);
-    constant(&mut b, 0);
-    b.push(Instruction::End);
-    b
-}
-
-// Validate a shared byte slice before creating a text view. Continuation state
-// encodes the shortest form, excludes surrogates, and caps scalars at U+10FFFF.
-// The byte slots and extent are already covered by checked slice construction.
-fn utf8_validator() -> Code {
-    // 0=input, 1=data, 2=length, 3=index, 4=remaining, 5=low, 6=high, 7=byte.
-    let mut b = Code::words(7);
-    get(&mut b, 0);
-    load(&mut b, 0);
-    set(&mut b, 1);
-    get(&mut b, 1);
-    load(&mut b, 8);
-    set(&mut b, 2);
-    get(&mut b, 1);
-    load(&mut b, 0);
-    set(&mut b, 1);
-    b.extend_from_slice(&[Instruction::Block(None), Instruction::Loop(None)]);
-    get(&mut b, 3);
-    get(&mut b, 2);
-    b.push(Instruction::Scalar(ScalarOp::I64GeU));
-    b.extend_from_slice(&[Instruction::Branch {
-        depth: 1,
-        conditional: true,
-    }]);
-    get(&mut b, 1);
-    get(&mut b, 3);
-    b.push(Instruction::Scalar(ScalarOp::I64Add));
-    load_value(
-        &mut b,
-        Storage {
-            bytes: 1,
-            signed: false,
-        },
-        0,
-    );
-    set(&mut b, 7);
-    get(&mut b, 4);
-    constant(&mut b, 0);
-    b.push(Instruction::Scalar(ScalarOp::I64Ne));
-    begin_if(&mut b);
-    get(&mut b, 7);
-    get(&mut b, 5);
-    b.push(Instruction::Scalar(ScalarOp::I64LtU));
-    get(&mut b, 7);
-    get(&mut b, 6);
-    b.push(Instruction::Scalar(ScalarOp::I64GtU));
-    b.push(Instruction::Scalar(ScalarOp::I32Or));
-    begin_if(&mut b);
-    constant(&mut b, 0);
-    b.push(Instruction::Return);
-    b.push(Instruction::End);
-    get(&mut b, 4);
-    constant(&mut b, 1);
-    b.push(Instruction::Scalar(ScalarOp::I64Sub));
-    set(&mut b, 4);
-    constant(&mut b, 128);
-    set(&mut b, 5);
-    constant(&mut b, 191);
-    set(&mut b, 6);
-    b.push(Instruction::Else);
-    get(&mut b, 7);
-    constant(&mut b, 128);
-    b.push(Instruction::Scalar(ScalarOp::I64GeU));
-    begin_if(&mut b);
-    constant(&mut b, 128);
-    set(&mut b, 5);
-    constant(&mut b, 191);
-    set(&mut b, 6);
-    for (low, high, remaining) in [(194, 223, 1), (224, 239, 2), (240, 244, 3)] {
-        get(&mut b, 7);
-        constant(&mut b, low);
-        b.push(Instruction::Scalar(ScalarOp::I64GeU));
-        get(&mut b, 7);
-        constant(&mut b, high);
-        b.push(Instruction::Scalar(ScalarOp::I64LeU));
-        b.push(Instruction::Scalar(ScalarOp::I32And));
-        begin_if(&mut b);
-        constant(&mut b, remaining);
-        set(&mut b, 4);
-        if remaining > 1 {
-            for (first, bound, local) in if remaining == 2 {
-                [(224, 160, 5), (237, 159, 6)]
-            } else {
-                [(240, 144, 5), (244, 143, 6)]
-            } {
-                get(&mut b, 7);
-                constant(&mut b, first);
-                b.push(Instruction::Scalar(ScalarOp::I64Eq));
-                begin_if(&mut b);
-                constant(&mut b, bound);
-                set(&mut b, local);
-                b.push(Instruction::End);
-            }
-        }
-        b.push(Instruction::Else);
-    }
-    constant(&mut b, 0);
-    b.push(Instruction::Return);
-    b.extend_from_slice(&[
-        Instruction::End,
-        Instruction::End,
-        Instruction::End,
-        Instruction::End,
-        Instruction::End,
-    ]);
-    get(&mut b, 3);
-    constant(&mut b, 1);
-    b.push(Instruction::Scalar(ScalarOp::I64Add));
-    set(&mut b, 3);
-    b.extend_from_slice(&[
-        Instruction::Branch {
-            depth: 0,
-            conditional: false,
-        },
-        Instruction::End,
-        Instruction::End,
-    ]);
-    get(&mut b, 4);
-    b.extend_from_slice(&[
-        Instruction::Scalar(ScalarOp::I64Eqz),
-        Instruction::Scalar(ScalarOp::I64ExtendI32U),
-        Instruction::End,
-    ]);
-    b
-}
-
 fn copy_fields(
     b: &mut Code,
     program: &KProgram,
@@ -1842,101 +1548,6 @@ fn copy_helper(program: &KProgram, runtime: usize, layout: &Layouts, ty: usize) 
         _ => unreachable!(),
     }
     get(&mut b, 1);
-    b.push(Instruction::End);
-    b
-}
-
-// A cleanup frame is { value, type, next_child, child_type }, each one i64.
-// One growable stack holds the active depth-first path. The dispatcher calls a
-// resumable step; zero means complete, otherwise the result is the next child.
-// A custom destructor is an ordinary call before the first child. Its &mut self
-// points at the value slot, which remains stable until that call returns.
-// Reentrant cleanup gets its own stack.
-fn drop_dispatcher(runtime: usize) -> Code {
-    // 0 base, 1 top byte offset, 2 capacity bytes, 3 child, 4 child type,
-    // 5 replacement base, 6 replacement capacity, 7 current frame.
-    let mut b = Code::words(7);
-    constant(&mut b, 32);
-    set(&mut b, 2);
-    b.extend_from_slice(&[Instruction::Loop(None)]);
-    get(&mut b, 0);
-    get(&mut b, 1);
-    b.push(Instruction::Scalar(ScalarOp::I64Add));
-    tee(&mut b, 7);
-    get(&mut b, 7);
-    load(&mut b, 8);
-    b.extend_from_slice(&[Instruction::CallIndirect(Signature::words(1))]); // call_indirect (i64) -> i64, table 0
-    set(&mut b, 3);
-    get(&mut b, 3);
-    b.push(Instruction::Scalar(ScalarOp::I64Eqz));
-    begin_if(&mut b);
-    get(&mut b, 1);
-    b.push(Instruction::Scalar(ScalarOp::I64Eqz));
-    begin_if(&mut b);
-    get(&mut b, 0);
-    call(&mut b, FREE + runtime);
-    b.push(Instruction::Return);
-    b.push(Instruction::End);
-    get(&mut b, 1);
-    constant(&mut b, 32);
-    b.push(Instruction::Scalar(ScalarOp::I64Sub));
-    set(&mut b, 1);
-    b.push(Instruction::Else);
-    get(&mut b, 7);
-    load(&mut b, 24);
-    set(&mut b, 4);
-    get(&mut b, 1);
-    constant(&mut b, 32);
-    b.push(Instruction::Scalar(ScalarOp::I64Add));
-    set(&mut b, 1);
-    get(&mut b, 1);
-    get(&mut b, 2);
-    b.push(Instruction::Scalar(ScalarOp::I64Eq));
-    begin_if(&mut b);
-    get(&mut b, 2);
-    constant(&mut b, 2);
-    b.push(Instruction::Scalar(ScalarOp::I64Mul));
-    tee(&mut b, 6);
-    get(&mut b, 2);
-    b.push(Instruction::Scalar(ScalarOp::I64LtU));
-    trap_if(&mut b, 6, 0);
-    get(&mut b, 6);
-    call(&mut b, ALLOC + runtime);
-    set(&mut b, 5);
-    get(&mut b, 5);
-    get(&mut b, 0);
-    get(&mut b, 2);
-    b.extend_from_slice(&[Instruction::MemoryCopy]);
-    get(&mut b, 0);
-    call(&mut b, FREE + runtime);
-    b.push(Instruction::Drop);
-    get(&mut b, 5);
-    set(&mut b, 0);
-    get(&mut b, 6);
-    set(&mut b, 2);
-    b.push(Instruction::End);
-    get(&mut b, 0);
-    get(&mut b, 1);
-    b.push(Instruction::Scalar(ScalarOp::I64Add));
-    set(&mut b, 7);
-    get(&mut b, 7);
-    get(&mut b, 3);
-    store(&mut b, 0);
-    get(&mut b, 7);
-    get(&mut b, 4);
-    store(&mut b, 8);
-    get(&mut b, 7);
-    constant(&mut b, 0);
-    store(&mut b, 16);
-    b.push(Instruction::End);
-    b.extend_from_slice(&[
-        Instruction::Branch {
-            depth: 0,
-            conditional: false,
-        },
-        Instruction::End,
-    ]);
-    constant(&mut b, 0);
     b.push(Instruction::End);
     b
 }
@@ -2434,7 +2045,10 @@ fn function_body(
 }
 /// Apply representation, cleanup and runtime contracts exactly once. Encoders
 /// consume the resulting functions and memory operations without consulting K.
-pub fn lower(checked: &CheckedProgram) -> Result<Program, String> {
+pub fn lower(
+    checked: &CheckedProgram,
+    source_runtime: &crate::runtime::Runtime,
+) -> Result<Program, String> {
     let program = checked.program();
     let runtime = usize::from(program.functions.iter().any(|function| {
         function.body.iter().any(|instruction| {
@@ -2460,25 +2074,20 @@ pub fn lower(checked: &CheckedProgram) -> Result<Program, String> {
         }
     }
     let mut functions = Vec::new();
-    for (name, role, code) in [
-        ("memory::allocate", RuntimeFunction::Allocate, allocator()),
-        ("memory::release", RuntimeFunction::Release, deallocator()),
-        (
-            "drop::walk",
-            RuntimeFunction::DropDispatch,
-            drop_dispatcher(runtime),
-        ),
-        (
-            "str::valid_utf8",
-            RuntimeFunction::Utf8Validate,
-            utf8_validator(),
-        ),
+    for (name, role) in [
+        ("memory::allocate", RuntimeFunction::Allocate),
+        ("memory::release", RuntimeFunction::Release),
+        ("drop::walk", RuntimeFunction::DropDispatch),
+        ("str::valid_utf8", RuntimeFunction::Utf8Validate),
     ] {
         functions.push(Function {
             name: name.to_string(),
             signature: Signature::words(1),
             role: FunctionRole::Runtime(role),
-            code,
+            code: Code {
+                locals: Vec::new(),
+                instructions: vec![Instruction::Unreachable, Instruction::End],
+            },
         });
     }
     for function in &program.functions {
@@ -2521,7 +2130,7 @@ pub fn lower(checked: &CheckedProgram) -> Result<Program, String> {
     }
     let minimum_memory_pages = texts.pages()?;
     let heap_start = texts.heap_start()?;
-    Ok(Program {
+    let mut lowered = Program {
         layout,
         imports: if runtime == 0 {
             Vec::new()
@@ -2568,7 +2177,9 @@ pub fn lower(checked: &CheckedProgram) -> Result<Program, String> {
         trap_code_global: 2,
         trap_line_global: 3,
         trap_messages: messages,
-    })
+    };
+    source_runtime.link(&mut lowered)?;
+    Ok(lowered)
 }
 
 /// Lower the checked scalar source of the sealed runtime without recursively
