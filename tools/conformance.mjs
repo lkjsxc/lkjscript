@@ -82,7 +82,20 @@ for(const c of cases.filter(c=>c.rust&&c.kind!=='run'&&c.kind!=='output')){
   await run('rustc',[...negativeFlags,negativeSource,'-o',path.join(out,c.id+'.rmeta')],{encoding:null})
  ));
 }
-const actualRoutes = await runRoutes(binary,cases.map(c=>({path:path.join(fixtures,c.file),entry:c.entry,mode:c.kind==='reject'?'check':'run'})),{engines,output:out,encoding:null});
+const jobs = Number(process.env.LKJ_CONFORMANCE_JOBS || 1);
+const batchStarted = performance.now();
+const actualRoutes = await runRoutes(binary,cases.map(c=>({path:path.join(fixtures,c.file),entry:c.entry,mode:c.kind==='reject'?'check':'run'})),{engines,output:out,encoding:null,jobs});
+const batchSeconds = (performance.now() - batchStarted) / 1000;
+for (const engine of engines) {
+    fs.writeFileSync(path.join(out, 'results-' + engine + '.jsonl'), actualRoutes[engine].map(result => JSON.stringify({
+        index: result.index, id: cases[result.index].id, engine, checkStatus: result.checkStatus,
+        status: result.status, stdoutHex: result.stdout.toString('hex'),
+        stderrHex: result.programStderr.toString('hex'), diagnostic: result.stderr.toString(),
+        signal: result.signal, error: result.error ? {message: result.error.message, code: result.error.code} : null,
+    })).join('\n') + (cases.length ? '\n' : ''));
+}
+fs.writeFileSync(path.join(out, 'batch-summary.json'), JSON.stringify({jobs,cases:cases.length,engines,batchSeconds},null,2)+'\n');
+process.stdout.write('conformance batch: ' + cases.length + ' cases, ' + jobs + ' workers, ' + batchSeconds.toFixed(3) + ' s\n');
 for (const engine of engines) {
 const actualResults = actualRoutes[engine];
 const failures = [], pending = [];

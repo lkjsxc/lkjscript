@@ -4,7 +4,7 @@ import { run } from './process.mjs';
 
 let serial = 0;
 // Compilation and lowering are shared. Execution state and results never are.
-export async function runRoutes(binary, cases, {
+async function runShard(binary, cases, {
     engines = ['native', 'k'],
     output = 'target/batch-input',
     encoding = 'utf8',
@@ -71,6 +71,45 @@ export async function runRoutes(binary, cases, {
     }
     return routes;
 }
+// A shard owns its process and local protocol indices. Merge only by the
+// original input index, never by worker completion order.
+export async function runRoutes(binary, cases, {
+    jobs = 1,
+    engines = ['native', 'k'],
+    encoding = 'utf8',
+    ...options
+} = {}) {
+    if (!Number.isSafeInteger(jobs) || jobs < 1) throw new Error('batch jobs must be a positive integer');
+    if (!engines.length || new Set(engines).size !== engines.length
+        || engines.some(engine => !['native', 'k'].includes(engine))) {
+        throw new Error('batch engines must be distinct names from native,k');
+    }
+    const routes = Object.fromEntries(engines.map(engine => [engine, new Array(cases.length)]));
+    if (!cases.length) return routes;
+    const shards = Array.from({length: Math.min(jobs, cases.length)}, () => []);
+    for (let index = 0; index < cases.length; index++) shards[index % shards.length].push(index);
+    const outcomes = await Promise.allSettled(shards.map(indices => runShard(binary,
+        indices.map(index => cases[index]), {...options, engines, encoding})));
+    for (let shard = 0; shard < shards.length; shard++) {
+        const indices = shards[shard], outcome = outcomes[shard];
+        for (const engine of engines) {
+            for (let local = 0; local < indices.length; local++) {
+                const index = indices[local];
+                routes[engine][index] = outcome.status === 'fulfilled'
+                    ? {...outcome.value[engine][local], index}
+                    : {
+                        index, engine, checkStatus: null, status: null,
+                        stdout: encoding ? '' : Buffer.alloc(0),
+                        programStderr: encoding ? '' : Buffer.alloc(0),
+                        stderr: encoding ? '' : Buffer.alloc(0), signal: null,
+                        error: outcome.reason instanceof Error ? outcome.reason : new Error(String(outcome.reason)),
+                    };
+            }
+        }
+    }
+    return routes;
+}
+
 export async function runCases(binary, cases, { engine = 'k', ...options } = {}) {
     const routes = await runRoutes(binary, cases, { ...options, engines: [engine] });
     return routes[engine];

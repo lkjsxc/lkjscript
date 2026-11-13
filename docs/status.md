@@ -1,70 +1,68 @@
 # Status — 2026-11-13, outside review (e)
 
-The production K compiler and its World driver now pass the complete source
-pipeline: **833 source-body attempts, 2,978 instantiated K bodies and 200,616 K
-instructions, with zero unsupported, blocked or semantic diagnostics**. The
-native operand cache, compact array repeats and unreachable-function removal
-are implemented. Rust still builds B0; kc1/kc2 follow the allocation work next.
+The production K compiler has produced **byte-identical kc1, kc2 and kc3** from
+its own K input. Whole-corpus native-compiler parity is the next observation.
+Allocator ratios, default execution resources, conformance sharding and direct
+K mutation are implemented. The joint gate passes in **30.268 seconds**.
 
 ## Counted checkpoint
 
-| Observation | Result | Reproduce |
+| Observation | Result | Reproduce / record |
 | --- | --- | --- |
-| Recorded first ownership run | 12 E_BORROW, 0 unsupported; 823 source-body attempts | observations/2026-11-13e-first-ownership.txt |
-| Current World compiler driver | Zero diagnostics; 2,978 K bodies / 200,616 instructions | LKJSCRIPT_TIMINGS=1 target/release/lkjscript check --census src/kc_main.rs |
-| Source ownership repairs | 26 source sites across the 12 initially failing bodies; no ownership rule change | observations/2026-11-13e-ownership-rewrites.json |
-| Native changes on fixed K inputs | All 7 values/output agree; median of 3 runs: fib 336→191 ms, sort 1,927→1,172 ms, map 2,492→1,700 ms | observations/2026-11-13e-encoder.json |
-| Hello size | ELF 9,393,606→83,398 bytes; K 828,726→95,496 bytes | observations/2026-11-14-array-repeat.json |
-| Repeat representation | Both 16 and 8,192 elements: 6 locals, 8 instructions, 1 repeat intrinsic | cargo test --test array_repeat |
-| World driver adapter | 16 observations: 1 check success, 12 error cases, 3 Cargo-kc-identical artifacts | cargo test --test kc_world |
-| Full gate | Green, 55.678 s; 421 Rust tests, all-target Clippy clean | bash tools/check.sh |
+| First ownership verdict, recorded before repairs | 12 E_BORROW; 0 declaration/type blockers; 823 source-body attempts | observations/2026-11-13e-first-ownership.txt |
+| Current World compiler source | 833 source-body attempts; 2,982 K bodies; 200,997 instructions; zero diagnostics | target/release/lkjscript check --census src/kc_main.rs |
+| Ownership repairs | 26 sites across the 12 initially failing bodies; ownership rules unchanged | observations/2026-11-13e-ownership-rewrites.json |
+| Preliminary fixed point | kc1 = kc2 = kc3, 16,712,946 bytes each | target/selfhost-observation/summary.json |
+| Same own-K emission, first manual sample | Cargo K compiler 0.31 s / 117 MiB; native kc1 40.81 s / 300 MiB | target/selfhost/cargo-kc.time; target/selfhost/kc2.time |
+| Native encoder on fixed K | 7 values/output agree; median fib 336→191 ms, sort 1,927→1,172 ms, map 2,492→1,700 ms | observations/2026-11-13e-encoder.json |
+| Hello size | ELF 9,393,606→83,398 bytes; K 828,726→95,496 bytes at step 2 | observations/2026-11-14-array-repeat.json |
+| Plain run memory | 20 MB repeated Vec, 100 MB pushes and 200 MB stdin succeed | observations/2026-11-13e-memory.json |
+| Explicit-budget memory | 100 MB pushes fit 256 MiB AS; 200 MB stdin fits 512 MiB AS | observations/2026-11-13e-memory.json |
+| Warm conformance batch | 27.922 s serial→8.310 s with 4 workers; all 887 records identical per route | observations/2026-11-14-gate-economy.json |
+| Direct K mutation, seed 1701 / 128 edits | 100 rejected, 23 equal values, 4 equal traps, 1 two-route timeout; zero findings | node tools/generators/k_mutate.mjs target/release/lkjscript 1701 128 |
+| Outside-review recursion mutants | Both mutants now R0008 on both routes; exhaustion locations retained separately | observations/2026-11-13e-memory.json |
+| Full gate | Green, 30.268 s; 425 Rust tests; 17 Node tests; all-target Clippy clean | bash tools/check.sh |
 | Conformance, each route | 883 pass, 4 pending; 573 Rust comparisons | node tools/conformance.mjs |
 | Cargo K compiler parity | 562 verdicts, 64 rejections, 498 identical artifacts, 2 pending | node tools/kc.mjs |
-| World/generators | 91 World observations; no accepted disagreements, one known conservative ownership rejection | bash tools/check.sh |
+| World / source generators | 91 World observations; no accepted disagreements; one known conservative ownership rejection | bash tools/check.sh |
 
-The first 823 count records source-body attempts, not instantiated K functions.
-Each invalid body stops at its first diagnostic; the twelve were the first
-verdict, recorded before fixing them. Current counts include the World entry
-and compact repeats. Raw observations remain under observations/.
+Source-body attempts and instantiated K bodies are different counts. The first
+twelve errors were saved before any ownership repair; they were not a forecast
+of all edit sites. Raw records and prior checkpoints remain in observations/.
 
 ## Decisions
 
 Facts use an owned packed bit vector; immutable checker tables use owned vectors.
 Rare compiler forms were rewritten by the two-way rule. Ordinary source forms
-needed by the compiler were added through existing K and source-library code:
-shared primitive operators, checked mixed-width shifts, Result ? from &str to
-String, structural ordering, collection operations, text/slice iteration and
-parsing. The Unicode constructor and compact array-repeat intrinsic have exact
-checker contracts and independent K-machine implementations.
+needed by the compiler were implemented through existing K and source library
+code. The Unicode constructor and compact array-repeat intrinsic have exact
+checker contracts and independent machine implementations.
 
-The native encoder caches only the top operand and flushes at control/call
-boundaries. Reachability starts at the selected entry and all table targets,
-then follows direct calls. It preserves indices/signatures and omits dead code.
-Every input K body is still checked before lowering; this is not a separate
-validator for arbitrary malformed lower-only programs.
+The native encoder caches the top operand and emits only functions reachable
+from the entry or an indirect-call table target. Every input K body is checked
+first. Array repeats evaluate their seed once and physically copy Copy values;
+they do not invoke Clone. Zero/one-element behavior is preserved.
 
-Array repeats evaluate the seed once, physically copy Copy values and transfer
-the original last. They do not invoke Clone. Zero/one-element behavior remains
-unchanged. The World compiler entry shares all nine production modules with B0;
-its inputs are explicit relative program-K/runtime-K paths and its output is ELF
-on stdout. Adapter tests do not establish self-compilation.
+Allocator classes now describe payload capacity, with the header separate. Tip
+blocks grow in place; other growth transfers storage through source reallocate.
+Native startup maps the selected stack first and gives the heap the remainder.
+Plain run inherits the caller's address-space limit. LKJ_RUN_STACK_BYTES is
+independent and preserves tighter inherited limits. The K model charges actual
+frame/root-cell storage; array and container payloads stay on the heap.
+
+The gate reserves each suite's internal workers against one total. Direct K
+mutations use saved seeds, edits, input/binary hashes and independent route
+processes. Timeouts and one-sided resource exhaustion remain unresolved
+observations; they are not counted as semantic agreement.
 
 ## Next obligations
 
-Fix payload size classes, tip growth and the stack/heap split. Remove the
-runner's small default address-space quotas and give stack extent its own
-control while preserving tighter inherited operator limits. Ordinary programs
-whose data fits comfortably in memory must run under the default.
+Finish whole-corpus kc1 verdict/ELF parity and publish the fixed-point costs
+beside B0. Profile the actual self-build, then remove the largest measured cost
+through rechecked K-to-K transformations where appropriate. Keep the encoder
+small. Measure the front-end census before choosing a port or a rewrite with
+B0 K-text identity; no unrelated language-width work precedes that decision.
 
-Then shard conformance, adopt direct K mutation, and align unbounded-recursion
-resource classification. Build kc1, compare its verdicts/bytes with B0, build
-kc2 and measure the fixed point beside B0 in time and peak memory.
-
-Afterward profile kc, keeping substantial optimization in rechecked K-to-K
-passes. Measure the front-end census before choosing a port or a rewrite with
-B0 K-text identity. No unrelated front-end width work precedes these needs.
-
-The native 256 MiB / worker 512 MiB defaults and quarter-extent heap split still
-exist at this checkpoint. Runtime trap filenames also lose source-file
-provenance at the host boundary; lines come from the trapped function. See
-limits.md for current controls. Neither is hidden by the green regression gate.
+Runtime trap filenames still lose source-file provenance at the host boundary;
+lines come from the trapped function. Finite resource exhaustion may occur at
+different calls on the two representations. These limitations remain explicit.
