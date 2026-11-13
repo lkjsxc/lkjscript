@@ -234,7 +234,7 @@ fn run(functions: Vec<k::Function>, script: &str) {
 #[test]
 fn literal_pool_is_immutable_deduplicated_and_separate_from_heap() {
     let unicode = "nul\0é水😀";
-    let large = "λ".repeat(6000);
+    let large = "λ".repeat(40_000);
     let mut functions = vec![
         literal("empty", ""),
         literal("unicode", unicode),
@@ -314,14 +314,14 @@ fn literal_pool_is_immutable_deduplicated_and_separate_from_heap() {
             const length=Number(view.getBigUint64(header+8,true));
             if(length!==expected.length)throw Error(name+' length '+length);
             if(view.getBigUint64(header+16,true)!==BigInt(length))throw Error('capacity');
-            for(let i=0;i<length;i++)if(view.getBigUint64(data+8*i,true)!==BigInt(expected[i]))throw Error(name+' byte '+i);
-            end=Math.max(end,data+8*length);
+            for(let i=0;i<length;i++)if(view.getUint8(data+i)!==expected[i])throw Error(name+' byte '+i);
+            end=Math.max(end,data+length);
             return pointer;
         }}
         inspect('empty',[]);
         const text=inspect('unicode',{unicode_bytes:?});
         if(inspect('duplicate',{unicode_bytes:?})!==text)throw Error('literal not pooled');
-        inspect('large',Array.from(Buffer.from('λ'.repeat(6000))));
+        inspect('large',Array.from(Buffer.from('λ'.repeat(40000))));
         if(e.memory.buffer.byteLength<131072)throw Error('static data did not initialize extra page');
         const saved=Buffer.from(new Uint8Array(e.memory.buffer,0,end));
         for(let i=0;i<1000;i++){{
@@ -420,7 +420,7 @@ fn runtime_utf8_validation_matches_rust_at_encoding_boundaries() {
         let index=0;
         function verify(bytes){{
             view.setBigUint64(header+8,BigInt(bytes.length),true);
-            for(let i=0;i<bytes.length;i++)view.setBigUint64(data+8*i,BigInt(bytes[i]),true);
+            for(let i=0;i<bytes.length;i++)view.setUint8(data+i,bytes[i]);
             const actual=e['fn:validate'](slot);
             const answer=BigInt((expected[index>>3]>>(index&7))&1);
             if(actual!==answer)throw Error('UTF8 '+bytes+' expected '+answer+' got '+actual);

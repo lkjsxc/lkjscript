@@ -4,6 +4,8 @@ use super::{Builder, Result, a, err, integers, k};
 use std::collections::{BTreeMap, BTreeSet};
 
 type PatternConstructor = (Option<usize>, Vec<(k::Projection, usize)>);
+type PatternMatrix = (Vec<Vec<Option<usize>>>, Vec<usize>);
+type CoverageMemo = BTreeMap<PatternMatrix, bool>;
 
 #[derive(Clone, Copy)]
 pub(super) struct IntegerRange {
@@ -66,6 +68,83 @@ impl PatternPlan {
             }
         }
         false
+    }
+    pub(super) fn tested_places(&self, root: usize, place: k::Place) -> Vec<k::Place> {
+        let mut tested = Vec::new();
+        let mut pending = vec![(root, place)];
+        while let Some((id, place)) = pending.pop() {
+            match &self.nodes[id].kind {
+                PatternKind::Literal(_) | PatternKind::Range(_) => tested.push(place),
+                PatternKind::Product(fields) | PatternKind::Variant { fields, .. } => {
+                    if matches!(self.nodes[id].kind, PatternKind::Variant { .. }) {
+                        tested.push(place.clone());
+                    }
+                    for (projection, child) in fields {
+                        let mut field = place.clone();
+                        field.projections.push(projection.clone());
+                        pending.push((*child, field));
+                    }
+                }
+                PatternKind::Deref(inner) => {
+                    let mut field = place;
+                    field.projections.push(k::Projection::Deref);
+                    pending.push((*inner, field));
+                }
+                PatternKind::Or(alternatives) => {
+                    pending.extend(alternatives.iter().map(|id| (*id, place.clone())));
+                }
+                _ => {}
+            }
+        }
+        tested
+    }
+    /// A shared continuation can bind once when every alternative names the
+    /// same original places. Walking the graph never expands products of ors.
+    pub(super) fn uniform_bindings(&self, root: usize, place: k::Place) -> bool {
+        let bindings: BTreeMap<_, _> = self
+            .bindings(root, place.clone())
+            .into_iter()
+            .map(|binding| (binding.name.clone(), binding))
+            .collect();
+        let mut pending = vec![(root, place)];
+        while let Some((id, place)) = pending.pop() {
+            let node = &self.nodes[id];
+            match &node.kind {
+                PatternKind::Bind {
+                    name,
+                    mutable,
+                    borrow,
+                } => {
+                    let Some(binding) = bindings.get(name) else {
+                        return false;
+                    };
+                    if binding.place != place
+                        || binding.ty != node.ty
+                        || binding.mutable != *mutable
+                        || binding.borrow != *borrow
+                    {
+                        return false;
+                    }
+                }
+                PatternKind::Product(fields) | PatternKind::Variant { fields, .. } => {
+                    for (projection, child) in fields {
+                        let mut child_place = place.clone();
+                        child_place.projections.push(projection.clone());
+                        pending.push((*child, child_place));
+                    }
+                }
+                PatternKind::Deref(inner) => {
+                    let mut child_place = place;
+                    child_place.projections.push(k::Projection::Deref);
+                    pending.push((*inner, child_place));
+                }
+                PatternKind::Or(alternatives) => {
+                    pending.extend(alternatives.iter().map(|id| (*id, place.clone())));
+                }
+                _ => {}
+            }
+        }
+        true
     }
     /// Guard retries retain Rust's left-to-right alternative order. The source
     /// plans remain shared: only the selecting product nodes are constructed.
@@ -255,6 +334,26 @@ impl Builder<'_, '_> {
         ty: usize,
         borrow: Option<bool>,
     ) -> Result<usize> {
+        let root = self.prepare_pattern_inner(plan, pattern, ty, borrow)?;
+        let mut names = BTreeSet::new();
+        for binding in plan.bindings(root, k::Place::local(0)) {
+            if !names.insert(binding.name) {
+                return Err(err(
+                    self.compiler.source.patterns[pattern].span,
+                    "E_TYPE",
+                    "pattern binds a name more than once",
+                ));
+            }
+        }
+        Ok(root)
+    }
+    fn prepare_pattern_inner(
+        &mut self,
+        plan: &mut PatternPlan,
+        pattern: usize,
+        ty: usize,
+        borrow: Option<bool>,
+    ) -> Result<usize> {
         let node = self.compiler.source.patterns[pattern].clone();
         // Match ergonomics follow references only for structural/literal forms.
         if !matches!(
@@ -263,7 +362,7 @@ impl Builder<'_, '_> {
         ) {
             if let k::TypeKind::Ref { inner, mutable } = self.compiler.types[ty].kind {
                 let mode = Some(borrow.unwrap_or(true) && mutable);
-                let child = self.prepare_pattern(plan, pattern, inner, mode)?;
+                let child = self.prepare_pattern_inner(plan, pattern, inner, mode)?;
                 return Ok(plan.add(ty, node.span, PatternKind::Deref(child)));
             }
         }
@@ -351,14 +450,14 @@ impl Builder<'_, '_> {
                         "reference pattern mutability differs",
                     ));
                 }
-                let child = self.prepare_pattern(plan, inner, referent, None)?;
+                let child = self.prepare_pattern_inner(plan, inner, referent, None)?;
                 PatternKind::Deref(child)
             }
             a::Pattern::Or(alternatives) => {
                 let mut roots = Vec::new();
                 let mut signature = None;
                 for alternative in alternatives {
-                    let root = self.prepare_pattern(plan, alternative, ty, borrow)?;
+                    let root = self.prepare_pattern_inner(plan, alternative, ty, borrow)?;
                     let mut names = BTreeMap::new();
                     for binding in plan.bindings(root, k::Place::local(0)) {
                         if names
@@ -411,7 +510,7 @@ impl Builder<'_, '_> {
                 for (index, (pattern, field)) in fields.into_iter().zip(declared).enumerate() {
                     children.push((
                         k::Projection::Field(index),
-                        self.prepare_pattern(plan, pattern, field.ty, borrow)?,
+                        self.prepare_pattern_inner(plan, pattern, field.ty, borrow)?,
                     ));
                 }
                 PatternKind::Product(children)
@@ -501,7 +600,7 @@ impl Builder<'_, '_> {
                     };
                     children.push((
                         projection,
-                        self.prepare_pattern(plan, pattern, field.ty, borrow)?,
+                        self.prepare_pattern_inner(plan, pattern, field.ty, borrow)?,
                     ));
                 }
                 match tag {
@@ -566,7 +665,7 @@ impl Builder<'_, '_> {
                     };
                     children.push((
                         projection,
-                        self.prepare_pattern(plan, pattern, declared[index].ty, borrow)?,
+                        self.prepare_pattern_inner(plan, pattern, declared[index].ty, borrow)?,
                     ));
                 }
                 if !rest && seen.len() != declared.len() {
@@ -581,18 +680,7 @@ impl Builder<'_, '_> {
                 }
             }
         };
-        let id = plan.add(ty, node.span, kind);
-        let mut names = BTreeSet::new();
-        for binding in plan.bindings(id, k::Place::local(0)) {
-            if !names.insert(binding.name) {
-                return Err(err(
-                    node.span,
-                    "E_TYPE",
-                    "pattern binds a name more than once",
-                ));
-            }
-        }
-        Ok(id)
+        Ok(plan.add(ty, node.span, kind))
     }
     fn check_struct_pattern(&mut self, path: &a::Path, ty: usize, span: a::Span) -> Result<()> {
         let target = self
@@ -737,66 +825,132 @@ impl Builder<'_, '_> {
         }
         Ok(result)
     }
-    /// Re-establish selected discriminants at their original places before any
-    /// payload is moved. The false branches are compiler-internal impossibilities.
-    pub(super) fn establish_pattern(
+    pub(super) fn pattern_bindings_share(
+        &self,
+        plan: &PatternPlan,
+        id: usize,
+        place: k::Place,
+    ) -> bool {
+        plan.uniform_bindings(id, place.clone())
+            || plan
+                .bindings(id, place)
+                .iter()
+                .all(|binding| binding.borrow.is_none() && !self.compiler.has_view(binding.ty))
+    }
+
+    fn establish_pattern_tag(&mut self, place: k::Place, tag: usize, line: usize) {
+        let condition = self.temp(k::BOOL);
+        self.emit(
+            k::Op::TagTest {
+                dst: condition,
+                place,
+                variant: tag,
+            },
+            line,
+        );
+        self.emit(k::Op::If { condition }, line);
+        let selected = self.snapshot();
+        self.emit(k::Op::Else, line);
+        self.emit(
+            k::Op::Trap {
+                message: "unreachable selected pattern".to_string(),
+            },
+            line,
+        );
+        self.emit(k::Op::End, line);
+        self.restore(&selected);
+    }
+
+    /// Select each shared or subtree independently, then reach one arm body.
+    /// The destinations carry values without reference origins; reference joins
+    /// are handled only when all alternatives bind the same original places.
+    fn bind_pattern_tree(
         &mut self,
         plan: &PatternPlan,
         id: usize,
         place: k::Place,
+        destinations: &BTreeMap<String, usize>,
+        line: usize,
     ) -> Result<()> {
-        let node = &plan.nodes[id];
-        let line = node.span.line;
-        match &node.kind {
+        match &plan.nodes[id].kind {
+            PatternKind::Bind { name, borrow, .. } => {
+                let value = match borrow {
+                    Some(mutable) => self.borrow(place, *mutable, line)?,
+                    None => self.read(place, line)?,
+                };
+                self.emit(
+                    k::Op::Assign {
+                        place: k::Place::local(destinations[name]),
+                        src: value.0,
+                    },
+                    line,
+                );
+            }
             PatternKind::Deref(inner) => {
                 let mut place = place;
                 place.projections.push(k::Projection::Deref);
-                self.establish_pattern(plan, *inner, place)?;
+                self.bind_pattern_tree(plan, *inner, place, destinations, line)?;
             }
-            PatternKind::Product(fields) => {
-                for (projection, id) in fields {
+            PatternKind::Product(fields) | PatternKind::Variant { fields, .. } => {
+                if let PatternKind::Variant { tag, .. } = &plan.nodes[id].kind {
+                    self.establish_pattern_tag(place.clone(), *tag, line);
+                }
+                for (projection, child) in fields {
                     let mut field = place.clone();
                     field.projections.push(projection.clone());
-                    self.establish_pattern(plan, *id, field)?;
+                    self.bind_pattern_tree(plan, *child, field, destinations, line)?;
                 }
             }
-            PatternKind::Variant { tag, fields } => {
-                let condition = self.temp(k::BOOL);
-                self.emit(
-                    k::Op::TagTest {
-                        dst: condition,
-                        place: place.clone(),
-                        variant: *tag,
-                    },
-                    line,
-                );
-                self.emit(k::Op::If { condition }, line);
-                for (projection, id) in fields {
-                    let mut field = place.clone();
-                    field.projections.push(projection.clone());
-                    self.establish_pattern(plan, *id, field)?;
+            PatternKind::Or(alternatives) => {
+                let start = self.live.len();
+                let mut exit = None;
+                for alternative in alternatives {
+                    let condition = self.pattern_condition(plan, *alternative, place.clone())?;
+                    self.emit(k::Op::If { condition }, line);
+                    let failure = self.snapshot();
+                    self.bind_pattern_tree(plan, *alternative, place.clone(), destinations, line)?;
+                    self.cleanup(start, None, line);
+                    self.written.truncate(start);
+                    self.written.resize(self.function.locals.len(), false);
+                    if let Some(previous) = &exit {
+                        self.merge_carriers(previous);
+                    }
+                    exit = Some(self.snapshot());
+                    self.emit(k::Op::Else, line);
+                    self.restore(&failure);
                 }
-                let selected = self.snapshot();
-                self.emit(k::Op::Else, line);
                 self.emit(
                     k::Op::Trap {
-                        message: "unreachable selected pattern".to_string(),
+                        message: "unreachable selected or-pattern".to_string(),
                     },
                     line,
                 );
-                self.emit(k::Op::End, line);
-                self.restore(&selected);
-            }
-            PatternKind::Or(_) => {
-                return Err(err(
-                    node.span,
-                    "E_K",
-                    "unselected or-pattern reached binding",
-                ));
+                for _ in alternatives {
+                    self.emit(k::Op::End, line);
+                }
+                if let Some(exit) = exit {
+                    self.restore(&exit);
+                }
             }
             _ => {}
         }
         Ok(())
+    }
+    /// A successful pattern only needs witnesses for projections that bind.
+    /// Alternatives may differ in tests while sharing exactly these places.
+    fn establish_bindings(&mut self, bindings: &[PatternBinding], line: usize) {
+        let mut established = BTreeSet::new();
+        for binding in bindings {
+            let mut place = k::Place::local(binding.place.local);
+            for projection in &binding.place.projections {
+                if let k::Projection::VariantField(tag, _) = projection {
+                    if established.insert((place.clone(), *tag)) {
+                        self.establish_pattern_tag(place.clone(), *tag, line);
+                    }
+                }
+                place.projections.push(projection.clone());
+            }
+        }
     }
     pub(super) fn bind_pattern_plan(
         &mut self,
@@ -805,11 +959,22 @@ impl Builder<'_, '_> {
         place: k::Place,
         line: usize,
     ) -> Result<()> {
-        if plan.bindings(id, place.clone()).is_empty() {
-            return Ok(());
+        if plan.has_or(id) && !plan.uniform_bindings(id, place.clone()) {
+            let mut destinations = BTreeMap::new();
+            for binding in plan.bindings(id, place.clone()) {
+                let ty = match binding.borrow {
+                    Some(mutable) => self.compiler.reference(binding.ty, mutable),
+                    None => binding.ty,
+                };
+                let destination = self.local(ty, &binding.name, binding.mutable);
+                destinations.insert(binding.name.clone(), destination);
+                self.bindings.push((binding.name, destination));
+            }
+            return self.bind_pattern_tree(plan, id, place, &destinations, line);
         }
-        self.establish_pattern(plan, id, place.clone())?;
-        for binding in plan.bindings(id, place) {
+        let bindings = plan.bindings(id, place);
+        self.establish_bindings(&bindings, line);
+        for binding in bindings {
             let value = match binding.borrow {
                 Some(mutable) => self.borrow(binding.place, mutable, line)?,
                 None => self.read(binding.place, line)?,
@@ -825,8 +990,9 @@ impl Builder<'_, '_> {
         place: k::Place,
         guard: usize,
         condition: usize,
-        line: usize,
+        tested: &[k::Place],
     ) -> Result<usize> {
+        let line = plan.nodes[id].span.line;
         let result = self.local(k::BOOL, "$guard", true);
         let no = self.pattern_boolean(false, line);
         self.emit(
@@ -841,11 +1007,13 @@ impl Builder<'_, '_> {
         let start = self.live.len();
         let names = self.bindings.len();
         let aliases = self.guard_aliases.clone();
-        self.establish_pattern(plan, id, place.clone())?;
-        for binding in plan.bindings(id, place) {
-            if binding.borrow.is_none() && !super::is_copy(&self.compiler.types, binding.ty) {
-                // The shared loan freezes a by-value guard binding until the
-                // guard succeeds. Name uses still denote its original place.
+        let shells = self.guard_shells.len();
+        let bindings = plan.bindings(id, place);
+        self.establish_bindings(&bindings, line);
+        for binding in bindings {
+            if binding.borrow.is_none() {
+                // Every by-value guard binding is read through a shared loan,
+                // including Copy values. Moving happens only after success.
                 let frozen = self.borrow(binding.place.clone(), false, line)?.0;
                 self.guard_aliases.insert(
                     binding.name,
@@ -873,7 +1041,9 @@ impl Builder<'_, '_> {
                 }
             }
         }
+        self.guard_shells.extend_from_slice(tested);
         let value = self.expr(guard, Some(k::BOOL))?;
+        self.guard_shells.truncate(shells);
         let reached = self.reachable;
         if reached {
             self.emit(
@@ -969,6 +1139,7 @@ impl Builder<'_, '_> {
             plan,
             roots.iter().map(|id| vec![Some(*id)]).collect(),
             vec![ty],
+            &mut CoverageMemo::new(),
         )
     }
     fn pattern_matrix(
@@ -976,6 +1147,38 @@ impl Builder<'_, '_> {
         plan: &PatternPlan,
         mut rows: Vec<Vec<Option<usize>>>,
         types: Vec<usize>,
+        memo: &mut CoverageMemo,
+    ) -> Result<bool> {
+        // Constructor alternatives often reach the very same shared suffix.
+        // Normalize bindings to wildcards so coverage checks that suffix once.
+        for row in &mut rows {
+            for id in row {
+                if id.is_some_and(|id| {
+                    matches!(
+                        plan.nodes[id].kind,
+                        PatternKind::Any | PatternKind::Bind { .. }
+                    )
+                }) {
+                    *id = None;
+                }
+            }
+        }
+        rows.sort();
+        rows.dedup();
+        let key = (rows.clone(), types.clone());
+        if let Some(result) = memo.get(&key) {
+            return Ok(*result);
+        }
+        let result = self.pattern_matrix_inner(plan, rows, types, memo)?;
+        memo.insert(key, result);
+        Ok(result)
+    }
+    fn pattern_matrix_inner(
+        &self,
+        plan: &PatternPlan,
+        mut rows: Vec<Vec<Option<usize>>>,
+        types: Vec<usize>,
+        memo: &mut CoverageMemo,
     ) -> Result<bool> {
         if types.is_empty() {
             return Ok(!rows.is_empty());
@@ -1088,7 +1291,7 @@ impl Builder<'_, '_> {
                 }
                 let mut next_types = fields.iter().map(|(_, ty)| *ty).collect::<Vec<_>>();
                 next_types.extend_from_slice(&types[1..]);
-                if !self.pattern_matrix(plan, specialized, next_types)? {
+                if !self.pattern_matrix(plan, specialized, next_types, memo)? {
                     return Ok(false);
                 }
             }
@@ -1106,7 +1309,7 @@ impl Builder<'_, '_> {
                 .filter(|row| wild(row[0]))
                 .map(|row| row[1..].to_vec())
                 .collect();
-            return self.pattern_matrix(plan, rows, types[1..].to_vec());
+            return self.pattern_matrix(plan, rows, types[1..].to_vec(), memo);
         };
         let mut intervals = Vec::new();
         for row in &rows {
@@ -1155,7 +1358,7 @@ impl Builder<'_, '_> {
                 .filter(|(_, range)| range.is_some_and(|(low, high)| low <= first && first <= high))
                 .map(|(row, _)| row[1..].to_vec())
                 .collect();
-            if !self.pattern_matrix(plan, rows, types[1..].to_vec())? {
+            if !self.pattern_matrix(plan, rows, types[1..].to_vec(), memo)? {
                 return Ok(false);
             }
         }

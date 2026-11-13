@@ -114,7 +114,8 @@ impl Builder<'_, '_> {
         let loops = self
             .loops
             .iter()
-            .map(|_| LoopScope {
+            .map(|scope| LoopScope {
+                synthetic: scope.synthetic,
                 start: 0,
                 range: None,
                 exits: Vec::new(),
@@ -136,6 +137,7 @@ impl Builder<'_, '_> {
                 sub: self.sub.clone(),
                 bindings,
                 guard_aliases: BTreeMap::new(),
+                guard_shells: Vec::new(),
                 active_span: self.active_span,
                 reference_updates: references.clone(),
                 reference_schedules: BTreeMap::new(),
@@ -180,6 +182,7 @@ impl Builder<'_, '_> {
             return Err(err(span, "E_TYPE", "assignment type differs"));
         }
         let place = self.place(place)?;
+        self.guard_write(&place, span)?;
         if place.projections.is_empty()
             && !self.function.locals[place.local].mutable
             && self.written[place.local]

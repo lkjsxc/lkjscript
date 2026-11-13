@@ -98,6 +98,8 @@ fn operation(which: usize, changed: bool) -> k::Op {
         23 => k::Op::Continue,
         24 => k::Op::Return { src: n },
         26 => k::Op::DropIf { place: place(n) },
+        27 => k::Op::BreakTo { depth: n },
+        28 => k::Op::ContinueTo { depth: n },
         _ => k::Op::Trap {
             message: if changed {
                 "changed".to_string()
@@ -160,6 +162,8 @@ fn operation_value(value: &k::Op) -> i64 {
         k::Op::Loop => 1003,
         k::Op::Break => 1004,
         k::Op::Continue => 1005,
+        k::Op::BreakTo { depth } => 1006 + *depth as i64,
+        k::Op::ContinueTo { depth } => 1007 + *depth as i64,
         k::Op::Return { src } => *src as i64,
         k::Op::Trap { message } => message.len() as i64,
     }
@@ -261,7 +265,7 @@ fn model() -> k::Program {
     });
     let mut body: Vec<k::Instruction> = Vec::new();
     let mut index: usize = 0;
-    while index < 27 {
+    while index < 29 {
         body.push(k::Instruction { column: 1,
             op: operation(index, false),
             line: 100 + index,
@@ -376,6 +380,7 @@ pub fn program_snapshot(field: usize) -> i64 {
         Option::None => -1,
         Option::Some(source) => match source {
             k::ReturnSource::Static => -2,
+            k::ReturnSource::Leaves(leaves) => leaves.len() as i64,
             k::ReturnSource::Parameter { index, projections } => {
                 *index as i64 + projections.len() as i64
             }
@@ -383,12 +388,27 @@ pub fn program_snapshot(field: usize) -> i64 {
     }
 }
 
+fn projections_value(projections: &Vec<k::Projection>) -> i64 {
+    let mut result: i64 = 0;
+    let mut cursor: usize = 0;
+    while cursor < projections.len() {
+        result = result + match &projections[cursor] {
+            k::Projection::Deref => 1,
+            k::Projection::Field(value) => *value as i64,
+            k::Projection::VariantField(tag, value) => *tag as i64 + *value as i64,
+            k::Projection::Index(value) => *value as i64,
+        };
+        cursor = cursor + 1;
+    }
+    result
+}
+
 pub fn return_source_snapshot(which: usize) -> i64 {
     let original: Option<k::ReturnSource> = if which == 0 {
         Option::None
     } else if which == 1 {
         Option::Some(k::ReturnSource::Static)
-    } else {
+    } else if which == 2 {
         Option::Some(k::ReturnSource::Parameter {
             index: 17,
             projections: vec![
@@ -398,6 +418,20 @@ pub fn return_source_snapshot(which: usize) -> i64 {
                 k::Projection::Index(5),
             ],
         })
+    } else {
+        let origin = if which == 5 {
+            k::LeafOrigin::Static
+        } else {
+            k::LeafOrigin::Parameter {
+                index: 11,
+                projections: vec![k::Projection::Deref, k::Projection::Field(7)],
+                exact: which == 3,
+            }
+        };
+        Option::Some(k::ReturnSource::Leaves(vec![k::ReturnLeaf {
+            projections: vec![k::Projection::VariantField(2, 9)],
+            origin,
+        }]))
     };
     let copied = original.clone();
     assert!(copied == original);
@@ -407,16 +441,19 @@ pub fn return_source_snapshot(which: usize) -> i64 {
         Option::Some(source) => match source {
             k::ReturnSource::Static => 101,
             k::ReturnSource::Parameter { index, projections } => {
-                let mut result = index as i64;
+                index as i64 + projections_value(&projections)
+            }
+            k::ReturnSource::Leaves(leaves) => {
+                let mut result: i64 = 0;
                 let mut cursor: usize = 0;
-                while cursor < projections.len() {
-                    result = result
-                        + match &projections[cursor] {
-                            k::Projection::Deref => 1,
-                            k::Projection::Field(value) => *value as i64,
-                            k::Projection::VariantField(tag, value) => *tag as i64 + *value as i64,
-                            k::Projection::Index(value) => *value as i64,
-                        };
+                while cursor < leaves.len() {
+                    result = result + projections_value(&leaves[cursor].projections);
+                    result = result + match &leaves[cursor].origin {
+                        k::LeafOrigin::Static => 103,
+                        k::LeafOrigin::Parameter { index, projections, exact } => {
+                            *index as i64 + projections_value(projections) + flag(exact)
+                        }
+                    };
                     cursor = cursor + 1;
                 }
                 result

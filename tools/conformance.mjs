@@ -45,12 +45,17 @@ harness += '_ => std::process::exit(2), } }\n';
 const oracleSource = path.join(out, 'oracle.rs');
 const oracle = path.join(out, 'oracle');
 fs.writeFileSync(oracleSource, harness);
-const referenceResults = await oracleCache({suite:'conformance',harness,flags:'2024 overflow-checks=yes opt-level=1',negative:cases.filter(c=>c.rust&&c.kind!=='run'&&c.kind!=='output').map(c=>[c.id,fs.readFileSync(path.join(fixtures,c.file),'utf8')])},async()=>{
+const referenceResults = await oracleCache({suite:'conformance',harness,flags:'2024 overflow-checks=yes opt-level=1',negative:cases.filter(c=>c.rust&&c.kind!=='run'&&c.kind!=='output').map(c=>[c.id,Boolean(c.world),c.rustCode,fs.readFileSync(path.join(fixtures,c.file),'utf8')])},async()=>{
  const compiled=await run('rustc',['--edition=2024','-C','overflow-checks=yes','-C','opt-level=1','-A','warnings',oracleSource,'-o',oracle]);
  if(!succeeded(compiled))throw new Error('Rust oracle did not build: '+diagnostic(compiled));
  const results={};
  for(const c of cases.filter(c=>c.rust)) {
-  const result=c.kind==='run'||c.kind==='output'?await run(oracle,[c.id],{encoding:null}):await run('rustc',['--edition=2024','--crate-type=lib','--emit=metadata','-A','warnings',path.join(fixtures,c.file),'-o',path.join(out,c.id+'.rmeta')],{encoding:null});
+  let negativeSource=path.join(fixtures,c.file);
+  if(c.kind==='reject'&&c.world){
+   negativeSource=path.join(out,c.id+'.rs');
+   fs.writeFileSync(negativeSource,'mod __lkj_host {\n'+fs.readFileSync(path.join(root,'bridge/output.rs'),'utf8')+'\n}\nmod case {\n'+fs.readFileSync(path.join(fixtures,c.file),'utf8')+'\nuse crate::__lkj_host::{World,Stdout};\n}\n');
+  }
+  const result=c.kind==='run'||c.kind==='output'?await run(oracle,[c.id],{encoding:null}):await run('rustc',['--edition=2024','--crate-type=lib','--emit=metadata','-A','warnings',negativeSource,'-o',path.join(out,c.id+'.rmeta')],{encoding:null});
   results[c.id]=packResult(result);
  }
  return results;
@@ -117,7 +122,7 @@ for (const c of cases) {
         }
     } else if (c.rust) {
         const reference = unpackResult(referenceResults[c.id]);
-        if (succeeded(reference) !== Boolean(c.rustAccept)) {
+        if (succeeded(reference) !== Boolean(c.rustAccept) || (c.rustCode && !reference.stderr.includes('['+c.rustCode+']'))) {
             fail(c.id + ': unexpected Rust oracle verdict: ' + diagnostic(reference));
             continue;
         }

@@ -49,9 +49,14 @@ patterns, reference binding modes, or-patterns and match guards execute in sourc
 order. Failed pattern tests and guards do not move payloads. Guard bindings are
 protected by shared loans until the guard succeeds; mutation or moving an affine
 binding in a guard is rejected. Overlapping or alternatives retry the guard in
-source order. No-binding, unguarded or-pattern products share their source tree.
-General bound/guarded product sharing and irrefutable or-pattern binding remain
-unfinished; status records that code-growth defect.
+source order. Unguarded alternatives with uniform binding paths, and independent
+value-binding choices, share their source tree, including irrefutable let bindings.
+Guards cannot assign or mutably borrow a tested place or its ancestor; unrelated
+untested fields remain writable. Copy bindings are frozen too. A wildcard does
+not inspect storage. Guarded alternative products and nonuniform reference
+binding joins still need shared continuations; status records that code-growth
+defect. Targeted K loop transfers preserve enclosing source loops when lowering
+needs an internal loop; invalid depths reject even in unreachable K.
 
 Enums retain distinct unit, tuple and named-field variant shapes. Named constructors
 evaluate initializers in written order and store payloads in declaration order.
@@ -107,13 +112,16 @@ receivers are cleaned at the end of their statement. Source cannot call Drop
 directly. Traps terminate the program without cleanup or recovery.
 
 References have local, parameter, or immutable static provenance. Mutable
-references are exclusive; fields can be borrowed disjointly. A view aggregate
-contains references from at most one dynamic source root, with static leaves
-allowed alongside it. A projected result names one
-borrowed parameter as its source, using explicit lifetime annotation or Rust
-elision (including receiver elision). A result cannot select between unrelated
-input sources. Static leaves can share a shorter dynamic source lifetime without
-losing their individual provenance. Borrow endings and cleanup are explicit in K.
+references are exclusive; fields can be borrowed disjointly. A view aggregate may
+contain independently rooted reference leaves. Each leaf retains its own source
+and parent dependencies. A result can declare a separate input leaf or immutable
+static origin for every output leaf; exact maps preserve the input referent while
+bounded maps permit its descendants. The checker requires complete, unique leaf
+coverage and validates calls and returns independently. Source rigid T input-to-T
+transport preserves its abstract leaf origins; equal concrete types alone do not
+authorize that correspondence. Named lifetimes map when each source is unique.
+Alternative input choices and repeated generic input candidates remain conservative.
+Borrow endings and cleanup are explicit in K.
 Whole-array/Vec slice projections, view structs and implicit mutable reborrowing
 are implemented.
 
@@ -208,8 +216,8 @@ remains future work.
 The explicit static-lifetime subset covers wholly static function outputs,
 including view aggregates. K records `ReturnSource::Static` and checks every live
 reference leaf. Static constraints on inputs, local annotations, fields, aliases,
-bounds, or mixed static/dynamic result leaves are named unsupported until per-leaf
-lifetime contracts exist. Validation includes unused definitions and dead source.
+bounds, or mixed static/dynamic source result annotations remain named unsupported.
+Direct K can already describe mixed static/dynamic per-leaf result maps. Validation includes unused definitions and dead source.
 Ordinary dynamic outputs may contain static literals with their lifetime shortened.
 A named shared output lifetime with no source input is universal: elaboration
 records an explicit static K contract and the body must satisfy it. Inactive enum
@@ -381,8 +389,11 @@ search. Only CheckedProgram reaches the backend; later stages rely on that gate.
 
 ## Memory and execution
 
-The backend emits memory64 WebAssembly. Integer and pointer slots are i64; f64
-uses its bit representation in slots and canonical NaNs after arithmetic.
+Checked K lowers to target-independent typed operations with layout, calls and
+copy/drop glue explicit. The Wasm encoder consumes this form without consulting K.
+Memory scalars use their natural one-, two-, four- or eight-byte widths; signed
+loads extend correctly. Registers and pointers retain 64-bit representations.
+F64 retains its bit representation and canonical NaNs after arithmetic.
 Collection indexing checks bounds. Traps report a code and source line. The
 reusable first-fit allocator and structural/custom drop release owned fields,
 arrays, boxes and vector elements. Structural cleanup uses an explicit growable
@@ -396,8 +407,9 @@ live values spill into a growing memory64 frame; address-taken values have stabl
 frame slots. The physical register pool is an optimization, not an acceptance
 limit. Source-local count does not determine the permanent Wasm-local count.
 
-Structs use field slots; enums add a tag. Vec and array storage has data, length
-and capacity slots. Whole-storage slice projections borrow that header without a
+Struct payloads align fields at their natural widths; enum payloads additionally
+carry a tag. Vec and array storage has data, length and capacity words, with
+element strides from the one layout contract. A Vec<u8> element occupies one byte. Whole-storage slice projections borrow that header without a
 separate allocation. Moved heap slots are cleared so partial cleanup skips them.
 These layouts are implementation details, not an exposed source API.
 
@@ -492,8 +504,8 @@ required value. Pure programs do not import the output operation.
 The WebAssembly host boundary receives a packed byte pointer, length and source
 line. It checks the entire range without overflowing, copies chunks before
 writing, loops on partial writes and retains no bytes or pointer after returning.
-The current eight-byte scalar layout is packed inside lowering; it is not exposed
-to the host API. Zero-length writes produce no bytes. An invalid range, zero-byte
+Byte storage is already contiguous under the common layout contract; the host
+API does not depend on a source aggregate representation. Zero-length writes produce no bytes. An invalid range, zero-byte
 write or operating-system write failure traps with `R0007` (host output failure).
 Output emitted before any trap remains observable. Traps do not unwind; this is a
 specified departure from Rust panic unwinding. Normal destructor order remains

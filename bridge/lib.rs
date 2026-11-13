@@ -6,7 +6,7 @@ mod language;
 
 pub(crate) use language::facts;
 pub use language::{
-    ast, check, diagnostics, elaborate, encoding, generics, json, k, k_text, names, resolve,
+    ast, check, diagnostics, elaborate, encoding, generics, json, k, k_text, lower, names, resolve,
     source, syntax, wasm,
 };
 

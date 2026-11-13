@@ -761,3 +761,20 @@ fn source_exclusive_leaf_projection_is_a_named_unsupported_boundary() {
         }
     }
 }
+
+#[test]
+fn per_leaf_contract_text_preserves_exact_and_static_sources() {
+    for fixture in [
+        include_str!("conformance/k/per_leaf_transport.k"),
+        include_str!("conformance/k/per_leaf_static_mix.k"),
+    ] {
+        let original = k_text::read(fixture).unwrap();
+        check::check(original.clone()).unwrap();
+        let reparsed = k_text::read(&k_text::write(&original)).unwrap();
+        assert!(
+            original == reparsed,
+            "per-leaf contract text changed meaning"
+        );
+        check::check(reparsed).unwrap();
+    }
+}

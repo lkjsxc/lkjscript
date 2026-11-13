@@ -9,6 +9,7 @@ pub mod generics;
 pub mod json;
 pub mod k;
 pub mod k_text;
+pub mod lower;
 pub mod machine;
 pub mod names;
 pub mod resolve;

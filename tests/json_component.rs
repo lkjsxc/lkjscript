@@ -86,13 +86,7 @@ fn compare_outputs(artifact: &[u8], cases: &[String], outputs: &[Vec<u8>], valid
             const view=new DataView(e.memory.buffer);
             const data=Number(view.getBigUint64(Number(header),true));
             const length=Number(view.getBigUint64(Number(header)+8,true));
-            const bytes=Buffer.alloc(length);
-            for(let i=0;i<length;i++){
-                const byte=view.getBigUint64(data+8*i,true);
-                if(byte>255n)throw Error('nonbyte output');
-                bytes[i]=Number(byte);
-            }
-            return bytes;
+            return Buffer.from(new Uint8Array(e.memory.buffer,data,length));
         }
         function verify(index,expected,input,valid){
             const owner=e['fn:encode_'+index]();

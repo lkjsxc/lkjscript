@@ -178,6 +178,13 @@ pub enum Op {
     Loop,
     Break,
     Continue,
+    /// Select an enclosing lexical loop, counting only loops (zero is nearest).
+    BreakTo {
+        depth: usize,
+    },
+    ContinueTo {
+        depth: usize,
+    },
     Return {
         src: usize,
     },
@@ -191,8 +198,26 @@ pub struct Instruction {
     pub line: usize,
     pub column: usize,
 }
+/// A result reference leaf selects one declared input leaf or static storage.
+#[derive(Clone, PartialEq, Eq)]
+pub enum LeafOrigin {
+    Parameter {
+        index: usize,
+        projections: Vec<Projection>,
+        /// Exact preserves the input referent; bounded permits a descendant.
+        exact: bool,
+    },
+    Static,
+}
+#[derive(Clone, PartialEq, Eq)]
+pub struct ReturnLeaf {
+    pub projections: Vec<Projection>,
+    pub origin: LeafOrigin,
+}
 #[derive(Clone, PartialEq, Eq)]
 pub enum ReturnSource {
+    /// A complete, unique contract for every reference leaf in the result.
+    Leaves(Vec<ReturnLeaf>),
     /// Reference leaves in a parameter value, after the declared dereferences.
     /// Projected sources currently require shared leaves; exclusive reborrows
     /// retain the lifetime of their outer reference.

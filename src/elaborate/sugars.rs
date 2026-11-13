@@ -196,7 +196,7 @@ impl Builder<'_, '_> {
                 "let binding requires an irrefutable pattern",
             ));
         }
-        if plan.has_or(root) {
+        if plan.has_or(root) && !self.pattern_bindings_share(&plan, root, place.clone()) {
             return Err(err(
                 self.compiler.source.patterns[pattern].span,
                 "E_UNSUPPORTED",

@@ -53,6 +53,14 @@ fn equal(a: &Link, b: &Link) -> bool {
     }
 }
 
+fn same_node(a: &Link, b: &Link) -> bool {
+    match (a, b) {
+        (None, None) => true,
+        (Some(a), Some(b)) => Rc::ptr_eq(a, b),
+        _ => false,
+    }
+}
+
 // Combine shared subtrees directly; work is proportional to changed branches.
 // kind: 0 intersection, 1 union, 2 symmetric difference.
 fn combine(a: &Link, b: &Link, kind: u8) -> Link {
@@ -77,14 +85,20 @@ fn combine(a: &Link, b: &Link, kind: u8) -> Link {
                 return if kind == 2 { None } else { a.clone() };
             }
             let node = match (&**left, &**right) {
-                (Node::Word(a), Node::Word(b)) => {
+                (Node::Word(av), Node::Word(bv)) => {
                     let value = match kind {
-                        0 => a & b,
-                        1 => a | b,
-                        _ => a ^ b,
+                        0 => av & bv,
+                        1 => av | bv,
+                        _ => av ^ bv,
                     };
                     if value == 0 {
                         return None;
+                    }
+                    if value == *av {
+                        return a.clone();
+                    }
+                    if value == *bv {
+                        return b.clone();
                     }
                     Node::Word(value)
                 }
@@ -102,6 +116,12 @@ fn combine(a: &Link, b: &Link, kind: u8) -> Link {
                     let right = combine(ar, br, kind);
                     if left.is_none() && right.is_none() {
                         return None;
+                    }
+                    if same_node(&left, al) && same_node(&right, ar) {
+                        return a.clone();
+                    }
+                    if same_node(&left, bl) && same_node(&right, br) {
+                        return b.clone();
                     }
                     Node::Branch { left, right }
                 }
@@ -465,5 +485,40 @@ mod tests {
                 assert_eq!(facts[index], *value);
             }
         }
+    }
+    #[test]
+    fn combinations_match_independent_bits_across_tree_boundaries() {
+        let mut left = Facts::new(257);
+        let mut right = Facts::new(130);
+        for i in 0..257 {
+            left.set(i, i % 3 == 0 || i % 11 == 0);
+        }
+        for i in 0..130 {
+            right.set(i, i % 7 == 0 || i % 11 == 0);
+        }
+        for (kind, actual) in [
+            left.intersection(&right),
+            left.union(&right),
+            left.symmetric_difference(&right),
+        ]
+        .iter()
+        .enumerate()
+        {
+            for i in 0..257 {
+                let a = i % 3 == 0 || i % 11 == 0;
+                let b = i < 130 && (i % 7 == 0 || i % 11 == 0);
+                assert_eq!(
+                    actual[i],
+                    match kind {
+                        0 => a && b,
+                        1 => a || b,
+                        _ => a != b,
+                    }
+                );
+            }
+        }
+        assert!(left == left.union(&left));
+        assert!(left == left.intersection(&left));
+        assert!(!left.symmetric_difference(&left).any());
     }
 }

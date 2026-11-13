@@ -10,6 +10,7 @@ mod generic_check;
 mod inference;
 mod integers;
 mod operators;
+mod origins;
 mod output;
 mod patterns;
 mod sequences;
@@ -574,12 +575,16 @@ impl Compiler<'_> {
     }
     fn return_source(
         &self,
+        source_index: usize,
         source: &a::Function,
         locals: &[k::Local],
         result: usize,
     ) -> Result<Option<k::ReturnSource>> {
         if !self.has_view(result) {
             return Ok(None);
+        }
+        if let Some(leaves) = self.return_leaf_contract(source_index, source, locals, result)? {
+            return Ok(Some(k::ReturnSource::Leaves(leaves)));
         }
         if static_lifetimes::has_static(self.source, source.result) {
             return Ok(Some(k::ReturnSource::Static));
@@ -707,7 +712,7 @@ impl Compiler<'_> {
             });
         }
         let result = self.resolve(source.result, &sub)?;
-        let return_source = self.return_source(&source, &locals, result)?;
+        let return_source = self.return_source(index, &source, &locals, result)?;
         let id = self.functions.len();
         self.instance_names.insert(key, id);
         self.pending_functions.push((
@@ -861,6 +866,7 @@ impl Compiler<'_> {
             sub: instance.substitutions.clone(),
             bindings,
             guard_aliases: BTreeMap::new(),
+            guard_shells: Vec::new(),
             active_span: source.span,
             reference_updates: references.clone(),
             reference_schedules: BTreeMap::new(),
@@ -948,6 +954,7 @@ struct Snapshot {
     dependents: borrow_cleanup::Dependencies,
 }
 struct LoopScope {
+    synthetic: bool,
     start: usize,
     range: Option<(usize, usize, bool)>,
     result: Option<usize>,
@@ -963,6 +970,7 @@ struct Builder<'a, 'b> {
     sub: BTreeMap<String, usize>,
     bindings: Bindings,
     guard_aliases: BTreeMap<String, k::Place>,
+    guard_shells: Vec<k::Place>,
     active_span: a::Span,
     references: Facts,
     reference_updates: Facts,
@@ -1226,14 +1234,20 @@ impl Builder<'_, '_> {
                 self.set_live(*src, false);
                 self.reachable = false;
             }
-            k::Op::Break => {
+            k::Op::Break | k::Op::BreakTo { .. } => {
+                let depth = match op {
+                    k::Op::BreakTo { depth } => depth,
+                    _ => 0,
+                };
                 let state = self.snapshot();
-                if let Some(scope) = self.loops.last_mut() {
+                if let Some(scope) = self.loops.iter_mut().rev().nth(depth) {
                     scope.exits.push(state);
                 }
                 self.reachable = false;
             }
-            k::Op::Continue | k::Op::Trap { .. } => self.reachable = false,
+            k::Op::Continue | k::Op::ContinueTo { .. } | k::Op::Trap { .. } => {
+                self.reachable = false
+            }
             _ => {}
         }
         self.function.body.push(k::Instruction {
@@ -1292,6 +1306,29 @@ impl Builder<'_, '_> {
         self.references.resize(self.function.locals.len(), false);
         self.reachable = true;
     }
+    fn guard_write(&self, place: &k::Place, span: a::Span) -> Result<()> {
+        let protected = self.guard_shells.iter().any(|guarded| {
+            place.local == guarded.local
+                && place.projections.len() <= guarded.projections.len()
+                && place
+                    .projections
+                    .iter()
+                    .zip(&guarded.projections)
+                    .all(|(a, b)| {
+                        a == b
+                            || matches!((a, b), (k::Projection::Index(_), k::Projection::Index(_)))
+                    })
+        });
+        if protected {
+            Err(err(
+                span,
+                "E_BORROW",
+                "cannot change a tested scrutinee place in a match guard",
+            ))
+        } else {
+            Ok(())
+        }
+    }
     fn read(&mut self, place: k::Place, line: usize) -> Result<(usize, usize)> {
         let ty = place_type(&self.compiler.types, self.function, &place).ok_or_else(|| {
             err(
@@ -1315,6 +1352,9 @@ impl Builder<'_, '_> {
         Ok((dst, ty))
     }
     fn borrow(&mut self, place: k::Place, mutable: bool, line: usize) -> Result<(usize, usize)> {
+        if mutable {
+            self.guard_write(&place, self.active_span)?;
+        }
         let ty = place_type(&self.compiler.types, self.function, &place).ok_or_else(|| {
             err(
                 a::Span {
@@ -2181,10 +2221,12 @@ impl Builder<'_, '_> {
                 Ok(result)
             }
             a::Expr::Break(value) => {
-                let scope = self
+                let index = self
                     .loops
-                    .last()
+                    .iter()
+                    .rposition(|scope| !scope.synthetic)
                     .ok_or_else(|| err(node.span, "E_TYPE", "break outside loop"))?;
+                let scope = &self.loops[index];
                 let (start, result, typed) = (scope.start, scope.result, scope.result_typed);
                 if let Some(result) = result {
                     let value = if let Some(value) = value {
@@ -2197,7 +2239,7 @@ impl Builder<'_, '_> {
                     }
                     if !typed {
                         self.function.locals[result].ty = value.1;
-                        self.loops.last_mut().unwrap().result_typed = true;
+                        self.loops[index].result_typed = true;
                     }
                     self.emit(
                         k::Op::Assign {
@@ -2210,18 +2252,19 @@ impl Builder<'_, '_> {
                     return Err(err(node.span, "E_TYPE", "only loop accepts a break value"));
                 }
                 self.cleanup(start, result, line);
-                self.emit(k::Op::Break, line);
+                self.loop_transfer(index, false, line);
                 Ok(self.unit(line))
             }
             a::Expr::Continue => {
-                let start = self
+                let index = self
                     .loops
-                    .last()
-                    .ok_or_else(|| err(node.span, "E_TYPE", "continue outside loop"))?
-                    .start;
+                    .iter()
+                    .rposition(|scope| !scope.synthetic)
+                    .ok_or_else(|| err(node.span, "E_TYPE", "continue outside loop"))?;
+                let start = self.loops[index].start;
                 self.advance_range(line)?;
                 self.cleanup(start, None, line);
-                self.emit(k::Op::Continue, line);
+                self.loop_transfer(index, true, line);
                 Ok(self.unit(line))
             }
             a::Expr::Try(value) => self.try_expr(value, node.span),
@@ -2475,11 +2518,21 @@ impl Builder<'_, '_> {
         self.reachable = first_reachable || second_reachable;
         Ok((result, self.ty(result)))
     }
-    fn advance_range(&mut self, line: usize) -> Result<()> {
-        let (start, range) = match self.loops.last() {
-            Some(scope) => (scope.start, scope.range),
-            None => return Ok(()),
+    fn loop_transfer(&mut self, index: usize, continuing: bool, line: usize) {
+        let depth = self.loops.len() - index - 1;
+        let op = match (continuing, depth) {
+            (false, 0) => k::Op::Break,
+            (true, 0) => k::Op::Continue,
+            (false, depth) => k::Op::BreakTo { depth },
+            (true, depth) => k::Op::ContinueTo { depth },
         };
+        self.emit(op, line);
+    }
+    fn advance_range(&mut self, line: usize) -> Result<()> {
+        let Some(index) = self.loops.iter().rposition(|scope| !scope.synthetic) else {
+            return Ok(());
+        };
+        let (start, range) = (self.loops[index].start, self.loops[index].range);
         if let Some((counter, finish, inclusive)) = range {
             if inclusive {
                 let before = self.snapshot();
@@ -2497,7 +2550,7 @@ impl Builder<'_, '_> {
                 );
                 self.emit(k::Op::If { condition: done }, line);
                 self.cleanup(start, None, line);
-                self.emit(k::Op::Break, line);
+                self.loop_transfer(index, false, line);
                 self.emit(k::Op::End, line);
                 self.restore(&before);
             }
@@ -2546,6 +2599,7 @@ impl Builder<'_, '_> {
         let start = self.live.len();
         let entry = self.snapshot();
         self.loops.push(LoopScope {
+            synthetic: false,
             start,
             range: None,
             result,
@@ -2649,6 +2703,7 @@ impl Builder<'_, '_> {
         self.bindings.push((name, binding));
         let state = self.snapshot();
         self.loops.push(LoopScope {
+            synthetic: false,
             start: first,
             range: Some((counter, finish, inclusive)),
             result: None,
@@ -3846,10 +3901,15 @@ impl Builder<'_, '_> {
         if !self.patterns_exhaustive(&plan, &coverage, ty)? {
             return Err(err(span, "E_TYPE", "match is not exhaustive"));
         }
+        let tested_places = roots
+            .iter()
+            .flat_map(|root| plan.tested_places(*root, original.clone()))
+            .collect::<Vec<_>>();
         let mut entries = Vec::new();
         for (arm, root) in arms.iter().zip(roots) {
             let alternatives = if plan.has_or(root)
-                && (arm.guard.is_some() || !plan.bindings(root, original.clone()).is_empty())
+                && (arm.guard.is_some()
+                    || !self.pattern_bindings_share(&plan, root, original.clone()))
             {
                 plan.alternatives(root)
             } else {
@@ -3879,7 +3939,7 @@ impl Builder<'_, '_> {
                     original.clone(),
                     guard,
                     condition,
-                    arm.span.line,
+                    &tested_places,
                 )?;
             }
             self.emit(k::Op::If { condition }, arm.span.line);
@@ -3906,6 +3966,11 @@ impl Builder<'_, '_> {
                 if !existing && !extended && self.live[original.local] {
                     self.cleanup_place(original.clone(), span.line);
                 }
+                // An arm's new bindings are out of scope here. Preserve the
+                // reassignment history of incoming locals; the match result is
+                // an internal mutable slot and has no source name.
+                self.written.truncate(start);
+                self.written.resize(self.function.locals.len(), false);
                 if let Some(exit) = &exit_state {
                     self.merge_carriers(exit);
                 }
@@ -3923,6 +3988,8 @@ impl Builder<'_, '_> {
                 exhausted = true;
             }
             self.restore(&failure);
+            self.written.truncate(start);
+            self.written.resize(self.function.locals.len(), false);
         }
         self.emit(
             k::Op::Trap {

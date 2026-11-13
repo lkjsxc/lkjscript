@@ -1,0 +1,36 @@
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+fn "probe" 0 3
+local "counter" 3 mut
+local "left" 3 let
+local "one" 3 let
+local "next" 3 let
+local "current" 3 let
+local "limit" 3 let
+local "condition" 1 let
+local "result" 3 let
+@1 int 0 0
+@2 loop
+@3 loop
+@4 read 1 copy 0
+@5 int 2 1
+@6 binary 3 "+" 1 2
+@7 assign 3 0
+@8 read 4 copy 0
+@9 int 5 3
+@10 binary 6 "<" 4 5
+@11 if 6
+@12 continue-to 1
+@13 end
+@14 break-to 1
+@15 end
+@16 end
+@17 read 7 copy 0
+@18 drop 0
+@19 return 7
+endfn

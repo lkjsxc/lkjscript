@@ -1335,5 +1335,454 @@
     "code": "E_BORROW",
     "rust": true,
     "rustAccept": false
+  },
+  {
+    "id": "natural_width",
+    "file": "output/natural_width.rs",
+    "kind": "output",
+    "entry": "main",
+    "ending": "normal",
+    "rust": true,
+    "hex": "01feff046c61796f75740a"
+  },
+  {
+    "id": "or_shared_bindings",
+    "file": "pass/or_shared_bindings.rs",
+    "kind": "run",
+    "value": "84",
+    "rust": false,
+    "rustSkip": "The 32-way nested alternative product exceeds the Rust oracle test envelope; retain this width stress on every lkjscript route and compare its independent expansion."
+  },
+  {
+    "id": "or_binding_reference",
+    "file": "pass/or_binding_reference.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "targeted_loop_transfer",
+    "file": "k/targeted_loop_transfer.k",
+    "kind": "run",
+    "value": "3"
+  },
+  {
+    "id": "invalid_loop_depth",
+    "file": "k/invalid_loop_depth.k",
+    "kind": "reject",
+    "code": "E_K"
+  },
+  {
+    "id": "dead_invalid_loop_depth",
+    "file": "k/dead_invalid_loop_depth.k",
+    "kind": "reject",
+    "code": "E_K"
+  },
+  {
+    "id": "per_leaf_transport",
+    "file": "k/per_leaf_transport.k",
+    "kind": "run",
+    "value": "42"
+  },
+  {
+    "id": "per_leaf_static_mix",
+    "file": "k/per_leaf_static_mix.k",
+    "kind": "run",
+    "value": "42"
+  },
+  {
+    "id": "multi_root_generic_transport",
+    "file": "pass/multi_root_generic_transport.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "per_leaf_wrong_source",
+    "file": "k/per_leaf_wrong_source.k",
+    "kind": "reject",
+    "code": "E_BORROW"
+  },
+  {
+    "id": "per_leaf_duplicate_mapping",
+    "file": "k/per_leaf_duplicate_mapping.k",
+    "kind": "reject",
+    "code": "E_BORROW"
+  },
+  {
+    "id": "per_leaf_missing_mapping",
+    "file": "k/per_leaf_missing_mapping.k",
+    "kind": "reject",
+    "code": "E_BORROW"
+  },
+  {
+    "id": "per_leaf_nonparameter",
+    "file": "k/per_leaf_nonparameter.k",
+    "kind": "reject",
+    "code": "E_BORROW"
+  },
+  {
+    "id": "per_leaf_forged_static",
+    "file": "k/per_leaf_forged_static.k",
+    "kind": "reject",
+    "code": "E_BORROW"
+  },
+  {
+    "id": "per_leaf_local_escape",
+    "file": "k/per_leaf_local_escape.k",
+    "kind": "reject",
+    "code": "E_BORROW"
+  },
+  {
+    "id": "generic_transport_reborrow_parent",
+    "file": "fail/generic_transport_reborrow_parent.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "multi_root_return_swap",
+    "file": "fail/multi_root_return_swap.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "guard_place_boundaries",
+    "file": "pass/guard_place_boundaries.rs",
+    "kind": "run",
+    "value": "126",
+    "rust": true
+  },
+  {
+    "id": "guard_moves_scrutinee",
+    "file": "pass/guard_moves_scrutinee.rs",
+    "kind": "run",
+    "value": "10",
+    "rust": true
+  },
+  {
+    "id": "guard_replaces_scrutinee",
+    "file": "fail/guard_replaces_scrutinee.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "guard_replaces_alias",
+    "file": "fail/guard_replaces_alias.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "guard_changes_tested_field",
+    "file": "fail/guard_changes_tested_field.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "guard_changes_copy_binding",
+    "file": "fail/guard_changes_copy_binding.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "guard_changes_later_test",
+    "file": "fail/guard_changes_later_test.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "guard_moves_then_retests",
+    "file": "fail/guard_moves_then_retests.rs",
+    "kind": "reject",
+    "code": "E_MOVE",
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "review_r01_use_after_conditional_move",
+    "file": "fail/review/r01_use_after_conditional_move.rs",
+    "kind": "reject",
+    "code": "E_MOVE",
+    "rust": true,
+    "rustAccept": false,
+    "world": true,
+    "rustCode": "E0382"
+  },
+  {
+    "id": "review_r02_use_after_move_in_loop",
+    "file": "fail/review/r02_use_after_move_in_loop.rs",
+    "kind": "reject",
+    "code": "E_MOVE",
+    "rust": true,
+    "rustAccept": false,
+    "world": true,
+    "rustCode": "E0382"
+  },
+  {
+    "id": "review_r03_whole_after_partial_move",
+    "file": "fail/review/r03_whole_after_partial_move.rs",
+    "kind": "reject",
+    "code": "E_MOVE",
+    "rust": true,
+    "rustAccept": false,
+    "world": true,
+    "rustCode": "E0382"
+  },
+  {
+    "id": "review_r04_move_out_of_drop_type",
+    "file": "fail/review/r04_move_out_of_drop_type.rs",
+    "kind": "reject",
+    "code": "E_MOVE",
+    "rust": true,
+    "rustAccept": false,
+    "world": true,
+    "rustCode": "E0509"
+  },
+  {
+    "id": "review_r05_replace_while_borrowed",
+    "file": "fail/review/r05_replace_while_borrowed.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false,
+    "world": true,
+    "rustCode": "E0502"
+  },
+  {
+    "id": "review_r06_move_while_borrowed",
+    "file": "fail/review/r06_move_while_borrowed.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false,
+    "world": true,
+    "rustCode": "E0505"
+  },
+  {
+    "id": "review_r07_stdout_moved_while_borrowed",
+    "file": "fail/review/r07_stdout_moved_while_borrowed.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false,
+    "world": true,
+    "rustCode": "E0505"
+  },
+  {
+    "id": "review_r08_drop_moves_field",
+    "file": "fail/review/r08_drop_moves_field.rs",
+    "kind": "reject",
+    "code": "E_MOVE",
+    "rust": true,
+    "rustAccept": false,
+    "world": true,
+    "rustCode": "E0507"
+  },
+  {
+    "id": "review_r09_assign_field_of_moved",
+    "file": "fail/review/r09_assign_field_of_moved.rs",
+    "kind": "reject",
+    "code": "E_MOVE",
+    "rust": true,
+    "rustAccept": false,
+    "world": true,
+    "rustCode": "E0382"
+  },
+  {
+    "id": "review_r10_match_moves_from_borrow",
+    "file": "fail/review/r10_match_moves_from_borrow.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false,
+    "world": true,
+    "rustCode": "E0507"
+  },
+  {
+    "id": "review_r11_index_move",
+    "file": "fail/review/r11_index_move.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false,
+    "world": true,
+    "rustCode": "E0507"
+  },
+  {
+    "id": "review_r12_box_moved_twice",
+    "file": "fail/review/r12_box_moved_twice.rs",
+    "kind": "reject",
+    "code": "E_MOVE",
+    "rust": true,
+    "rustAccept": false,
+    "world": true,
+    "rustCode": "E0382"
+  },
+  {
+    "id": "review_r13_conditional_init_then_use",
+    "file": "fail/review/r13_conditional_init_then_use.rs",
+    "kind": "reject",
+    "code": "E_MOVE",
+    "rust": true,
+    "rustAccept": false,
+    "world": true,
+    "rustCode": "E0381"
+  },
+  {
+    "id": "review_r14_two_mut_world",
+    "file": "fail/review/r14_two_mut_world.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false,
+    "world": true,
+    "rustCode": "E0499"
+  },
+  {
+    "id": "review_r15_two_live_mut_borrows",
+    "file": "fail/review/r15_two_live_mut_borrows.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false,
+    "world": true,
+    "rustCode": "E0499"
+  },
+  {
+    "id": "review_r16_return_ref_to_local",
+    "file": "fail/review/r16_return_ref_to_local.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false,
+    "world": true,
+    "rustCode": "E0515"
+  },
+  {
+    "id": "review_r17_move_in_one_branch_use_in_other_then_after",
+    "file": "fail/review/r17_move_in_one_branch_use_in_other_then_after.rs",
+    "kind": "reject",
+    "code": "E_MOVE",
+    "rust": true,
+    "rustAccept": false,
+    "world": true,
+    "rustCode": "E0382"
+  },
+  {
+    "id": "review_r18_reinit_only_one_branch",
+    "file": "fail/review/r18_reinit_only_one_branch.rs",
+    "kind": "reject",
+    "code": "E_MOVE",
+    "rust": true,
+    "rustAccept": false,
+    "world": true,
+    "rustCode": "E0382"
+  },
+  {
+    "id": "review_r19_break_after_move_then_use",
+    "file": "fail/review/r19_break_after_move_then_use.rs",
+    "kind": "reject",
+    "code": "E_MOVE",
+    "rust": true,
+    "rustAccept": false,
+    "world": true,
+    "rustCode": "E0382"
+  },
+  {
+    "id": "review_r20_partial_move_then_drop_type_field",
+    "file": "fail/review/r20_partial_move_then_drop_type_field.rs",
+    "kind": "reject",
+    "code": "E_MOVE",
+    "rust": true,
+    "rustAccept": false,
+    "world": true,
+    "rustCode": "E0509"
+  },
+  {
+    "id": "review_r21_clone_capability",
+    "file": "fail/review/r21_clone_capability.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "rust": true,
+    "rustAccept": false,
+    "world": true,
+    "rustCode": "E0277"
+  },
+  {
+    "id": "review_r22_copy_capability",
+    "file": "fail/review/r22_copy_capability.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "rust": true,
+    "rustAccept": false,
+    "world": true,
+    "rustCode": "E0204"
+  },
+  {
+    "id": "review_r23_vec_push_while_element_borrowed",
+    "file": "fail/review/r23_vec_push_while_element_borrowed.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false,
+    "world": true,
+    "rustCode": "E0502"
+  },
+  {
+    "id": "review_r24_replace_through_shared",
+    "file": "fail/review/r24_replace_through_shared.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": true,
+    "rustAccept": false,
+    "world": true,
+    "rustCode": "E0308"
+  },
+  {
+    "id": "review_r25_use_after_move_into_pair",
+    "file": "fail/review/r25_use_after_move_into_pair.rs",
+    "kind": "reject",
+    "code": "E_MOVE",
+    "rust": true,
+    "rustAccept": false,
+    "world": true,
+    "rustCode": "E0382"
+  },
+  {
+    "id": "review_r26_mut_borrow_field_then_whole",
+    "file": "fail/review/r26_mut_borrow_field_then_whole.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false,
+    "world": true,
+    "rustCode": "E0505"
+  },
+  {
+    "id": "or_shared_bindings_expanded",
+    "file": "pass/or_shared_bindings_expanded.rs",
+    "kind": "run",
+    "value": "84",
+    "rust": true
+  },
+  {
+    "id": "or_shared_bindings_small",
+    "file": "pass/or_shared_bindings_small.rs",
+    "kind": "run",
+    "value": "84",
+    "rust": true
   }
 ]

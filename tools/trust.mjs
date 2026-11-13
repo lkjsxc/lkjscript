@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 const groups={
  'K contract and safety gate':['src/k.rs','src/check.rs','src/facts.rs'],
- 'Lowering, layout and runtime':['src/lower.rs'],
+ 'Lowering, layout and runtime':['src/lower.rs','src/lower/ir.rs'],
  'Encoding and metadata':['src/wasm.rs','src/encoding.rs','src/json.rs'],
  'Production host boundary':['bridge/main.rs','bridge/lib.rs','bridge/compiler_stack.rs','bridge/run.mjs','bridge/engine.mjs','bridge/worker.mjs','bridge/output.mjs'],
  'Independent K execution model':['src/machine.rs','src/machine/scalar.rs'],

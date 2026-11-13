@@ -809,13 +809,20 @@ impl<H: Host> Machine<'_, H> {
                         }
                     }
                 }
-                Op::Break | Op::Continue => {
+                Op::Break | Op::Continue | Op::BreakTo { .. } | Op::ContinueTo { .. } => {
+                    let depth = match instruction.op {
+                        Op::BreakTo { depth } | Op::ContinueTo { depth } => depth,
+                        _ => 0,
+                    };
                     let control = controls
                         .iter_mut()
                         .rev()
-                        .find(|control| control.1)
-                        .ok_or_else(|| self.invalid("loop transfer outside loop"))?;
-                    if matches!(instruction.op, Op::Break) {
+                        .filter(|control| control.1)
+                        .nth(depth)
+                        .ok_or_else(|| {
+                            self.invalid("loop transfer target is outside enclosing loops")
+                        })?;
+                    if matches!(instruction.op, Op::Break | Op::BreakTo { .. }) {
                         control.3.push(pc);
                     } else {
                         jump[pc] = Some(control.0 + 1);
@@ -1613,7 +1620,7 @@ impl<H: Host> Machine<'_, H> {
                     frame.pc = self.flow[frame.function].as_ref().unwrap().jump[pc].unwrap();
                 }
             }
-            Op::Else | Op::Break | Op::Continue => {
+            Op::Else | Op::Break | Op::Continue | Op::BreakTo { .. } | Op::ContinueTo { .. } => {
                 frame.pc = self.flow[frame.function].as_ref().unwrap().jump[pc]
                     .ok_or_else(|| self.invalid("control transfer has no target"))?;
             }

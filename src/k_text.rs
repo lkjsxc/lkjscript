@@ -361,6 +361,15 @@ fn instruction(words: &[String], line: usize) -> Result<Instruction> {
                 condition: number(words, 2, line)?,
             }
         }
+        "break-to" | "continue-to" => {
+            exact(words, 3, line)?;
+            let depth = number(words, 2, line)?;
+            if words[1] == "break-to" {
+                Op::BreakTo { depth }
+            } else {
+                Op::ContinueTo { depth }
+            }
+        }
         "return" => {
             exact(words, 3, line)?;
             Op::Return {
@@ -437,6 +446,44 @@ pub fn read(text: &str) -> Result<Program> {
                         ty: number(&words, 2, line)?,
                         mutable: flag(&words, 3, "mut", "let", line)?,
                     });
+                }
+                "return-leaf" => {
+                    let pivot = words
+                        .iter()
+                        .position(|word| matches!(word.as_str(), "exact" | "bound" | "static"))
+                        .ok_or_else(|| {
+                            error(line, "return leaf needs exact, bound, or static origin")
+                        })?;
+                    let result = place(&words[..pivot], 1, line)?;
+                    if result.local != 0 {
+                        return Err(error(line, "result place uses root zero"));
+                    }
+                    let origin = if words[pivot] == "static" {
+                        exact(&words, pivot + 1, line)?;
+                        LeafOrigin::Static
+                    } else {
+                        let input = place(&words, pivot + 1, line)?;
+                        LeafOrigin::Parameter {
+                            index: input.local,
+                            projections: input.projections,
+                            exact: words[pivot] == "exact",
+                        }
+                    };
+                    if function.return_source.is_none() {
+                        function.return_source = Some(ReturnSource::Leaves(Vec::new()));
+                    }
+                    match &mut function.return_source {
+                        Some(ReturnSource::Leaves(leaves)) => leaves.push(ReturnLeaf {
+                            projections: result.projections,
+                            origin,
+                        }),
+                        _ => {
+                            return Err(error(
+                                line,
+                                "cannot combine aggregate and per-leaf return contracts",
+                            ));
+                        }
+                    }
                 }
                 "endfn" => {
                     exact(&words, 1, line)?;
@@ -751,6 +798,8 @@ fn write_instruction(text: &mut String, instruction: &Instruction) {
         Op::Loop => text.push_str("loop"),
         Op::Break => text.push_str("break"),
         Op::Continue => text.push_str("continue"),
+        Op::BreakTo { depth } => text.push_str(&format!("break-to {depth}")),
+        Op::ContinueTo { depth } => text.push_str(&format!("continue-to {depth}")),
         Op::Return { src } => text.push_str(&format!("return {src}")),
         Op::Trap { message } => text.push_str(&format!("trap {}", quoted(message))),
     }
@@ -822,12 +871,32 @@ pub fn write(program: &Program) -> String {
                     write_projections(&mut text, projections);
                 }
                 ReturnSource::Static => text.push_str(" from static"),
+                ReturnSource::Leaves(_) => {}
             }
         }
         if function.test {
             text.push_str(" test");
         }
         text.push('\n');
+        if let Some(ReturnSource::Leaves(leaves)) = &function.return_source {
+            for leaf in leaves {
+                text.push_str("return-leaf 0");
+                write_projections(&mut text, &leaf.projections);
+                match &leaf.origin {
+                    LeafOrigin::Static => text.push_str(" static"),
+                    LeafOrigin::Parameter {
+                        index,
+                        projections,
+                        exact,
+                    } => {
+                        text.push_str(if *exact { " exact " } else { " bound " });
+                        text.push_str(&index.to_string());
+                        write_projections(&mut text, projections);
+                    }
+                }
+                text.push('\n');
+            }
+        }
         for local in &function.locals {
             text.push_str(&format!(
                 "local {} {} {}\n",
