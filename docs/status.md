@@ -22,9 +22,10 @@ the existing producer.
 | Warm conformance batch | 27.922 s serial → 8.310 s with 4 workers; all 887 records identical per route | observations/2026-11-14-gate-economy.json |
 | Gate K mutation, seed 1701 / 128 edits | 100 rejected, 23 equal values, 4 equal traps, 1 two-route timeout; zero findings | node tools/generators/k_mutate.mjs target/release/lkjscript 1701 128 |
 | Fresh K mutation, seed 1702 / 1,024 edits | 830 rejected, 173 equal values, 19 equal traps, 2 equal R0008; zero findings or unresolved cases; 685 unique texts | observations/2026-11-14-k-mutation-1702.json |
+| Rust execution worker | 24 direct/mutual recursion observations report R0008 at unchanged budgets; idle mapped space 200,576 → 17,096 KiB | observations/2026-11-13e-host-resources.json |
 | Outside-review recursion mutants | Both mutants now R0008 on both routes; exhaustion locations retained separately | observations/2026-11-13e-memory.json |
 | Front-end census | 55 new module files / 31,703 physical lines plus 9 shared self-built files; temporary valid-Rust probe exposes 310 diagnostics | observations/2026-11-14-frontend-census.json |
-| Final gate | Green, 38.726 s with native-corpus parity running concurrently; 425 Rust tests; 17 Node tests; all-target Clippy clean | bash tools/check.sh |
+| Final local gate | Green, 35.274 s after the CI-discovered host fix; 425 Rust tests; 17 Node tests; all-target Clippy clean | bash tools/check.sh |
 | Conformance, each route | 883 pass, 4 pending; 573 Rust comparisons | node tools/conformance.mjs |
 | World / source generators | 91 World observations; no accepted disagreements; one known conservative ownership rejection | bash tools/check.sh |
 
@@ -50,7 +51,10 @@ place; other growth transfers storage through source reallocate. Native startup
 maps the selected stack first and gives the heap the remainder. Plain run
 inherits the caller's address-space limit; the independent stack control
 preserves tighter inherited limits. The K model charges actual frame/root-cell
-storage, while aggregate and container payloads remain on the heap.
+storage, while aggregate and container payloads remain on the heap. Rust compiler
+threads join before execution. Workers share one glibc arena by default, avoiding
+secondary arena reservation overhead; explicit allocator policy is respected.
+Static model resource diagnostics do not allocate their messages.
 
 The gate reserves internal suite workers against one total. Direct K mutations
 retain seeds, edits, hashes and independent process outcomes. Timeouts and
@@ -58,7 +62,9 @@ one-sided resource exhaustion remain unresolved observations.
 
 ## Next obligation: port the source front end
 
-Retain the current producer's algorithms and their K ordering. The census crossed
+The first untouched producer blocker is resolve::resolve_nodes at
+src/resolve.rs:948: an impl FnMut callback parameter. Retain the producer's
+algorithms and their K ordering. The census crossed
 declaration barriers with a 15-file temporary patch and no deleted bodies; it
 reached 149 E_TYPE, 100 E_UNSUPPORTED, 48 E_BORROW, 8 E_TRAIT and 5 E_NAME.
 That probe is not merged, has no complete K artifact, and has not established

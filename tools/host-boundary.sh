@@ -69,12 +69,15 @@ for engine in native k; do
     [[ ! -s "$work/inherited-$engine.stderr" ]]
     grep -Eq '^Max address space +2147483648 +2147483648 +bytes' "$work/inherited-$engine.stdout"
     grep -Eq '^Max stack size +1048576 +unlimited +bytes' "$work/inherited-$engine.stdout"
+    # Execution has joined the compiler thread.
+    grep -Eq '^Threads:[[:space:]]+1$' "$work/inherited-$engine.stdout"
     env -u LKJ_RUN_MEMORY_BYTES LKJ_RUN_STACK_BYTES=67108864 \
         prlimit --as=2147483648 --stack=1048576:unlimited \
         "$binary" run tests/fixtures/runtime_resource_limits.rs --engine "$engine" \
         > "$work/clamped-$engine.stdout" 2> "$work/clamped-$engine.stderr"
     [[ ! -s "$work/clamped-$engine.stderr" ]]
     grep -Eq '^Max stack size +1048576 +unlimited +bytes' "$work/clamped-$engine.stdout"
+    grep -Eq '^Threads:[[:space:]]+1$' "$work/clamped-$engine.stdout"
 done
 env -u LKJ_RUN_MEMORY_BYTES LKJ_RUN_STACK_BYTES=65536 \
     prlimit --as=2147483648 --stack=1048576:unlimited \
@@ -82,6 +85,7 @@ env -u LKJ_RUN_MEMORY_BYTES LKJ_RUN_STACK_BYTES=65536 \
     > "$work/model-stack.stdout" 2> "$work/model-stack.stderr"
 [[ ! -s "$work/model-stack.stderr" ]]
 grep -Eq '^Max stack size +1048576 +unlimited +bytes' "$work/model-stack.stdout"
+grep -Eq '^Threads:[[:space:]]+1$' "$work/model-stack.stdout"
 # Native-only batches capture guest streams in a Rust worker too. Infinite
 # output must exhaust that explicit process envelope, never the compiler parent.
 printf 'run\t\ttests/fixtures/runtime_output_exhaustion.rs\n' > "$work/output.tsv"

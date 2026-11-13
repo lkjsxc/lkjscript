@@ -161,9 +161,16 @@ pub fn execution_worker() -> Result<Option<std::process::ExitCode>, String> {
     }
     let executable = std::env::current_exe().map_err(|error| format!("E_HOST {error}"))?;
     let mut command = Command::new(executable);
+    command.args(&argv).env("LKJ_EXECUTION_WORKER", "1");
+    // The worker has one active compiler/execution thread at a time. A second
+    // glibc arena can require a large aligned reservation under RLIMIT_AS;
+    // when that reservation fails, tiny allocations can fall back to separate
+    // mappings and can exhaust the budget during source preparation.
+    // Share the process arena unless the operator selected another policy.
+    if std::env::var_os("MALLOC_ARENA_MAX").is_none() {
+        command.env("MALLOC_ARENA_MAX", "1");
+    }
     command
-        .args(&argv)
-        .env("LKJ_EXECUTION_WORKER", "1")
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());

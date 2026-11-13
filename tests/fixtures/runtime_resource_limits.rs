@@ -4,4 +4,7 @@ pub fn main(mut world: World) {
     let bytes = file.read_to_end().unwrap();
     let mut output = world.stdout();
     output.write(&bytes);
+    let mut status = directory.open("status").unwrap();
+    let status_bytes = status.read_to_end().unwrap();
+    output.write(&status_bytes);
 }

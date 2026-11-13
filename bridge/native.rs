@@ -15,9 +15,17 @@ pub struct Outcome {
     pub error: Option<String>,
 }
 pub fn lower(checked: &k::CheckedProgram) -> Result<lower::Program, String> {
-    lower::lower(checked, bootstrap_runtime::get()?)
+    compiler_work(|| lower::lower(checked, bootstrap_runtime::get()?))
 }
 pub fn image(
+    program: &lower::Program,
+    meaning: &k::Program,
+    entry: usize,
+    packet: bool,
+) -> Result<Vec<u8>, String> {
+    compiler_work(|| image_inner(program, meaning, entry, packet))
+}
+fn image_inner(
     program: &lower::Program,
     meaning: &k::Program,
     entry: usize,

@@ -7,7 +7,7 @@ of the accepted language and can be changed explicitly.
 | Stage | Actual constraint |
 | --- | --- |
 | Representation | Indices, extents and pointers use the supported 64-bit host representation. Checked arithmetic detects overflow. ELF and virtual-address formats remain finite. |
-| Rust bootstrap | Recursive compiler paths use a native thread stack provisioned from host resources. Rust/Cargo still build the source front end. The production K compiler source closure is complete. |
+| Rust bootstrap | Recursive compiler paths use a scoped native thread stack provisioned from host resources. Compiler threads join before execution or stream capture. Rust/Cargo still build the source front end. The production K compiler source closure is complete. |
 | Native code | Linux x86-64 static ELF; absolute call/branch addresses avoid a signed-32-bit code-distance ceiling. No external engine imposes function/local counts. |
 | Native stack/heap | Startup reads physical memory, excluding swap, RLIMIT_AS and RLIMIT_STACK. It reserves the stack first and gives the heap the remaining extent after the image and actual startup mappings. Stack exhaustion is R0008; heap refusal/growth/exhaustion is R0006. Linux can still kill an overcommitted process under physical or cgroup pressure. Execution readings never affect artifact bytes. |
 | K execution and batch capture | A separate worker inherits the caller's address-space limit or a tighter explicitly selected limit. The model receives a separate stack-byte extent, charging live frames, local location tables and root cells. Array/aggregate/container payloads remain heap allocations. Fallible paths report R0008/R0006; other Rust collection allocations may abort, reported by the parent as a host failure. |
@@ -27,6 +27,20 @@ a 64 MiB provisioning fallback. Native reservations round down to 4 KiB pages.
 To increase an inherited finite limit, the caller raises it explicitly before
 launching the runner. A small K model extent does not shrink the Rust worker's
 own OS stack.
+
+Rust compiler work uses scoped threads, joined before model execution or native
+stream capture. The temporary compiler stack comes from physical/cgroup memory;
+under a finite address-space limit it reserves half the remaining address space.
+Execution therefore does not retain that compiler stack as live work. Libc can
+cache some thread mappings, so the actual reservation is measured separately.
+
+The Rust execution worker defaults to one glibc allocation arena, honoring an
+explicit MALLOC_ARENA_MAX. It has one active compiler or execution thread at a
+time; sharing the process arena avoids secondary aligned arena reservations
+under a tight address-space budget. This changes allocation overhead, not the
+heap capacity or the operator budget. Static model error messages are borrowed,
+so constructing an R0006/R0008 message needs no allocation. Infallible Rust
+allocations can still abort and remain classified as host failures.
 
 Standalone ELFs read the caller's Linux limits directly; they do not read the
 runner's environment settings. For example:
@@ -58,7 +72,7 @@ cancel test process groups; they never define language semantics.
 
 `bash tools/host-boundary.sh target/release/lkjscript` checks build-resource byte
 identity, K-text byte identity, inherited/clamped controls, located native/K
-resource failures and bounded batch capture. Resource exhaustion can occur at
+resource failures, joined compiler threads and bounded batch capture. Resource exhaustion can occur at
 different source calls in the two representations; resource codes are compared
 separately from their recorded locations.
 
@@ -67,6 +81,11 @@ The 2026-11-13e observation has plain run succeeding on a 20 MB repeated vector,
 explicit 256 MiB and 512 MiB address-space settings respectively. These are
 observations, not acceptance thresholds. See
 observations/2026-11-13e-memory.json for inputs, commands, values and measured RSS.
+
+The follow-up CI investigation is recorded in
+observations/2026-11-13e-host-resources.json. With the same 256 MiB process and
+1 MiB model-stack budgets, 24 direct/mutual recursion cases report located R0008.
+The idle model observation drops from 200,576 to 17,096 KiB mapped address space.
 
 Virtual reservation, committed memory, RSS and logical heap size are different
 measurements. Multiple processes compete for physical memory even after mappings

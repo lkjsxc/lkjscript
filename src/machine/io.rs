@@ -254,7 +254,7 @@ impl<H: Host> Machine<'_, H> {
                 let bytes = self.bytes(&buffer)?;
                 self.host
                     .write_stderr(&bytes)
-                    .map_err(|message| self.trap(7, &message))?;
+                    .map_err(|message| self.trap(7, message))?;
                 Value::Unit
             }
             _ => return Ok(None),

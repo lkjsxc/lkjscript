@@ -114,7 +114,19 @@ fn analysis_failure(
     }
     messages.join("\n")
 }
+// Reserve the bootstrap compiler stack only while compiler work is live.
+// Execution and stream capture continue after the thread has been joined.
+fn compiler_work<T: Send>(work: impl FnOnce() -> Result<T, String> + Send) -> Result<T, String> {
+    lkjscript::compiler_stack::run(work).map_err(|error| format!("E_HOST {error}"))?
+}
 fn compile(
+    path: &str,
+    census: bool,
+    timings: &mut timing::Timings,
+) -> Result<k::CheckedProgram, String> {
+    compiler_work(|| compile_inner(path, census, timings))
+}
+fn compile_inner(
     path: &str,
     census: bool,
     timings: &mut timing::Timings,
@@ -438,10 +450,12 @@ fn run() -> Result<u8, String> {
         return Err("E_USAGE program arguments after -- require run or test".to_string());
     }
     if argv.len() == 2 && argv[1] == "runtime-k" {
-        print!(
-            "{}",
-            k_text::write(lkjscript::bootstrap_runtime::get()?.checked_program())
-        );
+        let text = compiler_work(|| {
+            Ok(k_text::write(
+                lkjscript::bootstrap_runtime::get()?.checked_program(),
+            ))
+        })?;
+        print!("{text}");
         return Ok(0);
     }
     if argv.len() == 2 && argv[1] == "trusted" {
@@ -458,9 +472,11 @@ fn run() -> Result<u8, String> {
     let mut timings = timing::Timings::new();
     if args.unchecked {
         let text = fs::read_to_string(&args.path).map_err(|e| format!("E_IO {e}"))?;
-        let program = timings
-            .measure("parse_k", || k_text::read(&text))
-            .map_err(|e| report(&args.path, e))?;
+        let program = compiler_work(|| {
+            timings
+                .measure("parse_k", || k_text::read(&text))
+                .map_err(|e| report(&args.path, e))
+        })?;
         let status = execute_machine(&program, &args, &mut timings)?;
         timings.done();
         return Ok(status);
@@ -471,7 +487,8 @@ fn run() -> Result<u8, String> {
         return Ok(0);
     }
     if args.verb == "k" {
-        print!("{}", k_text::write(checked.program()));
+        let text = compiler_work(|| Ok(k_text::write(checked.program())))?;
+        print!("{text}");
         timings.done();
         return Ok(0);
     }
@@ -495,9 +512,7 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     }
-    let result = lkjscript::compiler_stack::run(run)
-        .map_err(|error| format!("E_HOST {error}"))
-        .and_then(|result| result);
+    let result = run();
     match result {
         Ok(status) => ExitCode::from(status),
         Err(error) => {

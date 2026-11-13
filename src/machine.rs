@@ -3,6 +3,7 @@
 mod io;
 mod scalar;
 use crate::k::{self, Op, Place, Program, Projection, TypeKind};
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
@@ -62,7 +63,8 @@ pub struct RunError {
     pub function: usize,
     pub file: usize,
     pub line: usize,
-    pub message: String,
+    // Resource failures must be reportable without allocating an error message.
+    pub message: Cow<'static, str>,
 }
 impl RunError {
     pub fn code(&self) -> String {
@@ -245,25 +247,25 @@ struct Machine<'a, H: Host> {
 }
 
 impl<H: Host> Machine<'_, H> {
-    fn error(&self, kind: MachineError, message: &str) -> RunError {
+    fn error(&self, kind: MachineError, message: impl Into<Cow<'static, str>>) -> RunError {
         RunError {
             kind: ErrorKind::Machine(kind),
             function: self.site.function,
             file: self.site.file,
             line: self.site.line,
-            message: message.to_string(),
+            message: message.into(),
         }
     }
-    fn invalid(&self, message: &str) -> RunError {
+    fn invalid(&self, message: impl Into<Cow<'static, str>>) -> RunError {
         self.error(MachineError::InvalidK, message)
     }
-    fn trap(&self, code: u64, message: &str) -> RunError {
+    fn trap(&self, code: u64, message: impl Into<Cow<'static, str>>) -> RunError {
         RunError {
             kind: ErrorKind::Trap(code),
             function: self.site.function,
             file: self.site.file,
             line: self.site.line,
-            message: message.to_string(),
+            message: message.into(),
         }
     }
     fn number(&self, result: Result<u64, scalar::NumberError>) -> Result<u64, RunError> {
@@ -434,7 +436,7 @@ impl<H: Host> Machine<'_, H> {
             {
                 return Err(self.error(
                     MachineError::ConflictingAccess,
-                    &format!(
+                    format!(
                         "access to location {} conflicts with loan {} on location {}",
                         access.cell.index, tag, loan.target.index
                     ),
@@ -1595,7 +1597,7 @@ impl<H: Host> Machine<'_, H> {
                 let bytes = self.bytes(&data)?;
                 self.host
                     .write_stdout(&bytes)
-                    .map_err(|message| self.trap(7, &message))?;
+                    .map_err(|message| self.trap(7, message))?;
                 Value::Unit
             }
             _ => match self.io_intrinsic(destination.ty, name, &values)? {
@@ -1603,7 +1605,7 @@ impl<H: Host> Machine<'_, H> {
                 None => {
                     return Err(self.error(
                         MachineError::Unsupported,
-                        &format!("intrinsic {name} is not implemented by the K machine"),
+                        format!("intrinsic {name} is not implemented by the K machine"),
                     ));
                 }
             },
@@ -2044,7 +2046,7 @@ impl<H: Host> Machine<'_, H> {
                         .iter()
                         .position(|candidate| *candidate == message)
                         .unwrap() as u64;
-                return Err(self.trap(code, &message));
+                return Err(self.trap(code, message));
             }
         }
         self.push_work(Work::Frame(frame))?;
