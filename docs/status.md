@@ -175,9 +175,9 @@ under target/. The routine timing below uses existing build/reference caches.
 
 | Observation | Command and seed | Result |
 | --- | --- | --- |
-| Routine native/K gate | `bash tools/check.sh` | **16.414 s**; **439 Cargo tests**; 607 conformance passes, 4 pending, 514 Rust comparisons per route |
-| Gate parts | same command | format 0.442 s; host 0.061 s; release 0.027 s; Rust 15.811 s; lint 0.043 s; overlapping suites 15.861 s |
-| Suite parts | same command | conformance 13.192 s; values 3.104 s; verdicts 3.165 s; output 1.593 s; drops 3.523 s; sugars 12.748 s; closures 2.659 s |
+| Routine native/K gate | `bash tools/check.sh` | **16.643 s**; **439 Cargo tests**; 607 conformance passes, 4 pending, 514 Rust comparisons per route |
+| Gate parts | same command | format 0.439 s; host 0.060 s; release 0.028 s; Rust 16.041 s; lint 0.040 s; overlapping suites 16.094 s |
+| Suite parts | same command | conformance 13.702 s; values 3.751 s; verdicts 2.897 s; output 1.529 s; drops 3.182 s; sugars 12.852 s; closures 3.030 s |
 | Full all-route gate | `LKJ_GATE_ENGINES=native,k,node bash tools/check.sh` | **37.201 s**, including 14.079 s release rebuild and 21.024 s Rust tests/rebuild; all required checks pass |
 | All-route conformance | all-route gate; replay with `LKJ_ENGINES=native,k,node node tools/conformance.mjs "$R"` | **607 passes, 4 pending, 514 Rust comparisons** per route |
 | Independent examples, each route | `LKJ_ENGINE=native node tools/corpus.mjs "$R"`; repeat with k/node | idioms **26/30**; ownership **26/30**; rejected **16/16** |
@@ -194,7 +194,7 @@ under target/. The routine timing below uses existing build/reference caches.
 Other generated outcome classes are zero. The gate now runs 216 sugar pairs and
 611 conformance cases, an increase of 69 pairs and 118 cases since the preceding
 checkpoint.
-Its 16.414 s warm time is slightly above the original 16 s reference; the
+Its 16.643 s warm time is slightly above the original 16 s reference; the
 performance objective has not been met in this observation.
 
 ```sh
@@ -211,6 +211,9 @@ pairs compare independently emitted environments and Rust. Caches include
 generator/source/seed and compiler identity. Conformance caches each Rust
 rejection source separately, including the host wrapper and flags; adding a
 fixture no longer invalidates every unchanged negative reference.
+Rust diagnostic alternatives are allowed only where observed: the visibility
+alias fixture rejects with E0433 on 1.97 and E0578 on CI's 1.100. Its rejection
+remains required, and all other pinned diagnostic expectations stay exact.
 
 The batch host checks once for requested routes and shares lowering while keeping
 execution independent. Optimized suites overlap the full debug Rust tests/lint.

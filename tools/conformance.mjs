@@ -18,6 +18,10 @@ for (const c of cases) {
     if (!kinds.has(c.kind)) throw new Error('unknown conformance kind: ' + c.kind);
     if (ids.has(c.id)) throw new Error('duplicate conformance id: ' + c.id);
     ids.add(c.id);
+    if (c.rustCodes !== undefined && (c.rustCode !== undefined || !Array.isArray(c.rustCodes)
+        || c.rustCodes.length === 0 || c.rustCodes.some(code => typeof code !== 'string' || !/^E[0-9]{4}$/.test(code)))) {
+        throw new Error('Rust diagnostic alternatives must be a nonempty code list: ' + c.id);
+    }
     if (c.kind === 'output' && (!c.rust || typeof c.hex !== 'string' || !/^(?:[0-9a-fA-F]{2})*$/.test(c.hex)
         || (c.ending !== 'normal' && !/^R[0-9]{4}$/.test(c.ending)))) {
         throw new Error('output cases need a Rust oracle, hexadecimal bytes and an explicit ending: ' + c.id);
@@ -152,7 +156,8 @@ for (const c of cases) {
         }
     } else if (c.rust) {
         const reference = unpackResult(referenceResults[c.id]);
-        if (succeeded(reference) !== Boolean(c.rustAccept) || (c.rustCode && !reference.stderr.includes('['+c.rustCode+']'))) {
+        const codes = c.rustCodes ?? (c.rustCode ? [c.rustCode] : []);
+        if (succeeded(reference) !== Boolean(c.rustAccept) || (codes.length && !codes.some(code => reference.stderr.includes('['+code+']')))) {
             fail(c.id + ': unexpected Rust oracle verdict: ' + diagnostic(reference));
             continue;
         }

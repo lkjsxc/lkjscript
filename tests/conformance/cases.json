@@ -4532,7 +4532,10 @@
     "code": "E_PRIVACY",
     "rust": true,
     "rustAccept": false,
-    "rustCode": "E0433"
+    "rustCodes": [
+      "E0433",
+      "E0578"
+    ]
   },
   {
     "id": "ancestor_visibility_excess_super",
