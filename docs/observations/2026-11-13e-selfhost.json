@@ -1,0 +1,118 @@
+{
+  "observation": "Production K compiler fixed point and whole-corpus native compiler parity",
+  "date": "2026-11-13",
+  "git": {
+    "commit": "964ceae03d5f94cb160683f66b46bc1c768bb518",
+    "dirty": true,
+    "diff_sha256": "58bea548559aa3c457f5fd870fd035be84a81b3c0e565beb7505e55ba006eb38"
+  },
+  "archive": "/home/coder/lkjscript-codex-20261113e-selfhost",
+  "controls": {
+    "memory_bytes": "8589934592",
+    "timeout_ms": 600000,
+    "max_output_bytes": 268435456
+  },
+  "inputs": {
+    "program": {
+      "bytes": 6488711,
+      "sha256": "0803ee7e94a8b7f822123185a60bef9facefb36e0e5fb73322e92eee2b2d2a42",
+      "archive": "/home/coder/lkjscript-codex-20261113e-selfhost/kc.k"
+    },
+    "runtime": {
+      "bytes": 28799,
+      "sha256": "9fd9ab291e3a437cea001f9cc7de1aea1834861a1f8bc7123285141eb29bed4e",
+      "archive": "/home/coder/lkjscript-codex-20261113e-selfhost/runtime.k"
+    }
+  },
+  "compilers": {
+    "native": {
+      "bytes": 16712946,
+      "sha256": "f995fdc8ca7add37c0482ac287f329b9779de7e6fb09cf28bd9951cb56f30fc8",
+      "archive": "/home/coder/lkjscript-codex-20261113e-selfhost/kc.elf"
+    },
+    "b0": {
+      "bytes": 6208960,
+      "sha256": "51ccc2786becf5262694947a66ccc5e7d820084be4fec09106eb67523fe0467e",
+      "archive": "/home/coder/lkjscript-codex-20261113e-selfhost/b0"
+    },
+    "cargo_kc": {
+      "bytes": 1518960,
+      "sha256": "d1799a9517a346a81514355d6385cacf16b954a2c6a1a8023ac369c5d3559e49",
+      "archive": "/home/coder/lkjscript-codex-20261113e-selfhost/cargo-kc"
+    }
+  },
+  "fixed_point": {
+    "identical": [
+      "B0 emitted ELF",
+      "Cargo K compiler emitted kc1",
+      "kc1 emitted kc2",
+      "kc2 emitted kc3"
+    ],
+    "timing_method": "GNU /usr/bin/time on each child; MaxRSS converted from KiB to bytes. Timed self-builds finished before profile and mutation workloads started.",
+    "stages": [
+      {
+        "name": "prepare_k",
+        "elapsed_seconds": 0.63,
+        "max_rss_bytes": 82452480,
+        "exit_status": 0
+      },
+      {
+        "name": "prepare_runtime",
+        "elapsed_seconds": 0,
+        "max_rss_bytes": 7131136,
+        "exit_status": 0
+      },
+      {
+        "name": "b0_emit",
+        "elapsed_seconds": 0.32,
+        "max_rss_bytes": 129380352,
+        "exit_status": 0
+      },
+      {
+        "name": "cargo_emit",
+        "elapsed_seconds": 0.31,
+        "max_rss_bytes": 122314752,
+        "exit_status": 0
+      },
+      {
+        "name": "kc1_emit_kc2",
+        "elapsed_seconds": 40.39,
+        "max_rss_bytes": 314306560,
+        "exit_status": 0
+      },
+      {
+        "name": "kc2_emit_kc3",
+        "elapsed_seconds": 40.15,
+        "max_rss_bytes": 314310656,
+        "exit_status": 0
+      }
+    ],
+    "record": "/home/coder/lkjscript-codex-20261113e-selfhost/fixed-point-summary.json"
+  },
+  "parity": {
+    "cases": 887,
+    "verdicts": 562,
+    "rejections": 64,
+    "identical_artifacts": 498,
+    "pending": 2,
+    "source_rejections": 323,
+    "failures": 0,
+    "elapsed_seconds": 85.98913188499999,
+    "timing_context": "Whole-corpus parity ran concurrently with the CPU profile and K mutation experiments; elapsed time is not an uncontended speed measurement.",
+    "manifest_sha256": "fb956d5e9a288ac9577a31cecdefb86501d7ce9108e5c050b07b4ac5d9862149",
+    "record": "/home/coder/lkjscript-codex-20261113e-selfhost/parity-summary.json",
+    "cases_record": "/home/coder/lkjscript-codex-20261113e-selfhost/parity-observations.json"
+  },
+  "host_failure_checks": "Killed B0 check, killed KC check and timed-out KC check each recorded one host failure with zero verdicts, rejections or artifacts; six-case World smoke also passed.",
+  "reproduction": "README.md in the archive records commands; tools/selfhost.mjs and tools/kc.mjs remain the maintained entry points.",
+  "validation": {
+    "command": "bash tools/check.sh",
+    "fullSeconds": 30.699,
+    "rustTests": 425,
+    "nodeTests": 17,
+    "allTargetClippy": "clean",
+    "worldObservations": 91,
+    "conformancePerRoute": 883,
+    "rustComparisons": 573
+  }
+}

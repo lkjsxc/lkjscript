@@ -1,9 +1,9 @@
 # Status — 2026-11-13, outside review (e)
 
 The production K compiler has produced **byte-identical kc1, kc2 and kc3** from
-its own K input. Whole-corpus native-compiler parity is the next observation.
+its own K input and matches B0 across the complete recorded K corpus.
 Allocator ratios, default execution resources, conformance sharding and direct
-K mutation are implemented. The joint gate passes in **30.268 seconds**.
+K mutation are implemented. The joint gate passes in **30.699 seconds**.
 
 ## Counted checkpoint
 
@@ -12,16 +12,18 @@ K mutation are implemented. The joint gate passes in **30.268 seconds**.
 | First ownership verdict, recorded before repairs | 12 E_BORROW; 0 declaration/type blockers; 823 source-body attempts | observations/2026-11-13e-first-ownership.txt |
 | Current World compiler source | 833 source-body attempts; 2,982 K bodies; 200,997 instructions; zero diagnostics | target/release/lkjscript check --census src/kc_main.rs |
 | Ownership repairs | 26 sites across the 12 initially failing bodies; ownership rules unchanged | observations/2026-11-13e-ownership-rewrites.json |
-| Preliminary fixed point | kc1 = kc2 = kc3, 16,712,946 bytes each | target/selfhost-observation/summary.json |
-| Same own-K emission, first manual sample | Cargo K compiler 0.31 s / 117 MiB; native kc1 40.81 s / 300 MiB | target/selfhost/cargo-kc.time; target/selfhost/kc2.time |
+| Fixed point | B0 = kc1 = kc2 = kc3, 16,712,946 bytes each | observations/2026-11-13e-selfhost.json |
+| Same own-K emission | B0 0.32 s / 123 MiB; kc1 40.39 s / 300 MiB; kc2 40.15 s / 300 MiB | observations/2026-11-13e-selfhost.json |
+| Native K compiler parity | 562 matching verdicts, 64 rejections, 498 identical ELF artifacts, 2 pending | node tools/kc.mjs target/release/lkjscript target/selfhost-observation/kc2.elf --world |
 | Native encoder on fixed K | 7 values/output agree; median fib 336→191 ms, sort 1,927→1,172 ms, map 2,492→1,700 ms | observations/2026-11-13e-encoder.json |
 | Hello size | ELF 9,393,606→83,398 bytes; K 828,726→95,496 bytes at step 2 | observations/2026-11-14-array-repeat.json |
 | Plain run memory | 20 MB repeated Vec, 100 MB pushes and 200 MB stdin succeed | observations/2026-11-13e-memory.json |
 | Explicit-budget memory | 100 MB pushes fit 256 MiB AS; 200 MB stdin fits 512 MiB AS | observations/2026-11-13e-memory.json |
 | Warm conformance batch | 27.922 s serial→8.310 s with 4 workers; all 887 records identical per route | observations/2026-11-14-gate-economy.json |
 | Direct K mutation, seed 1701 / 128 edits | 100 rejected, 23 equal values, 4 equal traps, 1 two-route timeout; zero findings | node tools/generators/k_mutate.mjs target/release/lkjscript 1701 128 |
+| Fresh K mutation, seed 1702 / 1,024 edits | 830 rejected, 173 equal values, 19 equal traps, 2 equal R0008; zero findings or unresolved cases; 685 unique texts | observations/2026-11-14-k-mutation-1702.json |
 | Outside-review recursion mutants | Both mutants now R0008 on both routes; exhaustion locations retained separately | observations/2026-11-13e-memory.json |
-| Full gate | Green, 30.268 s; 425 Rust tests; 17 Node tests; all-target Clippy clean | bash tools/check.sh |
+| Full gate | Green, 30.699 s; 425 Rust tests; 17 Node tests; all-target Clippy clean | bash tools/check.sh |
 | Conformance, each route | 883 pass, 4 pending; 573 Rust comparisons | node tools/conformance.mjs |
 | Cargo K compiler parity | 562 verdicts, 64 rejections, 498 identical artifacts, 2 pending | node tools/kc.mjs |
 | World / source generators | 91 World observations; no accepted disagreements; one known conservative ownership rejection | bash tools/check.sh |
@@ -57,11 +59,15 @@ observations; they are not counted as semantic agreement.
 
 ## Next obligations
 
-Finish whole-corpus kc1 verdict/ELF parity and publish the fixed-point costs
-beside B0. Profile the actual self-build, then remove the largest measured cost
-through rechecked K-to-K transformations where appropriate. Keep the encoder
-small. Measure the front-end census before choosing a port or a rewrite with
-B0 K-text identity; no unrelated language-width work precedes that decision.
+The actual self-build profile puts 64% of self CPU in runtime helpers
+(observations/2026-11-13e-kc-profile.json).
+Class computation accounts for 16% and is the first source-runtime experiment:
+store the already-computed class in the block header and avoid recalculating it
+on release. Preserve the fixed point and corpus parity after any retained change.
+Keep substantial general optimization in rechecked K-to-K transformations and
+the encoder small. The front-end census is now being measured to choose a port
+or rewrite with B0 K-text identity; no unrelated language-width work precedes
+that decision.
 
 Runtime trap filenames still lose source-file provenance at the host boundary;
 lines come from the trapped function. Finite resource exhaustion may occur at

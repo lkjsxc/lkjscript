@@ -37,7 +37,13 @@ produces native ELF. `lkjscript runtime-k` exports the prepared runtime as a
 declared input. The separately cargo-built `kc` demonstrates this boundary but
 does not establish any self-compilation claim.
 
-The observations to reach are:
+The 2026-11-13e checkpoint reaches the four K-compiler observations below.
+The native World driver in src/kc_main.rs shares the same nine production
+modules; kc1, kc2 and kc3 have identical bytes, and its complete recorded corpus
+parity includes 562 K verdicts and 498 identical ELF artifacts. Timings and
+peak memory are recorded in observations/2026-11-13e-selfhost.json.
+
+The retained obligations and their measurements are:
 
 1. The real K compiler source checks and B0 emits kc1.
 2. kc1 gives B0's verdict for direct K and the K of every accepted conformance

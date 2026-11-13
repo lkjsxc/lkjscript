@@ -4,7 +4,7 @@ A Rust-compatible subset for reliable work by agents, with affine ownership,
 explicit capabilities and an independently checked K core. Cargo builds the
 bootstrap compiler. Its output is static Linux x86-64 machine code without Node,
 libc or a dynamic loader. The project is moving toward an owned compiler and tools;
-the production K compiler is the first self-compilation target.
+the production K compiler is self-built, with a byte-identical fixed point.
 
 ```sh
 cargo build --release
@@ -45,14 +45,28 @@ front end:
 node tools/kc.mjs
 ```
 
-That boundary now has byte-identity observations; it is not yet a self-built
-compiler. [Status](docs/status.md) records current evidence and open obligations.
+The ordinary-source World driver in src/kc_main.rs shares those production
+modules. Its native compiler checks direct K and emits ELF bytes on stdout. The
+measured kc1, kc2 and kc3 are byte-identical; the self-built compiler matches
+B0 on all 562 K verdicts and all 498 accepted artifacts in the recorded corpus.
+The source front end still uses the Rust bootstrap. Reproduce the fixed point
+and native-compiler parity with:
+
+```sh
+node tools/selfhost.mjs
+LKJ_KC_OUT=target/kc-native-observation node tools/kc.mjs \
+    target/release/lkjscript target/selfhost-observation/kc2.elf --world
+```
+
+[Status](docs/status.md) records current evidence and open obligations.
 [Direction](docs/direction.md) defines the consumer-led route out of Rust;
 [language](docs/language.md) describes the implemented contract and
 [constraints](docs/limits.md) records representation and execution boundaries.
 
 New semantic tests are source/K data. The gate compares native and K results
 with Rust under the declared host, exercises generated programs and checks the
-K-to-ELF boundary. WebAssembly and its Node execution host have been removed.
+K-to-ELF boundary. Seeded direct K mutations independently compare accepted
+programs on both engines and retain resource/timeouts separately. WebAssembly
+and its Node execution host have been removed.
 Node remains temporary test orchestration. Generation one is preserved on its
 branch and is not a generation-two dependency.

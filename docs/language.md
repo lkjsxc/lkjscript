@@ -843,22 +843,22 @@ The pure core additionally receives its declared Runtime; `kc::compile` consumes
 program K, runtime K and an entry name without source-front-end dependencies.
 `compiler::check_bundle` uses the same production checking pipeline. These entries
 perform no host I/O. Their existence and input-mutation tests do not establish
-self-compilation. The ordinary-source World entry in src/kc_main.rs shares all
+self-compilation. The separately measured complete compiler now reaches a
+byte-identical kc1/kc2/kc3 fixed point and matches B0 on the recorded K corpus.
+The ordinary-source World entry in src/kc_main.rs shares all
 nine production modules with src/kc_lib.rs. It accepts PROGRAM.k, optional
 --entry NAME and --check, and --runtime RUNTIME.k for emission. Paths are
 relative to its current directory capability. A completed ELF is written to
 stdout; diagnostics use stderr and status 1.
 
-The production unsigned/signed LEB128 encoders live in `src/encoding.rs` and are
-used directly by the emitter. That exact source also compiles and executes under
-lkjscript, with byte-level boundary vectors and behavior-changing source mutations.
 The same production canonical-name helper in `src/names.rs` is used by resolution,
 generic validation and elaboration, and executes with the source String library.
 Its tests compare complete output bytes and require valid/invalid source mutations
 to change behavior or produce an attributed diagnostic. These are executing
-compiler components; the full dependency closure and fixed point remain unfinished.
+compiler components. The complete K compiler closure is now self-built; the
+source front end remains a separate consumer.
 
-`src/json.rs::write_string` is the production emitter's JSON string encoder. It
+`src/json.rs::write_string` is the bootstrap batch host's JSON string encoder. It
 executes through ordinary source compilation using byte loops, vector operations
 and integer range patterns. Tests compare every output byte, independently decode
 JSON, inspect actual emitted trap metadata and mutate a range boundary. The old
