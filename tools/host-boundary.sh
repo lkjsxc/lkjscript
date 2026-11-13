@@ -1,10 +1,24 @@
 #!/usr/bin/env bash
 # These process budgets test host refusal; they never reject source programs.
-set -euo pipefail
+set -Eeuo pipefail
 cd "$(dirname "$0")/.."
 binary=$(realpath "${1:-target/release/lkjscript}")
 work=target/host-boundary
 mkdir -p "$work"
+report_failure() {
+    local status=$1 line=$2 failed_command=$3 capture
+    printf 'Host boundary failed at line %s (status %s): %s\n' \
+        "$line" "$status" "$failed_command" >&2
+    for capture in "$work"/*.stderr "$work"/*.stdout; do
+        if [[ -s "$capture" ]]; then
+            printf '%s (last 2048 bytes):\n' "$capture" >&2
+            tail -c 2048 "$capture" >&2
+            printf '\n' >&2
+        fi
+    done
+    exit "$status"
+}
+trap 'report_failure "$?" "$LINENO" "$BASH_COMMAND"' ERR
 "$binary" build examples/hello.rs -o "$work/hello.elf"
 prlimit --as=8589934592 "$binary" build examples/hello.rs -o "$work/hello-limited.elf"
 cmp "$work/hello.elf" "$work/hello-limited.elf"
