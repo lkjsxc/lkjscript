@@ -1,7 +1,7 @@
 //! Static Linux x86-64 encoding of the shared lowered program.
 //! Heap and stack extents are selected at process startup from Linux controls.
-//! Language values use
-//! frame slots; only the platform primitives below issue system calls.
+//! Operand slots have a frame home; the top may stay in a register or unevaluated.
+//! Only the platform primitives below issue system calls.
 use crate::lower::{HostFunction, Instruction, Program, ScalarOp, Signature, ValueType};
 use std::collections::BTreeMap;
 mod io;
@@ -584,8 +584,39 @@ struct Body<'a> {
     maximum: usize,
     reachable: bool,
     regions: Vec<Region>,
+    pending: Pending,
+}
+#[derive(Clone, Copy)]
+enum Pending {
+    None,
+    InA,
+    Constant(u64),
+    Local(usize),
 }
 impl Body<'_> {
+    // Height includes the pending top; all lower operands already have frame slots.
+    fn flush(&mut self) {
+        let pending = self.pending;
+        self.pending = Pending::None;
+        match pending {
+            Pending::None => return,
+            Pending::InA => {}
+            Pending::Constant(value) => {
+                self.a.immediate(A, value);
+            }
+            Pending::Local(local) => {
+                let offset = self.offset(local);
+                self.a.load(A, BP, offset);
+            }
+        }
+        let offset = self.operand(self.height - 1);
+        self.a.store(BP, offset, A);
+    }
+    fn hold(&mut self, pending: Pending) {
+        self.pending = pending;
+        self.height += 1;
+        self.maximum = self.maximum.max(self.height);
+    }
     fn offset(&self, index: usize) -> i64 {
         -((index as i64 + 1) * 8)
     }
@@ -597,11 +628,34 @@ impl Body<'_> {
             .height
             .checked_sub(1)
             .ok_or("invalid lowered operand stack")?;
-        let offset = self.operand(self.height);
-        self.a.load(reg, BP, offset);
+        let pending = self.pending;
+        self.pending = Pending::None;
+        match pending {
+            Pending::None => {
+                let offset = self.operand(self.height);
+                self.a.load(reg, BP, offset);
+            }
+            Pending::InA => {
+                if reg != A {
+                    self.a.mov(reg, A);
+                }
+            }
+            Pending::Constant(value) => {
+                self.a.immediate(reg, value);
+            }
+            Pending::Local(local) => {
+                let offset = self.offset(local);
+                self.a.load(reg, BP, offset);
+            }
+        }
         Ok(())
     }
     fn push(&mut self, reg: u8) {
+        self.flush();
+        if reg == A {
+            self.hold(Pending::InA);
+            return;
+        }
         let offset = self.operand(self.height);
         self.a.store(BP, offset, reg);
         self.height += 1;
@@ -841,6 +895,21 @@ impl Body<'_> {
         Ok(())
     }
     fn instruction(&mut self, instruction: &Instruction) -> Result<()> {
+        // Calls, joins and nonconsuming operations need a stable frame home.
+        let consumes_top = self.reachable
+            && matches!(
+                instruction,
+                Instruction::Scalar(_)
+                    | Instruction::LocalSet(_)
+                    | Instruction::LocalTee(_)
+                    | Instruction::GlobalSet(_)
+                    | Instruction::Load { .. }
+                    | Instruction::Store { .. }
+                    | Instruction::If(_)
+            );
+        if !consumes_top {
+            self.flush();
+        }
         match instruction {
             Instruction::Block(result) => return self.begin(RegionKind::Block, *result),
             Instruction::Loop(result) => return self.begin(RegionKind::Loop, *result),
@@ -891,21 +960,13 @@ impl Body<'_> {
             return Ok(());
         }
         match instruction {
-            Instruction::I32(value) => {
-                self.a.immediate(A, *value as u32 as u64);
-                self.push(A);
-            }
-            Instruction::I64(value) => {
-                self.a.immediate(A, *value as u64);
-                self.push(A);
-            }
+            Instruction::I32(value) => self.hold(Pending::Constant(*value as u32 as u64)),
+            Instruction::I64(value) => self.hold(Pending::Constant(*value as u64)),
             Instruction::LocalGet(local) => {
                 if *local >= self.locals {
                     return Err("invalid lowered local".to_string());
                 }
-                let offset = self.offset(*local);
-                self.a.load(A, BP, offset);
-                self.push(A);
+                self.hold(Pending::Local(*local));
             }
             Instruction::LocalSet(local) | Instruction::LocalTee(local) => {
                 if *local >= self.locals {
@@ -1178,6 +1239,7 @@ fn function(
         globals: &program.globals,
         locals,
         height: 0,
+        pending: Pending::None,
         maximum: 0,
         reachable: true,
         regions: Vec::new(),
@@ -1237,6 +1299,51 @@ fn segment(bytes: &mut [u8], at: usize, flags: u32, offset: u64, size: u64) {
     put64(bytes, at + 40, size);
     put64(bytes, at + 48, 4096);
 }
+// K checking validates every K body before lowering. This graph only decides
+// which lowered bodies need machine code; it does not replace that safety boundary.
+// Preserve all signatures and table slots, including targets not called by entry.
+fn reachable_functions(program: &Program, entry: usize, count: usize) -> Result<Vec<bool>> {
+    let mut reachable = vec![false; count];
+    let mut pending = Vec::new();
+    reachable[entry] = true;
+    pending.push(entry);
+    for target in &program.table {
+        if *target >= count {
+            return Err("invalid lowered table function".to_string());
+        }
+        if !reachable[*target] {
+            reachable[*target] = true;
+            pending.push(*target);
+        }
+    }
+    // Keep index validation independent of reachability, even for omitted bodies.
+    for function in &program.functions {
+        for instruction in &function.code.instructions {
+            if let Instruction::Call(target) = instruction {
+                if *target >= count {
+                    return Err("invalid lowered call".to_string());
+                }
+            }
+        }
+    }
+    while let Some(index) = pending.pop() {
+        if index < program.imports.len() {
+            continue;
+        }
+        for instruction in &program.functions[index - program.imports.len()]
+            .code
+            .instructions
+        {
+            if let Instruction::Call(target) = instruction {
+                if !reachable[*target] {
+                    reachable[*target] = true;
+                    pending.push(*target);
+                }
+            }
+        }
+    }
+    Ok(reachable)
+}
 pub fn encode(program: &Program, entry: Entry) -> Result<Vec<u8>> {
     let mut signatures: Vec<Signature> = Vec::new();
     for import in &program.imports {
@@ -1251,6 +1358,7 @@ pub fn encode(program: &Program, entry: Entry) -> Result<Vec<u8>> {
     if selected.parameters.len() != entry.arguments.len() {
         return Err("native entry argument count differs".to_string());
     }
+    let reachable = reachable_functions(program, entry.function, signatures.len())?;
     let initial = program
         .minimum_memory_pages
         .checked_mul(65536)
@@ -1299,7 +1407,9 @@ pub fn encode(program: &Program, entry: Entry) -> Result<Vec<u8>> {
     }
     platform(&mut a, p, program, &entry, &functions, initial);
     for index in 0..program.functions.len() {
-        function(&mut a, p, program, index, &functions, &signatures, &ids)?;
+        if reachable[program.imports.len() + index] {
+            function(&mut a, p, program, index, &functions, &signatures, &ids)?;
+        }
     }
     let data_offset = (CODE_OFFSET + a.bytes.len() + 4095) & !4095;
     let mut data = vec![0u8; CONTEXT_GLOBALS as usize + program.globals.len() * 8];

@@ -1301,6 +1301,80 @@ impl<'a> Body<'a> {
         }
         Ok(())
     }
+    /// One checked K operation constructs the complete array. Copy aggregates
+    /// need independent physical storage; the original seed becomes the last item.
+    fn array_repeat(&mut self, dst: usize, seed: usize) -> Result<(), String> {
+        let TypeKind::Array { inner, len } = self.program.types[self.function.locals[dst].ty].kind
+        else {
+            unreachable!()
+        };
+        let storage = self.layout.storage(inner);
+        let extent = (len as u64)
+            .checked_mul(storage.bytes as u64)
+            .ok_or("array extent exceeds address representation")?;
+        constant(&mut self.code, 24);
+        call(&mut self.code, ALLOC + self.runtime);
+        self.write(dst);
+        self.read(dst);
+        constant(&mut self.code, extent as i64);
+        call(&mut self.code, ALLOC + self.runtime);
+        store(&mut self.code, 0);
+        self.read(dst);
+        constant(&mut self.code, len as i64);
+        store(&mut self.code, 8);
+        self.read(dst);
+        constant(&mut self.code, len as i64);
+        store(&mut self.code, 16);
+
+        let index = self.scratch + 4;
+        constant(&mut self.code, 0);
+        set(&mut self.code, index);
+        self.code.push(Instruction::Block(None));
+        self.code.push(Instruction::Loop(None));
+        get(&mut self.code, index);
+        constant(&mut self.code, (len - 1) as i64);
+        self.code.push(Instruction::Scalar(ScalarOp::I64GeU));
+        self.code.push(Instruction::Branch {
+            depth: 1,
+            conditional: true,
+        });
+        self.read(dst);
+        load(&mut self.code, 0);
+        get(&mut self.code, index);
+        constant(&mut self.code, storage.bytes as i64);
+        self.code.push(Instruction::Scalar(ScalarOp::I64Mul));
+        self.code.push(Instruction::Scalar(ScalarOp::I64Add));
+        self.read(seed);
+        if heap_type(&self.program.types[inner].kind) {
+            call(
+                &mut self.code,
+                helper_index(self.program, self.runtime, inner, true),
+            );
+        }
+        store_storage(&mut self.code, storage, 0, self.scratch + 6);
+        get(&mut self.code, index);
+        constant(&mut self.code, 1);
+        self.code.push(Instruction::Scalar(ScalarOp::I64Add));
+        set(&mut self.code, index);
+        self.code.push(Instruction::Branch {
+            depth: 0,
+            conditional: false,
+        });
+        self.code.push(Instruction::End);
+        self.code.push(Instruction::End);
+
+        self.read(dst);
+        load(&mut self.code, 0);
+        self.read(seed);
+        store_storage(
+            &mut self.code,
+            storage,
+            (len - 1) as u64 * storage.bytes as u64,
+            self.scratch + 6,
+        );
+        Ok(())
+    }
+
     fn intrinsic(
         &mut self,
         dst: usize,
@@ -1312,6 +1386,7 @@ impl<'a> Body<'a> {
             return Ok(());
         }
         match name {
+            "array_repeat" => self.array_repeat(dst, args[0])?,
             "assert" => {
                 self.read(args[0]);
                 self.code.push(Instruction::Scalar(ScalarOp::I64Eqz));

@@ -137,7 +137,12 @@ they are not expanded semantic identity keys.
 Struct/enum fields have declaration order. Scalars and shared references are Copy.
 Nominal types opt into Copy with `#[derive(Copy, Clone)]`, whose fields must all be
 Copy; other values move even if their fields are scalar. Box and Vec own their
-contents. Arrays contain their declared fixed number of elements. Partial moves
+contents. Arrays contain their declared fixed number of elements. Array repeats
+evaluate their seed once. Counts of at least two require Copy and use one compact
+K array_repeat intrinsic, with physical copies rather than calls to Clone. A zero
+count still evaluates and destroys the seed; one element transfers it. Native
+lowering uses a loop and the independent K machine allocates distinct elements.
+Partial moves
 can be reinitialized. A type with custom Drop cannot be Copy or partially moved.
 Custom Drop runs before owned fields, including on early return/break; temporary
 receivers are cleaned at the end of their statement. Source cannot call Drop
@@ -733,7 +738,10 @@ search. Only CheckedProgram reaches the backend; later stages rely on that gate.
 
 Checked K lowers to target-independent typed operations with layout, calls and
 copy/drop/equality glue explicit. The native encoder consumes this form without
-consulting K. The independent K machine executes the checked representation directly.
+consulting K. It caches the top operand until a frame slot is needed and emits
+only functions reachable from the selected entry or any indirect-call table
+target. All K bodies have already been checked; function indices and signatures
+remain stable. The independent K machine executes the checked representation directly.
 Memory scalars use their natural one-, two-, four- or eight-byte widths; signed
 loads extend correctly. Registers and pointers retain 64-bit representations.
 F64 retains its bit representation and canonical NaNs after arithmetic.
@@ -831,7 +839,11 @@ The pure core additionally receives its declared Runtime; `kc::compile` consumes
 program K, runtime K and an entry name without source-front-end dependencies.
 `compiler::check_bundle` uses the same production checking pipeline. These entries
 perform no host I/O. Their existence and input-mutation tests do not establish
-self-compilation.
+self-compilation. The ordinary-source World entry in src/kc_main.rs shares all
+nine production modules with src/kc_lib.rs. It accepts PROGRAM.k, optional
+--entry NAME and --check, and --runtime RUNTIME.k for emission. Paths are
+relative to its current directory capability. A completed ELF is written to
+stdout; diagnostics use stderr and status 1.
 
 The production unsigned/signed LEB128 encoders live in `src/encoding.rs` and are
 used directly by the emitter. That exact source also compiles and executes under

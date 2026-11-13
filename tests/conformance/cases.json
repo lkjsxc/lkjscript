@@ -6681,5 +6681,32 @@
     "ending": "R0004",
     "rust": true,
     "pending": false
+  },
+  {
+    "id": "array_repeat_compact",
+    "file": "pass/array_repeat_compact.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
+  },
+  {
+    "id": "array_repeat_evaluation",
+    "file": "output/array_repeat_evaluation.rs",
+    "kind": "output",
+    "hex": "414d30424d433144",
+    "ending": "normal",
+    "rust": true,
+    "pending": false
+  },
+  {
+    "id": "array_repeat_affine",
+    "file": "fail/array_repeat_affine.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": true,
+    "rustAccept": false,
+    "rustCode": "E0277",
+    "pending": false
   }
 ]

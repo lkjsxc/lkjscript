@@ -1249,6 +1249,32 @@ impl<H: Host> Machine<'_, H> {
         }
         Ok(bytes)
     }
+    fn array_repeat(&mut self, frame: &Frame, dst: usize, args: &[usize]) -> Result<(), RunError> {
+        let destination = self.local(frame, dst)?;
+        let (inner, len) = match self.kind(destination.ty)? {
+            TypeKind::Array { inner, len } => (*inner, *len),
+            _ => return Err(self.invalid("array repeat result must be an array")),
+        };
+        if args.len() != 1 || len < 2 {
+            return Err(self.invalid("array repeat needs one seed and an extent of at least two"));
+        }
+        let seed = self.local(frame, args[0])?;
+        if seed.ty != inner || !self.is_copy(inner)? {
+            return Err(self.invalid("array repeat seed must have the Copy element type"));
+        }
+        let mut fields = Vec::new();
+        fields
+            .try_reserve(len)
+            .map_err(|_| self.trap(6, "allocation failed"))?;
+        for _ in 0..len - 1 {
+            let value = self.copy_value(&seed)?;
+            fields.push(self.allocate(inner, Some(value), false)?);
+        }
+        let value = self.take(&seed)?;
+        fields.push(self.allocate(inner, Some(value), false)?);
+        self.put_local(frame, dst, Value::Sequence(fields))
+    }
+
     fn intrinsic(
         &mut self,
         frame: &Frame,
@@ -1256,6 +1282,9 @@ impl<H: Host> Machine<'_, H> {
         name: &str,
         args: &[usize],
     ) -> Result<(), RunError> {
+        if name == "array_repeat" {
+            return self.array_repeat(frame, dst, args);
+        }
         let destination = self.local(frame, dst)?;
         let mut values = Vec::new();
         for arg in args {

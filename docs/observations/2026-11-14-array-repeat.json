@@ -1,0 +1,79 @@
+{
+  "source": "examples/hello.rs",
+  "baseCommit": "20fd1793",
+  "description": "Fresh-source before/after; after includes compact arrays and concurrent native pending-top/reachability changes. K-text reduction is from array-repeat elaboration.",
+  "samples": 5,
+  "compilers": {
+    "before": {
+      "binary": "/tmp/lkje-pre-encoder/b0",
+      "sha256": "649b6af06d1910d66af10f240a941a34e75cb7f3507dc9ec8198419bf8281e13",
+      "kBytes": 828726,
+      "kLines": 37930,
+      "kGenerationMs": 58.642151999999996,
+      "elfBytes": 9393606,
+      "buildMs": [
+        67.15290800000001,
+        69.54207199999999,
+        68.01659300000003,
+        68.54510599999998,
+        70.87078100000002
+      ],
+      "medianBuildMs": 68.54510599999998,
+      "stdoutHex": "48656c6c6f2066726f6d206c6b6a7363726970742e0a00ff410a"
+    },
+    "after": {
+      "binary": "/home/coder/workspace/lkjscript/target/release/lkjscript",
+      "sha256": "34dde6b867863939630c65ffd9299da1dad273684323e6a4c2e67283179ded67",
+      "kBytes": 95496,
+      "kLines": 5160,
+      "kGenerationMs": 44.902060000000006,
+      "elfBytes": 83398,
+      "buildMs": [
+        45.34210699999994,
+        46.65499599999998,
+        47.331638999999996,
+        46.80226400000004,
+        48.57131099999992
+      ],
+      "medianBuildMs": 46.80226400000004,
+      "stdoutHex": "48656c6c6f2066726f6d206c6b6a7363726970742e0a00ff410a"
+    }
+  },
+  "sameEncoder": {
+    "description": "Both pre-change and compact K compiled by the same current native encoder/runtime.",
+    "before": {
+      "elfBytes": 83398,
+      "buildMs": 23.513723000000027
+    },
+    "after": {
+      "elfBytes": 83398,
+      "buildMs": 5.425623999999971
+    }
+  },
+  "probeShapes": {
+    "before-16": {
+      "locals": 22,
+      "instructions": 25,
+      "repeatInstructions": []
+    },
+    "after-16": {
+      "locals": 6,
+      "instructions": 8,
+      "repeatInstructions": [
+        "@1:28 intrinsic 1 \"array_repeat\" 0"
+      ]
+    },
+    "before-8192": {
+      "locals": 8198,
+      "instructions": 8201,
+      "repeatInstructions": []
+    },
+    "after-8192": {
+      "locals": 6,
+      "instructions": 8,
+      "repeatInstructions": [
+        "@1:28 intrinsic 1 \"array_repeat\" 0"
+      ]
+    }
+  }
+}

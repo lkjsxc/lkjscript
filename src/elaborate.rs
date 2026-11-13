@@ -2483,8 +2483,10 @@ impl Builder<'_, '_> {
                     ));
                 }
                 let mut elements = Vec::new();
-                for _ in 0..length {
-                    elements.push(self.read(k::Place::local(v.0), line)?.0);
+                if length <= 1 {
+                    for _ in 0..length {
+                        elements.push(self.read(k::Place::local(v.0), line)?.0);
+                    }
                 }
                 let ty = self.compiler.intern(
                     format!("[{};{}]", self.compiler.types[v.1].name, length),
@@ -2494,7 +2496,18 @@ impl Builder<'_, '_> {
                     },
                 );
                 let dst = self.temp(ty);
-                self.emit(k::Op::Array { dst, elements }, line);
+                if length > 1 {
+                    self.emit(
+                        k::Op::Intrinsic {
+                            dst,
+                            name: "array_repeat".to_string(),
+                            args: vec![v.0],
+                        },
+                        line,
+                    );
+                } else {
+                    self.emit(k::Op::Array { dst, elements }, line);
+                }
                 if self.live.at(v.0) {
                     self.emit(
                         k::Op::Drop {

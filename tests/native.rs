@@ -202,3 +202,175 @@ fn prepared_source_runtime_probes_run_through_the_native_encoder() {
         assert_eq!((result[0], result[1]), (status, value), "{name}");
     }
 }
+
+fn instruction_program(functions: Vec<lower::Function>, table: Vec<usize>) -> lower::Program {
+    lower::Program {
+        layout: lower::Layouts { types: vec![] },
+        imports: vec![],
+        functions,
+        globals: vec![
+            lower::Global {
+                initial: 0,
+                mutable: true,
+            },
+            lower::Global {
+                initial: 0,
+                mutable: true,
+            },
+        ],
+        exports: vec![],
+        table,
+        data: vec![],
+        data_offset: 8,
+        minimum_memory_pages: 1,
+        trap_code_global: 0,
+        trap_line_global: 1,
+        trap_messages: vec![],
+    }
+}
+
+fn instruction_function(
+    name: &str,
+    parameters: Vec<lower::ValueType>,
+    locals: Vec<lower::ValueType>,
+    instructions: Vec<lower::Instruction>,
+) -> lower::Function {
+    lower::Function {
+        name: name.to_string(),
+        signature: lower::Signature {
+            parameters,
+            result: Some(lower::ValueType::I64),
+        },
+        role: lower::FunctionRole::Source,
+        code: lower::Code {
+            locals,
+            instructions,
+        },
+    }
+}
+
+#[test]
+fn pending_operands_survive_local_updates_calls_and_region_merges() {
+    let _execution = EXECUTION.lock().unwrap();
+    use lower::{Instruction as I, ScalarOp as S, ValueType as V};
+    let program = instruction_program(
+        vec![
+            instruction_function(
+                "pending_boundaries",
+                vec![V::I32],
+                vec![V::I64],
+                vec![
+                    I::I64(11),
+                    I::LocalSet(1),
+                    I::LocalGet(1),
+                    I::I64(31),
+                    I::LocalSet(1),
+                    I::LocalGet(1),
+                    I::Scalar(S::I64Add),
+                    I::LocalTee(1),
+                    I::Call(1),
+                    I::LocalGet(0),
+                    I::If(None),
+                    I::I64(99),
+                    I::LocalSet(1),
+                    I::Else,
+                    I::I32(-1),
+                    I::Scalar(S::I64ExtendI32U),
+                    I::LocalSet(1),
+                    I::End,
+                    I::Return,
+                    I::End,
+                ],
+            ),
+            instruction_function(
+                "identity",
+                vec![V::I64],
+                vec![],
+                vec![I::LocalGet(0), I::End],
+            ),
+        ],
+        vec![],
+    );
+    for condition in [0, 1] {
+        let image = Image::new("pending", &program, 0, vec![condition]);
+        assert_eq!(packet(image.command().output().unwrap()), [0, 42, 0]);
+    }
+}
+
+fn table_program() -> lower::Program {
+    use lower::{Instruction as I, Signature};
+    instruction_program(
+        vec![
+            instruction_function(
+                "entry",
+                vec![],
+                vec![],
+                vec![I::I64(1), I::CallIndirect(Signature::words(0)), I::End],
+            ),
+            // Public lowered IR is not a second safety boundary. Its dead local
+            // instruction is omitted; mandatory K checking precedes real lowering.
+            instruction_function("dead", vec![], vec![], vec![I::LocalGet(99), I::End]),
+            instruction_function("table_target", vec![], vec![], vec![I::Call(3), I::End]),
+            instruction_function("direct_callee", vec![], vec![], vec![I::I64(42), I::End]),
+            instruction_function("other_table_slot", vec![], vec![], vec![I::I64(73), I::End]),
+        ],
+        vec![4, 2],
+    )
+}
+
+#[test]
+fn reachability_keeps_table_slots_and_their_direct_callees() {
+    let _execution = EXECUTION.lock().unwrap();
+    use lower::{Instruction as I, Signature};
+    let mut program = table_program();
+    let image = Image::new("table_second", &program, 0, vec![]);
+    assert_eq!(packet(image.command().output().unwrap()), [0, 42, 0]);
+    let original = std::fs::read(&image.0).unwrap();
+    program.functions[1].code.instructions = vec![I::I64(0), I::End];
+    let changed_dead_body = native::encode(
+        &program,
+        native::Entry {
+            function: 0,
+            arguments: vec![],
+            result_fd: Some(2),
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        original, changed_dead_body,
+        "dead bodies must not contribute code"
+    );
+    program.functions[0].code.instructions =
+        vec![I::I64(0), I::CallIndirect(Signature::words(0)), I::End];
+    let image = Image::new("table_first", &program, 0, vec![]);
+    assert_eq!(packet(image.command().output().unwrap()), [0, 73, 0]);
+}
+
+#[test]
+fn reachability_rejects_invalid_roots_table_entries_and_dead_direct_calls() {
+    use lower::Instruction as I;
+    let encode = |program: &lower::Program, function| {
+        native::encode(
+            program,
+            native::Entry {
+                function,
+                arguments: vec![],
+                result_fd: Some(2),
+            },
+        )
+    };
+    let mut program = table_program();
+    assert_eq!(
+        encode(&program, 99).unwrap_err(),
+        "native entry is not a function"
+    );
+    assert_eq!(encode(&program, 1).unwrap_err(), "invalid lowered local");
+    program.table.push(99);
+    assert_eq!(
+        encode(&program, 0).unwrap_err(),
+        "invalid lowered table function"
+    );
+    program.table.pop();
+    program.functions[1].code.instructions = vec![I::Call(99), I::End];
+    assert_eq!(encode(&program, 0).unwrap_err(), "invalid lowered call");
+}

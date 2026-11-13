@@ -1720,6 +1720,12 @@ fn check_intrinsic(
                     && variants[1].name == "Some" && variants[1].fields.len() == 1
                     && matches!(types[variants[1].fields[0].ty].kind, TypeKind::Char))
         }
+        "array_repeat" => match types[dt].kind {
+            TypeKind::Array { inner, len } => {
+                len >= 2 && ts.len() == 1 && ts[0] == inner && is_copy(types, inner)
+            }
+            _ => false,
+        },
         "str_len" => ts.len() == 1 && text_ref(ts[0]) && dt == U64,
         "str_as_bytes" => ts.len() == 1 && text_ref(ts[0]) && bytes_ref(dt),
         "str_from_utf8" => {
