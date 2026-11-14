@@ -13,8 +13,8 @@ name = "lkjscript"
 path = "bridge/main.rs"
 
 [[bin]]
-name = "kc"
-path = "bridge/kc.rs"
+name = "lkjscript-backend"
+path = "bridge/backend.rs"
 test = false
 
 [profile.release]

@@ -6,7 +6,7 @@ import { run } from './process.mjs';
 import { runRoutes } from './batch.mjs';
 import { worldOutcome } from './oracle.mjs';
 const root=path.resolve('.'), binary=path.resolve(process.argv[2]||'target/release/lkjscript');
-const kc=path.resolve(process.argv[3]||path.join(path.dirname(binary),'kc'));
+const backend=path.resolve(process.argv[3]||path.join(path.dirname(binary),'lkjscript-backend'));
 const output=path.join(root,'target/world-io');fs.mkdirSync(output,{recursive:true});
 const started=performance.now(), summary={observations:0,failures:[]};
 const host=fs.readFileSync('bridge/output.rs','utf8');
@@ -14,19 +14,19 @@ const launch=path.join(output,'launch');
 function detail(r){return `${r.status}/${r.signal}: ${r.stderr?.toString()} ${r.error||''}`;}
 async function build(command,args){const r=await run(command,args);if(r.status!==0||r.error)throw Error(detail(r));}
 await build('rustc',['--edition=2024','tests/fixtures/world/launch.rs','-o',launch]);
-const runtime=await run(binary,['runtime-k']);if(runtime.status!==0||runtime.error)throw Error(detail(runtime));
-const runtimePath=path.join(output,'runtime.k');fs.writeFileSync(runtimePath,runtime.stdout);
+const runtime=await run(binary,['runtime-ir']);if(runtime.status!==0||runtime.error)throw Error(detail(runtime));
+const runtimePath=path.join(output,'runtime.lkjir');fs.writeFileSync(runtimePath,runtime.stdout);
 async function compile(name){
  const source=path.join(root,'tests/fixtures/world',name+'.rs');
  const rust=path.join(output,name+'-rust.rs'), oracle=path.join(output,name+'-rust'), native=path.join(output,name+'.elf');
  fs.writeFileSync(rust,'#![allow(warnings)]\nmod host {\n'+host+'\n}\nmod case {\nuse crate::host::{World,Stdout,Stdin,Stderr,Directory,File};\n'+fs.readFileSync(source,'utf8')+'\n}\nfn main(){host::enter(case::main);}\n');
- await build('rustc',['--edition=2024','--cfg','lkj_control','-C','overflow-checks=yes','-C','opt-level=1',rust,'-o',oracle]);
+ await build('rustc',['--edition=2024','--cfg','lkjscript_control','-C','overflow-checks=yes','-C','opt-level=1',rust,'-o',oracle]);
  await build(binary,['build',source,'-o',native]);
- const k=await run(binary,['k',source]);if(k.status!==0||k.error)throw Error(detail(k));
- const kpath=path.join(output,name+'.k'), kelf=path.join(output,name+'-kc.elf');fs.writeFileSync(kpath,k.stdout);
- await build(kc,[kpath,'--runtime',runtimePath,'-o',kelf]);summary.observations++;
- if(!fs.readFileSync(native).equals(fs.readFileSync(kelf)))summary.failures.push(name+': K compiler bytes differ');
- return {source,routes:[['standalone',native,[]],['native',binary,['run',source,'--engine','native','--']],['k',binary,['run',source,'--engine','k','--']],['rust',oracle,[]]]};
+ const ir=await run(binary,['ir',source]);if(ir.status!==0||ir.error)throw Error(detail(ir));
+ const irPath=path.join(output,name+'.lkjir'), backendElf=path.join(output,name+'-backend.elf');fs.writeFileSync(irPath,ir.stdout);
+ await build(backend,[irPath,'--runtime',runtimePath,'-o',backendElf]);summary.observations++;
+ if(!fs.readFileSync(native).equals(fs.readFileSync(backendElf)))summary.failures.push(name+': backend bytes differ');
+ return {source,routes:[['standalone',native,[]],['native',binary,['run',source,'--engine','native','--']],['interpreter',binary,['run',source,'--engine','interpreter','--']],['rust',oracle,[]]]};
 }
 async function execute(route,args,input,close,nofile){
  const [name,command,prefix]=route;
@@ -81,10 +81,10 @@ for(const route of invalid.routes){
  if(result.error||result.signal||result.status==0||(route[0]==='rust'?(worldOutcome(result).kind!=='trap'||worldOutcome(result).code!=='R0003'):!result.stderr.toString().includes('R0003')))summary.failures.push('invalid argument/'+route[0]+': '+detail(result));
 }
 const marker=await compile('status_marker');
-for(const route of marker.routes)check(await execute(route,[],Buffer.alloc(0)),101,Buffer.alloc(0),Buffer.from('LKJ_RUST_TRAP R0005\n'),'status marker/'+route[0]);
+for(const route of marker.routes)check(await execute(route,[],Buffer.alloc(0)),101,Buffer.alloc(0),Buffer.from('LKJSCRIPT_RUST_TRAP R0005\n'),'status marker/'+route[0]);
 // Real program stderr is separate from diagnostics in the batch protocol.
 const status=await compile('status');
-const routes=await runRoutes(binary,[{path:status.source}],{engines:['native','k'],output,encoding:null});
+const routes=await runRoutes(binary,[{path:status.source}],{engines:['native','interpreter'],output,encoding:null});
 for(const [engine,results] of Object.entries(routes)){
  const r=results[0];summary.observations++;
  if(r.status!==23||r.checkStatus!==0||r.stderr.length!==0||!r.stdout.equals(Buffer.from([0,255]))||!r.programStderr.equals(Buffer.from([255,0,128])))summary.failures.push('batch stderr/status '+engine+': '+detail(r));

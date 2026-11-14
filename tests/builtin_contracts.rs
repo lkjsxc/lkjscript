@@ -8,11 +8,11 @@ mod native;
 use lkjscript::{compiler, syntax};
 use std::process::Command;
 
-fn check(source: &str) -> Result<lkjscript::k::CheckedProgram, lkjscript::ast::Diagnostic> {
+fn check(source: &str) -> Result<lkjscript::ir::CheckedProgram, lkjscript::ast::Diagnostic> {
     compiler::check_source(&syntax::parse(source).expect("fixture parses"))
 }
 
-fn run(checked: &lkjscript::k::CheckedProgram, entries: &[(&str, i64)]) {
+fn run(checked: &lkjscript::ir::CheckedProgram, entries: &[(&str, i64)]) {
     native::assert_values(checked, entries);
 }
 
@@ -218,7 +218,7 @@ pub fn probe()->i64 {
             "{name}"
         );
     }
-    let artifact = lkjscript::kc::emit(
+    let artifact = lkjscript::backend::emit(
         &checked,
         lkjscript::bootstrap_runtime::get().unwrap(),
         "probe",
@@ -234,70 +234,70 @@ pub fn probe()->i64 {
     run(&checked, &[("probe", 42)]);
 }
 
-// A cyclic K reference type exercises the projection representation without
+// A cyclic IR reference type exercises the projection representation without
 // introducing a source alias or a numeric count that expands during checking.
-fn cyclic_reference_program(depth: usize) -> lkjscript::k::Program {
-    use lkjscript::k;
-    let mut types = k::primitives();
+fn cyclic_reference_program(depth: usize) -> lkjscript::ir::Program {
+    use lkjscript::ir;
+    let mut types = ir::primitives();
     let reference = types.len();
-    types.push(k::Type {
+    types.push(ir::Type {
         name: "CyclicReference".to_string(),
-        kind: k::TypeKind::Ref {
+        kind: ir::TypeKind::Ref {
             inner: reference,
             mutable: false,
         },
     });
-    let projections = vec![k::Projection::Deref; depth];
-    let function = k::Function {
+    let projections = vec![ir::Projection::Deref; depth];
+    let function = ir::Function {
         file: 0,
         name: "cyclic".to_string(),
         params: 1,
         result: reference,
-        return_source: Some(k::ReturnSource::Parameter {
+        return_source: Some(ir::ReturnSource::Parameter {
             index: 0,
             projections: projections.clone(),
         }),
         locals: vec![
-            k::Local {
+            ir::Local {
                 name: "parameter".to_string(),
                 ty: reference,
                 mutable: false,
             },
-            k::Local {
+            ir::Local {
                 name: "returned".to_string(),
                 ty: reference,
                 mutable: false,
             },
         ],
         body: vec![
-            k::Instruction {
+            ir::Instruction {
                 column: 1,
                 line: 1,
-                op: k::Op::Read {
+                op: ir::Op::Read {
                     dst: 1,
-                    place: k::Place {
+                    place: ir::Place {
                         local: 0,
                         projections,
                     },
                     moving: false,
                 },
             },
-            k::Instruction {
+            ir::Instruction {
                 column: 1,
                 line: 2,
-                op: k::Op::Drop {
-                    place: k::Place::local(0),
+                op: ir::Op::Drop {
+                    place: ir::Place::local(0),
                 },
             },
-            k::Instruction {
+            ir::Instruction {
                 column: 1,
                 line: 3,
-                op: k::Op::Return { src: 1 },
+                op: ir::Op::Return { src: 1 },
             },
         ],
         test: false,
     };
-    k::Program {
+    ir::Program {
         types,
         functions: vec![function],
         destructors: Vec::new(),
@@ -309,10 +309,10 @@ fn explicit_return_paths_check_and_round_trip_on_cyclic_reference_types() {
     for depth in [1, 2, 64] {
         let original = cyclic_reference_program(depth);
         lkjscript::check::check(original.clone()).unwrap();
-        let text = lkjscript::k_text::write(&original);
+        let text = lkjscript::ir_text::write(&original);
         let header = text.lines().find(|line| line.starts_with("fn ")).unwrap();
         assert_eq!(header.matches(" deref").count(), depth);
-        let parsed = lkjscript::k_text::read(&text).unwrap();
+        let parsed = lkjscript::ir_text::read(&text).unwrap();
         assert!(
             parsed == original,
             "return projection path changed during text roundtrip"
@@ -323,20 +323,20 @@ fn explicit_return_paths_check_and_round_trip_on_cyclic_reference_types() {
 
 #[test]
 fn return_path_text_rejects_encoded_numeric_repetition() {
-    let text = lkjscript::k_text::write(&cyclic_reference_program(1));
+    let text = lkjscript::ir_text::write(&cyclic_reference_program(1));
     for count in [0, 1, 64, usize::MAX] {
         let old_form = text.replace(" from 0 deref", &format!(" from 0 deref {count}"));
         assert_ne!(old_form, text);
-        let error = lkjscript::k_text::read(&old_form)
+        let error = lkjscript::ir_text::read(&old_form)
             .err()
             .expect("old numeric repetition must not expand a projection path");
-        assert_eq!(error.code, "E_K_TEXT", "{error:?}");
+        assert_eq!(error.code, "E_IR_TEXT", "{error:?}");
     }
 }
 
 #[test]
-fn return_contract_rejects_unsupported_projection_kinds_in_the_k_checker() {
-    use lkjscript::k::{Projection, ReturnSource};
+fn return_contract_rejects_unsupported_projection_kinds_in_the_ir_checker() {
+    use lkjscript::ir::{Projection, ReturnSource};
     for projection in [
         Projection::Field(0),
         Projection::VariantField(0, 0),
@@ -347,13 +347,13 @@ fn return_contract_rejects_unsupported_projection_kinds_in_the_k_checker() {
             index: 0,
             projections: vec![projection],
         });
-        // The generic K place syntax preserves the requested projection. Its
-        // return-contract legality is checked at the semantic K boundary.
-        let parsed = lkjscript::k_text::read(&lkjscript::k_text::write(&original)).unwrap();
+        // The generic IR place syntax preserves the requested projection. Its
+        // return-contract legality is checked at the semantic IR boundary.
+        let parsed = lkjscript::ir_text::read(&lkjscript::ir_text::write(&original)).unwrap();
         assert!(parsed == original);
         let error = lkjscript::check::check(parsed)
             .err()
-            .expect("unsupported return projection must reach and fail the K checker");
+            .expect("unsupported return projection must reach and fail the IR checker");
         assert_eq!(error.code, "E_BORROW", "{error:?}");
         assert!(error.message.contains("source contract"), "{error:?}");
     }

@@ -1,6 +1,5 @@
 #!/usr/bin/env node
-// Observe the production K compiler's fixed point on one declared K/runtime pair.
-// Resource envelopes are operator choices and never language acceptance limits.
+// Observe the production backend's fixed point on one declared IR/runtime pair.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -11,28 +10,28 @@ import { run } from './process.mjs';
 const repository=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const argv=process.argv.slice(2);
 if(argv.includes('--help')){
- console.log('usage: node tools/selfhost.mjs [B0] [CARGO_KC] [--prepare-only]\n'+
-  'LKJ_SELFHOST_OUT selects the observation directory (default target/selfhost-observation).\n'+
-  'LKJ_SELFHOST_MEMORY_BYTES defaults to 8589934592; unlimited inherits Linux controls.\n'+
-  'LKJ_SELFHOST_TIMEOUT_MS defaults to 600000 per command; 0 disables the deadline.\n'+
-  'LKJ_SELFHOST_MAX_OUTPUT_BYTES defaults to 268435456 for captured compiler output.');
+ console.log('usage: node tools/selfhost.mjs [B0] [CARGO_BACKEND] [--prepare-only]\n'+
+  'LKJSCRIPT_SELFHOST_OUT selects the observation directory (default target/selfhost-observation).\n'+
+  'LKJSCRIPT_SELFHOST_MEMORY_BYTES defaults to 8589934592; unlimited inherits Linux controls.\n'+
+  'LKJSCRIPT_SELFHOST_TIMEOUT_MS defaults to 600000 per command; 0 disables the deadline.\n'+
+  'LKJSCRIPT_SELFHOST_MAX_OUTPUT_BYTES defaults to 268435456 for captured compiler output.');
  process.exit(0);
 }
 const prepareOnly=argv.includes('--prepare-only');
 const positional=argv.filter(value=>value!=='--prepare-only');
 if(positional.length>2||positional.some(value=>value.startsWith('--')))throw Error('unexpected argument; see --help');
 const binary=path.resolve(positional[0]||path.join(repository,'target/release/lkjscript'));
-const cargoKc=path.resolve(positional[1]||path.join(repository,'target/release/kc'));
-const out=path.resolve(process.env.LKJ_SELFHOST_OUT||path.join(repository,'target/selfhost-observation'));
+const cargoBackend=path.resolve(positional[1]||path.join(repository,'target/release/lkjscript-backend'));
+const out=path.resolve(process.env.LKJSCRIPT_SELFHOST_OUT||path.join(repository,'target/selfhost-observation'));
 function numberSetting(name,fallback,minimum){
  const value=Number(process.env[name]??fallback);
  if(!Number.isSafeInteger(value)||value<minimum)throw Error(name+' must be an integer >= '+minimum);
  return value;
 }
 const controls={
- memory_bytes:process.env.LKJ_SELFHOST_MEMORY_BYTES||'8589934592',
- timeout_ms:numberSetting('LKJ_SELFHOST_TIMEOUT_MS',600000,0),
- max_output_bytes:numberSetting('LKJ_SELFHOST_MAX_OUTPUT_BYTES',268435456,1),
+ memory_bytes:process.env.LKJSCRIPT_SELFHOST_MEMORY_BYTES||'8589934592',
+ timeout_ms:numberSetting('LKJSCRIPT_SELFHOST_TIMEOUT_MS',600000,0),
+ max_output_bytes:numberSetting('LKJSCRIPT_SELFHOST_MAX_OUTPUT_BYTES',268435456,1),
 };
 fs.mkdirSync(out,{recursive:true});
 const digest=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
@@ -46,8 +45,8 @@ function gitSnapshot(){
 }
 const start=performance.now();
 const summary={
- stage:'production K compiler fixed point',status:'running',started_at:new Date().toISOString(),
- controls,git_start:gitSnapshot(),harness:fileRecord(fileURLToPath(import.meta.url)),compilers:{b0:fileRecord(binary),cargo_kc:fileRecord(cargoKc)},
+ stage:'production backend fixed point',status:'running',started_at:new Date().toISOString(),
+ controls,git_start:gitSnapshot(),harness:fileRecord(fileURLToPath(import.meta.url)),compilers:{b0:fileRecord(binary),cargo_backend:fileRecord(cargoBackend)},
  inputs:{},commands:[],comparisons:[],artifacts:{},failures:[],
 };
 const summaryPath=path.join(out,'summary.json');
@@ -92,26 +91,26 @@ function compare(name,left,right){
  if(!identical)throw Error(name+': ELF bytes differ');
 }
 try{
- const input=path.join(out,'kc.k'),runtime=path.join(out,'runtime.k');
- await measure('prepare_k',binary,['k','src/kc_main.rs'],{stdout:input});
- await measure('prepare_runtime',binary,['runtime-k'],{stdout:runtime});
+ const input=path.join(out,'backend.lkjir'),runtime=path.join(out,'runtime.lkjir');
+ await measure('prepare_ir',binary,['ir','src/backend_main.rs'],{stdout:input});
+ await measure('prepare_runtime',binary,['runtime-ir'],{stdout:runtime});
  summary.inputs={program:fileRecord(input),runtime:fileRecord(runtime)};save();
  if(prepareOnly){
   summary.status='prepared';
  }else{
-  const b0=path.join(out,'b0.elf'),kc1=path.join(out,'kc1.elf'),kc2=path.join(out,'kc2.elf'),kc3=path.join(out,'kc3.elf');
+  const b0=path.join(out,'b0.elf'),backend1=path.join(out,'backend1.elf'),backend2=path.join(out,'backend2.elf'),backend3=path.join(out,'backend3.elf');
   await measure('b0_emit',binary,['build',input,'--entry','main','-o',b0],{artifact:b0});
   summary.artifacts.b0=elf(b0);
-  await measure('cargo_emit',cargoKc,[input,'--runtime',runtime,'--entry','main','-o',kc1],{artifact:kc1});
-  summary.artifacts.kc1=elf(kc1);
-  compare('B0 versus Cargo K compiler',b0,kc1);
-  const args=['kc.k','--runtime','runtime.k','--entry','main'];
-  await measure('kc1_emit_kc2',kc1,args,{cwd:out,stdout:kc2});
-  summary.artifacts.kc2=elf(kc2);
-  compare('kc1 versus kc2',kc1,kc2);
-  await measure('kc2_emit_kc3',kc2,args,{cwd:out,stdout:kc3});
-  summary.artifacts.kc3=elf(kc3);
-  compare('kc2 versus kc3',kc2,kc3);
+  await measure('cargo_emit',cargoBackend,[input,'--runtime',runtime,'--entry','main','-o',backend1],{artifact:backend1});
+  summary.artifacts.backend1=elf(backend1);
+  compare('B0 versus Cargo backend',b0,backend1);
+  const args=['backend.lkjir','--runtime','runtime.lkjir','--entry','main'];
+  await measure('backend1_emit_backend2',backend1,args,{cwd:out,stdout:backend2});
+  summary.artifacts.backend2=elf(backend2);
+  compare('backend1 versus backend2',backend1,backend2);
+  await measure('backend2_emit_backend3',backend2,args,{cwd:out,stdout:backend3});
+  summary.artifacts.backend3=elf(backend3);
+  compare('backend2 versus backend3',backend2,backend3);
   summary.status='fixed point';
  }
 }catch(error){

@@ -3,7 +3,7 @@
 mod bootstrap_library;
 
 use lkjscript::source::{SourceBundle, SourceInput};
-use lkjscript::{compiler, k};
+use lkjscript::{compiler, ir};
 #[path = "support/native.rs"]
 mod native;
 use std::process::Command;
@@ -29,7 +29,7 @@ fn bundle(source: &str, library: bool) -> SourceBundle {
     }
 }
 
-fn check(bundle: &SourceBundle) -> k::CheckedProgram {
+fn check(bundle: &SourceBundle) -> ir::CheckedProgram {
     compiler::check_bundle(bundle)
         .unwrap_or_else(|problem| panic!("valid generic scope rejected: {problem:?}"))
 }

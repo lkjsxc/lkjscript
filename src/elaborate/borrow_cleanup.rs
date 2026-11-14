@@ -1,7 +1,7 @@
 //! Scheduling metadata for early reference cleanup. These storage dependencies
 //! keep a reference descriptor alive while another live value points into it.
-//! They do not prove lifetime validity: every emitted operation still passes K.
-use super::{Builder, Snapshot, k, place_type};
+//! They do not prove lifetime validity: every emitted operation still passes IR.
+use super::{Builder, Snapshot, ir, place_type};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(super) type Dependencies = BTreeMap<usize, BTreeSet<usize>>;
@@ -13,11 +13,11 @@ pub(super) struct ReferenceSchedule {
 }
 
 impl Builder<'_, '_> {
-    fn storage_dependencies(&self, place: &k::Place) -> BTreeSet<usize> {
+    fn storage_dependencies(&self, place: &ir::Place) -> BTreeSet<usize> {
         let mut storage = BTreeSet::new();
         storage.insert(place.local);
         for projection in &place.projections {
-            if matches!(projection, k::Projection::Deref) {
+            if matches!(projection, ir::Projection::Deref) {
                 let mut next = BTreeSet::new();
                 for local in storage {
                     if let Some(parents) = self.carriers.get(&local) {
@@ -32,7 +32,7 @@ impl Builder<'_, '_> {
         storage
     }
 
-    fn value_dependencies(&self, place: &k::Place) -> BTreeSet<usize> {
+    fn value_dependencies(&self, place: &ir::Place) -> BTreeSet<usize> {
         let Some(ty) = place_type(&self.compiler.types, self.function, place) else {
             return BTreeSet::new();
         };
@@ -52,10 +52,10 @@ impl Builder<'_, '_> {
 
     fn carries_references(&self, ty: usize) -> bool {
         match self.compiler.types[ty].kind {
-            k::TypeKind::Ref { .. } | k::TypeKind::Slice { .. } => true,
-            k::TypeKind::Struct { .. } | k::TypeKind::Enum { .. } | k::TypeKind::Array { .. } => {
-                self.compiler.has_view(ty)
-            }
+            ir::TypeKind::Ref { .. } | ir::TypeKind::Slice { .. } => true,
+            ir::TypeKind::Struct { .. }
+            | ir::TypeKind::Enum { .. }
+            | ir::TypeKind::Array { .. } => self.compiler.has_view(ty),
             _ => false,
         }
     }
@@ -91,12 +91,12 @@ impl Builder<'_, '_> {
         }
     }
 
-    fn store_dependencies(&mut self, place: &k::Place, dependencies: BTreeSet<usize>) {
+    fn store_dependencies(&mut self, place: &ir::Place, dependencies: BTreeSet<usize>) {
         if place.projections.is_empty() {
             self.set_dependencies(place.local, dependencies);
         } else {
             // Field writes preserve dependencies of the other fields. This
-            // scheduling approximation may keep carriers longer; K checks the
+            // scheduling approximation may keep carriers longer; IR checks the
             // exact projected loans and moves independently.
             for local in self.storage_dependencies(place) {
                 let mut parents = self
@@ -112,29 +112,29 @@ impl Builder<'_, '_> {
         }
     }
 
-    pub(super) fn record_carriers(&mut self, operation: &k::Op) {
+    pub(super) fn record_carriers(&mut self, operation: &ir::Op) {
         match operation {
-            k::Op::Borrow { dst, place, .. }
-            | k::Op::SliceBorrow { dst, place, .. }
-            | k::Op::ViewRange { dst, place, .. } => {
+            ir::Op::Borrow { dst, place, .. }
+            | ir::Op::SliceBorrow { dst, place, .. }
+            | ir::Op::ViewRange { dst, place, .. } => {
                 let dependencies = self.storage_dependencies(place);
                 self.set_dependencies(*dst, dependencies);
             }
-            k::Op::Read { dst, place, moving } => {
+            ir::Op::Read { dst, place, moving } => {
                 let dependencies = self.value_dependencies(place);
                 if *moving && place.projections.is_empty() {
                     self.remove_dependencies(place.local);
                 }
                 self.set_dependencies(*dst, dependencies);
             }
-            k::Op::Assign { place, src } => {
+            ir::Op::Assign { place, src } => {
                 let dependencies = self.carriers.get(src).cloned().unwrap_or(BTreeSet::new());
                 self.remove_dependencies(*src);
                 self.store_dependencies(place, dependencies);
             }
-            k::Op::Struct { dst, fields }
-            | k::Op::Variant { dst, fields, .. }
-            | k::Op::Array {
+            ir::Op::Struct { dst, fields }
+            | ir::Op::Variant { dst, fields, .. }
+            | ir::Op::Array {
                 dst,
                 elements: fields,
             } => {
@@ -148,23 +148,23 @@ impl Builder<'_, '_> {
                 }
                 self.set_dependencies(*dst, dependencies);
             }
-            k::Op::Call {
+            ir::Op::Call {
                 dst,
                 function,
                 args,
             } => {
                 let dependencies = match &self.compiler.functions[*function].return_source {
-                    Some(k::ReturnSource::Parameter { index, projections }) => self
-                        .value_dependencies(&k::Place {
+                    Some(ir::ReturnSource::Parameter { index, projections }) => self
+                        .value_dependencies(&ir::Place {
                             local: args[*index],
                             projections: projections.clone(),
                         }),
-                    Some(k::ReturnSource::Leaves(leaves)) => {
+                    Some(ir::ReturnSource::Leaves(leaves)) => {
                         let mut dependencies = BTreeSet::new();
                         for leaf in leaves {
-                            if let k::LeafOrigin::Inputs { inputs, .. } = &leaf.origin {
+                            if let ir::LeafOrigin::Inputs { inputs, .. } = &leaf.origin {
                                 for input in inputs {
-                                    for parent in self.value_dependencies(&k::Place {
+                                    for parent in self.value_dependencies(&ir::Place {
                                         local: args[input.index],
                                         projections: input.projections.clone(),
                                     }) {
@@ -182,12 +182,12 @@ impl Builder<'_, '_> {
                 }
                 self.set_dependencies(*dst, dependencies);
             }
-            k::Op::Intrinsic { dst, name, args } => {
+            ir::Op::Intrinsic { dst, name, args } => {
                 let mut dependencies = BTreeSet::new();
                 if name == "replace" || name == "clone" {
-                    let source = k::Place {
+                    let source = ir::Place {
                         local: args[0],
-                        projections: vec![k::Projection::Deref],
+                        projections: vec![ir::Projection::Deref],
                     };
                     dependencies = self.value_dependencies(&source);
                     if name == "replace" {
@@ -215,10 +215,10 @@ impl Builder<'_, '_> {
                 }
                 self.set_dependencies(*dst, dependencies);
             }
-            k::Op::Drop { place } | k::Op::DropIf { place } if place.projections.is_empty() => {
+            ir::Op::Drop { place } | ir::Op::DropIf { place } if place.projections.is_empty() => {
                 self.remove_dependencies(place.local);
             }
-            k::Op::Return { src } => {
+            ir::Op::Return { src } => {
                 self.remove_dependencies(*src);
             }
             _ => {}
@@ -227,7 +227,7 @@ impl Builder<'_, '_> {
 
     pub(super) fn merge_carriers(&mut self, state: &Snapshot) {
         // Source construction tracks possible owners so lexical cleanup is
-        // emitted for either path. K independently checks definite availability.
+        // emitted for either path. IR independently checks definite availability.
         self.live = self.live.union(&state.live);
         self.definite_live = self.definite_live.intersection(&state.definite_live);
         self.written = self.written.union(&state.written);
@@ -313,8 +313,8 @@ impl Builder<'_, '_> {
             let fields = self.compiler.closure_reference_fields(self.ty(local));
             if fields.is_empty() {
                 self.emit(
-                    k::Op::Drop {
-                        place: k::Place::local(local),
+                    ir::Op::Drop {
+                        place: ir::Place::local(local),
                     },
                     line,
                 );
@@ -323,10 +323,10 @@ impl Builder<'_, '_> {
                 // fields retain their lexical destructor point and drop order.
                 for field in fields {
                     self.emit(
-                        k::Op::DropIf {
-                            place: k::Place {
+                        ir::Op::DropIf {
+                            place: ir::Place {
                                 local,
-                                projections: vec![k::Projection::Field(field)],
+                                projections: vec![ir::Projection::Field(field)],
                             },
                         },
                         line,
@@ -346,6 +346,6 @@ impl Builder<'_, '_> {
             }
         }
         // A dependency cycle has no early-drop order. Leave it to ordinary
-        // scope cleanup and the K check rather than inventing a lifetime rule.
+        // scope cleanup and the IR check rather than inventing a lifetime rule.
     }
 }

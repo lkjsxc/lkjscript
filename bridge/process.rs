@@ -51,16 +51,16 @@ fn inherited_limit(resource: u32) -> Result<Limit, String> {
 /// The model receives an execution input; its core never reads host policy.
 /// A finite inherited stack limit is always authoritative. Only an unlimited
 /// inherited extent needs a finite provisioning fallback.
-pub fn machine_resources() -> Result<lkjscript::machine::Resources, String> {
+pub fn interpreter_resources() -> Result<lkjscript::interpreter::Resources, String> {
     let inherited = inherited_limit(3)?.current;
-    let stack = match budget("LKJ_RUN_STACK_BYTES")? {
+    let stack = match budget("LKJSCRIPT_RUN_STACK_BYTES")? {
         Some(requested) => inherited.min(requested),
         None if inherited == u64::MAX => STACK_FALLBACK,
         None => inherited,
     };
     let stack_bytes = usize::try_from(stack)
         .map_err(|_| "E_HOST stack extent exceeds host representation".to_string())?;
-    Ok(lkjscript::machine::Resources { stack_bytes })
+    Ok(lkjscript::interpreter::Resources { stack_bytes })
 }
 
 /// Budgets are explicit host choices. An absent memory setting inherits Linux
@@ -69,10 +69,10 @@ pub fn prepare_native_child(command: &mut Command) -> Result<(), String> {
     prepare_budgeted_child(command, true).map(|_| ())
 }
 fn prepare_budgeted_child(command: &mut Command, native_stack: bool) -> Result<u64, String> {
-    let requested_memory = budget("LKJ_RUN_MEMORY_BYTES")?.unwrap_or(u64::MAX);
+    let requested_memory = budget("LKJSCRIPT_RUN_MEMORY_BYTES")?.unwrap_or(u64::MAX);
     let selected_memory = inherited_limit(9)?.current.min(requested_memory);
     let requested_stack = if native_stack {
-        budget("LKJ_RUN_STACK_BYTES")?
+        budget("LKJSCRIPT_RUN_STACK_BYTES")?
     } else {
         // A tiny model extent must not shrink the Rust worker's startup stack.
         None
@@ -130,13 +130,13 @@ pub fn prepare_child(command: &mut Command) {
     }
 }
 
-/// K execution and every batch run in a fresh process so the Rust allocator
+/// IR execution and every batch run in a fresh process so the Rust allocator
 /// and captured program streams cannot consume the compiler host. Compile/check
 /// commands have no runner budget. Batch retains its streaming result protocol.
 pub fn execution_worker() -> Result<Option<std::process::ExitCode>, String> {
     use std::os::unix::process::ExitStatusExt;
     use std::process::{ExitCode, Stdio};
-    if std::env::var("LKJ_EXECUTION_WORKER").as_deref() == Ok("1") {
+    if std::env::var("LKJSCRIPT_EXECUTION_WORKER").as_deref() == Ok("1") {
         return Ok(None);
     }
     let argv = std::env::args_os().skip(1).collect::<Vec<_>>();
@@ -155,13 +155,13 @@ pub fn execution_worker() -> Result<Option<std::process::ExitCode>, String> {
         }
     });
     let needs_worker =
-        verb == "batch" || ((verb == "run" || verb == "test") && selected == Some("k"));
+        verb == "batch" || ((verb == "run" || verb == "test") && selected == Some("interpreter"));
     if !needs_worker {
         return Ok(None);
     }
     let executable = std::env::current_exe().map_err(|error| format!("E_HOST {error}"))?;
     let mut command = Command::new(executable);
-    command.args(&argv).env("LKJ_EXECUTION_WORKER", "1");
+    command.args(&argv).env("LKJSCRIPT_EXECUTION_WORKER", "1");
     // The worker has one active compiler/execution thread at a time. A second
     // glibc arena can require a large aligned reservation under RLIMIT_AS;
     // when that reservation fails, tiny allocations can fall back to separate

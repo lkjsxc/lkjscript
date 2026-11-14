@@ -1,5 +1,5 @@
-//! Surface control forms lower to the ordinary checked K operations.
-use super::{Builder, Result, a, err, k};
+//! Surface control forms lower to the ordinary checked IR operations.
+use super::{Builder, Result, a, err, ir};
 
 impl Builder<'_, '_> {
     pub(super) fn try_expr(&mut self, expression: usize, span: a::Span) -> Result<(usize, usize)> {
@@ -25,10 +25,10 @@ impl Builder<'_, '_> {
                 "? and the function result require the same Result or Option family",
             ));
         }
-        let k::TypeKind::Enum { variants, .. } = self.compiler.types[ty].kind.clone() else {
+        let ir::TypeKind::Enum { variants, .. } = self.compiler.types[ty].kind.clone() else {
             unreachable!()
         };
-        let k::TypeKind::Enum {
+        let ir::TypeKind::Enum {
             variants: outputs, ..
         } = self.compiler.types[result_ty].kind.clone()
         else {
@@ -36,15 +36,15 @@ impl Builder<'_, '_> {
         };
         let success = variants
             .iter()
-            .position(|variant: &k::Variant| variant.name == success_name)
+            .position(|variant: &ir::Variant| variant.name == success_name)
             .unwrap();
         let failure = variants
             .iter()
-            .position(|variant: &k::Variant| variant.name == failure_name)
+            .position(|variant: &ir::Variant| variant.name == failure_name)
             .unwrap();
         let output_failure = outputs
             .iter()
-            .position(|variant: &k::Variant| variant.name == failure_name)
+            .position(|variant: &ir::Variant| variant.name == failure_name)
             .unwrap();
         let input_fields = &variants[failure].fields;
         let output_fields = &outputs[output_failure].fields;
@@ -53,8 +53,8 @@ impl Builder<'_, '_> {
             && self.library_string(output_fields[0].ty, span)
             && matches!(
                 self.compiler.types[input_fields[0].ty].kind,
-                k::TypeKind::Ref { inner, mutable: false }
-                    if matches!(self.compiler.types[inner].kind, k::TypeKind::Str)
+                ir::TypeKind::Ref { inner, mutable: false }
+                    if matches!(self.compiler.types[inner].kind, ir::TypeKind::Str)
             );
         let mut fields_differ = input_fields.len() != output_fields.len();
         let mut field = 0;
@@ -71,59 +71,59 @@ impl Builder<'_, '_> {
         }
         let payload = variants[success].fields[0].ty;
         let result = self.local(payload, "$try", true);
-        let condition = self.temp(k::BOOL);
+        let condition = self.temp(ir::BOOL);
         self.emit(
-            k::Op::TagTest {
+            ir::Op::TagTest {
                 dst: condition,
-                place: k::Place::local(source),
+                place: ir::Place::local(source),
                 variant: success,
             },
             span.line,
         );
-        self.emit(k::Op::If { condition }, span.line);
+        self.emit(ir::Op::If { condition }, span.line);
         let before = self.snapshot();
         let value = self
             .read(
-                k::Place {
+                ir::Place {
                     local: source,
-                    projections: vec![k::Projection::VariantField(success, 0)],
+                    projections: vec![ir::Projection::VariantField(success, 0)],
                 },
                 span.line,
             )?
             .0;
         self.emit(
-            k::Op::Assign {
-                place: k::Place::local(result),
+            ir::Op::Assign {
+                place: ir::Place::local(result),
                 src: value,
             },
             span.line,
         );
         self.emit(
-            k::Op::DropIf {
-                place: k::Place::local(source),
+            ir::Op::DropIf {
+                place: ir::Place::local(source),
             },
             span.line,
         );
         let succeeded = self.snapshot();
-        self.emit(k::Op::Else, span.line);
+        self.emit(ir::Op::Else, span.line);
         self.restore(&before);
-        let condition = self.temp(k::BOOL);
+        let condition = self.temp(ir::BOOL);
         self.emit(
-            k::Op::TagTest {
+            ir::Op::TagTest {
                 dst: condition,
-                place: k::Place::local(source),
+                place: ir::Place::local(source),
                 variant: failure,
             },
             span.line,
         );
-        self.emit(k::Op::If { condition }, span.line);
+        self.emit(ir::Op::If { condition }, span.line);
         let mut fields = Vec::new();
         for index in 0..variants[failure].fields.len() {
             let value = self
                 .read(
-                    k::Place {
+                    ir::Place {
                         local: source,
-                        projections: vec![k::Projection::VariantField(failure, index)],
+                        projections: vec![ir::Projection::VariantField(failure, index)],
                     },
                     span.line,
                 )?
@@ -133,9 +133,9 @@ impl Builder<'_, '_> {
                 // implicit coercion for Result constructors or assignments.
                 let arguments: Vec<usize> = Vec::new();
                 self.text_method(
-                    k::Place {
+                    ir::Place {
                         local: value,
-                        projections: vec![k::Projection::Deref],
+                        projections: vec![ir::Projection::Deref],
                     },
                     "to_string",
                     &arguments,
@@ -149,7 +149,7 @@ impl Builder<'_, '_> {
         }
         let output = self.temp(result_ty);
         self.emit(
-            k::Op::Variant {
+            ir::Op::Variant {
                 dst: output,
                 variant: output_failure,
                 fields,
@@ -157,16 +157,16 @@ impl Builder<'_, '_> {
             span.line,
         );
         self.cleanup(0, Some(output), span.line);
-        self.emit(k::Op::Return { src: output }, span.line);
-        self.emit(k::Op::Else, span.line);
+        self.emit(ir::Op::Return { src: output }, span.line);
+        self.emit(ir::Op::Else, span.line);
         self.emit(
-            k::Op::Trap {
+            ir::Op::Trap {
                 message: "unreachable ? variant".to_string(),
             },
             span.line,
         );
-        self.emit(k::Op::End, span.line);
-        self.emit(k::Op::End, span.line);
+        self.emit(ir::Op::End, span.line);
+        self.emit(ir::Op::End, span.line);
         self.restore(&succeeded);
         Ok((result, payload))
     }
@@ -188,10 +188,10 @@ impl Builder<'_, '_> {
             self.compiler.source.patterns[pattern].kind,
             a::Pattern::Wild
         ) && expected
-            .is_some_and(|ty| matches!(self.compiler.types[ty].kind, k::TypeKind::Ref { .. })))
+            .is_some_and(|ty| matches!(self.compiler.types[ty].kind, ir::TypeKind::Ref { .. })))
         {
             let value = self.expr(expression, expected)?;
-            self.annotation_initializer(annotation, k::Place::local(value.0))?;
+            self.annotation_initializer(annotation, ir::Place::local(value.0))?;
             let result = self.bind(pattern, value, line);
             self.typed_bindings.clear();
             return result;
@@ -207,7 +207,7 @@ impl Builder<'_, '_> {
         let place = if existing {
             self.place(expression)?
         } else {
-            k::Place::local(self.expr(expression, expected)?.0)
+            ir::Place::local(self.expr(expression, expected)?.0)
         };
         let ty =
             super::place_type(&self.compiler.types, self.function, &place).ok_or_else(|| {

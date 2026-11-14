@@ -235,22 +235,22 @@ fn invalid_shared_signatures_block_semantic_recovery_before_body_checks() {
     assert!(errors[0].message.contains("Missing"));
 }
 
-fn uninitialized_function(name: &str, file: usize, line: usize) -> lkjscript::k::Function {
-    use lkjscript::k;
-    k::Function {
+fn uninitialized_function(name: &str, file: usize, line: usize) -> lkjscript::ir::Function {
+    use lkjscript::ir;
+    ir::Function {
         file,
         name: name.to_string(),
         params: 0,
-        result: k::I64,
+        result: ir::I64,
         return_source: None,
-        locals: vec![k::Local {
+        locals: vec![ir::Local {
             name: "value".to_string(),
-            ty: k::I64,
+            ty: ir::I64,
             mutable: false,
         }],
-        body: vec![k::Instruction {
+        body: vec![ir::Instruction {
             column: 1,
-            op: k::Op::Return { src: 0 },
+            op: ir::Op::Return { src: 0 },
             line,
         }],
         test: false,
@@ -258,10 +258,10 @@ fn uninitialized_function(name: &str, file: usize, line: usize) -> lkjscript::k:
 }
 
 #[test]
-fn independent_k_body_errors_never_construct_checked_program_authority() {
-    use lkjscript::{check, k};
-    let program = k::Program {
-        types: k::primitives(),
+fn independent_ir_body_errors_never_construct_checked_program_authority() {
+    use lkjscript::{check, ir};
+    let program = ir::Program {
+        types: ir::primitives(),
         functions: vec![
             uninitialized_function("first", 0, 7),
             uninitialized_function("second", 1, 9),
@@ -269,7 +269,7 @@ fn independent_k_body_errors_never_construct_checked_program_authority() {
         destructors: Vec::new(),
     };
     let errors = match check::check_all(program.clone()) {
-        Ok(_) => panic!("invalid K bodies accepted"),
+        Ok(_) => panic!("invalid IR bodies accepted"),
         Err(errors) => errors,
     };
     assert_eq!(errors.len(), 2);
@@ -284,12 +284,12 @@ fn independent_k_body_errors_never_construct_checked_program_authority() {
 }
 
 #[test]
-fn malformed_k_structure_blocks_all_body_checks() {
-    use lkjscript::{check, k};
+fn malformed_ir_structure_blocks_all_body_checks() {
+    use lkjscript::{check, ir};
     let mut first = uninitialized_function("bad_signature", 0, 7);
     first.locals[0].ty = usize::MAX;
-    let program = k::Program {
-        types: k::primitives(),
+    let program = ir::Program {
+        types: ir::primitives(),
         functions: vec![first, uninitialized_function("blocked", 1, 9)],
         destructors: Vec::new(),
     };
@@ -298,7 +298,7 @@ fn malformed_k_structure_blocks_all_body_checks() {
         Err(errors) => errors,
     };
     assert_eq!(errors.len(), 1);
-    assert_eq!(errors[0].code, "E_K");
+    assert_eq!(errors[0].code, "E_IR");
     assert!(errors[0].message.contains("unknown local type"));
 }
 

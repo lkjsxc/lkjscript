@@ -3,7 +3,7 @@
 pub use super::frontend::{check_bundle, check_source};
 use crate::ast::Diagnostic;
 use crate::source::SourceBundle;
-use crate::{kc, runtime::Runtime};
+use crate::{backend, runtime::Runtime};
 
 /// Compile declared source and a checked runtime to native Linux x86-64 bytes.
 /// This entry performs no host I/O and has no hidden compilation service.
@@ -16,7 +16,7 @@ pub fn compile(bundle: &SourceBundle, runtime: &Runtime) -> Result<Vec<u8>, Diag
             break;
         }
     }
-    kc::emit(&checked, runtime, entry).map_err(|mut problem| {
+    backend::emit(&checked, runtime, entry).map_err(|mut problem| {
         if problem.path.is_empty() {
             problem.path = bundle.root.clone();
         }

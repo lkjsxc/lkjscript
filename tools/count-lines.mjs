@@ -18,7 +18,7 @@ const labels={
   rust_tests:'Rust test harnesses',
   node_tests:'Node unit tests',
   conformance:'Conformance source programs',
-  k_fixtures:'K fixtures and model counterexamples',
+  ir_fixtures:'IR fixtures and model counterexamples',
   corpus:'Independent corpus source programs',
   reduced:'Retained reduced source programs',
   examples:'Example source programs',
@@ -30,9 +30,9 @@ const labels={
 
 function category(file) {
   const rs=file.endsWith('.rs'), node=/\.(?:mjs|js)$/.test(file);
-  if(file.startsWith('tests/conformance/')) return rs?'conformance':file.endsWith('.k')?'k_fixtures':undefined;
+  if(file.startsWith('tests/conformance/')) return rs?'conformance':file.endsWith('.lkjir')?'ir_fixtures':undefined;
   if(file.startsWith('tests/corpus/')) return rs?'corpus':undefined;
-  if(file.startsWith('tools/model-counterexamples/')) return file.endsWith('.k')?'k_fixtures':undefined;
+  if(file.startsWith('tools/model-counterexamples/')) return file.endsWith('.lkjir')?'ir_fixtures':undefined;
   if(file.startsWith('tools/generators/reduced/')) return rs?'reduced':undefined;
   if(file.startsWith('examples/')) return rs?'examples':undefined;
   if(file.startsWith('src/')&&rs) return 'compiler';

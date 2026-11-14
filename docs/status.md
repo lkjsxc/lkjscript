@@ -1,89 +1,53 @@
-# Status — 2026-11-14, routine native compilation
+# Status — 2026-11-14
 
-The installed native `lkj` command now handles declared source/library inputs,
-module discovery, bundle packing, runtime preparation, checking, building,
-execution and scalar evaluation. The frontend, K compiler and result reader
-are ordinary lkjscript programs. Installation and a complete compiler generation
-rebuild run without Rust or Node. Bash and standard Linux tools connect the
-processes; Cargo, Rust comparisons, the independent K machine and Node test
-orchestration remain development/reference tools.
+## Current milestone: 6.1, direct native backend
 
-## Counted checkpoint
+Milestone 6.0 is complete: lkjscript IR names throughout source, tools, tests and
+references; .lkjir files require the first line `lkjscript-ir 1`; execution uses
+`--engine interpreter`; the installed command is `lkjscript`.
+Both native compiler components reproduce their bytes and match the Rust-built
+witness output. The full eight-worker gate passes in 82.691 s: 462 Rust tests,
+17 harness tests, 883 conformance passes and four pending on each route,
+573 Rust comparisons, 91 World cases, zero IR mutation findings.
 
-| Observation | Result | Record |
-| --- | --- | --- |
-| Current frontend own-source K | 18,740,263 bytes; native hash identical to B0 | observations/2026-11-14-native-workflow.json |
-| Frontend ELF fixed point | 51,430,946 bytes; seed and next generation byte-identical | observations/2026-11-14-native-workflow.json |
-| K compiler ELF fixed point | 16,841,426 bytes; seed and next generation byte-identical | observations/2026-11-14-native-workflow.json |
-| Result reader ELF fixed point | 531,762 bytes; seed and next generation byte-identical | observations/2026-11-14-native-workflow.json |
-| Runtime K | 28,472 bytes; regenerated natively and byte-identical | observations/2026-11-14-native-workflow.json |
-| Complete native rebuild | 443.56 s; 766 MiB peak RSS; four matching K hashes, four exact artifact comparisons | observations/2026-11-14-native-workflow.json |
-| Native process interface | 41 outcomes; source/bundle/K identity, scalars, traps, streams, paths, controls and hashes all pass | observations/2026-11-14-native-gate.json |
-| Launcher cancellation | 16 TERM/INT cases pass, including GNU time descendants; three shell contract suites pass | observations/2026-11-14-native-workflow.json |
-| Full gate | 461 Rust tests, 17 harness tests, all-target Clippy clean; 69.243 s with eight workers | observations/2026-11-14-native-launcher-portability.json |
-| Execution conformance | 883 pass and four pending per route; 573 Rust comparisons; 91 World observations | observations/2026-11-14-native-gate.json |
+Deleted 31 observation files, the trusted command and its reporting tool.
+AGENTS.md/direction/status hold the new course; docs/ir.md is the IR reference.
+The gate prints one success line per suite and failure details.
 
-The complete rebuild used only the installed seed. All 105 compiler/library/script
-inputs had identical before/after hashes; the forbidden Cargo/rustc/Node log was
-empty. It selected an external 8 GiB address-space limit, inherited an 8 MiB
-stack, and had no deadline. Those are experiment controls, not defaults.
-Later launcher path/cancellation fixes preserve all 102 compiler/library inputs
-and the compiler binaries; the final gate exercises the corrected launchers.
-The release build was prepared before the timed gate and reused there.
+Next: replace boxed aggregates and linear-memory execution with direct checked-IR
+selection, inline aggregates, machine references and stack slots, rel32 control
+flow, a source allocator over independent kernel mappings, and separate encoding.
+Keep old/new/interpreter comparison until the replacement passes; then remove the
+old lowering, encoder and resource-planning machinery in the same stretch.
 
-The first pushed gate exposed descriptor repair by Ubuntu 26.04 uutils env. Native
-launchers now use direct Bash entries and builtin signal restoration; closed
-stdout is checked before publishing compiler output. All three shell suites pass
-on Ubuntu 24.04 and 26.04, and a fresh Ubuntu 26.04 installation passes all 41 native process
-outcomes and 22 file hashes without invoking Cargo/rustc/Node/B0. See
-observations/2026-11-14-native-launcher-portability.json.
+## Rename checkpoint measurements
 
-## Measured source lookup improvement
-
-A complete 99 Hz profile of the unchanged frontend found two repeated source
-scans taking 13.29% of sampled CPU time. Generic ranges now have a file/name
-index while retaining span containment; derived bounds have a declaration-name
-index while retaining their union/any-match rules. No language, K, ownership,
-encoder, runtime or source-library rule changed.
-
-| Same frozen source input | Before | Candidate |
+| Work | Self-built native | Rust-built twin |
 | --- | ---: | ---: |
-| Complete profiled run | 248.42 s | 218.35 s |
-| Peak RSS | 775,475,200 bytes | 800,636,928 bytes |
-| Selected lookup union | 32.71 sampled CPU s | 1.41 sampled CPU s |
-| K output | 18,489,341 bytes | Identical bytes |
+| Frontend source to IR | 216.54 s | 1.87 s |
+| Frontend IR to ELF | 110.68 s | 0.90 s |
+| Backend IR to ELF | 37.21 s | 0.31 s |
+| Frontend source peak RSS | 766.1 MiB | 205.8 MiB |
+| Frontend emission peak RSS | 735.1 MiB | 334.3 MiB |
+| Frontend executable | 51,431,226 bytes | Identical emitted bytes |
+| Backend executable | 16,845,618 bytes | Identical emitted bytes |
+| Frontend own-source IR | 18,750,365 bytes | Identical bytes |
 
-This pair observed 12.10% lower wall time and 3.24% higher peak RSS. It is one
-matched pair on a shared host; the candidate also includes direct-source input
-support. All samples map to the exact executable and neither run lost records.
-The candidate recorder failed to retain a live `/proc` limits snapshot; its
-launcher stack and executed prlimit command remain recorded. The failed metadata
-copy was disclosed and the existing profile decoded without repeating the run.
-Full evidence and limits: observations/2026-11-14-native-profile.json.
+The review's 5068ad3a baseline remains the comparison for the new backend:
 
-## Routine interface
+| Work | lkjscript | Rust comparison |
+| --- | ---: | ---: |
+| Hello build | 5.16 s | 0.05 s, twin |
+| Complete native rebuild | 443.56 s | — |
+| 20 M two-field Copy calls | 5.82 s | 0.031 s unoptimized; 0.009 s optimized |
+| 200 M scalar iterations | 1.74 s | 0.17 s unoptimized; 0.05 s optimized |
+| 100 M Vec reads / 5 M pushes | 0.97 s | 0.33 s unoptimized |
 
-See [native.md](native.md) for installation, explicit toolchain selection and
-rebuilding. `run` preserves ordinary process streams/status; `eval` additionally
-prints scalar returns, with binary64 values represented by exact hexadecimal
-bits. Outputs are published after successful compilation. Default execution
-inherits Linux limits, and optional settings tighten only the target.
-The source loader is shared by direct files and bundles. Runtime source is
-compiled as normal K and sealed by the K compiler during emission.
+## Known gaps
 
-The earlier ownership verdict, port, first fixed points and complete native
-source corpus remain in their observations and Git history. Current K mutation
-has zero findings, with its two-route timeout recorded separately. The four
-pending source cases and one known conservative ownership rejection remain.
-Runtime resource-trap filenames still lose source-file provenance at the host
-boundary, and finite exhaustion locations can differ between representations.
-
-## Next obligation
-
-Use the native command for routine compiler work. The complete candidate profile
-still attributes 24.64 sampled CPU seconds (11.43%) to `has_view`/`is_copy`, with
-repeated full-type-table boolean vectors overlapping that cost. Investigate that
-bookkeeping before another broad speed change. Keep substantial optimization in
-rechecked K-to-K passes and retain the independent K machine. A direct K generator
-is the next useful self-built development tool; unrelated surface width waits
-for a real consumer.
+Four pending cases: concurrency_moved, concurrency_shared, concurrency_alias,
+borrowed_closure_escape. One conservative ownership rejection remains.
+The current backend still boxes aggregates, uses heap frames and linear memory.
+Resource traps lose source-file provenance at the host boundary.
+The interpreter, gate and development tools still require the Rust/Node host.
+No stored seed, single executable, HTTP consumer or entry grants yet.

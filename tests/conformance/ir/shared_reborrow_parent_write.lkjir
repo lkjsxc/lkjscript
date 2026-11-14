@@ -1,0 +1,34 @@
+lkjscript-ir 1
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "&mut i64" ref mut 3
+type "&i64" ref shared 3
+type "&&i64" ref shared 8
+fn "probe" 0 3
+local "value" 3 mut
+local "parent" 7 let
+local "shared" 8 let
+local "carrier" 9 let
+local "output" 8 let
+local "replacement" 3 let
+local "result" 3 let
+@1 int 0 42
+@2 borrow 1 mut 0
+@3 borrow 2 shared 1 deref
+@4 borrow 3 shared 2
+@5 borrow 4 shared 3 deref deref
+@6 drop 3
+@7 drop 2
+@8 int 5 7
+@9 assign 5 1 deref
+@10 read 6 copy 4 deref
+@10 drop 4
+@11 drop 1
+@11 drop 0
+@12 return 6
+endfn

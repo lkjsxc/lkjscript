@@ -1,13 +1,13 @@
 //! Symbolic origin variables in signatures. A type parameter's variable is a
 //! map of reference-leaf paths, not one concrete allocation root.
-use super::{Compiler, Result, a, k};
+use super::{Compiler, Result, a, ir};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) enum Label {
     Lifetime(String),
-    Parameter(String, Vec<k::Projection>),
-    Associated(String, Vec<k::Projection>),
+    Parameter(String, Vec<ir::Projection>),
+    Associated(String, Vec<ir::Projection>),
     Static,
     Elided { site: usize, parameter: usize },
     Unknown,
@@ -17,7 +17,7 @@ struct Environment {
     types: BTreeMap<String, (usize, usize)>,
     lifetimes: BTreeMap<String, Label>,
 }
-type SignatureChild = (usize, usize, Vec<k::Projection>);
+type SignatureChild = (usize, usize, Vec<ir::Projection>);
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum LeafPurpose {
     Outputs,
@@ -31,7 +31,7 @@ enum BorrowAccess {
     Mutable,
 }
 pub(super) struct RegionLeaf {
-    pub(super) path: Vec<k::Projection>,
+    pub(super) path: Vec<ir::Projection>,
     pub(super) label: Label,
     pub(super) preserve: bool,
     pub(super) mutable_storage: bool,
@@ -39,13 +39,13 @@ pub(super) struct RegionLeaf {
 struct Leaf {
     borrowed: bool,
     mutable_storage: bool,
-    path: Vec<k::Projection>,
+    path: Vec<ir::Projection>,
     label: Label,
     transport: bool,
     mutable: bool,
 }
 struct Candidate {
-    input: k::InputLeaf,
+    input: ir::InputLeaf,
     transport: bool,
     mutable: bool,
 }
@@ -199,7 +199,7 @@ impl Compiler<'_> {
                         inner: syntax_inner,
                         ..
                     },
-                    k::TypeKind::Ref { inner, mutable },
+                    ir::TypeKind::Ref { inner, mutable },
                 ) => {
                     let label = lifetime(&environments, environment, name, syntax, 0);
                     if !borrowed || !mutable || purpose == LeafPurpose::Regions {
@@ -214,7 +214,7 @@ impl Compiler<'_> {
                     }
                     if purpose != LeafPurpose::Outputs && self.has_view(*inner) {
                         let mut nested = path;
-                        nested.push(k::Projection::Deref);
+                        nested.push(ir::Projection::Deref);
                         let access = if access == BorrowAccess::Shared || !mutable {
                             BorrowAccess::Shared
                         } else {
@@ -223,12 +223,12 @@ impl Compiler<'_> {
                         pending.push((*syntax_inner, *inner, environment, nested, access));
                     }
                 }
-                (a::Type::Tuple(syntax_fields), k::TypeKind::Struct { fields, .. })
+                (a::Type::Tuple(syntax_fields), ir::TypeKind::Struct { fields, .. })
                     if syntax_fields.len() == fields.len() =>
                 {
                     for (index, (syntax, field)) in syntax_fields.iter().zip(fields).enumerate() {
                         let mut nested = path.clone();
-                        nested.push(k::Projection::Field(index));
+                        nested.push(ir::Projection::Field(index));
                         pending.push((*syntax, field.ty, environment, nested, access));
                     }
                 }
@@ -279,7 +279,8 @@ impl Compiler<'_> {
                         match self.source.declarations[declaration].item {
                             a::Item::Struct(index) => {
                                 let definition = &self.source.structs[index];
-                                let k::TypeKind::Struct { fields, .. } = &self.types[concrete].kind
+                                let ir::TypeKind::Struct { fields, .. } =
+                                    &self.types[concrete].kind
                                 else {
                                     continue;
                                 };
@@ -290,14 +291,15 @@ impl Compiler<'_> {
                                     children.push((
                                         syntax.ty,
                                         field.ty,
-                                        vec![k::Projection::Field(index)],
+                                        vec![ir::Projection::Field(index)],
                                     ));
                                 }
                                 (&definition.generics, children)
                             }
                             a::Item::Enum(index) => {
                                 let definition = &self.source.enums[index];
-                                let k::TypeKind::Enum { variants, .. } = &self.types[concrete].kind
+                                let ir::TypeKind::Enum { variants, .. } =
+                                    &self.types[concrete].kind
                                 else {
                                     continue;
                                 };
@@ -311,7 +313,7 @@ impl Compiler<'_> {
                                         children.push((
                                             syntax.ty,
                                             field.ty,
-                                            vec![k::Projection::VariantField(tag, index)],
+                                            vec![ir::Projection::VariantField(tag, index)],
                                         ));
                                     }
                                 }
@@ -404,7 +406,7 @@ impl Compiler<'_> {
     pub(super) fn return_elision(
         &self,
         source_index: usize,
-        locals: &[k::Local],
+        locals: &[ir::Local],
         result: usize,
     ) -> Result<Option<Label>> {
         let source = &self.source.functions[source_index];
@@ -427,7 +429,7 @@ impl Compiler<'_> {
                 if index == 0
                     && parameter.name == "self"
                     && leaf.path.is_empty()
-                    && matches!(self.types[locals[0].ty].kind, k::TypeKind::Ref { .. })
+                    && matches!(self.types[locals[0].ty].kind, ir::TypeKind::Ref { .. })
                 {
                     return Ok(Some(leaf.label));
                 }
@@ -448,9 +450,9 @@ impl Compiler<'_> {
         &self,
         source_index: usize,
         source: &a::Function,
-        locals: &[k::Local],
+        locals: &[ir::Local],
         result: usize,
-    ) -> Result<Option<Vec<k::ReturnLeaf>>> {
+    ) -> Result<Option<Vec<ir::ReturnLeaf>>> {
         let outputs = self.signature_leaves(source, source_index, source.result, result, false);
         // Elided lifetimes retain the established elision rule. A rigid type
         // variable transports its relative leaf paths even at equal concrete
@@ -474,7 +476,7 @@ impl Compiler<'_> {
                     &mut inputs,
                     leaf.label,
                     Candidate {
-                        input: k::InputLeaf {
+                        input: ir::InputLeaf {
                             index,
                             projections: leaf.path,
                         },
@@ -487,14 +489,14 @@ impl Compiler<'_> {
         let mut mappings = Vec::new();
         for leaf in outputs {
             let origin = match &leaf.label {
-                Label::Static => k::LeafOrigin::Static,
+                Label::Static => ir::LeafOrigin::Static,
                 Label::Unknown | Label::Elided { .. } => return Ok(None),
                 label => {
                     let Some(candidates) = inputs.get(label) else {
                         return Ok(None);
                     };
                     let exact = matches!(label, Label::Parameter(_, _) | Label::Associated(_, _));
-                    let mut selected: Vec<k::InputLeaf> = Vec::new();
+                    let mut selected: Vec<ir::InputLeaf> = Vec::new();
                     for candidate in candidates {
                         if (!exact || candidate.transport) && (!leaf.mutable || candidate.mutable) {
                             selected.push(candidate.input.clone());
@@ -504,13 +506,13 @@ impl Compiler<'_> {
                     if candidates.is_empty() {
                         return Ok(None);
                     }
-                    k::LeafOrigin::Inputs {
+                    ir::LeafOrigin::Inputs {
                         inputs: candidates,
                         exact,
                     }
                 }
             };
-            mappings.push(k::ReturnLeaf {
+            mappings.push(ir::ReturnLeaf {
                 projections: leaf.path,
                 origin,
             });
@@ -567,10 +569,10 @@ impl Compiler<'_> {
         &self,
         source_index: usize,
         source: &a::Function,
-        locals: &[k::Local],
+        locals: &[ir::Local],
         result: usize,
         substitutions: &BTreeMap<String, usize>,
-    ) -> Option<Vec<k::ReturnLeaf>> {
+    ) -> Option<Vec<ir::ReturnLeaf>> {
         let outputs = self.signature_leaves(source, source_index, source.result, result, false);
         if !outputs
             .iter()
@@ -590,7 +592,7 @@ impl Compiler<'_> {
                     &mut inputs,
                     leaf.label,
                     Candidate {
-                        input: k::InputLeaf {
+                        input: ir::InputLeaf {
                             index,
                             projections: leaf.path,
                         },
@@ -605,10 +607,10 @@ impl Compiler<'_> {
         let mut mappings = Vec::new();
         for leaf in outputs {
             let origin = if matches!(leaf.label, Label::Static) {
-                k::LeafOrigin::Static
+                ir::LeafOrigin::Static
             } else {
                 let family = matches!(leaf.label, Label::Parameter(_, _) | Label::Associated(_, _));
-                let mut matching: Vec<k::InputLeaf> = Vec::new();
+                let mut matching: Vec<ir::InputLeaf> = Vec::new();
                 if let Some(candidates) = inputs.get(&leaf.label) {
                     for candidate in candidates {
                         if (!family || candidate.transport) && (!leaf.mutable || candidate.mutable)
@@ -618,13 +620,13 @@ impl Compiler<'_> {
                     }
                 }
                 if !matching.is_empty() && !produced.contains(&leaf.label) {
-                    k::LeafOrigin::Inputs {
+                    ir::LeafOrigin::Inputs {
                         inputs: matching,
                         exact: family,
                     }
                 } else if family {
                     widened = true;
-                    let mut candidates: BTreeSet<k::InputLeaf> = BTreeSet::new();
+                    let mut candidates: BTreeSet<ir::InputLeaf> = BTreeSet::new();
                     for entries in inputs.values() {
                         for candidate in entries {
                             if !leaf.mutable || candidate.mutable {
@@ -636,13 +638,13 @@ impl Compiler<'_> {
                         if leaf.mutable {
                             return None;
                         }
-                        k::LeafOrigin::Static
+                        ir::LeafOrigin::Static
                     } else {
                         let mut ordered = Vec::new();
                         for candidate in candidates {
                             ordered.push(candidate);
                         }
-                        k::LeafOrigin::Inputs {
+                        ir::LeafOrigin::Inputs {
                             inputs: ordered,
                             exact: false,
                         }
@@ -651,7 +653,7 @@ impl Compiler<'_> {
                     return None;
                 }
             };
-            mappings.push(k::ReturnLeaf {
+            mappings.push(ir::ReturnLeaf {
                 projections: leaf.path,
                 origin,
             });

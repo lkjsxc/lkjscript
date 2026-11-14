@@ -1,0 +1,64 @@
+lkjscript-ir 1
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "&i64" ref shared 3
+type "Pair" struct move "left" 7 "right" 7
+fn "choose" 3 8
+return-leaf 0 field 0 exact 0 field 0 or 1 field 0
+return-leaf 0 field 1 exact 0 field 1 or 1 field 1
+local "first" 8 let
+local "second" 8 let
+local "condition" 1 let
+local "result" 8 let
+@1 if 2
+@2 read 3 move 0
+@3 else
+@4 read 3 move 1
+@5 end
+@6 drop-if 0
+@7 drop-if 1
+@8 return 3
+endfn
+fn "probe" 0 3
+local "a" 3 let
+local "b" 3 let
+local "c" 3 let
+local "d" 3 let
+local "ra" 7 let
+local "rb" 7 let
+local "rc" 7 let
+local "rd" 7 let
+local "first" 8 let
+local "second" 8 let
+local "condition" 1 let
+local "selected" 8 let
+local "x" 3 let
+local "y" 3 let
+local "result" 3 let
+@9 int 0 12
+@10 int 1 30
+@11 int 2 20
+@12 int 3 22
+@13 borrow 4 shared 0
+@14 borrow 5 shared 1
+@15 borrow 6 shared 2
+@16 borrow 7 shared 3
+@17 struct 8 4 5
+@18 struct 9 6 7
+@19 int 10 0
+@20 call 11 0 8 9 10
+@21 read 12 copy 11 field 0 deref
+@22 read 13 copy 11 field 1 deref
+@23 binary 14 "+" 12 13
+@24 drop 11
+@25 drop 3
+@26 drop 2
+@27 drop 1
+@28 drop 0
+@29 return 14
+endfn

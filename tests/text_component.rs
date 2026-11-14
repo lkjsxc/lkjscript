@@ -44,7 +44,7 @@ fn bundle(module: &str, cases: &[(String, String)]) -> SourceBundle {
     }
 }
 
-fn run(checked: &lkjscript::k::CheckedProgram, expected: &[usize]) {
+fn run(checked: &lkjscript::ir::CheckedProgram, expected: &[usize]) {
     let names: Vec<_> = (0..expected.len())
         .map(|index| format!("compare_{index}"))
         .collect();
@@ -82,8 +82,8 @@ fn changing_the_production_join_changes_generated_behavior() {
     assert_ne!(NAMES, changed);
     let mutated = compiler::check_bundle(&bundle(&changed, &cases)).unwrap();
     assert_ne!(
-        lkjscript::k_text::write(original.program()),
-        lkjscript::k_text::write(mutated.program())
+        lkjscript::ir_text::write(original.program()),
+        lkjscript::ir_text::write(mutated.program())
     );
     run(&original, &[0, 0]);
     run(&mutated, &[0, 1]);

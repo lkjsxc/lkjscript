@@ -2,7 +2,7 @@ use std::collections::btree_map::Iter;
 fn next<I: Iterator>(iterator: &mut I) -> Option<I::Item> {
     iterator.next()
 }
-fn forward<'a, K, V>(iterator: &mut Iter<'a, K, V>) -> Option<(&'a K, &'a V)> {
+fn forward<'a, IR, V>(iterator: &mut Iter<'a, IR, V>) -> Option<(&'a IR, &'a V)> {
     next(iterator)
 }
 pub fn probe() -> i64 {

@@ -1,10 +1,10 @@
-//! Executable builtin trait operations use ordinary, checked K functions.
+//! Executable builtin trait operations use ordinary, checked IR functions.
 //!
 //! Headers are interned before their bodies enter the shared compilation queue.
 //! Recursive nominal layouts therefore reuse an existing function identity;
 //! neither helper discovery nor field type traversal recurses on the host stack.
 use super::generic_check::BuiltinMethod;
-use super::{Builder, Compiler, PendingFunction, Result, a, err, is_copy, k};
+use super::{Builder, Compiler, PendingFunction, Result, a, err, ir, is_copy};
 use crate::generics::TraitIdentity;
 use std::collections::BTreeMap;
 
@@ -66,31 +66,31 @@ impl Compiler<'_> {
                 return self.instantiate(source, substitutions);
             }
         }
-        if let k::TypeKind::Vec { inner } = self.types[receiver].kind {
+        if let ir::TypeKind::Vec { inner } = self.types[receiver].kind {
             let helper = match method {
-                BuiltinMethod::Clone => Some("__lkj_vec_clone"),
-                BuiltinMethod::Eq => Some("__lkj_vec_equal"),
-                BuiltinMethod::Order => Some("__lkj_vec_order"),
+                BuiltinMethod::Clone => Some("__lkjscript_vec_clone"),
+                BuiltinMethod::Eq => Some("__lkjscript_vec_equal"),
+                BuiltinMethod::Order => Some("__lkjscript_vec_order"),
                 _ => None,
             };
             if let Some(helper) = helper {
                 return self.sequence_instance(helper, inner, span);
             }
         }
-        if let k::TypeKind::Slice { inner, .. } = self.types[receiver].kind {
+        if let ir::TypeKind::Slice { inner, .. } = self.types[receiver].kind {
             let helper = match method {
-                BuiltinMethod::Eq => Some("__lkj_slice_equal"),
-                BuiltinMethod::Order => Some("__lkj_slice_order"),
+                BuiltinMethod::Eq => Some("__lkjscript_slice_equal"),
+                BuiltinMethod::Order => Some("__lkjscript_slice_order"),
                 _ => None,
             };
             if let Some(helper) = helper {
                 return self.sequence_instance(helper, inner, span);
             }
         }
-        if matches!(self.types[receiver].kind, k::TypeKind::Str) {
+        if matches!(self.types[receiver].kind, ir::TypeKind::Str) {
             let helper = match method {
-                BuiltinMethod::Eq => Some(("__lkj_eq", k::BOOL)),
-                BuiltinMethod::Order => Some(("__lkj_compare", k::I32)),
+                BuiltinMethod::Eq => Some(("__lkjscript_eq", ir::BOOL)),
+                BuiltinMethod::Order => Some(("__lkjscript_compare", ir::I32)),
                 _ => None,
             };
             if let Some((name, result)) = helper {
@@ -115,7 +115,7 @@ impl Compiler<'_> {
         if method == BuiltinMethod::CloneFrom
             && matches!(
                 self.types[receiver].kind,
-                k::TypeKind::Box { .. } | k::TypeKind::Array { .. } | k::TypeKind::Vec { .. }
+                ir::TypeKind::Box { .. } | ir::TypeKind::Array { .. } | ir::TypeKind::Vec { .. }
             )
         {
             return Err(err(
@@ -136,14 +136,14 @@ impl Compiler<'_> {
             ));
         }
         let reference = self.reference(receiver, method == BuiltinMethod::CloneFrom);
-        let mut locals = vec![k::Local {
+        let mut locals = vec![ir::Local {
             name: "self".to_string(),
             ty: reference,
             mutable: false,
         }];
         if method.arguments() != 0 {
             let shared = self.reference(receiver, false);
-            locals.push(k::Local {
+            locals.push(ir::Local {
                 name: "other".to_string(),
                 ty: shared,
                 mutable: false,
@@ -151,15 +151,15 @@ impl Compiler<'_> {
         }
         let result = method.result(receiver);
         let return_source = if method == BuiltinMethod::Clone && self.has_view(receiver) {
-            Some(k::ReturnSource::Parameter {
+            Some(ir::ReturnSource::Parameter {
                 index: 0,
-                projections: vec![k::Projection::Deref],
+                projections: vec![ir::Projection::Deref],
             })
         } else {
             None
         };
         let index = self.functions.len();
-        self.functions.push(k::Function {
+        self.functions.push(ir::Function {
             file: span.file,
             name: format!("$builtin:{}:t{receiver}", method.name()),
             params: locals.len(),
@@ -215,7 +215,7 @@ impl Compiler<'_> {
         &mut self,
         index: usize,
         instance: &DerivedInstance,
-    ) -> Result<k::Function> {
+    ) -> Result<ir::Function> {
         let function = self.functions[index].clone();
         let live = vec![true; function.params];
         let mut body = Generated {
@@ -238,8 +238,8 @@ impl Compiler<'_> {
                     instance.span,
                 )?;
                 let compared = body.call(equal, vec![0, 1]);
-                let result = body.local(k::BOOL);
-                body.emit(k::Op::Unary {
+                let result = body.local(ir::BOOL);
+                body.emit(ir::Op::Unary {
                     dst: result,
                     op: "!".to_string(),
                     src: compared,
@@ -254,16 +254,16 @@ impl Compiler<'_> {
                 )?;
                 let cloned = body.call(clone, vec![1]);
                 let old = body.local(instance.receiver);
-                body.emit(k::Op::Intrinsic {
+                body.emit(ir::Op::Intrinsic {
                     dst: old,
                     name: "replace".to_string(),
                     args: vec![0, cloned],
                 });
-                body.emit(k::Op::Drop {
-                    place: k::Place::local(old),
+                body.emit(ir::Op::Drop {
+                    place: ir::Place::local(old),
                 });
-                let result = body.local(k::UNIT);
-                body.emit(k::Op::Unit { dst: result });
+                let result = body.local(ir::UNIT);
+                body.emit(ir::Op::Unit { dst: result });
                 body.finish(result);
             }
         }
@@ -272,10 +272,10 @@ impl Compiler<'_> {
 }
 
 /// This builder tracks only its own explicit temporaries for cleanup. All types,
-/// ownership, tag proofs and provenance are independently checked by K.
+/// ownership, tag proofs and provenance are independently checked by IR.
 struct Generated<'a, 'b> {
     compiler: &'a mut Compiler<'b>,
-    function: k::Function,
+    function: ir::Function,
     live: Vec<bool>,
     span: a::Span,
 }
@@ -283,7 +283,7 @@ struct Generated<'a, 'b> {
 impl Generated<'_, '_> {
     fn local(&mut self, ty: usize) -> usize {
         let local = self.function.locals.len();
-        self.function.locals.push(k::Local {
+        self.function.locals.push(ir::Local {
             name: format!("v{local}"),
             ty,
             mutable: false,
@@ -292,23 +292,23 @@ impl Generated<'_, '_> {
         local
     }
 
-    fn emit(&mut self, op: k::Op) {
+    fn emit(&mut self, op: ir::Op) {
         match &op {
-            k::Op::Read { dst, .. }
-            | k::Op::Borrow { dst, .. }
-            | k::Op::SliceBorrow { dst, .. }
-            | k::Op::Int { dst, .. }
-            | k::Op::Unit { dst }
-            | k::Op::TagTest { dst, .. } => self.live[*dst] = true,
-            k::Op::Call { dst, args, .. } | k::Op::Intrinsic { dst, args, .. } => {
+            ir::Op::Read { dst, .. }
+            | ir::Op::Borrow { dst, .. }
+            | ir::Op::SliceBorrow { dst, .. }
+            | ir::Op::Int { dst, .. }
+            | ir::Op::Unit { dst }
+            | ir::Op::TagTest { dst, .. } => self.live[*dst] = true,
+            ir::Op::Call { dst, args, .. } | ir::Op::Intrinsic { dst, args, .. } => {
                 for arg in args {
                     self.live[*arg] = false;
                 }
                 self.live[*dst] = true;
             }
-            k::Op::Struct { dst, fields }
-            | k::Op::Variant { dst, fields, .. }
-            | k::Op::Array {
+            ir::Op::Struct { dst, fields }
+            | ir::Op::Variant { dst, fields, .. }
+            | ir::Op::Array {
                 dst,
                 elements: fields,
             } => {
@@ -317,33 +317,33 @@ impl Generated<'_, '_> {
                 }
                 self.live[*dst] = true;
             }
-            k::Op::Binary {
+            ir::Op::Binary {
                 dst, left, right, ..
             } => {
                 self.live[*left] = false;
                 self.live[*right] = false;
                 self.live[*dst] = true;
             }
-            k::Op::Unary { dst, src, .. } => {
+            ir::Op::Unary { dst, src, .. } => {
                 self.live[*src] = false;
                 self.live[*dst] = true;
             }
-            k::Op::Assign { place, src } => {
+            ir::Op::Assign { place, src } => {
                 self.live[*src] = false;
                 if place.projections.is_empty() {
                     self.live[place.local] = true;
                 }
             }
-            k::Op::Drop { place } | k::Op::DropIf { place } => {
+            ir::Op::Drop { place } | ir::Op::DropIf { place } => {
                 if place.projections.is_empty() {
                     self.live[place.local] = false;
                 }
             }
-            k::Op::If { condition } => self.live[*condition] = false,
-            k::Op::Return { src } => self.live[*src] = false,
+            ir::Op::If { condition } => self.live[*condition] = false,
+            ir::Op::Return { src } => self.live[*src] = false,
             _ => {}
         }
-        self.function.body.push(k::Instruction {
+        self.function.body.push(ir::Instruction {
             op,
             line: self.span.line,
             column: self.span.column.max(1),
@@ -361,24 +361,24 @@ impl Generated<'_, '_> {
         self.live = live;
     }
 
-    fn referent(parameter: usize) -> k::Place {
-        k::Place {
+    fn referent(parameter: usize) -> ir::Place {
+        ir::Place {
             local: parameter,
-            projections: vec![k::Projection::Deref],
+            projections: vec![ir::Projection::Deref],
         }
     }
 
-    fn projected(parameter: usize, projection: k::Projection) -> k::Place {
-        k::Place {
+    fn projected(parameter: usize, projection: ir::Projection) -> ir::Place {
+        ir::Place {
             local: parameter,
-            projections: vec![k::Projection::Deref, projection],
+            projections: vec![ir::Projection::Deref, projection],
         }
     }
 
-    fn borrow(&mut self, place: k::Place, ty: usize) -> usize {
+    fn borrow(&mut self, place: ir::Place, ty: usize) -> usize {
         let reference = self.compiler.reference(ty, false);
         let dst = self.local(reference);
-        self.emit(k::Op::Borrow {
+        self.emit(ir::Op::Borrow {
             dst,
             place,
             mutable: false,
@@ -386,9 +386,9 @@ impl Generated<'_, '_> {
         dst
     }
 
-    fn read(&mut self, place: k::Place, ty: usize) -> usize {
+    fn read(&mut self, place: ir::Place, ty: usize) -> usize {
         let dst = self.local(ty);
-        self.emit(k::Op::Read {
+        self.emit(ir::Op::Read {
             dst,
             place,
             moving: false,
@@ -399,7 +399,7 @@ impl Generated<'_, '_> {
     fn call(&mut self, function: usize, args: Vec<usize>) -> usize {
         let result = self.compiler.functions[function].result;
         let dst = self.local(result);
-        self.emit(k::Op::Call {
+        self.emit(ir::Op::Call {
             dst,
             function,
             args,
@@ -412,17 +412,17 @@ impl Generated<'_, '_> {
         while local > 0 {
             local -= 1;
             if local != result && self.live[local] {
-                self.emit(k::Op::Drop {
-                    place: k::Place::local(local),
+                self.emit(ir::Op::Drop {
+                    place: ir::Place::local(local),
                 });
             }
         }
-        self.emit(k::Op::Return { src: result });
+        self.emit(ir::Op::Return { src: result });
     }
 
     fn boolean(&mut self, value: bool) -> usize {
-        let dst = self.local(k::BOOL);
-        self.emit(k::Op::Int {
+        let dst = self.local(ir::BOOL);
+        self.emit(ir::Op::Int {
             dst,
             value: if value { 1 } else { 0 },
         });
@@ -435,15 +435,15 @@ impl Generated<'_, '_> {
     }
 
     fn index(&mut self, value: usize) -> usize {
-        let dst = self.local(k::U64);
-        self.emit(k::Op::Int {
+        let dst = self.local(ir::U64);
+        self.emit(ir::Op::Int {
             dst,
             value: value as i64,
         });
         dst
     }
 
-    fn clone_place(&mut self, place: k::Place, ty: usize) -> Result<usize> {
+    fn clone_place(&mut self, place: ir::Place, ty: usize) -> Result<usize> {
         let function = self
             .compiler
             .builtin_operation(ty, BuiltinMethod::Clone, self.span)?;
@@ -451,11 +451,11 @@ impl Generated<'_, '_> {
         Ok(self.call(function, vec![borrowed]))
     }
 
-    fn clone_fields(&mut self, fields: &[k::Field], variant: Option<usize>) -> Result<Vec<usize>> {
+    fn clone_fields(&mut self, fields: &[ir::Field], variant: Option<usize>) -> Result<Vec<usize>> {
         let mut values = Vec::new();
         for (index, field) in fields.iter().enumerate() {
-            let projection = variant.map_or(k::Projection::Field(index), |variant| {
-                k::Projection::VariantField(variant, index)
+            let projection = variant.map_or(ir::Projection::Field(index), |variant| {
+                ir::Projection::VariantField(variant, index)
             });
             values.push(self.clone_place(Self::projected(0, projection), field.ty)?);
         }
@@ -466,12 +466,12 @@ impl Generated<'_, '_> {
         let kind = self.compiler.types[ty].kind.clone();
         if matches!(
             kind,
-            k::TypeKind::Unit
-                | k::TypeKind::Bool
-                | k::TypeKind::Char
-                | k::TypeKind::Int { .. }
-                | k::TypeKind::F64
-                | k::TypeKind::Ref { mutable: false, .. }
+            ir::TypeKind::Unit
+                | ir::TypeKind::Bool
+                | ir::TypeKind::Char
+                | ir::TypeKind::Int { .. }
+                | ir::TypeKind::F64
+                | ir::TypeKind::Ref { mutable: false, .. }
         ) || self.compiler.derived_copy_clone(ty)
         {
             let result = self.read(Self::referent(0), ty);
@@ -479,63 +479,63 @@ impl Generated<'_, '_> {
             return Ok(());
         }
         match kind {
-            k::TypeKind::Struct { fields, .. } => {
+            ir::TypeKind::Struct { fields, .. } => {
                 let fields = self.clone_fields(&fields, None)?;
                 let result = self.local(ty);
-                self.emit(k::Op::Struct {
+                self.emit(ir::Op::Struct {
                     dst: result,
                     fields,
                 });
                 self.finish(result);
             }
-            k::TypeKind::Enum { variants, .. } => {
+            ir::TypeKind::Enum { variants, .. } => {
                 for (variant, value) in variants.iter().enumerate() {
-                    let condition = self.local(k::BOOL);
-                    self.emit(k::Op::TagTest {
+                    let condition = self.local(ir::BOOL);
+                    self.emit(ir::Op::TagTest {
                         dst: condition,
-                        place: k::Place::local(0),
+                        place: ir::Place::local(0),
                         variant,
                     });
-                    self.emit(k::Op::If { condition });
+                    self.emit(ir::Op::If { condition });
                     let entry = self.live.clone();
                     let fields = self.clone_fields(&value.fields, Some(variant))?;
                     let result = self.local(ty);
-                    self.emit(k::Op::Variant {
+                    self.emit(ir::Op::Variant {
                         dst: result,
                         variant,
                         fields,
                     });
                     self.finish(result);
-                    self.emit(k::Op::End);
+                    self.emit(ir::Op::End);
                     self.restored(entry);
                 }
-                self.emit(k::Op::Trap {
+                self.emit(ir::Op::Trap {
                     message: "invalid enum discriminant".to_string(),
                 });
             }
-            k::TypeKind::Box { inner } => {
-                let result = self.clone_place(Self::projected(0, k::Projection::Deref), inner)?;
+            ir::TypeKind::Box { inner } => {
+                let result = self.clone_place(Self::projected(0, ir::Projection::Deref), inner)?;
                 let boxed = self.local(ty);
-                self.emit(k::Op::Intrinsic {
+                self.emit(ir::Op::Intrinsic {
                     dst: boxed,
                     name: "box_new".to_string(),
                     args: vec![result],
                 });
                 self.finish(boxed);
             }
-            k::TypeKind::Array { inner, len } => {
+            ir::TypeKind::Array { inner, len } => {
                 let mut elements = Vec::new();
                 for index in 0..len {
                     let at = self.index(index);
                     elements.push(
-                        self.clone_place(Self::projected(0, k::Projection::Index(at)), inner)?,
+                        self.clone_place(Self::projected(0, ir::Projection::Index(at)), inner)?,
                     );
-                    self.emit(k::Op::Drop {
-                        place: k::Place::local(at),
+                    self.emit(ir::Op::Drop {
+                        place: ir::Place::local(at),
                     });
                 }
                 let result = self.local(ty);
-                self.emit(k::Op::Array {
+                self.emit(ir::Op::Array {
                     dst: result,
                     elements,
                 });
@@ -553,8 +553,8 @@ impl Generated<'_, '_> {
     }
 
     fn integer(&mut self, value: i32) -> usize {
-        let result = self.local(k::I32);
-        self.emit(k::Op::Int {
+        let result = self.local(ir::I32);
+        self.emit(ir::Op::Int {
             dst: result,
             value: value as i64,
         });
@@ -567,8 +567,8 @@ impl Generated<'_, '_> {
     }
 
     fn binary(&mut self, operation: &str, left: usize, right: usize) -> usize {
-        let result = self.local(k::BOOL);
-        self.emit(k::Op::Binary {
+        let result = self.local(ir::BOOL);
+        self.emit(ir::Op::Binary {
             dst: result,
             op: operation.to_string(),
             left,
@@ -578,14 +578,14 @@ impl Generated<'_, '_> {
     }
 
     fn return_order_if(&mut self, condition: usize, value: i32) {
-        self.emit(k::Op::If { condition });
+        self.emit(ir::Op::If { condition });
         let entry = self.live.clone();
         self.finish_order(value);
-        self.emit(k::Op::End);
+        self.emit(ir::Op::End);
         self.restored(entry);
     }
 
-    fn order_places(&mut self, left: k::Place, right: k::Place, ty: usize) -> Result<usize> {
+    fn order_places(&mut self, left: ir::Place, right: ir::Place, ty: usize) -> Result<usize> {
         let function = self
             .compiler
             .builtin_operation(ty, BuiltinMethod::Order, self.span)?;
@@ -597,23 +597,23 @@ impl Generated<'_, '_> {
     // Return the first non-equal classification, including unordered. Equality
     // is an ordering result here; a custom PartialEq implementation is irrelevant.
     fn decisive_order(&mut self, compared: usize) {
-        let inspect = self.read(k::Place::local(compared), k::I32);
+        let inspect = self.read(ir::Place::local(compared), ir::I32);
         let zero = self.integer(0);
         let condition = self.binary("!=", inspect, zero);
-        self.emit(k::Op::If { condition });
+        self.emit(ir::Op::If { condition });
         let entry = self.live.clone();
         self.finish(compared);
-        self.emit(k::Op::End);
+        self.emit(ir::Op::End);
         self.restored(entry);
-        self.emit(k::Op::Drop {
-            place: k::Place::local(compared),
+        self.emit(ir::Op::Drop {
+            place: ir::Place::local(compared),
         });
     }
 
-    fn order_fields(&mut self, fields: &[k::Field], variant: Option<usize>) -> Result<()> {
+    fn order_fields(&mut self, fields: &[ir::Field], variant: Option<usize>) -> Result<()> {
         for (index, field) in fields.iter().enumerate() {
-            let projection = variant.map_or(k::Projection::Field(index), |variant| {
-                k::Projection::VariantField(variant, index)
+            let projection = variant.map_or(ir::Projection::Field(index), |variant| {
+                ir::Projection::VariantField(variant, index)
             });
             let compared = self.order_places(
                 Self::projected(0, projection.clone()),
@@ -629,20 +629,20 @@ impl Generated<'_, '_> {
         let rank = self.index(0);
         self.function.locals[rank].mutable = true;
         for variant in 1..variants {
-            let condition = self.local(k::BOOL);
-            self.emit(k::Op::TagTest {
+            let condition = self.local(ir::BOOL);
+            self.emit(ir::Op::TagTest {
                 dst: condition,
-                place: k::Place::local(parameter),
+                place: ir::Place::local(parameter),
                 variant,
             });
-            self.emit(k::Op::If { condition });
+            self.emit(ir::Op::If { condition });
             let entry = self.live.clone();
             let value = self.index(variant);
-            self.emit(k::Op::Assign {
-                place: k::Place::local(rank),
+            self.emit(ir::Op::Assign {
+                place: ir::Place::local(rank),
                 src: value,
             });
-            self.emit(k::Op::End);
+            self.emit(ir::Op::End);
             self.restored(entry);
         }
         rank
@@ -650,8 +650,8 @@ impl Generated<'_, '_> {
 
     fn order_value(&mut self, ty: usize) -> Result<()> {
         match self.compiler.types[ty].kind.clone() {
-            k::TypeKind::Unit => self.finish_order(0),
-            k::TypeKind::Bool => {
+            ir::TypeKind::Unit => self.finish_order(0),
+            ir::TypeKind::Bool => {
                 let left = self.read(Self::referent(0), ty);
                 let right = self.read(Self::referent(1), ty);
                 let equal = self.binary("==", left, right);
@@ -660,7 +660,7 @@ impl Generated<'_, '_> {
                 self.return_order_if(left, 1);
                 self.finish_order(-1);
             }
-            k::TypeKind::Char | k::TypeKind::Int { .. } | k::TypeKind::F64 => {
+            ir::TypeKind::Char | ir::TypeKind::Int { .. } | ir::TypeKind::F64 => {
                 for ordering in 0..2 {
                     let operation = if ordering == 0 { "<" } else { ">" };
                     let value = if ordering == 0 { -1 } else { 1 };
@@ -669,7 +669,7 @@ impl Generated<'_, '_> {
                     let condition = self.binary(operation, left, right);
                     self.return_order_if(condition, value);
                 }
-                if ty == k::F64 {
+                if ty == ir::F64 {
                     let left = self.read(Self::referent(0), ty);
                     let right = self.read(Self::referent(1), ty);
                     let equal = self.binary("==", left, right);
@@ -679,85 +679,85 @@ impl Generated<'_, '_> {
                     self.finish_order(0);
                 }
             }
-            k::TypeKind::Struct { fields, .. } => {
+            ir::TypeKind::Struct { fields, .. } => {
                 self.order_fields(&fields, None)?;
                 self.finish_order(0);
             }
-            k::TypeKind::Enum { variants, .. } => {
+            ir::TypeKind::Enum { variants, .. } => {
                 let left = self.enum_rank(0, variants.len());
                 let right = self.enum_rank(1, variants.len());
                 for ordering in 0..2 {
                     let operation = if ordering == 0 { "<" } else { ">" };
                     let value = if ordering == 0 { -1 } else { 1 };
-                    let left_value = self.read(k::Place::local(left), k::U64);
-                    let right_value = self.read(k::Place::local(right), k::U64);
+                    let left_value = self.read(ir::Place::local(left), ir::U64);
+                    let right_value = self.read(ir::Place::local(right), ir::U64);
                     let condition = self.binary(operation, left_value, right_value);
                     self.return_order_if(condition, value);
                 }
-                self.emit(k::Op::Drop {
-                    place: k::Place::local(left),
+                self.emit(ir::Op::Drop {
+                    place: ir::Place::local(left),
                 });
-                self.emit(k::Op::Drop {
-                    place: k::Place::local(right),
+                self.emit(ir::Op::Drop {
+                    place: ir::Place::local(right),
                 });
                 for (variant, value) in variants.iter().enumerate() {
-                    let condition = self.local(k::BOOL);
-                    self.emit(k::Op::TagTest {
+                    let condition = self.local(ir::BOOL);
+                    self.emit(ir::Op::TagTest {
                         dst: condition,
-                        place: k::Place::local(0),
+                        place: ir::Place::local(0),
                         variant,
                     });
-                    self.emit(k::Op::If { condition });
+                    self.emit(ir::Op::If { condition });
                     let outer = self.live.clone();
-                    let condition = self.local(k::BOOL);
-                    self.emit(k::Op::TagTest {
+                    let condition = self.local(ir::BOOL);
+                    self.emit(ir::Op::TagTest {
                         dst: condition,
-                        place: k::Place::local(1),
+                        place: ir::Place::local(1),
                         variant,
                     });
-                    self.emit(k::Op::If { condition });
+                    self.emit(ir::Op::If { condition });
                     self.order_fields(&value.fields, Some(variant))?;
                     self.finish_order(0);
-                    self.emit(k::Op::End);
-                    self.emit(k::Op::End);
+                    self.emit(ir::Op::End);
+                    self.emit(ir::Op::End);
                     self.restored(outer);
                 }
-                self.emit(k::Op::Trap {
+                self.emit(ir::Op::Trap {
                     message: "invalid enum discriminant".to_string(),
                 });
             }
-            k::TypeKind::Ref { inner, .. } | k::TypeKind::Box { inner } => {
+            ir::TypeKind::Ref { inner, .. } | ir::TypeKind::Box { inner } => {
                 let compared = self.order_places(
-                    Self::projected(0, k::Projection::Deref),
-                    Self::projected(1, k::Projection::Deref),
+                    Self::projected(0, ir::Projection::Deref),
+                    Self::projected(1, ir::Projection::Deref),
                     inner,
                 )?;
                 self.finish(compared);
             }
-            k::TypeKind::Array { inner, .. } => {
+            ir::TypeKind::Array { inner, .. } => {
                 let slice = self.compiler.intern(
                     String::new(),
-                    k::TypeKind::Slice {
+                    ir::TypeKind::Slice {
                         inner,
                         mutable: false,
                     },
                 );
                 let reference = self.compiler.reference(slice, false);
                 let left = self.local(reference);
-                self.emit(k::Op::SliceBorrow {
+                self.emit(ir::Op::SliceBorrow {
                     dst: left,
                     place: Self::referent(0),
                     mutable: false,
                 });
                 let right = self.local(reference);
-                self.emit(k::Op::SliceBorrow {
+                self.emit(ir::Op::SliceBorrow {
                     dst: right,
                     place: Self::referent(1),
                     mutable: false,
                 });
                 let function =
                     self.compiler
-                        .sequence_instance("__lkj_slice_order", inner, self.span)?;
+                        .sequence_instance("__lkjscript_slice_order", inner, self.span)?;
                 let compared = self.call(function, vec![left, right]);
                 self.finish(compared);
             }
@@ -785,13 +785,13 @@ impl Generated<'_, '_> {
             _ => unreachable!(),
         };
         // Unordered is false for every relation, including >=.
-        let inspect = self.read(k::Place::local(compared), k::I32);
+        let inspect = self.read(ir::Place::local(compared), ir::I32);
         let unordered = self.integer(2);
         let condition = self.binary("==", inspect, unordered);
-        self.emit(k::Op::If { condition });
+        self.emit(ir::Op::If { condition });
         let entry = self.live.clone();
         self.finish_bool(false);
-        self.emit(k::Op::End);
+        self.emit(ir::Op::End);
         self.restored(entry);
         let value = self.integer(constant);
         let result = self.binary(operation, compared, value);
@@ -799,7 +799,7 @@ impl Generated<'_, '_> {
         Ok(())
     }
 
-    fn equal_places(&mut self, left: k::Place, right: k::Place, ty: usize) -> Result<usize> {
+    fn equal_places(&mut self, left: ir::Place, right: ir::Place, ty: usize) -> Result<usize> {
         let function = self
             .compiler
             .builtin_operation(ty, BuiltinMethod::Eq, self.span)?;
@@ -809,20 +809,20 @@ impl Generated<'_, '_> {
     }
 
     fn require_equal(&mut self, compared: usize) {
-        self.emit(k::Op::If {
+        self.emit(ir::Op::If {
             condition: compared,
         });
         let entry = self.live.clone();
-        self.emit(k::Op::Else);
+        self.emit(ir::Op::Else);
         self.finish_bool(false);
-        self.emit(k::Op::End);
+        self.emit(ir::Op::End);
         self.restored(entry);
     }
 
-    fn equal_fields(&mut self, fields: &[k::Field], variant: Option<usize>) -> Result<()> {
+    fn equal_fields(&mut self, fields: &[ir::Field], variant: Option<usize>) -> Result<()> {
         for (index, field) in fields.iter().enumerate() {
-            let projection = variant.map_or(k::Projection::Field(index), |variant| {
-                k::Projection::VariantField(variant, index)
+            let projection = variant.map_or(ir::Projection::Field(index), |variant| {
+                ir::Projection::VariantField(variant, index)
             });
             let compared = self.equal_places(
                 Self::projected(0, projection.clone()),
@@ -836,12 +836,15 @@ impl Generated<'_, '_> {
 
     fn equal_value(&mut self, ty: usize) -> Result<()> {
         match self.compiler.types[ty].kind.clone() {
-            k::TypeKind::Unit => self.finish_bool(true),
-            k::TypeKind::Bool | k::TypeKind::Char | k::TypeKind::Int { .. } | k::TypeKind::F64 => {
+            ir::TypeKind::Unit => self.finish_bool(true),
+            ir::TypeKind::Bool
+            | ir::TypeKind::Char
+            | ir::TypeKind::Int { .. }
+            | ir::TypeKind::F64 => {
                 let left = self.read(Self::referent(0), ty);
                 let right = self.read(Self::referent(1), ty);
-                let result = self.local(k::BOOL);
-                self.emit(k::Op::Binary {
+                let result = self.local(ir::BOOL);
+                self.emit(ir::Op::Binary {
                     dst: result,
                     op: "==".to_string(),
                     left,
@@ -849,59 +852,59 @@ impl Generated<'_, '_> {
                 });
                 self.finish(result);
             }
-            k::TypeKind::Struct { fields, .. } => {
+            ir::TypeKind::Struct { fields, .. } => {
                 self.equal_fields(&fields, None)?;
                 self.finish_bool(true);
             }
-            k::TypeKind::Enum { variants, .. } => {
+            ir::TypeKind::Enum { variants, .. } => {
                 for (variant, value) in variants.iter().enumerate() {
-                    let condition = self.local(k::BOOL);
-                    self.emit(k::Op::TagTest {
+                    let condition = self.local(ir::BOOL);
+                    self.emit(ir::Op::TagTest {
                         dst: condition,
-                        place: k::Place::local(0),
+                        place: ir::Place::local(0),
                         variant,
                     });
-                    self.emit(k::Op::If { condition });
+                    self.emit(ir::Op::If { condition });
                     let outer = self.live.clone();
-                    let condition = self.local(k::BOOL);
-                    self.emit(k::Op::TagTest {
+                    let condition = self.local(ir::BOOL);
+                    self.emit(ir::Op::TagTest {
                         dst: condition,
-                        place: k::Place::local(1),
+                        place: ir::Place::local(1),
                         variant,
                     });
-                    self.emit(k::Op::If { condition });
+                    self.emit(ir::Op::If { condition });
                     let inner = self.live.clone();
                     self.equal_fields(&value.fields, Some(variant))?;
                     self.finish_bool(true);
-                    self.emit(k::Op::Else);
+                    self.emit(ir::Op::Else);
                     self.restored(inner);
                     self.finish_bool(false);
-                    self.emit(k::Op::End);
-                    self.emit(k::Op::End);
+                    self.emit(ir::Op::End);
+                    self.emit(ir::Op::End);
                     self.restored(outer);
                 }
-                self.emit(k::Op::Trap {
+                self.emit(ir::Op::Trap {
                     message: "invalid enum discriminant".to_string(),
                 });
             }
-            k::TypeKind::Ref { inner, .. } | k::TypeKind::Box { inner } => {
+            ir::TypeKind::Ref { inner, .. } | ir::TypeKind::Box { inner } => {
                 let compared = self.equal_places(
-                    Self::projected(0, k::Projection::Deref),
-                    Self::projected(1, k::Projection::Deref),
+                    Self::projected(0, ir::Projection::Deref),
+                    Self::projected(1, ir::Projection::Deref),
                     inner,
                 )?;
                 self.finish(compared);
             }
-            k::TypeKind::Array { inner, len } => {
+            ir::TypeKind::Array { inner, len } => {
                 for index in 0..len {
                     let at = self.index(index);
                     let compared = self.equal_places(
-                        Self::projected(0, k::Projection::Index(at)),
-                        Self::projected(1, k::Projection::Index(at)),
+                        Self::projected(0, ir::Projection::Index(at)),
+                        Self::projected(1, ir::Projection::Index(at)),
                         inner,
                     )?;
-                    self.emit(k::Op::Drop {
-                        place: k::Place::local(at),
+                    self.emit(ir::Op::Drop {
+                        place: ir::Place::local(at),
                     });
                     self.require_equal(compared);
                 }
@@ -998,7 +1001,7 @@ impl Builder<'_, '_> {
 
     pub(super) fn builtin_trait_method(
         &mut self,
-        target: &k::Place,
+        target: &ir::Place,
         receiver: usize,
         name: &str,
         types: &[usize],
@@ -1045,7 +1048,7 @@ impl Builder<'_, '_> {
         let result = method.result(receiver);
         let dst = self.temp(result);
         self.emit(
-            k::Op::Call {
+            ir::Op::Call {
                 dst,
                 function,
                 args: values,

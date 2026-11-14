@@ -5,22 +5,22 @@ repository=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 work=$(mktemp -d)
 trap 'rm -rf -- "$work"' EXIT
 mkdir -p "$work/fixture/tools" "$work/inputs/library/nested" "$work/path"
-export LKJ_INSTALL_TEST_WAIT=$work/wait.sh
-export LKJ_INSTALL_TEST_FIFO=$work/wait.fifo
-export LKJ_INSTALL_TEST_PID=$work/worker.pid
-mkfifo "$LKJ_INSTALL_TEST_FIFO"
-cat > "$LKJ_INSTALL_TEST_WAIT" <<'WAIT'
+export LKJSCRIPT_INSTALL_TEST_WAIT=$work/wait.sh
+export LKJSCRIPT_INSTALL_TEST_FIFO=$work/wait.fifo
+export LKJSCRIPT_INSTALL_TEST_PID=$work/worker.pid
+mkfifo "$LKJSCRIPT_INSTALL_TEST_FIFO"
+cat > "$LKJSCRIPT_INSTALL_TEST_WAIT" <<'WAIT'
 installer_wait() {
-    [[ ${LKJ_INSTALL_TEST_LONG_STAGE:-} == "$1" ]] || return 0
-    exec 9<>"$LKJ_INSTALL_TEST_FIFO"
+    [[ ${LKJSCRIPT_INSTALL_TEST_LONG_STAGE:-} == "$1" ]] || return 0
+    exec 9<>"$LKJSCRIPT_INSTALL_TEST_FIFO"
     trap 'exit 143' TERM
     trap 'exit 130' INT
-    printf '%s\n' "$BASHPID" > "$LKJ_INSTALL_TEST_PID"
+    printf '%s\n' "$BASHPID" > "$LKJSCRIPT_INSTALL_TEST_PID"
     while :; do read -r -t 60 -u 9 || :; done
 }
 WAIT
 cp "$repository/tools/install-native.sh" "$repository/tools/native-process.sh" "$work/fixture/tools/"
-printf '#!/bin/bash\nexit 0\n' > "$work/fixture/tools/lkj"
+printf '#!/bin/bash\nexit 0\n' > "$work/fixture/tools/lkjscript"
 printf '// declared runtime bytes\n' > "$work/inputs/runtime.rs"
 printf '// declared library bytes\n' > "$work/inputs/library/lib.rs"
 printf '// nested bytes\r\n' > "$work/inputs/library/nested/with spaces.rs"
@@ -28,40 +28,40 @@ printf '// nested bytes\r\n' > "$work/inputs/library/nested/with spaces.rs"
 for dependency in basename bash cat chmod cmp cp dirname find mkdir mktemp mv rm setsid sha256sum sort; do
     ln -s "$(command -v "$dependency")" "$work/path/$dependency"
 done
-export LKJ_INSTALL_TEST_ADDRESS_SPACE
-LKJ_INSTALL_TEST_ADDRESS_SPACE=$(ulimit -v)
+export LKJSCRIPT_INSTALL_TEST_ADDRESS_SPACE
+LKJSCRIPT_INSTALL_TEST_ADDRESS_SPACE=$(ulimit -v)
 
 cat > "$work/inputs/frontend" <<'FRONTEND'
 #!/bin/bash
 set -euo pipefail
-source "$LKJ_INSTALL_TEST_WAIT"
+source "$LKJSCRIPT_INSTALL_TEST_WAIT"
 installer_wait frontend
-[[ $(ulimit -v) == "$LKJ_INSTALL_TEST_ADDRESS_SPACE" ]]
+[[ $(ulimit -v) == "$LKJSCRIPT_INSTALL_TEST_ADDRESS_SPACE" ]]
 [[ $# == 3 && $1 == --source && $3 == --no-library ]]
-[[ ${LKJ_INSTALL_TEST_FAILURE:-} != frontend ]] || exit 19
-if [[ -n ${LKJ_INSTALL_TEST_RACE_DEST:-} && ! -d $LKJ_INSTALL_TEST_RACE_DEST ]]; then
-    mkdir "$LKJ_INSTALL_TEST_RACE_DEST"
-    printf 'keep racing destination\n' > "$LKJ_INSTALL_TEST_RACE_DEST/keep"
+[[ ${LKJSCRIPT_INSTALL_TEST_FAILURE:-} != frontend ]] || exit 19
+if [[ -n ${LKJSCRIPT_INSTALL_TEST_RACE_DEST:-} && ! -d $LKJSCRIPT_INSTALL_TEST_RACE_DEST ]]; then
+    mkdir "$LKJSCRIPT_INSTALL_TEST_RACE_DEST"
+    printf 'keep racing destination\n' > "$LKJSCRIPT_INSTALL_TEST_RACE_DEST/keep"
 fi
 case "$2" in
     '$runtime/runtime.rs')
         cmp -s '$runtime/runtime.rs' ../runtime.rs
-        printf 'runtime K\n'
+        printf 'runtime IR\n'
         ;;
     probe.rs)
         [[ $(<probe.rs) == 'pub fn probe() -> i64 { 42 }' ]]
-        printf 'probe K\n'
+        printf 'probe IR\n'
         ;;
     *) exit 20 ;;
 esac
 FRONTEND
-cat > "$work/inputs/kc" <<'KC'
+cat > "$work/inputs/backend" <<'BACKEND'
 #!/bin/bash
 set -euo pipefail
-[[ ${LKJ_INSTALL_TEST_FAILURE:-} != kc ]] || exit 21
+[[ ${LKJSCRIPT_INSTALL_TEST_FAILURE:-} != backend ]] || exit 21
 [[ $# == 5 || $# == 7 ]]
-[[ $1 == probe.k && $2 == --runtime && $3 == runtime.k && $4 == --entry && $5 == probe ]]
-[[ $(<runtime.k) == 'runtime K' && $(<probe.k) == 'probe K' ]]
+[[ $1 == probe.lkjir && $2 == --runtime && $3 == runtime.lkjir && $4 == --entry && $5 == probe ]]
+[[ $(<runtime.lkjir) == 'runtime IR' && $(<probe.lkjir) == 'probe IR' ]]
 if [[ $# == 5 ]]; then
     printf '#!/bin/bash\nexit 0\n'
 else
@@ -70,30 +70,30 @@ else
     cat <<'ELF'
 #!/bin/bash
 printf '\000\000\000\000\000\000\000\000\052\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000' >&3
-[[ ${LKJ_INSTALL_TEST_FAILURE:-} != packet ]] || exit 23
+[[ ${LKJSCRIPT_INSTALL_TEST_FAILURE:-} != packet ]] || exit 23
 ELF
 fi
-KC
+BACKEND
 cat > "$work/inputs/result" <<'RESULT'
 #!/bin/bash
 set -euo pipefail
-source "$LKJ_INSTALL_TEST_WAIT"
+source "$LKJSCRIPT_INSTALL_TEST_WAIT"
 installer_wait result
 [[ $# == 2 && $1 == probe.result && $2 == installation-probe ]]
 [[ $(<probe.result) == descriptor ]]
 cmp -s - <(printf '\000\000\000\000\000\000\000\000\052\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\n0\n')
-case "${LKJ_INSTALL_TEST_FAILURE:-}" in
+case "${LKJSCRIPT_INSTALL_TEST_FAILURE:-}" in
     result) exit 22 ;;
     wrong-result) printf '41\n' ;;
     missing-newline) printf '42' ;;
     *) printf '42\n' ;;
 esac
 RESULT
-chmod 755 "$work/inputs/frontend" "$work/inputs/kc" "$work/inputs/result"
+chmod 755 "$work/inputs/frontend" "$work/inputs/backend" "$work/inputs/result"
 installer=$work/fixture/tools/install-native.sh
 invoke() {
     PATH=$work/path bash "$installer" "$1" \
-        --frontend "$work/inputs/frontend" --kc "$work/inputs/kc" \
+        --frontend "$work/inputs/frontend" --backend "$work/inputs/backend" \
         --result "$work/inputs/result" --library "$work/inputs/library" \
         --runtime-source "$work/inputs/runtime.rs" --source-commit fixture-commit
 }
@@ -103,17 +103,17 @@ reject() {
         exit 1
     fi
     [[ ! -e $1 ]]
-    [[ -z $(find "$work" -maxdepth 1 -name '.lkj-install.*' -print -quit) ]]
+    [[ -z $(find "$work" -maxdepth 1 -name '.lkjscript-install.*' -print -quit) ]]
 }
 destination=$work/toolchain\ with\ spaces
 invoke "$destination" > "$work/output"
 [[ -d $destination && ! -e $destination/.work ]]
-[[ -x $destination/bin/lkj && -x $destination/libexec/frontend ]]
-[[ -x $destination/libexec/kc && -x $destination/libexec/result ]]
+[[ -x $destination/bin/lkjscript && -x $destination/libexec/frontend ]]
+[[ -x $destination/libexec/backend && -x $destination/libexec/result ]]
 [[ -z $(find "$destination" -type l -print -quit) ]]
 [[ ! $destination/libexec/frontend -ef $work/inputs/frontend ]]
 [[ ! $destination/library/lib.rs -ef $work/inputs/library/lib.rs ]]
-[[ $(<"$destination/runtime.k") == 'runtime K' ]]
+[[ $(<"$destination/runtime.lkjir") == 'runtime IR' ]]
 [[ $(<"$destination/manifest") == *'source_commit fixture-commit'* ]]
 (cd "$destination" && sha256sum --check --status SHA256SUMS)
 # Installed bytes remain valid after every declared input tree disappears.
@@ -139,43 +139,43 @@ rm "$work/inputs/library/external.rs"
 mkfifo "$work/inputs/library/fifo"
 reject "$work/fifo-rejected"
 rm "$work/inputs/library/fifo"
-for failure in frontend kc packet result wrong-result missing-newline; do
-    export LKJ_INSTALL_TEST_FAILURE=$failure
+for failure in frontend backend packet result wrong-result missing-newline; do
+    export LKJSCRIPT_INSTALL_TEST_FAILURE=$failure
     reject "$work/failed-$failure"
 done
-unset LKJ_INSTALL_TEST_FAILURE
-export LKJ_INSTALL_TEST_RACE_DEST=$work/racing-destination
-if invoke "$LKJ_INSTALL_TEST_RACE_DEST" > "$work/output" 2> "$work/error"; then
+unset LKJSCRIPT_INSTALL_TEST_FAILURE
+export LKJSCRIPT_INSTALL_TEST_RACE_DEST=$work/racing-destination
+if invoke "$LKJSCRIPT_INSTALL_TEST_RACE_DEST" > "$work/output" 2> "$work/error"; then
     printf 'racing destination was overwritten\n' >&2
     exit 1
 fi
-[[ $(<"$LKJ_INSTALL_TEST_RACE_DEST/keep") == 'keep racing destination' ]]
-[[ ! -e $LKJ_INSTALL_TEST_RACE_DEST/bin ]]
-[[ -z $(find "$work" -maxdepth 1 -name '.lkj-install.*' -print -quit) ]]
-unset LKJ_INSTALL_TEST_RACE_DEST
+[[ $(<"$LKJSCRIPT_INSTALL_TEST_RACE_DEST/keep") == 'keep racing destination' ]]
+[[ ! -e $LKJSCRIPT_INSTALL_TEST_RACE_DEST/bin ]]
+[[ -z $(find "$work" -maxdepth 1 -name '.lkjscript-install.*' -print -quit) ]]
+unset LKJSCRIPT_INSTALL_TEST_RACE_DEST
 # A cancelled validation stage must not publish or retain staging/children.
 for stage in frontend result; do
     for signal in TERM INT; do
-        rm -f -- "$LKJ_INSTALL_TEST_PID"
+        rm -f -- "$LKJSCRIPT_INSTALL_TEST_PID"
         (
-            exec /usr/bin/env --default-signal=INT,QUIT PATH="$work/path" LKJ_INSTALL_TEST_LONG_STAGE="$stage" \
+            exec /usr/bin/env --default-signal=INT,QUIT PATH="$work/path" LKJSCRIPT_INSTALL_TEST_LONG_STAGE="$stage" \
                 bash "$installer" "$work/cancelled-$stage-$signal" \
-                --frontend "$work/inputs/frontend" --kc "$work/inputs/kc" \
+                --frontend "$work/inputs/frontend" --backend "$work/inputs/backend" \
                 --result "$work/inputs/result" --library "$work/inputs/library" \
                 --runtime-source "$work/inputs/runtime.rs"
         ) >"$work/output" 2>"$work/error" &
         installer_pid=$!
         for ((attempt=0; attempt<500; attempt++)); do
-            [[ ! -f $LKJ_INSTALL_TEST_PID ]] || break
+            [[ ! -f $LKJSCRIPT_INSTALL_TEST_PID ]] || break
             sleep 0.01
         done
-        if [[ ! -f $LKJ_INSTALL_TEST_PID ]]; then
+        if [[ ! -f $LKJSCRIPT_INSTALL_TEST_PID ]]; then
             kill -KILL "$installer_pid" 2>/dev/null || :
             wait "$installer_pid" 2>/dev/null || :
             printf 'installer cancellation stage was not reached: %s\n' "$stage" >&2
             exit 1
         fi
-        worker_pid=$(<"$LKJ_INSTALL_TEST_PID")
+        worker_pid=$(<"$LKJSCRIPT_INSTALL_TEST_PID")
         kill -s "$signal" "$installer_pid"
         sleep 5 &
         timer_pid=$!
@@ -195,7 +195,7 @@ for stage in frontend result; do
         [[ $status == "$expected" ]]
         [[ ! -e /proc/$worker_pid/status ]]
         [[ ! -e $work/cancelled-$stage-$signal ]]
-        [[ -z $(find "$work" -maxdepth 1 -name '.lkj-install.*' -print -quit) ]]
+        [[ -z $(find "$work" -maxdepth 1 -name '.lkjscript-install.*' -print -quit) ]]
     done
 done
 rm "$work/path/sha256sum"

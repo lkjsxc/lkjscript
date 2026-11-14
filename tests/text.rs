@@ -1,9 +1,9 @@
-//! Immutable UTF-8 views retain static or borrowed provenance through K and source.
+//! Immutable UTF-8 views retain static or borrowed provenance through IR and source.
 #[path = "../bridge/library.rs"]
 mod bootstrap_library;
 
 use lkjscript::ast::Diagnostic;
-use lkjscript::{check, compiler, k, k_text, source};
+use lkjscript::{check, compiler, ir, ir_text, source};
 #[path = "support/native.rs"]
 mod native;
 
@@ -12,30 +12,30 @@ const TEXT: usize = 8;
 const BYTE_SLICE: usize = 9;
 const BYTES: usize = 10;
 
-fn types() -> Vec<k::Type> {
-    let mut result = k::primitives();
+fn types() -> Vec<ir::Type> {
+    let mut result = ir::primitives();
     result.extend([
-        k::Type {
+        ir::Type {
             name: "str".to_string(),
-            kind: k::TypeKind::Str,
+            kind: ir::TypeKind::Str,
         },
-        k::Type {
+        ir::Type {
             name: "&str".to_string(),
-            kind: k::TypeKind::Ref {
+            kind: ir::TypeKind::Ref {
                 inner: STR,
                 mutable: false,
             },
         },
-        k::Type {
+        ir::Type {
             name: "[u8]".to_string(),
-            kind: k::TypeKind::Slice {
-                inner: k::U8,
+            kind: ir::TypeKind::Slice {
+                inner: ir::U8,
                 mutable: false,
             },
         },
-        k::Type {
+        ir::Type {
             name: "&[u8]".to_string(),
-            kind: k::TypeKind::Ref {
+            kind: ir::TypeKind::Ref {
                 inner: BYTE_SLICE,
                 mutable: false,
             },
@@ -44,8 +44,8 @@ fn types() -> Vec<k::Type> {
     result
 }
 
-fn local(ty: usize) -> k::Local {
-    k::Local {
+fn local(ty: usize) -> ir::Local {
+    ir::Local {
         name: String::new(),
         ty,
         mutable: false,
@@ -56,11 +56,11 @@ fn function(
     name: &str,
     params: usize,
     result: usize,
-    return_source: Option<k::ReturnSource>,
+    return_source: Option<ir::ReturnSource>,
     locals: &[usize],
-    body: Vec<k::Op>,
-) -> k::Function {
-    k::Function {
+    body: Vec<ir::Op>,
+) -> ir::Function {
+    ir::Function {
         file: 0,
         name: name.to_string(),
         params,
@@ -70,7 +70,7 @@ fn function(
         body: body
             .into_iter()
             .enumerate()
-            .map(|(index, op)| k::Instruction {
+            .map(|(index, op)| ir::Instruction {
                 column: 1,
                 op,
                 line: index + 1,
@@ -80,42 +80,42 @@ fn function(
     }
 }
 
-fn program(types: Vec<k::Type>, functions: Vec<k::Function>) -> k::Program {
-    k::Program {
+fn program(types: Vec<ir::Type>, functions: Vec<ir::Function>) -> ir::Program {
+    ir::Program {
         types,
         functions,
         destructors: Vec::new(),
     }
 }
 
-fn text(dst: usize, value: &str) -> k::Op {
-    k::Op::Text {
+fn text(dst: usize, value: &str) -> ir::Op {
+    ir::Op::Text {
         dst,
         bytes: value.as_bytes().to_vec(),
     }
 }
 
-fn intrinsic(dst: usize, name: &str, args: &[usize]) -> k::Op {
-    k::Op::Intrinsic {
+fn intrinsic(dst: usize, name: &str, args: &[usize]) -> ir::Op {
+    ir::Op::Intrinsic {
         dst,
         name: name.to_string(),
         args: args.to_vec(),
     }
 }
 
-fn drop_local(local: usize) -> k::Op {
-    k::Op::Drop {
-        place: k::Place::local(local),
+fn drop_local(local: usize) -> ir::Op {
+    ir::Op::Drop {
+        place: ir::Place::local(local),
     }
 }
 
-fn accepted(program: k::Program) -> k::CheckedProgram {
-    check::check(program).unwrap_or_else(|error| panic!("valid text K rejected: {error:?}"))
+fn accepted(program: ir::Program) -> ir::CheckedProgram {
+    check::check(program).unwrap_or_else(|error| panic!("valid text IR rejected: {error:?}"))
 }
 
-fn rejected(program: k::Program, code: &str) -> Diagnostic {
+fn rejected(program: ir::Program, code: &str) -> Diagnostic {
     match check::check(program) {
-        Ok(_) => panic!("invalid text K was accepted"),
+        Ok(_) => panic!("invalid text IR was accepted"),
         Err(error) => {
             assert_eq!(error.code, code, "{error:?}");
             error
@@ -123,38 +123,38 @@ fn rejected(program: k::Program, code: &str) -> Diagnostic {
     }
 }
 
-fn literal_program(bytes: Vec<u8>) -> k::Program {
+fn literal_program(bytes: Vec<u8>) -> ir::Program {
     program(
         types(),
         vec![function(
             "literal",
             0,
             TEXT,
-            Some(k::ReturnSource::Static),
+            Some(ir::ReturnSource::Static),
             &[TEXT],
-            vec![k::Op::Text { dst: 0, bytes }, k::Op::Return { src: 0 }],
+            vec![ir::Op::Text { dst: 0, bytes }, ir::Op::Return { src: 0 }],
         )],
     )
 }
 
 #[test]
-fn direct_k_static_literals_have_a_checked_text_round_trip() {
+fn direct_ir_static_literals_have_a_checked_text_round_trip() {
     for value in ["", "ASCII", "nul\0byte", "é水😀", "\u{10ffff}"] {
         let original = literal_program(value.as_bytes().to_vec());
-        let encoded = k_text::write(&original);
-        let decoded = k_text::read(&encoded).expect("text K must round trip");
+        let encoded = ir_text::write(&original);
+        let decoded = ir_text::read(&encoded).expect("text IR must round trip");
         assert!(
             original == decoded,
-            "static text K structures differ:\noriginal:\n{}\ndecoded:\n{}",
-            k_text::write(&original),
-            k_text::write(&decoded)
+            "static text IR structures differ:\noriginal:\n{}\ndecoded:\n{}",
+            ir_text::write(&original),
+            ir_text::write(&decoded)
         );
         accepted(decoded);
     }
 }
 
 #[test]
-fn direct_k_invalid_utf8_is_rejected_before_emission() {
+fn direct_ir_invalid_utf8_is_rejected_before_emission() {
     for bytes in [
         vec![128],
         vec![192, 128],
@@ -177,7 +177,7 @@ fn direct_k_invalid_utf8_is_rejected_before_emission() {
 }
 
 #[test]
-fn direct_k_static_reference_returns_require_the_declared_contract() {
+fn direct_ir_static_reference_returns_require_the_declared_contract() {
     let mut missing = literal_program(b"stable".to_vec());
     missing.functions[0].return_source = None;
     rejected(missing, "E_BORROW");
@@ -188,12 +188,12 @@ fn direct_k_static_reference_returns_require_the_declared_contract() {
             "shortened",
             1,
             TEXT,
-            Some(k::ReturnSource::Parameter {
+            Some(ir::ReturnSource::Parameter {
                 index: 0,
                 projections: Vec::new(),
             }),
             &[TEXT, TEXT],
-            vec![text(1, "stable"), drop_local(0), k::Op::Return { src: 1 }],
+            vec![text(1, "stable"), drop_local(0), ir::Op::Return { src: 1 }],
         )],
     ));
     rejected(
@@ -203,9 +203,9 @@ fn direct_k_static_reference_returns_require_the_declared_contract() {
                 "forged_static",
                 1,
                 TEXT,
-                Some(k::ReturnSource::Static),
+                Some(ir::ReturnSource::Static),
                 &[TEXT],
-                vec![k::Op::Return { src: 0 }],
+                vec![ir::Op::Return { src: 0 }],
             )],
         ),
         "E_BORROW",
@@ -213,40 +213,40 @@ fn direct_k_static_reference_returns_require_the_declared_contract() {
 }
 
 #[test]
-fn direct_k_no_argument_calls_transport_static_reference_results() {
+fn direct_ir_no_argument_calls_transport_static_reference_results() {
     let mut module = literal_program("é".as_bytes().to_vec());
     module.functions.push(function(
         "forward",
         0,
         TEXT,
-        Some(k::ReturnSource::Static),
+        Some(ir::ReturnSource::Static),
         &[TEXT],
         vec![
-            k::Op::Call {
+            ir::Op::Call {
                 dst: 0,
                 function: 0,
                 args: Vec::new(),
             },
-            k::Op::Return { src: 0 },
+            ir::Op::Return { src: 0 },
         ],
     ));
     accepted(module);
 }
 
 #[test]
-fn direct_k_aggregate_static_leaves_can_return_without_a_parameter() {
+fn direct_ir_aggregate_static_leaves_can_return_without_a_parameter() {
     let mut declarations = types();
     let pair = declarations.len();
-    declarations.push(k::Type {
+    declarations.push(ir::Type {
         name: "Pair".to_string(),
-        kind: k::TypeKind::Struct {
+        kind: ir::TypeKind::Struct {
             copy: true,
             fields: vec![
-                k::Field {
+                ir::Field {
                     name: "left".to_string(),
                     ty: TEXT,
                 },
-                k::Field {
+                ir::Field {
                     name: "right".to_string(),
                     ty: TEXT,
                 },
@@ -259,43 +259,43 @@ fn direct_k_aggregate_static_leaves_can_return_without_a_parameter() {
             "pair",
             0,
             pair,
-            Some(k::ReturnSource::Static),
+            Some(ir::ReturnSource::Static),
             &[TEXT, TEXT, pair],
             vec![
                 text(0, "left"),
                 text(1, "right"),
-                k::Op::Struct {
+                ir::Op::Struct {
                     dst: 2,
                     fields: vec![0, 1],
                 },
-                k::Op::Return { src: 2 },
+                ir::Op::Return { src: 2 },
             ],
         )],
     ));
 }
 
 #[test]
-fn direct_k_static_and_parameter_leaves_keep_the_dynamic_lifetime() {
+fn direct_ir_static_and_parameter_leaves_keep_the_dynamic_lifetime() {
     let mut declarations = types();
     let pointer = declarations.len();
-    declarations.push(k::Type {
+    declarations.push(ir::Type {
         name: "&i64".to_string(),
-        kind: k::TypeKind::Ref {
-            inner: k::I64,
+        kind: ir::TypeKind::Ref {
+            inner: ir::I64,
             mutable: false,
         },
     });
     let view = declarations.len();
-    declarations.push(k::Type {
+    declarations.push(ir::Type {
         name: "View".to_string(),
-        kind: k::TypeKind::Struct {
+        kind: ir::TypeKind::Struct {
             copy: false,
             fields: vec![
-                k::Field {
+                ir::Field {
                     name: "label".to_string(),
                     ty: TEXT,
                 },
-                k::Field {
+                ir::Field {
                     name: "value".to_string(),
                     ty: pointer,
                 },
@@ -308,24 +308,24 @@ fn direct_k_static_and_parameter_leaves_keep_the_dynamic_lifetime() {
             "mixed",
             1,
             view,
-            Some(k::ReturnSource::Parameter {
+            Some(ir::ReturnSource::Parameter {
                 index: 0,
                 projections: Vec::new(),
             }),
             &[pointer, TEXT, pointer, view],
             vec![
                 text(1, "label"),
-                k::Op::Read {
+                ir::Op::Read {
                     dst: 2,
-                    place: k::Place::local(0),
+                    place: ir::Place::local(0),
                     moving: false,
                 },
-                k::Op::Struct {
+                ir::Op::Struct {
                     dst: 3,
                     fields: vec![1, 2],
                 },
                 drop_local(0),
-                k::Op::Return { src: 3 },
+                ir::Op::Return { src: 3 },
             ],
         )],
     ));
@@ -336,25 +336,25 @@ fn direct_k_static_and_parameter_leaves_keep_the_dynamic_lifetime() {
                 "mixed_escape",
                 1,
                 view,
-                Some(k::ReturnSource::Parameter {
+                Some(ir::ReturnSource::Parameter {
                     index: 0,
                     projections: Vec::new(),
                 }),
-                &[pointer, TEXT, k::I64, pointer, view],
+                &[pointer, TEXT, ir::I64, pointer, view],
                 vec![
                     text(1, "label"),
-                    k::Op::Int { dst: 2, value: 7 },
-                    k::Op::Borrow {
+                    ir::Op::Int { dst: 2, value: 7 },
+                    ir::Op::Borrow {
                         dst: 3,
-                        place: k::Place::local(2),
+                        place: ir::Place::local(2),
                         mutable: false,
                     },
-                    k::Op::Struct {
+                    ir::Op::Struct {
                         dst: 4,
                         fields: vec![1, 3],
                     },
                     drop_local(0),
-                    k::Op::Return { src: 4 },
+                    ir::Op::Return { src: 4 },
                 ],
             )],
         ),
@@ -363,51 +363,51 @@ fn direct_k_static_and_parameter_leaves_keep_the_dynamic_lifetime() {
 }
 
 #[test]
-fn direct_k_borrowed_bytes_retain_the_static_text_origin() {
+fn direct_ir_borrowed_bytes_retain_the_static_text_origin() {
     accepted(program(
         types(),
         vec![function(
             "bytes",
             0,
             BYTES,
-            Some(k::ReturnSource::Static),
+            Some(ir::ReturnSource::Static),
             &[TEXT, BYTES],
             vec![
                 text(0, "é"),
                 intrinsic(1, "str_as_bytes", &[0]),
-                k::Op::Return { src: 1 },
+                ir::Op::Return { src: 1 },
             ],
         )],
     ));
 }
 
 #[test]
-fn direct_k_static_bytes_cannot_be_mutated_or_freed() {
+fn direct_ir_static_bytes_cannot_be_mutated_or_freed() {
     rejected(
         program(
             types(),
             vec![function(
                 "mutate",
                 0,
-                k::UNIT,
+                ir::UNIT,
                 None,
-                &[TEXT, BYTES, k::U64, k::U8, k::UNIT],
+                &[TEXT, BYTES, ir::U64, ir::U8, ir::UNIT],
                 vec![
                     text(0, "A"),
                     intrinsic(1, "str_as_bytes", &[0]),
-                    k::Op::Int { dst: 2, value: 0 },
-                    k::Op::Int { dst: 3, value: 255 },
-                    k::Op::Assign {
-                        place: k::Place {
+                    ir::Op::Int { dst: 2, value: 0 },
+                    ir::Op::Int { dst: 3, value: 255 },
+                    ir::Op::Assign {
+                        place: ir::Place {
                             local: 1,
-                            projections: vec![k::Projection::Deref, k::Projection::Index(2)],
+                            projections: vec![ir::Projection::Deref, ir::Projection::Index(2)],
                         },
                         src: 3,
                     },
                     drop_local(1),
                     drop_local(2),
-                    k::Op::Unit { dst: 4 },
-                    k::Op::Return { src: 4 },
+                    ir::Op::Unit { dst: 4 },
+                    ir::Op::Return { src: 4 },
                 ],
             )],
         ),
@@ -419,19 +419,19 @@ fn direct_k_static_bytes_cannot_be_mutated_or_freed() {
             vec![function(
                 "free",
                 0,
-                k::UNIT,
+                ir::UNIT,
                 None,
-                &[TEXT, k::UNIT],
+                &[TEXT, ir::UNIT],
                 vec![
                     text(0, "A"),
-                    k::Op::Drop {
-                        place: k::Place {
+                    ir::Op::Drop {
+                        place: ir::Place {
                             local: 0,
-                            projections: vec![k::Projection::Deref],
+                            projections: vec![ir::Projection::Deref],
                         },
                     },
-                    k::Op::Unit { dst: 1 },
-                    k::Op::Return { src: 1 },
+                    ir::Op::Unit { dst: 1 },
+                    ir::Op::Return { src: 1 },
                 ],
             )],
         ),
@@ -440,9 +440,9 @@ fn direct_k_static_bytes_cannot_be_mutated_or_freed() {
 }
 
 #[test]
-fn direct_k_mutable_text_references_are_explicitly_unsupported() {
+fn direct_ir_mutable_text_references_are_explicitly_unsupported() {
     let mut invalid = literal_program(b"immutable".to_vec());
-    invalid.types[TEXT].kind = k::TypeKind::Ref {
+    invalid.types[TEXT].kind = ir::TypeKind::Ref {
         inner: STR,
         mutable: true,
     };
@@ -451,13 +451,13 @@ fn direct_k_mutable_text_references_are_explicitly_unsupported() {
 }
 
 #[test]
-fn direct_k_invalid_utf8_is_checked_even_after_a_trap() {
+fn direct_ir_invalid_utf8_is_checked_even_after_a_trap() {
     let mut invalid = literal_program(vec![255]);
     invalid.functions[0].body.insert(
         0,
-        k::Instruction {
+        ir::Instruction {
             column: 1,
-            op: k::Op::Trap {
+            op: ir::Op::Trap {
                 message: "unreachable payload".to_string(),
             },
             line: 1,
@@ -468,7 +468,7 @@ fn direct_k_invalid_utf8_is_checked_even_after_a_trap() {
 }
 
 #[test]
-fn direct_k_a_scalar_cannot_forge_a_text_reference() {
+fn direct_ir_a_scalar_cannot_forge_a_text_reference() {
     rejected(
         program(
             types(),
@@ -476,9 +476,9 @@ fn direct_k_a_scalar_cannot_forge_a_text_reference() {
                 "forged",
                 0,
                 TEXT,
-                Some(k::ReturnSource::Static),
+                Some(ir::ReturnSource::Static),
                 &[TEXT],
-                vec![k::Op::Int { dst: 0, value: 0 }, k::Op::Return { src: 0 }],
+                vec![ir::Op::Int { dst: 0, value: 0 }, ir::Op::Return { src: 0 }],
             )],
         ),
         "E_TYPE",
@@ -486,12 +486,12 @@ fn direct_k_a_scalar_cannot_forge_a_text_reference() {
 }
 
 #[test]
-fn direct_k_borrowing_a_local_text_reference_does_not_make_its_storage_static() {
+fn direct_ir_borrowing_a_local_text_reference_does_not_make_its_storage_static() {
     let mut declarations = types();
     let double = declarations.len();
-    declarations.push(k::Type {
+    declarations.push(ir::Type {
         name: "&&str".to_string(),
-        kind: k::TypeKind::Ref {
+        kind: ir::TypeKind::Ref {
             inner: TEXT,
             mutable: false,
         },
@@ -503,16 +503,16 @@ fn direct_k_borrowing_a_local_text_reference_does_not_make_its_storage_static() 
                 "local_cell",
                 0,
                 double,
-                Some(k::ReturnSource::Static),
+                Some(ir::ReturnSource::Static),
                 &[TEXT, double],
                 vec![
                     text(0, "static bytes"),
-                    k::Op::Borrow {
+                    ir::Op::Borrow {
                         dst: 1,
-                        place: k::Place::local(0),
+                        place: ir::Place::local(0),
                         mutable: false,
                     },
-                    k::Op::Return { src: 1 },
+                    ir::Op::Return { src: 1 },
                 ],
             )],
         ),
@@ -520,32 +520,32 @@ fn direct_k_borrowing_a_local_text_reference_does_not_make_its_storage_static() 
     );
 }
 
-fn result_types() -> (Vec<k::Type>, usize) {
+fn result_types() -> (Vec<ir::Type>, usize) {
     let mut declarations = types();
     let error = declarations.len();
-    declarations.push(k::Type {
+    declarations.push(ir::Type {
         name: "Utf8Error".to_string(),
-        kind: k::TypeKind::Struct {
+        kind: ir::TypeKind::Struct {
             fields: Vec::new(),
             copy: true,
         },
     });
     let result = declarations.len();
-    declarations.push(k::Type {
+    declarations.push(ir::Type {
         name: "Result".to_string(),
-        kind: k::TypeKind::Enum {
+        kind: ir::TypeKind::Enum {
             copy: true,
             variants: vec![
-                k::Variant {
+                ir::Variant {
                     name: "Ok".to_string(),
-                    fields: vec![k::Field {
+                    fields: vec![ir::Field {
                         name: "0".to_string(),
                         ty: TEXT,
                     }],
                 },
-                k::Variant {
+                ir::Variant {
                     name: "Err".to_string(),
-                    fields: vec![k::Field {
+                    fields: vec![ir::Field {
                         name: "0".to_string(),
                         ty: error,
                     }],
@@ -557,7 +557,7 @@ fn result_types() -> (Vec<k::Type>, usize) {
 }
 
 #[test]
-fn direct_k_utf8_validation_preserves_borrowed_or_static_provenance() {
+fn direct_ir_utf8_validation_preserves_borrowed_or_static_provenance() {
     let (declarations, result) = result_types();
     accepted(program(
         declarations.clone(),
@@ -565,14 +565,14 @@ fn direct_k_utf8_validation_preserves_borrowed_or_static_provenance() {
             "validate",
             1,
             result,
-            Some(k::ReturnSource::Parameter {
+            Some(ir::ReturnSource::Parameter {
                 index: 0,
                 projections: Vec::new(),
             }),
             &[BYTES, result],
             vec![
                 intrinsic(1, "str_from_utf8", &[0]),
-                k::Op::Return { src: 1 },
+                ir::Op::Return { src: 1 },
             ],
         )],
     ));
@@ -582,26 +582,26 @@ fn direct_k_utf8_validation_preserves_borrowed_or_static_provenance() {
             "validate_static",
             0,
             result,
-            Some(k::ReturnSource::Static),
+            Some(ir::ReturnSource::Static),
             &[TEXT, BYTES, result],
             vec![
                 text(0, "checked"),
                 intrinsic(1, "str_as_bytes", &[0]),
                 intrinsic(2, "str_from_utf8", &[1]),
-                k::Op::Return { src: 2 },
+                ir::Op::Return { src: 2 },
             ],
         )],
     ));
 }
 
 #[test]
-fn direct_k_utf8_validation_cannot_promote_local_bytes_to_static_storage() {
+fn direct_ir_utf8_validation_cannot_promote_local_bytes_to_static_storage() {
     let (mut declarations, result) = result_types();
     let array = declarations.len();
-    declarations.push(k::Type {
+    declarations.push(ir::Type {
         name: "[u8;1]".to_string(),
-        kind: k::TypeKind::Array {
-            inner: k::U8,
+        kind: ir::TypeKind::Array {
+            inner: ir::U8,
             len: 1,
         },
     });
@@ -612,21 +612,21 @@ fn direct_k_utf8_validation_cannot_promote_local_bytes_to_static_storage() {
                 "local_bytes",
                 0,
                 result,
-                Some(k::ReturnSource::Static),
-                &[k::U8, array, BYTES, result],
+                Some(ir::ReturnSource::Static),
+                &[ir::U8, array, BYTES, result],
                 vec![
-                    k::Op::Int { dst: 0, value: 65 },
-                    k::Op::Array {
+                    ir::Op::Int { dst: 0, value: 65 },
+                    ir::Op::Array {
                         dst: 1,
                         elements: vec![0],
                     },
-                    k::Op::SliceBorrow {
+                    ir::Op::SliceBorrow {
                         dst: 2,
-                        place: k::Place::local(1),
+                        place: ir::Place::local(1),
                         mutable: false,
                     },
                     intrinsic(3, "str_from_utf8", &[2]),
-                    k::Op::Return { src: 3 },
+                    ir::Op::Return { src: 3 },
                 ],
             )],
         ),
@@ -647,7 +647,7 @@ fn source_bundle(text: &str) -> source::SourceBundle {
     }
 }
 
-fn checked_source(text: &str) -> k::CheckedProgram {
+fn checked_source(text: &str) -> ir::CheckedProgram {
     compiler::check_bundle(&source_bundle(text))
         .unwrap_or_else(|error| panic!("valid source rejected: {error:?}"))
 }

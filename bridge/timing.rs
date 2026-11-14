@@ -60,6 +60,6 @@ impl Drop for Timings {
                 fields.push(format!("\"peak_rss_bytes\":{}", kib * 1024));
             }
         }
-        eprintln!("LKJ_TIMING {{{}}}", fields.join(","));
+        eprintln!("LKJSCRIPT_TIMING {{{}}}", fields.join(","));
     }
 }

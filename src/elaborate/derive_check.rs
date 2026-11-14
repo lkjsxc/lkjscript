@@ -203,8 +203,8 @@ fn implementation_contracts(compiler: &mut Compiler<'_>) -> Result<()> {
             }
             let (parameters, result) = match (bound.as_str(), function.name.as_str()) {
                 ("Clone", "clone") => (vec![shared], receiver),
-                ("Clone", "clone_from") => (vec![exclusive, shared], super::k::UNIT),
-                ("PartialEq", "eq" | "ne") => (vec![shared, shared], super::k::BOOL),
+                ("Clone", "clone_from") => (vec![exclusive, shared], super::ir::UNIT),
+                ("PartialEq", "eq" | "ne") => (vec![shared, shared], super::ir::BOOL),
                 _ => {
                     return Err(err(
                         function.span,

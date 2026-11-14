@@ -3,7 +3,7 @@
 set -euo pipefail
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 rebuild=$script_dir/../tools/rebuild-native.sh
-work=$(mktemp -d "${TMPDIR:-/tmp}/lkj-native-rebuild-test.XXXXXXXX")
+work=$(mktemp -d "${TMPDIR:-/tmp}/lkjscript-native-rebuild-test.XXXXXXXX")
 test_pids=()
 stub_pids=()
 live_pid() {
@@ -28,7 +28,7 @@ export REBUILD_TEST_SEED=$work/'seed toolchain'
 export REBUILD_TEST_SOURCE=$work/'source checkout'
 export REBUILD_TEST_CALLS=$work/calls
 export REBUILD_TEST_COMMIT='explicit source identity'
-export LKJ_TOOLCHAIN=$work/'unselected toolchain'
+export LKJSCRIPT_TOOLCHAIN=$work/'unselected toolchain'
 export TMPDIR=$work/staging
 mkdir -p -- "$REBUILD_TEST_SEED/bin" "$REBUILD_TEST_SOURCE/tools" \
     "$REBUILD_TEST_SOURCE/library" "$work/caller" "$work/forbidden" "$TMPDIR"
@@ -38,7 +38,7 @@ for name in cargo rustc node git; do
     chmod 755 -- "$work/forbidden/$name"
 done
 export PATH=$work/forbidden:$PATH
-cat > "$REBUILD_TEST_SEED/bin/lkj" <<'STUB'
+cat > "$REBUILD_TEST_SEED/bin/lkjscript" <<'STUB'
 #!/bin/bash
 set -euo pipefail
 [[ $1 == --toolchain && $2 == "$REBUILD_TEST_SEED" ]]
@@ -46,20 +46,20 @@ shift 2
 command=$1
 shift
 case $command in
-    runtime-k)
+    runtime-ir)
         [[ $# == 4 && $1 == --runtime-source && $2 == "$REBUILD_TEST_SOURCE/library/runtime.rs" && $3 == -o ]]
         [[ $4 == /* ]]
-        printf 'runtime-k\n' >> "$REBUILD_TEST_CALLS"
+        printf 'runtime-ir\n' >> "$REBUILD_TEST_CALLS"
         [[ $(stat -c %a -- "$(dirname -- "$4")") == 700 ]]
         cp -- "$2" "$4"
         ;;
-    k)
+    ir)
         input=$1
         shift
         [[ $# == 6 && $1 == --source-dir && $2 == "$REBUILD_TEST_SOURCE" ]]
         [[ $3 == --library-dir && $4 == "$REBUILD_TEST_SOURCE/library" && $5 == -o ]]
-        printf 'k %s\n' "$input" >> "$REBUILD_TEST_CALLS"
-        [[ ${REBUILD_TEST_FAIL:-} != "k $input" ]] || exit 24
+        printf 'ir %s\n' "$input" >> "$REBUILD_TEST_CALLS"
+        [[ ${REBUILD_TEST_FAIL:-} != "ir $input" ]] || exit 24
         if [[ ${REBUILD_TEST_BLOCK:-} == 1 && $input == src/frontend_main.rs ]]; then
             REBUILD_TEST_TIME_PID=$PPID bash -c '
                 trap "exit 130" INT
@@ -78,7 +78,7 @@ case $command in
         cmp -s -- "$2" "$REBUILD_TEST_SOURCE/library/runtime.rs"
         [[ $(dirname -- "$input") == "$(dirname -- "$2")" ]]
         [[ $(dirname -- "$input") == "$(dirname -- "$6")" ]]
-        [[ $(basename -- "$input") == "$(basename -- "$6").k" ]]
+        [[ $(basename -- "$input") == "$(basename -- "$6").lkjir" ]]
         printf 'build %s\n' "$(basename -- "$input")" >> "$REBUILD_TEST_CALLS"
         [[ ${REBUILD_TEST_FAIL:-} != "build $(basename -- "$input")" ]] || exit 24
         cp -- "$input" "$6"
@@ -86,15 +86,15 @@ case $command in
     *) exit 98 ;;
 esac
 STUB
-chmod 755 -- "$REBUILD_TEST_SEED/bin/lkj"
+chmod 755 -- "$REBUILD_TEST_SEED/bin/lkjscript"
 cat > "$REBUILD_TEST_SOURCE/tools/install-native.sh" <<'STUB'
 #!/bin/bash
 set -euo pipefail
 destination=$1
 shift
-[[ $# == 12 && $1 == --frontend && $3 == --kc && $5 == --result ]]
+[[ $# == 12 && $1 == --frontend && $3 == --backend && $5 == --result ]]
 [[ $(cat -- "$2") == src/frontend_main.rs ]]
-[[ $(cat -- "$4") == src/kc_main.rs ]]
+[[ $(cat -- "$4") == src/backend_main.rs ]]
 [[ $(cat -- "$6") == src/result_main.rs ]]
 [[ $7 == --library && $8 == "$REBUILD_TEST_SOURCE/library" ]]
 [[ $9 == --runtime-source && ${10} == "$REBUILD_TEST_SOURCE/library/runtime.rs" ]]
@@ -116,29 +116,29 @@ bash "$rebuild" 'new toolchain' --seed "$REBUILD_TEST_SEED" \
     > "$work/success.stdout" 2> "$work/success.stderr"
 [[ $(cat 'new toolchain/marker') == installed ]] || fail 'destination was not installed'
 mapfile -t calls < "$REBUILD_TEST_CALLS"
-[[ ${#calls[@]} == 8 && ${calls[0]} == runtime-k && ${calls[1]} == 'k src/frontend_main.rs' \
-    && ${calls[2]} == 'build frontend.k' && ${calls[3]} == 'k src/kc_main.rs' \
-    && ${calls[4]} == 'build kc.k' && ${calls[5]} == 'k src/result_main.rs' \
-    && ${calls[6]} == 'build result.k' && ${calls[7]} == install ]] || fail 'generation command order differs'
-hash_names=(runtime frontend kc result)
+[[ ${#calls[@]} == 8 && ${calls[0]} == runtime-ir && ${calls[1]} == 'ir src/frontend_main.rs' \
+    && ${calls[2]} == 'build frontend.lkjir' && ${calls[3]} == 'ir src/backend_main.rs' \
+    && ${calls[4]} == 'build backend.lkjir' && ${calls[5]} == 'ir src/result_main.rs' \
+    && ${calls[6]} == 'build result.lkjir' && ${calls[7]} == install ]] || fail 'generation command order differs'
+hash_names=(runtime frontend backend result)
 hash_count=0
 while IFS= read -r line; do
     case $line in
-        'rebuild-native: k_sha256 '*)
+        'rebuild-native: ir_sha256 '*)
             read -r prefix field component digest <<< "$line"
-            ((hash_count < 4)) || fail 'too many K hash records'
-            [[ $component == "${hash_names[hash_count]}" ]] || fail 'K hash record order differs'
+            ((hash_count < 4)) || fail 'too many IR hash records'
+            [[ $component == "${hash_names[hash_count]}" ]] || fail 'IR hash record order differs'
             if [[ $component == runtime ]]; then
                 expected=$(sha256sum < "$REBUILD_TEST_SOURCE/library/runtime.rs")
             else
                 expected=$(printf '%s\n' "src/${component}_main.rs" | sha256sum)
             fi
-            [[ $digest == "${expected%% *}" ]] || fail "wrong K hash: $component"
+            [[ $digest == "${expected%% *}" ]] || fail "wrong IR hash: $component"
             hash_count=$((hash_count + 1))
             ;;
     esac
 done < "$work/success.stderr"
-((hash_count == 4)) || fail 'missing K hash records'
+((hash_count == 4)) || fail 'missing IR hash records'
 no_staging
 cp -- "$REBUILD_TEST_CALLS" "$work/before-existing"
 if bash "$rebuild" 'new toolchain' --seed "$REBUILD_TEST_SEED" --source-dir "$REBUILD_TEST_SOURCE" \
@@ -147,7 +147,7 @@ if bash "$rebuild" 'new toolchain' --seed "$REBUILD_TEST_SEED" --source-dir "$RE
 fi
 cmp -s -- "$REBUILD_TEST_CALLS" "$work/before-existing" || fail 'existing destination started compiler work'
 [[ $(cat 'new toolchain/marker') == installed ]] || fail 'existing destination was modified'
-for failure in 'k src/kc_main.rs' 'build kc.k' install; do
+for failure in 'ir src/backend_main.rs' 'build backend.lkjir' install; do
     : > "$REBUILD_TEST_CALLS"
     export REBUILD_TEST_FAIL=$failure
     if bash "$rebuild" 'failed toolchain' --seed "$REBUILD_TEST_SEED" \

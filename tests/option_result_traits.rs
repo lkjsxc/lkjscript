@@ -284,7 +284,7 @@ fn rust_oracle(source: &str, prelude: &str, probes: &[&str]) -> String {
     String::from_utf8(output.stdout).unwrap()
 }
 
-fn run_native(program: &lkjscript::k::CheckedProgram, expected: &str) {
+fn run_native(program: &lkjscript::ir::CheckedProgram, expected: &str) {
     native::assert_rows(program, expected);
 }
 
@@ -324,8 +324,8 @@ fn selected_source_clone_and_equality_bodies_change_derived_behavior() {
     let clone_artifact = compiler::check_bundle(&bundle(&clone_mutation, PRELUDE))
         .unwrap_or_else(|error| panic!("{error:?}"));
     assert_ne!(
-        lkjscript::k_text::write(clone_artifact.program()),
-        lkjscript::k_text::write(baseline.program())
+        lkjscript::ir_text::write(clone_artifact.program()),
+        lkjscript::ir_text::write(baseline.program())
     );
     let clone_expected = rust_oracle(&clone_mutation, PRELUDE, &probes);
     assert_ne!(clone_expected, expected);
@@ -337,8 +337,8 @@ fn selected_source_clone_and_equality_bodies_change_derived_behavior() {
     let equality_artifact = compiler::check_bundle(&bundle(&equality_mutation, PRELUDE))
         .unwrap_or_else(|error| panic!("{error:?}"));
     assert_ne!(
-        lkjscript::k_text::write(equality_artifact.program()),
-        lkjscript::k_text::write(baseline.program())
+        lkjscript::ir_text::write(equality_artifact.program()),
+        lkjscript::ir_text::write(baseline.program())
     );
     let equality_expected = rust_oracle(&equality_mutation, PRELUDE, &probes);
     assert_ne!(equality_expected, expected);
@@ -355,8 +355,8 @@ fn supplied_prelude_bytes_control_behavior_and_diagnostics() {
     let altered = compiler::check_bundle(&bundle(source, &mutation))
         .unwrap_or_else(|error| panic!("{error:?}"));
     assert_ne!(
-        lkjscript::k_text::write(baseline.program()),
-        lkjscript::k_text::write(altered.program())
+        lkjscript::ir_text::write(baseline.program()),
+        lkjscript::ir_text::write(altered.program())
     );
     run_native(&baseline, &rust_oracle(source, PRELUDE, &["probe"]));
     run_native(&altered, &rust_oracle(source, &mutation, &["probe"]));

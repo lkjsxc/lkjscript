@@ -61,7 +61,7 @@ impl Parser {
             let callee = self.add_expr(
                 Expr::Path(Path {
                     declaration: None,
-                    name: "std::default::__lkj_default".to_string(),
+                    name: "std::default::__lkjscript_default".to_string(),
                     args: vec![field.ty],
                 }),
                 field.span,

@@ -1,7 +1,7 @@
 //! Named enum fields preserve declaration identity, source evaluation order and ownership.
 use lkjscript::ast::Diagnostic;
 use lkjscript::source::{SourceBundle, SourceInput};
-use lkjscript::{check, compiler, k};
+use lkjscript::{check, compiler, ir};
 #[path = "support/native.rs"]
 mod native;
 use std::process::Command;
@@ -165,7 +165,7 @@ fn bundle(files: &[(&str, &str)]) -> SourceBundle {
     }
 }
 
-fn checked(text: &str) -> Result<k::CheckedProgram, Diagnostic> {
+fn checked(text: &str) -> Result<ir::CheckedProgram, Diagnostic> {
     compiler::check_bundle(&bundle(&[("main.rs", text)]))
 }
 
@@ -341,53 +341,53 @@ fn unused_generic_named_constructors_are_checked() {
     );
 }
 
-fn direct_borrows(second_variant: usize, second_field: usize, checked_tag: bool) -> k::Program {
-    let mut types = k::primitives();
+fn direct_borrows(second_variant: usize, second_field: usize, checked_tag: bool) -> ir::Program {
+    let mut types = ir::primitives();
     let fields = vec![
-        k::Field {
+        ir::Field {
             name: "left".to_string(),
-            ty: k::I64,
+            ty: ir::I64,
         },
-        k::Field {
+        ir::Field {
             name: "right".to_string(),
-            ty: k::I64,
+            ty: ir::I64,
         },
     ];
-    types.push(k::Type {
+    types.push(ir::Type {
         name: "Pair".to_string(),
-        kind: k::TypeKind::Enum {
+        kind: ir::TypeKind::Enum {
             copy: false,
             variants: vec![
-                k::Variant {
+                ir::Variant {
                     name: "Pair".to_string(),
                     fields: fields.clone(),
                 },
-                k::Variant {
+                ir::Variant {
                     name: "Other".to_string(),
                     fields,
                 },
             ],
         },
     });
-    types.push(k::Type {
+    types.push(ir::Type {
         name: "&mut i64".to_string(),
-        kind: k::TypeKind::Ref {
-            inner: k::I64,
+        kind: ir::TypeKind::Ref {
+            inner: ir::I64,
             mutable: true,
         },
     });
-    let place = |variant, field| k::Place {
+    let place = |variant, field| ir::Place {
         local: 2,
-        projections: vec![k::Projection::VariantField(variant, field)],
+        projections: vec![ir::Projection::VariantField(variant, field)],
     };
-    let drop_local = |local| k::Op::Drop {
-        place: k::Place::local(local),
+    let drop_local = |local| ir::Op::Drop {
+        place: ir::Place::local(local),
     };
     let mut body = if checked_tag {
         vec![
-            k::Op::Int { dst: 0, value: 1 },
-            k::Op::Int { dst: 1, value: 2 },
-            k::Op::Variant {
+            ir::Op::Int { dst: 0, value: 1 },
+            ir::Op::Int { dst: 1, value: 2 },
+            ir::Op::Variant {
                 dst: 2,
                 variant: 0,
                 fields: vec![0, 1],
@@ -398,21 +398,21 @@ fn direct_borrows(second_variant: usize, second_field: usize, checked_tag: bool)
     };
     if checked_tag {
         body.extend([
-            k::Op::TagTest {
+            ir::Op::TagTest {
                 dst: 3,
-                place: k::Place::local(2),
+                place: ir::Place::local(2),
                 variant: 0,
             },
-            k::Op::If { condition: 3 },
+            ir::Op::If { condition: 3 },
         ]);
     }
     body.extend([
-        k::Op::Borrow {
+        ir::Op::Borrow {
             dst: 4,
             place: place(0, 0),
             mutable: true,
         },
-        k::Op::Borrow {
+        ir::Op::Borrow {
             dst: 5,
             place: place(second_variant, second_field),
             mutable: true,
@@ -420,40 +420,40 @@ fn direct_borrows(second_variant: usize, second_field: usize, checked_tag: bool)
         drop_local(5),
         drop_local(4),
         drop_local(2),
-        k::Op::Int { dst: 6, value: 42 },
-        k::Op::Return { src: 6 },
+        ir::Op::Int { dst: 6, value: 42 },
+        ir::Op::Return { src: 6 },
     ]);
     if checked_tag {
         body.extend([
-            k::Op::Else,
-            k::Op::Trap {
+            ir::Op::Else,
+            ir::Op::Trap {
                 message: "unreachable variant".to_string(),
             },
-            k::Op::End,
+            ir::Op::End,
         ]);
     }
-    let locals = [k::I64, k::I64, 7, k::BOOL, 8, 8, k::I64]
+    let locals = [ir::I64, ir::I64, 7, ir::BOOL, 8, 8, ir::I64]
         .into_iter()
         .enumerate()
-        .map(|(index, ty)| k::Local {
+        .map(|(index, ty)| ir::Local {
             name: format!("v{index}"),
             ty,
             mutable: index == 2,
         })
         .collect();
-    k::Program {
+    ir::Program {
         types,
-        functions: vec![k::Function {
+        functions: vec![ir::Function {
             file: 0,
             name: "borrow_fields".to_string(),
             params: if checked_tag { 0 } else { 3 },
-            result: k::I64,
+            result: ir::I64,
             return_source: None,
             locals,
             body: body
                 .into_iter()
                 .enumerate()
-                .map(|(line, op)| k::Instruction {
+                .map(|(line, op)| ir::Instruction {
                     column: 1,
                     op,
                     line: line + 1,
@@ -466,12 +466,12 @@ fn direct_borrows(second_variant: usize, second_field: usize, checked_tag: bool)
 }
 
 #[test]
-fn direct_k_mutable_borrows_of_distinct_checked_variant_fields_are_disjoint() {
+fn direct_ir_mutable_borrows_of_distinct_checked_variant_fields_are_disjoint() {
     check::check(direct_borrows(0, 1, true)).unwrap_or_else(|error| panic!("{error:?}"));
 }
 
 #[test]
-fn direct_k_variant_disjointness_does_not_allow_aliases_or_unchecked_tags() {
+fn direct_ir_variant_disjointness_does_not_allow_aliases_or_unchecked_tags() {
     for (variant, field, tag, code) in [
         (0, 0, true, "E_BORROW"),
         (1, 1, true, "E_TYPE"),

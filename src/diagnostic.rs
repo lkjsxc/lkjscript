@@ -1,4 +1,4 @@
-//! Source locations and diagnostics shared by K and source producers.
+//! Source locations and diagnostics shared by IR and source producers.
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
 pub struct Span {
     pub file: usize,

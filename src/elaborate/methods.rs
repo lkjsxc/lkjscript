@@ -1,6 +1,6 @@
 //! One inventory of methods implemented directly by the front end. Candidate
-//! discovery can use this inventory without manufacturing a K receiver layout.
-use super::k;
+//! discovery can use this inventory without manufacturing a IR receiver layout.
+use super::ir;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum Receiver {
@@ -29,20 +29,20 @@ pub(super) enum Direct {
     Push,
     Pop,
 }
-pub(super) fn receiver(kind: &k::TypeKind) -> Receiver {
+pub(super) fn receiver(kind: &ir::TypeKind) -> Receiver {
     match kind {
-        k::TypeKind::Int { .. } => Receiver::Integer,
-        k::TypeKind::Char => Receiver::Character,
-        k::TypeKind::Str => Receiver::Text,
-        k::TypeKind::Vec { .. } => Receiver::Vector,
-        k::TypeKind::Array { .. } => Receiver::Array,
-        k::TypeKind::Slice { .. } => Receiver::Slice,
-        k::TypeKind::World => Receiver::World,
-        k::TypeKind::Stdout => Receiver::Stdout,
-        k::TypeKind::Stdin => Receiver::Stdin,
-        k::TypeKind::Stderr => Receiver::Stderr,
-        k::TypeKind::Directory => Receiver::Directory,
-        k::TypeKind::File => Receiver::File,
+        ir::TypeKind::Int { .. } => Receiver::Integer,
+        ir::TypeKind::Char => Receiver::Character,
+        ir::TypeKind::Str => Receiver::Text,
+        ir::TypeKind::Vec { .. } => Receiver::Vector,
+        ir::TypeKind::Array { .. } => Receiver::Array,
+        ir::TypeKind::Slice { .. } => Receiver::Slice,
+        ir::TypeKind::World => Receiver::World,
+        ir::TypeKind::Stdout => Receiver::Stdout,
+        ir::TypeKind::Stdin => Receiver::Stdin,
+        ir::TypeKind::Stderr => Receiver::Stderr,
+        ir::TypeKind::Directory => Receiver::Directory,
+        ir::TypeKind::File => Receiver::File,
         _ => Receiver::Other,
     }
 }

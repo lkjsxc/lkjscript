@@ -1,7 +1,7 @@
 //! Fixed callable regions in the discarded definition program. Region variables
 //! belong to declarations; type equality never identifies their scopes.
 use super::origins::Label;
-use super::{Compiler, Instance, PendingFunction, Result, a, err, k};
+use super::{Compiler, Instance, PendingFunction, Result, a, err, ir};
 use crate::check::scoped::{Region, Requirement, Scope};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -39,7 +39,7 @@ fn insert_region(bindings: &mut RegionBindings, label: Label, region: Region) {
     }
 }
 fn normalize(requirements: Vec<Requirement>) -> Vec<Requirement> {
-    let mut unique: BTreeMap<(usize, Vec<k::Projection>, Region), (bool, bool)> = BTreeMap::new();
+    let mut unique: BTreeMap<(usize, Vec<ir::Projection>, Region), (bool, bool)> = BTreeMap::new();
     for requirement in requirements {
         let key = (
             requirement.argument,
@@ -105,7 +105,7 @@ impl Compiler<'_> {
         }
         edges
     }
-    fn source_scope(&self, instance: &Instance, function: &k::Function) -> Result<Scope> {
+    fn source_scope(&self, instance: &Instance, function: &ir::Function) -> Result<Scope> {
         let source = &self.source.functions[instance.source];
         let mut scope = Scope {
             outlives: self.region_edges(instance.source),
@@ -138,7 +138,7 @@ impl Compiler<'_> {
                 ) {
                     input_regions.insert(leaf.label.clone(), region.clone());
                 }
-                let input = k::InputLeaf {
+                let input = ir::InputLeaf {
                     index,
                     projections: leaf.path,
                 };
@@ -188,10 +188,10 @@ impl Compiler<'_> {
         // implications, not facts manufactured by a call needing a region.
         for (leaf, inner) in &scope.parameters {
             for cut in 0..leaf.projections.len() {
-                if leaf.projections[cut] != k::Projection::Deref {
+                if leaf.projections[cut] != ir::Projection::Deref {
                     continue;
                 }
-                let outer = k::InputLeaf {
+                let outer = ir::InputLeaf {
                     index: leaf.index,
                     projections: leaf.projections[..cut].to_vec(),
                 };
@@ -207,7 +207,7 @@ impl Compiler<'_> {
             if self.closures.region_bounds.contains_key(&ty) {
                 return Some(ty);
             }
-            if let k::TypeKind::Ref { inner, .. } = self.types[ty].kind {
+            if let ir::TypeKind::Ref { inner, .. } = self.types[ty].kind {
                 ty = inner;
             } else {
                 return None;
@@ -271,7 +271,7 @@ impl Compiler<'_> {
                         .zip(&actual.arguments)
                         .zip(&signature.arguments)
                     {
-                        let mut actual_leaves: BTreeMap<Vec<k::Projection>, Label> =
+                        let mut actual_leaves: BTreeMap<Vec<ir::Projection>, Label> =
                             BTreeMap::new();
                         for leaf in self.region_leaves(actual.scope, *actual_syntax, *concrete) {
                             actual_leaves.insert(leaf.path, leaf.label);
@@ -310,7 +310,7 @@ impl Compiler<'_> {
     fn source_requirements(
         &self,
         instance: &Instance,
-        function: &k::Function,
+        function: &ir::Function,
     ) -> Result<Vec<Requirement>> {
         let mut bindings = RegionBindings::new();
         self.bind_callable_regions(instance, &mut bindings)?;
@@ -425,7 +425,7 @@ impl Compiler<'_> {
                         argument: parameter.place.local,
                         projections: parameter.place.projections.clone(),
                         region: parameter.region.clone(),
-                        preserve: parameter.place.projections.contains(&k::Projection::Deref),
+                        preserve: parameter.place.projections.contains(&ir::Projection::Deref),
                         // Concrete closure bodies receive the ordinary external-store
                         // identity check; this is not an opaque mutation promise.
                         mutable_storage: false,
@@ -456,7 +456,7 @@ impl Compiler<'_> {
                 }
                 for requirement in self.opaque_requirements(*ty) {
                     scope.parameters.insert(
-                        k::InputLeaf {
+                        ir::InputLeaf {
                             index: requirement.argument,
                             projections: requirement.projections,
                         },
@@ -478,14 +478,14 @@ impl Compiler<'_> {
                 }
                 for parameter in &body.parameters {
                     scope.parameter_sites.insert(
-                        k::InputLeaf {
+                        ir::InputLeaf {
                             index: parameter.place.local,
                             projections: parameter.place.projections.clone(),
                         },
                         parameter.created,
                     );
                     scope.parameters.insert(
-                        k::InputLeaf {
+                        ir::InputLeaf {
                             index: parameter.place.local,
                             projections: parameter.place.projections.clone(),
                         },
@@ -500,7 +500,7 @@ impl Compiler<'_> {
                 scope.environment = body.environment.clone();
             }
             for (instruction_index, instruction) in function.body.iter().enumerate() {
-                let k::Op::Call {
+                let ir::Op::Call {
                     function: target, ..
                 } = instruction.op
                 else {

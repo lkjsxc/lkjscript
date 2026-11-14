@@ -38,7 +38,7 @@ stops when no remaining candidate deletion preserves the category and Rust
 validity assumption. This is a local minimum for those deletion spans. It does
 not claim globally minimal source. `--profile value` also compares trap source
 lines; `--profile output --entry main` uses the World shim and compares raw bytes
-and the manner of ending. `--engine k` selects the independent K machine.
+and the manner of ending. `--engine interpreter` selects the independent IR interpreter.
 
 `--timeout` is an operational timeout for each child process, not a language
 execution limit. The shared process runner kills the whole child process group.

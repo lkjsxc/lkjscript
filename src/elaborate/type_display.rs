@@ -1,5 +1,5 @@
 //! Source-facing type names are expanded only when producing a diagnostic.
-use super::{Compiler, k};
+use super::{Compiler, ir};
 impl Compiler<'_> {
     pub(super) fn check_owned_element(&self, ty: usize, span: super::a::Span) -> super::Result<()> {
         if self.has_view(ty) {
@@ -35,16 +35,16 @@ impl Compiler<'_> {
             return display;
         }
         match &self.types[ty].kind {
-            k::TypeKind::Ref { inner, mutable } => format!(
+            ir::TypeKind::Ref { inner, mutable } => format!(
                 "&{}{}",
                 if *mutable { "mut " } else { "" },
                 self.display_type(*inner)
             ),
-            k::TypeKind::Vec { inner } => format!("Vec<{}>", self.display_type(*inner)),
-            k::TypeKind::Box { inner } => format!("Box<{}>", self.display_type(*inner)),
-            k::TypeKind::Slice { inner, .. } => format!("[{}]", self.display_type(*inner)),
-            k::TypeKind::Array { inner, len } => format!("[{}; {len}]", self.display_type(*inner)),
-            k::TypeKind::Struct { fields, .. } if !self.types[ty].name.starts_with('$') => {
+            ir::TypeKind::Vec { inner } => format!("Vec<{}>", self.display_type(*inner)),
+            ir::TypeKind::Box { inner } => format!("Box<{}>", self.display_type(*inner)),
+            ir::TypeKind::Slice { inner, .. } => format!("[{}]", self.display_type(*inner)),
+            ir::TypeKind::Array { inner, len } => format!("[{}; {len}]", self.display_type(*inner)),
+            ir::TypeKind::Struct { fields, .. } if !self.types[ty].name.starts_with('$') => {
                 let mut display = "(".to_string();
                 let mut index = 0;
                 while index < fields.len() {

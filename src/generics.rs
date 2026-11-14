@@ -1,5 +1,5 @@
 //! Global source rules for coherence and finite generic instantiation.
-//! The executable K checker still checks concrete function and witness types.
+//! The executable IR checker still checks concrete function and witness types.
 mod bound_solver;
 mod signature_bounds;
 use crate::ast::*;
@@ -437,8 +437,8 @@ fn unknown(terms: &[Term], term: usize) -> bool {
         match &terms[t] {
             Term::Unknown => return true,
             Term::Named(_, kids) | Term::DeclaredTrait(_, kids) => {
-                for k in kids {
-                    stack.push(*k);
+                for ir in kids {
+                    stack.push(*ir);
                 }
             }
             Term::Variable(_) => {}
@@ -1101,17 +1101,17 @@ mod tests {
     }
 }
 
-// Trait selection uses concrete K types. Prerequisites form a work graph rather
+// Trait selection uses concrete IR types. Prerequisites form a work graph rather
 // than a recursive search with a depth limit. Structural traits are coinductive;
 // a cycle made solely of user implementation prerequisites proves nothing.
 fn impl_arguments(
     source: &Program,
-    types: &[crate::k::Type],
+    types: &[crate::ir::Type],
     applications: &BTreeMap<usize, (String, Vec<usize>)>,
     implementation: &Impl,
     actual: usize,
 ) -> Option<BTreeMap<String, usize>> {
-    use crate::k::TypeKind;
+    use crate::ir::TypeKind;
     let mut env = BTreeMap::new();
     let mut work = vec![(implementation.target, actual)];
     let mut aliases = BTreeMap::new();
@@ -1438,7 +1438,7 @@ impl ImplementationIndex {
     }
     fn derived(
         &self,
-        types: &[crate::k::Type],
+        types: &[crate::ir::Type],
         applications: &BTreeMap<usize, (String, Vec<usize>)>,
         ty: usize,
         bound: &str,
@@ -1519,7 +1519,7 @@ impl ImplementationIndex {
         Ok(())
     }
     fn receiver_head<'a>(
-        types: &'a [crate::k::Type],
+        types: &'a [crate::ir::Type],
         applications: &'a BTreeMap<usize, (String, Vec<usize>)>,
         ty: usize,
     ) -> Option<&'a str> {
@@ -1527,8 +1527,8 @@ impl ImplementationIndex {
             Some(name.as_str())
         } else {
             match &types[ty].kind {
-                crate::k::TypeKind::Vec { .. } => Some("Vec"),
-                crate::k::TypeKind::Box { .. } => Some("Box"),
+                crate::ir::TypeKind::Vec { .. } => Some("Vec"),
+                crate::ir::TypeKind::Box { .. } => Some("Box"),
                 _ if !types[ty].name.is_empty() => Some(types[ty].name.as_str()),
                 _ => None,
             }
@@ -1536,7 +1536,7 @@ impl ImplementationIndex {
     }
     pub(crate) fn candidates(
         &self,
-        types: &[crate::k::Type],
+        types: &[crate::ir::Type],
         applications: &BTreeMap<usize, (String, Vec<usize>)>,
         ty: usize,
         bound: &TraitIdentity,
@@ -1562,14 +1562,14 @@ impl ImplementationIndex {
     /// generic and structural targets still require the complete matcher.
     pub(crate) fn method_candidates(
         &self,
-        types: &[crate::k::Type],
+        types: &[crate::ir::Type],
         applications: &BTreeMap<usize, (String, Vec<usize>)>,
         ty: usize,
         name: &str,
     ) -> Vec<usize> {
         self.method_candidates_by_head(Self::receiver_head(types, applications, ty), name)
     }
-    /// Definition inference uses the same canonical candidate filter before K
+    /// Definition inference uses the same canonical candidate filter before IR
     /// types exist. This query supplies no implementation or bound authority.
     pub(crate) fn method_candidates_by_head(&self, head: Option<&str>, name: &str) -> Vec<usize> {
         let mut values = match self.by_method.get(&name.to_string()) {
@@ -1585,7 +1585,7 @@ impl ImplementationIndex {
 pub(crate) fn select_implementation(
     source: &Program,
     index: &ImplementationIndex,
-    types: &[crate::k::Type],
+    types: &[crate::ir::Type],
     applications: &BTreeMap<usize, (String, Vec<usize>)>,
     ty: usize,
     bound: &TraitIdentity,
@@ -1621,13 +1621,13 @@ pub(crate) fn select_implementation(
 fn trait_requirements(
     source: &Program,
     index: &ImplementationIndex,
-    types: &[crate::k::Type],
+    types: &[crate::ir::Type],
     applications: &BTreeMap<usize, (String, Vec<usize>)>,
     goal: &Goal,
     rigid: &BTreeMap<usize, BTreeSet<TraitIdentity>>,
     inferred: &BTreeMap<Goal, ImplementationWitness>,
 ) -> Option<Requirements> {
-    use crate::k::TypeKind;
+    use crate::ir::TypeKind;
     let ty = types.get(goal.ty)?;
     if let Some(assumptions) = rigid.get(&goal.ty) {
         if assumptions.contains(&goal.bound) {
@@ -1836,7 +1836,7 @@ fn trait_requirements(
 /// their explicit witness/type arguments. Unknown or cyclic user bounds fail.
 pub fn satisfies(
     source: &Program,
-    types: &[crate::k::Type],
+    types: &[crate::ir::Type],
     applications: &BTreeMap<usize, (String, Vec<usize>)>,
     ty: usize,
     bound: &str,
@@ -1859,7 +1859,7 @@ pub fn satisfies(
 pub(crate) fn satisfies_resolved(
     source: &Program,
     index: &ImplementationIndex,
-    types: &[crate::k::Type],
+    types: &[crate::ir::Type],
     applications: &BTreeMap<usize, (String, Vec<usize>)>,
     ty: usize,
     bound: &TraitIdentity,
@@ -1878,7 +1878,7 @@ pub(crate) fn satisfies_resolved(
 pub(crate) fn satisfies_under(
     source: &Program,
     index: &ImplementationIndex,
-    types: &[crate::k::Type],
+    types: &[crate::ir::Type],
     applications: &BTreeMap<usize, (String, Vec<usize>)>,
     ty: usize,
     bound: &TraitIdentity,
@@ -1903,7 +1903,7 @@ pub(crate) fn satisfies_under(
 #[cfg(test)]
 mod bound_tests {
     use super::*;
-    use crate::k::{self, TypeKind};
+    use crate::ir::{self, TypeKind};
     #[test]
     fn missing_unused_bound_is_false() {
         let source = crate::syntax::parse(
@@ -1912,9 +1912,9 @@ mod bound_tests {
         .unwrap();
         assert!(!satisfies(
             &source,
-            &k::primitives(),
+            &ir::primitives(),
             &BTreeMap::new(),
-            k::I64,
+            ir::I64,
             "Score"
         ));
     }
@@ -1924,32 +1924,32 @@ mod bound_tests {
             "trait A {} trait B {} struct S<T>{x:T} impl A for i64 {} impl<T:A> B for S<T> {}",
         )
         .unwrap();
-        let mut types = k::primitives();
+        let mut types = ir::primitives();
         let si = types.len();
-        types.push(k::Type {
+        types.push(ir::Type {
             name: "S<i64>".to_string(),
             kind: TypeKind::Struct {
                 copy: false,
-                fields: vec![k::Field {
+                fields: vec![ir::Field {
                     name: "x".to_string(),
-                    ty: k::I64,
+                    ty: ir::I64,
                 }],
             },
         });
         let sb = types.len();
-        types.push(k::Type {
+        types.push(ir::Type {
             name: "S<bool>".to_string(),
             kind: TypeKind::Struct {
                 copy: false,
-                fields: vec![k::Field {
+                fields: vec![ir::Field {
                     name: "x".to_string(),
-                    ty: k::BOOL,
+                    ty: ir::BOOL,
                 }],
             },
         });
         let mut apps = BTreeMap::new();
-        apps.insert(si, ("S".to_string(), vec![k::I64]));
-        apps.insert(sb, ("S".to_string(), vec![k::BOOL]));
+        apps.insert(si, ("S".to_string(), vec![ir::I64]));
+        apps.insert(sb, ("S".to_string(), vec![ir::BOOL]));
         assert!(satisfies(&source, &types, &apps, si, "B"));
         assert!(!satisfies(&source, &types, &apps, sb, "B"));
     }
@@ -1960,29 +1960,29 @@ mod bound_tests {
                 .unwrap();
         assert!(!satisfies(
             &source,
-            &k::primitives(),
+            &ir::primitives(),
             &BTreeMap::new(),
-            k::I64,
+            ir::I64,
             "A"
         ));
     }
     #[test]
     fn recursive_structural_traits_have_no_depth_limit() {
         let source = crate::syntax::parse("struct Link {next:Box<Link>}").unwrap();
-        let mut types = k::primitives();
+        let mut types = ir::primitives();
         let link = types.len();
         let bx = link + 1;
-        types.push(k::Type {
+        types.push(ir::Type {
             name: "Link".to_string(),
             kind: TypeKind::Struct {
                 copy: false,
-                fields: vec![k::Field {
+                fields: vec![ir::Field {
                     name: "next".to_string(),
                     ty: bx,
                 }],
             },
         });
-        types.push(k::Type {
+        types.push(ir::Type {
             name: "Box<Link>".to_string(),
             kind: TypeKind::Box { inner: link },
         });
@@ -1996,7 +1996,7 @@ mod bound_tests {
         let source = crate::syntax::parse(
             "#[derive(Clone)] #[derive(PartialEq)] struct Same; #[derive(Ord)] struct Same; #[derive(Eq)] enum Same{Value} #[other(Send)] struct Same; trait Marker{} impl Marker for Same{}",
         ).unwrap();
-        let types = vec![k::Type {
+        let types = vec![ir::Type {
             name: "Same".to_string(),
             kind: TypeKind::Struct {
                 copy: false,
@@ -2026,14 +2026,14 @@ mod bound_tests {
         ).unwrap();
         let index = ImplementationIndex::new(&source).unwrap();
         let types = vec![
-            k::Type {
+            ir::Type {
                 name: "Value<i64>".to_string(),
                 kind: TypeKind::Struct {
                     copy: false,
                     fields: Vec::new(),
                 },
             },
-            k::Type {
+            ir::Type {
                 name: "other::Value".to_string(),
                 kind: TypeKind::Enum {
                     copy: false,
@@ -2042,7 +2042,7 @@ mod bound_tests {
             },
         ];
         let mut applications = BTreeMap::new();
-        applications.insert(0, ("Value".to_string(), vec![k::I64]));
+        applications.insert(0, ("Value".to_string(), vec![ir::I64]));
         assert!(index.derived(&types, &applications, 0, "Clone"));
         assert!(!index.derived(&types, &applications, 0, "Ord"));
         assert!(!index.derived(&types, &BTreeMap::new(), 0, "Clone"));
@@ -2056,20 +2056,20 @@ mod bound_tests {
             "#[derive(Clone,PartialEq,Eq,PartialOrd,Ord)] struct Holder<T>{value:T}",
         )
         .unwrap();
-        let mut types = k::primitives();
+        let mut types = ir::primitives();
         let holder = types.len();
-        types.push(k::Type {
+        types.push(ir::Type {
             name: "Holder<f64>".to_string(),
             kind: TypeKind::Struct {
                 copy: false,
-                fields: vec![k::Field {
+                fields: vec![ir::Field {
                     name: "value".to_string(),
-                    ty: k::F64,
+                    ty: ir::F64,
                 }],
             },
         });
         let mut applications = BTreeMap::new();
-        applications.insert(holder, ("Holder".to_string(), vec![k::F64]));
+        applications.insert(holder, ("Holder".to_string(), vec![ir::F64]));
         assert!(satisfies(&source, &types, &applications, holder, "Clone"));
         assert!(satisfies(
             &source,
@@ -2085,16 +2085,16 @@ mod bound_tests {
     #[test]
     fn ord_and_clone_on_collections() {
         let source = Program::default();
-        let mut types = k::primitives();
+        let mut types = ir::primitives();
         let vi = types.len();
-        types.push(k::Type {
+        types.push(ir::Type {
             name: "Vec<i64>".to_string(),
-            kind: TypeKind::Vec { inner: k::I64 },
+            kind: TypeKind::Vec { inner: ir::I64 },
         });
         let vf = types.len();
-        types.push(k::Type {
+        types.push(ir::Type {
             name: "Vec<f64>".to_string(),
-            kind: TypeKind::Vec { inner: k::F64 },
+            kind: TypeKind::Vec { inner: ir::F64 },
         });
         assert!(satisfies(&source, &types, &BTreeMap::new(), vi, "Ord"));
         assert!(!satisfies(&source, &types, &BTreeMap::new(), vf, "Ord"));
@@ -2211,8 +2211,8 @@ fn normalize(source: &Program, term: usize, terms: &mut Vec<Term>) -> Result<usi
                             tasks.push(Normalize::Enter(expanded));
                         } else {
                             tasks.push(Normalize::Node(id, name, kids.clone()));
-                            for k in kids {
-                                tasks.push(Normalize::Enter(k));
+                            for ir in kids {
+                                tasks.push(Normalize::Enter(ir));
                             }
                         }
                     }
@@ -2235,8 +2235,8 @@ fn normalize(source: &Program, term: usize, terms: &mut Vec<Term>) -> Result<usi
             }
             Normalize::Node(id, name, kids) => {
                 let mut normalized = Vec::new();
-                for k in kids {
-                    normalized.push(*done.get(&k).unwrap());
+                for ir in kids {
+                    normalized.push(*done.get(&ir).unwrap());
                 }
                 let new = push(terms, Term::Named(name, normalized));
                 done.insert(id, new);

@@ -69,7 +69,7 @@ fn bundle(root: &str, string_source: &str) -> SourceBundle {
     }
 }
 
-fn run(program: &lkjscript::k::CheckedProgram, expected: &[(&str, usize)]) {
+fn run(program: &lkjscript::ir::CheckedProgram, expected: &[(&str, usize)]) {
     let observations = expected
         .iter()
         .map(|(name, value)| (*name, i64::try_from(*value).unwrap()))
@@ -352,8 +352,8 @@ pub fn differing_operator()->usize {
     assert_ne!(STRING, changed_clone);
     let clone_artifact = compiler::check_bundle(&bundle(&source, &changed_clone)).unwrap();
     assert_ne!(
-        lkjscript::k_text::write(original.program()),
-        lkjscript::k_text::write(clone_artifact.program())
+        lkjscript::ir_text::write(original.program()),
+        lkjscript::ir_text::write(clone_artifact.program())
     );
     run(
         &clone_artifact,
@@ -375,8 +375,8 @@ pub fn differing_operator()->usize {
     assert_ne!(STRING, changed_equality);
     let equality_artifact = compiler::check_bundle(&bundle(&source, &changed_equality)).unwrap();
     assert_ne!(
-        lkjscript::k_text::write(original.program()),
-        lkjscript::k_text::write(equality_artifact.program())
+        lkjscript::ir_text::write(original.program()),
+        lkjscript::ir_text::write(equality_artifact.program())
     );
     run(
         &equality_artifact,
@@ -395,8 +395,8 @@ pub fn differing_operator()->usize {
     assert_ne!(STRING, changed_ne);
     let ne_artifact = compiler::check_bundle(&bundle(&source, &changed_ne)).unwrap();
     assert_ne!(
-        lkjscript::k_text::write(original.program()),
-        lkjscript::k_text::write(ne_artifact.program())
+        lkjscript::ir_text::write(original.program()),
+        lkjscript::ir_text::write(ne_artifact.program())
     );
     run(
         &ne_artifact,

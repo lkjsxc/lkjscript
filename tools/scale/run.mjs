@@ -34,10 +34,10 @@ for (const family of families) {
       const start = performance.now();
       const result = await run(binary, command, {timeout, sampleMemory:true, env:{...process.env,LKJSCRIPT_TIMINGS:'1'}});
       const ms = performance.now()-start;
-      const stages = result.stderr.split('\n').filter(l=>l.startsWith('LKJ_TIMING ')).map(l=>JSON.parse(l.slice(11)));
+      const stages = result.stderr.split('\n').filter(l=>l.startsWith('LKJSCRIPT_TIMING ')).map(l=>JSON.parse(l.slice('LKJSCRIPT_TIMING '.length)));
       samples.push({ms,sampled_peak_tree_rss_bytes:result.sampled_peak_tree_rss_bytes,stages});
       if (result.error || result.status !== 0) {
-        const diagnostic = result.stderr.split('\n').filter(l=>!l.startsWith('LKJ_')).join('\n').trim();
+        const diagnostic = result.stderr.split('\n').filter(l=>!l.startsWith('LKJSCRIPT_')).join('\n').trim();
         const record = {...context,family,n,source_bytes:Buffer.byteLength(text),outcome:result.error?.code || 'failed',diagnostic,samples};
         console.log(JSON.stringify(record)); fs.appendFileSync(path.join(out,'runs.jsonl'),JSON.stringify(record)+'\n');
         failed = true; anyFailed = true; break;
@@ -45,7 +45,7 @@ for (const family of families) {
     }
     if (failed) break;
     const ms = median(samples.map(x=>x.ms));
-    const stageNames = new Set(samples.flatMap(x=>x.stages.flatMap(s=>Object.keys(s).filter(k=>k.endsWith('_ms')))));
+    const stageNames = new Set(samples.flatMap(x=>x.stages.flatMap(s=>Object.keys(s).filter(ir=>ir.endsWith('_ms')))));
     const stageMedians = Object.fromEntries([...stageNames].map(name=>[name,median(samples.flatMap(x=>x.stages.filter(s=>name in s).map(s=>s[name])))]));
     const record = {...context,family,n,source_bytes:Buffer.byteLength(text),outcome:'ok',median_ms:Number(ms.toFixed(3)),ratio:previous ? Number((ms/previous).toFixed(3)) : null,sampled_peak_tree_rss_bytes:median(samples.map(x=>x.sampled_peak_tree_rss_bytes)),stages:stageMedians};
     if (verb === 'build') record.emitted_bytes = fs.statSync(path.join(out, `${family}-${n}.elf`)).size;

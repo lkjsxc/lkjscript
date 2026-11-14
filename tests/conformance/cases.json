@@ -373,48 +373,48 @@
     "entry": "main"
   },
   {
-    "id": "k_forged_world",
-    "file": "k/forged_world.k",
+    "id": "ir_forged_world",
+    "file": "ir/forged_world.lkjir",
     "kind": "reject",
     "code": "E_TYPE",
     "pending": false,
     "rust": false
   },
   {
-    "id": "k_borrowed_owner",
-    "file": "k/borrowed_owner.k",
+    "id": "ir_borrowed_owner",
+    "file": "ir/borrowed_owner.lkjir",
     "kind": "reject",
     "code": "E_BORROW",
     "pending": false,
     "rust": false
   },
   {
-    "id": "k_inactive_variant",
-    "file": "k/inactive_variant.k",
+    "id": "ir_inactive_variant",
+    "file": "ir/inactive_variant.lkjir",
     "kind": "reject",
     "code": "E_TYPE",
     "pending": false,
     "rust": false
   },
   {
-    "id": "k_dead_bad_operand",
-    "file": "k/dead_bad_operand.k",
+    "id": "ir_dead_bad_operand",
+    "file": "ir/dead_bad_operand.lkjir",
     "kind": "reject",
     "code": "E_TYPE",
     "pending": false,
     "rust": false
   },
   {
-    "id": "k_missing_cleanup",
-    "file": "k/missing_cleanup.k",
+    "id": "ir_missing_cleanup",
+    "file": "ir/missing_cleanup.lkjir",
     "kind": "reject",
-    "code": "E_K",
+    "code": "E_IR",
     "pending": false,
     "rust": false
   },
   {
-    "id": "k_parameter_slot_escape",
-    "file": "k/parameter_slot_escape.k",
+    "id": "ir_parameter_slot_escape",
+    "file": "ir/parameter_slot_escape.lkjir",
     "kind": "reject",
     "code": "E_BORROW",
     "pending": false,
@@ -965,7 +965,7 @@
   },
   {
     "id": "forged_stdout",
-    "file": "k/forged_stdout.k",
+    "file": "ir/forged_stdout.lkjir",
     "kind": "reject",
     "code": "E_TYPE",
     "rust": false
@@ -1076,42 +1076,42 @@
   },
   {
     "id": "drop_if_owned",
-    "file": "k/drop_if_owned.k",
+    "file": "ir/drop_if_owned.lkjir",
     "kind": "run",
     "value": "42",
     "rust": false
   },
   {
     "id": "double_projected_drop",
-    "file": "k/double_projected_drop.k",
+    "file": "ir/double_projected_drop.lkjir",
     "kind": "reject",
     "code": "E_MOVE",
     "rust": false
   },
   {
     "id": "drop_after_projected_move",
-    "file": "k/drop_after_projected_move.k",
+    "file": "ir/drop_after_projected_move.lkjir",
     "kind": "reject",
     "code": "E_MOVE",
     "rust": false
   },
   {
     "id": "drop_if_absent_ancestor",
-    "file": "k/drop_if_absent_ancestor.k",
+    "file": "ir/drop_if_absent_ancestor.lkjir",
     "kind": "reject",
     "code": "E_MOVE",
     "rust": false
   },
   {
     "id": "drop_if_borrowed_owner",
-    "file": "k/drop_if_borrowed_owner.k",
+    "file": "ir/drop_if_borrowed_owner.lkjir",
     "kind": "reject",
     "code": "E_BORROW",
     "rust": false
   },
   {
     "id": "drop_if_indexed_owner",
-    "file": "k/drop_if_indexed_owner.k",
+    "file": "ir/drop_if_indexed_owner.lkjir",
     "kind": "reject",
     "code": "E_BORROW",
     "rust": false
@@ -1158,7 +1158,7 @@
   },
   {
     "id": "conditional_owner_cleanup",
-    "file": "k/conditional_owner_cleanup.k",
+    "file": "ir/conditional_owner_cleanup.lkjir",
     "kind": "run",
     "value": "42"
   },
@@ -1212,33 +1212,33 @@
   },
   {
     "id": "conditional_owner_strict_drop",
-    "file": "k/conditional_owner_strict_drop.k",
+    "file": "ir/conditional_owner_strict_drop.lkjir",
     "kind": "reject",
     "code": "E_MOVE"
   },
   {
     "id": "conditional_parent_projection",
-    "file": "k/conditional_parent_projection.k",
+    "file": "ir/conditional_parent_projection.lkjir",
     "kind": "reject",
     "code": "E_MOVE"
   },
   {
     "id": "conditional_partial_read",
-    "file": "k/conditional_partial_read.k",
+    "file": "ir/conditional_partial_read.lkjir",
     "kind": "reject",
     "code": "E_MOVE"
   },
   {
     "id": "conditional_owner_overwrite",
-    "file": "k/conditional_owner_overwrite.k",
+    "file": "ir/conditional_owner_overwrite.lkjir",
     "kind": "reject",
-    "code": "E_K"
+    "code": "E_IR"
   },
   {
     "id": "conditional_owner_leak",
-    "file": "k/conditional_owner_leak.k",
+    "file": "ir/conditional_owner_leak.lkjir",
     "kind": "reject",
-    "code": "E_K"
+    "code": "E_IR"
   },
   {
     "id": "control_sugars",
@@ -1313,7 +1313,7 @@
   },
   {
     "id": "conditional_owned_view_field",
-    "file": "k/conditional_owned_view_field.k",
+    "file": "ir/conditional_owned_view_field.lkjir",
     "kind": "run",
     "value": "42",
     "entry": "probe"
@@ -1359,31 +1359,31 @@
   },
   {
     "id": "targeted_loop_transfer",
-    "file": "k/targeted_loop_transfer.k",
+    "file": "ir/targeted_loop_transfer.lkjir",
     "kind": "run",
     "value": "3"
   },
   {
     "id": "invalid_loop_depth",
-    "file": "k/invalid_loop_depth.k",
+    "file": "ir/invalid_loop_depth.lkjir",
     "kind": "reject",
-    "code": "E_K"
+    "code": "E_IR"
   },
   {
     "id": "dead_invalid_loop_depth",
-    "file": "k/dead_invalid_loop_depth.k",
+    "file": "ir/dead_invalid_loop_depth.lkjir",
     "kind": "reject",
-    "code": "E_K"
+    "code": "E_IR"
   },
   {
     "id": "per_leaf_transport",
-    "file": "k/per_leaf_transport.k",
+    "file": "ir/per_leaf_transport.lkjir",
     "kind": "run",
     "value": "42"
   },
   {
     "id": "per_leaf_static_mix",
-    "file": "k/per_leaf_static_mix.k",
+    "file": "ir/per_leaf_static_mix.lkjir",
     "kind": "run",
     "value": "42"
   },
@@ -1396,37 +1396,37 @@
   },
   {
     "id": "per_leaf_wrong_source",
-    "file": "k/per_leaf_wrong_source.k",
+    "file": "ir/per_leaf_wrong_source.lkjir",
     "kind": "reject",
     "code": "E_BORROW"
   },
   {
     "id": "per_leaf_duplicate_mapping",
-    "file": "k/per_leaf_duplicate_mapping.k",
+    "file": "ir/per_leaf_duplicate_mapping.lkjir",
     "kind": "reject",
     "code": "E_BORROW"
   },
   {
     "id": "per_leaf_missing_mapping",
-    "file": "k/per_leaf_missing_mapping.k",
+    "file": "ir/per_leaf_missing_mapping.lkjir",
     "kind": "reject",
     "code": "E_BORROW"
   },
   {
     "id": "per_leaf_nonparameter",
-    "file": "k/per_leaf_nonparameter.k",
+    "file": "ir/per_leaf_nonparameter.lkjir",
     "kind": "reject",
     "code": "E_BORROW"
   },
   {
     "id": "per_leaf_forged_static",
-    "file": "k/per_leaf_forged_static.k",
+    "file": "ir/per_leaf_forged_static.lkjir",
     "kind": "reject",
     "code": "E_BORROW"
   },
   {
     "id": "per_leaf_local_escape",
-    "file": "k/per_leaf_local_escape.k",
+    "file": "ir/per_leaf_local_escape.lkjir",
     "kind": "reject",
     "code": "E_BORROW"
   },
@@ -1791,13 +1791,13 @@
   },
   {
     "id": "conditional_reference_cleanup",
-    "file": "k/conditional_reference_cleanup.k",
+    "file": "ir/conditional_reference_cleanup.lkjir",
     "kind": "run",
     "value": "42"
   },
   {
     "id": "conditional_reference_owner_drop",
-    "file": "k/conditional_reference_owner_drop.k",
+    "file": "ir/conditional_reference_owner_drop.lkjir",
     "kind": "reject",
     "code": "E_BORROW"
   },
@@ -1841,25 +1841,25 @@
   },
   {
     "id": "per_leaf_input_alternatives",
-    "file": "k/per_leaf_input_alternatives.k",
+    "file": "ir/per_leaf_input_alternatives.lkjir",
     "kind": "run",
     "value": "42"
   },
   {
     "id": "per_leaf_omitted_alternative",
-    "file": "k/per_leaf_omitted_alternative.k",
+    "file": "ir/per_leaf_omitted_alternative.lkjir",
     "kind": "reject",
     "code": "E_BORROW"
   },
   {
     "id": "per_leaf_duplicate_input",
-    "file": "k/per_leaf_duplicate_input.k",
+    "file": "ir/per_leaf_duplicate_input.lkjir",
     "kind": "reject",
     "code": "E_BORROW"
   },
   {
     "id": "exact_transport_keeps_bound",
-    "file": "k/exact_transport_keeps_bound.k",
+    "file": "ir/exact_transport_keeps_bound.lkjir",
     "kind": "reject",
     "code": "E_BORROW"
   },
@@ -1873,7 +1873,7 @@
   },
   {
     "id": "conditional_reference_read",
-    "file": "k/conditional_reference_read.k",
+    "file": "ir/conditional_reference_read.lkjir",
     "kind": "reject",
     "code": "E_MOVE"
   },
@@ -2122,43 +2122,43 @@
   },
   {
     "id": "char_surrogate",
-    "file": "k/char_surrogate.k",
+    "file": "ir/char_surrogate.lkjir",
     "kind": "reject",
     "code": "E_TYPE"
   },
   {
     "id": "char_above_unicode",
-    "file": "k/char_above_unicode.k",
+    "file": "ir/char_above_unicode.lkjir",
     "kind": "reject",
     "code": "E_TYPE"
   },
   {
     "id": "char_forbidden_cast",
-    "file": "k/char_forbidden_cast.k",
+    "file": "ir/char_forbidden_cast.lkjir",
     "kind": "reject",
     "code": "E_TYPE"
   },
   {
     "id": "shared_reference_carrier_cleanup",
-    "file": "k/shared_reference_carrier_cleanup.k",
+    "file": "ir/shared_reference_carrier_cleanup.lkjir",
     "kind": "run",
     "value": "42"
   },
   {
     "id": "shared_reference_exclusive_ancestor",
-    "file": "k/shared_reference_exclusive_ancestor.k",
+    "file": "ir/shared_reference_exclusive_ancestor.lkjir",
     "kind": "run",
     "value": "42"
   },
   {
     "id": "borrowed_reference_carrier_drop",
-    "file": "k/borrowed_reference_carrier_drop.k",
+    "file": "ir/borrowed_reference_carrier_drop.lkjir",
     "kind": "reject",
     "code": "E_BORROW"
   },
   {
     "id": "shared_reborrow_parent_write",
-    "file": "k/shared_reborrow_parent_write.k",
+    "file": "ir/shared_reborrow_parent_write.lkjir",
     "kind": "reject",
     "code": "E_BORROW"
   },
@@ -2454,7 +2454,7 @@
   },
   {
     "id": "enum_alternative_join",
-    "file": "k/enum_alternative_join.k",
+    "file": "ir/enum_alternative_join.lkjir",
     "kind": "run",
     "value": "42"
   },
@@ -2487,25 +2487,25 @@
   },
   {
     "id": "enum_wrong_tag",
-    "file": "k/enum_wrong_tag.k",
+    "file": "ir/enum_wrong_tag.lkjir",
     "kind": "reject",
     "code": "E_TYPE"
   },
   {
     "id": "enum_join_loses_tag",
-    "file": "k/enum_join_loses_tag.k",
+    "file": "ir/enum_join_loses_tag.lkjir",
     "kind": "reject",
     "code": "E_TYPE"
   },
   {
     "id": "enum_stale_tag",
-    "file": "k/enum_stale_tag.k",
+    "file": "ir/enum_stale_tag.lkjir",
     "kind": "reject",
     "code": "E_TYPE"
   },
   {
     "id": "enum_live_join_conflict",
-    "file": "k/enum_live_join_conflict.k",
+    "file": "ir/enum_live_join_conflict.lkjir",
     "kind": "reject",
     "code": "E_BORROW"
   },
@@ -2561,31 +2561,31 @@
   },
   {
     "id": "enum_fixed_pointer_tag",
-    "file": "k/enum_fixed_pointer_tag.k",
+    "file": "ir/enum_fixed_pointer_tag.lkjir",
     "kind": "run",
     "value": "42"
   },
   {
     "id": "enum_indexed_predicate_stale",
-    "file": "k/enum_indexed_predicate_stale.k",
+    "file": "ir/enum_indexed_predicate_stale.lkjir",
     "kind": "reject",
     "code": "E_TYPE"
   },
   {
     "id": "enum_indexed_tag_stale",
-    "file": "k/enum_indexed_tag_stale.k",
+    "file": "ir/enum_indexed_tag_stale.lkjir",
     "kind": "reject",
     "code": "E_TYPE"
   },
   {
     "id": "enum_indexed_alias_stale",
-    "file": "k/enum_indexed_alias_stale.k",
+    "file": "ir/enum_indexed_alias_stale.lkjir",
     "kind": "reject",
     "code": "E_TYPE"
   },
   {
     "id": "enum_indexed_move_stale",
-    "file": "k/enum_indexed_move_stale.k",
+    "file": "ir/enum_indexed_move_stale.lkjir",
     "kind": "reject",
     "code": "E_TYPE"
   },
@@ -2827,22 +2827,22 @@
     "rust": true
   },
   {
-    "id": "integer_wrapping_k",
-    "file": "k/integer_wrapping.k",
+    "id": "integer_wrapping_ir",
+    "file": "ir/integer_wrapping.lkjir",
     "kind": "run",
     "value": "42",
     "rust": false
   },
   {
     "id": "integer_wrapping_bool",
-    "file": "k/integer_wrapping_bool.k",
+    "file": "ir/integer_wrapping_bool.lkjir",
     "kind": "reject",
     "code": "E_TYPE",
     "rust": false
   },
   {
     "id": "integer_wrapping_unknown",
-    "file": "k/integer_wrapping_unknown.k",
+    "file": "ir/integer_wrapping_unknown.lkjir",
     "kind": "reject",
     "code": "E_TYPE",
     "rust": false
@@ -3255,176 +3255,176 @@
     "rustCode": "E0502"
   },
   {
-    "id": "k_range_full_extent",
-    "file": "k/range_full_extent.k",
+    "id": "ir_range_full_extent",
+    "file": "ir/range_full_extent.lkjir",
     "kind": "run",
     "rust": false,
     "entry": "probe",
     "value": "3"
   },
   {
-    "id": "k_range_inclusive_empty",
-    "file": "k/range_inclusive_empty.k",
+    "id": "ir_range_inclusive_empty",
+    "file": "ir/range_inclusive_empty.lkjir",
     "kind": "run",
     "rust": false,
     "entry": "probe",
     "value": "0"
   },
   {
-    "id": "k_range_empty",
-    "file": "k/range_empty.k",
+    "id": "ir_range_empty",
+    "file": "ir/range_empty.lkjir",
     "kind": "run",
     "rust": false,
     "entry": "probe",
     "value": "0"
   },
   {
-    "id": "k_range_end_past",
-    "file": "k/range_end_past.k",
+    "id": "ir_range_end_past",
+    "file": "ir/range_end_past.lkjir",
     "kind": "trap",
     "rust": false,
     "entry": "probe",
     "code": "R0003"
   },
   {
-    "id": "k_range_reversed",
-    "file": "k/range_reversed.k",
+    "id": "ir_range_reversed",
+    "file": "ir/range_reversed.lkjir",
     "kind": "trap",
     "rust": false,
     "entry": "probe",
     "code": "R0003"
   },
   {
-    "id": "k_range_inclusive_max",
-    "file": "k/range_inclusive_max.k",
+    "id": "ir_range_inclusive_max",
+    "file": "ir/range_inclusive_max.lkjir",
     "kind": "trap",
     "rust": false,
     "entry": "probe",
     "code": "R0003"
   },
   {
-    "id": "k_range_wrong_bound",
-    "file": "k/range_wrong_bound.k",
+    "id": "ir_range_wrong_bound",
+    "file": "ir/range_wrong_bound.lkjir",
     "kind": "reject",
     "rust": false,
     "entry": "probe",
     "code": "E_TYPE"
   },
   {
-    "id": "k_range_wrong_source",
-    "file": "k/range_wrong_source.k",
+    "id": "ir_range_wrong_source",
+    "file": "ir/range_wrong_source.lkjir",
     "kind": "reject",
     "rust": false,
     "entry": "probe",
     "code": "E_TYPE"
   },
   {
-    "id": "k_range_wrong_element",
-    "file": "k/range_wrong_element.k",
+    "id": "ir_range_wrong_element",
+    "file": "ir/range_wrong_element.lkjir",
     "kind": "reject",
     "rust": false,
     "entry": "probe",
     "code": "E_TYPE"
   },
   {
-    "id": "k_range_immutable_mut",
-    "file": "k/range_immutable_mut.k",
+    "id": "ir_range_immutable_mut",
+    "file": "ir/range_immutable_mut.lkjir",
     "kind": "reject",
     "rust": false,
     "entry": "probe",
     "code": "E_BORROW"
   },
   {
-    "id": "k_range_consumed_bound",
-    "file": "k/range_consumed_bound.k",
+    "id": "ir_range_consumed_bound",
+    "file": "ir/range_consumed_bound.lkjir",
     "kind": "reject",
     "rust": false,
     "entry": "probe",
     "code": "E_MOVE"
   },
   {
-    "id": "k_range_live_owner_drop",
-    "file": "k/range_live_owner_drop.k",
+    "id": "ir_range_live_owner_drop",
+    "file": "ir/range_live_owner_drop.lkjir",
     "kind": "reject",
     "rust": false,
     "entry": "probe",
     "code": "E_BORROW"
   },
   {
-    "id": "k_range_nested_call",
-    "file": "k/range_nested_call.k",
+    "id": "ir_range_nested_call",
+    "file": "ir/range_nested_call.lkjir",
     "kind": "run",
     "rust": false,
     "entry": "probe",
     "value": "42"
   },
   {
-    "id": "k_range_forged_exact",
-    "file": "k/range_forged_exact.k",
+    "id": "ir_range_forged_exact",
+    "file": "ir/range_forged_exact.lkjir",
     "kind": "reject",
     "rust": false,
     "entry": "probe",
     "code": "E_BORROW"
   },
   {
-    "id": "k_range_mutable",
-    "file": "k/range_mutable.k",
+    "id": "ir_range_mutable",
+    "file": "ir/range_mutable.lkjir",
     "kind": "run",
     "rust": false,
     "entry": "probe",
     "value": "42"
   },
   {
-    "id": "k_range_owner_write",
-    "file": "k/range_owner_write.k",
+    "id": "ir_range_owner_write",
+    "file": "ir/range_owner_write.lkjir",
     "kind": "reject",
     "rust": false,
     "entry": "probe",
     "code": "E_BORROW"
   },
   {
-    "id": "k_range_utf8",
-    "file": "k/range_utf8.k",
+    "id": "ir_range_utf8",
+    "file": "ir/range_utf8.lkjir",
     "kind": "run",
     "rust": false,
     "entry": "probe",
     "value": "4"
   },
   {
-    "id": "k_range_utf8_inclusive",
-    "file": "k/range_utf8_inclusive.k",
+    "id": "ir_range_utf8_inclusive",
+    "file": "ir/range_utf8_inclusive.lkjir",
     "kind": "run",
     "rust": false,
     "entry": "probe",
     "value": "4"
   },
   {
-    "id": "k_range_utf8_start",
-    "file": "k/range_utf8_start.k",
+    "id": "ir_range_utf8_start",
+    "file": "ir/range_utf8_start.lkjir",
     "kind": "trap",
     "rust": false,
     "entry": "probe",
     "code": "R0003"
   },
   {
-    "id": "k_range_utf8_end",
-    "file": "k/range_utf8_end.k",
+    "id": "ir_range_utf8_end",
+    "file": "ir/range_utf8_end.lkjir",
     "kind": "trap",
     "rust": false,
     "entry": "probe",
     "code": "R0003"
   },
   {
-    "id": "k_range_utf8_empty_middle",
-    "file": "k/range_utf8_empty_middle.k",
+    "id": "ir_range_utf8_empty_middle",
+    "file": "ir/range_utf8_empty_middle.lkjir",
     "kind": "trap",
     "rust": false,
     "entry": "probe",
     "code": "R0003"
   },
   {
-    "id": "k_range_mutable_text",
-    "file": "k/range_mutable_text.k",
+    "id": "ir_range_mutable_text",
+    "file": "ir/range_mutable_text.lkjir",
     "kind": "reject",
     "rust": false,
     "entry": "probe",
@@ -3654,31 +3654,31 @@
   },
   {
     "id": "reborrowed_descriptor_shell",
-    "file": "k/reborrowed_descriptor_shell.k",
+    "file": "ir/reborrowed_descriptor_shell.lkjir",
     "kind": "run",
     "value": "42"
   },
   {
     "id": "borrowed_descriptor_shell",
-    "file": "k/borrowed_descriptor_shell.k",
+    "file": "ir/borrowed_descriptor_shell.lkjir",
     "kind": "reject",
     "code": "E_BORROW"
   },
   {
     "id": "reborrowed_shell_custom_drop",
-    "file": "k/reborrowed_shell_custom_drop.k",
+    "file": "ir/reborrowed_shell_custom_drop.lkjir",
     "kind": "reject",
     "code": "E_BORROW"
   },
   {
     "id": "reborrowed_shell_nested_drop",
-    "file": "k/reborrowed_shell_nested_drop.k",
+    "file": "ir/reborrowed_shell_nested_drop.lkjir",
     "kind": "reject",
     "code": "E_BORROW"
   },
   {
     "id": "reborrowed_shell_replace",
-    "file": "k/reborrowed_shell_replace.k",
+    "file": "ir/reborrowed_shell_replace.lkjir",
     "kind": "reject",
     "code": "E_BORROW"
   },
@@ -4430,8 +4430,8 @@
     "rust": true
   },
   {
-    "id": "k_local_reference_duration",
-    "file": "k/local_reference_duration.k",
+    "id": "ir_local_reference_duration",
+    "file": "ir/local_reference_duration.lkjir",
     "kind": "run",
     "value": "42",
     "pending": false,
@@ -5004,1220 +5004,1220 @@
   {
     "id": "integer_2_0_0",
     "kind": "run",
-    "file": "migrated/integer_2_0_0.k",
+    "file": "migrated/integer_2_0_0.lkjir",
     "value": "0"
   },
   {
     "id": "integer_2_0_1",
     "kind": "run",
-    "file": "migrated/integer_2_0_1.k",
+    "file": "migrated/integer_2_0_1.lkjir",
     "value": "1"
   },
   {
     "id": "integer_2_0_2",
     "kind": "run",
-    "file": "migrated/integer_2_0_2.k",
+    "file": "migrated/integer_2_0_2.lkjir",
     "value": "1"
   },
   {
     "id": "integer_2_0_3",
     "kind": "run",
-    "file": "migrated/integer_2_0_3.k",
+    "file": "migrated/integer_2_0_3.lkjir",
     "value": "0"
   },
   {
     "id": "integer_2_0_4",
     "kind": "run",
-    "file": "migrated/integer_2_0_4.k",
+    "file": "migrated/integer_2_0_4.lkjir",
     "value": "0"
   },
   {
     "id": "integer_2_0_5",
     "kind": "run",
-    "file": "migrated/integer_2_0_5.k",
+    "file": "migrated/integer_2_0_5.lkjir",
     "value": "-1"
   },
   {
     "id": "integer_2_0_6",
     "kind": "run",
-    "file": "migrated/integer_2_0_6.k",
+    "file": "migrated/integer_2_0_6.lkjir",
     "value": "-2"
   },
   {
     "id": "integer_2_0_7",
     "kind": "run",
-    "file": "migrated/integer_2_0_7.k",
+    "file": "migrated/integer_2_0_7.lkjir",
     "value": "2"
   },
   {
     "id": "integer_2_0_8",
     "kind": "run",
-    "file": "migrated/integer_2_0_8.k",
+    "file": "migrated/integer_2_0_8.lkjir",
     "value": "4"
   },
   {
     "id": "integer_2_0_9",
     "kind": "trap",
-    "file": "migrated/integer_2_0_9.k",
+    "file": "migrated/integer_2_0_9.lkjir",
     "code": "R0001"
   },
   {
     "id": "integer_2_0_10",
     "kind": "trap",
-    "file": "migrated/integer_2_0_10.k",
+    "file": "migrated/integer_2_0_10.lkjir",
     "code": "R0001"
   },
   {
     "id": "integer_2_0_11",
     "kind": "run",
-    "file": "migrated/integer_2_0_11.k",
+    "file": "migrated/integer_2_0_11.lkjir",
     "value": "510"
   },
   {
     "id": "integer_2_0_12",
     "kind": "run",
-    "file": "migrated/integer_2_0_12.k",
+    "file": "migrated/integer_2_0_12.lkjir",
     "value": "1"
   },
   {
     "id": "integer_2_1_0",
     "kind": "run",
-    "file": "migrated/integer_2_1_0.k",
+    "file": "migrated/integer_2_1_0.lkjir",
     "value": "0"
   },
   {
     "id": "integer_2_1_1",
     "kind": "run",
-    "file": "migrated/integer_2_1_1.k",
+    "file": "migrated/integer_2_1_1.lkjir",
     "value": "1"
   },
   {
     "id": "integer_2_1_2",
     "kind": "run",
-    "file": "migrated/integer_2_1_2.k",
+    "file": "migrated/integer_2_1_2.lkjir",
     "value": "-1"
   },
   {
     "id": "integer_2_1_3",
     "kind": "run",
-    "file": "migrated/integer_2_1_3.k",
+    "file": "migrated/integer_2_1_3.lkjir",
     "value": "-2"
   },
   {
     "id": "integer_2_1_4",
     "kind": "run",
-    "file": "migrated/integer_2_1_4.k",
+    "file": "migrated/integer_2_1_4.lkjir",
     "value": "-2"
   },
   {
     "id": "integer_2_1_5",
     "kind": "run",
-    "file": "migrated/integer_2_1_5.k",
+    "file": "migrated/integer_2_1_5.lkjir",
     "value": "1"
   },
   {
     "id": "integer_2_1_6",
     "kind": "run",
-    "file": "migrated/integer_2_1_6.k",
+    "file": "migrated/integer_2_1_6.lkjir",
     "value": "0"
   },
   {
     "id": "integer_2_1_7",
     "kind": "run",
-    "file": "migrated/integer_2_1_7.k",
+    "file": "migrated/integer_2_1_7.lkjir",
     "value": "-2"
   },
   {
     "id": "integer_2_1_8",
     "kind": "run",
-    "file": "migrated/integer_2_1_8.k",
+    "file": "migrated/integer_2_1_8.lkjir",
     "value": "-4"
   },
   {
     "id": "integer_2_1_9",
     "kind": "run",
-    "file": "migrated/integer_2_1_9.k",
+    "file": "migrated/integer_2_1_9.lkjir",
     "value": "2147483645"
   },
   {
     "id": "integer_2_1_10",
     "kind": "run",
-    "file": "migrated/integer_2_1_10.k",
+    "file": "migrated/integer_2_1_10.lkjir",
     "value": "-2147483647"
   },
   {
     "id": "integer_2_1_11",
     "kind": "run",
-    "file": "migrated/integer_2_1_11.k",
+    "file": "migrated/integer_2_1_11.lkjir",
     "value": "0"
   },
   {
     "id": "integer_2_1_12",
     "kind": "run",
-    "file": "migrated/integer_2_1_12.k",
+    "file": "migrated/integer_2_1_12.lkjir",
     "value": "-3"
   },
   {
     "id": "integer_2_2_0",
     "kind": "run",
-    "file": "migrated/integer_2_2_0.k",
+    "file": "migrated/integer_2_2_0.lkjir",
     "value": "0"
   },
   {
     "id": "integer_2_2_1",
     "kind": "run",
-    "file": "migrated/integer_2_2_1.k",
+    "file": "migrated/integer_2_2_1.lkjir",
     "value": "0"
   },
   {
     "id": "integer_2_2_2",
     "kind": "run",
-    "file": "migrated/integer_2_2_2.k",
+    "file": "migrated/integer_2_2_2.lkjir",
     "value": "0"
   },
   {
     "id": "integer_2_2_3",
     "kind": "run",
-    "file": "migrated/integer_2_2_3.k",
+    "file": "migrated/integer_2_2_3.lkjir",
     "value": "-1"
   },
   {
     "id": "integer_2_2_4",
     "kind": "run",
-    "file": "migrated/integer_2_2_4.k",
+    "file": "migrated/integer_2_2_4.lkjir",
     "value": "-1"
   },
   {
     "id": "integer_2_2_5",
     "kind": "run",
-    "file": "migrated/integer_2_2_5.k",
+    "file": "migrated/integer_2_2_5.lkjir",
     "value": "0"
   },
   {
     "id": "integer_2_2_6",
     "kind": "run",
-    "file": "migrated/integer_2_2_6.k",
+    "file": "migrated/integer_2_2_6.lkjir",
     "value": "1"
   },
   {
     "id": "integer_2_2_7",
     "kind": "run",
-    "file": "migrated/integer_2_2_7.k",
+    "file": "migrated/integer_2_2_7.lkjir",
     "value": "0"
   },
   {
     "id": "integer_2_2_8",
     "kind": "run",
-    "file": "migrated/integer_2_2_8.k",
+    "file": "migrated/integer_2_2_8.lkjir",
     "value": "0"
   },
   {
     "id": "integer_2_2_9",
     "kind": "trap",
-    "file": "migrated/integer_2_2_9.k",
+    "file": "migrated/integer_2_2_9.lkjir",
     "code": "R0001"
   },
   {
     "id": "integer_2_2_10",
     "kind": "trap",
-    "file": "migrated/integer_2_2_10.k",
+    "file": "migrated/integer_2_2_10.lkjir",
     "code": "R0001"
   },
   {
     "id": "integer_2_2_11",
     "kind": "run",
-    "file": "migrated/integer_2_2_11.k",
+    "file": "migrated/integer_2_2_11.lkjir",
     "value": "65025"
   },
   {
     "id": "integer_2_2_12",
     "kind": "run",
-    "file": "migrated/integer_2_2_12.k",
+    "file": "migrated/integer_2_2_12.lkjir",
     "value": "-2"
   },
   {
     "id": "integer_2_3_0",
     "kind": "trap",
-    "file": "migrated/integer_2_3_0.k",
+    "file": "migrated/integer_2_3_0.lkjir",
     "code": "R0002"
   },
   {
     "id": "integer_2_3_1",
     "kind": "trap",
-    "file": "migrated/integer_2_3_1.k",
+    "file": "migrated/integer_2_3_1.lkjir",
     "code": "R0002"
   },
   {
     "id": "integer_2_3_2",
     "kind": "run",
-    "file": "migrated/integer_2_3_2.k",
+    "file": "migrated/integer_2_3_2.lkjir",
     "value": "0"
   },
   {
     "id": "integer_2_3_3",
     "kind": "run",
-    "file": "migrated/integer_2_3_3.k",
+    "file": "migrated/integer_2_3_3.lkjir",
     "value": "-1"
   },
   {
     "id": "integer_2_3_4",
     "kind": "run",
-    "file": "migrated/integer_2_3_4.k",
+    "file": "migrated/integer_2_3_4.lkjir",
     "value": "-1"
   },
   {
     "id": "integer_2_3_5",
     "kind": "run",
-    "file": "migrated/integer_2_3_5.k",
+    "file": "migrated/integer_2_3_5.lkjir",
     "value": "0"
   },
   {
     "id": "integer_2_3_6",
     "kind": "run",
-    "file": "migrated/integer_2_3_6.k",
+    "file": "migrated/integer_2_3_6.lkjir",
     "value": "1"
   },
   {
     "id": "integer_2_3_7",
     "kind": "run",
-    "file": "migrated/integer_2_3_7.k",
+    "file": "migrated/integer_2_3_7.lkjir",
     "value": "0"
   },
   {
     "id": "integer_2_3_8",
     "kind": "run",
-    "file": "migrated/integer_2_3_8.k",
+    "file": "migrated/integer_2_3_8.lkjir",
     "value": "0"
   },
   {
     "id": "integer_2_3_9",
     "kind": "run",
-    "file": "migrated/integer_2_3_9.k",
+    "file": "migrated/integer_2_3_9.lkjir",
     "value": "1073741823"
   },
   {
     "id": "integer_2_3_10",
     "kind": "trap",
-    "file": "migrated/integer_2_3_10.k",
+    "file": "migrated/integer_2_3_10.lkjir",
     "code": "R0001"
   },
   {
     "id": "integer_2_3_11",
     "kind": "run",
-    "file": "migrated/integer_2_3_11.k",
+    "file": "migrated/integer_2_3_11.lkjir",
     "value": "1"
   },
   {
     "id": "integer_2_3_12",
     "kind": "run",
-    "file": "migrated/integer_2_3_12.k",
+    "file": "migrated/integer_2_3_12.lkjir",
     "value": "0"
   },
   {
     "id": "integer_2_4_0",
     "kind": "trap",
-    "file": "migrated/integer_2_4_0.k",
+    "file": "migrated/integer_2_4_0.lkjir",
     "code": "R0002"
   },
   {
     "id": "integer_2_4_1",
     "kind": "trap",
-    "file": "migrated/integer_2_4_1.k",
+    "file": "migrated/integer_2_4_1.lkjir",
     "code": "R0002"
   },
   {
     "id": "integer_2_4_2",
     "kind": "run",
-    "file": "migrated/integer_2_4_2.k",
+    "file": "migrated/integer_2_4_2.lkjir",
     "value": "0"
   },
   {
     "id": "integer_2_4_3",
     "kind": "run",
-    "file": "migrated/integer_2_4_3.k",
+    "file": "migrated/integer_2_4_3.lkjir",
     "value": "0"
   },
   {
     "id": "integer_2_4_4",
     "kind": "run",
-    "file": "migrated/integer_2_4_4.k",
+    "file": "migrated/integer_2_4_4.lkjir",
     "value": "0"
   },
   {
     "id": "integer_2_4_5",
     "kind": "run",
-    "file": "migrated/integer_2_4_5.k",
+    "file": "migrated/integer_2_4_5.lkjir",
     "value": "0"
   },
   {
     "id": "integer_2_4_6",
     "kind": "run",
-    "file": "migrated/integer_2_4_6.k",
+    "file": "migrated/integer_2_4_6.lkjir",
     "value": "0"
   },
   {
     "id": "integer_2_4_7",
     "kind": "run",
-    "file": "migrated/integer_2_4_7.k",
+    "file": "migrated/integer_2_4_7.lkjir",
     "value": "0"
   },
   {
     "id": "integer_2_4_8",
     "kind": "run",
-    "file": "migrated/integer_2_4_8.k",
+    "file": "migrated/integer_2_4_8.lkjir",
     "value": "0"
   },
   {
     "id": "integer_2_4_9",
     "kind": "run",
-    "file": "migrated/integer_2_4_9.k",
+    "file": "migrated/integer_2_4_9.lkjir",
     "value": "1"
   },
   {
     "id": "integer_2_4_10",
     "kind": "trap",
-    "file": "migrated/integer_2_4_10.k",
+    "file": "migrated/integer_2_4_10.lkjir",
     "code": "R0001"
   },
   {
     "id": "integer_2_4_11",
     "kind": "run",
-    "file": "migrated/integer_2_4_11.k",
+    "file": "migrated/integer_2_4_11.lkjir",
     "value": "0"
   },
   {
     "id": "integer_2_4_12",
     "kind": "run",
-    "file": "migrated/integer_2_4_12.k",
+    "file": "migrated/integer_2_4_12.lkjir",
     "value": "-1"
   },
   {
     "id": "integer_3_0_0",
     "kind": "run",
-    "file": "migrated/integer_3_0_0.k",
+    "file": "migrated/integer_3_0_0.lkjir",
     "value": "0"
   },
   {
     "id": "integer_3_0_1",
     "kind": "run",
-    "file": "migrated/integer_3_0_1.k",
+    "file": "migrated/integer_3_0_1.lkjir",
     "value": "1"
   },
   {
     "id": "integer_3_0_2",
     "kind": "run",
-    "file": "migrated/integer_3_0_2.k",
+    "file": "migrated/integer_3_0_2.lkjir",
     "value": "1"
   },
   {
     "id": "integer_3_0_3",
     "kind": "run",
-    "file": "migrated/integer_3_0_3.k",
+    "file": "migrated/integer_3_0_3.lkjir",
     "value": "0"
   },
   {
     "id": "integer_3_0_4",
     "kind": "trap",
-    "file": "migrated/integer_3_0_4.k",
+    "file": "migrated/integer_3_0_4.lkjir",
     "code": "R0001"
   },
   {
     "id": "integer_3_0_5",
     "kind": "trap",
-    "file": "migrated/integer_3_0_5.k",
+    "file": "migrated/integer_3_0_5.lkjir",
     "code": "R0001"
   },
   {
     "id": "integer_3_0_6",
     "kind": "run",
-    "file": "migrated/integer_3_0_6.k",
+    "file": "migrated/integer_3_0_6.lkjir",
     "value": "-2"
   },
   {
     "id": "integer_3_0_7",
     "kind": "run",
-    "file": "migrated/integer_3_0_7.k",
+    "file": "migrated/integer_3_0_7.lkjir",
     "value": "-9223372036854775806"
   },
   {
     "id": "integer_3_0_8",
     "kind": "run",
-    "file": "migrated/integer_3_0_8.k",
+    "file": "migrated/integer_3_0_8.lkjir",
     "value": "4611686018427387908"
   },
   {
     "id": "integer_3_0_9",
     "kind": "run",
-    "file": "migrated/integer_3_0_9.k",
+    "file": "migrated/integer_3_0_9.lkjir",
     "value": "2147483649"
   },
   {
     "id": "integer_3_0_10",
     "kind": "run",
-    "file": "migrated/integer_3_0_10.k",
+    "file": "migrated/integer_3_0_10.lkjir",
     "value": "-2147483649"
   },
   {
     "id": "integer_3_0_11",
     "kind": "run",
-    "file": "migrated/integer_3_0_11.k",
+    "file": "migrated/integer_3_0_11.lkjir",
     "value": "510"
   },
   {
     "id": "integer_3_0_12",
     "kind": "run",
-    "file": "migrated/integer_3_0_12.k",
+    "file": "migrated/integer_3_0_12.lkjir",
     "value": "1"
   },
   {
     "id": "integer_3_1_0",
     "kind": "run",
-    "file": "migrated/integer_3_1_0.k",
+    "file": "migrated/integer_3_1_0.lkjir",
     "value": "0"
   },
   {
     "id": "integer_3_1_1",
     "kind": "run",
-    "file": "migrated/integer_3_1_1.k",
+    "file": "migrated/integer_3_1_1.lkjir",
     "value": "1"
   },
   {
     "id": "integer_3_1_2",
     "kind": "run",
-    "file": "migrated/integer_3_1_2.k",
+    "file": "migrated/integer_3_1_2.lkjir",
     "value": "-1"
   },
   {
     "id": "integer_3_1_3",
     "kind": "run",
-    "file": "migrated/integer_3_1_3.k",
+    "file": "migrated/integer_3_1_3.lkjir",
     "value": "-2"
   },
   {
     "id": "integer_3_1_4",
     "kind": "run",
-    "file": "migrated/integer_3_1_4.k",
+    "file": "migrated/integer_3_1_4.lkjir",
     "value": "9223372036854775806"
   },
   {
     "id": "integer_3_1_5",
     "kind": "run",
-    "file": "migrated/integer_3_1_5.k",
+    "file": "migrated/integer_3_1_5.lkjir",
     "value": "-9223372036854775807"
   },
   {
     "id": "integer_3_1_6",
     "kind": "run",
-    "file": "migrated/integer_3_1_6.k",
+    "file": "migrated/integer_3_1_6.lkjir",
     "value": "0"
   },
   {
     "id": "integer_3_1_7",
     "kind": "trap",
-    "file": "migrated/integer_3_1_7.k",
+    "file": "migrated/integer_3_1_7.lkjir",
     "code": "R0001"
   },
   {
     "id": "integer_3_1_8",
     "kind": "run",
-    "file": "migrated/integer_3_1_8.k",
+    "file": "migrated/integer_3_1_8.lkjir",
     "value": "4611686018427387900"
   },
   {
     "id": "integer_3_1_9",
     "kind": "run",
-    "file": "migrated/integer_3_1_9.k",
+    "file": "migrated/integer_3_1_9.lkjir",
     "value": "2147483645"
   },
   {
     "id": "integer_3_1_10",
     "kind": "run",
-    "file": "migrated/integer_3_1_10.k",
+    "file": "migrated/integer_3_1_10.lkjir",
     "value": "-2147483647"
   },
   {
     "id": "integer_3_1_11",
     "kind": "run",
-    "file": "migrated/integer_3_1_11.k",
+    "file": "migrated/integer_3_1_11.lkjir",
     "value": "0"
   },
   {
     "id": "integer_3_1_12",
     "kind": "run",
-    "file": "migrated/integer_3_1_12.k",
+    "file": "migrated/integer_3_1_12.lkjir",
     "value": "-3"
   },
   {
     "id": "integer_3_2_0",
     "kind": "run",
-    "file": "migrated/integer_3_2_0.k",
+    "file": "migrated/integer_3_2_0.lkjir",
     "value": "0"
   },
   {
     "id": "integer_3_2_1",
     "kind": "run",
-    "file": "migrated/integer_3_2_1.k",
+    "file": "migrated/integer_3_2_1.lkjir",
     "value": "0"
   },
   {
     "id": "integer_3_2_2",
     "kind": "run",
-    "file": "migrated/integer_3_2_2.k",
+    "file": "migrated/integer_3_2_2.lkjir",
     "value": "0"
   },
   {
     "id": "integer_3_2_3",
     "kind": "run",
-    "file": "migrated/integer_3_2_3.k",
+    "file": "migrated/integer_3_2_3.lkjir",
     "value": "-1"
   },
   {
     "id": "integer_3_2_4",
     "kind": "run",
-    "file": "migrated/integer_3_2_4.k",
+    "file": "migrated/integer_3_2_4.lkjir",
     "value": "9223372036854775807"
   },
   {
     "id": "integer_3_2_5",
     "kind": "trap",
-    "file": "migrated/integer_3_2_5.k",
+    "file": "migrated/integer_3_2_5.lkjir",
     "code": "R0001"
   },
   {
     "id": "integer_3_2_6",
     "kind": "run",
-    "file": "migrated/integer_3_2_6.k",
+    "file": "migrated/integer_3_2_6.lkjir",
     "value": "1"
   },
   {
     "id": "integer_3_2_7",
     "kind": "trap",
-    "file": "migrated/integer_3_2_7.k",
+    "file": "migrated/integer_3_2_7.lkjir",
     "code": "R0001"
   },
   {
     "id": "integer_3_2_8",
     "kind": "trap",
-    "file": "migrated/integer_3_2_8.k",
+    "file": "migrated/integer_3_2_8.lkjir",
     "code": "R0001"
   },
   {
     "id": "integer_3_2_9",
     "kind": "run",
-    "file": "migrated/integer_3_2_9.k",
+    "file": "migrated/integer_3_2_9.lkjir",
     "value": "4294967294"
   },
   {
     "id": "integer_3_2_10",
     "kind": "run",
-    "file": "migrated/integer_3_2_10.k",
+    "file": "migrated/integer_3_2_10.lkjir",
     "value": "2147483648"
   },
   {
     "id": "integer_3_2_11",
     "kind": "run",
-    "file": "migrated/integer_3_2_11.k",
+    "file": "migrated/integer_3_2_11.lkjir",
     "value": "65025"
   },
   {
     "id": "integer_3_2_12",
     "kind": "run",
-    "file": "migrated/integer_3_2_12.k",
+    "file": "migrated/integer_3_2_12.lkjir",
     "value": "-2"
   },
   {
     "id": "integer_3_3_0",
     "kind": "trap",
-    "file": "migrated/integer_3_3_0.k",
+    "file": "migrated/integer_3_3_0.lkjir",
     "code": "R0002"
   },
   {
     "id": "integer_3_3_1",
     "kind": "trap",
-    "file": "migrated/integer_3_3_1.k",
+    "file": "migrated/integer_3_3_1.lkjir",
     "code": "R0002"
   },
   {
     "id": "integer_3_3_2",
     "kind": "run",
-    "file": "migrated/integer_3_3_2.k",
+    "file": "migrated/integer_3_3_2.lkjir",
     "value": "0"
   },
   {
     "id": "integer_3_3_3",
     "kind": "run",
-    "file": "migrated/integer_3_3_3.k",
+    "file": "migrated/integer_3_3_3.lkjir",
     "value": "-1"
   },
   {
     "id": "integer_3_3_4",
     "kind": "run",
-    "file": "migrated/integer_3_3_4.k",
+    "file": "migrated/integer_3_3_4.lkjir",
     "value": "9223372036854775807"
   },
   {
     "id": "integer_3_3_5",
     "kind": "trap",
-    "file": "migrated/integer_3_3_5.k",
+    "file": "migrated/integer_3_3_5.lkjir",
     "code": "R0001"
   },
   {
     "id": "integer_3_3_6",
     "kind": "run",
-    "file": "migrated/integer_3_3_6.k",
+    "file": "migrated/integer_3_3_6.lkjir",
     "value": "1"
   },
   {
     "id": "integer_3_3_7",
     "kind": "run",
-    "file": "migrated/integer_3_3_7.k",
+    "file": "migrated/integer_3_3_7.lkjir",
     "value": "-4611686018427387904"
   },
   {
     "id": "integer_3_3_8",
     "kind": "run",
-    "file": "migrated/integer_3_3_8.k",
+    "file": "migrated/integer_3_3_8.lkjir",
     "value": "1152921504606846976"
   },
   {
     "id": "integer_3_3_9",
     "kind": "run",
-    "file": "migrated/integer_3_3_9.k",
+    "file": "migrated/integer_3_3_9.lkjir",
     "value": "1073741823"
   },
   {
     "id": "integer_3_3_10",
     "kind": "run",
-    "file": "migrated/integer_3_3_10.k",
+    "file": "migrated/integer_3_3_10.lkjir",
     "value": "2147483648"
   },
   {
     "id": "integer_3_3_11",
     "kind": "run",
-    "file": "migrated/integer_3_3_11.k",
+    "file": "migrated/integer_3_3_11.lkjir",
     "value": "1"
   },
   {
     "id": "integer_3_3_12",
     "kind": "run",
-    "file": "migrated/integer_3_3_12.k",
+    "file": "migrated/integer_3_3_12.lkjir",
     "value": "0"
   },
   {
     "id": "integer_3_4_0",
     "kind": "trap",
-    "file": "migrated/integer_3_4_0.k",
+    "file": "migrated/integer_3_4_0.lkjir",
     "code": "R0002"
   },
   {
     "id": "integer_3_4_1",
     "kind": "trap",
-    "file": "migrated/integer_3_4_1.k",
+    "file": "migrated/integer_3_4_1.lkjir",
     "code": "R0002"
   },
   {
     "id": "integer_3_4_2",
     "kind": "run",
-    "file": "migrated/integer_3_4_2.k",
+    "file": "migrated/integer_3_4_2.lkjir",
     "value": "0"
   },
   {
     "id": "integer_3_4_3",
     "kind": "run",
-    "file": "migrated/integer_3_4_3.k",
+    "file": "migrated/integer_3_4_3.lkjir",
     "value": "0"
   },
   {
     "id": "integer_3_4_4",
     "kind": "run",
-    "file": "migrated/integer_3_4_4.k",
+    "file": "migrated/integer_3_4_4.lkjir",
     "value": "0"
   },
   {
     "id": "integer_3_4_5",
     "kind": "trap",
-    "file": "migrated/integer_3_4_5.k",
+    "file": "migrated/integer_3_4_5.lkjir",
     "code": "R0001"
   },
   {
     "id": "integer_3_4_6",
     "kind": "run",
-    "file": "migrated/integer_3_4_6.k",
+    "file": "migrated/integer_3_4_6.lkjir",
     "value": "0"
   },
   {
     "id": "integer_3_4_7",
     "kind": "run",
-    "file": "migrated/integer_3_4_7.k",
+    "file": "migrated/integer_3_4_7.lkjir",
     "value": "0"
   },
   {
     "id": "integer_3_4_8",
     "kind": "run",
-    "file": "migrated/integer_3_4_8.k",
+    "file": "migrated/integer_3_4_8.lkjir",
     "value": "0"
   },
   {
     "id": "integer_3_4_9",
     "kind": "run",
-    "file": "migrated/integer_3_4_9.k",
+    "file": "migrated/integer_3_4_9.lkjir",
     "value": "1"
   },
   {
     "id": "integer_3_4_10",
     "kind": "run",
-    "file": "migrated/integer_3_4_10.k",
+    "file": "migrated/integer_3_4_10.lkjir",
     "value": "0"
   },
   {
     "id": "integer_3_4_11",
     "kind": "run",
-    "file": "migrated/integer_3_4_11.k",
+    "file": "migrated/integer_3_4_11.lkjir",
     "value": "0"
   },
   {
     "id": "integer_3_4_12",
     "kind": "run",
-    "file": "migrated/integer_3_4_12.k",
+    "file": "migrated/integer_3_4_12.lkjir",
     "value": "-1"
   },
   {
     "id": "integer_4_0_0",
     "kind": "run",
-    "file": "migrated/integer_4_0_0.k",
+    "file": "migrated/integer_4_0_0.lkjir",
     "value": "0"
   },
   {
     "id": "integer_4_0_1",
     "kind": "run",
-    "file": "migrated/integer_4_0_1.k",
+    "file": "migrated/integer_4_0_1.lkjir",
     "value": "1"
   },
   {
     "id": "integer_4_0_2",
     "kind": "run",
-    "file": "migrated/integer_4_0_2.k",
+    "file": "migrated/integer_4_0_2.lkjir",
     "value": "1"
   },
   {
     "id": "integer_4_0_3",
     "kind": "trap",
-    "file": "migrated/integer_4_0_3.k",
+    "file": "migrated/integer_4_0_3.lkjir",
     "code": "R0001"
   },
   {
     "id": "integer_4_0_4",
     "kind": "run",
-    "file": "migrated/integer_4_0_4.k",
+    "file": "migrated/integer_4_0_4.lkjir",
     "value": "9223372036854775808"
   },
   {
     "id": "integer_4_0_5",
     "kind": "trap",
-    "file": "migrated/integer_4_0_5.k",
+    "file": "migrated/integer_4_0_5.lkjir",
     "code": "R0001"
   },
   {
     "id": "integer_4_0_6",
     "kind": "trap",
-    "file": "migrated/integer_4_0_6.k",
+    "file": "migrated/integer_4_0_6.lkjir",
     "code": "R0001"
   },
   {
     "id": "integer_4_0_7",
     "kind": "run",
-    "file": "migrated/integer_4_0_7.k",
+    "file": "migrated/integer_4_0_7.lkjir",
     "value": "9223372036854775810"
   },
   {
     "id": "integer_4_0_8",
     "kind": "run",
-    "file": "migrated/integer_4_0_8.k",
+    "file": "migrated/integer_4_0_8.lkjir",
     "value": "4611686018427387908"
   },
   {
     "id": "integer_4_0_9",
     "kind": "run",
-    "file": "migrated/integer_4_0_9.k",
+    "file": "migrated/integer_4_0_9.lkjir",
     "value": "2147483649"
   },
   {
     "id": "integer_4_0_10",
     "kind": "trap",
-    "file": "migrated/integer_4_0_10.k",
+    "file": "migrated/integer_4_0_10.lkjir",
     "code": "R0001"
   },
   {
     "id": "integer_4_0_11",
     "kind": "run",
-    "file": "migrated/integer_4_0_11.k",
+    "file": "migrated/integer_4_0_11.lkjir",
     "value": "510"
   },
   {
     "id": "integer_4_0_12",
     "kind": "trap",
-    "file": "migrated/integer_4_0_12.k",
+    "file": "migrated/integer_4_0_12.lkjir",
     "code": "R0001"
   },
   {
     "id": "integer_4_1_0",
     "kind": "run",
-    "file": "migrated/integer_4_1_0.k",
+    "file": "migrated/integer_4_1_0.lkjir",
     "value": "0"
   },
   {
     "id": "integer_4_1_1",
     "kind": "run",
-    "file": "migrated/integer_4_1_1.k",
+    "file": "migrated/integer_4_1_1.lkjir",
     "value": "1"
   },
   {
     "id": "integer_4_1_2",
     "kind": "trap",
-    "file": "migrated/integer_4_1_2.k",
+    "file": "migrated/integer_4_1_2.lkjir",
     "code": "R0001"
   },
   {
     "id": "integer_4_1_3",
     "kind": "run",
-    "file": "migrated/integer_4_1_3.k",
+    "file": "migrated/integer_4_1_3.lkjir",
     "value": "18446744073709551614"
   },
   {
     "id": "integer_4_1_4",
     "kind": "run",
-    "file": "migrated/integer_4_1_4.k",
+    "file": "migrated/integer_4_1_4.lkjir",
     "value": "9223372036854775806"
   },
   {
     "id": "integer_4_1_5",
     "kind": "trap",
-    "file": "migrated/integer_4_1_5.k",
+    "file": "migrated/integer_4_1_5.lkjir",
     "code": "R0001"
   },
   {
     "id": "integer_4_1_6",
     "kind": "run",
-    "file": "migrated/integer_4_1_6.k",
+    "file": "migrated/integer_4_1_6.lkjir",
     "value": "0"
   },
   {
     "id": "integer_4_1_7",
     "kind": "run",
-    "file": "migrated/integer_4_1_7.k",
+    "file": "migrated/integer_4_1_7.lkjir",
     "value": "9223372036854775806"
   },
   {
     "id": "integer_4_1_8",
     "kind": "run",
-    "file": "migrated/integer_4_1_8.k",
+    "file": "migrated/integer_4_1_8.lkjir",
     "value": "4611686018427387900"
   },
   {
     "id": "integer_4_1_9",
     "kind": "run",
-    "file": "migrated/integer_4_1_9.k",
+    "file": "migrated/integer_4_1_9.lkjir",
     "value": "2147483645"
   },
   {
     "id": "integer_4_1_10",
     "kind": "trap",
-    "file": "migrated/integer_4_1_10.k",
+    "file": "migrated/integer_4_1_10.lkjir",
     "code": "R0001"
   },
   {
     "id": "integer_4_1_11",
     "kind": "run",
-    "file": "migrated/integer_4_1_11.k",
+    "file": "migrated/integer_4_1_11.lkjir",
     "value": "0"
   },
   {
     "id": "integer_4_1_12",
     "kind": "run",
-    "file": "migrated/integer_4_1_12.k",
+    "file": "migrated/integer_4_1_12.lkjir",
     "value": "18446744073709551613"
   },
   {
     "id": "integer_4_2_0",
     "kind": "run",
-    "file": "migrated/integer_4_2_0.k",
+    "file": "migrated/integer_4_2_0.lkjir",
     "value": "0"
   },
   {
     "id": "integer_4_2_1",
     "kind": "run",
-    "file": "migrated/integer_4_2_1.k",
+    "file": "migrated/integer_4_2_1.lkjir",
     "value": "0"
   },
   {
     "id": "integer_4_2_2",
     "kind": "run",
-    "file": "migrated/integer_4_2_2.k",
+    "file": "migrated/integer_4_2_2.lkjir",
     "value": "0"
   },
   {
     "id": "integer_4_2_3",
     "kind": "run",
-    "file": "migrated/integer_4_2_3.k",
+    "file": "migrated/integer_4_2_3.lkjir",
     "value": "18446744073709551615"
   },
   {
     "id": "integer_4_2_4",
     "kind": "run",
-    "file": "migrated/integer_4_2_4.k",
+    "file": "migrated/integer_4_2_4.lkjir",
     "value": "9223372036854775807"
   },
   {
     "id": "integer_4_2_5",
     "kind": "trap",
-    "file": "migrated/integer_4_2_5.k",
+    "file": "migrated/integer_4_2_5.lkjir",
     "code": "R0001"
   },
   {
     "id": "integer_4_2_6",
     "kind": "trap",
-    "file": "migrated/integer_4_2_6.k",
+    "file": "migrated/integer_4_2_6.lkjir",
     "code": "R0001"
   },
   {
     "id": "integer_4_2_7",
     "kind": "trap",
-    "file": "migrated/integer_4_2_7.k",
+    "file": "migrated/integer_4_2_7.lkjir",
     "code": "R0001"
   },
   {
     "id": "integer_4_2_8",
     "kind": "trap",
-    "file": "migrated/integer_4_2_8.k",
+    "file": "migrated/integer_4_2_8.lkjir",
     "code": "R0001"
   },
   {
     "id": "integer_4_2_9",
     "kind": "run",
-    "file": "migrated/integer_4_2_9.k",
+    "file": "migrated/integer_4_2_9.lkjir",
     "value": "4294967294"
   },
   {
     "id": "integer_4_2_10",
     "kind": "trap",
-    "file": "migrated/integer_4_2_10.k",
+    "file": "migrated/integer_4_2_10.lkjir",
     "code": "R0001"
   },
   {
     "id": "integer_4_2_11",
     "kind": "run",
-    "file": "migrated/integer_4_2_11.k",
+    "file": "migrated/integer_4_2_11.lkjir",
     "value": "65025"
   },
   {
     "id": "integer_4_2_12",
     "kind": "trap",
-    "file": "migrated/integer_4_2_12.k",
+    "file": "migrated/integer_4_2_12.lkjir",
     "code": "R0001"
   },
   {
     "id": "integer_4_3_0",
     "kind": "trap",
-    "file": "migrated/integer_4_3_0.k",
+    "file": "migrated/integer_4_3_0.lkjir",
     "code": "R0002"
   },
   {
     "id": "integer_4_3_1",
     "kind": "trap",
-    "file": "migrated/integer_4_3_1.k",
+    "file": "migrated/integer_4_3_1.lkjir",
     "code": "R0002"
   },
   {
     "id": "integer_4_3_2",
     "kind": "run",
-    "file": "migrated/integer_4_3_2.k",
+    "file": "migrated/integer_4_3_2.lkjir",
     "value": "0"
   },
   {
     "id": "integer_4_3_3",
     "kind": "run",
-    "file": "migrated/integer_4_3_3.k",
+    "file": "migrated/integer_4_3_3.lkjir",
     "value": "18446744073709551615"
   },
   {
     "id": "integer_4_3_4",
     "kind": "run",
-    "file": "migrated/integer_4_3_4.k",
+    "file": "migrated/integer_4_3_4.lkjir",
     "value": "9223372036854775807"
   },
   {
     "id": "integer_4_3_5",
     "kind": "run",
-    "file": "migrated/integer_4_3_5.k",
+    "file": "migrated/integer_4_3_5.lkjir",
     "value": "0"
   },
   {
     "id": "integer_4_3_6",
     "kind": "run",
-    "file": "migrated/integer_4_3_6.k",
+    "file": "migrated/integer_4_3_6.lkjir",
     "value": "1"
   },
   {
     "id": "integer_4_3_7",
     "kind": "run",
-    "file": "migrated/integer_4_3_7.k",
+    "file": "migrated/integer_4_3_7.lkjir",
     "value": "4611686018427387904"
   },
   {
     "id": "integer_4_3_8",
     "kind": "run",
-    "file": "migrated/integer_4_3_8.k",
+    "file": "migrated/integer_4_3_8.lkjir",
     "value": "1152921504606846976"
   },
   {
     "id": "integer_4_3_9",
     "kind": "run",
-    "file": "migrated/integer_4_3_9.k",
+    "file": "migrated/integer_4_3_9.lkjir",
     "value": "1073741823"
   },
   {
     "id": "integer_4_3_10",
     "kind": "run",
-    "file": "migrated/integer_4_3_10.k",
+    "file": "migrated/integer_4_3_10.lkjir",
     "value": "0"
   },
   {
     "id": "integer_4_3_11",
     "kind": "run",
-    "file": "migrated/integer_4_3_11.k",
+    "file": "migrated/integer_4_3_11.lkjir",
     "value": "1"
   },
   {
     "id": "integer_4_3_12",
     "kind": "run",
-    "file": "migrated/integer_4_3_12.k",
+    "file": "migrated/integer_4_3_12.lkjir",
     "value": "9223372036854775807"
   },
   {
     "id": "integer_4_4_0",
     "kind": "trap",
-    "file": "migrated/integer_4_4_0.k",
+    "file": "migrated/integer_4_4_0.lkjir",
     "code": "R0002"
   },
   {
     "id": "integer_4_4_1",
     "kind": "trap",
-    "file": "migrated/integer_4_4_1.k",
+    "file": "migrated/integer_4_4_1.lkjir",
     "code": "R0002"
   },
   {
     "id": "integer_4_4_2",
     "kind": "run",
-    "file": "migrated/integer_4_4_2.k",
+    "file": "migrated/integer_4_4_2.lkjir",
     "value": "0"
   },
   {
     "id": "integer_4_4_3",
     "kind": "run",
-    "file": "migrated/integer_4_4_3.k",
+    "file": "migrated/integer_4_4_3.lkjir",
     "value": "0"
   },
   {
     "id": "integer_4_4_4",
     "kind": "run",
-    "file": "migrated/integer_4_4_4.k",
+    "file": "migrated/integer_4_4_4.lkjir",
     "value": "0"
   },
   {
     "id": "integer_4_4_5",
     "kind": "run",
-    "file": "migrated/integer_4_4_5.k",
+    "file": "migrated/integer_4_4_5.lkjir",
     "value": "9223372036854775808"
   },
   {
     "id": "integer_4_4_6",
     "kind": "run",
-    "file": "migrated/integer_4_4_6.k",
+    "file": "migrated/integer_4_4_6.lkjir",
     "value": "0"
   },
   {
     "id": "integer_4_4_7",
     "kind": "run",
-    "file": "migrated/integer_4_4_7.k",
+    "file": "migrated/integer_4_4_7.lkjir",
     "value": "0"
   },
   {
     "id": "integer_4_4_8",
     "kind": "run",
-    "file": "migrated/integer_4_4_8.k",
+    "file": "migrated/integer_4_4_8.lkjir",
     "value": "0"
   },
   {
     "id": "integer_4_4_9",
     "kind": "run",
-    "file": "migrated/integer_4_4_9.k",
+    "file": "migrated/integer_4_4_9.lkjir",
     "value": "1"
   },
   {
     "id": "integer_4_4_10",
     "kind": "run",
-    "file": "migrated/integer_4_4_10.k",
+    "file": "migrated/integer_4_4_10.lkjir",
     "value": "18446744071562067968"
   },
   {
     "id": "integer_4_4_11",
     "kind": "run",
-    "file": "migrated/integer_4_4_11.k",
+    "file": "migrated/integer_4_4_11.lkjir",
     "value": "0"
   },
   {
     "id": "integer_4_4_12",
     "kind": "run",
-    "file": "migrated/integer_4_4_12.k",
+    "file": "migrated/integer_4_4_12.lkjir",
     "value": "1"
   },
   {
     "id": "backend_nan_negation",
     "kind": "run",
-    "file": "migrated/backend_nan_negation.k",
+    "file": "migrated/backend_nan_negation.lkjir",
     "value": "NaN"
   },
   {
     "id": "backend_u8_complement",
     "kind": "run",
-    "file": "migrated/backend_u8_complement.k",
+    "file": "migrated/backend_u8_complement.lkjir",
     "value": "127"
   },
   {
     "id": "backend_infinity_i32",
     "kind": "run",
-    "file": "migrated/backend_infinity_i32.k",
+    "file": "migrated/backend_infinity_i32.lkjir",
     "value": "2147483647"
   },
   {
     "id": "backend_negative_float_u8",
     "kind": "run",
-    "file": "migrated/backend_negative_float_u8.k",
+    "file": "migrated/backend_negative_float_u8.lkjir",
     "value": "0"
   },
   {
     "id": "backend_negative_infinity_i64",
     "kind": "run",
-    "file": "migrated/backend_negative_infinity_i64.k",
+    "file": "migrated/backend_negative_infinity_i64.lkjir",
     "value": "-9223372036854775808"
   },
   {
     "id": "backend_nan_i64",
     "kind": "run",
-    "file": "migrated/backend_nan_i64.k",
+    "file": "migrated/backend_nan_i64.lkjir",
     "value": "0"
   },
   {
     "id": "backend_export_0",
     "kind": "run",
-    "file": "migrated/backend_export_0.k",
+    "file": "migrated/backend_export_0.lkjir",
     "value": "41",
     "entry": "memory"
   },
   {
     "id": "backend_export_1",
     "kind": "run",
-    "file": "migrated/backend_export_1.k",
+    "file": "migrated/backend_export_1.lkjir",
     "value": "42",
     "entry": "fn:memory"
   },
@@ -6328,13 +6328,13 @@
   {
     "id": "byte_constant_wrong_extent",
     "kind": "reject",
-    "file": "k/byte_constant_wrong_extent.k",
+    "file": "ir/byte_constant_wrong_extent.lkjir",
     "code": "E_TYPE"
   },
   {
     "id": "byte_constant_mutable",
     "kind": "reject",
-    "file": "k/byte_constant_mutable.k",
+    "file": "ir/byte_constant_mutable.lkjir",
     "code": "E_TYPE"
   },
   {
@@ -6366,28 +6366,28 @@
   },
   {
     "id": "forged_stdin",
-    "file": "k/forged_stdin.k",
+    "file": "ir/forged_stdin.lkjir",
     "kind": "reject",
     "code": "E_TYPE",
     "rust": false
   },
   {
     "id": "forged_stderr",
-    "file": "k/forged_stderr.k",
+    "file": "ir/forged_stderr.lkjir",
     "kind": "reject",
     "code": "E_TYPE",
     "rust": false
   },
   {
     "id": "forged_directory",
-    "file": "k/forged_directory.k",
+    "file": "ir/forged_directory.lkjir",
     "kind": "reject",
     "code": "E_TYPE",
     "rust": false
   },
   {
     "id": "forged_file",
-    "file": "k/forged_file.k",
+    "file": "ir/forged_file.lkjir",
     "kind": "reject",
     "code": "E_TYPE",
     "rust": false
@@ -6460,7 +6460,7 @@
     "file": "output/stderr_status_marker.rs",
     "kind": "output",
     "hex": "",
-    "stderrHex": "4c4b4a5f525553545f545241502052303030350a",
+    "stderrHex": "4c4b4a5343524950545f525553545f545241502052303030350a",
     "status": 101,
     "ending": "normal",
     "rust": true
@@ -6533,16 +6533,16 @@
     "rust": true
   },
   {
-    "id": "kc_map_err_input_coercion",
-    "file": "pass/kc_map_err_input_coercion.rs",
+    "id": "map_err_input_coercion",
+    "file": "pass/map_err_input_coercion.rs",
     "kind": "run",
     "value": "42",
     "pending": false,
     "rust": true
   },
   {
-    "id": "kc_map_err_wrong_input",
-    "file": "fail/kc_map_err_wrong_input.rs",
+    "id": "map_err_wrong_input",
+    "file": "fail/map_err_wrong_input.rs",
     "kind": "reject",
     "code": "E_TYPE",
     "pending": false,
@@ -6551,32 +6551,32 @@
     "rustCode": "E0631"
   },
   {
-    "id": "kc_slice_helpers",
-    "file": "pass/kc_slice_helpers.rs",
+    "id": "slice_helpers",
+    "file": "pass/slice_helpers.rs",
     "kind": "run",
     "value": "42",
     "rust": true,
     "pending": false
   },
   {
-    "id": "kc_iterator_search",
-    "file": "pass/kc_iterator_search.rs",
+    "id": "iterator_search",
+    "file": "pass/iterator_search.rs",
     "kind": "run",
     "value": "42",
     "rust": true,
     "pending": false
   },
   {
-    "id": "kc_text_views",
-    "file": "pass/kc_text_views.rs",
+    "id": "text_views",
+    "file": "pass/text_views.rs",
     "kind": "run",
     "value": "42",
     "rust": true,
     "pending": false
   },
   {
-    "id": "kc_integer_parse",
-    "file": "pass/kc_integer_parse.rs",
+    "id": "integer_parse",
+    "file": "pass/integer_parse.rs",
     "kind": "run",
     "value": "42",
     "rust": true,
@@ -6599,8 +6599,8 @@
     "pending": false
   },
   {
-    "id": "kc_slice_copy_mismatch",
-    "file": "pass/kc_slice_copy_mismatch.rs",
+    "id": "slice_copy_mismatch",
+    "file": "pass/slice_copy_mismatch.rs",
     "kind": "trap",
     "entry": "probe",
     "code": "R0005",
@@ -6616,8 +6616,8 @@
     "pending": false
   },
   {
-    "id": "kc_slice_split",
-    "file": "pass/kc_slice_split.rs",
+    "id": "slice_split",
+    "file": "pass/slice_split.rs",
     "kind": "run",
     "value": "42",
     "rust": true,

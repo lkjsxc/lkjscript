@@ -1,8 +1,8 @@
 #[path = "../bridge/library.rs"]
 mod bootstrap_library;
-use lkjscript::{check, compiler, k, machine, source};
+use lkjscript::{check, compiler, interpreter, ir, source};
 
-fn program() -> k::Program {
+fn program() -> ir::Program {
     let mut files = bootstrap_library::standard_library();
     files.push(source::SourceInput {
         path: "unicode.rs".to_string(),
@@ -19,7 +19,7 @@ fn program() -> k::Program {
 }
 
 #[test]
-fn character_construction_checks_its_signature_on_both_k_boundaries() {
+fn character_construction_checks_its_signature_on_both_ir_boundaries() {
     let original = program();
     let entry = original
         .functions
@@ -29,30 +29,30 @@ fn character_construction_checks_its_signature_on_both_k_boundaries() {
     let instruction = original.functions[entry]
         .body
         .iter()
-        .position(|i| matches!(&i.op, k::Op::Intrinsic {name,..} if name == "char_from_u32"))
+        .position(|i| matches!(&i.op, ir::Op::Intrinsic {name,..} if name == "char_from_u32"))
         .unwrap();
     let (destination, argument) = match &original.functions[entry].body[instruction].op {
-        k::Op::Intrinsic { dst, args, .. } => (*dst, args[0]),
+        ir::Op::Intrinsic { dst, args, .. } => (*dst, args[0]),
         _ => unreachable!(),
     };
     let option = original.functions[entry].locals[destination].ty;
     for mutation in 0..8 {
         let mut forged = original.clone();
         match mutation {
-            0 => forged.functions[entry].locals[argument].ty = k::I32,
-            1 => forged.functions[entry].locals[destination].ty = k::U64,
+            0 => forged.functions[entry].locals[argument].ty = ir::I32,
+            1 => forged.functions[entry].locals[destination].ty = ir::U64,
             2..=5 => {
-                let k::TypeKind::Enum { variants, .. } = &mut forged.types[option].kind else {
+                let ir::TypeKind::Enum { variants, .. } = &mut forged.types[option].kind else {
                     panic!("Option shape");
                 };
                 match mutation {
                     2 => variants.swap(0, 1),
-                    3 => variants[1].fields[0].ty = k::U64,
-                    4 => variants[0].fields.push(k::Field {
+                    3 => variants[1].fields[0].ty = ir::U64,
+                    4 => variants[0].fields.push(ir::Field {
                         name: "payload".to_string(),
-                        ty: k::U64,
+                        ty: ir::U64,
                     }),
-                    5 => variants.push(k::Variant {
+                    5 => variants.push(ir::Variant {
                         name: "Extra".to_string(),
                         fields: vec![],
                     }),
@@ -60,7 +60,7 @@ fn character_construction_checks_its_signature_on_both_k_boundaries() {
                 }
             }
             6 | 7 => {
-                let k::Op::Intrinsic { args, .. } =
+                let ir::Op::Intrinsic { args, .. } =
                     &mut forged.functions[entry].body[instruction].op
                 else {
                     unreachable!()
@@ -77,17 +77,17 @@ fn character_construction_checks_its_signature_on_both_k_boundaries() {
             check::check(forged.clone()).is_err(),
             "checker accepted signature mutation {mutation}"
         );
-        let error = machine::run(
+        let error = interpreter::run(
             &forged,
             entry,
             &[],
             &mut Vec::new(),
-            machine::Resources::unlimited(),
+            interpreter::Resources::unlimited(),
         )
         .err()
         .expect("model accepted malformed construction");
         assert!(
-            matches!(error.kind, machine::ErrorKind::Machine(_)),
+            matches!(error.kind, interpreter::ErrorKind::Interpreter(_)),
             "signature mutation {mutation}: {}",
             error.message
         );

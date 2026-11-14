@@ -1,7 +1,7 @@
-//! The single gate for explicit K. Each structured edge has an ownership state.
+//! The single gate for explicit IR. Each structured edge has an ownership state.
 use crate::diagnostic::{Diagnostic, Span};
 use crate::facts::Facts;
-use crate::k::*;
+use crate::ir::*;
 use std::collections::{BTreeMap, BTreeSet};
 
 mod io;
@@ -239,18 +239,18 @@ struct Loans {
 }
 // The compiler needs default map slots, not an Entry sum type. Keep the stored
 // relation owned and make each lookup explicit in the source subset.
-fn get_or_default<'a, K: Ord + Clone, V: Default>(
-    map: &'a mut BTreeMap<K, V>,
-    key: K,
+fn get_or_default<'a, Key: Ord + Clone, V: Default>(
+    map: &'a mut BTreeMap<Key, V>,
+    key: Key,
 ) -> &'a mut V {
     if !map.contains_key(&key) {
         map.insert(key.clone(), V::default());
     }
     map.get_mut(&key).expect("inserted map entry")
 }
-fn get_or_insert<'a, K: Ord + Clone, V>(
-    map: &'a mut BTreeMap<K, V>,
-    key: K,
+fn get_or_insert<'a, Key: Ord + Clone, V>(
+    map: &'a mut BTreeMap<Key, V>,
+    key: Key,
     value: V,
 ) -> &'a mut V {
     if !map.contains_key(&key) {
@@ -258,7 +258,7 @@ fn get_or_insert<'a, K: Ord + Clone, V>(
     }
     map.get_mut(&key).expect("inserted map entry")
 }
-fn remove_index<K: Ord>(map: &mut BTreeMap<K, BTreeSet<Place>>, key: &K, place: &Place) {
+fn remove_index<Key: Ord>(map: &mut BTreeMap<Key, BTreeSet<Place>>, key: &Key, place: &Place) {
     let empty = if let Some(entries) = map.get_mut(key) {
         entries.remove(place);
         entries.is_empty()
@@ -1083,7 +1083,7 @@ fn storage_place(target: &Origin, fallback: &Place) -> Place {
         Root::Parameter(_) | Root::Static => fallback.clone(),
     }
 }
-/// K does not yet declare cross-parameter write effects. A write into external
+/// IR does not yet declare cross-parameter write effects. A write into external
 /// view storage may clear leaves or retain their exact existing origins, but
 /// cannot silently change the caller's lifetime/projection contract.
 fn check_external_write(
@@ -1504,7 +1504,7 @@ fn forget(state: &mut State, local: usize) {
 }
 fn put(state: &mut State, local: usize, line: usize) -> Result<(), Diagnostic> {
     if state.maybe_live.at(local) {
-        return Err(error(line, "E_K", "destination may still own a value"));
+        return Err(error(line, "E_IR", "destination may still own a value"));
     }
     state.live.set(local, true);
     state.maybe_live.set(local, true);
@@ -1647,7 +1647,7 @@ fn local_type(function: &Function, local: usize, line: usize) -> Result<usize, D
         .locals
         .get(local)
         .map(|l| l.ty)
-        .ok_or_else(|| error(line, "E_K", "local index is not declared"))
+        .ok_or_else(|| error(line, "E_IR", "local index is not declared"))
 }
 fn enum_place(types: &[Type], function: &Function, mut place: Place) -> Place {
     if matches!(
@@ -2170,7 +2170,7 @@ fn check_shape(
             let target = program
                 .functions
                 .get(*called)
-                .ok_or_else(|| error(line, "E_K", "call target is not declared"))?;
+                .ok_or_else(|| error(line, "E_IR", "call target is not declared"))?;
             if target.params != args.len() || target.result != ty(*dst)? {
                 return Err(error(line, "E_TYPE", "call signature differs"));
             }
@@ -2481,9 +2481,9 @@ fn check_function_body(
             Op::Else => {
                 let control = controls
                     .last_mut()
-                    .ok_or_else(|| error(line, "E_K", "else outside if"))?;
+                    .ok_or_else(|| error(line, "E_IR", "else outside if"))?;
                 if control.is_loop || control.then_state.is_some() {
-                    return Err(error(line, "E_K", "invalid else"));
+                    return Err(error(line, "E_IR", "invalid else"));
                 }
                 control.then_state = Some(std::mem::replace(&mut state, control.entry.clone()));
                 continue;
@@ -2491,7 +2491,7 @@ fn check_function_body(
             Op::End => {
                 let mut control = controls
                     .pop()
-                    .ok_or_else(|| error(line, "E_K", "end outside control"))?;
+                    .ok_or_else(|| error(line, "E_IR", "end outside control"))?;
                 if control.is_loop {
                     if state.reachable {
                         validate_merge(&control.entry, &state, types, function, line)?;
@@ -2563,7 +2563,7 @@ fn check_function_body(
                 if !found {
                     return Err(error(
                         line,
-                        "E_K",
+                        "E_IR",
                         "loop transfer target is not an enclosing loop",
                     ));
                 }
@@ -2710,7 +2710,7 @@ fn check_function_body(
                 if !absent && heap_type(&types[pt].kind) {
                     return Err(error(
                         line,
-                        "E_K",
+                        "E_IR",
                         "replacement of an owned value needs an explicit drop",
                     ));
                 }
@@ -3274,7 +3274,7 @@ fn check_function_body(
                 if state.maybe_live.any() {
                     return Err(error(
                         line,
-                        "E_K",
+                        "E_IR",
                         "return leaves a value without an explicit drop",
                     ));
                 }
@@ -3332,10 +3332,10 @@ fn check_function_body(
         }
     }
     if !controls.is_empty() {
-        return Err(error(1, "E_K", "unclosed control block"));
+        return Err(error(1, "E_IR", "unclosed control block"));
     }
     if state.reachable {
-        return Err(error(1, "E_K", "function reaches end without return"));
+        return Err(error(1, "E_IR", "function reaches end without return"));
     }
     Ok(())
 }
@@ -3449,11 +3449,11 @@ impl TypeFacts {
 fn check_types(types: &[Type]) -> Result<(), Diagnostic> {
     let expected = primitives();
     if types.len() < expected.len() {
-        return Err(error(1, "E_K", "primitive types are missing"));
+        return Err(error(1, "E_IR", "primitive types are missing"));
     }
     for i in 0..expected.len() {
         if types[i] != expected[i] {
-            return Err(error(1, "E_K", "primitive type definition differs"));
+            return Err(error(1, "E_IR", "primitive type definition differs"));
         }
     }
     for ty in types {
@@ -3461,7 +3461,7 @@ fn check_types(types: &[Type]) -> Result<(), Diagnostic> {
         match &ty.kind {
             TypeKind::Int { bits, .. } => {
                 if !matches!(*bits, 8 | 16 | 32 | 64) {
-                    return Err(error(1, "E_K", "unsupported integer representation"));
+                    return Err(error(1, "E_IR", "unsupported integer representation"));
                 }
             }
             TypeKind::Ref { inner, .. }
@@ -3472,7 +3472,7 @@ fn check_types(types: &[Type]) -> Result<(), Diagnostic> {
         }
         for child in children {
             if child >= types.len() {
-                return Err(error(1, "E_K", "unknown type reference"));
+                return Err(error(1, "E_IR", "unknown type reference"));
             }
         }
     }
@@ -3562,14 +3562,14 @@ fn check_structure(program: &Program) -> Result<(), Diagnostic> {
     let mut function_names: BTreeSet<String> = BTreeSet::new();
     for function in &program.functions {
         if !function_names.insert(function.name.clone()) {
-            return Err(error(1, "E_K", "duplicate function name"));
+            return Err(error(1, "E_IR", "duplicate function name"));
         }
         if function.params > function.locals.len() || function.result >= program.types.len() {
-            return Err(error(1, "E_K", "invalid function signature"));
+            return Err(error(1, "E_IR", "invalid function signature"));
         }
         for local in &function.locals {
             if local.ty >= program.types.len() {
-                return Err(error(1, "E_K", "unknown local type"));
+                return Err(error(1, "E_IR", "unknown local type"));
             }
             if matches!(
                 program.types[local.ty].kind,
@@ -3627,7 +3627,7 @@ fn check_structure(program: &Program) -> Result<(), Diagnostic> {
         {
             return Err(error(
                 1,
-                "E_K",
+                "E_IR",
                 "invalid or duplicate destructor declaration",
             ));
         }
@@ -3660,7 +3660,7 @@ fn check_structure(program: &Program) -> Result<(), Diagnostic> {
 
 /// Observe a fully validated function's return provenance to refine an
 /// already valid explicit leaf contract. This is inference data, never checked
-/// program authority. Emission still requires check/check_all on the final K.
+/// program authority. Emission still requires check/check_all on the final IR.
 fn observed_return_contract(
     program: &Program,
     index: usize,
@@ -3881,7 +3881,7 @@ pub fn check(program: Program) -> Result<CheckedProgram, Diagnostic> {
         problems
             .into_iter()
             .next()
-            .expect("failed K check has a diagnostic")
+            .expect("failed IR check has a diagnostic")
     })
 }
 
@@ -3935,7 +3935,7 @@ mod tests {
     }
     fn rejection(p: Program, code: &str) {
         let result = check(p);
-        assert!(result.is_err(), "malformed K was accepted");
+        assert!(result.is_err(), "malformed IR was accepted");
         assert_eq!(result.err().unwrap().code, code);
     }
     fn with_ref(mutable: bool) -> Vec<Type> {
@@ -4031,7 +4031,7 @@ mod tests {
             body: Vec::new(),
             test: false,
         });
-        rejection(p, "E_K");
+        rejection(p, "E_IR");
     }
 
     #[test]
@@ -4341,7 +4341,7 @@ mod tests {
                     Op::Return { src: 1 },
                 ],
             ),
-            "E_K",
+            "E_IR",
         );
     }
 

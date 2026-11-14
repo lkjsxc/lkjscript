@@ -6,7 +6,7 @@ import { run } from './process.mjs';
 import { runCases } from './batch.mjs';
 import { oracleCache,packResult,unpackResult } from './oracle.mjs';
 const binary=path.resolve(process.argv[2]||'target/debug/lkjscript');
-const engine=process.env.LKJ_ENGINE || 'native';
+const engine=process.env.LKJSCRIPT_ENGINE || 'native';
 const suites=process.argv.slice(3);if(!suites.length)suites.push('idioms','ownership','rejected');
 const out=path.resolve('target/corpus');fs.mkdirSync(out,{recursive:true});
 let fatal=false;
@@ -34,7 +34,7 @@ for(const suite of suites) {
   else if(reference.status===0&&actual.status===0&&reference.stdout===actual.stdout)category='equal-output-and-exit';
   else category='output-or-exit-differs';
   tally[category]=(tally[category]||0)+1;
-  if(category!=='equal-output-and-exit'&&category!=='both-rejected')details.push({file:cases[i],category,diagnostic:checked.stderr.trim(),rust:reference?.stdout,lkj:actual.stdout,execution:actual.stderr});
+  if(category!=='equal-output-and-exit'&&category!=='both-rejected')details.push({file:cases[i],category,diagnostic:checked.stderr.trim(),rust:reference?.stdout,lkjscript:actual.stdout,execution:actual.stderr});
   if(!category.startsWith('valid-but-rejected')&&category!=='equal-output-and-exit'&&category!=='both-rejected')fatal=true;
  }
  const record={suite,engine,total:cases.length,tally,details};fs.writeFileSync(path.join(out,suite+'-'+engine+'.json'),JSON.stringify(record,null,2)+'\n');console.log(JSON.stringify({suite,engine,total:cases.length,tally}));

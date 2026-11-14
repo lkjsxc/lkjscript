@@ -31,8 +31,8 @@ impl Helpers {
             })
         };
         Ok(Self {
-            into: path("__lkj_into_iter")?,
-            next: path("__lkj_next")?,
+            into: path("__lkjscript_into_iter")?,
+            next: path("__lkjscript_next")?,
             option: resolver.library_type("prelude", "Option", span)?,
         })
     }

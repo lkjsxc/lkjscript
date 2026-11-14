@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Output {
-    K,
+    IR,
     Check,
     Pack,
 }
@@ -46,7 +46,7 @@ pub fn parse(arguments: Vec<String>) -> Result<Request, String> {
     let mut directory_set = false;
     let mut library: Option<String> = None;
     let mut library_set = false;
-    let mut output = Output::K;
+    let mut output = Output::IR;
     let mut output_set = false;
     let mut at = 0usize;
     while at < arguments.len() {

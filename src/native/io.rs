@@ -1,5 +1,5 @@
 //! Linux leaves for World-derived authority. Buffer ownership and syscall result
-//! interpretation stay in K and the source library; these leaves do not allocate.
+//! interpretation stay in IR and the source library; these leaves do not allocate.
 use super::*;
 
 #[derive(Clone, Copy)]

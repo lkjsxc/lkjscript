@@ -3,11 +3,11 @@ enum Option {
 }
 struct Iterator;
 mod std {
-    pub fn __lkj_next() -> i64 {
+    pub fn __lkjscript_next() -> i64 {
         0
     }
 }
-fn __lkj_into_iter() -> i64 {
+fn __lkjscript_into_iter() -> i64 {
     0
 }
 pub fn probe() -> i64 {

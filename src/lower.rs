@@ -1,15 +1,15 @@
-//! Checked K lowers to this typed, structured instruction form before encoding.
+//! Checked IR lowers to this typed, structured instruction form before encoding.
 //! Values are bit patterns or linear-memory addresses. Loads and stores carry
 //! their width; calls name ordinary functions, including generated glue and the
-//! runtime. No instruction contains target bytecode or source/K type objects.
-use crate::k::{
-    CheckedProgram, Function as KFunction, Op, Place, Program as KProgram, Projection, TypeKind,
+//! runtime. No instruction contains target bytecode or source/IR type objects.
+use crate::ir::{
+    CheckedProgram, Function as IrFunction, Op, Place, Program as IrProgram, Projection, TypeKind,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
 mod io;
-mod ir;
-pub use ir::*;
+mod stack;
+pub use stack::*;
 
 fn host_index(value: u64, message: &str) -> Result<usize, String> {
     if value > (!0usize) as u64 {
@@ -31,7 +31,7 @@ fn aligned(value: u64, alignment: u8) -> Result<u64, String> {
         .ok_or_else(|| "layout extent exceeds the address representation".to_string())
 }
 impl Layouts {
-    fn new(program: &KProgram) -> Result<Self, String> {
+    fn new(program: &IrProgram) -> Result<Self, String> {
         let mut types = Vec::new();
         for ty in &program.types {
             let storage = match ty.kind {
@@ -90,7 +90,7 @@ impl Layouts {
         }
         Ok(result)
     }
-    fn fields(&self, fields: &[crate::k::Field], tag: bool) -> Result<AggregateLayout, String> {
+    fn fields(&self, fields: &[crate::ir::Field], tag: bool) -> Result<AggregateLayout, String> {
         let mut extent = if tag { 8 } else { 0 };
         let mut alignment = if tag { 8 } else { 1 };
         let mut offsets = Vec::new();
@@ -149,7 +149,7 @@ fn store_value(out: &mut Code, storage: Storage, offset: u64) {
         offset,
     });
 }
-// A K value may occupy multiple scalar words. These memory helpers are the
+// An IR value may occupy multiple scalar words. These memory helpers are the
 // same for locals, fields and return slots; no encoder sees a wide scalar load.
 fn load_storage(out: &mut Code, storage: Storage, offset: u64, scratch: usize) {
     if storage.words() == 1 {
@@ -188,7 +188,7 @@ struct FunctionAbi {
     result_slot: Option<usize>,
 }
 impl FunctionAbi {
-    fn new(layout: &Layouts, function: &KFunction) -> Result<Self, String> {
+    fn new(layout: &Layouts, function: &IrFunction) -> Result<Self, String> {
         let mut parameters = Vec::new();
         let mut words = 0usize;
         for local in &function.locals[..function.params] {
@@ -246,7 +246,7 @@ struct TextPool {
     data: Vec<u8>,
 }
 impl TextPool {
-    fn collect(program: &KProgram) -> Result<Self, String> {
+    fn collect(program: &IrProgram) -> Result<Self, String> {
         let mut pool = Self {
             offsets: BTreeMap::new(),
             arrays: BTreeMap::new(),
@@ -347,9 +347,9 @@ enum Control {
 }
 
 struct Body<'a> {
-    program: &'a KProgram,
+    program: &'a IrProgram,
     layout: &'a Layouts,
-    function: &'a KFunction,
+    function: &'a IrFunction,
     code: Code,
     slots: Vec<Slot>,
     drop_flags: BTreeMap<usize, usize>,
@@ -406,7 +406,7 @@ impl<'a> Body<'a> {
         self.write_value(local);
         self.initialized(local, true);
     }
-    // K consumes operands even when their old bits remain in a reusable slot.
+    // IR consumes operands even when their old bits remain in a reusable slot.
     // Conditional destruction reads compiler-owned flags, never those stale bits.
     fn consume_inputs(&mut self, op: &Op) {
         if self.drop_flags.is_empty() {
@@ -467,14 +467,14 @@ impl<'a> Body<'a> {
                 Projection::Deref => {
                     ty = match self.program.types[ty].kind {
                         TypeKind::Ref { inner, .. } | TypeKind::Box { inner } => inner,
-                        _ => unreachable!("K dereference type"),
+                        _ => unreachable!("IR dereference type"),
                     };
                 }
                 Projection::Field(field) => {
                     let offset = self.layout.payload(ty, None).fields[*field];
                     ty = match &self.program.types[ty].kind {
                         TypeKind::Struct { fields, .. } => fields[*field].ty,
-                        _ => unreachable!("K field type"),
+                        _ => unreachable!("IR field type"),
                     };
                     constant(&mut self.code, offset as i64);
                     self.code.push(Instruction::Scalar(ScalarOp::I64Add));
@@ -483,7 +483,7 @@ impl<'a> Body<'a> {
                     let offset = self.layout.payload(ty, Some(*variant)).fields[*field];
                     ty = match &self.program.types[ty].kind {
                         TypeKind::Enum { variants, .. } => variants[*variant].fields[*field].ty,
-                        _ => unreachable!("K variant field type"),
+                        _ => unreachable!("IR variant field type"),
                     };
                     constant(&mut self.code, offset as i64);
                     self.code.push(Instruction::Scalar(ScalarOp::I64Add));
@@ -494,7 +494,7 @@ impl<'a> Body<'a> {
                         TypeKind::Vec { inner }
                         | TypeKind::Slice { inner, .. }
                         | TypeKind::Array { inner, .. } => inner,
-                        _ => unreachable!("K index type"),
+                        _ => unreachable!("IR index type"),
                     };
                     if slice {
                         // An unsized place is already data,count on the stack.
@@ -656,7 +656,7 @@ impl<'a> Body<'a> {
             TypeKind::Int { bits, signed } => (bits, signed),
             TypeKind::Bool => (1, false),
             TypeKind::Char => (32, false),
-            _ => return Err("non-numeric K binary operation".to_string()),
+            _ => return Err("non-numeric IR binary operation".to_string()),
         };
         self.read(left);
         set(&mut self.code, self.scratch);
@@ -1179,7 +1179,7 @@ impl<'a> Body<'a> {
                 self.controls.push(Control::Loop);
             }
             Op::End => {
-                if self.controls.pop().expect("K control end") == Control::Loop {
+                if self.controls.pop().expect("IR control end") == Control::Loop {
                     self.code.extend_from_slice(&[
                         Instruction::Branch {
                             depth: 0,
@@ -1302,7 +1302,7 @@ impl<'a> Body<'a> {
         }
         Ok(())
     }
-    /// One checked K operation constructs the complete array. Copy aggregates
+    /// One checked IR operation constructs the complete array. Copy aggregates
     /// need independent physical storage; the original seed becomes the last item.
     fn array_repeat(&mut self, dst: usize, seed: usize) -> Result<(), String> {
         let TypeKind::Array { inner, len } = self.program.types[self.function.locals[dst].ty].kind
@@ -1835,7 +1835,7 @@ impl<'a> Body<'a> {
         Ok(())
     }
 }
-fn helper_index(program: &KProgram, runtime: usize, ty: usize, copying: bool) -> usize {
+fn helper_index(program: &IrProgram, runtime: usize, ty: usize, copying: bool) -> usize {
     (FIRST_USER + runtime) + program.functions.len() + ty * 2 + if copying { 1 } else { 0 }
 }
 fn needs_cleanup(kind: &TypeKind) -> bool {
@@ -1856,10 +1856,10 @@ fn heap_type(kind: &TypeKind) -> bool {
 // release, drop dispatch and UTF-8 validation are linked from the source runtime.
 fn copy_fields(
     b: &mut Code,
-    program: &KProgram,
+    program: &IrProgram,
     runtime: usize,
     layout: &Layouts,
-    fields: &[crate::k::Field],
+    fields: &[crate::ir::Field],
     offsets: &[u64],
 ) {
     for (field, offset) in fields.iter().zip(offsets) {
@@ -1883,7 +1883,7 @@ fn copy_fields(
 
 // The destination and source cell addresses are already on the stack. Wide
 // references copy their metadata directly; scalar owned values use their glue.
-fn copy_cell(b: &mut Code, program: &KProgram, runtime: usize, layout: &Layouts, ty: usize) {
+fn copy_cell(b: &mut Code, program: &IrProgram, runtime: usize, layout: &Layouts, ty: usize) {
     let storage = layout.storage(ty);
     if storage.words() > 1 {
         constant(b, storage.bytes as i64);
@@ -1895,7 +1895,7 @@ fn copy_cell(b: &mut Code, program: &KProgram, runtime: usize, layout: &Layouts,
     }
 }
 
-fn copy_helper(program: &KProgram, runtime: usize, layout: &Layouts, ty: usize) -> Code {
+fn copy_helper(program: &IrProgram, runtime: usize, layout: &Layouts, ty: usize) -> Code {
     let mut b = Code::words(5);
     let kind = &program.types[ty].kind;
     if layout.storage(ty).words() > 1 {
@@ -2043,7 +2043,7 @@ fn copy_helper(program: &KProgram, runtime: usize, layout: &Layouts, ty: usize) 
     b
 }
 
-fn drop_start(program: &KProgram, runtime: usize, ty: usize, close: Option<usize>) -> Code {
+fn drop_start(program: &IrProgram, runtime: usize, ty: usize, close: Option<usize>) -> Code {
     let mut b = Code::words(1);
     if matches!(program.types[ty].kind, TypeKind::File | TypeKind::Directory) {
         get(&mut b, 0);
@@ -2106,7 +2106,7 @@ fn yield_drop_child(b: &mut Code, ty: usize) {
     b.push(Instruction::End);
 }
 
-fn drop_fields(b: &mut Code, program: &KProgram, fields: &[crate::k::Field], offsets: &[u64]) {
+fn drop_fields(b: &mut Code, program: &IrProgram, fields: &[crate::ir::Field], offsets: &[u64]) {
     let mut next = 1;
     for (i, field) in fields.iter().enumerate() {
         if needs_cleanup(&program.types[field.ty].kind) {
@@ -2128,7 +2128,7 @@ fn drop_fields(b: &mut Code, program: &KProgram, fields: &[crate::k::Field], off
 }
 
 fn drop_step(
-    program: &KProgram,
+    program: &IrProgram,
     runtime: usize,
     layout: &Layouts,
     ty: usize,
@@ -2254,7 +2254,7 @@ fn drop_step(
     b
 }
 
-fn drop_step_index(program: &KProgram, runtime: usize, ty: usize) -> usize {
+fn drop_step_index(program: &IrProgram, runtime: usize, ty: usize) -> usize {
     (FIRST_USER + runtime) + program.functions.len() + program.types.len() * 2 + ty
 }
 
@@ -2299,9 +2299,9 @@ fn touch_place(ranges: &mut [(usize, usize)], place: &Place, at: usize) {
 // a loop through its back edge. Address-taken slots remain stable for the entire
 // invocation, including uses through aliases not spelled as a local access.
 fn local_layout(
-    program: &KProgram,
+    program: &IrProgram,
     representations: &Layouts,
-    function: &KFunction,
+    function: &IrFunction,
 ) -> Result<LocalLayout, String> {
     let n = function.locals.len();
     let abi = FunctionAbi::new(representations, function)?;
@@ -2543,10 +2543,10 @@ fn local_layout(
 }
 
 fn function_body(
-    program: &KProgram,
+    program: &IrProgram,
     representations: &Layouts,
     hosts: &[HostFunction],
-    function: &KFunction,
+    function: &IrFunction,
     messages: &[String],
     texts: &TextPool,
     source_lines: bool,
@@ -2635,7 +2635,7 @@ fn function_body(
     Ok(body.code)
 }
 /// Apply representation, cleanup and runtime contracts exactly once. Encoders
-/// consume the resulting functions and memory operations without consulting K.
+/// consume the resulting functions and memory operations without consulting IR.
 pub fn lower(
     checked: &CheckedProgram,
     source_runtime: &crate::runtime::Runtime,
@@ -2797,7 +2797,7 @@ pub fn lower(
 /// building another runtime. Calls retain FIRST_USER + source-function index;
 /// the runtime linker remaps those calls when appending these functions.
 /// Authority to replace primitive stubs belongs to the runtime preparer, not
-/// to an ordinary K function name or this storage-only validation.
+/// to an ordinary IR function name or this storage-only validation.
 pub fn lower_runtime_functions(checked: &CheckedProgram) -> Result<Vec<Function>, String> {
     let program = checked.program();
     let layout = Layouts::new(program)?;

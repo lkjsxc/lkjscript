@@ -1,7 +1,7 @@
 //! Integer range-pattern semantics through the ordinary compiler and Rust oracle.
 use lkjscript::ast::Diagnostic;
 use lkjscript::source::{SourceBundle, SourceInput};
-use lkjscript::{compiler, k};
+use lkjscript::{compiler, ir};
 #[path = "support/native.rs"]
 mod native;
 use std::process::Command;
@@ -135,7 +135,7 @@ fn bundle(text: &str) -> SourceBundle {
     }
 }
 
-fn checked(text: &str) -> Result<k::CheckedProgram, Diagnostic> {
+fn checked(text: &str) -> Result<ir::CheckedProgram, Diagnostic> {
     compiler::check_bundle(&bundle(text))
 }
 

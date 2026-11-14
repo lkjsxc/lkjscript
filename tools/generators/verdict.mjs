@@ -12,7 +12,7 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 const [binary, seedS = '601', countS = '100', output = 'target/generators'] = process.argv.slice(2);
 const bin = path.resolve(binary || 'target/debug/lkjscript');
-const engines = (process.env.LKJ_ENGINES || process.env.LKJ_ENGINE || 'native').split(',');
+const engines = (process.env.LKJSCRIPT_ENGINES || process.env.LKJSCRIPT_ENGINE || 'native').split(',');
 const sh = (c, a) => (spawnSync(c, a, { encoding: 'utf8' }).stdout || '').trim();
 // Capture identities before execution so later edits cannot relabel this run.
 const metadata = { sha256: createHash('sha256').update(fs.readFileSync(new URL(import.meta.url))).update(fs.readFileSync(new URL('../process.mjs', import.meta.url))).digest('hex'), binarySha256: createHash('sha256').update(fs.readFileSync(bin)).digest('hex'), compilerDirty: sh('git', ['status', '--porcelain', '--untracked-files=no']) !== '', compiler: sh('git', ['-C', path.dirname(fs.realpathSync(bin)), 'rev-parse', 'HEAD']) || 'unknown', rustc: sh('rustc', ['--version']), node: process.version };
@@ -126,7 +126,7 @@ for (let i = 0; i < N; i++) {
   else if (rust.k === 'trap' && lk.k === 'trap') cls = rust.kind === lk.kind ? 'both-run-trap-equal' : 'TRAP-KIND-DIFFERS';
   else cls = 'VALUE-VS-TRAP';
   bump(tally, cls);
-  if (!cls.startsWith('both-')) show.push(`${dir}/c${i} ${cls} rust=${rust.k}:${rust.code || rust.v || rust.kind || ''} lkj=${text.replace(/^\S*\/c\d+\.rs:/, '').slice(0, 140)}`);
+  if (!cls.startsWith('both-')) show.push(`${dir}/c${i} ${cls} rust=${rust.k}:${rust.code || rust.v || rust.kind || ''} lkjscript=${text.replace(/^\S*\/c\d+\.rs:/, '').slice(0, 140)}`);
 }
 const record = { generator: 'verdict', engine, ...metadata, rustFlags: { verdict: '--edition=2024 --error-format=short -A warnings --emit=metadata', execution: '--edition=2024 -C overflow-checks=yes -A warnings' }, seed: seedS, programs: N, ...tally, rejectCodePairs: pairs };
 fs.mkdirSync(output, {recursive: true});

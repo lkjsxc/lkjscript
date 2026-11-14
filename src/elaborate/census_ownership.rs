@@ -1,4 +1,4 @@
-//! Closed structural roots use the ordinary K builder and checker. No missing
+//! Closed structural roots use the ordinary IR builder and checker. No missing
 //! nominal layout, generic witness, or callee signature is replaced by a stub.
 use super::{Compiler, Instance, PendingFunction, a, census, definition_types, methods};
 use crate::diagnostics::SemanticReport;
@@ -250,10 +250,10 @@ pub(super) fn analyze(
                 None,
                 None,
             );
-            compiler.functions[function].body = vec![crate::k::Instruction {
+            compiler.functions[function].body = vec![crate::ir::Instruction {
                 column: 1,
                 line: 1,
-                op: crate::k::Op::Trap {
+                op: crate::ir::Op::Trap {
                     message: "unavailable derived body".to_string(),
                 },
             }];
@@ -284,10 +284,10 @@ pub(super) fn analyze(
                     None,
                     None,
                 );
-                compiler.functions[function].body = vec![crate::k::Instruction {
+                compiler.functions[function].body = vec![crate::ir::Instruction {
                     column: 1,
                     line: 1,
-                    op: crate::k::Op::Trap {
+                    op: crate::ir::Op::Trap {
                         message: "known signature with unavailable body".to_string(),
                     },
                 }];
@@ -295,7 +295,7 @@ pub(super) fn analyze(
         }
         next += 1;
     }
-    let mut program = crate::k::Program {
+    let mut program = crate::ir::Program {
         types: compiler.types,
         functions: compiler.functions,
         destructors: compiler.destructors,

@@ -1,11 +1,11 @@
 //! Resolved identities and lexical shadows remain local to a compilation.
-use lkjscript::k;
+use lkjscript::ir;
 #[path = "support/native.rs"]
 mod native;
 
 use lkjscript::source::{SourceBundle, SourceInput};
 
-fn compile(source: &str) -> k::CheckedProgram {
+fn compile(source: &str) -> ir::CheckedProgram {
     native::check(&SourceBundle {
         root: "lookup.rs".to_string(),
         library: None,
@@ -16,7 +16,7 @@ fn compile(source: &str) -> k::CheckedProgram {
     })
 }
 
-fn run(checked: &k::CheckedProgram, expected: i64) {
+fn run(checked: &ir::CheckedProgram, expected: i64) {
     native::assert_values(checked, &[("probe", expected)]);
 }
 

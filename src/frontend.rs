@@ -1,8 +1,8 @@
-//! Pure source-to-K boundary over declared source and library bytes.
+//! Pure source-to-IR boundary over declared source and library bytes.
 use crate::ast::{Diagnostic, Program};
-use crate::k::CheckedProgram;
+use crate::ir::CheckedProgram;
 use crate::source::SourceBundle;
-use crate::{check, elaborate, k_text, source};
+use crate::{check, elaborate, ir_text, source};
 
 fn locate(program: &Program, mut problem: Diagnostic) -> Diagnostic {
     if problem.path.is_empty() {
@@ -26,7 +26,7 @@ pub fn check_bundle(bundle: &SourceBundle) -> Result<CheckedProgram, Diagnostic>
 }
 
 /// Serialize the checked meaning of exactly the supplied source bundle.
-pub fn source_to_k(bundle: &SourceBundle) -> Result<String, Diagnostic> {
+pub fn source_to_ir(bundle: &SourceBundle) -> Result<String, Diagnostic> {
     let checked = check_bundle(bundle)?;
-    Ok(k_text::write(checked.program()))
+    Ok(ir_text::write(checked.program()))
 }

@@ -39,22 +39,22 @@ impl World {
     pub fn args(&mut self) -> Vec<Vec<u8>> {
         self.arguments.clone()
     }
-    pub fn __lkj_arg_count(&mut self) -> usize {
+    pub fn __lkjscript_arg_count(&mut self) -> usize {
         self.arguments.len()
     }
-    pub fn __lkj_arg_len(&mut self, index: usize) -> usize {
+    pub fn __lkjscript_arg_len(&mut self, index: usize) -> usize {
         self.arguments[index].len()
     }
-    pub fn __lkj_arg_copy(&mut self, index: usize, bytes: &mut [u8]) -> usize {
+    pub fn __lkjscript_arg_copy(&mut self, index: usize, bytes: &mut [u8]) -> usize {
         let argument = &self.arguments[index];
         let count = argument.len().min(bytes.len());
         bytes[..count].copy_from_slice(&argument[..count]);
         count
     }
     pub fn directory(&mut self, path: &str) -> Result<Directory, i64> {
-        self.__lkj_directory(&files::path_bytes(path)?)
+        self.__lkjscript_directory(&files::path_bytes(path)?)
     }
-    pub fn __lkj_directory(&mut self, path: &[u8]) -> Result<Directory, i64> {
+    pub fn __lkjscript_directory(&mut self, path: &[u8]) -> Result<Directory, i64> {
         Ok(Directory {
             handle: files::open_directory(path)?,
         })
@@ -78,7 +78,7 @@ impl Stderr {
     }
 }
 impl Stdin {
-    pub fn __lkj_read(&mut self, bytes: &mut [u8]) -> i64 {
+    pub fn __lkjscript_read(&mut self, bytes: &mut [u8]) -> i64 {
         count(files::read(0, bytes))
     }
     pub fn read(&mut self, bytes: &mut [u8]) -> Result<usize, i64> {
@@ -90,22 +90,22 @@ impl Stdin {
 }
 impl Directory {
     pub fn open(&mut self, path: &str) -> Result<File, i64> {
-        self.__lkj_open(&files::path_bytes(path)?, false)
+        self.__lkjscript_open(&files::path_bytes(path)?, false)
     }
     pub fn create(&mut self, path: &str) -> Result<File, i64> {
-        self.__lkj_open(&files::path_bytes(path)?, true)
+        self.__lkjscript_open(&files::path_bytes(path)?, true)
     }
-    pub fn __lkj_open(&mut self, path: &[u8], create: bool) -> Result<File, i64> {
+    pub fn __lkjscript_open(&mut self, path: &[u8], create: bool) -> Result<File, i64> {
         Ok(File {
             handle: files::open_file(&self.handle, path, create)?,
         })
     }
 }
 impl File {
-    pub fn __lkj_read(&mut self, bytes: &mut [u8]) -> i64 {
+    pub fn __lkjscript_read(&mut self, bytes: &mut [u8]) -> i64 {
         count(self.read(bytes))
     }
-    pub fn __lkj_write(&mut self, bytes: &[u8]) -> i64 {
+    pub fn __lkjscript_write(&mut self, bytes: &[u8]) -> i64 {
         count(self.write(bytes))
     }
     pub fn read(&mut self, bytes: &mut [u8]) -> Result<usize, i64> {
@@ -129,14 +129,14 @@ fn count(result: Result<usize, i64>) -> i64 {
     }
 }
 
-#[cfg(lkj_control)]
+#[cfg(lkjscript_control)]
 fn control(code: u64, status: u8) {
     let mut bytes = [0u8; 24];
     bytes[..8].copy_from_slice(&code.to_le_bytes());
     bytes[16..].copy_from_slice(&u64::from(status).to_le_bytes());
     let _ = files::write_all(3, &bytes);
 }
-#[cfg(not(lkj_control))]
+#[cfg(not(lkjscript_control))]
 fn control(_code: u64, _status: u8) {}
 
 #[allow(clippy::exit)]
@@ -146,9 +146,9 @@ fn trap(code: &str) -> ! {
         .and_then(|digits| digits.parse::<u64>().ok())
         .unwrap_or(4);
     control(number, 0);
-    #[cfg(not(lkj_control))]
+    #[cfg(not(lkjscript_control))]
     {
-        let message = format!("LKJ_RUST_TRAP {code}\n");
+        let message = format!("LKJSCRIPT_RUST_TRAP {code}\n");
         // Legacy Rust helpers have no control pipe. A closed stderr must not
         // turn the language trap into a second Rust panic.
         let _ = files::write_all(2, message.as_bytes());
@@ -156,7 +156,7 @@ fn trap(code: &str) -> ! {
     std::process::exit(101);
 }
 
-/// The test host owns fd3 only when compiled with --cfg lkj_control. Its record
+/// The test host owns fd3 only when compiled with --cfg lkjscript_control. Its record
 /// distinguishes a trap from arbitrary program stderr or a normal status101.
 #[allow(clippy::exit)]
 pub fn observe(entry: impl FnOnce() -> u8) {
@@ -207,7 +207,7 @@ pub fn enter(entry: fn(World)) {
 }
 
 /// The shared Linux x86-64 host boundary. Oracle harnesses paste this file as a
-/// module; the K-machine host imports the same helper rather than maintaining a
+/// module; the IR-interpreter host imports the same helper rather than maintaining a
 /// second path resolver. No source program can name descriptors or this module.
 #[allow(unsafe_code)]
 pub(crate) mod files {

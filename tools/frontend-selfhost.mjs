@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Measure the source producer over a declared bundle, K input and native backend.
+// Measure the source producer over a declared bundle, IR input and native backend.
 // Stages are explicit so artifact size and controls can be inspected before runs.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -9,16 +9,16 @@ import { run } from './process.mjs';
 import { packFiles } from './source-bundle.mjs';
 
 const usage = [
-  'usage: node tools/frontend-selfhost.mjs prepare SNAPSHOT NATIVE_KC RUNTIME_K OUT',
+  'usage: node tools/frontend-selfhost.mjs prepare SNAPSHOT NATIVE_BACKEND RUNTIME_IR OUT',
   '       node tools/frontend-selfhost.mjs emit OUT',
   '       node tools/frontend-selfhost.mjs run OUT',
   'SNAPSHOT must contain one accepted source target, prepared with frontend.mjs snapshot --source.',
   'prepare validates and packs inputs without executing compilers; emit builds frontend1;',
-  'run checks its own K, builds frontend2 and checks the K/ELF fixed point.',
-  'LKJ_FRONTEND_SELFHOST_MEMORY_BYTES defaults to 8589934592; unlimited inherits Linux controls.',
-  'LKJ_FRONTEND_SELFHOST_STACK_BYTES is optional and independent; default inherits the stack limit.',
-  'LKJ_FRONTEND_SELFHOST_TIMEOUT_MS defaults to 600000 per command; 0 disables the deadline.',
-  'LKJ_FRONTEND_SELFHOST_MAX_OUTPUT_BYTES defaults to 268435456.',
+  'run checks its own IR, builds frontend2 and checks the IR/ELF fixed point.',
+  'LKJSCRIPT_FRONTEND_SELFHOST_MEMORY_BYTES defaults to 8589934592; unlimited inherits Linux controls.',
+  'LKJSCRIPT_FRONTEND_SELFHOST_STACK_BYTES is optional and independent; default inherits the stack limit.',
+  'LKJSCRIPT_FRONTEND_SELFHOST_TIMEOUT_MS defaults to 600000 per command; 0 disables the deadline.',
+  'LKJSCRIPT_FRONTEND_SELFHOST_MAX_OUTPUT_BYTES defaults to 268435456.',
 ].join('\n');
 const argv = process.argv.slice(2);
 if (argv.includes('--help')) { console.log(usage); process.exit(0); }
@@ -47,10 +47,10 @@ function byteSetting(name, fallback) {
   return value;
 }
 const controls = {
-  memory_bytes: byteSetting('LKJ_FRONTEND_SELFHOST_MEMORY_BYTES', '8589934592'),
-  stack_bytes: byteSetting('LKJ_FRONTEND_SELFHOST_STACK_BYTES', undefined) || 'inherited',
-  timeout_ms: numberSetting('LKJ_FRONTEND_SELFHOST_TIMEOUT_MS', 600000, 0),
-  max_output_bytes: numberSetting('LKJ_FRONTEND_SELFHOST_MAX_OUTPUT_BYTES', 268435456, 1),
+  memory_bytes: byteSetting('LKJSCRIPT_FRONTEND_SELFHOST_MEMORY_BYTES', '8589934592'),
+  stack_bytes: byteSetting('LKJSCRIPT_FRONTEND_SELFHOST_STACK_BYTES', undefined) || 'inherited',
+  timeout_ms: numberSetting('LKJSCRIPT_FRONTEND_SELFHOST_TIMEOUT_MS', 600000, 0),
+  max_output_bytes: numberSetting('LKJSCRIPT_FRONTEND_SELFHOST_MAX_OUTPUT_BYTES', 268435456, 1),
 };
 let summary;
 function save() { fs.writeFileSync(summaryPath, JSON.stringify(summary, null, 2) + '\n'); }
@@ -146,19 +146,19 @@ if (stage === 'prepare') {
   for (const file of absent) if (fs.existsSync(file)) throw Error('previously absent module appeared: ' + file);
   const packed = await packFiles({ root: input.source, library: '$std/lib.rs', files: declared.map(file => ({ path: file.logical_path, file: path.join(sourceRoot, file.path) })) });
   for (let index = 0; index < declared.length; index++) if (packed.manifest.files[index].sha256 !== declared[index].sha256) throw Error('input changed while packing ' + declared[index].path);
-  const expectedK = { path: path.join(snapshot, input.result.stdout), bytes: input.result.stdout_bytes, sha256: input.result.stdout_sha256 };
-  unchanged(expectedK);
+  const expectedIr = { path: path.join(snapshot, input.result.stdout), bytes: input.result.stdout_bytes, sha256: input.result.stdout_sha256 };
+  unchanged(expectedIr);
   fs.mkdirSync(out, { recursive: true });
   summary = {
     stage: 'source producer self-host fixed point', status: 'prepared', started_at: new Date().toISOString(),
     source_root: sourceRoot, source: input.source,
     snapshot: { directory: snapshot, summary: record(path.join(snapshot, 'summary.json')), observations: record(path.join(snapshot, baseline.observations || 'observations.json')) },
-    compilers: { b0: baseline.compiler, kc: record(argv[1]) },
+    compilers: { b0: baseline.compiler, backend: record(argv[1]) },
     runtime_origin: record(argv[2]), declared_source_files: declaredFiles, absent_source_files: absent,
     inputs: {}, artifacts: {}, commands: [], comparisons: [], runs: [], failures: [],
   };
-  summary.inputs.program = copyInput(expectedK.path, 'frontend.k');
-  summary.inputs.runtime = copyInput(argv[2], 'runtime.k');
+  summary.inputs.program = copyInput(expectedIr.path, 'frontend.lkjir');
+  summary.inputs.runtime = copyInput(argv[2], 'runtime.lkjir');
   fs.writeFileSync(path.join(out, 'frontend.lkjsb'), packed.bytes, { flag: 'wx' });
   fs.writeFileSync(path.join(out, 'bundle.json'), JSON.stringify(packed.manifest, null, 2) + '\n', { flag: 'wx' });
   summary.inputs.bundle = record(path.join(out, 'frontend.lkjsb'));
@@ -174,29 +174,29 @@ if (stage === 'prepare') {
   const began = performance.now();
   try {
     for (const input of Object.values(summary.inputs)) unchanged(input);
-    unchanged(summary.compilers.kc);
-    const b0 = summary.compilers.b0.path, kc = summary.compilers.kc.path;
+    unchanged(summary.compilers.backend);
+    const b0 = summary.compilers.b0.path, backend = summary.compilers.backend.path;
     if (stage === 'emit') {
       unchanged(summary.compilers.b0); sourceUnchanged();
-      await measure('b0_source', b0, ['k', summary.source], { cwd: summary.source_root, stdout: 'b0-source.k' });
-      compare('B0 source reproduces the declared K', summary.inputs.program.path, path.join(out, 'b0-source.k'));
-      await measure('b0_runtime', b0, ['runtime-k'], { stdout: 'b0-runtime.k' });
-      compare('B0 runtime matches declared native runtime', summary.inputs.runtime.path, path.join(out, 'b0-runtime.k'));
-      await measure('b0_emit', b0, ['build', 'frontend.k', '--entry', 'main', '-o', 'frontend-b0.elf'], { artifact: 'frontend-b0.elf' });
+      await measure('b0_source', b0, ['ir', summary.source], { cwd: summary.source_root, stdout: 'b0-source.lkjir' });
+      compare('B0 source reproduces the declared IR', summary.inputs.program.path, path.join(out, 'b0-source.lkjir'));
+      await measure('b0_runtime', b0, ['runtime-ir'], { stdout: 'b0-runtime.lkjir' });
+      compare('B0 runtime matches declared native runtime', summary.inputs.runtime.path, path.join(out, 'b0-runtime.lkjir'));
+      await measure('b0_emit', b0, ['build', 'frontend.lkjir', '--entry', 'main', '-o', 'frontend-b0.elf'], { artifact: 'frontend-b0.elf' });
       summary.artifacts.b0 = elf('frontend-b0.elf');
-      await measure('kc_emit_frontend1', kc, ['frontend.k', '--runtime', 'runtime.k', '--entry', 'main'], { stdout: 'frontend1.elf' });
+      await measure('backend_emit_frontend1', backend, ['frontend.lkjir', '--runtime', 'runtime.lkjir', '--entry', 'main'], { stdout: 'frontend1.elf' });
       summary.artifacts.frontend1 = elf('frontend1.elf');
-      compare('B0 versus native K compiler frontend ELF', summary.artifacts.b0.path, summary.artifacts.frontend1.path);
+      compare('B0 versus native backend frontend ELF', summary.artifacts.b0.path, summary.artifacts.frontend1.path);
       summary.status = 'emitted';
     } else {
       unchanged(summary.artifacts.frontend1);
-      await measure('frontend1_source', summary.artifacts.frontend1.path, ['frontend.lkjsb'], { stdout: 'frontend1.k' });
-      compare('frontend1 versus B0 own-source K', summary.inputs.program.path, path.join(out, 'frontend1.k'));
-      await measure('kc_emit_frontend2', kc, ['frontend1.k', '--runtime', 'runtime.k', '--entry', 'main'], { stdout: 'frontend2.elf' });
+      await measure('frontend1_source', summary.artifacts.frontend1.path, ['frontend.lkjsb'], { stdout: 'frontend1.lkjir' });
+      compare('frontend1 versus B0 own-source IR', summary.inputs.program.path, path.join(out, 'frontend1.lkjir'));
+      await measure('backend_emit_frontend2', backend, ['frontend1.lkjir', '--runtime', 'runtime.lkjir', '--entry', 'main'], { stdout: 'frontend2.elf' });
       summary.artifacts.frontend2 = elf('frontend2.elf');
       compare('frontend1 versus frontend2 ELF', summary.artifacts.frontend1.path, summary.artifacts.frontend2.path);
-      await measure('frontend2_source', summary.artifacts.frontend2.path, ['frontend.lkjsb'], { stdout: 'frontend2.k' });
-      compare('frontend2 versus B0 own-source K', summary.inputs.program.path, path.join(out, 'frontend2.k'));
+      await measure('frontend2_source', summary.artifacts.frontend2.path, ['frontend.lkjsb'], { stdout: 'frontend2.lkjir' });
+      compare('frontend2 versus B0 own-source IR', summary.inputs.program.path, path.join(out, 'frontend2.lkjir'));
       summary.status = 'fixed point';
     }
     attempt.status = summary.status;

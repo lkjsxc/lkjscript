@@ -137,9 +137,9 @@ pub fn floating_vector_equality_needs_partial_eq_only()->i64 {
 
 pub fn exact_source_helpers_match_the_ordinary_vector_api()->i64 {
     let mut values:Vec<Item>=Vec::new();values.push(item(1));values.push(item(3));
-    let explicit=__lkj_vec_clone(&values);
+    let explicit=__lkjscript_vec_clone(&values);
     let ordinary=values.clone();
-    if !__lkj_vec_equal(&explicit,&ordinary) {return 1;}
+    if !__lkjscript_vec_equal(&explicit,&ordinary) {return 1;}
     if explicit[0].generation!=ordinary[0].generation {return 2;}
     if explicit[1].value!=3 || ordinary[0].value!=1 {return 3;}
     drop(values);drop(ordinary);
@@ -166,7 +166,7 @@ fn bundle(root: &str, sequence: &str) -> SourceBundle {
     }
 }
 
-fn run(program: &lkjscript::k::CheckedProgram, expected: &[(String, i64)]) {
+fn run(program: &lkjscript::ir::CheckedProgram, expected: &[(String, i64)]) {
     let observations = expected
         .iter()
         .map(|(name, value)| (name.as_str(), *value))
@@ -191,7 +191,7 @@ fn rust_observations(source: &str, probes: &[&str]) -> Vec<(String, i64)> {
         rust.push_str(&format!("#[path={path:?}] mod {module};\n"));
     }
     rust.push_str(
-        "pub use prelude::{Option,Result};use string::String;use sequence::{__lkj_vec_clone,__lkj_vec_equal};\n",
+        "pub use prelude::{Option,Result};use string::String;use sequence::{__lkjscript_vec_clone,__lkjscript_vec_equal};\n",
     );
     rust.push_str(source);
     rust.push_str("\nfn main(){\n");
@@ -257,7 +257,7 @@ fn owned_vectors_and_exact_helpers_match_rust_with_affine_elements() {
         expected.iter().all(|(_, value)| *value == 0),
         "{expected:?}"
     );
-    let root = format!("use std::{{__lkj_vec_clone,__lkj_vec_equal}};\n{COMMON}");
+    let root = format!("use std::{{__lkjscript_vec_clone,__lkjscript_vec_equal}};\n{COMMON}");
     let artifact = compiler::check_bundle(&bundle(&root, SEQUENCE)).unwrap();
     run(&artifact, &expected);
 }
@@ -276,7 +276,7 @@ fn different<T:PartialEq>(left:&T,right:&T)->bool{left.ne(right)}
 pub fn exact_helper()->i64 {
     let left:Vec<Item>=vec![Item{value:Box::new(1)}];
     let right:Vec<Item>=vec![Item{value:Box::new(2)}];
-    if __lkj_vec_equal(&left,&right) {1} else {0}
+    if __lkjscript_vec_equal(&left,&right) {1} else {0}
 }
 pub fn vector_rule()->i64 {
     let left:Vec<Item>=vec![Item{value:Box::new(1)}];
@@ -293,7 +293,7 @@ pub fn vector_rule()->i64 {
     let mut expected = rust_observations(source, &["exact_helper"]);
     assert_eq!(expected[0].1, 0);
     expected.push(("vector_rule".to_string(), 0));
-    let root = format!("use std::{{__lkj_vec_equal}};\n{source}");
+    let root = format!("use std::{{__lkjscript_vec_equal}};\n{source}");
     run(
         &compiler::check_bundle(&bundle(&root, SEQUENCE)).unwrap(),
         &expected,
@@ -331,7 +331,7 @@ fn cloned_string_vectors_preserve_every_byte_after_original_cleanup() {
     source.push_str("0}\n");
     let expected = rust_observations(&source, &["all_bytes"]);
     assert_eq!(expected[0].1, 0);
-    let root = format!("use std::{{__lkj_vec_clone,__lkj_vec_equal}};\n{source}");
+    let root = format!("use std::{{__lkjscript_vec_clone,__lkjscript_vec_equal}};\n{source}");
     run(
         &compiler::check_bundle(&bundle(&root, SEQUENCE)).unwrap(),
         &expected,
@@ -388,11 +388,11 @@ fn element_constraints_and_existing_view_storage_rules_are_enforced() {
 #[test]
 fn vector_helpers_have_source_library_identity() {
     let source = r#"
-fn __lkj_vec_clone<T:Clone>(_value:&Vec<T>)->Vec<T>{Vec::new()}
-fn __lkj_vec_equal<T:PartialEq>(_left:&Vec<T>,_right:&Vec<T>)->bool{false}
+fn __lkjscript_vec_clone<T:Clone>(_value:&Vec<T>)->Vec<T>{Vec::new()}
+fn __lkjscript_vec_equal<T:PartialEq>(_left:&Vec<T>,_right:&Vec<T>)->bool{false}
 mod std {
-    pub fn __lkj_vec_clone<T:Clone>(_value:&Vec<T>)->Vec<T>{Vec::new()}
-    pub fn __lkj_vec_equal<T:PartialEq>(_left:&Vec<T>,_right:&Vec<T>)->bool{false}
+    pub fn __lkjscript_vec_clone<T:Clone>(_value:&Vec<T>)->Vec<T>{Vec::new()}
+    pub fn __lkjscript_vec_equal<T:PartialEq>(_left:&Vec<T>,_right:&Vec<T>)->bool{false}
 }
 pub fn probe()->i64 {
     let values:Vec<i64>=vec![4,2];let copied=values.clone();
@@ -546,16 +546,16 @@ pub fn ne_probe()->i64 {
     assert_ne!(clone_changed, SEQUENCE);
     let cloned = compiler::check_bundle(&bundle(root, &clone_changed)).unwrap();
     assert_ne!(
-        lkjscript::k_text::write(cloned.program()),
-        lkjscript::k_text::write(original.program())
+        lkjscript::ir_text::write(cloned.program()),
+        lkjscript::ir_text::write(original.program())
     );
     run(&cloned, &[("clone_probe".to_string(), 44)]);
     let equality_changed = SEQUENCE.replace("if !(left[index] == right[index]) {", "if false {");
     assert_ne!(equality_changed, SEQUENCE);
     let compared = compiler::check_bundle(&bundle(root, &equality_changed)).unwrap();
     assert_ne!(
-        lkjscript::k_text::write(compared.program()),
-        lkjscript::k_text::write(original.program())
+        lkjscript::ir_text::write(compared.program()),
+        lkjscript::ir_text::write(original.program())
     );
     run(
         &compared,
@@ -579,16 +579,16 @@ fn invalid_sequence_source_mutation_keeps_the_library_diagnostic() {
 
 #[test]
 fn weakened_library_helpers_cannot_grant_missing_element_contracts() {
-    let clone_start = SEQUENCE.find("pub fn __lkj_vec_clone").unwrap();
-    let equality_start = SEQUENCE.find("pub fn __lkj_vec_equal").unwrap();
-    let repeat_start = SEQUENCE.find("pub fn __lkj_vec_repeat").unwrap();
+    let clone_start = SEQUENCE.find("pub fn __lkjscript_vec_clone").unwrap();
+    let equality_start = SEQUENCE.find("pub fn __lkjscript_vec_equal").unwrap();
+    let repeat_start = SEQUENCE.find("pub fn __lkjscript_vec_repeat").unwrap();
     let weak_clone = format!(
-        "{}pub fn __lkj_vec_clone<T>(_source:&Vec<T>)->Vec<T>{{Vec::new()}}\n{}",
+        "{}pub fn __lkjscript_vec_clone<T>(_source:&Vec<T>)->Vec<T>{{Vec::new()}}\n{}",
         &SEQUENCE[..clone_start],
         &SEQUENCE[equality_start..]
     );
     let weak_equality = format!(
-        "{}pub fn __lkj_vec_equal<T>(_left:&Vec<T>,_right:&Vec<T>)->bool{{true}}\n{}",
+        "{}pub fn __lkjscript_vec_equal<T>(_left:&Vec<T>,_right:&Vec<T>)->bool{{true}}\n{}",
         &SEQUENCE[..equality_start],
         &SEQUENCE[repeat_start..]
     );
@@ -612,7 +612,7 @@ fn weakened_library_helpers_cannot_grant_missing_element_contracts() {
         assert_eq!(error.path, "vector_traits_probe.rs", "{error:?}");
     }
     let wrong_result = format!(
-        "{}pub fn __lkj_vec_clone<T:Clone>(_source:&Vec<T>)->bool{{true}}\n{}",
+        "{}pub fn __lkjscript_vec_clone<T:Clone>(_source:&Vec<T>)->bool{{true}}\n{}",
         &SEQUENCE[..clone_start],
         &SEQUENCE[equality_start..]
     );

@@ -2,9 +2,9 @@
 mod bootstrap_library;
 #[path = "support/native.rs"]
 mod native;
-use lkjscript::{ast::Diagnostic, check, elaborate, k, source};
+use lkjscript::{ast::Diagnostic, check, elaborate, ir, source};
 
-fn program(files: &[(&str, &str)]) -> Result<k::CheckedProgram, Diagnostic> {
+fn program(files: &[(&str, &str)]) -> Result<ir::CheckedProgram, Diagnostic> {
     let mut inputs = bootstrap_library::standard_library();
     inputs.extend(files.iter().map(|(path, text)| source::SourceInput {
         path: path.to_string(),
@@ -230,7 +230,7 @@ fn structural_type_text_scales_linearly_for_nested_boxes() {
         let ty = format!("{}i64{}", "Box<".repeat(depth), ">".repeat(depth));
         let text = format!("fn consume(_x:{ty}){{}}fn probe()->i64{{0}}");
         let checked = program(&[("main.rs", &text)]).unwrap();
-        lkjscript::k_text::write(checked.program()).len()
+        lkjscript::ir_text::write(checked.program()).len()
     }
     let small = size(32);
     let large = size(64);

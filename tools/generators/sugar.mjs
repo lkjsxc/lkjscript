@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // The primary oracle is each generated sugar against an independently emitted
-// expansion on every route. LKJ_SUGAR_RUST=0 keeps that oracle without rustc.
+// expansion on every route. LKJSCRIPT_SUGAR_RUST=0 keeps that oracle without rustc.
 // Rust's 32-way nested or product exceeds the observed oracle compilation budget;
 // those cases still compare every route with their independently expanded Rust forms.
 import fs from 'node:fs';
@@ -15,8 +15,8 @@ import { iteratorClosurePair } from './iterator_closures.mjs';
 import { iteratorReducerPair } from './iterator_reducers.mjs';
 const [binary='target/debug/lkjscript',seedText='1301',countText='216',output='target/generators']=process.argv.slice(2);
 const bin=path.resolve(binary),count=Number(countText),dir=path.resolve(output,`sugar-${seedText}`);
-const engines=(process.env.LKJ_ENGINES||'native,k').split(',');
-const compareRust=process.env.LKJ_SUGAR_RUST!=='0';
+const engines=(process.env.LKJSCRIPT_ENGINES||'native,interpreter').split(',');
+const compareRust=process.env.LKJSCRIPT_SUGAR_RUST!=='0';
 let state=BigInt(seedText)||1n;
 function random(n){state^=(state<<13n)&0xffffffffffffffffn;state^=state>>7n;state^=(state<<17n)&0xffffffffffffffffn;return Number(state%BigInt(n));}
 const prelude=`struct M { out: Stdout, b: u8 }
@@ -305,14 +305,14 @@ let references;
 if(compareRust){
  let source='#![allow(warnings)]\nmod host {\n'+fs.readFileSync('bridge/output.rs','utf8')+'\n}\n';
  for(let i=0;i<count;i++)for(const variant of ['sugar','expanded'])if(variant!=='sugar'||pairs[i].rustSugar)source+=`mod c${i}_${variant} { use crate::host::{World,Stdout};\n${pairs[i][variant]} }\n`;
- source+='fn main(){match std::env::var("LKJ_ORACLE_CASE").unwrap().as_str(){\n';
+ source+='fn main(){match std::env::var("LKJSCRIPT_ORACLE_CASE").unwrap().as_str(){\n';
  for(let i=0;i<count;i++)for(const variant of ['sugar','expanded'])if(variant!=='sugar'||pairs[i].rustSugar)source+=`"${i}-${variant}"=>host::enter(c${i}_${variant}::main),\n`;
  source+='_=>std::process::exit(2)}}\n';
  const rustSource=path.join(dir,'oracle.rs'),rustBinary=path.join(dir,'oracle');fs.writeFileSync(rustSource,source);
- const flags=['--edition=2024','--cfg','lkj_control','-C','overflow-checks=yes','-A','warnings'];
+ const flags=['--edition=2024','--cfg','lkjscript_control','-C','overflow-checks=yes','-A','warnings'];
  references=await oracleCache({generator:generatorHash,seed:seedText,count,flags,source},async()=>{
   const built=await run('rustc',[...flags,rustSource,'-o',rustBinary]);if(built.error||built.status!==0)throw Error('invalid generated Rust: '+built.stderr);
-  const results=[];for(let i=0;i<count;i++)for(const variant of ['sugar','expanded'])results.push(variant==='sugar'&&!pairs[i].rustSugar?null:packResult(await run(rustBinary,[],{encoding:null,captureControl:true,env:{...process.env,LKJ_ORACLE_CASE:`${i}-${variant}`}})));return results;
+  const results=[];for(let i=0;i<count;i++)for(const variant of ['sugar','expanded'])results.push(variant==='sugar'&&!pairs[i].rustSugar?null:packResult(await run(rustBinary,[],{encoding:null,captureControl:true,env:{...process.env,LKJSCRIPT_ORACLE_CASE:`${i}-${variant}`}})));return results;
  });
 }
 function ending(result,rust=false){

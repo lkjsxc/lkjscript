@@ -1,4 +1,4 @@
-//! The bootstrap K-machine host. Authority is represented by owned descriptors;
+//! The bootstrap IR-interpreter host. Authority is represented by owned descriptors;
 //! handles are private registry identities, never source-visible integers.
 #[allow(dead_code)]
 #[path = "output.rs"]
@@ -68,7 +68,7 @@ impl Host {
     }
 }
 
-impl lkjscript::machine::Host for Host {
+impl lkjscript::interpreter::Host for Host {
     fn write_stdout(&mut self, bytes: &[u8]) -> Result<(), String> {
         if self.is_stdio {
             files::write_all(1, bytes)

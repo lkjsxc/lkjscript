@@ -390,7 +390,7 @@ fn platform(
     initial: u64,
 ) {
     // Startup performs only resource observation and capability setup. The ELF
-    // contains no observation of the machine that compiled it.
+    // contains no observation of the interpreter that compiled it.
     a.address(GLOBALS, p.context);
     a.store(GLOBALS, INITIAL_STACK, SP);
     a.immediate(A, 1);
@@ -1346,7 +1346,7 @@ fn segment(bytes: &mut [u8], at: usize, flags: u32, offset: u64, size: u64) {
     put64(bytes, at + 40, size);
     put64(bytes, at + 48, 4096);
 }
-// K checking validates every K body before lowering. This graph only decides
+// IR checking validates every IR body before lowering. This graph only decides
 // which lowered bodies need machine code; it does not replace that safety boundary.
 // Preserve all signatures and table slots, including targets not called by entry.
 fn reachable_functions(program: &Program, entry: usize, count: usize) -> Result<Vec<bool>> {

@@ -1,21 +1,21 @@
 //! Reference-bearing values must preserve every live loan across transfers.
 #[path = "support/native.rs"]
 mod native;
-use lkjscript::{check, elaborate, k, source, syntax};
+use lkjscript::{check, elaborate, ir, source, syntax};
 
-fn source_program(source: &str) -> k::Program {
+fn source_program(source: &str) -> ir::Program {
     let parsed = syntax::parse(source).expect("regression source must parse");
     elaborate::elaborate(&parsed).expect("regression source must elaborate")
 }
 
-fn reject(program: k::Program) {
+fn reject(program: ir::Program) {
     match check::check(program) {
-        Ok(_) => panic!("K checker accepted a reference to dead local storage"),
+        Ok(_) => panic!("IR checker accepted a reference to dead local storage"),
         Err(diagnostic) => assert_eq!(diagnostic.code, "E_BORROW", "{diagnostic:?}"),
     }
 }
 
-fn accept(program: k::Program) {
+fn accept(program: ir::Program) {
     if let Err(diagnostic) = check::check(program) {
         panic!("valid reference transfer was rejected: {diagnostic:?}");
     }
@@ -35,42 +35,42 @@ fn run(text: &str, expected: i64) {
     );
 }
 
-fn local(ty: usize, mutable: bool) -> k::Local {
-    k::Local {
+fn local(ty: usize, mutable: bool) -> ir::Local {
+    ir::Local {
         name: String::new(),
         ty,
         mutable,
     }
 }
 
-fn drop_local(index: usize) -> k::Op {
-    k::Op::Drop {
-        place: k::Place::local(index),
+fn drop_local(index: usize) -> ir::Op {
+    ir::Op::Drop {
+        place: ir::Place::local(index),
     }
 }
 
-fn reference_types(copy: bool, mutable_view_borrow: bool) -> Vec<k::Type> {
-    let mut types = k::primitives();
-    types.push(k::Type {
+fn reference_types(copy: bool, mutable_view_borrow: bool) -> Vec<ir::Type> {
+    let mut types = ir::primitives();
+    types.push(ir::Type {
         name: "&i64".to_string(),
-        kind: k::TypeKind::Ref {
-            inner: k::I64,
+        kind: ir::TypeKind::Ref {
+            inner: ir::I64,
             mutable: false,
         },
     });
-    types.push(k::Type {
+    types.push(ir::Type {
         name: "View".to_string(),
-        kind: k::TypeKind::Struct {
+        kind: ir::TypeKind::Struct {
             copy,
-            fields: vec![k::Field {
+            fields: vec![ir::Field {
                 name: "value".to_string(),
                 ty: 7,
             }],
         },
     });
-    types.push(k::Type {
+    types.push(ir::Type {
         name: "ViewBorrow".to_string(),
-        kind: k::TypeKind::Ref {
+        kind: ir::TypeKind::Ref {
             inner: 8,
             mutable: mutable_view_borrow,
         },
@@ -78,15 +78,15 @@ fn reference_types(copy: bool, mutable_view_borrow: bool) -> Vec<k::Type> {
     types
 }
 
-fn program(types: Vec<k::Type>, locals: Vec<k::Local>, ops: Vec<k::Op>) -> k::Program {
-    k::Program {
+fn program(types: Vec<ir::Type>, locals: Vec<ir::Local>, ops: Vec<ir::Op>) -> ir::Program {
+    ir::Program {
         types,
-        functions: vec![k::Function {
+        functions: vec![ir::Function {
             file: 0,
             name: "transfer".to_string(),
             params: 1,
             result: 8,
-            return_source: Some(k::ReturnSource::Parameter {
+            return_source: Some(ir::ReturnSource::Parameter {
                 index: 0,
                 projections: Vec::new(),
             }),
@@ -94,7 +94,7 @@ fn program(types: Vec<k::Type>, locals: Vec<k::Local>, ops: Vec<k::Op>) -> k::Pr
             body: ops
                 .into_iter()
                 .enumerate()
-                .map(|(line, op)| k::Instruction {
+                .map(|(line, op)| ir::Instruction {
                     column: 1,
                     op,
                     line: line + 1,
@@ -106,43 +106,43 @@ fn program(types: Vec<k::Type>, locals: Vec<k::Local>, ops: Vec<k::Op>) -> k::Pr
     }
 }
 
-fn reference(dst: usize, from_local: bool) -> k::Op {
+fn reference(dst: usize, from_local: bool) -> ir::Op {
     if from_local {
-        k::Op::Borrow {
+        ir::Op::Borrow {
             dst,
-            place: k::Place::local(1),
+            place: ir::Place::local(1),
             mutable: false,
         }
     } else {
-        k::Op::Read {
+        ir::Op::Read {
             dst,
-            place: k::Place::local(0),
+            place: ir::Place::local(0),
             moving: false,
         }
     }
 }
 
-// These programs are built directly as K; the source frontend cannot reject or
+// These programs are built directly as IR; the source frontend cannot reject or
 // repair them before the checker sees the replacement operation.
-fn replacement(old_local: bool, new_local: bool, return_installed: bool) -> k::Program {
+fn replacement(old_local: bool, new_local: bool, return_installed: bool) -> ir::Program {
     let mut ops = vec![
-        k::Op::Int { dst: 1, value: 7 },
+        ir::Op::Int { dst: 1, value: 7 },
         reference(2, old_local),
-        k::Op::Struct {
+        ir::Op::Struct {
             dst: 3,
             fields: vec![2],
         },
         reference(4, new_local),
-        k::Op::Struct {
+        ir::Op::Struct {
             dst: 5,
             fields: vec![4],
         },
-        k::Op::Borrow {
+        ir::Op::Borrow {
             dst: 6,
-            place: k::Place::local(3),
+            place: ir::Place::local(3),
             mutable: true,
         },
-        k::Op::Intrinsic {
+        ir::Op::Intrinsic {
             dst: 7,
             name: "replace".to_string(),
             args: vec![6, 5],
@@ -150,9 +150,9 @@ fn replacement(old_local: bool, new_local: bool, return_installed: bool) -> k::P
     ];
     let result = if return_installed {
         ops.push(drop_local(7));
-        ops.push(k::Op::Read {
+        ops.push(ir::Op::Read {
             dst: 8,
-            place: k::Place::local(3),
+            place: ir::Place::local(3),
             moving: true,
         });
         8
@@ -162,12 +162,12 @@ fn replacement(old_local: bool, new_local: bool, return_installed: bool) -> k::P
     };
     ops.push(drop_local(1));
     ops.push(drop_local(0));
-    ops.push(k::Op::Return { src: result });
+    ops.push(ir::Op::Return { src: result });
     program(
         reference_types(false, true),
         vec![
             local(7, false),
-            local(k::I64, false),
+            local(ir::I64, false),
             local(7, false),
             local(8, true),
             local(7, false),
@@ -181,41 +181,41 @@ fn replacement(old_local: bool, new_local: bool, return_installed: bool) -> k::P
 }
 
 #[test]
-fn direct_k_replacement_return_keeps_the_old_value_source() {
+fn direct_ir_replacement_return_keeps_the_old_value_source() {
     reject(replacement(true, false, false));
     accept(replacement(false, true, false));
 }
 
 #[test]
-fn direct_k_replacement_installs_the_new_value_source() {
+fn direct_ir_replacement_installs_the_new_value_source() {
     reject(replacement(false, true, true));
     accept(replacement(true, false, true));
 }
 
-fn cloned_view(from_local: bool) -> k::Program {
+fn cloned_view(from_local: bool) -> ir::Program {
     program(
         reference_types(true, false),
         vec![
             local(7, false),
-            local(k::I64, false),
+            local(ir::I64, false),
             local(7, false),
             local(8, false),
             local(9, false),
             local(8, false),
         ],
         vec![
-            k::Op::Int { dst: 1, value: 7 },
+            ir::Op::Int { dst: 1, value: 7 },
             reference(2, from_local),
-            k::Op::Struct {
+            ir::Op::Struct {
                 dst: 3,
                 fields: vec![2],
             },
-            k::Op::Borrow {
+            ir::Op::Borrow {
                 dst: 4,
-                place: k::Place::local(3),
+                place: ir::Place::local(3),
                 mutable: false,
             },
-            k::Op::Intrinsic {
+            ir::Op::Intrinsic {
                 dst: 5,
                 name: "clone".to_string(),
                 args: vec![4],
@@ -223,13 +223,13 @@ fn cloned_view(from_local: bool) -> k::Program {
             drop_local(3),
             drop_local(1),
             drop_local(0),
-            k::Op::Return { src: 5 },
+            ir::Op::Return { src: 5 },
         ],
     )
 }
 
 #[test]
-fn direct_k_clone_cannot_erase_aggregate_provenance() {
+fn direct_ir_clone_cannot_erase_aggregate_provenance() {
     reject(cloned_view(true));
     accept(cloned_view(false));
 }
@@ -414,51 +414,51 @@ fn a_parameter_root_does_not_justify_borrowing_its_owned_cache() {
     ));
 }
 
-fn field_assignment(old_local: bool, new_local: bool, borrowed: bool) -> k::Program {
+fn field_assignment(old_local: bool, new_local: bool, borrowed: bool) -> ir::Program {
     let mut ops = vec![
-        k::Op::Int { dst: 1, value: 7 },
+        ir::Op::Int { dst: 1, value: 7 },
         reference(2, old_local),
-        k::Op::Struct {
+        ir::Op::Struct {
             dst: 3,
             fields: vec![2],
         },
         reference(4, new_local),
     ];
     let place = if borrowed {
-        ops.push(k::Op::Borrow {
+        ops.push(ir::Op::Borrow {
             dst: 6,
-            place: k::Place::local(3),
+            place: ir::Place::local(3),
             mutable: true,
         });
-        k::Place {
+        ir::Place {
             local: 6,
-            projections: vec![k::Projection::Deref, k::Projection::Field(0)],
+            projections: vec![ir::Projection::Deref, ir::Projection::Field(0)],
         }
     } else {
-        k::Place {
+        ir::Place {
             local: 3,
-            projections: vec![k::Projection::Field(0)],
+            projections: vec![ir::Projection::Field(0)],
         }
     };
-    ops.push(k::Op::Assign { place, src: 4 });
+    ops.push(ir::Op::Assign { place, src: 4 });
     if borrowed {
         ops.push(drop_local(6));
     }
     ops.extend([
-        k::Op::Read {
+        ir::Op::Read {
             dst: 5,
-            place: k::Place::local(3),
+            place: ir::Place::local(3),
             moving: true,
         },
         drop_local(1),
         drop_local(0),
-        k::Op::Return { src: 5 },
+        ir::Op::Return { src: 5 },
     ]);
     program(
         reference_types(false, true),
         vec![
             local(7, false),
-            local(k::I64, false),
+            local(ir::I64, false),
             local(7, false),
             local(8, true),
             local(7, false),
@@ -470,7 +470,7 @@ fn field_assignment(old_local: bool, new_local: bool, borrowed: bool) -> k::Prog
 }
 
 #[test]
-fn direct_k_reference_field_assignment_updates_canonical_storage() {
+fn direct_ir_reference_field_assignment_updates_canonical_storage() {
     for borrowed in [false, true] {
         reject(field_assignment(false, true, borrowed));
         accept(field_assignment(true, false, borrowed));

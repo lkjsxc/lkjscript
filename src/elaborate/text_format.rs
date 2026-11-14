@@ -1,6 +1,6 @@
-//! Formatting expands to source String/Formatter calls. K still sees ordinary
+//! Formatting expands to source String/Formatter calls. IR still sees ordinary
 //! references, calls, aggregates and control flow; formatting owns no authority.
-use super::{Builder, Result, a, err, k, place_type};
+use super::{Builder, Result, a, err, ir, place_type};
 use crate::syntax::formatting::{self, Part, Specification};
 use std::collections::BTreeMap;
 impl Builder<'_, '_> {
@@ -11,21 +11,26 @@ impl Builder<'_, '_> {
         right: usize,
         span: a::Span,
     ) -> Result<(usize, usize)> {
-        let equal =
-            self.source_library_call("str", "__lkj_eq", BTreeMap::new(), vec![left, right], span)?;
+        let equal = self.source_library_call(
+            "str",
+            "__lkjscript_eq",
+            BTreeMap::new(),
+            vec![left, right],
+            span,
+        )?;
         if operation == "==" {
             Ok(equal)
         } else {
-            let dst = self.temp(k::BOOL);
+            let dst = self.temp(ir::BOOL);
             self.emit(
-                k::Op::Unary {
+                ir::Op::Unary {
                     dst,
                     op: "!".to_string(),
                     src: equal.0,
                 },
                 span.line,
             );
-            Ok((dst, k::BOOL))
+            Ok((dst, ir::BOOL))
         }
     }
 
@@ -56,7 +61,7 @@ impl Builder<'_, '_> {
         let ty = signature.result;
         let dst = self.temp(ty);
         self.emit(
-            k::Op::Call {
+            ir::Op::Call {
                 dst,
                 function,
                 args: arguments,
@@ -67,7 +72,7 @@ impl Builder<'_, '_> {
     }
     pub(super) fn source_text_method(
         &mut self,
-        target: k::Place,
+        target: ir::Place,
         name: &str,
         args: &[usize],
         span: a::Span,
@@ -91,7 +96,7 @@ impl Builder<'_, '_> {
         let mut substitutions = BTreeMap::new();
         for (index, arg) in args.iter().enumerate() {
             let expected = if name == "repeat" {
-                Some(k::U64)
+                Some(ir::U64)
             } else if name == "eq_ignore_ascii_case" || (name == "replace" && index == 1) {
                 Some(self.ty(receiver))
             } else {
@@ -103,19 +108,25 @@ impl Builder<'_, '_> {
             }
             values.push(value.0);
         }
-        self.source_library_call("str", &format!("__lkj_{name}"), substitutions, values, span)
+        self.source_library_call(
+            "str",
+            &format!("__lkjscript_{name}"),
+            substitutions,
+            values,
+            span,
+        )
     }
     fn format_constant(&mut self, ty: usize, value: i64, line: usize) -> usize {
         let dst = self.temp(ty);
-        self.emit(k::Op::Int { dst, value }, line);
+        self.emit(ir::Op::Int { dst, value }, line);
         dst
     }
     fn format_text(&mut self, text: String, line: usize) -> usize {
-        let inner = self.compiler.intern(String::new(), k::TypeKind::Str);
+        let inner = self.compiler.intern(String::new(), ir::TypeKind::Str);
         let ty = self.compiler.reference(inner, false);
         let dst = self.temp(ty);
         self.emit(
-            k::Op::Text {
+            ir::Op::Text {
                 dst,
                 bytes: text.into_bytes(),
             },
@@ -131,10 +142,10 @@ impl Builder<'_, '_> {
         let mut place = self.addressable(expression)?;
         let mut ty = place_type(&self.compiler.types, self.function, &place)
             .ok_or_else(|| err(span, "E_TYPE", "format argument is not addressable"))?;
-        while let k::TypeKind::Ref { inner, .. } | k::TypeKind::Box { inner } =
+        while let ir::TypeKind::Ref { inner, .. } | ir::TypeKind::Box { inner } =
             self.compiler.types[ty].kind
         {
-            place.projections.push(k::Projection::Deref);
+            place.projections.push(ir::Projection::Deref);
             ty = inner;
         }
         let reference = self.borrow(place, false, span.line)?.0;
@@ -146,21 +157,21 @@ impl Builder<'_, '_> {
         specification: &Specification,
         span: a::Span,
     ) -> Result<()> {
-        let receiver = self.borrow(k::Place::local(formatter), true, span.line)?.0;
-        let width = self.format_constant(k::U64, specification.width as i64, span.line);
-        let flags = self.format_constant(k::U8, specification.flags as i64, span.line);
+        let receiver = self.borrow(ir::Place::local(formatter), true, span.line)?.0;
+        let width = self.format_constant(ir::U64, specification.width as i64, span.line);
+        let flags = self.format_constant(ir::U8, specification.flags as i64, span.line);
         let character = *self.compiler.type_names.get(&"char".to_string()).unwrap();
         let fill = self.format_constant(character, specification.fill as i64, span.line);
         let unit = self
             .source_library_call(
                 "fmt",
-                "__lkj_settings",
+                "__lkjscript_settings",
                 BTreeMap::new(),
                 vec![receiver, width, flags, fill],
                 span,
             )?
             .0;
-        self.cleanup_place(k::Place::local(unit), span.line);
+        self.cleanup_place(ir::Place::local(unit), span.line);
         Ok(())
     }
     pub(super) fn format_macro(
@@ -193,8 +204,8 @@ impl Builder<'_, '_> {
         let formatter = if let Some(mut target) = target {
             let mut ty = place_type(&self.compiler.types, self.function, &target)
                 .ok_or_else(|| err(span, "E_TYPE", "format output is not addressable"))?;
-            while let k::TypeKind::Ref { inner, .. } = self.compiler.types[ty].kind {
-                target.projections.push(k::Projection::Deref);
+            while let ir::TypeKind::Ref { inner, .. } = self.compiler.types[ty].kind {
+                target.projections.push(ir::Projection::Deref);
                 ty = inner;
             }
             let formatter_type = self.formatter_type(span)?;
@@ -209,9 +220,9 @@ impl Builder<'_, '_> {
             self.source_library_call(
                 "fmt",
                 if ty == formatter_type {
-                    "__lkj_nested"
+                    "__lkjscript_nested"
                 } else {
-                    "__lkj_new"
+                    "__lkjscript_new"
                 },
                 BTreeMap::new(),
                 vec![receiver],
@@ -220,45 +231,62 @@ impl Builder<'_, '_> {
             .0
         } else {
             let string = self
-                .source_library_call("string", "__lkj_new", BTreeMap::new(), Vec::new(), span)?
+                .source_library_call(
+                    "string",
+                    "__lkjscript_new",
+                    BTreeMap::new(),
+                    Vec::new(),
+                    span,
+                )?
                 .0;
             self.function.locals[string].mutable = true;
             output = Some(string);
-            let receiver = self.borrow(k::Place::local(string), true, span.line)?.0;
-            self.source_library_call("fmt", "__lkj_new", BTreeMap::new(), vec![receiver], span)?
-                .0
+            let receiver = self.borrow(ir::Place::local(string), true, span.line)?.0;
+            self.source_library_call(
+                "fmt",
+                "__lkjscript_new",
+                BTreeMap::new(),
+                vec![receiver],
+                span,
+            )?
+            .0
         };
         self.function.locals[formatter].mutable = true;
-        let (initial, result_type) =
-            self.source_library_call("fmt", "__lkj_success", BTreeMap::new(), Vec::new(), span)?;
+        let (initial, result_type) = self.source_library_call(
+            "fmt",
+            "__lkjscript_success",
+            BTreeMap::new(),
+            Vec::new(),
+            span,
+        )?;
         let result = self.local(result_type, "$format_result", true);
         self.emit(
-            k::Op::Assign {
-                place: k::Place::local(result),
+            ir::Op::Assign {
+                place: ir::Place::local(result),
                 src: initial,
             },
             span.line,
         );
         for part in parts {
             let first = self.live.len();
-            let success = self.temp(k::BOOL);
+            let success = self.temp(ir::BOOL);
             self.emit(
-                k::Op::TagTest {
+                ir::Op::TagTest {
                     dst: success,
-                    place: k::Place::local(result),
+                    place: ir::Place::local(result),
                     variant: 0,
                 },
                 span.line,
             );
-            self.emit(k::Op::If { condition: success }, span.line);
+            self.emit(ir::Op::If { condition: success }, span.line);
             let before = self.snapshot();
             let produced = match part {
                 Part::Text(text) => {
-                    let receiver = self.borrow(k::Place::local(formatter), true, span.line)?.0;
+                    let receiver = self.borrow(ir::Place::local(formatter), true, span.line)?.0;
                     let text = self.format_text(text, span.line);
                     self.source_library_call(
                         "fmt",
-                        "__lkj_literal",
+                        "__lkjscript_literal",
                         BTreeMap::new(),
                         vec![receiver, text],
                         span,
@@ -277,16 +305,16 @@ impl Builder<'_, '_> {
                         return Err(err(span, "E_FORMAT", "format argument is out of bounds"));
                     };
                     self.format_settings(formatter, &specification, span)?;
-                    let receiver = self.borrow(k::Place::local(formatter), true, span.line)?.0;
-                    let value = self.read(k::Place::local(reference), span.line)?.0;
+                    let receiver = self.borrow(ir::Place::local(formatter), true, span.line)?.0;
+                    let value = self.read(ir::Place::local(reference), span.line)?.0;
                     let mut substitutions = BTreeMap::new();
                     substitutions.insert("T".to_string(), ty);
-                    let helper = if matches!(self.compiler.types[ty].kind, k::TypeKind::Str)
+                    let helper = if matches!(self.compiler.types[ty].kind, ir::TypeKind::Str)
                         && specification.method == "display"
                     {
-                        "__lkj_display_str".to_string()
+                        "__lkjscript_display_str".to_string()
                     } else {
-                        format!("__lkj_{}", specification.method)
+                        format!("__lkjscript_{}", specification.method)
                     };
                     self.source_library_call(
                         "fmt",
@@ -300,47 +328,47 @@ impl Builder<'_, '_> {
             if produced.1 != result_type {
                 return Err(err(span, "E_TYPE", "format helper result differs"));
             }
-            self.cleanup_place(k::Place::local(result), span.line);
+            self.cleanup_place(ir::Place::local(result), span.line);
             self.emit(
-                k::Op::Assign {
-                    place: k::Place::local(result),
+                ir::Op::Assign {
+                    place: ir::Place::local(result),
                     src: produced.0,
                 },
                 span.line,
             );
             self.cleanup(first, None, span.line);
             let after = self.snapshot();
-            self.emit(k::Op::Else, span.line);
+            self.emit(ir::Op::Else, span.line);
             self.restore(&before);
-            self.emit(k::Op::End, span.line);
+            self.emit(ir::Op::End, span.line);
             self.merge_carriers(&after);
         }
-        self.cleanup_place(k::Place::local(formatter), span.line);
+        self.cleanup_place(ir::Place::local(formatter), span.line);
         for (reference, _) in arguments {
-            self.cleanup_place(k::Place::local(reference), span.line);
+            self.cleanup_place(ir::Place::local(reference), span.line);
         }
         if let Some(output) = output {
-            let success = self.temp(k::BOOL);
+            let success = self.temp(ir::BOOL);
             self.emit(
-                k::Op::TagTest {
+                ir::Op::TagTest {
                     dst: success,
-                    place: k::Place::local(result),
+                    place: ir::Place::local(result),
                     variant: 0,
                 },
                 span.line,
             );
-            self.emit(k::Op::If { condition: success }, span.line);
+            self.emit(ir::Op::If { condition: success }, span.line);
             let valid = self.snapshot();
-            self.emit(k::Op::Else, span.line);
+            self.emit(ir::Op::Else, span.line);
             self.emit(
-                k::Op::Trap {
+                ir::Op::Trap {
                     message: "formatting trait returned an error".to_string(),
                 },
                 span.line,
             );
-            self.emit(k::Op::End, span.line);
+            self.emit(ir::Op::End, span.line);
             self.restore(&valid);
-            self.cleanup_place(k::Place::local(result), span.line);
+            self.cleanup_place(ir::Place::local(result), span.line);
             Ok((output, self.ty(output)))
         } else {
             Ok((result, result_type))

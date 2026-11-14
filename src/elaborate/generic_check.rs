@@ -1,11 +1,11 @@
-//! Definition-site verification through the production elaborator and K checker.
+//! Definition-site verification through the production elaborator and IR checker.
 //!
 //! Rigid IDs are abstract type variables, not sampled concrete instantiations.
-//! Their private K storage shape supplies only affine/Copy behavior. Trait proof
+//! Their private IR storage shape supplies only affine/Copy behavior. Trait proof
 //! consults the explicit assumptions below before structural rules, and source
 //! cannot name or construct these IDs. Verification programs are consumed here;
 //! no abstract value, assumed method, or verification artifact reaches emission.
-use super::{Compiler, Instance, Result, a, err, k};
+use super::{Compiler, Instance, Result, a, err, ir};
 use crate::generics::TraitIdentity;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -76,9 +76,9 @@ impl BuiltinMethod {
     pub(super) fn result(self, receiver: usize) -> usize {
         match self {
             Self::Clone => receiver,
-            Self::CloneFrom => k::UNIT,
-            Self::Eq | Self::Ne | Self::Lt | Self::Le | Self::Gt | Self::Ge => k::BOOL,
-            Self::Order => k::I32,
+            Self::CloneFrom => ir::UNIT,
+            Self::Eq | Self::Ne | Self::Lt | Self::Le | Self::Gt | Self::Ge => ir::BOOL,
+            Self::Order => ir::I32,
         }
     }
 }
@@ -171,7 +171,7 @@ pub(super) fn validate_report(
         }
     }
 
-    // User destructors retain their ordinary K obligations. Their definitions
+    // User destructors retain their ordinary IR obligations. Their definitions
     // were checked above; this declaration pass attaches concrete signatures to
     // the abstract nominal layouts created while checking those definitions.
     let mut next_type = 0;
@@ -259,9 +259,9 @@ pub(super) fn validate_report(
                 "verification call has no declaration or trait contract",
             ));
         }
-        function.body = vec![k::Instruction {
+        function.body = vec![ir::Instruction {
             column: 1,
-            op: k::Op::Trap {
+            op: ir::Op::Trap {
                 message: "abstract declared contract".to_string(),
             },
             line: 1,
@@ -275,7 +275,7 @@ pub(super) fn validate_report(
     for problem in scoped_problems {
         problems.push(problem);
     }
-    let mut program = k::Program {
+    let mut program = ir::Program {
         types: compiler.types,
         functions: compiler.functions,
         destructors: compiler.destructors,
@@ -304,9 +304,9 @@ pub(super) fn validate_report(
 impl Compiler<'_> {
     fn rigid_type(&mut self, name: &str) -> usize {
         let id = self.types.len();
-        self.types.push(k::Type {
+        self.types.push(ir::Type {
             name: format!("$rigid:{name}:{id}"),
-            kind: k::TypeKind::Struct {
+            kind: ir::TypeKind::Struct {
                 fields: Vec::new(),
                 copy: false,
             },
@@ -365,7 +365,7 @@ impl Compiler<'_> {
             assumptions.insert(TraitIdentity::Builtin(parent));
         }
         if name == "Copy" {
-            self.types[ty].kind = k::TypeKind::Struct {
+            self.types[ty].kind = ir::TypeKind::Struct {
                 fields: Vec::new(),
                 copy: true,
             };
@@ -792,17 +792,17 @@ impl Compiler<'_> {
                 return true;
             }
             match &self.types[ty].kind {
-                k::TypeKind::Ref { inner, .. }
-                | k::TypeKind::Slice { inner, .. }
-                | k::TypeKind::Vec { inner }
-                | k::TypeKind::Box { inner }
-                | k::TypeKind::Array { inner, .. } => pending.push(*inner),
-                k::TypeKind::Struct { fields, .. } => {
+                ir::TypeKind::Ref { inner, .. }
+                | ir::TypeKind::Slice { inner, .. }
+                | ir::TypeKind::Vec { inner }
+                | ir::TypeKind::Box { inner }
+                | ir::TypeKind::Array { inner, .. } => pending.push(*inner),
+                ir::TypeKind::Struct { fields, .. } => {
                     for field in fields {
                         pending.push(field.ty);
                     }
                 }
-                k::TypeKind::Enum { variants, .. } => {
+                ir::TypeKind::Enum { variants, .. } => {
                     for variant in variants {
                         for field in &variant.fields {
                             pending.push(field.ty);
@@ -839,19 +839,19 @@ impl Compiler<'_> {
         }
         let reference = self.reference(ty, false);
         let index = self.functions.len();
-        self.functions.push(k::Function {
+        self.functions.push(ir::Function {
             file: span.file,
             name: format!("$contract:{operation}:{ty}"),
             params: 2,
-            result: k::BOOL,
+            result: ir::BOOL,
             return_source: None,
             locals: vec![
-                k::Local {
+                ir::Local {
                     name: "left".to_string(),
                     ty: reference,
                     mutable: false,
                 },
-                k::Local {
+                ir::Local {
                     name: "right".to_string(),
                     ty: reference,
                     mutable: false,
@@ -896,21 +896,21 @@ impl Compiler<'_> {
             return Ok(*index);
         }
         let receiver_type = self.reference(receiver, method == BuiltinMethod::CloneFrom);
-        let mut locals = vec![k::Local {
+        let mut locals = vec![ir::Local {
             name: "self".to_string(),
             ty: receiver_type,
             mutable: false,
         }];
         if method.arguments() != 0 {
             let shared = self.reference(receiver, false);
-            locals.push(k::Local {
+            locals.push(ir::Local {
                 name: "other".to_string(),
                 ty: shared,
                 mutable: false,
             });
         }
         let index = self.functions.len();
-        self.functions.push(k::Function {
+        self.functions.push(ir::Function {
             file: span.file,
             name: format!("$contract:{}:{receiver}", method.name()),
             params: locals.len(),
@@ -942,7 +942,7 @@ impl Compiler<'_> {
                     for parameter in 0..function.locals.len() {
                         let local = &function.locals[parameter];
                         if !matches!(self.types[local.ty].kind,
-                        k::TypeKind::Ref { inner, mutable }
+                        ir::TypeKind::Ref { inner, mutable }
                         if inner == *receiver
                             && mutable == (parameter == 0 && *method == BuiltinMethod::CloneFrom))
                         {
@@ -1118,7 +1118,7 @@ impl Compiler<'_> {
 impl super::Builder<'_, '_> {
     fn builtin_method(
         &mut self,
-        target: &k::Place,
+        target: &ir::Place,
         base: usize,
         method: BuiltinMethod,
         types: &[usize],
@@ -1161,7 +1161,7 @@ impl super::Builder<'_, '_> {
         let result = method.result(base);
         let dst = self.temp(result);
         self.emit(
-            k::Op::Call {
+            ir::Op::Call {
                 dst,
                 function: called,
                 args: values,
@@ -1175,7 +1175,7 @@ impl super::Builder<'_, '_> {
     /// implementation evidence. Inherent methods cannot displace this choice.
     pub(super) fn witnessed_method(
         &mut self,
-        target: &k::Place,
+        target: &ir::Place,
         base: usize,
         identity: &TraitIdentity,
         expression: a::ExprId,
@@ -1236,7 +1236,7 @@ impl super::Builder<'_, '_> {
     /// same declaration after substitution, even if another method then applies.
     pub(super) fn fixed_source_method(
         &mut self,
-        target: &k::Place,
+        target: &ir::Place,
         base: usize,
         index: usize,
         types: &[usize],
@@ -1287,7 +1287,7 @@ impl super::Builder<'_, '_> {
 
     pub(super) fn source_method(
         &mut self,
-        target: &k::Place,
+        target: &ir::Place,
         base: usize,
         instance: Instance,
         types: &[usize],
@@ -1322,7 +1322,7 @@ impl super::Builder<'_, '_> {
             // A by-value Self may itself be a reference. Reborrowing it would
             // change the declared receiver from Self to &Self (or &mut Self).
             self.read(target.clone(), span.line)?
-        } else if let k::TypeKind::Ref { inner, mutable } = self.compiler.types[first].kind {
+        } else if let ir::TypeKind::Ref { inner, mutable } = self.compiler.types[first].kind {
             if inner != base {
                 return Err(err(
                     span,
@@ -1353,7 +1353,7 @@ impl super::Builder<'_, '_> {
         let result = self.compiler.functions[called].result;
         let dst = self.temp(result);
         self.emit(
-            k::Op::Call {
+            ir::Op::Call {
                 dst,
                 function: called,
                 args: values,
@@ -1366,7 +1366,7 @@ impl super::Builder<'_, '_> {
     pub(super) fn generic_method(
         &mut self,
         expression: a::ExprId,
-        target: &k::Place,
+        target: &ir::Place,
         base: usize,
         name: &str,
         types: &[usize],
@@ -1458,7 +1458,7 @@ impl super::Builder<'_, '_> {
             .compiler
             .resolve(function.params[0].ty, &substitutions)?;
         let receiver = match self.compiler.types[first].kind {
-            k::TypeKind::Ref { mutable, .. } => self.borrow(target.clone(), mutable, span.line)?,
+            ir::TypeKind::Ref { mutable, .. } => self.borrow(target.clone(), mutable, span.line)?,
             _ => self.read(target.clone(), span.line)?,
         };
         let mut values = vec![receiver.0];
@@ -1481,7 +1481,7 @@ impl super::Builder<'_, '_> {
         let result = self.compiler.functions[called].result;
         let dst = self.temp(result);
         self.emit(
-            k::Op::Call {
+            ir::Op::Call {
                 dst,
                 function: called,
                 args: values,

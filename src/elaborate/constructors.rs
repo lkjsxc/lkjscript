@@ -72,7 +72,7 @@ impl Builder<'_, '_> {
                         return substitutions.get(&path.name).is_some_and(|ty| {
                             matches!(
                                 self.compiler.types[*ty].kind,
-                                super::k::TypeKind::Ref { .. }
+                                super::ir::TypeKind::Ref { .. }
                             )
                         });
                     }

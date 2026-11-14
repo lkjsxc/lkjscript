@@ -1,7 +1,7 @@
 //! Infer declaration parameters from structural types in lexical environments.
 //! Alias parameters get their own environment; transparent expansion never
 //! binds an unrelated same-spelled parameter in the caller.
-use super::{Builder, Compiler, Result, a, err, k};
+use super::{Builder, Compiler, Result, a, err, ir};
 use std::collections::BTreeMap;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -248,8 +248,8 @@ impl Compiler<'_> {
                                 }
                             } else if path.declaration.is_none() && arguments.len() == 1 {
                                 let inner = match (&self.types[actual].kind, path.name.as_str()) {
-                                    (k::TypeKind::Vec { inner }, "Vec")
-                                    | (k::TypeKind::Box { inner }, "Box") => Some(*inner),
+                                    (ir::TypeKind::Vec { inner }, "Vec")
+                                    | (ir::TypeKind::Box { inner }, "Box") => Some(*inner),
                                     _ => None,
                                 };
                                 if let Some(actual) = inner {
@@ -263,7 +263,7 @@ impl Compiler<'_> {
                             }
                         }
                         a::Type::Ref { inner, .. } => {
-                            if let k::TypeKind::Ref { inner: actual, .. } = self.types[actual].kind
+                            if let ir::TypeKind::Ref { inner: actual, .. } = self.types[actual].kind
                             {
                                 pending.push(Work::Match {
                                     pattern: inner,
@@ -279,9 +279,9 @@ impl Compiler<'_> {
                         }
                         a::Type::Slice(inner) => {
                             let element = match (&self.types[actual].kind, mode) {
-                                (k::TypeKind::Slice { inner, .. }, _) => Some(*inner),
+                                (ir::TypeKind::Slice { inner, .. }, _) => Some(*inner),
                                 (
-                                    k::TypeKind::Vec { inner } | k::TypeKind::Array { inner, .. },
+                                    ir::TypeKind::Vec { inner } | ir::TypeKind::Array { inner, .. },
                                     MatchMode::Referent,
                                 ) => Some(*inner),
                                 _ => None,
@@ -296,7 +296,7 @@ impl Compiler<'_> {
                             }
                         }
                         a::Type::Array { inner, .. } => {
-                            if let k::TypeKind::Array { inner: actual, .. } =
+                            if let ir::TypeKind::Array { inner: actual, .. } =
                                 self.types[actual].kind
                             {
                                 pending.push(Work::Match {
@@ -309,7 +309,8 @@ impl Compiler<'_> {
                         }
                         a::Type::Tuple(elements) => {
                             if !self.applications.contains_key(&actual) {
-                                if let k::TypeKind::Struct { fields, .. } = &self.types[actual].kind
+                                if let ir::TypeKind::Struct { fields, .. } =
+                                    &self.types[actual].kind
                                 {
                                     if elements.len() == fields.len() {
                                         let mut index = elements.len();

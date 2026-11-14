@@ -15,7 +15,7 @@ pub struct SourceBundle {
 }
 
 /// Recovered syntax is retained for diagnostics and census only. An error in
-/// this report prevents every production path from constructing checked K.
+/// this report prevents every production path from constructing checked IR.
 pub struct SourceReport {
     pub program: Program,
     pub diagnostics: Vec<Diagnostic>,

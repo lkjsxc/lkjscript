@@ -1,6 +1,6 @@
 //! Vec operations are ordinary source over checked element access.
 use crate::prelude::Option;
-pub fn __lkj_vec_clone<T: Clone>(source: &Vec<T>) -> Vec<T> {
+pub fn __lkjscript_vec_clone<T: Clone>(source: &Vec<T>) -> Vec<T> {
     let mut result: Vec<T> = Vec::new();
     let mut index: usize = 0;
     while index < source.len() {
@@ -10,7 +10,7 @@ pub fn __lkj_vec_clone<T: Clone>(source: &Vec<T>) -> Vec<T> {
     result
 }
 
-pub fn __lkj_vec_equal<T: PartialEq>(left: &Vec<T>, right: &Vec<T>) -> bool {
+pub fn __lkjscript_vec_equal<T: PartialEq>(left: &Vec<T>, right: &Vec<T>) -> bool {
     if left.len() != right.len() {
         return false;
     }
@@ -27,7 +27,7 @@ pub fn __lkj_vec_equal<T: PartialEq>(left: &Vec<T>, right: &Vec<T>) -> bool {
 
 // Clone the first count-1 elements and move the original into the last slot.
 // The element expression is evaluated even when count is zero.
-pub fn __lkj_vec_repeat<T: Clone>(value: T, count: usize) -> Vec<T> {
+pub fn __lkjscript_vec_repeat<T: Clone>(value: T, count: usize) -> Vec<T> {
     let mut result: Vec<T> = Vec::new();
     if count == 0 {
         return result;
@@ -118,7 +118,7 @@ impl<T> VecMutate<T> for Vec<T> {
     #[allow(clippy::mem_replace_with_default)]
     fn retain<F: FnMut(&T) -> bool>(&mut self, mut predicate: F) {
         let mut remaining = crate::iter::owned(std::mem::replace(self, Vec::new()));
-        while let Option::Some(value) = crate::iter::__lkj_next(&mut remaining) {
+        while let Option::Some(value) = crate::iter::__lkjscript_next(&mut remaining) {
             if predicate(&value) {
                 self.push(value);
             }
@@ -136,7 +136,7 @@ impl<T: Ord> VecSort<T> for Vec<T> {
     fn sort(&mut self) {
         let mut remaining = crate::iter::owned(std::mem::replace(self, Vec::new()));
         let mut values: Vec<Option<T>> = Vec::new();
-        while let Option::Some(value) = crate::iter::__lkj_next(&mut remaining) {
+        while let Option::Some(value) = crate::iter::__lkjscript_next(&mut remaining) {
             values.push(Option::Some(value));
         }
         let count = values.len();
@@ -354,7 +354,7 @@ impl<T> VecClear<T> for Vec<T> {
 /// A four-way lexicographic result: less, equal, greater, or unordered.
 /// Relational operators are used directly so custom equality does not affect order.
 #[allow(clippy::neg_cmp_op_on_partial_ord)]
-pub fn __lkj_slice_order<T: PartialOrd>(left: &[T], right: &[T]) -> i32 {
+pub fn __lkjscript_slice_order<T: PartialOrd>(left: &[T], right: &[T]) -> i32 {
     let mut index = 0usize;
     while index < left.len() && index < right.len() {
         if left[index] < right[index] {
@@ -377,11 +377,11 @@ pub fn __lkj_slice_order<T: PartialOrd>(left: &[T], right: &[T]) -> i32 {
     }
 }
 
-pub fn __lkj_vec_order<T: PartialOrd>(left: &Vec<T>, right: &Vec<T>) -> i32 {
-    __lkj_slice_order(&left[..], &right[..])
+pub fn __lkjscript_vec_order<T: PartialOrd>(left: &Vec<T>, right: &Vec<T>) -> i32 {
+    __lkjscript_slice_order(&left[..], &right[..])
 }
 
-pub fn __lkj_slice_equal<T: PartialEq>(left: &[T], right: &[T]) -> bool {
+pub fn __lkjscript_slice_equal<T: PartialEq>(left: &[T], right: &[T]) -> bool {
     if left.len() != right.len() {
         return false;
     }

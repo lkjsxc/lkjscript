@@ -1,5 +1,5 @@
-//! Raw-memory model for exercising the same runtime source on K. This byte arena
-//! is separate from the machine's independently typed owner/loan heap.
+//! Raw-memory model for exercising the same runtime source on IR. This byte arena
+//! is separate from the interpreter's independently typed owner/loan heap.
 use crate::runtime::Primitive;
 
 #[derive(Clone, Copy, PartialEq, Eq)]

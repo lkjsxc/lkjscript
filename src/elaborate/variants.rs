@@ -1,5 +1,5 @@
 //! Source variant shapes and declaration-ordered enum payload construction.
-use super::{Builder, ExpressionContext, Result, a, err, k};
+use super::{Builder, ExpressionContext, Result, a, err, ir};
 use std::collections::BTreeMap;
 
 impl Builder<'_, '_> {
@@ -160,7 +160,7 @@ impl Builder<'_, '_> {
             ordered[field] = Some(value);
         }
         let ty = self.finish_constructor(target, span)?;
-        let k::TypeKind::Enum { variants, .. } = self.compiler.types[ty].kind.clone() else {
+        let ir::TypeKind::Enum { variants, .. } = self.compiler.types[ty].kind.clone() else {
             unreachable!()
         };
         let mut fields = Vec::new();
@@ -177,7 +177,7 @@ impl Builder<'_, '_> {
         }
         let dst = self.temp(ty);
         self.emit(
-            k::Op::Variant {
+            ir::Op::Variant {
                 dst,
                 variant: tag,
                 fields,

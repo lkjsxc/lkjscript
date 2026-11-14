@@ -7,7 +7,7 @@ mod floats;
 mod native_test;
 
 use lkjscript::source::{SourceBundle, SourceInput};
-use lkjscript::{compiler, machine};
+use lkjscript::{compiler, interpreter};
 
 #[derive(Debug, PartialEq, Eq)]
 enum Outcome {
@@ -173,16 +173,16 @@ fn production_decimal_conversion_executes_on_both_routes() {
             .iter()
             .position(|function| function.name == name)
             .unwrap();
-        let result = machine::run(
+        let result = interpreter::run(
             checked.program(),
             index,
             &[],
             &mut Vec::new(),
-            machine::Resources::unlimited(),
+            interpreter::Resources::unlimited(),
         )
         .unwrap_or_else(|error| panic!("{name}: {}:{}: {}", error.file, error.line, error.message));
         match result.value {
-            machine::Scalar::Int {
+            interpreter::Scalar::Int {
                 value: 0,
                 bits: 64,
                 signed: true,

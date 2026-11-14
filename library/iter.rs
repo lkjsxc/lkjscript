@@ -55,10 +55,10 @@ impl<'a, T> IntoIterator for &'a Vec<T> {
 
 // Structural for lowering resolves these declarations by library identity.
 // Both remain ordinary generic source functions, checked like user functions.
-pub fn __lkj_into_iter<I: IntoIterator>(value: I) -> I::IntoIter {
+pub fn __lkjscript_into_iter<I: IntoIterator>(value: I) -> I::IntoIter {
     value.into_iter()
 }
-pub fn __lkj_next<I: Iterator>(iterator: &mut I) -> Option<I::Item> {
+pub fn __lkjscript_next<I: Iterator>(iterator: &mut I) -> Option<I::Item> {
     iterator.next()
 }
 

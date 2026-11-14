@@ -6,7 +6,7 @@ use super::*;
 pub(crate) struct BoundContext<'a> {
     pub(crate) source: &'a Program,
     pub(crate) index: &'a ImplementationIndex,
-    pub(crate) types: &'a [crate::k::Type],
+    pub(crate) types: &'a [crate::ir::Type],
     pub(crate) applications: &'a BTreeMap<usize, (String, Vec<usize>)>,
     pub(crate) rigid: &'a BTreeMap<usize, BTreeSet<TraitIdentity>>,
 }

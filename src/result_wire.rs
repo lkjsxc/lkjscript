@@ -1,4 +1,4 @@
-//! Native evaluation metadata and framing, shared by the K driver and reader.
+//! Native evaluation metadata and framing, shared by the IR driver and reader.
 //! Descriptor v1 is "LKJRD1\n", a scalar tag and width byte, then a u64 trap
 //! count and length-prefixed UTF-8 messages. All integers are little-endian.
 //! The control stream is the native 24-byte packet followed by "\nSTATUS\n"

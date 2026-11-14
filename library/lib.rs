@@ -20,8 +20,8 @@ mod string;
 pub use string::{FromUtf8Error, String};
 mod sequence;
 pub use sequence::{
-    __lkj_slice_equal, __lkj_slice_order, __lkj_vec_clone, __lkj_vec_equal, __lkj_vec_order,
-    __lkj_vec_repeat,
+    __lkjscript_slice_equal, __lkjscript_slice_order, __lkjscript_vec_clone, __lkjscript_vec_equal, __lkjscript_vec_order,
+    __lkjscript_vec_repeat,
 };
 pub use sequence::{SliceSplit, SliceSplitSource};
 
@@ -45,5 +45,5 @@ pub mod result {
 }
 
 pub mod default {
-    pub use crate::prelude::{__lkj_default, Default};
+    pub use crate::prelude::{__lkjscript_default, Default};
 }

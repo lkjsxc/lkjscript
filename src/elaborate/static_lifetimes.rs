@@ -1,4 +1,4 @@
-//! The current K return contract can require every live view to be static.
+//! The current IR return contract can require every live view to be static.
 //! Stronger requirements on individual parameters, fields, or result leaves need
 //! leaf contracts; reject those source annotations instead of erasing them.
 use super::{Result, a, err};

@@ -1,0 +1,22 @@
+[
+  {"path":"tools/generators/ir-seeds/calls.lkjir","entry":"probe"},
+  {"path":"tools/generators/ir-seeds/array-repeat.lkjir","entry":"probe"},
+  {"path":"tests/conformance/ir/drop_if_owned.lkjir","entry":"probe"},
+  {"path":"tests/conformance/ir/conditional_owner_cleanup.lkjir","entry":"probe"},
+  {"path":"tests/conformance/ir/conditional_owned_view_field.lkjir","entry":"probe"},
+  {"path":"tests/conformance/ir/targeted_loop_transfer.lkjir","entry":"probe"},
+  {"path":"tests/conformance/ir/per_leaf_transport.lkjir","entry":"probe"},
+  {"path":"tests/conformance/ir/per_leaf_static_mix.lkjir","entry":"probe"},
+  {"path":"tests/conformance/ir/conditional_reference_cleanup.lkjir","entry":"probe"},
+  {"path":"tests/conformance/ir/per_leaf_input_alternatives.lkjir","entry":"probe"},
+  {"path":"tests/conformance/ir/shared_reference_carrier_cleanup.lkjir","entry":"probe"},
+  {"path":"tests/conformance/ir/shared_reference_exclusive_ancestor.lkjir","entry":"probe"},
+  {"path":"tests/conformance/ir/enum_alternative_join.lkjir","entry":"probe"},
+  {"path":"tests/conformance/ir/enum_fixed_pointer_tag.lkjir","entry":"probe"},
+  {"path":"tests/conformance/ir/integer_wrapping.lkjir","entry":"probe"},
+  {"path":"tests/conformance/ir/range_full_extent.lkjir","entry":"probe"},
+  {"path":"tests/conformance/ir/range_empty.lkjir","entry":"probe"},
+  {"path":"tests/conformance/ir/range_mutable.lkjir","entry":"probe"},
+  {"path":"tests/conformance/ir/range_utf8.lkjir","entry":"probe"},
+  {"path":"tests/conformance/ir/range_nested_call.lkjir","entry":"probe"}
+]

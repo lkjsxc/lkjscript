@@ -1,10 +1,10 @@
 //! Returning a stored reference follows its referent, not the temporary value
-//! that carried the reference to the callee. K source projections are checked.
+//! that carried the reference to the callee. IR source projections are checked.
 #[path = "../bridge/library.rs"]
 mod bootstrap_library;
 
 use lkjscript::source::{SourceBundle, SourceInput};
-use lkjscript::{check, compiler, k, k_text};
+use lkjscript::{check, compiler, ir, ir_text};
 #[path = "support/native.rs"]
 mod native;
 use std::process::Command;
@@ -312,43 +312,43 @@ fn source_local_referents_and_descriptors_still_cannot_escape() {
     }
 }
 
-fn local(ty: usize) -> k::Local {
-    k::Local {
+fn local(ty: usize) -> ir::Local {
+    ir::Local {
         name: String::new(),
         ty,
         mutable: false,
     }
 }
-fn place(local: usize, projections: Vec<k::Projection>) -> k::Place {
-    k::Place { local, projections }
+fn place(local: usize, projections: Vec<ir::Projection>) -> ir::Place {
+    ir::Place { local, projections }
 }
-fn drop_local(local: usize) -> k::Op {
-    k::Op::Drop {
-        place: k::Place::local(local),
+fn drop_local(local: usize) -> ir::Op {
+    ir::Op::Drop {
+        place: ir::Place::local(local),
     }
 }
 fn function(
     name: &str,
     params: usize,
-    locals: Vec<k::Local>,
+    locals: Vec<ir::Local>,
     result: usize,
     depth: Option<usize>,
-    operations: Vec<k::Op>,
-) -> k::Function {
-    k::Function {
+    operations: Vec<ir::Op>,
+) -> ir::Function {
+    ir::Function {
         file: 0,
         name: name.to_string(),
         params,
         locals,
         result,
-        return_source: depth.map(|dereferences| k::ReturnSource::Parameter {
+        return_source: depth.map(|dereferences| ir::ReturnSource::Parameter {
             index: 0,
-            projections: vec![k::Projection::Deref; dereferences],
+            projections: vec![ir::Projection::Deref; dereferences],
         }),
         body: operations
             .into_iter()
             .enumerate()
-            .map(|(line, op)| k::Instruction {
+            .map(|(line, op)| ir::Instruction {
                 column: 1,
                 op,
                 line: line + 1,
@@ -357,51 +357,51 @@ fn function(
         test: false,
     }
 }
-fn types() -> Vec<k::Type> {
-    let mut types = k::primitives();
-    for inner in [k::I64, 7, 8] {
+fn types() -> Vec<ir::Type> {
+    let mut types = ir::primitives();
+    for inner in [ir::I64, 7, 8] {
         let index = types.len();
-        types.push(k::Type {
+        types.push(ir::Type {
             name: format!("ref{index}"),
-            kind: k::TypeKind::Ref {
+            kind: ir::TypeKind::Ref {
                 inner,
                 mutable: false,
             },
         });
     }
-    types.push(k::Type {
+    types.push(ir::Type {
         name: "View".to_string(),
-        kind: k::TypeKind::Struct {
+        kind: ir::TypeKind::Struct {
             copy: true,
             fields: vec![
-                k::Field {
+                ir::Field {
                     name: "value".to_string(),
                     ty: 7,
                 },
-                k::Field {
+                ir::Field {
                     name: "descriptor".to_string(),
-                    ty: k::I64,
+                    ty: ir::I64,
                 },
             ],
         },
     });
-    types.push(k::Type {
+    types.push(ir::Type {
         name: "refView".to_string(),
-        kind: k::TypeKind::Ref {
+        kind: ir::TypeKind::Ref {
             inner: 10,
             mutable: false,
         },
     });
     types
 }
-fn program(functions: Vec<k::Function>) -> k::Program {
-    k::Program {
+fn program(functions: Vec<ir::Function>) -> ir::Program {
+    ir::Program {
         types: types(),
         functions,
         destructors: Vec::new(),
     }
 }
-fn copy(depth: usize) -> k::Function {
+fn copy(depth: usize) -> ir::Function {
     function(
         "copy",
         1,
@@ -409,19 +409,19 @@ fn copy(depth: usize) -> k::Function {
         7,
         Some(depth),
         vec![
-            k::Op::Read {
+            ir::Op::Read {
                 dst: 1,
-                place: place(0, vec![k::Projection::Deref; depth]),
+                place: place(0, vec![ir::Projection::Deref; depth]),
                 moving: false,
             },
             drop_local(0),
-            k::Op::Return { src: 1 },
+            ir::Op::Return { src: 1 },
         ],
     )
 }
-fn reject_k(program: k::Program, reason: &str) {
+fn reject_ir(program: ir::Program, reason: &str) {
     match check::check(program) {
-        Ok(_) => panic!("K accepted forged projected provenance"),
+        Ok(_) => panic!("IR accepted forged projected provenance"),
         Err(problem) => {
             assert_eq!(problem.code, "E_BORROW", "{problem:?}");
             assert!(problem.message.contains(reason), "{problem:?}");
@@ -430,16 +430,16 @@ fn reject_k(program: k::Program, reason: &str) {
 }
 
 #[test]
-fn direct_k_nested_copy_contracts_check_and_round_trip() {
+fn direct_ir_nested_copy_contracts_check_and_round_trip() {
     for depth in [1, 2] {
         let original = program(vec![copy(depth)]);
         check::check(original.clone()).unwrap();
-        let text = k_text::write(&original);
-        let reparsed = k_text::read(&text).unwrap();
+        let text = ir_text::write(&original);
+        let reparsed = ir_text::read(&text).unwrap();
         assert!(
             reparsed == original,
-            "K text roundtrip differs:\n{}",
-            k_text::write(&reparsed)
+            "IR text roundtrip differs:\n{}",
+            ir_text::write(&reparsed)
         );
         check::check(reparsed).unwrap();
     }
@@ -450,52 +450,52 @@ fn direct_k_nested_copy_contracts_check_and_round_trip() {
         7,
         Some(1),
         vec![
-            k::Op::Read {
+            ir::Op::Read {
                 dst: 1,
-                place: place(0, vec![k::Projection::Deref, k::Projection::Field(0)]),
+                place: place(0, vec![ir::Projection::Deref, ir::Projection::Field(0)]),
                 moving: false,
             },
             drop_local(0),
-            k::Op::Return { src: 1 },
+            ir::Op::Return { src: 1 },
         ],
     );
     check::check(program(vec![field])).unwrap();
 }
 
 #[test]
-fn direct_k_call_preserves_referent_after_carrier_cleanup() {
+fn direct_ir_call_preserves_referent_after_carrier_cleanup() {
     let probe = function(
         "probe",
         0,
-        vec![local(k::I64), local(7), local(8), local(7), local(k::I64)],
-        k::I64,
+        vec![local(ir::I64), local(7), local(8), local(7), local(ir::I64)],
+        ir::I64,
         None,
         vec![
-            k::Op::Int { dst: 0, value: 42 },
-            k::Op::Borrow {
+            ir::Op::Int { dst: 0, value: 42 },
+            ir::Op::Borrow {
                 dst: 1,
-                place: k::Place::local(0),
+                place: ir::Place::local(0),
                 mutable: false,
             },
-            k::Op::Borrow {
+            ir::Op::Borrow {
                 dst: 2,
-                place: k::Place::local(1),
+                place: ir::Place::local(1),
                 mutable: false,
             },
-            k::Op::Call {
+            ir::Op::Call {
                 dst: 3,
                 function: 0,
                 args: vec![2],
             },
             drop_local(1),
-            k::Op::Read {
+            ir::Op::Read {
                 dst: 4,
-                place: place(3, vec![k::Projection::Deref]),
+                place: place(3, vec![ir::Projection::Deref]),
                 moving: false,
             },
             drop_local(3),
             drop_local(0),
-            k::Op::Return { src: 4 },
+            ir::Op::Return { src: 4 },
         ],
     );
     let checked = check::check(program(vec![copy(1), probe])).unwrap();
@@ -503,28 +503,28 @@ fn direct_k_call_preserves_referent_after_carrier_cleanup() {
 }
 
 #[test]
-fn direct_k_rejects_invalid_projection_depth_and_nonview_sources() {
+fn direct_ir_rejects_invalid_projection_depth_and_nonview_sources() {
     for depth in [2, 3, 8] {
         let mut invalid = copy(1);
-        invalid.return_source = Some(k::ReturnSource::Parameter {
+        invalid.return_source = Some(ir::ReturnSource::Parameter {
             index: 0,
-            projections: vec![k::Projection::Deref; depth],
+            projections: vec![ir::Projection::Deref; depth],
         });
-        reject_k(program(vec![invalid]), "source contract");
+        reject_ir(program(vec![invalid]), "source contract");
     }
     let mut invalid = copy(1);
-    invalid.return_source = Some(k::ReturnSource::Parameter {
+    invalid.return_source = Some(ir::ReturnSource::Parameter {
         index: 1,
-        projections: vec![k::Projection::Deref],
+        projections: vec![ir::Projection::Deref],
     });
-    reject_k(program(vec![invalid]), "source contract");
+    reject_ir(program(vec![invalid]), "source contract");
     let mut invalid = copy(1);
-    invalid.result = k::I64;
-    reject_k(program(vec![invalid]), "source contract");
+    invalid.result = ir::I64;
+    reject_ir(program(vec![invalid]), "source contract");
 }
 
 #[test]
-fn direct_k_rejects_returning_a_reference_descriptor_instead_of_its_referent() {
+fn direct_ir_rejects_returning_a_reference_descriptor_instead_of_its_referent() {
     let forged = function(
         "descriptor",
         1,
@@ -532,20 +532,20 @@ fn direct_k_rejects_returning_a_reference_descriptor_instead_of_its_referent() {
         8,
         Some(2),
         vec![
-            k::Op::Borrow {
+            ir::Op::Borrow {
                 dst: 1,
-                place: place(0, vec![k::Projection::Deref, k::Projection::Deref]),
+                place: place(0, vec![ir::Projection::Deref, ir::Projection::Deref]),
                 mutable: false,
             },
             drop_local(0),
-            k::Op::Return { src: 1 },
+            ir::Op::Return { src: 1 },
         ],
     );
-    reject_k(program(vec![forged]), "declared source");
+    reject_ir(program(vec![forged]), "declared source");
 }
 
 #[test]
-fn direct_k_rejects_an_unrelated_scalar_field_of_the_same_carrier() {
+fn direct_ir_rejects_an_unrelated_scalar_field_of_the_same_carrier() {
     let forged = function(
         "wrong_field",
         1,
@@ -553,20 +553,20 @@ fn direct_k_rejects_an_unrelated_scalar_field_of_the_same_carrier() {
         7,
         Some(1),
         vec![
-            k::Op::Borrow {
+            ir::Op::Borrow {
                 dst: 1,
-                place: place(0, vec![k::Projection::Deref, k::Projection::Field(1)]),
+                place: place(0, vec![ir::Projection::Deref, ir::Projection::Field(1)]),
                 mutable: false,
             },
             drop_local(0),
-            k::Op::Return { src: 1 },
+            ir::Op::Return { src: 1 },
         ],
     );
-    reject_k(program(vec![forged]), "declared source");
+    reject_ir(program(vec![forged]), "declared source");
 }
 
 #[test]
-fn direct_k_rejects_other_parameters_and_local_storage() {
+fn direct_ir_rejects_other_parameters_and_local_storage() {
     let other = function(
         "other",
         2,
@@ -574,35 +574,35 @@ fn direct_k_rejects_other_parameters_and_local_storage() {
         7,
         Some(1),
         vec![
-            k::Op::Read {
+            ir::Op::Read {
                 dst: 2,
-                place: place(1, vec![k::Projection::Deref]),
+                place: place(1, vec![ir::Projection::Deref]),
                 moving: false,
             },
             drop_local(0),
             drop_local(1),
-            k::Op::Return { src: 2 },
+            ir::Op::Return { src: 2 },
         ],
     );
-    reject_k(program(vec![other]), "declared source");
+    reject_ir(program(vec![other]), "declared source");
     let local = function(
         "local",
         1,
-        vec![local(8), local(k::I64), local(7)],
+        vec![local(8), local(ir::I64), local(7)],
         7,
         Some(1),
         vec![
-            k::Op::Int { dst: 1, value: 7 },
-            k::Op::Borrow {
+            ir::Op::Int { dst: 1, value: 7 },
+            ir::Op::Borrow {
                 dst: 2,
-                place: k::Place::local(1),
+                place: ir::Place::local(1),
                 mutable: false,
             },
             drop_local(0),
-            k::Op::Return { src: 2 },
+            ir::Op::Return { src: 2 },
         ],
     );
-    reject_k(program(vec![local]), "declared source");
+    reject_ir(program(vec![local]), "declared source");
 }
 
 #[test]
@@ -637,26 +637,26 @@ fn bad()->i64 {
 }
 
 #[test]
-fn direct_k_cannot_detach_an_exclusive_leaf_from_its_carrier() {
-    let mut types = k::primitives();
-    types.push(k::Type {
+fn direct_ir_cannot_detach_an_exclusive_leaf_from_its_carrier() {
+    let mut types = ir::primitives();
+    types.push(ir::Type {
         name: "exclusive".to_string(),
-        kind: k::TypeKind::Ref {
-            inner: k::I64,
+        kind: ir::TypeKind::Ref {
+            inner: ir::I64,
             mutable: true,
         },
     });
-    types.push(k::Type {
+    types.push(ir::Type {
         name: "carrier".to_string(),
-        kind: k::TypeKind::Ref {
+        kind: ir::TypeKind::Ref {
             inner: 7,
             mutable: false,
         },
     });
-    types.push(k::Type {
+    types.push(ir::Type {
         name: "shared".to_string(),
-        kind: k::TypeKind::Ref {
-            inner: k::I64,
+        kind: ir::TypeKind::Ref {
+            inner: ir::I64,
             mutable: false,
         },
     });
@@ -667,17 +667,17 @@ fn direct_k_cannot_detach_an_exclusive_leaf_from_its_carrier() {
         9,
         Some(1),
         vec![
-            k::Op::Borrow {
+            ir::Op::Borrow {
                 dst: 1,
-                place: place(0, vec![k::Projection::Deref, k::Projection::Deref]),
+                place: place(0, vec![ir::Projection::Deref, ir::Projection::Deref]),
                 mutable: false,
             },
             drop_local(0),
-            k::Op::Return { src: 1 },
+            ir::Op::Return { src: 1 },
         ],
     );
-    reject_k(
-        k::Program {
+    reject_ir(
+        ir::Program {
             types,
             functions: vec![borrowed],
             destructors: Vec::new(),
@@ -729,13 +729,13 @@ fn source_exclusive_leaf_projection_is_a_named_unsupported_boundary() {
 #[test]
 fn per_leaf_contract_text_preserves_exact_and_static_sources() {
     for fixture in [
-        include_str!("conformance/k/per_leaf_transport.k"),
-        include_str!("conformance/k/per_leaf_input_alternatives.k"),
-        include_str!("conformance/k/per_leaf_static_mix.k"),
+        include_str!("conformance/ir/per_leaf_transport.lkjir"),
+        include_str!("conformance/ir/per_leaf_input_alternatives.lkjir"),
+        include_str!("conformance/ir/per_leaf_static_mix.lkjir"),
     ] {
-        let original = k_text::read(fixture).unwrap();
+        let original = ir_text::read(fixture).unwrap();
         check::check(original.clone()).unwrap();
-        let reparsed = k_text::read(&k_text::write(&original)).unwrap();
+        let reparsed = ir_text::read(&ir_text::write(&original)).unwrap();
         assert!(
             original == reparsed,
             "per-leaf contract text changed meaning"

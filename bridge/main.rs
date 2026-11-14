@@ -1,6 +1,6 @@
 //! Rust-only bootstrap host. Replace by lkjscript World once the compiler self-compiles.
 use lkjscript::{
-    ast::Diagnostic, check, diagnostics, elaborate, k, k_text, machine, resolve, source,
+    ast::Diagnostic, check, diagnostics, elaborate, interpreter, ir, ir_text, resolve, source,
 };
 mod batch;
 mod library;
@@ -123,22 +123,25 @@ fn compile(
     path: &str,
     census: bool,
     timings: &mut timing::Timings,
-) -> Result<k::CheckedProgram, String> {
+) -> Result<ir::CheckedProgram, String> {
     compiler_work(|| compile_inner(path, census, timings))
 }
 fn compile_inner(
     path: &str,
     census: bool,
     timings: &mut timing::Timings,
-) -> Result<k::CheckedProgram, String> {
-    if Path::new(path).extension().is_some_and(|ext| ext == "k") {
+) -> Result<ir::CheckedProgram, String> {
+    if Path::new(path)
+        .extension()
+        .is_some_and(|ext| ext == "lkjir")
+    {
         let text = fs::read_to_string(path).map_err(|e| format!("{path}:1:1: E_IO {e}"))?;
         timings.count("source_bytes", text.len());
         let meaning = timings
-            .measure("parse_k", || k_text::read(&text))
+            .measure("parse_ir", || ir_text::read(&text))
             .map_err(|e| report(path, e))?;
         timings.count(
-            "k_instructions",
+            "ir_instructions",
             meaning.functions.iter().map(|f| f.body.len()).sum(),
         );
         return timings
@@ -189,7 +192,7 @@ fn compile_inner(
                 vec![problem],
                 census,
                 Some(
-                    "declaration resolution failed; dependent definition and K analysis was not attempted",
+                    "declaration resolution failed; dependent definition and IR analysis was not attempted",
                 ),
             ));
         }
@@ -204,12 +207,12 @@ fn compile_inner(
                 problems,
                 census,
                 Some(
-                    "definition analysis failed; dependent K construction and checking was not attempted",
+                    "definition analysis failed; dependent IR construction and checking was not attempted",
                 ),
             ));
         }
     };
-    let meaning = match timings.measure("build_k", || elaborate::lower_definitions(definitions)) {
+    let meaning = match timings.measure("build_ir", || elaborate::lower_definitions(definitions)) {
         Ok(value) => value,
         Err(problems) => {
             return Err(analysis_failure(
@@ -224,7 +227,7 @@ fn compile_inner(
         }
     };
     timings.count(
-        "k_instructions",
+        "ir_instructions",
         meaning.functions.iter().map(|f| f.body.len()).sum(),
     );
     timings.count("instantiated_bodies", meaning.functions.len());
@@ -236,7 +239,7 @@ fn compile_inner(
                 &mut loaded,
                 problems,
                 census,
-                Some("each invalid K body stops at its diagnostic; no artifact is produced"),
+                Some("each invalid IR body stops at its diagnostic; no artifact is produced"),
             ));
         }
     };
@@ -257,7 +260,7 @@ struct Arguments {
 }
 fn arguments(args: &[String]) -> Result<Arguments, String> {
     if args.len() < 2 {
-        return Err("usage: lkjscript check|run|test|build|k <source> [--census] [--engine native|k] [--entry name] [-o artifact] [-- program arguments]".to_string());
+        return Err("usage: lkjscript check|run|test|build|ir <source> [--census] [--engine native|interpreter] [--entry name] [-o artifact] [-- program arguments]".to_string());
     }
     let mut result = Arguments {
         verb: args[1].clone(),
@@ -273,7 +276,7 @@ fn arguments(args: &[String]) -> Result<Arguments, String> {
     while at < args.len() {
         match args[at].as_str() {
             "--census" => result.census = true,
-            "--unchecked-k" => result.unchecked = true,
+            "--unchecked-ir" => result.unchecked = true,
             "--entry" | "--engine" | "-o" => {
                 let option = args[at].as_str();
                 at += 1;
@@ -295,22 +298,23 @@ fn arguments(args: &[String]) -> Result<Arguments, String> {
         at += 1;
     }
     if result.path.is_empty()
-        || !["check", "run", "test", "build", "k"].contains(&result.verb.as_str())
+        || !["check", "run", "test", "build", "ir"].contains(&result.verb.as_str())
     {
-        return Err("E_USAGE expected check|run|test|build|k and a source path".to_string());
+        return Err("E_USAGE expected check|run|test|build|ir and a source path".to_string());
     }
-    if !["k", "native"].contains(&result.engine.as_str()) {
-        return Err("E_USAGE engine is native or k".to_string());
+    if !["interpreter", "native"].contains(&result.engine.as_str()) {
+        return Err("E_USAGE engine is native or interpreter".to_string());
     }
     if result.unchecked
-        && (result.engine != "k"
+        && (result.engine != "interpreter"
             || !["run", "test"].contains(&result.verb.as_str())
             || Path::new(&result.path)
                 .extension()
-                .is_none_or(|ext| ext != "k"))
+                .is_none_or(|ext| ext != "lkjir"))
     {
         return Err(
-            "E_USAGE --unchecked-k requires a .k input, --engine k, and run/test".to_string(),
+            "E_USAGE --unchecked-ir requires a .lkjir input, --engine interpreter, and run/test"
+                .to_string(),
         );
     }
     if result.census && result.verb != "check" {
@@ -318,14 +322,14 @@ fn arguments(args: &[String]) -> Result<Arguments, String> {
     }
     Ok(result)
 }
-fn entry_world(program: &k::Program, function: &k::Function) -> Result<bool, String> {
+fn entry_world(program: &ir::Program, function: &ir::Function) -> Result<bool, String> {
     if !matches!(
         program.types[function.result].kind,
-        k::TypeKind::Unit
-            | k::TypeKind::Bool
-            | k::TypeKind::Char
-            | k::TypeKind::Int { .. }
-            | k::TypeKind::F64
+        ir::TypeKind::Unit
+            | ir::TypeKind::Bool
+            | ir::TypeKind::Char
+            | ir::TypeKind::Int { .. }
+            | ir::TypeKind::F64
     ) {
         return Err("E_ENTRY host entry result must be unit or a scalar".to_string());
     }
@@ -335,14 +339,14 @@ fn entry_world(program: &k::Program, function: &k::Function) -> Result<bool, Str
     if function.params == 1
         && matches!(
             program.types[function.locals[0].ty].kind,
-            k::TypeKind::World
+            ir::TypeKind::World
         )
     {
         return Ok(true);
     }
     Err("E_ENTRY entry takes no arguments or exactly one World".to_string())
 }
-fn entries(program: &k::Program, args: &Arguments) -> Result<Vec<usize>, String> {
+fn entries(program: &ir::Program, args: &Arguments) -> Result<Vec<usize>, String> {
     let selected: Vec<_> = if args.verb == "test" {
         program
             .functions
@@ -372,12 +376,12 @@ fn entries(program: &k::Program, args: &Arguments) -> Result<Vec<usize>, String>
     }
     Ok(selected)
 }
-fn scalar(value: machine::Scalar) -> String {
+fn scalar(value: interpreter::Scalar) -> String {
     match value {
-        machine::Scalar::Unit => String::new(),
-        machine::Scalar::Bool(value) => format!("{value}\n"),
-        machine::Scalar::Char(value) => format!("{value}\n"),
-        machine::Scalar::Int {
+        interpreter::Scalar::Unit => String::new(),
+        interpreter::Scalar::Bool(value) => format!("{value}\n"),
+        interpreter::Scalar::Char(value) => format!("{value}\n"),
+        interpreter::Scalar::Int {
             value,
             bits,
             signed,
@@ -389,36 +393,36 @@ fn scalar(value: machine::Scalar) -> String {
                 format!("{value}\n")
             }
         }
-        machine::Scalar::F64 { bits } => format!("{}\n", f64::from_bits(bits)),
+        interpreter::Scalar::F64 { bits } => format!("{}\n", f64::from_bits(bits)),
     }
 }
-fn execute_machine(
-    program: &k::Program,
+fn execute_interpreter(
+    program: &ir::Program,
     args: &Arguments,
     timings: &mut timing::Timings,
 ) -> Result<u8, String> {
     let mut status = 0;
-    let resources = host_process::machine_resources()?;
-    timings.count("machine_stack_extent_bytes", resources.stack_bytes);
+    let resources = host_process::interpreter_resources()?;
+    timings.count("interpreter_stack_extent_bytes", resources.stack_bytes);
     for entry in entries(program, args)? {
         let started = std::time::Instant::now();
         let mut host = world::Host::stdio(&args.program_arguments);
-        let result = machine::run(program, entry, &[], &mut host, resources);
+        let result = interpreter::run(program, entry, &[], &mut host, resources);
         if status == 0 {
             status = host.status;
         }
         if std::env::var("LKJSCRIPT_TIMINGS").as_deref() == Ok("1") {
             eprintln!(
-                "LKJ_TIMING {{\"route\":\"k\",\"run_ms\":{},\"stopped_stage\":\"{}\"}}",
+                "LKJSCRIPT_TIMING {{\"route\":\"interpreter\",\"run_ms\":{},\"stopped_stage\":\"{}\"}}",
                 started.elapsed().as_secs_f64() * 1000.0,
                 if result.is_ok() { "done" } else { "run" }
             );
         }
         let result =
             result.map_err(|e| format!("{}:{}: {} {}", args.path, e.line, e.code(), e.message))?;
-        timings.count("machine_peak_frames", result.peak_frames);
-        timings.count("machine_peak_cells", result.peak_cells);
-        timings.count("machine_peak_stack_bytes", result.peak_stack_bytes);
+        timings.count("interpreter_peak_frames", result.peak_frames);
+        timings.count("interpreter_peak_cells", result.peak_cells);
+        timings.count("interpreter_peak_stack_bytes", result.peak_stack_bytes);
         if args.verb != "test" {
             std::io::stdout()
                 .write_all(scalar(result.value).as_bytes())
@@ -449,19 +453,13 @@ fn run() -> Result<u8, String> {
     {
         return Err("E_USAGE program arguments after -- require run or test".to_string());
     }
-    if argv.len() == 2 && argv[1] == "runtime-k" {
+    if argv.len() == 2 && argv[1] == "runtime-ir" {
         let text = compiler_work(|| {
-            Ok(k_text::write(
+            Ok(ir_text::write(
                 lkjscript::bootstrap_runtime::get()?.checked_program(),
             ))
         })?;
         print!("{text}");
-        return Ok(0);
-    }
-    if argv.len() == 2 && argv[1] == "trusted" {
-        println!(
-            "source meaning: src/syntax.rs, src/resolve.rs, src/generics.rs, src/elaborate/\nK safety gate: src/k.rs, src/check.rs\nlayout and lowering: src/lower.rs, src/lower/\nsource runtime and sealed raw binding: library/runtime.rs, src/runtime.rs\nnative ELF encoder and Linux entry: src/native.rs, src/native/\nindependent models: src/machine.rs, src/machine/, src/runtime_memory.rs\nRust host and declared source provisioning: bridge/\nRust output oracle: bridge/output.rs\nphysical size ledger: node tools/trust.mjs"
-        );
         return Ok(0);
     }
     if argv.get(1).is_some_and(|verb| verb == "batch") {
@@ -474,10 +472,10 @@ fn run() -> Result<u8, String> {
         let text = fs::read_to_string(&args.path).map_err(|e| format!("E_IO {e}"))?;
         let program = compiler_work(|| {
             timings
-                .measure("parse_k", || k_text::read(&text))
+                .measure("parse_ir", || ir_text::read(&text))
                 .map_err(|e| report(&args.path, e))
         })?;
-        let status = execute_machine(&program, &args, &mut timings)?;
+        let status = execute_interpreter(&program, &args, &mut timings)?;
         timings.done();
         return Ok(status);
     }
@@ -486,14 +484,14 @@ fn run() -> Result<u8, String> {
         timings.done();
         return Ok(0);
     }
-    if args.verb == "k" {
-        let text = compiler_work(|| Ok(k_text::write(checked.program())))?;
+    if args.verb == "ir" {
+        let text = compiler_work(|| Ok(ir_text::write(checked.program())))?;
         print!("{text}");
         timings.done();
         return Ok(0);
     }
-    if args.engine == "k" && args.verb != "build" {
-        let status = execute_machine(checked.program(), &args, &mut timings)?;
+    if args.engine == "interpreter" && args.verb != "build" {
+        let status = execute_interpreter(checked.program(), &args, &mut timings)?;
         timings.done();
         return Ok(status);
     }

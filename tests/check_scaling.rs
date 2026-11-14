@@ -1,54 +1,54 @@
-//! Direct K protects sparse ownership snapshots independently of elaboration.
-use lkjscript::{check, k};
+//! Direct IR protects sparse ownership snapshots independently of elaboration.
+use lkjscript::{check, ir};
 
-fn program(locals: usize, branches: usize, consume_in_then: bool) -> k::Program {
+fn program(locals: usize, branches: usize, consume_in_then: bool) -> ir::Program {
     let owner = locals - 1;
     let mut declarations = vec![
-        k::Local {
+        ir::Local {
             name: String::new(),
-            ty: k::I64,
+            ty: ir::I64,
             mutable: false
         };
         locals
     ];
-    declarations[0].ty = k::BOOL;
-    let mut ops = vec![k::Op::Int {
+    declarations[0].ty = ir::BOOL;
+    let mut ops = vec![ir::Op::Int {
         dst: owner,
         value: 42,
     }];
     for branch in 0..branches {
-        ops.push(k::Op::Int { dst: 0, value: 1 });
-        ops.push(k::Op::If { condition: 0 });
-        ops.push(k::Op::Int { dst: 1, value: 7 });
-        ops.push(k::Op::Drop {
-            place: k::Place::local(1),
+        ops.push(ir::Op::Int { dst: 0, value: 1 });
+        ops.push(ir::Op::If { condition: 0 });
+        ops.push(ir::Op::Int { dst: 1, value: 7 });
+        ops.push(ir::Op::Drop {
+            place: ir::Place::local(1),
         });
         if consume_in_then && branch + 1 == branches {
-            ops.push(k::Op::Drop {
-                place: k::Place::local(owner),
+            ops.push(ir::Op::Drop {
+                place: ir::Place::local(owner),
             });
         }
-        ops.push(k::Op::Else);
-        ops.push(k::Op::Int { dst: 2, value: 9 });
-        ops.push(k::Op::Drop {
-            place: k::Place::local(2),
+        ops.push(ir::Op::Else);
+        ops.push(ir::Op::Int { dst: 2, value: 9 });
+        ops.push(ir::Op::Drop {
+            place: ir::Place::local(2),
         });
-        ops.push(k::Op::End);
+        ops.push(ir::Op::End);
     }
-    ops.push(k::Op::Return { src: owner });
-    k::Program {
-        types: k::primitives(),
-        functions: vec![k::Function {
+    ops.push(ir::Op::Return { src: owner });
+    ir::Program {
+        types: ir::primitives(),
+        functions: vec![ir::Function {
             file: 0,
             name: "probe".to_string(),
             params: 0,
-            result: k::I64,
+            result: ir::I64,
             return_source: None,
             locals: declarations,
             body: ops
                 .into_iter()
                 .enumerate()
-                .map(|(index, op)| k::Instruction {
+                .map(|(index, op)| ir::Instruction {
                     column: 1,
                     line: index + 1,
                     op,

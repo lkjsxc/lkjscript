@@ -5,30 +5,30 @@ use crate::Option;
 use crate::iter::Iterator;
 
 #[derive(Clone)]
-pub struct BTreeMap<K, V> {
-    nodes: Vec<Node<K, V>>,
+pub struct BTreeMap<IR, V> {
+    nodes: Vec<Node<IR, V>>,
     root: usize,
     vacant: usize,
     count: usize,
 }
 
 #[derive(Clone)]
-struct Pair<K, V> {
-    key: K,
+struct Pair<IR, V> {
+    key: IR,
     value: V,
 }
 
 #[derive(Clone)]
-struct Node<K, V> {
-    entry: Option<Pair<K, V>>,
+struct Node<IR, V> {
+    entry: Option<Pair<IR, V>>,
     left: usize,
     right: usize,
     parent: usize,
     height: usize,
 }
 
-impl<K, V> BTreeMap<K, V> {
-    pub fn new() -> BTreeMap<K, V> {
+impl<IR, V> BTreeMap<IR, V> {
+    pub fn new() -> BTreeMap<IR, V> {
         BTreeMap {
             nodes: Vec::new(),
             root: 0,
@@ -136,7 +136,7 @@ impl<K, V> BTreeMap<K, V> {
             index = self.nodes[index].parent;
         }
     }
-    fn allocate(&mut self, key: K, value: V, parent: usize) -> usize {
+    fn allocate(&mut self, key: IR, value: V, parent: usize) -> usize {
         let node = Node {
             entry: Option::Some(Pair { key, value }),
             left: 0,
@@ -165,7 +165,7 @@ impl<K, V> BTreeMap<K, V> {
             index
         }
     }
-    fn remove_node(&mut self, mut index: usize) -> Pair<K, V> {
+    fn remove_node(&mut self, mut index: usize) -> Pair<IR, V> {
         let removed = self.nodes[index].entry.take().unwrap();
         if self.nodes[index].left != 0 && self.nodes[index].right != 0 {
             let next = self.first_node(self.nodes[index].right);
@@ -201,7 +201,7 @@ impl<K, V> BTreeMap<K, V> {
         self.vacant = 0;
         self.count = 0;
     }
-    pub fn first_key_value(&self) -> Option<(&K, &V)> {
+    pub fn first_key_value(&self) -> Option<(&IR, &V)> {
         let index = self.first_node(self.root);
         if index == 0 {
             Option::None
@@ -212,7 +212,7 @@ impl<K, V> BTreeMap<K, V> {
             }
         }
     }
-    pub fn pop_first(&mut self) -> Option<(K, V)> {
+    pub fn pop_first(&mut self) -> Option<(IR, V)> {
         let index = self.first_node(self.root);
         if index == 0 {
             Option::None
@@ -221,7 +221,7 @@ impl<K, V> BTreeMap<K, V> {
             Option::Some((entry.key, entry.value))
         }
     }
-    pub fn retain<F: FnMut(&K, &mut V) -> bool>(&mut self, mut predicate: F) {
+    pub fn retain<F: FnMut(&IR, &mut V) -> bool>(&mut self, mut predicate: F) {
         let mut index = self.first_node(self.root);
         while index != 0 {
             let next = self.successor(index);
@@ -241,22 +241,22 @@ impl<K, V> BTreeMap<K, V> {
             }
         }
     }
-    pub fn iter<'a>(&'a self) -> Iter<'a, K, V> {
+    pub fn iter<'a>(&'a self) -> Iter<'a, IR, V> {
         Iter {
             map: self,
             next: self.first_node(self.root),
         }
     }
-    pub fn keys<'a>(&'a self) -> Keys<'a, K, V> {
+    pub fn keys<'a>(&'a self) -> Keys<'a, IR, V> {
         Keys { inner: self.iter() }
     }
-    pub fn values<'a>(&'a self) -> Values<'a, K, V> {
+    pub fn values<'a>(&'a self) -> Values<'a, IR, V> {
         Values { inner: self.iter() }
     }
 }
 
-impl<K: Ord, V> BTreeMap<K, V> {
-    fn compare_key(&self, index: usize, key: &K) -> i32 {
+impl<IR: Ord, V> BTreeMap<IR, V> {
+    fn compare_key(&self, index: usize, key: &IR) -> i32 {
         match &self.nodes[index].entry {
             Option::Some(entry) => {
                 if *key < entry.key {
@@ -270,7 +270,7 @@ impl<K: Ord, V> BTreeMap<K, V> {
             Option::None => unreachable!(),
         }
     }
-    fn find_node(&self, key: &K) -> usize {
+    fn find_node(&self, key: &IR) -> usize {
         let mut index = self.root;
         while index != 0 {
             let ordering = self.compare_key(index, key);
@@ -284,10 +284,10 @@ impl<K: Ord, V> BTreeMap<K, V> {
         }
         0
     }
-    pub fn contains_key(&self, key: &K) -> bool {
+    pub fn contains_key(&self, key: &IR) -> bool {
         self.find_node(key) != 0
     }
-    pub fn get(&self, key: &K) -> Option<&V> {
+    pub fn get(&self, key: &IR) -> Option<&V> {
         let index = self.find_node(key);
         if index == 0 {
             Option::None
@@ -298,7 +298,7 @@ impl<K: Ord, V> BTreeMap<K, V> {
             }
         }
     }
-    pub fn get_mut(&mut self, key: &K) -> Option<&mut V> {
+    pub fn get_mut(&mut self, key: &IR) -> Option<&mut V> {
         let index = self.find_node(key);
         if index == 0 {
             Option::None
@@ -309,7 +309,7 @@ impl<K: Ord, V> BTreeMap<K, V> {
             }
         }
     }
-    pub fn insert(&mut self, key: K, value: V) -> Option<V> {
+    pub fn insert(&mut self, key: IR, value: V) -> Option<V> {
         let mut parent = 0usize;
         let mut index = self.root;
         let mut left = false;
@@ -343,7 +343,7 @@ impl<K: Ord, V> BTreeMap<K, V> {
         self.balance(parent);
         Option::None
     }
-    pub fn remove(&mut self, key: &K) -> Option<V> {
+    pub fn remove(&mut self, key: &IR) -> Option<V> {
         let index = self.find_node(key);
         if index == 0 {
             Option::None
@@ -353,19 +353,19 @@ impl<K: Ord, V> BTreeMap<K, V> {
     }
 }
 
-impl<K, V> Drop for BTreeMap<K, V> {
+impl<IR, V> Drop for BTreeMap<IR, V> {
     fn drop(&mut self) {
         self.clear();
     }
 }
 
-pub struct Iter<'a, K, V> {
-    map: &'a BTreeMap<K, V>,
+pub struct Iter<'a, IR, V> {
+    map: &'a BTreeMap<IR, V>,
     next: usize,
 }
-impl<'a, K, V> crate::iter::Iterator for Iter<'a, K, V> {
-    type Item = (&'a K, &'a V);
-    fn next(&mut self) -> Option<(&'a K, &'a V)> {
+impl<'a, IR, V> crate::iter::Iterator for Iter<'a, IR, V> {
+    type Item = (&'a IR, &'a V);
+    fn next(&mut self) -> Option<(&'a IR, &'a V)> {
         if self.next == 0 {
             return Option::None;
         }
@@ -377,42 +377,42 @@ impl<'a, K, V> crate::iter::Iterator for Iter<'a, K, V> {
         }
     }
 }
-impl<'a, K, V> crate::iter::IntoIterator for Iter<'a, K, V> {
+impl<'a, IR, V> crate::iter::IntoIterator for Iter<'a, IR, V> {
     type IntoIter = Self;
     fn into_iter(self) -> Self {
         self
     }
 }
-impl<'a, K, V> crate::iter::IntoIterator for &'a BTreeMap<K, V> {
-    type IntoIter = Iter<'a, K, V>;
-    fn into_iter(self) -> Iter<'a, K, V> {
+impl<'a, IR, V> crate::iter::IntoIterator for &'a BTreeMap<IR, V> {
+    type IntoIter = Iter<'a, IR, V>;
+    fn into_iter(self) -> Iter<'a, IR, V> {
         self.iter()
     }
 }
 
-pub struct Keys<'a, K, V> {
-    inner: Iter<'a, K, V>,
+pub struct Keys<'a, IR, V> {
+    inner: Iter<'a, IR, V>,
 }
-impl<'a, K, V> crate::iter::Iterator for Keys<'a, K, V> {
-    type Item = &'a K;
-    fn next(&mut self) -> Option<&'a K> {
+impl<'a, IR, V> crate::iter::Iterator for Keys<'a, IR, V> {
+    type Item = &'a IR;
+    fn next(&mut self) -> Option<&'a IR> {
         match self.inner.next() {
             Option::Some((key, _)) => Option::Some(key),
             Option::None => Option::None,
         }
     }
 }
-impl<'a, K, V> crate::iter::IntoIterator for Keys<'a, K, V> {
+impl<'a, IR, V> crate::iter::IntoIterator for Keys<'a, IR, V> {
     type IntoIter = Self;
     fn into_iter(self) -> Self {
         self
     }
 }
 
-pub struct Values<'a, K, V> {
-    inner: Iter<'a, K, V>,
+pub struct Values<'a, IR, V> {
+    inner: Iter<'a, IR, V>,
 }
-impl<'a, K, V> crate::iter::Iterator for Values<'a, K, V> {
+impl<'a, IR, V> crate::iter::Iterator for Values<'a, IR, V> {
     type Item = &'a V;
     fn next(&mut self) -> Option<&'a V> {
         match self.inner.next() {
@@ -421,20 +421,20 @@ impl<'a, K, V> crate::iter::Iterator for Values<'a, K, V> {
         }
     }
 }
-impl<'a, K, V> crate::iter::IntoIterator for Values<'a, K, V> {
+impl<'a, IR, V> crate::iter::IntoIterator for Values<'a, IR, V> {
     type IntoIter = Self;
     fn into_iter(self) -> Self {
         self
     }
 }
 
-impl<K, V> crate::prelude::Default for BTreeMap<K, V> {
-    fn default() -> BTreeMap<K, V> {
+impl<IR, V> crate::prelude::Default for BTreeMap<IR, V> {
+    fn default() -> BTreeMap<IR, V> {
         BTreeMap::new()
     }
 }
 
-impl<K: Ord, V: PartialEq> PartialEq for BTreeMap<K, V> {
+impl<IR: Ord, V: PartialEq> PartialEq for BTreeMap<IR, V> {
     fn eq(&self, other: &Self) -> bool {
         if self.len() != other.len() {
             return false;
@@ -454,16 +454,16 @@ impl<K: Ord, V: PartialEq> PartialEq for BTreeMap<K, V> {
         }
     }
 }
-impl<K: Ord, V: Eq> Eq for BTreeMap<K, V> {}
+impl<IR: Ord, V: Eq> Eq for BTreeMap<IR, V> {}
 
 /// Owned iteration takes entries in key order without rebalancing the tree.
-pub struct IntoIter<K, V> {
-    map: BTreeMap<K, V>,
+pub struct IntoIter<IR, V> {
+    map: BTreeMap<IR, V>,
     next: usize,
 }
-impl<K, V> crate::iter::Iterator for IntoIter<K, V> {
-    type Item = (K, V);
-    fn next(&mut self) -> Option<(K, V)> {
+impl<IR, V> crate::iter::Iterator for IntoIter<IR, V> {
+    type Item = (IR, V);
+    fn next(&mut self) -> Option<(IR, V)> {
         if self.next == 0 {
             return Option::None;
         }
@@ -474,15 +474,15 @@ impl<K, V> crate::iter::Iterator for IntoIter<K, V> {
         Option::Some((entry.key, entry.value))
     }
 }
-impl<K, V> crate::iter::IntoIterator for IntoIter<K, V> {
+impl<IR, V> crate::iter::IntoIterator for IntoIter<IR, V> {
     type IntoIter = Self;
     fn into_iter(self) -> Self {
         self
     }
 }
-impl<K, V> crate::iter::IntoIterator for BTreeMap<K, V> {
-    type IntoIter = IntoIter<K, V>;
-    fn into_iter(self) -> IntoIter<K, V> {
+impl<IR, V> crate::iter::IntoIterator for BTreeMap<IR, V> {
+    type IntoIter = IntoIter<IR, V>;
+    fn into_iter(self) -> IntoIter<IR, V> {
         let next = self.first_node(self.root);
         IntoIter { map: self, next }
     }

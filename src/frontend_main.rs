@@ -10,8 +10,8 @@ pub mod frontend;
 pub mod frontend_bundle;
 pub mod frontend_input;
 pub mod generics;
-pub mod k;
-pub mod k_text;
+pub mod ir;
+pub mod ir_text;
 pub mod names;
 pub mod resolve;
 pub mod source;
@@ -75,8 +75,8 @@ fn read_source(directory: &mut Directory, path: &str) -> Result<Option<String>, 
     }
 }
 
-fn write_k(world: &mut World, checked: &k::CheckedProgram) {
-    let ir = k_text::write(checked.program());
+fn write_ir(world: &mut World, checked: &ir::CheckedProgram) {
+    let ir = ir_text::write(checked.program());
     let mut output = world.stdout();
     output.write(ir.as_bytes());
 }
@@ -92,7 +92,7 @@ fn run_bundle(world: &mut World, path: &str, check_only: bool) -> Result<(), Str
         Err(problem) => return Err(report(&bundle.root, problem)),
     };
     if !check_only {
-        write_k(world, &checked);
+        write_ir(world, &checked);
     }
     Ok(())
 }
@@ -156,7 +156,7 @@ fn run_source(world: &mut World, options: frontend_input::SourceOptions) -> Resu
             let mut output = world.stdout();
             output.write(&bytes);
         }
-        frontend_input::Output::Check | frontend_input::Output::K => {
+        frontend_input::Output::Check | frontend_input::Output::IR => {
             let program = match loaded.report.into_result() {
                 Ok(program) => program,
                 Err(problem) => return Err(report(&options.root, problem)),
@@ -165,8 +165,8 @@ fn run_source(world: &mut World, options: frontend_input::SourceOptions) -> Resu
                 Ok(checked) => checked,
                 Err(problem) => return Err(report(&options.root, problem)),
             };
-            if options.output == frontend_input::Output::K {
-                write_k(world, &checked);
+            if options.output == frontend_input::Output::IR {
+                write_ir(world, &checked);
             }
         }
     }

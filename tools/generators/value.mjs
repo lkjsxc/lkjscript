@@ -11,7 +11,7 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 const [binary, seedS = '601', countS = '100', output = 'target/generators'] = process.argv.slice(2);
 const bin = path.resolve(binary || 'target/debug/lkjscript');
-const engines = (process.env.LKJ_ENGINES || process.env.LKJ_ENGINE || 'native').split(',');
+const engines = (process.env.LKJSCRIPT_ENGINES || process.env.LKJSCRIPT_ENGINE || 'native').split(',');
 const sh = (c, a) => (spawnSync(c, a, { encoding: 'utf8' }).stdout || '').trim();
 // Capture identities before execution so later edits cannot relabel this run.
 const metadata = { sha256: createHash('sha256').update(fs.readFileSync(new URL(import.meta.url))).update(fs.readFileSync(new URL('../process.mjs', import.meta.url))).digest('hex'), binarySha256: createHash('sha256').update(fs.readFileSync(bin)).digest('hex'), compilerDirty: sh('git', ['status', '--porcelain', '--untracked-files=no']) !== '', compiler: sh('git', ['-C', path.dirname(fs.realpathSync(bin)), 'rev-parse', 'HEAD']) || 'unknown', rustc: sh('rustc', ['--version']), node: process.version };
@@ -168,7 +168,7 @@ for (let i = 0; i < N; i++) {
   else if (r.k === 'trap' && l.k === 'trap') cls = r.kind !== l.kind ? 'TRAP-KIND-DIFFERS' : r.line !== l.line ? 'trap-same-kind-other-line' : 'trap-equal';
   else cls = 'VALUE-VS-TRAP';
   bump(cls);
-  if (cls !== 'value-equal' && cls !== 'trap-equal') show.push(`${dir}/c${i} ${cls} rust=${r.k === 'value' ? r.v : r.k === 'trap' ? r.kind + '@' + r.line + ' ' + r.text : r.text} lkj=${(l.text || '').replace(/^\S*\.(rs|elf):/, '').slice(0, 150)}`);
+  if (cls !== 'value-equal' && cls !== 'trap-equal') show.push(`${dir}/c${i} ${cls} rust=${r.k === 'value' ? r.v : r.k === 'trap' ? r.kind + '@' + r.line + ' ' + r.text : r.text} lkjscript=${(l.text || '').replace(/^\S*\.(rs|elf):/, '').slice(0, 150)}`);
 }
 const record = { generator: 'value', engine, ...metadata, rustFlags: FLAGS.join(' '), seed: seedS, programs: N, ...tally };
 fs.mkdirSync(output, {recursive: true});

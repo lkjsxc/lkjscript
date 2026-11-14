@@ -1,5 +1,5 @@
 //! Additional obligations for discarded definition-verification programs.
-//! These annotations cannot create CheckedProgram authority or alter parsed K.
+//! These annotations cannot create CheckedProgram authority or alter parsed IR.
 //! A fixed source region may retain a call argument after its descriptor dies.
 use super::*;
 mod locals;
@@ -561,7 +561,7 @@ pub(super) fn common_permissions(values: &[BTreeSet<EffectId>]) -> BTreeSet<Effe
 }
 
 /// The generic verifier consumes these diagnostics. This API never returns the
-/// capability required by an encoder, and ordinary K cannot supply a Scope.
+/// capability required by an encoder, and ordinary IR cannot supply a Scope.
 pub(crate) fn check_definitions(
     program: &Program,
     scopes: &BTreeMap<usize, Scope>,

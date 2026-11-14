@@ -14,12 +14,12 @@ pub struct Outcome {
     pub value: u64,
     pub error: Option<String>,
 }
-pub fn lower(checked: &k::CheckedProgram) -> Result<lower::Program, String> {
+pub fn lower(checked: &ir::CheckedProgram) -> Result<lower::Program, String> {
     compiler_work(|| lower::lower(checked, bootstrap_runtime::get()?))
 }
 pub fn image(
     program: &lower::Program,
-    meaning: &k::Program,
+    meaning: &ir::Program,
     entry: usize,
     packet: bool,
 ) -> Result<Vec<u8>, String> {
@@ -27,7 +27,7 @@ pub fn image(
 }
 fn image_inner(
     program: &lower::Program,
-    meaning: &k::Program,
+    meaning: &ir::Program,
     entry: usize,
     packet: bool,
 ) -> Result<Vec<u8>, String> {
@@ -143,26 +143,26 @@ pub fn execute(
 }
 
 pub fn scalar(
-    program: &k::Program,
-    function: &k::Function,
+    program: &ir::Program,
+    function: &ir::Function,
     value: u64,
-) -> Result<machine::Scalar, String> {
+) -> Result<interpreter::Scalar, String> {
     Ok(match program.types[function.result].kind {
-        k::TypeKind::Unit => machine::Scalar::Unit,
-        k::TypeKind::Bool => machine::Scalar::Bool(value != 0),
-        k::TypeKind::Char => machine::Scalar::Char(
+        ir::TypeKind::Unit => interpreter::Scalar::Unit,
+        ir::TypeKind::Bool => interpreter::Scalar::Bool(value != 0),
+        ir::TypeKind::Char => interpreter::Scalar::Char(
             u32::try_from(value)
                 .ok()
                 .and_then(char::from_u32)
                 .ok_or_else(|| "E_HOST native image returned an invalid character".to_string())?,
         ),
-        k::TypeKind::F64 => machine::Scalar::F64 { bits: value },
-        k::TypeKind::Int { bits, signed } => machine::Scalar::Int {
+        ir::TypeKind::F64 => interpreter::Scalar::F64 { bits: value },
+        ir::TypeKind::Int { bits, signed } => interpreter::Scalar::Int {
             value,
             bits,
             signed,
         },
-        _ => machine::Scalar::Int {
+        _ => interpreter::Scalar::Int {
             value,
             bits: 64,
             signed: true,
@@ -170,7 +170,7 @@ pub fn scalar(
     })
 }
 pub fn run(
-    checked: &k::CheckedProgram,
+    checked: &ir::CheckedProgram,
     args: &Arguments,
     timings: &mut timing::Timings,
 ) -> Result<u8, String> {

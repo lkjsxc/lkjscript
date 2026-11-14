@@ -3,7 +3,7 @@
 //! Source edges, generic substitutions, nominal fields, and transparent aliases
 //! use explicit work frames. In-progress nominal IDs are interned before their
 //! fields, preserving recursive types through indirection without native recursion.
-use super::{Compiler, Result, TypeKey, a, err, is_copy, k};
+use super::{Compiler, Result, TypeKey, a, err, ir, is_copy};
 use std::collections::BTreeMap;
 
 enum Work {
@@ -178,7 +178,7 @@ impl Compiler<'_> {
                                 "function pointer types are not implemented",
                             ));
                         }
-                        a::Type::Never => work.values.push(k::UNIT),
+                        a::Type::Never => work.values.push(ir::UNIT),
                     }
                 }
                 Work::Remember { id, environment } => {
@@ -266,7 +266,7 @@ impl Compiler<'_> {
                 }
                 Work::Reference { mutable, span } => {
                     let inner = work.values.pop().expect("reference child");
-                    if mutable && matches!(self.types[inner].kind, k::TypeKind::Str) {
+                    if mutable && matches!(self.types[inner].kind, ir::TypeKind::Str) {
                         return Err(err(
                             span,
                             "E_UNSUPPORTED",
@@ -279,7 +279,7 @@ impl Compiler<'_> {
                     let inner = work.values.pop().expect("slice child");
                     let id = self.intern(
                         String::new(),
-                        k::TypeKind::Slice {
+                        ir::TypeKind::Slice {
                             inner,
                             mutable: false,
                         },
@@ -308,24 +308,24 @@ impl Compiler<'_> {
                         ));
                     }
                     self.check_owned_element(inner, span)?;
-                    let id = self.intern(String::new(), k::TypeKind::Array { inner, len });
+                    let id = self.intern(String::new(), ir::TypeKind::Array { inner, len });
                     work.values.push(id);
                 }
                 Work::Tuple { fields } => {
                     let values = work.take_values(fields);
                     if values.is_empty() {
-                        work.values.push(k::UNIT);
+                        work.values.push(ir::UNIT);
                         continue;
                     }
                     let mut fields = Vec::new();
                     for (index, ty) in values.into_iter().enumerate() {
-                        fields.push(k::Field {
+                        fields.push(ir::Field {
                             name: format!("{index}"),
                             ty,
                         });
                     }
                     let copy = fields.iter().all(|field| is_copy(&self.types, field.ty));
-                    let id = self.intern(String::new(), k::TypeKind::Struct { fields, copy });
+                    let id = self.intern(String::new(), ir::TypeKind::Struct { fields, copy });
                     work.values.push(id);
                 }
                 Work::Struct {
@@ -338,7 +338,7 @@ impl Compiler<'_> {
                     let values = work.take_values(definition.fields.len());
                     let mut fields = Vec::new();
                     for (field, ty) in definition.fields.iter().zip(values) {
-                        fields.push(k::Field {
+                        fields.push(ir::Field {
                             name: field.name.clone(),
                             ty,
                         });
@@ -356,7 +356,7 @@ impl Compiler<'_> {
                     {
                         return Err(err(span, "E_TYPE", "Copy requires Copy fields"));
                     }
-                    self.types[id].kind = k::TypeKind::Struct {
+                    self.types[id].kind = ir::TypeKind::Struct {
                         fields,
                         copy: requested_copy && fields_copy,
                     };
@@ -383,13 +383,13 @@ impl Compiler<'_> {
                     for variant in &definition.variants {
                         let mut fields = Vec::new();
                         for field in &variant.fields {
-                            fields.push(k::Field {
+                            fields.push(ir::Field {
                                 name: field.name.clone(),
                                 ty: values[at],
                             });
                             at += 1;
                         }
-                        variants.push(k::Variant {
+                        variants.push(ir::Variant {
                             name: variant.name.clone(),
                             fields,
                         });
@@ -412,7 +412,7 @@ impl Compiler<'_> {
                     {
                         return Err(err(span, "E_TYPE", "Copy requires Copy fields"));
                     }
-                    self.types[id].kind = k::TypeKind::Enum {
+                    self.types[id].kind = ir::TypeKind::Enum {
                         variants,
                         copy: requested_copy && fields_copy,
                     };
@@ -448,9 +448,9 @@ impl Compiler<'_> {
             }
             self.check_owned_element(args[0], span)?;
             let kind = if path.name == "Vec" {
-                k::TypeKind::Vec { inner: args[0] }
+                ir::TypeKind::Vec { inner: args[0] }
             } else {
-                k::TypeKind::Box { inner: args[0] }
+                ir::TypeKind::Box { inner: args[0] }
             };
             work.values.push(self.intern(String::new(), kind));
             return Ok(());
@@ -460,7 +460,7 @@ impl Compiler<'_> {
                 return Err(err(span, "E_TYPE", "str takes no type arguments"));
             }
             work.values
-                .push(self.intern(String::new(), k::TypeKind::Str));
+                .push(self.intern(String::new(), ir::TypeKind::Str));
             return Ok(());
         }
         if path.declaration.is_none()
@@ -477,12 +477,12 @@ impl Compiler<'_> {
                 ));
             }
             let kind = match path.name.as_str() {
-                "World" => k::TypeKind::World,
-                "Stdout" => k::TypeKind::Stdout,
-                "Stdin" => k::TypeKind::Stdin,
-                "Stderr" => k::TypeKind::Stderr,
-                "Directory" => k::TypeKind::Directory,
-                "File" => k::TypeKind::File,
+                "World" => ir::TypeKind::World,
+                "Stdout" => ir::TypeKind::Stdout,
+                "Stdin" => ir::TypeKind::Stdin,
+                "Stderr" => ir::TypeKind::Stderr,
+                "Directory" => ir::TypeKind::Directory,
+                "File" => ir::TypeKind::File,
                 _ => unreachable!(),
             };
             work.values.push(self.intern(String::new(), kind));
@@ -571,9 +571,9 @@ impl Compiler<'_> {
         };
         let id = self.types.len();
         self.type_keys.insert(key, id);
-        self.types.push(k::Type {
+        self.types.push(ir::Type {
             name: description,
-            kind: k::TypeKind::Unit,
+            kind: ir::TypeKind::Unit,
         });
         match item {
             Some(a::Item::Struct(index)) => {

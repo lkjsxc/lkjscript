@@ -1,0 +1,829 @@
+#[path = "../bridge/library.rs"]
+mod bootstrap_library;
+use interpreter::{ErrorKind, InterpreterError, Scalar};
+use lkjscript::{compiler, interpreter, ir, source};
+
+fn compiled(text: &str) -> ir::CheckedProgram {
+    let mut files = bootstrap_library::standard_library();
+    files.push(source::SourceInput {
+        path: "interpreter.rs".to_string(),
+        text: text.to_string(),
+    });
+    compiler::check_bundle(&source::SourceBundle {
+        root: "interpreter.rs".to_string(),
+        library: Some("$std/lib.rs".to_string()),
+        files,
+    })
+    .unwrap()
+}
+fn execute(
+    text: &str,
+    name: &str,
+    args: &[u64],
+) -> Result<interpreter::RunResult, interpreter::RunError> {
+    let checked = compiled(text);
+    let program = checked.program();
+    let entry = program
+        .functions
+        .iter()
+        .position(|function| function.name == name)
+        .unwrap();
+    interpreter::run(
+        program,
+        entry,
+        args,
+        &mut Vec::new(),
+        interpreter::Resources::unlimited(),
+    )
+}
+fn must_run(
+    result: Result<interpreter::RunResult, interpreter::RunError>,
+) -> interpreter::RunResult {
+    result.unwrap_or_else(|error| panic!("{}: {}", error.code(), error.message))
+}
+fn observed(value: Scalar) -> i64 {
+    match value {
+        Scalar::Int { value, .. } => value as i64,
+        _ => panic!("expected an integer scalar"),
+    }
+}
+
+#[test]
+fn model_runs_values_moves_borrows_collections_and_source_library() {
+    let cases = [
+        (include_str!("conformance/pass/arithmetic.rs"), 42),
+        (include_str!("conformance/pass/fibonacci.rs"), 55),
+        (include_str!("conformance/pass/loop_control.rs"), 25),
+        (
+            include_str!("conformance/pass/disjoint_mutable_fields.rs"),
+            42,
+        ),
+        (
+            include_str!("conformance/pass/partial_move_reinitialize.rs"),
+            42,
+        ),
+        (include_str!("conformance/pass/recursive_box.rs"), 42),
+        (
+            "pub fn probe() -> i64 {let mut v:Vec<i64>=vec![10,20];v.push(12);let out=v.pop().unwrap();v[0]+v[1]+out}",
+            42,
+        ),
+        (
+            "pub fn probe() -> i64 {let mut s=String::from_str(\"ab\");s.push_str(\"c\");let t=s.clone();t.len() as i64}",
+            3,
+        ),
+    ];
+    for (text, expected) in cases {
+        let result = execute(text, "probe", &[])
+            .unwrap_or_else(|error| panic!("{}: {}\n{text}", error.code(), error.message));
+        assert_eq!(observed(result.value), expected);
+    }
+}
+
+#[test]
+fn model_runs_custom_drop_in_source_order() {
+    let text = r#"
+        struct Counter<'a> { count: &'a mut i64 }
+        impl<'a> Drop for Counter<'a> {
+            fn drop(&mut self) { *self.count = *self.count * 10 + 1; }
+        }
+        struct Parent<'a> { child: Counter<'a> }
+        fn returning(count: &mut i64) -> i64 { let counter = Counter { count }; return 7; }
+        fn breaking(count: &mut i64) { loop { let counter = Counter { count }; break; } }
+        fn probe() -> i64 {
+            let mut count: i64 = 0;
+            let value = returning(&mut count);
+            breaking(&mut count);
+            { let parent = Parent { child: Counter { count: &mut count } }; }
+            count + value
+        }
+    "#;
+    assert_eq!(observed(must_run(execute(text, "probe", &[])).value), 118);
+}
+
+#[test]
+fn model_uses_an_explicit_stack_for_non_tail_calls_and_deep_cleanup() {
+    let checked = compiled(
+        "fn recurse(n:i64)->i64 { if n==0 {0} else { let value=recurse(n-1);value+1 } } pub fn probe()->i64 {recurse(20000)}",
+    );
+    let program = checked.program().clone();
+    let entry = program
+        .functions
+        .iter()
+        .position(|function| function.name == "probe")
+        .unwrap();
+    let result = must_run(interpreter::run(
+        &program,
+        entry,
+        &[],
+        &mut Vec::new(),
+        interpreter::Resources::unlimited(),
+    ));
+    assert_eq!(observed(result.value), 20000);
+    assert_eq!(result.peak_frames, 20002);
+    let cleanup = "enum List {End,Next(Box<List>)} pub fn probe()->i64 {let mut v=List::End;let mut i:i64=0;while i<20000 {v=List::Next(Box::new(v));i=i+1;}i}";
+    assert_eq!(
+        observed(must_run(execute(cleanup, "probe", &[])).value),
+        20000
+    );
+}
+
+#[test]
+fn model_reports_program_traps_separately_from_machine_errors() {
+    for (text, argument, code) in [
+        ("fn probe(x:i8)->i8{x+1i8}", 127, 1),
+        ("fn probe(x:i64)->i64{42/x}", 0, 2),
+        ("fn probe(x:usize)->i64{let a:[i64;1]=[1];a[x]}", 1, 3),
+        ("fn probe(x:i64)->i64{assert!(x==0);x}", 1, 5),
+    ] {
+        let error = execute(text, "probe", &[argument])
+            .err()
+            .expect("expected a interpreter failure");
+        assert!(error.kind == ErrorKind::Trap(code), "{}", error.message);
+        assert_eq!(error.line, 1);
+    }
+}
+
+fn raw(mut types: Vec<ir::Type>, locals: &[usize], result: usize, ops: Vec<ir::Op>) -> ir::Program {
+    let mut primitives = ir::primitives();
+    primitives.append(&mut types);
+    ir::Program {
+        types: primitives,
+        functions: vec![ir::Function {
+            file: 0,
+            name: "probe".to_string(),
+            params: 0,
+            result,
+            return_source: None,
+            locals: locals
+                .iter()
+                .map(|ty| ir::Local {
+                    name: String::new(),
+                    ty: *ty,
+                    mutable: true,
+                })
+                .collect(),
+            body: ops
+                .into_iter()
+                .enumerate()
+                .map(|(line, op)| ir::Instruction {
+                    column: 1,
+                    line: line + 1,
+                    op,
+                })
+                .collect(),
+            test: false,
+        }],
+        destructors: Vec::new(),
+    }
+}
+fn read(dst: usize, local: usize, moving: bool) -> ir::Op {
+    ir::Op::Read {
+        dst,
+        place: ir::Place::local(local),
+        moving,
+    }
+}
+fn drop_local(local: usize) -> ir::Op {
+    ir::Op::Drop {
+        place: ir::Place::local(local),
+    }
+}
+fn fails(program: ir::Program, expected: InterpreterError) {
+    let error = interpreter::run(
+        &program,
+        0,
+        &[],
+        &mut Vec::new(),
+        interpreter::Resources::unlimited(),
+    )
+    .err()
+    .expect("expected a interpreter failure");
+    assert!(
+        error.kind == ErrorKind::Interpreter(expected),
+        "{}: {}",
+        error.code(),
+        error.message
+    );
+}
+#[test]
+fn raw_ir_detects_moves_double_drop_and_conflicting_access_without_checker() {
+    fails(
+        raw(
+            Vec::new(),
+            &[ir::I64],
+            ir::I64,
+            vec![
+                ir::Op::Int { dst: 0, value: 1 },
+                drop_local(0),
+                drop_local(0),
+            ],
+        ),
+        InterpreterError::DoubleDrop,
+    );
+    fails(
+        raw(
+            Vec::new(),
+            &[ir::I64, ir::I64, ir::I64],
+            ir::I64,
+            vec![
+                ir::Op::Int { dst: 0, value: 1 },
+                read(1, 0, true),
+                read(2, 0, false),
+            ],
+        ),
+        InterpreterError::UseAfterMove,
+    );
+    let reference = ir::Type {
+        name: "&mut i64".to_string(),
+        kind: ir::TypeKind::Ref {
+            inner: ir::I64,
+            mutable: true,
+        },
+    };
+    fails(
+        raw(
+            vec![reference],
+            &[ir::I64, 7, ir::I64],
+            ir::I64,
+            vec![
+                ir::Op::Int { dst: 0, value: 1 },
+                ir::Op::Borrow {
+                    dst: 1,
+                    place: ir::Place::local(0),
+                    mutable: true,
+                },
+                read(2, 0, false),
+            ],
+        ),
+        InterpreterError::ConflictingAccess,
+    );
+}
+#[test]
+fn raw_ir_detects_frame_escape_and_inactive_variant_without_checker() {
+    let reference = ir::Type {
+        name: "&i64".to_string(),
+        kind: ir::TypeKind::Ref {
+            inner: ir::I64,
+            mutable: false,
+        },
+    };
+    fails(
+        raw(
+            vec![reference],
+            &[ir::I64, 7],
+            7,
+            vec![
+                ir::Op::Int { dst: 0, value: 1 },
+                ir::Op::Borrow {
+                    dst: 1,
+                    place: ir::Place::local(0),
+                    mutable: false,
+                },
+                ir::Op::Return { src: 1 },
+            ],
+        ),
+        InterpreterError::DanglingReference,
+    );
+    let enumeration = ir::Type {
+        name: "E".to_string(),
+        kind: ir::TypeKind::Enum {
+            copy: false,
+            variants: vec![
+                ir::Variant {
+                    name: "A".to_string(),
+                    fields: vec![ir::Field {
+                        name: "0".to_string(),
+                        ty: ir::I64,
+                    }],
+                },
+                ir::Variant {
+                    name: "B".to_string(),
+                    fields: vec![ir::Field {
+                        name: "0".to_string(),
+                        ty: ir::I64,
+                    }],
+                },
+            ],
+        },
+    };
+    fails(
+        raw(
+            vec![enumeration],
+            &[ir::I64, 7, ir::I64],
+            ir::I64,
+            vec![
+                ir::Op::Int { dst: 0, value: 1 },
+                ir::Op::Variant {
+                    dst: 1,
+                    variant: 0,
+                    fields: vec![0],
+                },
+                ir::Op::Read {
+                    dst: 2,
+                    place: ir::Place {
+                        local: 1,
+                        projections: vec![ir::Projection::VariantField(1, 0)],
+                    },
+                    moving: false,
+                },
+            ],
+        ),
+        InterpreterError::InactiveVariant,
+    );
+}
+#[test]
+fn raw_ir_cannot_fabricate_host_authority_or_supply_it_as_integer_argument() {
+    for kind in [
+        ir::TypeKind::World,
+        ir::TypeKind::Stdout,
+        ir::TypeKind::Stdin,
+        ir::TypeKind::Stderr,
+        ir::TypeKind::Directory,
+        ir::TypeKind::File,
+    ] {
+        let program = raw(
+            vec![ir::Type {
+                name: "authority".to_string(),
+                kind,
+            }],
+            &[7],
+            7,
+            vec![ir::Op::Int { dst: 0, value: 0 }, ir::Op::Return { src: 0 }],
+        );
+        fails(program.clone(), InterpreterError::InvalidIr);
+        let mut entry = program;
+        entry.functions[0].params = 1;
+        assert!(
+            interpreter::run(
+                &entry,
+                0,
+                &[0],
+                &mut Vec::new(),
+                interpreter::Resources::unlimited()
+            )
+            .err()
+            .expect("expected a interpreter failure")
+            .kind
+                == ErrorKind::Interpreter(InterpreterError::InvalidIr)
+        );
+    }
+}
+
+fn run_output<H: interpreter::Host>(
+    text: &str,
+    host: &mut H,
+) -> Result<interpreter::RunResult, interpreter::RunError> {
+    let checked = compiled(text);
+    let program = checked.program();
+    let entry = program
+        .functions
+        .iter()
+        .position(|function| function.name == "main")
+        .unwrap();
+    interpreter::run(
+        program,
+        entry,
+        &[],
+        host,
+        interpreter::Resources::unlimited(),
+    )
+}
+
+#[test]
+fn model_output_preserves_bytes_drop_order_and_trap_prefix() {
+    let mut bytes = Vec::new();
+    let result = must_run(run_output(
+        include_str!("conformance/output/bytes.rs"),
+        &mut bytes,
+    ));
+    assert!(result.value == Scalar::Unit);
+    let mut expected = "Hello, 世界!\n".as_bytes().to_vec();
+    expected.extend_from_slice(&[0, 255, 13, 10]);
+    expected.extend(0u8..=255);
+    assert_eq!(bytes, expected);
+    bytes.clear();
+    must_run(run_output(
+        include_str!("conformance/output/drop_order.rs"),
+        &mut bytes,
+    ));
+    assert_eq!(bytes, b"abc\n");
+    bytes.clear();
+    must_run(run_output(
+        include_str!("conformance/output/derived_writer.rs"),
+        &mut bytes,
+    ));
+    assert_eq!(bytes, b"derived\n");
+    bytes.clear();
+    let error = run_output(
+        include_str!("conformance/output/before_trap.rs"),
+        &mut bytes,
+    )
+    .err()
+    .expect("expected a interpreter failure");
+    assert!(error.kind == ErrorKind::Trap(5), "{}", error.message);
+    assert_eq!(bytes, b"before trap\n");
+}
+
+#[test]
+fn model_host_failure_keeps_previous_output_and_has_its_own_trap_kind() {
+    struct FailingHost(Vec<u8>);
+    impl interpreter::Host for FailingHost {
+        fn write_stdout(&mut self, bytes: &[u8]) -> Result<(), String> {
+            if !self.0.is_empty() {
+                return Err("injected write failure".to_string());
+            }
+            self.0.extend_from_slice(bytes);
+            Ok(())
+        }
+    }
+    let mut host = FailingHost(Vec::new());
+    let error = run_output("pub fn main(mut world:World){let mut out=world.stdout();out.write(\"a\".as_bytes());out.write(\"b\".as_bytes());}", &mut host).err().expect("expected a interpreter failure");
+    assert!(error.kind == ErrorKind::Trap(7), "{}", error.message);
+    assert_eq!(host.0, b"a");
+}
+
+#[test]
+fn conditional_projected_drop_clears_moves_while_strict_drop_rejects_repeated_destruction() {
+    let types = vec![
+        ir::Type {
+            name: "Box".to_string(),
+            kind: ir::TypeKind::Box { inner: ir::I64 },
+        },
+        ir::Type {
+            name: "Pair".to_string(),
+            kind: ir::TypeKind::Struct {
+                fields: vec![ir::Field {
+                    name: "left".to_string(),
+                    ty: 7,
+                }],
+                copy: false,
+            },
+        },
+    ];
+    let field = ir::Place {
+        local: 2,
+        projections: vec![ir::Projection::Field(0)],
+    };
+    let mut ops = vec![
+        ir::Op::Int { dst: 0, value: 1 },
+        ir::Op::Intrinsic {
+            dst: 1,
+            name: "box_new".to_string(),
+            args: vec![0],
+        },
+        ir::Op::Struct {
+            dst: 2,
+            fields: vec![1],
+        },
+        ir::Op::Read {
+            dst: 6,
+            place: field.clone(),
+            moving: true,
+        },
+        ir::Op::DropIf {
+            place: field.clone(),
+        },
+        ir::Op::Int { dst: 3, value: 2 },
+        ir::Op::Intrinsic {
+            dst: 4,
+            name: "box_new".to_string(),
+            args: vec![3],
+        },
+        ir::Op::Assign {
+            place: field.clone(),
+            src: 4,
+        },
+        ir::Op::Drop {
+            place: field.clone(),
+        },
+    ];
+    let mut forged = ops.clone();
+    forged.push(ir::Op::Drop { place: field });
+    fails(
+        raw(
+            types.clone(),
+            &[ir::I64, 7, 8, ir::I64, 7, ir::UNIT, 7],
+            ir::UNIT,
+            forged,
+        ),
+        InterpreterError::DoubleDrop,
+    );
+    ops.extend([
+        drop_local(6),
+        drop_local(2),
+        ir::Op::Unit { dst: 5 },
+        ir::Op::Return { src: 5 },
+    ]);
+    let valid = raw(
+        types,
+        &[ir::I64, 7, 8, ir::I64, 7, ir::UNIT, 7],
+        ir::UNIT,
+        ops,
+    );
+    assert!(
+        must_run(interpreter::run(
+            &valid,
+            0,
+            &[],
+            &mut Vec::new(),
+            interpreter::Resources::unlimited()
+        ))
+        .value
+            == Scalar::Unit
+    );
+}
+
+#[test]
+fn model_checks_signed_minimum_overflow_and_invalid_raw_integer_widths() {
+    for (text, argument) in [
+        ("fn probe(x:i8)->i8{-x}", (-128i64) as u64),
+        ("fn probe(x:i16)->i16{x / -1i16}", (-32768i64) as u64),
+        ("fn probe(x:i32)->i32{x % -1i32}", (i32::MIN as i64) as u64),
+        ("fn probe(x:i64)->i64{x / -1i64}", i64::MIN as u64),
+    ] {
+        assert!(
+            execute(text, "probe", &[argument])
+                .err()
+                .expect("expected a interpreter failure")
+                .kind
+                == ErrorKind::Trap(1)
+        );
+    }
+    fails(
+        raw(
+            vec![ir::Type {
+                name: "invalid".to_string(),
+                kind: ir::TypeKind::Int {
+                    bits: 0,
+                    signed: true,
+                },
+            }],
+            &[7],
+            7,
+            vec![ir::Op::Int { dst: 0, value: 0 }],
+        ),
+        InterpreterError::InvalidIr,
+    );
+}
+
+#[test]
+fn strict_and_conditional_drops_have_independent_static_and_dynamic_checks() {
+    fn program(text: &str) -> ir::Program {
+        lkjscript::ir_text::read(text)
+            .unwrap_or_else(|problem| panic!("{}: {}", problem.code, problem.message))
+    }
+    let accepted = program(include_str!("conformance/ir/drop_if_owned.lkjir"));
+    lkjscript::check::check(accepted.clone())
+        .unwrap_or_else(|problem| panic!("{}: {}", problem.code, problem.message));
+    assert!(
+        must_run(interpreter::run(
+            &accepted,
+            0,
+            &[],
+            &mut Vec::new(),
+            interpreter::Resources::unlimited()
+        ))
+        .value
+            == Scalar::Int {
+                value: 42,
+                bits: 64,
+                signed: true,
+            }
+    );
+    for (text, code, fault, place) in [
+        (
+            include_str!("conformance/ir/double_projected_drop.lkjir"),
+            "E_MOVE",
+            InterpreterError::DoubleDrop,
+            "pair.left",
+        ),
+        (
+            include_str!("conformance/ir/drop_after_projected_move.lkjir"),
+            "E_MOVE",
+            InterpreterError::DoubleDrop,
+            "pair.left",
+        ),
+        (
+            include_str!("conformance/ir/drop_if_absent_ancestor.lkjir"),
+            "E_MOVE",
+            InterpreterError::UseAfterMove,
+            "outer.*",
+        ),
+        (
+            include_str!("conformance/ir/drop_if_borrowed_owner.lkjir"),
+            "E_BORROW",
+            InterpreterError::UseAfterMove,
+            "slot.*",
+        ),
+        (
+            include_str!("conformance/ir/drop_if_indexed_owner.lkjir"),
+            "E_BORROW",
+            InterpreterError::UseAfterMove,
+            "array[index]",
+        ),
+    ] {
+        let raw = program(text);
+        let problem = lkjscript::check::check(raw.clone())
+            .err()
+            .expect("forged drop passed the checker");
+        assert_eq!(problem.code, code);
+        assert!(problem.message.contains(place), "{}", problem.message);
+        fails(raw, fault);
+    }
+}
+
+#[test]
+fn shared_reference_copy_keeps_real_carrier_and_exclusive_parent_conflicts() {
+    for (text, line) in [
+        (
+            include_str!("conformance/ir/borrowed_reference_carrier_drop.lkjir"),
+            6,
+        ),
+        (
+            include_str!("conformance/ir/shared_reborrow_parent_write.lkjir"),
+            9,
+        ),
+    ] {
+        let program = lkjscript::ir_text::read(text).unwrap();
+        let diagnostic = lkjscript::check::check(program.clone()).err().unwrap();
+        assert_eq!(diagnostic.code, "E_BORROW");
+        let error = interpreter::run(
+            &program,
+            0,
+            &[],
+            &mut Vec::new(),
+            interpreter::Resources::unlimited(),
+        )
+        .err()
+        .unwrap();
+        assert!(
+            error.kind == ErrorKind::Interpreter(InterpreterError::ConflictingAccess),
+            "{}",
+            error.message
+        );
+        assert_eq!(error.line, line);
+    }
+}
+
+#[test]
+fn range_views_validate_types_loans_and_utf8_without_the_checker() {
+    for (text, expected) in [
+        (
+            include_str!("conformance/ir/range_wrong_bound.lkjir"),
+            ErrorKind::Interpreter(InterpreterError::InvalidIr),
+        ),
+        (
+            include_str!("conformance/ir/range_wrong_source.lkjir"),
+            ErrorKind::Interpreter(InterpreterError::InvalidIr),
+        ),
+        (
+            include_str!("conformance/ir/range_wrong_element.lkjir"),
+            ErrorKind::Interpreter(InterpreterError::InvalidIr),
+        ),
+        (
+            include_str!("conformance/ir/range_immutable_mut.lkjir"),
+            ErrorKind::Interpreter(InterpreterError::ConflictingAccess),
+        ),
+        (
+            include_str!("conformance/ir/range_consumed_bound.lkjir"),
+            ErrorKind::Interpreter(InterpreterError::DoubleDrop),
+        ),
+        (
+            include_str!("conformance/ir/range_live_owner_drop.lkjir"),
+            ErrorKind::Interpreter(InterpreterError::ConflictingAccess),
+        ),
+        (
+            include_str!("conformance/ir/range_owner_write.lkjir"),
+            ErrorKind::Interpreter(InterpreterError::ConflictingAccess),
+        ),
+        (
+            include_str!("conformance/ir/range_mutable_text.lkjir"),
+            ErrorKind::Interpreter(InterpreterError::InvalidIr),
+        ),
+        (
+            include_str!("conformance/ir/range_end_past.lkjir"),
+            ErrorKind::Trap(3),
+        ),
+        (
+            include_str!("conformance/ir/range_utf8_start.lkjir"),
+            ErrorKind::Trap(3),
+        ),
+    ] {
+        let program = lkjscript::ir_text::read(text).unwrap();
+        let error = interpreter::run(
+            &program,
+            0,
+            &[],
+            &mut Vec::new(),
+            interpreter::Resources::unlimited(),
+        )
+        .err()
+        .unwrap();
+        assert!(
+            error.kind == expected,
+            "{}: {}",
+            error.code(),
+            error.message
+        );
+    }
+}
+
+#[test]
+fn model_frame_bytes_bound_recursion_and_are_released_on_return() {
+    let checked = compiled(
+        r#"
+fn finite(n: i64) -> i64 {
+    if n == 0 { 0 } else { finite(n - 1) + 1 }
+}
+fn direct(n: i64) -> i64 {
+    direct(n + 1) + 1
+}
+fn first(n: i64) -> i64 {
+    second(n + 1) + 1
+}
+fn second(n: i64) -> i64 {
+    first(n + 1) + 1
+}
+pub fn repeated() -> i64 {
+    let mut total = 0i64;
+    for _ in 0..20 { total += finite(64); }
+    total
+}
+pub fn runaway() -> i64 { direct(0) }
+pub fn mutual() -> i64 { first(0) }
+"#,
+    );
+    let program = checked.program();
+    let entry = |name: &str| {
+        program
+            .functions
+            .iter()
+            .position(|f| f.name == name)
+            .unwrap()
+    };
+    let resources = interpreter::Resources {
+        stack_bytes: 512 * 1024,
+    };
+    let result = must_run(interpreter::run(
+        program,
+        entry("repeated"),
+        &[],
+        &mut Vec::new(),
+        resources,
+    ));
+    assert_eq!(observed(result.value), 1280);
+    assert!(result.peak_stack_bytes > 0);
+    assert!(result.peak_stack_bytes <= resources.stack_bytes);
+    for name in ["runaway", "mutual"] {
+        let error = interpreter::run(
+            program,
+            entry(name),
+            &[],
+            &mut Vec::new(),
+            interpreter::Resources {
+                stack_bytes: 32 * 1024,
+            },
+        )
+        .err()
+        .expect("unbounded recursion exhausted its supplied frame extent");
+        assert_eq!(error.code(), "R0008");
+        assert!(error.line > 1);
+    }
+}
+
+#[test]
+fn model_heap_payloads_do_not_consume_the_frame_extent() {
+    let checked = compiled(
+        r#"
+pub fn payload() -> i64 {
+    let bytes = [7u8; 131072];
+    bytes.len() as i64 + bytes[0] as i64 + bytes[131071] as i64
+}
+pub fn unexecuted() -> i64 {
+    if false {
+        let bytes = [3u8; 100000000];
+        bytes[0] as i64
+    } else { 42 }
+}
+"#,
+    );
+    let program = checked.program();
+    for (name, expected) in [("payload", 131086), ("unexecuted", 42)] {
+        let entry = program
+            .functions
+            .iter()
+            .position(|f| f.name == name)
+            .unwrap();
+        let result = must_run(interpreter::run(
+            program,
+            entry,
+            &[],
+            &mut Vec::new(),
+            interpreter::Resources {
+                stack_bytes: 64 * 1024,
+            },
+        ));
+        assert_eq!(observed(result.value), expected);
+        assert!(result.peak_stack_bytes <= 64 * 1024);
+    }
+}

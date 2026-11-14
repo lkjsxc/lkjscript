@@ -9,7 +9,7 @@ import { runRoutes } from '../batch.mjs';
 import { oracleCache, packResult, unpackResult, worldOutcome } from '../oracle.mjs';
 const [binary='target/debug/lkjscript',seedText='601',countText='50',output='target/generators']=process.argv.slice(2);
 const bin=path.resolve(binary), seed=BigInt(seedText), count=Number(countText);
-const engines=(process.env.LKJ_ENGINES || 'native,k').split(',');
+const engines=(process.env.LKJSCRIPT_ENGINES || 'native,interpreter').split(',');
 let state=seed||1n;
 function random(n) {state^=(state<<13n)&0xffffffffffffffffn;state^=state>>7n;state^=(state<<17n)&0xffffffffffffffffn;return Number(state%BigInt(n));}
 const hash=file=>createHash('sha256').update(fs.readFileSync(file)).digest('hex');
@@ -25,7 +25,7 @@ struct OwnedMark { out: Stdout, byte: u8 }
 impl Drop for OwnedMark { fn drop(&mut self) { let b: [u8; 1] = [self.byte]; self.out.write(b.as_slice()); } }
 struct Marks { first: OwnedMark, second: OwnedMark }
 `;
-let oracle='#![allow(warnings)]\nmod __lkj_host {\n'+fs.readFileSync('bridge/output.rs','utf8')+'\n}\n';
+let oracle='#![allow(warnings)]\nmod __lkjscript_host {\n'+fs.readFileSync('bridge/output.rs','utf8')+'\n}\n';
 for(let i=0;i<count;i++) {
  let source=prelude+'pub fn main(mut world: World) { let writer: Stdout = world.stdout(); let mut out: Stdout = writer;\n';
  const bytes=[];const chunks=1+random(8);
@@ -56,11 +56,11 @@ pair.second=OwnedMark { out: world.stdout(), byte: ${d}u8 };
  }
  const trapped=random(5)===0;if(trapped)source+='assert!(false);\n';source+='}\n';
  const file=path.join(dir,`c${i}.rs`);fs.writeFileSync(file,source);sourceFiles.push(file);expected.push({bytes:Buffer.from(bytes),ending:trapped?'R0005':'normal'});
- oracle+=`mod c${i} { use crate::__lkj_host::{World,Stdout};\n${source}}\n`;
+ oracle+=`mod c${i} { use crate::__lkjscript_host::{World,Stdout};\n${source}}\n`;
 }
-oracle+='fn main() { match std::env::var("LKJ_ORACLE_CASE").unwrap().as_str() {\n'+sourceFiles.map((_,i)=>`"${i}" => __lkj_host::enter(c${i}::main),`).join('\n')+'\n_ => std::process::exit(2) } }\n';
+oracle+='fn main() { match std::env::var("LKJSCRIPT_ORACLE_CASE").unwrap().as_str() {\n'+sourceFiles.map((_,i)=>`"${i}" => __lkjscript_host::enter(c${i}::main),`).join('\n')+'\n_ => std::process::exit(2) } }\n';
 const rustSource=path.join(dir,'oracle.rs'),rustBinary=path.join(dir,'oracle');fs.writeFileSync(rustSource,oracle);
-const rustFlags=['--edition=2024','--cfg','lkj_control','-C','overflow-checks=yes','-A','warnings'];
+const rustFlags=['--edition=2024','--cfg','lkjscript_control','-C','overflow-checks=yes','-A','warnings'];
 function ending(result,oracle) {
  if(oracle){const outcome=worldOutcome(result);return outcome.kind==='normal'?(outcome.status===0?'normal':'exit:'+outcome.status):outcome.kind==='trap'?(Number(outcome.code.slice(1))>=16?'R0004':outcome.code):'crash';}
  if(result.error)return result.error.code==='ETIMEDOUT'?'timeout':'crash';
@@ -74,7 +74,7 @@ const references=await oracleCache({generator:generatorHash,seed:seedText,count,
 const built=await run('rustc',[...rustFlags,rustSource,'-o',rustBinary]);
 if(built.error||built.status!==0) {process.stderr.write(built.stderr||String(built.error));process.exit(1);}
 
-const results=[];for(let i=0;i<count;i++)results.push(packResult(await run(rustBinary,[],{encoding:null,captureControl:true,env:{...process.env,LKJ_ORACLE_CASE:String(i)}})));return results;
+const results=[];for(let i=0;i<count;i++)results.push(packResult(await run(rustBinary,[],{encoding:null,captureControl:true,env:{...process.env,LKJSCRIPT_ORACLE_CASE:String(i)}})));return results;
 });
 const actualResults=await runRoutes(bin,sourceFiles.map(path=>({path})),{engines,output:dir,encoding:null});
 const tally=Object.fromEntries(engines.map(engine=>[engine,{}])),failures=[];

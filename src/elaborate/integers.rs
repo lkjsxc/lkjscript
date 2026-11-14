@@ -1,5 +1,5 @@
 //! Integer constants share one typed validation path in expressions and patterns.
-use super::{Builder, Result, a, err, k};
+use super::{Builder, Result, a, err, ir};
 use std::collections::BTreeMap;
 
 fn integer_suffix(index: usize) -> &'static str {
@@ -56,7 +56,7 @@ pub(super) fn suffix_type(names: &BTreeMap<String, usize>, text: &str) -> Option
 }
 
 pub(super) fn literal(
-    types: &[k::Type],
+    types: &[ir::Type],
     names: &BTreeMap<String, usize>,
     text: &str,
     expected: Option<usize>,
@@ -64,7 +64,7 @@ pub(super) fn literal(
     span: a::Span,
 ) -> Result<(i64, usize)> {
     let mut digits = text.replace('_', "");
-    let mut ty = expected.unwrap_or(k::I32);
+    let mut ty = expected.unwrap_or(ir::I32);
     for index in 0..10 {
         let suffix = integer_suffix(index);
         if digits.ends_with(suffix) {
@@ -102,7 +102,7 @@ pub(super) fn literal(
     )
     .ok_or_else(|| err(span, "E_TYPE", "integer literal exceeds its representation"))?;
     let (bits, signed) = match types[ty].kind {
-        k::TypeKind::Int { bits, signed } => (bits, signed),
+        ir::TypeKind::Int { bits, signed } => (bits, signed),
         _ => {
             return Err(err(
                 span,
@@ -139,7 +139,7 @@ pub(super) fn literal(
 impl Builder<'_, '_> {
     pub(super) fn wrapping_method(
         &mut self,
-        place: &k::Place,
+        place: &ir::Place,
         ty: usize,
         name: &str,
         types: &[usize],
@@ -164,7 +164,7 @@ impl Builder<'_, '_> {
         let right = self.expr(args[0], Some(ty))?.0;
         let dst = self.temp(ty);
         self.emit(
-            k::Op::Binary {
+            ir::Op::Binary {
                 dst,
                 op: name.to_string(),
                 left,
@@ -179,12 +179,12 @@ impl Builder<'_, '_> {
 impl Builder<'_, '_> {
     pub(super) fn primitive_value_type(&self, ty: usize) -> usize {
         match self.compiler.types[ty].kind {
-            k::TypeKind::Ref {
+            ir::TypeKind::Ref {
                 inner,
                 mutable: false,
             } if matches!(
                 self.compiler.types[inner].kind,
-                k::TypeKind::Bool | k::TypeKind::Int { .. } | k::TypeKind::F64
+                ir::TypeKind::Bool | ir::TypeKind::Int { .. } | ir::TypeKind::F64
             ) =>
             {
                 inner
@@ -208,9 +208,9 @@ impl Builder<'_, '_> {
         let value = self.expr(expression, if borrowed { None } else { expected })?;
         if self.primitive_value_type(value.1) != value.1 {
             self.read(
-                k::Place {
+                ir::Place {
                     local: value.0,
-                    projections: vec![k::Projection::Deref],
+                    projections: vec![ir::Projection::Deref],
                 },
                 span.line,
             )
@@ -233,16 +233,16 @@ impl Builder<'_, '_> {
             .map(|ty| self.primitive_value_type(ty));
         let (left, ty) = self.primitive_operand(left, expected, span)?;
         let (mut right, rt) = self.primitive_operand(right, None, span)?;
-        if !matches!(self.compiler.types[ty].kind, k::TypeKind::Int { .. })
-            || !matches!(self.compiler.types[rt].kind, k::TypeKind::Int { .. })
+        if !matches!(self.compiler.types[ty].kind, ir::TypeKind::Int { .. })
+            || !matches!(self.compiler.types[rt].kind, ir::TypeKind::Int { .. })
         {
             return Err(err(span, "E_TYPE", "shift operands must be integers"));
         }
         if ty != rt {
-            let k::TypeKind::Int { bits, .. } = self.compiler.types[ty].kind else {
+            let ir::TypeKind::Int { bits, .. } = self.compiler.types[ty].kind else {
                 unreachable!()
             };
-            let k::TypeKind::Int {
+            let ir::TypeKind::Int {
                 bits: right_bits, ..
             } = self.compiler.types[rt].kind
             else {
@@ -252,28 +252,28 @@ impl Builder<'_, '_> {
                 // Validate before narrowing: an invalid amount such as 256_u64
                 // must not turn into a valid zero when shifted into a u8 value.
                 // Casting a negative amount to u64 also preserves its invalidity.
-                // An ordinary checked K shift provides the arithmetic trap.
-                let amount = self.temp(k::U64);
+                // An ordinary checked IR shift provides the arithmetic trap.
+                let amount = self.temp(ir::U64);
                 self.emit(
-                    k::Op::Intrinsic {
+                    ir::Op::Intrinsic {
                         dst: amount,
                         name: "cast".to_string(),
                         args: vec![right],
                     },
                     span.line,
                 );
-                let zero = self.temp(k::U64);
+                let zero = self.temp(ir::U64);
                 self.emit(
-                    k::Op::Int {
+                    ir::Op::Int {
                         dst: zero,
                         value: 0,
                     },
                     span.line,
                 );
-                let check_amount = self.read(k::Place::local(amount), span.line)?.0;
-                let checked = self.temp(k::U64);
+                let check_amount = self.read(ir::Place::local(amount), span.line)?.0;
+                let checked = self.temp(ir::U64);
                 self.emit(
-                    k::Op::Binary {
+                    ir::Op::Binary {
                         dst: checked,
                         op: "<<".to_string(),
                         left: zero,
@@ -285,7 +285,7 @@ impl Builder<'_, '_> {
             }
             let amount = self.temp(ty);
             self.emit(
-                k::Op::Intrinsic {
+                ir::Op::Intrinsic {
                     dst: amount,
                     name: "cast".to_string(),
                     args: vec![right],
@@ -296,7 +296,7 @@ impl Builder<'_, '_> {
         }
         let dst = self.temp(ty);
         self.emit(
-            k::Op::Binary {
+            ir::Op::Binary {
                 dst,
                 op: operation.to_string(),
                 left,

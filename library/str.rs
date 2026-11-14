@@ -50,10 +50,10 @@ impl Pattern for char {
         matches_bytes(value, text.as_bytes(), position)
     }
 }
-pub fn __lkj_starts_with<P: Pattern>(value: &str, pattern: P) -> bool {
+pub fn __lkjscript_starts_with<P: Pattern>(value: &str, pattern: P) -> bool {
     pattern.matches_at(value.as_bytes(), 0usize)
 }
-pub fn __lkj_ends_with<P: Pattern>(value: &str, pattern: P) -> bool {
+pub fn __lkjscript_ends_with<P: Pattern>(value: &str, pattern: P) -> bool {
     let length = pattern.byte_len();
     if length > value.len() {
         false
@@ -61,7 +61,7 @@ pub fn __lkj_ends_with<P: Pattern>(value: &str, pattern: P) -> bool {
         pattern.matches_at(value.as_bytes(), value.len() - length)
     }
 }
-pub fn __lkj_find<P: Pattern>(value: &str, pattern: P) -> Option<usize> {
+pub fn __lkjscript_find<P: Pattern>(value: &str, pattern: P) -> Option<usize> {
     let length = pattern.byte_len();
     if length > value.len() {
         return Option::None;
@@ -78,7 +78,7 @@ pub fn __lkj_find<P: Pattern>(value: &str, pattern: P) -> Option<usize> {
     }
     Option::None
 }
-pub fn __lkj_rfind<P: Pattern>(value: &str, pattern: P) -> Option<usize> {
+pub fn __lkjscript_rfind<P: Pattern>(value: &str, pattern: P) -> Option<usize> {
     let length = pattern.byte_len();
     if length > value.len() {
         return Option::None;
@@ -95,10 +95,10 @@ pub fn __lkj_rfind<P: Pattern>(value: &str, pattern: P) -> Option<usize> {
     }
     Option::None
 }
-pub fn __lkj_contains<P: Pattern>(value: &str, pattern: P) -> bool {
-    __lkj_find(value, pattern).is_some()
+pub fn __lkjscript_contains<P: Pattern>(value: &str, pattern: P) -> bool {
+    __lkjscript_find(value, pattern).is_some()
 }
-pub fn __lkj_is_ascii(value: &str) -> bool {
+pub fn __lkjscript_is_ascii(value: &str) -> bool {
     let bytes = value.as_bytes();
     let mut i = 0usize;
     while i < bytes.len() {
@@ -123,7 +123,7 @@ fn upper(value: u8) -> u8 {
         value
     }
 }
-pub fn __lkj_eq_ignore_ascii_case(left: &str, right: &str) -> bool {
+pub fn __lkjscript_eq_ignore_ascii_case(left: &str, right: &str) -> bool {
     if left.len() != right.len() {
         return false;
     }
@@ -138,7 +138,7 @@ pub fn __lkj_eq_ignore_ascii_case(left: &str, right: &str) -> bool {
     }
     true
 }
-pub fn __lkj_to_ascii_lowercase(value: &str) -> String {
+pub fn __lkjscript_to_ascii_lowercase(value: &str) -> String {
     let bytes = value.as_bytes();
     let mut result: Vec<u8> = Vec::new();
     let mut i = 0usize;
@@ -148,7 +148,7 @@ pub fn __lkj_to_ascii_lowercase(value: &str) -> String {
     }
     String::from_utf8(result).unwrap()
 }
-pub fn __lkj_to_ascii_uppercase(value: &str) -> String {
+pub fn __lkjscript_to_ascii_uppercase(value: &str) -> String {
     let bytes = value.as_bytes();
     let mut result: Vec<u8> = Vec::new();
     let mut i = 0usize;
@@ -158,7 +158,7 @@ pub fn __lkj_to_ascii_uppercase(value: &str) -> String {
     }
     String::from_utf8(result).unwrap()
 }
-pub fn __lkj_repeat(value: &str, count: usize) -> String {
+pub fn __lkjscript_repeat(value: &str, count: usize) -> String {
     let mut result = String::new();
     let mut i = 0usize;
     while i < count {
@@ -167,7 +167,7 @@ pub fn __lkj_repeat(value: &str, count: usize) -> String {
     }
     result
 }
-pub fn __lkj_replace<P: Pattern>(value: &str, pattern: P, replacement: &str) -> String {
+pub fn __lkjscript_replace<P: Pattern>(value: &str, pattern: P, replacement: &str) -> String {
     let bytes = value.as_bytes();
     let length = pattern.byte_len();
     let mut result: Vec<u8> = Vec::new();
@@ -194,7 +194,7 @@ pub fn __lkj_replace<P: Pattern>(value: &str, pattern: P, replacement: &str) -> 
 }
 
 /// UTF-8 equality compares bytes; no allocation or locale affects the result.
-pub fn __lkj_eq(left: &str, right: &str) -> bool {
+pub fn __lkjscript_eq(left: &str, right: &str) -> bool {
     if left.len() != right.len() {
         return false;
     }
@@ -202,8 +202,8 @@ pub fn __lkj_eq(left: &str, right: &str) -> bool {
 }
 
 /// Text order is lexicographic UTF-8 byte order.
-pub fn __lkj_compare(left: &str, right: &str) -> i32 {
-    crate::sequence::__lkj_slice_order(left.as_bytes(), right.as_bytes())
+pub fn __lkjscript_compare(left: &str, right: &str) -> i32 {
+    crate::sequence::__lkjscript_slice_order(left.as_bytes(), right.as_bytes())
 }
 
 use crate::Result;
@@ -449,7 +449,7 @@ impl TextView for str {
     }
     fn split_once<'a, P: Pattern>(&'a self, pattern: P) -> Option<(&'a str, &'a str)> {
         let length = pattern.byte_len();
-        match __lkj_find(self, pattern) {
+        match __lkjscript_find(self, pattern) {
             Option::Some(index) => Option::Some((&self[..index], &self[index + length..])),
             Option::None => Option::None,
         }

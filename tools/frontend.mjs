@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Preserve and compare the source producer's exact K over identical declared
+// Preserve and compare the source producer's exact IR over identical declared
 // inputs. Resource envelopes belong to this experiment, not source acceptance.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -22,19 +22,19 @@ for (let index = 0; index < argv.length; index++) {
 if (!['snapshot', 'compare'].includes(mode) ||
     (mode === 'snapshot' && args.length !== 2) ||
     (mode === 'compare' && args.length !== 3)) throw Error(usage);
-const sourceRoot = path.resolve(process.env.LKJ_FRONTEND_SOURCE_ROOT || '.');
+const sourceRoot = path.resolve(process.env.LKJSCRIPT_FRONTEND_SOURCE_ROOT || '.');
 const snapshotRoot = mode === 'compare' ? path.resolve(args[0]) : undefined;
 const binary = path.resolve(args[mode === 'snapshot' ? 0 : 1]);
 const out = path.resolve(args[mode === 'snapshot' ? 1 : 2]);
-const jobs = Number(process.env.LKJ_FRONTEND_JOBS || 4);
-const timeout = Number(process.env.LKJ_FRONTEND_TIMEOUT_MS || 60000);
-const maxBuffer = Number(process.env.LKJ_FRONTEND_MAX_OUTPUT_BYTES || 134217728);
-const memoryBytes = process.env.LKJ_FRONTEND_MEMORY_BYTES || '8589934592';
-const stackBytes = process.env.LKJ_FRONTEND_STACK_BYTES;
-if (stackBytes !== undefined && stackBytes !== 'unlimited' && !/^[1-9][0-9]*$/.test(stackBytes)) throw Error('LKJ_FRONTEND_STACK_BYTES must be positive bytes or unlimited');
-if (!Number.isSafeInteger(jobs) || jobs < 1) throw Error('LKJ_FRONTEND_JOBS must be positive');
-if (!Number.isSafeInteger(timeout) || timeout < 1) throw Error('LKJ_FRONTEND_TIMEOUT_MS must be positive');
-if (!Number.isSafeInteger(maxBuffer) || maxBuffer < 1) throw Error('LKJ_FRONTEND_MAX_OUTPUT_BYTES must be positive');
+const jobs = Number(process.env.LKJSCRIPT_FRONTEND_JOBS || 4);
+const timeout = Number(process.env.LKJSCRIPT_FRONTEND_TIMEOUT_MS || 60000);
+const maxBuffer = Number(process.env.LKJSCRIPT_FRONTEND_MAX_OUTPUT_BYTES || 134217728);
+const memoryBytes = process.env.LKJSCRIPT_FRONTEND_MEMORY_BYTES || '8589934592';
+const stackBytes = process.env.LKJSCRIPT_FRONTEND_STACK_BYTES;
+if (stackBytes !== undefined && stackBytes !== 'unlimited' && !/^[1-9][0-9]*$/.test(stackBytes)) throw Error('LKJSCRIPT_FRONTEND_STACK_BYTES must be positive bytes or unlimited');
+if (!Number.isSafeInteger(jobs) || jobs < 1) throw Error('LKJSCRIPT_FRONTEND_JOBS must be positive');
+if (!Number.isSafeInteger(timeout) || timeout < 1) throw Error('LKJSCRIPT_FRONTEND_TIMEOUT_MS must be positive');
+if (!Number.isSafeInteger(maxBuffer) || maxBuffer < 1) throw Error('LKJSCRIPT_FRONTEND_MAX_OUTPUT_BYTES must be positive');
 if (fs.existsSync(path.join(out, 'summary.json'))) throw Error('refusing to overwrite an existing observation');
 fs.mkdirSync(path.join(out, 'records'), { recursive: true });
 if (world) fs.mkdirSync(path.join(out, 'bundles'), { recursive: true });
@@ -115,13 +115,13 @@ function hostFailure(result, record) {
   if (result.status === null) return 'compiler returned no exit status';
   if (['E_HOST', 'E_IO', 'E_USAGE', ...(world ? ['E_BUNDLE'] : [])].includes(record.diagnostic)) return result.stderr.toString('utf8');
   if (result.status !== 0 && !record.diagnostic) return 'compiler failed without a diagnostic (status ' + result.status + ')';
-  if (result.status !== 0 && result.stdout.length) return 'rejected source emitted partial K output';
+  if (result.status !== 0 && result.stdout.length) return 'rejected source emitted partial IR output';
   if (result.status === 0 && record.diagnostic) return 'successful compiler status included a diagnostic';
   return null;
 }
 function saveStreams(index, result) {
   const prefix = 'records/' + String(index).padStart(5, '0');
-  const stdout = prefix + (result.status === 0 ? '.k' : '.stdout');
+  const stdout = prefix + (result.status === 0 ? '.lkjir' : '.stdout');
   const stderr = prefix + '.stderr';
   fs.writeFileSync(path.join(out, stdout), result.stdout);
   fs.writeFileSync(path.join(out, stderr), result.stderr);
@@ -138,13 +138,13 @@ if (mode === 'snapshot' && sources.length) {
   cases = sources.map(source => ({ id: 'source:' + source, source, kind: 'compiler', pending: false }));
   manifest = { kind: 'explicit-source-roots', sources };
 } else if (mode === 'snapshot') {
-  const manifestPath = process.env.LKJ_FRONTEND_CASES || 'tests/conformance/cases.json';
+  const manifestPath = process.env.LKJSCRIPT_FRONTEND_CASES || 'tests/conformance/cases.json';
   const all = JSON.parse(fs.readFileSync(path.join(sourceRoot, manifestPath), 'utf8'));
   cases = all.filter(c => c.file.endsWith('.rs')).map(c => ({
     id: c.id, source: 'tests/conformance/' + c.file, kind: c.kind, pending: Boolean(c.pending)
   }));
-  cases.push({ id: 'compiler-kc-main', source: 'src/kc_main.rs', kind: 'compiler', pending: false });
-  manifest = { ...fileRecord(sourceRoot, manifestPath), total_cases: all.length, direct_k_cases: all.length - cases.length + 1 };
+  cases.push({ id: 'compiler-backend-main', source: 'src/backend_main.rs', kind: 'compiler', pending: false });
+  manifest = { ...fileRecord(sourceRoot, manifestPath), total_cases: all.length, direct_ir_cases: all.length - cases.length + 1 };
 } else {
   reference = JSON.parse(fs.readFileSync(path.join(snapshotRoot, 'summary.json'), 'utf8'));
   if (reference.mode !== 'snapshot' || reference.failures.length) throw Error('baseline snapshot is incomplete or failed');
@@ -163,7 +163,7 @@ if (reference) {
   }
 }
 const summary = {
-  stage: 'source producer exact-K ' + mode,
+  stage: 'source producer exact-IR ' + mode,
   mode, route: world ? 'world-bundle' : 'host-cli', source_root: sourceRoot, compiler: binaryRecord(binary),
   manifest, library, library_changes: libraryChanges,
   controls: { jobs, timeout_ms: timeout, memory_bytes: memoryBytes, stack_bytes: stackBytes || 'inherited', max_output_bytes: maxBuffer },
@@ -198,7 +198,7 @@ async function observe(index) {
         return;
       }
     }
-    let commandArgs = ['k', input.source], cwd = sourceRoot;
+    let commandArgs = ['ir', input.source], cwd = sourceRoot;
     if (world) {
       const declared = [
         ...input.inputs.filter(file => !file.missing).map(file => ({ ...file, logical_path: file.path })),
@@ -244,11 +244,11 @@ async function observe(index) {
       outcome(observation, 'verdict-changed', 'expected status ' + expected.status + ', actual ' + result.status);
     } else if (result.status === 0) {
       const expectedBytes = fs.readFileSync(path.join(snapshotRoot, expected.stdout));
-      if (expectedBytes.length !== expected.stdout_bytes || digest(expectedBytes) !== expected.stdout_sha256) throw Error('baseline K stream no longer matches its recorded bytes/hash');
-      if (expectedBytes.equals(result.stdout)) outcome(observation, 'identical-k');
+      if (expectedBytes.length !== expected.stdout_bytes || digest(expectedBytes) !== expected.stdout_sha256) throw Error('baseline IR stream no longer matches its recorded bytes/hash');
+      if (expectedBytes.equals(result.stdout)) outcome(observation, 'identical-ir');
       else {
         observation.difference = firstDifference(expectedBytes, result.stdout);
-        outcome(observation, 'k-changed', 'K differs at byte ' + observation.difference.byte_offset);
+        outcome(observation, 'ir-changed', 'IR differs at byte ' + observation.difference.byte_offset);
       }
     } else if (observed.diagnostic !== expected.diagnostic || observed.status !== expected.status) {
       outcome(observation, 'diagnostic-changed', 'expected ' + expected.diagnostic + ', actual ' + observed.diagnostic);

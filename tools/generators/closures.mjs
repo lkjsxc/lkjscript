@@ -9,7 +9,7 @@ import { runRoutes } from '../batch.mjs';
 import { oracleCache, packResult, unpackResult, worldOutcome } from '../oracle.mjs';
 const [binary='target/debug/lkjscript',seed='1501',countText='88',output='target/generators']=process.argv.slice(2);
 const count=Number(countText),bin=path.resolve(binary),dir=path.resolve(output,`closures-${seed}`);
-const engines=(process.env.LKJ_ENGINES||'native,k').split(','),rust=process.env.LKJ_CLOSURE_RUST!=='0';
+const engines=(process.env.LKJSCRIPT_ENGINES||'native,interpreter').split(','),rust=process.env.LKJSCRIPT_CLOSURE_RUST!=='0';
 let state=BigInt(seed)||1n;
 function random(n){state^=(state<<13n)&0xffffffffffffffffn;state^=state>>7n;state^=(state<<17n)&0xffffffffffffffffn;return Number(state%BigInt(n));}
 const prelude=`struct M { out: Stdout, byte: u8 }
@@ -142,15 +142,15 @@ let references;
 if(rust){
  let source='#![allow(warnings)]\nmod host{\n'+fs.readFileSync('bridge/output.rs','utf8')+'\n}\n';
  for(let index=0;index<count;index++)for(const variant of ['source','expanded'])source+=`mod c${index}_${variant}{use crate::host::{World,Stdout};\n${pairs[index][variant]} }\n`;
- source+='fn main(){match std::env::var("LKJ_ORACLE_CASE").unwrap().as_str(){\n';
+ source+='fn main(){match std::env::var("LKJSCRIPT_ORACLE_CASE").unwrap().as_str(){\n';
  for(let index=0;index<count;index++)for(const variant of ['source','expanded'])source+=`"${index}-${variant}"=>host::enter(c${index}_${variant}::main),\n`;
  source+='_=>std::process::exit(2)}}\n';
  const rustSource=path.join(dir,'oracle.rs'),rustBinary=path.join(dir,'oracle');fs.writeFileSync(rustSource,source);
- const flags=['--edition=2024','--cfg','lkj_control','-C','overflow-checks=yes','-A','warnings'];
+ const flags=['--edition=2024','--cfg','lkjscript_control','-C','overflow-checks=yes','-A','warnings'];
  const generator=createHash('sha256').update(fs.readFileSync(new URL(import.meta.url))).digest('hex');
  references=await oracleCache({generator,seed,count,flags,source},async()=>{
   const built=await run('rustc',[...flags,rustSource,'-o',rustBinary]);if(built.error||built.status!==0)throw Error('invalid generated Rust: '+built.stderr);
-  const results=[];for(let index=0;index<count;index++)for(const variant of ['source','expanded'])results.push(packResult(await run(rustBinary,[],{encoding:null,captureControl:true,env:{...process.env,LKJ_ORACLE_CASE:`${index}-${variant}`}})));return results;
+  const results=[];for(let index=0;index<count;index++)for(const variant of ['source','expanded'])results.push(packResult(await run(rustBinary,[],{encoding:null,captureControl:true,env:{...process.env,LKJSCRIPT_ORACLE_CASE:`${index}-${variant}`}})));return results;
  });
 }
 function ending(result){

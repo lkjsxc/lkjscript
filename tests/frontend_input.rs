@@ -3,7 +3,7 @@ mod frontend_bundle;
 #[path = "../src/frontend_input.rs"]
 mod frontend_input;
 pub use lkjscript::source;
-use lkjscript::{frontend, k_text};
+use lkjscript::{frontend, ir_text};
 use std::collections::BTreeMap;
 use std::io::Write;
 use std::process::{Command, Stdio};
@@ -17,7 +17,7 @@ fn source_options(root: &str) -> frontend_input::SourceOptions {
         root: root.to_string(),
         directory: ".".to_string(),
         library: None,
-        output: frontend_input::Output::K,
+        output: frontend_input::Output::IR,
     }
 }
 
@@ -257,7 +257,7 @@ fn io_errors_remain_distinct_from_an_absent_source() {
 }
 
 #[test]
-fn the_loaded_program_and_its_snapshot_emit_identical_k() {
+fn the_loaded_program_and_its_snapshot_emit_identical_ir() {
     let loaded = load_files(
         &source_options("app/main.rs"),
         &[
@@ -270,8 +270,8 @@ fn the_loaded_program_and_its_snapshot_emit_identical_k() {
     );
     assert!(loaded.report.diagnostics.is_empty());
     let checked = frontend::check_source(&loaded.report.program).unwrap();
-    let direct = k_text::write(checked.program());
-    let packed = frontend::source_to_k(&loaded.bundle).unwrap();
+    let direct = ir_text::write(checked.program());
+    let packed = frontend::source_to_ir(&loaded.bundle).unwrap();
     assert_eq!(direct.as_bytes(), packed.as_bytes());
 }
 

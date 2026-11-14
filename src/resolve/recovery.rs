@@ -1,5 +1,5 @@
 //! Private diagnostic resolution: successful paths retain their real identities,
-//! while failures remain unavailable source nodes. This graph never authorizes K.
+//! while failures remain unavailable source nodes. This graph never authorizes IR.
 use super::*;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

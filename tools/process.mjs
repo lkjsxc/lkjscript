@@ -16,20 +16,20 @@ for (const [signal, status] of [['SIGINT', 130], ['SIGTERM', 143]]) {
   process.on(signal, () => { for (const child of active) stop(child); process.exit(status); });
 }
 export function run(command, args, options = {}) {
-  const { timeout = Number(process.env.LKJ_TEST_TIMEOUT_MS || 30000),
+  const { timeout = Number(process.env.LKJSCRIPT_TEST_TIMEOUT_MS || 30000),
     maxBuffer = 32 * 1024 * 1024, encoding = 'utf8', sampleMemory = false, idleTimeout = 0, input, captureControl = false,
-    memoryBytes = process.env.LKJ_TEST_MEMORY_BYTES || (path.basename(command) === 'rustc' ? '8589934592' : '2147483648'), ...spawnOptions } = options;
+    memoryBytes = process.env.LKJSCRIPT_TEST_MEMORY_BYTES || (path.basename(command) === 'rustc' ? '8589934592' : '2147483648'), ...spawnOptions } = options;
   if (![timeout, idleTimeout].every(value => Number.isFinite(value) && value >= 0)) throw new Error('invalid process timeout');
   return new Promise(resolve => {
     const stdout = [], stderr = [], control = [];
     let size = 0, error;
     // Programs under test, including Rust references, inherit an explicit Linux
     // address-space envelope. Capacity probes opt into a larger value or
-    // LKJ_TEST_MEMORY_BYTES=unlimited. Node only orchestrates tests and reserves
+    // LKJSCRIPT_TEST_MEMORY_BYTES=unlimited. Node only orchestrates tests and reserves
     // a large V8 address cage; generated programs never execute inside it.
     const budget = String(memoryBytes);
     if (budget !== 'unlimited' && (!/^[1-9][0-9]*$/.test(budget) || BigInt(budget) > 18446744073709551615n)) {
-      throw new Error('LKJ_TEST_MEMORY_BYTES must be positive bytes or unlimited');
+      throw new Error('LKJSCRIPT_TEST_MEMORY_BYTES must be positive bytes or unlimited');
     }
     const node = ['node', 'nodejs'].includes(path.basename(command));
     const executable = process.platform === 'linux' ? 'prlimit' : command;

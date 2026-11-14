@@ -5,15 +5,15 @@ import { run } from './process.mjs';
 let serial = 0;
 // Compilation and lowering are shared. Execution state and results never are.
 async function runShard(binary, cases, {
-    engines = ['native', 'k'],
+    engines = ['native', 'interpreter'],
     output = 'target/batch-input',
     encoding = 'utf8',
-    timeout = Number(process.env.LKJ_TEST_TIMEOUT_MS || 30000),
+    timeout = Number(process.env.LKJSCRIPT_TEST_TIMEOUT_MS || 30000),
     ...options
 } = {}) {
     if (!engines.length || new Set(engines).size !== engines.length
-        || engines.some(engine => !['native', 'k'].includes(engine))) {
-        throw new Error('batch engines must be distinct names from native,k');
+        || engines.some(engine => !['native', 'interpreter'].includes(engine))) {
+        throw new Error('batch engines must be distinct names from native,interpreter');
     }
     fs.mkdirSync(output, { recursive: true });
     const manifest = path.resolve(output, process.pid + '-' + serial++ + '.tsv');
@@ -75,14 +75,14 @@ async function runShard(binary, cases, {
 // original input index, never by worker completion order.
 export async function runRoutes(binary, cases, {
     jobs = 1,
-    engines = ['native', 'k'],
+    engines = ['native', 'interpreter'],
     encoding = 'utf8',
     ...options
 } = {}) {
     if (!Number.isSafeInteger(jobs) || jobs < 1) throw new Error('batch jobs must be a positive integer');
     if (!engines.length || new Set(engines).size !== engines.length
-        || engines.some(engine => !['native', 'k'].includes(engine))) {
-        throw new Error('batch engines must be distinct names from native,k');
+        || engines.some(engine => !['native', 'interpreter'].includes(engine))) {
+        throw new Error('batch engines must be distinct names from native,interpreter');
     }
     const routes = Object.fromEntries(engines.map(engine => [engine, new Array(cases.length)]));
     if (!cases.length) return routes;
@@ -110,7 +110,7 @@ export async function runRoutes(binary, cases, {
     return routes;
 }
 
-export async function runCases(binary, cases, { engine = 'k', ...options } = {}) {
+export async function runCases(binary, cases, { engine = 'interpreter', ...options } = {}) {
     const routes = await runRoutes(binary, cases, { ...options, engines: [engine] });
     return routes[engine];
 }

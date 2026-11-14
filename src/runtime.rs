@@ -1,8 +1,8 @@
 //! The host supplies a declared source runtime separately from user input.
 //! Preparing that bundle is the sole authority to replace raw primitive stubs.
-//! Ordinary source names, imports and K text cannot request this substitution.
+//! Ordinary source names, imports and IR text cannot request this substitution.
 use crate::diagnostic::{Diagnostic, Span};
-use crate::k::{self, CheckedProgram, Op, TypeKind};
+use crate::ir::{self, CheckedProgram, Op, TypeKind};
 use crate::lower::{self, Code, Function, Instruction, Signature};
 use std::collections::BTreeMap;
 
@@ -121,7 +121,7 @@ pub struct Runtime {
 fn problem(message: &str) -> Diagnostic {
     Diagnostic::new(Span::default(), "E_RUNTIME", message)
 }
-fn word(program: &k::Program, ty: usize) -> bool {
+fn word(program: &ir::Program, ty: usize) -> bool {
     matches!(
         program.types[ty].kind,
         TypeKind::Int {
@@ -243,8 +243,8 @@ pub fn seal(checked: CheckedProgram) -> Result<Runtime, Diagnostic> {
 }
 
 impl Runtime {
-    /// The declared runtime K, suitable for an independent K compiler input.
-    pub fn checked_program(&self) -> &k::Program {
+    /// The declared runtime IR, suitable for an independent backend input.
+    pub fn checked_program(&self) -> &ir::Program {
         self.checked.program()
     }
     pub(crate) fn checked(&self) -> &CheckedProgram {
@@ -262,7 +262,7 @@ impl Runtime {
     }
     /// An isolated executable for the runtime model. Its explicit raw arena
     /// has no application owners or host capabilities. Test hosts may initialize
-    /// the bytes and compare this source on K and every production encoder.
+    /// the bytes and compare this source on IR and every production encoder.
     pub fn model_program(&self, drop_steps: &[usize]) -> Result<lower::Program, String> {
         let mut functions = Vec::new();
         for slot in 0usize..lower::RUNTIME_ENTRIES {

@@ -1,6 +1,6 @@
 //! Assignment has a different operand order from ordinary binary expressions:
 //! first compute the incoming value, then the destination, then replace it.
-use super::{Bindings, Builder, Facts, LoopScope, Result, a, err, k, place_type};
+use super::{Bindings, Builder, Facts, LoopScope, Result, a, err, ir, place_type};
 use std::collections::BTreeMap;
 
 enum HintStep {
@@ -41,17 +41,17 @@ impl Builder<'_, '_> {
         while let Some(step) = steps.pop() {
             ty = match step {
                 HintStep::Deref => match self.compiler.types[ty].kind {
-                    k::TypeKind::Ref { inner, .. } | k::TypeKind::Box { inner } => inner,
+                    ir::TypeKind::Ref { inner, .. } | ir::TypeKind::Box { inner } => inner,
                     _ => return None,
                 },
                 HintStep::Field(name) => {
-                    while let k::TypeKind::Ref { inner, .. } | k::TypeKind::Box { inner } =
+                    while let ir::TypeKind::Ref { inner, .. } | ir::TypeKind::Box { inner } =
                         self.compiler.types[ty].kind
                     {
                         ty = inner;
                     }
                     match &self.compiler.types[ty].kind {
-                        k::TypeKind::Struct { fields, .. } => {
+                        ir::TypeKind::Struct { fields, .. } => {
                             let mut found = None;
                             for field in fields {
                                 if field.name == name {
@@ -65,13 +65,13 @@ impl Builder<'_, '_> {
                     }
                 }
                 HintStep::Index => {
-                    while let k::TypeKind::Ref { inner, .. } = self.compiler.types[ty].kind {
+                    while let ir::TypeKind::Ref { inner, .. } = self.compiler.types[ty].kind {
                         ty = inner;
                     }
                     match self.compiler.types[ty].kind {
-                        k::TypeKind::Vec { inner }
-                        | k::TypeKind::Slice { inner, .. }
-                        | k::TypeKind::Array { inner, .. } => inner,
+                        ir::TypeKind::Vec { inner }
+                        | ir::TypeKind::Slice { inner, .. }
+                        | ir::TypeKind::Array { inner, .. } => inner,
                         _ => return None,
                     }
                 }
@@ -97,7 +97,7 @@ impl Builder<'_, '_> {
         // Only source-visible bindings are needed, not the function's transient
         // locals or existing instructions. The common structural path above
         // needs no copy of this environment.
-        let mut function = k::Function {
+        let mut function = ir::Function {
             file: self.file,
             name: "$assignment_type".to_string(),
             params: 0,
@@ -220,7 +220,7 @@ impl Builder<'_, '_> {
                 end -= 1;
             }
             self.emit(
-                k::Op::Binary {
+                ir::Op::Binary {
                     dst,
                     op: operation[..end].to_string(),
                     left,
@@ -230,7 +230,7 @@ impl Builder<'_, '_> {
             );
             dst
         };
-        self.emit(k::Op::Assign { place, src: value }, span.line);
+        self.emit(ir::Op::Assign { place, src: value }, span.line);
         Ok(self.unit(span.line))
     }
 }

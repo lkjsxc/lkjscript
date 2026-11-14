@@ -308,7 +308,7 @@ fn table_program() -> lower::Program {
                 vec![I::I64(1), I::CallIndirect(Signature::words(0)), I::End],
             ),
             // Public lowered IR is not a second safety boundary. Its dead local
-            // instruction is omitted; mandatory K checking precedes real lowering.
+            // instruction is omitted; mandatory IR checking precedes real lowering.
             instruction_function("dead", vec![], vec![], vec![I::LocalGet(99), I::End]),
             instruction_function("table_target", vec![], vec![], vec![I::Call(3), I::End]),
             instruction_function("direct_callee", vec![], vec![], vec![I::I64(42), I::End]),

@@ -1,7 +1,7 @@
-//! Statically resolved callable values are ordinary nominal environments and K
+//! Statically resolved callable values are ordinary nominal environments and IR
 //! functions. Capture requirements come from the operations the ordinary body
 //! elaborator emits; the final functions receive no unchecked access privilege.
-use super::{Bindings, Builder, Compiler, Facts, Result, a, err, is_copy, k, place_type};
+use super::{Bindings, Builder, Compiler, Facts, Result, a, err, ir, is_copy, place_type};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -42,7 +42,7 @@ pub(super) struct VariableCapture {
 #[derive(Clone, PartialEq, Eq)]
 pub(super) struct CapturePlan {
     source: usize,
-    projections: Vec<k::Projection>,
+    projections: Vec<ir::Projection>,
     mode: Kind,
 }
 // One concrete mapping is used for emitted operations and source annotations.
@@ -55,7 +55,7 @@ pub(super) struct CaptureRemap<'a> {
     span: a::Span,
 }
 impl CaptureRemap<'_> {
-    pub(super) fn apply(&self, place: &mut k::Place) -> Result<()> {
+    pub(super) fn apply(&self, place: &mut ir::Place) -> Result<()> {
         if place.local < self.parameters || place.local >= self.parameters + self.variables {
             return Ok(());
         }
@@ -78,14 +78,14 @@ impl CaptureRemap<'_> {
         let plan = &self.plans[field];
         let mut projections = Vec::new();
         if self.kind != Kind::Once {
-            projections.push(k::Projection::Deref);
+            projections.push(ir::Projection::Deref);
         }
-        projections.push(k::Projection::Field(field));
+        projections.push(ir::Projection::Field(field));
         if plan.mode != Kind::Once {
-            projections.push(k::Projection::Deref);
+            projections.push(ir::Projection::Deref);
         }
         projections.extend_from_slice(&place.projections[plan.projections.len()..]);
-        *place = k::Place {
+        *place = ir::Place {
             local: 0,
             projections,
         };
@@ -130,7 +130,7 @@ pub(super) struct Catalog {
     pub(super) evidence: Evidence,
 }
 
-fn prefix(a: &[k::Projection], b: &[k::Projection]) -> bool {
+fn prefix(a: &[ir::Projection], b: &[ir::Projection]) -> bool {
     if a.len() > b.len() {
         return false;
     }
@@ -141,14 +141,14 @@ fn prefix(a: &[k::Projection], b: &[k::Projection]) -> bool {
     }
     true
 }
-fn operation_place(operation: &k::Op) -> Option<(&k::Place, Kind)> {
+fn operation_place(operation: &ir::Op) -> Option<(&ir::Place, Kind)> {
     match operation {
-        k::Op::Read { place, moving, .. } => {
+        ir::Op::Read { place, moving, .. } => {
             Some((place, if *moving { Kind::Once } else { Kind::Shared }))
         }
-        k::Op::Borrow { place, mutable, .. }
-        | k::Op::SliceBorrow { place, mutable, .. }
-        | k::Op::ViewRange { place, mutable, .. } => Some((
+        ir::Op::Borrow { place, mutable, .. }
+        | ir::Op::SliceBorrow { place, mutable, .. }
+        | ir::Op::ViewRange { place, mutable, .. } => Some((
             place,
             if *mutable {
                 Kind::Mutable
@@ -156,23 +156,23 @@ fn operation_place(operation: &k::Op) -> Option<(&k::Place, Kind)> {
                 Kind::Shared
             },
         )),
-        k::Op::Assign { place, .. } | k::Op::Drop { place } | k::Op::DropIf { place } => {
+        ir::Op::Assign { place, .. } | ir::Op::Drop { place } | ir::Op::DropIf { place } => {
             Some((place, Kind::Mutable))
         }
-        k::Op::TagTest { place, .. } => Some((place, Kind::Shared)),
+        ir::Op::TagTest { place, .. } => Some((place, Kind::Shared)),
         _ => None,
     }
 }
-fn operation_place_mut(operation: &mut k::Op) -> Option<&mut k::Place> {
+fn operation_place_mut(operation: &mut ir::Op) -> Option<&mut ir::Place> {
     match operation {
-        k::Op::Read { place, .. }
-        | k::Op::Borrow { place, .. }
-        | k::Op::SliceBorrow { place, .. }
-        | k::Op::ViewRange { place, .. }
-        | k::Op::Assign { place, .. }
-        | k::Op::Drop { place }
-        | k::Op::DropIf { place }
-        | k::Op::TagTest { place, .. } => Some(place),
+        ir::Op::Read { place, .. }
+        | ir::Op::Borrow { place, .. }
+        | ir::Op::SliceBorrow { place, .. }
+        | ir::Op::ViewRange { place, .. }
+        | ir::Op::Assign { place, .. }
+        | ir::Op::Drop { place }
+        | ir::Op::DropIf { place }
+        | ir::Op::TagTest { place, .. } => Some(place),
         _ => None,
     }
 }
@@ -208,14 +208,14 @@ impl Compiler<'_> {
         // the body before a value or callable contract using it is emitted.
         let mut fields = Vec::new();
         for capture in &variables {
-            fields.push(k::Field {
+            fields.push(ir::Field {
                 name: capture.name.clone(),
                 ty: capture.ty,
             });
         }
-        self.types.push(k::Type {
+        self.types.push(ir::Type {
             name: format!("$closure:{expression}:{ty}"),
-            kind: k::TypeKind::Struct {
+            kind: ir::TypeKind::Struct {
                 fields,
                 copy: false,
             },
@@ -244,12 +244,12 @@ impl Compiler<'_> {
         if !self.closures.entries.contains_key(&ty) {
             return Vec::new();
         }
-        let k::TypeKind::Struct { fields, .. } = &self.types[ty].kind else {
+        let ir::TypeKind::Struct { fields, .. } = &self.types[ty].kind else {
             return Vec::new();
         };
         let mut references = Vec::new();
         for (index, field) in fields.iter().enumerate() {
-            if matches!(self.types[field.ty].kind, k::TypeKind::Ref { .. }) {
+            if matches!(self.types[field.ty].kind, ir::TypeKind::Ref { .. }) {
                 references.push(index);
             } else if self.has_view(field.ty) {
                 return Vec::new();
@@ -259,7 +259,7 @@ impl Compiler<'_> {
     }
 
     pub(super) fn callable_signature(&self, ty: usize) -> Option<Signature> {
-        if let k::TypeKind::Ref { inner, mutable } = self.types[ty].kind {
+        if let ir::TypeKind::Ref { inner, mutable } = self.types[ty].kind {
             let signature = self.callable_signature(inner)?;
             if signature.kind == Kind::Once || (!mutable && signature.kind != Kind::Shared) {
                 return None;
@@ -275,7 +275,7 @@ impl Compiler<'_> {
     }
 
     fn callable_type_signature(&self, mut ty: usize) -> Option<Signature> {
-        while let k::TypeKind::Ref { inner, .. } = self.types[ty].kind {
+        while let ir::TypeKind::Ref { inner, .. } = self.types[ty].kind {
             ty = inner;
         }
         self.closures
@@ -287,7 +287,7 @@ impl Compiler<'_> {
 
     /// A callable bound determines types even when its output parameter does
     /// not occur in the receiver or a value argument. Binding these equations
-    /// confers no callable/ownership authority; bounds and concrete K still
+    /// confers no callable/ownership authority; bounds and concrete IR still
     /// validate the selected signature and body independently.
     pub(super) fn prepare_callable_arguments(
         &mut self,
@@ -361,7 +361,7 @@ impl Compiler<'_> {
                     arguments,
                 }];
             }
-            if let k::TypeKind::Ref { inner, .. } = self.types[ty].kind {
+            if let ir::TypeKind::Ref { inner, .. } = self.types[ty].kind {
                 ty = inner;
             } else {
                 return Vec::new();
@@ -386,7 +386,7 @@ impl Compiler<'_> {
             {
                 let formal = parameters[index];
                 let concrete = signature.arguments[index];
-                let mut actual: BTreeMap<Vec<k::Projection>, Label> = BTreeMap::new();
+                let mut actual: BTreeMap<Vec<ir::Projection>, Label> = BTreeMap::new();
                 for leaf in self.region_leaves(bound.scope, bound.arguments[index], concrete) {
                     actual.insert(leaf.path, leaf.label);
                 }
@@ -536,21 +536,21 @@ impl Compiler<'_> {
 
     fn callable_return_source(
         &self,
-        function: &k::Function,
+        function: &ir::Function,
         span: a::Span,
-    ) -> Result<Option<k::ReturnSource>> {
+    ) -> Result<Option<ir::ReturnSource>> {
         let outputs = crate::check::reference_paths(&self.types, function.result);
         if outputs.is_empty() {
             return Ok(None);
         }
-        let mut inputs = BTreeMap::<k::InputLeaf, bool>::new();
+        let mut inputs = BTreeMap::<ir::InputLeaf, bool>::new();
         for (index, parameter) in function.locals[..function.params].iter().enumerate() {
             let mut ty = parameter.ty;
             let mut path = Vec::new();
             if index == 0 {
-                while let k::TypeKind::Ref { inner, .. } = self.types[ty].kind {
+                while let ir::TypeKind::Ref { inner, .. } = self.types[ty].kind {
                     ty = inner;
-                    path.push(k::Projection::Deref);
+                    path.push(ir::Projection::Deref);
                 }
             }
             for (leaf, mutable) in crate::check::reference_paths(&self.types, ty) {
@@ -561,7 +561,7 @@ impl Compiler<'_> {
                 for projection in leaf {
                     projections.push(projection);
                 }
-                inputs.insert(k::InputLeaf { index, projections }, mutable);
+                inputs.insert(ir::InputLeaf { index, projections }, mutable);
             }
         }
         // Stored references reached through captured descriptors have their own
@@ -574,20 +574,20 @@ impl Compiler<'_> {
             if place.local >= function.params {
                 continue;
             }
-            let mut current = k::Place::local(place.local);
+            let mut current = ir::Place::local(place.local);
             let mut ty = function.locals[place.local].ty;
             let mut borrowed = false;
             let mut in_capture = place.local != 0;
             for projection in &place.projections {
-                if matches!(projection, k::Projection::Index(_)) {
+                if matches!(projection, ir::Projection::Index(_)) {
                     break;
                 }
-                if matches!(projection, k::Projection::Deref)
-                    && matches!(self.types[ty].kind, k::TypeKind::Ref { .. })
+                if matches!(projection, ir::Projection::Deref)
+                    && matches!(self.types[ty].kind, ir::TypeKind::Ref { .. })
                 {
                     borrowed = true;
                 }
-                if !matches!(projection, k::Projection::Deref) {
+                if !matches!(projection, ir::Projection::Deref) {
                     in_capture = true;
                 }
                 current.projections.push(projection.clone());
@@ -595,10 +595,10 @@ impl Compiler<'_> {
                     break;
                 };
                 ty = next;
-                if let k::TypeKind::Ref { mutable, .. } = self.types[ty].kind {
+                if let ir::TypeKind::Ref { mutable, .. } = self.types[ty].kind {
                     if in_capture && !(borrowed && mutable) {
                         inputs.insert(
-                            k::InputLeaf {
+                            ir::InputLeaf {
                                 index: place.local,
                                 projections: current.projections.clone(),
                             },
@@ -624,39 +624,39 @@ impl Compiler<'_> {
                         "callable result has no captured or argument origin",
                     ));
                 }
-                leaves.push(k::ReturnLeaf {
+                leaves.push(ir::ReturnLeaf {
                     projections,
-                    origin: k::LeafOrigin::Static,
+                    origin: ir::LeafOrigin::Static,
                 });
             } else {
-                leaves.push(k::ReturnLeaf {
+                leaves.push(ir::ReturnLeaf {
                     projections,
-                    origin: k::LeafOrigin::Inputs {
+                    origin: ir::LeafOrigin::Inputs {
                         inputs: candidates,
                         exact: false,
                     },
                 });
             }
         }
-        Ok(Some(k::ReturnSource::Leaves(leaves)))
+        Ok(Some(ir::ReturnSource::Leaves(leaves)))
     }
 
     fn forwarded_callable_result(
         &self,
         function: usize,
-        receiver: &k::Place,
-    ) -> Result<Option<k::ReturnSource>> {
-        let Some(k::ReturnSource::Leaves(mut leaves)) =
+        receiver: &ir::Place,
+    ) -> Result<Option<ir::ReturnSource>> {
+        let Some(ir::ReturnSource::Leaves(mut leaves)) =
             self.functions[function].return_source.clone()
         else {
             return Ok(self.functions[function].return_source.clone());
         };
         for leaf_index in 0..leaves.len() {
-            if let k::LeafOrigin::Inputs { inputs, .. } = &mut leaves[leaf_index].origin {
+            if let ir::LeafOrigin::Inputs { inputs, .. } = &mut leaves[leaf_index].origin {
                 for input_index in 0..inputs.len() {
                     let input = &mut inputs[input_index];
                     if input.index == 0 {
-                        if input.projections.first() != Some(&k::Projection::Deref) {
+                        if input.projections.first() != Some(&ir::Projection::Deref) {
                             return Err(err(
                                 a::Span::default(),
                                 "E_BORROW",
@@ -670,7 +670,7 @@ impl Compiler<'_> {
                 }
             }
         }
-        Ok(Some(k::ReturnSource::Leaves(leaves)))
+        Ok(Some(ir::ReturnSource::Leaves(leaves)))
     }
 
     fn assumed_callable(&mut self, ty: usize, span: a::Span) -> Result<usize> {
@@ -678,7 +678,7 @@ impl Compiler<'_> {
             return Ok(*index);
         }
         let signature = self.closures.assumptions.get(&ty).unwrap().clone();
-        // Opaque F currently has no hidden-leaf K inventory. A signature that
+        // Opaque F currently has no hidden-leaf IR inventory. A signature that
         // returns an explicit reference from F cannot pretend that F is static.
         if self.has_view(signature.result) {
             return Err(err(
@@ -692,20 +692,20 @@ impl Compiler<'_> {
             Kind::Mutable => self.reference(ty, true),
             Kind::Once => ty,
         };
-        let mut locals = vec![k::Local {
+        let mut locals = vec![ir::Local {
             name: "$self".to_string(),
             ty: receiver,
             mutable: false,
         }];
         for index in 0..signature.arguments.len() {
-            locals.push(k::Local {
+            locals.push(ir::Local {
                 name: format!("$arg{index}"),
                 ty: signature.arguments[index],
                 mutable: false,
             });
         }
         let index = self.functions.len();
-        self.functions.push(k::Function {
+        self.functions.push(ir::Function {
             file: span.file,
             name: format!("$callable:{ty}"),
             params: locals.len(),
@@ -728,7 +728,7 @@ impl Compiler<'_> {
     }
 
     fn closure_entry(&mut self, ty: usize, requested: Kind, span: a::Span) -> Result<usize> {
-        if let k::TypeKind::Ref { inner, .. } = self.types[ty].kind {
+        if let ir::TypeKind::Ref { inner, .. } = self.types[ty].kind {
             return self.reference_callable_entry(ty, inner, requested, span);
         }
         if self.closures.assumptions.contains_key(&ty) {
@@ -756,13 +756,13 @@ impl Compiler<'_> {
         } else {
             self.reference(ty, true)
         };
-        let mut locals = vec![k::Local {
+        let mut locals = vec![ir::Local {
             name: "$self".to_string(),
             ty: receiver,
             mutable: true,
         }];
         for index in 0..entry.signature.arguments.len() {
-            locals.push(k::Local {
+            locals.push(ir::Local {
                 name: format!("$arg{index}"),
                 ty: entry.signature.arguments[index],
                 mutable: false,
@@ -771,23 +771,23 @@ impl Compiler<'_> {
         let params = locals.len();
         let borrowed_ty = self.functions[function].locals[0].ty;
         let borrowed = locals.len();
-        locals.push(k::Local {
+        locals.push(ir::Local {
             name: "$borrow".to_string(),
             ty: borrowed_ty,
             mutable: false,
         });
         let output = locals.len();
-        locals.push(k::Local {
+        locals.push(ir::Local {
             name: "$result".to_string(),
             ty: entry.signature.result,
             mutable: false,
         });
-        let place = k::Place {
+        let place = ir::Place {
             local: 0,
             projections: if requested == Kind::Once {
                 Vec::new()
             } else {
-                vec![k::Projection::Deref]
+                vec![ir::Projection::Deref]
             },
         };
         let mut args = vec![borrowed];
@@ -795,24 +795,24 @@ impl Compiler<'_> {
             args.push(parameter);
         }
         let operations = vec![
-            k::Op::Borrow {
+            ir::Op::Borrow {
                 dst: borrowed,
                 place: place.clone(),
                 mutable: entry.signature.kind == Kind::Mutable,
             },
-            k::Op::Call {
+            ir::Op::Call {
                 dst: output,
                 function,
                 args,
             },
-            k::Op::Drop {
-                place: k::Place::local(0),
+            ir::Op::Drop {
+                place: ir::Place::local(0),
             },
-            k::Op::Return { src: output },
+            ir::Op::Return { src: output },
         ];
         let return_source = self.forwarded_callable_result(function, &place)?;
         let index = self.functions.len();
-        self.functions.push(k::Function {
+        self.functions.push(ir::Function {
             file: span.file,
             name: format!("$closure:{}:{ty}:{}", entry.expression, requested.name()),
             params,
@@ -852,13 +852,13 @@ impl Compiler<'_> {
             Kind::Mutable => self.reference(ty, true),
             Kind::Once => ty,
         };
-        let mut locals = vec![k::Local {
+        let mut locals = vec![ir::Local {
             name: "$self".to_string(),
             ty: receiver,
             mutable: false,
         }];
         for index in 0..signature.arguments.len() {
-            locals.push(k::Local {
+            locals.push(ir::Local {
                 name: format!("$arg{index}"),
                 ty: signature.arguments[index],
                 mutable: false,
@@ -866,22 +866,22 @@ impl Compiler<'_> {
         }
         let params = locals.len();
         let borrowed = locals.len();
-        locals.push(k::Local {
+        locals.push(ir::Local {
             name: "$borrow".to_string(),
             ty: self.functions[target].locals[0].ty,
             mutable: false,
         });
         let output = locals.len();
-        locals.push(k::Local {
+        locals.push(ir::Local {
             name: "$result".to_string(),
             ty: signature.result,
             mutable: false,
         });
-        let mut projections = vec![k::Projection::Deref];
+        let mut projections = vec![ir::Projection::Deref];
         if requested != Kind::Once {
-            projections.push(k::Projection::Deref);
+            projections.push(ir::Projection::Deref);
         }
-        let place = k::Place {
+        let place = ir::Place {
             local: 0,
             projections,
         };
@@ -891,23 +891,23 @@ impl Compiler<'_> {
         }
         let return_source = self.forwarded_callable_result(target, &place)?;
         let operations = vec![
-            k::Op::Borrow {
+            ir::Op::Borrow {
                 dst: borrowed,
                 place,
                 mutable: signature.kind == Kind::Mutable,
             },
-            k::Op::Call {
+            ir::Op::Call {
                 dst: output,
                 function: target,
                 args,
             },
-            k::Op::Drop {
-                place: k::Place::local(0),
+            ir::Op::Drop {
+                place: ir::Place::local(0),
             },
-            k::Op::Return { src: output },
+            ir::Op::Return { src: output },
         ];
         let index = self.functions.len();
-        self.functions.push(k::Function {
+        self.functions.push(ir::Function {
             file: span.file,
             name: format!("$reference-call:{ty}:{}", requested.name()),
             params,
@@ -957,7 +957,7 @@ impl Builder<'_, '_> {
                     if !crate::check::place_writable(&self.compiler.types, self.function, &place)
                         && matches!(
                             self.compiler.types[source_ty].kind,
-                            k::TypeKind::Ref { mutable: true, .. }
+                            ir::TypeKind::Ref { mutable: true, .. }
                         )
                     {
                         // A unique immutable capture may read the descriptor and
@@ -965,17 +965,17 @@ impl Builder<'_, '_> {
                         // binding. A fresh reborrow descriptor represents those
                         // existing authorities without making that binding mut.
                         let mut referent = place;
-                        referent.projections.push(k::Projection::Deref);
+                        referent.projections.push(ir::Projection::Deref);
                         let reborrow = self.borrow(referent, true, span.line)?;
                         let descriptor = self.local(source_ty, "@capture", true);
                         self.emit(
-                            k::Op::Assign {
-                                place: k::Place::local(descriptor),
+                            ir::Op::Assign {
+                                place: ir::Place::local(descriptor),
                                 src: reborrow.0,
                             },
                             span.line,
                         );
-                        self.borrow(k::Place::local(descriptor), true, span.line)?
+                        self.borrow(ir::Place::local(descriptor), true, span.line)?
                     } else {
                         self.borrow(place, true, span.line)?
                     }
@@ -985,7 +985,7 @@ impl Builder<'_, '_> {
             fields.push(value.0);
         }
         let dst = self.local(ty, "$", true);
-        self.emit(k::Op::Struct { dst, fields }, span.line);
+        self.emit(ir::Op::Struct { dst, fields }, span.line);
         let function = self
             .compiler
             .closures
@@ -996,7 +996,7 @@ impl Builder<'_, '_> {
             .unwrap();
         let construction = crate::check::scoped::Construction {
             function,
-            place: k::Place::local(dst),
+            place: ir::Place::local(dst),
         };
         let index = self.function.body.len();
         if self.scoped_body.constructions.contains_key(&index) {
@@ -1028,14 +1028,14 @@ impl Builder<'_, '_> {
         else {
             unreachable!()
         };
-        let mut locals = vec![k::Local {
+        let mut locals = vec![ir::Local {
             name: "$self".to_string(),
             ty,
             mutable: true,
         }];
         let mut parameter = 0;
         while parameter < params.len() && parameter < entry.signature.arguments.len() {
-            locals.push(k::Local {
+            locals.push(ir::Local {
                 name: params[parameter].name.clone(),
                 ty: entry.signature.arguments[parameter],
                 mutable: params[parameter].mutable,
@@ -1050,17 +1050,17 @@ impl Builder<'_, '_> {
             let mutable =
                 crate::check::place_writable(&self.compiler.types, self.function, &original);
             let local = locals.len();
-            locals.push(k::Local {
+            locals.push(ir::Local {
                 name: variable.name.clone(),
                 ty: variable.ty,
                 mutable,
             });
             capture_locals.insert(local);
             for expression in &variable.uses {
-                aliases.insert(*expression, k::Place::local(local));
+                aliases.insert(*expression, ir::Place::local(local));
             }
         }
-        let mut function = k::Function {
+        let mut function = ir::Function {
             file: span.file,
             name: format!("$closure:{}:{ty}", entry.expression),
             params: param_count,
@@ -1107,7 +1107,7 @@ impl Builder<'_, '_> {
             };
             for (index, parameter) in params.iter().enumerate() {
                 let annotations =
-                    builder.fixed_annotation(parameter.ty, &k::Place::local(index + 1))?;
+                    builder.fixed_annotation(parameter.ty, &ir::Place::local(index + 1))?;
                 for annotation in annotations {
                     builder.scoped_body.parameters.push(annotation);
                 }
@@ -1127,7 +1127,7 @@ impl Builder<'_, '_> {
                         "closure parameter requires an irrefutable pattern",
                     ));
                 }
-                builder.bind_pattern_plan(&plan, root, k::Place::local(index + 1), span.line)?;
+                builder.bind_pattern_plan(&plan, root, ir::Place::local(index + 1), span.line)?;
             }
             let result = builder.return_value(body)?;
             if builder.reachable {
@@ -1135,7 +1135,7 @@ impl Builder<'_, '_> {
                     return Err(err(span, "E_TYPE", "closure result type differs"));
                 }
                 builder.cleanup(0, Some(result.0), span.line);
-                builder.emit(k::Op::Return { src: result.0 }, span.line);
+                builder.emit(ir::Op::Return { src: result.0 }, span.line);
             }
             scoped_body = std::mem::replace(
                 &mut builder.scoped_body,
@@ -1172,8 +1172,8 @@ impl Builder<'_, '_> {
             for projection in &place.projections {
                 if matches!(
                     projection,
-                    k::Projection::Index(_) | k::Projection::VariantField(_, _)
-                ) || (moved && matches!(projection, k::Projection::Deref))
+                    ir::Projection::Index(_) | ir::Projection::VariantField(_, _)
+                ) || (moved && matches!(projection, ir::Projection::Deref))
                 {
                     break;
                 }
@@ -1184,7 +1184,7 @@ impl Builder<'_, '_> {
         }
         // Capture roots follow their first source use. Disjoint projections of
         // one root follow that root's declaration order, independently of the
-        // order in which operand evaluation emitted its K loads and borrows.
+        // order in which operand evaluation emitted its IR loads and borrows.
         plans = sorted_capture_plans(plans);
         if self
             .compiler
@@ -1211,7 +1211,7 @@ impl Builder<'_, '_> {
         }
         let mut fields = Vec::new();
         for (index, plan) in plans.iter().enumerate() {
-            let original = k::Place {
+            let original = ir::Place {
                 local: param_count + plan.source,
                 projections: plan.projections.clone(),
             };
@@ -1222,7 +1222,7 @@ impl Builder<'_, '_> {
                 Kind::Mutable => self.compiler.reference(source_ty, true),
                 Kind::Once => source_ty,
             };
-            fields.push(k::Field {
+            fields.push(ir::Field {
                 name: format!("capture{index}"),
                 ty: field_ty,
             });
@@ -1234,7 +1234,7 @@ impl Builder<'_, '_> {
                 break;
             }
         }
-        self.compiler.types[ty].kind = k::TypeKind::Struct { fields, copy };
+        self.compiler.types[ty].kind = ir::TypeKind::Struct { fields, copy };
         function.locals[0].ty = match kind {
             Kind::Shared => self.compiler.reference(ty, false),
             Kind::Mutable => self.compiler.reference(ty, true),
@@ -1261,7 +1261,7 @@ impl Builder<'_, '_> {
             prefix: if kind == Kind::Once {
                 Vec::new()
             } else {
-                vec![k::Projection::Deref]
+                vec![ir::Projection::Deref]
             },
         });
         scoped_body.source_scope = Some(entry.source_function);
@@ -1289,11 +1289,11 @@ impl Builder<'_, '_> {
             .ok_or_else(|| err(span, "E_TYPE", "invalid callable place"))?;
         let proved = self.compiler.closures.evidence.calls.get(&callee).copied();
         let mut dereferences = 0;
-        while let k::TypeKind::Ref { inner, .. } = self.compiler.types[ty].kind {
+        while let ir::TypeKind::Ref { inner, .. } = self.compiler.types[ty].kind {
             if proved.is_some_and(|selection| selection.dereferences == dereferences) {
                 break;
             }
-            place.projections.push(k::Projection::Deref);
+            place.projections.push(ir::Projection::Deref);
             ty = inner;
             dereferences += 1;
         }
@@ -1331,7 +1331,7 @@ impl Builder<'_, '_> {
         let function = self.compiler.closure_entry(ty, requested, span)?;
         let dst = self.temp(signature.result);
         self.emit(
-            k::Op::Call {
+            ir::Op::Call {
                 dst,
                 function,
                 args: values,
@@ -1342,10 +1342,10 @@ impl Builder<'_, '_> {
     }
 }
 
-fn instructions(operations: Vec<k::Op>, span: a::Span) -> Vec<k::Instruction> {
+fn instructions(operations: Vec<ir::Op>, span: a::Span) -> Vec<ir::Instruction> {
     let mut body = Vec::new();
     for op in operations {
-        body.push(k::Instruction {
+        body.push(ir::Instruction {
             op,
             line: span.line,
             column: span.column,
@@ -1357,7 +1357,7 @@ fn instructions(operations: Vec<k::Op>, span: a::Span) -> Vec<k::Instruction> {
 fn add_capture_plan(
     plans: &mut Vec<CapturePlan>,
     source: usize,
-    projections: Vec<k::Projection>,
+    projections: Vec<ir::Projection>,
     storage: Kind,
 ) {
     for index in 0..plans.len() {
@@ -1404,7 +1404,7 @@ fn add_capture_plan(
 }
 
 fn sorted_capture_plans(plans: Vec<CapturePlan>) -> Vec<CapturePlan> {
-    let mut order: Vec<(usize, Vec<k::Projection>, usize)> = Vec::new();
+    let mut order: Vec<(usize, Vec<ir::Projection>, usize)> = Vec::new();
     let mut values: Vec<Option<CapturePlan>> = Vec::new();
     for plan in plans {
         order.push((plan.source, plan.projections.clone(), values.len()));

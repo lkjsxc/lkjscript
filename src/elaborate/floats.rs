@@ -1,5 +1,5 @@
 //! Decimal literal conversion uses one exact rational rounding step. This is
-//! ordinary producer code; no host float parser or new K operation is required.
+//! ordinary producer code; no host float parser or new IR operation is required.
 //! Decimal magnitude shortcuts classify values outside binary64's range. They
 //! never limit the number of source digits or reject a representable literal.
 

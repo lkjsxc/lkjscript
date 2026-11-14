@@ -1,0 +1,38 @@
+lkjscript-ir 1
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "&mut i64" ref mut 3
+type "Either" enum move
+variant "Left" "value" 7
+variant "Right" "value" 7
+endtype
+fn "wrong" 1 3
+local "value" 8 let
+local "condition" 1 let
+local "result" 3 let
+@1 tag-test 1 0 0
+@2 if 1
+@3 read 2 copy 0 variant 1 0 deref
+@4 drop 0
+@5 return 2
+@6 else
+@7 trap "unreachable"
+@8 end
+endfn
+fn "probe" 0 3
+local "value" 3 mut
+local "reference" 7 let
+local "either" 8 let
+local "result" 3 let
+@20 int 0 42
+@21 borrow 1 mut 0
+@22 variant 2 0 1
+@23 call 3 0 2
+@24 drop 0
+@25 return 3
+endfn

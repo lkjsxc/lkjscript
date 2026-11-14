@@ -5,7 +5,7 @@ mod bootstrap_library;
 mod library_rust;
 #[path = "support/native.rs"]
 mod native;
-use lkjscript::{k, source};
+use lkjscript::{ir, source};
 use std::process::Command;
 
 #[path = "../library/bytes.rs"]
@@ -32,7 +32,7 @@ mod iter;
 #[allow(dead_code)]
 mod sequence;
 
-fn compile(text: &str, _library: &str) -> k::CheckedProgram {
+fn compile(text: &str, _library: &str) -> ir::CheckedProgram {
     let text = format!("use std::bytes::*; use std::collections::BTreeMap;\n{text}");
     let mut files = bootstrap_library::standard_library();
     files.push(source::SourceInput {
@@ -47,7 +47,7 @@ fn compile(text: &str, _library: &str) -> k::CheckedProgram {
     native::check(&bundle)
 }
 
-fn run(checked: &k::CheckedProgram, entry: &str, expected: i64) {
+fn run(checked: &ir::CheckedProgram, entry: &str, expected: i64) {
     native::assert_values(checked, &[(entry, expected)]);
 }
 

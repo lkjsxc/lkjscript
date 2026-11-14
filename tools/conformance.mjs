@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// The process envelopes below belong to the test runner, never to the language.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,7 +8,7 @@ import { oracleCache, packResult, unpackResult, worldOutcome } from './oracle.mj
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const binary = path.resolve(root, process.env.LKJSCRIPT_BIN || process.argv[2] || 'target/debug/lkjscript');
-const engines = (process.env.LKJ_ENGINES || process.env.LKJ_ENGINE || 'native').split(',');
+const engines = (process.env.LKJSCRIPT_ENGINES || process.env.LKJSCRIPT_ENGINE || 'native').split(',');
 const fixtures = path.join(root, 'tests/conformance');
 const cases = JSON.parse(fs.readFileSync(path.join(fixtures, 'cases.json'), 'utf8'));
 const kinds = new Set(['run', 'output', 'reject', 'trap']);
@@ -34,7 +33,7 @@ for (const c of cases) {
 }
 const out = path.join(root, 'target/conformance', engines.join('-'));
 fs.mkdirSync(out, { recursive: true });
-const timeout = Number(process.env.LKJ_TEST_TIMEOUT_MS || 30000);
+const timeout = Number(process.env.LKJSCRIPT_TEST_TIMEOUT_MS || 30000);
 function run(command, args, options = {}) {
     return runProcess(command, args, { cwd: root, encoding: 'utf8', timeout, maxBuffer: 4 * 1024 * 1024, ...options });
 }
@@ -48,23 +47,23 @@ const started = performance.now();
 // language features. Unsupported lkjscript cases remain explicitly pending.
 const rustCases = cases.filter(c => c.rust && (c.kind === 'run' || c.kind === 'output'));
 let harness = '#![allow(dead_code, unused_imports, unused_variables)]\n';
-harness += 'mod __lkj_host {\n' + fs.readFileSync(path.join(root, 'bridge/output.rs'), 'utf8') + '\n}\n';
+harness += 'mod __lkjscript_host {\n' + fs.readFileSync(path.join(root, 'bridge/output.rs'), 'utf8') + '\n}\n';
 for (const c of rustCases) {
-    harness += 'mod case_' + c.id + ' {\n' + (c.kind === 'output' ? 'use crate::__lkj_host::{World, Stdout, Stdin, Stderr, Directory, File};\n' : '') + fs.readFileSync(path.join(fixtures, c.file), 'utf8') + '\n}\n';
+    harness += 'mod case_' + c.id + ' {\n' + (c.kind === 'output' ? 'use crate::__lkjscript_host::{World, Stdout, Stdin, Stderr, Directory, File};\n' : '') + fs.readFileSync(path.join(fixtures, c.file), 'utf8') + '\n}\n';
 }
-harness += 'fn main() { let name = std::env::var("LKJ_ORACLE_CASE").unwrap(); match name.as_str() {\n';
+harness += 'fn main() { let name = std::env::var("LKJSCRIPT_ORACLE_CASE").unwrap(); match name.as_str() {\n';
 for (const c of rustCases) {
-    harness += JSON.stringify(c.id) + (c.kind === 'output' ? ' => __lkj_host::enter(case_' + c.id + '::main),\n' : ' => __lkj_host::observe(|| { println!("{}", case_' + c.id + '::probe()); 0 }),\n');
+    harness += JSON.stringify(c.id) + (c.kind === 'output' ? ' => __lkjscript_host::enter(case_' + c.id + '::main),\n' : ' => __lkjscript_host::observe(|| { println!("{}", case_' + c.id + '::probe()); 0 }),\n');
 }
 harness += '_ => std::process::exit(2), } }\n';
 const oracleSource = path.join(out, 'oracle.rs');
 const oracle = path.join(out, 'oracle');
 fs.writeFileSync(oracleSource, harness);
-const referenceResults = await oracleCache({suite:'conformance-positive',harness,flags:'2024 overflow-checks=yes opt-level=1 cfg=lkj_control'},async()=>{
- const compiled=await run('rustc',['--edition=2024','--cfg','lkj_control','-C','overflow-checks=yes','-C','opt-level=1','-A','warnings',oracleSource,'-o',oracle]);
+const referenceResults = await oracleCache({suite:'conformance-positive',harness,flags:'2024 overflow-checks=yes opt-level=1 cfg=lkjscript_control'},async()=>{
+ const compiled=await run('rustc',['--edition=2024','--cfg','lkjscript_control','-C','overflow-checks=yes','-C','opt-level=1','-A','warnings',oracleSource,'-o',oracle]);
  if(!succeeded(compiled))throw new Error('Rust oracle did not build: '+diagnostic(compiled));
  const results={};
- for(const c of rustCases)results[c.id]=packResult(await run(oracle,[],{encoding:null,captureControl:true,env:{...process.env,LKJ_ORACLE_CASE:c.id}}));
+ for(const c of rustCases)results[c.id]=packResult(await run(oracle,[],{encoding:null,captureControl:true,env:{...process.env,LKJSCRIPT_ORACLE_CASE:c.id}}));
  return results;
 });
 // A new rejection fixture must not invalidate every unchanged Rust rejection.
@@ -75,14 +74,14 @@ for(const c of cases.filter(c=>c.rust&&c.kind!=='run'&&c.kind!=='output')){
  let source=fs.readFileSync(negativeSource,'utf8');
  if(c.kind==='reject'&&c.world){
   negativeSource=path.join(out,c.id+'.rs');
-  source='mod __lkj_host {\n'+fs.readFileSync(path.join(root,'bridge/output.rs'),'utf8')+'\n}\nmod case {\n'+source+'\nuse crate::__lkj_host::{World,Stdout,Stdin,Stderr,Directory,File};\n}\n';
+  source='mod __lkjscript_host {\n'+fs.readFileSync(path.join(root,'bridge/output.rs'),'utf8')+'\n}\nmod case {\n'+source+'\nuse crate::__lkjscript_host::{World,Stdout,Stdin,Stderr,Directory,File};\n}\n';
   fs.writeFileSync(negativeSource,source);
  }
  referenceResults[c.id]=await oracleCache({suite:'conformance-rejection',file:c.file,source,flags:negativeFlags},async()=>packResult(
   await run('rustc',[...negativeFlags,negativeSource,'-o',path.join(out,c.id+'.rmeta')],{encoding:null})
  ));
 }
-const jobs = Number(process.env.LKJ_CONFORMANCE_JOBS || 1);
+const jobs = Number(process.env.LKJSCRIPT_CONFORMANCE_JOBS || 1);
 const batchStarted = performance.now();
 const actualRoutes = await runRoutes(binary,cases.map(c=>({path:path.join(fixtures,c.file),entry:c.entry,mode:c.kind==='reject'?'check':'run'})),{engines,output:out,encoding:null,jobs});
 const batchSeconds = (performance.now() - batchStarted) / 1000;
@@ -153,7 +152,7 @@ for (const c of cases) {
         if (!actual.stdout.equals(expected) || !reference.stdout.equals(expected)
             || !actual.programStderr.equals(expectedStderr) || !reference.stderr.equals(expectedStderr)
             || ending(actual, false) !== c.ending || ending(reference, true) !== c.ending) {
-            fail(c.id + ': output/termination differs: lkj=' + ending(actual, false)
+            fail(c.id + ': output/termination differs: lkjscript=' + ending(actual, false)
                 + ' rust=' + ending(reference, true) + ' expected=' + c.ending + ' ' + diagnostic(actual));
             continue;
         }

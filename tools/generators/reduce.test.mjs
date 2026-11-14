@@ -75,7 +75,7 @@ test('World outcome uses the private record even for a marker-shaped stderr and 
     [code, reserved, status].forEach((value, index) => bytes.writeBigUInt64LE(BigInt(value), index * 8));
     return bytes;
   };
-  const result = {status: 101, signal: null, stderr: Buffer.from('LKJ_RUST_TRAP R0004\n'), control: control(0, 101)};
+  const result = {status: 101, signal: null, stderr: Buffer.from('LKJSCRIPT_RUST_TRAP R0004\n'), control: control(0, 101)};
   assert.deepEqual(worldOutcome(result), {kind: 'normal', status: 101});
   assert.deepEqual(worldOutcome({...result, stderr: Buffer.alloc(0), control: control(4)}), {kind: 'trap', code: 'R0004'});
   for (const invalid of [undefined, Buffer.alloc(23), Buffer.concat([control(4), control(4)]), control(4, 1), control(4, 0, 1), control(0, 0), control(0, 256)]) {

@@ -1,4 +1,4 @@
-//! Reporting data does not carry checked K and cannot authorize emission.
+//! Reporting data does not carry checked IR and cannot authorize emission.
 pub(crate) mod lookup_domains;
 pub(crate) mod readiness;
 use crate::ast::{Span, Type};
@@ -121,7 +121,7 @@ pub fn complete_unsupported(report: &mut SourceReport) {
     }
 }
 
-/// A diagnostic observation carries source locations, never inference or K evidence.
+/// A diagnostic observation carries source locations, never inference or IR evidence.
 #[derive(Clone)]
 pub struct SemanticObservation {
     pub function: Option<String>,

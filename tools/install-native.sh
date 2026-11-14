@@ -5,10 +5,10 @@ export LC_ALL=C
 
 usage() {
     printf '%s\n' \
-        'usage: install-native.sh DEST --frontend PATH --kc PATH --result PATH' \
+        'usage: install-native.sh DEST --frontend PATH --backend PATH --result PATH' \
         '    --library DIR --runtime-source FILE [--source-commit ID]' \
         'DEST must not exist. All compiler and source inputs are explicit.' \
-        'The supplied native tools regenerate and validate runtime.k before publication.' \
+        'The supplied native tools regenerate and validate runtime.lkjir before publication.' \
         'Requires Bash, coreutils, findutils and util-linux; no Rust or Node tooling is used.'
 }
 
@@ -26,7 +26,7 @@ destination=$1
 shift
 [[ -n $destination ]] || fail 'DEST must be nonempty'
 frontend=
-kc=
+backend=
 result=
 library=
 runtime_source=
@@ -35,7 +35,7 @@ seen=' '
 while [[ $# -gt 0 ]]; do
     option=$1
     case "$option" in
-        --frontend|--kc|--result|--library|--runtime-source|--source-commit) ;;
+        --frontend|--backend|--result|--library|--runtime-source|--source-commit) ;;
         *) fail "unknown option: $option" ;;
     esac
     [[ $seen != *" $option "* ]] || fail "repeated option: $option"
@@ -43,7 +43,7 @@ while [[ $# -gt 0 ]]; do
     seen+="$option "
     case "$option" in
         --frontend) frontend=$2 ;;
-        --kc) kc=$2 ;;
+        --backend) backend=$2 ;;
         --result) result=$2 ;;
         --library) library=$2 ;;
         --runtime-source) runtime_source=$2 ;;
@@ -52,7 +52,7 @@ while [[ $# -gt 0 ]]; do
     shift 2
 done
 [[ -n $frontend ]] || fail '--frontend is required'
-[[ -n $kc ]] || fail '--kc is required'
+[[ -n $backend ]] || fail '--backend is required'
 [[ -n $result ]] || fail '--result is required'
 [[ -n $library ]] || fail '--library is required'
 [[ -n $runtime_source ]] || fail '--runtime-source is required'
@@ -75,15 +75,15 @@ regular_file() {
 
 # Copy this checkout's driver, never discover a compiler or source implicitly.
 script_directory=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
-driver=$script_directory/lkj
+driver=$script_directory/lkjscript
 process_helper=$script_directory/native-process.sh
 frontend=$(absolute_path "$frontend")
-kc=$(absolute_path "$kc")
+backend=$(absolute_path "$backend")
 result=$(absolute_path "$result")
 runtime_source=$(absolute_path "$runtime_source")
 library=$(absolute_path "$library")
 regular_file frontend "$frontend"
-regular_file kc "$kc"
+regular_file backend "$backend"
 regular_file result "$result"
 regular_file driver "$driver"
 regular_file process-helper "$process_helper"
@@ -119,12 +119,12 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-stage=$(mktemp -d -- "$destination_parent/.lkj-install.XXXXXXXX")
-lkj_process_init "$stage"
+stage=$(mktemp -d -- "$destination_parent/.lkjscript-install.XXXXXXXX")
+lkjscript_process_init "$stage"
 mkdir -- "$stage/bin" "$stage/libexec" "$stage/library" "$stage/.work"
-cp --no-dereference -- "$driver" "$stage/bin/lkj"
+cp --no-dereference -- "$driver" "$stage/bin/lkjscript"
 cp --no-dereference -- "$frontend" "$stage/libexec/frontend"
-cp --no-dereference -- "$kc" "$stage/libexec/kc"
+cp --no-dereference -- "$backend" "$stage/libexec/backend"
 cp --no-dereference -- "$result" "$stage/libexec/result"
 cp --no-dereference -- "$process_helper" "$stage/libexec/native-process.sh"
 chmod 644 -- "$stage/libexec/native-process.sh"
@@ -134,36 +134,36 @@ cp -R --no-dereference -- "$library/." "$stage/library/"
 bad=$(find "$stage" ! -type d ! -type f -print -quit) ||
     fail 'cannot inspect staged files'
 [[ -z $bad ]] || fail "copied input contains a symlink or special file: $bad"
-chmod 755 -- "$stage/bin/lkj" "$stage/libexec/frontend" "$stage/libexec/kc" "$stage/libexec/result"
+chmod 755 -- "$stage/bin/lkjscript" "$stage/libexec/frontend" "$stage/libexec/backend" "$stage/libexec/result"
 work=$stage/.work
 mkdir -- "$work/"'$runtime'
 cp -- "$stage/runtime.rs" "$work/"'$runtime/runtime.rs'
-lkj_process_run "$work" 1 "$stage/libexec/frontend" --source '$runtime/runtime.rs' --no-library > "$work/runtime.k" ||
+lkjscript_process_run "$work" 1 "$stage/libexec/frontend" --source '$runtime/runtime.rs' --no-library > "$work/runtime.lkjir" ||
     fail 'native frontend rejected the runtime source'
-[[ -s $work/runtime.k ]] || fail 'native frontend emitted an empty runtime'
+[[ -s $work/runtime.lkjir ]] || fail 'native frontend emitted an empty runtime'
 printf 'pub fn probe() -> i64 { 42 }\n' > "$work/probe.rs"
-lkj_process_run "$work" 1 "$stage/libexec/frontend" --source probe.rs --no-library > "$work/probe.k" ||
+lkjscript_process_run "$work" 1 "$stage/libexec/frontend" --source probe.rs --no-library > "$work/probe.lkjir" ||
     fail 'native frontend rejected the installation probe'
-lkj_process_run "$work" 1 "$stage/libexec/kc" probe.k --runtime runtime.k --entry probe > "$work/probe.elf" ||
-    fail 'native K compiler rejected the regenerated runtime or probe'
+lkjscript_process_run "$work" 1 "$stage/libexec/backend" probe.lkjir --runtime runtime.lkjir --entry probe > "$work/probe.elf" ||
+    fail 'native backend rejected the regenerated runtime or probe'
 chmod 755 "$work/probe.elf"
-lkj_process_run "$work" 1 "$work/probe.elf" >/dev/null ||
+lkjscript_process_run "$work" 1 "$work/probe.elf" >/dev/null ||
     fail 'native installation probe failed'
-lkj_process_run "$work" 1 "$stage/libexec/kc" probe.k --runtime runtime.k --entry probe \
+lkjscript_process_run "$work" 1 "$stage/libexec/backend" probe.lkjir --runtime runtime.lkjir --entry probe \
     --result-descriptor probe.result > "$work/packet.elf" ||
-    fail 'native K compiler could not emit an evaluation artifact'
+    fail 'native backend could not emit an evaluation artifact'
 chmod 755 "$work/packet.elf"
 status=0
-lkj_process_run "$work" 1 "$work/packet.elf" 3>"$work/packet.raw" >/dev/null || status=$?
+lkjscript_process_run "$work" 1 "$work/packet.elf" 3>"$work/packet.raw" >/dev/null || status=$?
 printf '\n%s\n' "$status" >> "$work/packet.raw"
-lkj_process_run "$work" 1 "$stage/libexec/result" probe.result installation-probe \
+lkjscript_process_run "$work" 1 "$stage/libexec/result" probe.result installation-probe \
     <"$work/packet.raw" >"$work/result.stdout" ||
     fail 'native evaluation artifact and result reader disagree'
 [[ $status == 0 ]] || fail 'native evaluation artifact failed'
 printf '42\n' > "$work/expected.stdout"
 cmp -s "$work/expected.stdout" "$work/result.stdout" ||
     fail 'native result reader did not return exactly 42 and a newline'
-cp -- "$work/runtime.k" "$stage/runtime.k"
+cp -- "$work/runtime.lkjir" "$stage/runtime.lkjir"
 rm -rf -- "$work"
 
 hash_file() {
@@ -188,18 +188,18 @@ record_input() {
 }
 
 library_hash=$(cd -- "$stage" && write_hashes ./library | sha256sum)
-runtime_hash=$(hash_file runtime.k)
+runtime_hash=$(hash_file runtime.lkjir)
 {
     printf 'format lkjscript-native-v1\nsource_commit %q\n' "$source_commit"
     record_input frontend "$frontend" libexec/frontend
-    record_input kc "$kc" libexec/kc
+    record_input backend "$backend" libexec/backend
     record_input result "$result" libexec/result
-    record_input driver "$driver" bin/lkj
+    record_input driver "$driver" bin/lkjscript
     record_input process_helper "$process_helper" libexec/native-process.sh
     record_input runtime_source "$runtime_source" runtime.rs
     printf 'input library %q\n' "$library"
     printf 'library_tree_sha256 %s\n' "${library_hash%% *}"
-    printf 'generated runtime_k %s\n' "$runtime_hash"
+    printf 'generated runtime_ir %s\n' "$runtime_hash"
     printf 'validation runtime_seal plain_execution scalar_result passed\n'
 } > "$stage/manifest"
 (

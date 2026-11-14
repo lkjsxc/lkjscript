@@ -1,9 +1,9 @@
-use lkjscript::{check, compiler, k, k_text, source};
+use lkjscript::{check, compiler, ir, ir_text, source};
 use std::path::Path;
 use std::process::Command;
 
 #[test]
-fn capabilities_cannot_be_fabricated_by_source_or_raw_k() {
+fn capabilities_cannot_be_fabricated_by_source_or_raw_ir() {
     for text in [
         "fn probe() -> World { 42 }",
         "fn probe(mut world: World) { let out = world.stdout::<i64>(); }",
@@ -22,51 +22,51 @@ fn capabilities_cannot_be_fabricated_by_source_or_raw_k() {
         };
         assert!(compiler::compile(&bundle).is_err(), "accepted: {text}");
     }
-    for kind in [k::TypeKind::World, k::TypeKind::Stdout] {
+    for kind in [ir::TypeKind::World, ir::TypeKind::Stdout] {
         for op in [
-            k::Op::Int { dst: 0, value: 1 },
-            k::Op::Unit { dst: 0 },
-            k::Op::Struct {
+            ir::Op::Int { dst: 0, value: 1 },
+            ir::Op::Unit { dst: 0 },
+            ir::Op::Struct {
                 dst: 0,
                 fields: vec![],
             },
         ] {
-            let mut types = k::primitives();
-            types.push(k::Type {
+            let mut types = ir::primitives();
+            types.push(ir::Type {
                 name: "capability".to_string(),
                 kind: kind.clone(),
             });
-            let program = k::Program {
+            let program = ir::Program {
                 types,
                 destructors: vec![],
-                functions: vec![k::Function {
+                functions: vec![ir::Function {
                     file: 0,
                     name: "probe".to_string(),
                     params: 0,
                     result: 7,
                     return_source: None,
                     test: false,
-                    locals: vec![k::Local {
+                    locals: vec![ir::Local {
                         name: "cap".to_string(),
                         ty: 7,
                         mutable: false,
                     }],
                     body: vec![
-                        k::Instruction {
+                        ir::Instruction {
                             column: 1,
                             op,
                             line: 1,
                         },
-                        k::Instruction {
+                        ir::Instruction {
                             column: 1,
-                            op: k::Op::Return { src: 0 },
+                            op: ir::Op::Return { src: 0 },
                             line: 2,
                         },
                     ],
                 }],
             };
-            let text = k_text::write(&program);
-            assert!(check::check(k_text::read(&text).unwrap()).is_err());
+            let text = ir_text::write(&program);
+            assert!(check::check(ir_text::read(&text).unwrap()).is_err());
         }
     }
 }

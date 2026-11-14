@@ -1,6 +1,6 @@
-//! Source annotations stay attached to the body that owns their K identities.
+//! Source annotations stay attached to the body that owns their IR identities.
 //! Probe builders discard these records; completed functions install them once.
-use super::{Builder, Result, a, err, k};
+use super::{Builder, Result, a, err, ir};
 use crate::check::scoped::{
     Annotation, Annotations, Construction, Environment, Region, ResultLeaf,
 };
@@ -171,7 +171,7 @@ impl Builder<'_, '_> {
     pub(super) fn fixed_annotation(
         &self,
         syntax: a::TypeId,
-        place: &k::Place,
+        place: &ir::Place,
     ) -> Result<Vec<Annotation>> {
         let ty =
             super::place_type(&self.compiler.types, self.function, place).ok_or_else(|| {
@@ -297,7 +297,7 @@ impl Builder<'_, '_> {
                     continue;
                 }
                 match &self.compiler.types[ty].kind {
-                    k::TypeKind::Ref { inner, .. } => {
+                    ir::TypeKind::Ref { inner, .. } => {
                         if in_slice {
                             return Err(err(
                                 self.compiler.source.types[syntax].span,
@@ -307,16 +307,16 @@ impl Builder<'_, '_> {
                         }
                         pending.push((*inner, false));
                     }
-                    k::TypeKind::Slice { inner, .. } => pending.push((*inner, true)),
-                    k::TypeKind::Box { inner }
-                    | k::TypeKind::Vec { inner }
-                    | k::TypeKind::Array { inner, .. } => pending.push((*inner, in_slice)),
-                    k::TypeKind::Struct { fields, .. } => {
+                    ir::TypeKind::Slice { inner, .. } => pending.push((*inner, true)),
+                    ir::TypeKind::Box { inner }
+                    | ir::TypeKind::Vec { inner }
+                    | ir::TypeKind::Array { inner, .. } => pending.push((*inner, in_slice)),
+                    ir::TypeKind::Struct { fields, .. } => {
                         for field in fields {
                             pending.push((field.ty, in_slice));
                         }
                     }
-                    k::TypeKind::Enum { variants, .. } => {
+                    ir::TypeKind::Enum { variants, .. } => {
                         for variant in variants {
                             for field in &variant.fields {
                                 pending.push((field.ty, in_slice));
@@ -332,7 +332,7 @@ impl Builder<'_, '_> {
     pub(super) fn annotation_initializer(
         &mut self,
         syntax: Option<a::TypeId>,
-        place: k::Place,
+        place: ir::Place,
     ) -> Result<()> {
         let annotations = match syntax {
             Some(syntax) => self.fixed_annotation(syntax, &place)?,
@@ -368,13 +368,13 @@ impl Builder<'_, '_> {
         syntax: a::TypeId,
         local: usize,
     ) -> Result<()> {
-        let annotations = self.fixed_annotation(syntax, &k::Place::local(local))?;
+        let annotations = self.fixed_annotation(syntax, &ir::Place::local(local))?;
         for annotation in annotations {
             self.scoped_body.annotations.bindings.push(annotation);
         }
         Ok(())
     }
-    pub(super) fn annotation_binding(&mut self, from: &k::Place, local: usize, borrowed: bool) {
+    pub(super) fn annotation_binding(&mut self, from: &ir::Place, local: usize, borrowed: bool) {
         for annotation in &self.typed_bindings {
             if annotation.place.local != from.local
                 || !annotation.place.projections.starts_with(&from.projections)
@@ -382,12 +382,12 @@ impl Builder<'_, '_> {
                 continue;
             }
             let mut next = annotation.clone();
-            next.place = k::Place::local(local);
+            next.place = ir::Place::local(local);
             if borrowed {
-                next.place.projections.push(k::Projection::Deref);
+                next.place.projections.push(ir::Projection::Deref);
                 next.invariant |= matches!(
                     self.compiler.types[self.ty(local)].kind,
-                    k::TypeKind::Ref { mutable: true, .. }
+                    ir::TypeKind::Ref { mutable: true, .. }
                 );
             }
             next.place

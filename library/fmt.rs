@@ -191,7 +191,7 @@ impl Display for char {
         f.pad(value.as_str())
     }
 }
-pub fn __lkj_new<'a>(output: &'a mut String) -> Formatter<'a> {
+pub fn __lkjscript_new<'a>(output: &'a mut String) -> Formatter<'a> {
     Formatter {
         output,
         width: 0usize,
@@ -199,7 +199,7 @@ pub fn __lkj_new<'a>(output: &'a mut String) -> Formatter<'a> {
         fill: ' ',
     }
 }
-pub fn __lkj_nested<'a, 'b>(outer: &'a mut Formatter<'b>) -> Formatter<'a> {
+pub fn __lkjscript_nested<'a, 'b>(outer: &'a mut Formatter<'b>) -> Formatter<'a> {
     Formatter {
         output: &mut *outer.output,
         width: 0usize,
@@ -207,30 +207,30 @@ pub fn __lkj_nested<'a, 'b>(outer: &'a mut Formatter<'b>) -> Formatter<'a> {
         fill: ' ',
     }
 }
-pub fn __lkj_settings(formatter: &mut Formatter, width: usize, flags: u8, fill: char) {
+pub fn __lkjscript_settings(formatter: &mut Formatter, width: usize, flags: u8, fill: char) {
     formatter.width = width;
     formatter.flags = flags;
     formatter.fill = fill;
 }
-pub fn __lkj_literal(formatter: &mut Formatter, value: &str) -> Result {
+pub fn __lkjscript_literal(formatter: &mut Formatter, value: &str) -> Result {
     formatter.write_str(value)
 }
-pub fn __lkj_display<T: Display>(formatter: &mut Formatter, value: &T) -> Result {
+pub fn __lkjscript_display<T: Display>(formatter: &mut Formatter, value: &T) -> Result {
     value.fmt(formatter)
 }
-pub fn __lkj_display_str(formatter: &mut Formatter, value: &str) -> Result {
+pub fn __lkjscript_display_str(formatter: &mut Formatter, value: &str) -> Result {
     formatter.pad(value)
 }
-pub fn __lkj_lower_hex<T: LowerHex>(formatter: &mut Formatter, value: &T) -> Result {
+pub fn __lkjscript_lower_hex<T: LowerHex>(formatter: &mut Formatter, value: &T) -> Result {
     value.fmt(formatter)
 }
-pub fn __lkj_upper_hex<T: UpperHex>(formatter: &mut Formatter, value: &T) -> Result {
+pub fn __lkjscript_upper_hex<T: UpperHex>(formatter: &mut Formatter, value: &T) -> Result {
     value.fmt(formatter)
 }
-pub fn __lkj_binary<T: Binary>(formatter: &mut Formatter, value: &T) -> Result {
+pub fn __lkjscript_binary<T: Binary>(formatter: &mut Formatter, value: &T) -> Result {
     value.fmt(formatter)
 }
-pub fn __lkj_octal<T: Octal>(formatter: &mut Formatter, value: &T) -> Result {
+pub fn __lkjscript_octal<T: Octal>(formatter: &mut Formatter, value: &T) -> Result {
     value.fmt(formatter)
 }
 
@@ -529,6 +529,6 @@ impl Octal for isize {
     }
 }
 
-pub fn __lkj_success() -> Result {
+pub fn __lkjscript_success() -> Result {
     crate::Result::Ok(())
 }

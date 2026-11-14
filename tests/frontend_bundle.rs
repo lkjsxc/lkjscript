@@ -130,7 +130,7 @@ fn decoder_leaves_duplicate_and_missing_module_rules_to_production_loader() {
 }
 
 #[test]
-fn bundle_boundary_preserves_k_bytes_and_child_diagnostics() {
+fn bundle_boundary_preserves_ir_bytes_and_child_diagnostics() {
     let root = b"mod child; pub fn probe()->i64 { child::answer() }";
     let child = b"pub fn answer()->i64 { 7 }";
     let decoded = frontend_bundle::decode(&wire(
@@ -154,8 +154,8 @@ fn bundle_boundary_preserves_k_bytes_and_child_diagnostics() {
         ],
     };
     assert_eq!(
-        frontend::source_to_k(&decoded).unwrap(),
-        frontend::source_to_k(&direct).unwrap()
+        frontend::source_to_ir(&decoded).unwrap(),
+        frontend::source_to_ir(&direct).unwrap()
     );
     let invalid = frontend_bundle::decode(&wire(
         b"src/main.rs",
@@ -166,7 +166,7 @@ fn bundle_boundary_preserves_k_bytes_and_child_diagnostics() {
         ],
     ))
     .unwrap();
-    let error = frontend::source_to_k(&invalid).unwrap_err();
+    let error = frontend::source_to_ir(&invalid).unwrap_err();
     assert_eq!(error.code, "E_TYPE");
     assert_eq!(error.path, "src/child.rs");
     assert_ne!(error.line, 0);

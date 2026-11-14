@@ -2,11 +2,11 @@
 //! method-name search. Operand materialization is shared by scalar and nominal
 //! paths so a failed hint cannot cause a source expression to run twice.
 use super::generic_check::BuiltinMethod;
-use super::{Builder, Result, a, err, k, place_type};
+use super::{Builder, Result, a, err, ir, place_type};
 
 impl Builder<'_, '_> {
     /// Relations borrow aggregates and read scalar operands exactly once, before
-    /// evaluating the right expression. Derived operations are ordinary checked K.
+    /// evaluating the right expression. Derived operations are ordinary checked IR.
     pub(super) fn ordering_expr(
         &mut self,
         operation: &str,
@@ -35,7 +35,10 @@ impl Builder<'_, '_> {
             let (left_place, target) = self.equality_referent(left_place, operand_type);
             if matches!(
                 self.compiler.types[target].kind,
-                k::TypeKind::Bool | k::TypeKind::Char | k::TypeKind::Int { .. } | k::TypeKind::F64
+                ir::TypeKind::Bool
+                    | ir::TypeKind::Char
+                    | ir::TypeKind::Int { .. }
+                    | ir::TypeKind::F64
             ) {
                 let left = self.read(left_place, span.line)?.0;
                 let (right_place, right_type) =
@@ -45,11 +48,11 @@ impl Builder<'_, '_> {
                 }
                 let (right_place, _) = self.equality_referent(right_place, right_type);
                 let right = self.read(right_place, span.line)?.0;
-                let result = self.temp(k::BOOL);
-                if target == k::BOOL {
-                    let negated = self.temp(k::BOOL);
+                let result = self.temp(ir::BOOL);
+                if target == ir::BOOL {
+                    let negated = self.temp(ir::BOOL);
                     self.emit(
-                        k::Op::Unary {
+                        ir::Op::Unary {
                             dst: negated,
                             op: "!".to_string(),
                             src: if operation == "<" || operation == "<=" {
@@ -61,7 +64,7 @@ impl Builder<'_, '_> {
                         span.line,
                     );
                     self.emit(
-                        k::Op::Binary {
+                        ir::Op::Binary {
                             dst: result,
                             op: if operation == "<" || operation == ">" {
                                 "&"
@@ -80,7 +83,7 @@ impl Builder<'_, '_> {
                     );
                 } else {
                     self.emit(
-                        k::Op::Binary {
+                        ir::Op::Binary {
                             dst: result,
                             op: operation.to_string(),
                             left,
@@ -89,7 +92,7 @@ impl Builder<'_, '_> {
                         span.line,
                     );
                 }
-                (result, k::BOOL)
+                (result, ir::BOOL)
             } else {
                 let method = match operation {
                     "<" => BuiltinMethod::Lt,
@@ -116,12 +119,12 @@ impl Builder<'_, '_> {
             if self.live.at(local)
                 && matches!(
                     self.compiler.types[self.ty(local)].kind,
-                    k::TypeKind::Ref { .. }
+                    ir::TypeKind::Ref { .. }
                 )
             {
                 self.emit(
-                    k::Op::Drop {
-                        place: k::Place::local(local),
+                    ir::Op::Drop {
+                        place: ir::Place::local(local),
                     },
                     span.line,
                 );
@@ -148,7 +151,7 @@ impl Builder<'_, '_> {
         expression: usize,
         expected: Option<usize>,
         span: a::Span,
-    ) -> Result<(k::Place, usize)> {
+    ) -> Result<(ir::Place, usize)> {
         let is_place = match &self.compiler.source.exprs[expression].kind {
             a::Expr::Path(path) => self.binding(&path.name).is_some(),
             a::Expr::Field { .. } | a::Expr::Index { .. } => true,
@@ -159,16 +162,16 @@ impl Builder<'_, '_> {
             self.place(expression)?
         } else {
             let value = self.expr(expression, expected)?;
-            k::Place::local(value.0)
+            ir::Place::local(value.0)
         };
         let ty = place_type(&self.compiler.types, self.function, &place)
             .ok_or_else(|| err(span, "E_TYPE", "invalid equality operand"))?;
         Ok((place, ty))
     }
 
-    fn equality_referent(&self, mut place: k::Place, mut ty: usize) -> (k::Place, usize) {
-        while let k::TypeKind::Ref { inner, .. } = self.compiler.types[ty].kind {
-            place.projections.push(k::Projection::Deref);
+    fn equality_referent(&self, mut place: ir::Place, mut ty: usize) -> (ir::Place, usize) {
+        while let ir::TypeKind::Ref { inner, .. } = self.compiler.types[ty].kind {
+            place.projections.push(ir::Projection::Deref);
             ty = inner;
         }
         (place, ty)
@@ -199,9 +202,9 @@ impl Builder<'_, '_> {
         right: usize,
         span: a::Span,
     ) -> (usize, usize) {
-        let dst = self.temp(k::BOOL);
+        let dst = self.temp(ir::BOOL);
         self.emit(
-            k::Op::Call {
+            ir::Op::Call {
                 dst,
                 function,
                 args: vec![left, right],
@@ -209,18 +212,18 @@ impl Builder<'_, '_> {
             span.line,
         );
         if negate {
-            let result = self.temp(k::BOOL);
+            let result = self.temp(ir::BOOL);
             self.emit(
-                k::Op::Unary {
+                ir::Op::Unary {
                     dst: result,
                     op: "!".to_string(),
                     src: dst,
                 },
                 span.line,
             );
-            (result, k::BOOL)
+            (result, ir::BOOL)
         } else {
-            (dst, k::BOOL)
+            (dst, ir::BOOL)
         }
     }
 
@@ -252,7 +255,7 @@ impl Builder<'_, '_> {
             self.equality_call(function, false, left, right, span)
         } else {
             let (left_place, target) = self.equality_referent(left_place, operand_type);
-            if matches!(self.compiler.types[target].kind, k::TypeKind::Str)
+            if matches!(self.compiler.types[target].kind, ir::TypeKind::Str)
                 || self.library_string(target, span)
             {
                 let left_string = self.library_string(target, span);
@@ -262,7 +265,7 @@ impl Builder<'_, '_> {
                 let right_string = self.library_string(right_target, span);
                 let depth = |mut ty: usize| {
                     let mut count = 0;
-                    while let k::TypeKind::Ref { inner, .. } = self.compiler.types[ty].kind {
+                    while let ir::TypeKind::Ref { inner, .. } = self.compiler.types[ty].kind {
                         ty = inner;
                         count += 1;
                     }
@@ -273,7 +276,7 @@ impl Builder<'_, '_> {
                 let compatible = if left_string == right_string {
                     operand_type == right_type
                 } else if left_string {
-                    matches!(self.compiler.types[right_target].kind, k::TypeKind::Str)
+                    matches!(self.compiler.types[right_target].kind, ir::TypeKind::Str)
                         && (right_depth == left_depth || right_depth == left_depth + 1)
                 } else {
                     right_string && (left_depth == right_depth || left_depth == right_depth + 1)
@@ -299,7 +302,7 @@ impl Builder<'_, '_> {
                         left = self
                             .source_library_call(
                                 "string",
-                                "__lkj_as_str",
+                                "__lkjscript_as_str",
                                 std::collections::BTreeMap::new(),
                                 vec![left],
                                 span,
@@ -310,7 +313,7 @@ impl Builder<'_, '_> {
                         right = self
                             .source_library_call(
                                 "string",
-                                "__lkj_as_str",
+                                "__lkjscript_as_str",
                                 std::collections::BTreeMap::new(),
                                 vec![right],
                                 span,
@@ -321,10 +324,10 @@ impl Builder<'_, '_> {
                 }
             } else {
                 match self.compiler.types[target].kind.clone() {
-                    k::TypeKind::Bool
-                    | k::TypeKind::Char
-                    | k::TypeKind::Int { .. }
-                    | k::TypeKind::F64 => {
+                    ir::TypeKind::Bool
+                    | ir::TypeKind::Char
+                    | ir::TypeKind::Int { .. }
+                    | ir::TypeKind::F64 => {
                         // Read scalars before evaluating the right expression. A
                         // later assignment must not change the left operand value.
                         let left = self.read(left_place, span.line)?.0;
@@ -335,9 +338,9 @@ impl Builder<'_, '_> {
                         }
                         let (right_place, _) = self.equality_referent(right_place, right_type);
                         let right = self.read(right_place, span.line)?.0;
-                        let dst = self.temp(k::BOOL);
+                        let dst = self.temp(ir::BOOL);
                         self.emit(
-                            k::Op::Binary {
+                            ir::Op::Binary {
                                 dst,
                                 op: operation.to_string(),
                                 left,
@@ -345,9 +348,9 @@ impl Builder<'_, '_> {
                             },
                             span.line,
                         );
-                        (dst, k::BOOL)
+                        (dst, ir::BOOL)
                     }
-                    k::TypeKind::Str => {
+                    ir::TypeKind::Str => {
                         let left = self.borrow(left_place, false, span.line)?.0;
                         let (right_place, right_type) =
                             self.equality_operand(right, Some(operand_type), span)?;
@@ -358,11 +361,11 @@ impl Builder<'_, '_> {
                         let right = self.borrow(right_place, false, span.line)?.0;
                         self.text_equality_values(operation, left, right, span)?
                     }
-                    k::TypeKind::Unit
-                    | k::TypeKind::Struct { .. }
-                    | k::TypeKind::Enum { .. }
-                    | k::TypeKind::Box { .. }
-                    | k::TypeKind::Array { .. } => {
+                    ir::TypeKind::Unit
+                    | ir::TypeKind::Struct { .. }
+                    | ir::TypeKind::Enum { .. }
+                    | ir::TypeKind::Box { .. }
+                    | ir::TypeKind::Array { .. } => {
                         let (function, negate) =
                             self.equality_implementation(target, operation, span)?;
                         let left = self.borrow(left_place, false, span.line)?.0;
@@ -375,10 +378,12 @@ impl Builder<'_, '_> {
                         let right = self.borrow(right_place, false, span.line)?.0;
                         self.equality_call(function, negate, left, right, span)
                     }
-                    k::TypeKind::Slice { inner, .. } => {
-                        let function =
-                            self.compiler
-                                .sequence_instance("__lkj_slice_equal", inner, span)?;
+                    ir::TypeKind::Slice { inner, .. } => {
+                        let function = self.compiler.sequence_instance(
+                            "__lkjscript_slice_equal",
+                            inner,
+                            span,
+                        )?;
                         let left = self.borrow(left_place, false, span.line)?.0;
                         let (right_place, right_type) =
                             self.equality_operand(right, Some(operand_type), span)?;
@@ -389,7 +394,7 @@ impl Builder<'_, '_> {
                         let right = self.borrow(right_place, false, span.line)?.0;
                         self.equality_call(function, operation == "!=", left, right, span)
                     }
-                    k::TypeKind::Vec { inner } => {
+                    ir::TypeKind::Vec { inner } => {
                         let left = self.borrow(left_place, false, span.line)?.0;
                         let (right_place, right_type) =
                             self.equality_operand(right, Some(operand_type), span)?;
@@ -419,12 +424,12 @@ impl Builder<'_, '_> {
             if self.live.at(local)
                 && matches!(
                     self.compiler.types[self.ty(local)].kind,
-                    k::TypeKind::Ref { .. }
+                    ir::TypeKind::Ref { .. }
                 )
             {
                 self.emit(
-                    k::Op::Drop {
-                        place: k::Place::local(local),
+                    ir::Op::Drop {
+                        place: ir::Place::local(local),
                     },
                     span.line,
                 );

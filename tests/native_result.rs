@@ -258,11 +258,11 @@ fn parent_status_is_checked_and_control_stream_is_fully_consumed() {
 }
 
 #[test]
-fn kc_default_bytes_and_optional_descriptor_use_the_same_lowering() {
-    use lkjscript::{bootstrap_runtime, check, k_text, kc, lower, native};
+fn backend_default_bytes_and_optional_descriptor_use_the_same_lowering() {
+    use lkjscript::{backend, bootstrap_runtime, check, ir_text, lower, native};
     let checked = check::check(
-        k_text::read(
-            "type \"()\" unit\ntype \"bool\" bool\ntype \"i32\" int 32 signed\n\
+        ir_text::read(
+            "lkjscript-ir 1\ntype \"()\" unit\ntype \"bool\" bool\ntype \"i32\" int 32 signed\n\
          type \"i64\" int 64 signed\ntype \"usize\" int 64 unsigned\n\
          type \"u8\" int 8 unsigned\ntype \"f64\" f64\ntype \"i16\" int 16 signed\n\
          fn \"probe\" 0 7\nlocal \"result\" 7 let\n@1 int 0 42\n@2 return 0\nendfn\n\
@@ -290,8 +290,8 @@ fn kc_default_bytes_and_optional_descriptor_use_the_same_lowering() {
         },
     )
     .unwrap();
-    assert_eq!(kc::emit(&checked, runtime, "probe").unwrap(), ordinary);
-    let (eval, bytes) = kc::emit_for_eval(&checked, runtime, "probe").unwrap();
+    assert_eq!(backend::emit(&checked, runtime, "probe").unwrap(), ordinary);
+    let (eval, bytes) = backend::emit_for_eval(&checked, runtime, "probe").unwrap();
     let descriptor = result_wire::decode(&bytes).unwrap();
     assert!(
         descriptor.kind
@@ -318,5 +318,5 @@ fn kc_default_bytes_and_optional_descriptor_use_the_same_lowering() {
     .unwrap();
     assert_eq!(eval, expected_eval);
     assert_ne!(eval, ordinary);
-    assert_eq!(kc::emit(&checked, runtime, "probe").unwrap(), ordinary);
+    assert_eq!(backend::emit(&checked, runtime, "probe").unwrap(), ordinary);
 }

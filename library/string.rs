@@ -58,37 +58,37 @@ impl String {
     }
 
     pub fn starts_with<P: crate::str::Pattern>(&self, pattern: P) -> bool {
-        crate::str::__lkj_starts_with(self.as_str(), pattern)
+        crate::str::__lkjscript_starts_with(self.as_str(), pattern)
     }
     pub fn ends_with<P: crate::str::Pattern>(&self, pattern: P) -> bool {
-        crate::str::__lkj_ends_with(self.as_str(), pattern)
+        crate::str::__lkjscript_ends_with(self.as_str(), pattern)
     }
     pub fn contains<P: crate::str::Pattern>(&self, pattern: P) -> bool {
-        crate::str::__lkj_contains(self.as_str(), pattern)
+        crate::str::__lkjscript_contains(self.as_str(), pattern)
     }
     pub fn find<P: crate::str::Pattern>(&self, pattern: P) -> crate::Option<usize> {
-        crate::str::__lkj_find(self.as_str(), pattern)
+        crate::str::__lkjscript_find(self.as_str(), pattern)
     }
     pub fn rfind<P: crate::str::Pattern>(&self, pattern: P) -> crate::Option<usize> {
-        crate::str::__lkj_rfind(self.as_str(), pattern)
+        crate::str::__lkjscript_rfind(self.as_str(), pattern)
     }
     pub fn is_ascii(&self) -> bool {
-        crate::str::__lkj_is_ascii(self.as_str())
+        crate::str::__lkjscript_is_ascii(self.as_str())
     }
     pub fn to_ascii_lowercase(&self) -> String {
-        crate::str::__lkj_to_ascii_lowercase(self.as_str())
+        crate::str::__lkjscript_to_ascii_lowercase(self.as_str())
     }
     pub fn to_ascii_uppercase(&self) -> String {
-        crate::str::__lkj_to_ascii_uppercase(self.as_str())
+        crate::str::__lkjscript_to_ascii_uppercase(self.as_str())
     }
     pub fn eq_ignore_ascii_case(&self, other: &str) -> bool {
-        crate::str::__lkj_eq_ignore_ascii_case(self.as_str(), other)
+        crate::str::__lkjscript_eq_ignore_ascii_case(self.as_str(), other)
     }
     pub fn repeat(&self, count: usize) -> String {
-        crate::str::__lkj_repeat(self.as_str(), count)
+        crate::str::__lkjscript_repeat(self.as_str(), count)
     }
     pub fn replace<P: crate::str::Pattern>(&self, pattern: P, replacement: &str) -> String {
-        crate::str::__lkj_replace(self.as_str(), pattern, replacement)
+        crate::str::__lkjscript_replace(self.as_str(), pattern, replacement)
     }
 
     pub fn to_string(&self) -> String {
@@ -162,17 +162,17 @@ impl FromUtf8Error {
 }
 
 // Resolved compiler helpers retain the same source String implementation.
-pub fn __lkj_new() -> String {
+pub fn __lkjscript_new() -> String {
     String::new()
 }
 
 // Range syntax resolves this declaration, preserving the source String invariant.
-pub fn __lkj_as_str(value: &String) -> &str {
+pub fn __lkjscript_as_str(value: &String) -> &str {
     value.as_str()
 }
 
 /// Canonical lexical String ordering uses its UTF-8 bytes, as Rust does.
-pub fn __lkj_compare(left: &String, right: &String) -> i32 {
+pub fn __lkjscript_compare(left: &String, right: &String) -> i32 {
     let left = left.as_bytes();
     let right = right.as_bytes();
     let mut index = 0usize;

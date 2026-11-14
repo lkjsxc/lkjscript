@@ -1,4 +1,4 @@
-use lkjscript::{compiler, machine, runtime, source};
+use lkjscript::{compiler, interpreter, runtime, source};
 
 fn bundle(text: String) -> source::SourceBundle {
     source::SourceBundle {
@@ -23,25 +23,25 @@ fn value(
     name: &str,
     args: &[u64],
     memory: &mut runtime::Memory,
-) -> machine::RunResult {
-    machine::run_runtime(
+) -> interpreter::RunResult {
+    interpreter::run_runtime(
         runtime,
         runtime.function(name).unwrap(),
         args,
         memory,
         &mut Vec::new(),
-        machine::Resources::unlimited(),
+        interpreter::Resources::unlimited(),
     )
     .unwrap_or_else(|error| panic!("{}: {}", error.code(), error.message))
 }
-fn bits(result: machine::RunResult) -> u64 {
+fn bits(result: interpreter::RunResult) -> u64 {
     match result.value {
-        machine::Scalar::Int { value, .. } => value,
+        interpreter::Scalar::Int { value, .. } => value,
         _ => panic!("expected a runtime word"),
     }
 }
 #[test]
-fn source_runtime_reuse_growth_copy_utf8_and_cleanup_agree_with_its_k_model() {
+fn source_runtime_reuse_growth_copy_utf8_and_cleanup_agree_with_its_ir_model() {
     let runtime = runtime::prepare(&bundle(source_text())).unwrap();
     let step = runtime.function("model_drop_step").unwrap();
     let mut memory = runtime::Memory::new();
@@ -87,13 +87,13 @@ fn source_runtime_reuse_growth_copy_utf8_and_cleanup_agree_with_its_k_model() {
             answer
         );
     }
-    let overflow = machine::run_runtime(
+    let overflow = interpreter::run_runtime(
         &runtime,
         runtime.function("probe_overflow").unwrap(),
         &[],
         &mut memory,
         &mut Vec::new(),
-        machine::Resources::unlimited(),
+        interpreter::Resources::unlimited(),
     )
     .err()
     .unwrap();
@@ -110,14 +110,14 @@ fn raw_names_in_ordinary_source_do_not_grant_runtime_authority() {
         .iter()
         .position(|function| function.name == "probe_allocator")
         .unwrap();
-    let result = machine::run(
+    let result = interpreter::run(
         checked.program(),
         entry,
         &[],
         &mut Vec::new(),
-        machine::Resources::unlimited(),
+        interpreter::Resources::unlimited(),
     );
-    assert!(matches!(result.err().unwrap().kind,machine::ErrorKind::Trap(code) if code>=16));
+    assert!(matches!(result.err().unwrap().kind,interpreter::ErrorKind::Trap(code) if code>=16));
     let replaced = input.files[0]
         .text
         .replacen("panic!(\"unsealed runtime primitive\")", "0", 1);

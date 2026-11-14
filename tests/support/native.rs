@@ -2,7 +2,7 @@
 //! compared in Rust after one native image returns every observation as bytes.
 // Each integration-test crate uses a different subset of this shared helper.
 #![allow(dead_code)]
-use lkjscript::{bootstrap_runtime, compiler, k, lower, native, source};
+use lkjscript::{bootstrap_runtime, compiler, ir, lower, native, source};
 use lower::{
     Code, Function, FunctionRole, HostFunction, Import, Instruction as I, RuntimeFunction,
     Signature,
@@ -15,20 +15,20 @@ static NEXT: AtomicUsize = AtomicUsize::new(0);
 // Keep each native observation batch together inside this test process.
 static EXECUTION: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-pub fn check(bundle: &source::SourceBundle) -> k::CheckedProgram {
+pub fn check(bundle: &source::SourceBundle) -> ir::CheckedProgram {
     compiler::check_bundle(bundle).unwrap_or_else(|error| panic!("{error:?}"))
 }
 pub fn assert_bundle(bundle: &source::SourceBundle, entries: &[(&str, i64)]) {
     assert_values(&check(bundle), entries);
 }
-pub fn assert_values(checked: &k::CheckedProgram, entries: &[(&str, i64)]) {
+pub fn assert_values(checked: &ir::CheckedProgram, entries: &[(&str, i64)]) {
     let calls = entries
         .iter()
         .map(|(name, expected)| (*name, &[][..], *expected))
         .collect::<Vec<_>>();
     assert_calls(checked, &calls);
 }
-pub fn assert_rows(checked: &k::CheckedProgram, rows: &str) {
+pub fn assert_rows(checked: &ir::CheckedProgram, rows: &str) {
     let values = rows
         .lines()
         .map(|row| {
@@ -39,7 +39,7 @@ pub fn assert_rows(checked: &k::CheckedProgram, rows: &str) {
         .collect::<Vec<_>>();
     assert_values(checked, &values);
 }
-pub fn assert_calls(checked: &k::CheckedProgram, calls: &[(&str, &[i64], i64)]) {
+pub fn assert_calls(checked: &ir::CheckedProgram, calls: &[(&str, &[i64], i64)]) {
     let mut program = lower::lower(checked, bootstrap_runtime::get().unwrap()).unwrap();
     let stdout = match program
         .imports

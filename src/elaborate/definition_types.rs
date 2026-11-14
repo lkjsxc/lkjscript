@@ -1,7 +1,7 @@
 //! Definition-local inference. The graph records structural type constraints
-//! before K construction; integer fallback happens only after those constraints
+//! before IR construction; integer fallback happens only after those constraints
 //! have propagated. Method selection and ownership remain checked separately.
-use super::{Bindings, Compiler, Result, a, err, is_copy, k};
+use super::{Bindings, Compiler, Result, a, err, ir, is_copy};
 use std::collections::BTreeMap;
 
 mod capabilities;
@@ -208,7 +208,7 @@ impl DefinitionTypes {
                     if let Some(ty) = named {
                         Some(ty)
                     } else if name == "()" {
-                        Some(k::UNIT)
+                        Some(ir::UNIT)
                     } else {
                         Some(compiler.named_type(
                             &a::Path {
@@ -224,13 +224,13 @@ impl DefinitionTypes {
                 Shape::Rigid(name) | Shape::Projected(_, name) => substitutions.get(&name).copied(),
                 Shape::Source(source) => compiler.resolve_if_known(source, substitutions)?,
                 Shape::Vec(_) => {
-                    Some(compiler.intern(String::new(), k::TypeKind::Vec { inner: values[0] }))
+                    Some(compiler.intern(String::new(), ir::TypeKind::Vec { inner: values[0] }))
                 }
                 Shape::Box(_) => {
-                    Some(compiler.intern(String::new(), k::TypeKind::Box { inner: values[0] }))
+                    Some(compiler.intern(String::new(), ir::TypeKind::Box { inner: values[0] }))
                 }
                 Shape::Ref(mutable, _) => {
-                    if mutable && matches!(compiler.types[values[0]].kind, k::TypeKind::Str) {
+                    if mutable && matches!(compiler.types[values[0]].kind, ir::TypeKind::Str) {
                         return Err(err(
                             span,
                             "E_UNSUPPORTED",
@@ -241,25 +241,25 @@ impl DefinitionTypes {
                 }
                 Shape::Slice(_) => Some(compiler.intern(
                     String::new(),
-                    k::TypeKind::Slice {
+                    ir::TypeKind::Slice {
                         inner: values[0],
                         mutable: false,
                     },
                 )),
                 Shape::Array(_, len) => Some(compiler.intern(
                     String::new(),
-                    k::TypeKind::Array {
+                    ir::TypeKind::Array {
                         inner: values[0],
                         len,
                     },
                 )),
                 Shape::Tuple(_) => {
                     if values.is_empty() {
-                        Some(k::UNIT)
+                        Some(ir::UNIT)
                     } else {
                         let mut fields = Vec::new();
                         for index in 0..values.len() {
-                            fields.push(k::Field {
+                            fields.push(ir::Field {
                                 name: format!("{index}"),
                                 ty: values[index],
                             });
@@ -271,7 +271,7 @@ impl DefinitionTypes {
                                 break;
                             }
                         }
-                        Some(compiler.intern(String::new(), k::TypeKind::Struct { fields, copy }))
+                        Some(compiler.intern(String::new(), ir::TypeKind::Struct { fields, copy }))
                     }
                 }
                 Shape::Nominal(declaration, _) => {
@@ -747,7 +747,7 @@ impl Infer<'_, '_> {
         {
             if tm && !fm {
                 return Ok(());
-            } // K/type checking diagnoses an invalid mutable coercion.
+            } // IR/type checking diagnoses an invalid mutable coercion.
             return self.coerce_referents(from, to, span);
         }
         self.unify(from, to, span)
@@ -2031,7 +2031,7 @@ impl Infer<'_, '_> {
                 if arity == 2 {
                     // Rust's Result question mark converts its error through
                     // From. The source String conversion is the concrete case
-                    // used by the K compiler; other differing errors still need
+                    // used by the backend; other differing errors still need
                     // explicit map_err until general From evidence is supported.
                     let text_output = matches!(
                         self.shape(output_arguments[1]),
@@ -2207,9 +2207,11 @@ impl Infer<'_, '_> {
                 let primitive = shape.primitive();
                 let direct = super::methods::direct(primitive, &name);
                 if direct == Some(super::methods::Direct::Character) {
-                    let function =
-                        self.names
-                            .library_function("char", &format!("__lkj_{name}"), span)?;
+                    let function = self.names.library_function(
+                        "char",
+                        &format!("__lkjscript_{name}"),
+                        span,
+                    )?;
                     let mut values = vec![base];
                     values.extend_from_slice(&arguments);
                     let output = self.call_signature(function, &types, &values, span)?;

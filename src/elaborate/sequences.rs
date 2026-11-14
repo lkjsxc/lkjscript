@@ -1,5 +1,5 @@
 //! Vec operations call ordinary, resolved source-library functions.
-use super::{Builder, Compiler, Result, a, err, k};
+use super::{Builder, Compiler, Result, a, err, ir};
 use std::collections::BTreeMap;
 
 impl Builder<'_, '_> {
@@ -28,7 +28,7 @@ impl Builder<'_, '_> {
         }
         let destination = self.temp(result);
         self.emit(
-            k::Op::Call {
+            ir::Op::Call {
                 dst: destination,
                 function,
                 args: arguments,
@@ -54,9 +54,9 @@ impl Builder<'_, '_> {
         }
         let vector = self
             .compiler
-            .intern(String::new(), k::TypeKind::Vec { inner: element });
+            .intern(String::new(), ir::TypeKind::Vec { inner: element });
         self.sequence_call(
-            "__lkj_vec_repeat",
+            "__lkjscript_vec_repeat",
             element,
             vec![value, count],
             vector,
@@ -79,21 +79,26 @@ impl Builder<'_, '_> {
                 "Vec equality requires element PartialEq",
             ));
         }
-        let compared =
-            self.sequence_call("__lkj_vec_equal", element, vec![left, right], k::BOOL, span)?;
+        let compared = self.sequence_call(
+            "__lkjscript_vec_equal",
+            element,
+            vec![left, right],
+            ir::BOOL,
+            span,
+        )?;
         if operation == "==" {
             return Ok(compared);
         }
-        let destination = self.temp(k::BOOL);
+        let destination = self.temp(ir::BOOL);
         self.emit(
-            k::Op::Unary {
+            ir::Op::Unary {
                 dst: destination,
                 op: "!".to_string(),
                 src: compared.0,
             },
             span.line,
         );
-        Ok((destination, k::BOOL))
+        Ok((destination, ir::BOOL))
     }
 }
 
@@ -121,23 +126,23 @@ impl Compiler<'_> {
         let mut substitutions = BTreeMap::new();
         substitutions.insert(parameters[0].clone(), element);
         let function = self.instantiate(source, substitutions)?;
-        let vector = self.intern(String::new(), k::TypeKind::Vec { inner: element });
+        let vector = self.intern(String::new(), ir::TypeKind::Vec { inner: element });
         let reference = self.reference(vector, false);
         let slice = self.intern(
             String::new(),
-            k::TypeKind::Slice {
+            ir::TypeKind::Slice {
                 inner: element,
                 mutable: false,
             },
         );
         let slice_reference = self.reference(slice, false);
         let (parameters, result) = match name {
-            "__lkj_vec_clone" => (vec![reference], vector),
-            "__lkj_vec_equal" => (vec![reference, reference], k::BOOL),
-            "__lkj_vec_order" => (vec![reference, reference], k::I32),
-            "__lkj_slice_equal" => (vec![slice_reference, slice_reference], k::BOOL),
-            "__lkj_slice_order" => (vec![slice_reference, slice_reference], k::I32),
-            "__lkj_vec_repeat" => (vec![element, k::U64], vector),
+            "__lkjscript_vec_clone" => (vec![reference], vector),
+            "__lkjscript_vec_equal" => (vec![reference, reference], ir::BOOL),
+            "__lkjscript_vec_order" => (vec![reference, reference], ir::I32),
+            "__lkjscript_slice_equal" => (vec![slice_reference, slice_reference], ir::BOOL),
+            "__lkjscript_slice_order" => (vec![slice_reference, slice_reference], ir::I32),
+            "__lkjscript_vec_repeat" => (vec![element, ir::U64], vector),
             _ => {
                 return Err(err(
                     span,

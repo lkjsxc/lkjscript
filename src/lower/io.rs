@@ -88,7 +88,7 @@ impl Body<'_> {
         line: usize,
     ) -> Result<bool, String> {
         if name == "world_stdout" || name == "world_stdin" || name == "world_stderr" {
-            // Authority is checked in K. No scalar construction can produce it.
+            // Authority is checked in IR. No scalar construction can produce it.
             constant(&mut self.code, 1);
             self.write(dst);
             return Ok(true);

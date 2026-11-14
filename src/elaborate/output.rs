@@ -1,30 +1,30 @@
-//! Capability methods lower to checked K primitives or ordinary source helpers.
-use super::{Builder, Result, a, capabilities, err, k, methods};
+//! Capability methods lower to checked IR primitives or ordinary source helpers.
+use super::{Builder, Result, a, capabilities, err, ir, methods};
 use std::collections::BTreeMap;
 
 impl Builder<'_, '_> {
     fn capability_type(&mut self, value: capabilities::Value, span: a::Span) -> Result<usize> {
         use capabilities::Value;
         Ok(match value {
-            Value::Unit => k::UNIT,
-            Value::Byte => k::U8,
-            Value::Count => k::U64,
-            Value::Error => k::I64,
-            Value::Boolean => k::BOOL,
-            Value::Stdout => self.compiler.intern(String::new(), k::TypeKind::Stdout),
-            Value::Stdin => self.compiler.intern(String::new(), k::TypeKind::Stdin),
-            Value::Stderr => self.compiler.intern(String::new(), k::TypeKind::Stderr),
-            Value::Directory => self.compiler.intern(String::new(), k::TypeKind::Directory),
-            Value::File => self.compiler.intern(String::new(), k::TypeKind::File),
+            Value::Unit => ir::UNIT,
+            Value::Byte => ir::U8,
+            Value::Count => ir::U64,
+            Value::Error => ir::I64,
+            Value::Boolean => ir::BOOL,
+            Value::Stdout => self.compiler.intern(String::new(), ir::TypeKind::Stdout),
+            Value::Stdin => self.compiler.intern(String::new(), ir::TypeKind::Stdin),
+            Value::Stderr => self.compiler.intern(String::new(), ir::TypeKind::Stderr),
+            Value::Directory => self.compiler.intern(String::new(), ir::TypeKind::Directory),
+            Value::File => self.compiler.intern(String::new(), ir::TypeKind::File),
             Value::Text => {
-                let text = self.compiler.intern(String::new(), k::TypeKind::Str);
+                let text = self.compiler.intern(String::new(), ir::TypeKind::Str);
                 self.compiler.reference(text, false)
             }
             Value::Bytes | Value::MutableBytes => {
                 let bytes = self.compiler.intern(
                     String::new(),
-                    k::TypeKind::Slice {
-                        inner: k::U8,
+                    ir::TypeKind::Slice {
+                        inner: ir::U8,
                         mutable: false,
                     },
                 );
@@ -34,9 +34,9 @@ impl Builder<'_, '_> {
             Value::Arguments => {
                 let bytes = self
                     .compiler
-                    .intern(String::new(), k::TypeKind::Vec { inner: k::U8 });
+                    .intern(String::new(), ir::TypeKind::Vec { inner: ir::U8 });
                 self.compiler
-                    .intern(String::new(), k::TypeKind::Vec { inner: bytes })
+                    .intern(String::new(), ir::TypeKind::Vec { inner: bytes })
             }
             Value::ResultDirectory
             | Value::ResultFile
@@ -46,11 +46,11 @@ impl Builder<'_, '_> {
                 let success = match value {
                     Value::ResultDirectory => self.capability_type(Value::Directory, span)?,
                     Value::ResultFile => self.capability_type(Value::File, span)?,
-                    Value::ResultCount => k::U64,
+                    Value::ResultCount => ir::U64,
                     Value::ResultBytes => self
                         .compiler
-                        .intern(String::new(), k::TypeKind::Vec { inner: k::U8 }),
-                    _ => k::UNIT,
+                        .intern(String::new(), ir::TypeKind::Vec { inner: ir::U8 }),
+                    _ => ir::UNIT,
                 };
                 let path = self
                     .compiler
@@ -58,14 +58,14 @@ impl Builder<'_, '_> {
                     .library_type("prelude", "Result", span)?;
                 let mut arguments = BTreeMap::new();
                 arguments.insert("T".to_string(), success);
-                arguments.insert("E".to_string(), k::I64);
+                arguments.insert("E".to_string(), ir::I64);
                 self.compiler.named_type(&path, &arguments, span)?
             }
         })
     }
     pub(super) fn output_method(
         &mut self,
-        target: k::Place,
+        target: ir::Place,
         base: usize,
         name: &str,
         args: &[usize],
@@ -119,7 +119,7 @@ impl Builder<'_, '_> {
         if let Some(operation) = method.intrinsic() {
             let dst = self.temp(result);
             self.emit(
-                k::Op::Intrinsic {
+                ir::Op::Intrinsic {
                     dst,
                     name: operation.to_string(),
                     args: values,

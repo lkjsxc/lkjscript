@@ -481,6 +481,6 @@ impl Default for crate::string::String {
 }
 
 // Derive expansion resolves this declaration by standard-library identity.
-pub fn __lkj_default<T: Default>() -> T {
+pub fn __lkjscript_default<T: Default>() -> T {
     T::default()
 }

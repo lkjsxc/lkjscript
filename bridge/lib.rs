@@ -8,8 +8,8 @@ mod language;
 
 pub(crate) use language::facts;
 pub use language::{
-    ast, check, diagnostic, diagnostics, elaborate, frontend, generics, json, k, k_text, kc, lower,
-    names, native, resolve, result_wire, runtime_memory, source, syntax,
+    ast, backend, check, diagnostic, diagnostics, elaborate, frontend, generics, ir, ir_text, json,
+    lower, names, native, resolve, result_wire, runtime_memory, source, syntax,
 };
 
 /// Preserve the public compiler boundary while isolating Rust resource setup.
@@ -51,10 +51,10 @@ pub mod compiler {
     }
 }
 
-pub use language::machine;
+pub use language::interpreter;
 
 /// Rust bootstrap preparation of the declared runtime source.
-/// The K compiler itself only seals already checked K.
+/// The backend itself only seals already checked IR.
 pub mod runtime {
     pub use crate::language::runtime::*;
     pub use crate::language::runtime_memory::{Memory, MemoryFault};

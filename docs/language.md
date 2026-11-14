@@ -1,11 +1,12 @@
 # Language
 
-This file describes the implemented generation-two subset. Status names the
-unimplemented parts of the intended language.
+This reference describes implemented lkjscript source forms.
+[Status](status.md) names the current milestone and known gaps.
 
 ## Source and values
 
-The surface is Rust-compatible. Integer literal fallback is i32; annotations and
+The surface has Rust shape. Programs both compilers accept behave the same.
+Integer literal fallback is i32; annotations and
 suffixes retain distinct types, including usize/u64 and isize/i64. Arithmetic is
 checked. Signed minimum literals are accepted; out-of-range integer and non-finite
 floating literals are rejected. Explicit casts follow Rust conversion behavior.
@@ -76,8 +77,8 @@ Guards cannot assign or mutably borrow a tested place or its ancestor; unrelated
 untested fields remain writable. Copy bindings are frozen too. A wildcard does
 not inspect storage. Discriminant-only later arms can use the cached test after
 a guard consumes an owner; any later payload access still requires ownership.
-Targeted K loop transfers preserve enclosing source loops when lowering needs an
-internal loop; invalid depths reject even in unreachable K.
+Targeted IR loop transfers preserve enclosing source loops when lowering needs an
+internal loop; invalid depths reject even in unreachable IR.
 
 Enums retain distinct unit, tuple and named-field variant shapes. Named constructors
 evaluate initializers in written order and store payloads in declaration order.
@@ -98,7 +99,7 @@ places, so testing a nested payload preserves its owner and lexical cleanup.
 Source bundles declare their root, source files and optional source-library root.
 The owned loader handles inline modules, file modules (`child.rs` or
 `child/mod.rs`) and nested directories. Missing, ambiguous and duplicate inputs
-have distinct diagnostics. Source spans and K functions retain file IDs;
+have distinct diagnostics. Source spans and IR functions retain file IDs;
 diagnostics identify the original file. The host supplies bytes only.
 The [source-producer interface](frontend.md) specifies the pure API, native World
 driver, explicit bundle encoding and input records.
@@ -141,9 +142,9 @@ Nominal types opt into Copy with `#[derive(Copy, Clone)]`, whose fields must all
 Copy; other values move even if their fields are scalar. Box and Vec own their
 contents. Arrays contain their declared fixed number of elements. Array repeats
 evaluate their seed once. Counts of at least two require Copy and use one compact
-K array_repeat intrinsic, with physical copies rather than calls to Clone. A zero
+IR array_repeat intrinsic, with physical copies rather than calls to Clone. A zero
 count still evaluates and destroys the seed; one element transfers it. Native
-lowering uses a loop and the independent K machine allocates distinct elements.
+lowering uses a loop and the independent IR interpreter allocates distinct elements.
 Partial moves
 can be reinitialized. A type with custom Drop cannot be Copy or partially moved.
 Custom Drop runs before owned fields, including on early return/break; temporary
@@ -161,7 +162,7 @@ Source rigid T input-to-T transport preserves its abstract leaf origins; equal
 concrete types alone do not authorize that correspondence. Named lifetimes and
 repeated generic input candidates map to explicit alternatives. Exact transport
 of a bounded input keeps its conservative footprint; it cannot forge exact storage.
-Borrow endings and cleanup are explicit in K.
+Borrow endings and cleanup are explicit in IR.
 Whole-array/Vec slice projections, view structs and implicit mutable reborrowing
 are implemented. Generic arguments declared as &[T] or &mut [T] can infer T from
 an array or vector reference, including through transparent aliases. This is an
@@ -192,7 +193,7 @@ Reference-field writes recheck the enclosing view's source and exclusivity.
 Assignment to initialized borrowed/indexed owned storage uses checked replacement
 and destroys the separate old owner; it does not move a hole into the container.
 
-K does not yet express cross-parameter mutation contracts. Writes through an
+IR does not yet express cross-parameter mutation contracts. Writes through an
 external parameter may retain the exact symbolic origin of each reference leaf
 or clear it, but changing that origin is rejected with `E_BORROW`. The comparison
 includes projections, not just the parameter root. This conservative restriction
@@ -239,9 +240,9 @@ The parser recovers at item, method and block-statement boundaries using balance
 tokens. It reports independent syntax errors and marks skipped regions as
 E_BLOCKED. A recovered source graph never authorizes an artifact. A valid shared
 declaration graph permits independent definition constraint errors to be
-collected. A structurally valid K graph permits independent function-body errors
+collected. A structurally valid IR graph permits independent function-body errors
 to be collected. Analysis of a failing body stops at its diagnostic; shared
-signature/resolution failures and subsequent mutable K construction are explicitly
+signature/resolution failures and subsequent mutable IR construction are explicitly
 blocked instead of supplying invented types or ownership facts. The single-error
 library API selects the first error from these same production paths.
 
@@ -350,7 +351,7 @@ declarations. Collection for lowers to an outer match holding iterable temporari
 a while loop, a next call and an irrefutable let binding for each item. Break,
 continue, early return and ordinary completion preserve item and iterator cleanup.
 Refutable item patterns and non-unit bodies are rejected. Numeric range loops use
-the same binding subsystem. No iteration K operation or nominal-type shortcut is
+the same binding subsystem. No iteration IR operation or nominal-type shortcut is
 required. Borrowed map/set iteration uses the same source protocols. enumerate,
 skip, take and zip are source adapters; chain currently requires two identical
 iterator types so Item equality follows from the type contract. Adapters retain
@@ -378,13 +379,13 @@ and returns a zero-based index. Exclusive collection iteration, Sum/FromIterator
 and the broader adapter library remain separate work.
 
 The explicit static-lifetime subset covers wholly static function outputs,
-including view aggregates. K records `ReturnSource::Static` and checks every live
+including view aggregates. IR records `ReturnSource::Static` and checks every live
 reference leaf. Static constraints on inputs, local annotations, fields, aliases,
 bounds, or mixed static/dynamic source result annotations remain named unsupported.
-Direct K can already describe mixed static/dynamic per-leaf result maps. Validation includes unused definitions and dead source.
+Direct IR can already describe mixed static/dynamic per-leaf result maps. Validation includes unused definitions and dead source.
 Ordinary dynamic outputs may contain static literals with their lifetime shortened.
 A named shared output lifetime with no source input is universal: elaboration
-records an explicit static K contract and the body must satisfy it. Inactive enum
+records an explicit static IR contract and the body must satisfy it. Inactive enum
 reference leaves satisfy that contract too. A call with no active input reference
 leaves may still return static data; it does not prove the output leaves absent.
 
@@ -421,7 +422,7 @@ make a candidate fit. Contextual method headers and primitive result contracts
 supply argument shape; final method, callable and provenance checks still apply.
 
 Generic function, impl-method and trait-default bodies are checked even when
-never instantiated. Definition checking reuses production elaboration and K
+never instantiated. Definition checking reuses production elaboration and IR
 ownership/type checking under rigid parameter identities and declared trait
 contracts. It does not sample concrete parameter types. Bounds, associated-type
 relationships, method signatures and explicit method type arguments are checked;
@@ -464,9 +465,9 @@ traits with the same names remain different declarations. Explicit builtin Copy,
 Ord, PartialOrd, Data, Send and Sync implementations remain named unsupported;
 Copy derives and the existing structural automatic predicates retain their rules.
 
-Derived Clone and PartialEq execute as memoized monomorphic K functions. Source
+Derived Clone and PartialEq execute as memoized monomorphic IR functions. Source
 and generated bodies share a pending-function queue and all bodies reach the
-normal K checker, including those generated for definition checking. Headers are
+normal IR checker, including those generated for definition checking. Headers are
 registered before bodies, so recursive layouts reuse their function identities.
 Field operations select the exact builtin trait implementation, with explicit
 implementations taking precedence over derives and inherent methods excluded.
@@ -496,10 +497,10 @@ supplied helper header. Ordinary method lookup diagnoses competing visible
 source traits. Vec clone_from default-body execution remains unsupported.
 
 The emitted program remains monomorphic. The generic validation context names
-declared evidence, but a complete independently replayable generic/witness K
+declared evidence, but a complete independently replayable generic/witness IR
 contract is unfinished. Reference-bearing content hidden inside arbitrary type
 parameters is not fully modeled at this generic boundary; concrete specializations
-still receive full K provenance checks. This is not complete generic lifetime or
+still receive full IR provenance checks. This is not complete generic lifetime or
 external mutation-contract closure.
 
 Fixed input regions on callable bounds now have declaration-scoped proof
@@ -521,7 +522,7 @@ Branches retain every possible effect and only permissions justified on each
 relevant edge. Loop effects are replayed to a finite monotone fixed point; ordinary
 initialization and loan backedges still require their existing equality contract.
 
-These annotations are private diagnostic evidence. Text K cannot declare them,
+These annotations are private diagnostic evidence. Text IR cannot declare them,
 and their checking API returns no executable authority. Mutable access to stored
 reference origins still needs a mutation contract and is explicitly unsupported
 at opaque calls. General output/capture origin families remain unfinished.
@@ -541,7 +542,7 @@ a backward worklist propagates region requirements, then the private verifier
 checks all reachable stores from entry. These observations only add restrictions.
 Fresh reborrows must establish their issuing reference chain as well as their
 referent origin. Moving or copying an existing descriptor preserves its original
-contract. External reference-bearing writes retain the ordinary K mutation rule.
+contract. External reference-bearing writes retain the ordinary IR mutation rule.
 
 Typed views separately retain the declared regions of their visible reference
 leaves. A shared view of a descriptor can shorten what is obtained through that
@@ -569,11 +570,11 @@ places and metadata. Concrete type equality never establishes a source region.
 Owning reference-bearing collections retain their existing unsupported boundary.
 Named reference leaves inside borrowed slice elements are also rejected until
 a collection reference inventory exists. No private source annotation can alter
-the meaning or acceptance of a parsed K program.
+the meaning or acceptance of a parsed IR program.
 
 ## Closures
 
-Closures are anonymous environment structs plus ordinary K functions. Their
+Closures are anonymous environment structs plus ordinary IR functions. Their
 capture requirements come from the body operations; source binding identity and
 capture order determine fields, including disjoint field captures. Owned captures
 move into the environment. Shared and mutable captures use existing loans, and
@@ -616,13 +617,13 @@ environment storage. Returned references must come from captured reference
 origins, explicit arguments or static storage. Every result leaf has its own
 contract. Return inference observes the ordinary checker's validated provenance,
 narrows the initial allowed input set, then submits the resulting program to
-independent complete K validation. These observations carry no execution
+independent complete IR validation. These observations carry no execution
 authority. Disjoint mutable result leaves remain disjoint across a call; shared
 results may outlive a copied reference's environment while their referents remain
 live. Generic and associated result families can likewise begin with explicit
 per-leaf candidate bounds and refine from fully checked concrete body returns.
 Acyclic callees refine before callers; recursive groups retain conservative
-contracts. The final complete K check validates every resulting mapping. These
+contracts. The final complete IR check validates every resulting mapping. These
 concrete observations do not prove an unused generic definition's hidden effects.
 Explicit reference results hidden behind an opaque generic callable still
 require a fuller origin inventory and remain a named unsupported boundary.
@@ -636,26 +637,28 @@ At a join, a reference template proven inactive on every feasible predecessor
 remains absent after individual tag facts disappear. A holder active on any
 incoming edge still participates in ownership and borrow checks.
 
-## K and checking
+## IR and checking
+
+The [lkjscript IR reference](ir.md) defines text, operations and admission rules.
+Files use .lkjir and begin with lkjscript-ir 1.
 
 Dropping a proven tree of scalar and reference descriptors can release its old
 descriptor storage while descendants continue to refer to external owners.
 Eligibility is computed once for the type graph and excludes every owned
 destructor. Actual loans into the released storage still conflict. Replacement,
 assignment and custom destruction retain their original parent restrictions.
-The K machine checks the same programs independently.
+The IR interpreter checks the same programs independently.
 
 
-K is a monomorphic program of explicit types, function signatures, local slots,
+IR is a monomorphic program of explicit types, function signatures, local slots,
 places, instructions and structured control. It distinguishes copies, moves,
 borrows and drops. A function declares a parameter or immutable static source for
-returned views. Literal instructions carry bytes that the K checker validates as
-UTF-8, independently of source parsing. Text K serializes those bytes as hexadecimal
+returned views. Literal instructions carry bytes that the IR checker validates as
+UTF-8, independently of source parsing. Text IR serializes those bytes as hexadecimal
 and static result contracts as `from static`.
 A parameter result source carries an explicit reference projection path before
-selecting its stored reference leaves (text K: `from 0 deref deref`). An empty
-path selects the parameter itself. The path contains actual projection entries;
-there is no encoded repetition count or numeric depth allowance. Projected
+selecting its stored reference leaves (text IR: `from 0 deref deref`). An empty
+path selects the parameter itself. The path contains explicit projection entries. Projected
 contracts currently require shared leaves;
 exclusive reborrows retain their outer lifetime. The checker verifies returned
 origins against the exact selected input leaves, then callers transport their
@@ -672,21 +675,21 @@ footprint, and no positional input/output leaf correspondence is assumed.
 Early source cleanup tracks immediate carrier dependencies through reference
 creation, value transport, calls and control flow. A textually dead descriptor
 remains live while another live value needs its storage. Dead reference chains
-are dropped in dependency order; K independently verifies every emitted drop.
+are dropped in dependency order; IR independently verifies every emitted drop.
 Concrete trait method selection is represented by an explicit function call.
-Bounded slice/text views use ViewRange, written in text K as
+Bounded slice/text views use ViewRange, written in text IR as
 `view-range DST shared|mut exclusive|inclusive START END PLACE`. Bounds are
 separate consumed usize values; element and result reference types must match.
-Every source root and parent loan survives with a bounded footprint. The K
-machine independently tracks sequence start/count and checks UTF-8 endpoints;
+Every source root and parent loan survives with a bounded footprint. The IR
+interpreter independently tracks sequence start/count and checks UTF-8 endpoints;
 common lowering computes inline data/count using existing scalar operations.
 No range-specific runtime function or encoder operation is required.
-K has a readable/writable text form accepted by `check` for direct tests.
+IR has a readable/writable text form accepted by `check` for direct tests.
 Instructions preserve source lines and columns (`@line:column`; `@line` reads
 as column 1). Ownership errors name the place, conflicting holder and loan
 creation site; parameter-supplied authority is identified as a parameter.
 
-Strict destruction (`drop` in text K) requires the named place to be initialized.
+Strict destruction (`drop` in text IR) requires the named place to be initialized.
 An already moved or dropped exact place, or an absent ancestor, produces
 `E_MOVE` with the concrete place path. Structural destruction of a remaining
 aggregate shell skips its moved children. A custom destructor requires every
@@ -702,7 +705,7 @@ that separate owner, keeping the destination initialized.
 Shared lowering maintains initialization flags for roots used by conditional
 destruction and clears moved owned payload slots. Consumed call arguments do not
 remain initialized merely because their old bits remain in a physical slot.
-K cannot supply a flag value. The independent machine tests its own cell state.
+IR cannot supply a flag value. The independent interpreter tests its own cell state.
 Conditional cleanup runs at the original destruction or replacement point;
 it does not move destruction to a branch join. Initialization joins intersect
 definite roots and union possible roots, with corresponding must/may projected
@@ -738,93 +741,43 @@ search. Only CheckedProgram reaches the backend; later stages rely on that gate.
 
 ## Memory and execution
 
-Checked K lowers to target-independent typed operations with layout, calls and
-copy/drop/equality glue explicit. The native encoder consumes this form without
-consulting K. It caches the top operand until a frame slot is needed and emits
-only functions reachable from the selected entry or any indirect-call table
-target. All K bodies have already been checked; function indices and signatures
-remain stable. The independent K machine executes the checked representation directly.
-Memory scalars use their natural one-, two-, four- or eight-byte widths; signed
-loads extend correctly. Registers and pointers retain 64-bit representations.
-F64 retains its bit representation and canonical NaNs after arithmetic.
-Collection indexing checks bounds. Traps report a code and source line. The
-source runtime releases owned fields, arrays, boxes and vector elements. Its
-power-of-two payload classes reuse released blocks in constant free-list work.
-A block has at least 16 payload bytes and a separate 16-byte header, so a
-power-of-two Vec capacity fills its class. The header retains its class index,
-so release does not recalculate it from capacity. A block at the heap tip grows in
-place; otherwise reallocation copies the old payload before releasing it.
-Heap commitment tries geometric capacity and then the exact required extent.
-Structural cleanup uses an explicit growable DFS stack, preserving custom-destructor-before-children and
-declaration/element order. Moved fields are skipped. Copy helpers, recursive
-generated Clone/equality calls and explicit recursive source calls use the selected
-route's call stack. Loop-condition temporaries end before either loop edge,
-including index locals and owned receivers.
+The current backend lowers checked IR to a typed operand-stack form before
+encoding static Linux x86-64 ELF. Layout, calls, copy/drop glue and sealed runtime
+calls are explicit. It emits functions reachable from the selected entry and
+indirect glue targets. The direct-native replacement is specified in
+[direction](direction.md); this section describes the implementation in the tree.
 
-The host supplies runtime source separately from application source. Runtime
-preparation checks ordinary scalar K, validates the trapping primitive signatures,
-and seals a small raw load/store/grow/copy/glue-call interface. Ordinary names or
-imports cannot request those substitutions. Allocation, release, growth, the
-cleanup walker and UTF-8 validation are source functions. The K compiler takes
-this runtime as checked K input, without invoking the source front end.
-The K runtime model executes those same functions against an independent raw arena;
-the normal K machine keeps its separate typed heap as the application model.
-The raw-memory invariants of the source allocator and glue still belong to the
-trusted implementation; ordinary type checking alone does not establish them.
+| Value or operation | Current representation |
+| --- | --- |
+| Scalars | Natural 1/2/4/8-byte memory widths; signed loads extend; registers are 64-bit. |
+| Structs/enums | Heap payloads with aligned fields; enums carry an active tag. |
+| Vec/array | Data, length and capacity words; element strides follow the layout. |
+| Sized reference | One address word. |
+| Slice/text reference | Inline 16-byte address/count pair. |
+| View call/result | Flattened argument words; caller-owned result pair. |
+| Conditional cleanup | Initialization flags and moved-field state maintained by lowering. |
 
-Native output is a static Linux x86-64 ELF without libc or a dynamic loader.
-Build-host resource measurements never enter its bytes. Startup reads physical
-memory (excluding swap), RLIMIT_AS and RLIMIT_STACK. It maps the selected stack
-first, then gives the heap the remaining extent after image and startup mappings.
-Prologues check stack exhaustion (R0008); heap mapping/growth refusal and allocation exhaustion report R0006. Standalone traps
-write their code and source line to stderr and exit unsuccessfully. Linux may
-still kill a process under physical/cgroup memory pressure; ordinary operator
-budgets belong to execution, not source acceptance.
+Collection access checks bounds. Integer arithmetic, division and invalid shifts
+trap. F64 arithmetic canonicalizes NaNs. Traps retain a code and source location.
 
-The runner inherits the caller's Linux address-space limit unless
-LKJ_RUN_MEMORY_BYTES explicitly tightens it; unlimited also means inheritance.
-LKJ_RUN_STACK_BYTES independently tightens the stack extent. Finite inherited
-stack limits are preserved; only an unlimited inherited limit needs the 64 MiB
-provisioning fallback. The K model receives the extent as an explicit input and
-charges live frame/root-cell storage, while payload allocations remain heap
-storage. A small model budget does not shrink its Rust worker's OS stack.
-Some infallible Rust allocations in the K host can still abort; the parent
-reports that host failure without inventing a source location. Fallible K frame
-and heap paths distinguish R0008 and R0006 at their instruction lines. The
-generator subprocess budget is 2 GiB for test executables and 8 GiB for rustc compilation/linking, configurable
-with LKJ_TEST_MEMORY_BYTES; Node orchestration is
-excluded from this address-space setting because its VM reserves a large cage.
+The source runtime implements allocation, reuse, growth, destruction traversal
+and UTF-8 validation. Preparation checks its ordinary IR, validates primitive
+signatures, then seals raw load/store/grow/copy/glue-call bindings.
+Ordinary program names cannot request those bindings.
+Structural destruction visits the custom destructor before children and preserves
+field/element order. Moved fields are skipped. Loop temporaries end before
+either edge, including index locals and owned receivers.
 
-Lowering reuses local storage across nonoverlapping lifetimes. Address-taken
-values have stable frame slots; remaining live storage grows with the program.
-Local-slot allocation is an optimization and introduces no acceptance limit.
+The current startup reserves linear memory and a stack using physical memory
+and rlimits; allocation and stack failures report R0006 and R0008.
+The implementation and runner controls are listed in [limits](limits.md).
+Build-host measurements do not affect artifact bytes.
 
-Struct payloads align fields at their natural widths; enum payloads additionally
-carry a tag. Vec and array storage has data, length and capacity words, with
-element strides from the one layout contract. A Vec<u8> element occupies one byte.
-References to slices and text are inline data/count pairs: 16 bytes aligned to
-eight. Sized references remain one word; a reference to a stored slice reference
-points to that pair. Aggregate fields and copies preserve both words. Whole-storage
-projections read data and length directly, with no separate descriptor allocation.
-
-The common lowering flattens view parameters into scalar words. A view result
-uses a caller-owned two-word output slot supplied as the last lowered argument;
-the callee stores both words before releasing its frame. Scalar-only calls retain
-their existing ABI. Raw exports use that lowered ABI. The command-line host accepts
-only unit/scalar entry results and either no arguments or one World capability;
-internal calls can still return views. UTF-8 validation and byte output receive
-data/count directly. Moved heap slots are cleared so partial cleanup skips them.
-These layouts are implementation details, not an exposed source API.
-
-Lowered functions retain `fn:<K-name>` entry identities. The independent K
-machine executes checked K directly over its own heap, explicit call/control/drop
-stacks, initialization states and exact storage/loan identities. It validates
-reference tags and active variants on actual access and distinguishes M_* machine
-errors from R* program traps. It shares neither the checker implementation nor
-shared lowering. This dynamic search is not a proof or a full Rust memory
-model. The host prints scalar entry results; floating display formatting is route
-specific, while World output compares exact bytes.
-No generated engine implements a step counter or per-operation allowance.
+The independent IR interpreter executes over its own typed heap, initialization
+state, loan identities and call/control/drop stacks. It checks actual reference
+access and active variants independently of the checker and lowering.
+M_* diagnostics identify interpreter safety failures; R* codes identify program
+traps. Program output is compared as exact bytes across routes.
 
 ## Source library, trusted modules and imports
 
@@ -842,48 +795,22 @@ bundle supplies its own library files without hidden fallback.
 and memory operations remain trusted intrinsics until their source layer lands.
 
 `compiler::compile(&SourceBundle)` is the bootstrap source-to-native entry.
-The pure core additionally receives its declared Runtime; `kc::compile` consumes
-program K, runtime K and an entry name without source-front-end dependencies.
+The pure core additionally receives its declared Runtime; `backend::compile` consumes
+program IR, runtime IR and an entry name without source-front-end dependencies.
 `compiler::check_bundle` uses the same production checking pipeline. These entries
-perform no host I/O. Their existence and input-mutation tests do not establish
-self-compilation. The separately measured complete compiler now reaches a
-byte-identical kc1/kc2/kc3 fixed point and matches B0 on the recorded K corpus.
-The ordinary-source World entry in src/kc_main.rs shares all
-nine production modules with src/kc_lib.rs. It accepts PROGRAM.k, optional
---entry NAME and --check, and --runtime RUNTIME.k for emission. Paths are
+perform no host I/O. Current self-build and corpus results are in [status](status.md).
+The ordinary-source World entry in src/backend_main.rs shares all
+nine production modules with src/backend_lib.rs. It accepts PROGRAM.lkjir, optional
+--entry NAME and --check, and --runtime RUNTIME.lkjir for emission. Paths are
 relative to its current directory capability. A completed ELF is written to
 stdout; diagnostics use stderr and status 1.
 
-The same production canonical-name helper in `src/names.rs` is used by resolution,
-generic validation and elaboration, and executes with the source String library.
-Its tests compare complete output bytes and require valid/invalid source mutations
-to change behavior or produce an attributed diagnostic. These are executing
-compiler components. The complete K compiler closure is now self-built; the
-source front end remains a separate consumer.
-
-`src/json.rs::write_string` is the bootstrap batch host's JSON string encoder. It
-executes through ordinary source compilation using byte loops, vector operations
-and integer range patterns. Tests compare every output byte, independently decode
-JSON, inspect actual emitted trap metadata and mutate a range boundary. The old
-emitter-local quoting loop has been removed; K text keeps its distinct quoting
-semantics.
-
-The complete unchanged `src/k.rs` production representation module also executes
-through ordinary source loading, with its real Clone/equality operations and
-source library. Probes cover all Op and TypeKind variants, nested Program/Function
-data, Option<ReturnSource>, projections and access after original owners are
-dropped. Rust executes the same module/probe bytes. Changes to primitives and
-Place::local alter artifacts and results; an invalid body reports src/k.rs. These
-are representation operations on K data, not execution of that data as a checked
-program or a compiler-core fixed point.
-
-`src/check.rs` is the K checker; `src/k.rs` defines its inputs and checked result.
-`src/lower.rs` owns layout, glue and the explicit lowered operations.
-`library/runtime.rs` owns source runtime algorithms; `src/runtime.rs` seals and links
-the raw interface. `src/native.rs` encodes the lowered program as static ELF.
-`bridge/` supplies bootstrap file/process/command-line access and declared runtime
-and library source. `lkjscript trusted` lists these boundaries; `tools/trust.mjs`
-reports their physical sizes.
+The production modules have one role each: src/ir.rs defines IR data;
+src/check.rs verifies it; src/lower.rs owns current layout/glue lowering;
+src/native.rs encodes ELF. library/runtime.rs implements source runtime
+algorithms and src/runtime.rs seals their raw interface. The bridge/ modules
+supply the Rust host and declared source inputs. The [IR reference](ir.md)
+identifies the trusted implementation.
 
 Generated programs have no ambient filesystem, environment or process imports.
 Only checked operations on capability values can request host I/O. Source cannot
@@ -897,7 +824,7 @@ The host entry alone creates `World`. An entry is either a zero-argument functio
 or a function taking exactly one `World`; ordinary source calls supply their own
 arguments. `World`, `Stdout`, `Stdin`, `Stderr`, `Directory` and `File` are
 affine intrinsic types with no source constructor, Copy, Clone, Data, Send or Sync
-implementation. Same-spelled source structs acquire no authority. K checks the
+implementation. Same-spelled source structs acquire no authority. IR checks the
 capability type and operation signature independently; integers, casts and
 aggregate construction cannot forge a capability. A function without a capability
 in its arguments or captures has no observable I/O effects.
@@ -942,7 +869,7 @@ Rust-compatible in the supported intersection.
 Inherited closed standard descriptors stay closed; opening another capability
 cannot retarget them. The Rust bootstrap records their state before Rust startup
 fills closed descriptors and restores that state once before application work.
-Both native and K runners inherit stdin/stdout/stderr directly for run and test.
+Both native and IR runners inherit stdin/stdout/stderr directly for run and test.
 The native runner uses a separate result descriptor, so program stderr cannot be
 interpreted as a trap packet. Program arguments after the command-line `--`
 separator retain their original bytes. A normal nonzero requested status remains
@@ -952,7 +879,7 @@ status across entries rather than losing it when a later entry succeeds.
 
 The [rustc conformance adapter](../bridge/output.rs) supplies the same capability
 methods and privately constructs World. Conformance compares exact output bytes,
-normal exit status and the specified trap kind. With `--cfg lkj_control`, the
+normal exit status and the specified trap kind. With `--cfg lkjscript_control`, the
 adapter reports its outcome on a separate descriptor and leaves stderr entirely
 to the program. Arbitrary stderr bytes and a normal status of 101 cannot
 impersonate an oracle trap. Missing or malformed control records are host
@@ -961,7 +888,7 @@ execution.
 
 ## Diagnostic recovery and test oracles
 
-Once signatures are valid, a body that passes definition inference proceeds to K
+Once signatures are valid, a body that passes definition inference proceeds to IR
 construction and ownership checking even if a peer fails. Diagnostic-only trap
 bodies retain known signatures for dependent checks; the saved error list
 prevents such a program from becoming an emitted artifact. Unsupported source
@@ -973,17 +900,17 @@ independent bodies. A known field type remains available when a different field
 blocks its enclosing layout. Source type observations never fabricate that layout.
 
 Closed structural bodies with complete nongeneric dependencies can reach ordinary
-K construction and ownership checking in the diagnostic pass. Unknown nominal,
+IR construction and ownership checking in the diagnostic pass. Unknown nominal,
 generic, callable, constant or region contracts remain ownership blockers.
 The public recovery result contains observations and locations only; it cannot
-supply checked K or authorize emission. Missing modules and excluded implementation
+supply checked IR or authorize emission. Missing modules and excluded implementation
 domains prevent method-absence claims. An unresolved import can affect trait
 visibility, but it cannot add an implementation to an otherwise complete supplied
 source graph. Existing candidates whose visibility or prerequisites are unknown
 remain blocked. A method's spelling alone is not evidence that it resolves.
 
-The bootstrap batch command accepts native, K, or both. It checks each source
-once. K uses fresh machine state per case inside its bounded worker; native cases
+The bootstrap batch command accepts native, IR, or both. It checks each source
+once. IR uses fresh machine state per case inside its bounded worker; native cases
 execute separate images. Every batch route runs inside a bounded worker, including
 native-only batches whose captured streams grow in the Rust host. Each result
 records program stdout in `stdoutHex`, program stderr in `stderrHex`, normal
@@ -991,7 +918,7 @@ status separately, and compiler/runtime diagnostics in `stderr`. Each case
 retains its own bytes and termination class.
 The batch watchdog measures missing progress, not total duration. Missing,
 duplicate or incomplete results fail the suite. Rust reference outputs are cached
-by source, seed, compiler version and flags. Semantic cases are source/K data;
+by source, seed, compiler version and flags. Semantic cases are source/IR data;
 source-sensitivity bootstrap tests remain while their exact source identity is
 relevant. Detailed measurements remain under target/.
 
@@ -1003,7 +930,7 @@ is an ordinary generated implementation using field defaults under declared
 trait bounds. Text equality and string-literal patterns follow Rust's reference
 matching depth. String references coerce to str at declared argument and receiver
 sites. Byte-string literals have static shared references to exact-size byte
-arrays; the K constant contract checks their type and extent.
+arrays; the IR constant contract checks their type and extent.
 
 The source library provides String ordering/from conversion, scalar ASCII tests
 and min/max, owned Vec iteration, stable sort and retain. Source bodies specify
@@ -1018,7 +945,7 @@ preserve key order. This is library source, not a new trusted primitive.
 
 ## First compiler consumer additions
 
-Derived structural ordering executes ordinary checked K for nominal fields and
+Derived structural ordering executes ordinary checked IR for nominal fields and
 enum declaration order. Arrays, slices and vectors compare lexicographically.
 Floating-point unordered results stop comparison at the decisive field and make
 all four ordering relations false. Ordering does not use custom PartialEq as an
@@ -1028,4 +955,4 @@ Slice access includes is_empty, get/first/last and mutable counterparts; to_vec
 clones in order, starts_with borrows elements, and copy_from_slice requires Copy
 and equal lengths. Predicate split returns borrowed groups, including empty
 groups at adjacent/endpoint delimiters. Vec clear/truncate drop removed elements
-in forward order. These are source library operations over existing K storage.
+in forward order. These are source library operations over existing IR storage.

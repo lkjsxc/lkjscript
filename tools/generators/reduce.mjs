@@ -170,7 +170,7 @@ function execution(result, rust) {
   if (result.error || result.signal) return {kind: result.error?.code === 'ETIMEDOUT' ? 'timeout' : 'crash', stdout};
   if (result.status === 0) return {kind: 'value', stdout};
   if (rust) {
-    const shim = stderr.match(/LKJ_RUST_TRAP (R[0-9]+)/);
+    const shim = stderr.match(/LKJSCRIPT_RUST_TRAP (R[0-9]+)/);
     if (shim) return {kind: 'trap', code: normalTrap(shim[1]), stdout};
     const panic = stderr.match(/panicked at [^\n]*?:(\d+):\d+:\r?\n([^\n]*)/);
     if (result.status === 101 && panic) return {kind: 'trap', code: rustTrap(panic[2]), line: Number(panic[1]), stdout};
@@ -236,7 +236,7 @@ function writeAtomic(file, content) {
 
 export function createEvaluator(binary, options = {}) {
   const engine = options.engine || 'node', entry = options.entry || 'probe', profile = options.profile || 'verdict';
-  if (!['native', 'k'].includes(engine) || !['value', 'verdict', 'output'].includes(profile)) throw new Error('invalid engine or profile');
+  if (!['native', 'interpreter'].includes(engine) || !['value', 'verdict', 'output'].includes(profile)) throw new Error('invalid engine or profile');
   if (!/^[A-Za-z_][A-Za-z0-9_]*(::[A-Za-z_][A-Za-z0-9_]*)*$/.test(entry)) throw new Error('entry must be a Rust path');
   fs.mkdirSync(path.join(root, 'target'), {recursive: true});
   const directory = fs.mkdtempSync(path.join(root, 'target/reduce-'));
@@ -249,7 +249,7 @@ export function createEvaluator(binary, options = {}) {
   const shim = path.join(directory, 'output.rs');
   if (profile === 'output') fs.copyFileSync(path.join(root, 'bridge/output.rs'), shim);
   const flags = ['--edition=2024', '--error-format=json', '-C', 'overflow-checks=yes', '-C', 'opt-level=0', '-A', 'warnings'];
-  if (profile === 'output') flags.push('--cfg', 'lkj_control');
+  if (profile === 'output') flags.push('--cfg', 'lkjscript_control');
   if (profile === 'value') flags.push('-A', 'arithmetic_overflow', '-A', 'unconditional_panic', '-A', 'overflowing_literals');
   const processOptions = {cwd: root, encoding: null, timeout: options.timeout || 10000};
   function stableRuntime() {
@@ -261,11 +261,11 @@ export function createEvaluator(binary, options = {}) {
     stableRuntime();
     const adapter = '__lkjscript_reduce_' + hash(source).slice(0, 16);
     fs.writeFileSync(sourceFile, source);
-    const importHost = profile === 'output' ? '\nuse crate::__lkj_host::{World,Stdout,Stdin,Stderr,Directory,File};\n' : '\n';
-    const body = profile === 'output' ? 'crate::__lkj_host::enter(' + entry + ');' : 'println!("{}", ' + entry + '());';
+    const importHost = profile === 'output' ? '\nuse crate::__lkjscript_host::{World,Stdout,Stdin,Stderr,Directory,File};\n' : '\n';
+    const body = profile === 'output' ? 'crate::__lkjscript_host::enter(' + entry + ');' : 'println!("{}", ' + entry + '());';
     fs.writeFileSync(rustCase, source + importHost + 'pub fn ' + adapter + '() { ' + body + ' }\n');
     fs.writeFileSync(rustSource, '#![allow(warnings)]\n'
-      + (profile === 'output' ? '#[path="output.rs"] mod __lkj_host;\n' : '')
+      + (profile === 'output' ? '#[path="output.rs"] mod __lkjscript_host;\n' : '')
       + '#[path="oracle_case.rs"] mod case;\nfn main() { case::' + adapter + '(); }\n');
     const built = await run('rustc', [...flags, rustSource, '-o', oracle], processOptions);
     let reference, rustAccepted;

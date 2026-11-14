@@ -38,19 +38,21 @@ fn record_streams(
     );
 }
 pub fn run(argv: &[String]) -> Result<(), String> {
-    let usage = "E_USAGE batch <manifest.tsv|directory> [--engine native|k | --engines native,k]";
+    let usage = "E_USAGE batch <manifest.tsv|directory> [--engine native|interpreter | --engines native,interpreter]";
     let Some(manifest) = argv.first() else {
         return Err(usage.to_string());
     };
     let engines = match argv.len() {
-        1 => vec!["k"],
+        1 => vec!["interpreter"],
         3 if argv[1] == "--engine" => vec![argv[2].as_str()],
         3 if argv[1] == "--engines" => argv[2].split(',').collect(),
         _ => return Err(usage.to_string()),
     };
     for (index, engine) in engines.iter().enumerate() {
-        if !["native", "k"].contains(engine) || engines[..index].contains(engine) {
-            return Err("E_USAGE engines must be distinct names from native,k".to_string());
+        if !["native", "interpreter"].contains(engine) || engines[..index].contains(engine) {
+            return Err(
+                "E_USAGE engines must be distinct names from native,interpreter".to_string(),
+            );
         }
     }
     let requests = if Path::new(manifest).is_dir() {
@@ -64,7 +66,7 @@ pub fn run(argv: &[String]) -> Result<(), String> {
             .into_iter()
             .filter(|path| {
                 path.extension()
-                    .is_some_and(|ext| ext == "rs" || ext == "k")
+                    .is_some_and(|ext| ext == "rs" || ext == "lkjir")
             })
             .map(|path| format!("run\t\t{}", path.display()))
             .collect::<Vec<_>>()
@@ -122,14 +124,14 @@ pub fn run(argv: &[String]) -> Result<(), String> {
             // Layout, glue and runtime linking are route independent too.
             let lowered = engines
                 .iter()
-                .any(|engine| *engine != "k")
+                .any(|engine| *engine != "interpreter")
                 .then(|| timings.measure("lower", || native::lower(&checked)));
             for engine in &engines {
-                if *engine == "k" {
+                if *engine == "interpreter" {
                     let mut output = world::Host::captured();
-                    let resources = host_process::machine_resources()?;
-                    match timings.measure("machine", || {
-                        machine::run(program, entry, &[], &mut output, resources)
+                    let resources = host_process::interpreter_resources()?;
+                    match timings.measure("interpreter", || {
+                        interpreter::run(program, entry, &[], &mut output, resources)
                     }) {
                         Ok(result) => {
                             output

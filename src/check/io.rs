@@ -1,5 +1,5 @@
-//! Exact K signatures for authority-bearing host operations.
-use crate::k::*;
+//! Exact IR signatures for authority-bearing host operations.
+use crate::ir::*;
 
 fn authority(types: &[Type], ty: usize, kind: &TypeKind) -> bool {
     matches!(types[ty].kind, TypeKind::Ref { inner, mutable: true }

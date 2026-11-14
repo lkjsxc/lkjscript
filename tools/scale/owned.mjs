@@ -149,7 +149,7 @@ int main(int argc, char **argv) {
     if(current)phases.push({phase:current,completed:false,wall_ms:performance.now()-boundary});
     const usage=fs.existsSync(stem+'.usage.json')?JSON.parse(fs.readFileSync(stem+'.usage.json','utf8')):{};
     const output=fs.readFileSync(stem+'.stdout','utf8');
-    const stages=fs.readFileSync(stem+'.stderr','utf8').split('\n').filter(line=>line.startsWith('LKJ_TIMING ')).map(line=>JSON.parse(line.slice(11)));
+    const stages=fs.readFileSync(stem+'.stderr','utf8').split('\n').filter(line=>line.startsWith('LKJSCRIPT_TIMING ')).map(line=>JSON.parse(line.slice('LKJSCRIPT_TIMING '.length)));
     return {...completion,...usage,wall_ms:wall,sampled_peak_tree_rss_bytes:peak,host_before:before,host_after:host(),phases,
       markers:found,output,compile_stages:stages,ok:!completion.error&&completion.status===0&&(!phaseMarkers.length||output===phaseMarkers.join('\n')+'\n')};
   }

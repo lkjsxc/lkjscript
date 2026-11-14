@@ -1,0 +1,315 @@
+#!/bin/bash
+# Orchestrate the native source producer, checked backend and result reader.
+# Source discovery and all compiler semantics belong to those ordinary programs.
+set -euo pipefail
+export LC_ALL=C
+
+usage() {
+    cat <<'HELP'
+Usage: lkjscript [--toolchain DIR] COMMAND [INPUT] [OPTIONS] [-- PROGRAM_ARGS...]
+
+Commands:
+  check INPUT             Check source, a .lkjsb bundle, or IR text (.lkjir).
+  ir INPUT                 Write checked IR text from source or a bundle.
+  pack SOURCE             Snapshot source and its discovered modules/library.
+  build INPUT -o OUTPUT   Publish a standalone Linux x86-64 ELF.
+  run INPUT [-- ARGS...]   Build and run with ordinary process streams/status.
+  eval INPUT [-- ARGS...]  Also print a scalar return (f64 as exact hex bits).
+  runtime-ir               Prepare normal IR from the selected runtime source.
+  toolchain               Show the selected toolchain and its manifest.
+  verify                  Check all installed file hashes.
+
+Options:
+  --source-dir DIR        Directory capability for source (default: caller CWD).
+  --library-dir DIR      Explicit library (default: TOOLCHAIN/library).
+  --no-library           Compile without a source library.
+  --runtime FILE         Runtime IR for build/run/eval (default: TOOLCHAIN/runtime.lkjir).
+  --runtime-source FILE  Input for runtime-ir (default: TOOLCHAIN/runtime.rs).
+  --entry NAME           Entry for build/run/eval (default: main, otherwise probe).
+  -o, --output FILE      Atomic file output; ir/pack/runtime-ir otherwise use stdout.
+
+Toolchain: --toolchain, then LKJSCRIPT_TOOLCHAIN, then this installed command's parent.
+No bootstrap compiler or package manager is invoked.
+Relative source names retain their spelling. An absolute source name without
+--source-dir uses its parent directory and basename. Other source directories
+must be selected explicitly; module reads cannot escape their directory.
+LKJSCRIPT_RUN_MEMORY_BYTES and LKJSCRIPT_RUN_STACK_BYTES optionally tighten the target's
+inherited Linux limits. Unset or "unlimited" inherits; compilation is unaffected.
+HELP
+}
+
+fail() { printf 'lkjscript: %s\n' "$*" >&2; exit 1; }
+need_value() { (($# >= 2)) && [[ -n $2 ]] || fail "$1 needs a value"; }
+absolute() {
+    if [[ $1 == /* ]]; then printf '%s\n' "$1"
+    else printf '%s/%s\n' "$PWD" "$1"; fi
+}
+
+toolchain=${LKJSCRIPT_TOOLCHAIN:-}
+while (($#)); do
+    case $1 in
+        --toolchain) need_value "$@"; toolchain=$2; shift 2 ;;
+        -h|--help) usage; exit 0 ;;
+        *) break ;;
+    esac
+done
+(($#)) || { usage >&2; exit 1; }
+command=$1
+shift
+case $command in
+    check|ir|pack|build|run|eval|runtime-ir|toolchain|verify) ;;
+    *) fail "unknown command $command (see --help)" ;;
+esac
+
+input=
+output=
+source_dir=.
+source_dir_set=0
+library_dir=
+library_set=0
+no_library=0
+runtime=
+runtime_source=
+entry=
+program_args=()
+while (($#)); do
+    case $1 in
+        --source-dir) need_value "$@"; source_dir=$2; source_dir_set=1; shift 2 ;;
+        --library-dir) need_value "$@"; library_dir=$2; library_set=1; shift 2 ;;
+        --no-library) no_library=1; shift ;;
+        --runtime) need_value "$@"; runtime=$2; shift 2 ;;
+        --runtime-source) need_value "$@"; runtime_source=$2; shift 2 ;;
+        --entry) need_value "$@"; entry=$2; shift 2 ;;
+        -o|--output) need_value "$@"; output=$2; shift 2 ;;
+        -h|--help) usage; exit 0 ;;
+        --) shift; program_args=("$@"); break ;;
+        -*) fail "unknown option $1" ;;
+        *) [[ -z $input ]] || fail "unexpected input $1"; input=$1; shift ;;
+    esac
+done
+((!library_set || !no_library)) || fail "--library-dir and --no-library are mutually exclusive"
+if ((${#program_args[@]})) && [[ $command != run && $command != eval ]]; then
+    fail "program arguments require run or eval"
+fi
+case $command in
+    runtime-ir|toolchain|verify) [[ -z $input ]] || fail "$command takes no input argument" ;;
+    *) [[ -n $input ]] || fail "$command needs an input path" ;;
+esac
+case $command in
+    build) [[ -n $output && $output != - ]] || fail "build needs -o FILE" ;;
+    ir|pack|runtime-ir) ;;
+    *) [[ -z $output ]] || fail "-o is not used by $command" ;;
+esac
+case $command in
+    build|run|eval) ;;
+    *) [[ -z $runtime && -z $entry ]] || fail "--runtime and --entry require build, run or eval" ;;
+esac
+[[ $command == runtime-ir || -z $runtime_source ]] || fail "--runtime-source requires runtime-ir"
+case $command in
+    runtime-ir|toolchain|verify)
+        ((!source_dir_set && !library_set && !no_library)) ||
+            fail "source and library options are not used by $command"
+        ;;
+esac
+if [[ -z $toolchain ]]; then
+    script=$(realpath -e -- "${BASH_SOURCE[0]}")
+    toolchain=$(dirname -- "$(dirname -- "$script")")
+fi
+[[ -d $toolchain/libexec ]] || fail "select an installed toolchain with --toolchain or LKJSCRIPT_TOOLCHAIN"
+toolchain=$(cd -- "$toolchain" && pwd -P)
+frontend=$toolchain/libexec/frontend
+backend=$toolchain/libexec/backend
+result=$toolchain/libexec/result
+if [[ $command == toolchain ]]; then
+    printf '%s\n' "$toolchain"
+    [[ ! -f $toolchain/manifest ]] || cat -- "$toolchain/manifest"
+    exit 0
+fi
+if [[ $command == verify ]]; then
+    (cd -- "$toolchain" && sha256sum --check --strict SHA256SUMS)
+    exit
+fi
+if ((!library_set)); then library_dir=$toolchain/library; fi
+library_dir=$(absolute "$library_dir")
+runtime=${runtime:-$toolchain/runtime.lkjir}
+runtime=$(absolute "$runtime")
+runtime_source=${runtime_source:-$toolchain/runtime.rs}
+runtime_source=$(absolute "$runtime_source")
+
+kind=source
+root=$input
+source_dir=$(absolute "$source_dir")
+input_path=
+if [[ -n $input ]]; then
+    case $input in
+        *.lkjir) kind=ir ;;
+        *.lkjsb) kind=bundle ;;
+    esac
+    if [[ $kind == source ]]; then
+        if [[ $input == /* ]]; then
+            if ((source_dir_set)); then
+                root=$(realpath -m --relative-to="$source_dir" -- "$input")
+            else
+                source_dir=$(dirname -- "$input")
+                root=$(basename -- "$input")
+            fi
+        fi
+        input_path=$(absolute "$source_dir/$root")
+    else
+        ((!source_dir_set && !library_set && !no_library)) ||
+            fail "source and library options apply only to source inputs"
+        input_path=$(absolute "$input")
+    fi
+fi
+[[ $command != pack || $kind == source ]] || fail "pack needs a source input"
+if [[ -n $output && $output != - ]]; then
+    output=$(absolute "$output")
+    source_path=${input_path:-$runtime_source}
+    [[ $output != "$source_path" ]] || fail "output would replace the input"
+    if [[ -e $output && $output -ef $source_path ]]; then fail "output aliases the input"; fi
+    if [[ $command == build ]]; then
+        [[ $output != "$runtime" ]] || fail "output would replace the runtime input"
+        if [[ -e $output && $output -ef $runtime ]]; then fail "output aliases the runtime input"; fi
+    fi
+fi
+
+# Compare decimal strings without shell integer overflow.
+decimal_less() {
+    ((${#1} < ${#2})) || { ((${#1} == ${#2})) && [[ $1 < $2 ]]; }
+}
+target_prefix=()
+limit_flags=()
+add_limit() {
+    local name=$1 option=$2 value=${!1:-} inherited
+    [[ -n $value && $value != unlimited ]] || return 0
+    [[ $value =~ ^[1-9][0-9]*$ ]] || fail "$name must be positive bytes or unlimited"
+    if decimal_less 18446744073709551615 "$value"; then fail "$name exceeds a Linux limit"; fi
+    inherited=$(prlimit --pid "$$" "$option" --noheadings --raw --output SOFT)
+    if [[ $inherited != unlimited ]] && decimal_less "$inherited" "$value"; then value=$inherited; fi
+    limit_flags+=("$option=$value:")
+}
+if [[ $command == run || $command == eval ]]; then
+    add_limit LKJSCRIPT_RUN_MEMORY_BYTES --as
+    add_limit LKJSCRIPT_RUN_STACK_BYTES --stack
+    if ((${#limit_flags[@]})); then target_prefix=(prlimit "${limit_flags[@]}" --); fi
+fi
+
+work=
+publish_temp=
+cleanup() {
+    local status=$?
+    trap - EXIT
+    [[ -z $publish_temp ]] || rm -f -- "$publish_temp"
+    [[ -z $work ]] || rm -rf -- "$work"
+    exit "$status"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+work=$(mktemp -d "${TMPDIR:-/tmp}/lkjscript.XXXXXXXXXX")
+work=$(cd -- "$work" && pwd -P)
+chmod 700 -- "$work"
+driver_directory=$(dirname -- "$(realpath -e -- "${BASH_SOURCE[0]}")")
+process_helper=$driver_directory/native-process.sh
+if [[ ! -f $process_helper ]]; then process_helper=$driver_directory/../libexec/native-process.sh; fi
+source "$process_helper"
+lkjscript_process_init "$work"
+
+require_program() { [[ -x $1 && -f $1 ]] || fail "missing executable $1"; }
+publish() {
+    local from=$1 mode=$2 parent output_fd
+    if [[ -z $output || $output == - ]]; then
+        # A Rust-based host cat can reopen closed stdout as /dev/null. Diagnose
+        # that state before invoking a copier so successful output is observable.
+        if ! { exec {output_fd}>&1; } 2>/dev/null; then fail "standard output is closed"; fi
+        exec {output_fd}>&-
+        lkjscript_process_run "" 0 cat -- "$from"
+        return
+    fi
+    parent=$(dirname -- "$output")
+    [[ -d $parent ]] || fail "output directory does not exist: $parent"
+    [[ ! -d $output ]] || fail "output is a directory: $output"
+    publish_temp=$(mktemp "$parent/.lkjscript.XXXXXXXXXX")
+    cp -- "$from" "$publish_temp"
+    chmod "$mode" -- "$publish_temp"
+    mv -fT -- "$publish_temp" "$output"
+    publish_temp=
+}
+source_command=()
+prepare_source_command() {
+    require_program "$frontend"
+    if [[ $kind == bundle ]]; then
+        cp -- "$input_path" "$work/input.lkjsb"
+        source_command=("$frontend" input.lkjsb)
+    else
+        source_command=("$frontend" --source "$root" --source-dir "$source_dir")
+        if ((no_library)); then source_command+=(--no-library)
+        else source_command+=(--library-dir "$library_dir"); fi
+    fi
+}
+produce_ir() {
+    if [[ $kind == ir ]]; then cp -- "$input_path" "$work/program.lkjir"
+    else
+        prepare_source_command
+        lkjscript_process_run "$work" 1 "${source_command[@]}" >"$work/program.lkjir"
+    fi
+}
+case $command in
+    runtime-ir)
+        require_program "$frontend"
+        mkdir -- "$work/\$runtime"
+        cp -- "$runtime_source" "$work/\$runtime/runtime.rs"
+        lkjscript_process_run "$work" 1 "$frontend" --source '$runtime/runtime.rs' --source-dir "$work" --no-library >"$work/runtime.lkjir"
+        publish "$work/runtime.lkjir" 644
+        exit
+        ;;
+    check)
+        if [[ $kind == ir ]]; then
+            require_program "$backend"
+            cp -- "$input_path" "$work/program.lkjir"
+            lkjscript_process_run "$work" 1 "$backend" program.lkjir --check
+        else
+            prepare_source_command
+            lkjscript_process_run "$work" 1 "${source_command[@]}" --check
+        fi
+        exit
+        ;;
+    pack)
+        prepare_source_command
+        lkjscript_process_run "$work" 1 "${source_command[@]}" --pack >"$work/input.lkjsb"
+        publish "$work/input.lkjsb" 644
+        exit
+        ;;
+    ir)
+        produce_ir
+        if [[ $kind == ir ]]; then
+            require_program "$backend"
+            lkjscript_process_run "$work" 1 "$backend" program.lkjir --check
+        fi
+        publish "$work/program.lkjir" 644
+        exit
+        ;;
+esac
+require_program "$backend"
+if [[ $command == eval ]]; then require_program "$result"; fi
+produce_ir
+cp -- "$runtime" "$work/runtime.lkjir"
+backend_command=("$backend" program.lkjir --runtime runtime.lkjir)
+[[ -z $entry ]] || backend_command+=(--entry "$entry")
+if [[ $command == eval ]]; then backend_command+=(--result-descriptor result.desc); fi
+lkjscript_process_run "$work" 1 "${backend_command[@]}" >"$work/program.elf"
+chmod 700 -- "$work/program.elf"
+if [[ $command == build ]]; then publish "$work/program.elf" 755; exit; fi
+if [[ $command == run ]]; then
+    status=0
+    lkjscript_process_run "" 0 "${target_prefix[@]}" "$work/program.elf" "${program_args[@]}" || status=$?
+    exit "$status"
+fi
+
+# The packet arrives only at completion. A private file avoids introducing
+# a control pipeline or duplicating the target's ordinary process streams.
+status=0
+lkjscript_process_run "" 0 "${target_prefix[@]}" "$work/program.elf" "${program_args[@]}" \
+    3>"$work/result.packet" || status=$?
+printf '\n%s\n' "$status" >>"$work/result.packet"
+lkjscript_process_run "$work" 1 "$result" result.desc "$input" <"$work/result.packet"
