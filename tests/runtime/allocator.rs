@@ -63,11 +63,11 @@ pub fn probe_allocator() -> u64 {
     release(guard);
     release(grown);
 
-    let large = allocate(8192);
+    let large = allocate(2097152);
     raw_store64(large, 12345);
-    raw_store8(large + 8191, 201);
-    let larger = reallocate(large, 16384);
-    if raw_load64(larger) != 12345 || raw_load8(larger + 8191) != 201 { return 10; }
+    raw_store8(large + 2097151, 201);
+    let larger = reallocate(large, 4194304);
+    if raw_load64(larger) != 12345 || raw_load8(larger + 2097151) != 201 { return 10; }
     release(larger);
 
     let empty = reallocate(0, 7);
@@ -78,3 +78,26 @@ pub fn probe_allocator() -> u64 {
     answer
 }
 pub fn probe_overflow() -> u64 { allocate(18446744073709551615) }
+
+pub fn probe_medium_regions() -> u64 {
+    let slots = allocate(520);
+    let mut index: u64 = 0;
+    while index < 65 {
+        let block = allocate(32768);
+        raw_store64(slots + index * 8, block);
+        raw_store64(block, index);
+        raw_store64(block + 32760, index + 1000);
+        index = index + 1;
+    }
+    index = 0;
+    while index < 65 {
+        let block = raw_load64(slots + index * 8);
+        if raw_load64(block) != index || raw_load64(block + 32760) != index + 1000 {
+            return 1;
+        }
+        release(block);
+        index = index + 1;
+    }
+    release(slots);
+    42
+}

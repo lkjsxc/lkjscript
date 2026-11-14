@@ -166,7 +166,7 @@ impl Builder<'_, '_> {
         self.emit(
             ir::Op::Binary {
                 dst,
-                op: name.to_string(),
+                op: ir::BinaryOp::parse(name).unwrap(),
                 left,
                 right,
             },
@@ -257,7 +257,7 @@ impl Builder<'_, '_> {
                 self.emit(
                     ir::Op::Intrinsic {
                         dst: amount,
-                        name: "cast".to_string(),
+                        name: ir::IntrinsicOp::Cast,
                         args: vec![right],
                     },
                     span.line,
@@ -275,7 +275,7 @@ impl Builder<'_, '_> {
                 self.emit(
                     ir::Op::Binary {
                         dst: checked,
-                        op: "<<".to_string(),
+                        op: ir::BinaryOp::Shl,
                         left: zero,
                         right: check_amount,
                     },
@@ -287,7 +287,7 @@ impl Builder<'_, '_> {
             self.emit(
                 ir::Op::Intrinsic {
                     dst: amount,
-                    name: "cast".to_string(),
+                    name: ir::IntrinsicOp::Cast,
                     args: vec![right],
                 },
                 span.line,
@@ -298,7 +298,7 @@ impl Builder<'_, '_> {
         self.emit(
             ir::Op::Binary {
                 dst,
-                op: operation.to_string(),
+                op: ir::BinaryOp::parse(operation).unwrap(),
                 left,
                 right,
             },

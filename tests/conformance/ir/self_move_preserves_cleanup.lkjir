@@ -1,0 +1,45 @@
+lkjscript-ir 1
+# A self-move preserves the owner's cleanup state although no bytes move.
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "&mut i64" ref mut 3
+type "Mark" struct move "value" 7
+type "&mut Mark" ref mut 8
+destructor 8 1
+fn "probe" 0 3
+local "counter" 3 mut
+local "reference" 7 let
+local "mark" 8 let
+local "answer" 3 let
+@1 int 0 0
+@2 borrow 1 mut 0
+@3 struct 2 1
+@4 read 2 move 2
+@5 drop-if 2
+@6 drop-if 2
+@7 read 3 copy 0
+@8 drop 0
+@9 return 3
+endfn
+fn "Mark::drop" 1 0
+local "self" 9 let
+local "counter" 7 let
+local "old" 3 let
+local "amount" 3 let
+local "next" 3 let
+local "done" 0 let
+@10 borrow 1 mut 0 deref field 0 deref
+@11 read 2 copy 1 deref
+@12 int 3 42
+@13 binary 4 "+" 2 3
+@14 assign 4 1 deref
+@15 drop 1
+@16 drop 0
+@17 unit 5
+@18 return 5
+endfn

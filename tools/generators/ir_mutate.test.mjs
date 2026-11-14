@@ -66,9 +66,9 @@ test('timeouts, safety/model errors and process failures cannot masquerade as tr
     const safety = observed('mutant.lkjir:8: M_USE_AFTER_MOVE storage moved\n');
     const unsupported = observed('mutant.lkjir:8: M_UNSUPPORTED missing operation\n');
     const crash = observed('', '42\n', {signal: 'SIGSEGV', status: null});
-    assert.equal(timeout.kind, 'timeout');
-    assert.equal(compareRoutes(timeout, observed('', '42\n')).category, 'timeout');
-    assert.deepEqual(compareRoutes(timeout, {kind: 'skipped', reason: 'independent interpreter timed out'}), {category: 'timeout', finding: false});
+    assert.equal(timeout.kind, 'did-not-terminate');
+    assert.equal(compareRoutes(timeout, observed('', '42\n')).category, 'did-not-terminate');
+    assert.deepEqual(compareRoutes(timeout, {kind: 'skipped', reason: 'independent interpreter did not terminate within its allowance'}), {category: 'did-not-terminate', finding: false});
     assert.equal(compareRoutes(safety, observed('', '42\n')).category, 'safety-error');
     assert.equal(compareRoutes(unsupported, observed('', '42\n')).category, 'model-error');
     assert.equal(compareRoutes(crash, observed('', '42\n')).category, 'host-error');

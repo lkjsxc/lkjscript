@@ -111,7 +111,11 @@ impl Layouts {
         };
         let kind = program.types[ty].kind.clone();
         match kind {
-            TypeKind::Unit | TypeKind::Bool => {
+            TypeKind::Unit => {
+                value.bytes = 0;
+                value.alignment = 1;
+            }
+            TypeKind::Bool => {
                 value.bytes = 1;
                 value.alignment = 1;
             }

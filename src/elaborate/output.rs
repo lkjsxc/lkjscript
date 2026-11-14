@@ -121,7 +121,7 @@ impl Builder<'_, '_> {
             self.emit(
                 ir::Op::Intrinsic {
                     dst,
-                    name: operation.to_string(),
+                    name: operation,
                     args: values,
                 },
                 span.line,

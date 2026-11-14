@@ -1314,10 +1314,10 @@ impl<H: Host> Interpreter<'_, H> {
         &mut self,
         frame: &Frame,
         dst: usize,
-        name: &str,
+        name: ir::IntrinsicOp,
         args: &[usize],
     ) -> Result<(), RunError> {
-        if name == "array_repeat" {
+        if name == ir::IntrinsicOp::ArrayRepeat {
             return self.array_repeat(frame, dst, args);
         }
         let destination = self.local(frame, dst)?;
@@ -1332,7 +1332,7 @@ impl<H: Host> Interpreter<'_, H> {
             }
         };
         let result = match name {
-            "assert" if values.len() == 1 => {
+            ir::IntrinsicOp::Assert if values.len() == 1 => {
                 if values[0].0 != ir::BOOL {
                     return Err(self.invalid("assert needs bool"));
                 }
@@ -1341,7 +1341,7 @@ impl<H: Host> Interpreter<'_, H> {
                 }
                 Value::Unit
             }
-            "char_from_u32" if values.len() == 1 => {
+            ir::IntrinsicOp::CharFromU32 if values.len() == 1 => {
                 if !matches!(
                     self.kind(values[0].0)?,
                     TypeKind::Int {
@@ -1382,7 +1382,7 @@ impl<H: Host> Interpreter<'_, H> {
                     },
                 }
             }
-            "cast" if values.len() == 1 => {
+            ir::IntrinsicOp::Cast if values.len() == 1 => {
                 let Value::Bits(value) = values[0].1 else {
                     return Err(self.invalid("cast requires a scalar"));
                 };
@@ -1392,13 +1392,13 @@ impl<H: Host> Interpreter<'_, H> {
                     value,
                 ))?)
             }
-            "vec_new"
+            ir::IntrinsicOp::VecNew
                 if values.is_empty()
                     && matches!(self.kind(destination.ty)?, TypeKind::Vec { .. }) =>
             {
                 Value::Sequence(Vec::new())
             }
-            "box_new" if values.len() == 1 => {
+            ir::IntrinsicOp::BoxNew if values.len() == 1 => {
                 let TypeKind::Box { inner } = self.kind(destination.ty)? else {
                     return Err(self.invalid("box_new result is not Box"));
                 };
@@ -1408,12 +1408,12 @@ impl<H: Host> Interpreter<'_, H> {
                 let (ty, value) = values.remove(0);
                 Value::Box(self.allocate(ty, Some(value), false)?)
             }
-            "vec_len" | "str_len" if values.len() == 1 => {
+            ir::IntrinsicOp::VecLen | ir::IntrinsicOp::StrLen if values.len() == 1 => {
                 let access = reference(0, self)?;
                 self.access(&access, false, true)?;
                 Value::Bits(self.sequence(&access)?.len() as u64)
             }
-            "vec_push" if values.len() == 2 => {
+            ir::IntrinsicOp::VecPush if values.len() == 2 => {
                 let access = reference(0, self)?;
                 if !access.writable {
                     return Err(self.error(
@@ -1438,7 +1438,7 @@ impl<H: Host> Interpreter<'_, H> {
                 elements.push(child);
                 Value::Unit
             }
-            "vec_pop" if values.len() == 1 => {
+            ir::IntrinsicOp::VecPop if values.len() == 1 => {
                 let access = reference(0, self)?;
                 if !access.writable {
                     return Err(self.error(
@@ -1468,7 +1468,7 @@ impl<H: Host> Interpreter<'_, H> {
                     }
                 }
             }
-            "replace" if values.len() == 2 => {
+            ir::IntrinsicOp::Replace if values.len() == 2 => {
                 let access = reference(0, self)?;
                 if !access.writable || access.ty != values[1].0 || access.ty != destination.ty {
                     return Err(self.invalid("invalid replacement signature"));
@@ -1478,14 +1478,14 @@ impl<H: Host> Interpreter<'_, H> {
                 self.put(access.cell, replacement)?;
                 old
             }
-            "clone" if values.len() == 1 => {
+            ir::IntrinsicOp::Clone if values.len() == 1 => {
                 let access = reference(0, self)?;
                 if access.ty != destination.ty {
                     return Err(self.invalid("clone result type differs"));
                 }
                 self.copy_value(&access)?
             }
-            "str_as_bytes" if values.len() == 1 => {
+            ir::IntrinsicOp::StrAsBytes if values.len() == 1 => {
                 let access = reference(0, self)?;
                 if !matches!(self.kind(access.ty)?, TypeKind::Str) {
                     return Err(self.invalid("text projection requires str"));
@@ -1513,7 +1513,7 @@ impl<H: Host> Interpreter<'_, H> {
                 reference.referent = inner;
                 Value::Reference(reference)
             }
-            "str_from_utf8" if values.len() == 1 => {
+            ir::IntrinsicOp::StrFromUtf8 if values.len() == 1 => {
                 let access = reference(0, self)?;
                 let bytes = self.bytes(&access)?;
                 let TypeKind::Enum { variants, .. } = self.kind(destination.ty)? else {
@@ -1561,7 +1561,7 @@ impl<H: Host> Interpreter<'_, H> {
                     }
                 }
             }
-            "world_stdout" if values.len() == 1 => {
+            ir::IntrinsicOp::WorldStdout if values.len() == 1 => {
                 let access = reference(0, self)?;
                 if !access.writable
                     || !matches!(self.kind(access.ty)?, TypeKind::World)
@@ -1572,7 +1572,7 @@ impl<H: Host> Interpreter<'_, H> {
                 self.access(&access, true, true)?;
                 Value::Stdout
             }
-            "stdout_write" if values.len() == 2 => {
+            ir::IntrinsicOp::StdoutWrite if values.len() == 2 => {
                 let writer = reference(0, self)?;
                 if !writer.writable
                     || !matches!(self.kind(writer.ty)?, TypeKind::Stdout)
@@ -1602,7 +1602,10 @@ impl<H: Host> Interpreter<'_, H> {
                 None => {
                     return Err(self.error(
                         InterpreterError::Unsupported,
-                        format!("intrinsic {name} is not implemented by the IR interpreter"),
+                        format!(
+                            "intrinsic {} is not implemented by the IR interpreter",
+                            name.as_str()
+                        ),
                     ));
                 }
             },
@@ -1849,7 +1852,7 @@ impl<H: Host> Interpreter<'_, H> {
                 let Value::Bits(value) = value else {
                     return Err(self.invalid("unary operand is not scalar"));
                 };
-                let value = self.number(scalar::unary(self.kind(ty)?, &op, value))?;
+                let value = self.number(scalar::unary(self.kind(ty)?, op, value))?;
                 self.put_local(&frame, dst, Value::Bits(value))?;
             }
             Op::Binary {
@@ -1863,14 +1866,22 @@ impl<H: Host> Interpreter<'_, H> {
                 if left_ty != right_ty {
                     return Err(self.invalid("binary operand types differ"));
                 }
-                let comparison = ["==", "!=", "<", "<=", ">", ">="].contains(&op.as_str());
+                let comparison = [
+                    ir::BinaryOp::Eq,
+                    ir::BinaryOp::Ne,
+                    ir::BinaryOp::Lt,
+                    ir::BinaryOp::Le,
+                    ir::BinaryOp::Gt,
+                    ir::BinaryOp::Ge,
+                ]
+                .contains(&op);
                 if self.local(&frame, dst)?.ty != if comparison { ir::BOOL } else { left_ty } {
                     return Err(self.invalid("binary result type differs"));
                 }
                 let (Value::Bits(left), Value::Bits(right)) = (left, right) else {
                     return Err(self.invalid("binary operands are not scalar"));
                 };
-                let value = self.number(scalar::binary(self.kind(left_ty)?, &op, left, right))?;
+                let value = self.number(scalar::binary(self.kind(left_ty)?, op, left, right))?;
                 self.put_local(&frame, dst, Value::Bits(value))?;
             }
             Op::Call {
@@ -1973,7 +1984,7 @@ impl<H: Host> Interpreter<'_, H> {
                 };
                 self.put_local(&frame, dst, Value::Bits(value))?;
             }
-            Op::Intrinsic { dst, name, args } => self.intrinsic(&frame, dst, &name, &args)?,
+            Op::Intrinsic { dst, name, args } => self.intrinsic(&frame, dst, name, &args)?,
             Op::If { condition } => {
                 let (ty, value) = self.take_local(&frame, condition)?;
                 if ty != ir::BOOL {

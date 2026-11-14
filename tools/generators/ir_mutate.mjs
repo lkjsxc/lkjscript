@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { run } from '../process.mjs';
 import { runCases } from '../batch.mjs';
 
+const MUTANT_ALLOWANCE_MS = 2_000;
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const tokens = line => line.match(/"(?:\\.|[^"\\])*"|\S+/g) || [];
 const control = new Set(['if', 'else', 'end', 'loop', 'break', 'continue', 'break-to', 'continue-to', 'return']);
@@ -134,7 +135,7 @@ export function classifyRoute(result) {
     const stderr = Buffer.from(result.stderr || '').toString();
     const observed = {status: result.status, signal: result.signal || null, stdoutHex, stderr,
         error: result.error ? {code: result.error.code, message: result.error.message} : null};
-    if (result.error?.code === 'ETIMEDOUT') return {...observed, kind: 'timeout'};
+    if (result.error?.code === 'ETIMEDOUT') return {...observed, kind: 'did-not-terminate'};
     if (result.error || result.signal) return {...observed, kind: 'host-error'};
     if (result.status === 0 && !stderr) return {...observed, kind: 'value'};
     const detail = diagnostic(stderr);
@@ -152,7 +153,7 @@ export function compareRoutes(ir, native) {
     if ([ir, native].some(value => value.kind === 'safety-error')) return {category: 'safety-error', finding: true};
     if ([ir, native].some(value => value.kind === 'model-error')) return {category: 'model-error', finding: true};
     if ([ir, native].some(value => value.kind === 'host-error')) return {category: 'host-error', finding: true};
-    if ([ir, native].some(value => value.kind === 'timeout')) return {category: 'timeout', finding: false};
+    if ([ir, native].some(value => value.kind === 'did-not-terminate')) return {category: 'did-not-terminate', finding: false};
     if (ir.kind === 'resource' || native.kind === 'resource') return {category: 'resource', finding: false};
     if (ir.kind !== native.kind) return {category: 'ending-differs', finding: true};
     if (ir.stdoutHex !== native.stdoutHex) return {category: 'value-differs', finding: true};
@@ -214,19 +215,19 @@ export async function main(argv = process.argv.slice(2)) {
         } else {
             const runRoute = async engine => {
                 const time = performance.now();
-                const processResult = await run(binary, ['run', files[index], '--entry', mutant.entry, '--engine', engine, ...(engine === 'interpreter' ? ['--unchecked-ir'] : [])], options);
+                const processResult = await run(binary, ['run', files[index], '--entry', mutant.entry, '--engine', engine, ...(engine === 'interpreter' ? ['--unchecked-ir'] : [])], {...options, timeout: MUTANT_ALLOWANCE_MS});
                 return {...classifyRoute(processResult), milliseconds: performance.now() - time};
             };
             const ir = await runRoute('interpreter');
-            const native = ir.kind === 'timeout'
-                ? {kind: 'skipped', reason: 'independent interpreter timed out'}
+            const native = ir.kind === 'did-not-terminate'
+                ? {kind: 'skipped', reason: 'independent interpreter did not terminate within its allowance'}
                 : ['safety-error', 'model-error'].includes(ir.kind)
                     ? {kind: 'skipped', reason: 'independent model found a contract violation'}
                     : await runRoute('native');
             result = {...compareRoutes(ir, native), interpreter: ir, native};
         }
         results[index] = {index, base: mutant.base, kind: mutant.kind, ...result};
-        if (result.finding || result.category === 'timeout') {
+        if (result.finding || result.category === 'did-not-terminate') {
             save(path.join(directory, index + '.result.json'), {...results[index], edits: mutant.edits});
         }
     });

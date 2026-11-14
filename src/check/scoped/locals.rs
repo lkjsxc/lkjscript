@@ -410,13 +410,13 @@ impl Observation {
                 Some(*dst)
             }
             Op::Intrinsic { dst, name, args } => {
-                if name == "replace" || name == "clone" {
+                if *name == IntrinsicOp::Replace || *name == IntrinsicOp::Clone {
                     let place = Place {
                         local: args[0],
                         projections: vec![Projection::Deref],
                     };
                     self.transfer(state, types, function, &place, &Place::local(*dst), line)?;
-                    if name == "replace" {
+                    if *name == IntrinsicOp::Replace {
                         self.transfer(
                             state,
                             types,
@@ -429,10 +429,10 @@ impl Observation {
                             self.changed(state, &place, line)?;
                         }
                     }
-                } else if name == "str_as_bytes" || name == "str_from_utf8" {
+                } else if *name == IntrinsicOp::StrAsBytes || *name == IntrinsicOp::StrFromUtf8 {
                     let to = Place {
                         local: *dst,
-                        projections: if name == "str_from_utf8" {
+                        projections: if *name == IntrinsicOp::StrFromUtf8 {
                             vec![Projection::VariantField(0, 0)]
                         } else {
                             Vec::new()
@@ -828,7 +828,7 @@ impl LocalPass<'_> {
                     | Op::Call { dst, .. }
                     | Op::Text { dst, .. } => Some(*dst),
                     Op::Intrinsic { dst, name, args } => {
-                        if name == "replace" && state.views[function.locals[*dst].ty] {
+                        if *name == IntrinsicOp::Replace && state.views[function.locals[*dst].ty] {
                             for target in storage(
                                 state,
                                 &Place {

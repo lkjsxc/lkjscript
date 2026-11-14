@@ -821,7 +821,7 @@ impl Builder<'_, '_> {
                 self.emit(
                     ir::Op::Binary {
                         dst,
-                        op: "==".to_string(),
+                        op: ir::BinaryOp::Eq,
                         left,
                         right,
                     },
@@ -874,7 +874,7 @@ impl Builder<'_, '_> {
                     self.emit(
                         ir::Op::Binary {
                             dst,
-                            op: "|".to_string(),
+                            op: ir::BinaryOp::BitOr,
                             left: result,
                             right,
                         },
@@ -902,7 +902,7 @@ impl Builder<'_, '_> {
             self.emit(
                 ir::Op::Binary {
                     dst,
-                    op: "&".to_string(),
+                    op: ir::BinaryOp::BitAnd,
                     left: result,
                     right,
                 },
@@ -1284,9 +1284,16 @@ impl Builder<'_, '_> {
         let mut conditions = Vec::new();
         for index in 0..2 {
             let (bound, op) = if index == 0 {
-                (range.start, ">=")
+                (range.start, ir::BinaryOp::Ge)
             } else {
-                (range.end, if range.inclusive { "<=" } else { "<" })
+                (
+                    range.end,
+                    if range.inclusive {
+                        ir::BinaryOp::Le
+                    } else {
+                        ir::BinaryOp::Lt
+                    },
+                )
             };
             if let Some(value) = bound {
                 let left = self.read(place.clone(), line)?.0;
@@ -1296,7 +1303,7 @@ impl Builder<'_, '_> {
                 self.emit(
                     ir::Op::Binary {
                         dst,
-                        op: op.to_string(),
+                        op,
                         left,
                         right,
                     },
@@ -1310,7 +1317,7 @@ impl Builder<'_, '_> {
             self.emit(
                 ir::Op::Binary {
                     dst,
-                    op: "&".to_string(),
+                    op: ir::BinaryOp::BitAnd,
                     left: conditions[0],
                     right: conditions[1],
                 },

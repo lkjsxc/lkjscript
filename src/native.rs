@@ -1,6 +1,9 @@
 //! Direct instruction selection from checked lkjscript IR to native x86-64.
 use crate::diagnostic::{Diagnostic, Span};
-use crate::ir::{self, CheckedProgram, Function, Op, Place, Program, Projection, TypeKind};
+use crate::ir::{
+    self, BinaryOp, CheckedProgram, Function, IntrinsicOp, Op, Place, Program, Projection,
+    TypeKind, UnaryOp,
+};
 use crate::runtime::{self, Primitive, Runtime};
 use crate::x86::*;
 use crate::x86::{Assembler, Label};
@@ -10,6 +13,7 @@ mod intrinsics;
 mod layout;
 mod ownership;
 pub(crate) mod platform;
+mod registers;
 mod scalar;
 
 use layout::Layouts;
@@ -122,13 +126,32 @@ fn frame_extent(bytes: u64, site: Span) -> Result<u64, Diagnostic> {
     }
     Ok(aligned)
 }
-fn prologue(a: &mut Assembler, p: platform::Platform, bytes: u64) {
+fn stack_available(a: &mut Assembler, p: platform::Platform, bytes: u64, site: Span) {
+    let exhausted = a.label();
+    let ready = a.label();
+    let grown = a.label();
     a.mov(R11, SP);
-    a.immediate(A, bytes + 16);
+    a.immediate(A, bytes);
     a.rr(0x29, R11, A, true);
-    a.condition(2, p.stack_exhausted);
+    a.condition(2, exhausted);
     a.compare(R11, STACK_FLOOR);
-    a.condition(2, p.stack_exhausted);
+    a.condition(3, ready);
+    // The cold helper uses platform context scratch, so it needs no stack
+    // before it provisions the frame. Incoming ABI arguments are preserved.
+    a.address(A, grown);
+    a.jump(p.grow_stack);
+    a.bind(grown);
+    a.test(A, true);
+    a.condition(5, ready);
+    a.bind(exhausted);
+    a.immediate(LINE, site.line.max(1) as u64);
+    a.immediate(FILE, site.file as u64);
+    a.immediate(A, 8);
+    a.jump(p.trap);
+    a.bind(ready);
+}
+fn prologue(a: &mut Assembler, p: platform::Platform, bytes: u64, site: Span) {
+    stack_available(a, p, bytes + 16, site);
     a.push(BP);
     a.mov(BP, SP);
     if bytes != 0 {
@@ -179,6 +202,7 @@ struct Body<'a> {
     platform: platform::Platform,
     runtime: RuntimeLabels,
     slots: Vec<i64>,
+    registers: Vec<Option<u8>>,
     scratch: Vec<i64>,
     partial_scratch: Vec<i64>,
     ownership: Ownership,
@@ -204,21 +228,36 @@ impl<'a> Body<'a> {
     // A local read changes only the requested register.
     fn read(&mut self, local: usize, register: u8) {
         let storage = self.layout.storage(self.ty(local));
-        self.a.load_width(
-            register,
-            BP,
-            self.slots[local],
-            storage.bytes as u8,
-            storage.signed,
-        );
+        if storage.bytes == 0 {
+            self.a.immediate(register, 0);
+        } else if let Some(assigned) = self.registers[local] {
+            self.a.mov(register, assigned);
+        } else {
+            self.a.load_width(
+                register,
+                BP,
+                self.slots[local],
+                storage.bytes as u8,
+                storage.signed,
+            );
+        }
     }
     fn read_word(&mut self, local: usize, word: usize, register: u8) {
         self.a
             .load(register, BP, self.slots[local] + word as i64 * 8);
     }
     fn write(&mut self, local: usize, register: u8) {
-        let bytes = self.layout.storage(self.ty(local)).bytes as u8;
-        self.a.store_width(BP, self.slots[local], register, bytes);
+        let storage = self.layout.storage(self.ty(local));
+        if storage.bytes != 0 {
+            if let Some(assigned) = self.registers[local] {
+                self.a.mov(assigned, register);
+                self.a
+                    .normalize(assigned, storage.bytes as u8, storage.signed);
+            } else {
+                self.a
+                    .store_width(BP, self.slots[local], register, storage.bytes as u8);
+            }
+        }
         self.mark(local);
     }
     fn write_word(&mut self, local: usize, word: usize, register: u8) {
@@ -232,6 +271,22 @@ impl<'a> Body<'a> {
         self.a.lea(register, BP, self.slots[local]);
     }
     fn trap(&mut self, code: u64) {
+        self.a.immediate(
+            LINE,
+            if self.source_lines {
+                self.site.line as u64
+            } else {
+                1
+            },
+        );
+        self.a.immediate(
+            FILE,
+            if self.source_lines {
+                self.site.file as u64
+            } else {
+                0
+            },
+        );
         self.a.immediate(A, code);
         self.a.jump(self.platform.trap);
     }
@@ -259,16 +314,49 @@ impl<'a> Body<'a> {
         copy_bytes(self.a, self.platform, bytes);
     }
     fn copy_local(&mut self, destination: usize, source: usize) {
+        if destination == source {
+            self.mark(destination);
+            return;
+        }
         let ty = self.ty(destination);
         let scalar = self.layout.storage(ty).scalar;
-        if scalar {
-            self.read(source, A);
-            self.write(destination, A);
+        if self.layout.storage(ty).bytes == 0 {
+            self.mark(destination);
+        } else if scalar {
+            if let Some(from) = self.registers[source] {
+                if let Some(to) = self.registers[destination] {
+                    self.a.mov(to, from);
+                    self.mark(destination);
+                } else {
+                    self.write(destination, from);
+                }
+            } else if let Some(to) = self.registers[destination] {
+                self.read(source, to);
+                self.mark(destination);
+            } else {
+                self.read(source, A);
+                self.write(destination, A);
+            }
         } else {
             self.local_address(destination, DI);
             self.local_address(source, SI);
             self.copy_value(DI, SI, ty);
             self.mark(destination);
+        }
+    }
+    fn copy_from_local(&mut self, destination: u8, source: usize, ty: usize) {
+        let bytes = self.layout.storage(ty).bytes;
+        let scalar = self.layout.storage(ty).scalar;
+        if bytes == 0 {
+            return;
+        }
+        if scalar {
+            self.read(source, A);
+            self.a
+                .store_width(destination, 0, A, self.layout.storage(ty).bytes as u8);
+        } else {
+            self.local_address(source, SI);
+            self.copy_value(destination, SI, ty);
         }
     }
     fn drop_at(&mut self, ty: usize, address: u8) {
@@ -399,12 +487,7 @@ impl<'a> Body<'a> {
         let padded = (stacked + 1) & !1;
         let stack_bytes = padded as u64 * 8;
         if stack_bytes != 0 {
-            self.a.mov(R11, SP);
-            self.a.immediate(A, stack_bytes + 8);
-            self.a.rr(0x29, R11, A, true);
-            self.a.condition(2, self.platform.stack_exhausted);
-            self.a.compare(R11, STACK_FLOOR);
-            self.a.condition(2, self.platform.stack_exhausted);
+            stack_available(self.a, self.platform, stack_bytes + 8, self.site);
         }
         if padded != stacked {
             self.a.immediate(A, 8);
@@ -614,6 +697,9 @@ impl<'a> Body<'a> {
         Ok(())
     }
     fn drop_place(&mut self, place: &Place) -> Result<(), Diagnostic> {
+        if place.projections.is_empty() && !self.layout.storage(self.ty(place.local)).cleanup {
+            return Ok(());
+        }
         let ty = self.place_address(place, DI)?;
         self.partial_drop(ty, place, 0)?;
         self.ownership.change(self.a, place, false);
@@ -629,29 +715,19 @@ impl<'a> Body<'a> {
         };
         self.a
             .location(self.site.file, self.site.line, self.site.column);
-        if self.source_lines
-            && !matches!(
-                instruction.op,
-                Op::Else | Op::End | Op::Loop | Op::Unit { .. } | Op::Int { .. } | Op::Float { .. }
-            )
-        {
-            self.a.immediate(LINE, instruction.line as u64);
-            self.a.immediate(FILE, self.function.file as u64);
-        }
         self.consume_inputs(&instruction.op);
         match &instruction.op {
             Op::Int { dst, value } => {
-                self.a.immediate(A, *value as u64);
-                self.write(*dst, A);
+                let register = self.registers[*dst].unwrap_or(A);
+                self.a.immediate(register, *value as u64);
+                self.write(*dst, register);
             }
             Op::Float { dst, bits } => {
-                self.a.immediate(A, *bits);
-                self.write(*dst, A);
+                let register = self.registers[*dst].unwrap_or(A);
+                self.a.immediate(register, *bits);
+                self.write(*dst, register);
             }
-            Op::Unit { dst } => {
-                self.a.immediate(A, 0);
-                self.write(*dst, A);
-            }
+            Op::Unit { dst } => self.mark(*dst),
             Op::Text { dst, bytes } => {
                 let label = match self.literals.get(bytes) {
                     Some(label) => *label,
@@ -673,9 +749,15 @@ impl<'a> Body<'a> {
                 }
             }
             Op::Read { dst, place, .. } => {
+                if place.projections.is_empty() {
+                    self.copy_local(*dst, place.local);
+                    return Ok(());
+                }
                 let ty = self.place_address(place, SI)?;
                 let scalar = self.layout.storage(ty).scalar;
-                if scalar {
+                if self.layout.storage(ty).bytes == 0 {
+                    self.mark(*dst);
+                } else if scalar {
                     let bytes = self.layout.storage(ty).bytes as u8;
                     let signed = self.layout.storage(ty).signed;
                     self.a.load_width(A, SI, 0, bytes, signed);
@@ -719,9 +801,15 @@ impl<'a> Body<'a> {
                 self.view_range(*dst, place, *start, *end, *inclusive)?;
             }
             Op::Assign { place, src } => {
+                if place.projections.is_empty() {
+                    self.copy_local(place.local, *src);
+                    self.ownership.change(self.a, place, true);
+                    return Ok(());
+                }
                 let ty = self.place_address(place, DI)?;
                 let scalar = self.layout.storage(ty).scalar;
-                if scalar {
+                if self.layout.storage(ty).bytes == 0 {
+                } else if scalar {
                     self.read(*src, A);
                     self.a
                         .store_width(DI, 0, A, self.layout.storage(ty).bytes as u8);
@@ -732,13 +820,13 @@ impl<'a> Body<'a> {
                 self.ownership.change(self.a, place, true);
             }
             Op::Drop { place } | Op::DropIf { place } => self.drop_place(place)?,
-            Op::Unary { dst, op, src } => self.scalar_unary(*dst, op, *src)?,
+            Op::Unary { dst, op, src } => self.scalar_unary(*dst, *op, *src)?,
             Op::Binary {
                 dst,
                 op,
                 left,
                 right,
-            } => self.scalar_binary(*dst, op, *left, *right)?,
+            } => self.scalar_binary(*dst, *op, *left, *right)?,
             Op::Call {
                 dst,
                 function,
@@ -753,8 +841,7 @@ impl<'a> Body<'a> {
                     self.local_address(*dst, DI);
                     self.a
                         .lea(DI, DI, (index as u64 * self.layout.stride(inner)) as i64);
-                    self.local_address(elements[index], SI);
-                    self.copy_value(DI, SI, inner);
+                    self.copy_from_local(DI, elements[index], inner);
                 }
                 self.mark(*dst);
             }
@@ -772,9 +859,8 @@ impl<'a> Body<'a> {
                     self.local_address(*dst, DI);
                     self.a
                         .lea(DI, DI, self.layout.field_offset(ty, variant, index) as i64);
-                    self.local_address(fields[index], SI);
                     let field_ty = self.ty(fields[index]);
-                    self.copy_value(DI, SI, field_ty);
+                    self.copy_from_local(DI, fields[index], field_ty);
                 }
                 self.mark(*dst);
             }
@@ -797,7 +883,7 @@ impl<'a> Body<'a> {
                 self.a.setcc(A, 4);
                 self.write(*dst, A);
             }
-            Op::Intrinsic { dst, name, args } => self.intrinsic(*dst, name, args)?,
+            Op::Intrinsic { dst, name, args } => self.intrinsic(*dst, *name, args)?,
             Op::If { condition } => {
                 let otherwise = self.a.label();
                 let end = self.a.label();
@@ -928,30 +1014,38 @@ fn emit_function(
     let source_lines = selection.source_lines;
     let function = &program.functions[function_index];
     let site = first_site(function);
+    let registers = registers::Registers::new(program, function, layout);
     let mut frame = 0;
     let mut slots = Vec::new();
-    for local in &function.locals {
-        let storage = layout.storage(local.ty);
-        slots.push(allocate_slot(
-            &mut frame,
-            storage.bytes,
-            storage.alignment,
-            site,
-        )?);
+    for index in 0..function.locals.len() {
+        let storage = layout.storage(function.locals[index].ty);
+        slots.push(if registers.locals[index].is_some() || storage.bytes == 0 {
+            0
+        } else {
+            allocate_slot(&mut frame, storage.bytes, storage.alignment, site)?
+        });
+    }
+    let mut saved = Vec::new();
+    for register in &registers.saved {
+        saved.push((*register, allocate_slot(&mut frame, 8, 8, site)?));
     }
     let mut scratch = Vec::new();
     for _ in 0..8 {
         scratch.push(allocate_slot(&mut frame, 8, 8, site)?);
     }
-    let mut ownership = Ownership::new(function);
+    let mut ownership = Ownership::new(function, layout);
     ownership.allocate(&mut frame, site)?;
     let mut partial_scratch = Vec::new();
     for _ in 0..ownership.depth + 2 {
         partial_scratch.push(allocate_slot(&mut frame, 8, 8, site)?);
     }
     let mut incoming = Vec::new();
-    for _ in 0..function.params {
-        incoming.push(allocate_slot(&mut frame, 8, 8, site)?);
+    for index in 0..function.params {
+        incoming.push(if layout.storage(function.locals[index].ty).scalar {
+            0
+        } else {
+            allocate_slot(&mut frame, 8, 8, site)?
+        });
     }
     let result_slot = if layout.storage(function.result).scalar {
         None
@@ -962,13 +1056,26 @@ fn emit_function(
     let return_label = a.label();
     a.location(site.file, site.line, site.column);
     a.bind(functions[function_index]);
-    prologue(a, p, frame);
+    prologue(
+        a,
+        p,
+        frame,
+        if source_lines { site } else { Span::default() },
+    );
+    for (register, slot) in &saved {
+        a.store(BP, *slot, *register);
+    }
     if let Some(slot) = result_slot {
         a.store(BP, slot, DI);
     }
     let hidden = if result_slot.is_some() { 1 } else { 0 };
-    // Spill incoming words before an aggregate copy can clobber argument regs.
+    // Scalar parameters go straight to their storage. Only aggregate pointers
+    // need staging before a copy can clobber the incoming argument registers.
     for index in 0..function.params {
+        let storage = layout.storage(function.locals[index].ty);
+        if storage.bytes == 0 {
+            continue;
+        }
         let abi = index + hidden;
         let register = if abi < 6 {
             parameter_register(abi)
@@ -976,14 +1083,20 @@ fn emit_function(
             a.load(A, BP, 16 + (abi - 6) as i64 * 8);
             A
         };
-        a.store(BP, incoming[index], register);
+        if storage.scalar {
+            if let Some(assigned) = registers.locals[index] {
+                a.mov(assigned, register);
+                a.normalize(assigned, storage.bytes as u8, storage.signed);
+            } else {
+                a.store_width(BP, slots[index], register, storage.bytes as u8);
+            }
+        } else {
+            a.store(BP, incoming[index], register);
+        }
     }
     for index in 0..function.params {
         let storage = layout.storage(function.locals[index].ty);
-        if storage.scalar {
-            a.load(A, BP, incoming[index]);
-            a.store_width(BP, slots[index], A, storage.bytes as u8);
-        } else {
+        if !storage.scalar {
             a.lea(DI, BP, slots[index]);
             a.load(SI, BP, incoming[index]);
             copy_bytes(a, p, storage.bytes);
@@ -998,6 +1111,7 @@ fn emit_function(
         platform: p,
         runtime,
         slots,
+        registers: registers.locals,
         scratch,
         partial_scratch,
         ownership,
@@ -1017,6 +1131,9 @@ fn emit_function(
         body.emit(instruction)?;
     }
     body.a.bind(return_label);
+    for (register, slot) in &saved {
+        body.a.load(*register, BP, *slot);
+    }
     epilogue(body.a);
     Ok(())
 }
@@ -1042,12 +1159,13 @@ fn emit_primitive(a: &mut Assembler, p: platform::Platform, label: Label, primit
             a.ret();
         }
         Primitive::MemoryCopy => {
-            prologue(a, p, 0);
+            prologue(a, p, 0, Span::default());
             a.call(p.copy);
             a.immediate(A, 0);
             epilogue(a);
         }
         Primitive::Map => a.jump(p.map),
+        Primitive::Remap => a.jump(p.remap),
         Primitive::Unmap => a.jump(p.unmap),
         Primitive::AllocatorState => {
             a.address(A, p.allocator_state);
@@ -1082,7 +1200,7 @@ fn emit_drop(
     let drops = selection.drops;
     let runtime = selection.runtime;
     a.bind(drops[ty]);
-    prologue(a, p, 48);
+    prologue(a, p, 48, Span::default());
     a.store(BP, -8, DI);
     if let Some((_, function)) = program.destructors.iter().find(|entry| entry.0 == ty) {
         needed[*function] = true;

@@ -222,7 +222,7 @@ impl Builder<'_, '_> {
             self.emit(
                 ir::Op::Binary {
                     dst,
-                    op: operation[..end].to_string(),
+                    op: ir::BinaryOp::parse(&operation[..end]).unwrap(),
                     left,
                     right: incoming.0,
                 },

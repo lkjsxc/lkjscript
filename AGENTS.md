@@ -15,13 +15,14 @@ Use ir/interpreter/backend in code, lkjscript for commands, and LKJSCRIPT_* vari
 IR text starts with lkjscript-ir 1. No compatibility aliases or obsolete paths.
 
 No resource policy exists except representation facts.
-Request memory from the kernel when needed; report located allocation/stack traps.
+Request memory when needed, adapt to refusal; run under limits that fit actual use.
+Report located allocation/stack traps; never size from RAM or rlimits.
 No default tool budgets, output caps, stack settings or address-space envelopes.
-Keep one generous test watchdog and one heap/one stack exhaustion test.
-Use at most eight workers on this shared host; clean up your own processes.
+Use a generous test watchdog; mutants get a short nontermination allowance.
+Keep one heap/one stack exhaustion test. Use at most eight workers on this shared host; clean up your own processes.
 
 The surface has Rust shape; programs both compilers accept behave the same.
-The optional Rust witness must not constrain lkjscript's design.
+The optional Rust witness must not constrain lkjscript's design; no Clippy gate.
 Apply the two-way rule: add ordinary forms using existing IR/library rules, or
 rewrite a consumer when a rare form would enlarge trusted semantics.
 English everywhere; no Python. All technical decisions are delegated.

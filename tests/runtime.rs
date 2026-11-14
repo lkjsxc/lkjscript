@@ -41,7 +41,7 @@ fn value(
 }
 
 #[test]
-fn source_allocator_reuses_slabs_and_releases_large_mappings() {
+fn source_allocator_reuses_regions_and_releases_dedicated_mappings() {
     let runtime = prepared();
     let mut memory = runtime_memory::Memory::new();
     assert_eq!(value(&runtime, "probe_allocator", &[], &mut memory), 42);
@@ -50,7 +50,12 @@ fn source_allocator_reuses_slabs_and_releases_large_mappings() {
     assert_eq!(value(&runtime, "probe_allocator", &[], &mut memory), 42);
     assert_eq!(memory.mapped_bytes(), retained);
     assert_eq!(memory.mapping_count(), regions);
-    let large = value(&runtime, "allocate", &[65536], &mut memory);
+    let medium = value(&runtime, "allocate", &[65536], &mut memory);
+    assert_eq!(memory.mapped_bytes(), retained);
+    value(&runtime, "release", &[medium], &mut memory);
+    assert_eq!(value(&runtime, "allocate", &[65536], &mut memory), medium);
+    value(&runtime, "release", &[medium], &mut memory);
+    let large = value(&runtime, "allocate", &[2097152], &mut memory);
     assert!(memory.mapped_bytes() > retained);
     value(&runtime, "release", &[large], &mut memory);
     assert_eq!(memory.mapped_bytes(), retained);
@@ -58,6 +63,39 @@ fn source_allocator_reuses_slabs_and_releases_large_mappings() {
         memory.read(large, 1),
         Err(runtime_memory::MemoryFault::Bounds)
     );
+}
+
+#[test]
+fn region_growth_preserves_live_blocks_and_reuses_medium_classes() {
+    let runtime = prepared();
+    let mut memory = runtime_memory::Memory::new();
+    assert_eq!(
+        value(&runtime, "probe_medium_regions", &[], &mut memory),
+        42
+    );
+    let retained = memory.mapped_bytes();
+    let regions = memory.mapping_count();
+    assert_eq!(
+        value(&runtime, "probe_medium_regions", &[], &mut memory),
+        42
+    );
+    assert_eq!(memory.mapped_bytes(), retained);
+    assert_eq!(memory.mapping_count(), regions);
+}
+
+#[test]
+fn refused_geometric_region_retries_a_smaller_request() {
+    let runtime = prepared();
+    let mut memory = runtime_memory::Memory::new();
+    memory.refuse_next_mapping();
+    let pointer = value(&runtime, "allocate", &[8], &mut memory);
+    memory.write(pointer, &[42]).unwrap();
+    assert_eq!(memory.read(pointer, 1).unwrap(), &[42]);
+    assert_eq!(
+        memory.mapped_bytes(),
+        runtime::ALLOCATOR_STATE_BYTES as usize + 32768
+    );
+    value(&runtime, "release", &[pointer], &mut memory);
 }
 
 #[test]
@@ -100,7 +138,7 @@ fn source_utf8_validation_matches_independent_decoding() {
 fn kernel_refusal_and_unrepresentable_allocation_report_heap_failure() {
     let runtime = prepared();
     let mut memory = runtime_memory::Memory::new();
-    memory.refuse_next_mapping();
+    memory.refuse_mappings();
     let refused = interpreter::run_runtime(
         &runtime,
         runtime.function("allocate").unwrap(),
@@ -179,19 +217,21 @@ fn native_packet(name: &str, bytes: Vec<u8>) -> [u64; 3] {
 #[test]
 fn native_allocator_matches_its_independent_raw_model() {
     let runtime = prepared();
-    let mut memory = runtime_memory::Memory::new();
-    let expected = value(&runtime, "probe_allocator", &[], &mut memory);
-    let image = lkjscript::native::encode_runtime(
-        &runtime,
-        lkjscript::native::Entry {
-            function: runtime.function("probe_allocator").unwrap(),
-            arguments: vec![],
-            result_fd: Some(2),
-        },
-    )
-    .unwrap_or_else(|error| panic!("{}: {}", error.code, error.message));
-    let result = native_packet("allocator", image.bytes);
-    assert_eq!((result[0], result[1]), (0, expected));
+    for name in ["probe_allocator", "probe_medium_regions"] {
+        let mut memory = runtime_memory::Memory::new();
+        let expected = value(&runtime, name, &[], &mut memory);
+        let image = lkjscript::native::encode_runtime(
+            &runtime,
+            lkjscript::native::Entry {
+                function: runtime.function(name).unwrap(),
+                arguments: vec![],
+                result_fd: Some(2),
+            },
+        )
+        .unwrap_or_else(|error| panic!("{}: {}", error.code, error.message));
+        let result = native_packet(name, image.bytes);
+        assert_eq!((result[0], result[1]), (0, expected));
+    }
 
     let ordinary = compiler::check_bundle(&bundle(source_text())).unwrap();
     let index = ordinary

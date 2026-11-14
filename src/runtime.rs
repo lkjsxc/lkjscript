@@ -4,8 +4,8 @@ use crate::diagnostic::{Diagnostic, Span};
 use crate::ir::{self, CheckedProgram, Op, TypeKind};
 use std::collections::BTreeMap;
 
-/// One free-list head for each bit position in a 64-bit allocation size.
-pub const ALLOCATOR_STATE_BYTES: u64 = 64 * 8;
+/// Free-list heads, followed by the region cursor, remaining bytes and growth hint.
+pub const ALLOCATOR_STATE_BYTES: u64 = (64 + 3) * 8;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Primitive {
@@ -16,6 +16,7 @@ pub enum Primitive {
     MemoryCopy,
     Map,
     Unmap,
+    Remap,
     AllocatorState,
     Fail,
 }
@@ -24,7 +25,7 @@ impl Primitive {
         match self {
             Self::Load8 | Self::Load64 | Self::Map => 1,
             Self::Store8 | Self::Store64 | Self::Unmap => 2,
-            Self::MemoryCopy => 3,
+            Self::MemoryCopy | Self::Remap => 3,
             Self::AllocatorState | Self::Fail => 0,
         }
     }
@@ -37,6 +38,7 @@ impl Primitive {
             ("raw_memory_copy".to_string(), Self::MemoryCopy),
             ("raw_map".to_string(), Self::Map),
             ("raw_unmap".to_string(), Self::Unmap),
+            ("raw_remap".to_string(), Self::Remap),
             ("raw_allocator_state".to_string(), Self::AllocatorState),
             ("raw_fail".to_string(), Self::Fail),
         ]
@@ -177,7 +179,7 @@ pub fn seal(checked: CheckedProgram) -> Result<Runtime, Diagnostic> {
                 | Op::Return { .. }
                 | Op::BreakTo { .. }
                 | Op::ContinueTo { .. } => true,
-                Op::Intrinsic { name, .. } => name == "cast",
+                Op::Intrinsic { name, .. } => *name == ir::IntrinsicOp::Cast,
                 Op::Read { place, .. }
                 | Op::Assign { place, .. }
                 | Op::Drop { place }

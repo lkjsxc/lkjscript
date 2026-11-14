@@ -159,8 +159,9 @@ The intrinsic signatures are checked in `src/check.rs` and `src/check/io.rs`:
 | `stdin_read file_read file_write` | Use an exclusive authority reference and a byte slice; return i64 count or negative errno. |
 | `stdout_write stderr_write` | Write an immutable byte slice through the corresponding exclusive authority reference. |
 
-Unknown intrinsic names or wrong signatures reject. A type name or integer
-constant cannot forge authority. Raw memory operations are available only through
+Unary, binary and intrinsic names form closed vocabularies. Unknown spellings
+reject with E_IR_TEXT; wrong typed signatures reject at the checker. A type name
+or integer constant cannot forge authority. Raw memory operations are available only through
 the separately checked and sealed runtime interface.
 
 ## Ownership, loans and control

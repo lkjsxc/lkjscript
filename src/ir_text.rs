@@ -314,7 +314,8 @@ fn instruction(words: &[String], line: usize) -> Result<Instruction> {
             exact(words, 5, line)?;
             Op::Unary {
                 dst: number(words, 2, line)?,
-                op: word(words, 3, line)?.to_string(),
+                op: UnaryOp::parse(word(words, 3, line)?)
+                    .ok_or_else(|| error(line, "unknown unary operation"))?,
                 src: number(words, 4, line)?,
             }
         }
@@ -322,7 +323,8 @@ fn instruction(words: &[String], line: usize) -> Result<Instruction> {
             exact(words, 6, line)?;
             Op::Binary {
                 dst: number(words, 2, line)?,
-                op: word(words, 3, line)?.to_string(),
+                op: BinaryOp::parse(word(words, 3, line)?)
+                    .ok_or_else(|| error(line, "unknown binary operation"))?,
                 left: number(words, 4, line)?,
                 right: number(words, 5, line)?,
             }
@@ -363,7 +365,8 @@ fn instruction(words: &[String], line: usize) -> Result<Instruction> {
         },
         "intrinsic" => Op::Intrinsic {
             dst: number(words, 2, line)?,
-            name: word(words, 3, line)?.to_string(),
+            name: IntrinsicOp::parse(word(words, 3, line)?)
+                .ok_or_else(|| error(line, "unknown intrinsic operation"))?,
             args: indices(words, 4, line)?,
         },
         "if" => {
@@ -809,13 +812,18 @@ fn write_instruction(text: &mut String, instruction: &Instruction) {
             text.push_str("drop-if");
             write_place(text, place);
         }
-        Op::Unary { dst, op, src } => text.push_str(&format!("unary {dst} {} {src}", quoted(op))),
+        Op::Unary { dst, op, src } => {
+            text.push_str(&format!("unary {dst} {} {src}", quoted(op.as_str())))
+        }
         Op::Binary {
             dst,
             op,
             left,
             right,
-        } => text.push_str(&format!("binary {dst} {} {left} {right}", quoted(op))),
+        } => text.push_str(&format!(
+            "binary {dst} {} {left} {right}",
+            quoted(op.as_str())
+        )),
         Op::Call {
             dst,
             function,
@@ -846,7 +854,7 @@ fn write_instruction(text: &mut String, instruction: &Instruction) {
             write_place(text, place);
         }
         Op::Intrinsic { dst, name, args } => {
-            text.push_str(&format!("intrinsic {dst} {}", quoted(name)));
+            text.push_str(&format!("intrinsic {dst} {}", quoted(name.as_str())));
             write_indices(text, args);
         }
         Op::If { condition } => text.push_str(&format!("if {condition}")),
@@ -1087,6 +1095,20 @@ mod tests {
     }
 
     #[test]
+    fn unknown_operation_spellings_are_rejected_before_ir_exists() {
+        for instruction in [
+            "unary 0 negate 1",
+            "binary 0 add 1 2",
+            "intrinsic 0 arbitrary 1",
+        ] {
+            let text = format!("lkjscript-ir 1\nfn \"probe\" 0 3\n@7 {instruction}\nendfn\n");
+            let problem = read(&text).err().unwrap();
+            assert_eq!(problem.code, "E_IR_TEXT");
+            assert_eq!(problem.line, 3);
+        }
+    }
+
+    #[test]
     fn names_and_messages_use_json_string_escapes() {
         let name = "quote\" slash\\ newline\n and 雪";
         let p = Program {
@@ -1146,12 +1168,12 @@ mod tests {
             },
             Op::Unary {
                 dst: 0,
-                op: "-".to_string(),
+                op: UnaryOp::Neg,
                 src: 1,
             },
             Op::Binary {
                 dst: 0,
-                op: "+".to_string(),
+                op: BinaryOp::Add,
                 left: 1,
                 right: 2,
             },
@@ -1177,7 +1199,7 @@ mod tests {
             },
             Op::Intrinsic {
                 dst: 0,
-                name: "vec_new".to_string(),
+                name: IntrinsicOp::VecNew,
                 args: Vec::new(),
             },
             Op::If { condition: 0 },

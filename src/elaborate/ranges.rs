@@ -166,14 +166,14 @@ impl Builder<'_, '_> {
                 let receiver = self.borrow(source.clone(), false, span.line)?.0;
                 let dst = self.temp(ir::U64);
                 let name = if matches!(self.compiler.types[referent].kind, ir::TypeKind::Str) {
-                    "str_len"
+                    ir::IntrinsicOp::StrLen
                 } else {
-                    "vec_len"
+                    ir::IntrinsicOp::VecLen
                 };
                 self.emit(
                     ir::Op::Intrinsic {
                         dst,
-                        name: name.to_string(),
+                        name,
                         args: vec![receiver],
                     },
                     span.line,

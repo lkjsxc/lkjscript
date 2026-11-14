@@ -112,7 +112,32 @@ impl Assembler {
         self.raw(&[opcode, 0xc0 | ((src & 7) << 3) | (dst & 7)]);
     }
     pub fn mov(&mut self, dst: u8, src: u8) {
-        self.rr(0x89, dst, src, true);
+        if dst != src {
+            self.rr(0x89, dst, src, true);
+        }
+    }
+    /// Apply a scalar storage width while retaining the value in a register.
+    pub fn normalize(&mut self, reg: u8, bytes: u8, signed: bool) {
+        match bytes {
+            1 | 2 => {
+                self.rex_for(signed, reg, reg, bytes == 1 && reg >= 4);
+                let opcode = if bytes == 1 {
+                    if signed { 0xbe } else { 0xb6 }
+                } else if signed {
+                    0xbf
+                } else {
+                    0xb7
+                };
+                self.raw(&[0x0f, opcode, 0xc0 | ((reg & 7) << 3) | (reg & 7)]);
+            }
+            4 if signed => {
+                self.rex_for(true, reg, reg, false);
+                self.raw(&[0x63, 0xc0 | ((reg & 7) << 3) | (reg & 7)]);
+            }
+            4 => self.rr(0x89, reg, reg, false),
+            8 => {}
+            _ => self.fail("unsupported x86-64 scalar register width"),
+        }
     }
     /// Materialize a bit pattern without changing flags. The payload is 4 or 8 bytes.
     pub fn immediate(&mut self, reg: u8, value: u64) -> usize {
@@ -286,6 +311,10 @@ impl Assembler {
     pub fn call(&mut self, label: Label) {
         self.bytes.push(0xe8);
         self.relative(label);
+    }
+    pub fn jump_register(&mut self, reg: u8) {
+        self.rex_for(false, 0, reg, false);
+        self.raw(&[0xff, 0xe0 | (reg & 7)]);
     }
     pub fn call_register(&mut self, reg: u8) {
         self.rex_for(false, 0, reg, false);

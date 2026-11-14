@@ -1460,7 +1460,7 @@ impl Builder<'_, '_> {
                             self.emit(
                                 ir::Op::Intrinsic {
                                     dst: old,
-                                    name: "replace".to_string(),
+                                    name: ir::IntrinsicOp::Replace,
                                     args: vec![receiver, *src],
                                 },
                                 line,
@@ -2600,7 +2600,14 @@ impl Builder<'_, '_> {
                 }
                 let (src, ty) = self.primitive_operand(value, expected, node.span)?;
                 let dst = self.temp(ty);
-                self.emit(ir::Op::Unary { dst, op, src }, line);
+                self.emit(
+                    ir::Op::Unary {
+                        dst,
+                        op: ir::UnaryOp::parse(&op).unwrap(),
+                        src,
+                    },
+                    line,
+                );
                 Ok((dst, ty))
             }
             a::Expr::Binary { op, left, right } => {
@@ -2638,7 +2645,7 @@ impl Builder<'_, '_> {
                 self.emit(
                     ir::Op::Binary {
                         dst,
-                        op,
+                        op: ir::BinaryOp::parse(&op).unwrap(),
                         left,
                         right,
                     },
@@ -2656,7 +2663,7 @@ impl Builder<'_, '_> {
                 self.emit(
                     ir::Op::Intrinsic {
                         dst,
-                        name: "cast".to_string(),
+                        name: ir::IntrinsicOp::Cast,
                         args: vec![src],
                     },
                     line,
@@ -2727,7 +2734,7 @@ impl Builder<'_, '_> {
                     self.emit(
                         ir::Op::Intrinsic {
                             dst,
-                            name: "array_repeat".to_string(),
+                            name: ir::IntrinsicOp::ArrayRepeat,
                             args: vec![v.0],
                         },
                         line,
@@ -3069,7 +3076,7 @@ impl Builder<'_, '_> {
                 self.emit(
                     ir::Op::Binary {
                         dst: done,
-                        op: "==".to_string(),
+                        op: ir::BinaryOp::Eq,
                         left,
                         right,
                     },
@@ -3095,7 +3102,7 @@ impl Builder<'_, '_> {
             self.emit(
                 ir::Op::Binary {
                     dst,
-                    op: "+".to_string(),
+                    op: ir::BinaryOp::Add,
                     left,
                     right,
                 },
@@ -3146,7 +3153,7 @@ impl Builder<'_, '_> {
             self.emit(
                 ir::Op::Unary {
                     dst: not,
-                    op: "!".to_string(),
+                    op: ir::UnaryOp::Not,
                     src: c,
                 },
                 line,
@@ -3247,7 +3254,11 @@ impl Builder<'_, '_> {
         self.emit(
             ir::Op::Binary {
                 dst: done,
-                op: if inclusive { ">" } else { ">=" }.to_string(),
+                op: if inclusive {
+                    ir::BinaryOp::Gt
+                } else {
+                    ir::BinaryOp::Ge
+                },
                 left,
                 right,
             },
@@ -3392,7 +3403,7 @@ impl Builder<'_, '_> {
             self.emit(
                 ir::Op::Intrinsic {
                     dst: destination,
-                    name: "char_from_u32".to_string(),
+                    name: ir::IntrinsicOp::CharFromU32,
                     args: vec![value.0],
                 },
                 span.line,
@@ -3436,7 +3447,7 @@ impl Builder<'_, '_> {
             self.emit(
                 ir::Op::Intrinsic {
                     dst,
-                    name: "str_from_utf8".to_string(),
+                    name: ir::IntrinsicOp::StrFromUtf8,
                     args: vec![value.0],
                 },
                 line,
@@ -3466,7 +3477,7 @@ impl Builder<'_, '_> {
             self.emit(
                 ir::Op::Intrinsic {
                     dst,
-                    name: "replace".to_string(),
+                    name: ir::IntrinsicOp::Replace,
                     args: vec![receiver.0, value.0],
                 },
                 line,
@@ -3510,7 +3521,7 @@ impl Builder<'_, '_> {
                 self.emit(
                     ir::Op::Intrinsic {
                         dst: d,
-                        name: "box_new".to_string(),
+                        name: ir::IntrinsicOp::BoxNew,
                         args: vec![value.0],
                     },
                     line,
@@ -3540,7 +3551,11 @@ impl Builder<'_, '_> {
             self.emit(
                 ir::Op::Intrinsic {
                     dst,
-                    name: if boxed { "box_new" } else { "vec_new" }.to_string(),
+                    name: if boxed {
+                        ir::IntrinsicOp::BoxNew
+                    } else {
+                        ir::IntrinsicOp::VecNew
+                    },
                     args: values,
                 },
                 line,
@@ -3926,11 +3941,10 @@ impl Builder<'_, '_> {
             ir::Op::Intrinsic {
                 dst,
                 name: if name == "as_bytes" {
-                    "str_as_bytes"
+                    ir::IntrinsicOp::StrAsBytes
                 } else {
-                    "str_len"
-                }
-                .to_string(),
+                    ir::IntrinsicOp::StrLen
+                },
                 args: vec![receiver],
             },
             span.line,
@@ -3948,7 +3962,7 @@ impl Builder<'_, '_> {
             self.emit(
                 ir::Op::Binary {
                     dst: result,
-                    op: "==".to_string(),
+                    op: ir::BinaryOp::Eq,
                     left: dst,
                     right: zero,
                 },
@@ -4130,7 +4144,7 @@ impl Builder<'_, '_> {
                 self.emit(
                     ir::Op::Intrinsic {
                         dst,
-                        name: "vec_len".to_string(),
+                        name: ir::IntrinsicOp::VecLen,
                         args: vec![r],
                     },
                     span.line,
@@ -4151,7 +4165,7 @@ impl Builder<'_, '_> {
                 self.emit(
                     ir::Op::Intrinsic {
                         dst,
-                        name: "vec_push".to_string(),
+                        name: ir::IntrinsicOp::VecPush,
                         args: vec![r, value.0],
                     },
                     span.line,
@@ -4183,7 +4197,7 @@ impl Builder<'_, '_> {
                 self.emit(
                     ir::Op::Intrinsic {
                         dst,
-                        name: "vec_pop".to_string(),
+                        name: ir::IntrinsicOp::VecPop,
                         args: vec![receiver],
                     },
                     span.line,
@@ -4475,7 +4489,7 @@ impl Builder<'_, '_> {
                 self.emit(
                     ir::Op::Intrinsic {
                         dst,
-                        name: "assert".to_string(),
+                        name: ir::IntrinsicOp::Assert,
                         args: vec![condition],
                     },
                     span.line,
@@ -4498,7 +4512,7 @@ impl Builder<'_, '_> {
                 self.emit(
                     ir::Op::Intrinsic {
                         dst,
-                        name: "assert".to_string(),
+                        name: ir::IntrinsicOp::Assert,
                         args: vec![condition],
                     },
                     span.line,
@@ -4547,7 +4561,7 @@ impl Builder<'_, '_> {
                 self.emit(
                     ir::Op::Intrinsic {
                         dst,
-                        name: "vec_new".to_string(),
+                        name: ir::IntrinsicOp::VecNew,
                         args: Vec::new(),
                     },
                     span.line,
@@ -4558,7 +4572,7 @@ impl Builder<'_, '_> {
                     self.emit(
                         ir::Op::Intrinsic {
                             dst: unit,
-                            name: "vec_push".to_string(),
+                            name: ir::IntrinsicOp::VecPush,
                             args: vec![r, value],
                         },
                         span.line,

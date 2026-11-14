@@ -18,5 +18,6 @@
   {"path":"tests/conformance/ir/range_empty.lkjir","entry":"probe"},
   {"path":"tests/conformance/ir/range_mutable.lkjir","entry":"probe"},
   {"path":"tests/conformance/ir/range_utf8.lkjir","entry":"probe"},
-  {"path":"tests/conformance/ir/range_nested_call.lkjir","entry":"probe"}
+  {"path":"tests/conformance/ir/range_nested_call.lkjir","entry":"probe"},
+  {"path":"tests/conformance/ir/self_move_preserves_cleanup.lkjir","entry":"probe"}
 ]

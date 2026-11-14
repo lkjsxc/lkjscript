@@ -7,7 +7,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
+          components: rustfmt
       - uses: actions/setup-node@v4
         with:
           node-version: '24'

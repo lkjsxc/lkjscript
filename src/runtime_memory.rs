@@ -24,6 +24,7 @@ pub struct Memory {
     regions: Vec<Region>,
     next_address: u64,
     refuse_next: bool,
+    refuse_all: bool,
 }
 impl Default for Memory {
     fn default() -> Self {
@@ -40,11 +41,16 @@ impl Memory {
             }],
             next_address: 8192,
             refuse_next: false,
+            refuse_all: false,
         }
     }
     /// Inject a kernel mapping refusal for allocation-failure tests.
     pub fn refuse_next_mapping(&mut self) {
         self.refuse_next = true;
+    }
+    /// Model a kernel that cannot supply another mapping, including retry attempts.
+    pub fn refuse_mappings(&mut self) {
+        self.refuse_all = true;
     }
     pub fn mapped_bytes(&self) -> usize {
         let mut total = 0;
@@ -105,7 +111,7 @@ impl Memory {
         Ok(result)
     }
     fn map(&mut self, bytes: u64) -> u64 {
-        if self.refuse_next {
+        if self.refuse_next || self.refuse_all {
             self.refuse_next = false;
             return 0;
         }
@@ -171,6 +177,28 @@ impl Memory {
         }
         Err(MemoryFault::Bounds)
     }
+    fn remap(&mut self, address: u64, old_bytes: u64, new_bytes: u64) -> Result<u64, MemoryFault> {
+        let old_rounded = old_bytes
+            .checked_add(4095)
+            .map(|size| size & !4095)
+            .ok_or(MemoryFault::Bounds)?;
+        let (index, start, end) = self.range(address, old_rounded)?;
+        if index == 0 || start != 0 || end != self.regions[index].bytes.len() {
+            return Err(MemoryFault::Bounds);
+        }
+        let Some(new_rounded) = new_bytes.checked_add(4095).map(|size| size & !4095) else {
+            return Ok(0);
+        };
+        let replacement = self.map(new_bytes);
+        if replacement == 0 {
+            return Ok(0);
+        }
+        let copied = old_rounded.min(new_rounded);
+        let bytes = self.read(address, copied)?.to_vec();
+        self.write(replacement, &bytes)?;
+        self.unmap(address, old_bytes)?;
+        Ok(replacement)
+    }
     pub(crate) fn invoke(
         &mut self,
         primitive: Primitive,
@@ -194,6 +222,7 @@ impl Memory {
             }
             Primitive::Map => self.map(args[0]),
             Primitive::Unmap => self.unmap(args[0], args[1])?,
+            Primitive::Remap => self.remap(args[0], args[1], args[2])?,
             Primitive::AllocatorState => self.regions[0].base,
             Primitive::Fail => return Err(MemoryFault::Allocation),
         };
@@ -224,5 +253,32 @@ mod tests {
         memory.invoke(Primitive::Unmap, &[left, 4096]).unwrap();
         assert_eq!(memory.read(left, 1), Err(MemoryFault::Bounds));
         assert_eq!(memory.read(right, 4).unwrap(), &[1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn remapping_preserves_contents_and_refusal_keeps_the_old_mapping_live() {
+        let mut memory = Memory::new();
+        let original = memory.invoke(Primitive::Map, &[17]).unwrap();
+        memory.write(original, &[1, 2, 3, 4]).unwrap();
+        memory.write(original + 4095, &[173]).unwrap();
+        memory.refuse_next_mapping();
+        assert_eq!(
+            memory.invoke(Primitive::Remap, &[original, 17, 8192]),
+            Ok(0)
+        );
+        assert_eq!(memory.read(original, 4).unwrap(), &[1, 2, 3, 4]);
+        let grown = memory
+            .invoke(Primitive::Remap, &[original, 4096, 8192])
+            .unwrap();
+        assert_ne!(grown, 0);
+        assert_eq!(memory.read(original, 1), Err(MemoryFault::Bounds));
+        assert_eq!(memory.read(grown, 4).unwrap(), &[1, 2, 3, 4]);
+        assert_eq!(memory.read(grown + 4095, 2).unwrap(), &[173, 0]);
+        assert_eq!(memory.read(grown + 8191, 1).unwrap(), &[0]);
+        assert_eq!(memory.mapping_count(), 2);
+        assert_eq!(
+            memory.invoke(Primitive::Remap, &[grown + 1, 4096, 8192]),
+            Err(MemoryFault::Bounds)
+        );
     }
 }

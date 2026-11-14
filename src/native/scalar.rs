@@ -5,25 +5,26 @@ impl Body<'_> {
     pub(super) fn scalar_unary(
         &mut self,
         dst: usize,
-        op: &str,
+        op: UnaryOp,
         src: usize,
     ) -> Result<(), Diagnostic> {
-        self.read(src, A);
+        let register = self.registers[dst].unwrap_or(A);
+        self.read(src, register);
         match self.program.types[self.ty(src)].kind {
             TypeKind::F64 => {
-                if op != "-" {
+                if op != UnaryOp::Neg {
                     return Err(self.problem("unsupported floating unary operation"));
                 }
                 self.a.immediate(C, 1u64 << 63);
-                self.a.rr(0x31, A, C, true);
+                self.a.rr(0x31, register, C, true);
             }
             TypeKind::Bool => {
                 self.a.immediate(C, 1);
-                self.a.rr(0x31, A, C, true);
+                self.a.rr(0x31, register, C, true);
             }
             TypeKind::Int { bits, signed } => {
-                if op == "!" {
-                    self.a.not(A);
+                if op == UnaryOp::Not {
+                    self.a.not(register);
                 } else {
                     let minimum = if signed { 1u64 << (bits - 1) } else { 0 };
                     if signed {
@@ -33,35 +34,35 @@ impl Body<'_> {
                             0u64.wrapping_sub(minimum)
                         };
                         self.a.immediate(C, minimum);
-                        self.a.compare(A, C);
+                        self.a.compare(register, C);
                         self.trap_if(4, 1);
                     } else {
-                        self.a.test(A, true);
+                        self.a.test(register, true);
                         self.trap_if(5, 1);
                     }
-                    self.a.negate(A);
+                    self.a.negate(register);
                 }
             }
             _ => return Err(self.problem("unsupported scalar unary type")),
         }
-        self.write(dst, A);
+        self.write(dst, register);
         Ok(())
     }
 
-    fn scalar_narrow(&mut self, bits: u8, signed: bool) {
+    fn scalar_narrow(&mut self, register: u8, bits: u8, signed: bool) {
         if bits == 64 {
             return;
         }
         if signed {
             self.a.immediate(D, 0u64.wrapping_sub(1u64 << (bits - 1)));
-            self.a.compare(A, D);
+            self.a.compare(register, D);
             self.trap_if(12, 1);
             self.a.immediate(D, (1u64 << (bits - 1)) - 1);
-            self.a.compare(A, D);
+            self.a.compare(register, D);
             self.trap_if(15, 1);
         } else {
             self.a.immediate(D, (1u64 << bits) - 1);
-            self.a.compare(A, D);
+            self.a.compare(register, D);
             self.trap_if(7, 1);
         }
     }
@@ -69,7 +70,7 @@ impl Body<'_> {
     fn floating_binary(
         &mut self,
         dst: usize,
-        op: &str,
+        op: BinaryOp,
         left: usize,
         right: usize,
     ) -> Result<(), Diagnostic> {
@@ -78,10 +79,10 @@ impl Body<'_> {
         self.a.mov_to_xmm(0, A);
         self.a.mov_to_xmm(1, C);
         let arithmetic = match op {
-            "+" => Some(0x58),
-            "-" => Some(0x5c),
-            "*" => Some(0x59),
-            "/" => Some(0x5e),
+            BinaryOp::Add => Some(0x58),
+            BinaryOp::Sub => Some(0x5c),
+            BinaryOp::Mul => Some(0x59),
+            BinaryOp::Div => Some(0x5e),
             _ => None,
         };
         match arithmetic {
@@ -96,18 +97,19 @@ impl Body<'_> {
             }
             None => {
                 let condition = match op {
-                    "==" => 4,
-                    "!=" => 5,
-                    "<" => 2,
-                    ">" => 7,
-                    "<=" => 6,
-                    ">=" => 3,
+                    BinaryOp::Eq => 4,
+                    BinaryOp::Ne => 5,
+                    BinaryOp::Lt => 2,
+                    BinaryOp::Gt => 7,
+                    BinaryOp::Le => 6,
+                    BinaryOp::Ge => 3,
                     _ => return Err(self.problem("unsupported floating binary operation")),
                 };
                 self.a.f64_compare(0, 1);
                 self.a.setcc(A, condition);
-                self.a.setcc(C, if op == "!=" { 10 } else { 11 });
-                self.a.rr(if op == "!=" { 0x09 } else { 0x21 }, A, C, true);
+                self.a.setcc(C, if op == BinaryOp::Ne { 10 } else { 11 });
+                self.a
+                    .rr(if op == BinaryOp::Ne { 0x09 } else { 0x21 }, A, C, true);
             }
         }
         self.write(dst, A);
@@ -117,7 +119,7 @@ impl Body<'_> {
     pub(super) fn scalar_binary(
         &mut self,
         dst: usize,
-        op: &str,
+        op: BinaryOp,
         left: usize,
         right: usize,
     ) -> Result<(), Diagnostic> {
@@ -130,28 +132,41 @@ impl Body<'_> {
             TypeKind::Char => (32, false),
             _ => return Err(self.problem("unsupported scalar binary type")),
         };
-        self.read(left, A);
+        let assigned = self.registers[dst].unwrap_or(A);
+        let fixed = matches!(op, BinaryOp::Div | BinaryOp::Rem)
+            || (!signed && bits == 64 && op == BinaryOp::Mul);
+        let register = if fixed || self.registers[right] == Some(assigned) {
+            A
+        } else {
+            assigned
+        };
+        self.read(left, register);
         self.read(right, C);
         match op {
-            "==" | "!=" | "<" | ">" | "<=" | ">=" => {
+            BinaryOp::Eq
+            | BinaryOp::Ne
+            | BinaryOp::Lt
+            | BinaryOp::Gt
+            | BinaryOp::Le
+            | BinaryOp::Ge => {
                 let condition = match op {
-                    "==" => 4,
-                    "!=" => 5,
-                    "<" => {
+                    BinaryOp::Eq => 4,
+                    BinaryOp::Ne => 5,
+                    BinaryOp::Lt => {
                         if signed {
                             12
                         } else {
                             2
                         }
                     }
-                    ">" => {
+                    BinaryOp::Gt => {
                         if signed {
                             15
                         } else {
                             7
                         }
                     }
-                    "<=" => {
+                    BinaryOp::Le => {
                         if signed {
                             14
                         } else {
@@ -166,49 +181,49 @@ impl Body<'_> {
                         }
                     }
                 };
-                self.a.compare(A, C);
-                self.a.setcc(A, condition);
+                self.a.compare(register, C);
+                self.a.setcc(register, condition);
             }
-            "+" | "wrapping_add" => {
-                self.a.rr(0x01, A, C, true);
-                if op == "+" {
+            BinaryOp::Add | BinaryOp::WrappingAdd => {
+                self.a.rr(0x01, register, C, true);
+                if op == BinaryOp::Add {
                     if bits == 64 {
                         self.trap_if(if signed { 0 } else { 2 }, 1);
                     }
-                    self.scalar_narrow(bits, signed);
+                    self.scalar_narrow(register, bits, signed);
                 }
             }
-            "-" | "wrapping_sub" => {
-                self.a.rr(0x29, A, C, true);
-                if op == "-" {
+            BinaryOp::Sub | BinaryOp::WrappingSub => {
+                self.a.rr(0x29, register, C, true);
+                if op == BinaryOp::Sub {
                     if bits == 64 {
                         self.trap_if(if signed { 0 } else { 2 }, 1);
                     }
-                    self.scalar_narrow(bits, signed);
+                    self.scalar_narrow(register, bits, signed);
                 }
             }
-            "*" | "wrapping_mul" => {
-                if !signed && bits == 64 && op == "*" {
+            BinaryOp::Mul | BinaryOp::WrappingMul => {
+                if !signed && bits == 64 && op == BinaryOp::Mul {
                     self.a.mul(C);
                     self.a.test(D, true);
                     self.trap_if(5, 1);
                 } else {
-                    self.a.imul(A, C);
-                    if op == "*" {
+                    self.a.imul(register, C);
+                    if op == BinaryOp::Mul {
                         if bits == 64 {
                             self.trap_if(0, 1);
                         }
-                        self.scalar_narrow(bits, signed);
+                        self.scalar_narrow(register, bits, signed);
                     }
                 }
             }
-            "/" | "%" => {
+            BinaryOp::Div | BinaryOp::Rem => {
                 self.a.test(C, true);
                 self.trap_if(4, 2);
                 if signed {
                     let ordinary = self.a.label();
                     self.a.immediate(D, 0u64.wrapping_sub(1u64 << (bits - 1)));
-                    self.a.compare(A, D);
+                    self.a.compare(register, D);
                     self.a.condition(5, ordinary);
                     self.a.immediate(D, !0u64);
                     self.a.compare(C, D);
@@ -219,20 +234,20 @@ impl Body<'_> {
                     self.a.rr(0x31, D, D, true);
                 }
                 self.a.divide(C, signed);
-                if op == "%" {
+                if op == BinaryOp::Rem {
                     self.a.mov(A, D);
                 }
             }
-            "&" | "&&" => self.a.rr(0x21, A, C, true),
-            "|" | "||" => self.a.rr(0x09, A, C, true),
-            "^" => self.a.rr(0x31, A, C, true),
-            "<<" | ">>" => {
+            BinaryOp::BitAnd | BinaryOp::And => self.a.rr(0x21, register, C, true),
+            BinaryOp::BitOr | BinaryOp::Or => self.a.rr(0x09, register, C, true),
+            BinaryOp::BitXor => self.a.rr(0x31, register, C, true),
+            BinaryOp::Shl | BinaryOp::Shr => {
                 self.a.immediate(D, bits as u64);
                 self.a.compare(C, D);
                 self.trap_if(3, 1);
                 self.a.shift_cl(
-                    A,
-                    if op == "<<" {
+                    register,
+                    if op == BinaryOp::Shl {
                         4
                     } else if signed {
                         7
@@ -241,9 +256,8 @@ impl Body<'_> {
                     },
                 );
             }
-            _ => return Err(self.problem("unsupported scalar binary operation")),
         }
-        self.write(dst, A);
+        self.write(dst, register);
         Ok(())
     }
 

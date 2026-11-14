@@ -241,7 +241,7 @@ impl Compiler<'_> {
                 let result = body.local(ir::BOOL);
                 body.emit(ir::Op::Unary {
                     dst: result,
-                    op: "!".to_string(),
+                    op: ir::UnaryOp::Not,
                     src: compared,
                 });
                 body.finish(result);
@@ -256,7 +256,7 @@ impl Compiler<'_> {
                 let old = body.local(instance.receiver);
                 body.emit(ir::Op::Intrinsic {
                     dst: old,
-                    name: "replace".to_string(),
+                    name: ir::IntrinsicOp::Replace,
                     args: vec![0, cloned],
                 });
                 body.emit(ir::Op::Drop {
@@ -518,7 +518,7 @@ impl Generated<'_, '_> {
                 let boxed = self.local(ty);
                 self.emit(ir::Op::Intrinsic {
                     dst: boxed,
-                    name: "box_new".to_string(),
+                    name: ir::IntrinsicOp::BoxNew,
                     args: vec![result],
                 });
                 self.finish(boxed);
@@ -570,7 +570,7 @@ impl Generated<'_, '_> {
         let result = self.local(ir::BOOL);
         self.emit(ir::Op::Binary {
             dst: result,
-            op: operation.to_string(),
+            op: ir::BinaryOp::parse(operation).unwrap(),
             left,
             right,
         });
@@ -846,7 +846,7 @@ impl Generated<'_, '_> {
                 let result = self.local(ir::BOOL);
                 self.emit(ir::Op::Binary {
                     dst: result,
-                    op: "==".to_string(),
+                    op: ir::BinaryOp::Eq,
                     left,
                     right,
                 });

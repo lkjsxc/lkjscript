@@ -25,7 +25,7 @@ impl Builder<'_, '_> {
             self.emit(
                 ir::Op::Unary {
                     dst,
-                    op: "!".to_string(),
+                    op: ir::UnaryOp::Not,
                     src: equal.0,
                 },
                 span.line,

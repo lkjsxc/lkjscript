@@ -1,5 +1,6 @@
 //! One public/raw signature table drives capability inference and construction.
 use super::methods::Receiver;
+use crate::ir;
 #[derive(Clone, Copy)]
 pub(super) enum Value {
     Unit,
@@ -104,22 +105,22 @@ impl Method {
             Method::FileWriteAll => (vec![Value::Bytes], Value::ResultUnit),
         }
     }
-    pub(super) fn intrinsic(self) -> Option<&'static str> {
+    pub(super) fn intrinsic(self) -> Option<ir::IntrinsicOp> {
         Some(match self {
-            Method::Stdout => "world_stdout",
-            Method::Stdin => "world_stdin",
-            Method::Stderr => "world_stderr",
-            Method::ExitStatus => "world_exit_status",
-            Method::ArgCount => "world_arg_count",
-            Method::ArgLen => "world_arg_len",
-            Method::ArgCopy => "world_arg_copy",
-            Method::DirectoryRaw => "world_directory",
-            Method::StdoutWrite => "stdout_write",
-            Method::StderrWrite => "stderr_write",
-            Method::StdinReadRaw => "stdin_read",
-            Method::DirectoryOpenRaw => "directory_open",
-            Method::FileReadRaw => "file_read",
-            Method::FileWriteRaw => "file_write",
+            Method::Stdout => ir::IntrinsicOp::WorldStdout,
+            Method::Stdin => ir::IntrinsicOp::WorldStdin,
+            Method::Stderr => ir::IntrinsicOp::WorldStderr,
+            Method::ExitStatus => ir::IntrinsicOp::WorldExitStatus,
+            Method::ArgCount => ir::IntrinsicOp::WorldArgCount,
+            Method::ArgLen => ir::IntrinsicOp::WorldArgLen,
+            Method::ArgCopy => ir::IntrinsicOp::WorldArgCopy,
+            Method::DirectoryRaw => ir::IntrinsicOp::WorldDirectory,
+            Method::StdoutWrite => ir::IntrinsicOp::StdoutWrite,
+            Method::StderrWrite => ir::IntrinsicOp::StderrWrite,
+            Method::StdinReadRaw => ir::IntrinsicOp::StdinRead,
+            Method::DirectoryOpenRaw => ir::IntrinsicOp::DirectoryOpen,
+            Method::FileReadRaw => ir::IntrinsicOp::FileRead,
+            Method::FileWriteRaw => ir::IntrinsicOp::FileWrite,
             _ => return None,
         })
     }

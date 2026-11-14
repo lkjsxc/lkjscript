@@ -9,6 +9,13 @@ const INITIAL_STACK: i64 = 0;
 const EXIT_STATUS: i64 = 8;
 const PACKET: i64 = 16;
 const TRAP_FILE: i64 = 40;
+const STACK_TOP: i64 = 48;
+const GROW_RETURN: i64 = 56;
+const GROW_NEEDED: i64 = 64;
+const GROW_REQUEST: i64 = 72;
+const GROW_ARGUMENTS: i64 = 80;
+const MEMORY_ARGUMENTS: i64 = 128;
+const TRIM_RETURN: i64 = 152;
 const STACK_RESERVATION: u64 = 1u64 << 46;
 const PAGE_BYTES: u64 = 4096;
 
@@ -19,9 +26,12 @@ pub struct Platform {
     pub trap: Label,
     pub heap_exhausted: Label,
     pub stack_exhausted: Label,
+    pub grow_stack: Label,
+    pub trim_stack: Label,
     pub copy: Label,
     pub map: Label,
     pub unmap: Label,
+    pub remap: Label,
     pub complete: Label,
     pub stdout_write: Label,
     pub stderr_write: Label,
@@ -47,9 +57,12 @@ impl Platform {
             trap: a.label(),
             heap_exhausted: a.label(),
             stack_exhausted: a.label(),
+            grow_stack: a.label(),
+            trim_stack: a.label(),
             copy: a.label(),
             map: a.label(),
             unmap: a.label(),
+            remap: a.label(),
             complete: a.label(),
             stdout_write: a.label(),
             stderr_write: a.label(),
@@ -70,12 +83,10 @@ impl Platform {
     }
 }
 
-/// All platform leaves preserve the IR call site's R14/R15 location.
+/// Platform leaves preserve callee-saved registers except on terminal failures.
 pub fn emit(a: &mut Assembler, p: Platform, entry_label: Label, entry: &Entry) {
     a.address(CONTEXT, p.context);
     a.store(CONTEXT, INITIAL_STACK, SP);
-    a.immediate(LINE, 1);
-    a.immediate(FILE, 0);
     // SIGPIPE is reported through the ordinary output trap.
     a.immediate(A, 13);
     a.immediate(DI, 13);
@@ -86,34 +97,79 @@ pub fn emit(a: &mut Assembler, p: Platform, entry_label: Label, entry: &Entry) {
     let signals_ready = a.label();
     a.test(A, true);
     a.condition(9, signals_ready);
+    a.immediate(LINE, 1);
+    a.immediate(FILE, 0);
     a.immediate(A, 7);
     a.jump(p.trap);
     a.bind(signals_ready);
 
-    // The virtual range is lazy; Linux supplies physical pages as the stack grows.
-    a.immediate(A, 9);
-    a.immediate(DI, 0);
-    a.immediate(SI, STACK_RESERVATION);
+    // Place our stack just below the original kernel stack, above the ordinary
+    // mmap arena. Releasing unused low pages must not invite the next heap map
+    // to occupy the stack's future growth direction.
+    let probe = a.label();
+    let top_ready = a.label();
+    a.load(DI, CONTEXT, INITIAL_STACK);
+    a.immediate(C, !(PAGE_BYTES - 1));
+    a.rr(0x21, DI, C, true);
+    a.bind(probe);
+    a.lea(DI, DI, -(PAGE_BYTES as i64));
+    a.immediate(SI, PAGE_BYTES);
     a.immediate(D, 3);
-    a.immediate(R10, 0x4022); // MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE
+    a.immediate(R10, 0x104022); // FIXED_NOREPLACE | NORESERVE | PRIVATE | ANONYMOUS
     a.immediate(R8, !0u64);
     a.immediate(R9, 0);
+    a.immediate(A, 9);
+    a.syscall();
+    a.immediate(C, (-17i64) as u64); // EEXIST: the original stack still occupies it.
+    a.compare(A, C);
+    a.condition(4, probe);
+    a.immediate(C, (-4095i64) as u64);
+    a.compare(A, C);
+    a.condition(2, top_ready);
+    a.jump(p.stack_exhausted);
+    a.bind(top_ready);
+    a.mov(STACK_FLOOR, A);
+    a.lea(A, A, PAGE_BYTES as i64);
+    a.store(CONTEXT, STACK_TOP, A);
+
+    // Reserve lazily, halving on refusal. The single top page already suffices
+    // to enter the first frame; further growth is requested only when needed.
+    let reserve = a.label();
+    let smaller = a.label();
+    let reserved = a.label();
+    a.immediate(B, STACK_RESERVATION);
+    a.bind(reserve);
+    a.immediate(C, PAGE_BYTES);
+    a.compare(B, C);
+    a.condition(6, reserved);
+    a.mov(SI, B);
+    a.rr(0x29, SI, C, true);
+    a.mov(DI, STACK_FLOOR);
+    a.rr(0x29, DI, SI, true);
+    a.condition(2, smaller);
+    a.immediate(D, 3);
+    a.immediate(R10, 0x104022);
+    a.immediate(R8, !0u64);
+    a.immediate(R9, 0);
+    a.immediate(A, 9);
     a.syscall();
     a.immediate(C, (-4095i64) as u64);
     a.compare(A, C);
-    a.condition(3, p.stack_exhausted);
+    a.condition(3, smaller);
     a.mov(STACK_FLOOR, A);
+    // Leave an unmapped guard below the current floor, without charging it
+    // against an external address-space allowance.
     a.mov(DI, A);
     a.immediate(SI, PAGE_BYTES);
-    a.immediate(D, 0);
-    a.immediate(A, 10);
+    a.immediate(A, 11);
     a.syscall();
-    a.test(A, true);
-    a.condition(8, p.stack_exhausted);
-    a.mov(SP, STACK_FLOOR);
-    a.immediate(A, STACK_RESERVATION);
-    a.rr(0x01, SP, A, true);
     a.lea(STACK_FLOOR, STACK_FLOOR, PAGE_BYTES as i64);
+    a.jump(reserved);
+    a.bind(smaller);
+    a.shift(B, 5, 1);
+    a.jump(reserve);
+    a.bind(reserved);
+    a.load(SP, CONTEXT, STACK_TOP);
     a.immediate(BP, 0);
 
     let registers = [DI, SI, D, C, R8, R9];
@@ -146,9 +202,13 @@ pub fn emit(a: &mut Assembler, p: Platform, entry_label: Label, entry: &Entry) {
     a.jump(p.complete);
 
     a.bind(p.heap_exhausted);
+    a.immediate(LINE, 1);
+    a.immediate(FILE, 0);
     a.immediate(A, 6);
     a.jump(p.trap);
     a.bind(p.stack_exhausted);
+    a.immediate(LINE, 1);
+    a.immediate(FILE, 0);
     a.immediate(A, 8);
     a.jump(p.trap);
     a.bind(p.trap);
@@ -189,6 +249,7 @@ pub fn emit(a: &mut Assembler, p: Platform, entry_label: Label, entry: &Entry) {
     a.syscall();
     a.raw(&[0x0f, 0x0b]);
 
+    stack(a, p);
     memory(a, p);
     io(a, p);
 }
@@ -203,9 +264,108 @@ fn syscall_retry(a: &mut Assembler, number: u64) {
     a.condition(4, retry);
 }
 
+// Both cold stack helpers use context scratch and return by an indirect jump.
+// They never touch an unprovisioned stack page and never alter allocated saved
+// registers. The current platform is single-threaded; future threads need their
+// own context just as they need their own machine stacks.
+fn stack(a: &mut Assembler, p: Platform) {
+    a.bind(p.grow_stack);
+    a.store(CONTEXT, GROW_RETURN, A);
+    a.store(CONTEXT, GROW_NEEDED, R11);
+    let arguments = [DI, SI, D, C, R8, R9];
+    for index in 0..arguments.len() {
+        a.store(CONTEXT, GROW_ARGUMENTS + index as i64 * 8, arguments[index]);
+    }
+    a.immediate(C, !(PAGE_BYTES - 1));
+    a.rr(0x21, R11, C, true);
+    a.store(CONTEXT, GROW_NEEDED, R11);
+    a.mov(D, STACK_FLOOR);
+    a.rr(0x29, D, R11, true);
+    a.load(SI, CONTEXT, STACK_TOP);
+    a.rr(0x29, SI, STACK_FLOOR, true);
+    a.compare(SI, D);
+    a.cmov(SI, D, 2);
+    a.store(CONTEXT, GROW_REQUEST, SI);
+    let growing = a.label();
+    let refused = a.label();
+    let failed = a.label();
+    let restore = a.label();
+    a.bind(growing);
+    a.load(SI, CONTEXT, GROW_REQUEST);
+    a.mov(DI, STACK_FLOOR);
+    a.rr(0x29, DI, SI, true);
+    a.condition(2, refused);
+    a.immediate(D, 3);
+    a.immediate(R10, 0x104022);
+    a.immediate(R8, !0u64);
+    a.immediate(R9, 0);
+    a.immediate(A, 9);
+    a.syscall();
+    a.immediate(C, (-4095i64) as u64);
+    a.compare(A, C);
+    a.condition(3, refused);
+    a.mov(STACK_FLOOR, A);
+    a.immediate(A, 1);
+    a.jump(restore);
+    a.bind(refused);
+    a.load(SI, CONTEXT, GROW_REQUEST);
+    a.mov(D, STACK_FLOOR);
+    a.load(C, CONTEXT, GROW_NEEDED);
+    a.rr(0x29, D, C, true);
+    a.compare(SI, D);
+    a.condition(6, failed);
+    a.shift(SI, 5, 1);
+    a.immediate(C, !(PAGE_BYTES - 1));
+    a.rr(0x21, SI, C, true);
+    a.compare(SI, D);
+    a.cmov(SI, D, 2);
+    a.store(CONTEXT, GROW_REQUEST, SI);
+    a.jump(growing);
+    a.bind(failed);
+    a.immediate(A, 0);
+    a.bind(restore);
+    for index in 0..arguments.len() {
+        a.load(arguments[index], CONTEXT, GROW_ARGUMENTS + index as i64 * 8);
+    }
+    a.load(R11, CONTEXT, GROW_RETURN);
+    a.jump_register(R11);
+
+    a.bind(p.trim_stack);
+    a.store(CONTEXT, TRIM_RETURN, A);
+    a.mov(DI, SP);
+    a.immediate(C, !(PAGE_BYTES - 1));
+    a.rr(0x21, DI, C, true);
+    a.compare(DI, STACK_FLOOR);
+    let unchanged = a.label();
+    let trimmed = a.label();
+    a.condition(6, unchanged);
+    a.store(CONTEXT, GROW_NEEDED, DI);
+    a.mov(SI, DI);
+    a.rr(0x29, SI, STACK_FLOOR, true);
+    a.mov(DI, STACK_FLOOR);
+    a.immediate(A, 11);
+    a.syscall();
+    a.test(A, true);
+    a.condition(8, unchanged);
+    a.load(STACK_FLOOR, CONTEXT, GROW_NEEDED);
+    a.immediate(A, 1);
+    a.jump(trimmed);
+    a.bind(unchanged);
+    a.immediate(A, 0);
+    a.bind(trimmed);
+    a.load(R11, CONTEXT, TRIM_RETURN);
+    a.jump_register(R11);
+}
+
 fn memory(a: &mut Assembler, p: Platform) {
     a.bind(p.map);
-    a.mov(SI, DI);
+    a.store(CONTEXT, MEMORY_ARGUMENTS, DI);
+    let mapping = a.label();
+    let map_trimmed = a.label();
+    let map_failed = a.label();
+    let mapped = a.label();
+    a.bind(mapping);
+    a.load(SI, CONTEXT, MEMORY_ARGUMENTS);
     a.immediate(DI, 0);
     a.immediate(D, 3);
     a.immediate(R10, 0x22);
@@ -213,12 +373,51 @@ fn memory(a: &mut Assembler, p: Platform) {
     a.immediate(R9, 0);
     a.immediate(A, 9);
     a.syscall();
-    let mapped = a.label();
     a.immediate(C, (-4095i64) as u64);
     a.compare(A, C);
     a.condition(2, mapped);
+    a.immediate(C, (-12i64) as u64);
+    a.compare(A, C);
+    a.condition(5, map_failed);
+    a.address(A, map_trimmed);
+    a.jump(p.trim_stack);
+    a.bind(map_trimmed);
+    a.test(A, true);
+    a.condition(5, mapping);
+    a.bind(map_failed);
     a.immediate(A, 0);
     a.bind(mapped);
+    a.ret();
+
+    a.bind(p.remap);
+    a.store(CONTEXT, MEMORY_ARGUMENTS, DI);
+    a.store(CONTEXT, MEMORY_ARGUMENTS + 8, SI);
+    a.store(CONTEXT, MEMORY_ARGUMENTS + 16, D);
+    let remapping = a.label();
+    let remap_trimmed = a.label();
+    let remap_failed = a.label();
+    let remapped = a.label();
+    a.bind(remapping);
+    a.load(DI, CONTEXT, MEMORY_ARGUMENTS);
+    a.load(SI, CONTEXT, MEMORY_ARGUMENTS + 8);
+    a.load(D, CONTEXT, MEMORY_ARGUMENTS + 16);
+    a.immediate(R10, 1); // MREMAP_MAYMOVE
+    a.immediate(A, 25);
+    a.syscall();
+    a.immediate(C, (-4095i64) as u64);
+    a.compare(A, C);
+    a.condition(2, remapped);
+    a.immediate(C, (-12i64) as u64);
+    a.compare(A, C);
+    a.condition(5, remap_failed);
+    a.address(A, remap_trimmed);
+    a.jump(p.trim_stack);
+    a.bind(remap_trimmed);
+    a.test(A, true);
+    a.condition(5, remapping);
+    a.bind(remap_failed);
+    a.immediate(A, 0);
+    a.bind(remapped);
     a.ret();
 
     a.bind(p.unmap);
@@ -312,7 +511,7 @@ fn path(a: &mut Assembler, invalid: Label) {
     a.bind(complete);
 }
 
-fn stream_write(a: &mut Assembler, p: Platform, label: Label, fd: u64) {
+fn stream_write(a: &mut Assembler, label: Label, fd: u64) {
     a.bind(label);
     a.mov(R8, DI);
     a.mov(R9, SI);
@@ -332,8 +531,8 @@ fn stream_write(a: &mut Assembler, p: Platform, label: Label, fd: u64) {
     a.rr(0x29, R9, A, true);
     a.jump(writing);
     a.bind(failed);
-    a.immediate(A, 7);
-    a.jump(p.trap);
+    a.immediate(A, !0u64);
+    a.ret();
     a.bind(done);
     a.immediate(A, 0);
     a.ret();
@@ -368,8 +567,8 @@ fn io(a: &mut Assembler, p: Platform) {
     a.raw(&[0xfc, 0xf3, 0xa4]);
     a.ret();
 
-    stream_write(a, p, p.stdout_write, 1);
-    stream_write(a, p, p.stderr_write, 2);
+    stream_write(a, p.stdout_write, 1);
+    stream_write(a, p.stderr_write, 2);
     a.bind(p.stdin_read);
     a.mov(D, SI);
     a.mov(SI, DI);
@@ -537,7 +736,7 @@ fn diagnostic(a: &mut Assembler, p: Platform) {
 /// Bind RW data labels. offset and all labels are relative to the code start.
 pub fn data(a: &mut Assembler, p: Platform, bytes: &mut Vec<u8>, offset: usize) {
     a.data_label(p.context, offset + bytes.len());
-    bytes.extend_from_slice(&[0u8; 48]);
+    bytes.extend_from_slice(&[0u8; 160]);
     a.data_label(p.signal_action, offset + bytes.len());
     bytes.extend_from_slice(&[1u8, 0, 0, 0, 0, 0, 0, 0]);
     bytes.extend_from_slice(&[0u8; 24]);
@@ -546,7 +745,9 @@ pub fn data(a: &mut Assembler, p: Platform, bytes: &mut Vec<u8>, offset: usize) 
     a.data_label(p.open_how, offset + bytes.len());
     bytes.extend_from_slice(&[0u8; 24]);
     a.data_label(p.allocator_state, offset + bytes.len());
-    bytes.extend_from_slice(&[0u8; 512]);
+    for _ in 0..crate::runtime::ALLOCATOR_STATE_BYTES {
+        bytes.push(0);
+    }
 }
 
 fn put(bytes: &mut [u8], at: usize, value: u64, count: usize) {

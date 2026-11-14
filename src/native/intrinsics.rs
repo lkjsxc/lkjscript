@@ -3,8 +3,7 @@ use super::*;
 
 impl Body<'_> {
     fn intrinsic_unit(&mut self, dst: usize) {
-        self.a.immediate(A, 0);
-        self.write(dst, A);
+        self.mark(dst);
     }
 
     fn intrinsic_open_result(&mut self, dst: usize) {
@@ -29,45 +28,55 @@ impl Body<'_> {
         self.mark(dst);
     }
 
-    fn intrinsic_io(&mut self, dst: usize, name: &str, args: &[usize]) -> Result<bool, Diagnostic> {
-        if name == "world_stdout" || name == "world_stderr" || name == "world_stdin" {
+    fn intrinsic_io(
+        &mut self,
+        dst: usize,
+        name: IntrinsicOp,
+        args: &[usize],
+    ) -> Result<bool, Diagnostic> {
+        if name == IntrinsicOp::WorldStdout
+            || name == IntrinsicOp::WorldStderr
+            || name == IntrinsicOp::WorldStdin
+        {
             self.a.immediate(A, 1);
             self.write(dst, A);
             return Ok(true);
         }
         match name {
-            "stdout_write" | "stderr_write" => {
+            IntrinsicOp::StdoutWrite | IntrinsicOp::StderrWrite => {
                 self.read_word(args[1], 0, DI);
                 self.read_word(args[1], 1, SI);
-                self.a.call(if name == "stdout_write" {
+                self.a.call(if name == IntrinsicOp::StdoutWrite {
                     self.platform.stdout_write
                 } else {
                     self.platform.stderr_write
                 });
+                self.a.test(A, true);
+                self.trap_if(8, 7);
             }
-            "world_arg_count" => self.a.call(self.platform.argument_count),
-            "world_arg_len" => {
+            IntrinsicOp::WorldArgCount => self.a.call(self.platform.argument_count),
+            IntrinsicOp::WorldArgLen => {
                 self.read(args[1], DI);
                 self.a.call(self.platform.argument_length);
             }
-            "world_arg_copy" => {
+            IntrinsicOp::WorldArgCopy => {
                 self.read(args[1], DI);
                 self.read_word(args[2], 0, SI);
                 self.read_word(args[2], 1, D);
                 self.a.call(self.platform.argument_copy);
             }
-            "world_exit_status" => {
+            IntrinsicOp::WorldExitStatus => {
                 self.read(args[1], DI);
                 self.a.call(self.platform.set_exit_status);
             }
-            "world_directory" => {
+            IntrinsicOp::WorldDirectory => {
                 self.read_word(args[1], 0, DI);
                 self.read_word(args[1], 1, SI);
                 self.a.call(self.platform.directory_open);
                 self.intrinsic_open_result(dst);
                 return Ok(true);
             }
-            "directory_open" => {
+            IntrinsicOp::DirectoryOpen => {
                 self.read(args[0], DI);
                 self.a.load(DI, DI, 0);
                 self.read_word(args[1], 0, SI);
@@ -77,17 +86,17 @@ impl Body<'_> {
                 self.intrinsic_open_result(dst);
                 return Ok(true);
             }
-            "stdin_read" => {
+            IntrinsicOp::StdinRead => {
                 self.read_word(args[1], 0, DI);
                 self.read_word(args[1], 1, SI);
                 self.a.call(self.platform.stdin_read);
             }
-            "file_read" | "file_write" => {
+            IntrinsicOp::FileRead | IntrinsicOp::FileWrite => {
                 self.read(args[0], DI);
                 self.a.load(DI, DI, 0);
                 self.read_word(args[1], 0, SI);
                 self.read_word(args[1], 1, D);
-                self.a.call(if name == "file_read" {
+                self.a.call(if name == IntrinsicOp::FileRead {
                     self.platform.file_read
                 } else {
                     self.platform.file_write
@@ -95,7 +104,7 @@ impl Body<'_> {
             }
             _ => return Ok(false),
         }
-        if name == "world_arg_len" || name == "world_arg_copy" {
+        if name == IntrinsicOp::WorldArgLen || name == IntrinsicOp::WorldArgCopy {
             self.a.test(A, true);
             self.trap_if(8, 3);
         }
@@ -142,8 +151,7 @@ impl Body<'_> {
         self.a.imul(A, C);
         self.a.load(DI, R8, 0);
         self.a.rr(0x01, DI, A, true);
-        self.local_address(args[1], SI);
-        self.copy_value(DI, SI, element);
+        self.copy_from_local(DI, args[1], element);
         self.a.load(R8, BP, self.scratch[0]);
         self.a.load(A, BP, self.scratch[1]);
         self.a.immediate(C, 1);
@@ -188,6 +196,22 @@ impl Body<'_> {
     }
 
     fn intrinsic_replace(&mut self, dst: usize, args: &[usize]) {
+        let bytes = self.layout.storage(self.ty(dst)).bytes;
+        let scalar = self.layout.storage(self.ty(dst)).scalar;
+        if bytes == 0 {
+            self.mark(dst);
+            return;
+        }
+        if scalar {
+            self.read(args[0], R8);
+            self.read(args[1], C);
+            let storage = self.layout.storage(self.ty(dst));
+            self.a
+                .load_width(A, R8, 0, storage.bytes as u8, storage.signed);
+            self.a.store_width(R8, 0, C, storage.bytes as u8);
+            self.write(dst, A);
+            return;
+        }
         // Swap a byte at a time so dst may reuse the consumed replacement local.
         self.read(args[0], R8);
         self.local_address(args[1], R9);
@@ -230,8 +254,7 @@ impl Body<'_> {
         self.a.test(A, true);
         self.a.condition(4, done);
         self.a.load(DI, BP, self.scratch[0]);
-        self.local_address(src, SI);
-        self.copy_value(DI, SI, inner);
+        self.copy_from_local(DI, src, inner);
         self.a.load(A, BP, self.scratch[0]);
         self.a.immediate(C, stride);
         self.a.rr(0x01, A, C, true);
@@ -249,43 +272,42 @@ impl Body<'_> {
     pub(super) fn intrinsic(
         &mut self,
         dst: usize,
-        name: &str,
+        name: IntrinsicOp,
         args: &[usize],
     ) -> Result<(), Diagnostic> {
         if self.intrinsic_io(dst, name, args)? {
             return Ok(());
         }
         match name {
-            "assert" => {
+            IntrinsicOp::Assert => {
                 self.read(args[0], A);
                 self.a.test(A, true);
                 self.trap_if(4, 5);
                 self.intrinsic_unit(dst);
             }
-            "cast" => self.scalar_cast(dst, args[0])?,
-            "array_repeat" => self.intrinsic_array_repeat(dst, args[0])?,
-            "replace" => self.intrinsic_replace(dst, args),
-            "box_new" => {
+            IntrinsicOp::Cast => self.scalar_cast(dst, args[0])?,
+            IntrinsicOp::ArrayRepeat => self.intrinsic_array_repeat(dst, args[0])?,
+            IntrinsicOp::Replace => self.intrinsic_replace(dst, args),
+            IntrinsicOp::BoxNew => {
                 let inner = self.ty(args[0]);
                 self.a.immediate(DI, self.layout.storage(inner).bytes);
                 self.a.call(self.runtime.allocate);
                 self.a.store(BP, self.scratch[0], A);
                 self.a.mov(DI, A);
-                self.local_address(args[0], SI);
-                self.copy_value(DI, SI, inner);
+                self.copy_from_local(DI, args[0], inner);
                 self.a.load(A, BP, self.scratch[0]);
                 self.write(dst, A);
             }
-            "vec_new" => {
+            IntrinsicOp::VecNew => {
                 self.a.immediate(A, 0);
                 self.write_word(dst, 0, A);
                 self.write_word(dst, 1, A);
                 self.write_word(dst, 2, A);
                 self.mark(dst);
             }
-            "vec_push" => self.intrinsic_vec_push(dst, args),
-            "vec_pop" => self.intrinsic_vec_pop(dst, args)?,
-            "vec_len" => {
+            IntrinsicOp::VecPush => self.intrinsic_vec_push(dst, args),
+            IntrinsicOp::VecPop => self.intrinsic_vec_pop(dst, args)?,
+            IntrinsicOp::VecLen => {
                 let inner = match self.program.types[self.ty(args[0])].kind {
                     TypeKind::Ref { inner, .. } => inner,
                     _ => return Err(self.problem("vec_len input is not a reference")),
@@ -303,14 +325,24 @@ impl Body<'_> {
                 }
                 self.write(dst, A);
             }
-            "clone" => {
+            IntrinsicOp::Clone => {
                 self.read(args[0], SI);
-                self.local_address(dst, DI);
                 let ty = self.ty(dst);
-                self.copy_value(DI, SI, ty);
-                self.mark(dst);
+                let bytes = self.layout.storage(ty).bytes;
+                let scalar = self.layout.storage(ty).scalar;
+                let signed = self.layout.storage(ty).signed;
+                if bytes == 0 {
+                    self.mark(dst);
+                } else if scalar {
+                    self.a.load_width(A, SI, 0, bytes as u8, signed);
+                    self.write(dst, A);
+                } else {
+                    self.local_address(dst, DI);
+                    self.copy_value(DI, SI, ty);
+                    self.mark(dst);
+                }
             }
-            "char_from_u32" => {
+            IntrinsicOp::CharFromU32 => {
                 let ty = self.ty(dst);
                 let field = self.layout.field_offset(ty, Some(1), 0);
                 let valid = self.a.label();
@@ -335,14 +367,14 @@ impl Body<'_> {
                 self.a.bind(done);
                 self.mark(dst);
             }
-            "str_as_bytes" => {
+            IntrinsicOp::StrAsBytes => {
                 self.copy_local(dst, args[0]);
             }
-            "str_len" => {
+            IntrinsicOp::StrLen => {
                 self.read_word(args[0], 1, A);
                 self.write(dst, A);
             }
-            "str_from_utf8" => {
+            IntrinsicOp::StrFromUtf8 => {
                 let ty = self.ty(dst);
                 let ok_field = self.layout.field_offset(ty, Some(0), 0);
                 let err_field = self.layout.field_offset(ty, Some(1), 0);
@@ -369,7 +401,11 @@ impl Body<'_> {
                 self.a.bind(done);
                 self.mark(dst);
             }
-            _ => return Err(self.problem(&format!("unsupported checked intrinsic {name}"))),
+            _ => {
+                return Err(
+                    self.problem(&format!("unsupported checked intrinsic {}", name.as_str()))
+                );
+            }
         }
         Ok(())
     }

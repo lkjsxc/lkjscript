@@ -54,7 +54,7 @@ impl Builder<'_, '_> {
                     self.emit(
                         ir::Op::Unary {
                             dst: negated,
-                            op: "!".to_string(),
+                            op: ir::UnaryOp::Not,
                             src: if operation == "<" || operation == "<=" {
                                 left
                             } else {
@@ -67,11 +67,10 @@ impl Builder<'_, '_> {
                         ir::Op::Binary {
                             dst: result,
                             op: if operation == "<" || operation == ">" {
-                                "&"
+                                ir::BinaryOp::BitAnd
                             } else {
-                                "|"
-                            }
-                            .to_string(),
+                                ir::BinaryOp::BitOr
+                            },
                             left: negated,
                             right: if operation == "<" || operation == "<=" {
                                 right
@@ -85,7 +84,7 @@ impl Builder<'_, '_> {
                     self.emit(
                         ir::Op::Binary {
                             dst: result,
-                            op: operation.to_string(),
+                            op: ir::BinaryOp::parse(operation).unwrap(),
                             left,
                             right,
                         },
@@ -216,7 +215,7 @@ impl Builder<'_, '_> {
             self.emit(
                 ir::Op::Unary {
                     dst: result,
-                    op: "!".to_string(),
+                    op: ir::UnaryOp::Not,
                     src: dst,
                 },
                 span.line,
@@ -342,7 +341,7 @@ impl Builder<'_, '_> {
                         self.emit(
                             ir::Op::Binary {
                                 dst,
-                                op: operation.to_string(),
+                                op: ir::BinaryOp::parse(operation).unwrap(),
                                 left,
                                 right,
                             },

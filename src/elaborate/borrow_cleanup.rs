@@ -184,13 +184,13 @@ impl Builder<'_, '_> {
             }
             ir::Op::Intrinsic { dst, name, args } => {
                 let mut dependencies = BTreeSet::new();
-                if name == "replace" || name == "clone" {
+                if *name == ir::IntrinsicOp::Replace || *name == ir::IntrinsicOp::Clone {
                     let source = ir::Place {
                         local: args[0],
                         projections: vec![ir::Projection::Deref],
                     };
                     dependencies = self.value_dependencies(&source);
-                    if name == "replace" {
+                    if *name == ir::IntrinsicOp::Replace {
                         let incoming = self
                             .carriers
                             .get(&args[1])

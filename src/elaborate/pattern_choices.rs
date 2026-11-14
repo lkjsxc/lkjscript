@@ -70,7 +70,11 @@ impl Builder<'_, '_> {
             self.emit(
                 ir::Op::Binary {
                     dst,
-                    op: if or { "|" } else { "&" }.to_string(),
+                    op: if or {
+                        ir::BinaryOp::BitOr
+                    } else {
+                        ir::BinaryOp::BitAnd
+                    },
                     left: result,
                     right,
                 },
@@ -261,7 +265,7 @@ impl Builder<'_, '_> {
         self.emit(
             ir::Op::Binary {
                 dst,
-                op: "==".to_string(),
+                op: ir::BinaryOp::Eq,
                 left,
                 right,
             },
@@ -327,7 +331,7 @@ impl Builder<'_, '_> {
                         self.emit(
                             ir::Op::Binary {
                                 dst: condition,
-                                op: "&".to_string(),
+                                op: ir::BinaryOp::BitAnd,
                                 left,
                                 right,
                             },
@@ -359,7 +363,7 @@ impl Builder<'_, '_> {
                         self.emit(
                             ir::Op::Binary {
                                 dst,
-                                op: "|".to_string(),
+                                op: ir::BinaryOp::BitOr,
                                 left: result,
                                 right,
                             },
@@ -461,7 +465,7 @@ impl Builder<'_, '_> {
             self.emit(
                 ir::Op::Binary {
                     dst: condition,
-                    op: "&".to_string(),
+                    op: ir::BinaryOp::BitAnd,
                     left,
                     right,
                 },
@@ -476,7 +480,7 @@ impl Builder<'_, '_> {
             self.emit(
                 ir::Op::Binary {
                     dst: next,
-                    op: "+".to_string(),
+                    op: ir::BinaryOp::Add,
                     left,
                     right,
                 },
@@ -488,7 +492,7 @@ impl Builder<'_, '_> {
             self.emit(
                 ir::Op::Binary {
                     dst: condition,
-                    op: "<".to_string(),
+                    op: ir::BinaryOp::Lt,
                     left,
                     right,
                 },

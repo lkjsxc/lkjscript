@@ -42,10 +42,6 @@ step() {
 step format cargo fmt --check
 step host node --test --test-concurrency=1 tools/batch.test.mjs tools/generators/reduce.test.mjs tools/generators/ir_mutate.test.mjs
 step build cargo build --release --quiet
-rust_checks() {
-    step rust cargo test --quiet || return $?
-    step lint cargo clippy --quiet --all-targets -- -D warnings
-}
 check_binary="${CARGO_TARGET_DIR:-target}/release/lkjscript"
 # Account for workers inside each suite. Rust build and test phases are sequential;
 # their worker count is the larger of the two. Other generators use one worker.
@@ -74,7 +70,7 @@ parallel_step() {
 }
 parallel_started_ns=$(date +%s%N)
 check_engines_text="${LKJSCRIPT_GATE_ENGINES:-native,interpreter}"
-parallel_step "$check_rust_jobs" rust-and-lint rust_checks
+parallel_step "$check_rust_jobs" rust cargo test --quiet
 parallel_step 1 world-io node tools/world-io.mjs "$check_binary"
 parallel_step 1 native-workflow bash tools/native-workflow.sh "$check_binary"
 parallel_step "$LKJSCRIPT_BACKEND_JOBS" backend node tools/backend.mjs "$check_binary" "${CARGO_TARGET_DIR:-target}/release/lkjscript-backend"

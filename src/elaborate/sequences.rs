@@ -93,7 +93,7 @@ impl Builder<'_, '_> {
         self.emit(
             ir::Op::Unary {
                 dst: destination,
-                op: "!".to_string(),
+                op: ir::UnaryOp::Not,
                 src: compared.0,
             },
             span.line,

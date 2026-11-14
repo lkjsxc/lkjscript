@@ -438,7 +438,7 @@ fn conditional_projected_drop_clears_moves_while_strict_drop_rejects_repeated_de
         ir::Op::Int { dst: 0, value: 1 },
         ir::Op::Intrinsic {
             dst: 1,
-            name: "box_new".to_string(),
+            name: ir::IntrinsicOp::BoxNew,
             args: vec![0],
         },
         ir::Op::Struct {
@@ -456,7 +456,7 @@ fn conditional_projected_drop_clears_moves_while_strict_drop_rejects_repeated_de
         ir::Op::Int { dst: 3, value: 2 },
         ir::Op::Intrinsic {
             dst: 4,
-            name: "box_new".to_string(),
+            name: ir::IntrinsicOp::BoxNew,
             args: vec![3],
         },
         ir::Op::Assign {

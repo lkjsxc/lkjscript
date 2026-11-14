@@ -144,7 +144,7 @@ fn replacement(old_local: bool, new_local: bool, return_installed: bool) -> ir::
         },
         ir::Op::Intrinsic {
             dst: 7,
-            name: "replace".to_string(),
+            name: ir::IntrinsicOp::Replace,
             args: vec![6, 5],
         },
     ];
@@ -217,7 +217,7 @@ fn cloned_view(from_local: bool) -> ir::Program {
             },
             ir::Op::Intrinsic {
                 dst: 5,
-                name: "clone".to_string(),
+                name: ir::IntrinsicOp::Clone,
                 args: vec![4],
             },
             drop_local(3),

@@ -45,7 +45,7 @@ fn repeat(program: &ir::Program) -> (usize, usize, usize) {
         .iter()
         .enumerate()
         .find_map(|(index, instruction)| match &instruction.op {
-            ir::Op::Intrinsic { dst, name, args } if name == "array_repeat" => {
+            ir::Op::Intrinsic { dst, name, args } if *name == ir::IntrinsicOp::ArrayRepeat => {
                 assert_eq!(args.len(), 1);
                 Some((index, *dst, args[0]))
             }
@@ -74,7 +74,7 @@ fn repeat_extent_does_not_expand_ir_locals_or_instructions() {
             program.functions[entry_index(program)]
                 .body
                 .iter()
-                .filter(|i| { matches!(&i.op,ir::Op::Intrinsic{name,..} if name=="array_repeat") })
+                .filter(|i| { matches!(&i.op,ir::Op::Intrinsic{name,..} if *name == ir::IntrinsicOp::ArrayRepeat) })
                 .count(),
             1
         );

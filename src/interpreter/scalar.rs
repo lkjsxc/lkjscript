@@ -1,4 +1,4 @@
-use crate::ir::TypeKind;
+use crate::ir::{BinaryOp, TypeKind, UnaryOp};
 
 pub(super) enum NumberError {
     Trap(u8),
@@ -32,21 +32,21 @@ fn float(value: f64) -> u64 {
     }
 }
 
-pub(super) fn unary(kind: &TypeKind, op: &str, value: u64) -> Result<u64, NumberError> {
+pub(super) fn unary(kind: &TypeKind, op: UnaryOp, value: u64) -> Result<u64, NumberError> {
     if matches!(kind, TypeKind::Char) {
         return Err(NumberError::Invalid("invalid character unary operation"));
     }
     if matches!(kind, TypeKind::F64) {
         return match op {
-            "-" => Ok(float(-f64::from_bits(value))),
+            UnaryOp::Neg => Ok(float(-f64::from_bits(value))),
             _ => Err(NumberError::Invalid("invalid floating unary operation")),
         };
     }
     let (bits, signed) = integer(kind)?;
     match op {
-        "!" if matches!(kind, TypeKind::Bool) => Ok(u64::from(value == 0)),
-        "!" => Ok(normalize(!value, bits, signed)),
-        "-" if signed => {
+        UnaryOp::Not if matches!(kind, TypeKind::Bool) => Ok(u64::from(value == 0)),
+        UnaryOp::Not => Ok(normalize(!value, bits, signed)),
+        UnaryOp::Neg if signed => {
             let value = value as i64 as i128;
             if value == -(1i128 << (bits - 1)) {
                 Err(NumberError::Trap(1))
@@ -58,55 +58,76 @@ pub(super) fn unary(kind: &TypeKind, op: &str, value: u64) -> Result<u64, Number
     }
 }
 
-pub(super) fn binary(kind: &TypeKind, op: &str, a: u64, b: u64) -> Result<u64, NumberError> {
-    if matches!(kind, TypeKind::Char) && !["==", "!=", "<", "<=", ">", ">="].contains(&op) {
+pub(super) fn binary(kind: &TypeKind, op: BinaryOp, a: u64, b: u64) -> Result<u64, NumberError> {
+    if matches!(kind, TypeKind::Char)
+        && ![
+            BinaryOp::Eq,
+            BinaryOp::Ne,
+            BinaryOp::Lt,
+            BinaryOp::Le,
+            BinaryOp::Gt,
+            BinaryOp::Ge,
+        ]
+        .contains(&op)
+    {
         return Err(NumberError::Invalid("invalid character binary operation"));
     }
     if matches!(kind, TypeKind::F64) {
         let (a, b) = (f64::from_bits(a), f64::from_bits(b));
         return Ok(match op {
-            "+" => float(a + b),
-            "-" => float(a - b),
-            "*" => float(a * b),
-            "/" => float(a / b),
-            "==" => u64::from(a == b),
-            "!=" => u64::from(a != b),
-            "<" => u64::from(a < b),
-            "<=" => u64::from(a <= b),
-            ">" => u64::from(a > b),
-            ">=" => u64::from(a >= b),
+            BinaryOp::Add => float(a + b),
+            BinaryOp::Sub => float(a - b),
+            BinaryOp::Mul => float(a * b),
+            BinaryOp::Div => float(a / b),
+            BinaryOp::Eq => u64::from(a == b),
+            BinaryOp::Ne => u64::from(a != b),
+            BinaryOp::Lt => u64::from(a < b),
+            BinaryOp::Le => u64::from(a <= b),
+            BinaryOp::Gt => u64::from(a > b),
+            BinaryOp::Ge => u64::from(a >= b),
             _ => return Err(NumberError::Invalid("invalid floating binary operation")),
         });
     }
     let (bits, signed) = integer(kind)?;
-    if matches!(kind, TypeKind::Bool) && !["==", "!=", "&", "|", "^", "&&", "||"].contains(&op) {
+    if matches!(kind, TypeKind::Bool)
+        && ![
+            BinaryOp::Eq,
+            BinaryOp::Ne,
+            BinaryOp::BitAnd,
+            BinaryOp::BitOr,
+            BinaryOp::BitXor,
+            BinaryOp::And,
+            BinaryOp::Or,
+        ]
+        .contains(&op)
+    {
         return Err(NumberError::Invalid("invalid boolean binary operation"));
     }
-    if op == "==" {
+    if op == BinaryOp::Eq {
         return Ok(u64::from(a == b));
     }
-    if op == "!=" {
+    if op == BinaryOp::Ne {
         return Ok(u64::from(a != b));
     }
-    if ["<", "<=", ">", ">="].contains(&op) {
+    if [BinaryOp::Lt, BinaryOp::Le, BinaryOp::Gt, BinaryOp::Ge].contains(&op) {
         let order = if signed {
             (a as i64).cmp(&(b as i64))
         } else {
             a.cmp(&b)
         };
         return Ok(u64::from(match op {
-            "<" => order.is_lt(),
-            "<=" => order.is_le(),
-            ">" => order.is_gt(),
+            BinaryOp::Lt => order.is_lt(),
+            BinaryOp::Le => order.is_le(),
+            BinaryOp::Gt => order.is_gt(),
             _ => order.is_ge(),
         }));
     }
-    if op == "<<" || op == ">>" {
+    if op == BinaryOp::Shl || op == BinaryOp::Shr {
         if b >= u64::from(bits) {
             return Err(NumberError::Trap(1));
         }
         return Ok(normalize(
-            if op == "<<" {
+            if op == BinaryOp::Shl {
                 a << b
             } else if signed {
                 ((a as i64) >> b) as u64
@@ -118,15 +139,15 @@ pub(super) fn binary(kind: &TypeKind, op: &str, a: u64, b: u64) -> Result<u64, N
         ));
     }
     match op {
-        "&" | "&&" => return Ok(normalize(a & b, bits, signed)),
-        "|" | "||" => return Ok(normalize(a | b, bits, signed)),
-        "^" => return Ok(normalize(a ^ b, bits, signed)),
-        "wrapping_add" => return Ok(normalize(a.wrapping_add(b), bits, signed)),
-        "wrapping_sub" => return Ok(normalize(a.wrapping_sub(b), bits, signed)),
-        "wrapping_mul" => return Ok(normalize(a.wrapping_mul(b), bits, signed)),
+        BinaryOp::BitAnd | BinaryOp::And => return Ok(normalize(a & b, bits, signed)),
+        BinaryOp::BitOr | BinaryOp::Or => return Ok(normalize(a | b, bits, signed)),
+        BinaryOp::BitXor => return Ok(normalize(a ^ b, bits, signed)),
+        BinaryOp::WrappingAdd => return Ok(normalize(a.wrapping_add(b), bits, signed)),
+        BinaryOp::WrappingSub => return Ok(normalize(a.wrapping_sub(b), bits, signed)),
+        BinaryOp::WrappingMul => return Ok(normalize(a.wrapping_mul(b), bits, signed)),
         _ => {}
     }
-    if op == "/" || op == "%" {
+    if op == BinaryOp::Div || op == BinaryOp::Rem {
         if b == 0 {
             return Err(NumberError::Trap(2));
         }
@@ -135,16 +156,16 @@ pub(super) fn binary(kind: &TypeKind, op: &str, a: u64, b: u64) -> Result<u64, N
             if a == -(1i128 << (bits - 1)) && b == -1 {
                 return Err(NumberError::Trap(1));
             }
-            return Ok(if op == "/" { a / b } else { a % b } as u64);
+            return Ok(if op == BinaryOp::Div { a / b } else { a % b } as u64);
         }
-        return Ok(if op == "/" { a / b } else { a % b });
+        return Ok(if op == BinaryOp::Div { a / b } else { a % b });
     }
     if signed {
         let (a, b) = (a as i64 as i128, b as i64 as i128);
         let value = match op {
-            "+" => a + b,
-            "-" => a - b,
-            "*" => a * b,
+            BinaryOp::Add => a + b,
+            BinaryOp::Sub => a - b,
+            BinaryOp::Mul => a * b,
             _ => return Err(NumberError::Invalid("unknown binary operation")),
         };
         if value < -(1i128 << (bits - 1)) || value > (1i128 << (bits - 1)) - 1 {
@@ -154,9 +175,9 @@ pub(super) fn binary(kind: &TypeKind, op: &str, a: u64, b: u64) -> Result<u64, N
     } else {
         let (a, b) = (u128::from(a), u128::from(b));
         let value = match op {
-            "+" => a.checked_add(b),
-            "-" => a.checked_sub(b),
-            "*" => a.checked_mul(b),
+            BinaryOp::Add => a.checked_add(b),
+            BinaryOp::Sub => a.checked_sub(b),
+            BinaryOp::Mul => a.checked_mul(b),
             _ => return Err(NumberError::Invalid("unknown binary operation")),
         }
         .ok_or(NumberError::Trap(1))?;

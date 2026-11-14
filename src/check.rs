@@ -1695,7 +1695,7 @@ fn check_intrinsic(
     types: &[Type],
     function: &Function,
     dst: usize,
-    name: &str,
+    name: IntrinsicOp,
     args: &[usize],
     line: usize,
 ) -> Result<(), Diagnostic> {
@@ -1723,7 +1723,7 @@ fn check_intrinsic(
         _ if io::signature(types, dt, &ts, name).is_some() => {
             io::signature(types, dt, &ts, name).unwrap()
         }
-        "char_from_u32" => {
+        IntrinsicOp::CharFromU32 => {
             ts.len() == 1
                 && matches!(
                     types[ts[0]].kind,
@@ -1737,15 +1737,15 @@ fn check_intrinsic(
                     && variants[1].name == "Some" && variants[1].fields.len() == 1
                     && matches!(types[variants[1].fields[0].ty].kind, TypeKind::Char))
         }
-        "array_repeat" => match types[dt].kind {
+        IntrinsicOp::ArrayRepeat => match types[dt].kind {
             TypeKind::Array { inner, len } => {
                 len >= 2 && ts.len() == 1 && ts[0] == inner && is_copy(types, inner)
             }
             _ => false,
         },
-        "str_len" => ts.len() == 1 && text_ref(ts[0]) && dt == U64,
-        "str_as_bytes" => ts.len() == 1 && text_ref(ts[0]) && bytes_ref(dt),
-        "str_from_utf8" => {
+        IntrinsicOp::StrLen => ts.len() == 1 && text_ref(ts[0]) && dt == U64,
+        IntrinsicOp::StrAsBytes => ts.len() == 1 && text_ref(ts[0]) && bytes_ref(dt),
+        IntrinsicOp::StrFromUtf8 => {
             ts.len() == 1
                 && bytes_ref(ts[0])
                 && match &types[dt].kind {
@@ -1761,9 +1761,9 @@ fn check_intrinsic(
                     _ => false,
                 }
         }
-        "assert" => ts == vec![BOOL] && dt == UNIT,
-        "vec_new" => ts.is_empty() && matches!(types[dt].kind, TypeKind::Vec { .. }),
-        "vec_len" => {
+        IntrinsicOp::Assert => ts == vec![BOOL] && dt == UNIT,
+        IntrinsicOp::VecNew => ts.is_empty() && matches!(types[dt].kind, TypeKind::Vec { .. }),
+        IntrinsicOp::VecLen => {
             ts.len() == 1
                 && dt == U64
                 && matches!(types[ts[0]].kind, TypeKind::Ref { .. })
@@ -1772,7 +1772,7 @@ fn check_intrinsic(
                     TypeKind::Array { .. } | TypeKind::Vec { .. } | TypeKind::Slice { .. }
                 )
         }
-        "vec_push" => {
+        IntrinsicOp::VecPush => {
             ts.len() == 2
                 && dt == UNIT
                 && match types[ts[0]].kind {
@@ -1785,7 +1785,7 @@ fn check_intrinsic(
                     _ => false,
                 }
         }
-        "vec_pop" => {
+        IntrinsicOp::VecPop => {
             ts.len() == 1
                 && match types[ts[0]].kind {
                     TypeKind::Ref {
@@ -1802,15 +1802,15 @@ fn check_intrinsic(
                     _ => false,
                 }
         }
-        "replace" => {
+        IntrinsicOp::Replace => {
             ts.len() == 2
                 && ts[1] == dt
                 && matches!(types[ts[0]].kind, TypeKind::Ref { inner, mutable: true } if inner == dt)
         }
-        "box_new" => {
+        IntrinsicOp::BoxNew => {
             ts.len() == 1 && matches!(types[dt].kind, TypeKind::Box { inner } if inner == ts[0])
         }
-        "cast" => {
+        IntrinsicOp::Cast => {
             ts.len() == 1
                 && match (&types[ts[0]].kind, &types[dt].kind) {
                     (TypeKind::Bool | TypeKind::Char, TypeKind::Int { .. }) => true,
@@ -1829,7 +1829,7 @@ fn check_intrinsic(
                     _ => false,
                 }
         }
-        "clone" => {
+        IntrinsicOp::Clone => {
             ts.len() == 1
                 && dt == inner(ts[0])
                 && matches!(types[ts[0]].kind, TypeKind::Ref { .. })
@@ -2107,9 +2107,9 @@ fn check_shape(
         }
         Op::Unary { dst, op, src } => {
             let t = ty(*src)?;
-            let valid = match (op.as_str(), &types[t].kind) {
-                ("-", TypeKind::Int { signed: true, .. } | TypeKind::F64) => true,
-                ("!", TypeKind::Int { .. } | TypeKind::Bool) => true,
+            let valid = match (*op, &types[t].kind) {
+                (UnaryOp::Neg, TypeKind::Int { signed: true, .. } | TypeKind::F64) => true,
+                (UnaryOp::Not, TypeKind::Int { .. } | TypeKind::Bool) => true,
                 _ => false,
             };
             if ty(*dst)? != t || !valid {
@@ -2126,40 +2126,67 @@ fn check_shape(
             if t != ty(*right)? {
                 return Err(error(line, "E_TYPE", "binary operand types differ"));
             }
-            let comparison = matches!(op.as_str(), "==" | "!=" | "<" | "<=" | ">" | ">=");
+            let comparison = matches!(
+                *op,
+                BinaryOp::Eq
+                    | BinaryOp::Ne
+                    | BinaryOp::Lt
+                    | BinaryOp::Le
+                    | BinaryOp::Gt
+                    | BinaryOp::Ge
+            );
             if ty(*dst)? != if comparison { BOOL } else { t } {
                 return Err(error(line, "E_TYPE", "binary result type differs"));
             }
             let allowed = match types[t].kind {
                 TypeKind::Bool => {
-                    matches!(op.as_str(), "==" | "!=" | "&" | "|" | "^" | "&&" | "||")
+                    matches!(
+                        *op,
+                        BinaryOp::Eq
+                            | BinaryOp::Ne
+                            | BinaryOp::BitAnd
+                            | BinaryOp::BitOr
+                            | BinaryOp::BitXor
+                            | BinaryOp::And
+                            | BinaryOp::Or
+                    )
                 }
                 TypeKind::Char => comparison,
                 TypeKind::Int { .. } => matches!(
-                    op.as_str(),
-                    "+" | "-"
-                        | "*"
-                        | "/"
-                        | "%"
-                        | "&"
-                        | "|"
-                        | "^"
-                        | "<<"
-                        | ">>"
-                        | "=="
-                        | "!="
-                        | "<"
-                        | "<="
-                        | ">"
-                        | ">="
-                        | "wrapping_add"
-                        | "wrapping_sub"
-                        | "wrapping_mul"
+                    *op,
+                    BinaryOp::Add
+                        | BinaryOp::Sub
+                        | BinaryOp::Mul
+                        | BinaryOp::Div
+                        | BinaryOp::Rem
+                        | BinaryOp::BitAnd
+                        | BinaryOp::BitOr
+                        | BinaryOp::BitXor
+                        | BinaryOp::Shl
+                        | BinaryOp::Shr
+                        | BinaryOp::Eq
+                        | BinaryOp::Ne
+                        | BinaryOp::Lt
+                        | BinaryOp::Le
+                        | BinaryOp::Gt
+                        | BinaryOp::Ge
+                        | BinaryOp::WrappingAdd
+                        | BinaryOp::WrappingSub
+                        | BinaryOp::WrappingMul
                 ),
                 TypeKind::F64 => {
                     matches!(
-                        op.as_str(),
-                        "+" | "-" | "*" | "/" | "==" | "!=" | "<" | "<=" | ">" | ">="
+                        *op,
+                        BinaryOp::Add
+                            | BinaryOp::Sub
+                            | BinaryOp::Mul
+                            | BinaryOp::Div
+                            | BinaryOp::Eq
+                            | BinaryOp::Ne
+                            | BinaryOp::Lt
+                            | BinaryOp::Le
+                            | BinaryOp::Gt
+                            | BinaryOp::Ge
                     )
                 }
                 _ => false,
@@ -2255,7 +2282,7 @@ fn check_shape(
             }
         }
         Op::Intrinsic { dst, name, args } => {
-            check_intrinsic(types, function, *dst, name, args, line)?
+            check_intrinsic(types, function, *dst, *name, args, line)?
         }
         Op::If { condition } => {
             if ty(*condition)? != BOOL {
@@ -3103,11 +3130,11 @@ fn check_function_body(
                 }
             }
             Op::Intrinsic { dst, name, args } => {
-                if name == "str_as_bytes" || name == "str_from_utf8" {
+                if *name == IntrinsicOp::StrAsBytes || *name == IntrinsicOp::StrFromUtf8 {
                     let source = Place::local(args[0]);
                     let destination = Place {
                         local: *dst,
-                        projections: if name == "str_from_utf8" {
+                        projections: if *name == IntrinsicOp::StrFromUtf8 {
                             vec![Projection::VariantField(0, 0)]
                         } else {
                             Vec::new()
@@ -3119,13 +3146,13 @@ fn check_function_body(
                     consume(&mut state, types, function, args[0], line)?;
                     put(&mut state, *dst, line)?;
                     install_provenance(&mut state, returned);
-                } else if name == "replace" || name == "clone" {
+                } else if *name == IntrinsicOp::Replace || *name == IntrinsicOp::Clone {
                     let place = Place {
                         local: args[0],
                         projections: vec![Projection::Deref],
                     };
                     let resolved = resolve_origin(&state, &place);
-                    if name == "replace"
+                    if *name == IntrinsicOp::Replace
                         && !resolved.exact()
                         && is_view(types, function.locals[*dst].ty)
                     {
@@ -3141,7 +3168,7 @@ fn check_function_body(
                     let mut returned =
                         carried_provenance(&state, types, function, &place, &destination, line)?;
                     let old_tag = tag_at(&state, &targets, &stored);
-                    let incoming = if name == "replace" {
+                    let incoming = if *name == IntrinsicOp::Replace {
                         let source = Place::local(args[1]);
                         let value =
                             carried_provenance(&state, types, function, &source, &stored, line)?;
@@ -4399,7 +4426,7 @@ mod tests {
                     Op::Int { dst: 0, value: 1 },
                     Op::Intrinsic {
                         dst: 1,
-                        name: "cast".to_string(),
+                        name: IntrinsicOp::Cast,
                         args: vec![0],
                     },
                     Op::Return { src: 1 },

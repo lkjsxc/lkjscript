@@ -2844,7 +2844,7 @@
     "id": "integer_wrapping_unknown",
     "file": "ir/integer_wrapping_unknown.lkjir",
     "kind": "reject",
-    "code": "E_TYPE",
+    "code": "E_IR_TEXT",
     "rust": false
   },
   {
@@ -6712,6 +6712,22 @@
   {
     "id": "inline_call_result_reuses_argument",
     "file": "ir/inline_call_result_reuses_argument.lkjir",
+    "kind": "run",
+    "value": "42",
+    "rust": false
+  },
+  {
+    "id": "unused_box_drop",
+    "file": "output/unused_box_drop.rs",
+    "kind": "output",
+    "hex": "4d51",
+    "ending": "normal",
+    "rust": true,
+    "pending": false
+  },
+  {
+    "id": "self_move_preserves_cleanup",
+    "file": "ir/self_move_preserves_cleanup.lkjir",
     "kind": "run",
     "value": "42",
     "rust": false

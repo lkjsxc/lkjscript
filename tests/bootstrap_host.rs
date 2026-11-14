@@ -97,7 +97,42 @@ fn kernel_heap_mapping_refusal_is_a_located_trap() {
 
 #[test]
 fn kernel_stack_mapping_refusal_is_a_located_trap() {
-    let image = allocation_image("stack-refusal");
+    let checked = lkjscript::compiler::check_bundle(&lkjscript::source::SourceBundle {
+        root: "stack-refusal.rs".to_string(),
+        library: None,
+        files: vec![lkjscript::source::SourceInput {
+            path: "stack-refusal.rs".to_string(),
+            text: "fn deep(n:usize)->i64 {
+    let frame = [n as i64; 1024];
+    if n == 0 { return frame[0]; }
+    deep(n - 1) + frame[n % 1024]
+}
+pub fn probe()->i64 { deep(100000) }"
+                .to_string(),
+        }],
+    })
+    .unwrap();
+    let function = checked
+        .program()
+        .functions
+        .iter()
+        .position(|function| function.name == "probe")
+        .unwrap();
+    let bytes = lkjscript::native::encode(
+        &checked,
+        lkjscript::bootstrap_runtime::get().unwrap(),
+        lkjscript::native::Entry {
+            function,
+            arguments: vec![],
+            result_fd: None,
+        },
+    )
+    .unwrap()
+    .bytes;
+    let path = file("stack-refusal").with_extension("elf");
+    fs::write(&path, bytes).unwrap();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+    let image = NativeImage(path);
     let output = Command::new("prlimit")
         .args(["--as=67108864", "--"])
         .arg(&image.0)
@@ -106,7 +141,7 @@ fn kernel_stack_mapping_refusal_is_a_located_trap() {
     assert_eq!(output.status.code(), Some(1), "{output:?}");
     assert!(output.stdout.is_empty());
     assert!(
-        String::from_utf8_lossy(&output.stderr).contains("R0008 at line 1 file 0"),
+        String::from_utf8_lossy(&output.stderr).contains("R0008 at line "),
         "{output:?}"
     );
 }

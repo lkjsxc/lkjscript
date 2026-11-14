@@ -29,7 +29,7 @@ fn character_construction_checks_its_signature_on_both_ir_boundaries() {
     let instruction = original.functions[entry]
         .body
         .iter()
-        .position(|i| matches!(&i.op, ir::Op::Intrinsic {name,..} if name == "char_from_u32"))
+        .position(|i| matches!(&i.op, ir::Op::Intrinsic {name,..} if *name == ir::IntrinsicOp::CharFromU32))
         .unwrap();
     let (destination, argument) = match &original.functions[entry].body[instruction].op {
         ir::Op::Intrinsic { dst, args, .. } => (*dst, args[0]),

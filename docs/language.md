@@ -741,7 +741,7 @@ use rel32; an unrepresentable displacement produces a located emission error.
 
 | Value or operation | Representation |
 | --- | --- |
-| Scalars | Natural 1/2/4/8-byte stack storage and machine registers. |
+| Scalars | Allocated registers; natural 1/2/4/8-byte frame storage when spilled or addressed. |
 | Structs and tuples | Inline aligned fields, including in parents and collections. |
 | Enums | Inline tag and storage for the largest payload. |
 | Arrays | Inline elements at their natural aligned stride. |
@@ -752,16 +752,17 @@ use rel32; an unrepresentable displacement produces a located emission error.
 | Aggregate call/result | Callee frame copy and caller-provided result storage. |
 | Conditional cleanup | Frame flags for initialized paths and moved fields. |
 
-The machine stack holds frames. Startup maps a lazy stack with a guard page;
-prologues report exhaustion as R0008. The allocator requests kernel mappings as
-needed and reports refusal as R0006. Startup reads neither physical memory nor
-resource limits. Only Box, Vec and String payloads require heap storage.
+| Mechanism | Contract |
+| --- | --- |
+| Stack | Stable machine addresses; lazy reservation retries smaller extents. Heap pressure releases unused reservation; recursive calls regrow pages. Exhaustion reports R0008. |
+| Small/medium allocations | Slabs and reusable size classes carved from geometrically grown regions. Refused region requests retry down to the required extent. |
+| Large allocations | Dedicated kernel mappings; growth remaps existing storage. Persistent refusal reports R0006. |
+| Runtime authority | Checked source sealed over raw load/store/copy/map/unmap/remap. Ordinary names cannot obtain these bindings. |
+| Runtime checks | Collection bounds; integer overflow, division and shift validity; UTF-8 and active tags. F64 arithmetic canonicalizes NaNs. |
+| Trap locations | Materialized on failure paths. Checked-operation lines remain exact; allocation/stack failures may name a runtime or function location. |
 
-Collection access checks bounds. Integer arithmetic, division and invalid shifts
-trap. F64 arithmetic canonicalizes NaNs. Traps retain a code and IR location.
-The source runtime implements allocation, reuse, growth and UTF-8 validation.
-Its checked IR is sealed over raw load/store/copy/map/unmap operations;
-ordinary program names cannot request those bindings.
+Neither stack nor allocator reads physical memory or resource limits. Box, Vec
+and String payloads require heap storage; aggregate values remain inline.
 
 Structural destruction invokes the custom destructor before fields, then visits
 fields/elements in declaration order. Moved fields are skipped. Loop temporaries

@@ -492,7 +492,8 @@ fn bounded_write(replace: bool, reference_value: bool, mutate_referent: bool) ->
     }
     if !replace {
         for instruction in &mut program.functions[2].body {
-            if matches!(&instruction.op, ir::Op::Intrinsic { name, .. } if name == "replace") {
+            if matches!(&instruction.op, ir::Op::Intrinsic { name, .. } if *name == ir::IntrinsicOp::Replace)
+            {
                 instruction.op = ir::Op::Assign {
                     place: place(7, vec![ir::Projection::Deref]),
                     src: 8,

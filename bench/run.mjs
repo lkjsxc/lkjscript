@@ -4,7 +4,7 @@ import {spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
-const options={compiler:'target/release/lkjscript',previous:'target/rename-fixed-point/twin',out:'target/bench'};
+const options={compiler:'target/release/lkjscript',previous:'',out:'target/bench'};
 for(let i=2;i<process.argv.length;i+=2){
  const name=process.argv[i].slice(2);
  if(!Object.hasOwn(options,name)||!process.argv[i+1])throw new Error('usage: node bench/run.mjs [--compiler path] [--previous path] [--out path]');
@@ -38,11 +38,13 @@ function same(reference,result,description){
 const programs=[
  {name:'aggregate',arguments:['20000000','7'],small:['13','7']},
  {name:'scalar',arguments:['200000000','7'],small:['13','7']},
+ {name:'scalar_add',arguments:['200000000','7'],small:['13','7']},
+ {name:'buffers',arguments:['200000','1000','7'],small:['127','19','7']},
  {name:'vector',arguments:['100000000','5000000','7'],small:['127','19','7']},
 ];
 const routes=[
  {name:'native',compiler:path.resolve(root,options.compiler)},
- ...(fs.existsSync(path.resolve(root,options.previous))?[{name:'previous',compiler:path.resolve(root,options.previous)}]:[]),
+ ...(options.previous&&fs.existsSync(path.resolve(root,options.previous))?[{name:'previous',compiler:path.resolve(root,options.previous)}]:[]),
  {name:'rustc0',opt:'0'},
  {name:'rustcO',opt:'3'},
 ];
@@ -68,12 +70,12 @@ for(const program of programs){
  let reference;
  for(const image of images){
   const rssFile=path.join(output,program.name+'-'+image.name+'.rss');
-  const result=await run('/usr/bin/time',['-f','%M','-o',rssFile,image.image,...program.arguments]);
+  const result=await run('/usr/bin/time',['-f','%M %U %S','-o',rssFile,image.image,...program.arguments]);
   if(reference===undefined)reference=result.stdout;
   same(reference,result,program.name+'/'+image.name);
-  const peakKiB=Number(fs.readFileSync(rssFile,'utf8').trim());
+  const [peakKiB,userSeconds,systemSeconds]=fs.readFileSync(rssFile,'utf8').trim().split(/\s+/).map(Number);
   fs.unlinkSync(rssFile);
-  measurements.push({program:program.name,route:image.name,arguments:program.arguments,seconds:result.seconds,peakKiB,bytes:image.bytes,result:result.stdout.toString().trim()});
+  measurements.push({program:program.name,route:image.name,arguments:program.arguments,seconds:result.seconds,userSeconds,systemSeconds,peakKiB,bytes:image.bytes,result:result.stdout.toString().trim()});
  }
 }
 const lookup=(program,route)=>measurements.find(row=>row.program===program&&row.route===route);
@@ -85,8 +87,8 @@ for(const program of programs){
  const last=previous?.measurements?.find(row=>row.program===program.name&&row.route==='native');
  console.log('| '+[program.name,time(current),time(old),time(rust),time(lookup(program.name,'rustcO')),(current.seconds/rust.seconds).toFixed(2)+'x',old?(old.seconds/current.seconds).toFixed(2)+'x':'—',time(last)].join(' | ')+' |');
 }
-console.log('\n| Program / route | Peak RSS KiB | ELF bytes | Result |');
-console.log('| --- | ---: | ---: | ---: |');
-for(const row of measurements)console.log('| '+[row.program+'/'+row.route,row.peakKiB,row.bytes,row.result].join(' | ')+' |');
+console.log('\n| Program / route | User s | Kernel s | Peak RSS KiB | ELF bytes | Result |');
+console.log('| --- | ---: | ---: | ---: | ---: | ---: |');
+for(const row of measurements)console.log('| '+[row.program+'/'+row.route,row.userSeconds.toFixed(2),row.systemSeconds.toFixed(2),row.peakKiB,row.bytes,row.result].join(' | ')+' |');
 const report={measuredAt:new Date().toISOString(),compiler:options.compiler,previousCompiler:options.previous,measurements};
 fs.writeFileSync(previousFile,JSON.stringify(report,null,2)+'\n');

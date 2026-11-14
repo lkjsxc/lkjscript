@@ -23,55 +23,60 @@ fn opened(types: &[Type], ty: usize, kind: &TypeKind) -> bool {
         _ => false,
     }
 }
-pub(super) fn signature(types: &[Type], result: usize, args: &[usize], name: &str) -> Option<bool> {
+pub(super) fn signature(
+    types: &[Type],
+    result: usize,
+    args: &[usize],
+    name: IntrinsicOp,
+) -> Option<bool> {
     let valid = match name {
-        "world_stdout" | "world_stdin" | "world_stderr" => {
+        IntrinsicOp::WorldStdout | IntrinsicOp::WorldStdin | IntrinsicOp::WorldStderr => {
             let kind = match name {
-                "world_stdout" => TypeKind::Stdout,
-                "world_stdin" => TypeKind::Stdin,
+                IntrinsicOp::WorldStdout => TypeKind::Stdout,
+                IntrinsicOp::WorldStdin => TypeKind::Stdin,
                 _ => TypeKind::Stderr,
             };
             args.len() == 1
                 && authority(types, args[0], &TypeKind::World)
                 && types[result].kind == kind
         }
-        "world_arg_count" => {
+        IntrinsicOp::WorldArgCount => {
             args.len() == 1 && authority(types, args[0], &TypeKind::World) && result == U64
         }
-        "world_arg_len" => {
+        IntrinsicOp::WorldArgLen => {
             args.len() == 2
                 && authority(types, args[0], &TypeKind::World)
                 && args[1] == U64
                 && result == U64
         }
-        "world_arg_copy" => {
+        IntrinsicOp::WorldArgCopy => {
             args.len() == 3
                 && authority(types, args[0], &TypeKind::World)
                 && args[1] == U64
                 && bytes(types, args[2], true)
                 && result == U64
         }
-        "world_exit_status" => {
+        IntrinsicOp::WorldExitStatus => {
             args.len() == 2
                 && authority(types, args[0], &TypeKind::World)
                 && args[1] == U8
                 && result == UNIT
         }
-        "world_directory" => {
+        IntrinsicOp::WorldDirectory => {
             args.len() == 2
                 && authority(types, args[0], &TypeKind::World)
                 && bytes(types, args[1], false)
                 && opened(types, result, &TypeKind::Directory)
         }
-        "directory_open" => {
+        IntrinsicOp::DirectoryOpen => {
             args.len() == 3
                 && authority(types, args[0], &TypeKind::Directory)
                 && bytes(types, args[1], false)
                 && args[2] == BOOL
                 && opened(types, result, &TypeKind::File)
         }
-        "stdin_read" | "file_read" => {
-            let kind = if name == "stdin_read" {
+        IntrinsicOp::StdinRead | IntrinsicOp::FileRead => {
+            let kind = if name == IntrinsicOp::StdinRead {
                 TypeKind::Stdin
             } else {
                 TypeKind::File
@@ -81,14 +86,14 @@ pub(super) fn signature(types: &[Type], result: usize, args: &[usize], name: &st
                 && bytes(types, args[1], true)
                 && result == I64
         }
-        "file_write" => {
+        IntrinsicOp::FileWrite => {
             args.len() == 2
                 && authority(types, args[0], &TypeKind::File)
                 && bytes(types, args[1], false)
                 && result == I64
         }
-        "stdout_write" | "stderr_write" => {
-            let kind = if name == "stdout_write" {
+        IntrinsicOp::StdoutWrite | IntrinsicOp::StderrWrite => {
+            let kind = if name == IntrinsicOp::StdoutWrite {
                 TypeKind::Stdout
             } else {
                 TypeKind::Stderr

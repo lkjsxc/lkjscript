@@ -98,7 +98,7 @@ fn text(dst: usize, value: &str) -> ir::Op {
 fn intrinsic(dst: usize, name: &str, args: &[usize]) -> ir::Op {
     ir::Op::Intrinsic {
         dst,
-        name: name.to_string(),
+        name: ir::IntrinsicOp::parse(name).unwrap(),
         args: args.to_vec(),
     }
 }

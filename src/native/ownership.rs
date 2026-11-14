@@ -19,7 +19,7 @@ fn prefix(parent: &Place, child: &Place) -> bool {
     true
 }
 impl Ownership {
-    pub(super) fn new(function: &Function) -> Self {
+    pub(super) fn new(function: &Function, layout: &Layouts) -> Self {
         let mut places: BTreeSet<Place> = BTreeSet::new();
         for instruction in &function.body {
             match &instruction.op {
@@ -43,6 +43,9 @@ impl Ownership {
         let mut by_local: Vec<Vec<usize>> = vec![Vec::new(); function.locals.len()];
         let mut depth: usize = 0;
         for place in &places {
+            if !layout.storage(function.locals[place.local].ty).cleanup {
+                continue;
+            }
             depth = depth.max(place.projections.len());
             by_local[place.local].push(paths.len());
             paths.push(place.clone());
@@ -78,7 +81,9 @@ impl Ownership {
         Ok(())
     }
     pub(super) fn initialize(&self, a: &mut Assembler, parameters: usize) {
-        a.immediate(R11, 0);
+        if !self.offsets.is_empty() {
+            a.immediate(R11, 0);
+        }
         for offset in &self.offsets {
             a.store_width(BP, *offset, R11, 1);
         }

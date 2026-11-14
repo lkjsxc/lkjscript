@@ -1,60 +1,60 @@
 # Status — 2026-11-14
 
-## Current milestone: 6.2, one binary and a stored seed
+## Current milestone: 6.2, one executable and a stored seed
 
-Milestones 6.0 and 6.1 are complete. The only backend selects x86-64 directly
-from checked lkjscript IR: inline aggregates, machine references and stack
-frames, rel32 control flow, and a source allocator over kernel mappings.
-src/x86.rs separates encoding; --stats reports phases/RSS/sizes. Frontend, backend and result-reader executables match the Rust-built twin's bytes;
-frontend/backend fixed points and own-source/runtime IR identity hold.
+6.1 is complete: cold trap locations, interval-allocated scalar registers,
+straight-line forwarding, effect-free operation removal and closed operation enums.
+The source allocator reuses geometric regions and medium classes; large buffers
+use mremap. Stack reservation adapts, yields unused pages on heap refusal and
+regrows without moving live frames. Hello runs under 4 GiB; a 16 MiB vector plus
+recursive frames and live references works under 32 MiB.
 
-The eight-worker gate passes in 176.680 s: 452 Rust tests, 17 harness tests,
-884 conformance passes plus four pending on each route, 573 Rust comparisons,
-91 World observations and all source generators. Of 128 IR mutants, 100 reject,
-27 agree and one times out in the interpreter; native is skipped for that case.
-The shared 120 s watchdog accounts for most gate time. There are zero findings.
+Eight-worker gate: 80.011 s, including both compiler fixed points, twin byte
+identity and own-source/runtime IR identity. 464 Rust tests, 17 harness tests,
+886 conformance passes plus four pending per route, 574 Rust comparisons,
+91 World observations and all generators pass. Fixed mutation slice: 128,
+101 rejected and 27 equal. Long campaign: 16,384, zero findings; 13,052 rejected,
+3,289 equal values/traps and 43 did not terminate within their two-second allowance.
 
-Deleted the operand-stack lowering, old encoder/linear-memory model, startup
-extent arithmetic, budget variables/tests, compiler-stack host code, census
-machinery, five unused tool scripts and native/frontend/limits documents.
-The language/IR references and --help describe current behavior. Old observation
-files and the trusted reporting command were removed in 6.0.
+Removed hot location writes, redundant scalar frame traffic/no-ops, string
+operation dispatch, Clippy configuration/gate, the misleading library-gap claim
+and three empty obsolete directories. No optimizer was added.
 
-Next: combine frontend, checker, backend, interpreter and CLI in lkjscript source.
-Add process/clock/directory mutation capabilities for the driver; port the
-interpreter to owned values/indices while preserving its independent checks.
-Pass IR in memory and check once, embed library/runtime, then store a compressed
-seed and verify a Rust/Node-free rebuild before removing the component pipeline.
+Next: combine frontend/checker/backend/interpreter/CLI into one executable with
+in-memory checked IR. Port interpreter values to owned indices; add embedding
+syntax and World-derived process/clock/directory operations. Then store a compressed
+seed and delete the component launcher, installer, reader and packet/bundle plumbing.
 
 ## Compiler measurements
 
-| Work | Self-built | Rust-built twin | Previous self-built |
+| Work | Self-built | Rust-built twin | At 98462339 |
 | --- | ---: | ---: | ---: |
-| Hello build | 0.62 s | 0.04 s | 5.16 s |
-| Complete component rebuild | 59.08 s | 3.32 s | 443.56 s |
-| Frontend source to IR | 34.47 s | 1.73 s | 216.54 s |
-| Frontend IR to ELF | 12.73 s | 0.72 s | 110.68 s |
-| Backend IR to ELF | 3.67 s | 0.24 s | 37.21 s |
-| Frontend source peak RSS | 262.1 MiB | 196.0 MiB | 766.1 MiB |
-| Frontend executable | 16,742,209 bytes | Identical | 51,431,226 bytes |
-| Backend executable | 4,429,265 bytes | Identical | 16,845,618 bytes |
+| Hello build | 0.37 s | 0.05 s | 0.62 s |
+| Component rebuild, sum of phases | 45.38 s | 3.85 s | 59.08 s |
+| Frontend source to IR | 26.35 s | 1.96 s | 34.47 s |
+| Frontend IR to ELF | 9.99 s | 0.80 s | 12.73 s |
+| Backend IR to ELF | 2.46 s | 0.33 s | 3.67 s |
+| Frontend source peak RSS | 287.3 MiB | 198.8 MiB | 262.1 MiB |
+| Frontend executable | 9,320,393 bytes | Identical | 16,742,209 bytes |
+| Backend executable | 2,438,833 bytes | Identical | 4,429,265 bytes |
 
-Previous compiler rows are the rename checkpoint, except hello/full rebuild
-from the supplied review. The twin uses Rust standard collections; lkjscript
-uses its indexed AVL map, so the 18–20x compiler ratio includes library differences.
+Single runs on the shared host; repeated unchanged workloads varied materially.
+A separate backend check spends 6.45 CPU seconds parsing/rechecking the frontend's
+already-checked IR: the next structural cost to remove in 6.2. Paired frontend
+checks take 17.10 CPU seconds self-built, 7.01 Rust debug and 1.63 Rust release.
 
-| bench/ workload | Native | Previous native | rustc opt=0 | rustc -O |
+| bench/ workload | Native | At 98462339 | rustc opt=0 | rustc -O |
 | --- | ---: | ---: | ---: | ---: |
-| 20 M aggregate calls | 0.134 s | 5.708 s | 0.023 s | 0.018 s |
-| 200 M scalar iterations | 0.911 s | 1.414 s | 0.260 s | 0.262 s |
-| 5 M pushes + 100 M Vec reads | 0.535 s | 0.912 s | 0.263 s | 0.073 s |
+| 20 M aggregate calls | 0.066 s | 0.137 s | 0.024 s | 0.022 s |
+| 200 M scalar multiply/xor | 0.262 s | 0.938 s | 0.261 s | 0.258 s |
+| 200 M scalar add/xor/mask | 0.177 s | 0.834 s | 0.137 s | 0.131 s |
+| 200,000 fresh 1,000-i64 buffers | 0.344 s | 1.771 s | 0.553 s | 0.107 s |
+| 5 M pushes + 100 M Vec reads | 0.180 s | 0.598 s | 0.272 s | 0.072 s |
 
-These are identical runtime-seeded sources across routes, with equal output.
-Vector RSS rose from 41.9 to 65.8 MiB during allocate-copy-release growth.
-Native selection still spills all IR locals; scalar parameter staging is redundant.
+Identical runtime-seeded sources and equal output across routes. Buffer kernel
+CPU time fell from 0.80 s to below 0.01 s; vector peak RSS fell from 67.1 to 43.1 MiB.
 
 ## Known gaps
 
-Pending: concurrency_moved/shared/alias and borrowed_closure_escape. One conservative
-ownership rejection remains. Interpreter/gate/tools still need
-Rust/Node; the single binary, stored seed, HTTP consumer and entry grants are next.
+Pending: concurrency_moved/shared/alias, borrowed_closure_escape and one conservative ownership rejection.
+Interpreter/gate/tools need Rust/Node; single binary, seed, independent gate, HTTP and entry grants follow.

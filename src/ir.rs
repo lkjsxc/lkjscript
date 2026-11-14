@@ -89,6 +89,204 @@ pub struct Local {
     pub ty: usize,
     pub mutable: bool,
 }
+/// Closed operation vocabulary; textual spellings are only an interchange format.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum UnaryOp {
+    Neg,
+    Not,
+}
+impl UnaryOp {
+    pub fn parse(text: &str) -> Option<UnaryOp> {
+        match text {
+            "-" => Some(UnaryOp::Neg),
+            "!" => Some(UnaryOp::Not),
+            _ => None,
+        }
+    }
+    pub fn as_str(self) -> &'static str {
+        match self {
+            UnaryOp::Neg => "-",
+            UnaryOp::Not => "!",
+        }
+    }
+}
+/// Closed operation vocabulary; textual spellings are only an interchange format.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum BinaryOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Rem,
+    BitAnd,
+    BitOr,
+    BitXor,
+    Shl,
+    Shr,
+    Eq,
+    Ne,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+    And,
+    Or,
+    WrappingAdd,
+    WrappingSub,
+    WrappingMul,
+}
+impl BinaryOp {
+    pub fn parse(text: &str) -> Option<BinaryOp> {
+        match text {
+            "+" => Some(BinaryOp::Add),
+            "-" => Some(BinaryOp::Sub),
+            "*" => Some(BinaryOp::Mul),
+            "/" => Some(BinaryOp::Div),
+            "%" => Some(BinaryOp::Rem),
+            "&" => Some(BinaryOp::BitAnd),
+            "|" => Some(BinaryOp::BitOr),
+            "^" => Some(BinaryOp::BitXor),
+            "<<" => Some(BinaryOp::Shl),
+            ">>" => Some(BinaryOp::Shr),
+            "==" => Some(BinaryOp::Eq),
+            "!=" => Some(BinaryOp::Ne),
+            "<" => Some(BinaryOp::Lt),
+            "<=" => Some(BinaryOp::Le),
+            ">" => Some(BinaryOp::Gt),
+            ">=" => Some(BinaryOp::Ge),
+            "&&" => Some(BinaryOp::And),
+            "||" => Some(BinaryOp::Or),
+            "wrapping_add" => Some(BinaryOp::WrappingAdd),
+            "wrapping_sub" => Some(BinaryOp::WrappingSub),
+            "wrapping_mul" => Some(BinaryOp::WrappingMul),
+            _ => None,
+        }
+    }
+    pub fn as_str(self) -> &'static str {
+        match self {
+            BinaryOp::Add => "+",
+            BinaryOp::Sub => "-",
+            BinaryOp::Mul => "*",
+            BinaryOp::Div => "/",
+            BinaryOp::Rem => "%",
+            BinaryOp::BitAnd => "&",
+            BinaryOp::BitOr => "|",
+            BinaryOp::BitXor => "^",
+            BinaryOp::Shl => "<<",
+            BinaryOp::Shr => ">>",
+            BinaryOp::Eq => "==",
+            BinaryOp::Ne => "!=",
+            BinaryOp::Lt => "<",
+            BinaryOp::Le => "<=",
+            BinaryOp::Gt => ">",
+            BinaryOp::Ge => ">=",
+            BinaryOp::And => "&&",
+            BinaryOp::Or => "||",
+            BinaryOp::WrappingAdd => "wrapping_add",
+            BinaryOp::WrappingSub => "wrapping_sub",
+            BinaryOp::WrappingMul => "wrapping_mul",
+        }
+    }
+}
+/// Closed operation vocabulary; textual spellings are only an interchange format.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum IntrinsicOp {
+    CharFromU32,
+    ArrayRepeat,
+    StrLen,
+    StrAsBytes,
+    StrFromUtf8,
+    Assert,
+    VecNew,
+    VecLen,
+    VecPush,
+    VecPop,
+    Replace,
+    BoxNew,
+    Cast,
+    Clone,
+    WorldStdout,
+    WorldStdin,
+    WorldStderr,
+    WorldArgCount,
+    WorldArgLen,
+    WorldArgCopy,
+    WorldExitStatus,
+    WorldDirectory,
+    DirectoryOpen,
+    StdinRead,
+    FileRead,
+    FileWrite,
+    StdoutWrite,
+    StderrWrite,
+}
+impl IntrinsicOp {
+    pub fn parse(text: &str) -> Option<IntrinsicOp> {
+        match text {
+            "char_from_u32" => Some(IntrinsicOp::CharFromU32),
+            "array_repeat" => Some(IntrinsicOp::ArrayRepeat),
+            "str_len" => Some(IntrinsicOp::StrLen),
+            "str_as_bytes" => Some(IntrinsicOp::StrAsBytes),
+            "str_from_utf8" => Some(IntrinsicOp::StrFromUtf8),
+            "assert" => Some(IntrinsicOp::Assert),
+            "vec_new" => Some(IntrinsicOp::VecNew),
+            "vec_len" => Some(IntrinsicOp::VecLen),
+            "vec_push" => Some(IntrinsicOp::VecPush),
+            "vec_pop" => Some(IntrinsicOp::VecPop),
+            "replace" => Some(IntrinsicOp::Replace),
+            "box_new" => Some(IntrinsicOp::BoxNew),
+            "cast" => Some(IntrinsicOp::Cast),
+            "clone" => Some(IntrinsicOp::Clone),
+            "world_stdout" => Some(IntrinsicOp::WorldStdout),
+            "world_stdin" => Some(IntrinsicOp::WorldStdin),
+            "world_stderr" => Some(IntrinsicOp::WorldStderr),
+            "world_arg_count" => Some(IntrinsicOp::WorldArgCount),
+            "world_arg_len" => Some(IntrinsicOp::WorldArgLen),
+            "world_arg_copy" => Some(IntrinsicOp::WorldArgCopy),
+            "world_exit_status" => Some(IntrinsicOp::WorldExitStatus),
+            "world_directory" => Some(IntrinsicOp::WorldDirectory),
+            "directory_open" => Some(IntrinsicOp::DirectoryOpen),
+            "stdin_read" => Some(IntrinsicOp::StdinRead),
+            "file_read" => Some(IntrinsicOp::FileRead),
+            "file_write" => Some(IntrinsicOp::FileWrite),
+            "stdout_write" => Some(IntrinsicOp::StdoutWrite),
+            "stderr_write" => Some(IntrinsicOp::StderrWrite),
+            _ => None,
+        }
+    }
+    pub fn as_str(self) -> &'static str {
+        match self {
+            IntrinsicOp::CharFromU32 => "char_from_u32",
+            IntrinsicOp::ArrayRepeat => "array_repeat",
+            IntrinsicOp::StrLen => "str_len",
+            IntrinsicOp::StrAsBytes => "str_as_bytes",
+            IntrinsicOp::StrFromUtf8 => "str_from_utf8",
+            IntrinsicOp::Assert => "assert",
+            IntrinsicOp::VecNew => "vec_new",
+            IntrinsicOp::VecLen => "vec_len",
+            IntrinsicOp::VecPush => "vec_push",
+            IntrinsicOp::VecPop => "vec_pop",
+            IntrinsicOp::Replace => "replace",
+            IntrinsicOp::BoxNew => "box_new",
+            IntrinsicOp::Cast => "cast",
+            IntrinsicOp::Clone => "clone",
+            IntrinsicOp::WorldStdout => "world_stdout",
+            IntrinsicOp::WorldStdin => "world_stdin",
+            IntrinsicOp::WorldStderr => "world_stderr",
+            IntrinsicOp::WorldArgCount => "world_arg_count",
+            IntrinsicOp::WorldArgLen => "world_arg_len",
+            IntrinsicOp::WorldArgCopy => "world_arg_copy",
+            IntrinsicOp::WorldExitStatus => "world_exit_status",
+            IntrinsicOp::WorldDirectory => "world_directory",
+            IntrinsicOp::DirectoryOpen => "directory_open",
+            IntrinsicOp::StdinRead => "stdin_read",
+            IntrinsicOp::FileRead => "file_read",
+            IntrinsicOp::FileWrite => "file_write",
+            IntrinsicOp::StdoutWrite => "stdout_write",
+            IntrinsicOp::StderrWrite => "stderr_write",
+        }
+    }
+}
 #[derive(Clone, PartialEq)]
 pub enum Op {
     /// Immutable module-long bytes: a UTF-8 str or an exact-length u8 array.
@@ -151,12 +349,12 @@ pub enum Op {
     },
     Unary {
         dst: usize,
-        op: String,
+        op: UnaryOp,
         src: usize,
     },
     Binary {
         dst: usize,
-        op: String,
+        op: BinaryOp,
         left: usize,
         right: usize,
     },
@@ -185,7 +383,7 @@ pub enum Op {
     },
     Intrinsic {
         dst: usize,
-        name: String,
+        name: IntrinsicOp,
         args: Vec<usize>,
     },
     If {

@@ -56,12 +56,12 @@ fn operation(which: usize, changed: bool) -> ir::Op {
         9 => ir::Op::Drop { place: place(n) },
         10 => ir::Op::Unary {
             dst: n,
-            op: "!".to_string(),
+            op: ir::UnaryOp::Not,
             src: 12,
         },
         11 => ir::Op::Binary {
             dst: n,
-            op: "+".to_string(),
+            op: ir::BinaryOp::Add,
             left: 13,
             right: 14,
         },
@@ -87,7 +87,7 @@ fn operation(which: usize, changed: bool) -> ir::Op {
         },
         17 => ir::Op::Intrinsic {
             dst: n,
-            name: "fixture\0水".to_string(),
+            name: ir::IntrinsicOp::VecNew,
             args: vec![23usize, 24usize],
         },
         18 => ir::Op::If { condition: n },
@@ -156,13 +156,15 @@ fn operation_value(value: &ir::Op) -> i64 {
         ir::Op::Assign { place, src } => place.local as i64 + *src as i64,
         ir::Op::Drop { place } => place.local as i64,
         ir::Op::DropIf { place } => place.local as i64 + 1,
-        ir::Op::Unary { dst, op, src } => *dst as i64 + op.as_bytes()[0] as i64 + *src as i64,
+        ir::Op::Unary { dst, op, src } => {
+            *dst as i64 + op.as_str().as_bytes()[0] as i64 + *src as i64
+        }
         ir::Op::Binary {
             dst,
             op,
             left,
             right,
-        } => *dst as i64 + op.as_bytes()[0] as i64 + *left as i64 + *right as i64,
+        } => *dst as i64 + op.as_str().as_bytes()[0] as i64 + *left as i64 + *right as i64,
         ir::Op::Call {
             dst,
             function,
@@ -181,7 +183,7 @@ fn operation_value(value: &ir::Op) -> i64 {
             variant,
         } => *dst as i64 + place.local as i64 + *variant as i64,
         ir::Op::Intrinsic { dst, name, args } => {
-            *dst as i64 + name.len() as i64 + args[0] as i64 + args[1] as i64
+            *dst as i64 + name.as_str().len() as i64 + args[0] as i64 + args[1] as i64
         }
         ir::Op::If { condition } => *condition as i64,
         ir::Op::Else => 1001,

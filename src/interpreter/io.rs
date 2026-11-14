@@ -145,13 +145,13 @@ impl<H: Host> Interpreter<'_, H> {
     pub(super) fn io_intrinsic(
         &mut self,
         result: usize,
-        name: &str,
+        name: ir::IntrinsicOp,
         values: &[(usize, Value)],
     ) -> Result<Option<Value>, RunError> {
         let value = match name {
-            "world_stdin" | "world_stderr" if values.len() == 1 => {
+            ir::IntrinsicOp::WorldStdin | ir::IntrinsicOp::WorldStderr if values.len() == 1 => {
                 self.io_authority(values, TypeKind::World)?;
-                let (expected, value) = if name == "world_stdin" {
+                let (expected, value) = if name == ir::IntrinsicOp::WorldStdin {
                     (TypeKind::Stdin, Value::Stdin)
                 } else {
                     (TypeKind::Stderr, Value::Stderr)
@@ -161,13 +161,18 @@ impl<H: Host> Interpreter<'_, H> {
                 }
                 value
             }
-            "world_arg_count" if values.len() == 1 => {
+            ir::IntrinsicOp::WorldArgCount if values.len() == 1 => {
                 self.io_authority(values, TypeKind::World)?;
                 self.io_result_type(result, ir::U64)?;
                 Value::Bits(self.host.arguments().len() as u64)
             }
-            "world_arg_len" | "world_arg_copy"
-                if values.len() == if name == "world_arg_len" { 2 } else { 3 } =>
+            ir::IntrinsicOp::WorldArgLen | ir::IntrinsicOp::WorldArgCopy
+                if values.len()
+                    == if name == ir::IntrinsicOp::WorldArgLen {
+                        2
+                    } else {
+                        3
+                    } =>
             {
                 self.io_authority(values, TypeKind::World)?;
                 self.io_result_type(result, ir::U64)?;
@@ -179,7 +184,7 @@ impl<H: Host> Interpreter<'_, H> {
                     .arguments()
                     .get(index)
                     .ok_or_else(|| self.trap(3, "argument index out of bounds"))?;
-                if name == "world_arg_len" {
+                if name == ir::IntrinsicOp::WorldArgLen {
                     Value::Bits(argument.len() as u64)
                 } else {
                     let buffer = self.io_buffer(values, 2, true)?;
@@ -189,14 +194,14 @@ impl<H: Host> Interpreter<'_, H> {
                     Value::Bits(count as u64)
                 }
             }
-            "world_exit_status" if values.len() == 2 => {
+            ir::IntrinsicOp::WorldExitStatus if values.len() == 2 => {
                 self.io_authority(values, TypeKind::World)?;
                 self.io_result_type(result, ir::UNIT)?;
                 let status = self.io_number(values, 1, ir::U8)?;
                 self.host.set_exit_status(status as u8);
                 Value::Unit
             }
-            "world_directory" if values.len() == 2 => {
+            ir::IntrinsicOp::WorldDirectory if values.len() == 2 => {
                 self.io_authority(values, TypeKind::World)?;
                 let types = self.io_open_types(result, TypeKind::Directory)?;
                 let path = self.io_buffer(values, 1, false)?;
@@ -204,7 +209,7 @@ impl<H: Host> Interpreter<'_, H> {
                 let opened = self.host.open_directory(&path);
                 self.io_open_result(types, opened, true)?
             }
-            "directory_open" if values.len() == 3 => {
+            ir::IntrinsicOp::DirectoryOpen if values.len() == 3 => {
                 let authority = self.io_authority(values, TypeKind::Directory)?;
                 let types = self.io_open_types(result, TypeKind::File)?;
                 let path = self.io_buffer(values, 1, false)?;
@@ -214,10 +219,10 @@ impl<H: Host> Interpreter<'_, H> {
                 let opened = self.host.open_file(handle, &path, create);
                 self.io_open_result(types, opened, false)?
             }
-            "stdin_read" | "file_read" if values.len() == 2 => {
+            ir::IntrinsicOp::StdinRead | ir::IntrinsicOp::FileRead if values.len() == 2 => {
                 let authority = self.io_authority(
                     values,
-                    if name == "stdin_read" {
+                    if name == ir::IntrinsicOp::StdinRead {
                         TypeKind::Stdin
                     } else {
                         TypeKind::File
@@ -226,7 +231,7 @@ impl<H: Host> Interpreter<'_, H> {
                 self.io_result_type(result, ir::I64)?;
                 let buffer = self.io_buffer(values, 1, true)?;
                 let mut bytes = self.bytes(&buffer)?;
-                let read = if name == "stdin_read" {
+                let read = if name == ir::IntrinsicOp::StdinRead {
                     self.host.read_stdin(&mut bytes)
                 } else {
                     let handle = self.io_handle(&authority)?;
@@ -238,7 +243,7 @@ impl<H: Host> Interpreter<'_, H> {
                 }
                 Value::Bits(count)
             }
-            "file_write" if values.len() == 2 => {
+            ir::IntrinsicOp::FileWrite if values.len() == 2 => {
                 let authority = self.io_authority(values, TypeKind::File)?;
                 self.io_result_type(result, ir::I64)?;
                 let buffer = self.io_buffer(values, 1, false)?;
@@ -247,7 +252,7 @@ impl<H: Host> Interpreter<'_, H> {
                 let written = self.host.write_file(handle, &bytes);
                 Value::Bits(self.io_count(written, bytes.len())?)
             }
-            "stderr_write" if values.len() == 2 => {
+            ir::IntrinsicOp::StderrWrite if values.len() == 2 => {
                 self.io_authority(values, TypeKind::Stderr)?;
                 self.io_result_type(result, ir::UNIT)?;
                 let buffer = self.io_buffer(values, 1, false)?;
