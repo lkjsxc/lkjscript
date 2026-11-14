@@ -26,6 +26,51 @@ pub struct File {
     handle: Option<std::fs::File>,
 }
 
+pub struct Listener {
+    handle: std::fs::File,
+}
+impl World {
+    pub fn listen(&mut self, address: &str, port: u16) -> Result<Listener, i64> {
+        let mut bytes = [0u8; 16];
+        bytes[0] = 2;
+        bytes[2..4].copy_from_slice(&port.to_be_bytes());
+        let mut parts = address.split('.');
+        for part in 0..4 {
+            let text = parts.next().ok_or(22i64)?;
+            if text.is_empty() { return Err(22); }
+            let mut value = 0u16;
+            for byte in text.bytes() {
+                if !byte.is_ascii_digit() { return Err(22); }
+                value = value * 10 + u16::from(byte - b'0');
+                if value > 255 { return Err(22); }
+            }
+            bytes[4 + part] = value as u8;
+        }
+        if parts.next().is_some() { return Err(22); }
+        self.__lkjscript_listen(&bytes)
+    }
+    pub fn __lkjscript_listen(&mut self, address: &[u8]) -> Result<Listener, i64> {
+        Ok(Listener { handle: files::listen(address)? })
+    }
+}
+impl Listener {
+    pub fn accept(&mut self) -> Result<File, i64> {
+        Ok(File { handle: Some(files::accept(self.handle.as_raw_fd())?) })
+    }
+    pub fn __lkjscript_accept(&mut self) -> Result<File, i64> {
+        self.accept()
+    }
+    pub fn port(&mut self) -> Result<u16, i64> {
+        let mut address = [0u8; 16];
+        files::listener_address(self.handle.as_raw_fd(), &mut address)?;
+        if address[0] != 2 || address[1] != 0 { return Err(22); }
+        Ok(u16::from_be_bytes([address[2], address[3]]))
+    }
+    pub fn __lkjscript_address(&mut self, address: &mut [u8]) -> i64 {
+        files::listener_address(self.handle.as_raw_fd(), address).map_or_else(|error| -error, |()| 0)
+    }
+}
+
 impl World {
     pub fn stdout(&mut self) -> Stdout {
         Stdout { _seal: () }
@@ -673,6 +718,25 @@ pub(crate) mod files {
     }
     pub fn executable(descriptor: i32) -> Result<(), i64> {
         retry(|| unsafe { syscall(91, i64::from(descriptor), 0o755_i64) }).map(|_| ())
+    }
+    pub fn listen(address: &[u8]) -> Result<std::fs::File, i64> {
+        if address.len() != 16 || address[0] != 2 || address[1] != 0 {
+            return Err(22);
+        }
+        let handle = owned(retry(|| unsafe { syscall(41, 2_i64, 0x80001_i64, 0_i64) })?)?;
+        retry(|| unsafe { syscall(49, i64::from(handle.as_raw_fd()), address.as_ptr(), 16_i64) })?;
+        retry(|| unsafe { syscall(50, i64::from(handle.as_raw_fd()), i64::from(i32::MAX)) })?;
+        Ok(handle)
+    }
+    pub fn accept(descriptor: i32) -> Result<std::fs::File, i64> {
+        owned(retry(|| unsafe { syscall(288, i64::from(descriptor), 0_i64, 0_i64, 0x80000_i64) })?)
+    }
+    pub fn listener_address(descriptor: i32, address: &mut [u8]) -> Result<(), i64> {
+        if address.len() != 16 { return Err(22); }
+        let mut length = 16u32;
+        retry(|| unsafe { syscall(51, i64::from(descriptor), address.as_mut_ptr(), &mut length as *mut u32) })?;
+        if length != 16 { return Err(22); }
+        Ok(())
     }
     pub fn monotonic_time(bytes: &mut [u8]) -> Result<(), i64> {
         if bytes.len() < 16 {

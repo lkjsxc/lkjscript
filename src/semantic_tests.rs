@@ -2,6 +2,7 @@
 mod allocator;
 mod array_repeat;
 mod diagnostic_contracts;
+mod entry_grants;
 mod facts;
 mod function_owners;
 mod interpreter_contracts;
@@ -100,6 +101,7 @@ pub fn run(world: &mut World, shard: usize, workers: usize, trace: bool) -> (usi
         count += return_contracts::run(world, trace);
         count += array_repeat::run(world, trace);
         count += interpreter_contracts::run(world, trace);
+        count += entry_grants::run(world, trace);
         count += allocator::run(world);
         count += facts::run();
         count += resolver::run();

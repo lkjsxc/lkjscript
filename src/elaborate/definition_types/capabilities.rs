@@ -18,6 +18,8 @@ impl Infer<'_, '_> {
             Value::Process => self.atom("Process"),
             Value::Clock => self.atom("Clock"),
             Value::Child => self.atom("Child"),
+            Value::Listener => self.atom("Listener"),
+            Value::Port => self.atom("u16"),
             Value::FileRef | Value::DirectoryRef => {
                 let inner = self.atom(if matches!(value, Value::FileRef) {
                     "File"
@@ -52,6 +54,8 @@ impl Infer<'_, '_> {
             | Value::ResultBytes
             | Value::ResultUnit
             | Value::ResultChild
+            | Value::ResultListener
+            | Value::ResultPort
             | Value::ResultNames
             | Value::ResultStatus
             | Value::ResultMaybeStatus => {
@@ -59,6 +63,8 @@ impl Infer<'_, '_> {
                     Value::ResultDirectory => self.capability_type(Value::Directory, span)?,
                     Value::ResultFile => self.capability_type(Value::File, span)?,
                     Value::ResultChild => self.capability_type(Value::Child, span)?,
+                    Value::ResultListener => self.capability_type(Value::Listener, span)?,
+                    Value::ResultPort => self.capability_type(Value::Port, span)?,
                     Value::ResultNames => self.capability_type(Value::Arguments, span)?,
                     Value::ResultStatus => self.atom("i64"),
                     Value::ResultMaybeStatus => {

@@ -68,6 +68,23 @@ pub(super) fn signature(
                 && bytes(types, args[1], false)
                 && opened(types, result, &TypeKind::Directory)
         }
+        IntrinsicOp::WorldListen => {
+            args.len() == 2
+                && authority(types, args[0], &TypeKind::World)
+                && bytes(types, args[1], false)
+                && opened(types, result, &TypeKind::Listener)
+        }
+        IntrinsicOp::ListenerAccept => {
+            args.len() == 1
+                && authority(types, args[0], &TypeKind::Listener)
+                && opened(types, result, &TypeKind::File)
+        }
+        IntrinsicOp::ListenerAddress => {
+            args.len() == 2
+                && authority(types, args[0], &TypeKind::Listener)
+                && bytes(types, args[1], true)
+                && result == I64
+        }
         IntrinsicOp::DirectoryOpen => {
             args.len() == 3
                 && authority(types, args[0], &TypeKind::Directory)

@@ -3,8 +3,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 check_started_ns=$(date +%s%N)
 check_jobs="${LKJSCRIPT_GATE_JOBS:-8}"
-if [[ ! "$check_jobs" =~ ^[1-8]$ ]]; then
-    echo 'LKJSCRIPT_GATE_JOBS must be between one and eight' >&2
+if [[ ! "$check_jobs" =~ ^[2-8]$ ]]; then
+    echo 'LKJSCRIPT_GATE_JOBS must be between two and eight (HTTP needs a server/client pair)' >&2
     exit 1
 fi
 check_suite_jobs=$((check_jobs < 4 ? check_jobs : 4))
@@ -96,6 +96,7 @@ parallel_step 1 world world_cases
 parallel_step 1 profiler timeout --kill-after=10s 600s sh tools/profile-test.sh "$check_binary"
 parallel_step 1 resources timeout --kill-after=10s 600s bash tools/resource-test.sh "$check_binary"
 parallel_step 1 runner timeout --kill-after=10s 600s "$check_binary" test src/test_runner.rs
+parallel_step 2 http timeout --kill-after=10s 600s sh tools/http-test.sh --compiler "$check_binary" --seconds 0 --out target/gate/http-profiles
 parallel_step "$check_suite_jobs" conformance timeout --kill-after=10s 600s "$check_binary" test tests/conformance --jobs "$check_suite_jobs"
 parallel_step "$check_suite_jobs" generated timeout --kill-after=10s 600s "$check_binary" test target/gate/generated --jobs "$check_suite_jobs"
 parallel_step "$check_suite_jobs" semantic-structure semantics

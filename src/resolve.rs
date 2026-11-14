@@ -142,6 +142,7 @@ fn builtin(name: &str) -> bool {
             | "Process"
             | "Clock"
             | "Child"
+            | "Listener"
             | "Copy"
             | "Clone"
             | "Ord"

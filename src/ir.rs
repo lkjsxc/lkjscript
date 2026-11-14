@@ -50,10 +50,29 @@ pub enum TypeKind {
     Process,
     Clock,
     Child,
+    /// Affine IPv4 TCP listener; structural destruction closes its handle.
+    Listener,
+}
+
+/// Explicit host provisioning data; executors validate every descriptor against
+/// the selected entry's parameter type before creating owned values.
+#[derive(Clone)]
+pub enum EntryGrant {
+    World,
+    Stdout,
+    Stdin,
+    Stderr,
+    Clock,
+    Process,
+    /// NUL-terminated path, matching the sealed WorldDirectory ABI.
+    Directory(Vec<u8>),
+    /// Exact sixteen-byte IPv4 sockaddr, matching WorldListen.
+    Listener(Vec<u8>),
 }
 
 #[derive(Clone, PartialEq)]
 pub struct Field {
+
     pub name: String,
     pub ty: usize,
 }
@@ -242,6 +261,9 @@ pub enum IntrinsicOp {
     FileExecutable,
     FileDuplicate,
     FileReadOnly,
+    WorldListen,
+    ListenerAccept,
+    ListenerAddress,
 }
 impl IntrinsicOp {
     pub fn parse(text: &str) -> Option<IntrinsicOp> {
@@ -293,6 +315,9 @@ impl IntrinsicOp {
             "file_executable" => Some(IntrinsicOp::FileExecutable),
             "file_duplicate" => Some(IntrinsicOp::FileDuplicate),
             "file_readonly" => Some(IntrinsicOp::FileReadOnly),
+            "world_listen" => Some(IntrinsicOp::WorldListen),
+            "listener_accept" => Some(IntrinsicOp::ListenerAccept),
+            "listener_address" => Some(IntrinsicOp::ListenerAddress),
             _ => None,
         }
     }
@@ -345,6 +370,9 @@ impl IntrinsicOp {
             IntrinsicOp::FileExecutable => "file_executable",
             IntrinsicOp::FileDuplicate => "file_duplicate",
             IntrinsicOp::FileReadOnly => "file_readonly",
+            IntrinsicOp::WorldListen => "world_listen",
+            IntrinsicOp::ListenerAccept => "listener_accept",
+            IntrinsicOp::ListenerAddress => "listener_address",
         }
     }
 }

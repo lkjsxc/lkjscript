@@ -1,0 +1,44 @@
+lkjscript-ir 1
+# expect: value 42
+# authority-expect: declared none; reachable operations none; reachable functions probe only
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "World" world
+type "&mut World" ref mut 7
+type "Unused" struct move "world" 7
+type "&mut Unused" ref mut 9
+destructor 9 2
+fn "probe" 0 3
+local "answer" 3 let
+local "uninitialized_world" 7 let
+local "unused_result" 4 let
+@1 int 0 42
+@2 return 0
+@3 call 2 1 1
+endfn
+fn "unrelated" 1 4
+local "world" 7 mut
+local "borrow" 8 let
+local "count" 4 let
+@20 borrow 1 mut 0
+@21 intrinsic 2 "world_arg_count" 1
+@23 drop 0
+@24 return 2
+endfn
+fn "Unused::drop" 1 0
+local "self" 10 let
+local "world" 8 let
+local "count" 4 let
+local "done" 0 let
+@30 borrow 1 mut 0 deref field 0
+@31 intrinsic 2 "world_arg_count" 1
+@32 drop 2
+@34 drop 0
+@35 unit 3
+@36 return 3
+endfn

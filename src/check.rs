@@ -103,7 +103,8 @@ pub fn is_data(types: &[Type], ty: usize) -> bool {
             | TypeKind::File
             | TypeKind::Process
             | TypeKind::Clock
-            | TypeKind::Child => return false,
+            | TypeKind::Child
+            | TypeKind::Listener => return false,
             TypeKind::Ref { inner, .. }
             | TypeKind::Slice { inner, .. }
             | TypeKind::Vec { inner }
@@ -1379,8 +1380,9 @@ fn access(
         }
     }
     let value_ty = place_type(types, function, place).unwrap();
-    let view_owner =
-        mode != 3 && state.views.at(value_ty) && !matches!(types[value_ty].kind, TypeKind::Ref { .. });
+    let view_owner = mode != 3
+        && state.views.at(value_ty)
+        && !matches!(types[value_ty].kind, TypeKind::Ref { .. });
     let mut candidates: BTreeSet<Place> = BTreeSet::new();
     for target in &targets {
         for holder in state.loans.for_target(&target.root, !write) {
@@ -3561,7 +3563,10 @@ fn check_types(types: &[Type]) -> Result<(), Diagnostic> {
                 return Err(error(
                     1,
                     "E_TYPE",
-                    &format!("unsized text cannot be an owned or collection element (type {})", ty.name),
+                    &format!(
+                        "unsized text cannot be an owned or collection element (type {})",
+                        ty.name
+                    ),
                 ));
             }
             _ => {}

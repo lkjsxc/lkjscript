@@ -11,6 +11,7 @@ struct Options {
     command: String,
     path: String,
     entry: Option<String>,
+    grants: Vec<String>,
     output: Option<String>,
     engine: String,
     engines: Vec<String>,
@@ -29,7 +30,7 @@ struct Options {
 }
 
 fn usage() -> &'static str {
-    "lkjscript check|build|run|test|ir <source.rs|program.lkjir> [options]\n\n  check  Check all source or input IR\n  build  Write a static Linux x86-64 executable\n  run    Execute main (or probe); bytes after -- are program arguments\n  test   Run #[test] functions through native and interpreter routes\n  ir     Write checked lkjscript IR\n\n  --entry NAME                 Select an entry\n  --engine native|interpreter  Select the execution route\n  -o PATH                     Write an artifact or IR\n  --stats                     Report phase times, counts and peak RSS\n  --profile                   Sample CPU to OUTPUT.samples.PID in built programs\n  profile SAMPLES             Report top self and inclusive functions\n  --jobs N                    Native test workers (1..8)\n  --witness RUSTC             Compare marked cases with optional rustc\n  --source-dir DIR            Grant a root for source reads\n  --library-dir DIR           Use explicit library sources\n  --no-library                Compile without the source library\n  --runtime-source PATH       Use an explicit source runtime\n  --unchecked-ir              Interpret raw IR for checker testing\n  runtime-ir                  Write the checked source runtime as IR\n  check-library               Check every source library body\n\nScalar runs print the value; f64 prints exact bits as f64:0x0123456789abcdef.\n"
+    "lkjscript check|build|run|test|ir|authority <source.rs|program.lkjir> [options]\n\n  check  Check all source or input IR\n  build  Write a static Linux x86-64 executable\n  run    Execute main (or probe); bytes after -- are program arguments\n  test   Run #[test] functions through native and interpreter routes\n  ir     Write checked lkjscript IR\n  authority  Report entry grants and reachable checked-IR effects\n\n  --entry NAME                 Select an entry\n  --grant NAME[=VALUE]          Grant an owned entry capability (repeatable)\n  --engine native|interpreter  Select the execution route\n  -o PATH                     Write an artifact or IR\n  --stats                     Report phase times, counts and peak RSS\n  --profile                   Sample CPU to OUTPUT.samples.PID in built programs\n  profile SAMPLES             Report top self and inclusive functions\n  --jobs N                    Native test workers (1..8)\n  --witness RUSTC             Compare marked cases with optional rustc\n  --source-dir DIR            Grant a root for source reads\n  --library-dir DIR           Use explicit library sources\n  --no-library                Compile without the source library\n  --runtime-source PATH       Use an explicit source runtime\n  --unchecked-ir              Interpret raw IR for checker testing\n  runtime-ir                  Write the checked source runtime as IR\n  check-library               Check every source library body\n\nScalar runs print the value; f64 prints exact bits as f64:0x0123456789abcdef.\n"
 }
 
 fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
@@ -62,6 +63,7 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
         command,
         path: String::new(),
         entry: None,
+        grants: Vec::new(),
         output: None,
         engine: "native".to_string(),
         engines: vec!["native".to_string(), "interpreter".to_string()],
@@ -92,7 +94,7 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
             "--unchecked-ir" => out.unchecked = true,
             "--no-library" => out.no_library = true,
             "--entry" | "-o" | "--engine" | "--engines" | "--source-dir" | "--library-dir"
-            | "--runtime-source" | "--jobs" | "--witness" => {
+            | "--runtime-source" | "--jobs" | "--witness" | "--grant" => {
                 at += 1;
                 if at == values.len() {
                     return Err(format!("E_USAGE {option} needs a value"));
@@ -100,6 +102,7 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
                 let value = values[at].clone();
                 match option.as_str() {
                     "--entry" => out.entry = Some(value),
+                    "--grant" => out.grants.push(value),
                     "-o" => out.output = Some(value),
                     "--engine" => {
                         out.engine = value.clone();
@@ -146,11 +149,13 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
         && out.command != "ir"
         && out.command != "batch"
         && out.command != "profile"
+        && out.command != "authority"
     {
-        return Err("E_USAGE expected check|build|run|test|ir".to_string());
+        return Err("E_USAGE expected check|build|run|test|ir|authority".to_string());
     }
     if out.command == "test" && out.path.is_empty() { out.path = "tests/conformance".to_string(); }
     if out.witness.is_some() && out.command != "test" { return Err("E_USAGE --witness requires test".to_string()); }
+    if !out.grants.is_empty() && out.command != "build" && out.command != "run" { return Err("E_USAGE --grant requires build or run".to_string()); }
     if out.profile && out.command != "build" { return Err("E_USAGE --profile requires build".to_string()); }
     if out.command != "runtime-ir" && out.command != "check-library" && out.path.is_empty() {
         return Err("E_USAGE a source or IR path is required".to_string());
@@ -600,29 +605,7 @@ fn entry(program: &ir::Program, requested: &Option<String>) -> Result<usize, Str
 }
 
 fn validate_entry(program: &ir::Program, index: usize) -> Result<(), String> {
-    let function = &program.functions[index];
-    if !matches!(
-        program.types[function.result].kind,
-        ir::TypeKind::Unit
-            | ir::TypeKind::Bool
-            | ir::TypeKind::Char
-            | ir::TypeKind::Int { .. }
-            | ir::TypeKind::F64
-    ) {
-        return Err("E_ENTRY host entry result must be unit or a scalar".to_string());
-    }
-    if function.params == 0 {
-        return Ok(());
-    }
-    if function.params == 1
-        && matches!(
-            program.types[function.locals[0].ty].kind,
-            ir::TypeKind::World
-        )
-    {
-        return Ok(());
-    }
-    Err("E_ENTRY entry takes no arguments or exactly one World".to_string())
+    crate::entry_grants::validate(program, index)
 }
 fn checked_entry(program: &ir::Program, requested: &Option<String>) -> Result<usize, String> {
     let index = entry(program, requested)?;
@@ -701,6 +684,16 @@ fn interpret(
     capture: bool,
     checked: Option<&ir::CheckedProgram>,
 ) -> Outcome {
+    let grants = if checked.is_none() && options.grants.is_empty() {
+        None
+    } else {
+        match crate::entry_grants::prepare(program, index, &options.grants) {
+            Ok(grants) => Some(grants),
+            Err(problem) => {
+                return Outcome { status: 1, stdout: Vec::new(), stderr: Vec::new(), diagnostic: problem };
+            }
+        }
+    };
     let mut host = match driver_host::Host::new(
         world,
         options.arguments.clone(),
@@ -720,7 +713,10 @@ fn interpret(
         }
     };
     let arguments: Vec<u64> = Vec::new();
-    let result = interpreter::run(program, index, &arguments, &mut host);
+    let result = match &grants {
+        Some(grants) => interpreter::run_granted(program, index, grants, &mut host),
+        None => interpreter::run(program, index, &arguments, &mut host),
+    };
     if let Err(problem) = host.finish() {
         return Outcome {
             status: 1,
@@ -780,7 +776,8 @@ fn native_run(
     stats: &mut Stats,
 ) -> Result<Outcome, String> {
     let name = &checked.program().functions[index].name;
-    let bytes = backend::emit_for_run(checked, runtime, name)
+    let grants = crate::entry_grants::prepare(checked.program(), index, &options.grants)?;
+    let bytes = backend::emit_granted(checked, runtime, name, &grants, Some(3), None)
         .map_err(|problem| report(&options.path, problem))?;
     stats.count("emitted_bytes", bytes.len());
     stats.mark("native_encode")?;
@@ -1004,17 +1001,28 @@ fn batch(world: &mut World, options: &Options, stats: &mut Stats) -> Result<u8, 
                 return Err(format!("E_TEST IR roundtrip changed {}", request.path));
             }
             if let Ok(selected) = checked_entry(checked.program(), &request.entry) {
-                ensure_runtime(world, &request, &mut runtime)?;
-                let name = &checked.program().functions[selected].name;
-                let original = match backend::emit(&checked, runtime.as_ref().unwrap(), name) {
-                    Ok(bytes) => bytes,
-                    Err(problem) => return Err(report(&request.path, problem)),
-                };
-                let repeated = match backend::emit(&replay, runtime.as_ref().unwrap(), name) {
-                    Ok(bytes) => bytes,
-                    Err(problem) => return Err(report(&request.path, problem)),
-                };
-                if original != repeated { return Err(format!("E_TEST IR roundtrip changed native bytes for {}", request.path)); }
+                // A check-only case need not grant an executable entry. Always
+                // recheck its IR above; compare native bytes only when the
+                // invocation supplies every required capability.
+                if let Ok(grants) = crate::entry_grants::prepare(
+                    checked.program(), selected, &request.grants,
+                ) {
+                    ensure_runtime(world, &request, &mut runtime)?;
+                    let name = &checked.program().functions[selected].name;
+                    let original = match backend::emit_granted(
+                        &checked, runtime.as_ref().unwrap(), name, &grants, None, None,
+                    ) {
+                        Ok(bytes) => bytes,
+                        Err(problem) => return Err(report(&request.path, problem)),
+                    };
+                    let repeated = match backend::emit_granted(
+                        &replay, runtime.as_ref().unwrap(), name, &grants, None, None,
+                    ) {
+                        Ok(bytes) => bytes,
+                        Err(problem) => return Err(report(&request.path, problem)),
+                    };
+                    if original != repeated { return Err(format!("E_TEST IR roundtrip changed native bytes for {}", request.path)); }
+                }
             }
         }
         for engine in &options.engines {
@@ -1125,8 +1133,16 @@ fn execute(world: &mut World, options: &Options, stats: &mut Stats) -> Result<u8
         }
         return Ok(0);
     }
+    if options.command == "authority" {
+        let selected = checked_entry(checked.program(), &options.entry)?;
+        let analysis = crate::authority::analyze(&checked, selected)?;
+        let output = crate::authority::render(&checked, &analysis);
+        world.stdout().write(output.as_bytes());
+        return Ok(0);
+    }
     if options.command == "build" {
         let selected = checked_entry(checked.program(), &options.entry)?;
+        let grants = crate::entry_grants::prepare(checked.program(), selected, &options.grants)?;
         ensure_runtime(world, options, &mut runtime)?;
         stats.mark("runtime")?;
         let path: String = match &options.output {
@@ -1135,9 +1151,10 @@ fn execute(world: &mut World, options: &Options, stats: &mut Stats) -> Result<u8
         };
         let name = &checked.program().functions[selected].name;
         let bytes = if options.profile {
-            backend::emit_profile(&checked, runtime.as_ref().unwrap(), name, &format!("{path}.samples"))
+            let profile_path = format!("{path}.samples");
+            backend::emit_granted(&checked, runtime.as_ref().unwrap(), name, &grants, None, Some(profile_path.as_str()))
         } else {
-            backend::emit(&checked, runtime.as_ref().unwrap(), name)
+            backend::emit_granted(&checked, runtime.as_ref().unwrap(), name, &grants, None, None)
         }.map_err(|problem| report(&options.path, problem))?;
         stats.count("emitted_bytes", bytes.len());
         stats.mark("native_encode")?;

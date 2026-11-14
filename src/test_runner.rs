@@ -800,6 +800,23 @@ fn witness_error_matches(metadata: &str, diagnostic: &str) -> bool {
     !found || matches
 }
 
+// The optional host witness executes env by its ordinary path. Some Linux
+// distributions use a multicall env whose identity check rejects execveat(fd).
+fn witness_invoke(
+    world: &mut World,
+    shell: &File,
+    arguments: &[Vec<u8>],
+) -> Result<Capture, String> {
+    let mut command = vec![
+        "-c".as_bytes().to_vec(),
+        "exec \"$@\"".as_bytes().to_vec(),
+        "lkjscript-witness".as_bytes().to_vec(),
+        "/usr/bin/env".as_bytes().to_vec(),
+    ];
+    for argument in arguments { command.push(argument.clone()); }
+    invoke(world, shell, &command, 0)
+}
+
 fn witness_inner(
     world: &mut World,
     path: &str,
@@ -815,7 +832,7 @@ fn witness_inner(
     }
     if cases.is_empty() { return Err(format!("E_TEST no marked Rust cases in {path}")); }
     let rustc_path = rustc.to_string();
-    let env = open_file(world, "/usr/bin/env")?;
+    let shell = open_file(world, "/bin/sh")?;
     let host = read(world, "witness/bridge/output.rs")?;
     let mut harness = "#![allow(dead_code,unused_imports,unused_variables)]\nmod host {\n".to_string();
     harness.push_str(&host);
@@ -824,7 +841,7 @@ fn witness_inner(
         if case.kind == "reject" { continue; }
         harness.push_str(&format!("mod case_{index} {{\n"));
         if case.kind != "value" {
-            harness.push_str("use crate::host::{World,Stdout,Stdin,Stderr,Directory,File,Process,Clock,Child};\n");
+            harness.push_str("use crate::host::{World,Stdout,Stdin,Stderr,Directory,File,Process,Clock,Child,Listener};\n");
         }
         harness.push_str(&read(world, &case.path)?);
         harness.push_str("\n}\n");
@@ -850,7 +867,7 @@ fn witness_inner(
         format!("{temporary}/positive.rs").into_bytes(), "-o".as_bytes().to_vec(),
         format!("{temporary}/positive").into_bytes(),
     ];
-    let built = invoke(world, &env, &arguments, 0)?;
+    let built = witness_invoke(world, &shell, &arguments)?;
     if built.status != 0 {
         world.stderr().write(&built.stderr);
         return Err("E_TEST Rust witness harness did not compile".to_string());
@@ -862,7 +879,7 @@ fn witness_inner(
         if case.kind != "reject" {
             let arguments = vec![format!("LKJSCRIPT_ORACLE_CASE={index}").into_bytes(),
                 format!("{temporary}/positive").into_bytes()];
-            let actual = witness_record(invoke(world, &env, &arguments, 0)?)?;
+            let actual = witness_record(witness_invoke(world, &shell, &arguments)?)?;
             let mut expectation = Case {
                 path: case.path.clone(), kind: case.kind.clone(), value: case.value.clone(),
                 stdout: case.stdout.clone(), stderr: case.stderr.clone(), status: case.status, line: 0,
@@ -879,7 +896,7 @@ fn witness_inner(
         } else {
             let source = read(world, &case.path)?;
             let source = if case.witness.contains("\"world\":true") {
-                format!("mod host {{\n{host}\n}}\nmod case {{\nuse crate::host::{{World,Stdout,Stdin,Stderr,Directory,File,Process,Clock,Child}};\n{source}\n}}\n")
+                format!("mod host {{\n{host}\n}}\nmod case {{\nuse crate::host::{{World,Stdout,Stdin,Stderr,Directory,File,Process,Clock,Child,Listener}};\n{source}\n}}\n")
             } else { source };
             write(directory, "rejection.rs", &source)?;
             let arguments = vec!["PATH=/usr/local/bin:/usr/bin:/bin".as_bytes().to_vec(), rustc_path.as_bytes().to_vec(),
@@ -888,7 +905,7 @@ fn witness_inner(
                 "-A".as_bytes().to_vec(), "warnings".as_bytes().to_vec(),
                 format!("{temporary}/rejection.rs").into_bytes(), "-o".as_bytes().to_vec(),
                 format!("{temporary}/rejection.rmeta").into_bytes()];
-            let actual = invoke(world, &env, &arguments, 0)?;
+            let actual = witness_invoke(world, &shell, &arguments)?;
             let accepted = case.witness.contains("\"rustAccept\":true");
             let diagnostic = utf8(actual.stderr, "E_TEST Rust diagnostics UTF-8")?;
             if (actual.status == 0) != accepted || !witness_error_matches(&case.witness, &diagnostic) {

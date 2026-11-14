@@ -1,6 +1,6 @@
 //! Checked lkjscript IR and a sealed runtime produce native bytes in memory.
 use crate::diagnostic::{Diagnostic, Span};
-use crate::ir::{CheckedProgram, TypeKind};
+use crate::ir::{CheckedProgram, EntryGrant, TypeKind};
 use crate::{check, ir_text, native, runtime};
 
 fn error(message: &str) -> Diagnostic {
@@ -18,7 +18,7 @@ pub fn emit(
     runtime: &runtime::Runtime,
     entry: &str,
 ) -> Result<Vec<u8>, Diagnostic> {
-    emit_artifact(checked, runtime, entry, None, None)
+    emit_artifact(checked, runtime, entry, None, None, None)
 }
 
 /// The driver holds fd3. A normal return writes only the raw eight-byte scalar;
@@ -28,11 +28,22 @@ pub fn emit_for_run(
     runtime: &runtime::Runtime,
     entry: &str,
 ) -> Result<Vec<u8>, Diagnostic> {
-    emit_artifact(checked, runtime, entry, Some(3), None)
+    emit_artifact(checked, runtime, entry, Some(3), None, None)
 }
 
 pub fn emit_profile(checked: &CheckedProgram, runtime: &runtime::Runtime, entry: &str, path: &str) -> Result<Vec<u8>, Diagnostic> {
-    emit_artifact(checked, runtime, entry, None, Some(path))
+    emit_artifact(checked, runtime, entry, None, Some(path), None)
+}
+
+pub fn emit_granted(
+    checked: &CheckedProgram,
+    runtime: &runtime::Runtime,
+    entry: &str,
+    grants: &[EntryGrant],
+    result_fd: Option<u32>,
+    profile_path: Option<&str>,
+) -> Result<Vec<u8>, Diagnostic> {
+    emit_artifact(checked, runtime, entry, result_fd, profile_path, Some(grants))
 }
 
 fn emit_artifact(
@@ -41,6 +52,7 @@ fn emit_artifact(
     entry: &str,
     result_fd: Option<u32>,
     profile_path: Option<&str>,
+    grants: Option<&[EntryGrant]>,
 ) -> Result<Vec<u8>, Diagnostic> {
     let meaning = checked.program();
     let mut selected = None;
@@ -57,6 +69,10 @@ fn emit_artifact(
         TypeKind::Unit | TypeKind::Bool | TypeKind::Char | TypeKind::Int { .. } | TypeKind::F64
     ) {
         return Err(error("host entry result must be unit or a scalar"));
+    }
+    if let Some(grants) = grants {
+        let image = native::encode_granted(checked, runtime, index, grants, result_fd, profile_path)?;
+        return Ok(image.bytes);
     }
     let mut arguments = Vec::new();
     if function.params == 1 && matches!(meaning.types[function.locals[0].ty].kind, TypeKind::World)

@@ -1,4 +1,6 @@
 pub mod ast;
+pub mod authority;
+pub mod entry_grants;
 pub mod backend;
 pub mod check;
 pub mod compiler;

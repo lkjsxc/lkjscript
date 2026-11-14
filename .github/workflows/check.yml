@@ -6,7 +6,7 @@ jobs:
     container: debian:bookworm-slim
     steps:
       - name: Checkout dependencies
-        run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates
+        run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl
       - uses: actions/checkout@v4
       - name: Seed-only native gate
         env:

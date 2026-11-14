@@ -98,15 +98,22 @@ Programs accepted by both compilers behave the same. Keep .rs while the witness
 lives; choose a native extension when deleting it. Delete the witness when it
 blocks necessary source forms or stops finding useful differences.
 
-## Real consumers (6.4)
+## Real consumers (6.4, complete)
 
-A persistent HTTP server serves docs/ beneath a Directory using Listener and time.
-Test generated requests for an hour on a fresh local port with flat memory, and
-profile it under load. Never deploy it or touch a running service.
-Capability-typed entries declare authority, for example main(Stdout, Directory,
-Listener). The CLI grants each explicitly and rejects missing grants before
-execution. World remains all authority. Report reachable authority from checked
-IR alone, including .lkjir inputs. The compiler must not be the only consumer.
+The persistent HTTP server serves docs/ beneath a Directory with Listener and Clock.
+Its four owned entry parameters declare authority; --grant names each parameter,
+with a root path for Directory and a numeric IPv4:port for Listener. A sole World
+continues to declare implicit full authority. Entry File/Child/borrowed/aggregate
+parameters reject; derive files beneath an explicitly granted Directory.
+Both executors validate entry grants before acquisition. Native artifacts acquire
+handles at startup; check-only cases never manufacture invocation authority.
+Listener accepts owned File streams, closes on destruction and preserves closed
+standard descriptors. The kernel determines backlog and resource limits.
+authority reads checked IR alone, including .lkjir inputs, following reachable
+calls, structured control and owning cleanup, including custom destructors.
+The hour-long local generated-request run measures memory and profiles source
+functions. The gate keeps its full functional requests; never deploy this example
+or touch a running service. The compiler is one consumer among ordinary programs.
 
 ## Resources and measurement
 

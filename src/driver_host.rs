@@ -7,6 +7,7 @@ enum Handle {
     Directory(Directory),
     File(File),
     Child(Child),
+    Listener(Listener),
 }
 
 struct Streams {
@@ -207,6 +208,26 @@ impl interpreter::Host for Host<'_, '_> {
                 let mut input = self.world.stdin();
                 count(input.__lkjscript_read(bytes))
             }
+        }
+    }
+
+    fn open_listener(&mut self, address: &[u8]) -> Result<u64, i64> {
+        let listener = self.world.__lkjscript_listen(address)?;
+        self.insert_handle(Handle::Listener(listener))
+    }
+
+    fn accept_listener(&mut self, listener: u64) -> Result<u64, i64> {
+        let stream = match self.handles.get_mut(&listener) {
+            Some(Handle::Listener(listener)) => listener.__lkjscript_accept(),
+            _ => return Err(9),
+        }?;
+        self.insert_handle(Handle::File(stream))
+    }
+
+    fn listener_address(&mut self, listener: u64, bytes: &mut [u8]) -> Result<(), i64> {
+        match self.handles.get_mut(&listener) {
+            Some(Handle::Listener(listener)) => status(listener.__lkjscript_address(bytes)),
+            _ => Err(9),
         }
     }
 

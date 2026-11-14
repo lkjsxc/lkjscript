@@ -36,9 +36,12 @@ artifact-local panic message codes R0016 and above.
 
 Workers are native compiler processes. They share each case's checked IR between
 routes, round-trip serialized IR through the independent checker, and compare
-source/IR executable bytes. Each execution has fresh owned state. Passing suites
+source/IR executable bytes when the invocation supplies every required grant.
+Check-only cases never create grants. Each execution has fresh owned state. Passing suites
 print one line; failures identify the case and route. The shell gate applies a
-generous suite watchdog and accounts for all workers within LKJSCRIPT_GATE_JOBS.
+generous suite watchdog and accounts for all workers within LKJSCRIPT_GATE_JOBS
+(2..8). The HTTP suite reserves two workers for its server/client pair; individual
+`lkjscript test --jobs 1` runs remain available.
 
 The four pending cases specify scoped tasks and rejection of escaping borrowed
 closures. They remain tests of intended language rules; unrelated rejection,
@@ -50,6 +53,13 @@ marked case with overflow checks enabled. Its native test coordinator keeps
 program stderr and Rust trap/status records separate.
 
 `tools/world-test.rs` checks binary arguments and streams, directory confinement,
-closed and broken descriptors, process ownership, and source/IR identity.
+closed and broken descriptors, process ownership, Listener descriptor promotion,
+and source/IR identity. Listener conformance cases cover IPv4 parsing, raw socket
+address bounds, failed-acquisition cleanup, affine ownership, and drop/rebind.
 `tools/resource-test.sh` keeps one heap and one stack refusal case and verifies
 startup/reservation reuse under explicit test limits.
+`tools/http-test.sh --seconds 0` retains all functional HTTP requests in the gate:
+large bodies/headers, binary bytes, GET/HEAD, framing and Directory confinement.
+It uses curl as an explicit test client, starts a fresh local server with stdin
+closed, profiles that server, and closes every child before returning. The full
+hour load and focused interpreter route run use the same supervisor separately.

@@ -19,6 +19,9 @@ pub trait Host {
     fn close_handle(&mut self, handle: u64);
     fn set_exit_status(&mut self, status: u8);
     fn world_file(&mut self, kind: u8) -> Result<u64, i64>;
+    fn open_listener(&mut self, address: &[u8]) -> Result<u64, i64>;
+    fn accept_listener(&mut self, listener: u64) -> Result<u64, i64>;
+    fn listener_address(&mut self, listener: u64, bytes: &mut [u8]) -> Result<(), i64>;
     fn duplicate_file(&mut self, handle: u64) -> Result<u64, i64>;
     fn readonly_file(&mut self, handle: u64) -> Result<u64, i64>;
     fn open_subdirectory(&mut self, directory: u64, path: &[u8]) -> Result<u64, i64>;
@@ -86,6 +89,15 @@ impl Host for Vec<u8> {
         Err(38)
     }
     fn world_file(&mut self, _kind: u8) -> Result<u64, i64> {
+        Err(38)
+    }
+    fn open_listener(&mut self, _address: &[u8]) -> Result<u64, i64> {
+        Err(38)
+    }
+    fn accept_listener(&mut self, _listener: u64) -> Result<u64, i64> {
+        Err(38)
+    }
+    fn listener_address(&mut self, _listener: u64, _bytes: &mut [u8]) -> Result<(), i64> {
         Err(38)
     }
     fn open_subdirectory(&mut self, _directory: u64, _path: &[u8]) -> Result<u64, i64> {
@@ -240,6 +252,7 @@ enum Value {
     Process,
     Clock,
     Child(u64),
+    Listener(u64),
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Empty {
@@ -680,7 +693,8 @@ impl<H: Host> Interpreter<'_, H> {
             | Value::Box(_)
             | Value::Directory(_)
             | Value::File(_)
-            | Value::Child(_) => Err(self.error(
+            | Value::Child(_)
+            | Value::Listener(_) => Err(self.error(
                 InterpreterError::MissingDrop,
                 "owned value requires structural destruction",
             )),
@@ -869,7 +883,8 @@ impl<H: Host> Interpreter<'_, H> {
             | (TypeKind::Clock, Value::Clock) => true,
             (TypeKind::Directory, Value::Directory(handle))
             | (TypeKind::File, Value::File(handle))
-            | (TypeKind::Child, Value::Child(handle)) => *handle != 0,
+            | (TypeKind::Child, Value::Child(handle))
+            | (TypeKind::Listener, Value::Listener(handle)) => *handle != 0,
             (TypeKind::Ref { inner, mutable }, Value::Reference(reference)) => {
                 *inner == reference.referent && *mutable == reference.mutable
             }
@@ -1341,7 +1356,7 @@ impl<H: Host> Interpreter<'_, H> {
         match value {
             Value::Reference(reference) => self.release_reference(&reference)?,
             Value::Child(handle) => self.host.drop_process(handle),
-            Value::Directory(handle) | Value::File(handle) => self.host.close_handle(handle),
+            Value::Directory(handle) | Value::File(handle) | Value::Listener(handle) => self.host.close_handle(handle),
             _ => {}
         }
         if work.release {
@@ -2247,10 +2262,23 @@ pub fn run<H: Host>(
     args: &[u64],
     host: &mut H,
 ) -> Result<RunResult, RunError> {
-    run_inner(program, entry, args, host, None)
+    run_inner(program, entry, args, host, None, None)
+}
+
+/// Run with explicit host-provisioned capabilities. The model validates the
+/// parameter types independently before asking its Host to acquire handles.
+pub fn run_granted<H: Host>(
+    program: &Program,
+    entry: usize,
+    grants: &[ir::EntryGrant],
+    host: &mut H,
+) -> Result<RunResult, RunError> {
+    let arguments: Vec<u64> = Vec::new();
+    run_inner(program, entry, &arguments, host, None, Some(grants))
 }
 
 /// Exercise the sealed source runtime against independent disjoint mappings.
+
 /// Ordinary run never substitutes function bodies, even for identical names.
 pub fn run_runtime<H: Host>(
     program: &Program,
@@ -2259,7 +2287,7 @@ pub fn run_runtime<H: Host>(
     memory: &mut crate::runtime_memory::Memory,
     host: &mut H,
 ) -> Result<RunResult, RunError> {
-    run_inner(program, entry, args, host, Some(RuntimeState { memory }))
+    run_inner(program, entry, args, host, Some(RuntimeState { memory }), None)
 }
 fn run_inner<'a, H: Host>(
     program: &'a Program,
@@ -2267,6 +2295,7 @@ fn run_inner<'a, H: Host>(
     args: &[u64],
     host: &'a mut H,
     runtime: Option<RuntimeState<'a>>,
+    grants: Option<&[ir::EntryGrant]>,
 ) -> Result<RunResult, RunError> {
     let site = Site {
         function: entry,
@@ -2306,8 +2335,66 @@ fn run_inner<'a, H: Host>(
     if function.params > function.locals.len() {
         return Err(interpreter.invalid("entry parameter declarations are missing"));
     }
-    let mut values = Vec::new();
-    if function.params == 1 && matches!(interpreter.kind(function.locals[0].ty)?, TypeKind::World) {
+    let mut values: Vec<(usize, Value)> = Vec::new();
+    if let Some(grants) = grants {
+        if !matches!(
+            interpreter.kind(function.result)?,
+            TypeKind::Unit | TypeKind::Bool | TypeKind::Char | TypeKind::Int { .. } | TypeKind::F64
+        ) {
+            return Err(interpreter.invalid("host entry result must be unit or a scalar"));
+        }
+        if !args.is_empty() || grants.len() != function.params {
+            return Err(interpreter.invalid("entry grant count differs"));
+        }
+        for index in 0..function.params {
+            let kind = interpreter.kind(function.locals[index].ty)?;
+            let valid = match &grants[index] {
+                ir::EntryGrant::World => function.params == 1 && matches!(kind, TypeKind::World),
+                ir::EntryGrant::Stdout => matches!(kind, TypeKind::Stdout),
+                ir::EntryGrant::Stdin => matches!(kind, TypeKind::Stdin),
+                ir::EntryGrant::Stderr => matches!(kind, TypeKind::Stderr),
+                ir::EntryGrant::Clock => matches!(kind, TypeKind::Clock),
+                ir::EntryGrant::Process => matches!(kind, TypeKind::Process),
+                ir::EntryGrant::Directory(_) => matches!(kind, TypeKind::Directory),
+                ir::EntryGrant::Listener(_) => matches!(kind, TypeKind::Listener),
+            };
+            if !valid { return Err(interpreter.invalid("entry grant does not match its owned capability parameter")); }
+        }
+        interpreter.site.line = function.body.first().map_or(1, |instruction| instruction.line);
+        for index in 0..function.params {
+            let value: Result<Value, i64> = match &grants[index] {
+                ir::EntryGrant::World => Ok(Value::World),
+                ir::EntryGrant::Stdout => Ok(Value::Stdout),
+                ir::EntryGrant::Stdin => Ok(Value::Stdin),
+                ir::EntryGrant::Stderr => Ok(Value::Stderr),
+                ir::EntryGrant::Clock => Ok(Value::Clock),
+                ir::EntryGrant::Process => Ok(Value::Process),
+                ir::EntryGrant::Directory(path) => match interpreter.host.open_directory(path) {
+                    Ok(handle) if handle != 0 => Ok(Value::Directory(handle)),
+                    Ok(_) => Err(0),
+                    Err(errno) => Err(errno),
+                },
+                ir::EntryGrant::Listener(address) => match interpreter.host.open_listener(address) {
+                    Ok(handle) if handle != 0 => Ok(Value::Listener(handle)),
+                    Ok(_) => Err(0),
+                    Err(errno) => Err(errno),
+                },
+            };
+            match value {
+                Ok(value) => values.push((function.locals[index].ty, value)),
+                Err(_) => {
+                    for (_, previous) in &values {
+                        match previous {
+                            Value::Directory(handle) | Value::Listener(handle) => interpreter.host.close_handle(*handle),
+                            _ => {}
+                        }
+                    }
+                    return Err(interpreter.trap(7, "I/O failed while provisioning entry grants"));
+                }
+            }
+        }
+    } else if function.params == 1 && matches!(interpreter.kind(function.locals[0].ty)?, TypeKind::World) {
+
         if !args.is_empty() {
             return Err(interpreter.invalid("World entry takes no raw arguments"));
         }

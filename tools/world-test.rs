@@ -308,7 +308,7 @@ fn exercise(
     let names: Vec<String> = vec!["main".to_string(), "paths".to_string(), "closed_stdin".to_string(),
         "handle_cleanup".to_string(), "output_failure".to_string(), "arguments".to_string(),
         "invalid_argument".to_string(), "status_marker".to_string(), "status".to_string(),
-        "system".to_string(), "closed_process".to_string(), "self_spawn".to_string(), "file_readonly".to_string()];
+        "system".to_string(), "closed_process".to_string(), "self_spawn".to_string(), "file_readonly".to_string(), "listener_closed".to_string()];
     for name in &names { prepare(world, compiler, directory, config, report, name)?; }
     let empty: Vec<Vec<u8>> = Vec::new();
     let payload = vec![255u8, 128u8, 97u8, 10u8, 192u8];
@@ -392,6 +392,8 @@ fn exercise(
             let args = vec![format!("{fd}").into_bytes()];
             let outcome = execute(world, compiler, config, "closed_process", route, &args, b"", &format!("close{fd}"))?;
             report.outcome(&format!("closed process/{fd}/{route}"), &outcome, 0, b"", b"");
+            let outcome = execute(world, compiler, config, "listener_closed", route, &args, b"", &format!("close{fd}"))?;
+            report.outcome(&format!("closed listener/{fd}/{route}"), &outcome, 0, b"", b"");
         }
     }
     Ok(())
@@ -412,7 +414,7 @@ fn main(mut world: World) {
     }
     if let Err(problem) = clean(&mut directory) { report.failures.push(problem); }
     if report.failures.is_empty() {
-        world.stdout().write(b"ok World streams, directories, process and descriptor cases\n");
+        world.stdout().write(b"ok World streams, directories, process, listener and descriptor cases\n");
     } else {
         for problem in report.failures { world.stderr().write(format!("FAIL {problem}\n").as_bytes()); }
         world.set_exit_status(1);

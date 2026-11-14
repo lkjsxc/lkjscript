@@ -168,7 +168,11 @@ impl Layouts {
                 value.scalar = false;
                 value.cleanup = true;
             }
-            TypeKind::Box { .. } | TypeKind::File | TypeKind::Directory | TypeKind::Child => {
+            TypeKind::Box { .. }
+            | TypeKind::File
+            | TypeKind::Directory
+            | TypeKind::Child
+            | TypeKind::Listener => {
                 value.cleanup = true;
             }
             TypeKind::Ref { inner, .. } => {

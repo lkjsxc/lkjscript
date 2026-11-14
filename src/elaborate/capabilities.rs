@@ -25,6 +25,10 @@ pub(super) enum Value {
     Process,
     Clock,
     Child,
+    Listener,
+    Port,
+    ResultListener,
+    ResultPort,
     FileRef,
     DirectoryRef,
     ArgumentsView,
@@ -95,6 +99,11 @@ pub(super) enum Method {
     DirectoryRemoveRaw,
     DirectoryRename,
     DirectoryRenameRaw,
+    WorldListen,
+    WorldListenRaw,
+    ListenerAccept,
+    ListenerPort,
+    ListenerAddressRaw,
 }
 pub(super) fn method(receiver: Receiver, name: &str) -> Option<Method> {
     Some(match (receiver, name) {
@@ -103,6 +112,11 @@ pub(super) fn method(receiver: Receiver, name: &str) -> Option<Method> {
         (Receiver::World, "stderr") => Method::Stderr,
         (Receiver::World, "args") => Method::Args,
         (Receiver::World, "directory") => Method::Directory,
+        (Receiver::World, "listen") => Method::WorldListen,
+        (Receiver::World, "__lkjscript_listen") => Method::WorldListenRaw,
+        (Receiver::Listener, "accept" | "__lkjscript_accept") => Method::ListenerAccept,
+        (Receiver::Listener, "port") => Method::ListenerPort,
+        (Receiver::Listener, "__lkjscript_address") => Method::ListenerAddressRaw,
         (Receiver::World, "set_exit_status") => Method::ExitStatus,
         (Receiver::World, "__lkjscript_arg_count") => Method::ArgCount,
         (Receiver::World, "__lkjscript_arg_len") => Method::ArgLen,
@@ -169,6 +183,11 @@ impl Method {
             Method::Stderr => (vec![], Value::Stderr),
             Method::Args => (vec![], Value::Arguments),
             Method::Directory => (vec![Value::Text], Value::ResultDirectory),
+            Method::WorldListen => (vec![Value::Text, Value::Port], Value::ResultListener),
+            Method::WorldListenRaw => (vec![Value::Bytes], Value::ResultListener),
+            Method::ListenerAccept => (vec![], Value::ResultFile),
+            Method::ListenerPort => (vec![], Value::ResultPort),
+            Method::ListenerAddressRaw => (vec![Value::MutableBytes], Value::Error),
             Method::ExitStatus => (vec![Value::Byte], Value::Unit),
             Method::ArgCount => (vec![], Value::Count),
             Method::ArgLen => (vec![Value::Count], Value::Count),
@@ -256,6 +275,9 @@ impl Method {
             Method::ArgLen => ir::IntrinsicOp::WorldArgLen,
             Method::ArgCopy => ir::IntrinsicOp::WorldArgCopy,
             Method::DirectoryRaw => ir::IntrinsicOp::WorldDirectory,
+            Method::WorldListenRaw => ir::IntrinsicOp::WorldListen,
+            Method::ListenerAccept => ir::IntrinsicOp::ListenerAccept,
+            Method::ListenerAddressRaw => ir::IntrinsicOp::ListenerAddress,
             Method::StdoutWrite => ir::IntrinsicOp::StdoutWrite,
             Method::StderrWrite => ir::IntrinsicOp::StderrWrite,
             Method::StdinReadRaw => ir::IntrinsicOp::StdinRead,
@@ -286,6 +308,8 @@ impl Method {
         Some(match self {
             Method::Args => "__lkjscript_args",
             Method::Directory => "__lkjscript_directory",
+            Method::WorldListen => "__lkjscript_listen",
+            Method::ListenerPort => "__lkjscript_listener_port",
             Method::StdinRead => "__lkjscript_stdin_read",
             Method::StdinReadToEnd => "__lkjscript_stdin_read_to_end",
             Method::DirectoryOpen => "__lkjscript_open",
@@ -329,6 +353,7 @@ fn reserved(name: &str) -> bool {
         Receiver::Process,
         Receiver::Clock,
         Receiver::Child,
+        Receiver::Listener,
     ];
     let mut index = 0;
     while index < receivers.len() {

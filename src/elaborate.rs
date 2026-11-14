@@ -61,6 +61,7 @@ enum TypeKey {
     Process,
     Clock,
     Child,
+    Listener,
     Str,
     Nominal(a::DeclarationId, Vec<usize>),
 }
@@ -808,6 +809,7 @@ impl Compiler<'_> {
             ir::TypeKind::Process => (TypeKey::Process, "Process".to_string()),
             ir::TypeKind::Clock => (TypeKey::Clock, "Clock".to_string()),
             ir::TypeKind::Child => (TypeKey::Child, "Child".to_string()),
+            ir::TypeKind::Listener => (TypeKey::Listener, "Listener".to_string()),
             ir::TypeKind::Str => (TypeKey::Str, "str".to_string()),
             _ => unreachable!("only structural types use intern"),
         };

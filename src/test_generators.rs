@@ -546,7 +546,19 @@ fn mutation_worker(
             if finding(&category) {
                 let case_path = format!("{output}/finding-{index}.lkjir");
                 write(world, &case_path, source.as_bytes())?;
-                let details = format!("seed {seed}, index {index}, base {}, mutation {}, category {category}\ninterpreter {} {} line {}\n{}\nnative {} {} line {}\n{}\n", seeds[base].path, mutation.kind, left.kind, left.code, left.line, display(&left.stderr), right.kind, right.code, right.line, display(&right.stderr));
+                let details = format!(
+                    "seed {seed}, index {index}, base {}, mutation {}, category {category}\ninterpreter {} {} line {}\n{}\nnative {} {} line {}\n{}\n",
+                    seeds[base].path,
+                    mutation.kind,
+                    left.kind,
+                    left.code,
+                    left.line,
+                    display(&left.stderr),
+                    right.kind,
+                    right.code,
+                    right.line,
+                    display(&right.stderr)
+                );
                 write(
                     world,
                     &format!("{output}/finding-{index}.txt"),
@@ -685,6 +697,26 @@ fn self_test(world: &mut World) -> Result<(), String> {
     let authority = "lkjscript-ir 1\ntype \"World\" world\nfn \"probe\" 0 0\nendfn\n";
     if mutation::prepare("authority", authority.to_string()).is_ok() {
         return Err("E_MUTATION authority admitted as pure seed".to_string());
+    }
+    for kind in vec!["world".to_string(), "listener".to_string()] {
+        let text = format!("lkjscript-ir 1\ntype \"authority\" {kind}\nfn \"probe\" 0 0\nendfn\n");
+        match mutation::prepare("authority", text) {
+            Err(problem) if problem.contains("authority type") => {}
+            _ => return Err("E_MUTATION listener type admitted as pure seed".to_string()),
+        }
+    }
+    for name in vec![
+        "world_listen".to_string(),
+        "listener_accept".to_string(),
+        "listener_address".to_string(),
+    ] {
+        let text = format!(
+            "lkjscript-ir 1\ntype \"unit\" unit\nfn \"probe\" 0 0\n@1 intrinsic 0 \"{name}\"\nendfn\n"
+        );
+        match mutation::prepare("authority", text) {
+            Err(problem) if problem.contains("authority intrinsic") => {}
+            _ => return Err("E_MUTATION listener operation admitted as pure seed".to_string()),
+        }
     }
     let left = Observation {
         kind: "trap".to_string(),

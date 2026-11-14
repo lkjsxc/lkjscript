@@ -78,6 +78,27 @@ impl Body<'_> {
                 self.intrinsic_open_result(dst);
                 return Ok(true);
             }
+            IntrinsicOp::WorldListen => {
+                self.read_word(args[1], 0, DI);
+                self.read_word(args[1], 1, SI);
+                self.a.call(self.platform.world_listen);
+                self.intrinsic_open_result(dst);
+                return Ok(true);
+            }
+            IntrinsicOp::ListenerAccept => {
+                self.read(args[0], DI);
+                self.a.load(DI, DI, 0);
+                self.a.call(self.platform.listener_accept);
+                self.intrinsic_open_result(dst);
+                return Ok(true);
+            }
+            IntrinsicOp::ListenerAddress => {
+                self.read(args[0], DI);
+                self.a.load(DI, DI, 0);
+                self.read_word(args[1], 0, SI);
+                self.read_word(args[1], 1, D);
+                self.a.call(self.platform.listener_address);
+            }
             IntrinsicOp::DirectoryOpen => {
                 self.read(args[0], DI);
                 self.a.load(DI, DI, 0);

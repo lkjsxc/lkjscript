@@ -48,6 +48,9 @@ pub struct Platform {
     pub file_write: Label,
     pub handle_close: Label,
     pub world_file: Label,
+    pub world_listen: Label,
+    pub listener_accept: Label,
+    pub listener_address: Label,
     pub clock_read: Label,
     pub process_spawn: Label,
     pub child_wait: Label,
@@ -95,6 +98,9 @@ impl Platform {
             file_write: a.label(),
             handle_close: a.label(),
             world_file: a.label(),
+            world_listen: a.label(),
+            listener_accept: a.label(),
+            listener_address: a.label(),
             clock_read: a.label(),
             process_spawn: a.label(),
             child_wait: a.label(),
@@ -118,7 +124,7 @@ impl Platform {
 }
 
 /// Platform leaves preserve callee-saved registers except on terminal failures.
-pub fn emit(a: &mut Assembler, p: Platform, entry_label: Label, entry: &Entry, profile: Option<super::profiling::Labels>) {
+pub fn emit(a: &mut Assembler, p: Platform, entry_label: Label, entry: &Entry, profile: Option<super::profiling::Labels>, grants: Option<&super::entry::Plan>) {
     a.address(CONTEXT, p.context);
     a.store(CONTEXT, INITIAL_STACK, SP);
     // SIGPIPE is reported through the ordinary output trap.
@@ -209,25 +215,32 @@ pub fn emit(a: &mut Assembler, p: Platform, entry_label: Label, entry: &Entry, p
         a.call(profile.start);
     }
 
+    if let Some(grants) = grants { grants.prepare(a, p); }
     let registers = [DI, SI, D, C, R8, R9];
     let extra = if entry.arguments.len() > registers.len() {
         entry.arguments.len() - registers.len()
     } else {
         0
     };
+    if extra != 0 {
+        // Entry stack arguments need the same kernel-backed growth as a body.
+        let bytes = ((extra as u64 + 1) & !1u64) * 8 + 8;
+        super::stack_available(a, p, bytes, Span::default());
+    }
     if extra % 2usize == 1usize {
+
         a.immediate(A, 0);
         a.push(A);
     }
     let mut index = entry.arguments.len();
     while index > registers.len() {
         index -= 1;
-        a.immediate(A, entry.arguments[index] as u64);
+        if let Some(grants) = grants { grants.load(a, index, A); } else { a.immediate(A, entry.arguments[index] as u64); }
         a.push(A);
     }
     let mut index = 0usize;
     while index < entry.arguments.len() && index < registers.len() {
-        a.immediate(registers[index], entry.arguments[index] as u64);
+        if let Some(grants) = grants { grants.load(a, index, registers[index]); } else { a.immediate(registers[index], entry.arguments[index] as u64); }
         index += 1;
     }
     a.call(entry_label);
@@ -294,6 +307,7 @@ pub fn emit(a: &mut Assembler, p: Platform, entry_label: Label, entry: &Entry, p
     memory(a, p);
     io(a, p);
     super::process::emit(a, p);
+    super::network::emit(a, p);
 }
 
 fn syscall_retry(a: &mut Assembler, number: u64) {

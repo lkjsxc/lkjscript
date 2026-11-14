@@ -9,12 +9,12 @@ accepted by a backend. Parsing text does not grant that authority.
 
 Files use `.lkjir` and begin with the exact first line `lkjscript-ir 1`.
 The revision describes the text format. Unsupported or absent headers are errors.
-`lkjscript ir SOURCE` writes it; `check`, `build`, `run` and `test` accept it.
+`lkjscript ir SOURCE` writes it; `check`, `build`, `run`, `test` and `authority` accept it.
 
 Types and functions are indexed from zero in declaration order. A function's
 locals are indexed from zero; its first `params` locals are parameters.
-Names identify diagnostics and function entry selection. Type names do not grant
-authority or change a type's shape. Function names must be unique.
+Names identify diagnostics and selection of entry functions and grant parameters.
+Type names do not grant authority or change a type's shape. Function names must be unique.
 
 Outside quoted words, whitespace separates tokens and `#` starts a comment.
 Quoted words use JSON-style string escapes. Instructions begin with
@@ -39,7 +39,7 @@ The first seven types must match this primitive prefix exactly, including names.
 | `array TYPE LENGTH` | Fixed-length owned elements. |
 | `vec TYPE`, `box TYPE` | Owned growable sequence or owned indirection. |
 | `str` | Unsized immutable UTF-8 text; values require a shared reference. |
-| `world`, `stdout`, `stdin`, `stderr`, `directory`, `file`, `process`, `clock`, `child` | Affine authority-bearing values. |
+| `world`, `stdout`, `stdin`, `stderr`, `directory`, `file`, `process`, `clock`, `child`, `listener` | Affine authority-bearing values. |
 
 All type indices must exist. Recursive by-value layouts reject; introduce Box or
 another indirection. Unsized text cannot be stored by value or as a container
@@ -146,6 +146,9 @@ The intrinsic signatures are checked in `src/check.rs` and `src/check/io.rs`:
 | `world_exit_status` | Set the requested u8 process status through World. |
 | `world_directory directory_open directory_open_directory` | Acquire a root Directory from World, or a File/Directory beneath an existing Directory. |
 | `world_file` | World plus u8 selector: 0 anonymous file, 1/2/3 owned stdin/stdout/stderr, 4 running executable. Return Result<File, i64>; closed standard streams produce closed Files. |
+| `world_listen` | `(&mut world, &[u8]) -> Result<listener, i64>`: bind and listen on an exact IPv4 socket address. |
+| `listener_accept` | `(&mut listener) -> Result<file, i64>`: accept an owned TCP byte stream. |
+| `listener_address` | `(&mut listener, &mut [u8]) -> i64`: write its local socket address; zero or negative errno. |
 | `file_duplicate` | Duplicate an exclusively borrowed File, sharing its offset and preserving closed state. Return Result<File, i64>. |
 | `file_readonly` | Reopen an exclusively borrowed File read-only with a fresh offset at zero, preserving closed state. Return Result<File, i64>; no path authority is granted. |
 | `file_rewind file_executable directory_rewind` | Seek to byte zero or make a File executable; return zero or negative errno. |
@@ -156,6 +159,22 @@ The intrinsic signatures are checked in `src/check.rs` and `src/check/io.rs`:
 | `child_wait child_terminate` | Exclusive Child. Wait takes a nonblocking bool and returns zero while running, Linux wait status plus one when reaped, or negative errno. Terminate requests SIGKILL; drop terminates and reaps a live direct child. |
 | `stdin_read file_read file_write` | Use an exclusive authority reference and a byte slice; return i64 count or negative errno. |
 | `stdout_write stderr_write` | Write an immutable byte slice through the corresponding exclusive authority reference. |
+
+Listener addresses contain exactly 16 bytes: bytes 0..2 hold AF_INET (2) as a
+little-endian u16, bytes 2..4 hold the port as a big-endian u16, bytes 4..8 hold
+the IPv4 octets, and the remaining bytes are padding. A zero port requests a
+kernel-selected port. Acquisition rejects another length or family with errno
+22. Address queries require an exact 16-byte writable slice and reject another
+length without writing it. No DNS lookup or outbound connection is implicit.
+
+Listener is non-Copy and non-Data. Structural destruction closes its owned
+handle; accepted Files follow ordinary File read/write/drop rules. Both
+acquisition results require a non-Copy enum with two alternatives: one success
+field of the declared capability type, then one i64 errno field. Native handles
+occupy eight bytes. Socket descriptors are close-on-exec and promoted above
+standard streams before exposure, preserving any originally closed stdio.
+Interrupted operations retry; closing consumes the descriptor without retry.
+The kernel determines backlog and resource limits.
 
 Unary, binary and intrinsic names form closed vocabularies. Unknown spellings
 reject with E_IR_TEXT; wrong typed signatures reject at the checker. A type name
@@ -204,6 +223,33 @@ once. `exact` preserves the selected referent; `bound` permits a descendant.
 `static` permits immutable module-lifetime storage. A call transports the
 actual arguments' provenance through the declared contract. A local owner or
 temporary reference carrier cannot become an escaping view's origin.
+
+## Host entry and authority reports
+
+A host entry returns unit or a scalar. It may take no parameters, a sole World,
+or owned Stdout/Stdin/Stderr, Directory, Listener, Process and Clock parameters.
+The sole World entry declares implicit full authority. Every other parameter
+requires an explicit invocation grant selected by its distinct, nonempty local
+name. ASCII whitespace, control bytes and equals signs cannot occur in grant names.
+File, Child, reference and aggregate parameters cannot be provisioned as entries;
+use a Directory entry and acquire files through ordinary checked operations.
+
+Grants are invocation data outside the IR. Directory descriptors contain the
+NUL-terminated root path; Listener descriptors contain the sixteen-byte address
+above. Other allowed capabilities need no payload. Both executors independently
+validate the complete parameter/grant correspondence before acquiring handles.
+Raw scalar arguments cannot manufacture an address or derived capability.
+Missing, duplicate, unknown or malformed CLI grants reject before publication or
+execution. Build embeds validated descriptors; acquisition occurs at startup.
+Acquisition failure reports R0007 at entry and releases acquired resources.
+
+The authority query starts from a checked entry. It lists all declared grants,
+then conservatively follows reachable structured branches, calls and owning
+cleanup, including custom destructors and capabilities nested in owned values.
+Unreachable instructions after return, trap or a loop transfer do not contribute.
+Borrowed values do not cause destruction of their referents. Recursive functions
+are listed once. This query reads checked IR alone and does not infer a smaller
+grant set from source spelling or a particular runtime branch.
 
 ## Backend contract and trust
 

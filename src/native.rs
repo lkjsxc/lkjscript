@@ -9,11 +9,13 @@ use crate::x86::*;
 use crate::x86::{Assembler, Label};
 use std::collections::{BTreeMap, BTreeSet};
 
+mod entry;
 mod intrinsics;
 mod layout;
 mod ownership;
 pub(crate) mod platform;
 mod process;
+mod network;
 pub mod profiling;
 mod registers;
 mod scalar;
@@ -1346,7 +1348,7 @@ fn emit_drop(
             a.load(DI, BP, -8);
             a.call(p.child_drop);
         }
-        TypeKind::File | TypeKind::Directory => {
+        TypeKind::File | TypeKind::Directory | TypeKind::Listener => {
             a.load(DI, BP, -8);
             a.load(DI, DI, 0);
             a.call(p.handle_close);
@@ -1382,15 +1384,39 @@ pub fn encode(
     runtime: &Runtime,
     entry: Entry,
 ) -> Result<Image, Diagnostic> {
-    encode_program(checked.program(), runtime, entry, false, None)
+    encode_program(checked.program(), runtime, entry, false, None, None)
 }
 pub fn encode_runtime(runtime: &Runtime, entry: Entry) -> Result<Image, Diagnostic> {
-    encode_program(runtime.checked_program(), runtime, entry, true, None)
+    encode_program(runtime.checked_program(), runtime, entry, true, None, None)
 }
 pub fn encode_profile(checked: &CheckedProgram, runtime: &Runtime, entry: Entry, path: &str) -> Result<Image, Diagnostic> {
-    encode_program(checked.program(), runtime, entry, false, Some(path))
+    encode_program(checked.program(), runtime, entry, false, Some(path), None)
+}
+pub fn encode_granted(
+    checked: &CheckedProgram,
+    runtime: &Runtime,
+    function: usize,
+    grants: &[ir::EntryGrant],
+    result_fd: Option<u32>,
+    profile_path: Option<&str>,
+) -> Result<Image, Diagnostic> {
+    let entry = Entry { function, arguments: vec![0i64; grants.len()], result_fd };
+    encode_program(checked.program(), runtime, entry, false, profile_path, Some(grants))
+}
+fn grant_matches(kind: &TypeKind, grant: &ir::EntryGrant, parameters: usize) -> bool {
+    match grant {
+        ir::EntryGrant::World => parameters == 1 && matches!(kind, TypeKind::World),
+        ir::EntryGrant::Stdout => matches!(kind, TypeKind::Stdout),
+        ir::EntryGrant::Stdin => matches!(kind, TypeKind::Stdin),
+        ir::EntryGrant::Stderr => matches!(kind, TypeKind::Stderr),
+        ir::EntryGrant::Clock => matches!(kind, TypeKind::Clock),
+        ir::EntryGrant::Process => matches!(kind, TypeKind::Process),
+        ir::EntryGrant::Directory(_) => matches!(kind, TypeKind::Directory),
+        ir::EntryGrant::Listener(_) => matches!(kind, TypeKind::Listener),
+    }
 }
 fn scalar_entry(kind: &TypeKind) -> bool {
+
     matches!(
         kind,
         TypeKind::Unit | TypeKind::Bool | TypeKind::Char | TypeKind::Int { .. } | TypeKind::F64
@@ -1420,6 +1446,7 @@ fn encode_program(
     entry: Entry,
     runtime_model: bool,
     profile_path: Option<&str>,
+    grants: Option<&[ir::EntryGrant]>,
 ) -> Result<Image, Diagnostic> {
     let selected = match program.functions.get(entry.function) {
         Some(function) => function,
@@ -1446,8 +1473,20 @@ fn encode_program(
             "native entry argument count differs",
         ));
     }
+    if let Some(grants) = grants {
+        if runtime_model || grants.len() != selected.params {
+            return Err(Diagnostic::new(first_site(selected), "E_ENTRY", "native entry grant count differs"));
+        }
+    }
     for index in 0..selected.params {
         let kind = &program.types[selected.locals[index].ty].kind;
+        if let Some(grants) = grants {
+            if !grant_matches(kind, &grants[index], selected.params) {
+                return Err(Diagnostic::new(first_site(selected), "E_ENTRY", "native entry grant does not match its owned capability parameter"));
+            }
+            continue;
+        }
+
         let value = entry.arguments[index] as u64;
         let world =
             !runtime_model && selected.params == 1 && matches!(kind, TypeKind::World) && value == 1;
@@ -1461,6 +1500,11 @@ fn encode_program(
     }
     let mut a = Assembler::new();
     let p = platform::Platform::new(&mut a);
+    let grant_plan = match grants {
+        Some(grants) => Some(entry::Plan::new(&mut a, grants, first_site(selected))),
+        None => None,
+    };
+
     let profile = if profile_path.is_some() { Some(profiling::Labels::new(&mut a)) } else { None };
     let image_start = a.label();
     a.bind(image_start);
@@ -1490,6 +1534,9 @@ fn encode_program(
         symbols.push((p.file_write, "$platform::file_write".to_string()));
         symbols.push((p.handle_close, "$platform::handle_close".to_string()));
         symbols.push((p.world_file, "$platform::world_file".to_string()));
+        symbols.push((p.world_listen, "$platform::world_listen".to_string()));
+        symbols.push((p.listener_accept, "$platform::listener_accept".to_string()));
+        symbols.push((p.listener_address, "$platform::listener_address".to_string()));
         symbols.push((p.clock_read, "$platform::clock_read".to_string()));
         symbols.push((p.process_spawn, "$platform::process_spawn".to_string()));
         symbols.push((p.child_wait, "$platform::child_wait".to_string()));
@@ -1525,7 +1572,7 @@ fn encode_program(
             needed[index] = true;
         }
     }
-    platform::emit(&mut a, p, functions[entry.function], &entry, profile);
+    platform::emit(&mut a, p, functions[entry.function], &entry, profile, grant_plan.as_ref());
     if let Some(profile) = profile {
         symbols.push((profile.start, "$profiler".to_string()));
         profiling::emit(&mut a, p, profile, profile_path.unwrap().len());
@@ -1627,6 +1674,7 @@ fn encode_program(
     let data_offset = (code_end + 4095) & !4095;
     let mut data = Vec::new();
     platform::data(&mut a, p, &mut data, data_offset, &trap_messages);
+    if let Some(plan) = grant_plan { plan.data(&mut a, &mut data, data_offset); }
     if let Some(profile) = profile {
         profiling::data(&mut a, profile, &mut data, data_offset, profile_path.unwrap(), &symbols, code_end);
     }

@@ -475,6 +475,7 @@ impl Compiler<'_> {
                     | "Process"
                     | "Clock"
                     | "Child"
+                    | "Listener"
             )
         {
             if !args.is_empty() {
@@ -494,6 +495,7 @@ impl Compiler<'_> {
                 "Process" => ir::TypeKind::Process,
                 "Clock" => ir::TypeKind::Clock,
                 "Child" => ir::TypeKind::Child,
+                "Listener" => ir::TypeKind::Listener,
                 _ => unreachable!(),
             };
             work.values.push(self.intern(String::new(), kind));

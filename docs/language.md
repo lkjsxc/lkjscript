@@ -399,6 +399,8 @@ reproduction without Rust or Node. The optional witness lives under witness/.
 | lkjscript build PATH [-o FILE] | Static executable, default PATH.elf; temporary publication plus rename preserves an existing destination on rejection. |
 | lkjscript run PATH [--entry NAME] | Execute main, else probe, with native default or --engine interpreter. |
 | lkjscript test PATH | Discover expectation cases or execute #[test]/IR test functions across native/interpreter routes; details on failure. |
+| lkjscript authority PATH | Entry grants and conservatively reachable operations/calls/owned cleanup, from checked IR alone. |
+| lkjscript build PATH --profile; lkjscript profile FILE | Sample CPU instruction/frame addresses to OUTPUT.samples.PID; report self/inclusive source functions in at most 40 lines. |
 
 Program arguments after -- remain exact bytes; compiler arguments require UTF-8.
 Scalar runs print integer decimal, bool text, UTF-8 char (including NUL), or
@@ -424,9 +426,16 @@ Single-error APIs select the first diagnostic from these same production paths.
 
 ## World and capabilities
 
-Entries currently take no argument or World; ordinary calls supply their arguments.
-World, Stdout/Stdin/Stderr, Directory, File, Process, Clock and Child are affine
-intrinsic types with no source constructor, Copy/Clone/Data/Send/Sync implementation.
+Entries take owned Stdout/Stdin/Stderr, Directory, Listener, Process or Clock
+parameters, no parameters, or a sole World declaring implicit full authority.
+build/run require --grant NAME for each parameter; Directory takes NAME=PATH,
+Listener takes NAME=IPv4:PORT (numeric address; port zero requests a fresh port).
+build embeds these descriptors; handles are acquired at executable startup.
+Duplicate, missing, unknown or malformed grants reject before publication/execution;
+acquisition failure traps R0007 at entry. File/Child/borrowed/aggregate entry
+parameters reject; accept Directory and open a File inside the entry instead.
+World, Stdout/Stdin/Stderr, Directory, File, Listener, Process, Clock and Child are
+affine intrinsic types with no constructor or Copy/Clone/Data/Send/Sync implementation.
 Names, integers or casts cannot forge authority. Every capability operation checks
 independently in IR; methods below exclusively borrow the receiver. Derived owners
 can outlive that borrow and move normally.
@@ -436,6 +445,8 @@ can outlive that borrow and move normally.
 | World.args() | Vec<Vec<u8>> excluding argv0. |
 | World.stdout()/stdin()/stderr() | Corresponding inherited stream capability. |
 | World.directory(path) | Result<Directory,i64> acquiring a root. |
+| World.listen(address,port) | Result<Listener,i64> binding a numeric IPv4 TCP endpoint. |
+| Listener.accept(), port() | Result<File,i64> owning a connected stream; Result<u16,i64> with the bound port. |
 | World.process()/clock() | Process or monotonic-clock capability. |
 | World.temporary_file() | Result<File,i64>, anonymous read/write storage. |
 | World.stdin_file()/stdout_file()/stderr_file() | Owned inherited-stream duplicate, preserving closed streams. |
@@ -467,7 +478,7 @@ EBADF, drops harmlessly and closes the assigned child stream. Spawn validates
 NUL-free arguments, chooses argv0 lkjscript, clears environment and executes the
 File with execveat, without PATH/shell fallback; exec failure returns errno.
 Direct children receive parent-death SIGKILL. No caller slice pointer survives I/O.
-File/Directory drops close once; standard-stream capability drops leave inherited
+File/Directory/Listener drops close once; standard-stream capability drops leave inherited
 streams open. Acquiring another capability preserves inherited closed streams.
 
 Generated programs have no ambient filesystem/environment/process imports or

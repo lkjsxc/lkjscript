@@ -380,6 +380,7 @@ fn raw_ir_cannot_fabricate_host_authority_or_supply_it_as_integer_argument() {
         ir::TypeKind::Process,
         ir::TypeKind::Clock,
         ir::TypeKind::Child,
+        ir::TypeKind::Listener,
     ] {
         let program = raw(
             vec![ir::Type {
@@ -449,7 +450,7 @@ fn model_output_preserves_bytes_drop_order_and_trap_prefix() {
     assert_eq!(bytes, "before trap\n".as_bytes().to_vec());
 }
 
-struct FailingHost(Vec<u8>);
+pub(super) struct FailingHost(pub(super) Vec<u8>);
 impl interpreter::Host for FailingHost {
     fn argument_count(&self) -> usize {
         0
@@ -464,7 +465,8 @@ impl interpreter::Host for FailingHost {
         Err("stderr is unavailable".to_string())
     }
     fn open_directory(&mut self, _path: &[u8]) -> Result<u64, i64> {
-        Err(38)
+        self.0.push(b'D');
+        Ok(1)
     }
     fn open_file(&mut self, _directory: u64, _path: &[u8], _create: bool) -> Result<u64, i64> {
         Err(38)
@@ -475,7 +477,10 @@ impl interpreter::Host for FailingHost {
     fn write_file(&mut self, _handle: u64, _bytes: &[u8]) -> Result<usize, i64> {
         Err(38)
     }
-    fn close_handle(&mut self, _handle: u64) {}
+    fn close_handle(&mut self, handle: u64) {
+        assert_eq!(handle, 1u64);
+        self.0.push(b'C');
+    }
     fn set_exit_status(&mut self, _status: u8) {}
     fn duplicate_file(&mut self, _handle: u64) -> Result<u64, i64> {
         Err(38)
@@ -484,6 +489,16 @@ impl interpreter::Host for FailingHost {
         Err(38)
     }
     fn world_file(&mut self, _kind: u8) -> Result<u64, i64> {
+        Err(38)
+    }
+    fn open_listener(&mut self, _address: &[u8]) -> Result<u64, i64> {
+        self.0.push(b'L');
+        Err(38)
+    }
+    fn accept_listener(&mut self, _listener: u64) -> Result<u64, i64> {
+        Err(38)
+    }
+    fn listener_address(&mut self, _listener: u64, _bytes: &mut [u8]) -> Result<(), i64> {
         Err(38)
     }
     fn open_subdirectory(&mut self, _directory: u64, _path: &[u8]) -> Result<u64, i64> {
@@ -842,6 +857,52 @@ fn range_views_validate_types_loans_and_utf8_without_the_checker() {
     }
 }
 
+fn listener_intrinsics_reject_wrong_signatures_without_host_effects() {
+    let cases: Vec<(String, ir::IntrinsicOp, ir::IntrinsicOp, bool)> = vec![
+        (
+            "fn main(mut world: World) { let _directory = world.__lkjscript_directory(b\".\\0\"); }".to_string(),
+            ir::IntrinsicOp::WorldDirectory,
+            ir::IntrinsicOp::WorldListen,
+            false,
+        ),
+        (
+            "fn main(mut world: World) { let _directory = world.__lkjscript_directory(b\".\\0\"); }".to_string(),
+            ir::IntrinsicOp::WorldDirectory,
+            ir::IntrinsicOp::ListenerAccept,
+            true,
+        ),
+        (
+            "fn main(mut world: World) { let mut clock = world.clock(); let mut bytes = [0u8; 16]; let _status = clock.__lkjscript_read(&mut bytes); }".to_string(),
+            ir::IntrinsicOp::ClockRead,
+            ir::IntrinsicOp::ListenerAddress,
+            false,
+        ),
+    ];
+    for (source, before, after, trim) in cases {
+        let checked = compiled(&source);
+        let mut program = checked.program().clone();
+        let entry = function_index(&program, "main");
+        let mut changed = 0usize;
+        for function_index in 0..program.functions.len() {
+            let function = &mut program.functions[function_index];
+            for instruction_index in 0..function.body.len() {
+                if let ir::Op::Intrinsic { name, args, .. } = &mut function.body[instruction_index].op {
+                    if *name == before {
+                        *name = after;
+                        if trim { args.pop(); }
+                        changed += 1;
+                    }
+                }
+            }
+        }
+        assert_eq!(changed, 1);
+        let rejected = crate::check::check(program.clone()).err().unwrap();
+        assert_eq!(rejected.code, "E_TYPE");
+        let failure = interpreter::run(&program, entry, &[0u64; 0], &mut Vec::<u8>::new()).err().unwrap();
+        assert!(failure.kind == ErrorKind::Interpreter(InterpreterError::InvalidIr), "{}", failure.message);
+    }
+}
+
 pub fn run(world: &mut World, trace: bool) -> usize {
     if trace {
         let mut output = world.stdout();
@@ -918,5 +979,10 @@ pub fn run(world: &mut World, trace: bool) -> usize {
         output.write(b"range_views_validate_types_loans_and_utf8_without_the_checker\n");
     }
     range_views_validate_types_loans_and_utf8_without_the_checker();
-    15
+    if trace {
+        let mut output = world.stdout();
+        output.write(b"listener_intrinsics_reject_wrong_signatures_without_host_effects\n");
+    }
+    listener_intrinsics_reject_wrong_signatures_without_host_effects();
+    16
 }

@@ -728,6 +728,7 @@ fn exercise(
         );
     }
     diagnostics(world, executable, directory, config, report)?;
+    authority_exercise(world, executable, directory, config, report)?;
     Ok(())
 }
 
@@ -837,4 +838,439 @@ fn main(mut world: World) {
         }
         world.set_exit_status(1);
     }
+}
+
+struct AuthorityCase {
+    name: String,
+    source: String,
+    entry: String,
+    required: String,
+    forbidden: String,
+}
+fn authority_case(
+    name: &str,
+    source: &str,
+    entry: &str,
+    required: &str,
+    forbidden: &str,
+) -> AuthorityCase {
+    AuthorityCase {
+        name: name.to_string(),
+        source: source.to_string(),
+        entry: entry.to_string(),
+        required: required.to_string(),
+        forbidden: forbidden.to_string(),
+    }
+}
+fn authority_cases() -> Vec<AuthorityCase> {
+    vec![
+        authority_case("pure.rs", include_str!("../tests/fixtures/authority/pure.rs"), "probe",
+            "declared authority:\n  none\n;owned cleanup):\n  none\n", "world_;stdout_write;directory_close"),
+        authority_case("typed_names.rs", include_str!("../tests/fixtures/authority/typed_names.rs"), "main",
+            "send: Stdout (--grant send);tree: Directory (--grant tree=PATH);timer: Clock (--grant timer);stdout_write;clock_read;directory_close [structural cleanup]", "world_"),
+        authority_case("unused_grants.rs", include_str!("../tests/fixtures/authority/unused_grants.rs"), "main",
+            "input: Stdin (--grant input);errors: Stderr (--grant errors);time: Clock (--grant time);launch: Process (--grant launch);owned cleanup):\n  none\n", "stdin_read;stderr_write;clock_read;process_spawn"),
+        authority_case("recursive.rs", include_str!("../tests/fixtures/authority/recursive.rs"), "main",
+            "stdout_write", "world_"),
+        authority_case("custom_cleanup.rs", include_str!("../tests/fixtures/authority/custom_cleanup.rs"), "main",
+            "[custom Drop];stdout_write;directory_close [structural cleanup]", "world_"),
+        authority_case("file_cleanup.rs", include_str!("../tests/fixtures/authority/file_cleanup.rs"), "main",
+            "directory_open;file_close [structural cleanup];directory_close [structural cleanup]", "world_"),
+        authority_case("listener_cleanup.rs", include_str!("../tests/fixtures/authority/listener_cleanup.rs"), "main",
+            "incoming: Listener (--grant incoming=ADDRESS);listener_address;listener_close [structural cleanup]", "world_"),
+        authority_case("world.rs", include_str!("../tests/fixtures/authority/world.rs"), "main",
+            "World (implicit full authority);world_stdout;stdout_write", "--grant"),
+        authority_case("unrelated_ir.lkjir", include_str!("../tests/fixtures/authority/unrelated_ir.lkjir"), "probe",
+            "declared authority:\n  none\n;owned cleanup):\n  none\n;reachable functions (1; each listed once):\n  probe\n", "world_;Unused;unrelated"),
+        authority_case("outer_break_ir.lkjir", include_str!("../tests/fixtures/authority/outer_break_ir.lkjir"), "probe",
+            "declared authority:\n  none\n;owned cleanup):\n  none\n;reachable functions (1; each listed once):\n  probe\n", "world_;Unused;unrelated"),
+        authority_case("reject_file.rs", include_str!("../tests/fixtures/authority/reject_file.rs"), "main",
+            "accept Directory and open the file inside the entry", ""),
+        authority_case("reject_child.rs", include_str!("../tests/fixtures/authority/reject_child.rs"), "main", "", ""),
+        authority_case("reject_reference.rs", include_str!("../tests/fixtures/authority/reject_reference.rs"), "main", "", ""),
+        authority_case("reject_aggregate.rs", include_str!("../tests/fixtures/authority/reject_aggregate.rs"), "main", "", ""),
+        authority_case("reject_world_mixed.rs", include_str!("../tests/fixtures/authority/reject_world_mixed.rs"), "main", "", ""),
+        authority_case("reject_duplicate_name.lkjir", include_str!("../tests/fixtures/authority/reject_duplicate_name.lkjir"), "main", "", ""),
+        authority_case("typed_read.rs", include_str!("../tests/fixtures/authority/typed_read.rs"), "main",
+            "send: Stdout (--grant send);tree: Directory (--grant tree=PATH);timer: Clock (--grant timer);stdout_write;clock_read;directory_open;file_read;file_close", "world_"),
+        authority_case("many_parameters.rs", include_str!("../tests/fixtures/authority/many_parameters.rs"), "main",
+            "tree: Directory (--grant tree=PATH);other: Directory (--grant other=PATH);stdout_write;stdin_read;stderr_write;directory_open;file_read", "world_"),
+    ]
+}
+fn authority_rejected_build(
+    world: &mut World,
+    executable: &File,
+    directory: &mut Directory,
+    config: &Config,
+    report: &mut Report,
+    source: &str,
+    entry: &str,
+    grants: &[String],
+) -> Result<(), String> {
+    write(
+        directory,
+        "authority-preserved",
+        b"existing authority artifact\0\xff",
+    )?;
+    for artifact in pair("authority-absent", "authority-preserved") {
+        let mut arguments = command(config, "build", source);
+        option(&mut arguments, "--entry", entry);
+        for grant in grants {
+            option(&mut arguments, "--grant", grant);
+        }
+        option(&mut arguments, "-o", &path(config, &artifact));
+        let result = invoke(world, executable, &arguments, b"")?;
+        report.require(
+            result.status == 1
+                && result.output.is_empty()
+                && result.result.is_empty()
+                && contains(&result.errors, b"E_ENTRY"),
+            format!(
+                "grant rejection build {source}/{artifact}: {} {}",
+                result.status,
+                display_bytes(&result.errors)
+            ),
+        );
+    }
+    report.require(
+        directory.open("authority-absent").is_err(),
+        format!("grant rejection {source} published an artifact"),
+    );
+    report.equal(
+        &format!("grant rejection {source}"),
+        "existing artifact",
+        &read(directory, "authority-preserved")?,
+        b"existing authority artifact\0\xff",
+    );
+    Ok(())
+}
+fn authority_queries(
+    world: &mut World,
+    executable: &File,
+    directory: &mut Directory,
+    config: &Config,
+    report: &mut Report,
+) -> Result<(), String> {
+    let no_grants: Vec<String> = Vec::new();
+    for case in authority_cases() {
+        let source = format!("authority-{}", case.name);
+        let roundtrip = format!("authority-{}.roundtrip.lkjir", case.name);
+        write(directory, &source, case.source.as_bytes())?;
+        let mut arguments = command(config, "ir", &source);
+        option(&mut arguments, "-o", &path(config, &roundtrip));
+        let result = invoke(world, executable, &arguments, b"")?;
+        report.outcome(&format!("authority IR {}", case.name), &result, 0, b"", b"");
+        if result.status != 0 {
+            continue;
+        }
+        let mut original: Vec<u8> = Vec::new();
+        for input in pair(&source, &roundtrip) {
+            let mut arguments = command(config, "authority", &input);
+            option(&mut arguments, "--entry", &case.entry);
+            let result = invoke(world, executable, &arguments, b"")?;
+            let label = format!("authority {input}");
+            if case.name.starts_with("reject_") {
+                report.require(
+                    result.status == 1
+                        && result.output.is_empty()
+                        && result.result.is_empty()
+                        && contains(&result.errors, b"E_ENTRY"),
+                    format!(
+                        "{label}: missing entry rejection: {} {}",
+                        result.status,
+                        display_bytes(&result.errors)
+                    ),
+                );
+                for required in case.required.as_str().split(';') {
+                    if !required.is_empty() {
+                        report.require(
+                            contains(&result.errors, required.as_bytes()),
+                            format!("{label}: missing rejection rewrite {required}"),
+                        );
+                    }
+                }
+                authority_rejected_build(
+                    world,
+                    executable,
+                    directory,
+                    config,
+                    report,
+                    &input,
+                    &case.entry,
+                    &no_grants,
+                )?;
+                continue;
+            }
+            report.require(
+                result.status == 0 && result.errors.is_empty() && result.result.is_empty(),
+                format!(
+                    "{label}: query failed: {} {}",
+                    result.status,
+                    display_bytes(&result.errors)
+                ),
+            );
+            if input == source {
+                original = result.output.clone();
+            } else {
+                report.equal(&label, "source/IR report", &result.output, &original);
+            }
+            for required in case.required.as_str().split(';') {
+                if !required.is_empty() {
+                    report.require(
+                        contains(&result.output, required.as_bytes()),
+                        format!("{label}: missing report text {required}"),
+                    );
+                }
+            }
+            for forbidden in case.forbidden.as_str().split(';') {
+                if !forbidden.is_empty() {
+                    report.require(
+                        !contains(&result.output, forbidden.as_bytes()),
+                        format!("{label}: included unreachable authority {forbidden}"),
+                    );
+                }
+            }
+            if case.name == "recursive.rs" {
+                report.require(
+                    occurrences(&result.output, b"  recursive\n") == 1,
+                    format!("{label}: recursive function was not listed exactly once"),
+                );
+            }
+        }
+    }
+    Ok(())
+}
+fn authority_grants(
+    world: &mut World,
+    executable: &File,
+    directory: &mut Directory,
+    config: &Config,
+    report: &mut Report,
+) -> Result<(), String> {
+    let no_arguments: Vec<Vec<u8>> = Vec::new();
+    write(directory, "authority-input", b"granted\0\xff\n")?;
+    io_result(
+        directory.create_directory("authority-other"),
+        "create second authority directory",
+    )?;
+    write(directory, "authority-other/authority-input", b"second\n")?;
+    let directory_grant = format!("tree={}", config.directory);
+    let grants: Vec<String> = vec![
+        "send".to_string(),
+        directory_grant.clone(),
+        "timer".to_string(),
+    ];
+    for source in pair(
+        "authority-typed_read.rs",
+        "authority-typed_read.rs.roundtrip.lkjir",
+    ) {
+        for engine in pair("native", "interpreter") {
+            let mut arguments = command(config, "run", &source);
+            option(&mut arguments, "--engine", &engine);
+            for grant in &grants {
+                option(&mut arguments, "--grant", grant);
+            }
+            let result = invoke(world, executable, &arguments, b"")?;
+            report.outcome(
+                &format!("typed grant {source}/{engine}"),
+                &result,
+                0,
+                b"granted\0\xff\n",
+                b"",
+            );
+        }
+        let artifact: &str = if source.ends_with(".rs") {
+            "authority-built-source"
+        } else {
+            "authority-built-ir"
+        };
+        let mut arguments = command(config, "build", &source);
+        for grant in &grants {
+            option(&mut arguments, "--grant", grant);
+        }
+        option(&mut arguments, "-o", &path(config, artifact));
+        let result = invoke(world, executable, &arguments, b"")?;
+        report.outcome(&format!("typed grant build {source}"), &result, 0, b"", b"");
+        if result.status == 0 {
+            let built: File = io_result(directory.open(artifact), "open granted artifact")?;
+            let result = invoke(world, &built, &no_arguments, b"")?;
+            report.outcome(
+                &format!("typed grant standalone {source}"),
+                &result,
+                0,
+                b"granted\0\xff\n",
+                b"",
+            );
+        }
+    }
+    report.equal(
+        "typed grants source/IR",
+        "artifact",
+        &read(directory, "authority-built-source")?,
+        &read(directory, "authority-built-ir")?,
+    );
+    let many: Vec<String> = vec![
+        "first".to_string(),
+        "errors".to_string(),
+        "timer".to_string(),
+        "launch".to_string(),
+        "input".to_string(),
+        "second".to_string(),
+        directory_grant.clone(),
+        format!("other={}", path(config, "authority-other")),
+    ];
+    for engine in pair("native", "interpreter") {
+        let mut arguments = command(config, "run", "authority-many_parameters.rs");
+        option(&mut arguments, "--engine", &engine);
+        for grant in &many {
+            option(&mut arguments, "--grant", grant);
+        }
+        let result = invoke(world, executable, &arguments, b"input\0\xff")?;
+        report.outcome(
+            &format!("eight grant stack arguments {engine}"),
+            &result,
+            0,
+            b"first|input\0\xff|granted\0\xff\n|second\n",
+            b"error\n",
+        );
+    }
+    let bad: Vec<Vec<String>> = vec![
+        Vec::new(),
+        vec!["send".to_string(), directory_grant.clone()],
+        vec![
+            "send".to_string(),
+            directory_grant.clone(),
+            "timer".to_string(),
+            "unknown".to_string(),
+        ],
+        vec![
+            "send".to_string(),
+            directory_grant.clone(),
+            "timer".to_string(),
+            "send".to_string(),
+        ],
+        vec![
+            "send=1".to_string(),
+            directory_grant.clone(),
+            "timer".to_string(),
+        ],
+        vec!["send".to_string(), "tree".to_string(), "timer".to_string()],
+        vec!["send".to_string(), "tree=".to_string(), "timer".to_string()],
+        vec![
+            "send".to_string(),
+            directory_grant,
+            "timer=monotonic".to_string(),
+        ],
+    ];
+    for (index, grants) in bad.iter().enumerate() {
+        for engine in pair("native", "interpreter") {
+            let mut arguments = command(config, "run", "authority-typed_read.rs");
+            option(&mut arguments, "--engine", &engine);
+            for grant in grants {
+                option(&mut arguments, "--grant", grant);
+            }
+            let result = invoke(world, executable, &arguments, b"")?;
+            report.require(
+                result.status == 1
+                    && result.output.is_empty()
+                    && result.result.is_empty()
+                    && contains(&result.errors, b"E_ENTRY"),
+                format!(
+                    "invalid grants {index}/{engine}: {} {}",
+                    result.status,
+                    display_bytes(&result.errors)
+                ),
+            );
+        }
+        authority_rejected_build(
+            world,
+            executable,
+            directory,
+            config,
+            report,
+            "authority-typed_read.rs",
+            "main",
+            grants,
+        )?;
+    }
+    for invalid in pair("incoming=localhost:0", "incoming=127.0.0.1:65536") {
+        authority_rejected_build(world, executable, directory, config, report,
+            "authority-listener_cleanup.rs", "main", &vec![invalid])?;
+    }
+    for source in pair("authority-pure.rs", "authority-world.rs") {
+        let entry = if source == "authority-pure.rs" {
+            "probe"
+        } else {
+            "main"
+        };
+        authority_rejected_build(
+            world,
+            executable,
+            directory,
+            config,
+            report,
+            &source,
+            entry,
+            &vec!["unused".to_string()],
+        )?;
+    }
+    Ok(())
+}
+fn authority_exercise(
+    world: &mut World,
+    executable: &File,
+    directory: &mut Directory,
+    config: &Config,
+    report: &mut Report,
+) -> Result<(), String> {
+    authority_queries(world, executable, directory, config, report)?;
+    let mut arguments = command(config, "test", "authority-typed_names.rs");
+    option(&mut arguments, "--jobs", "1");
+    let result = invoke(world, executable, &arguments, b"")?;
+    report.require(result.status == 0 && result.errors.is_empty() && result.result.is_empty()
+        && contains(&result.output, b"1 cases, 2 route checks, 0 pending"),
+        format!("check-only typed entry discovery: {} {}", result.status, display_bytes(&result.errors)));
+    authority_grants(world, executable, directory, config, report)?;
+    authority_server(world, executable, config, report)
+}
+
+fn authority_server(
+    world: &mut World, executable: &File, config: &Config, report: &mut Report,
+) -> Result<(), String> {
+    let source = "examples/http.rs";
+    let roundtrip = path(config, "authority-http.lkjir");
+    let mut arguments = vec!["ir".as_bytes().to_vec(), source.as_bytes().to_vec()];
+    for option in &config.options { arguments.push(option.clone()); }
+    option(&mut arguments, "-o", &roundtrip);
+    let result = invoke(world, executable, &arguments, b"")?;
+    report.outcome("HTTP authority checked IR", &result, 0, b"", b"");
+    if result.status != 0 { return Ok(()); }
+    let required: Vec<String> = vec![
+        "output: Stdout (--grant output)".to_string(),
+        "root: Directory (--grant root=PATH)".to_string(),
+        "listener: Listener (--grant listener=ADDRESS)".to_string(),
+        "clock: Clock (--grant clock)".to_string(),
+        "listener_address".to_string(), "listener_accept".to_string(),
+        "directory_open".to_string(), "file_read".to_string(), "file_write".to_string(),
+        "file_close [structural cleanup]".to_string(), "clock_read".to_string(),
+        "stdout_write".to_string(),
+    ];
+    let mut original: Vec<u8> = Vec::new();
+    for input in pair(source, &roundtrip) {
+        let mut arguments = vec!["authority".as_bytes().to_vec(), input.as_bytes().to_vec()];
+        for option in &config.options { arguments.push(option.clone()); }
+        let result = invoke(world, executable, &arguments, b"")?;
+        report.require(result.status == 0 && result.errors.is_empty() && result.result.is_empty(),
+            format!("HTTP authority {input}: {} {}", result.status, display_bytes(&result.errors)));
+        for text in &required {
+            report.require(contains(&result.output, text.as_bytes()),
+                format!("HTTP authority {input}: missing {text}"));
+        }
+        report.require(!contains(&result.output, b"world_")
+            && !contains(&result.output, b"implicit full authority"),
+            format!("HTTP authority {input}: reported undeclared World authority"));
+        if input == source { original = result.output; }
+        else { report.equal("HTTP authority", "source/IR report", &result.output, &original); }
+    }
+    Ok(())
 }

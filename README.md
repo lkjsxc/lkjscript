@@ -35,9 +35,10 @@ target/lkjscript run examples/hello.rs
 target/lkjscript run examples/hello.rs --engine interpreter
 target/lkjscript test path/to/tests.rs
 target/lkjscript test tests/conformance --jobs 8
+target/lkjscript authority examples/http.rs
 ```
 
-All five commands accept source or `.lkjir` input. `check` is silent on success.
+All six commands accept source or `.lkjir` input. `check` is silent on success.
 `build` writes a static Linux x86-64 ELF with no libc or dynamic loader. `run`
 executes `main`, falling back to `probe`; `--entry NAME` selects another entry.
 Arguments after `--` reach a World entry as exact bytes. Program streams and
@@ -69,11 +70,24 @@ ordinary IR. The source library provides text, iterators, formatting, ordered
 maps and collection algorithms. Heap containers own their contents; stored
 relationships use indices or owned values.
 
-World derives authority for byte arguments, streams, exit status, files and
-directory changes, child processes with explicit arguments and streams, and a
-monotonic clock. Owned file and directory handles close on destruction; dropping
-a live Child terminates and reaps it. Listener capabilities and explicit entry
-grants follow in milestone 6.4.
+An entry's owned capability parameters are its authority manifest. Supply each by
+name with `--grant NAME`; Directory requires `--grant NAME=PATH`, and Listener
+requires `--grant NAME=IPv4:PORT`. A sole World parameter declares implicit full
+authority. Missing, duplicate and unknown grants are rejected before execution or
+artifact publication. `build` records the grants; the executable acquires the
+handles at startup. `run` supports the same grants on both execution routes.
+
+World derives byte arguments, streams, exit status, files and directory changes,
+child processes with explicit arguments and streams, a monotonic clock, and IPv4
+TCP listeners. Directory confines descendant operations beneath its root.
+Listener accepts connections as owned Files. File, Directory and Listener close
+on destruction; dropping a live Child terminates and reaps it.
+
+`lkjscript authority PATH` reports the declared entry grants and conservatively
+reachable effects, calls and owned cleanup from checked IR. Source and serialized
+IR produce the same report. The [HTTP example](examples/README.md) serves a granted
+directory with explicit Stdout, Directory, Listener and Clock parameters, and
+includes a generated-traffic harness with memory measurement and CPU profiling.
 
 ## References and development
 
@@ -82,11 +96,15 @@ grants follow in milestone 6.4.
 - [Status](docs/status.md): current milestone, measurements and known gaps.
 - [Direction](docs/direction.md): the ordered development course.
 
-The development gate bootstraps from the stored seed and needs no Rust or Node:
+The development gate bootstraps from the stored seed and needs no Rust or Node.
+Its HTTP test uses curl as an explicit client:
 
 ```sh
 LKJSCRIPT_GATE_JOBS=8 bash tools/check.sh
 ```
+
+The gate accepts 2..8 workers; two are reserved for the HTTP server/client pair.
+Individual `lkjscript test --jobs 1` suites can still run with one worker.
 
 It compares native execution with the independent interpreter, checks serialized
 IR and executable identity, runs seeded source generators, mutates and reduces

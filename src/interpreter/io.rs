@@ -107,6 +107,7 @@ impl<H: Host> Interpreter<'_, H> {
                     TypeKind::Directory => Value::Directory(handle),
                     TypeKind::File => Value::File(handle),
                     TypeKind::Child => Value::Child(handle),
+                    TypeKind::Listener => Value::Listener(handle),
                     _ => return Err(self.invalid("open result is not a handle capability")),
                 },
             ),
@@ -121,7 +122,10 @@ impl<H: Host> Interpreter<'_, H> {
     }
     fn io_handle(&self, access: &Access) -> Result<u64, RunError> {
         match self.value(access.cell)? {
-            Value::Directory(handle) | Value::File(handle) | Value::Child(handle) => Ok(*handle),
+            Value::Directory(handle)
+            | Value::File(handle)
+            | Value::Child(handle)
+            | Value::Listener(handle) => Ok(*handle),
             _ => Err(self.invalid("I/O capability has no live handle")),
         }
     }
@@ -194,6 +198,41 @@ impl<H: Host> Interpreter<'_, H> {
                 let kind = self.io_number(values, 1, ir::U8)?;
                 let opened = self.host.world_file(kind as u8);
                 self.io_open_result(types, opened, TypeKind::File)?
+            }
+            ir::IntrinsicOp::WorldListen if values.len() == 2 => {
+                self.io_authority(values, TypeKind::World)?;
+                let types = self.io_open_types(result, TypeKind::Listener)?;
+                let address = self.io_buffer(values, 1, false)?;
+                let address = self.bytes(&address)?;
+                let opened = if address.len() != 16 || address[0] != 2 || address[1] != 0 {
+                    Err(22)
+                } else {
+                    self.host.open_listener(&address)
+                };
+                self.io_open_result(types, opened, TypeKind::Listener)?
+            }
+            ir::IntrinsicOp::ListenerAccept if values.len() == 1 => {
+                let authority = self.io_authority(values, TypeKind::Listener)?;
+                let types = self.io_open_types(result, TypeKind::File)?;
+                let handle = self.io_handle(&authority)?;
+                let opened = self.host.accept_listener(handle);
+                self.io_open_result(types, opened, TypeKind::File)?
+            }
+            ir::IntrinsicOp::ListenerAddress if values.len() == 2 => {
+                let authority = self.io_authority(values, TypeKind::Listener)?;
+                self.io_result_type(result, ir::I64)?;
+                let buffer = self.io_buffer(values, 1, true)?;
+                let mut bytes = self.bytes(&buffer)?;
+                let handle = self.io_handle(&authority)?;
+                if bytes.len() != 16 {
+                    Value::Bits((-22i64) as u64)
+                } else {
+                    let outcome = self.host.listener_address(handle, &mut bytes);
+                    if outcome.is_ok() {
+                        self.io_write_buffer(&buffer, &bytes)?;
+                    }
+                    self.io_status(outcome)?
+                }
             }
             ir::IntrinsicOp::DirectoryOpenDirectory if values.len() == 2 => {
                 let authority = self.io_authority(values, TypeKind::Directory)?;
