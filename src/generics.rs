@@ -1378,45 +1378,6 @@ pub(crate) fn derived_coherence(
     Ok(())
 }
 
-fn derived(
-    source: &Program,
-    types: &[crate::k::Type],
-    applications: &BTreeMap<usize, (String, Vec<usize>)>,
-    ty: usize,
-    bound: &str,
-) -> bool {
-    let name: &str = match applications.get(&ty) {
-        Some((name, _)) => name.as_str(),
-        None => types[ty].name.as_str(),
-    };
-    for s in &source.structs {
-        if qualified(&s.module, &s.name) == name {
-            for attr in &s.attrs {
-                if attr.name == "derive" {
-                    for arg in &attr.args {
-                        if arg == bound {
-                            return true;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    for e in &source.enums {
-        if qualified(&e.module, &e.name) == name {
-            for attr in &e.attrs {
-                if attr.name == "derive" {
-                    for arg in &attr.args {
-                        if arg == bound {
-                            return true;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    false
-}
 fn add_bound(source: &Program, id: TypeId, ty: usize, children: &mut Vec<Goal>) -> bool {
     if let Type::Path(path) = &source.types[id].kind {
         if path.name.starts_with('\'') {
@@ -1445,16 +1406,54 @@ pub(crate) struct ImplementationWitness {
 pub(crate) struct ImplementationIndex {
     by_trait: BTreeMap<TraitIdentity, Candidates>,
     by_method: BTreeMap<String, Candidates>,
+    derived_bounds: BTreeMap<String, BTreeSet<String>>,
 }
 impl ImplementationIndex {
-    fn empty() -> Self {
-        Self {
+    fn empty(source: &Program) -> Self {
+        let mut index = Self {
             by_trait: BTreeMap::new(),
             by_method: BTreeMap::new(),
+            derived_bounds: BTreeMap::new(),
+        };
+        for item in &source.structs {
+            index.derive_attributes(qualified(&item.module, &item.name), &item.attrs);
+        }
+        for item in &source.enums {
+            index.derive_attributes(qualified(&item.module, &item.name), &item.attrs);
+        }
+        index
+    }
+    fn derive_attributes(&mut self, name: String, attrs: &[Attribute]) {
+        for attr in attrs {
+            if attr.name == "derive" {
+                if !self.derived_bounds.contains_key(&name) {
+                    self.derived_bounds.insert(name.clone(), BTreeSet::new());
+                }
+                let bounds = self.derived_bounds.get_mut(&name).unwrap();
+                for arg in &attr.args {
+                    bounds.insert(arg.clone());
+                }
+            }
+        }
+    }
+    fn derived(
+        &self,
+        types: &[crate::k::Type],
+        applications: &BTreeMap<usize, (String, Vec<usize>)>,
+        ty: usize,
+        bound: &str,
+    ) -> bool {
+        let name = match applications.get(&ty) {
+            Some((name, _)) => name,
+            None => &types[ty].name,
+        };
+        match self.derived_bounds.get(name) {
+            Some(bounds) => bounds.contains(&bound.to_string()),
+            None => false,
         }
     }
     pub(crate) fn new(source: &Program) -> Result<Self, Diagnostic> {
-        let mut index = Self::empty();
+        let mut index = Self::empty(source);
         for id in 0..source.impls.len() {
             index.insert(source, id)?;
         }
@@ -1464,7 +1463,7 @@ impl ImplementationIndex {
         source: &Program,
         available: &[bool],
     ) -> (Self, Vec<(usize, Diagnostic)>) {
-        let mut index = Self::empty();
+        let mut index = Self::empty(source);
         let mut problems = Vec::new();
         for (id, ready) in available.iter().enumerate() {
             if *ready {
@@ -1750,7 +1749,7 @@ fn trait_requirements(
                         tuple = false;
                     }
                 }
-                if automatic || tuple || derived(source, types, applications, goal.ty, bound) {
+                if automatic || tuple || index.derived(types, applications, goal.ty, bound) {
                     for field in fields {
                         children.push(Goal {
                             ty: field.ty,
@@ -1762,7 +1761,7 @@ fn trait_requirements(
                 }
             }
             TypeKind::Enum { variants, .. } => {
-                if automatic || derived(source, types, applications, goal.ty, bound) {
+                if automatic || index.derived(types, applications, goal.ty, bound) {
                     for variant in variants {
                         for field in &variant.fields {
                             children.push(Goal {
@@ -1992,6 +1991,97 @@ mod bound_tests {
         assert!(satisfies(&source, &types, &BTreeMap::new(), link, "Data"));
         assert!(!satisfies(&source, &types, &BTreeMap::new(), link, "Copy"));
     }
+    #[test]
+    fn derive_lookup_unions_matching_names_in_both_index_build_modes() {
+        let source = crate::syntax::parse(
+            "#[derive(Clone)] #[derive(PartialEq)] struct Same; #[derive(Ord)] struct Same; #[derive(Eq)] enum Same{Value} #[other(Send)] struct Same; trait Marker{} impl Marker for Same{}",
+        ).unwrap();
+        let types = vec![k::Type {
+            name: "Same".to_string(),
+            kind: TypeKind::Struct {
+                copy: false,
+                fields: Vec::new(),
+            },
+        }];
+        let complete = ImplementationIndex::new(&source).unwrap();
+        let (partial, problems) = ImplementationIndex::for_diagnostics(&source, &[false]);
+        assert!(problems.is_empty());
+        for index in [&complete, &partial] {
+            for bound in ["Clone", "PartialEq", "Ord", "Eq"] {
+                assert!(index.derived(&types, &BTreeMap::new(), 0, bound), "{bound}");
+            }
+            for bound in ["Copy", "Send", "clone"] {
+                assert!(
+                    !index.derived(&types, &BTreeMap::new(), 0, bound),
+                    "{bound}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn derive_lookup_preserves_qualified_names_and_application_bases() {
+        let source = crate::syntax::parse(
+            "#[derive(Clone)] struct Value<T>{value:T} mod other{#[derive(Ord)] enum Value<T>{Some(T)}}",
+        ).unwrap();
+        let index = ImplementationIndex::new(&source).unwrap();
+        let types = vec![
+            k::Type {
+                name: "Value<i64>".to_string(),
+                kind: TypeKind::Struct {
+                    copy: false,
+                    fields: Vec::new(),
+                },
+            },
+            k::Type {
+                name: "other::Value".to_string(),
+                kind: TypeKind::Enum {
+                    copy: false,
+                    variants: Vec::new(),
+                },
+            },
+        ];
+        let mut applications = BTreeMap::new();
+        applications.insert(0, ("Value".to_string(), vec![k::I64]));
+        assert!(index.derived(&types, &applications, 0, "Clone"));
+        assert!(!index.derived(&types, &applications, 0, "Ord"));
+        assert!(!index.derived(&types, &BTreeMap::new(), 0, "Clone"));
+        assert!(index.derived(&types, &applications, 1, "Ord"));
+        assert!(!index.derived(&types, &applications, 1, "Clone"));
+    }
+
+    #[test]
+    fn indexed_derive_still_requires_the_fields_trait() {
+        let source = crate::syntax::parse(
+            "#[derive(Clone,PartialEq,Eq,PartialOrd,Ord)] struct Holder<T>{value:T}",
+        )
+        .unwrap();
+        let mut types = k::primitives();
+        let holder = types.len();
+        types.push(k::Type {
+            name: "Holder<f64>".to_string(),
+            kind: TypeKind::Struct {
+                copy: false,
+                fields: vec![k::Field {
+                    name: "value".to_string(),
+                    ty: k::F64,
+                }],
+            },
+        });
+        let mut applications = BTreeMap::new();
+        applications.insert(holder, ("Holder".to_string(), vec![k::F64]));
+        assert!(satisfies(&source, &types, &applications, holder, "Clone"));
+        assert!(satisfies(
+            &source,
+            &types,
+            &applications,
+            holder,
+            "PartialOrd"
+        ));
+        assert!(!satisfies(&source, &types, &applications, holder, "Ord"));
+        assert!(!satisfies(&source, &types, &applications, holder, "Eq"));
+    }
+
     #[test]
     fn ord_and_clone_on_collections() {
         let source = Program::default();

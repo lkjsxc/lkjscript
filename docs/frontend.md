@@ -33,26 +33,39 @@ the World driver substitutes embedded library bytes for missing inputs.
 
 ## Native World driver
 
-[src/frontend_main.rs](../src/frontend_main.rs) declares the same production
-modules as the pure root and adds the bundle decoder. Its entry is
-`main(World)`. Once that source has been compiled to a native executable, use:
+[src/frontend_main.rs](../src/frontend_main.rs) declares the production modules
+and a World entry. It accepts either an explicit bundle or directory capabilities:
 
 ```sh
-./frontend.elf inputs/program.lkjsb > program.k
+./frontend.elf program.lkjsb > program.k
+./frontend.elf --check program.lkjsb
+./frontend.elf --source src/main.rs --source-dir /work/project \
+  --library-dir /work/library > program.k
+./frontend.elf --source small.rs --no-library --check
+./frontend.elf --source src/main.rs --library-dir library --pack > program.lkjsb
 ```
 
-The driver takes exactly one UTF-8 argument. It opens the bundle beneath its
-current-directory capability, so use a relative path within that directory.
-Paths stored inside the bundle are logical names; they are not opened as files.
-The existing [World directory rules](language.md#world-and-io-capabilities)
-apply to opening the bundle.
+Bundle paths are opened beneath the current-directory capability. Stored paths
+are logical names. Direct source mode opens the explicitly selected source
+directory (default `.`), plus the explicit library directory or no library.
+It calls the same `source::load_report` module loader, then checks the already
+parsed program through `frontend::check_source`. There is no second parse or
+host-side module resolver. Library inputs use stable `$std/...` logical paths.
 
-On success stdout contains exactly the K string returned by `source_to_k`,
-with no added newline. On an input or compilation error the driver writes one
-message to stderr and selects status 1. Source diagnostics retain their logical
-path, line, column and code. Bundle framing errors use
-`BUNDLE:1:1: E_BUNDLE ...`; file errors use `E_IO`. Argument errors report the
-usage or invalid UTF-8. Stream failures retain the ordinary World trap behavior.
+`--pack` encodes the exact UTF-8 reads made by the loader, including both
+ambiguous module candidates. Missing-file results are cached too. Syntax/module
+rejection inputs can be packed; I/O errors are reported instead of being
+misrepresented as missing bytes. `--check` and `--pack` are mutually exclusive.
+
+On success normal mode writes exactly checked K with no added newline; check
+mode is silent. Errors write one diagnostic and select status 1. Source errors
+retain logical path, line, column and code. Bundle framing errors use
+`BUNDLE:1:1: E_BUNDLE ...`; file/UTF-8 read errors use `E_IO`. Compiler arguments
+must be UTF-8. Stream failures keep ordinary World trap behavior.
+
+The installed [native workflow](native.md) supplies source, library and runtime
+paths explicitly, publishes outputs atomically, and adds standalone run and
+scalar evaluation commands. No Node input-packing step is required.
 
 ## LKJSB1 wire format
 
@@ -83,7 +96,9 @@ controls remain separate, as described in [limits.md](limits.md).
 
 ## Packing declared inputs
 
-[tools/source-bundle.mjs](../tools/source-bundle.mjs) is a host-side packer. It
+Native `lkj pack` uses the loader directly, as described above.
+[tools/source-bundle.mjs](../tools/source-bundle.mjs) remains a host-side packer
+for explicit bootstrap observations. It
 reads only listed physical files; module selection remains the loader's job.
 Run commands from the directory against which physical input paths should be
 resolved. With identical physical and logical paths and no source library:

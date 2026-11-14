@@ -8,6 +8,7 @@ pub mod k_text;
 pub mod kc;
 pub mod lower;
 pub mod native;
+pub mod result_wire;
 pub mod runtime;
 
 struct Options {
@@ -15,6 +16,7 @@ struct Options {
     runtime: Option<String>,
     entry: Option<String>,
     check_only: bool,
+    result_descriptor: Option<String>,
 }
 
 fn options(world: &mut World) -> Result<Options, String> {
@@ -28,19 +30,20 @@ fn options(world: &mut World) -> Result<Options, String> {
     }
     if arguments.is_empty() {
         return Err(
-            "usage: kc PROGRAM.k [--runtime RUNTIME.k] [--entry NAME] [--check]".to_string(),
+            "usage: kc PROGRAM.k [--runtime RUNTIME.k] [--entry NAME] [--check] [--result-descriptor PATH]".to_string(),
         );
     }
     let program = arguments[0].clone();
     let mut runtime = None;
     let mut entry = None;
     let mut check_only = false;
+    let mut result_descriptor = None;
     let mut at = 1usize;
     while at < arguments.len() {
         let option = &arguments[at];
         if option == "--check" {
             check_only = true;
-        } else if option == "--runtime" || option == "--entry" {
+        } else if option == "--runtime" || option == "--entry" || option == "--result-descriptor" {
             at += 1;
             if at == arguments.len() {
                 return Err(format!("{option} needs a value"));
@@ -48,19 +51,25 @@ fn options(world: &mut World) -> Result<Options, String> {
             let value = arguments[at].clone();
             if option == "--runtime" {
                 runtime = Some(value);
-            } else {
+            } else if option == "--entry" {
                 entry = Some(value);
+            } else {
+                result_descriptor = Some(value);
             }
         } else {
             return Err(format!("unknown option {option}"));
         }
         at += 1;
     }
+    if check_only && result_descriptor.is_some() {
+        return Err("--check cannot write a result descriptor".to_string());
+    }
     Ok(Options {
         program,
         runtime,
         entry,
         check_only,
+        result_descriptor,
     })
 }
 
@@ -125,9 +134,27 @@ fn run(world: &mut World) -> Result<(), String> {
         Some(entry) => entry,
         None => default_entry(&checked),
     };
-    let bytes = match kc::emit(&checked, &runtime, &entry) {
-        Ok(bytes) => bytes,
-        Err(problem) => return Err(report(&options.program, problem)),
+    let bytes = match options.result_descriptor {
+        Some(path) => {
+            let artifact = match kc::emit_for_eval(&checked, &runtime, &entry) {
+                Ok(artifact) => artifact,
+                Err(problem) => return Err(report(&options.program, problem)),
+            };
+            // Publish metadata before stdout can contain an ELF. A failed
+            // descriptor write must not leave an apparently usable artifact.
+            let mut file = match directory.create(&path) {
+                Ok(file) => file,
+                Err(errno) => return Err(format!("{path}: create failed (errno {errno})")),
+            };
+            if let Err(errno) = file.write_all(&artifact.1) {
+                return Err(format!("{path}: write failed (errno {errno})"));
+            }
+            artifact.0
+        }
+        None => match kc::emit(&checked, &runtime, &entry) {
+            Ok(bytes) => bytes,
+            Err(problem) => return Err(report(&options.program, problem)),
+        },
     };
     let mut output = world.stdout();
     output.write(&bytes);

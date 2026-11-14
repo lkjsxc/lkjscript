@@ -1,73 +1,82 @@
-# Status — 2026-11-14, native source producer
+# Status — 2026-11-14, routine native compilation
 
-The production source front end now rebuilds itself through the already
-self-built K compiler. **The front-end ELF emitted by B0 is byte-identical to
-frontend1 and frontend2.** Both native generations emit B0's exact K for their
-own declared source bundle.
-The production source-to-K and K-to-ELF implementations can run without Rust.
-Rust remains a bootstrap/reference and development-test dependency; Node still
-packs declared inputs and orchestrates tests.
+The installed native `lkj` command now handles declared source/library inputs,
+module discovery, bundle packing, runtime preparation, checking, building,
+execution and scalar evaluation. The frontend, K compiler and result reader
+are ordinary lkjscript programs. Installation and a complete compiler generation
+rebuild run without Rust or Node. Bash and standard Linux tools connect the
+processes; Cargo, Rust comparisons, the independent K machine and Node test
+orchestration remain development/reference tools.
 
 ## Counted checkpoint
 
 | Observation | Result | Record |
 | --- | --- | --- |
-| First complete front-end ownership pass | 1,424 source-body attempts; 62 E_BORROW and 1 E_MOVE; no declaration/type blockers | observations/2026-11-14-frontend-first-ownership.json |
-| Ownership repairs | 78 observed sites, including 15 exposed after the first pass; rules unchanged | observations/2026-11-14-frontend-port.json |
-| Current World source producer | 1,433 source-body attempts; 7,334 K functions; zero diagnostics | observations/2026-11-14-frontend-port.json |
-| Host port versus preserved B0 | 268 identical K outputs, 321 matching rejections, 4 unchanged pending; zero failures | observations/2026-11-14-frontend-port.json |
-| Native producer versus B0 | 268 identical K outputs, 321 matching rejections, 4 unchanged pending; all 593 targets agree | observations/2026-11-14-frontend-native-corpus.json |
-| Native own-source K | 18,489,341 bytes, identical in both generations | observations/2026-11-14-frontend-selfhost.json |
-| Front-end ELF fixed point | 50,703,986 bytes; frontend-b0 = frontend1 = frontend2 | observations/2026-11-14-frontend-selfhost.json |
-| Same source-to-K work | B0 2.24 s / 206 MiB; native frontend1 246.20 s / 739 MiB peak RSS | observations/2026-11-14-frontend-selfhost.json |
-| Same K-to-ELF work | B0 0.91 s / 335 MiB; native kc 110.82 s / 733 MiB peak RSS | observations/2026-11-14-frontend-selfhost.json |
-| Full gate | Green: 440 Rust tests, 17 harness tests, all-target Clippy clean; 72.566 s with 8 workers | observations/2026-11-14-frontend-gate.json |
-| Execution conformance | 883 pass and 4 pending on each route; 573 Rust comparisons; 91 World observations | observations/2026-11-14-frontend-gate.json |
+| Current frontend own-source K | 18,740,263 bytes; native hash identical to B0 | observations/2026-11-14-native-workflow.json |
+| Frontend ELF fixed point | 51,430,946 bytes; seed and next generation byte-identical | observations/2026-11-14-native-workflow.json |
+| K compiler ELF fixed point | 16,841,426 bytes; seed and next generation byte-identical | observations/2026-11-14-native-workflow.json |
+| Result reader ELF fixed point | 531,762 bytes; seed and next generation byte-identical | observations/2026-11-14-native-workflow.json |
+| Runtime K | 28,472 bytes; regenerated natively and byte-identical | observations/2026-11-14-native-workflow.json |
+| Complete native rebuild | 443.56 s; 766 MiB peak RSS; four matching K hashes, four exact artifact comparisons | observations/2026-11-14-native-workflow.json |
+| Native process interface | 41 outcomes; source/bundle/K identity, scalars, traps, streams, paths, controls and hashes all pass | observations/2026-11-14-native-gate.json |
+| Launcher cancellation | 16 TERM/INT cases pass, including GNU time descendants; three shell contract suites pass | observations/2026-11-14-native-workflow.json |
+| Full gate | 461 Rust tests, 17 harness tests, all-target Clippy clean; 71.597 s with eight workers | observations/2026-11-14-native-gate.json |
+| Execution conformance | 883 pass and four pending per route; 573 Rust comparisons; 91 World observations | observations/2026-11-14-native-gate.json |
 
-The native source corpus includes all 592 source conformance files plus the K
-compiler source closure; it completed in 761.714 seconds with four workers.
-Rejection equality means the same exit status and first diagnostic code; accepted
-K is compared byte for byte. These bootstrap observations are separate from the gate.
-Source-body attempts and instantiated K functions are different counts.
+The complete rebuild used only the installed seed. All 105 compiler/library/script
+inputs had identical before/after hashes; the forbidden Cargo/rustc/Node log was
+empty. It selected an external 8 GiB address-space limit, inherited an 8 MiB
+stack, and had no deadline. Those are experiment controls, not defaults.
+Later launcher path/cancellation fixes preserve all 102 compiler/library inputs
+and the compiler binaries; the final gate exercises the corrected launchers.
+The release build was prepared before the timed gate and reused there.
 
-## Decisions and evidence
+## Measured source lookup improvement
 
-The port preserves the producer's algorithms and K numbering/order. Rare host
-forms use concrete owned collections, indices and shorter lookup scopes.
-Decimal-to-binary64 conversion is now exact ordinary source code, tested against
-752 Rust oracle cases and exercised on both native and K execution routes.
-Unsized source locals are diagnosed before their defining location is lost.
-The trusted K checker, K rules, encoder, runtime and source library did not change.
+A complete 99 Hz profile of the unchanged frontend found two repeated source
+scans taking 13.29% of sampled CPU time. Generic ranges now have a file/name
+index while retaining span containment; derived bounds have a declaration-name
+index while retaining their union/any-match rules. No language, K, ownership,
+encoder, runtime or source-library rule changed.
 
-The pure boundary and World driver share one SourceBundle-to-K implementation.
-The explicit LKJSB1 bundle contains the root, optional library root and exact
-logical-path/source-text pairs. Neither path loads hidden source bytes.
-See [frontend.md](frontend.md) for the interface and reproducible tools.
+| Same frozen source input | Before | Candidate |
+| --- | ---: | ---: |
+| Complete profiled run | 248.42 s | 218.35 s |
+| Peak RSS | 775,475,200 bytes | 800,636,928 bytes |
+| Selected lookup union | 32.71 sampled CPU s | 1.41 sampled CPU s |
+| K output | 18,489,341 bytes | Identical bytes |
 
-The first native measurements above were unprofiled and separate from the gate.
-The second backend emission overlapped the gate. The second front-end run
-included one eight-second profile window; it took 253.54 s with 739 MiB peak RSS.
-These are shared-host observations, not acceptance limits or speed requirements.
-The experiment selected 8 GiB address space and inherited an 8 MiB stack;
-plain program execution still inherits its operator's controls.
+This pair observed 12.10% lower wall time and 3.24% higher peak RSS. It is one
+matched pair on a shared host; the candidate also includes direct-source input
+support. All samples map to the exact executable and neither run lost records.
+The candidate recorder failed to retain a live `/proc` limits snapshot; its
+launcher stack and executed prlimit command remain recorded. The failed metadata
+copy was disclosed and the existing profile decoded without repeating the run.
+Full evidence and limits: observations/2026-11-14-native-profile.json.
 
-The earlier K-compiler fixed point, runtime-memory corrections, sharded gate and
-K mutation evidence remain in their observations and Git history. The current
-gate retains zero accepted disagreements and one known conservative source
-ownership rejection; its mutation timeout remains a separate unresolved outcome.
+## Routine interface
+
+See [native.md](native.md) for installation, explicit toolchain selection and
+rebuilding. `run` preserves ordinary process streams/status; `eval` additionally
+prints scalar returns, with binary64 values represented by exact hexadecimal
+bits. Outputs are published after successful compilation. Default execution
+inherits Linux limits, and optional settings tighten only the target.
+The source loader is shared by direct files and bundles. Runtime source is
+compiled as normal K and sealed by the K compiler during emission.
+
+The earlier ownership verdict, port, first fixed points and complete native
+source corpus remain in their observations and Git history. Current K mutation
+has zero findings, with its two-route timeout recorded separately. The four
+pending source cases and one known conservative ownership rejection remain.
+Runtime resource-trap filenames still lose source-file provenance at the host
+boundary, and finite exhaustion locations can differ between representations.
 
 ## Next obligation
 
-Make the native pipeline the routine compiler path over explicit inputs. Rust should remain only where it supplies
-useful reference or development evidence. Port the small input-packing and
-orchestration pieces as real consumers require them.
-
-Before choosing a speed change, measure the complete source-compilation workload.
-An eight-second elaboration sample found repeated full-type-table boolean vectors
-in `has_view` and `is_copy`, along with allocation and call-prologue costs; it is
-a bounded sample, not an overall cost ranking. Its exact window and raw evidence
-are in observations/2026-11-14-frontend-profile-window.json. Keep substantial
-optimization in rechecked K-to-K passes and preserve the independent K machine.
-
-Runtime resource-trap filenames still lose source-file provenance at the host
-boundary, and finite exhaustion locations may differ between representations.
+Use the native command for routine compiler work. The complete candidate profile
+still attributes 24.64 sampled CPU seconds (11.43%) to `has_view`/`is_copy`, with
+repeated full-type-table boolean vectors overlapping that cost. Investigate that
+bookkeeping before another broad speed change. Keep substantial optimization in
+rechecked K-to-K passes and retain the independent K machine. A direct K generator
+is the next useful self-built development tool; unrelated surface width waits
+for a real consumer.

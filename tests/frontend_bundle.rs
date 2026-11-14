@@ -54,6 +54,7 @@ fn exact_utf8_source_and_logical_paths_round_trip() {
     assert_eq!(bundle.files[0].text, text);
     assert_eq!(bundle.files[1].path, "library/lib.rs");
     assert_eq!(bundle.files[1].text, "");
+    assert_eq!(frontend_bundle::encode(&bundle), bytes);
 }
 
 #[test]

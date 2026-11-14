@@ -1,0 +1,148 @@
+{
+  "date": "2026-11-14",
+  "command": "LKJ_GATE_JOBS=8 bash tools/check.sh",
+  "exit_code": 0,
+  "full_seconds": 71.597,
+  "rust_tests": 461,
+  "rust_failed": 0,
+  "node_tests": 17,
+  "conformance": {
+    "cases": 887,
+    "passed_each_route": 883,
+    "pending_each_route": 4,
+    "failures": 0,
+    "rustc_comparisons": 573
+  },
+  "world_observations": 91,
+  "world_summary": "{\"observations\":91,\"failures\":[],\"elapsedSeconds\":5.415522686999999}",
+  "native_workflow": {
+    "process_outcomes": 41,
+    "shell_contract_suites": 3,
+    "term_int_cancellation_cases": 16,
+    "failed_assertions": 0
+  },
+  "k_compiler": {
+    "stage": "cargo-built K compiler",
+    "verdicts": 562,
+    "rejections": 64,
+    "artifacts": 498,
+    "pending": 2,
+    "failures": [],
+    "compilers": {
+      "b0": {
+        "path": "/home/coder/workspace/lkjscript/target/release/lkjscript",
+        "bytes": 5837008,
+        "sha256": "591cdd0331fbae1f25087b3b3fc5e262eb9c063fa2e9d0f308c4b1639a045045"
+      },
+      "kc": {
+        "path": "/home/coder/workspace/lkjscript/target/release/kc",
+        "bytes": 1521064,
+        "sha256": "5664300d52ee8206891e28b6855b0eea6308644c6e8982a176f75ec0b5d0e948"
+      }
+    },
+    "manifest": {
+      "path": "/home/coder/workspace/lkjscript/tests/conformance/cases.json",
+      "bytes": 164387,
+      "sha256": "fb956d5e9a288ac9577a31cecdefb86501d7ce9108e5c050b07b4ac5d9862149"
+    },
+    "runtime": {
+      "path": "/home/coder/workspace/lkjscript/target/kc-observation/runtime.k",
+      "bytes": 28472,
+      "sha256": "f7760407c7c5a7004648d7d28ba7ce8e006c86ce5c71f390039e2e9ce063d936"
+    },
+    "world": false,
+    "elapsedSeconds": 12.631178001999999,
+    "observations": "/home/coder/workspace/lkjscript/target/kc-observation/observations.json"
+  },
+  "k_mutation": {
+    "seed": "1701",
+    "budget": 128,
+    "counts": {
+      "rejected": 100,
+      "value-equal": 23,
+      "trap-equal": 4,
+      "timeout": 1
+    },
+    "routeCounts": {
+      "k": {
+        "value": 23,
+        "trap": 4,
+        "timeout": 1
+      },
+      "native": {
+        "value": 23,
+        "trap": 4,
+        "timeout": 1
+      }
+    },
+    "operators": {
+      "delete": 9,
+      "callee": 6,
+      "local-type": 10,
+      "type-copy-kind": 9,
+      "constant": 16,
+      "duplicate": 15,
+      "operand": 17,
+      "move-drop": 6,
+      "borrow-kind": 8,
+      "swap": 15,
+      "type-borrow-kind": 7,
+      "copy-move": 6,
+      "array-extent": 4
+    },
+    "findings": 0,
+    "resourceLocationDifferences": 0,
+    "executionSeconds": 4.041053382,
+    "directory": "/home/coder/workspace/lkjscript/target/generated/k-mutation/s1701-n128-f7Nq92"
+  },
+  "all_target_clippy": "passed",
+  "stage_seconds": {
+    "format": 0.584,
+    "host": 0.741,
+    "build": 0.011,
+    "host-boundary": 2.483,
+    "rust": 32.591,
+    "lint": 3.586,
+    "rust-and-lint": 36.18,
+    "world-io": 5.454,
+    "native-workflow": 31.894,
+    "k-compiler": 12.672,
+    "conformance": 9.77,
+    "k-mutation": 4.128,
+    "values": 4.978,
+    "verdicts": 4.572,
+    "output": 2.504,
+    "drops": 4.888,
+    "sugars": 18.909,
+    "closures": 4.22,
+    "parallel suites": 67.772
+  },
+  "logs": {
+    "stdout": {
+      "path": "/home/coder/lkjscript-codex-20261114-native-workflow/gate/check.stdout",
+      "bytes": 16015,
+      "sha256": "113871c27de656523bb6758c83511d71e6a0b45ecaab83d57ad0acba97553258"
+    },
+    "stderr": {
+      "path": "/home/coder/lkjscript-codex-20261114-native-workflow/gate/check.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "timing": {
+      "path": "/home/coder/lkjscript-codex-20261114-native-workflow/gate/check.time",
+      "bytes": 55,
+      "sha256": "5dc777ab7f12db0f76f629d25b46a416deb760d0a5f8a84268ceb5215d04d608"
+    },
+    "preparatory_build": {
+      "path": "/home/coder/lkjscript-codex-20261114-native-workflow/gate/build.time",
+      "bytes": 55,
+      "sha256": "dc7390fa38ccf7fc33c612041832e0bf088ceb70a64e9a2e245d9134f839cabf"
+    }
+  },
+  "notes": [
+    "Release build was prepared before the gate (16.81 seconds); gate build reused that artifact.",
+    "No native self-build or profile was running during the gate. Shared-host elapsed times are observations, not acceptance limits.",
+    "Rust/reference and Node orchestration remain development tools; the native workflow stage checks its installed operation with Cargo/rustc/Node failure stubs.",
+    "The known conservative ownership rejection and one two-route K mutation timeout remain separate from accepted disagreements."
+  ]
+}

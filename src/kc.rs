@@ -1,5 +1,6 @@
 //! The K compiler boundary: declared program K and runtime K produce native bytes.
 //! Parsing, verification, runtime sealing and encoding share the production files.
+use super::result_wire::{self, Descriptor, ScalarKind};
 use crate::diagnostic::{Diagnostic, Span};
 use crate::k::{CheckedProgram, TypeKind};
 use crate::{check, k_text, lower, native, runtime};
@@ -19,6 +20,24 @@ pub fn emit(
     runtime: &runtime::Runtime,
     entry: &str,
 ) -> Result<Vec<u8>, Diagnostic> {
+    Ok(emit_artifact(checked, runtime, entry, false)?.0)
+}
+
+/// Emit an fd3 result-packet ELF and metadata from the same checked lowering.
+pub fn emit_for_eval(
+    checked: &CheckedProgram,
+    runtime: &runtime::Runtime,
+    entry: &str,
+) -> Result<(Vec<u8>, Vec<u8>), Diagnostic> {
+    emit_artifact(checked, runtime, entry, true)
+}
+
+fn emit_artifact(
+    checked: &CheckedProgram,
+    runtime: &runtime::Runtime,
+    entry: &str,
+    packet: bool,
+) -> Result<(Vec<u8>, Vec<u8>), Diagnostic> {
     let meaning = checked.program();
     let mut selected = None;
     for function in &meaning.functions {
@@ -32,15 +51,22 @@ pub fn emit(
         None => return Err(error("E_ENTRY", &format!("unknown function {entry}"))),
     };
     let result = &meaning.types[function.result].kind;
-    if !matches!(
-        result,
-        TypeKind::Unit | TypeKind::Bool | TypeKind::Char | TypeKind::Int { .. } | TypeKind::F64
-    ) {
-        return Err(error(
-            "E_ENTRY",
-            "host entry result must be unit or a scalar",
-        ));
-    }
+    let kind = match result {
+        TypeKind::Unit => ScalarKind::Unit,
+        TypeKind::Bool => ScalarKind::Bool,
+        TypeKind::Char => ScalarKind::Char,
+        TypeKind::Int { bits, signed } => ScalarKind::Int {
+            bits: *bits,
+            signed: *signed,
+        },
+        TypeKind::F64 => ScalarKind::F64,
+        _ => {
+            return Err(error(
+                "E_ENTRY",
+                "host entry result must be unit or a scalar",
+            ));
+        }
+    };
     let mut arguments = Vec::new();
     if function.params == 1 && matches!(meaning.types[function.locals[0].ty].kind, TypeKind::World)
     {
@@ -64,13 +90,23 @@ pub fn emit(
         Some(value) => value,
         None => return Err(error("E_ENTRY", "lowered entry is missing")),
     };
-    native::encode(
+    let bytes = native::encode(
         &program,
         native::Entry {
             function,
             arguments,
-            result_fd: None,
+            result_fd: if packet { Some(3) } else { None },
         },
     )
-    .map_err(|message| error("E_EMIT", &message))
+    .map_err(|message| error("E_EMIT", &message))?;
+    let descriptor = if packet {
+        result_wire::encode(&Descriptor {
+            kind,
+            traps: program.trap_messages,
+        })
+        .map_err(|message| error("E_EMIT", &message))?
+    } else {
+        Vec::new()
+    };
+    Ok((bytes, descriptor))
 }

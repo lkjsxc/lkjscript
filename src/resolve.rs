@@ -51,7 +51,7 @@ pub struct Resolver<'a> {
     names: BTreeMap<(ModuleId, String, Namespace), Binding>,
     modules: BTreeMap<String, ModuleId>,
     alternatives: BTreeMap<(ModuleId, String, Namespace), Vec<Binding>>,
-    generic_ranges: Vec<(Span, Vec<String>)>,
+    generic_ranges: BTreeMap<(FileId, String), Vec<Span>>,
     import_scopes: ImportScopes,
     trait_names: BTreeMap<(usize, DeclarationId), BTreeSet<String>>,
     anonymous_traits: BTreeSet<(usize, DeclarationId)>,
@@ -242,7 +242,7 @@ impl<'a> Resolver<'a> {
             names: BTreeMap::new(),
             modules: BTreeMap::new(),
             alternatives: BTreeMap::new(),
-            generic_ranges: Vec::new(),
+            generic_ranges: BTreeMap::new(),
             import_scopes: ImportScopes::default(),
             trait_names: BTreeMap::new(),
             anonymous_traits: BTreeSet::new(),
@@ -349,24 +349,24 @@ impl<'a> Resolver<'a> {
         }
     }
     fn generics(&mut self, span: Span, params: &[GenericParam]) {
-        if !params.is_empty() {
-            let mut names = Vec::new();
-            for param in params {
-                names.push(param.name.clone());
+        for param in params {
+            let key = (span.file, param.name.clone());
+            if !self.generic_ranges.contains_key(&key) {
+                self.generic_ranges.insert(key.clone(), Vec::new());
             }
-            self.generic_ranges.push((span, names));
+            self.generic_ranges.get_mut(&key).unwrap().push(span);
         }
     }
     fn generic(&self, span: Span, name: &str) -> bool {
         if name == "Self" || name.starts_with('\'') {
             return true;
         }
-        self.generic_ranges.iter().any(|(range, names)| {
-            range.file == span.file
-                && range.start <= span.start
-                && span.end <= range.end
-                && names.iter().any(|n| n == name)
-        })
+        match self.generic_ranges.get(&(span.file, name.to_string())) {
+            Some(ranges) => ranges
+                .iter()
+                .any(|range| range.start <= span.start && span.end <= range.end),
+            None => false,
+        }
     }
     fn declare(
         &mut self,
@@ -1475,5 +1475,73 @@ pub fn resolution_problems(source: &Program) -> Vec<Diagnostic> {
             problems
         }
         Err(problem) => vec![problem],
+    }
+}
+
+#[cfg(test)]
+mod generic_range_tests {
+    use super::*;
+
+    #[test]
+    fn lookup_keeps_file_name_and_enclosing_span_boundaries() {
+        let source = crate::syntax::parse("  fn first<T>() {} fn second<U>() {}").unwrap();
+        let resolver = Resolver::new(&source).unwrap();
+        let range = source.functions[0].span;
+        assert!(resolver.generic(range, "T"));
+        assert!(resolver.generic(
+            Span {
+                end: range.start,
+                ..range
+            },
+            "T"
+        ));
+        assert!(resolver.generic(
+            Span {
+                start: range.end,
+                ..range
+            },
+            "T"
+        ));
+        assert!(!resolver.generic(
+            Span {
+                start: range.start - 1,
+                ..range
+            },
+            "T"
+        ));
+        assert!(!resolver.generic(
+            Span {
+                end: range.end + 1,
+                ..range
+            },
+            "T"
+        ));
+        assert!(!resolver.generic(
+            Span {
+                file: range.file + 1,
+                ..range
+            },
+            "T"
+        ));
+        assert!(!resolver.generic(range, "U"));
+        assert!(!resolver.generic(range, "TT"));
+        assert!(!resolver.generic(source.functions[1].span, "T"));
+        assert!(resolver.generic(source.functions[1].span, "U"));
+        assert!(resolver.generic(Span::default(), "Self"));
+        assert!(resolver.generic(Span::default(), "'a"));
+    }
+
+    #[test]
+    fn nested_method_and_impl_ranges_both_supply_parameters() {
+        let source = crate::syntax::parse(
+            "struct Holder<T>{value:T} impl<T> Holder<T>{fn pair<U>(self,extra:U)->(T,U){(self.value,extra)}}",
+        ).unwrap();
+        let resolver = Resolver::new(&source).unwrap();
+        let method = source.functions[0].span;
+        let implementation = source.impls[0].span;
+        assert!(resolver.generic(method, "T"));
+        assert!(resolver.generic(method, "U"));
+        assert!(resolver.generic(implementation, "T"));
+        assert!(!resolver.generic(implementation, "U"));
     }
 }

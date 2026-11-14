@@ -103,3 +103,42 @@ pub fn decode(bytes: &[u8]) -> Result<SourceBundle, String> {
         files,
     })
 }
+
+fn append_length(bytes: &mut Vec<u8>, length: usize) {
+    let mut value = length as u64;
+    let mut index = 0usize;
+    while index < 8 {
+        bytes.push(value as u8);
+        value >>= 8;
+        index += 1;
+    }
+}
+
+fn append_text(bytes: &mut Vec<u8>, text: &str) {
+    append_length(bytes, text.len());
+    let source = text.as_bytes();
+    let mut index = 0usize;
+    while index < source.len() {
+        bytes.push(source[index]);
+        index += 1;
+    }
+}
+
+/// Encode exact logical paths and source bytes in their recorded read order.
+pub fn encode(bundle: &SourceBundle) -> Vec<u8> {
+    let mut bytes = "LKJSB1\n".as_bytes().to_vec();
+    append_text(&mut bytes, &bundle.root);
+    match &bundle.library {
+        Some(path) => {
+            bytes.push(1u8);
+            append_text(&mut bytes, path);
+        }
+        None => bytes.push(0u8),
+    }
+    append_length(&mut bytes, bundle.files.len());
+    for file in &bundle.files {
+        append_text(&mut bytes, &file.path);
+        append_text(&mut bytes, &file.text);
+    }
+    bytes
+}

@@ -9,7 +9,7 @@ mod language;
 pub(crate) use language::facts;
 pub use language::{
     ast, check, diagnostic, diagnostics, elaborate, frontend, generics, json, k, k_text, kc, lower,
-    names, native, resolve, runtime_memory, source, syntax,
+    names, native, resolve, result_wire, runtime_memory, source, syntax,
 };
 
 /// Preserve the public compiler boundary while isolating Rust resource setup.

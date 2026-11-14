@@ -42,6 +42,11 @@ heap capacity or the operator budget. Static model error messages are borrowed,
 so constructing an R0006/R0008 message needs no allocation. Infallible Rust
 allocations can still abort and remain classified as host failures.
 
+The installed native `lkj run` and `lkj eval` apply the same optional settings
+only to the target. Compilation and the separate native result reader inherit
+the caller's controls; the shell wrapper preserves inherited hard limits when
+tightening soft limits. No additional default ceiling is installed.
+
 Standalone ELFs read the caller's Linux limits directly; they do not read the
 runner's environment settings. For example:
 

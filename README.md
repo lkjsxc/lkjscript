@@ -4,21 +4,37 @@ A Rust-compatible subset for reliable work by agents, with affine ownership,
 explicit capabilities and an independently checked K core. Cargo builds the
 bootstrap compiler. Its output is static Linux x86-64 machine code without Node,
 libc or a dynamic loader. The production source front end and K compiler are
-self-built, with exact K and ELF fixed points. The native source-to-K and
-K-to-ELF pipeline runs without Rust; development tools still use Cargo and Node.
+self-built, with exact K and ELF fixed points. The installed source-to-K and
+K-to-ELF pipeline, input packing, runtime preparation and compiler rebuilds run
+without Rust or Node. Cargo and Node remain development/reference tools.
+
+With an installed native toolchain:
+
+```sh
+/path/to/toolchain/bin/lkj check examples/hello.rs
+/path/to/toolchain/bin/lkj run examples/hello.rs
+/path/to/toolchain/bin/lkj build examples/hello.rs -o hello
+./hello
+/path/to/toolchain/bin/lkj eval probe.rs
+```
+
+`check` is silent on success; `run` preserves ordinary process streams and status;
+`eval` also prints a scalar return; `build` publishes an ELF only after success.
+`k` writes checked K, `pack` captures source/library inputs, `runtime-k` prepares
+the declared source runtime, and `verify` checks installed hashes. See the
+[native workflow](docs/native.md) for installation, explicit inputs and rebuilding
+all compiler programs from an installed seed.
+
+The bootstrap and development gate remain available:
 
 ```sh
 cargo build --release
-./target/release/lkjscript run examples/hello.rs
-./target/release/lkjscript build examples/hello.rs -o target/hello
-./target/hello
+./target/release/lkjscript run examples/hello.rs --engine k
 bash tools/check.sh
 ```
 
-`check` is silent on success; `run` preserves World output and prints scalar
-entry results; `build` writes an ELF; `test` runs test functions. `--engine k`
-selects the independent execution model. `k` writes readable K, `runtime-k`
-exports the prepared source runtime, and `trusted` lists implementation boundaries.
+The bootstrap runner prints scalar results and provides `test`, `trusted` and
+the independent K execution model. It remains useful for reference observations.
 Native artifacts take execution extents from Linux at startup. Runner budgets
 are explicit host controls; they do not restrict accepted source.
 
@@ -60,7 +76,8 @@ LKJ_KC_OUT=target/kc-native-observation node tools/kc.mjs \
 
 The source producer in src/frontend_main.rs shares the production parser,
 resolver, elaborator and independent K checker through src/frontend.rs. It reads
-an explicit source/library bundle and writes K. Both native generations reproduce
+explicit source/library directories or a prepared bundle and writes K. The same
+loader owns module discovery in both cases. Both native generations reproduce
 B0's exact own-source K and rebuild to an identical ELF through native kc.
 The [source-producer interface](docs/frontend.md) documents bundle packing and
 logical paths. After preparing the K compiler above, reproduce this fixed point:
@@ -77,7 +94,9 @@ node tools/frontend-selfhost.mjs run target/frontend-selfhost
 
 These stages retain declared inputs, hashes, raw outputs, time and peak memory.
 Choose fresh observation directories for a new run. The native front end and kc
-then operate on supplied bundles and runtime K without invoking the bootstrap.
+then operate on declared directories or bundles and runtime K without invoking
+the bootstrap. The installed workflow also provides native result decoding and
+a complete native rebuild command.
 
 [Status](docs/status.md) records current evidence and open obligations.
 [Direction](docs/direction.md) defines the consumer-led route out of Rust;

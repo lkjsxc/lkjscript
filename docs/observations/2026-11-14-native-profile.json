@@ -1,0 +1,582 @@
+{
+  "observation": "Full-profile comparison on identical frozen source input",
+  "status": "complete",
+  "recorded_at": "2026-11-14T05:35:02.260Z",
+  "before": {
+    "directory": "/home/coder/lkjscript-codex-20261114-native-workflow/profile-baseline",
+    "manifest": "/home/coder/lkjscript-codex-20261114-native-workflow/profile-baseline/manifest.json",
+    "timing": {
+      "elapsed_seconds": 248.42,
+      "max_rss_bytes": 775475200,
+      "exit_status": 0
+    },
+    "compiler": {
+      "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/frontend2.elf",
+      "bytes": 50703986,
+      "sha256": "fe77fac131af2d03b851eac59b503abf1f6dcdccea14a427a967a7bbcdb426f7"
+    },
+    "input": {
+      "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/frontend.lkjsb",
+      "bytes": 1705610,
+      "sha256": "cd23a3ee342849017ca9258885450c0d45bd868a08d7dfeb1530a568dcebadc5"
+    },
+    "output": {
+      "path": "/home/coder/lkjscript-codex-20261114-native-workflow/profile-baseline/frontend.k",
+      "bytes": 18489341,
+      "sha256": "75393007990e5b99d01d6ab5f3b678c0082b6ea60f0b3fb6c308f9e113dedcc6"
+    },
+    "output_identical": true,
+    "samples": 24364,
+    "mapped": 24364,
+    "unmapped": 0,
+    "weighted_cpu_seconds": 246.10100764,
+    "sample_span_seconds": 248.4115790000651,
+    "loss_records": 0,
+    "recorded_processes": {
+      "frontend2.elf": 24364
+    },
+    "metadata_caveat": null,
+    "groups": {
+      "generic_lookup": {
+        "samples": 1750,
+        "period": 17676767500,
+        "weighted_cpu_seconds": 17.6767675,
+        "percent": 7.182728615990806
+      },
+      "derive_lookup": {
+        "samples": 1488,
+        "period": 15030302880,
+        "weighted_cpu_seconds": 15.03030288,
+        "percent": 6.107371531768183
+      },
+      "has_view": {
+        "samples": 1645,
+        "period": 16616161450,
+        "weighted_cpu_seconds": 16.61616145,
+        "percent": 6.7517648990313575
+      },
+      "is_copy": {
+        "samples": 824,
+        "period": 8323232240,
+        "weighted_cpu_seconds": 8.32323224,
+        "percent": 3.382039074043671
+      },
+      "lookup_union": {
+        "samples": 3238,
+        "period": 32707070380,
+        "weighted_cpu_seconds": 32.70707038,
+        "percent": 13.290100147758988
+      },
+      "type_predicate_union": {
+        "samples": 2469,
+        "period": 24939393690,
+        "weighted_cpu_seconds": 24.93939369,
+        "percent": 10.133803973075029
+      },
+      "bool_repeat": {
+        "samples": 2257,
+        "period": 22797979570,
+        "weighted_cpu_seconds": 22.79797957,
+        "percent": 9.263667706452143
+      },
+      "bool_clone": {
+        "samples": 895,
+        "period": 9040403950,
+        "weighted_cpu_seconds": 9.04040395,
+        "percent": 3.673452635035298
+      },
+      "state_clone": {
+        "samples": 1190,
+        "period": 12020201900,
+        "weighted_cpu_seconds": 12.0202019,
+        "percent": 4.884255458873748
+      },
+      "runtime_leaf": {
+        "samples": 12106,
+        "period": 122282827060,
+        "weighted_cpu_seconds": 122.28282706,
+        "percent": 49.6880643572484
+      },
+      "drop_stack": {
+        "samples": 10191,
+        "period": 102939392910,
+        "weighted_cpu_seconds": 102.93939291,
+        "percent": 41.82810704317846
+      },
+      "prologue": {
+        "samples": 4558,
+        "period": 46040403580,
+        "weighted_cpu_seconds": 46.04040358,
+        "percent": 18.707929732392053
+      }
+    },
+    "phases": {
+      "elaborate::elaborate": {
+        "samples": 16050,
+        "period": 162121210500,
+        "weighted_cpu_seconds": 162.1212105,
+        "percent": 65.87588244951569
+      },
+      "check::check": {
+        "samples": 6636,
+        "period": 67030302360,
+        "weighted_cpu_seconds": 67.03030236,
+        "percent": 27.23690691183714
+      },
+      "k_text::write": {
+        "samples": 1002,
+        "period": 10121212020,
+        "weighted_cpu_seconds": 10.12121202,
+        "percent": 4.112625184698736
+      },
+      "source::parse_bundle": {
+        "samples": 551,
+        "period": 5565656510,
+        "weighted_cpu_seconds": 5.56565651,
+        "percent": 2.2615334099491053
+      },
+      "outside named compiler phase": {
+        "samples": 125,
+        "period": 1262626250,
+        "weighted_cpu_seconds": 1.26262625,
+        "percent": 0.5130520439993433
+      }
+    },
+    "state_type": 606,
+    "bool_type": 1,
+    "callchain_cap": {
+      "frames": 127,
+      "samples": 91,
+      "percent": 0.3735018880315219
+    },
+    "top_leaf": [
+      {
+        "name": "runtime::raw_load64",
+        "samples": 2936,
+        "period": 29656565360,
+        "percent": 12.050566409456575
+      },
+      {
+        "name": "runtime::release",
+        "samples": 1873,
+        "period": 18919191730,
+        "percent": 7.68757182728616
+      },
+      {
+        "name": "runtime::allocate",
+        "samples": 1793,
+        "period": 18111110930,
+        "percent": 7.35921851912658
+      },
+      {
+        "name": "$std::sequence::__lkj_vec_repeat",
+        "samples": 1777,
+        "period": 17949494770,
+        "percent": 7.293547857494664
+      },
+      {
+        "name": "runtime::payload_class",
+        "samples": 1478,
+        "period": 14929292780,
+        "percent": 6.066327368248235
+      },
+      {
+        "name": "drop::step",
+        "samples": 1278,
+        "period": 12909090780,
+        "percent": 5.245444097849286
+      },
+      {
+        "name": "runtime::raw_store64",
+        "samples": 1124,
+        "period": 11353535240,
+        "percent": 4.613363979642095
+      },
+      {
+        "name": "$std::sequence::__lkj_vec_clone",
+        "samples": 934,
+        "period": 9434343340,
+        "percent": 3.833524872763093
+      },
+      {
+        "name": "runtime::drop_walk",
+        "samples": 852,
+        "period": 8606060520,
+        "percent": 3.496962731899524
+      },
+      {
+        "name": "runtime::classes",
+        "samples": 683,
+        "period": 6898989830,
+        "percent": 2.803316368412412
+      }
+    ]
+  },
+  "after": {
+    "directory": "/home/coder/lkjscript-codex-20261114-native-workflow/profile-candidate",
+    "manifest": "/home/coder/lkjscript-codex-20261114-native-workflow/profile-candidate/manifest.json",
+    "timing": {
+      "elapsed_seconds": 218.35,
+      "max_rss_bytes": 800636928,
+      "exit_status": 0
+    },
+    "compiler": {
+      "path": "/home/coder/lkjscript-codex-20261114-native-workflow/candidate-frontend/frontend1.elf",
+      "bytes": 51430946,
+      "sha256": "7adce1857f655576d6ce98cad98dc30bbf8451362f22cd0ec0b80435980bcb94"
+    },
+    "input": {
+      "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/frontend.lkjsb",
+      "bytes": 1705610,
+      "sha256": "cd23a3ee342849017ca9258885450c0d45bd868a08d7dfeb1530a568dcebadc5"
+    },
+    "output": {
+      "path": "/home/coder/lkjscript-codex-20261114-native-workflow/profile-candidate/frontend.k",
+      "bytes": 18489341,
+      "sha256": "75393007990e5b99d01d6ab5f3b678c0082b6ea60f0b3fb6c308f9e113dedcc6"
+    },
+    "output_identical": true,
+    "samples": 21344,
+    "mapped": 21344,
+    "unmapped": 0,
+    "weighted_cpu_seconds": 215.59595744,
+    "sample_span_seconds": 218.33450999995694,
+    "loss_records": 0,
+    "recorded_processes": {
+      "frontend1.elf": 21344
+    },
+    "metadata_caveat": {
+      "original_failures": [
+        "Error: Target controls differ"
+      ],
+      "cause": "fs.copyFileSync on proc pseudo-files produced zero-byte files; the post-run metadata check treated empty limits as a mismatch.",
+      "scope": "Only process metadata capture failed. The compiler and perf record command completed with exit 0 and exact baseline output.",
+      "control_evidence": {
+        "launcher_stack_limit": "Max stack size            8388608              unlimited            bytes     ",
+        "successful_exec_chain": [
+          "/usr/bin/time",
+          "-f",
+          "%e\t%M\t%x",
+          "-o",
+          "/home/coder/lkjscript-codex-20261114-native-workflow/profile-candidate/perf.time.tsv",
+          "/home/coder/lkjscript-codex-20261113e-profile/perf-root/usr/lib/linux-tools-6.8.0-142/perf",
+          "record",
+          "-o",
+          "/home/coder/lkjscript-codex-20261114-native-workflow/profile-candidate/perf.data",
+          "-e",
+          "cpu-clock:u",
+          "-F",
+          "99",
+          "--call-graph",
+          "fp",
+          "--user-callchains",
+          "--",
+          "/usr/bin/time",
+          "-f",
+          "%e\t%M\t%x",
+          "-o",
+          "/home/coder/lkjscript-codex-20261114-native-workflow/profile-candidate/compiler.time.tsv",
+          "prlimit",
+          "--as=8589934592",
+          "--",
+          "/home/coder/lkjscript-codex-20261114-native-workflow/candidate-frontend/frontend1.elf",
+          "frontend.lkjsb"
+        ],
+        "live_proc_limits_captured": false
+      },
+      "action": "Decode and analyze the already completed perf.data; do not repeat the workload.",
+      "tool": {
+        "path": "/home/coder/lkjscript-codex-20261114-native-workflow/profile-candidate/complete.mjs",
+        "bytes": 4126,
+        "sha256": "4a347b5d73719d6f69146e7301fd69fdf9e52bcefe54ed2bfde75c8bd8bcb5d3"
+      },
+      "resumed_at": "2026-11-14T05:34:35.667Z",
+      "finished_at": "2026-11-14T05:34:36.661Z"
+    },
+    "groups": {
+      "generic_lookup": {
+        "samples": 128,
+        "period": 1292929280,
+        "weighted_cpu_seconds": 1.29292928,
+        "percent": 0.5997001499250375
+      },
+      "derive_lookup": {
+        "samples": 12,
+        "period": 121212120,
+        "weighted_cpu_seconds": 0.12121212,
+        "percent": 0.05622188905547226
+      },
+      "has_view": {
+        "samples": 1639,
+        "period": 16555555390,
+        "weighted_cpu_seconds": 16.55555539,
+        "percent": 7.678973013493254
+      },
+      "is_copy": {
+        "samples": 800,
+        "period": 8080808000,
+        "weighted_cpu_seconds": 8.080808,
+        "percent": 3.7481259370314843
+      },
+      "lookup_union": {
+        "samples": 140,
+        "period": 1414141400,
+        "weighted_cpu_seconds": 1.4141414,
+        "percent": 0.6559220389805097
+      },
+      "type_predicate_union": {
+        "samples": 2439,
+        "period": 24636363390,
+        "weighted_cpu_seconds": 24.63636339,
+        "percent": 11.427098950524737
+      },
+      "bool_repeat": {
+        "samples": 2206,
+        "period": 22282828060,
+        "weighted_cpu_seconds": 22.28282806,
+        "percent": 10.335457271364318
+      },
+      "bool_clone": {
+        "samples": 886,
+        "period": 8949494860,
+        "weighted_cpu_seconds": 8.94949486,
+        "percent": 4.151049475262369
+      },
+      "state_clone": {
+        "samples": 1153,
+        "period": 11646464530,
+        "weighted_cpu_seconds": 11.64646453,
+        "percent": 5.401986506746627
+      },
+      "runtime_leaf": {
+        "samples": 9784,
+        "period": 98828281840,
+        "weighted_cpu_seconds": 98.82828184,
+        "percent": 45.839580209895054
+      },
+      "drop_stack": {
+        "samples": 8837,
+        "period": 89262625370,
+        "weighted_cpu_seconds": 89.26262537,
+        "percent": 41.402736131934034
+      },
+      "prologue": {
+        "samples": 4048,
+        "period": 40888888480,
+        "weighted_cpu_seconds": 40.88888848,
+        "percent": 18.96551724137931
+      }
+    },
+    "phases": {
+      "elaborate::elaborate": {
+        "samples": 13031,
+        "period": 131626261310,
+        "weighted_cpu_seconds": 131.62626131,
+        "percent": 61.05228635682159
+      },
+      "check::check": {
+        "samples": 6700,
+        "period": 67676767000,
+        "weighted_cpu_seconds": 67.676767,
+        "percent": 31.39055472263868
+      },
+      "k_text::write": {
+        "samples": 975,
+        "period": 9848484750,
+        "weighted_cpu_seconds": 9.84848475,
+        "percent": 4.568028485757122
+      },
+      "source::parse_bundle": {
+        "samples": 532,
+        "period": 5373737320,
+        "weighted_cpu_seconds": 5.37373732,
+        "percent": 2.492503748125937
+      },
+      "outside named compiler phase": {
+        "samples": 106,
+        "period": 1070707060,
+        "weighted_cpu_seconds": 1.07070706,
+        "percent": 0.49662668665667165
+      }
+    },
+    "state_type": 624,
+    "bool_type": 1,
+    "callchain_cap": {
+      "frames": 127,
+      "samples": 61,
+      "percent": 0.2857946026986507
+    },
+    "top_leaf": [
+      {
+        "name": "runtime::raw_load64",
+        "samples": 2081,
+        "period": 21020201810,
+        "percent": 9.74981259370315
+      },
+      {
+        "name": "$std::sequence::__lkj_vec_repeat",
+        "samples": 1808,
+        "period": 18262626080,
+        "percent": 8.470764617691154
+      },
+      {
+        "name": "runtime::release",
+        "samples": 1573,
+        "period": 15888888730,
+        "percent": 7.369752623688156
+      },
+      {
+        "name": "runtime::payload_class",
+        "samples": 1242,
+        "period": 12545454420,
+        "percent": 5.818965517241379
+      },
+      {
+        "name": "drop::step",
+        "samples": 1234,
+        "period": 12464646340,
+        "percent": 5.781484257871065
+      },
+      {
+        "name": "runtime::allocate",
+        "samples": 1226,
+        "period": 12383838260,
+        "percent": 5.74400299850075
+      },
+      {
+        "name": "runtime::raw_store64",
+        "samples": 927,
+        "period": 9363636270,
+        "percent": 4.343140929535233
+      },
+      {
+        "name": "$std::sequence::__lkj_vec_clone",
+        "samples": 907,
+        "period": 9161616070,
+        "percent": 4.249437781109445
+      },
+      {
+        "name": "runtime::drop_walk",
+        "samples": 783,
+        "period": 7909090830,
+        "percent": 3.6684782608695654
+      },
+      {
+        "name": "runtime::classes",
+        "samples": 767,
+        "period": 7747474670,
+        "percent": 3.5935157421289357
+      }
+    ]
+  },
+  "change": {
+    "wall_seconds": -30.069999999999993,
+    "wall_reduction_percent": 12.104500442798484,
+    "speed_ratio": 1.1377146782688343,
+    "peak_rss_bytes": 25161728,
+    "peak_rss_change_percent": 3.2446850653637926,
+    "lookup_weighted_cpu_seconds": -31.29292898
+  },
+  "limitations": [
+    "One complete profiled run per executable, with identical frozen input, sampling settings and process controls. No repeated or unprofiled candidate benchmark.",
+    "The candidate includes lookup indices and direct-source input support. The experiment compares that combined candidate; it does not isolate every individual edit.",
+    "Observed timing is from one pair of runs on a shared host; no statistical confidence or isolated profiler-overhead claim is made.",
+    "Inclusive callchain groups overlap. Only explicit unions are combined; percentage changes must be read alongside weighted CPU seconds.",
+    "Frame-pointer prologues/epilogues may omit callers. No caller recovery is used, and callchains are capped at 127 captured frames.",
+    "K byte identity is checked against the old frozen source bundle. A fixed point of the new source is a separate workflow observation.",
+    "The candidate recorder copied /proc pseudo-files incorrectly, yielding empty metadata files. Its post-run check failed; complete.mjs resumed only decoding and analysis. The 8 MiB launcher stack was read correctly, and the successful prlimit exec chain set 8 GiB AS, but no live target limit snapshot was retained."
+  ],
+  "artifacts": [
+    {
+      "path": "/home/coder/lkjscript-codex-20261114-native-workflow/profile-candidate/record.mjs",
+      "bytes": 9727,
+      "sha256": "eee6ccbf7bf8e3e37c1e95ea26d9b0347f44148a6a92311bb41b6f076f8505ee"
+    },
+    {
+      "path": "/home/coder/lkjscript-codex-20261114-native-workflow/profile-candidate/complete.mjs",
+      "bytes": 4126,
+      "sha256": "4a347b5d73719d6f69146e7301fd69fdf9e52bcefe54ed2bfde75c8bd8bcb5d3"
+    },
+    {
+      "path": "/home/coder/lkjscript-codex-20261114-native-workflow/profile-candidate/complete.log",
+      "bytes": 964,
+      "sha256": "68cb9f150b61eabe09ab2f28a515bf24536c46c21e00a4a2dd1eb2206cda4144"
+    },
+    {
+      "path": "/home/coder/lkjscript-codex-20261114-native-workflow/profile-candidate/summarize.mjs",
+      "bytes": 9740,
+      "sha256": "eaee86e4a92c60d8b134aed16e7fd6f1881a918ac6d17248638d529b1ed461d3"
+    },
+    {
+      "path": "/home/coder/lkjscript-codex-20261114-native-workflow/profile-candidate/manifest.json",
+      "bytes": 13516,
+      "sha256": "d2e658413d06c7093677e188a5c1a3e7946b4a7ec2aef249191d5cbb02c09674"
+    },
+    {
+      "path": "/home/coder/lkjscript-codex-20261114-native-workflow/profile-candidate/functions.tsv",
+      "bytes": 1025088,
+      "sha256": "0dedb0763fc656f44be2ec2bb2af4167ef764302db1f15cbc54f7ea8e0a8622a"
+    },
+    {
+      "path": "/home/coder/lkjscript-codex-20261114-native-workflow/profile-candidate/instructions.tsv",
+      "bytes": 22865,
+      "sha256": "1b0ed003093a4bc2f9377cfc8107382b22058b976d1bcd194206a19b5d0d7a5f"
+    },
+    {
+      "path": "/home/coder/lkjscript-codex-20261114-native-workflow/profile-candidate/analyze.mjs",
+      "bytes": 3945,
+      "sha256": "f0b3269d81f248d82ebf4dd8f8e8a9df5eb02071a4476efbb40b530b1e9b30af"
+    },
+    {
+      "path": "/home/coder/lkjscript-codex-20261114-native-workflow/profile-candidate/details.mjs",
+      "bytes": 1661,
+      "sha256": "d14eb9207441fc772a12113b019ea348c0cfece4888618acd0496e899c26ab66"
+    },
+    {
+      "path": "/home/coder/lkjscript-codex-20261114-native-workflow/profile-candidate/attribution.mjs",
+      "bytes": 2542,
+      "sha256": "a4dfc526a21c002be497d4aea54f1bc0919a6cde5c8e49e89a8451c99730a342"
+    },
+    {
+      "path": "/home/coder/lkjscript-codex-20261114-native-workflow/profile-candidate/perf.data",
+      "bytes": 5944728,
+      "sha256": "9bccf078057d6fe3ffdffbbdf1fb86b8346bc4234ef39f572e9e5ad5e1a28143"
+    },
+    {
+      "path": "/home/coder/lkjscript-codex-20261114-native-workflow/profile-candidate/analysis.txt",
+      "bytes": 2794,
+      "sha256": "7813224cd8537ec38d75ae3978f57cde86f2e7f1eb883208425b67bec1b9f117"
+    },
+    {
+      "path": "/home/coder/lkjscript-codex-20261114-native-workflow/profile-candidate/candidates.json",
+      "bytes": 1501,
+      "sha256": "3dadef24292b060f3d2e36466624c8eb04deaeffff55b6ed1af64fe1c6a16f0f"
+    },
+    {
+      "path": "/home/coder/lkjscript-codex-20261114-native-workflow/profile-candidate/compiler.time.tsv",
+      "bytes": 16,
+      "sha256": "0de5effd52ffa2d1e50ffb4860595254b4cb444662746af7a9b1e5d30f4044f3"
+    },
+    {
+      "path": "/home/coder/lkjscript-codex-20261114-native-workflow/profile-candidate/perf.time.tsv",
+      "bytes": 16,
+      "sha256": "df31264884c7adee6996ebe54018f3e2ea5196cc594e16d4f6bca5307114c078"
+    },
+    {
+      "path": "/home/coder/lkjscript-codex-20261114-native-workflow/profile-candidate/perf.stderr",
+      "bytes": 191,
+      "sha256": "908aed338d1e850147a930ff1129a885799eb9962c921ee837664b79a782922a"
+    },
+    {
+      "path": "/home/coder/lkjscript-codex-20261114-native-workflow/profile-candidate/script.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/coder/lkjscript-codex-20261114-native-workflow/profile-candidate/process-running.limits",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "evidence_directory": "/home/coder/lkjscript-codex-20261114-native-workflow"
+}

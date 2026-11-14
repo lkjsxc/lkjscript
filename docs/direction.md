@@ -76,8 +76,8 @@ conversion is ordinary source code with an exact binary64 rounding oracle.
 See observations/2026-11-14-frontend-port.json.
 
 The production pure root is src/frontend_lib.rs. The World driver in
-src/frontend_main.rs consumes one explicit bundle of source and library bytes;
-frontend.rs owns the single shared pipeline. Its 1,433 source-body attempts
+src/frontend_main.rs uses declared source/library inputs; frontend.rs owns the
+single shared pipeline. At the first fixed point, its 1,433 source-body attempts
 produce 7,334 K functions. Both native generations emit exactly B0's 18,489,341
 own-source K bytes, and the already self-built K compiler produces identical
 50,703,986-byte ELF files: frontend-b0 = frontend1 = frontend2. Here frontend-b0
@@ -93,16 +93,40 @@ RSS, beside B0's 2.24 seconds and 206 MiB. Emitting the same frontend K takes
 110.82 seconds and 733 MiB through native kc, beside B0's 0.91 seconds and
 335 MiB. These are measured costs, not acceptance limits. The full source
 compiler core can therefore operate without Rust; Cargo tests and Rust reference
-observations remain development tools. Node still packs inputs and orchestrates
-experiments. Move routine compiler work onto the native pipeline, and replace
-remaining host work when it stops supplying independent evidence.
+observations remain development tools.
 
-Use a complete workload profile before selecting the next speed change. The
-bounded elaboration sample in observations/2026-11-14-frontend-profile-window.json
-finds repeated full-type-table boolean-vector construction in has_view and
-is_copy, plus allocator and function-prologue costs. That eight-second window
-identifies questions to measure; it does not establish a whole-build ranking.
-Keep unrelated surface width behind these actual consumer costs.
+## Routine native work and complete profiling
+
+The installed `lkj` command now reads declared source/library directories through
+the production loader, packs reproducible bundles, prepares runtime K, checks,
+builds, runs and evaluates programs. Native `frontend`, `kc` and `result`
+programs do the compiler/result work. Bash connects them and publishes completed
+outputs. The explicit installer and rebuild command use no Rust or Node; the
+new generation reproduces all three native binaries and runtime K exactly.
+See [native.md](native.md) and observations/2026-11-14-native-workflow.json.
+
+A complete 99 Hz profile of the unchanged compiler on its frozen own-source
+bundle found two source lookup scans taking 13.29% of sampled CPU time. Generic
+ranges are now indexed by file/name, with containment checks preserved; derived
+bounds are indexed by qualified declaration name, preserving union/any-match
+semantics. These are immutable source indices and add no trusted rule.
+
+On the same frozen input, the combined candidate takes 218.35 seconds versus
+248.42 seconds, a 12.10% wall-time reduction, with 3.24% higher peak RSS and
+identical K. The selected lookup union falls from 32.71 to 1.41 sampled CPU
+seconds. This is one complete profiled pair on a shared host, not a repeated
+benchmark. The candidate also includes the direct-source driver. Full controls,
+mapping proof and the failed live-proc metadata capture are retained in
+observations/2026-11-14-native-profile.json.
+
+The current complete profile still attributes 24.64 sampled CPU seconds
+(11.43%) to `has_view`/`is_copy`; repeated full-type-table boolean vectors overlap
+that cost. This is the next concrete bookkeeping cost to investigate. Broad
+allocator/drop/prologue totals overlap many operations and are not independent
+savings estimates. Keep substantial optimization in rechecked K-to-K passes,
+and keep unrelated surface width behind measured consumer needs. Retain host
+test orchestration while it supplies independent evidence; a direct K generator
+remains the next useful self-built development tool.
 
 ## Order and execution
 

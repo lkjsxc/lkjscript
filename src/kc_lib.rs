@@ -8,4 +8,5 @@ pub mod k_text;
 pub mod kc;
 pub mod lower;
 pub mod native;
+pub mod result_wire;
 pub mod runtime;
