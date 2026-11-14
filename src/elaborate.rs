@@ -58,6 +58,9 @@ enum TypeKey {
     Stderr,
     Directory,
     File,
+    Process,
+    Clock,
+    Child,
     Str,
     Nominal(a::DeclarationId, Vec<usize>),
 }
@@ -194,12 +197,29 @@ pub fn elaborate_resolved(source: &a::Program) -> Result<ir::Program> {
     }
 }
 
-/// Recorded definition constraints and rigid generic evidence. Only this phase
-/// selects source-level generic witnesses; concrete construction consumes them.
+/// Recorded definition constraints and rigid generic evidence. Library definitions
+/// add the same evidence when concrete construction first demands their bodies.
 pub struct TypedDefinitions<'source> {
     compiler: Compiler<'source>,
+    verifier: Compiler<'source>,
     evidence: generic_check::DefinitionEvidence,
     problems: Vec<a::Diagnostic>,
+    all_library: bool,
+}
+
+fn library_file(source: &a::Program, file: a::FileId) -> bool {
+    let file = match source.files.get(file) {
+        Some(file) => file,
+        None => return false,
+    };
+    match source.scopes.get(file.crate_root) {
+        Some(scope) => scope.path == "$std",
+        None => false,
+    }
+}
+
+fn library_definition(source: &a::Program, index: usize) -> bool {
+    library_file(source, source.functions[index].span.file)
 }
 
 /// Keep independent body results when signatures are valid. This report cannot
@@ -207,6 +227,20 @@ pub struct TypedDefinitions<'source> {
 /// escape, after checking the independently constructed bodies.
 pub fn infer_resolved_report(
     source: &a::Program,
+) -> std::result::Result<TypedDefinitions<'_>, Vec<a::Diagnostic>> {
+    infer_resolved_report_with_library(source, false)
+}
+
+/// Validate every library definition when building or testing the toolchain.
+pub fn infer_resolved_report_all_library(
+    source: &a::Program,
+) -> std::result::Result<TypedDefinitions<'_>, Vec<a::Diagnostic>> {
+    infer_resolved_report_with_library(source, true)
+}
+
+fn infer_resolved_report_with_library(
+    source: &a::Program,
+    all_library: bool,
 ) -> std::result::Result<TypedDefinitions<'_>, Vec<a::Diagnostic>> {
     if let std::result::Result::Err(error) = static_lifetimes::annotations(source) {
         return std::result::Result::Err(vec![error]);
@@ -224,24 +258,37 @@ pub fn infer_resolved_report(
     if let std::result::Result::Err(error) = compiler.check_capability_methods() {
         return std::result::Result::Err(vec![error]);
     }
-    let inferred =
-        diagnostic_inference::infer_all(source, &compiler.names, &compiler.implementations);
-    let (evidence, reported) = match generic_check::validate_report(source, inferred.definitions) {
-        std::result::Result::Ok(report) => report,
-        std::result::Result::Err(error) => {
-            let mut errors = inferred.problems;
-            errors.push(error);
-            return std::result::Result::Err(errors);
+    let mut selected = Vec::new();
+    for index in 0..source.functions.len() {
+        if all_library || !library_definition(source, index) {
+            selected.push(index);
         }
-    };
+    }
+    let inferred = diagnostic_inference::infer_selected(
+        source,
+        &compiler.names,
+        &compiler.implementations,
+        &selected,
+    );
+    let (verifier, evidence, reported) =
+        match generic_check::validate_report(source, inferred.definitions) {
+            std::result::Result::Ok(report) => report,
+            std::result::Result::Err(error) => {
+                let mut errors = inferred.problems;
+                errors.push(error);
+                return std::result::Result::Err(errors);
+            }
+        };
     let mut problems = inferred.problems;
     for problem in reported {
         problems.push(problem);
     }
     std::result::Result::Ok(TypedDefinitions {
         compiler,
+        verifier,
         evidence,
         problems,
+        all_library,
     })
 }
 
@@ -268,7 +315,9 @@ pub fn lower_definitions(
     let meaning = match elaborate_definitions(
         source,
         definitions.compiler,
+        definitions.verifier,
         definitions.evidence,
+        definitions.all_library,
         &mut problems,
     ) {
         std::result::Result::Ok(meaning) => meaning,
@@ -310,18 +359,59 @@ pub fn elaborate_resolved_all(
     }
 }
 
-fn elaborate_definitions(
-    source: &a::Program,
-    mut c: Compiler<'_>,
-    evidence: generic_check::DefinitionEvidence,
+fn infer_demanded_definitions(
+    compiler: &mut Compiler<'_>,
+    verifier: &mut Compiler<'_>,
+    next: &mut usize,
+    inferred: &mut BTreeSet<usize>,
     problems: &mut Vec<a::Diagnostic>,
-) -> Result<ir::Program> {
-    c.method_selections = evidence.methods;
-    c.definition_types = evidence.types;
-    c.closures.evidence = evidence.closures;
-    let empty = BTreeMap::new();
+) {
+    let mut selected = Vec::new();
+    for (_, pending) in &compiler.pending_functions[*next..] {
+        if let PendingFunction::Source(instance) = pending {
+            if inferred.insert(instance.source) {
+                selected.push(instance.source);
+            }
+        }
+    }
+    *next = compiler.pending_functions.len();
+    if selected.is_empty() {
+        return;
+    }
+    let report = diagnostic_inference::infer_selected(
+        compiler.source,
+        &compiler.names,
+        &compiler.implementations,
+        &selected,
+    );
+    for problem in report.problems {
+        problems.push(problem);
+    }
+    match generic_check::validate_demand(compiler.source, verifier, report.definitions) {
+        Ok((evidence, reported)) => {
+            for (expression, method) in evidence.methods {
+                compiler.method_selections.insert(expression, method);
+            }
+            for (function, definition) in evidence.types {
+                compiler.definition_types.insert(function, definition);
+            }
+            compiler.closures.evidence.extend(evidence.closures);
+            for problem in reported {
+                problems.push(problem);
+            }
+        }
+        Err(problem) => problems.push(problem),
+    }
+}
+
+fn instantiate_type_headers(
+    source: &a::Program,
+    c: &mut Compiler<'_>,
+    all_library: bool,
+) -> Result<()> {
+    let empty: BTreeMap<String, usize> = BTreeMap::new();
     for s in &source.structs {
-        if s.generics.is_empty() {
+        if s.generics.is_empty() && (all_library || !library_file(source, s.span.file)) {
             let declaration = c
                 .declaration_names
                 .get(&qualified(&s.module, &s.name))
@@ -338,7 +428,7 @@ fn elaborate_definitions(
         }
     }
     for e in &source.enums {
-        if e.generics.is_empty() {
+        if e.generics.is_empty() && (all_library || !library_file(source, e.span.file)) {
             let declaration = c
                 .declaration_names
                 .get(&qualified(&e.module, &e.name))
@@ -354,16 +444,40 @@ fn elaborate_definitions(
             )?;
         }
     }
+    Ok(())
+}
+
+fn elaborate_definitions(
+    source: &a::Program,
+    mut c: Compiler<'_>,
+    mut verifier: Compiler<'_>,
+    evidence: generic_check::DefinitionEvidence,
+    all_library: bool,
+    problems: &mut Vec<a::Diagnostic>,
+) -> Result<ir::Program> {
+    c.method_selections = evidence.methods;
+    c.definition_types = evidence.types;
+    c.closures.evidence = evidence.closures;
+    instantiate_type_headers(source, &mut c, all_library)?;
+    let empty: BTreeMap<String, usize> = BTreeMap::new();
     for i in 0..source.functions.len() {
         let f = &source.functions[i];
         if f.body.is_some()
+            && (all_library || !library_definition(source, i))
             && f.generics.iter().all(|g| g.lifetime)
             && source.function_owner(a::FunctionId { index: i }) == a::FunctionOwner::Free
         {
             c.instantiate(i, empty.clone())?;
         }
     }
+    let mut inferred = BTreeSet::new();
+    for index in 0..source.functions.len() {
+        if all_library || !library_definition(source, index) {
+            inferred.insert(index);
+        }
+    }
     let mut next = 0;
+    let mut next_definition = 0;
     let mut next_type = 0;
     while next < c.pending_functions.len() || next_type < c.types.len() {
         while next_type < c.types.len() {
@@ -371,6 +485,13 @@ fn elaborate_definitions(
             next_type += 1;
         }
         if next < c.pending_functions.len() {
+            infer_demanded_definitions(
+                &mut c,
+                &mut verifier,
+                &mut next_definition,
+                &mut inferred,
+                problems,
+            );
             let (index, pending) = c.pending_functions[next].clone();
             let compiled = match pending {
                 PendingFunction::Source(instance)
@@ -492,31 +613,7 @@ impl<'a> Compiler<'a> {
             return_inference: BTreeSet::new(),
             diagnostic_functions: None,
         };
-        for i in 0..c.types.len() {
-            c.type_names.insert(c.types[i].name.clone(), i);
-        }
-        for index in 0..6 {
-            let (name, bits, signed): (&str, u8, bool) = match index {
-                0 => ("u64", 64, false),
-                1 => ("isize", 64, true),
-                2 => ("u16", 16, false),
-                3 => ("u32", 32, false),
-                4 => ("i8", 8, true),
-                _ => ("i16", 16, true),
-            };
-            let id = c.types.len();
-            c.types.push(ir::Type {
-                name: name.to_string(),
-                kind: ir::TypeKind::Int { bits, signed },
-            });
-            c.type_names.insert(name.to_string(), id);
-        }
-        let character = c.types.len();
-        c.types.push(ir::Type {
-            name: "char".to_string(),
-            kind: ir::TypeKind::Char,
-        });
-        c.type_names.insert("char".to_string(), character);
+        c.initialize_primitive_names();
         for node in &source.exprs {
             if let a::Expr::Path(path) = &node.kind {
                 let key = (node.span.file, path.name.clone());
@@ -533,6 +630,36 @@ impl<'a> Compiler<'a> {
         }
         c.uses = sorted_uses;
         c
+    }
+}
+
+impl Compiler<'_> {
+    fn initialize_primitive_names(&mut self) {
+        for i in 0..self.types.len() {
+            self.type_names.insert(self.types[i].name.clone(), i);
+        }
+        for index in 0..6 {
+            let (name, bits, signed): (&str, u8, bool) = match index {
+                0 => ("u64", 64, false),
+                1 => ("isize", 64, true),
+                2 => ("u16", 16, false),
+                3 => ("u32", 32, false),
+                4 => ("i8", 8, true),
+                _ => ("i16", 16, true),
+            };
+            let id = self.types.len();
+            self.types.push(ir::Type {
+                name: name.to_string(),
+                kind: ir::TypeKind::Int { bits, signed },
+            });
+            self.type_names.insert(name.to_string(), id);
+        }
+        let character = self.types.len();
+        self.types.push(ir::Type {
+            name: "char".to_string(),
+            kind: ir::TypeKind::Char,
+        });
+        self.type_names.insert("char".to_string(), character);
     }
 }
 
@@ -678,6 +805,9 @@ impl Compiler<'_> {
             ir::TypeKind::Stderr => (TypeKey::Stderr, "Stderr".to_string()),
             ir::TypeKind::Directory => (TypeKey::Directory, "Directory".to_string()),
             ir::TypeKind::File => (TypeKey::File, "File".to_string()),
+            ir::TypeKind::Process => (TypeKey::Process, "Process".to_string()),
+            ir::TypeKind::Clock => (TypeKey::Clock, "Clock".to_string()),
+            ir::TypeKind::Child => (TypeKey::Child, "Child".to_string()),
             ir::TypeKind::Str => (TypeKey::Str, "str".to_string()),
             _ => unreachable!("only structural types use intern"),
         };
@@ -3379,6 +3509,27 @@ impl Builder<'_, '_> {
                 "structured task scopes are not implemented yet",
             ));
         }
+        if path.declaration.is_none() && path.name == "f64::from_bits" {
+            if !path.args.is_empty() || args.len() != 1 {
+                return Err(err(
+                    span,
+                    "E_TYPE",
+                    "f64::from_bits requires one u64 argument",
+                ));
+            }
+            let integer = *self.compiler.type_names.get(&"u64".to_string()).unwrap();
+            let value = self.expr(args[0], Some(integer))?;
+            let dst = self.temp(ir::F64);
+            self.emit(
+                ir::Op::Intrinsic {
+                    dst,
+                    name: ir::IntrinsicOp::F64FromBits,
+                    args: vec![value.0],
+                },
+                span.line,
+            );
+            return Ok((dst, ir::F64));
+        }
         if path.declaration.is_none()
             && (path.name == "char::from_u32" || path.name == "std::char::from_u32")
         {
@@ -4039,6 +4190,23 @@ impl Builder<'_, '_> {
             return Ok(value);
         }
         let direct = methods::direct(methods::receiver(&self.compiler.types[base].kind), name);
+        if direct == Some(methods::Direct::FloatBits) {
+            if !args.is_empty() || !_types.is_empty() {
+                return Err(err(span, "E_TYPE", "f64::to_bits takes no arguments"));
+            }
+            let value = self.read(target, span.line)?.0;
+            let integer = *self.compiler.type_names.get(&"u64".to_string()).unwrap();
+            let dst = self.temp(integer);
+            self.emit(
+                ir::Op::Intrinsic {
+                    dst,
+                    name: ir::IntrinsicOp::F64ToBits,
+                    args: vec![value],
+                },
+                span.line,
+            );
+            return Ok((dst, integer));
+        }
         if direct == Some(methods::Direct::Character) {
             let count = if name == "to_digit" { 1 } else { 0 };
             if args.len() != count || !_types.is_empty() {

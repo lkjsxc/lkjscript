@@ -20,9 +20,9 @@ Views may occupy locals, parameters, results and view aggregates, not heap conta
 Apply the two-way rule: add everyday forms through existing IR/library contracts;
 rewrite consumers when a rare form would enlarge trusted semantics.
 
-## Finish direct native execution (6.1)
+## Direct native execution (6.1, complete)
 
-The direct x86-64 backend exists. Remove its remaining structural costs:
+Keep the direct x86-64 backend plain:
 - Materialize locations only on cold failure paths; preserve exact trap lines.
   Allocation/stack failures may use a static function location.
 - Allocate registers to scalar locals/temporaries; keep aggregates and
@@ -41,32 +41,38 @@ Aggregates and vector elements are inline; references are machine addresses,
 with address/count pairs for slice/text views. Frames use the machine stack.
 Retain bounds, arithmetic, division, UTF-8, tag and stack-exhaustion checks.
 Calls/branches use rel32; reject an unencodable program with a located error.
-Finish with both fixed points matching the twin, hello under a 4 GiB address-space
-limit, and refreshed aggregate/scalar/buffer/compiler measurements. If the
-compiler gap remains above tenfold, identify another structural cause first.
+Preserve compiler reproduction, witness byte identity, hello under a 4 GiB
+address-space limit and measured aggregate/scalar/buffer/compiler behavior.
+If the compiler gap exceeds tenfold, identify another structural cause first.
 
 ## One executable and bootstrap (6.2)
 
 One static executable named lkjscript contains frontend, checker, backend,
 interpreter, CLI, source library and runtime. Stages exchange IR in memory,
 checked once. Text IR remains for ir output, .lkjir input, tests and fuzzing.
-Add include_str!/include_bytes! as compile-time syntax reading beneath the source
-Directory capability. Embed sources directly without generated source files.
-Derive process spawn with explicit arguments/streams/status/output, monotonic
-clock, directory listing and create/rename/remove capabilities from World.
-Port the independent interpreter to owned values and indices.
-An artifact returns scalar bytes on a driver-held descriptor; the driver prints
-those bytes without a reader executable or packet protocol.
-Measure hello after unification. If library typing dominates, elaborate library
-bodies on demand; always check all user code and check the complete library when
-building/testing the toolchain.
+include_str!/include_bytes! read beneath the source Directory capability;
+embedded sources are ordinary source literals, with no generated source files.
+World derives processes with explicit argument bytes and streams, a monotonic
+clock, and directory listing/create/rename/remove. Owned Files carry child
+streams and executable authority. Interpreter values use owned cells and indices.
+An artifact returns eight raw scalar bytes on a driver-held descriptor; traps
+return diagnostic text there, preserving the program's stderr bytes separately.
+Standalone executables report traps on stderr. There is no reader or packet layer.
+Interpreter self-execution materializes a checked native artifact only on demand;
+unchecked mutation input cannot request native emission.
+Raw bit conversions expose NaN payloads: negation preserves them and flips the
+sign to match Rust; binary arithmetic retains canonical NaNs.
 
+All user bodies are checked. Library headers/layouts remain global; library body
+verification and lowering follow demand, retaining indexes across batches.
+check-library checks every library body during bootstrap and toolchain tests.
 Store a previous compressed executable in seed/. Compiler sources must build
-with that seed. Refresh rarely, before using a new form in compiler sources.
-One documented command on a machine without Rust/Node unpacks the seed, builds
-the tree and verifies byte-for-byte self-reproduction. Test by building twice.
-Delete the launcher, installer/rebuild/native-process scripts, manifest/hash
-files, result modules/reader, their shell suites and unused .lkjsb bundles.
+with it. Refresh rarely, before using a new form in compiler sources.
+sh tools/bootstrap.sh unpacks it, builds target/lkjscript, checks the complete
+library and compares a second build byte for byte, without Rust or Node.
+The gate also compares the Rust witness's output with the self-built binary.
+The component launcher, installer, rebuild scripts, manifests, result reader,
+packet/bundle formats and their shell suites are deleted in this milestone.
 Do not create releases or tags: the generation-one release line serves live apps.
 
 ## Gate and optional witness (6.3)

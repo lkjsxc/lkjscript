@@ -13,6 +13,7 @@ mod intrinsics;
 mod layout;
 mod ownership;
 pub(crate) mod platform;
+mod process;
 mod registers;
 mod scalar;
 
@@ -26,7 +27,6 @@ pub struct Entry {
 }
 pub struct Image {
     pub bytes: Vec<u8>,
-    pub trap_messages: Vec<String>,
 }
 #[derive(Clone, Copy)]
 struct RuntimeLabels {
@@ -1288,6 +1288,10 @@ fn emit_drop(
                 a.call(runtime.release);
             }
         }
+        TypeKind::Child => {
+            a.load(DI, BP, -8);
+            a.call(p.child_drop);
+        }
         TypeKind::File | TypeKind::Directory => {
             a.load(DI, BP, -8);
             a.load(DI, DI, 0);
@@ -1349,11 +1353,7 @@ fn argument_fits(kind: &TypeKind, value: u64) -> bool {
                 value < (1u64 << *bits)
             }
         }
-        TypeKind::F64 => {
-            value & 0x7ff0000000000000 != 0x7ff0000000000000
-                || value & 0x000fffffffffffff == 0
-                || value == 0x7ff8000000000000
-        }
+        TypeKind::F64 => true,
         _ => false,
     }
 }
@@ -1506,7 +1506,7 @@ fn encode_program(
     }
     let data_offset = (a.bytes.len() + 4095) & !4095;
     let mut data = Vec::new();
-    platform::data(&mut a, p, &mut data, data_offset);
+    platform::data(&mut a, p, &mut data, data_offset, &trap_messages);
     for (bytes, label) in &literals {
         a.data_label(*label, data_offset + data.len());
         data.extend_from_slice(bytes);
@@ -1517,8 +1517,5 @@ fn encode_program(
     a.bytes.extend_from_slice(&data);
     let image = a.finish()?;
     let bytes = platform::elf(image, data_offset)?;
-    Ok(Image {
-        bytes,
-        trap_messages,
-    })
+    Ok(Image { bytes })
 }

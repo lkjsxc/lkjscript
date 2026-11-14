@@ -39,9 +39,9 @@ impl<H: Host> Interpreter<'_, H> {
         if !matches!(
             self.kind(access.ty)?,
             TypeKind::Slice {
-                inner: ir::U8,
+                inner,
                 mutable: false
-            }
+            } if *inner == ir::U8
         ) {
             return Err(self.invalid("I/O buffer must be a byte slice"));
         }
@@ -97,16 +97,17 @@ impl<H: Host> Interpreter<'_, H> {
         &mut self,
         types: (usize, usize),
         result: Result<u64, i64>,
-        directory: bool,
+        kind: TypeKind,
     ) -> Result<Value, RunError> {
         let (tag, ty, value) = match result {
             Ok(handle) if handle != 0 => (
                 0,
                 types.0,
-                if directory {
-                    Value::Directory(handle)
-                } else {
-                    Value::File(handle)
+                match kind {
+                    TypeKind::Directory => Value::Directory(handle),
+                    TypeKind::File => Value::File(handle),
+                    TypeKind::Child => Value::Child(handle),
+                    _ => return Err(self.invalid("open result is not a handle capability")),
                 },
             ),
             Err(errno) if errno > 0 => (1, types.1, Value::Bits(errno as u64)),
@@ -120,27 +121,42 @@ impl<H: Host> Interpreter<'_, H> {
     }
     fn io_handle(&self, access: &Access) -> Result<u64, RunError> {
         match self.value(access.cell)? {
-            Value::Directory(handle) | Value::File(handle) => Ok(*handle),
+            Value::Directory(handle) | Value::File(handle) | Value::Child(handle) => Ok(*handle),
             _ => Err(self.invalid("I/O capability has no live handle")),
         }
     }
     fn io_write_buffer(&mut self, access: &Access, bytes: &[u8]) -> Result<(), RunError> {
-        let cells = self.sequence(access)?;
+        let cells = self.sequence_cells(access)?;
         if bytes.len() > cells.len() {
             return Err(self.trap(7, "host read exceeded its buffer"));
         }
-        let cells = cells[..bytes.len()].to_vec();
-        for (cell, byte) in cells.iter().zip(bytes) {
-            self.cells[cell.index].value = Some(Value::Bits(u64::from(*byte)));
+        for index in 0..bytes.len() {
+            self.cells[cells[index].index].value = Some(Value::Bits(bytes[index] as u64));
         }
         Ok(())
     }
     fn io_count(&self, result: Result<usize, i64>, extent: usize) -> Result<u64, RunError> {
         match result {
-            Ok(count) if count <= extent && count <= i64::MAX as usize => Ok(count as u64),
+            Ok(count) if count <= extent && count <= 9223372036854775807i64 as usize => {
+                Ok(count as u64)
+            }
             Err(errno) if errno > 0 => Ok((-errno) as u64),
             _ => Err(self.trap(7, "host returned an invalid I/O count")),
         }
+    }
+    fn io_status(&self, result: Result<(), i64>) -> Result<Value, RunError> {
+        match result {
+            Ok(()) => Ok(Value::Bits(0)),
+            Err(errno) if errno > 0 => Ok(Value::Bits((-errno) as u64)),
+            _ => Err(self.trap(7, "host returned an invalid I/O status")),
+        }
+    }
+    fn io_file(&self, values: &[(usize, Value)], index: usize) -> Result<u64, RunError> {
+        let access = self.io_reference(values, index, false)?;
+        if !matches!(self.kind(access.ty)?, TypeKind::File) {
+            return Err(self.invalid("process stream requires a File capability"));
+        }
+        self.io_handle(&access)
     }
     pub(super) fn io_intrinsic(
         &mut self,
@@ -149,6 +165,169 @@ impl<H: Host> Interpreter<'_, H> {
         values: &[(usize, Value)],
     ) -> Result<Option<Value>, RunError> {
         let value = match name {
+            ir::IntrinsicOp::FileDuplicate | ir::IntrinsicOp::FileReadOnly if values.len() == 1 => {
+                let authority = self.io_authority(values, TypeKind::File)?;
+                let types = self.io_open_types(result, TypeKind::File)?;
+                let handle = self.io_handle(&authority)?;
+                let opened = if name == ir::IntrinsicOp::FileReadOnly {
+                    self.host.readonly_file(handle)
+                } else {
+                    self.host.duplicate_file(handle)
+                };
+                self.io_open_result(types, opened, TypeKind::File)?
+            }
+            ir::IntrinsicOp::WorldProcess | ir::IntrinsicOp::WorldClock if values.len() == 1 => {
+                self.io_authority(values, TypeKind::World)?;
+                let (expected, value) = if name == ir::IntrinsicOp::WorldProcess {
+                    (TypeKind::Process, Value::Process)
+                } else {
+                    (TypeKind::Clock, Value::Clock)
+                };
+                if *self.kind(result)? != expected {
+                    return Err(self.invalid("derived capability result differs"));
+                }
+                value
+            }
+            ir::IntrinsicOp::WorldFile if values.len() == 2 => {
+                self.io_authority(values, TypeKind::World)?;
+                let types = self.io_open_types(result, TypeKind::File)?;
+                let kind = self.io_number(values, 1, ir::U8)?;
+                let opened = self.host.world_file(kind as u8);
+                self.io_open_result(types, opened, TypeKind::File)?
+            }
+            ir::IntrinsicOp::DirectoryOpenDirectory if values.len() == 2 => {
+                let authority = self.io_authority(values, TypeKind::Directory)?;
+                let types = self.io_open_types(result, TypeKind::Directory)?;
+                let path = self.io_buffer(values, 1, false)?;
+                let path = self.bytes(&path)?;
+                let handle = self.io_handle(&authority)?;
+                let opened = self.host.open_subdirectory(handle, &path);
+                self.io_open_result(types, opened, TypeKind::Directory)?
+            }
+            ir::IntrinsicOp::DirectoryRead if values.len() == 2 => {
+                let authority = self.io_authority(values, TypeKind::Directory)?;
+                self.io_result_type(result, ir::I64)?;
+                let buffer = self.io_buffer(values, 1, true)?;
+                let mut bytes = self.bytes(&buffer)?;
+                let handle = self.io_handle(&authority)?;
+                let read = self.host.read_directory(handle, &mut bytes);
+                let count = self.io_count(read, bytes.len())?;
+                if (count as i64) >= 0 {
+                    self.io_write_buffer(&buffer, &bytes[..count as usize])?;
+                }
+                Value::Bits(count)
+            }
+            ir::IntrinsicOp::DirectoryRewind
+            | ir::IntrinsicOp::FileRewind
+            | ir::IntrinsicOp::FileExecutable
+                if values.len() == 1 =>
+            {
+                let kind = if name == ir::IntrinsicOp::DirectoryRewind {
+                    TypeKind::Directory
+                } else {
+                    TypeKind::File
+                };
+                let authority = self.io_authority(values, kind)?;
+                self.io_result_type(result, ir::I64)?;
+                let handle = self.io_handle(&authority)?;
+                let outcome = if name == ir::IntrinsicOp::FileExecutable {
+                    self.host.file_executable(handle)
+                } else {
+                    self.host.rewind_handle(handle)
+                };
+                self.io_status(outcome)?
+            }
+            ir::IntrinsicOp::DirectoryCreate | ir::IntrinsicOp::DirectoryRemove
+                if values.len()
+                    == if name == ir::IntrinsicOp::DirectoryCreate {
+                        2
+                    } else {
+                        3
+                    } =>
+            {
+                let authority = self.io_authority(values, TypeKind::Directory)?;
+                self.io_result_type(result, ir::I64)?;
+                let path = self.io_buffer(values, 1, false)?;
+                let path = self.bytes(&path)?;
+                let handle = self.io_handle(&authority)?;
+                let outcome = if name == ir::IntrinsicOp::DirectoryCreate {
+                    self.host.create_directory(handle, &path)
+                } else {
+                    let is_directory = self.io_number(values, 2, ir::BOOL)? != 0;
+                    self.host.remove_entry(handle, &path, is_directory)
+                };
+                self.io_status(outcome)?
+            }
+            ir::IntrinsicOp::DirectoryRename if values.len() == 4 => {
+                let from = self.io_authority(values, TypeKind::Directory)?;
+                self.io_result_type(result, ir::I64)?;
+                let to = self.io_reference(values, 2, true)?;
+                if !matches!(self.kind(to.ty)?, TypeKind::Directory) {
+                    return Err(self.invalid("rename destination requires a Directory capability"));
+                }
+                let old_name = self.io_buffer(values, 1, false)?;
+                let new_name = self.io_buffer(values, 3, false)?;
+                let old_name = self.bytes(&old_name)?;
+                let new_name = self.bytes(&new_name)?;
+                let from = self.io_handle(&from)?;
+                let to = self.io_handle(&to)?;
+                let outcome = self.host.rename_entry(from, &old_name, to, &new_name);
+                self.io_status(outcome)?
+            }
+            ir::IntrinsicOp::ClockRead if values.len() == 2 => {
+                self.io_authority(values, TypeKind::Clock)?;
+                self.io_result_type(result, ir::I64)?;
+                let buffer = self.io_buffer(values, 1, true)?;
+                let mut bytes = self.bytes(&buffer)?;
+                if bytes.len() < 16 {
+                    Value::Bits((-22i64) as u64)
+                } else {
+                    let outcome = self.host.monotonic_time(&mut bytes[..16]);
+                    if outcome.is_ok() {
+                        self.io_write_buffer(&buffer, &bytes[..16])?;
+                    }
+                    self.io_status(outcome)?
+                }
+            }
+            ir::IntrinsicOp::ProcessSpawn if values.len() == 7 => {
+                self.io_authority(values, TypeKind::Process)?;
+                let types = self.io_open_types(result, TypeKind::Child)?;
+                let executable = self.io_file(values, 1)?;
+                let arguments = self.io_buffer(values, 2, false)?;
+                let arguments = self.bytes(&arguments)?;
+                let stdin = self.io_file(values, 3)?;
+                let stdout = self.io_file(values, 4)?;
+                let stderr = self.io_file(values, 5)?;
+                let result = self.io_file(values, 6)?;
+                let child = if arguments.is_empty() || arguments[arguments.len() - 1] != 0 {
+                    Err(22)
+                } else {
+                    self.host
+                        .spawn_process(executable, &arguments, stdin, stdout, stderr, result)
+                };
+                self.io_open_result(types, child, TypeKind::Child)?
+            }
+            ir::IntrinsicOp::ChildWait if values.len() == 2 => {
+                let authority = self.io_authority(values, TypeKind::Child)?;
+                self.io_result_type(result, ir::I64)?;
+                let nonblocking = self.io_number(values, 1, ir::BOOL)? != 0;
+                let child = self.io_handle(&authority)?;
+                match self.host.wait_process(child, nonblocking) {
+                    Ok(None) => Value::Bits(0),
+                    Ok(Some(status)) if status >= 0 && status < 9223372036854775807i64 => {
+                        Value::Bits((status + 1) as u64)
+                    }
+                    Err(errno) if errno > 0 => Value::Bits((-errno) as u64),
+                    _ => return Err(self.trap(7, "host returned an invalid child status")),
+                }
+            }
+            ir::IntrinsicOp::ChildTerminate if values.len() == 1 => {
+                let authority = self.io_authority(values, TypeKind::Child)?;
+                self.io_result_type(result, ir::I64)?;
+                let child = self.io_handle(&authority)?;
+                let outcome = self.host.terminate_process(child);
+                self.io_status(outcome)?
+            }
             ir::IntrinsicOp::WorldStdin | ir::IntrinsicOp::WorldStderr if values.len() == 1 => {
                 self.io_authority(values, TypeKind::World)?;
                 let (expected, value) = if name == ir::IntrinsicOp::WorldStdin {
@@ -164,7 +343,7 @@ impl<H: Host> Interpreter<'_, H> {
             ir::IntrinsicOp::WorldArgCount if values.len() == 1 => {
                 self.io_authority(values, TypeKind::World)?;
                 self.io_result_type(result, ir::U64)?;
-                Value::Bits(self.host.arguments().len() as u64)
+                Value::Bits(self.host.argument_count() as u64)
             }
             ir::IntrinsicOp::WorldArgLen | ir::IntrinsicOp::WorldArgCopy
                 if values.len()
@@ -177,12 +356,10 @@ impl<H: Host> Interpreter<'_, H> {
                 self.io_authority(values, TypeKind::World)?;
                 self.io_result_type(result, ir::U64)?;
                 let index = self.io_number(values, 1, ir::U64)?;
-                let index = usize::try_from(index)
-                    .map_err(|_| self.trap(3, "argument index out of bounds"))?;
+                let index = index as usize;
                 let argument = self
                     .host
-                    .arguments()
-                    .get(index)
+                    .argument(index)
                     .ok_or_else(|| self.trap(3, "argument index out of bounds"))?;
                 if name == ir::IntrinsicOp::WorldArgLen {
                     Value::Bits(argument.len() as u64)
@@ -207,7 +384,7 @@ impl<H: Host> Interpreter<'_, H> {
                 let path = self.io_buffer(values, 1, false)?;
                 let path = self.bytes(&path)?;
                 let opened = self.host.open_directory(&path);
-                self.io_open_result(types, opened, true)?
+                self.io_open_result(types, opened, TypeKind::Directory)?
             }
             ir::IntrinsicOp::DirectoryOpen if values.len() == 3 => {
                 let authority = self.io_authority(values, TypeKind::Directory)?;
@@ -217,7 +394,7 @@ impl<H: Host> Interpreter<'_, H> {
                 let create = self.io_number(values, 2, ir::BOOL)? != 0;
                 let handle = self.io_handle(&authority)?;
                 let opened = self.host.open_file(handle, &path, create);
-                self.io_open_result(types, opened, false)?
+                self.io_open_result(types, opened, TypeKind::File)?
             }
             ir::IntrinsicOp::StdinRead | ir::IntrinsicOp::FileRead if values.len() == 2 => {
                 let authority = self.io_authority(
@@ -257,9 +434,9 @@ impl<H: Host> Interpreter<'_, H> {
                 self.io_result_type(result, ir::UNIT)?;
                 let buffer = self.io_buffer(values, 1, false)?;
                 let bytes = self.bytes(&buffer)?;
-                self.host
-                    .write_stderr(&bytes)
-                    .map_err(|message| self.trap(7, message))?;
+                if let Err(message) = self.host.write_stderr(&bytes) {
+                    return Err(self.trap(7, &message));
+                }
                 Value::Unit
             }
             _ => return Ok(None),

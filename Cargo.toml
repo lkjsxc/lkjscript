@@ -12,11 +12,6 @@ path = "bridge/lib.rs"
 name = "lkjscript"
 path = "bridge/main.rs"
 
-[[bin]]
-name = "lkjscript-backend"
-path = "bridge/backend.rs"
-test = false
-
 [profile.release]
 overflow-checks = true
 

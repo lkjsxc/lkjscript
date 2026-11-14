@@ -54,7 +54,7 @@ The first seven types must match this primitive prefix exactly, including names.
 | `array TYPE LENGTH` | Fixed-length owned elements. |
 | `vec TYPE`, `box TYPE` | Owned growable sequence or owned indirection. |
 | `str` | Unsized immutable UTF-8 text; values require a shared reference. |
-| `world`, `stdout`, `stdin`, `stderr`, `directory`, `file` | Affine authority-bearing values. |
+| `world`, `stdout`, `stdin`, `stderr`, `directory`, `file`, `process`, `clock`, `child` | Affine authority-bearing values. |
 
 All type indices must exist. Recursive by-value layouts reject; introduce Box or
 another indirection. Unsized text cannot be stored by value or as a container
@@ -136,6 +136,9 @@ Integer binary operations are `+ - * / % & | ^ << >>`, comparisons, and
 `wrapping_add wrapping_sub wrapping_mul`. F64 supports arithmetic and
 comparisons; char supports comparisons; bool supports equality and logical/bit
 operators. Operands have the same IR type. Comparisons produce bool.
+Binary64 negation flips only the sign bit; binary arithmetic canonicalizes NaNs.
+Bit conversions preserve every bit.
+
 Ordinary integer arithmetic, division and shifts trap on invalid operations.
 Wrapping operations compute modulo the declared width.
 
@@ -151,11 +154,21 @@ The intrinsic signatures are checked in `src/check.rs` and `src/check/io.rs`:
 | `str_len str_as_bytes str_from_utf8` | Byte length, immutable byte view, or UTF-8 validation preserving the source lifetime. |
 | `char_from_u32` | Return None or Some(valid Unicode scalar). |
 | `cast` | Checked scalar type combinations; references and capabilities cannot be cast. |
+| `f64_from_bits f64_to_bits` | Bit-preserving conversion between unsigned 64-bit integers and binary64, including NaN payloads. |
 | `assert` | Consume bool, returning unit or trapping. |
-| `world_stdout world_stdin world_stderr` | Derive the named capability through an exclusive World reference. |
+| `world_stdout world_stdin world_stderr world_process world_clock` | Derive the named capability through an exclusive World reference. |
 | `world_arg_count world_arg_len world_arg_copy` | Read/copy byte arguments through World. |
 | `world_exit_status` | Set the requested u8 process status through World. |
-| `world_directory directory_open` | Acquire a Directory from World or a File beneath a Directory. |
+| `world_directory directory_open directory_open_directory` | Acquire a root Directory from World, or a File/Directory beneath an existing Directory. |
+| `world_file` | World plus u8 selector: 0 anonymous file, 1/2/3 owned stdin/stdout/stderr, 4 running executable. Return Result<File, i64>; closed standard streams produce closed Files. |
+| `file_duplicate` | Duplicate an exclusively borrowed File, sharing its offset and preserving closed state. Return Result<File, i64>. |
+| `file_readonly` | Reopen an exclusively borrowed File read-only with a fresh offset at zero, preserving closed state. Return Result<File, i64>; no path authority is granted. |
+| `file_rewind file_executable directory_rewind` | Seek to byte zero or make a File executable; return zero or negative errno. |
+| `directory_read` | Read Linux directory records into mutable bytes; return count or negative errno. |
+| `directory_create directory_remove directory_rename` | Mutate NUL-terminated basenames through exclusive Directory references. Reject slash, empty name, dot and dot-dot. Return zero or negative errno. |
+| `clock_read` | Clock plus mutable bytes of length at least 16. Write little-endian i64 seconds/nanoseconds from CLOCK_MONOTONIC; return zero or negative errno. |
+| `process_spawn` | Exclusive Process, shared executable File, NUL-separated argv, and four shared Files for stdin/stdout/stderr/fd3. Execute with empty environment; return Result<Child, i64>. |
+| `child_wait child_terminate` | Exclusive Child. Wait takes a nonblocking bool and returns zero while running, Linux wait status plus one when reaped, or negative errno. Terminate requests SIGKILL; drop terminates and reaps a live direct child. |
 | `stdin_read file_read file_write` | Use an exclusive authority reference and a byte slice; return i64 count or negative errno. |
 | `stdout_write stderr_write` | Write an immutable byte slice through the corresponding exclusive authority reference. |
 

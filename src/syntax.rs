@@ -3048,7 +3048,9 @@ impl Parser {
                 || path.name == "unreachable"
                 || path.name == "debug_assert"
                 || path.name == "debug_assert_eq"
-                || path.name == "debug_assert_ne";
+                || path.name == "debug_assert_ne"
+                || path.name == "include_str"
+                || path.name == "include_bytes";
             if !known {
                 return Err(Diagnostic::new(
                     span,

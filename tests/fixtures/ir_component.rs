@@ -226,6 +226,9 @@ fn kind_value(kind: &ir::TypeKind) -> i64 {
         ir::TypeKind::Stderr => 8,
         ir::TypeKind::Directory => 9,
         ir::TypeKind::File => 10,
+        ir::TypeKind::Process => 11,
+        ir::TypeKind::Clock => 12,
+        ir::TypeKind::Child => 13,
     }
 }
 
@@ -372,6 +375,24 @@ pub fn primitive_snapshot(index: usize, field: usize) -> i64 {
     } else {
         -1
     }
+}
+
+pub fn capability_snapshot(which: usize) -> i64 {
+    let original = match which {
+        0 => ir::TypeKind::Process,
+        1 => ir::TypeKind::Clock,
+        _ => ir::TypeKind::Child,
+    };
+    let copied = original.clone();
+    assert!(copied == original);
+    drop(original);
+    let different = if which == 0 {
+        ir::TypeKind::Clock
+    } else {
+        ir::TypeKind::Process
+    };
+    assert!(copied != different);
+    kind_value(&copied)
 }
 
 pub fn operation_snapshot(which: usize) -> i64 {

@@ -48,6 +48,7 @@ impl Shape {
         match self {
             Self::Atom(name) if integer_name(name) => Receiver::Integer,
             Self::Atom(name) if name == "char" => Receiver::Character,
+            Self::Atom(name) if name == "f64" => Receiver::Float,
             Self::Atom(name) if name == "str" => Receiver::Text,
             Self::Atom(name) if name == "World" => Receiver::World,
             Self::Atom(name) if name == "Stdout" => Receiver::Stdout,
@@ -55,6 +56,9 @@ impl Shape {
             Self::Atom(name) if name == "Stderr" => Receiver::Stderr,
             Self::Atom(name) if name == "Directory" => Receiver::Directory,
             Self::Atom(name) if name == "File" => Receiver::File,
+            Self::Atom(name) if name == "Process" => Receiver::Process,
+            Self::Atom(name) if name == "Clock" => Receiver::Clock,
+            Self::Atom(name) if name == "Child" => Receiver::Child,
             Self::Vec(_) => Receiver::Vector,
             Self::Array(_, _) => Receiver::Array,
             Self::Slice(_) => Receiver::Slice,
@@ -1571,6 +1575,17 @@ impl Infer<'_, '_> {
                         } else {
                             self.shaped(Shape::Vec(inner))
                         }
+                    } else if path.declaration.is_none() && path.name == "f64::from_bits" {
+                        if values.len() != 1 || !path.args.is_empty() {
+                            return Err(err(
+                                span,
+                                "E_TYPE",
+                                "f64::from_bits requires one u64 argument",
+                            ));
+                        }
+                        let integer = self.atom("u64");
+                        self.coerce(values[0], integer, span)?;
+                        self.atom("f64")
                     } else if path.declaration.is_none()
                         && matches!(path.name.as_str(), "char::from_u32" | "std::char::from_u32")
                     {
@@ -2182,6 +2197,14 @@ impl Infer<'_, '_> {
                 }
                 let primitive = shape.primitive();
                 let direct = super::methods::direct(primitive, &name);
+                if direct == Some(super::methods::Direct::FloatBits) {
+                    if !arguments.is_empty() || !types.is_empty() {
+                        return Err(err(span, "E_TYPE", "f64::to_bits takes no arguments"));
+                    }
+                    let integer = self.atom("u64");
+                    self.unify(result, integer, span)?;
+                    return Ok(true);
+                }
                 if direct == Some(super::methods::Direct::Character) {
                     let function = self.names.library_function(
                         "char",

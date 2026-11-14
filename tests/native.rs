@@ -61,21 +61,18 @@ impl Drop for Image {
         let _ = std::fs::remove_file(&self.0);
     }
 }
-fn packet(output: Output) -> [u64; 3] {
-    assert_eq!(
-        output.stderr.len(),
-        24,
-        "native exit lacks result packet: {output:?}"
-    );
-    let words = std::array::from_fn(|i| {
-        u64::from_le_bytes(output.stderr[i * 8..i * 8 + 8].try_into().unwrap())
-    });
+fn assert_trap(output: Output, code: &str, line: u64) {
     assert_eq!(
         output.status.code(),
-        Some(i32::from(words[0] != 0)),
+        Some(1),
         "native process died by a signal: {output:?}"
     );
-    words
+    let diagnostic = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        diagnostic.starts_with(&format!("{code} at line {line} file 0:")),
+        "{diagnostic:?}"
+    );
+    assert!(diagnostic.ends_with("\n"), "{diagnostic:?}");
 }
 
 #[test]
@@ -97,7 +94,6 @@ fn broken_and_closed_output_return_the_source_line_without_sigpipe() {
         .output()
         .unwrap();
     for output in [broken, closed] {
-        let words = packet(output);
-        assert_eq!((words[0], words[2]), (7, 5));
+        assert_trap(output, "R0007", 5);
     }
 }

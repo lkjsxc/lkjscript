@@ -466,7 +466,15 @@ impl Compiler<'_> {
         if path.declaration.is_none()
             && matches!(
                 path.name.as_str(),
-                "World" | "Stdout" | "Stdin" | "Stderr" | "Directory" | "File"
+                "World"
+                    | "Stdout"
+                    | "Stdin"
+                    | "Stderr"
+                    | "Directory"
+                    | "File"
+                    | "Process"
+                    | "Clock"
+                    | "Child"
             )
         {
             if !args.is_empty() {
@@ -483,6 +491,9 @@ impl Compiler<'_> {
                 "Stderr" => ir::TypeKind::Stderr,
                 "Directory" => ir::TypeKind::Directory,
                 "File" => ir::TypeKind::File,
+                "Process" => ir::TypeKind::Process,
+                "Clock" => ir::TypeKind::Clock,
+                "Child" => ir::TypeKind::Child,
                 _ => unreachable!(),
             };
             work.values.push(self.intern(String::new(), kind));

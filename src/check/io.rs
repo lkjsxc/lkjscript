@@ -103,6 +103,99 @@ pub(super) fn signature(
                 && bytes(types, args[1], false)
                 && result == UNIT
         }
+        IntrinsicOp::WorldProcess | IntrinsicOp::WorldClock => {
+            args.len() == 1
+                && authority(types, args[0], &TypeKind::World)
+                && types[result].kind
+                    == if name == IntrinsicOp::WorldProcess {
+                        TypeKind::Process
+                    } else {
+                        TypeKind::Clock
+                    }
+        }
+        IntrinsicOp::WorldFile => {
+            args.len() == 2
+                && authority(types, args[0], &TypeKind::World)
+                && args[1] == U8
+                && opened(types, result, &TypeKind::File)
+        }
+        IntrinsicOp::ClockRead => {
+            args.len() == 2
+                && authority(types, args[0], &TypeKind::Clock)
+                && bytes(types, args[1], true)
+                && result == I64
+        }
+        IntrinsicOp::ProcessSpawn => {
+            if args.len() != 7
+                || !authority(types, args[0], &TypeKind::Process)
+                || !bytes(types, args[2], false)
+                || !opened(types, result, &TypeKind::Child)
+            {
+                false
+            } else {
+                let mut valid = true;
+                for index in vec![1usize, 3, 4, 5, 6] {
+                    if !matches!(types[args[index]].kind, TypeKind::Ref { inner, mutable: false } if types[inner].kind == TypeKind::File)
+                    {
+                        valid = false;
+                    }
+                }
+                valid
+            }
+        }
+        IntrinsicOp::ChildWait => {
+            args.len() == 2
+                && authority(types, args[0], &TypeKind::Child)
+                && args[1] == BOOL
+                && result == I64
+        }
+        IntrinsicOp::ChildTerminate => {
+            args.len() == 1 && authority(types, args[0], &TypeKind::Child) && result == I64
+        }
+        IntrinsicOp::DirectoryOpenDirectory => {
+            args.len() == 2
+                && authority(types, args[0], &TypeKind::Directory)
+                && bytes(types, args[1], false)
+                && opened(types, result, &TypeKind::Directory)
+        }
+        IntrinsicOp::DirectoryRead => {
+            args.len() == 2
+                && authority(types, args[0], &TypeKind::Directory)
+                && bytes(types, args[1], true)
+                && result == I64
+        }
+        IntrinsicOp::DirectoryRewind => {
+            args.len() == 1 && authority(types, args[0], &TypeKind::Directory) && result == I64
+        }
+        IntrinsicOp::DirectoryCreate => {
+            args.len() == 2
+                && authority(types, args[0], &TypeKind::Directory)
+                && bytes(types, args[1], false)
+                && result == I64
+        }
+        IntrinsicOp::DirectoryRemove => {
+            args.len() == 3
+                && authority(types, args[0], &TypeKind::Directory)
+                && bytes(types, args[1], false)
+                && args[2] == BOOL
+                && result == I64
+        }
+        IntrinsicOp::DirectoryRename => {
+            args.len() == 4
+                && authority(types, args[0], &TypeKind::Directory)
+                && bytes(types, args[1], false)
+                && authority(types, args[2], &TypeKind::Directory)
+                && bytes(types, args[3], false)
+                && result == I64
+        }
+        IntrinsicOp::FileDuplicate | IntrinsicOp::FileReadOnly => {
+            args.len() == 1
+                && authority(types, args[0], &TypeKind::File)
+                && opened(types, result, &TypeKind::File)
+        }
+        IntrinsicOp::FileRewind | IntrinsicOp::FileExecutable => {
+            args.len() == 1 && authority(types, args[0], &TypeKind::File) && result == I64
+        }
         _ => return None,
     };
     Some(valid)

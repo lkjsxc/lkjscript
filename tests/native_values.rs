@@ -63,21 +63,14 @@ fn checked_case(
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
     let output = Command::new(&path).output().unwrap();
     std::fs::remove_file(path).unwrap();
+    assert!(output.status.success(), "{name}: {output:?}");
     assert_eq!(
         output.stderr.len(),
-        24,
-        "{name}: process terminated without result: {output:?}"
+        8,
+        "{name}: missing raw scalar: {output:?}"
     );
-    let words: Vec<u64> = output
-        .stderr
-        .as_chunks::<8>()
-        .0
-        .iter()
-        .map(|word| u64::from_le_bytes(*word))
-        .collect();
-    assert_eq!(words[0], 0, "{name}: trap packet {words:?}");
-    assert_eq!(words[1], expected, "{name}: scalar result");
-    assert!(output.status.success(), "{name}: {output:?}");
+    let value = u64::from_le_bytes(output.stderr.as_slice().try_into().unwrap());
+    assert_eq!(value, expected, "{name}: scalar result");
     assert_eq!(output.stdout, stdout, "{name}: output bytes");
 }
 
@@ -192,4 +185,46 @@ fn aggregate_result_can_reuse_consumed_argument_storage() {
     .unwrap();
     let checked = check::check(program).unwrap();
     checked_case("alias_call", &checked, "probe", 42, &[]);
+}
+
+#[test]
+fn file_readonly_reopens_with_independent_offset_on_native_and_witness() {
+    let source = include_str!("fixtures/world/file_readonly.rs");
+    source_case("file-readonly", source, "main", 0, b"readonly ok\n");
+    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("target")
+        .join(format!("file-readonly-witness-{}", std::process::id()));
+    std::fs::create_dir(&directory).unwrap();
+    let input = directory.join("main.rs");
+    let binary = directory.join("witness");
+    std::fs::write(
+        &input,
+        format!(
+            "#![allow(dead_code, unused_imports)]\nmod host {{\n{}\n}}\nmod case {{ use crate::host::World;\n{source}\n}}\nfn main() {{host::enter(case::main);}}\n",
+            include_str!("../bridge/output.rs"),
+        ),
+    )
+    .unwrap();
+    let compiled = Command::new("rustc")
+        .args(["--edition", "2024", "-C", "overflow-checks=yes"])
+        .arg(&input)
+        .arg("-o")
+        .arg(&binary)
+        .output()
+        .unwrap();
+    let outcome = if compiled.status.success() {
+        Some(Command::new(&binary).output().unwrap())
+    } else {
+        None
+    };
+    std::fs::remove_dir_all(directory).unwrap();
+    assert!(
+        compiled.status.success(),
+        "{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+    let outcome = outcome.unwrap();
+    assert!(outcome.status.success(), "{outcome:?}");
+    assert_eq!(outcome.stdout, b"readonly ok\n");
+    assert!(outcome.stderr.is_empty(), "{outcome:?}");
 }

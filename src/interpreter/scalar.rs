@@ -2,7 +2,7 @@ use crate::ir::{BinaryOp, TypeKind, UnaryOp};
 
 pub(super) enum NumberError {
     Trap(u8),
-    Invalid(&'static str),
+    Invalid(String),
 }
 
 pub(super) fn normalize(value: u64, bits: u8, signed: bool) -> u64 {
@@ -19,13 +19,30 @@ fn integer(kind: &TypeKind) -> Result<(u8, bool), NumberError> {
     match kind {
         TypeKind::Bool => Ok((1, false)),
         TypeKind::Char => Ok((32, false)),
-        TypeKind::Int { bits, signed } if [8, 16, 32, 64].contains(bits) => Ok((*bits, *signed)),
-        _ => Err(NumberError::Invalid("operation requires a scalar integer")),
+        TypeKind::Int { bits, signed } if matches!(*bits, 8 | 16 | 32 | 64) => Ok((*bits, *signed)),
+        _ => Err(NumberError::Invalid(
+            "operation requires a scalar integer".to_string(),
+        )),
+    }
+}
+
+fn signed_minimum(bits: u8) -> i64 {
+    if bits == 64 {
+        -9223372036854775807i64 - 1
+    } else {
+        -(1i64 << (bits - 1))
+    }
+}
+fn unsigned_maximum(bits: u8) -> u64 {
+    if bits == 64 {
+        18446744073709551615u64
+    } else {
+        (1u64 << bits) - 1
     }
 }
 
 fn float(value: f64) -> u64 {
-    if value.is_nan() {
+    if value != value {
         0x7ff8_0000_0000_0000
     } else {
         value.to_bits()
@@ -34,43 +51,46 @@ fn float(value: f64) -> u64 {
 
 pub(super) fn unary(kind: &TypeKind, op: UnaryOp, value: u64) -> Result<u64, NumberError> {
     if matches!(kind, TypeKind::Char) {
-        return Err(NumberError::Invalid("invalid character unary operation"));
+        return Err(NumberError::Invalid(
+            "invalid character unary operation".to_string(),
+        ));
     }
     if matches!(kind, TypeKind::F64) {
         return match op {
-            UnaryOp::Neg => Ok(float(-f64::from_bits(value))),
-            _ => Err(NumberError::Invalid("invalid floating unary operation")),
+            UnaryOp::Neg => Ok(value ^ 0x8000_0000_0000_0000),
+            _ => Err(NumberError::Invalid(
+                "invalid floating unary operation".to_string(),
+            )),
         };
     }
     let (bits, signed) = integer(kind)?;
     match op {
-        UnaryOp::Not if matches!(kind, TypeKind::Bool) => Ok(u64::from(value == 0)),
+        UnaryOp::Not if matches!(kind, TypeKind::Bool) => Ok((value == 0) as u64),
         UnaryOp::Not => Ok(normalize(!value, bits, signed)),
         UnaryOp::Neg if signed => {
-            let value = value as i64 as i128;
-            if value == -(1i128 << (bits - 1)) {
+            let value = value as i64;
+            if value == signed_minimum(bits) {
                 Err(NumberError::Trap(1))
             } else {
                 Ok((-value) as u64)
             }
         }
-        _ => Err(NumberError::Invalid("invalid integer unary operation")),
+        _ => Err(NumberError::Invalid(
+            "invalid integer unary operation".to_string(),
+        )),
     }
 }
 
 pub(super) fn binary(kind: &TypeKind, op: BinaryOp, a: u64, b: u64) -> Result<u64, NumberError> {
     if matches!(kind, TypeKind::Char)
-        && ![
-            BinaryOp::Eq,
-            BinaryOp::Ne,
-            BinaryOp::Lt,
-            BinaryOp::Le,
-            BinaryOp::Gt,
-            BinaryOp::Ge,
-        ]
-        .contains(&op)
+        && !matches!(
+            op,
+            BinaryOp::Eq | BinaryOp::Ne | BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge
+        )
     {
-        return Err(NumberError::Invalid("invalid character binary operation"));
+        return Err(NumberError::Invalid(
+            "invalid character binary operation".to_string(),
+        ));
     }
     if matches!(kind, TypeKind::F64) {
         let (a, b) = (f64::from_bits(a), f64::from_bits(b));
@@ -79,51 +99,67 @@ pub(super) fn binary(kind: &TypeKind, op: BinaryOp, a: u64, b: u64) -> Result<u6
             BinaryOp::Sub => float(a - b),
             BinaryOp::Mul => float(a * b),
             BinaryOp::Div => float(a / b),
-            BinaryOp::Eq => u64::from(a == b),
-            BinaryOp::Ne => u64::from(a != b),
-            BinaryOp::Lt => u64::from(a < b),
-            BinaryOp::Le => u64::from(a <= b),
-            BinaryOp::Gt => u64::from(a > b),
-            BinaryOp::Ge => u64::from(a >= b),
-            _ => return Err(NumberError::Invalid("invalid floating binary operation")),
+            BinaryOp::Eq => (a == b) as u64,
+            BinaryOp::Ne => (a != b) as u64,
+            BinaryOp::Lt => (a < b) as u64,
+            BinaryOp::Le => (a <= b) as u64,
+            BinaryOp::Gt => (a > b) as u64,
+            BinaryOp::Ge => (a >= b) as u64,
+            _ => {
+                return Err(NumberError::Invalid(
+                    "invalid floating binary operation".to_string(),
+                ));
+            }
         });
     }
     let (bits, signed) = integer(kind)?;
     if matches!(kind, TypeKind::Bool)
-        && ![
-            BinaryOp::Eq,
-            BinaryOp::Ne,
-            BinaryOp::BitAnd,
-            BinaryOp::BitOr,
-            BinaryOp::BitXor,
-            BinaryOp::And,
-            BinaryOp::Or,
-        ]
-        .contains(&op)
+        && !matches!(
+            op,
+            BinaryOp::Eq
+                | BinaryOp::Ne
+                | BinaryOp::BitAnd
+                | BinaryOp::BitOr
+                | BinaryOp::BitXor
+                | BinaryOp::And
+                | BinaryOp::Or
+        )
     {
-        return Err(NumberError::Invalid("invalid boolean binary operation"));
+        return Err(NumberError::Invalid(
+            "invalid boolean binary operation".to_string(),
+        ));
     }
     if op == BinaryOp::Eq {
-        return Ok(u64::from(a == b));
+        return Ok((a == b) as u64);
     }
     if op == BinaryOp::Ne {
-        return Ok(u64::from(a != b));
+        return Ok((a != b) as u64);
     }
-    if [BinaryOp::Lt, BinaryOp::Le, BinaryOp::Gt, BinaryOp::Ge].contains(&op) {
-        let order = if signed {
-            (a as i64).cmp(&(b as i64))
+    if matches!(
+        op,
+        BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge
+    ) {
+        let value = if signed {
+            let left = a as i64;
+            let right = b as i64;
+            match op {
+                BinaryOp::Lt => left < right,
+                BinaryOp::Le => left <= right,
+                BinaryOp::Gt => left > right,
+                _ => left >= right,
+            }
         } else {
-            a.cmp(&b)
+            match op {
+                BinaryOp::Lt => a < b,
+                BinaryOp::Le => a <= b,
+                BinaryOp::Gt => a > b,
+                _ => a >= b,
+            }
         };
-        return Ok(u64::from(match op {
-            BinaryOp::Lt => order.is_lt(),
-            BinaryOp::Le => order.is_le(),
-            BinaryOp::Gt => order.is_gt(),
-            _ => order.is_ge(),
-        }));
+        return Ok(value as u64);
     }
     if op == BinaryOp::Shl || op == BinaryOp::Shr {
-        if b >= u64::from(bits) {
+        if b >= (bits as u64) {
             return Err(NumberError::Trap(1));
         }
         return Ok(normalize(
@@ -152,8 +188,8 @@ pub(super) fn binary(kind: &TypeKind, op: BinaryOp, a: u64, b: u64) -> Result<u6
             return Err(NumberError::Trap(2));
         }
         if signed {
-            let (a, b) = (a as i64 as i128, b as i64 as i128);
-            if a == -(1i128 << (bits - 1)) && b == -1 {
+            let (a, b) = (a as i64, b as i64);
+            if a == signed_minimum(bits) && b == -1 {
                 return Err(NumberError::Trap(1));
             }
             return Ok(if op == BinaryOp::Div { a / b } else { a % b } as u64);
@@ -161,30 +197,31 @@ pub(super) fn binary(kind: &TypeKind, op: BinaryOp, a: u64, b: u64) -> Result<u6
         return Ok(if op == BinaryOp::Div { a / b } else { a % b });
     }
     if signed {
-        let (a, b) = (a as i64 as i128, b as i64 as i128);
-        let value = match op {
-            BinaryOp::Add => a + b,
-            BinaryOp::Sub => a - b,
-            BinaryOp::Mul => a * b,
-            _ => return Err(NumberError::Invalid("unknown binary operation")),
-        };
-        if value < -(1i128 << (bits - 1)) || value > (1i128 << (bits - 1)) - 1 {
-            return Err(NumberError::Trap(1));
-        }
-        Ok(value as u64)
-    } else {
-        let (a, b) = (u128::from(a), u128::from(b));
+        let (a, b) = (a as i64, b as i64);
         let value = match op {
             BinaryOp::Add => a.checked_add(b),
             BinaryOp::Sub => a.checked_sub(b),
             BinaryOp::Mul => a.checked_mul(b),
-            _ => return Err(NumberError::Invalid("unknown binary operation")),
+            _ => return Err(NumberError::Invalid("unknown binary operation".to_string())),
         }
         .ok_or(NumberError::Trap(1))?;
-        if value > (1u128 << bits) - 1 {
+        let minimum = signed_minimum(bits);
+        if value < minimum || value > !minimum {
             return Err(NumberError::Trap(1));
         }
         Ok(value as u64)
+    } else {
+        let value = match op {
+            BinaryOp::Add => a.checked_add(b),
+            BinaryOp::Sub => a.checked_sub(b),
+            BinaryOp::Mul => a.checked_mul(b),
+            _ => return Err(NumberError::Invalid("unknown binary operation".to_string())),
+        }
+        .ok_or(NumberError::Trap(1))?;
+        if value > unsigned_maximum(bits) {
+            return Err(NumberError::Trap(1));
+        }
+        Ok(value)
     }
 }
 
@@ -199,11 +236,12 @@ pub(super) fn cast(from: &TypeKind, to: &TypeKind, value: u64) -> Result<u64, Nu
         (TypeKind::F64, TypeKind::Int { bits, signed }) => {
             let value = f64::from_bits(value);
             let value = if *signed {
-                let value = value as i64 as i128;
-                value.clamp(-(1i128 << (bits - 1)), (1i128 << (bits - 1)) - 1) as u64
+                let value = value as i64;
+                let minimum = signed_minimum(*bits);
+                value.max(minimum).min(!minimum) as u64
             } else {
                 (value as u64).min(if *bits == 64 {
-                    u64::MAX
+                    18446744073709551615u64
                 } else {
                     (1u64 << bits) - 1
                 })
@@ -222,6 +260,6 @@ pub(super) fn cast(from: &TypeKind, to: &TypeKind, value: u64) -> Result<u64, Nu
             TypeKind::Int { .. } | TypeKind::Bool | TypeKind::Char,
             TypeKind::Int { bits, signed },
         ) => Ok(normalize(value, *bits, *signed)),
-        _ => Err(NumberError::Invalid("invalid scalar cast")),
+        _ => Err(NumberError::Invalid("invalid scalar cast".to_string())),
     }
 }

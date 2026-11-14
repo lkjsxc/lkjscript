@@ -8,7 +8,7 @@ mod language;
 pub(crate) use language::facts;
 pub use language::{
     ast, backend, check, diagnostic, diagnostics, elaborate, frontend, generics, ir, ir_text, json,
-    names, native, resolve, result_wire, runtime_memory, source, syntax,
+    names, native, resolve, runtime_memory, source, syntax,
 };
 
 /// Rust witness provisioning for the pure compiler.

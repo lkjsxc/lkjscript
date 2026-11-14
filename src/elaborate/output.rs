@@ -16,6 +16,32 @@ impl Builder<'_, '_> {
             Value::Stderr => self.compiler.intern(String::new(), ir::TypeKind::Stderr),
             Value::Directory => self.compiler.intern(String::new(), ir::TypeKind::Directory),
             Value::File => self.compiler.intern(String::new(), ir::TypeKind::File),
+            Value::Process => self.compiler.intern(String::new(), ir::TypeKind::Process),
+            Value::Clock => self.compiler.intern(String::new(), ir::TypeKind::Clock),
+            Value::Child => self.compiler.intern(String::new(), ir::TypeKind::Child),
+            Value::FileRef | Value::DirectoryRef => {
+                let kind = if matches!(value, Value::FileRef) {
+                    ir::TypeKind::File
+                } else {
+                    ir::TypeKind::Directory
+                };
+                let inner = self.compiler.intern(String::new(), kind);
+                self.compiler
+                    .reference(inner, matches!(value, Value::DirectoryRef))
+            }
+            Value::ArgumentsView => {
+                let bytes = self
+                    .compiler
+                    .intern(String::new(), ir::TypeKind::Vec { inner: ir::U8 });
+                let values = self.compiler.intern(
+                    String::new(),
+                    ir::TypeKind::Slice {
+                        inner: bytes,
+                        mutable: false,
+                    },
+                );
+                self.compiler.reference(values, false)
+            }
             Value::Text => {
                 let text = self.compiler.intern(String::new(), ir::TypeKind::Str);
                 self.compiler.reference(text, false)
@@ -42,10 +68,26 @@ impl Builder<'_, '_> {
             | Value::ResultFile
             | Value::ResultCount
             | Value::ResultBytes
-            | Value::ResultUnit => {
+            | Value::ResultUnit
+            | Value::ResultChild
+            | Value::ResultNames
+            | Value::ResultStatus
+            | Value::ResultMaybeStatus => {
                 let success = match value {
                     Value::ResultDirectory => self.capability_type(Value::Directory, span)?,
                     Value::ResultFile => self.capability_type(Value::File, span)?,
+                    Value::ResultChild => self.capability_type(Value::Child, span)?,
+                    Value::ResultNames => self.capability_type(Value::Arguments, span)?,
+                    Value::ResultStatus => ir::I64,
+                    Value::ResultMaybeStatus => {
+                        let path = self
+                            .compiler
+                            .names
+                            .library_type("prelude", "Option", span)?;
+                        let mut arguments = BTreeMap::new();
+                        arguments.insert("T".to_string(), ir::I64);
+                        self.compiler.named_type(&path, &arguments, span)?
+                    }
                     Value::ResultCount => ir::U64,
                     Value::ResultBytes => self
                         .compiler

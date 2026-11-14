@@ -77,20 +77,13 @@ pub fn assert_calls(checked: &ir::CheckedProgram, calls: &[(&str, &[i64], i64)])
             std::fs::remove_file(path).unwrap();
             output
         };
+        assert!(output.status.success(), "entry {name} failed: {output:?}");
         assert_eq!(
             output.stderr.len(),
-            24,
-            "missing native result packet for {name}: {output:?}"
+            8,
+            "missing raw scalar for {name}: {output:?}"
         );
-        let word =
-            |offset| u64::from_le_bytes(output.stderr[offset..offset + 8].try_into().unwrap());
-        assert!(
-            output.status.success() && word(0) == 0,
-            "entry {name} trapped with R{:04} at line {}: {:?}",
-            word(0),
-            word(16),
-            output.status
-        );
-        assert_eq!(word(8) as i64, *expected, "entry {name}");
+        let value = u64::from_le_bytes(output.stderr.as_slice().try_into().unwrap());
+        assert_eq!(value as i64, *expected, "entry {name}");
     }
 }

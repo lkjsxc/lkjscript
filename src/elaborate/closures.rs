@@ -102,6 +102,16 @@ pub(super) struct Evidence {
     plans: BTreeMap<a::ExprId, (Kind, Vec<CapturePlan>)>,
     calls: BTreeMap<a::ExprId, CallSelection>,
 }
+impl Evidence {
+    pub(super) fn extend(&mut self, evidence: Self) {
+        for (expression, plan) in evidence.plans {
+            self.plans.insert(expression, plan);
+        }
+        for (expression, call) in evidence.calls {
+            self.calls.insert(expression, call);
+        }
+    }
+}
 #[derive(Clone)]
 struct Closure {
     expression: a::ExprId,

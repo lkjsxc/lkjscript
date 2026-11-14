@@ -57,7 +57,7 @@ pub fn parse_bundle_report(bundle: &SourceBundle) -> SourceReport {
     };
     let mut report = load_report(&bundle.root, library, &mut |path: &str| {
         let text = match files.get(&path.to_string()) {
-            Some(index) => Some(bundle.files[*index].text.clone()),
+            Some(index) => Some(bundle.files[*index].text.as_bytes().to_vec()),
             None => None,
         };
         Ok(text)
@@ -80,6 +80,7 @@ pub fn parse_bundle_report(bundle: &SourceBundle) -> SourceReport {
 
 fn parent(path: &str) -> &str {
     match path.rfind('/') {
+        Some(0) => &path[..1],
         Some(at) => &path[..at],
         None => "",
     }
@@ -87,6 +88,8 @@ fn parent(path: &str) -> &str {
 fn join(directory: &str, file: &str) -> String {
     if directory.is_empty() {
         file.to_string()
+    } else if directory == "/" {
+        format!("/{file}")
     } else {
         format!("{directory}/{file}")
     }
@@ -104,21 +107,160 @@ fn stem(path: &str) -> &str {
     }
 }
 
-fn read_source<F: FnMut(&str) -> std::result::Result<Option<String>, String>>(
+fn read_source<F: FnMut(&str) -> std::result::Result<Option<Vec<u8>>, String>>(
     read: &mut F,
     path: &str,
     span: Span,
 ) -> Result<Option<String>, Diagnostic> {
-    read(path).map_err(|message| {
+    let bytes = read(path).map_err(|message| {
         let mut e = Diagnostic::new(span, "E_IO", &message);
         e.path = path.to_string();
         e
-    })
+    })?;
+    match bytes {
+        Some(bytes) => match String::from_utf8(bytes) {
+            Ok(text) => Ok(Some(text)),
+            Err(_) => {
+                let mut error = Diagnostic::new(span, "E_IO", "source is not valid UTF-8");
+                error.path = path.to_string();
+                Err(error)
+            }
+        },
+        None => Ok(None),
+    }
+}
+
+fn include_path(source: &str, requested: &str) -> Result<String, String> {
+    if requested.is_empty() || requested.starts_with('/') {
+        return Err(
+            "an embedded file needs a nonempty path beneath the source directory".to_string(),
+        );
+    }
+    for byte in requested.bytes() {
+        if byte == 0u8 {
+            return Err("an embedded file path cannot contain a NUL byte".to_string());
+        }
+    }
+    let directory = parent(source);
+    let absolute = directory.starts_with('/');
+    let mut parts: Vec<String> = Vec::new();
+    for part in directory.split('/') {
+        if part != "" && part != "." {
+            if part == ".." {
+                if parts.pop().is_none() {
+                    return Err("embedded file escapes the source directory".to_string());
+                }
+            } else {
+                parts.push(part.to_string());
+            }
+        }
+    }
+    let floor = if !parts.is_empty() && parts[0] == "$std" {
+        1usize
+    } else {
+        0usize
+    };
+    for part in requested.split('/') {
+        if part != "" && part != "." {
+            if part == ".." {
+                if parts.len() == floor {
+                    return Err("embedded file escapes the source directory".to_string());
+                }
+                parts.pop();
+            } else {
+                parts.push(part.to_string());
+            }
+        }
+    }
+    let mut path = if absolute {
+        "/".to_string()
+    } else {
+        String::new()
+    };
+    for part in parts {
+        if !path.is_empty() && path != "/" {
+            path.push('/');
+        }
+        path.push_str(&part);
+    }
+    Ok(path)
+}
+
+fn expand_includes<F: FnMut(&str) -> Result<Option<Vec<u8>>, String>>(
+    program: &mut Program,
+    first: usize,
+    read: &mut F,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let mut index = first;
+    while index < program.exprs.len() {
+        let expression = program.exprs[index].clone();
+        if let Expr::Macro {
+            name,
+            args,
+            separator,
+        } = expression.kind
+        {
+            if name == "include_str" || name == "include_bytes" {
+                let span = expression.span;
+                let requested: Option<String> = if args.len() == 1 && separator == "," {
+                    match &program.exprs[args[0]].kind {
+                        Expr::String(path) => Some(path.clone()),
+                        _ => None,
+                    }
+                } else {
+                    None
+                };
+                let result: Result<String, String> = match requested {
+                    Some(requested) => include_path(&program.files[span.file].path, &requested),
+                    None => Err(format!("{name}! requires one literal file path")),
+                };
+                let path = match result {
+                    Ok(path) => path,
+                    Err(message) => {
+                        diagnostics.push(load_error(program, span, "E_INCLUDE_PATH", &message));
+                        index += 1;
+                        continue;
+                    }
+                };
+                match read(&path) {
+                    Ok(Some(bytes)) => {
+                        if name == "include_bytes" {
+                            program.exprs[index].kind = Expr::Bytes(bytes);
+                        } else {
+                            match String::from_utf8(bytes) {
+                                Ok(text) => program.exprs[index].kind = Expr::String(text),
+                                Err(_) => diagnostics.push(load_error(
+                                    program,
+                                    span,
+                                    "E_INCLUDE_UTF8",
+                                    &format!("embedded file {path} is not valid UTF-8"),
+                                )),
+                            }
+                        }
+                    }
+                    Ok(None) => diagnostics.push(load_error(
+                        program,
+                        span,
+                        "E_INCLUDE_MISSING",
+                        &format!("missing embedded file {path}"),
+                    )),
+                    Err(message) => diagnostics.push(load_error(
+                        program,
+                        span,
+                        "E_IO",
+                        &format!("cannot read embedded file {path}: {message}"),
+                    )),
+                }
+            }
+        }
+        index += 1;
+    }
 }
 
 /// Both bundle compilation and the bootstrap CLI use this module interpretation.
 /// `read` supplies bytes only; it does not resolve source names or select modules.
-pub fn load<F: FnMut(&str) -> std::result::Result<Option<String>, String>>(
+pub fn load<F: FnMut(&str) -> std::result::Result<Option<Vec<u8>>, String>>(
     root: &str,
     standard: Option<&str>,
     read: &mut F,
@@ -128,7 +270,7 @@ pub fn load<F: FnMut(&str) -> std::result::Result<Option<String>, String>>(
 
 /// Load every independently discoverable file even after source errors. File
 /// reads and parsing use the same path rules as ordinary compilation.
-pub fn load_report<F: FnMut(&str) -> std::result::Result<Option<String>, String>>(
+pub fn load_report<F: FnMut(&str) -> std::result::Result<Option<Vec<u8>>, String>>(
     root: &str,
     standard: Option<&str>,
     read: &mut F,
@@ -215,7 +357,9 @@ pub fn load_report<F: FnMut(&str) -> std::result::Result<Option<String>, String>
             join(parent(&path), stem(&path))
         };
         directories.insert(scope, base);
+        let first_expression = program.exprs.len();
         let parsed = syntax::parse_file_report(&mut program, &text, file, scope);
+        expand_includes(&mut program, first_expression, read, &mut diagnostics);
         for diagnostic in parsed.diagnostics {
             diagnostics.push(diagnostic);
         }

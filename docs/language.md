@@ -758,7 +758,7 @@ use rel32; an unrepresentable displacement produces a located emission error.
 | Small/medium allocations | Slabs and reusable size classes carved from geometrically grown regions. Refused region requests retry down to the required extent. |
 | Large allocations | Dedicated kernel mappings; growth remaps existing storage. Persistent refusal reports R0006. |
 | Runtime authority | Checked source sealed over raw load/store/copy/map/unmap/remap. Ordinary names cannot obtain these bindings. |
-| Runtime checks | Collection bounds; integer overflow, division and shift validity; UTF-8 and active tags. F64 arithmetic canonicalizes NaNs. |
+| Runtime checks | Collection bounds; integer overflow, division and shift validity; UTF-8 and active tags. F64 binary arithmetic canonicalizes NaNs; negation flips only the sign bit. |
 | Trap locations | Materialized on failure paths. Checked-operation lines remain exact; allocation/stack failures may name a runtime or function location. |
 
 Neither stack nor allocator reads physical memory or resource limits. Box, Vec
@@ -774,15 +774,55 @@ positive errno values; raw read/write leaves return negative errno. File handles
 close on destruction. Program bytes and requested exit status remain separate
 from runtime traps.
 
-The compiler's --help lists commands and input options. The Rust witness driver's
---stats writes phase times, peak RSS, IR size and code size to stderr. The gate
-compares output bytes, statuses, file effects, directory escapes and stream errors.
-
 The independent IR interpreter executes over its own typed heap, initialization
 state, loan identities and call/control/drop stacks. It checks actual reference
 access and active variants independently of the checker and lowering.
 M_* diagnostics identify interpreter safety failures; R* codes identify program
 traps. Program output is compared as exact bytes across routes.
+
+## Compiler commands
+
+The static lkjscript executable contains the frontend, checker, native backend,
+independent interpreter and command line, plus embedded library and runtime source.
+`sh tools/bootstrap.sh` unpacks the stored seed, builds `target/lkjscript`, then
+checks that it reproduces itself byte for byte. This needs neither Rust nor Node.
+
+| Command | Input and result |
+| --- | --- |
+| lkjscript check PATH | Check source or .lkjir; silent success, located diagnostics on stderr. |
+| lkjscript ir PATH [-o FILE] | Produce checked IR text; stdout unless an output file is selected. |
+| lkjscript build PATH [-o FILE] | Write a static Linux x86-64 executable; default PATH.elf. Publication uses a temporary file and rename. Rejection preserves any existing destination. |
+| lkjscript run PATH [--entry NAME] | Execute main, or probe when main is absent; print its scalar result. |
+| lkjscript test PATH | Run the input's #[test] functions or IR test entries through both routes; one ok N tests line on success, failures only otherwise. N counts executions across routes. |
+
+All five commands accept source or .lkjir. `run` selects native execution by
+default; `--engine interpreter` selects independent IR execution. The same
+option restricts `test` to one route. Entries take no parameter or one World.
+Arguments after `--` are exact program bytes; compiler arguments must be UTF-8.
+`test` currently accepts one source or IR file. Directory discovery and
+expectation-header cases are planned for milestone 6.3. Failed assertions, traps,
+nonzero exit status, or a diagnostic fail a test; successful output is suppressed.
+
+| Entry result | Driver stdout after program output |
+| --- | --- |
+| () | No added bytes. |
+| Signed or unsigned integer | Decimal value followed by newline. |
+| bool | true or false followed by newline. |
+| char | Its UTF-8 bytes followed by newline, including U+0000. |
+| f64 | f64:0x followed by exactly 16 lowercase hexadecimal digits and newline; preserves every returned bit. |
+
+For a native run, the artifact writes its raw eight-byte scalar to a descriptor
+held by the driver. A trap returns a located text diagnostic through that private
+descriptor, keeping it separate from program stderr. The driver interprets scalar
+bits using the checked entry type and reports diagnostics on stderr. Standalone
+build artifacts expose program streams and exit status, reporting traps directly
+on stderr. Traps preserve prior output and exit with status 1.
+Both routes use the same scalar formatting; exhaustion locations may differ.
+
+`--stats` writes phase times in milliseconds, IR/code counts and peak RSS to
+stderr. `--source-dir DIR` supplies the source read root. `--library-dir DIR`
+and `--runtime-source PATH` select explicit source replacements for the embedded
+components; ordinary use needs neither. `--help` lists the available options.
 
 ## Source library, trusted modules and imports
 
@@ -794,21 +834,16 @@ using the element Clone or PartialEq contract; allocation/storage still use the
 existing memory primitives.
 BTreeMap uses an indexed AVL arena with logarithmic lookup, insertion and removal. String constructors validate bytes and its private representation is
 protected across modules. The library loads through ordinary module scopes.
-Bootstrap byte provisioning lives in `bridge/library.rs`; a compiler source
-bundle supplies its own library files without hidden fallback.
-`std::mem::replace` transfers ownership through an exclusive reference. Vec/Box
-and memory operations remain trusted intrinsics until their source layer lands.
+Library and runtime sources are embedded with the ordinary include forms below.
+The frontend produces IR in memory; the checker admits it before native emission
+or checked interpretation. Explicit IR input, output, tests and mutation use the
+text representation. `std::mem::replace` transfers ownership through an exclusive
+reference. Vec/Box storage and memory operations remain checked intrinsics.
 
-`compiler::compile(&SourceBundle)` is the bootstrap source-to-native entry.
-The pure core additionally receives its declared Runtime; `backend::compile` consumes
-program IR, runtime IR and an entry name without source-front-end dependencies.
-`compiler::check_bundle` uses the same production checking pipeline. These entries
-perform no host I/O. Current self-build and corpus results are in [status](status.md).
-The ordinary-source World entry in src/backend_main.rs shares all
-nine production modules with src/backend_lib.rs. It accepts PROGRAM.lkjir, optional
---entry NAME and --check, and --runtime RUNTIME.lkjir for emission. Paths are
-relative to its current directory capability. A completed ELF is written to
-stdout; diagnostics use stderr and status 1.
+| Compile-time form | Result and source access | Rejection or rewrite |
+| --- | --- | --- |
+| include_str!("path") | Static str reference to UTF-8 file contents. Read relative to the containing source file beneath its source directory capability. | Missing file, invalid UTF-8, nonliteral path or path outside the granted source root. Use include_bytes! for arbitrary bytes. |
+| include_bytes!("path") | Static shared reference to an exact-size byte array containing every file byte. Same path resolution and capability. | Missing file, nonliteral path or escape from the source root. |
 
 The production modules have one role each: src/ir.rs defines IR data;
 src/check.rs verifies it; src/native.rs selects instructions and owns inline layout/drop glue;
@@ -824,73 +859,77 @@ declare host imports or construct capabilities from scalar words. Traps record a
 code and source line and terminate the selected route without requiring an
 application output capability. Structured task scopes remain unimplemented.
 
+## Binary64 bit representation
+
+| Form | Meaning and lowering | Rejection |
+| --- | --- | --- |
+| f64::from_bits(bits: u64) | Preserve all 64 bits through f64_from_bits, including negative zero and NaN payloads. | Wrong argument count or type. |
+| value.to_bits() on f64 | Return its exact u64 representation through f64_to_bits. | Arguments, type arguments or a non-f64 receiver. |
+
+Binary arithmetic retains canonical NaNs. Unary negation flips only the sign bit,
+preserving payloads and signaling state as Rust does. Bit conversion itself
+preserves every binary64 representation. Use a numeric cast when the intended
+operation is value conversion.
+
 ## World and I/O capabilities
 
-The host entry alone creates `World`. An entry is either a zero-argument function
-or a function taking exactly one `World`; ordinary source calls supply their own
-arguments. `World`, `Stdout`, `Stdin`, `Stderr`, `Directory` and `File` are
-affine intrinsic types with no source constructor, Copy, Clone, Data, Send or Sync
-implementation. Same-spelled source structs acquire no authority. IR checks the
-capability type and operation signature independently; integers, casts and
-aggregate construction cannot forge a capability. A function without a capability
-in its arguments or captures has no observable I/O effects.
+The host entry creates World. Entries take no argument or one World; ordinary calls
+supply their own arguments. World, Stdout, Stdin, Stderr, Directory, File, Process,
+Clock and Child are affine intrinsic types. They have no source constructor,
+Copy, Clone, Data, Send or Sync implementation. Same-spelled source declarations,
+integers and casts cannot create authority. The IR checker verifies every capability
+operation independently. All methods below take an exclusive receiver borrow.
+Derived capabilities may outlive that borrow and move into other owners.
 
-All methods below take `&mut self`. Derived capabilities may outlive the World
-borrow, move into owners and pass by mutable reference. Deriving standard streams
-more than once refers to the same inherited streams. Convenience algorithms live
-in [library/io.rs](../library/io.rs); the host leaves handle only their primitive
-operations.
-
-| Methods | Result and contract |
+| Form | Result and meaning |
 | --- | --- |
-| `World::args()` | `Vec<Vec<u8>>`: owned argument bytes in order, excluding argv0; no UTF-8 requirement. |
-| `World::stdout()`, `stdin()`, `stderr()` | The corresponding stream capability. |
-| `World::directory(&str)` | `Result<Directory, i64>`: open the explicitly named root directory. |
-| `World::set_exit_status(u8)` | Unit: select the eventual normal process status; execution and cleanup continue. The last setting in an entry wins. |
-| `Directory::open(&str)`, `create(&str)` | `Result<File, i64>`: open for reading, or create/truncate for writing, beneath that root. |
-| `Stdin::read(&mut [u8])`, `File::read(&mut [u8])` | `Result<usize, i64>`: copy a possibly short read; zero means EOF for a nonempty buffer. |
-| `Stdin::read_to_end()`, `File::read_to_end()` | `Result<Vec<u8>, i64>`: collect remaining bytes. |
-| `File::write(&[u8])`, `write_all(&[u8])` | `Result<usize, i64>` for one possibly short write, or `Result<(), i64>` for the complete sequence. |
-| `Stdout::write(&[u8])`, `Stderr::write(&[u8])` | Unit after the complete byte sequence has been written, in call order; output failure traps with R0007. |
+| World.args() | Vec<Vec<u8>> of argument bytes, excluding argv0. |
+| World.stdout(), stdin(), stderr() | A corresponding stream capability. |
+| World.directory(path: &str) | Result<Directory, i64>; acquire the named root. |
+| World.process(), clock() | Process-spawning or monotonic-clock authority. |
+| World.temporary_file() | Result<File, i64>; anonymous read/write storage. |
+| World.stdin_file(), stdout_file(), stderr_file() | Result<File, i64>; owned duplicate of an inherited standard stream, preserving a closed stream. |
+| World.executable() | Result<File, i64>; read-only running executable with a fresh offset. Checked interpretation prepares its native image lazily; unchecked IR receives ENOSYS. |
+| World.set_exit_status(u8) | Select normal exit status; execution and cleanup continue. Last setting wins. |
+| Directory.open(path), create(path) | Result<File, i64>; read a file or create/truncate a writable file beneath the root. |
+| Directory.open_directory(path) | Result<Directory, i64>; derive a readable descendant directory. |
+| Directory.list() | Result<Vec<Vec<u8>>, i64>; entry-name bytes, excluding dot and dot-dot; order is unspecified. |
+| Directory.create_directory(path), remove(path), remove_directory(path) | Result<(), i64>; create a directory, unlink an entry or remove an empty directory. |
+| Directory.rename(old, new) | Result<(), i64>; rename beneath the same root, replacing an existing destination as Linux permits. |
+| Stdin.read(&mut [u8]), File.read(&mut [u8]) | Result<usize, i64>; possibly short read; zero means EOF for nonempty input. |
+| Stdin.read_to_end(), File.read_to_end() | Result<Vec<u8>, i64>; collect remaining bytes. |
+| File.write(&[u8]), write_all(&[u8]) | Result<usize, i64> for one write, or Result<(), i64> for the complete sequence. |
+| File.duplicate() | Result<File, i64>; another owned handle sharing the same offset and closed state. |
+| File.readonly() | Result<File, i64>; reopen the granted file read-only with an independent offset starting at zero. Closed files remain closed. |
+| File.rewind(), set_executable() | Result<(), i64>; seek to zero, or set mode 0755. |
+| Stdout.write(&[u8]), Stderr.write(&[u8]) | Complete the write or trap R0007 at the call. |
+| Clock.nanoseconds() | Result<usize, i64>; monotonic time for differences and deadlines. |
+| Process.spawn_file(executable: &File, args: &[Vec<u8>], stdin: &File, stdout: &File, stderr: &File, result: &File) | Result<Child, i64>; execute that File with explicit streams; result is child descriptor 3. |
+| Child.wait(), try_wait() | Result<i64, i64> or Result<Option<i64>, i64>; status is exit code or 128 + signal. Polling returns None while running. Successful reap makes later waits fail ECHILD. |
+| Child.terminate() | Result<(), i64>; request SIGKILL, then wait to collect status. Drop terminates and reaps a live direct child. |
 
-I/O Results carry positive Linux errno values. Reads, writes and opens retry
-EINTR. Paths reject embedded NUL with EINVAL (22); raw terminated path buffers
-also require exactly one final NUL. Root acquisition uses openat with
-O_PATH | O_DIRECTORY | O_CLOEXEC. File resolution uses openat2 with
-RESOLVE_BENEATH | RESOLVE_NO_MAGICLINKS: absolute paths and resolution that
-escapes the root fail. Relative parent components and ordinary symlinks are
-permitted when they remain beneath it. An unavailable openat2 reports its error, without a weaker fallback.
-Creation uses mode 0666 subject to the inherited umask. Dropping a Directory or
-File closes its owned handle exactly once; moves and partial cleanup retain that
-ownership. Dropping a standard-stream capability does not close the stream.
+Convenience algorithms live in library/io.rs and lower to checked capability
+operations. I/O Results contain positive Linux errno. EINTR is retried except
+for close, which consumes the handle. Paths reject embedded NUL; raw path bytes
+require exactly one final NUL. Descendant resolution uses openat2 with
+RESOLVE_BENEATH | RESOLVE_NO_MAGICLINKS; an escape or absolute descendant path
+fails. Mutations first derive the parent, then operate on a checked basename.
+New files use mode 0666 and directories 0777, subject to the inherited umask.
 
-Host leaves check byte ranges without overflow and retain no caller pointer.
-A zero-length complete write succeeds without emitting bytes. A write that makes
-no progress with bytes remaining, or an OS error writing stdout/stderr, traps
-with R0007 at the source call. SIGPIPE does not bypass that trap. File write
-errors instead return errno. Output emitted before a trap remains observable;
-traps terminate without cleanup or unwinding. Normal destructor order remains
-Rust-compatible in the supported intersection.
+File-backed process streams share their offsets; rewind captured files before
+reading. A closed File returns EBADF on I/O, drops harmlessly, and closes its
+assigned child stream. Spawn validates NUL-free argument bytes, supplies argv0
+as lkjscript, and uses an empty environment. It executes the File directly with
+execveat, without PATH search or shell fallback. Exec failure returns errno.
+Dropping File or Directory closes its owned descriptor once. Dropping a standard
+stream capability leaves the inherited stream open. Spawn sets a parent-death
+SIGKILL for its direct child. No caller byte-slice pointer survives a host operation.
 
-Inherited closed standard descriptors stay closed; opening another capability
-cannot retarget them. The Rust bootstrap records their state before Rust startup
-fills closed descriptors and restores that state once before application work.
-Both native and IR runners inherit stdin/stdout/stderr directly for run and test.
-The native runner uses a separate result descriptor, so program stderr cannot be
-interpreted as a trap packet. Program arguments after the command-line `--`
-separator retain their original bytes. A normal nonzero requested status remains
-a normal completion; a trap exits unsuccessfully and reports its code and line
-on stderr when that stream is writable. Tests retain the first nonzero requested
-status across entries rather than losing it when a later entry succeeds.
-
-The [rustc conformance adapter](../bridge/output.rs) supplies the same capability
-methods and privately constructs World. Conformance compares exact output bytes,
-normal exit status and the specified trap kind. With `--cfg lkjscript_control`, the
-adapter reports its outcome on a separate descriptor and leaves stderr entirely
-to the program. Arbitrary stderr bytes and a normal status of 101 cannot
-impersonate an oracle trap. Missing or malformed control records are host
-failures. Matching bytes followed by an unrequested crash are not a passing
-execution.
+Output before a trap remains observable; traps exit without unwinding. Normal
+destructor order agrees with Rust in the supported intersection. Opening or
+duplicating another capability preserves inherited closed standard streams.
+The rustc conformance adapter in bridge/output.rs supplies the same methods;
+tests compare bytes, normal status and trap kind through a separate oracle channel.
 
 ## Diagnostic recovery and test oracles
 
@@ -902,17 +941,13 @@ forms are diagnosed across parsed regions. Shared signature and resolution
 failures stop dependent analysis. Ordinary checks retain source locations and
 never invent types or ownership facts to continue after those failures.
 
-The bootstrap batch command accepts native, IR, or both. It checks each source
-once. The interpreter uses fresh state per case; native cases execute separate
-images. Each result
-records program stdout in `stdoutHex`, program stderr in `stderrHex`, normal
-status separately, and compiler/runtime diagnostics in `stderr`. Each case
-retains its own bytes and termination class.
-The batch watchdog measures missing progress, not total duration. Missing,
-duplicate or incomplete results fail the suite. Rust reference outputs are cached
-by source, seed, compiler version and flags. Semantic cases are source/IR data;
-source-sensitivity bootstrap tests remain while their exact source identity is
-relevant. Detailed measurements remain under target/.
+The gate compares native and interpreter values, exact output bytes, exit statuses,
+file effects and trap codes. Generated source and direct IR mutations exercise
+both routes. Programs expected to finish use the suite watchdog; potentially
+nonterminating mutants have a short allowance and a separate outcome. Cases that
+exhaust heap or stack compare trap codes without comparing exhaustion locations.
+The native toolchain integration harness in tools/toolchain-test.rs covers command
+behavior, scalar representations, binary streams, embedding and rejected builds.
 
 ## Consumer-driven surface additions
 

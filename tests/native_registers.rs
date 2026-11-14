@@ -72,15 +72,16 @@ fn run_case(name: &str, text: &str, address_space: Option<u64>, expected: Option
         Command::new(&path).output().unwrap()
     };
     std::fs::remove_file(path).unwrap();
-    assert_eq!(output.stderr.len(), 24, "{name}: {output:?}");
-    let packet: [u64; 3] = std::array::from_fn(|i| {
-        u64::from_le_bytes(output.stderr[i * 8..i * 8 + 8].try_into().unwrap())
-    });
-    assert!(output.status.success(), "{name}: {packet:?}");
-    assert_eq!(packet[0], 0, "{name}: {packet:?}");
+    assert!(output.status.success(), "{name}: {output:?}");
     assert_eq!(
-        packet[1], expected,
-        "{name}: register selection differs from independent interpreter"
+        output.stderr.len(),
+        8,
+        "{name}: missing raw scalar: {output:?}"
+    );
+    let value = u64::from_le_bytes(output.stderr.as_slice().try_into().unwrap());
+    assert_eq!(
+        value, expected,
+        "{name}: register selection differs from interpretation"
     );
 }
 

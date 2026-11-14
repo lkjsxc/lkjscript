@@ -5,8 +5,9 @@ import path from 'node:path';
 import { run } from './process.mjs';
 import { runRoutes } from './batch.mjs';
 import { worldOutcome } from './oracle.mjs';
-const root=path.resolve('.'), binary=path.resolve(process.argv[2]||'target/release/lkjscript');
-const backend=path.resolve(process.argv[3]||path.join(path.dirname(binary),'lkjscript-backend'));
+const args=process.argv.slice(2);
+if(args.length>1||args.some(arg=>arg.startsWith('--')))throw Error('usage: node tools/world-io.mjs [COMPILER]');
+const root=path.resolve('.'), binary=path.resolve(args[0]||process.env.LKJSCRIPT_BIN||'target/release/lkjscript');
 const output=path.join(root,'target/world-io');fs.mkdirSync(output,{recursive:true});
 const started=performance.now(), summary={observations:0,failures:[]};
 const host=fs.readFileSync('bridge/output.rs','utf8');
@@ -14,18 +15,16 @@ const launch=path.join(output,'launch');
 function detail(r){return `${r.status}/${r.signal}: ${r.stderr?.toString()} ${r.error||''}`;}
 async function build(command,args){const r=await run(command,args);if(r.status!==0||r.error)throw Error(detail(r));}
 await build('rustc',['--edition=2024','tests/fixtures/world/launch.rs','-o',launch]);
-const runtime=await run(binary,['runtime-ir']);if(runtime.status!==0||runtime.error)throw Error(detail(runtime));
-const runtimePath=path.join(output,'runtime.lkjir');fs.writeFileSync(runtimePath,runtime.stdout);
 async function compile(name){
  const source=path.join(root,'tests/fixtures/world',name+'.rs');
  const rust=path.join(output,name+'-rust.rs'), oracle=path.join(output,name+'-rust'), native=path.join(output,name+'.elf');
- fs.writeFileSync(rust,'#![allow(warnings)]\nmod host {\n'+host+'\n}\nmod case {\nuse crate::host::{World,Stdout,Stdin,Stderr,Directory,File};\n'+fs.readFileSync(source,'utf8')+'\n}\nfn main(){host::enter(case::main);}\n');
+ fs.writeFileSync(rust,'#![allow(warnings)]\nmod host {\n'+host+'\n}\nmod case {\nuse crate::host::{World,Stdout,Stdin,Stderr,Directory,File,Process,Clock,Child};\n'+fs.readFileSync(source,'utf8')+'\n}\nfn main(){host::enter(case::main);}\n');
  await build('rustc',['--edition=2024','--cfg','lkjscript_control','-C','overflow-checks=yes','-C','opt-level=1',rust,'-o',oracle]);
  await build(binary,['build',source,'-o',native]);
  const ir=await run(binary,['ir',source]);if(ir.status!==0||ir.error)throw Error(detail(ir));
- const irPath=path.join(output,name+'.lkjir'), backendElf=path.join(output,name+'-backend.elf');fs.writeFileSync(irPath,ir.stdout);
- await build(backend,[irPath,'--runtime',runtimePath,'-o',backendElf]);summary.observations++;
- if(!fs.readFileSync(native).equals(fs.readFileSync(backendElf)))summary.failures.push(name+': backend bytes differ');
+ const irPath=path.join(output,name+'.lkjir'), irElf=path.join(output,name+'-ir.elf');fs.writeFileSync(irPath,ir.stdout);
+ await build(binary,['build',irPath,'-o',irElf]);summary.observations++;
+ if(!fs.readFileSync(native).equals(fs.readFileSync(irElf)))summary.failures.push(name+': source/IR bytes differ');
  return {source,routes:[['standalone',native,[]],['native',binary,['run',source,'--engine','native','--']],['interpreter',binary,['run',source,'--engine','interpreter','--']],['rust',oracle,[]]]};
 }
 async function execute(route,args,input,close){
@@ -88,6 +87,19 @@ const routes=await runRoutes(binary,[{path:status.source}],{engines:['native','i
 for(const [engine,results] of Object.entries(routes)){
  const r=results[0];summary.observations++;
  if(r.status!==23||r.checkStatus!==0||r.stderr.length!==0||!r.stdout.equals(Buffer.from([0,255]))||!r.programStderr.equals(Buffer.from([255,0,128])))summary.failures.push('batch stderr/status '+engine+': '+detail(r));
+}
+const system=await compile('system');
+for(const route of system.routes){
+ const dir=path.join(output,'data-system-'+route[0]);fs.mkdirSync(dir,{recursive:true});
+ check(await execute(route,[dir],Buffer.alloc(0)),0,Buffer.from('system ok\n'),Buffer.alloc(0),'system/'+route[0]);
+}
+const closedProcess=await compile('closed_process');
+for(const fd of [0,1,2])for(const route of closedProcess.routes){
+ check(await execute(route,[String(fd)],undefined,fd),0,Buffer.alloc(0),Buffer.alloc(0),'closed process '+fd+'/'+route[0]);
+}
+const selfSpawn=await compile('self_spawn');
+for(const route of selfSpawn.routes){
+ check(await execute(route,[],Buffer.alloc(0)),0,Buffer.from('42\n'),Buffer.alloc(0),'self executable/'+route[0]);
 }
 summary.elapsedSeconds=(performance.now()-started)/1000;
 console.log(JSON.stringify(summary));if(summary.failures.length)process.exitCode=1;

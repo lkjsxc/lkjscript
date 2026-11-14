@@ -7,15 +7,17 @@ pub(super) struct Report {
     pub problems: Vec<a::Diagnostic>,
 }
 
-pub(super) fn infer_all(
+pub(super) fn infer_selected(
     source: &a::Program,
     names: &crate::resolve::Resolver<'_>,
     implementations: &crate::generics::ImplementationIndex,
+    selected: &[usize],
 ) -> Report {
     let mut definitions = BTreeMap::new();
     let mut problems = Vec::new();
-    for (index, function) in source.functions.iter().enumerate() {
-        if function.body.is_none() {
+    for index in selected {
+        let index = *index;
+        if source.functions[index].body.is_none() {
             continue;
         }
         match definition_types::infer(source, names, implementations, index) {

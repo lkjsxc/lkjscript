@@ -15,7 +15,7 @@ pub fn stage(directory: &Path, inputs: &[SourceInput]) -> PathBuf {
             assert_eq!(text.matches("use crate::Result;").count(), 1);
             text = text.replacen(
                 "use crate::Result;",
-                "use crate::host::{Directory, File, Stdin, World};\nuse std::result::Result;",
+                "use crate::host::{Child, Clock, Directory, File, Process, Stdin, World};\nuse std::result::Result;",
                 1,
             );
         }

@@ -118,14 +118,34 @@ pub(super) struct DefinitionEvidence {
     pub(super) closures: super::closures::Evidence,
 }
 
-pub(super) fn validate_report(
+pub(super) fn validate_report<'source>(
+    source: &'source a::Program,
+    definitions: BTreeMap<usize, super::definition_types::DefinitionTypes>,
+) -> Result<(Compiler<'source>, DefinitionEvidence, Vec<a::Diagnostic>)> {
+    let mut compiler = Compiler::new(source)?;
+    let (evidence, problems) = validate_selected(source, &mut compiler, definitions, true)?;
+    Ok((compiler, evidence, problems))
+}
+
+pub(super) fn validate_demand(
     source: &a::Program,
+    compiler: &mut Compiler<'_>,
     definitions: BTreeMap<usize, super::definition_types::DefinitionTypes>,
 ) -> Result<(DefinitionEvidence, Vec<a::Diagnostic>)> {
+    validate_selected(source, compiler, definitions, false)
+}
+
+fn validate_selected(
+    source: &a::Program,
+    compiler: &mut Compiler<'_>,
+    definitions: BTreeMap<usize, super::definition_types::DefinitionTypes>,
+    validate_derives: bool,
+) -> Result<(DefinitionEvidence, Vec<a::Diagnostic>)> {
     let mut roots = Vec::new();
-    for index in 0..source.functions.len() {
+    for index in definitions.keys() {
+        let index = *index;
         let function = &source.functions[index];
-        if function.body.is_none() || !definitions.contains_key(&index) {
+        if function.body.is_none() {
             continue;
         }
         let mut generic = false;
@@ -139,16 +159,29 @@ pub(super) fn validate_report(
             roots.push(index);
         }
     }
-    let mut compiler = Compiler::new(source)?;
+    if roots.is_empty() && !validate_derives {
+        return Ok((
+            DefinitionEvidence {
+                methods: MethodSelections::default(),
+                closures: super::closures::Evidence::default(),
+                types: definitions,
+            },
+            Vec::new(),
+        ));
+    }
+    compiler.reset_definition_verification();
     compiler.definition_types = definitions;
     compiler.contracts = Some(Contracts::default());
-    super::derive_check::validate(&mut compiler)?;
+    if validate_derives {
+        super::instantiate_type_headers(source, compiler, true)?;
+        super::derive_check::validate(compiler)?;
+    }
     if roots.is_empty() {
         return Ok((
             DefinitionEvidence {
                 methods: MethodSelections::default(),
                 closures: super::closures::Evidence::default(),
-                types: compiler.definition_types,
+                types: std::mem::replace(&mut compiler.definition_types, BTreeMap::new()),
             },
             Vec::new(),
         ));
@@ -276,9 +309,9 @@ pub(super) fn validate_report(
         problems.push(problem);
     }
     let mut program = ir::Program {
-        types: compiler.types,
-        functions: compiler.functions,
-        destructors: compiler.destructors,
+        types: std::mem::replace(&mut compiler.types, Vec::new()),
+        functions: std::mem::replace(&mut compiler.functions, Vec::new()),
+        destructors: std::mem::replace(&mut compiler.destructors, Vec::new()),
     };
     for problem in crate::check::refine_return_contracts(&mut program, &refinement) {
         problems.push(problem);
@@ -293,15 +326,43 @@ pub(super) fn validate_report(
     }
     Ok((
         DefinitionEvidence {
-            methods: compiler.method_selections,
-            closures: compiler.closures.evidence,
-            types: compiler.definition_types,
+            methods: std::mem::replace(&mut compiler.method_selections, BTreeMap::new()),
+            closures: std::mem::replace(
+                &mut compiler.closures.evidence,
+                super::closures::Evidence::default(),
+            ),
+            types: std::mem::replace(&mut compiler.definition_types, BTreeMap::new()),
         },
         problems,
     ))
 }
 
 impl Compiler<'_> {
+    // Keep immutable source indexes; only the discarded verification IR belongs
+    // to a batch. Rebuilding the indexes here would scan the entire input for
+    // every newly demanded library method.
+    fn reset_definition_verification(&mut self) {
+        self.anonymous_fields = BTreeMap::new();
+        self.types = ir::primitives();
+        self.type_names = BTreeMap::new();
+        self.type_keys = BTreeMap::new();
+        self.functions = Vec::new();
+        self.pending_functions = Vec::new();
+        self.derived_functions = BTreeMap::new();
+        self.instance_names = BTreeMap::new();
+        self.applications = BTreeMap::new();
+        self.destructors = Vec::new();
+        self.contracts = None;
+        self.method_selections = BTreeMap::new();
+        self.definition_types = BTreeMap::new();
+        self.closures = super::closures::Catalog::default();
+        self.scoped_bodies = BTreeMap::new();
+        self.trait_proofs = None;
+        self.return_inference = BTreeSet::new();
+        self.diagnostic_functions = None;
+        self.initialize_primitive_names();
+    }
+
     fn rigid_type(&mut self, name: &str) -> usize {
         let id = self.types.len();
         self.types.push(ir::Type {

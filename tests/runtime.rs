@@ -27,7 +27,7 @@ fn value(
     memory: &mut runtime_memory::Memory,
 ) -> u64 {
     let result = interpreter::run_runtime(
-        runtime,
+        runtime.checked_program(),
         runtime.function(name).unwrap(),
         arguments,
         memory,
@@ -140,7 +140,7 @@ fn kernel_refusal_and_unrepresentable_allocation_report_heap_failure() {
     let mut memory = runtime_memory::Memory::new();
     memory.refuse_mappings();
     let refused = interpreter::run_runtime(
-        &runtime,
+        runtime.checked_program(),
         runtime.function("allocate").unwrap(),
         &[8],
         &mut memory,
@@ -150,7 +150,7 @@ fn kernel_refusal_and_unrepresentable_allocation_report_heap_failure() {
     .unwrap();
     assert_eq!(refused.code(), "R0006");
     let overflow = interpreter::run_runtime(
-        &runtime,
+        runtime.checked_program(),
         runtime.function("probe_overflow").unwrap(),
         &[],
         &mut memory,
@@ -189,7 +189,7 @@ fn raw_names_require_an_explicit_checked_runtime_seal() {
 }
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-fn native_packet(name: &str, bytes: Vec<u8>) -> [u64; 3] {
+fn native_result(name: &str, bytes: Vec<u8>) -> Result<u64, String> {
     use std::os::unix::fs::PermissionsExt;
     let directory =
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/native-runtime");
@@ -200,17 +200,12 @@ fn native_packet(name: &str, bytes: Vec<u8>) -> [u64; 3] {
     let output = std::process::Command::new(&path).output();
     std::fs::remove_file(path).unwrap();
     let output = output.unwrap();
-    assert_eq!(output.stderr.len(), 24, "native result packet: {output:?}");
-    let words: [u64; 3] = std::array::from_fn(|index| {
-        u64::from_le_bytes(output.stderr[index * 8..index * 8 + 8].try_into().unwrap())
-    });
-    assert_eq!(
-        output.status.code(),
-        Some(i32::from(words[0] != 0)),
-        "native result status: {output:?}"
-    );
     assert!(output.stdout.is_empty());
-    words
+    if !output.status.success() {
+        return Err(String::from_utf8(output.stderr).unwrap());
+    }
+    assert_eq!(output.stderr.len(), 8, "native scalar result: {output:?}");
+    Ok(u64::from_le_bytes(output.stderr.try_into().unwrap()))
 }
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
@@ -229,8 +224,7 @@ fn native_allocator_matches_its_independent_raw_model() {
             },
         )
         .unwrap_or_else(|error| panic!("{}: {}", error.code, error.message));
-        let result = native_packet(name, image.bytes);
-        assert_eq!((result[0], result[1]), (0, expected));
+        assert_eq!(native_result(name, image.bytes), Ok(expected));
     }
 
     let ordinary = compiler::check_bundle(&bundle(source_text())).unwrap();
@@ -250,6 +244,6 @@ fn native_allocator_matches_its_independent_raw_model() {
         },
     )
     .unwrap_or_else(|error| panic!("{}: {}", error.code, error.message));
-    let result = native_packet("unsealed", image.bytes);
-    assert!(result[0] >= 16);
+    let error = native_result("unsealed", image.bytes).unwrap_err();
+    assert!(error.starts_with("R0016 at line "), "{error}");
 }

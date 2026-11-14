@@ -74,6 +74,27 @@ fn model_runs_values_moves_borrows_collections_and_source_library() {
 }
 
 #[test]
+fn model_float_negation_preserves_payload_bits() {
+    let result = must_run(execute(
+        include_str!("conformance/pass/float_bits.rs"),
+        "probe",
+        &[],
+    ));
+    assert_eq!(observed(result.value), 42);
+    let program = lkjscript::ir_text::read(include_str!(
+        "conformance/migrated/backend_nan_negation.lkjir"
+    ))
+    .unwrap();
+    let result = must_run(interpreter::run(&program, 0, &[], &mut Vec::new()));
+    assert!(
+        result.value
+            == Scalar::F64 {
+                bits: 0xfff8_0000_0000_0000
+            }
+    );
+}
+
+#[test]
 fn model_runs_custom_drop_in_source_order() {
     let text = r#"
         struct Counter<'a> { count: &'a mut i64 }
@@ -322,6 +343,9 @@ fn raw_ir_cannot_fabricate_host_authority_or_supply_it_as_integer_argument() {
         ir::TypeKind::Stderr,
         ir::TypeKind::Directory,
         ir::TypeKind::File,
+        ir::TypeKind::Process,
+        ir::TypeKind::Clock,
+        ir::TypeKind::Child,
     ] {
         let program = raw(
             vec![ir::Type {
@@ -398,6 +422,95 @@ fn model_output_preserves_bytes_drop_order_and_trap_prefix() {
 fn model_host_failure_keeps_previous_output_and_has_its_own_trap_kind() {
     struct FailingHost(Vec<u8>);
     impl interpreter::Host for FailingHost {
+        fn argument_count(&self) -> usize {
+            0
+        }
+        fn argument(&self, _index: usize) -> Option<Vec<u8>> {
+            None
+        }
+        fn read_stdin(&mut self, _bytes: &mut [u8]) -> Result<usize, i64> {
+            Err(38)
+        }
+        fn write_stderr(&mut self, _bytes: &[u8]) -> Result<(), String> {
+            Err("stderr is unavailable".to_string())
+        }
+        fn open_directory(&mut self, _path: &[u8]) -> Result<u64, i64> {
+            Err(38)
+        }
+        fn open_file(&mut self, _directory: u64, _path: &[u8], _create: bool) -> Result<u64, i64> {
+            Err(38)
+        }
+        fn read_file(&mut self, _handle: u64, _bytes: &mut [u8]) -> Result<usize, i64> {
+            Err(38)
+        }
+        fn write_file(&mut self, _handle: u64, _bytes: &[u8]) -> Result<usize, i64> {
+            Err(38)
+        }
+        fn close_handle(&mut self, _handle: u64) {}
+        fn set_exit_status(&mut self, _status: u8) {}
+        fn duplicate_file(&mut self, _handle: u64) -> Result<u64, i64> {
+            Err(38)
+        }
+        fn readonly_file(&mut self, _handle: u64) -> Result<u64, i64> {
+            Err(38)
+        }
+        fn world_file(&mut self, _kind: u8) -> Result<u64, i64> {
+            Err(38)
+        }
+        fn open_subdirectory(&mut self, _directory: u64, _path: &[u8]) -> Result<u64, i64> {
+            Err(38)
+        }
+        fn read_directory(&mut self, _directory: u64, _bytes: &mut [u8]) -> Result<usize, i64> {
+            Err(38)
+        }
+        fn rewind_handle(&mut self, _handle: u64) -> Result<(), i64> {
+            Err(38)
+        }
+        fn create_directory(&mut self, _directory: u64, _name: &[u8]) -> Result<(), i64> {
+            Err(38)
+        }
+        fn remove_entry(
+            &mut self,
+            _directory: u64,
+            _name: &[u8],
+            _is_directory: bool,
+        ) -> Result<(), i64> {
+            Err(38)
+        }
+        fn rename_entry(
+            &mut self,
+            _from: u64,
+            _old_name: &[u8],
+            _to: u64,
+            _new_name: &[u8],
+        ) -> Result<(), i64> {
+            Err(38)
+        }
+        fn file_executable(&mut self, _file: u64) -> Result<(), i64> {
+            Err(38)
+        }
+        fn monotonic_time(&mut self, _bytes: &mut [u8]) -> Result<(), i64> {
+            Err(38)
+        }
+        fn spawn_process(
+            &mut self,
+            _executable: u64,
+            _arguments: &[u8],
+            _stdin: u64,
+            _stdout: u64,
+            _stderr: u64,
+            _result: u64,
+        ) -> Result<u64, i64> {
+            Err(38)
+        }
+        fn wait_process(&mut self, _child: u64, _nonblocking: bool) -> Result<Option<i64>, i64> {
+            Err(38)
+        }
+        fn terminate_process(&mut self, _child: u64) -> Result<(), i64> {
+            Err(38)
+        }
+        fn drop_process(&mut self, _child: u64) {}
+
         fn write_stdout(&mut self, bytes: &[u8]) -> Result<(), String> {
             if !self.0.is_empty() {
                 return Err("injected write failure".to_string());

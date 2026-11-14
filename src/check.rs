@@ -102,7 +102,10 @@ pub fn is_data(types: &[Type], ty: usize) -> bool {
             | TypeKind::Stdin
             | TypeKind::Stderr
             | TypeKind::Directory
-            | TypeKind::File => return false,
+            | TypeKind::File
+            | TypeKind::Process
+            | TypeKind::Clock
+            | TypeKind::Child => return false,
             TypeKind::Ref { inner, .. }
             | TypeKind::Slice { inner, .. }
             | TypeKind::Vec { inner }
@@ -1722,6 +1725,28 @@ fn check_intrinsic(
     let valid = match name {
         _ if io::signature(types, dt, &ts, name).is_some() => {
             io::signature(types, dt, &ts, name).unwrap()
+        }
+        IntrinsicOp::F64FromBits => {
+            ts.len() == 1
+                && matches!(
+                    types[ts[0]].kind,
+                    TypeKind::Int {
+                        bits: 64,
+                        signed: false
+                    }
+                )
+                && dt == F64
+        }
+        IntrinsicOp::F64ToBits => {
+            ts.len() == 1
+                && ts[0] == F64
+                && matches!(
+                    types[dt].kind,
+                    TypeKind::Int {
+                        bits: 64,
+                        signed: false
+                    }
+                )
         }
         IntrinsicOp::CharFromU32 => {
             ts.len() == 1

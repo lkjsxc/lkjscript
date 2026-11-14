@@ -7,7 +7,9 @@ pub const IMAGE_BASE: u64 = 0x400000;
 pub const CODE_OFFSET: usize = 4096;
 const INITIAL_STACK: i64 = 0;
 const EXIT_STATUS: i64 = 8;
-const PACKET: i64 = 16;
+const TRAP_CODE: i64 = 16;
+const RESULT: i64 = 24;
+const TRAP_LINE: i64 = 32;
 const TRAP_FILE: i64 = 40;
 const STACK_TOP: i64 = 48;
 const GROW_RETURN: i64 = 56;
@@ -45,6 +47,22 @@ pub struct Platform {
     pub file_read: Label,
     pub file_write: Label,
     pub handle_close: Label,
+    pub world_file: Label,
+    pub clock_read: Label,
+    pub process_spawn: Label,
+    pub child_wait: Label,
+    pub child_terminate: Label,
+    pub child_drop: Label,
+    pub directory_open_directory: Label,
+    pub directory_read: Label,
+    pub handle_rewind: Label,
+    pub directory_create: Label,
+    pub directory_remove: Label,
+    pub directory_rename: Label,
+    pub file_executable: Label,
+    pub file_duplicate: Label,
+    pub file_readonly: Label,
+    messages: Label,
     signal_action: Label,
     diagnostic_buffer: Label,
     open_how: Label,
@@ -76,6 +94,22 @@ impl Platform {
             file_read: a.label(),
             file_write: a.label(),
             handle_close: a.label(),
+            world_file: a.label(),
+            clock_read: a.label(),
+            process_spawn: a.label(),
+            child_wait: a.label(),
+            child_terminate: a.label(),
+            child_drop: a.label(),
+            directory_open_directory: a.label(),
+            directory_read: a.label(),
+            handle_rewind: a.label(),
+            directory_create: a.label(),
+            directory_remove: a.label(),
+            directory_rename: a.label(),
+            file_executable: a.label(),
+            file_duplicate: a.label(),
+            file_readonly: a.label(),
+            messages: a.label(),
             signal_action: a.label(),
             diagnostic_buffer: a.label(),
             open_how: a.label(),
@@ -194,11 +228,11 @@ pub fn emit(a: &mut Assembler, p: Platform, entry_label: Label, entry: &Entry) {
         index += 1;
     }
     a.call(entry_label);
-    a.store(CONTEXT, PACKET + 8, A);
+    a.store(CONTEXT, RESULT, A);
     a.immediate(A, 0);
-    a.store(CONTEXT, PACKET, A);
+    a.store(CONTEXT, TRAP_CODE, A);
     a.load(A, CONTEXT, EXIT_STATUS);
-    a.store(CONTEXT, PACKET + 16, A);
+    a.store(CONTEXT, TRAP_LINE, A);
     a.jump(p.complete);
 
     a.bind(p.heap_exhausted);
@@ -212,17 +246,21 @@ pub fn emit(a: &mut Assembler, p: Platform, entry_label: Label, entry: &Entry) {
     a.immediate(A, 8);
     a.jump(p.trap);
     a.bind(p.trap);
-    a.store(CONTEXT, PACKET, A);
-    a.store(CONTEXT, PACKET + 16, LINE);
+    a.store(CONTEXT, TRAP_CODE, A);
+    a.store(CONTEXT, TRAP_LINE, LINE);
     a.store(CONTEXT, TRAP_FILE, FILE);
     a.immediate(A, 0);
-    a.store(CONTEXT, PACKET + 8, A);
+    a.store(CONTEXT, RESULT, A);
     a.jump(p.complete);
 
     a.bind(p.complete);
     if let Some(fd) = entry.result_fd {
-        a.lea(SI, CONTEXT, PACKET);
-        a.immediate(D, 24);
+        let trapped = a.label();
+        a.load(A, CONTEXT, TRAP_CODE);
+        a.test(A, true);
+        a.condition(5, trapped);
+        a.lea(SI, CONTEXT, RESULT);
+        a.immediate(D, 8);
         let writing = a.label();
         let exit = a.label();
         a.bind(writing);
@@ -235,10 +273,10 @@ pub fn emit(a: &mut Assembler, p: Platform, entry_label: Label, entry: &Entry) {
         a.test(D, true);
         a.condition(5, writing);
         a.bind(exit);
-    } else {
-        diagnostic(a, p);
+        a.bind(trapped);
     }
-    a.load(A, CONTEXT, PACKET);
+    diagnostic(a, p, entry.result_fd.unwrap_or(2));
+    a.load(A, CONTEXT, TRAP_CODE);
     a.test(A, true);
     a.immediate(DI, 1);
     let exiting = a.label();
@@ -252,6 +290,7 @@ pub fn emit(a: &mut Assembler, p: Platform, entry_label: Label, entry: &Entry) {
     stack(a, p);
     memory(a, p);
     io(a, p);
+    super::process::emit(a, p);
 }
 
 fn syscall_retry(a: &mut Assembler, number: u64) {
@@ -625,9 +664,13 @@ fn io(a: &mut Assembler, p: Platform) {
     a.jump(open_result);
 
     a.bind(p.handle_close);
+    let already_closed = a.label();
+    a.test(DI, true);
+    a.condition(4, already_closed);
     a.immediate(A, 3);
     a.syscall();
     // close consumes ownership even on EINTR; retry could close a reused handle.
+    a.bind(already_closed);
     a.immediate(A, 0);
     a.ret();
 
@@ -685,44 +728,11 @@ fn diagnostic_decimal(a: &mut Assembler, minimum: u64) {
     a.condition(2, digit);
 }
 
-fn diagnostic(a: &mut Assembler, p: Platform) {
-    let complete = a.label();
-    a.load(A, CONTEXT, PACKET);
-    a.test(A, true);
-    a.condition(4, complete);
-    a.address(R8, p.diagnostic_buffer);
-    a.lea(R8, R8, 128);
-    diagnostic_text(a, "\n");
-    a.load(A, CONTEXT, PACKET);
-    a.immediate(C, 8);
-    a.compare(A, C);
-    let heap = a.label();
-    let location = a.label();
-    a.condition(5, heap);
-    diagnostic_text(a, " (stack exhausted)");
-    a.jump(location);
-    a.bind(heap);
-    a.immediate(C, 6);
-    a.compare(A, C);
-    a.condition(5, location);
-    diagnostic_text(a, " (heap allocation failed)");
-    a.bind(location);
-    a.load(A, CONTEXT, TRAP_FILE);
-    diagnostic_decimal(a, 1);
-    diagnostic_text(a, " file ");
-    a.load(A, CONTEXT, PACKET + 16);
-    diagnostic_decimal(a, 1);
-    diagnostic_text(a, " at line ");
-    a.load(A, CONTEXT, PACKET);
-    diagnostic_decimal(a, 4);
-    diagnostic_text(a, "R");
-    a.mov(SI, R8);
-    a.address(D, p.diagnostic_buffer);
-    a.lea(D, D, 128);
-    a.rr(0x29, D, SI, true);
+fn diagnostic_write(a: &mut Assembler, fd: u32) {
     let writing = a.label();
+    let complete = a.label();
     a.bind(writing);
-    a.immediate(DI, 2);
+    a.immediate(DI, fd as u64);
     syscall_retry(a, 1);
     a.test(A, true);
     a.condition(14, complete);
@@ -733,8 +743,52 @@ fn diagnostic(a: &mut Assembler, p: Platform) {
     a.bind(complete);
 }
 
+fn diagnostic(a: &mut Assembler, p: Platform, fd: u32) {
+    let complete = a.label();
+    a.load(A, CONTEXT, TRAP_CODE);
+    a.test(A, true);
+    a.condition(4, complete);
+    a.address(R8, p.diagnostic_buffer);
+    a.lea(R8, R8, 128);
+    diagnostic_text(a, ": ");
+    a.load(A, CONTEXT, TRAP_FILE);
+    diagnostic_decimal(a, 1);
+    diagnostic_text(a, " file ");
+    a.load(A, CONTEXT, TRAP_LINE);
+    diagnostic_decimal(a, 1);
+    diagnostic_text(a, " at line ");
+    a.load(A, CONTEXT, TRAP_CODE);
+    diagnostic_decimal(a, 4);
+    diagnostic_text(a, "R");
+    a.mov(SI, R8);
+    a.address(D, p.diagnostic_buffer);
+    a.lea(D, D, 128);
+    a.rr(0x29, D, SI, true);
+    diagnostic_write(a, fd);
+    a.address(R8, p.messages);
+    a.load(A, CONTEXT, TRAP_CODE);
+    a.load(C, R8, 0);
+    a.compare(A, C);
+    let known = a.label();
+    a.condition(2, known);
+    a.immediate(A, 4);
+    a.bind(known);
+    a.shift(A, 4, 4);
+    a.rr(0x01, R8, A, true);
+    a.load(SI, R8, 8);
+    a.load(D, R8, 16);
+    diagnostic_write(a, fd);
+    a.bind(complete);
+}
+
 /// Bind RW data labels. offset and all labels are relative to the code start.
-pub fn data(a: &mut Assembler, p: Platform, bytes: &mut Vec<u8>, offset: usize) {
+pub fn data(
+    a: &mut Assembler,
+    p: Platform,
+    bytes: &mut Vec<u8>,
+    offset: usize,
+    messages: &[String],
+) {
     a.data_label(p.context, offset + bytes.len());
     bytes.extend_from_slice(&[0u8; 160]);
     a.data_label(p.signal_action, offset + bytes.len());
@@ -747,6 +801,42 @@ pub fn data(a: &mut Assembler, p: Platform, bytes: &mut Vec<u8>, offset: usize) 
     a.data_label(p.allocator_state, offset + bytes.len());
     for _ in 0..crate::runtime::ALLOCATOR_STATE_BYTES {
         bytes.push(0);
+    }
+    a.data_label(p.messages, offset + bytes.len());
+    let mut text = vec![
+        "completed".to_string(),
+        "integer overflow".to_string(),
+        "division by zero".to_string(),
+        "index out of bounds".to_string(),
+        "explicit trap".to_string(),
+        "assertion failed".to_string(),
+        "heap allocation failed".to_string(),
+        "host output failure".to_string(),
+        "stack exhausted".to_string(),
+    ];
+    while text.len() < 16 {
+        text.push("trap".to_string());
+    }
+    for message in messages {
+        text.push(message.clone());
+    }
+    let table = bytes.len();
+    let table_bytes = 8 + text.len() * 16;
+    for _ in 0..table_bytes {
+        bytes.push(0);
+    }
+    put(bytes, table, text.len() as u64, 8);
+    for index in 0..text.len() {
+        let address = IMAGE_BASE + CODE_OFFSET as u64 + offset as u64 + bytes.len() as u64;
+        put(bytes, table + 8 + index * 16, address, 8);
+        put(
+            bytes,
+            table + 16 + index * 16,
+            text[index].len() as u64 + 1,
+            8,
+        );
+        bytes.extend_from_slice(text[index].as_bytes());
+        bytes.push(b'\n');
     }
 }
 

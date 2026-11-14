@@ -1722,7 +1722,7 @@
     "id": "review_r22_copy_capability",
     "file": "fail/review/r22_copy_capability.rs",
     "kind": "reject",
-    "code": "E_TRAIT",
+    "code": "E_TYPE",
     "rust": true,
     "rustAccept": false,
     "world": true,
@@ -6175,7 +6175,7 @@
     "id": "backend_nan_negation",
     "kind": "run",
     "file": "migrated/backend_nan_negation.lkjir",
-    "value": "NaN"
+    "value": "f64:0xfff8000000000000"
   },
   {
     "id": "backend_u8_complement",
@@ -6731,5 +6731,31 @@
     "kind": "run",
     "value": "42",
     "rust": false
+  },
+  {
+    "id": "float_bits",
+    "file": "pass/float_bits.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true
+  },
+  {
+    "id": "process_capture",
+    "file": "output/process_capture.rs",
+    "kind": "output",
+    "hex": "6265666f72657c6368696c642d6f75747c6166746572",
+    "stderrHex": "6265666f72657c6368696c642d6572727c6166746572",
+    "status": 0,
+    "ending": "normal",
+    "rust": true
+  },
+  {
+    "id": "trap_stream",
+    "file": "output/trap_stream.rs",
+    "kind": "output",
+    "hex": "",
+    "stderrHex": "6265666f7265ff80",
+    "ending": "R0004",
+    "rust": true
   }
 ]

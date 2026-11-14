@@ -23,7 +23,7 @@ pub struct Directory {
     handle: std::fs::File,
 }
 pub struct File {
-    handle: std::fs::File,
+    handle: Option<std::fs::File>,
 }
 
 impl World {
@@ -89,6 +89,9 @@ impl Stdin {
     }
 }
 impl Directory {
+    fn descriptor(&self) -> i32 {
+        self.handle.as_raw_fd()
+    }
     pub fn open(&mut self, path: &str) -> Result<File, i64> {
         self.__lkjscript_open(&files::path_bytes(path)?, false)
     }
@@ -97,11 +100,14 @@ impl Directory {
     }
     pub fn __lkjscript_open(&mut self, path: &[u8], create: bool) -> Result<File, i64> {
         Ok(File {
-            handle: files::open_file(&self.handle, path, create)?,
+            handle: Some(files::open_file(&self.handle, path, create)?),
         })
     }
 }
 impl File {
+    fn descriptor(&self) -> i32 {
+        self.handle.as_ref().map_or(-1, |file| file.as_raw_fd())
+    }
     pub fn __lkjscript_read(&mut self, bytes: &mut [u8]) -> i64 {
         count(self.read(bytes))
     }
@@ -109,16 +115,272 @@ impl File {
         count(self.write(bytes))
     }
     pub fn read(&mut self, bytes: &mut [u8]) -> Result<usize, i64> {
-        files::read(self.handle.as_raw_fd(), bytes)
+        files::read(self.descriptor(), bytes)
     }
     pub fn write(&mut self, bytes: &[u8]) -> Result<usize, i64> {
-        files::write(self.handle.as_raw_fd(), bytes)
+        files::write(self.descriptor(), bytes)
     }
     pub fn read_to_end(&mut self) -> Result<Vec<u8>, i64> {
-        files::read_to_end(self.handle.as_raw_fd())
+        files::read_to_end(self.descriptor())
     }
     pub fn write_all(&mut self, bytes: &[u8]) -> Result<(), i64> {
-        files::write_all(self.handle.as_raw_fd(), bytes)
+        files::write_all(self.descriptor(), bytes)
+    }
+}
+
+pub struct Process {
+    _seal: (),
+}
+pub struct Clock {
+    _seal: (),
+}
+pub struct Child {
+    handle: Option<std::process::Child>,
+}
+impl Drop for Child {
+    fn drop(&mut self) {
+        if let Some(child) = self.handle.as_mut() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+}
+impl World {
+    pub fn process(&mut self) -> Process {
+        Process { _seal: () }
+    }
+    pub fn clock(&mut self) -> Clock {
+        Clock { _seal: () }
+    }
+    pub fn __lkjscript_file(&mut self, kind: u8) -> Result<File, i64> {
+        Ok(File {
+            handle: files::world_file(kind)?,
+        })
+    }
+    pub fn temporary_file(&mut self) -> Result<File, i64> {
+        self.__lkjscript_file(0)
+    }
+    pub fn stdin_file(&mut self) -> Result<File, i64> {
+        self.__lkjscript_file(1)
+    }
+    pub fn stdout_file(&mut self) -> Result<File, i64> {
+        self.__lkjscript_file(2)
+    }
+    pub fn stderr_file(&mut self) -> Result<File, i64> {
+        self.__lkjscript_file(3)
+    }
+    pub fn executable(&mut self) -> Result<File, i64> {
+        self.__lkjscript_file(4)
+    }
+}
+impl Clock {
+    pub fn __lkjscript_read(&mut self, bytes: &mut [u8]) -> i64 {
+        files::monotonic_time(bytes).map_or_else(|e| -e, |()| 0)
+    }
+    pub fn nanoseconds(&mut self) -> Result<usize, i64> {
+        let mut bytes = [0u8; 16];
+        files::monotonic_time(&mut bytes)?;
+        Ok(
+            usize::from_le_bytes(bytes[..8].try_into().unwrap()) * 1_000_000_000
+                + usize::from_le_bytes(bytes[8..].try_into().unwrap()),
+        )
+    }
+}
+impl Process {
+    pub fn __lkjscript_spawn(
+        &mut self,
+        executable: &File,
+        arguments: &[u8],
+        input: &File,
+        output: &File,
+        errors: &File,
+        result: &File,
+    ) -> Result<Child, i64> {
+        Ok(Child {
+            handle: Some(files::spawn_process(
+                executable.handle.as_ref().ok_or(9)?,
+                arguments,
+                [
+                    input.handle.as_ref(),
+                    output.handle.as_ref(),
+                    errors.handle.as_ref(),
+                    result.handle.as_ref(),
+                ],
+            )?),
+        })
+    }
+    pub fn spawn_file(
+        &mut self,
+        executable: &File,
+        arguments: &[Vec<u8>],
+        input: &File,
+        output: &File,
+        errors: &File,
+        result: &File,
+    ) -> Result<Child, i64> {
+        let mut bytes = b"lkjscript\0".to_vec();
+        for argument in arguments {
+            if argument.contains(&0) {
+                return Err(22);
+            }
+            bytes.extend_from_slice(argument);
+            bytes.push(0);
+        }
+        self.__lkjscript_spawn(executable, &bytes, input, output, errors, result)
+    }
+}
+impl Child {
+    pub fn __lkjscript_wait(&mut self, nonblocking: bool) -> i64 {
+        let Some(child) = self.handle.as_mut() else {
+            return -10;
+        };
+        match files::wait_process(child, nonblocking) {
+            Err(error) => -error,
+            Ok(None) => 0,
+            Ok(Some(status)) => {
+                self.handle = None;
+                status + 1
+            }
+        }
+    }
+    pub fn __lkjscript_terminate(&mut self) -> i64 {
+        let Some(child) = self.handle.as_mut() else {
+            return -10;
+        };
+        child.kill().map_or_else(|e| -files::error(e), |()| 0)
+    }
+    pub fn wait(&mut self) -> Result<i64, i64> {
+        let status = self.__lkjscript_wait(false);
+        if status < 0 {
+            Err(-status)
+        } else {
+            Ok(files::process_status(status - 1))
+        }
+    }
+    pub fn try_wait(&mut self) -> Result<Option<i64>, i64> {
+        let status = self.__lkjscript_wait(true);
+        if status < 0 {
+            Err(-status)
+        } else if status == 0 {
+            Ok(None)
+        } else {
+            Ok(Some(files::process_status(status - 1)))
+        }
+    }
+    pub fn terminate(&mut self) -> Result<(), i64> {
+        let status = self.__lkjscript_terminate();
+        if status < 0 { Err(-status) } else { Ok(()) }
+    }
+}
+impl File {
+    pub fn __lkjscript_rewind(&mut self) -> i64 {
+        files::rewind(self.descriptor()).map_or_else(|e| -e, |()| 0)
+    }
+    pub fn __lkjscript_executable(&mut self) -> i64 {
+        files::executable(self.descriptor()).map_or_else(|e| -e, |()| 0)
+    }
+    pub fn __lkjscript_duplicate(&mut self) -> Result<File, i64> {
+        Ok(File {
+            handle: self.handle.as_ref().map(files::duplicate).transpose()?,
+        })
+    }
+    pub fn __lkjscript_readonly(&mut self) -> Result<File, i64> {
+        Ok(File {
+            handle: self.handle.as_ref().map(files::readonly).transpose()?,
+        })
+    }
+    pub fn readonly(&mut self) -> Result<File, i64> {
+        self.__lkjscript_readonly()
+    }
+    pub fn duplicate(&mut self) -> Result<File, i64> {
+        self.__lkjscript_duplicate()
+    }
+    pub fn rewind(&mut self) -> Result<(), i64> {
+        files::rewind(self.descriptor())
+    }
+    pub fn set_executable(&mut self) -> Result<(), i64> {
+        files::executable(self.descriptor())
+    }
+}
+impl Directory {
+    pub fn __lkjscript_open_directory(&mut self, path: &[u8]) -> Result<Directory, i64> {
+        Ok(Directory {
+            handle: files::open_subdirectory(&self.handle, path)?,
+        })
+    }
+    pub fn open_directory(&mut self, path: &str) -> Result<Directory, i64> {
+        self.__lkjscript_open_directory(&files::path_bytes(path)?)
+    }
+    pub fn __lkjscript_read(&mut self, bytes: &mut [u8]) -> i64 {
+        count(files::read_directory(self.descriptor(), bytes))
+    }
+    pub fn __lkjscript_rewind(&mut self) -> i64 {
+        files::rewind(self.descriptor()).map_or_else(|e| -e, |()| 0)
+    }
+    pub fn __lkjscript_create_directory(&mut self, name: &[u8]) -> i64 {
+        files::create_directory(&self.handle, name).map_or_else(|e| -e, |()| 0)
+    }
+    pub fn __lkjscript_remove(&mut self, name: &[u8], directory: bool) -> i64 {
+        files::remove_entry(&self.handle, name, directory).map_or_else(|e| -e, |()| 0)
+    }
+    pub fn __lkjscript_rename(&mut self, old: &[u8], to: &mut Directory, new: &[u8]) -> i64 {
+        files::rename_entry(&self.handle, old, &to.handle, new).map_or_else(|e| -e, |()| 0)
+    }
+    fn parent(&mut self, path: &str) -> Result<(Directory, Vec<u8>), i64> {
+        let split = path.rfind('/').map_or(0, |at| at + 1);
+        let parent = if split == 0 { "." } else { &path[..split] };
+        let name = &path[split..];
+        if name.is_empty() || name == "." || name == ".." {
+            return Err(22);
+        }
+        let owner = self.open_directory(parent)?;
+        Ok((owner, files::path_bytes(name)?))
+    }
+    pub fn create_directory(&mut self, path: &str) -> Result<(), i64> {
+        let (parent, name) = self.parent(path)?;
+        files::create_directory(&parent.handle, &name)
+    }
+    pub fn remove(&mut self, path: &str) -> Result<(), i64> {
+        let (parent, name) = self.parent(path)?;
+        files::remove_entry(&parent.handle, &name, false)
+    }
+    pub fn remove_directory(&mut self, path: &str) -> Result<(), i64> {
+        let (parent, name) = self.parent(path)?;
+        files::remove_entry(&parent.handle, &name, true)
+    }
+    pub fn rename(&mut self, old: &str, new: &str) -> Result<(), i64> {
+        let (from, old) = self.parent(old)?;
+        let (to, new) = self.parent(new)?;
+        files::rename_entry(&from.handle, &old, &to.handle, &new)
+    }
+    pub fn list(&mut self) -> Result<Vec<Vec<u8>>, i64> {
+        let directory = self.open_directory(".")?;
+        let mut bytes = [0u8; 8192];
+        let mut names = Vec::new();
+        loop {
+            let count = files::read_directory(directory.handle.as_raw_fd(), &mut bytes)?;
+            if count == 0 {
+                return Ok(names);
+            }
+            let mut at = 0;
+            while at < count {
+                if count - at < 20 {
+                    return Err(5);
+                }
+                let record = u16::from_le_bytes([bytes[at + 16], bytes[at + 17]]) as usize;
+                if record < 20 || record > count - at {
+                    return Err(5);
+                }
+                let name = bytes[at + 19..at + record]
+                    .split(|b| *b == 0)
+                    .next()
+                    .unwrap();
+                if name != b"." && name != b".." {
+                    names.push(name.to_vec());
+                }
+                at += record;
+            }
+        }
     }
 }
 
@@ -382,5 +644,237 @@ pub(crate) mod files {
             bytes = &bytes[count..];
         }
         Ok(())
+    }
+    pub fn error(error: std::io::Error) -> i64 {
+        i64::from(error.raw_os_error().unwrap_or(5))
+    }
+    pub fn world_file(kind: u8) -> Result<Option<std::fs::File>, i64> {
+        let descriptor = match kind {
+            0 => retry(|| unsafe { syscall(319, c"lkjscript".as_ptr(), 1_i64) }),
+            1..=3 => retry(|| unsafe { syscall(72, i64::from(kind) - 1, 1030_i64, 3_i64) }),
+            4 => retry(|| unsafe {
+                syscall(
+                    257,
+                    -100_i64,
+                    c"/proc/self/exe".as_ptr(),
+                    0x80000_i64,
+                    0_i64,
+                )
+            }),
+            _ => return Err(22),
+        };
+        if matches!(kind, 1..=3) && descriptor == Err(9) {
+            return Ok(None);
+        }
+        owned(descriptor?).map(Some)
+    }
+    pub fn rewind(descriptor: i32) -> Result<(), i64> {
+        retry(|| unsafe { syscall(8, i64::from(descriptor), 0_i64, 0_i64) }).map(|_| ())
+    }
+    pub fn executable(descriptor: i32) -> Result<(), i64> {
+        retry(|| unsafe { syscall(91, i64::from(descriptor), 0o755_i64) }).map(|_| ())
+    }
+    pub fn monotonic_time(bytes: &mut [u8]) -> Result<(), i64> {
+        if bytes.len() < 16 {
+            return Err(22);
+        }
+        retry(|| unsafe { syscall(228, 1_i64, bytes.as_mut_ptr()) }).map(|_| ())
+    }
+    pub fn open_subdirectory(
+        directory: &std::fs::File,
+        bytes: &[u8],
+    ) -> Result<std::fs::File, i64> {
+        let path = path(bytes)?;
+        let how = OpenHow {
+            flags: 0x90000,
+            mode: 0,
+            resolve: 0x0a,
+        };
+        owned(retry(|| unsafe {
+            syscall(
+                437,
+                i64::from(directory.as_raw_fd()),
+                path.as_ptr(),
+                &how as *const OpenHow,
+                24_i64,
+            )
+        })?)
+    }
+    pub fn read_directory(descriptor: i32, bytes: &mut [u8]) -> Result<usize, i64> {
+        retry(|| unsafe {
+            syscall(
+                217,
+                i64::from(descriptor),
+                bytes.as_mut_ptr(),
+                bytes.len() as u64,
+            )
+        })
+        .map(|n| n as usize)
+    }
+    fn name(bytes: &[u8]) -> Result<&CStr, i64> {
+        let name = path(bytes)?;
+        if name.to_bytes().is_empty()
+            || name.to_bytes().contains(&b'/')
+            || name.to_bytes() == b"."
+            || name.to_bytes() == b".."
+        {
+            return Err(22);
+        }
+        Ok(name)
+    }
+    pub fn create_directory(directory: &std::fs::File, bytes: &[u8]) -> Result<(), i64> {
+        let name = name(bytes)?;
+        retry(|| unsafe {
+            syscall(
+                258,
+                i64::from(directory.as_raw_fd()),
+                name.as_ptr(),
+                0o777_i64,
+            )
+        })
+        .map(|_| ())
+    }
+    pub fn remove_entry(
+        directory: &std::fs::File,
+        bytes: &[u8],
+        is_directory: bool,
+    ) -> Result<(), i64> {
+        let name = name(bytes)?;
+        retry(|| unsafe {
+            syscall(
+                263,
+                i64::from(directory.as_raw_fd()),
+                name.as_ptr(),
+                if is_directory { 0x200_i64 } else { 0 },
+            )
+        })
+        .map(|_| ())
+    }
+    pub fn rename_entry(
+        from: &std::fs::File,
+        old: &[u8],
+        to: &std::fs::File,
+        new: &[u8],
+    ) -> Result<(), i64> {
+        let old = name(old)?;
+        let new = name(new)?;
+        retry(|| unsafe {
+            syscall(
+                264,
+                i64::from(from.as_raw_fd()),
+                old.as_ptr(),
+                i64::from(to.as_raw_fd()),
+                new.as_ptr(),
+            )
+        })
+        .map(|_| ())
+    }
+    pub fn readonly(file: &std::fs::File) -> Result<std::fs::File, i64> {
+        let path = std::ffi::CString::new(format!("/proc/self/fd/{}", file.as_raw_fd())).unwrap();
+        owned(retry(|| unsafe {
+            syscall(257, -100_i64, path.as_ptr(), 0x80000_i64, 0_i64)
+        })?)
+    }
+    pub fn duplicate(file: &std::fs::File) -> Result<std::fs::File, i64> {
+        owned(retry(|| unsafe {
+            syscall(72, i64::from(file.as_raw_fd()), 1030_i64, 4_i64)
+        })?)
+    }
+    pub fn spawn_process(
+        executable: &std::fs::File,
+        arguments: &[u8],
+        streams: [Option<&std::fs::File>; 4],
+    ) -> Result<std::process::Child, i64> {
+        use std::os::unix::ffi::OsStringExt;
+        use std::os::unix::process::CommandExt;
+        if arguments.is_empty() || arguments[arguments.len() - 1] != 0 {
+            return Err(22);
+        }
+        let argv: Vec<std::ffi::OsString> = arguments[..arguments.len() - 1]
+            .split(|byte| *byte == 0)
+            .map(|value| std::ffi::OsString::from_vec(value.to_vec()))
+            .collect();
+        let executable = duplicate(executable)?;
+        let result = streams[3].map(duplicate).transpose()?;
+        let mut command =
+            std::process::Command::new(format!("/proc/self/fd/{}", executable.as_raw_fd()));
+        command.arg0(&argv[0]).args(&argv[1..]).env_clear();
+        command.stdin(match streams[0] {
+            Some(file) => std::process::Stdio::from(duplicate(file)?),
+            None => std::process::Stdio::inherit(),
+        });
+        command.stdout(match streams[1] {
+            Some(file) => std::process::Stdio::from(duplicate(file)?),
+            None => std::process::Stdio::inherit(),
+        });
+        command.stderr(match streams[2] {
+            Some(file) => std::process::Stdio::from(duplicate(file)?),
+            None => std::process::Stdio::inherit(),
+        });
+        let strings: Vec<std::ffi::CString> = arguments[..arguments.len() - 1]
+            .split(|byte| *byte == 0)
+            .map(|value| std::ffi::CString::new(value).unwrap())
+            .collect();
+        let mut pointers: Vec<usize> = strings
+            .iter()
+            .map(|value| value.as_ptr() as usize)
+            .collect();
+        pointers.push(0);
+        let executable_descriptor = executable.as_raw_fd();
+        let result_descriptor = result.as_ref().map(|file| file.as_raw_fd());
+        let mut closed = 0u8;
+        for (index, stream) in streams.iter().enumerate() {
+            if stream.is_none() {
+                closed |= 1 << index;
+            }
+        }
+        unsafe {
+            command.pre_exec(move || {
+                if syscall(157, 1_i64, 9_i64, 0_i64, 0_i64, 0_i64) < 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                for descriptor in 0..4 {
+                    if closed & (1 << descriptor) != 0 {
+                        syscall(3, descriptor as i64);
+                    }
+                }
+                if let Some(result) = result_descriptor {
+                    if syscall(33, i64::from(result), 3_i64) < 0 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                }
+                let _strings = &strings;
+                syscall(
+                    322,
+                    i64::from(executable_descriptor),
+                    c"".as_ptr(),
+                    pointers.as_ptr(),
+                    0usize,
+                    0x1000_i64,
+                );
+                Err(std::io::Error::last_os_error())
+            });
+        }
+        command.spawn().map_err(error)
+    }
+    pub fn wait_process(
+        child: &mut std::process::Child,
+        nonblocking: bool,
+    ) -> Result<Option<i64>, i64> {
+        use std::os::unix::process::ExitStatusExt;
+        let status = if nonblocking {
+            child.try_wait().map_err(error)?
+        } else {
+            Some(child.wait().map_err(error)?)
+        };
+        Ok(status.map(|value| i64::from(value.into_raw())))
+    }
+    pub fn process_status(status: i64) -> i64 {
+        let signal = status & 127;
+        if signal == 0 {
+            (status >> 8) & 255
+        } else {
+            128 + signal
+        }
     }
 }

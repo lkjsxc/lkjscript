@@ -15,7 +15,6 @@ pub mod json;
 pub mod names;
 pub mod native;
 pub mod resolve;
-pub mod result_wire;
 pub mod runtime;
 pub mod runtime_memory;
 pub mod source;

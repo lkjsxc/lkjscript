@@ -4,12 +4,13 @@
 // usage: node drops.mjs <lkjscript-binary> <seed> <count> [out-dir]      env ONE_SIDED=<n>: 1 in n `if`s is unbalanced (default 6)
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { run } from '../process.mjs';
 import { runRoutes } from '../batch.mjs';
 import { oracleCache, packResult, unpackResult, worldOutcome } from '../oracle.mjs';
 const [binArg, seedS = '1', countS = '100', outArg = 'target/generators'] = process.argv.slice(2);
-const bin = path.resolve(binArg); const repo = path.resolve(path.dirname(fs.realpathSync(bin)), '../..');
+const bin = path.resolve(binArg); const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const ONE_SIDED = Number(process.env.ONE_SIDED || 6);
 const engines=(process.env.LKJSCRIPT_ENGINES || 'native,interpreter').split(',');
 const generatorHash=createHash('sha256').update(fs.readFileSync(new URL(import.meta.url))).digest('hex');

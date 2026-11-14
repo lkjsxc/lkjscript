@@ -52,3 +52,9 @@ impl fmt::Debug for Program {
             .finish_non_exhaustive()
     }
 }
+
+impl fmt::Debug for crate::runtime_memory::MemoryFault {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.message())
+    }
+}

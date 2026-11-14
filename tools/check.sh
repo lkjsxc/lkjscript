@@ -22,7 +22,6 @@ for check_setting in LKJSCRIPT_CONFORMANCE_JOBS LKJSCRIPT_BACKEND_JOBS LKJSCRIPT
     fi
 done
 check_rust_jobs=$((CARGO_BUILD_JOBS > RUST_TEST_THREADS ? CARGO_BUILD_JOBS : RUST_TEST_THREADS))
-echo "Gate workers: total=$check_jobs conformance=$LKJSCRIPT_CONFORMANCE_JOBS backend=$LKJSCRIPT_BACKEND_JOBS mutations=$LKJSCRIPT_IR_MUTATION_JOBS rust=$check_rust_jobs"
 step() {
     local label=$1
     shift
@@ -42,7 +41,21 @@ step() {
 step format cargo fmt --check
 step host node --test --test-concurrency=1 tools/batch.test.mjs tools/generators/reduce.test.mjs tools/generators/ir_mutate.test.mjs
 step build cargo build --release --quiet
-check_binary="${CARGO_TARGET_DIR:-target}/release/lkjscript"
+check_twin="${CARGO_TARGET_DIR:-target}/release/lkjscript"
+step bootstrap sh tools/bootstrap.sh
+witness() {
+    "$check_twin" build src/main.rs --library-dir library --runtime-source library/runtime.rs -o target/gate/lkjscript-witness
+    cmp target/lkjscript target/gate/lkjscript-witness
+    rm target/gate/lkjscript-witness
+}
+step witness witness
+check_binary="target/lkjscript"
+toolchain() (
+    "$check_binary" build tools/toolchain-test.rs -o target/gate/toolchain-test
+    toolchain_directory=$(mktemp -d target/gate/toolchain.XXXXXX)
+    trap 'rm -rf "$toolchain_directory"' EXIT HUP INT TERM
+    target/gate/toolchain-test "$check_binary" "$toolchain_directory"
+)
 # Account for workers inside each suite. Rust build and test phases are sequential;
 # their worker count is the larger of the two. Other generators use one worker.
 mkdir -p target/gate
@@ -68,12 +81,11 @@ parallel_step() {
     check_weights+=("$weight")
     check_active=$((check_active + weight))
 }
-parallel_started_ns=$(date +%s%N)
 check_engines_text="${LKJSCRIPT_GATE_ENGINES:-native,interpreter}"
 parallel_step "$check_rust_jobs" rust cargo test --quiet
 parallel_step 1 world-io node tools/world-io.mjs "$check_binary"
-parallel_step 1 native-workflow bash tools/native-workflow.sh "$check_binary"
-parallel_step "$LKJSCRIPT_BACKEND_JOBS" backend node tools/backend.mjs "$check_binary" "${CARGO_TARGET_DIR:-target}/release/lkjscript-backend"
+parallel_step 1 toolchain toolchain
+parallel_step "$LKJSCRIPT_BACKEND_JOBS" backend node tools/backend.mjs "$check_binary"
 parallel_step "$LKJSCRIPT_CONFORMANCE_JOBS" conformance env LKJSCRIPT_ENGINES="$check_engines_text" node tools/conformance.mjs "$check_binary"
 parallel_step "$LKJSCRIPT_IR_MUTATION_JOBS" ir-mutation node tools/generators/ir_mutate.mjs "$check_binary" 1701 128
 parallel_step 1 values env LKJSCRIPT_ENGINES="$check_engines_text" node tools/generators/value.mjs "$check_binary" 601 100
@@ -84,8 +96,6 @@ parallel_step 1 sugars env LKJSCRIPT_ENGINES="$check_engines_text" node tools/ge
 parallel_step 1 closures env LKJSCRIPT_ENGINES="$check_engines_text" node tools/generators/closures.mjs "$check_binary" 1501 44
 while ((check_waited < ${#check_pids[@]})); do wait_oldest; done
 for log in "${check_logs[@]}"; do cat "$log"; done
-parallel_elapsed_ns=$(($(date +%s%N)-parallel_started_ns))
-awk -v elapsed_ns="$parallel_elapsed_ns" 'BEGIN { printf "Gate parallel suites: %.3f s\n", elapsed_ns / 1000000000 }'
 if ((check_failed)); then exit 1; fi
 check_elapsed_ns=$(($(date +%s%N)-check_started_ns))
-awk -v elapsed_ns="$check_elapsed_ns" 'BEGIN { printf "Full check: %.3f s\n", elapsed_ns / 1000000000 }'
+awk -v elapsed_ns="$check_elapsed_ns" 'BEGIN { printf "ok gate (%.3f s)\n", elapsed_ns / 1000000000 }'

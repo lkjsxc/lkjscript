@@ -37,6 +37,8 @@ impl Body<'_> {
         if name == IntrinsicOp::WorldStdout
             || name == IntrinsicOp::WorldStderr
             || name == IntrinsicOp::WorldStdin
+            || name == IntrinsicOp::WorldProcess
+            || name == IntrinsicOp::WorldClock
         {
             self.a.immediate(A, 1);
             self.write(dst, A);
@@ -94,6 +96,9 @@ impl Body<'_> {
             IntrinsicOp::FileRead | IntrinsicOp::FileWrite => {
                 self.read(args[0], DI);
                 self.a.load(DI, DI, 0);
+                self.a.test(DI, true);
+                self.a.immediate(A, !0u64);
+                self.a.cmov(DI, A, 4);
                 self.read_word(args[1], 0, SI);
                 self.read_word(args[1], 1, D);
                 self.a.call(if name == IntrinsicOp::FileRead {
@@ -101,6 +106,110 @@ impl Body<'_> {
                 } else {
                     self.platform.file_write
                 });
+            }
+            IntrinsicOp::FileDuplicate | IntrinsicOp::FileReadOnly => {
+                self.read(args[0], DI);
+                self.a.load(DI, DI, 0);
+                self.a.call(if name == IntrinsicOp::FileReadOnly {
+                    self.platform.file_readonly
+                } else {
+                    self.platform.file_duplicate
+                });
+                self.intrinsic_open_result(dst);
+                return Ok(true);
+            }
+            IntrinsicOp::WorldFile => {
+                self.read(args[1], DI);
+                self.a.call(self.platform.world_file);
+                self.intrinsic_open_result(dst);
+                return Ok(true);
+            }
+            IntrinsicOp::ClockRead => {
+                self.read_word(args[1], 0, DI);
+                self.read_word(args[1], 1, SI);
+                self.a.call(self.platform.clock_read);
+            }
+            IntrinsicOp::ProcessSpawn => {
+                self.read(args[1], A);
+                self.a.load(A, A, 0);
+                self.a.store(BP, self.scratch[0], A);
+                self.read_word(args[2], 0, A);
+                self.a.store(BP, self.scratch[1], A);
+                self.read_word(args[2], 1, A);
+                self.a.store(BP, self.scratch[2], A);
+                for index in 3..7 {
+                    self.read(args[index], A);
+                    self.a.load(A, A, 0);
+                    self.a.store(BP, self.scratch[index], A);
+                }
+                self.a.lea(DI, BP, self.scratch[0]);
+                self.a.call(self.platform.process_spawn);
+                self.intrinsic_open_result(dst);
+                return Ok(true);
+            }
+            IntrinsicOp::ChildWait => {
+                self.read(args[0], DI);
+                self.read(args[1], SI);
+                self.a.call(self.platform.child_wait);
+            }
+            IntrinsicOp::ChildTerminate => {
+                self.read(args[0], DI);
+                self.a.call(self.platform.child_terminate);
+            }
+            IntrinsicOp::DirectoryOpenDirectory => {
+                self.read(args[0], DI);
+                self.a.load(DI, DI, 0);
+                self.read_word(args[1], 0, SI);
+                self.read_word(args[1], 1, D);
+                self.a.call(self.platform.directory_open_directory);
+                self.intrinsic_open_result(dst);
+                return Ok(true);
+            }
+            IntrinsicOp::DirectoryRead => {
+                self.read(args[0], DI);
+                self.a.load(DI, DI, 0);
+                self.read_word(args[1], 0, SI);
+                self.read_word(args[1], 1, D);
+                self.a.call(self.platform.directory_read);
+            }
+            IntrinsicOp::FileRewind
+            | IntrinsicOp::DirectoryRewind
+            | IntrinsicOp::FileExecutable => {
+                self.read(args[0], DI);
+                self.a.load(DI, DI, 0);
+                self.a.test(DI, true);
+                self.a.immediate(A, !0u64);
+                self.a.cmov(DI, A, 4);
+                self.a.call(if name == IntrinsicOp::FileExecutable {
+                    self.platform.file_executable
+                } else {
+                    self.platform.handle_rewind
+                });
+            }
+            IntrinsicOp::DirectoryCreate | IntrinsicOp::DirectoryRemove => {
+                self.read(args[0], DI);
+                self.a.load(DI, DI, 0);
+                self.read_word(args[1], 0, SI);
+                self.read_word(args[1], 1, D);
+                if name == IntrinsicOp::DirectoryRemove {
+                    self.read(args[2], C);
+                }
+                self.a.call(if name == IntrinsicOp::DirectoryCreate {
+                    self.platform.directory_create
+                } else {
+                    self.platform.directory_remove
+                });
+            }
+            IntrinsicOp::DirectoryRename => {
+                self.read(args[0], DI);
+                self.a.load(DI, DI, 0);
+                self.read_word(args[1], 0, SI);
+                self.read_word(args[1], 1, D);
+                self.read(args[2], C);
+                self.a.load(C, C, 0);
+                self.read_word(args[3], 0, R8);
+                self.read_word(args[3], 1, R9);
+                self.a.call(self.platform.directory_rename);
             }
             _ => return Ok(false),
         }
@@ -341,6 +450,10 @@ impl Body<'_> {
                     self.copy_value(DI, SI, ty);
                     self.mark(dst);
                 }
+            }
+            IntrinsicOp::F64FromBits | IntrinsicOp::F64ToBits => {
+                self.read(args[0], A);
+                self.write(dst, A);
             }
             IntrinsicOp::CharFromU32 => {
                 let ty = self.ty(dst);

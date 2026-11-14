@@ -5,6 +5,7 @@ use super::ir;
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum Receiver {
     Integer,
+    Float,
     Character,
     Text,
     Vector,
@@ -16,11 +17,15 @@ pub(super) enum Receiver {
     Stderr,
     Directory,
     File,
+    Process,
+    Clock,
+    Child,
     Other,
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum Direct {
     Wrapping,
+    FloatBits,
     Character,
     Text,
     Output,
@@ -33,6 +38,7 @@ pub(super) fn receiver(kind: &ir::TypeKind) -> Receiver {
     match kind {
         ir::TypeKind::Int { .. } => Receiver::Integer,
         ir::TypeKind::Char => Receiver::Character,
+        ir::TypeKind::F64 => Receiver::Float,
         ir::TypeKind::Str => Receiver::Text,
         ir::TypeKind::Vec { .. } => Receiver::Vector,
         ir::TypeKind::Array { .. } => Receiver::Array,
@@ -43,6 +49,9 @@ pub(super) fn receiver(kind: &ir::TypeKind) -> Receiver {
         ir::TypeKind::Stderr => Receiver::Stderr,
         ir::TypeKind::Directory => Receiver::Directory,
         ir::TypeKind::File => Receiver::File,
+        ir::TypeKind::Process => Receiver::Process,
+        ir::TypeKind::Clock => Receiver::Clock,
+        ir::TypeKind::Child => Receiver::Child,
         _ => Receiver::Other,
     }
 }
@@ -51,6 +60,7 @@ pub(super) fn direct(receiver: Receiver, name: &str) -> Option<Direct> {
         return Some(Direct::Output);
     }
     match (receiver, name) {
+        (Receiver::Float, "to_bits") => Some(Direct::FloatBits),
         (Receiver::Integer, "wrapping_add" | "wrapping_sub" | "wrapping_mul") => {
             Some(Direct::Wrapping)
         }

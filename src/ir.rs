@@ -47,7 +47,11 @@ pub enum TypeKind {
     Directory,
     /// Affine open file; structural destruction closes its handle.
     File,
+    Process,
+    Clock,
+    Child,
 }
+
 #[derive(Clone, PartialEq)]
 pub struct Field {
     pub name: String,
@@ -192,6 +196,8 @@ impl BinaryOp {
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum IntrinsicOp {
     CharFromU32,
+    F64FromBits,
+    F64ToBits,
     ArrayRepeat,
     StrLen,
     StrAsBytes,
@@ -219,11 +225,30 @@ pub enum IntrinsicOp {
     FileWrite,
     StdoutWrite,
     StderrWrite,
+    WorldProcess,
+    WorldClock,
+    WorldFile,
+    ClockRead,
+    ProcessSpawn,
+    ChildWait,
+    ChildTerminate,
+    DirectoryOpenDirectory,
+    DirectoryRead,
+    DirectoryRewind,
+    DirectoryCreate,
+    DirectoryRemove,
+    DirectoryRename,
+    FileRewind,
+    FileExecutable,
+    FileDuplicate,
+    FileReadOnly,
 }
 impl IntrinsicOp {
     pub fn parse(text: &str) -> Option<IntrinsicOp> {
         match text {
             "char_from_u32" => Some(IntrinsicOp::CharFromU32),
+            "f64_from_bits" => Some(IntrinsicOp::F64FromBits),
+            "f64_to_bits" => Some(IntrinsicOp::F64ToBits),
             "array_repeat" => Some(IntrinsicOp::ArrayRepeat),
             "str_len" => Some(IntrinsicOp::StrLen),
             "str_as_bytes" => Some(IntrinsicOp::StrAsBytes),
@@ -251,12 +276,31 @@ impl IntrinsicOp {
             "file_write" => Some(IntrinsicOp::FileWrite),
             "stdout_write" => Some(IntrinsicOp::StdoutWrite),
             "stderr_write" => Some(IntrinsicOp::StderrWrite),
+            "world_process" => Some(IntrinsicOp::WorldProcess),
+            "world_clock" => Some(IntrinsicOp::WorldClock),
+            "world_file" => Some(IntrinsicOp::WorldFile),
+            "clock_read" => Some(IntrinsicOp::ClockRead),
+            "process_spawn" => Some(IntrinsicOp::ProcessSpawn),
+            "child_wait" => Some(IntrinsicOp::ChildWait),
+            "child_terminate" => Some(IntrinsicOp::ChildTerminate),
+            "directory_open_directory" => Some(IntrinsicOp::DirectoryOpenDirectory),
+            "directory_read" => Some(IntrinsicOp::DirectoryRead),
+            "directory_rewind" => Some(IntrinsicOp::DirectoryRewind),
+            "directory_create" => Some(IntrinsicOp::DirectoryCreate),
+            "directory_remove" => Some(IntrinsicOp::DirectoryRemove),
+            "directory_rename" => Some(IntrinsicOp::DirectoryRename),
+            "file_rewind" => Some(IntrinsicOp::FileRewind),
+            "file_executable" => Some(IntrinsicOp::FileExecutable),
+            "file_duplicate" => Some(IntrinsicOp::FileDuplicate),
+            "file_readonly" => Some(IntrinsicOp::FileReadOnly),
             _ => None,
         }
     }
     pub fn as_str(self) -> &'static str {
         match self {
             IntrinsicOp::CharFromU32 => "char_from_u32",
+            IntrinsicOp::F64FromBits => "f64_from_bits",
+            IntrinsicOp::F64ToBits => "f64_to_bits",
             IntrinsicOp::ArrayRepeat => "array_repeat",
             IntrinsicOp::StrLen => "str_len",
             IntrinsicOp::StrAsBytes => "str_as_bytes",
@@ -284,6 +328,23 @@ impl IntrinsicOp {
             IntrinsicOp::FileWrite => "file_write",
             IntrinsicOp::StdoutWrite => "stdout_write",
             IntrinsicOp::StderrWrite => "stderr_write",
+            IntrinsicOp::WorldProcess => "world_process",
+            IntrinsicOp::WorldClock => "world_clock",
+            IntrinsicOp::WorldFile => "world_file",
+            IntrinsicOp::ClockRead => "clock_read",
+            IntrinsicOp::ProcessSpawn => "process_spawn",
+            IntrinsicOp::ChildWait => "child_wait",
+            IntrinsicOp::ChildTerminate => "child_terminate",
+            IntrinsicOp::DirectoryOpenDirectory => "directory_open_directory",
+            IntrinsicOp::DirectoryRead => "directory_read",
+            IntrinsicOp::DirectoryRewind => "directory_rewind",
+            IntrinsicOp::DirectoryCreate => "directory_create",
+            IntrinsicOp::DirectoryRemove => "directory_remove",
+            IntrinsicOp::DirectoryRename => "directory_rename",
+            IntrinsicOp::FileRewind => "file_rewind",
+            IntrinsicOp::FileExecutable => "file_executable",
+            IntrinsicOp::FileDuplicate => "file_duplicate",
+            IntrinsicOp::FileReadOnly => "file_readonly",
         }
     }
 }

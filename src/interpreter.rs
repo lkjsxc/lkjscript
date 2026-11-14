@@ -3,15 +3,61 @@
 mod io;
 mod scalar;
 use crate::ir::{self, Op, Place, Program, Projection, TypeKind};
-use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
-use std::rc::Rc;
 
 pub trait Host {
     /// Consume bytes before returning. The borrowed buffer cannot be retained.
     fn write_stdout(&mut self, bytes: &[u8]) -> Result<(), String>;
-    fn arguments(&self) -> &[Vec<u8>] {
-        &[]
+    fn argument_count(&self) -> usize;
+    fn argument(&self, index: usize) -> Option<Vec<u8>>;
+    fn read_stdin(&mut self, bytes: &mut [u8]) -> Result<usize, i64>;
+    fn write_stderr(&mut self, bytes: &[u8]) -> Result<(), String>;
+    fn open_directory(&mut self, path: &[u8]) -> Result<u64, i64>;
+    fn open_file(&mut self, directory: u64, path: &[u8], create: bool) -> Result<u64, i64>;
+    fn read_file(&mut self, handle: u64, bytes: &mut [u8]) -> Result<usize, i64>;
+    fn write_file(&mut self, handle: u64, bytes: &[u8]) -> Result<usize, i64>;
+    fn close_handle(&mut self, handle: u64);
+    fn set_exit_status(&mut self, status: u8);
+    fn world_file(&mut self, kind: u8) -> Result<u64, i64>;
+    fn duplicate_file(&mut self, handle: u64) -> Result<u64, i64>;
+    fn readonly_file(&mut self, handle: u64) -> Result<u64, i64>;
+    fn open_subdirectory(&mut self, directory: u64, path: &[u8]) -> Result<u64, i64>;
+    fn read_directory(&mut self, directory: u64, bytes: &mut [u8]) -> Result<usize, i64>;
+    fn rewind_handle(&mut self, handle: u64) -> Result<(), i64>;
+    fn create_directory(&mut self, directory: u64, name: &[u8]) -> Result<(), i64>;
+    fn remove_entry(&mut self, directory: u64, name: &[u8], is_directory: bool) -> Result<(), i64>;
+    fn rename_entry(
+        &mut self,
+        from: u64,
+        old_name: &[u8],
+        to: u64,
+        new_name: &[u8],
+    ) -> Result<(), i64>;
+    fn file_executable(&mut self, file: u64) -> Result<(), i64>;
+    fn monotonic_time(&mut self, bytes: &mut [u8]) -> Result<(), i64>;
+    fn spawn_process(
+        &mut self,
+        executable: u64,
+        arguments: &[u8],
+        stdin: u64,
+        stdout: u64,
+        stderr: u64,
+        result: u64,
+    ) -> Result<u64, i64>;
+    fn wait_process(&mut self, child: u64, nonblocking: bool) -> Result<Option<i64>, i64>;
+    fn terminate_process(&mut self, child: u64) -> Result<(), i64>;
+    fn drop_process(&mut self, child: u64);
+}
+impl Host for Vec<u8> {
+    fn write_stdout(&mut self, bytes: &[u8]) -> Result<(), String> {
+        self.extend_from_slice(bytes);
+        Ok(())
+    }
+    fn argument_count(&self) -> usize {
+        0
+    }
+    fn argument(&self, _index: usize) -> Option<Vec<u8>> {
+        None
     }
     fn read_stdin(&mut self, _bytes: &mut [u8]) -> Result<usize, i64> {
         Err(38)
@@ -33,12 +79,68 @@ pub trait Host {
     }
     fn close_handle(&mut self, _handle: u64) {}
     fn set_exit_status(&mut self, _status: u8) {}
-}
-impl Host for Vec<u8> {
-    fn write_stdout(&mut self, bytes: &[u8]) -> Result<(), String> {
-        self.extend_from_slice(bytes);
-        Ok(())
+    fn duplicate_file(&mut self, _handle: u64) -> Result<u64, i64> {
+        Err(38)
     }
+    fn readonly_file(&mut self, _handle: u64) -> Result<u64, i64> {
+        Err(38)
+    }
+    fn world_file(&mut self, _kind: u8) -> Result<u64, i64> {
+        Err(38)
+    }
+    fn open_subdirectory(&mut self, _directory: u64, _path: &[u8]) -> Result<u64, i64> {
+        Err(38)
+    }
+    fn read_directory(&mut self, _directory: u64, _bytes: &mut [u8]) -> Result<usize, i64> {
+        Err(38)
+    }
+    fn rewind_handle(&mut self, _handle: u64) -> Result<(), i64> {
+        Err(38)
+    }
+    fn create_directory(&mut self, _directory: u64, _name: &[u8]) -> Result<(), i64> {
+        Err(38)
+    }
+    fn remove_entry(
+        &mut self,
+        _directory: u64,
+        _name: &[u8],
+        _is_directory: bool,
+    ) -> Result<(), i64> {
+        Err(38)
+    }
+    fn rename_entry(
+        &mut self,
+        _from: u64,
+        _old_name: &[u8],
+        _to: u64,
+        _new_name: &[u8],
+    ) -> Result<(), i64> {
+        Err(38)
+    }
+    fn file_executable(&mut self, _file: u64) -> Result<(), i64> {
+        Err(38)
+    }
+    fn monotonic_time(&mut self, _bytes: &mut [u8]) -> Result<(), i64> {
+        Err(38)
+    }
+    fn spawn_process(
+        &mut self,
+        _executable: u64,
+        _arguments: &[u8],
+        _stdin: u64,
+        _stdout: u64,
+        _stderr: u64,
+        _result: u64,
+    ) -> Result<u64, i64> {
+        Err(38)
+    }
+    fn wait_process(&mut self, _child: u64, _nonblocking: bool) -> Result<Option<i64>, i64> {
+        Err(38)
+    }
+    fn terminate_process(&mut self, _child: u64) -> Result<(), i64> {
+        Err(38)
+    }
+    fn drop_process(&mut self, _child: u64) {}
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -63,8 +165,7 @@ pub struct RunError {
     pub function: usize,
     pub file: usize,
     pub line: usize,
-    // Resource failures must be reportable without allocating an error message.
-    pub message: Cow<'static, str>,
+    pub message: String,
 }
 impl RunError {
     pub fn code(&self) -> String {
@@ -97,12 +198,11 @@ pub struct RunResult {
     pub value: Scalar,
     pub peak_frames: usize,
     pub peak_cells: usize,
-    pub peak_stack_bytes: usize,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-// Owner and frame handles keep their slots allocated. References additionally
-// retain an identity token, so retirement/reuse needs no lifetime counter.
+// Owner and frame handles keep slots allocated. References also carry the
+// occupant generation, so a reused cell cannot revive a stale reference.
 struct Location {
     index: usize,
 }
@@ -115,7 +215,7 @@ struct SequenceExtent {
 struct Reference {
     extent: Option<SequenceExtent>,
     target: Location,
-    identity: Rc<()>,
+    identity: u64,
     tag: usize,
     referent: usize,
     mutable: bool,
@@ -137,6 +237,9 @@ enum Value {
     Stderr,
     Directory(u64),
     File(u64),
+    Process,
+    Clock,
+    Child(u64),
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Empty {
@@ -144,11 +247,11 @@ enum Empty {
     Moved,
     Dropped,
 }
-// A retired cell drops its token. Stale references retain the old allocation
-// until they disappear; a new occupant always gets a distinct live token.
+// Recycling a cell advances its occupant generation. Loans retain the old word
+// without retaining cells or allocating shared host objects.
 struct Cell {
     allocated: bool,
-    identity: Option<Rc<()>>,
+    identity: u64,
     ty: usize,
     value: Option<Value>,
     empty: Empty,
@@ -158,7 +261,7 @@ struct Cell {
 struct Loan {
     extent: Option<SequenceExtent>,
     target: Location,
-    identity: Rc<()>,
+    identity: u64,
     mutable: bool,
     parents: Vec<usize>,
     holders: usize,
@@ -185,7 +288,6 @@ enum ReturnTo {
     Discard,
 }
 struct Frame {
-    byte_cost: usize,
     function: usize,
     pc: usize,
     locals: Vec<Location>,
@@ -207,7 +309,6 @@ struct Flow {
 }
 
 struct RuntimeState<'a> {
-    runtime: &'a crate::runtime::Runtime,
     memory: &'a mut crate::runtime_memory::Memory,
 }
 struct Interpreter<'a, H: Host> {
@@ -224,8 +325,6 @@ struct Interpreter<'a, H: Host> {
     work: Vec<Work>,
     frames: usize,
     peak_frames: usize,
-    stack_bytes: usize,
-    peak_stack_bytes: usize,
     flow: Vec<Option<Flow>>,
     texts: BTreeMap<(usize, Vec<u8>), Location>,
     site: Site,
@@ -233,32 +332,32 @@ struct Interpreter<'a, H: Host> {
 }
 
 impl<H: Host> Interpreter<'_, H> {
-    fn error(&self, kind: InterpreterError, message: impl Into<Cow<'static, str>>) -> RunError {
+    fn error(&self, kind: InterpreterError, message: &str) -> RunError {
         RunError {
             kind: ErrorKind::Interpreter(kind),
             function: self.site.function,
             file: self.site.file,
             line: self.site.line,
-            message: message.into(),
+            message: message.to_string(),
         }
     }
-    fn invalid(&self, message: impl Into<Cow<'static, str>>) -> RunError {
+    fn invalid(&self, message: &str) -> RunError {
         self.error(InterpreterError::InvalidIr, message)
     }
-    fn trap(&self, code: u64, message: impl Into<Cow<'static, str>>) -> RunError {
+    fn trap(&self, code: u64, message: &str) -> RunError {
         RunError {
             kind: ErrorKind::Trap(code),
             function: self.site.function,
             file: self.site.file,
             line: self.site.line,
-            message: message.into(),
+            message: message.to_string(),
         }
     }
     fn number(&self, result: Result<u64, scalar::NumberError>) -> Result<u64, RunError> {
         result.map_err(|error| match error {
             scalar::NumberError::Trap(1) => self.trap(1, "integer overflow"),
-            scalar::NumberError::Trap(code) => self.trap(u64::from(code), "division by zero"),
-            scalar::NumberError::Invalid(message) => self.invalid(message),
+            scalar::NumberError::Trap(code) => self.trap(code as u64, "division by zero"),
+            scalar::NumberError::Invalid(message) => self.invalid(&message),
         })
     }
     fn kind(&self, ty: usize) -> Result<&TypeKind, RunError> {
@@ -268,7 +367,7 @@ impl<H: Host> Interpreter<'_, H> {
             .get(ty)
             .ok_or_else(|| self.invalid("unknown type"))?
             .kind;
-        if matches!(kind, TypeKind::Int {bits,..} if ![8,16,32,64].contains(bits)) {
+        if matches!(kind, TypeKind::Int {bits,..} if !matches!(*bits, 8 | 16 | 32 | 64)) {
             return Err(self.invalid("invalid integer width"));
         }
         Ok(kind)
@@ -284,11 +383,10 @@ impl<H: Host> Interpreter<'_, H> {
                 )
             })
     }
-    fn same_occupant(&self, location: Location, identity: &Rc<()>) -> bool {
+    fn same_occupant(&self, location: Location, identity: u64) -> bool {
         self.cells
             .get(location.index)
-            .and_then(|cell| cell.identity.as_ref())
-            .is_some_and(|current| Rc::ptr_eq(current, identity))
+            .is_some_and(|cell| cell.allocated && cell.identity == identity)
     }
     fn value(&self, location: Location) -> Result<&Value, RunError> {
         self.cell(location)?.value.as_ref().ok_or_else(|| {
@@ -307,9 +405,13 @@ impl<H: Host> Interpreter<'_, H> {
         self.kind(ty)?;
         let index = match self.free.pop() {
             Some(index) => {
+                let identity = self.cells[index]
+                    .identity
+                    .checked_add(1)
+                    .ok_or_else(|| self.trap(6, "cell occupant identity is not representable"))?;
                 self.cells[index] = Cell {
                     allocated: true,
-                    identity: None,
+                    identity,
                     ty,
                     value,
                     empty: Empty::Never,
@@ -319,13 +421,10 @@ impl<H: Host> Interpreter<'_, H> {
                 index
             }
             None => {
-                self.cells
-                    .try_reserve(1)
-                    .map_err(|_| self.trap(6, "allocation failed"))?;
                 let index = self.cells.len();
                 self.cells.push(Cell {
                     allocated: true,
-                    identity: None,
+                    identity: 0,
                     ty,
                     value,
                     empty: Empty::Never,
@@ -341,21 +440,18 @@ impl<H: Host> Interpreter<'_, H> {
         self.reparent(location)?;
         Ok(location)
     }
-    fn children(value: &Value) -> &[Location] {
+    fn children(value: &Value) -> Vec<Location> {
         match value {
-            Value::Aggregate { fields, .. } | Value::Sequence(fields) => fields,
-            Value::Box(child) => std::slice::from_ref(child),
-            _ => &[],
+            Value::Aggregate { fields, .. } | Value::Sequence(fields) => fields.clone(),
+            Value::Box(child) => vec![*child],
+            _ => Vec::new(),
         }
     }
     fn reparent(&mut self, location: Location) -> Result<(), RunError> {
-        let children = self
-            .cell(location)?
-            .value
-            .as_ref()
-            .map(Self::children)
-            .unwrap_or(&[])
-            .to_vec();
+        let children = match &self.cell(location)?.value {
+            Some(value) => Self::children(value),
+            None => Vec::new(),
+        };
         for child in children {
             self.cell(child)?;
             self.cells[child.index].parent = Some(location);
@@ -370,7 +466,6 @@ impl<H: Host> Interpreter<'_, H> {
             ));
         }
         self.cells[location.index].allocated = false;
-        self.cells[location.index].identity = None;
         self.cells[location.index].parent = None;
         self.free.push(location.index);
         self.live_cells -= 1;
@@ -419,13 +514,13 @@ impl<H: Host> Interpreter<'_, H> {
         let permitted = self.permissions(&access.permissions);
         for (tag, loan) in &self.loans {
             if !permitted.contains(tag)
-                && self.same_occupant(loan.target, &loan.identity)
+                && self.same_occupant(loan.target, loan.identity)
                 && self.overlaps(access.cell, loan.target)
                 && (write || loan.mutable)
             {
                 return Err(self.error(
                     InterpreterError::ConflictingAccess,
-                    format!(
+                    &format!(
                         "access to location {} conflicts with loan {} on location {}",
                         access.cell.index, tag, loan.target.index
                     ),
@@ -441,7 +536,7 @@ impl<H: Host> Interpreter<'_, H> {
                 "reference tag has expired",
             )
         })?;
-        if !Rc::ptr_eq(&loan.identity, &reference.identity) {
+        if loan.identity != reference.identity || loan.target != reference.target {
             return Err(self.error(
                 InterpreterError::DanglingReference,
                 "loan tag belongs to another storage identity",
@@ -453,7 +548,7 @@ impl<H: Host> Interpreter<'_, H> {
         {
             return Err(self.invalid("reference tag differs from its borrow"));
         }
-        if !self.same_occupant(reference.target, &reference.identity) {
+        if !self.same_occupant(reference.target, reference.identity) {
             return Err(self.error(
                 InterpreterError::DanglingReference,
                 "reference points to a retired occupant of a reused slot",
@@ -506,25 +601,20 @@ impl<H: Host> Interpreter<'_, H> {
             })?;
             tag
         };
-        let parents = self
-            .permissions(&access.permissions)
-            .into_iter()
-            .collect::<Vec<_>>();
+        let mut parents = Vec::new();
+        for permission in self.permissions(&access.permissions) {
+            parents.push(permission);
+        }
         for parent in &parents {
             self.loans.get_mut(parent).unwrap().children += 1;
         }
-        // Unborrowed cells need no allocated identity. Internal owner handles
-        // retain their slots; only references can survive a storage retirement.
-        if self.cells[access.cell.index].identity.is_none() {
-            self.cells[access.cell.index].identity = Some(Rc::new(()));
-        }
-        let identity = self.cell(access.cell)?.identity.as_ref().unwrap().clone();
+        let identity = self.cell(access.cell)?.identity;
         self.loans.insert(
             tag,
             Loan {
                 extent,
                 target: access.cell,
-                identity: identity.clone(),
+                identity,
                 mutable,
                 parents,
                 holders: 1,
@@ -540,47 +630,42 @@ impl<H: Host> Interpreter<'_, H> {
             mutable,
         }))
     }
+    fn loan_finished(&self, tag: usize) -> bool {
+        match self.loans.get(&tag) {
+            Some(loan) => loan.holders == 0 && loan.children == 0,
+            None => false,
+        }
+    }
     fn release_reference(&mut self, reference: &Reference) -> Result<(), RunError> {
-        if !self
-            .loans
-            .get(&reference.tag)
-            .is_some_and(|loan| Rc::ptr_eq(&loan.identity, &reference.identity))
-        {
+        if !self.loans.get(&reference.tag).is_some_and(|loan| {
+            loan.identity == reference.identity && loan.target == reference.target
+        }) {
             return Err(self.error(
                 InterpreterError::DanglingReference,
                 "reference loan identity has expired",
             ));
         }
-        let Some(loan) = self.loans.get_mut(&reference.tag) else {
-            return Err(self.error(
-                InterpreterError::DanglingReference,
-                "dropping an expired reference tag",
-            ));
-        };
-        if loan.holders == 0 {
+        let holders = self.loans.get(&reference.tag).unwrap().holders;
+        if holders == 0 {
             return Err(self.error(
                 InterpreterError::DoubleDrop,
                 "reference holder already dropped",
             ));
         }
-        loan.holders -= 1;
+        self.loans.get_mut(&reference.tag).unwrap().holders -= 1;
         let mut pending = vec![reference.tag];
         while let Some(tag) = pending.pop() {
-            if self
-                .loans
-                .get(&tag)
-                .is_some_and(|loan| loan.holders == 0 && loan.children == 0)
-            {
+            if self.loan_finished(tag) {
                 let loan = self.loans.remove(&tag).unwrap();
                 self.free_tags.push(tag);
                 for parent in loan.parents {
-                    let Some(parent_loan) = self.loans.get_mut(&parent) else {
+                    if !self.loans.contains_key(&parent) {
                         return Err(self.error(
                             InterpreterError::DanglingReference,
                             "reborrow parent is missing",
                         ));
-                    };
-                    parent_loan.children -= 1;
+                    }
+                    self.loans.get_mut(&parent).unwrap().children -= 1;
                     pending.push(parent);
                 }
             }
@@ -594,7 +679,8 @@ impl<H: Host> Interpreter<'_, H> {
             | Value::Sequence(_)
             | Value::Box(_)
             | Value::Directory(_)
-            | Value::File(_) => Err(self.error(
+            | Value::File(_)
+            | Value::Child(_) => Err(self.error(
                 InterpreterError::MissingDrop,
                 "owned value requires structural destruction",
             )),
@@ -709,9 +795,8 @@ impl<H: Host> Interpreter<'_, H> {
                         _ => return Err(self.invalid("indexing requires a collection")),
                     };
                     let elements = self.sequence(&access)?;
-                    access.cell = *usize::try_from(*index)
-                        .ok()
-                        .and_then(|index| elements.get(index))
+                    access.cell = *elements
+                        .get(*index as usize)
                         .ok_or_else(|| self.trap(3, "index out of bounds"))?;
                     access.extent = None;
                     access.ty = inner;
@@ -734,69 +819,87 @@ impl<H: Host> Interpreter<'_, H> {
         let access = self.local(frame, local)?;
         Ok((access.ty, self.take(&access)?))
     }
+    fn element_types(&self, values: &[Location], expected: usize) -> bool {
+        for value in values {
+            match self.cell(*value) {
+                Ok(cell) => {
+                    if cell.ty != expected {
+                        return false;
+                    }
+                }
+                Err(_) => return false,
+            }
+        }
+        true
+    }
+    fn field_types(&self, fields: &[ir::Field], values: &[Location]) -> bool {
+        if fields.len() != values.len() {
+            return false;
+        }
+        for index in 0..fields.len() {
+            match self.cell(values[index]) {
+                Ok(cell) => {
+                    if cell.ty != fields[index].ty {
+                        return false;
+                    }
+                }
+                Err(_) => return false,
+            }
+        }
+        true
+    }
     fn validate_value(&self, ty: usize, value: &Value) -> Result<(), RunError> {
-        let valid =
-            match (self.kind(ty)?, value) {
-                (TypeKind::Unit, Value::Unit) => true,
-                (TypeKind::Bool, Value::Bits(value)) => *value <= 1,
-                (TypeKind::Char, Value::Bits(value)) => u32::try_from(*value)
-                    .ok()
-                    .and_then(char::from_u32)
-                    .is_some(),
-                (TypeKind::Int { bits, signed }, Value::Bits(value))
-                    if [8, 16, 32, 64].contains(bits) =>
-                {
-                    scalar::normalize(*value, *bits, *signed) == *value
-                }
-                (TypeKind::F64, Value::Bits(_)) => true,
-                (TypeKind::World, Value::World)
-                | (TypeKind::Stdout, Value::Stdout)
-                | (TypeKind::Stdin, Value::Stdin)
-                | (TypeKind::Stderr, Value::Stderr) => true,
-                (TypeKind::Directory, Value::Directory(handle))
-                | (TypeKind::File, Value::File(handle)) => *handle != 0,
-                (TypeKind::Ref { inner, mutable }, Value::Reference(reference)) => {
-                    *inner == reference.referent && *mutable == reference.mutable
-                }
-                (
-                    TypeKind::Struct { fields, .. },
-                    Value::Aggregate {
-                        variant: None,
-                        fields: values,
-                    },
-                ) => {
-                    fields.len() == values.len()
-                        && fields.iter().zip(values).all(|(field, cell)| {
-                            self.cell(*cell).is_ok_and(|cell| cell.ty == field.ty)
-                        })
-                }
-                (
-                    TypeKind::Enum { variants, .. },
-                    Value::Aggregate {
-                        variant: Some(variant),
-                        fields: values,
-                    },
-                ) => variants.get(*variant).is_some_and(|variant| {
-                    variant.fields.len() == values.len()
-                        && variant.fields.iter().zip(values).all(|(field, cell)| {
-                            self.cell(*cell).is_ok_and(|cell| cell.ty == field.ty)
-                        })
-                }),
-                (TypeKind::Vec { inner }, Value::Sequence(values)) => values
-                    .iter()
-                    .all(|value| self.cell(*value).is_ok_and(|cell| cell.ty == *inner)),
-                (TypeKind::Array { inner, len }, Value::Sequence(values)) => {
-                    *len == values.len()
-                        && values
-                            .iter()
-                            .all(|value| self.cell(*value).is_ok_and(|cell| cell.ty == *inner))
-                }
-                (TypeKind::Str, Value::Sequence(values)) => values
-                    .iter()
-                    .all(|value| self.cell(*value).is_ok_and(|cell| cell.ty == ir::U8)),
-                (TypeKind::Box { inner }, Value::Box(value)) => self.cell(*value)?.ty == *inner,
-                _ => false,
-            };
+        let valid = match (self.kind(ty)?, value) {
+            (TypeKind::Unit, Value::Unit) => true,
+            (TypeKind::Bool, Value::Bits(value)) => *value <= 1,
+            (TypeKind::Char, Value::Bits(value)) => {
+                *value <= 0x10ffff && !(*value >= 0xd800 && *value <= 0xdfff)
+            }
+            (TypeKind::Int { bits, signed }, Value::Bits(value))
+                if matches!(*bits, 8 | 16 | 32 | 64) =>
+            {
+                scalar::normalize(*value, *bits, *signed) == *value
+            }
+            (TypeKind::F64, Value::Bits(_)) => true,
+            (TypeKind::World, Value::World)
+            | (TypeKind::Stdout, Value::Stdout)
+            | (TypeKind::Stdin, Value::Stdin)
+            | (TypeKind::Stderr, Value::Stderr)
+            | (TypeKind::Process, Value::Process)
+            | (TypeKind::Clock, Value::Clock) => true,
+            (TypeKind::Directory, Value::Directory(handle))
+            | (TypeKind::File, Value::File(handle))
+            | (TypeKind::Child, Value::Child(handle)) => *handle != 0,
+            (TypeKind::Ref { inner, mutable }, Value::Reference(reference)) => {
+                *inner == reference.referent && *mutable == reference.mutable
+            }
+            (
+                TypeKind::Struct { fields, .. },
+                Value::Aggregate {
+                    variant: None,
+                    fields: values,
+                },
+            ) => self.field_types(fields, values),
+            (
+                TypeKind::Enum { variants, .. },
+                Value::Aggregate {
+                    variant: Some(variant),
+                    fields: values,
+                },
+            ) => match variants.get(*variant) {
+                Some(declaration) => self.field_types(&declaration.fields, values),
+                None => false,
+            },
+            (TypeKind::Vec { inner }, Value::Sequence(values)) => {
+                self.element_types(values, *inner)
+            }
+            (TypeKind::Array { inner, len }, Value::Sequence(values)) => {
+                *len == values.len() && self.element_types(values, *inner)
+            }
+            (TypeKind::Str, Value::Sequence(values)) => self.element_types(values, ir::U8),
+            (TypeKind::Box { inner }, Value::Box(value)) => self.cell(*value)?.ty == *inner,
+            _ => false,
+        };
         if valid {
             Ok(())
         } else {
@@ -836,16 +939,20 @@ impl<H: Host> Interpreter<'_, H> {
                 TypeKind::Ref { mutable: false, .. } => {}
                 TypeKind::Array { inner, .. } => pending.push(*inner),
                 TypeKind::Struct { fields, copy: true } => {
-                    pending.extend(fields.iter().map(|field| field.ty))
+                    for field in fields {
+                        pending.push(field.ty);
+                    }
                 }
                 TypeKind::Enum {
                     variants,
                     copy: true,
-                } => pending.extend(
-                    variants
-                        .iter()
-                        .flat_map(|variant| variant.fields.iter().map(|field| field.ty)),
-                ),
+                } => {
+                    for variant in variants {
+                        for field in &variant.fields {
+                            pending.push(field.ty);
+                        }
+                    }
+                }
                 _ => return Ok(false),
             }
         }
@@ -862,10 +969,14 @@ impl<H: Host> Interpreter<'_, H> {
             let mut value = self.value(source)?.clone();
             match &mut value {
                 Value::Aggregate { fields, .. } | Value::Sequence(fields) => {
-                    for field in fields {
-                        let replacement = self.allocate(self.cell(*field)?.ty, None, false)?;
-                        pending.push((*field, replacement));
-                        *field = replacement;
+                    let mut index = 0usize;
+                    while index < fields.len() {
+                        let original = fields[index];
+                        let ty = self.cell(original)?.ty;
+                        let replacement = self.allocate(ty, None, false)?;
+                        pending.push((original, replacement));
+                        fields[index] = replacement;
+                        index += 1;
                     }
                 }
                 Value::Reference(reference) => {
@@ -915,7 +1026,10 @@ impl<H: Host> Interpreter<'_, H> {
                             jump[transfer] = Some(pc + 1);
                         }
                     } else {
-                        jump[open] = Some(otherwise.map_or(pc + 1, |otherwise| otherwise + 1));
+                        jump[open] = Some(match otherwise {
+                            Some(position) => position + 1,
+                            None => pc + 1,
+                        });
                         if let Some(otherwise) = otherwise {
                             jump[otherwise] = Some(pc + 1);
                         }
@@ -926,14 +1040,23 @@ impl<H: Host> Interpreter<'_, H> {
                         Op::BreakTo { depth } | Op::ContinueTo { depth } => depth,
                         _ => 0,
                     };
-                    let control = controls
-                        .iter_mut()
-                        .rev()
-                        .filter(|control| control.1)
-                        .nth(depth)
-                        .ok_or_else(|| {
-                            self.invalid("loop transfer target is outside enclosing loops")
-                        })?;
+                    let mut index = controls.len();
+                    let mut remaining = depth;
+                    let mut target = None;
+                    while index > 0 {
+                        index -= 1;
+                        if controls[index].1 {
+                            if remaining == 0 {
+                                target = Some(index);
+                                break;
+                            }
+                            remaining -= 1;
+                        }
+                    }
+                    let index = target.ok_or_else(|| {
+                        self.invalid("loop transfer target is outside enclosing loops")
+                    })?;
+                    let control = &mut controls[index];
                     if matches!(instruction.op, Op::Break | Op::BreakTo { .. }) {
                         control.3.push(pc);
                     } else {
@@ -953,20 +1076,43 @@ impl<H: Host> Interpreter<'_, H> {
         function: usize,
         arguments: &[(usize, Value)],
     ) -> Result<Option<u64>, RunError> {
-        let Some(primitive) = self
-            .runtime
-            .as_ref()
-            .and_then(|state| state.runtime.primitive(function))
+        if self.runtime.is_none() {
+            return Ok(None);
+        }
+        let Some(primitive) =
+            crate::runtime_memory::Primitive::parse(&self.program.functions[function].name)
         else {
             return Ok(None);
         };
         let declaration = &self.program.functions[function];
-        if declaration.params != arguments.len() {
-            return Err(self.invalid("runtime primitive argument count differs"));
+        if declaration.params != primitive.parameters()
+            || declaration.params != arguments.len()
+            || declaration.params > declaration.locals.len()
+            || !matches!(
+                self.kind(declaration.result)?,
+                TypeKind::Int {
+                    bits: 64,
+                    signed: false
+                }
+            )
+            || !matches!(
+                declaration.body.first().map(|instruction| &instruction.op),
+                Some(Op::Trap { .. })
+            )
+        {
+            return Err(self.invalid("runtime primitive signature or stub differs"));
         }
         let mut words = Vec::new();
         for (index, (ty, value)) in arguments.iter().enumerate() {
-            if *ty != declaration.locals[index].ty {
+            if *ty != declaration.locals[index].ty
+                || !matches!(
+                    self.kind(*ty)?,
+                    TypeKind::Int {
+                        bits: 64,
+                        signed: false
+                    }
+                )
+            {
                 return Err(self.invalid("runtime primitive argument type differs"));
             }
             let Value::Bits(value) = value else {
@@ -980,7 +1126,7 @@ impl<H: Host> Interpreter<'_, H> {
             .unwrap()
             .memory
             .invoke(primitive, &words);
-        action.map(Some).map_err(|fault| {
+        action.map(|value: u64| Some(value)).map_err(|fault| {
             if fault == crate::runtime_memory::MemoryFault::Allocation {
                 self.trap(6, fault.message())
             } else {
@@ -988,61 +1134,52 @@ impl<H: Host> Interpreter<'_, H> {
             }
         })
     }
+    fn frame_types(&self, function: usize) -> Result<(usize, Vec<usize>), RunError> {
+        let declaration = self
+            .program
+            .functions
+            .get(function)
+            .ok_or_else(|| self.invalid("unknown function"))?;
+        let mut types = Vec::new();
+        for local in &declaration.locals {
+            types.push(local.ty);
+        }
+        Ok((declaration.params, types))
+    }
+    fn initialized(&self, location: Location) -> Result<bool, RunError> {
+        Ok(self.cell(location)?.value.is_some())
+    }
+    fn sequence_cells(&self, access: &Access) -> Result<Vec<Location>, RunError> {
+        Ok(self.sequence(access)?.to_vec())
+    }
     fn push_frame(
         &mut self,
         function: usize,
         args: Vec<(usize, Value)>,
         return_to: ReturnTo,
     ) -> Result<(), RunError> {
-        let declaration = self
-            .program
-            .functions
-            .get(function)
-            .ok_or_else(|| self.invalid("unknown function"))?;
-        if declaration.params != args.len() || declaration.params > declaration.locals.len() {
+        let (params, local_types) = self.frame_types(function)?;
+        if params != args.len() || params > local_types.len() {
             return Err(self.invalid("call argument count differs"));
         }
         for (index, (ty, value)) in args.iter().enumerate() {
-            if *ty != declaration.locals[index].ty {
+            if *ty != local_types[index] {
                 return Err(self.invalid("call argument type differs"));
             }
             self.validate_value(*ty, value)?;
         }
-        // Frame entry allocates only root cells and their location table.
-        // Aggregate, array, Vec and Box payloads allocate separately on the heap.
-        let local_bytes = std::mem::size_of::<Location>() + std::mem::size_of::<Cell>();
-        let byte_cost = declaration
-            .locals
-            .len()
-            .checked_mul(local_bytes)
-            .and_then(|bytes| bytes.checked_add(std::mem::size_of::<Frame>()))
-            .ok_or_else(|| self.trap(8, "stack memory exhausted"))?;
-        let stack_bytes = self
-            .stack_bytes
-            .checked_add(byte_cost)
-            .ok_or_else(|| self.trap(8, "stack memory exhausted"))?;
         if self.flow[function].is_none() {
             self.flow[function] = Some(self.prepare_flow(function)?);
         }
         let mut locals = Vec::new();
-        locals
-            .try_reserve_exact(declaration.locals.len())
-            .map_err(|_| self.trap(8, "stack memory exhausted"))?;
-        for local in &declaration.locals {
-            let location = self.allocate(local.ty, None, false).map_err(|error| {
-                if error.kind == ErrorKind::Trap(6) {
-                    self.trap(8, "stack memory exhausted")
-                } else {
-                    error
-                }
-            })?;
+        for ty in local_types {
+            let location = self.allocate(ty, None, false)?;
             locals.push(location);
         }
         for (index, (_, value)) in args.into_iter().enumerate() {
             self.put(locals[index], value)?;
         }
         self.push_work(Work::Frame(Frame {
-            byte_cost,
             function,
             pc: 0,
             locals,
@@ -1050,14 +1187,9 @@ impl<H: Host> Interpreter<'_, H> {
         }))?;
         self.frames += 1;
         self.peak_frames = self.peak_frames.max(self.frames);
-        self.stack_bytes = stack_bytes;
-        self.peak_stack_bytes = self.peak_stack_bytes.max(stack_bytes);
         Ok(())
     }
     fn push_work(&mut self, work: Work) -> Result<(), RunError> {
-        self.work
-            .try_reserve(1)
-            .map_err(|_| self.trap(8, "stack memory exhausted"))?;
         self.work.push(work);
         Ok(())
     }
@@ -1065,11 +1197,15 @@ impl<H: Host> Interpreter<'_, H> {
         match (self.kind(ty)?, value) {
             (TypeKind::Unit, Value::Unit) => Ok(Scalar::Unit),
             (TypeKind::Bool, Value::Bits(value)) => Ok(Scalar::Bool(*value != 0)),
-            (TypeKind::Char, Value::Bits(value)) => u32::try_from(*value)
-                .ok()
-                .and_then(char::from_u32)
-                .map(Scalar::Char)
-                .ok_or_else(|| self.invalid("invalid character result")),
+            (TypeKind::Char, Value::Bits(value)) => {
+                if *value > 0x10ffff {
+                    return Err(self.invalid("invalid character result"));
+                }
+                match char::from_u32(*value as u32) {
+                    Some(character) => Ok(Scalar::Char(character)),
+                    None => Err(self.invalid("invalid character result")),
+                }
+            }
             (TypeKind::Int { bits, signed }, Value::Bits(value)) => Ok(Scalar::Int {
                 value: *value,
                 bits: *bits,
@@ -1092,11 +1228,13 @@ impl<H: Host> Interpreter<'_, H> {
         while let Some(value) = pending.pop() {
             if let Value::Reference(reference) = &value {
                 self.reference_access(reference)?;
-                if frame
-                    .locals
-                    .iter()
-                    .any(|local| self.ancestor(*local, reference.target))
-                {
+                let mut escaping = false;
+                for local in &frame.locals {
+                    if self.ancestor(*local, reference.target) {
+                        escaping = true;
+                    }
+                }
+                if escaping {
                     return Err(self.error(
                         InterpreterError::DanglingReference,
                         "returned reference points into the retiring frame",
@@ -1104,7 +1242,7 @@ impl<H: Host> Interpreter<'_, H> {
                 }
             }
             for child in Self::children(&value) {
-                if let Some(value) = &self.cell(*child)?.value {
+                if let Some(value) = &self.cell(child)?.value {
                     pending.push(value.clone());
                 }
             }
@@ -1121,7 +1259,6 @@ impl<H: Host> Interpreter<'_, H> {
             self.release(local)?;
         }
         self.frames -= 1;
-        self.stack_bytes -= frame.byte_cost;
         match frame.return_to {
             ReturnTo::Entry => {
                 self.result = Some(self.scalar_result(ty, &value)?);
@@ -1142,9 +1279,17 @@ impl<H: Host> Interpreter<'_, H> {
         }
         Ok(())
     }
+    fn destructor(&self, ty: usize) -> Option<usize> {
+        for entry in &self.program.destructors {
+            if entry.0 == ty {
+                return Some(entry.1);
+            }
+        }
+        None
+    }
     fn drop_work(&mut self, work: DropWork) -> Result<(), RunError> {
         self.site = work.site;
-        if self.cell(work.access.cell)?.value.is_none() {
+        if !self.initialized(work.access.cell)? {
             // Structural cleanup and explicit DropIf skip an absent value.
             // A strict Drop requires this exact storage to be initialized.
             if !work.optional {
@@ -1161,13 +1306,7 @@ impl<H: Host> Interpreter<'_, H> {
         }
         self.access(&work.access, true, true)?;
         if work.custom {
-            if let Some((_, function)) = self
-                .program
-                .destructors
-                .iter()
-                .find(|entry| entry.0 == work.access.ty)
-            {
-                let function = *function;
+            if let Some(function) = self.destructor(work.access.ty) {
                 let declaration = self
                     .program
                     .functions
@@ -1198,16 +1337,17 @@ impl<H: Host> Interpreter<'_, H> {
         }
         let value = self.take(&work.access)?;
         self.cells[work.access.cell.index].empty = Empty::Dropped;
-        let children = Self::children(&value).to_vec();
+        let mut children = Self::children(&value);
         match value {
             Value::Reference(reference) => self.release_reference(&reference)?,
+            Value::Child(handle) => self.host.drop_process(handle),
             Value::Directory(handle) | Value::File(handle) => self.host.close_handle(handle),
             _ => {}
         }
         if work.release {
             self.release(work.access.cell)?;
         }
-        for child in children.into_iter().rev() {
+        while let Some(child) = children.pop() {
             let ty = self.cell(child)?.ty;
             self.push_work(Work::Drop(DropWork {
                 access: Access {
@@ -1252,11 +1392,14 @@ impl<H: Host> Interpreter<'_, H> {
             start: 0,
             count: elements.len(),
         });
-        extent
+        let end = extent
             .start
             .checked_add(extent.count)
-            .and_then(|end| elements.get(extent.start..end))
-            .ok_or_else(|| self.invalid("reference extent exceeds sequence storage"))
+            .ok_or_else(|| self.invalid("reference extent exceeds sequence storage"))?;
+        if end > elements.len() {
+            return Err(self.invalid("reference extent exceeds sequence storage"));
+        }
+        Ok(&elements[extent.start..end])
     }
     fn bytes(&self, access: &Access) -> Result<Vec<u8>, RunError> {
         self.access(access, false, true)?;
@@ -1277,10 +1420,10 @@ impl<H: Host> Interpreter<'_, H> {
             let Value::Bits(value) = self.value(*element)? else {
                 return Err(self.invalid("byte is not scalar"));
             };
-            bytes.push(
-                u8::try_from(*value)
-                    .map_err(|_| self.invalid("byte exceeds its representation"))?,
-            );
+            if *value > 255 {
+                return Err(self.invalid("byte exceeds its representation"));
+            }
+            bytes.push(*value as u8);
         }
         Ok(bytes)
     }
@@ -1298,9 +1441,6 @@ impl<H: Host> Interpreter<'_, H> {
             return Err(self.invalid("array repeat seed must have the Copy element type"));
         }
         let mut fields = Vec::new();
-        fields
-            .try_reserve(len)
-            .map_err(|_| self.trap(6, "allocation failed"))?;
         for _ in 0..len - 1 {
             let value = self.copy_value(&seed)?;
             fields.push(self.allocate(inner, Some(value), false)?);
@@ -1310,6 +1450,90 @@ impl<H: Host> Interpreter<'_, H> {
         self.put_local(frame, dst, Value::Sequence(fields))
     }
 
+    fn reference_type(&self, ty: usize) -> Result<(usize, bool), RunError> {
+        match self.kind(ty)? {
+            TypeKind::Ref { inner, mutable } => Ok((*inner, *mutable)),
+            _ => Err(self.invalid("operation requires a reference type")),
+        }
+    }
+    fn result_fields(&self, ty: usize) -> Result<(usize, usize), RunError> {
+        let TypeKind::Enum { variants, .. } = self.kind(ty)? else {
+            return Err(self.invalid("result must be an enum"));
+        };
+        if variants.len() != 2 || variants[0].fields.len() != 1 || variants[1].fields.len() != 1 {
+            return Err(self.invalid("invalid result shape"));
+        }
+        Ok((variants[0].fields[0].ty, variants[1].fields[0].ty))
+    }
+    fn sequence_push(&mut self, cell: Location, child: Location) -> Result<(), RunError> {
+        let valid = match &mut self.cells[cell.index].value {
+            Some(Value::Sequence(elements)) => {
+                elements.push(child);
+                true
+            }
+            _ => false,
+        };
+        if valid {
+            Ok(())
+        } else {
+            Err(self.invalid("Vec has no buffer"))
+        }
+    }
+    fn sequence_pop(&mut self, cell: Location) -> Result<Option<Location>, RunError> {
+        let popped = match &mut self.cells[cell.index].value {
+            Some(Value::Sequence(elements)) => Some(elements.pop()),
+            _ => None,
+        };
+        match popped {
+            Some(value) => Ok(value),
+            None => Err(self.invalid("Vec has no buffer")),
+        }
+    }
+    fn character_result(&self, ty: usize) -> Result<usize, RunError> {
+        let TypeKind::Enum { variants, .. } = self.kind(ty)? else {
+            return Err(self.invalid("character construction requires Option<char>"));
+        };
+        if variants.len() != 2
+            || variants[0].name != "None"
+            || !variants[0].fields.is_empty()
+            || variants[1].name != "Some"
+            || variants[1].fields.len() != 1
+            || !matches!(self.kind(variants[1].fields[0].ty)?, TypeKind::Char)
+        {
+            return Err(self.invalid("character construction result shape differs"));
+        }
+        Ok(variants[1].fields[0].ty)
+    }
+    fn constructor_types(&self, ty: usize, variant: Option<usize>) -> Result<Vec<usize>, RunError> {
+        let mut expected = Vec::new();
+        match (variant, self.kind(ty)?) {
+            (None, TypeKind::Struct { fields, .. }) => {
+                for field in fields {
+                    expected.push(field.ty);
+                }
+            }
+            (Some(variant), TypeKind::Enum { variants, .. }) => {
+                let declaration = variants
+                    .get(variant)
+                    .ok_or_else(|| self.invalid("unknown constructor variant"))?;
+                for field in &declaration.fields {
+                    expected.push(field.ty);
+                }
+            }
+            _ => return Err(self.invalid("aggregate constructor has wrong type")),
+        }
+        Ok(expected)
+    }
+    fn intrinsic_reference(
+        &self,
+        values: &[(usize, Value)],
+        index: usize,
+    ) -> Result<Access, RunError> {
+        match values.get(index) {
+            Some((_, Value::Reference(reference))) => self.reference_access(reference),
+            _ => Err(self.invalid("intrinsic requires a reference argument")),
+        }
+    }
     fn intrinsic(
         &mut self,
         frame: &Frame,
@@ -1325,13 +1549,34 @@ impl<H: Host> Interpreter<'_, H> {
         for arg in args {
             values.push(self.take_local(frame, *arg)?);
         }
-        let reference = |index: usize, interpreter: &Self| -> Result<Access, RunError> {
-            match values.get(index).map(|value| &value.1) {
-                Some(Value::Reference(reference)) => interpreter.reference_access(reference),
-                _ => Err(interpreter.invalid("intrinsic requires a reference argument")),
-            }
-        };
         let result = match name {
+            ir::IntrinsicOp::F64FromBits | ir::IntrinsicOp::F64ToBits if values.len() == 1 => {
+                let valid = if name == ir::IntrinsicOp::F64FromBits {
+                    matches!(
+                        self.kind(values[0].0)?,
+                        TypeKind::Int {
+                            bits: 64,
+                            signed: false
+                        }
+                    ) && matches!(self.kind(destination.ty)?, TypeKind::F64)
+                } else {
+                    matches!(self.kind(values[0].0)?, TypeKind::F64)
+                        && matches!(
+                            self.kind(destination.ty)?,
+                            TypeKind::Int {
+                                bits: 64,
+                                signed: false
+                            }
+                        )
+                };
+                if !valid {
+                    return Err(self.invalid("floating bitcast signature differs"));
+                }
+                let Value::Bits(bits) = values[0].1 else {
+                    return Err(self.invalid("floating bitcast requires scalar bits"));
+                };
+                Value::Bits(bits)
+            }
             ir::IntrinsicOp::Assert if values.len() == 1 => {
                 if values[0].0 != ir::BOOL {
                     return Err(self.invalid("assert needs bool"));
@@ -1351,23 +1596,16 @@ impl<H: Host> Interpreter<'_, H> {
                 ) {
                     return Err(self.invalid("character construction requires u32"));
                 }
-                let TypeKind::Enum { variants, .. } = self.kind(destination.ty)? else {
-                    return Err(self.invalid("character construction requires Option<char>"));
-                };
-                if variants.len() != 2
-                    || variants[0].name != "None"
-                    || !variants[0].fields.is_empty()
-                    || variants[1].name != "Some"
-                    || variants[1].fields.len() != 1
-                    || !matches!(self.kind(variants[1].fields[0].ty)?, TypeKind::Char)
-                {
-                    return Err(self.invalid("character construction result shape differs"));
-                }
-                let character = variants[1].fields[0].ty;
+                let character = self.character_result(destination.ty)?;
                 let Value::Bits(code) = values[0].1 else {
                     return Err(self.invalid("character code must be scalar"));
                 };
-                match u32::try_from(code).ok().and_then(char::from_u32) {
+                let character_value = if code <= 0x10ffff {
+                    char::from_u32(code as u32)
+                } else {
+                    None
+                };
+                match character_value {
                     Some(value) => {
                         let field =
                             self.allocate(character, Some(Value::Bits(value as u64)), false)?;
@@ -1399,22 +1637,23 @@ impl<H: Host> Interpreter<'_, H> {
                 Value::Sequence(Vec::new())
             }
             ir::IntrinsicOp::BoxNew if values.len() == 1 => {
-                let TypeKind::Box { inner } = self.kind(destination.ty)? else {
-                    return Err(self.invalid("box_new result is not Box"));
+                let inner = match self.kind(destination.ty)? {
+                    TypeKind::Box { inner } => *inner,
+                    _ => return Err(self.invalid("box_new result is not Box")),
                 };
-                if *inner != values[0].0 {
+                if inner != values[0].0 {
                     return Err(self.invalid("Box element type differs"));
                 }
-                let (ty, value) = values.remove(0);
+                let (ty, value) = values.pop().unwrap();
                 Value::Box(self.allocate(ty, Some(value), false)?)
             }
             ir::IntrinsicOp::VecLen | ir::IntrinsicOp::StrLen if values.len() == 1 => {
-                let access = reference(0, self)?;
+                let access = self.intrinsic_reference(&values, 0)?;
                 self.access(&access, false, true)?;
                 Value::Bits(self.sequence(&access)?.len() as u64)
             }
             ir::IntrinsicOp::VecPush if values.len() == 2 => {
-                let access = reference(0, self)?;
+                let access = self.intrinsic_reference(&values, 0)?;
                 if !access.writable {
                     return Err(self.error(
                         InterpreterError::ConflictingAccess,
@@ -1422,24 +1661,21 @@ impl<H: Host> Interpreter<'_, H> {
                     ));
                 }
                 self.access(&access, true, true)?;
-                let TypeKind::Vec { inner } = self.kind(access.ty)? else {
-                    return Err(self.invalid("push target is not Vec"));
+                let inner = match self.kind(access.ty)? {
+                    TypeKind::Vec { inner } => *inner,
+                    _ => return Err(self.invalid("push target is not Vec")),
                 };
-                if *inner != values[1].0 {
+                if inner != values[1].0 {
                     return Err(self.invalid("pushed element type differs"));
                 }
-                let (ty, value) = values.remove(1);
+                let (ty, value) = values.pop().unwrap();
                 let child = self.allocate(ty, Some(value), false)?;
                 self.cells[child.index].parent = Some(access.cell);
-                let Some(Value::Sequence(elements)) = &mut self.cells[access.cell.index].value
-                else {
-                    return Err(self.invalid("Vec has no buffer"));
-                };
-                elements.push(child);
+                self.sequence_push(access.cell, child)?;
                 Value::Unit
             }
             ir::IntrinsicOp::VecPop if values.len() == 1 => {
-                let access = reference(0, self)?;
+                let access = self.intrinsic_reference(&values, 0)?;
                 if !access.writable {
                     return Err(self.error(
                         InterpreterError::ConflictingAccess,
@@ -1450,11 +1686,7 @@ impl<H: Host> Interpreter<'_, H> {
                 if !matches!(self.kind(access.ty)?, TypeKind::Vec { .. }) {
                     return Err(self.invalid("pop target is not Vec"));
                 }
-                let Some(Value::Sequence(elements)) = &mut self.cells[access.cell.index].value
-                else {
-                    return Err(self.invalid("Vec has no buffer"));
-                };
-                match elements.pop() {
+                match self.sequence_pop(access.cell)? {
                     None => Value::Aggregate {
                         variant: Some(0),
                         fields: Vec::new(),
@@ -1469,77 +1701,59 @@ impl<H: Host> Interpreter<'_, H> {
                 }
             }
             ir::IntrinsicOp::Replace if values.len() == 2 => {
-                let access = reference(0, self)?;
+                let access = self.intrinsic_reference(&values, 0)?;
                 if !access.writable || access.ty != values[1].0 || access.ty != destination.ty {
                     return Err(self.invalid("invalid replacement signature"));
                 }
                 let old = self.take(&access)?;
-                let (_, replacement) = values.remove(1);
+                let (_, replacement) = values.pop().unwrap();
                 self.put(access.cell, replacement)?;
                 old
             }
             ir::IntrinsicOp::Clone if values.len() == 1 => {
-                let access = reference(0, self)?;
+                let access = self.intrinsic_reference(&values, 0)?;
                 if access.ty != destination.ty {
                     return Err(self.invalid("clone result type differs"));
                 }
                 self.copy_value(&access)?
             }
             ir::IntrinsicOp::StrAsBytes if values.len() == 1 => {
-                let access = reference(0, self)?;
+                let access = self.intrinsic_reference(&values, 0)?;
                 if !matches!(self.kind(access.ty)?, TypeKind::Str) {
                     return Err(self.invalid("text projection requires str"));
                 }
-                let TypeKind::Ref {
-                    inner,
-                    mutable: false,
-                } = self.kind(destination.ty)?
-                else {
+                let (inner, mutable) = self.reference_type(destination.ty)?;
+                if mutable {
                     return Err(self.invalid("text bytes result must be a shared slice"));
                 };
                 if !matches!(
-                    self.kind(*inner)?,
+                    self.kind(inner)?,
                     TypeKind::Slice {
-                        inner: ir::U8,
+                        inner,
                         mutable: false
-                    }
+                    } if *inner == ir::U8
                 ) {
                     return Err(self.invalid("text bytes result is not a byte slice"));
                 }
-                let inner = *inner;
-                let (_, Value::Reference(mut reference)) = values.remove(0) else {
+                let (_, Value::Reference(mut reference)) = values.pop().unwrap() else {
                     unreachable!()
                 };
                 reference.referent = inner;
                 Value::Reference(reference)
             }
             ir::IntrinsicOp::StrFromUtf8 if values.len() == 1 => {
-                let access = reference(0, self)?;
+                let access = self.intrinsic_reference(&values, 0)?;
                 let bytes = self.bytes(&access)?;
-                let TypeKind::Enum { variants, .. } = self.kind(destination.ty)? else {
-                    return Err(self.invalid("UTF-8 result must be an enum"));
-                };
-                if variants.len() != 2
-                    || variants[0].fields.len() != 1
-                    || variants[1].fields.len() != 1
-                {
-                    return Err(self.invalid("invalid UTF-8 result shape"));
-                }
-                let success = variants[0].fields[0].ty;
-                let failure = variants[1].fields[0].ty;
+                let (success, failure) = self.result_fields(destination.ty)?;
                 if std::str::from_utf8(&bytes).is_ok() {
-                    let TypeKind::Ref {
-                        inner,
-                        mutable: false,
-                    } = self.kind(success)?
-                    else {
+                    let (inner, mutable) = self.reference_type(success)?;
+                    if mutable {
                         return Err(self.invalid("UTF-8 success is not a shared reference"));
                     };
-                    if !matches!(self.kind(*inner)?, TypeKind::Str) {
+                    if !matches!(self.kind(inner)?, TypeKind::Str) {
                         return Err(self.invalid("UTF-8 success is not str"));
                     }
-                    let inner = *inner;
-                    let (_, Value::Reference(mut reference)) = values.remove(0) else {
+                    let (_, Value::Reference(mut reference)) = values.pop().unwrap() else {
                         unreachable!()
                     };
                     reference.referent = inner;
@@ -1562,7 +1776,7 @@ impl<H: Host> Interpreter<'_, H> {
                 }
             }
             ir::IntrinsicOp::WorldStdout if values.len() == 1 => {
-                let access = reference(0, self)?;
+                let access = self.intrinsic_reference(&values, 0)?;
                 if !access.writable
                     || !matches!(self.kind(access.ty)?, TypeKind::World)
                     || !matches!(self.value(access.cell)?, Value::World)
@@ -1573,7 +1787,7 @@ impl<H: Host> Interpreter<'_, H> {
                 Value::Stdout
             }
             ir::IntrinsicOp::StdoutWrite if values.len() == 2 => {
-                let writer = reference(0, self)?;
+                let writer = self.intrinsic_reference(&values, 0)?;
                 if !writer.writable
                     || !matches!(self.kind(writer.ty)?, TypeKind::Stdout)
                     || !matches!(self.value(writer.cell)?, Value::Stdout)
@@ -1581,20 +1795,20 @@ impl<H: Host> Interpreter<'_, H> {
                     return Err(self.invalid("stdout write requires derived writer authority"));
                 }
                 self.access(&writer, true, true)?;
-                let data = reference(1, self)?;
+                let data = self.intrinsic_reference(&values, 1)?;
                 if !matches!(
                     self.kind(data.ty)?,
                     TypeKind::Slice {
-                        inner: ir::U8,
+                        inner,
                         mutable: false
-                    }
+                    } if *inner == ir::U8
                 ) {
                     return Err(self.invalid("stdout write requires bytes"));
                 }
                 let bytes = self.bytes(&data)?;
-                self.host
-                    .write_stdout(&bytes)
-                    .map_err(|message| self.trap(7, message))?;
+                if let Err(message) = self.host.write_stdout(&bytes) {
+                    return Err(self.trap(7, &message));
+                }
                 Value::Unit
             }
             _ => match self.io_intrinsic(destination.ty, name, &values)? {
@@ -1602,7 +1816,7 @@ impl<H: Host> Interpreter<'_, H> {
                 None => {
                     return Err(self.error(
                         InterpreterError::Unsupported,
-                        format!(
+                        &format!(
                             "intrinsic {} is not implemented by the IR interpreter",
                             name.as_str()
                         ),
@@ -1615,16 +1829,28 @@ impl<H: Host> Interpreter<'_, H> {
         }
         self.put_local(frame, dst, result)
     }
-    fn step(&mut self, mut frame: Frame) -> Result<(), RunError> {
-        let declaration = &self.program.functions[frame.function];
+    fn instruction_at(
+        &self,
+        function: usize,
+        pc: usize,
+    ) -> Result<(usize, ir::Instruction), RunError> {
+        let declaration = self
+            .program
+            .functions
+            .get(function)
+            .ok_or_else(|| self.invalid("unknown function"))?;
         let instruction = declaration
             .body
-            .get(frame.pc)
+            .get(pc)
             .ok_or_else(|| self.invalid("function reaches its end without returning"))?
             .clone();
+        Ok((declaration.file, instruction))
+    }
+    fn step(&mut self, mut frame: Frame) -> Result<(), RunError> {
+        let (file, instruction) = self.instruction_at(frame.function, frame.pc)?;
         self.site = Site {
             function: frame.function,
-            file: declaration.file,
+            file,
             line: instruction.line,
         };
         let pc = frame.pc;
@@ -1639,21 +1865,17 @@ impl<H: Host> Interpreter<'_, H> {
             }
             Op::Unit { dst } => self.put_local(&frame, dst, Value::Unit)?,
             Op::Text { dst, bytes } => {
-                let TypeKind::Ref {
-                    inner,
-                    mutable: false,
-                } = self.kind(self.local(&frame, dst)?.ty)?
-                else {
+                let (inner, mutable) = self.reference_type(self.local(&frame, dst)?.ty)?;
+                if mutable {
                     return Err(self.invalid("text literal needs a shared str reference"));
                 };
-                let inner = *inner;
                 match self.kind(inner)? {
                     TypeKind::Str => {
                         if std::str::from_utf8(&bytes).is_err() {
                             return Err(self.invalid("text literal is not UTF-8"));
                         }
                     }
-                    TypeKind::Array { inner: ir::U8, len } if *len == bytes.len() => {}
+                    TypeKind::Array { inner, len } if *inner == ir::U8 && *len == bytes.len() => {}
                     _ => {
                         return Err(
                             self.invalid("byte constant requires str or an exact-length u8 array")
@@ -1661,14 +1883,18 @@ impl<H: Host> Interpreter<'_, H> {
                     }
                 }
                 let key = (inner, bytes.clone());
-                let cell = match self.texts.get(&key) {
-                    Some(cell) => *cell,
+                let existing = match self.texts.get(&key) {
+                    Some(cell) => Some(*cell),
+                    None => None,
+                };
+                let cell = match existing {
+                    Some(cell) => cell,
                     None => {
                         let mut elements = Vec::new();
                         for byte in &bytes {
                             elements.push(self.allocate(
                                 ir::U8,
-                                Some(Value::Bits(u64::from(*byte))),
+                                Some(Value::Bits(*byte as u64)),
                                 true,
                             )?);
                         }
@@ -1710,15 +1936,8 @@ impl<H: Host> Interpreter<'_, H> {
                 mutable,
             } => {
                 let source = self.resolve(&frame, place)?;
-                let TypeKind::Ref {
-                    inner,
-                    mutable: expected,
-                } = self.kind(self.local(&frame, dst)?.ty)?
-                else {
-                    return Err(self.invalid("borrow destination is not a reference"));
-                };
-                let inner = *inner;
-                if *expected != mutable {
+                let (inner, expected) = self.reference_type(self.local(&frame, dst)?.ty)?;
+                if expected != mutable {
                     return Err(self.invalid("borrow mutability differs"));
                 }
                 if matches!(instruction.op, Op::SliceBorrow { .. }) {
@@ -1745,15 +1964,8 @@ impl<H: Host> Interpreter<'_, H> {
                 mutable,
             } => {
                 let mut source = self.resolve(&frame, place)?;
-                let TypeKind::Ref {
-                    inner,
-                    mutable: expected,
-                } = self.kind(self.local(&frame, dst)?.ty)?
-                else {
-                    return Err(self.invalid("range result must be a reference"));
-                };
-                let inner = *inner;
-                if *expected != mutable {
+                let (inner, expected) = self.reference_type(self.local(&frame, dst)?.ty)?;
+                if expected != mutable {
                     return Err(self.invalid("range mutability differs"));
                 }
                 let text = matches!(self.kind(source.ty)?, TypeKind::Str);
@@ -1793,7 +2005,8 @@ impl<H: Host> Interpreter<'_, H> {
                     return Err(self.trap(3, "range out of bounds"));
                 }
                 if text {
-                    for endpoint in [start, end] {
+                    for side in 0usize..2 {
+                        let endpoint = if side == 0 { start } else { end };
                         if endpoint != 0 && endpoint < count {
                             let cell = elements[endpoint as usize];
                             let Value::Bits(byte) = self.value(cell)? else {
@@ -1814,7 +2027,7 @@ impl<H: Host> Interpreter<'_, H> {
             }
             Op::Assign { place, src } => {
                 let destination = self.resolve(&frame, &place)?;
-                if self.cell(destination.cell)?.value.is_some() && !destination.writable {
+                if self.initialized(destination.cell)? && !destination.writable {
                     return Err(self.error(
                         InterpreterError::ConflictingAccess,
                         "assignment through an immutable place",
@@ -1866,15 +2079,15 @@ impl<H: Host> Interpreter<'_, H> {
                 if left_ty != right_ty {
                     return Err(self.invalid("binary operand types differ"));
                 }
-                let comparison = [
-                    ir::BinaryOp::Eq,
-                    ir::BinaryOp::Ne,
-                    ir::BinaryOp::Lt,
-                    ir::BinaryOp::Le,
-                    ir::BinaryOp::Gt,
-                    ir::BinaryOp::Ge,
-                ]
-                .contains(&op);
+                let comparison = matches!(
+                    op,
+                    ir::BinaryOp::Eq
+                        | ir::BinaryOp::Ne
+                        | ir::BinaryOp::Lt
+                        | ir::BinaryOp::Le
+                        | ir::BinaryOp::Gt
+                        | ir::BinaryOp::Ge
+                );
                 if self.local(&frame, dst)?.ty != if comparison { ir::BOOL } else { left_ty } {
                     return Err(self.invalid("binary result type differs"));
                 }
@@ -1930,27 +2143,16 @@ impl<H: Host> Interpreter<'_, H> {
                     Op::Variant { variant, .. } => Some(variant),
                     _ => None,
                 };
-                let expected = match (variant, self.kind(ty)?) {
-                    (None, TypeKind::Struct { fields, .. }) => {
-                        fields.iter().map(|field| field.ty).collect::<Vec<_>>()
-                    }
-                    (Some(variant), TypeKind::Enum { variants, .. }) => variants
-                        .get(variant)
-                        .ok_or_else(|| self.invalid("unknown constructor variant"))?
-                        .fields
-                        .iter()
-                        .map(|field| field.ty)
-                        .collect(),
-                    _ => return Err(self.invalid("aggregate constructor has wrong type")),
-                };
+                let expected = self.constructor_types(ty, variant)?;
                 let fields = self.fields(&frame, fields, &expected)?;
                 self.put_local(&frame, dst, Value::Aggregate { variant, fields })?;
             }
             Op::Array { dst, elements } => {
-                let TypeKind::Array { inner, len } = self.kind(self.local(&frame, dst)?.ty)? else {
-                    return Err(self.invalid("array constructor has wrong type"));
+                let (inner, len) = match self.kind(self.local(&frame, dst)?.ty)? {
+                    TypeKind::Array { inner, len } => (*inner, *len),
+                    _ => return Err(self.invalid("array constructor has wrong type")),
                 };
-                let expected = vec![*inner; *len];
+                let expected = vec![inner; len];
                 let fields = self.fields(&frame, &elements, &expected)?;
                 self.put_local(&frame, dst, Value::Sequence(fields))?;
             }
@@ -1969,18 +2171,18 @@ impl<H: Host> Interpreter<'_, H> {
                 }
                 let access = self.resolve(&frame, &place)?;
                 self.access(&access, false, true)?;
-                let Value::Aggregate {
-                    variant: Some(variant),
-                    ..
-                } = self.value(access.cell)?
-                else {
-                    return Err(self.invalid("tag read requires an enum"));
+                let variant = match self.value(access.cell)? {
+                    Value::Aggregate {
+                        variant: Some(variant),
+                        ..
+                    } => *variant,
+                    _ => return Err(self.invalid("tag read requires an enum")),
                 };
                 let value = match instruction.op {
                     Op::TagTest {
                         variant: expected, ..
-                    } => u64::from(*variant == expected),
-                    _ => *variant as u64,
+                    } => (variant == expected) as u64,
+                    _ => variant as u64,
                 };
                 self.put_local(&frame, dst, Value::Bits(value))?;
             }
@@ -2013,7 +2215,7 @@ impl<H: Host> Interpreter<'_, H> {
                 return Ok(());
             }
             Op::Trap { message } => {
-                let mut messages = Vec::new();
+                let mut messages: Vec<String> = Vec::new();
                 for function in &self.program.functions {
                     for instruction in &function.body {
                         if let Op::Trap { message } = &instruction.op {
@@ -2023,12 +2225,12 @@ impl<H: Host> Interpreter<'_, H> {
                         }
                     }
                 }
-                let code = 16
-                    + messages
-                        .iter()
-                        .position(|candidate| *candidate == message)
-                        .unwrap() as u64;
-                return Err(self.trap(code, message));
+                let mut index = 0usize;
+                while index < messages.len() && messages[index] != message {
+                    index += 1;
+                }
+                let code = 16 + index as u64;
+                return Err(self.trap(code, &message));
             }
         }
         self.push_work(Work::Frame(frame))?;
@@ -2051,19 +2253,13 @@ pub fn run<H: Host>(
 /// Exercise the sealed source runtime against independent disjoint mappings.
 /// Ordinary run never substitutes function bodies, even for identical names.
 pub fn run_runtime<H: Host>(
-    runtime: &crate::runtime::Runtime,
+    program: &Program,
     entry: usize,
     args: &[u64],
     memory: &mut crate::runtime_memory::Memory,
     host: &mut H,
 ) -> Result<RunResult, RunError> {
-    run_inner(
-        runtime.checked_program(),
-        entry,
-        args,
-        host,
-        Some(RuntimeState { runtime, memory }),
-    )
+    run_inner(program, entry, args, host, Some(RuntimeState { memory }))
 }
 fn run_inner<'a, H: Host>(
     program: &'a Program,
@@ -2080,6 +2276,10 @@ fn run_inner<'a, H: Host>(
             .map_or(0, |function| function.file),
         line: 1,
     };
+    let mut flow: Vec<Option<Flow>> = Vec::new();
+    for _ in 0..program.functions.len() {
+        flow.push(None);
+    }
     let mut interpreter = Interpreter {
         program,
         host,
@@ -2094,9 +2294,7 @@ fn run_inner<'a, H: Host>(
         work: Vec::new(),
         frames: 0,
         peak_frames: 0,
-        stack_bytes: 0,
-        peak_stack_bytes: 0,
-        flow: (0..program.functions.len()).map(|_| None).collect(),
+        flow,
         texts: BTreeMap::new(),
         site,
         result: None,
@@ -2143,7 +2341,6 @@ fn run_inner<'a, H: Host>(
         value,
         peak_frames: interpreter.peak_frames,
         peak_cells: interpreter.peak_cells,
-        peak_stack_bytes: interpreter.peak_stack_bytes,
     })
 }
 
@@ -2176,8 +2373,6 @@ mod tests {
             work: Vec::new(),
             frames: 0,
             peak_frames: 0,
-            stack_bytes: 0,
-            peak_stack_bytes: 0,
             flow: Vec::new(),
             texts: BTreeMap::new(),
             site: Site {
@@ -2228,5 +2423,33 @@ mod tests {
             .expect("stale tag reference accepted");
         assert!(error.kind == ErrorKind::Interpreter(InterpreterError::DanglingReference));
         checked(interpreter.reference_access(&current));
+        checked(interpreter.release_reference(&current));
+        let other = checked(interpreter.allocate(ir::I64, Some(Value::Bits(3)), false));
+        let other_access = Access {
+            extent: None,
+            cell: other,
+            ty: ir::I64,
+            permissions: Vec::new(),
+            writable: true,
+        };
+        let Value::Reference(other_reference) =
+            checked(interpreter.borrow(&other_access, ir::I64, false))
+        else {
+            panic!("borrow did not return a reference")
+        };
+        assert_eq!(stale.tag, other_reference.tag);
+        assert_eq!(stale.identity, other_reference.identity);
+        assert_ne!(stale.target.index, other_reference.target.index);
+        let error = interpreter
+            .reference_access(&stale)
+            .err()
+            .expect("stale reference reached another cell");
+        assert!(error.kind == ErrorKind::Interpreter(InterpreterError::DanglingReference));
+        let error = interpreter
+            .release_reference(&stale)
+            .err()
+            .expect("stale reference released another cell's loan");
+        assert!(error.kind == ErrorKind::Interpreter(InterpreterError::DanglingReference));
+        checked(interpreter.reference_access(&other_reference));
     }
 }

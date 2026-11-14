@@ -65,6 +65,13 @@ fn observations() -> Vec<Observation> {
             ));
         }
     }
+    for which in 0..3 {
+        cases.push(call(
+            "capability_snapshot",
+            &which.to_string(),
+            &format!("{which}n"),
+        ));
+    }
     // Every production Op variant: clone followed by payload reads, equality,
     // and inequality after a payload/tag change. These Op values are data;
     // this component probe does not execute them as a checked IR program.

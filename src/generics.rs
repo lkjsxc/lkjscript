@@ -1644,7 +1644,10 @@ fn trait_requirements(
             | TypeKind::Stdin
             | TypeKind::Stderr
             | TypeKind::Directory
-            | TypeKind::File => return None,
+            | TypeKind::File
+            | TypeKind::Process
+            | TypeKind::Clock
+            | TypeKind::Child => return None,
             TypeKind::Ref { inner, .. }
             | TypeKind::Slice { inner, .. }
             | TypeKind::Vec { inner }
@@ -1701,7 +1704,10 @@ fn trait_requirements(
             | TypeKind::Stdin
             | TypeKind::Stderr
             | TypeKind::Directory
-            | TypeKind::File => {
+            | TypeKind::File
+            | TypeKind::Process
+            | TypeKind::Clock
+            | TypeKind::Child => {
                 return None;
             }
             TypeKind::Vec { inner } | TypeKind::Box { inner } | TypeKind::Array { inner, .. } => {

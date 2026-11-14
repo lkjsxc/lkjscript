@@ -87,6 +87,9 @@ impl Infer<'_, '_> {
                                         | "Stderr"
                                         | "Directory"
                                         | "File"
+                                        | "Process"
+                                        | "Clock"
+                                        | "Child"
                                 )
                             {
                                 values.push(self.atom(&path.name));

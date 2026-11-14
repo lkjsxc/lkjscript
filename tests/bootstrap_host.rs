@@ -14,6 +14,7 @@ fn run_source(name: &str, text: &str, verb: &str) -> Output {
     fs::write(&path, text).unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_lkjscript"))
         .arg(verb)
+        .args(["--engine", "native"])
         .arg(&path)
         .output()
         .unwrap();
@@ -56,7 +57,7 @@ fn run_and_test_execute_owned_recursion_and_recursive_drop() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert!(output.stdout.is_empty());
+    assert_eq!(output.stdout, b"ok 1 tests\n");
 }
 
 struct NativeImage(PathBuf);

@@ -1,8 +1,48 @@
 //! Independent raw-address model for the sealed source allocator.
 //! Mappings are disjoint, independently released byte regions.
-use crate::runtime::{ALLOCATOR_STATE_BYTES, Primitive};
+// The raw interface is modelled here independently of its native seal/emitter.
+const ALLOCATOR_STATE_BYTES: usize = (64 + 3) * 8;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Primitive {
+    Load8,
+    Load64,
+    Store8,
+    Store64,
+    MemoryCopy,
+    Map,
+    Unmap,
+    Remap,
+    AllocatorState,
+    Fail,
+}
+impl Primitive {
+    pub(crate) fn parse(name: &str) -> Option<Self> {
+        match name {
+            "raw_load8" => Some(Self::Load8),
+            "raw_load64" => Some(Self::Load64),
+            "raw_store8" => Some(Self::Store8),
+            "raw_store64" => Some(Self::Store64),
+            "raw_memory_copy" => Some(Self::MemoryCopy),
+            "raw_map" => Some(Self::Map),
+            "raw_unmap" => Some(Self::Unmap),
+            "raw_remap" => Some(Self::Remap),
+            "raw_allocator_state" => Some(Self::AllocatorState),
+            "raw_fail" => Some(Self::Fail),
+            _ => None,
+        }
+    }
+    pub(crate) fn parameters(self) -> usize {
+        match self {
+            Self::Load8 | Self::Load64 | Self::Map => 1,
+            Self::Store8 | Self::Store64 | Self::Unmap => 2,
+            Self::MemoryCopy | Self::Remap => 3,
+            Self::AllocatorState | Self::Fail => 0,
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum MemoryFault {
     Allocation,
     Bounds,
@@ -90,7 +130,7 @@ impl Memory {
     }
     pub fn read(&self, address: u64, length: u64) -> Result<&[u8], MemoryFault> {
         if length == 0 {
-            return Ok(&[]);
+            return Ok(&self.regions[0].bytes[0..0]);
         }
         let (index, start, end) = self.range(address, length)?;
         Ok(&self.regions[index].bytes[start..end])
@@ -106,7 +146,7 @@ impl Memory {
     fn load(&self, address: u64, length: u64) -> Result<u64, MemoryFault> {
         let mut result = 0;
         for (index, byte) in self.read(address, length)?.iter().enumerate() {
-            result |= u64::from(*byte) << (index * 8);
+            result |= (*byte as u64) << (index * 8);
         }
         Ok(result)
     }
@@ -121,9 +161,7 @@ impl Memory {
         let Some(rounded) = bytes.checked_add(4095).map(|size| size & !4095) else {
             return 0;
         };
-        let Ok(length) = usize::try_from(rounded) else {
-            return 0;
-        };
+        let length = rounded as usize;
         let Some(next) = self
             .next_address
             .checked_add(rounded)
@@ -132,10 +170,9 @@ impl Memory {
             return 0;
         };
         let mut storage = Vec::new();
-        if storage.try_reserve_exact(length).is_err() {
-            return 0;
+        for _ in 0..length {
+            storage.push(0u8);
         }
-        storage.resize(length, 0);
         let base = self.next_address;
         let region = Region {
             base,
@@ -152,9 +189,6 @@ impl Memory {
         if let Some(index) = unused {
             self.regions[index] = region;
         } else {
-            if self.regions.try_reserve(1).is_err() {
-                return 0;
-            }
             self.regions.push(region);
         }
         self.next_address = next;
@@ -212,7 +246,13 @@ impl Memory {
                 0
             }
             Primitive::Store64 => {
-                self.write(args[0], &args[1].to_le_bytes())?;
+                let mut bytes = Vec::new();
+                let mut index = 0usize;
+                while index < 8 {
+                    bytes.push((args[1] >> (index * 8)) as u8);
+                    index += 1;
+                }
+                self.write(args[0], &bytes)?;
                 0
             }
             Primitive::MemoryCopy => {
