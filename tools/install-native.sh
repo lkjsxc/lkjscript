@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # Install an explicit native toolchain. Resource controls are inherited.
 set -euo pipefail
 export LC_ALL=C
@@ -9,7 +9,7 @@ usage() {
         '    --library DIR --runtime-source FILE [--source-commit ID]' \
         'DEST must not exist. All compiler and source inputs are explicit.' \
         'The supplied native tools regenerate and validate runtime.k before publication.' \
-        'Requires Bash, GNU coreutils and findutils; no Rust or Node tooling is used.'
+        'Requires Bash, coreutils, findutils and util-linux; no Rust or Node tooling is used.'
 }
 
 fail() {

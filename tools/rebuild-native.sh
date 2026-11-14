@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # Build one native toolchain generation with an explicitly installed seed.
 set -euo pipefail
 export LC_ALL=C

@@ -1,7 +1,7 @@
 # Native compiler workflow
 
 An installed toolchain compiles source to checked K and K to static Linux x86-64
-ELF using three ordinary lkjscript programs. Bash connects the processes; GNU
+ELF using three ordinary lkjscript programs. Bash connects the processes;
 coreutils and findutils handle files, and util-linux supplies prlimit and
 setsid for optional execution controls and owned process groups. The command path does not invoke Cargo, rustc or Node.
 
@@ -162,8 +162,10 @@ TERM and INT sent to a launcher cancel its tracked work and preserve the usual
 143/130 status. Compilation and rebuild stages use owned process groups so
 wrappers such as GNU time cannot leave a compiler behind. Application targets
 keep the caller's terminal group and inherited streams. The shared process helper
-restores asynchronous children's INT/QUIT dispositions with GNU env; it introduces
-no execution deadline. Relative TMPDIR values are supported, and filesystem input
+restores asynchronous children's INT/QUIT dispositions with Bash builtins; it
+introduces no execution deadline. Direct /bin/bash entry points preserve closed
+standard descriptors even on hosts whose env utility reopens them. Publication
+to stdout checks that descriptor before copying bytes. Relative TMPDIR values are supported, and filesystem input
 paths retain the kernel meaning of symlinks and parent components.
 
 ## Development checks

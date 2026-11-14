@@ -20,7 +20,7 @@ orchestration remain development/reference tools.
 | Complete native rebuild | 443.56 s; 766 MiB peak RSS; four matching K hashes, four exact artifact comparisons | observations/2026-11-14-native-workflow.json |
 | Native process interface | 41 outcomes; source/bundle/K identity, scalars, traps, streams, paths, controls and hashes all pass | observations/2026-11-14-native-gate.json |
 | Launcher cancellation | 16 TERM/INT cases pass, including GNU time descendants; three shell contract suites pass | observations/2026-11-14-native-workflow.json |
-| Full gate | 461 Rust tests, 17 harness tests, all-target Clippy clean; 71.597 s with eight workers | observations/2026-11-14-native-gate.json |
+| Full gate | 461 Rust tests, 17 harness tests, all-target Clippy clean; 69.243 s with eight workers | observations/2026-11-14-native-launcher-portability.json |
 | Execution conformance | 883 pass and four pending per route; 573 Rust comparisons; 91 World observations | observations/2026-11-14-native-gate.json |
 
 The complete rebuild used only the installed seed. All 105 compiler/library/script
@@ -30,6 +30,13 @@ stack, and had no deadline. Those are experiment controls, not defaults.
 Later launcher path/cancellation fixes preserve all 102 compiler/library inputs
 and the compiler binaries; the final gate exercises the corrected launchers.
 The release build was prepared before the timed gate and reused there.
+
+The first pushed gate exposed descriptor repair by Ubuntu 26.04 uutils env. Native
+launchers now use direct Bash entries and builtin signal restoration; closed
+stdout is checked before publishing compiler output. All three shell suites pass
+on Ubuntu 24.04 and 26.04, and a fresh Ubuntu 26.04 installation passes all 41 native process
+outcomes and 22 file hashes without invoking Cargo/rustc/Node/B0. See
+observations/2026-11-14-native-launcher-portability.json.
 
 ## Measured source lookup improvement
 

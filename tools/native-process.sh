@@ -4,7 +4,7 @@
 
 lkj_process_init() {
     local dependency
-    for dependency in bash env setsid; do
+    for dependency in bash setsid; do
         command -v "$dependency" >/dev/null || {
             printf 'lkj: required command is missing: %s\n' "$dependency" >&2
             return 1
@@ -53,13 +53,16 @@ lkj_process_cancel() {
 lkj_process_exec() {
     local directory=$1 group=$2 input_fd=$3 ready=$4
     shift 4
+    # Reset Bash's async INT/QUIT disposition before starting another process.
+    # An external env launcher can reopen closed standard descriptors (uutils).
+    trap - INT QUIT
     [[ -z $input_fd ]] || exec {input_fd}<&-
     if [[ -n $directory ]]; then cd -- "$directory" || exit; fi
     local prefix=()
     if ((group)); then prefix=(setsid); fi
     # The marker follows group creation and signal restoration. The shell then
     # execs the actual command, retaining the PID tracked by its parent.
-    exec env --default-signal=INT,QUIT -- "${prefix[@]}" bash -c '
+    exec "${prefix[@]}" /bin/bash -c '
         ready=$1
         shift
         : > "$ready" || exit

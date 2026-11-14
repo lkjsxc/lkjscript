@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # Contract tests for the native shell workflow, using executable compiler stubs.
 # Usage: bash tests/native_cli.sh [PATH_TO_LKJ]
 # No source compilation or Rust/Node command is needed by this test.
@@ -34,7 +34,7 @@ printf 'format lkjscript-native-v1\nsource_commit cli-fixture\n' > "$toolchain/m
 printf 'stdin with spaces\nsecond line\n' > "$work/stdin"
 # This PATH deliberately lacks Rust, Cargo and Node. Keep the host tools needed
 # by the shell workflow and these fixtures, rather than an alternate compiler.
-for dependency in bash basename cat chmod cmp cp dirname env find ln mkdir mktemp mv prlimit realpath rm setsid sha256sum sort; do
+for dependency in bash basename cat chmod cmp cp dirname find ln mkdir mktemp mv prlimit realpath rm setsid sha256sum sort; do
     ln -s -- "$(command -v "$dependency")" "$path/$dependency"
 done
 export LKJ_CLI_TEST_TRACE=$trace
@@ -42,6 +42,8 @@ export LKJ_CLI_TEST_TARGET_BODY=$work/target-body
 export LKJ_CLI_TEST_CONTROL=$work/expected-control
 export LKJ_CLI_TEST_WAIT=$work/wait.sh
 export LKJ_CLI_TEST_FIFO=$work/wait.fifo
+export LKJ_CLI_TEST_SETSID
+LKJ_CLI_TEST_SETSID=$(command -v setsid)
 mkfifo -- "$LKJ_CLI_TEST_FIFO"
 export TMPDIR=$work/tmp
 unset LKJ_TOOLCHAIN LKJ_RUN_MEMORY_BYTES LKJ_RUN_STACK_BYTES
@@ -57,18 +59,18 @@ lkj_fixture_wait() {
     while :; do read -r -t 60 -u 9 || :; done
 }
 WAIT
-# This shim also exposes cancellation before env restores async INT handling.
-rm -- "$path/env"
-cat > "$path/env" <<'ENV'
+# This shim exposes cancellation before group creation and the ready marker.
+rm -- "$path/setsid"
+cat > "$path/setsid" <<'SETSID'
 #!/bin/bash
 source "$LKJ_CLI_TEST_WAIT"
 lkj_fixture_wait launcher
-exec /usr/bin/env "$@"
-ENV
-chmod 755 "$path/env"
+exec "$LKJ_CLI_TEST_SETSID" "$@"
+SETSID
+chmod 755 "$path/setsid"
 
 cat > "$toolchain/libexec/frontend" <<'FRONTEND'
-#!/usr/bin/env bash
+#!/bin/bash
 set -euo pipefail
 source "$LKJ_CLI_TEST_WAIT"
 lkj_fixture_wait frontend
@@ -119,7 +121,7 @@ case $mode in
 esac
 FRONTEND
 cat > "$toolchain/libexec/kc" <<'KC'
-#!/usr/bin/env bash
+#!/bin/bash
 set -euo pipefail
 source "$LKJ_CLI_TEST_WAIT"
 lkj_fixture_wait kc
@@ -155,11 +157,11 @@ if [[ -n $descriptor ]]; then
     printf 'descriptor:%s\n' "$entry" > "$descriptor"
     packet=1
 fi
-printf '#!/usr/bin/env bash\nset -euo pipefail\nlkj_fixture_packet=%s\n' "$packet"
+printf '#!/bin/bash\nset -euo pipefail\nlkj_fixture_packet=%s\n' "$packet"
 cat -- "$LKJ_CLI_TEST_TARGET_BODY"
 KC
 cat > "$toolchain/libexec/result" <<'RESULT'
-#!/usr/bin/env bash
+#!/bin/bash
 set -euo pipefail
 source "$LKJ_CLI_TEST_WAIT"
 lkj_fixture_wait result
@@ -457,6 +459,30 @@ for mode in run eval; do
     else expect_text "$work/stdout" $'closed stdin\n42\n'; fi
 done
 unset LKJ_CLI_TEST_TARGET_MODE
+
+case_name='stdout publication cannot silently reopen a closed stream'
+for command in k pack runtime-k; do
+    arguments=("$command")
+    if [[ $command != runtime-k ]]; then arguments+=(project/input.rs); fi
+    status=0
+    (
+        cd -- "$caller"
+        PATH=$path bash "$wrapper" --toolchain "$toolchain" "${arguments[@]}" 1>&-
+    ) >"$work/stdout" 2>"$work/stderr" || status=$?
+    expect_status 1
+    expect_empty "$work/stdout"
+    expect_text "$work/stderr" $'lkj: standard output is closed\n'
+done
+for command in check build; do
+    arguments=("$command" project/input.rs)
+    if [[ $command == build ]]; then arguments+=(-o outputs/closed-stream-build); fi
+    status=0
+    (
+        cd -- "$caller"
+        PATH=$path bash "$wrapper" --toolchain "$toolchain" "${arguments[@]}" 0<&- 1>&- 2>&-
+    ) >"$work/stdout" 2>"$work/stderr" || status=$?
+    expect_status 0
+done
 
 case_name='TERM and INT cancel only the owned child and clean staging'
 cancel_case() {

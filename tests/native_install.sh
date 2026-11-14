@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # Exercise installation transactions and the native artifact interface with stubs.
 set -euo pipefail
 repository=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
@@ -20,19 +20,19 @@ installer_wait() {
 }
 WAIT
 cp "$repository/tools/install-native.sh" "$repository/tools/native-process.sh" "$work/fixture/tools/"
-printf '#!/usr/bin/env bash\nexit 0\n' > "$work/fixture/tools/lkj"
+printf '#!/bin/bash\nexit 0\n' > "$work/fixture/tools/lkj"
 printf '// declared runtime bytes\n' > "$work/inputs/runtime.rs"
 printf '// declared library bytes\n' > "$work/inputs/library/lib.rs"
 printf '// nested bytes\r\n' > "$work/inputs/library/nested/with spaces.rs"
 # The tested process cannot find Cargo, rustc or Node through PATH.
-for dependency in basename bash cat chmod cmp cp dirname env find mkdir mktemp mv rm setsid sha256sum sort; do
+for dependency in basename bash cat chmod cmp cp dirname find mkdir mktemp mv rm setsid sha256sum sort; do
     ln -s "$(command -v "$dependency")" "$work/path/$dependency"
 done
 export LKJ_INSTALL_TEST_ADDRESS_SPACE
 LKJ_INSTALL_TEST_ADDRESS_SPACE=$(ulimit -v)
 
 cat > "$work/inputs/frontend" <<'FRONTEND'
-#!/usr/bin/env bash
+#!/bin/bash
 set -euo pipefail
 source "$LKJ_INSTALL_TEST_WAIT"
 installer_wait frontend
@@ -56,26 +56,26 @@ case "$2" in
 esac
 FRONTEND
 cat > "$work/inputs/kc" <<'KC'
-#!/usr/bin/env bash
+#!/bin/bash
 set -euo pipefail
 [[ ${LKJ_INSTALL_TEST_FAILURE:-} != kc ]] || exit 21
 [[ $# == 5 || $# == 7 ]]
 [[ $1 == probe.k && $2 == --runtime && $3 == runtime.k && $4 == --entry && $5 == probe ]]
 [[ $(<runtime.k) == 'runtime K' && $(<probe.k) == 'probe K' ]]
 if [[ $# == 5 ]]; then
-    printf '#!/usr/bin/env bash\nexit 0\n'
+    printf '#!/bin/bash\nexit 0\n'
 else
     [[ $6 == --result-descriptor && $7 == probe.result ]]
     printf 'descriptor\n' > probe.result
     cat <<'ELF'
-#!/usr/bin/env bash
+#!/bin/bash
 printf '\000\000\000\000\000\000\000\000\052\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000' >&3
 [[ ${LKJ_INSTALL_TEST_FAILURE:-} != packet ]] || exit 23
 ELF
 fi
 KC
 cat > "$work/inputs/result" <<'RESULT'
-#!/usr/bin/env bash
+#!/bin/bash
 set -euo pipefail
 source "$LKJ_INSTALL_TEST_WAIT"
 installer_wait result

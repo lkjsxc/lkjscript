@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # Exercise an installed native compiler as processes, without a bootstrap.
 set -Eeuo pipefail
 export LC_ALL=C
@@ -34,7 +34,7 @@ mkdir -p "$work/app" "$work/caller" "$work/without-bootstrap"
 # of the bootstrap/development tools, and retain the attempted name.
 for name in cargo rustc node; do
     cat >"$work/without-bootstrap/$name" <<'STUB'
-#!/usr/bin/env bash
+#!/bin/bash
 printf '%s\n' "$0" >>"$LKJ_FORBIDDEN_LOG"
 exit 97
 STUB
@@ -145,8 +145,8 @@ for mode in run eval; do
     text_is "closed-error-$mode" ''
     silent_errors "closed-error-$mode"
 done
-capture 0 target-limits env LKJ_RUN_MEMORY_BYTES=268435456 LKJ_RUN_STACK_BYTES=1048576 \
-    prlimit --as=536870912:536870912 --stack=2097152:unlimited \
+LKJ_RUN_MEMORY_BYTES=268435456 LKJ_RUN_STACK_BYTES=1048576 \
+    capture 0 target-limits prlimit --as=536870912:536870912 --stack=2097152:unlimited \
     "$lkj" run "$work/limits.k"
 grep -Eq '^Max address space +268435456 +536870912 +bytes' "$work/target-limits.stdout"
 grep -Eq '^Max stack size +1048576 +unlimited +bytes' "$work/target-limits.stdout"

@@ -515,5 +515,12 @@
       "exit_code": 0,
       "native_process_outcomes": 41
     }
+  },
+  "portability_followup": {
+    "record": "2026-11-14-native-launcher-portability.json",
+    "ubuntu24_shell_suites": "passed",
+    "ubuntu26_shell_suites": "passed",
+    "ubuntu26_native_process_outcomes": 41,
+    "final_local_gate_exit_code": 0
   }
 }

@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # Exercise rebuild orchestration without executing a compiler workload.
 set -euo pipefail
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
@@ -34,12 +34,12 @@ mkdir -p -- "$REBUILD_TEST_SEED/bin" "$REBUILD_TEST_SOURCE/tools" \
     "$REBUILD_TEST_SOURCE/library" "$work/caller" "$work/forbidden" "$TMPDIR"
 printf 'checkout runtime\n' > "$REBUILD_TEST_SOURCE/library/runtime.rs"
 for name in cargo rustc node git; do
-    printf '#!/usr/bin/env bash\nexit 99\n' > "$work/forbidden/$name"
+    printf '#!/bin/bash\nexit 99\n' > "$work/forbidden/$name"
     chmod 755 -- "$work/forbidden/$name"
 done
 export PATH=$work/forbidden:$PATH
 cat > "$REBUILD_TEST_SEED/bin/lkj" <<'STUB'
-#!/usr/bin/env bash
+#!/bin/bash
 set -euo pipefail
 [[ $1 == --toolchain && $2 == "$REBUILD_TEST_SEED" ]]
 shift 2
@@ -88,7 +88,7 @@ esac
 STUB
 chmod 755 -- "$REBUILD_TEST_SEED/bin/lkj"
 cat > "$REBUILD_TEST_SOURCE/tools/install-native.sh" <<'STUB'
-#!/usr/bin/env bash
+#!/bin/bash
 set -euo pipefail
 destination=$1
 shift

@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # Orchestrate the native source producer, checked K compiler and result reader.
 # Source discovery and all compiler semantics belong to those ordinary programs.
 set -euo pipefail
@@ -217,8 +217,15 @@ lkj_process_init "$work"
 
 require_program() { [[ -x $1 && -f $1 ]] || fail "missing executable $1"; }
 publish() {
-    local from=$1 mode=$2 parent
-    if [[ -z $output || $output == - ]]; then lkj_process_run "" 0 cat -- "$from"; return; fi
+    local from=$1 mode=$2 parent output_fd
+    if [[ -z $output || $output == - ]]; then
+        # A Rust-based host cat can reopen closed stdout as /dev/null. Diagnose
+        # that state before invoking a copier so successful output is observable.
+        if ! { exec {output_fd}>&1; } 2>/dev/null; then fail "standard output is closed"; fi
+        exec {output_fd}>&-
+        lkj_process_run "" 0 cat -- "$from"
+        return
+    fi
     parent=$(dirname -- "$output")
     [[ -d $parent ]] || fail "output directory does not exist: $parent"
     [[ ! -d $output ]] || fail "output is a directory: $output"
