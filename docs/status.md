@@ -15,7 +15,7 @@ Final bare Debian bootstrap/toolchain/exact-float checks passed in 55.21 s;
 cargo/rustc/node were absent. Its compiler bytes match the host and Rust witness.
 The executable is static; compiled hello runs under a 4 GiB address-space limit.
 
-Eight-worker gate: 187.115 s. 453 Rust tests, 17 harness tests, 889 conformance
+Eight-worker gate: 183.639 s. 453 Rust tests, 17 harness tests, 889 conformance
 passes plus four pending per route, 577 Rust comparisons and 114 World observations.
 Source/IR boundary: 568 verdicts, 64 rejections, 504 identical artifacts, two pending.
 Fixed mutation slice: 128, zero findings. Long campaign: 32,768, zero findings;

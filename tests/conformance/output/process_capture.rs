@@ -3,7 +3,7 @@ fn copy(world: &mut World, program: &File, bytes: &[u8], output: &File, errors: 
     input.write_all(bytes).unwrap();
     input.rewind().unwrap();
     let result = world.temporary_file().unwrap();
-    let arguments: Vec<Vec<u8>> = Vec::new();
+    let arguments = vec!["-c".as_bytes().to_vec(), "cat".as_bytes().to_vec()];
     let mut process = world.process();
     let mut child = process
         .spawn_file(program, &arguments, &input, output, errors, &result)
@@ -12,8 +12,8 @@ fn copy(world: &mut World, program: &File, bytes: &[u8], output: &File, errors: 
 }
 
 pub fn main(mut world: World) {
-    let mut tools = world.directory("/usr/bin").unwrap();
-    let program = tools.open("cat").unwrap();
+    let mut tools = world.directory("/bin").unwrap();
+    let program = tools.open("sh").unwrap();
     let output = world.stdout_file().unwrap().duplicate().unwrap();
     let errors = world.stderr_file().unwrap().duplicate().unwrap();
     world.stdout().write(b"before|");
