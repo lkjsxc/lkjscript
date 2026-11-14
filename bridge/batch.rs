@@ -90,12 +90,12 @@ pub fn run(argv: &[String]) -> Result<(), String> {
                 path: columns[2].to_string(),
                 output: None,
                 engine: engines[0].to_string(),
-                census: false,
+                stats: false,
                 unchecked: false,
                 program_arguments: Vec::new(),
             };
-            let mut timings = timing::Timings::new();
-            let checked = match compile(&args.path, false, &mut timings) {
+            let mut timings = timing::Timings::new(false);
+            let checked = match compile(&args.path, &mut timings) {
                 Ok(value) => value,
                 Err(error) => {
                     for engine in &engines {
@@ -121,17 +121,11 @@ pub fn run(argv: &[String]) -> Result<(), String> {
                     continue;
                 }
             };
-            // Layout, glue and runtime linking are route independent too.
-            let lowered = engines
-                .iter()
-                .any(|engine| *engine != "interpreter")
-                .then(|| timings.measure("lower", || native::lower(&checked)));
             for engine in &engines {
                 if *engine == "interpreter" {
                     let mut output = world::Host::captured();
-                    let resources = host_process::interpreter_resources()?;
                     match timings.measure("interpreter", || {
-                        interpreter::run(program, entry, &[], &mut output, resources)
+                        interpreter::run(program, entry, &[], &mut output)
                     }) {
                         Ok(result) => {
                             output
@@ -165,17 +159,10 @@ pub fn run(argv: &[String]) -> Result<(), String> {
                     }
                     continue;
                 }
-                let lowered = match lowered.as_ref().expect("encoded route has lowering") {
-                    Ok(value) => value,
-                    Err(error) => {
-                        record(index, engine, true, 1, &[], &format!("E_EMIT {error}"));
-                        continue;
-                    }
-                };
                 if *engine == "native" {
-                    let bytes = match timings.measure("native_encode", || {
-                        native::image(lowered, program, entry, true)
-                    }) {
+                    let image = match timings
+                        .measure("native_encode", || native::image(&checked, entry, true))
+                    {
                         Ok(value) => value,
                         Err(error) => {
                             record(index, engine, true, 1, &[], &format!("E_EMIT {error}"));
@@ -183,9 +170,15 @@ pub fn run(argv: &[String]) -> Result<(), String> {
                         }
                     };
                     let path = directory.join(format!("{index}.elf"));
-                    native::save(&path, &bytes)?;
+                    native::save(&path, &image.bytes)?;
                     match timings.measure("native_run", || {
-                        native::execute(&path, lowered, &args.path, true, &args.program_arguments)
+                        native::execute(
+                            &path,
+                            &image.trap_messages,
+                            &args.path,
+                            true,
+                            &args.program_arguments,
+                        )
                     }) {
                         Ok(mut outcome) => {
                             if let Some(error) = outcome.error {

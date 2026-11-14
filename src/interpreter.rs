@@ -92,19 +92,6 @@ pub enum Scalar {
     Int { value: u64, bits: u8, signed: bool },
     F64 { bits: u64 },
 }
-/// Execution resources supplied by the host; they never constrain accepted IR.
-#[derive(Clone, Copy)]
-pub struct Resources {
-    pub stack_bytes: usize,
-}
-impl Resources {
-    pub const fn unlimited() -> Self {
-        Self {
-            stack_bytes: usize::MAX,
-        }
-    }
-}
-
 #[derive(Clone, PartialEq, Eq)]
 pub struct RunResult {
     pub value: Scalar,
@@ -237,7 +224,6 @@ struct Interpreter<'a, H: Host> {
     work: Vec<Work>,
     frames: usize,
     peak_frames: usize,
-    resources: Resources,
     stack_bytes: usize,
     peak_stack_bytes: usize,
     flow: Vec<Option<Flow>>,
@@ -966,7 +952,7 @@ impl<H: Host> Interpreter<'_, H> {
         &mut self,
         function: usize,
         arguments: &[(usize, Value)],
-    ) -> Result<Option<crate::runtime_memory::Action>, RunError> {
+    ) -> Result<Option<u64>, RunError> {
         let Some(primitive) = self
             .runtime
             .as_ref()
@@ -1030,23 +1016,22 @@ impl<H: Host> Interpreter<'_, H> {
             .len()
             .checked_mul(local_bytes)
             .and_then(|bytes| bytes.checked_add(std::mem::size_of::<Frame>()))
-            .ok_or_else(|| self.trap(8, "stack extent exhausted"))?;
+            .ok_or_else(|| self.trap(8, "stack memory exhausted"))?;
         let stack_bytes = self
             .stack_bytes
             .checked_add(byte_cost)
-            .filter(|bytes| *bytes <= self.resources.stack_bytes)
-            .ok_or_else(|| self.trap(8, "stack extent exhausted"))?;
+            .ok_or_else(|| self.trap(8, "stack memory exhausted"))?;
         if self.flow[function].is_none() {
             self.flow[function] = Some(self.prepare_flow(function)?);
         }
         let mut locals = Vec::new();
         locals
             .try_reserve_exact(declaration.locals.len())
-            .map_err(|_| self.trap(8, "stack extent exhausted"))?;
+            .map_err(|_| self.trap(8, "stack memory exhausted"))?;
         for local in &declaration.locals {
             let location = self.allocate(local.ty, None, false).map_err(|error| {
                 if error.kind == ErrorKind::Trap(6) {
-                    self.trap(8, "stack extent exhausted")
+                    self.trap(8, "stack memory exhausted")
                 } else {
                     error
                 }
@@ -1072,7 +1057,7 @@ impl<H: Host> Interpreter<'_, H> {
     fn push_work(&mut self, work: Work) -> Result<(), RunError> {
         self.work
             .try_reserve(1)
-            .map_err(|_| self.trap(8, "stack extent exhausted"))?;
+            .map_err(|_| self.trap(8, "stack memory exhausted"))?;
         self.work.push(work);
         Ok(())
     }
@@ -1915,35 +1900,8 @@ impl<H: Host> Interpreter<'_, H> {
                     values.push(self.take_local(&frame, arg)?);
                 }
                 match self.runtime_call(function, &values)? {
-                    Some(crate::runtime_memory::Action::Value(value)) => {
+                    Some(value) => {
                         self.put(destination.cell, Value::Bits(value))?;
-                    }
-                    Some(crate::runtime_memory::Action::Call { function, argument }) => {
-                        let target = self
-                            .program
-                            .functions
-                            .get(function)
-                            .ok_or_else(|| self.invalid("unknown runtime cleanup target"))?;
-                        if target.params != 1
-                            || target.result != destination.ty
-                            || !matches!(
-                                self.kind(target.locals[0].ty)?,
-                                TypeKind::Int {
-                                    bits: 64,
-                                    signed: false
-                                }
-                            )
-                        {
-                            return Err(self.invalid("runtime cleanup signature differs"));
-                        }
-                        let argument = (target.locals[0].ty, Value::Bits(argument));
-                        self.push_work(Work::Frame(frame))?;
-                        self.push_frame(
-                            function,
-                            vec![argument],
-                            ReturnTo::Cell(destination.cell),
-                        )?;
-                        return Ok(());
                     }
                     None => {
                         self.push_work(Work::Frame(frame))?;
@@ -2075,12 +2033,11 @@ pub fn run<H: Host>(
     entry: usize,
     args: &[u64],
     host: &mut H,
-    resources: Resources,
 ) -> Result<RunResult, RunError> {
-    run_inner(program, entry, args, host, None, resources)
+    run_inner(program, entry, args, host, None)
 }
 
-/// Exercise an explicitly sealed source runtime in a separate raw byte arena.
+/// Exercise the sealed source runtime against independent disjoint mappings.
 /// Ordinary run never substitutes function bodies, even for identical names.
 pub fn run_runtime<H: Host>(
     runtime: &crate::runtime::Runtime,
@@ -2088,15 +2045,13 @@ pub fn run_runtime<H: Host>(
     args: &[u64],
     memory: &mut crate::runtime_memory::Memory,
     host: &mut H,
-    resources: Resources,
 ) -> Result<RunResult, RunError> {
     run_inner(
-        runtime.checked().program(),
+        runtime.checked_program(),
         entry,
         args,
         host,
         Some(RuntimeState { runtime, memory }),
-        resources,
     )
 }
 fn run_inner<'a, H: Host>(
@@ -2105,7 +2060,6 @@ fn run_inner<'a, H: Host>(
     args: &[u64],
     host: &'a mut H,
     runtime: Option<RuntimeState<'a>>,
-    resources: Resources,
 ) -> Result<RunResult, RunError> {
     let site = Site {
         function: entry,
@@ -2129,7 +2083,6 @@ fn run_inner<'a, H: Host>(
         work: Vec::new(),
         frames: 0,
         peak_frames: 0,
-        resources,
         stack_bytes: 0,
         peak_stack_bytes: 0,
         flow: (0..program.functions.len()).map(|_| None).collect(),
@@ -2212,7 +2165,6 @@ mod tests {
             work: Vec::new(),
             frames: 0,
             peak_frames: 0,
-            resources: Resources::unlimited(),
             stack_bytes: 0,
             peak_stack_bytes: 0,
             flow: Vec::new(),

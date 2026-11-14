@@ -26,15 +26,9 @@ fn entry_index(program: &ir::Program) -> usize {
         .unwrap()
 }
 fn value(program: &ir::Program) -> i64 {
-    match interpreter::run(
-        program,
-        entry_index(program),
-        &[],
-        &mut Vec::new(),
-        interpreter::Resources::unlimited(),
-    )
-    .unwrap_or_else(|error| panic!("{}:{}: {}", error.file, error.line, error.message))
-    .value
+    match interpreter::run(program, entry_index(program), &[], &mut Vec::new())
+        .unwrap_or_else(|error| panic!("{}:{}: {}", error.file, error.line, error.message))
+        .value
     {
         interpreter::Scalar::Int {
             value,
@@ -162,15 +156,9 @@ fn repeat_rejects_malformed_ir_signatures_and_uninitialized_seeds() {
             check::check(forged.clone()).is_err(),
             "checker accepted mutation {mutation}"
         );
-        let error = interpreter::run(
-            &forged,
-            entry,
-            &[],
-            &mut Vec::new(),
-            interpreter::Resources::unlimited(),
-        )
-        .err()
-        .expect("model accepted malformed repeat");
+        let error = interpreter::run(&forged, entry, &[], &mut Vec::new())
+            .err()
+            .expect("model accepted malformed repeat");
         assert!(
             matches!(error.kind, interpreter::ErrorKind::Interpreter(_)),
             "mutation {mutation}: {}",
@@ -186,14 +174,8 @@ fn repeat_rejects_malformed_ir_signatures_and_uninitialized_seeds() {
     };
     *copy = false;
     assert!(check::check(noncopy.clone()).is_err());
-    let error = interpreter::run(
-        &noncopy,
-        noncopy_entry,
-        &[],
-        &mut Vec::new(),
-        interpreter::Resources::unlimited(),
-    )
-    .err()
-    .expect("model accepted affine repeat");
+    let error = interpreter::run(&noncopy, noncopy_entry, &[], &mut Vec::new())
+        .err()
+        .expect("model accepted affine repeat");
     assert!(matches!(error.kind, interpreter::ErrorKind::Interpreter(_)));
 }

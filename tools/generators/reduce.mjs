@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Reduce one generated source while preserving its observed failure and Rust
-// validity assumption. Process time/output envelopes belong to this tool only.
+// validity assumption.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -235,7 +235,7 @@ function writeAtomic(file, content) {
 }
 
 export function createEvaluator(binary, options = {}) {
-  const engine = options.engine || 'node', entry = options.entry || 'probe', profile = options.profile || 'verdict';
+  const engine = options.engine || 'native', entry = options.entry || 'probe', profile = options.profile || 'verdict';
   if (!['native', 'interpreter'].includes(engine) || !['value', 'verdict', 'output'].includes(profile)) throw new Error('invalid engine or profile');
   if (!/^[A-Za-z_][A-Za-z0-9_]*(::[A-Za-z_][A-Za-z0-9_]*)*$/.test(entry)) throw new Error('entry must be a Rust path');
   fs.mkdirSync(path.join(root, 'target'), {recursive: true});
@@ -251,7 +251,7 @@ export function createEvaluator(binary, options = {}) {
   const flags = ['--edition=2024', '--error-format=json', '-C', 'overflow-checks=yes', '-C', 'opt-level=0', '-A', 'warnings'];
   if (profile === 'output') flags.push('--cfg', 'lkjscript_control');
   if (profile === 'value') flags.push('-A', 'arithmetic_overflow', '-A', 'unconditional_panic', '-A', 'overflowing_literals');
-  const processOptions = {cwd: root, encoding: null, timeout: options.timeout || 10000};
+  const processOptions = {cwd: root, encoding: null};
   function stableRuntime() {
     for (const [file, digest] of Object.entries(runtimeHashes)) {
       if (hash(fs.readFileSync(path.join(root, file))) !== digest) throw new Error('runtime changed during reduction: ' + file);
@@ -300,8 +300,8 @@ export function createEvaluator(binary, options = {}) {
 }
 
 const usage = 'usage: node tools/generators/reduce.mjs <binary> <source.rs> <output.rs>'
-  + ' [--engine native|k] [--entry probe] [--category auto|CLASS]'
-  + ' [--profile verdict|value|output] [--timeout milliseconds]\n';
+  + ' [--engine native|interpreter] [--entry probe] [--category auto|CLASS]'
+  + ' [--profile verdict|value|output]\n';
 async function main() {
   const args = process.argv.slice(2);
   if (args.includes('--help')) { process.stdout.write(usage); return; }
@@ -309,12 +309,10 @@ async function main() {
   for (let i = 0; i < args.length; i++) {
     if (!args[i].startsWith('--')) { positional.push(args[i]); continue; }
     const name = args[i].slice(2);
-    if (!['engine', 'entry', 'category', 'profile', 'timeout'].includes(name) || args[i + 1] === undefined) throw new Error(usage);
+    if (!['engine', 'entry', 'category', 'profile'].includes(name) || args[i + 1] === undefined) throw new Error(usage);
     options[name] = args[++i];
   }
   if (positional.length !== 3) throw new Error(usage);
-  if (options.timeout !== undefined && (!Number.isSafeInteger(Number(options.timeout)) || Number(options.timeout) <= 0)) throw new Error('timeout must be a positive number of milliseconds');
-  if (options.timeout !== undefined) options.timeout = Number(options.timeout);
   options.entry ||= options.profile === 'output' ? 'main' : 'probe';
   const [binary, input, output] = positional.map(file => path.resolve(file));
   if (input === output) throw new Error('use a separate output file to preserve the original failing source');

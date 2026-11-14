@@ -3,7 +3,6 @@
 // into an order-sensitive hash, so a wrong intermediate value changes the result.
 // usage: node value.mjs <lkjscript-binary> <seed> <count>     (writes cases<seed>/ in the current directory)
 import fs from 'node:fs';
-import { spawnSync } from 'node:child_process';
 import { run } from '../process.mjs';
 import { runRoutes } from '../batch.mjs';
 import { oracleCache } from '../oracle.mjs';
@@ -12,9 +11,7 @@ import path from 'node:path';
 const [binary, seedS = '601', countS = '100', output = 'target/generators'] = process.argv.slice(2);
 const bin = path.resolve(binary || 'target/debug/lkjscript');
 const engines = (process.env.LKJSCRIPT_ENGINES || process.env.LKJSCRIPT_ENGINE || 'native').split(',');
-const sh = (c, a) => (spawnSync(c, a, { encoding: 'utf8' }).stdout || '').trim();
-// Capture identities before execution so later edits cannot relabel this run.
-const metadata = { sha256: createHash('sha256').update(fs.readFileSync(new URL(import.meta.url))).update(fs.readFileSync(new URL('../process.mjs', import.meta.url))).digest('hex'), binarySha256: createHash('sha256').update(fs.readFileSync(bin)).digest('hex'), compilerDirty: sh('git', ['status', '--porcelain', '--untracked-files=no']) !== '', compiler: sh('git', ['-C', path.dirname(fs.realpathSync(bin)), 'rev-parse', 'HEAD']) || 'unknown', rustc: sh('rustc', ['--version']), node: process.version };
+const generatorHash = createHash('sha256').update(fs.readFileSync(new URL(import.meta.url))).update(fs.readFileSync(new URL('../process.mjs', import.meta.url))).digest('hex');
 let state = (BigInt(seedS) * 0x9E3779B97F4A7C15n & 0xFFFFFFFFFFFFFFFFn) || 1n;
 function rnd(n) { state ^= (state << 13n) & 0xFFFFFFFFFFFFFFFFn; state ^= state >> 7n; state ^= (state << 17n) & 0xFFFFFFFFFFFFFFFFn; return Number(state % BigInt(n)); }
 const pick = a => a[rnd(a.length)];
@@ -131,7 +128,7 @@ const FLAGS = ['--edition=2024', '-C', 'overflow-checks=yes', '-C', 'opt-level=0
 // Outcomes are kept apart: a value, a trap of a given kind at a given line, a compile-time rejection, a crash, a timeout.
 const rustKind = m => /with overflow/.test(m) ? 'R0001' : /divide by zero|divisor of zero/.test(m) ? 'R0002' : /index out of bounds/.test(m) ? 'R0003' : /assertion/.test(m) ? 'R0005' : 'R0004';
 async function rustRun(i) {
-  const r = await run(`${dir}/oracle`, [String(i)], { encoding: 'utf8', timeout: 10000 });
+  const r = await run(`${dir}/oracle`, [String(i)], { encoding: 'utf8' });
   if (r.error || r.signal) return { k: 'abnormal', text: String(r.error?.code || r.signal) };
   if (r.status === 0) return { k: 'value', v: r.stdout.trim() };
   const m = r.stderr.match(/panicked at [^:\n]+:(\d+):\d+:\n(.*)/);
@@ -148,13 +145,13 @@ function lkRun(l) {
   if (m) return { k: 'reject', code: m[2], text };
   return { k: 'crash', text };
 }
-const references=await oracleCache({generator:metadata.sha256,seed:seedS,count:N,flags:FLAGS,harness},async()=>{
+const references=await oracleCache({generator:generatorHash,seed:seedS,count:N,flags:FLAGS,harness},async()=>{
 const rc = await run('rustc', [...FLAGS, `${dir}/oracle.rs`, '-o', `${dir}/oracle`], { encoding: 'utf8' });
 if (rc.status !== 0) { console.log('oracle failed:\n' + rc.stderr.split('\n').slice(0, 40).join('\n')); process.exit(1); }
 
 const results=[];for(let i=0;i<N;i++){const result=await rustRun(i);if(result.k==='abnormal')throw new Error('abnormal Rust oracle: '+result.text);results.push(result);}return results;
 });
-const actualRoutes=await runRoutes(bin,srcs.map((_,i)=>({path:dir+'/c'+i+'.rs',entry:'probe'})),{engines,output:dir,timeout:20000});
+const actualRoutes=await runRoutes(bin,srcs.map((_,i)=>({path:dir+'/c'+i+'.rs',entry:'probe'})),{engines,output:dir});
 for(const engine of engines) {
 const actualResults=actualRoutes[engine];
 const tally = {}; const show = []; const bump = c => { tally[c] = (tally[c] || 0) + 1; };
@@ -170,9 +167,8 @@ for (let i = 0; i < N; i++) {
   bump(cls);
   if (cls !== 'value-equal' && cls !== 'trap-equal') show.push(`${dir}/c${i} ${cls} rust=${r.k === 'value' ? r.v : r.k === 'trap' ? r.kind + '@' + r.line + ' ' + r.text : r.text} lkjscript=${(l.text || '').replace(/^\S*\.(rs|elf):/, '').slice(0, 150)}`);
 }
-const record = { generator: 'value', engine, ...metadata, rustFlags: FLAGS.join(' '), seed: seedS, programs: N, ...tally };
+const record = { generator: 'value', engine, rustFlags: FLAGS.join(' '), seed: seedS, programs: N, ...tally };
 fs.mkdirSync(output, {recursive: true});
-fs.appendFileSync(path.join(output, 'runs.jsonl'), JSON.stringify(record) + '\n');
 console.log(JSON.stringify(record)); fs.writeFileSync(`${dir}/report-${engine}.txt`, show.join('\n') + '\n');
 
 // These generated families are implemented. A valid-source rejection is a

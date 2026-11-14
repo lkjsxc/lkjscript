@@ -1,4 +1,4 @@
-//! Optional host observations. Timers and process resources do not affect acceptance.
+//! Phase timing and process statistics for --stats.
 use std::collections::BTreeMap;
 use std::time::Instant;
 
@@ -10,14 +10,17 @@ pub struct Timings {
     counts: BTreeMap<&'static str, usize>,
 }
 impl Timings {
-    pub fn new() -> Self {
+    pub fn new(enabled: bool) -> Self {
         Self {
-            enabled: std::env::var("LKJSCRIPT_TIMINGS").as_deref() == Ok("1"),
+            enabled,
             started: Instant::now(),
             stage: "startup",
             times: BTreeMap::new(),
             counts: BTreeMap::new(),
         }
+    }
+    pub fn enabled(&self) -> bool {
+        self.enabled
     }
     pub fn measure<T>(&mut self, name: &'static str, work: impl FnOnce() -> T) -> T {
         self.stage = name;
@@ -60,6 +63,6 @@ impl Drop for Timings {
                 fields.push(format!("\"peak_rss_bytes\":{}", kib * 1024));
             }
         }
-        eprintln!("LKJSCRIPT_TIMING {{{}}}", fields.join(","));
+        eprintln!("LKJSCRIPT_STATS {{{}}}", fields.join(","));
     }
 }

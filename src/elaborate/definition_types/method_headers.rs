@@ -133,7 +133,7 @@ impl Infer<'_, '_> {
                     });
             let unavailable = trait_declaration
                 .is_some_and(|declaration| !self.names.trait_in_scope(scope, declaration, span));
-            if unavailable && self.census_trait_visibility_complete(scope, span) {
+            if unavailable {
                 continue;
             }
             let environment = match self.implementation_environment(candidate, receiver)? {

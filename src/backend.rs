@@ -3,7 +3,7 @@
 use super::result_wire::{self, Descriptor, ScalarKind};
 use crate::diagnostic::{Diagnostic, Span};
 use crate::ir::{CheckedProgram, TypeKind};
-use crate::{check, ir_text, lower, native, runtime};
+use crate::{check, ir_text, native, runtime};
 
 fn error(code: &str, message: &str) -> Diagnostic {
     Diagnostic::new(Span::default(), code, message)
@@ -40,16 +40,17 @@ fn emit_artifact(
 ) -> Result<(Vec<u8>, Vec<u8>), Diagnostic> {
     let meaning = checked.program();
     let mut selected = None;
-    for function in &meaning.functions {
+    for (index, function) in meaning.functions.iter().enumerate() {
         if function.name == entry {
-            selected = Some(function);
+            selected = Some(index);
             break;
         }
     }
-    let function = match selected {
+    let function_index = match selected {
         Some(value) => value,
         None => return Err(error("E_ENTRY", &format!("unknown function {entry}"))),
     };
+    let function = &meaning.functions[function_index];
     let result = &meaning.types[function.result].kind;
     let kind = match result {
         TypeKind::Unit => ScalarKind::Unit,
@@ -77,32 +78,20 @@ fn emit_artifact(
             "entry takes no arguments or exactly one World",
         ));
     }
-    let program = lower::lower(checked, runtime).map_err(|message| error("E_EMIT", &message))?;
-    let exported_name = format!("fn:{entry}");
-    let mut exported = None;
-    for item in &program.exports {
-        if item.name == exported_name {
-            exported = Some(item.function);
-            break;
-        }
-    }
-    let function = match exported {
-        Some(value) => value,
-        None => return Err(error("E_ENTRY", "lowered entry is missing")),
-    };
-    let bytes = native::encode(
-        &program,
+    let image = native::encode(
+        checked,
+        runtime,
         native::Entry {
-            function,
+            function: function_index,
             arguments,
             result_fd: if packet { Some(3) } else { None },
         },
-    )
-    .map_err(|message| error("E_EMIT", &message))?;
+    )?;
+    let bytes = image.bytes;
     let descriptor = if packet {
         result_wire::encode(&Descriptor {
             kind,
-            traps: program.trap_messages,
+            traps: image.trap_messages,
         })
         .map_err(|message| error("E_EMIT", &message))?
     } else {

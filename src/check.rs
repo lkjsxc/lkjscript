@@ -22,6 +22,23 @@ fn error(line: usize, code: &str, message: &str) -> Diagnostic {
 }
 
 pub fn is_copy(types: &[Type], ty: usize) -> bool {
+    if ty >= types.len() {
+        return false;
+    }
+    // Direct cases need no traversal or table-sized visited storage.
+    match &types[ty].kind {
+        TypeKind::Unit | TypeKind::Bool | TypeKind::Char | TypeKind::Int { .. } | TypeKind::F64 => {
+            return true;
+        }
+        TypeKind::Ref { mutable, .. } | TypeKind::Slice { mutable, .. } => return !*mutable,
+        TypeKind::Array { .. } => {}
+        TypeKind::Struct { copy, .. } | TypeKind::Enum { copy, .. } => {
+            if !*copy {
+                return false;
+            }
+        }
+        _ => return false,
+    }
     let mut pending = vec![ty];
     let mut seen = vec![false; types.len()];
     while let Some(current) = pending.pop() {

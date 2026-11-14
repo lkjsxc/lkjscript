@@ -12,7 +12,7 @@ async function fixture(t, body) {
     fs.writeFileSync(binary, '#!' + process.execPath + '\n' + body);
     fs.chmodSync(binary, 0o755);
     const cases = Array.from({length: 9}, (_, index) => ({path: path.join(directory, index + '.lkjir')}));
-    return {binary, cases, options: {output: directory, encoding: null, memoryBytes: 'unlimited', timeout: 2000}};
+    return {binary, cases, options: {output: directory, encoding: null}};
 }
 
 const worker = String.raw`

@@ -1,1540 +1,1406 @@
-//! Static Linux x86-64 encoding of the shared lowered program.
-//! Heap and stack extents are selected at process startup from Linux controls.
-//! Operand slots have a frame home; the top may stay in a register or unevaluated.
-//! Only the platform primitives below issue system calls.
-use crate::lower::{HostFunction, Instruction, Program, ScalarOp, Signature, ValueType};
-use std::collections::BTreeMap;
-mod io;
+//! Direct instruction selection from checked lkjscript IR to native x86-64.
+use crate::diagnostic::{Diagnostic, Span};
+use crate::ir::{self, CheckedProgram, Function, Op, Place, Program, Projection, TypeKind};
+use crate::runtime::{self, Primitive, Runtime};
+use crate::x86::*;
+use crate::x86::{Assembler, Label};
+use std::collections::{BTreeMap, BTreeSet};
+
+mod intrinsics;
+mod layout;
+mod ownership;
+pub(crate) mod platform;
+mod scalar;
+
+use layout::Layouts;
+use ownership::Ownership;
 
 pub struct Entry {
     pub function: usize,
     pub arguments: Vec<i64>,
     pub result_fd: Option<u32>,
 }
-const IMAGE_BASE: u64 = 0x400000;
-const CODE_OFFSET: usize = 4096;
-const CONTEXT_GLOBALS: i64 = 80;
-const HEAP_RESERVED: i64 = 0;
-const STACK_RESERVED: i64 = 8;
-const HEAP_USED: i64 = 16;
-const INITIAL_STACK: i64 = 24;
-const EXIT_STATUS: i64 = 32;
-const PACKET: i64 = 40;
-const A: u8 = 0;
-const C: u8 = 1;
-const D: u8 = 2;
-const SP: u8 = 4;
-const BP: u8 = 5;
-const SI: u8 = 6;
-const DI: u8 = 7;
-const R8: u8 = 8;
-const R9: u8 = 9;
-const R10: u8 = 10;
-const R11: u8 = 11;
-const GLOBALS: u8 = 13;
-const HEAP: u8 = 14;
-const STACK: u8 = 15;
-type Label = usize;
-type Result<T> = std::result::Result<T, String>;
-
-struct Assembler {
-    bytes: Vec<u8>,
-    labels: Vec<Option<u64>>,
-    references: Vec<(usize, Label)>,
+pub struct Image {
+    pub bytes: Vec<u8>,
+    pub trap_messages: Vec<String>,
 }
-impl Assembler {
-    fn new() -> Self {
-        Self {
-            bytes: Vec::new(),
-            labels: Vec::new(),
-            references: Vec::new(),
-        }
-    }
-    fn label(&mut self) -> Label {
-        let id = self.labels.len();
-        self.labels.push(None);
-        id
-    }
-    fn bind(&mut self, label: Label) {
-        assert!(self.labels[label].is_none());
-        self.labels[label] = Some(IMAGE_BASE + CODE_OFFSET as u64 + self.bytes.len() as u64);
-    }
-    fn data_label(&mut self, label: Label, offset: usize) {
-        assert!(self.labels[label].is_none());
-        self.labels[label] = Some(IMAGE_BASE + offset as u64);
-    }
-    fn raw(&mut self, bytes: &[u8]) {
-        self.bytes.extend_from_slice(bytes);
-    }
-    fn rex(&mut self, wide: bool, r: u8, b: u8) {
-        let prefix = 0x40 | ((wide as u8) * 8) | (((r >> 3) & 1) * 4) | ((b >> 3) & 1);
-        if prefix != 0x40 {
-            self.bytes.push(prefix);
-        }
-    }
-    fn rr(&mut self, opcode: u8, dst: u8, src: u8, wide: bool) {
-        self.rex(wide, src, dst);
-        self.raw(&[opcode, 0xc0 | ((src & 7) << 3) | (dst & 7)]);
-    }
-    fn mov(&mut self, dst: u8, src: u8) {
-        self.rr(0x89, dst, src, true);
-    }
-    fn immediate(&mut self, reg: u8, value: u64) -> usize {
-        self.rex(true, 0, reg);
-        self.bytes.push(0xb8 | (reg & 7));
-        let at = self.bytes.len();
-        append_word(&mut self.bytes, value, 8);
-        at
-    }
-    fn address(&mut self, reg: u8, label: Label) {
-        let at = self.immediate(reg, 0);
-        self.references.push((at, label));
-    }
-    fn memory(&mut self, opcode: &[u8], reg: u8, base: u8, offset: i64, wide: bool) {
-        if offset >= -2147483648 && offset <= 2147483647 {
-            self.rex(wide, reg, base);
-            self.raw(opcode);
-            self.bytes.push(0x80 | ((reg & 7) << 3) | (base & 7));
-            if base & 7 == 4 {
-                self.bytes.push(0x24);
-            }
-            append_word(&mut self.bytes, offset as u64, 4);
-        } else {
-            let temporary = if R10 != reg && R10 != base {
-                R10
-            } else if R11 != reg && R11 != base {
-                R11
-            } else {
-                R9
-            };
-            self.immediate(temporary, offset as u64);
-            self.rr(0x01, temporary, base, true);
-            self.memory(opcode, reg, temporary, 0, wide);
-        }
-    }
-    fn load(&mut self, reg: u8, base: u8, offset: i64) {
-        self.memory(&[0x8b], reg, base, offset, true);
-    }
-    fn store(&mut self, base: u8, offset: i64, reg: u8) {
-        self.memory(&[0x89], reg, base, offset, true);
-    }
-    fn lea(&mut self, reg: u8, base: u8, offset: i64) {
-        self.memory(&[0x8d], reg, base, offset, true);
-    }
-    fn compare(&mut self, left: u8, right: u8) {
-        self.rr(0x39, left, right, true);
-    }
-    fn test(&mut self, reg: u8, wide: bool) {
-        self.rr(0x85, reg, reg, wide);
-    }
-    fn shift(&mut self, reg: u8, kind: u8, count: u8) {
-        self.rex(true, 0, reg);
-        self.raw(&[0xc1, 0xc0 | (kind << 3) | (reg & 7), count]);
-    }
-    fn jump(&mut self, label: Label) {
-        self.address(R11, label);
-        self.raw(&[0x41, 0xff, 0xe3]);
-    }
-    fn condition(&mut self, condition: u8, label: Label) {
-        self.raw(&[0x70 | (condition ^ 1), 13]);
-        self.jump(label);
-    }
-    fn call(&mut self, label: Label) {
-        self.address(R11, label);
-        self.raw(&[0x41, 0xff, 0xd3]);
-    }
-    fn call_register(&mut self, reg: u8) {
-        self.rex(false, 0, reg);
-        self.raw(&[0xff, 0xd0 | (reg & 7)]);
-    }
-    fn syscall(&mut self) {
-        self.raw(&[0x0f, 0x05]);
-    }
-    fn ret(&mut self) {
-        self.bytes.push(0xc3);
-    }
-    fn finish(mut self) -> Result<Vec<u8>> {
-        for (at, label) in self.references {
-            let address = self.labels[label].ok_or("unbound native code label")?;
-            put64(&mut self.bytes, at, address);
-        }
-        Ok(self.bytes)
-    }
-}
-
 #[derive(Clone, Copy)]
-struct Platform {
-    io: io::Io,
-    trap: Label,
-    exhausted: Label,
-    stack_exhausted: Label,
-    memory_fault: Label,
-    grow: Label,
-    copy: Label,
-    complete: Label,
-    context: Label,
-    literals: Label,
-    image_end: Label,
-    table: Label,
-    arguments: Label,
-    stdout: Label,
-    signal_action: Label,
-    system_info: Label,
-    resource_limit: Label,
-    diagnostic_buffer: Label,
-    trap_code: usize,
-    trap_line: usize,
+struct RuntimeLabels {
+    allocate: Label,
+    release: Label,
+    reallocate: Label,
+    utf8_validate: Label,
 }
-impl Platform {
-    fn new(a: &mut Assembler, program: &Program) -> Self {
+impl RuntimeLabels {
+    fn new(runtime: &Runtime, labels: &[Label]) -> Self {
         Self {
-            io: io::Io::new(a),
-            trap: a.label(),
-            exhausted: a.label(),
-            stack_exhausted: a.label(),
-            memory_fault: a.label(),
-            grow: a.label(),
-            copy: a.label(),
-            complete: a.label(),
-            context: a.label(),
-            literals: a.label(),
-            image_end: a.label(),
-            table: a.label(),
-            arguments: a.label(),
-            stdout: a.label(),
-            signal_action: a.label(),
-            system_info: a.label(),
-            resource_limit: a.label(),
-            diagnostic_buffer: a.label(),
-            trap_code: program.trap_code_global,
-            trap_line: program.trap_line_global,
+            allocate: labels[runtime.entry(runtime::Entry::Allocate)],
+            release: labels[runtime.entry(runtime::Entry::Release)],
+            reallocate: labels[runtime.entry(runtime::Entry::Reallocate)],
+            utf8_validate: labels[runtime.entry(runtime::Entry::Utf8Validate)],
         }
     }
-    fn global(index: usize) -> i64 {
-        CONTEXT_GLOBALS + (index as i64) * 8
-    }
-    fn failure(&self, a: &mut Assembler, code: u64, line: u64) {
-        a.immediate(A, code);
-        a.store(GLOBALS, Self::global(self.trap_code), A);
-        a.immediate(A, line);
-        a.store(GLOBALS, Self::global(self.trap_line), A);
-        a.jump(self.trap);
-    }
-    fn range(&self, a: &mut Assembler, address: u8, length: u8) {
-        self.range_to(a, address, length, self.memory_fault);
-    }
-    fn range_to(&self, a: &mut Assembler, address: u8, length: u8, failure: Label) {
-        a.load(R10, GLOBALS, HEAP_USED);
-        a.compare(address, R10);
-        a.condition(7, failure);
-        a.rr(0x29, R10, address, true);
-        a.compare(length, R10);
-        a.condition(7, failure);
+}
+fn parameter_register(index: usize) -> u8 {
+    match index {
+        0 => DI,
+        1 => SI,
+        2 => D,
+        3 => C,
+        4 => R8,
+        _ => R9,
     }
 }
-
-/// Linux x86-64 sysinfo and prlimit64 have fixed ABI layouts. Resource readings
-/// occur in the artifact process, before its own heap and stack are mapped. A
-/// finite Linux stack limit selects that reservation; unlimited uses 64 MiB.
-/// The heap gets the remaining physical/address-space extent after stack and ELF.
-fn startup_extents(a: &mut Assembler, p: Platform, initial: u64) {
-    a.immediate(A, 99); // sysinfo
-    a.address(DI, p.system_info);
-    a.syscall();
-    a.test(A, true);
-    a.condition(8, p.exhausted);
-    a.load(A, DI, 32); // totalram, excluding swap
-    a.memory(&[0x8b], C, DI, 104, false); // mem_unit: u32
-    a.raw(&[0x48, 0x0f, 0xaf, 0xc1]); // imul rax, rcx
-    a.condition(0, p.exhausted);
-    a.mov(R9, A);
-    a.immediate(A, 302); // prlimit64(0, RLIMIT_AS, NULL, &old)
-    a.immediate(DI, 0);
-    a.immediate(SI, 9);
-    a.immediate(D, 0);
-    a.address(R10, p.resource_limit);
-    a.syscall();
-    a.test(A, true);
-    a.condition(8, p.exhausted);
-    a.load(A, R10, 0);
-    a.compare(A, R9);
-    let physical = a.label();
-    a.condition(3, physical);
-    a.mov(R9, A);
-    a.bind(physical);
-    a.immediate(A, 302); // prlimit64(0, RLIMIT_STACK, NULL, &old)
-    a.immediate(DI, 0);
-    a.immediate(SI, 3);
-    a.immediate(D, 0);
-    a.address(R10, p.resource_limit);
-    a.syscall();
-    a.test(A, true);
-    a.condition(8, p.stack_exhausted);
-    a.load(A, R10, 0);
-    a.immediate(C, 18446744073709551615_u64);
-    a.compare(A, C);
-    let finite_stack = a.label();
-    a.condition(5, finite_stack);
-    a.immediate(A, 67108864);
-    a.bind(finite_stack);
-    a.immediate(C, !4095_u64);
-    a.rr(0x21, A, C, true);
-    a.test(A, true);
-    a.condition(4, p.stack_exhausted);
-    a.store(GLOBALS, STACK_RESERVED, A);
-    a.rr(0x29, R9, A, true);
+fn first_site(function: &Function) -> Span {
+    Span {
+        file: function.file,
+        start: 0,
+        end: 0,
+        line: function
+            .body
+            .first()
+            .map_or(1, |instruction| instruction.line),
+        column: function
+            .body
+            .first()
+            .map_or(1, |instruction| instruction.column),
+    }
+}
+fn allocate_slot(
+    frame: &mut u64,
+    bytes: u64,
+    alignment: u8,
+    site: Span,
+) -> Result<i64, Diagnostic> {
+    let mask = alignment as u64 - 1;
+    *frame = match frame.checked_add(mask) {
+        Some(value) => value & !mask,
+        None => {
+            return Err(Diagnostic::new(
+                site,
+                "E_EMIT",
+                "native frame extent overflow",
+            ));
+        }
+    };
+    *frame = match frame.checked_add(bytes.max(alignment as u64)) {
+        Some(value) => value,
+        None => {
+            return Err(Diagnostic::new(
+                site,
+                "E_EMIT",
+                "native frame extent overflow",
+            ));
+        }
+    };
+    if *frame > 2147483647 {
+        return Err(Diagnostic::new(
+            site,
+            "E_EMIT",
+            "native frame exceeds signed 32-bit displacement representation",
+        ));
+    }
+    Ok(-(*frame as i64))
+}
+fn frame_extent(bytes: u64, site: Span) -> Result<u64, Diagnostic> {
+    let aligned = match bytes.checked_add(15) {
+        Some(value) => value & !15,
+        None => {
+            return Err(Diagnostic::new(
+                site,
+                "E_EMIT",
+                "native frame extent overflow",
+            ));
+        }
+    };
+    if aligned > 2147483647 {
+        return Err(Diagnostic::new(
+            site,
+            "E_EMIT",
+            "native frame exceeds signed 32-bit displacement representation",
+        ));
+    }
+    Ok(aligned)
+}
+fn prologue(a: &mut Assembler, p: platform::Platform, bytes: u64) {
+    a.mov(R11, SP);
+    a.immediate(A, bytes + 16);
+    a.rr(0x29, R11, A, true);
     a.condition(2, p.stack_exhausted);
-    a.address(C, p.image_end);
-    a.immediate(D, IMAGE_BASE);
-    a.rr(0x29, C, D, true);
-    a.rr(0x29, R9, C, true);
-    a.condition(2, p.exhausted);
-    a.immediate(A, !65535_u64);
-    a.rr(0x21, R9, A, true);
-    a.immediate(A, initial.max(65536));
-    a.compare(R9, A);
-    a.condition(2, p.exhausted);
-    a.store(GLOBALS, HEAP_RESERVED, R9);
-}
-
-// Format traps without allocating or using the exhausted language stack. R8
-// moves backward through a 128-byte buffer; the maximum record is 81 bytes.
-fn diagnostic_text(a: &mut Assembler, text: &str) {
-    let bytes = text.as_bytes();
-    let mut index = bytes.len();
-    while index > 0 {
-        index -= 1;
-        let byte = bytes[index];
-        a.immediate(A, 1);
-        a.rr(0x29, R8, A, true);
-        a.immediate(A, byte as u64);
-        a.memory(&[0x88], A, R8, 0, false);
+    a.compare(R11, STACK_FLOOR);
+    a.condition(2, p.stack_exhausted);
+    a.push(BP);
+    a.mov(BP, SP);
+    if bytes != 0 {
+        a.immediate(A, bytes);
+        a.rr(0x29, SP, A, true);
     }
 }
-fn diagnostic_decimal(a: &mut Assembler, minimum: u64) {
-    a.immediate(C, 10);
-    a.immediate(R9, 0);
-    a.immediate(R10, 1);
-    let digit = a.label();
-    a.bind(digit);
-    a.immediate(D, 0);
-    a.raw(&[0x48, 0xf7, 0xf1]); // unsigned rdx:rax / rcx
-    a.rr(0x29, R8, R10, true);
-    a.rr(0x01, R9, R10, true);
-    a.immediate(SI, b'0' as u64);
-    a.rr(0x01, D, SI, true);
-    a.memory(&[0x88], D, R8, 0, false);
-    a.test(A, true);
-    a.condition(5, digit);
-    a.immediate(SI, minimum);
-    a.compare(R9, SI);
-    a.condition(2, digit);
-}
-fn standalone_diagnostic(a: &mut Assembler, p: Platform) {
-    let complete = a.label();
-    a.load(A, GLOBALS, PACKET);
-    a.test(A, true);
-    a.condition(4, complete);
-    a.address(R8, p.diagnostic_buffer);
-    a.immediate(C, 128);
-    a.rr(0x01, R8, C, true);
-    diagnostic_text(a, "\n");
-    a.load(A, GLOBALS, PACKET);
-    a.immediate(C, 8);
-    a.compare(A, C);
-    let heap = a.label();
-    let line = a.label();
-    a.condition(5, heap);
-    diagnostic_text(a, " (stack extent exhausted)");
-    a.jump(line);
-    a.bind(heap);
-    a.immediate(C, 6);
-    a.compare(A, C);
-    a.condition(5, line);
-    diagnostic_text(a, " (heap allocation failed)");
-    a.bind(line);
-    a.load(A, GLOBALS, PACKET + 16);
-    diagnostic_decimal(a, 1);
-    diagnostic_text(a, " at line ");
-    a.load(A, GLOBALS, PACKET);
-    diagnostic_decimal(a, 4);
-    diagnostic_text(a, "R");
-    a.mov(SI, R8);
-    a.address(D, p.diagnostic_buffer);
-    a.immediate(A, 128);
-    a.rr(0x01, D, A, true);
-    a.rr(0x29, D, SI, true);
-    let writing = a.label();
-    a.bind(writing);
-    a.immediate(A, 1);
-    a.immediate(DI, 2);
-    a.syscall();
-    a.immediate(C, (-4_i64) as u64);
-    a.compare(A, C);
-    a.condition(4, writing);
-    a.test(A, true);
-    a.condition(14, complete);
-    a.rr(0x01, SI, A, true);
-    a.rr(0x29, D, A, true);
-    a.test(D, true);
-    a.condition(5, writing);
-    a.bind(complete);
-}
-
-fn platform(
-    a: &mut Assembler,
-    p: Platform,
-    program: &Program,
-    entry: &Entry,
-    functions: &[Label],
-    initial: u64,
-) {
-    // Startup performs only resource observation and capability setup. The ELF
-    // contains no observation of the interpreter that compiled it.
-    a.address(GLOBALS, p.context);
-    a.store(GLOBALS, INITIAL_STACK, SP);
-    a.immediate(A, 1);
-    a.store(GLOBALS, Platform::global(p.trap_line), A);
-    startup_extents(a, p, initial);
-    {
-        a.immediate(A, 13);
-        a.immediate(DI, 13);
-        a.address(SI, p.signal_action);
-        a.immediate(D, 0);
-        a.immediate(R10, 8);
-        a.syscall();
-        a.test(A, true);
-        a.condition(8, p.exhausted);
+fn copy_bytes(a: &mut Assembler, p: platform::Platform, bytes: u64) {
+    if bytes == 0 {
+        return;
     }
-    // Reserve the stack first, so a heap reservation cannot consume its budget.
-    a.immediate(A, 9);
-    a.immediate(DI, 0);
-    a.load(SI, GLOBALS, STACK_RESERVED);
-    a.immediate(D, 3);
-    a.immediate(R10, 0x4022);
-    a.immediate(R8, 18446744073709551615_u64);
-    a.immediate(R9, 0);
-    a.syscall();
-    a.immediate(C, (-4095i64) as u64);
-    a.compare(A, C);
-    a.condition(3, p.stack_exhausted);
-    a.mov(STACK, A);
-
-    // Initial argv/environment, the Linux stack and kernel mappings vary. Let
-    // mmap account for them, losing at most one 64-KiB heap page on success.
-    let reserve_heap = a.label();
-    let heap_ready = a.label();
-    a.bind(reserve_heap);
-    a.immediate(A, 9);
-    a.immediate(DI, 0);
-    a.load(SI, GLOBALS, HEAP_RESERVED);
-    a.immediate(D, 0);
-    a.immediate(R10, 0x4022);
-    a.immediate(R8, 18446744073709551615_u64);
-    a.immediate(R9, 0);
-    a.syscall();
-    a.immediate(C, (-4095i64) as u64);
-    a.compare(A, C);
-    a.condition(2, heap_ready);
-    a.immediate(C, (-12i64) as u64); // ENOMEM
-    a.compare(A, C);
-    a.condition(5, p.exhausted);
-    a.load(A, GLOBALS, HEAP_RESERVED);
-    a.immediate(C, initial.max(65536));
-    a.compare(A, C);
-    a.condition(6, p.exhausted);
-    a.immediate(C, 65536);
-    a.rr(0x29, A, C, true);
-    a.store(GLOBALS, HEAP_RESERVED, A);
-    a.jump(reserve_heap);
-    a.bind(heap_ready);
-    a.mov(HEAP, A);
-    a.immediate(A, 10);
-    a.mov(DI, HEAP);
-    a.immediate(SI, initial);
-    a.immediate(D, 3);
-    a.syscall();
-    a.test(A, true);
-    a.condition(8, p.exhausted);
-    a.mov(A, STACK);
-    a.load(C, GLOBALS, STACK_RESERVED);
-    a.rr(0x01, A, C, true);
-    a.mov(SP, A);
-    a.immediate(BP, 0);
-    a.address(SI, p.literals);
-    a.mov(DI, HEAP);
-    a.immediate(A, program.data_offset);
-    a.rr(0x01, DI, A, true);
-    a.immediate(C, program.data.len() as u64);
-    a.raw(&[0xfc, 0xf3, 0xa4]);
-    a.address(DI, p.arguments);
-    a.call(functions[entry.function]);
-    a.store(GLOBALS, PACKET + 8, A);
-    a.immediate(A, 0);
-    a.store(GLOBALS, PACKET, A);
-    a.load(A, GLOBALS, EXIT_STATUS);
-    a.store(GLOBALS, PACKET + 16, A);
-    a.jump(p.complete);
-
-    a.bind(p.exhausted);
-    a.immediate(A, 6);
-    a.store(GLOBALS, Platform::global(p.trap_code), A);
-    a.jump(p.trap);
-    a.bind(p.stack_exhausted);
-    a.immediate(A, 8);
-    a.store(GLOBALS, Platform::global(p.trap_code), A);
-    a.jump(p.trap);
-    a.bind(p.memory_fault);
-    p.failure(a, 3, 0);
-    a.bind(p.trap);
-    a.load(A, GLOBALS, Platform::global(p.trap_code));
-    a.test(A, true);
-    let known = a.label();
-    a.condition(5, known);
-    a.immediate(A, 4);
-    a.bind(known);
-    a.store(GLOBALS, PACKET, A);
-    a.load(A, GLOBALS, Platform::global(p.trap_line));
-    a.store(GLOBALS, PACKET + 16, A);
-    a.immediate(A, 0);
-    a.store(GLOBALS, PACKET + 8, A);
-    a.jump(p.complete);
-    a.bind(p.complete);
-    if let Some(fd) = entry.result_fd {
-        a.lea(SI, GLOBALS, PACKET);
-        a.immediate(D, 24);
-        let writing = a.label();
-        let exit = a.label();
-        a.bind(writing);
-        a.immediate(A, 1);
-        a.immediate(DI, fd as u64);
-        a.syscall();
-        a.test(A, true);
-        a.condition(14, exit);
-        a.rr(0x01, SI, A, true);
-        a.rr(0x29, D, A, true);
-        a.test(D, true);
-        a.condition(5, writing);
-        a.bind(exit);
+    if bytes == 1 || bytes == 2 || bytes == 4 || bytes == 8 {
+        a.load_width(A, SI, 0, bytes as u8, false);
+        a.store_width(DI, 0, A, bytes as u8);
+    } else if bytes == 16 || bytes == 24 || bytes == 32 {
+        for word in 0..bytes / 8 {
+            a.load(R8 + word as u8, SI, word as i64 * 8);
+        }
+        for word in 0..bytes / 8 {
+            a.store(DI, word as i64 * 8, R8 + word as u8);
+        }
     } else {
-        standalone_diagnostic(a, p);
+        a.immediate(D, bytes);
+        a.call(p.copy);
     }
-    a.load(A, GLOBALS, PACKET);
-    a.test(A, true);
-    a.immediate(DI, 1);
-    let exiting = a.label();
-    a.condition(5, exiting);
-    a.load(DI, GLOBALS, EXIT_STATUS);
-    a.bind(exiting);
-    a.immediate(A, 60);
-    a.syscall();
-    a.raw(&[0x0f, 0x0b]);
-
-    a.bind(p.grow); // rdi: extra logical pages. Return former pages or -1.
-    a.mov(R9, DI);
-    a.immediate(C, 18446744073709551615_u64 >> 16);
-    a.compare(R9, C);
-    let failed = a.label();
-    let grown = a.label();
-    a.condition(7, failed);
-    a.shift(R9, 4, 16);
-    a.load(R8, GLOBALS, HEAP_USED);
-    a.mov(C, R8);
-    a.rr(0x01, C, R9, true);
-    a.condition(2, failed);
-    a.load(A, GLOBALS, HEAP_RESERVED);
-    a.compare(C, A);
-    a.condition(7, failed);
-    a.test(R9, true);
-    a.condition(4, grown);
-    a.mov(DI, HEAP);
-    a.rr(0x01, DI, R8, true);
-    a.mov(SI, R9);
-    a.immediate(D, 3);
-    a.immediate(A, 10);
-    a.syscall();
-    a.test(A, true);
-    a.condition(8, failed);
-    a.rr(0x01, R9, R8, true);
-    a.store(GLOBALS, HEAP_USED, R9);
-    a.bind(grown);
-    a.mov(A, R8);
-    a.shift(A, 5, 16);
-    a.ret();
-    a.bind(failed);
-    a.immediate(A, 18446744073709551615_u64);
-    a.ret();
-
-    a.bind(p.copy); // rdi, rsi, rdx: destination/source/count heap offsets.
-    p.range(a, DI, D);
-    p.range(a, SI, D);
-    a.test(D, true);
-    let copy_done = a.label();
-    let forward = a.label();
-    a.condition(4, copy_done);
-    a.compare(DI, SI);
-    a.condition(6, forward);
-    a.mov(A, SI);
-    a.rr(0x01, A, D, true);
-    a.compare(DI, A);
-    a.condition(3, forward);
-    a.rr(0x01, DI, HEAP, true);
-    a.rr(0x01, SI, HEAP, true);
-    a.rr(0x01, DI, D, true);
-    a.rr(0x01, SI, D, true);
-    a.immediate(A, 1);
-    a.rr(0x29, DI, A, true);
-    a.rr(0x29, SI, A, true);
-    a.mov(C, D);
-    a.raw(&[0xfd, 0xf3, 0xa4, 0xfc]);
-    a.jump(copy_done);
-    a.bind(forward);
-    a.rr(0x01, DI, HEAP, true);
-    a.rr(0x01, SI, HEAP, true);
-    a.mov(C, D);
-    a.raw(&[0xfc, 0xf3, 0xa4]);
-    a.bind(copy_done);
-    a.ret();
-
-    io::emit(a, p);
 }
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum RegionKind {
-    Function,
-    Block,
-    Loop,
-    If,
+fn epilogue(a: &mut Assembler) {
+    a.mov(SP, BP);
+    a.pop(BP);
+    a.ret();
 }
-struct Region {
-    kind: RegionKind,
-    result: Option<ValueType>,
-    height: usize,
-    start: Label,
-    end: Label,
-    otherwise: Label,
-    entered: bool,
-    end_reachable: bool,
-    then_reachable: bool,
-    has_else: bool,
+enum Control {
+    Conditional {
+        otherwise: Label,
+        end: Label,
+        has_else: bool,
+    },
+    Loop {
+        start: Label,
+        end: Label,
+    },
 }
 struct Body<'a> {
     a: &'a mut Assembler,
-    p: Platform,
+    program: &'a Program,
+    function: &'a Function,
+    layout: &'a Layouts,
+    platform: platform::Platform,
+    runtime: RuntimeLabels,
+    slots: Vec<i64>,
+    scratch: Vec<i64>,
+    partial_scratch: Vec<i64>,
+    ownership: Ownership,
+    site: Span,
     functions: &'a [Label],
-    signatures: &'a [Signature],
-    signature_ids: &'a BTreeMap<Signature, u64>,
-    table_length: usize,
-    globals: &'a [crate::lower::Global],
-    locals: usize,
-    height: usize,
-    maximum: usize,
-    reachable: bool,
-    regions: Vec<Region>,
-    pending: Pending,
+    needed: &'a mut Vec<bool>,
+    drops: &'a [Label],
+    needed_drops: &'a mut Vec<bool>,
+    literals: &'a mut BTreeMap<Vec<u8>, Label>,
+    messages: &'a [String],
+    controls: Vec<Control>,
+    result_slot: Option<i64>,
+    return_label: Label,
+    source_lines: bool,
 }
-#[derive(Clone, Copy)]
-enum Pending {
-    None,
-    InA,
-    Constant(u64),
-    Local(usize),
-}
-impl Body<'_> {
-    // Height includes the pending top; all lower operands already have frame slots.
-    fn flush(&mut self) {
-        let pending = self.pending;
-        self.pending = Pending::None;
-        match pending {
-            Pending::None => return,
-            Pending::InA => {}
-            Pending::Constant(value) => {
-                self.a.immediate(A, value);
-            }
-            Pending::Local(local) => {
-                let offset = self.offset(local);
-                self.a.load(A, BP, offset);
-            }
-        }
-        let offset = self.operand(self.height - 1);
-        self.a.store(BP, offset, A);
+impl<'a> Body<'a> {
+    fn problem(&self, message: &str) -> Diagnostic {
+        Diagnostic::new(self.site, "E_EMIT", message)
     }
-    fn hold(&mut self, pending: Pending) {
-        self.pending = pending;
-        self.height += 1;
-        self.maximum = self.maximum.max(self.height);
+    fn ty(&self, local: usize) -> usize {
+        self.function.locals[local].ty
     }
-    fn offset(&self, index: usize) -> i64 {
-        -((index as i64 + 1) * 8)
+    // A local read changes only the requested register.
+    fn read(&mut self, local: usize, register: u8) {
+        let storage = self.layout.storage(self.ty(local));
+        self.a.load_width(
+            register,
+            BP,
+            self.slots[local],
+            storage.bytes as u8,
+            storage.signed,
+        );
     }
-    fn operand(&self, index: usize) -> i64 {
-        self.offset(self.locals + index)
+    fn read_word(&mut self, local: usize, word: usize, register: u8) {
+        self.a
+            .load(register, BP, self.slots[local] + word as i64 * 8);
     }
-    fn pop(&mut self, reg: u8) -> Result<()> {
-        self.height = self
-            .height
-            .checked_sub(1)
-            .ok_or("invalid lowered operand stack")?;
-        let pending = self.pending;
-        self.pending = Pending::None;
-        match pending {
-            Pending::None => {
-                let offset = self.operand(self.height);
-                self.a.load(reg, BP, offset);
-            }
-            Pending::InA => {
-                if reg != A {
-                    self.a.mov(reg, A);
-                }
-            }
-            Pending::Constant(value) => {
-                self.a.immediate(reg, value);
-            }
-            Pending::Local(local) => {
-                let offset = self.offset(local);
-                self.a.load(reg, BP, offset);
-            }
-        }
-        Ok(())
+    fn write(&mut self, local: usize, register: u8) {
+        let bytes = self.layout.storage(self.ty(local)).bytes as u8;
+        self.a.store_width(BP, self.slots[local], register, bytes);
+        self.mark(local);
     }
-    fn push(&mut self, reg: u8) {
-        self.flush();
-        if reg == A {
-            self.hold(Pending::InA);
-            return;
-        }
-        let offset = self.operand(self.height);
-        self.a.store(BP, offset, reg);
-        self.height += 1;
-        self.maximum = self.maximum.max(self.height);
+    fn write_word(&mut self, local: usize, word: usize, register: u8) {
+        self.a
+            .store(BP, self.slots[local] + word as i64 * 8, register);
     }
-    fn leave(&mut self) {
-        self.a.raw(&[0xc9, 0xc3]);
+    fn mark(&mut self, local: usize) {
+        self.ownership.change(self.a, &Place::local(local), true);
     }
-    fn result(&mut self, result: Option<ValueType>) -> Result<()> {
-        if result.is_some() {
-            self.pop(A)?;
+    fn local_address(&mut self, local: usize, register: u8) {
+        self.a.lea(register, BP, self.slots[local]);
+    }
+    fn trap(&mut self, code: u64) {
+        self.a.immediate(A, code);
+        self.a.jump(self.platform.trap);
+    }
+    fn trap_if(&mut self, condition: u8, code: u64) {
+        let valid = self.a.label();
+        self.a.condition(condition ^ 1, valid);
+        self.trap(code);
+        self.a.bind(valid);
+    }
+    // Small inline copies read every source word before writing any destination;
+    // larger copies use the overlap-safe platform leaf. Registers are caller-saved.
+    fn copy_value(&mut self, destination: u8, source: u8, ty: usize) {
+        let bytes = self.layout.storage(ty).bytes;
+        if destination == SI && source == DI {
+            self.a.mov(R8, DI);
+            self.a.mov(DI, SI);
+            self.a.mov(SI, R8);
+        } else if source == DI {
+            self.a.mov(SI, DI);
+            self.a.mov(DI, destination);
         } else {
-            self.a.immediate(A, 0);
+            self.a.mov(DI, destination);
+            self.a.mov(SI, source);
         }
-        self.leave();
-        self.reachable = false;
-        Ok(())
+        copy_bytes(self.a, self.platform, bytes);
     }
-    fn begin(&mut self, kind: RegionKind, result: Option<ValueType>) -> Result<()> {
-        let start = self.a.label();
-        let end = self.a.label();
-        let otherwise = self.a.label();
-        if kind == RegionKind::If && self.reachable {
-            self.pop(A)?;
-            self.a.test(A, false);
-            self.a.condition(4, otherwise);
+    fn copy_local(&mut self, destination: usize, source: usize) {
+        let ty = self.ty(destination);
+        let scalar = self.layout.storage(ty).scalar;
+        if scalar {
+            self.read(source, A);
+            self.write(destination, A);
+        } else {
+            self.local_address(destination, DI);
+            self.local_address(source, SI);
+            self.copy_value(DI, SI, ty);
+            self.mark(destination);
         }
-        self.a.bind(start);
-        self.regions.push(Region {
-            kind,
-            result,
-            height: self.height,
-            start,
-            end,
-            otherwise,
-            entered: self.reachable,
-            end_reachable: false,
-            then_reachable: false,
-            has_else: false,
-        });
-        Ok(())
     }
-    fn floating(&mut self, op: ScalarOp) -> Result<()> {
-        use ScalarOp::*;
-        // xmm0 carries the left/input value and xmm1 the right/threshold.
-        let to_xmm0: &[u8] = &[0x66, 0x48, 0x0f, 0x6e, 0xc0];
-        let to_xmm1: &[u8] = &[0x66, 0x48, 0x0f, 0x6e, 0xc9];
-        let from_xmm0: &[u8] = &[0x66, 0x48, 0x0f, 0x7e, 0xc0];
-        let compare: &[u8] = &[0x66, 0x0f, 0x2e, 0xc1];
+    fn drop_at(&mut self, ty: usize, address: u8) {
+        if self.layout.storage(ty).cleanup {
+            self.needed_drops[ty] = true;
+            if address != DI {
+                self.a.mov(DI, address);
+            }
+            self.a.call(self.drops[ty]);
+        }
+    }
+    // Address selection uses RAX, RCX, R10 and R11. For an unsized place the
+    // accompanying count is retained in scratch[7].
+    fn place_address(&mut self, place: &Place, register: u8) -> Result<usize, Diagnostic> {
+        let mut ty = self.ty(place.local);
+        self.local_address(place.local, R10);
+        for projection in &place.projections {
+            match projection {
+                Projection::Deref => {
+                    let inner = match self.program.types[ty].kind {
+                        TypeKind::Ref { inner, .. } | TypeKind::Box { inner } => inner,
+                        _ => return Err(self.problem("checked dereference has no address")),
+                    };
+                    if matches!(
+                        self.program.types[inner].kind,
+                        TypeKind::Slice { .. } | TypeKind::Str
+                    ) {
+                        self.a.load(R11, R10, 8);
+                    }
+                    self.a.load(R10, R10, 0);
+                    ty = inner;
+                }
+                Projection::Field(field) => {
+                    let offset = self.layout.field_offset(ty, None, *field);
+                    let inner = match &self.program.types[ty].kind {
+                        TypeKind::Struct { fields, .. } => fields[*field].ty,
+                        _ => return Err(self.problem("checked field has no aggregate")),
+                    };
+                    self.a.lea(R10, R10, offset as i64);
+                    ty = inner;
+                }
+                Projection::VariantField(variant, field) => {
+                    let offset = self.layout.field_offset(ty, Some(*variant), *field);
+                    let inner = match &self.program.types[ty].kind {
+                        TypeKind::Enum { variants, .. } => variants[*variant].fields[*field].ty,
+                        _ => return Err(self.problem("checked variant field has no enum")),
+                    };
+                    self.a.lea(R10, R10, offset as i64);
+                    ty = inner;
+                }
+                Projection::Index(index) => {
+                    let inner = match self.program.types[ty].kind {
+                        TypeKind::Array { inner, len } => {
+                            self.a.immediate(R11, len as u64);
+                            inner
+                        }
+                        TypeKind::Vec { inner } => {
+                            self.a.load(R11, R10, 8);
+                            self.a.load(R10, R10, 0);
+                            inner
+                        }
+                        TypeKind::Slice { inner, .. } => inner,
+                        _ => return Err(self.problem("checked index has no collection")),
+                    };
+                    self.read(*index, A);
+                    self.a.compare(A, R11);
+                    self.trap_if(3, 3);
+                    self.a.immediate(C, self.layout.stride(inner));
+                    self.a.imul(A, C);
+                    self.a.rr(0x01, R10, A, true);
+                    ty = inner;
+                }
+            }
+        }
+        if matches!(
+            self.program.types[ty].kind,
+            TypeKind::Slice { .. } | TypeKind::Str
+        ) {
+            self.a.store(BP, self.scratch[7], R11);
+        }
+        if register != R10 {
+            self.a.mov(register, R10);
+        }
+        Ok(ty)
+    }
+    fn consume_inputs(&mut self, op: &Op) {
         match op {
-            F64Add | F64Sub | F64Mul | F64Div => {
-                self.a.raw(to_xmm0);
-                self.a.raw(to_xmm1);
-                self.a.raw(&[
-                    0xf2,
-                    0x0f,
-                    match op {
-                        F64Add => 0x58,
-                        F64Sub => 0x5c,
-                        F64Mul => 0x59,
-                        _ => 0x5e,
-                    },
-                    0xc1,
-                ]);
-                self.a.raw(from_xmm0);
+            Op::Read {
+                place,
+                moving: true,
+                ..
+            } => self.ownership.change(self.a, place, false),
+            Op::Assign { src, .. } | Op::Unary { src, .. } | Op::Return { src } => {
+                self.ownership.change(self.a, &Place::local(*src), false);
             }
-            F64Eq | F64Ne | F64Lt | F64Gt | F64Le | F64Ge => {
-                self.a.raw(to_xmm0);
-                self.a.raw(to_xmm1);
-                self.a.raw(compare);
-                let condition = match op {
-                    F64Eq => 4,
-                    F64Ne => 5,
-                    F64Lt => 2,
-                    F64Gt => 7,
-                    F64Le => 6,
-                    _ => 3,
-                };
-                self.a.raw(&[0x0f, 0x90 | condition, 0xc0]);
-                if op == F64Ne {
-                    self.a.raw(&[0x0f, 0x9a, 0xc2, 0x08, 0xd0]);
-                } else if matches!(op, F64Eq | F64Lt | F64Le) {
-                    self.a.raw(&[0x0f, 0x9b, 0xc2, 0x20, 0xd0]);
-                }
-                self.a.raw(&[0x0f, 0xb6, 0xc0]);
+            Op::Binary { left, right, .. } => {
+                self.ownership.change(self.a, &Place::local(*left), false);
+                self.ownership.change(self.a, &Place::local(*right), false);
             }
-            F64ConvertI64S => {
-                self.a.raw(&[0xf2, 0x48, 0x0f, 0x2a, 0xc0]);
-                self.a.raw(from_xmm0);
+            Op::Array { elements, .. }
+            | Op::Struct {
+                fields: elements, ..
             }
-            F64ConvertI64U => {
-                let small = self.a.label();
-                let end = self.a.label();
-                self.a.test(A, true);
-                self.a.condition(9, small);
-                self.a.mov(C, A);
-                self.a.immediate(D, 1);
-                self.a.rr(0x21, C, D, true);
-                self.a.shift(A, 5, 1);
-                self.a.rr(0x09, A, C, true);
-                self.a
-                    .raw(&[0xf2, 0x48, 0x0f, 0x2a, 0xc0, 0xf2, 0x0f, 0x58, 0xc0]);
-                self.a.jump(end);
-                self.a.bind(small);
-                self.a.raw(&[0xf2, 0x48, 0x0f, 0x2a, 0xc0]);
-                self.a.bind(end);
-                self.a.raw(from_xmm0);
+            | Op::Variant {
+                fields: elements, ..
             }
-            I64TruncSatF64S | I64TruncSatF64U => {
-                let zero = self.a.label();
-                let minimum = self.a.label();
-                let maximum = self.a.label();
-                let end = self.a.label();
-                self.a.raw(to_xmm0);
-                self.a.raw(&[0x66, 0x0f, 0x2e, 0xc0]);
-                self.a.condition(10, zero);
-                // Exact IEEE-754 encodings of -2^63, 2^63 and 2^64.
-                if op == I64TruncSatF64S {
-                    self.a.immediate(C, 0xc3e0000000000000_u64);
-                    self.a.raw(to_xmm1);
-                    self.a.raw(compare);
-                    self.a.condition(6, minimum);
-                    self.a.immediate(C, 0x43e0000000000000_u64);
-                    self.a.raw(to_xmm1);
-                    self.a.raw(compare);
-                    self.a.condition(3, maximum);
-                    self.a.raw(&[0xf2, 0x48, 0x0f, 0x2c, 0xc0]);
-                    self.a.jump(end);
-                } else {
-                    self.a.raw(&[0x0f, 0x57, 0xc9]);
-                    self.a.raw(compare);
-                    self.a.condition(6, zero);
-                    self.a.immediate(C, 0x43f0000000000000_u64);
-                    self.a.raw(to_xmm1);
-                    self.a.raw(compare);
-                    self.a.condition(3, maximum);
-                    self.a.immediate(C, 0x43e0000000000000_u64);
-                    self.a.raw(to_xmm1);
-                    self.a.raw(compare);
-                    let small = self.a.label();
-                    self.a.condition(2, small);
-                    self.a
-                        .raw(&[0xf2, 0x0f, 0x5c, 0xc1, 0xf2, 0x48, 0x0f, 0x2c, 0xc0]);
-                    self.a.immediate(C, 1u64 << 63);
-                    self.a.rr(0x09, A, C, true);
-                    self.a.jump(end);
-                    self.a.bind(small);
-                    self.a.raw(&[0xf2, 0x48, 0x0f, 0x2c, 0xc0]);
-                    self.a.jump(end);
-                }
-                self.a.bind(zero);
-                self.a.immediate(A, 0);
-                self.a.jump(end);
-                self.a.bind(minimum);
-                self.a.immediate(A, 0x8000000000000000_u64);
-                self.a.jump(end);
-                self.a.bind(maximum);
-                self.a.immediate(
-                    A,
-                    if op == I64TruncSatF64S {
-                        0x7fffffffffffffff_u64
-                    } else {
-                        18446744073709551615_u64
-                    },
-                );
-                self.a.bind(end);
-            }
-            _ => return Err("invalid native scalar instruction".to_string()),
-        }
-        Ok(())
-    }
-    fn scalar(&mut self, op: ScalarOp) -> Result<()> {
-        use ScalarOp::*;
-        let (count, _, _) = op.signature();
-        if count == 2 {
-            self.pop(C)?;
-        }
-        self.pop(A)?;
-        match op {
-            I32Eqz | I64Eqz => {
-                self.a.test(A, op == I64Eqz);
-                self.a.raw(&[0x0f, 0x94, 0xc0, 0x0f, 0xb6, 0xc0]);
-            }
-            I32And => self.a.rr(0x21, A, C, false),
-            I32Or => self.a.rr(0x09, A, C, false),
-            I64Add => self.a.rr(0x01, A, C, true),
-            I64Sub => self.a.rr(0x29, A, C, true),
-            I64And => self.a.rr(0x21, A, C, true),
-            I64Or => self.a.rr(0x09, A, C, true),
-            I64Xor => self.a.rr(0x31, A, C, true),
-            I64Mul => self.a.raw(&[0x48, 0x0f, 0xaf, 0xc1]),
-            I64DivS | I64RemS => {
-                self.a.raw(&[0x48, 0x99, 0x48, 0xf7, 0xf9]);
-                if op == I64RemS {
-                    self.a.mov(A, D);
+            | Op::Call { args: elements, .. }
+            | Op::Intrinsic { args: elements, .. } => {
+                for local in elements {
+                    self.ownership.change(self.a, &Place::local(*local), false);
                 }
             }
-            I64DivU | I64RemU => {
-                self.a.rr(0x31, D, D, false);
-                self.a.raw(&[0x48, 0xf7, 0xf1]);
-                if op == I64RemU {
-                    self.a.mov(A, D);
-                }
-            }
-            I64Shl | I64ShrS | I64ShrU => self.a.raw(&[
-                0x48,
-                0xd3,
-                match op {
-                    I64Shl => 0xe0,
-                    I64ShrS => 0xf8,
-                    _ => 0xe8,
-                },
-            ]),
-            I64Eq | I64Ne | I64LtS | I64LtU | I64GtS | I64GtU | I64LeS | I64LeU | I64GeS
-            | I64GeU => {
-                self.a.compare(A, C);
-                let cc = match op {
-                    I64Eq => 4,
-                    I64Ne => 5,
-                    I64LtS => 12,
-                    I64LtU => 2,
-                    I64GtS => 15,
-                    I64GtU => 7,
-                    I64LeS => 14,
-                    I64LeU => 6,
-                    I64GeS => 13,
-                    _ => 3,
-                };
-                self.a.raw(&[0x0f, 0x90 | cc, 0xc0, 0x0f, 0xb6, 0xc0]);
-            }
-            I32WrapI64 => self.a.rr(0x89, A, A, false),
-            I64ExtendI32U => self.a.rr(0x89, A, A, false),
-            I64ReinterpretF64 | F64ReinterpretI64 => {}
-            _ => self.floating(op)?,
-        }
-        self.push(A);
-        Ok(())
-    }
-    fn instruction(&mut self, instruction: &Instruction) -> Result<()> {
-        // Calls, joins and nonconsuming operations need a stable frame home.
-        let consumes_top = self.reachable
-            && matches!(
-                instruction,
-                Instruction::Scalar(_)
-                    | Instruction::LocalSet(_)
-                    | Instruction::LocalTee(_)
-                    | Instruction::GlobalSet(_)
-                    | Instruction::Load { .. }
-                    | Instruction::Store { .. }
-                    | Instruction::If(_)
-            );
-        if !consumes_top {
-            self.flush();
-        }
-        match instruction {
-            Instruction::Block(result) => return self.begin(RegionKind::Block, *result),
-            Instruction::Loop(result) => return self.begin(RegionKind::Loop, *result),
-            Instruction::If(result) => return self.begin(RegionKind::If, *result),
-            Instruction::Else => {
-                let index = self
-                    .regions
-                    .len()
-                    .checked_sub(1)
-                    .ok_or("lowered else without if")?;
-                let region = &mut self.regions[index];
-                if region.kind != RegionKind::If || region.has_else {
-                    return Err("invalid lowered else".to_string());
-                }
-                region.then_reachable = self.reachable;
-                region.has_else = true;
-                if self.reachable {
-                    self.a.jump(region.end);
-                }
-                self.a.bind(region.otherwise);
-                self.height = region.height;
-                self.reachable = region.entered;
-                return Ok(());
-            }
-            Instruction::End => {
-                let region = self.regions.pop().ok_or("unbalanced lowered end")?;
-                if region.kind == RegionKind::If && !region.has_else {
-                    self.a.bind(region.otherwise);
-                }
-                self.a.bind(region.end);
-                self.reachable = self.reachable
-                    || region.end_reachable
-                    || (region.kind == RegionKind::If
-                        && if region.has_else {
-                            region.then_reachable
-                        } else {
-                            region.entered
-                        });
-                self.height = region.height + if region.result.is_some() { 1 } else { 0 };
-                if region.kind == RegionKind::Function && self.reachable {
-                    self.result(region.result)?;
-                }
-                return Ok(());
+            Op::If { condition } => self
+                .ownership
+                .change(self.a, &Place::local(*condition), false),
+            Op::ViewRange { start, end, .. } => {
+                self.ownership.change(self.a, &Place::local(*start), false);
+                self.ownership.change(self.a, &Place::local(*end), false);
             }
             _ => {}
         }
-        if !self.reachable {
+    }
+    fn call(&mut self, dst: usize, called: usize, args: &[usize]) -> Result<(), Diagnostic> {
+        let aggregate_result = !self.layout.storage(self.ty(dst)).scalar;
+        let hidden = if aggregate_result { 1usize } else { 0 };
+        let words = args.len() + hidden;
+        let stacked = if words > 6 { words - 6 } else { 0 };
+        let padded = (stacked + 1) & !1;
+        let stack_bytes = padded as u64 * 8;
+        if stack_bytes != 0 {
+            self.a.mov(R11, SP);
+            self.a.immediate(A, stack_bytes + 8);
+            self.a.rr(0x29, R11, A, true);
+            self.a.condition(2, self.platform.stack_exhausted);
+            self.a.compare(R11, STACK_FLOOR);
+            self.a.condition(2, self.platform.stack_exhausted);
+        }
+        if padded != stacked {
+            self.a.immediate(A, 8);
+            self.a.rr(0x29, SP, A, true);
+        }
+        let mut word = words;
+        while word > 6 {
+            word -= 1;
+            let arg = args[word - hidden];
+            let scalar = self.layout.storage(self.ty(arg)).scalar;
+            if scalar {
+                self.read(arg, A);
+            } else {
+                self.local_address(arg, A);
+            }
+            self.a.push(A);
+        }
+        if aggregate_result {
+            self.local_address(dst, DI);
+        }
+        for index in 0..args.len() {
+            let abi = index + hidden;
+            if abi < 6 {
+                let register = parameter_register(abi);
+                let local = args[index];
+                let scalar = self.layout.storage(self.ty(local)).scalar;
+                if scalar {
+                    self.read(local, register);
+                } else {
+                    self.local_address(local, register);
+                }
+            }
+        }
+        self.needed[called] = true;
+        self.a.call(self.functions[called]);
+        if stack_bytes != 0 {
+            self.a.immediate(R11, stack_bytes);
+            self.a.rr(0x01, SP, R11, true);
+        }
+        if aggregate_result {
+            self.mark(dst);
+        } else {
+            self.write(dst, A);
+        }
+        Ok(())
+    }
+    fn collection(&mut self, place: &Place) -> Result<(usize, u64), Diagnostic> {
+        let ty = self.place_address(place, R10)?;
+        let stride = match self.program.types[ty].kind {
+            TypeKind::Array { inner, len } => {
+                self.a.immediate(R11, len as u64);
+                self.layout.stride(inner)
+            }
+            TypeKind::Vec { inner } => {
+                self.a.load(R11, R10, 8);
+                self.a.load(R10, R10, 0);
+                self.layout.stride(inner)
+            }
+            TypeKind::Slice { inner, .. } => {
+                self.a.load(R11, BP, self.scratch[7]);
+                self.layout.stride(inner)
+            }
+            TypeKind::Str => {
+                self.a.load(R11, BP, self.scratch[7]);
+                1
+            }
+            _ => return Err(self.problem("checked view has no collection")),
+        };
+        self.a.store(BP, self.scratch[0], R10);
+        self.a.store(BP, self.scratch[1], R11);
+        Ok((ty, stride))
+    }
+    fn view_range(
+        &mut self,
+        dst: usize,
+        place: &Place,
+        start: usize,
+        end: usize,
+        inclusive: bool,
+    ) -> Result<(), Diagnostic> {
+        let (source, stride) = self.collection(place)?;
+        self.read(end, A);
+        self.a.load(C, BP, self.scratch[1]);
+        self.a.compare(A, C);
+        self.trap_if(if inclusive { 3 } else { 7 }, 3);
+        if inclusive {
+            self.a.immediate(C, 1);
+            self.a.rr(0x01, A, C, true);
+        }
+        self.a.store(BP, self.scratch[2], A);
+        self.read(start, C);
+        self.a.compare(C, A);
+        self.trap_if(7, 3);
+        if matches!(self.program.types[source].kind, TypeKind::Str) {
+            for endpoint in 0..2 {
+                if endpoint == 0 {
+                    self.read(start, A);
+                } else {
+                    self.a.load(A, BP, self.scratch[2]);
+                }
+                self.a.load(C, BP, self.scratch[1]);
+                self.a.compare(A, C);
+                let boundary = self.a.label();
+                self.a.condition(4, boundary);
+                self.a.load(C, BP, self.scratch[0]);
+                self.a.rr(0x01, C, A, true);
+                self.a.load_width(A, C, 0, 1, false);
+                self.a.immediate(C, 0xc0);
+                self.a.rr(0x21, A, C, true);
+                self.a.immediate(C, 0x80);
+                self.a.compare(A, C);
+                self.trap_if(4, 3);
+                self.a.bind(boundary);
+            }
+        }
+        self.read(start, A);
+        self.a.immediate(C, stride);
+        self.a.imul(A, C);
+        self.a.load(C, BP, self.scratch[0]);
+        self.a.rr(0x01, A, C, true);
+        self.write_word(dst, 0, A);
+        self.a.load(A, BP, self.scratch[2]);
+        self.read(start, C);
+        self.a.rr(0x29, A, C, true);
+        self.write_word(dst, 1, A);
+        self.mark(dst);
+        Ok(())
+    }
+    fn partial_drop(&mut self, ty: usize, place: &Place, depth: usize) -> Result<(), Diagnostic> {
+        let absent = self.a.label();
+        if let Some(flag) = self.ownership.flag(place) {
+            self.a.load_width(A, BP, flag, 1, false);
+            self.a.test(A, true);
+            self.a.condition(4, absent);
+        }
+        if !self.ownership.descendants(place) {
+            self.drop_at(ty, DI);
+            self.a.bind(absent);
             return Ok(());
         }
-        match instruction {
-            Instruction::I32(value) => self.hold(Pending::Constant(*value as u32 as u64)),
-            Instruction::I64(value) => self.hold(Pending::Constant(*value as u64)),
-            Instruction::LocalGet(local) => {
-                if *local >= self.locals {
-                    return Err("invalid lowered local".to_string());
+        self.a.store(BP, self.partial_scratch[depth], DI);
+        let destructor = self
+            .program
+            .destructors
+            .iter()
+            .find(|entry| entry.0 == ty)
+            .map(|entry| entry.1);
+        if let Some(destructor) = destructor {
+            self.needed[destructor] = true;
+            self.a.call(self.functions[destructor]);
+        }
+        let kind = self.program.types[ty].kind.clone();
+        match kind {
+            TypeKind::Struct { fields, .. } => {
+                for index in 0..fields.len() {
+                    let mut child = place.clone();
+                    child.projections.push(Projection::Field(index));
+                    self.a.load(DI, BP, self.partial_scratch[depth]);
+                    self.a
+                        .lea(DI, DI, self.layout.field_offset(ty, None, index) as i64);
+                    self.partial_drop(fields[index].ty, &child, depth + 1)?;
                 }
-                self.hold(Pending::Local(*local));
             }
-            Instruction::LocalSet(local) | Instruction::LocalTee(local) => {
-                if *local >= self.locals {
-                    return Err("invalid lowered local".to_string());
+            TypeKind::Enum { variants, .. } => {
+                let done = self.a.label();
+                for variant in 0..variants.len() {
+                    let next = self.a.label();
+                    self.a.load(DI, BP, self.partial_scratch[depth]);
+                    self.a.load(A, DI, 0);
+                    self.a.immediate(C, variant as u64);
+                    self.a.compare(A, C);
+                    self.a.condition(5, next);
+                    for index in 0..variants[variant].fields.len() {
+                        let mut child = place.clone();
+                        child
+                            .projections
+                            .push(Projection::VariantField(variant, index));
+                        self.a.load(DI, BP, self.partial_scratch[depth]);
+                        self.a.lea(
+                            DI,
+                            DI,
+                            self.layout.field_offset(ty, Some(variant), index) as i64,
+                        );
+                        self.partial_drop(variants[variant].fields[index].ty, &child, depth + 1)?;
+                    }
+                    self.a.jump(done);
+                    self.a.bind(next);
                 }
-                self.pop(A)?;
-                let offset = self.offset(*local);
-                self.a.store(BP, offset, A);
-                if matches!(instruction, Instruction::LocalTee(_)) {
-                    self.push(A);
+                self.a.bind(done);
+            }
+            TypeKind::Box { inner } => {
+                let mut child = place.clone();
+                child.projections.push(Projection::Deref);
+                self.a.load(DI, BP, self.partial_scratch[depth]);
+                self.a.load(DI, DI, 0);
+                self.partial_drop(inner, &child, depth + 1)?;
+                self.a.load(DI, BP, self.partial_scratch[depth]);
+                self.a.load(DI, DI, 0);
+                self.a.call(self.runtime.release);
+            }
+            _ => {
+                self.a.load(DI, BP, self.partial_scratch[depth]);
+                self.drop_at(ty, DI);
+            }
+        }
+        self.a.bind(absent);
+        Ok(())
+    }
+    fn drop_place(&mut self, place: &Place) -> Result<(), Diagnostic> {
+        let ty = self.place_address(place, DI)?;
+        self.partial_drop(ty, place, 0)?;
+        self.ownership.change(self.a, place, false);
+        Ok(())
+    }
+    fn emit(&mut self, instruction: &ir::Instruction) -> Result<(), Diagnostic> {
+        self.site = Span {
+            file: self.function.file,
+            start: 0,
+            end: 0,
+            line: instruction.line,
+            column: instruction.column,
+        };
+        self.a
+            .location(self.site.file, self.site.line, self.site.column);
+        if self.source_lines
+            && !matches!(
+                instruction.op,
+                Op::Else | Op::End | Op::Loop | Op::Unit { .. } | Op::Int { .. } | Op::Float { .. }
+            )
+        {
+            self.a.immediate(LINE, instruction.line as u64);
+            self.a.immediate(FILE, self.function.file as u64);
+        }
+        self.consume_inputs(&instruction.op);
+        match &instruction.op {
+            Op::Int { dst, value } => {
+                self.a.immediate(A, *value as u64);
+                self.write(*dst, A);
+            }
+            Op::Float { dst, bits } => {
+                self.a.immediate(A, *bits);
+                self.write(*dst, A);
+            }
+            Op::Unit { dst } => {
+                self.a.immediate(A, 0);
+                self.write(*dst, A);
+            }
+            Op::Text { dst, bytes } => {
+                let label = match self.literals.get(bytes) {
+                    Some(label) => *label,
+                    None => {
+                        let label = self.a.label();
+                        self.literals.insert(bytes.clone(), label);
+                        label
+                    }
+                };
+                self.a.address(A, label);
+                let scalar = self.layout.storage(self.ty(*dst)).scalar;
+                if scalar {
+                    self.write(*dst, A);
+                } else {
+                    self.write_word(*dst, 0, A);
+                    self.a.immediate(A, bytes.len() as u64);
+                    self.write_word(*dst, 1, A);
+                    self.mark(*dst);
                 }
             }
-            Instruction::GlobalGet(index) => {
-                if *index >= self.globals.len() {
-                    return Err("invalid lowered global".to_string());
+            Op::Read { dst, place, .. } => {
+                let ty = self.place_address(place, SI)?;
+                let scalar = self.layout.storage(ty).scalar;
+                if scalar {
+                    let bytes = self.layout.storage(ty).bytes as u8;
+                    let signed = self.layout.storage(ty).signed;
+                    self.a.load_width(A, SI, 0, bytes, signed);
+                    self.write(*dst, A);
+                } else {
+                    self.local_address(*dst, DI);
+                    self.copy_value(DI, SI, ty);
+                    self.mark(*dst);
                 }
-                self.a.load(A, GLOBALS, Platform::global(*index));
-                self.push(A);
             }
-            Instruction::GlobalSet(index) => {
-                if !self
-                    .globals
-                    .get(*index)
-                    .is_some_and(|global| global.mutable)
-                {
-                    return Err("invalid or immutable lowered global".to_string());
+            Op::Borrow { dst, place, .. } => {
+                let ty = self.place_address(place, A)?;
+                if matches!(
+                    self.program.types[ty].kind,
+                    TypeKind::Slice { .. } | TypeKind::Str
+                ) {
+                    self.write_word(*dst, 0, A);
+                    self.a.load(A, BP, self.scratch[7]);
+                    self.write_word(*dst, 1, A);
+                    self.mark(*dst);
+                } else {
+                    self.write(*dst, A);
                 }
-                self.pop(A)?;
-                self.a.store(GLOBALS, Platform::global(*index), A);
             }
-            Instruction::Scalar(op) => self.scalar(*op)?,
-            Instruction::Load {
-                bytes,
-                signed,
-                offset,
+            Op::SliceBorrow { dst, place, .. } => {
+                self.collection(place)?;
+                self.a.load(A, BP, self.scratch[0]);
+                self.write_word(*dst, 0, A);
+                self.a.load(A, BP, self.scratch[1]);
+                self.write_word(*dst, 1, A);
+                self.mark(*dst);
+            }
+            Op::ViewRange {
+                dst,
+                place,
+                start,
+                end,
+                inclusive,
+                ..
             } => {
-                self.pop(A)?;
-                self.a.immediate(C, *offset);
-                self.a.rr(0x01, A, C, true);
-                self.a.condition(2, self.p.memory_fault);
-                self.a.immediate(C, *bytes as u64);
-                self.p.range(self.a, A, C);
-                self.a.rr(0x01, A, HEAP, true);
-                match (*bytes, *signed) {
-                    (1, false) => self.a.memory(&[0x0f, 0xb6], A, A, 0, true),
-                    (1, true) => self.a.memory(&[0x0f, 0xbe], A, A, 0, true),
-                    (2, false) => self.a.memory(&[0x0f, 0xb7], A, A, 0, true),
-                    (2, true) => self.a.memory(&[0x0f, 0xbf], A, A, 0, true),
-                    (4, false) => self.a.memory(&[0x8b], A, A, 0, false),
-                    (4, true) => self.a.memory(&[0x63], A, A, 0, true),
-                    (8, _) => self.a.load(A, A, 0),
-                    _ => return Err("invalid lowered load width".to_string()),
-                }
-                self.push(A);
+                self.view_range(*dst, place, *start, *end, *inclusive)?;
             }
-            Instruction::Store { bytes, offset } => {
-                self.pop(C)?;
-                self.pop(A)?;
-                self.a.immediate(D, *offset);
-                self.a.rr(0x01, A, D, true);
-                self.a.condition(2, self.p.memory_fault);
-                self.a.immediate(D, *bytes as u64);
-                self.p.range(self.a, A, D);
-                self.a.rr(0x01, A, HEAP, true);
-                match bytes {
-                    1 => self.a.memory(&[0x88], C, A, 0, false),
-                    2 => {
-                        self.a.raw(&[0x66]);
-                        self.a.memory(&[0x89], C, A, 0, false);
-                    }
-                    4 => self.a.memory(&[0x89], C, A, 0, false),
-                    8 => self.a.store(A, 0, C),
-                    _ => return Err("invalid lowered store width".to_string()),
-                }
-            }
-            Instruction::Drop => {
-                self.height = self.height.checked_sub(1).ok_or("lowered drop underflow")?;
-            }
-            Instruction::Branch { depth, conditional } => {
-                if *conditional {
-                    self.pop(A)?;
-                }
-                let distance = depth.checked_add(1).ok_or("invalid lowered branch depth")?;
-                let target = self
-                    .regions
-                    .len()
-                    .checked_sub(distance)
-                    .ok_or("invalid lowered branch depth")?;
-                let region = &mut self.regions[target];
-                let loop_target = region.kind == RegionKind::Loop;
-                let destination = if loop_target {
-                    region.start
+            Op::Assign { place, src } => {
+                let ty = self.place_address(place, DI)?;
+                let scalar = self.layout.storage(ty).scalar;
+                if scalar {
+                    self.read(*src, A);
+                    self.a
+                        .store_width(DI, 0, A, self.layout.storage(ty).bytes as u8);
                 } else {
-                    region.end
-                };
-                let result_slot = if !loop_target && region.result.is_some() {
-                    Some(region.height)
-                } else {
-                    None
-                };
-                if !loop_target {
-                    region.end_reachable = true;
+                    self.local_address(*src, SI);
+                    self.copy_value(DI, SI, ty);
                 }
-                // A conditional branch carries its result only on its taken edge.
-                // The not-taken edge retains all values beneath the condition.
-                let skipped = if *conditional && result_slot.is_some() {
-                    Some(self.a.label())
-                } else {
-                    None
-                };
-                if *conditional {
-                    self.a.test(A, false);
-                    if let Some(label) = skipped {
-                        self.a.condition(4, label);
-                    } else {
-                        self.a.condition(5, destination);
-                    }
-                }
-                if let Some(slot) = result_slot {
-                    let from = self
-                        .height
-                        .checked_sub(1)
-                        .ok_or("missing lowered branch result")?;
-                    let from_offset = self.operand(from);
-                    let slot_offset = self.operand(slot);
-                    self.a.load(C, BP, from_offset);
-                    self.a.store(BP, slot_offset, C);
-                }
-                if !conditional || skipped.is_some() {
-                    self.a.jump(destination);
-                }
-                if let Some(label) = skipped {
-                    self.a.bind(label);
-                }
-                if !conditional {
-                    self.reachable = false;
-                }
+                self.ownership.change(self.a, place, true);
             }
-            Instruction::Call(index) => {
-                let (parameters, has_result) = {
-                    let signature = self.signatures.get(*index).ok_or("invalid lowered call")?;
-                    (signature.parameters.len(), signature.result.is_some())
+            Op::Drop { place } | Op::DropIf { place } => self.drop_place(place)?,
+            Op::Unary { dst, op, src } => self.scalar_unary(*dst, op, *src)?,
+            Op::Binary {
+                dst,
+                op,
+                left,
+                right,
+            } => self.scalar_binary(*dst, op, *left, *right)?,
+            Op::Call {
+                dst,
+                function,
+                args,
+            } => self.call(*dst, *function, args)?,
+            Op::Array { dst, elements } => {
+                let inner = match self.program.types[self.ty(*dst)].kind {
+                    TypeKind::Array { inner, .. } => inner,
+                    _ => return Err(self.problem("checked array constructor has no array")),
                 };
-                self.height = self
-                    .height
-                    .checked_sub(parameters)
-                    .ok_or("lowered call operands missing")?;
-                let offset = self.operand(self.height);
-                self.a.lea(DI, BP, offset);
-                self.a.call(self.functions[*index]);
-                if has_result {
-                    self.push(A);
+                for index in 0..elements.len() {
+                    self.local_address(*dst, DI);
+                    self.a
+                        .lea(DI, DI, (index as u64 * self.layout.stride(inner)) as i64);
+                    self.local_address(elements[index], SI);
+                    self.copy_value(DI, SI, inner);
                 }
+                self.mark(*dst);
             }
-            Instruction::CallIndirect(signature) => {
-                self.pop(A)?;
-                self.a.immediate(C, self.table_length as u64);
+            Op::Struct { dst, fields } | Op::Variant { dst, fields, .. } => {
+                let variant = match instruction.op {
+                    Op::Variant { variant, .. } => Some(variant),
+                    _ => None,
+                };
+                let ty = self.ty(*dst);
+                if let Some(variant) = variant {
+                    self.a.immediate(A, variant as u64);
+                    self.write_word(*dst, 0, A);
+                }
+                for index in 0..fields.len() {
+                    self.local_address(*dst, DI);
+                    self.a
+                        .lea(DI, DI, self.layout.field_offset(ty, variant, index) as i64);
+                    self.local_address(fields[index], SI);
+                    let field_ty = self.ty(fields[index]);
+                    self.copy_value(DI, SI, field_ty);
+                }
+                self.mark(*dst);
+            }
+            Op::Discriminant { dst, src } => {
+                self.read_word(*src, 0, A);
+                self.write(*dst, A);
+            }
+            Op::TagTest {
+                dst,
+                place,
+                variant,
+            } => {
+                let ty = self.place_address(place, A)?;
+                if matches!(self.program.types[ty].kind, TypeKind::Ref { .. }) {
+                    self.a.load(A, A, 0);
+                }
+                self.a.load(A, A, 0);
+                self.a.immediate(C, *variant as u64);
                 self.a.compare(A, C);
-                self.a.condition(3, self.p.memory_fault);
-                self.a.shift(A, 4, 4);
-                self.a.address(C, self.p.table);
-                self.a.rr(0x01, A, C, true);
-                self.a.load(C, A, 8);
-                self.a.immediate(
-                    D,
-                    *self
-                        .signature_ids
-                        .get(signature)
-                        .expect("interned signature"),
-                );
-                self.a.compare(C, D);
-                self.a.condition(5, self.p.memory_fault);
-                self.a.load(R11, A, 0);
-                self.height = self
-                    .height
-                    .checked_sub(signature.parameters.len())
-                    .ok_or("lowered indirect operands missing")?;
-                let offset = self.operand(self.height);
-                self.a.lea(DI, BP, offset);
-                self.a.call_register(R11);
-                if signature.result.is_some() {
-                    self.push(A);
+                self.a.setcc(A, 4);
+                self.write(*dst, A);
+            }
+            Op::Intrinsic { dst, name, args } => self.intrinsic(*dst, name, args)?,
+            Op::If { condition } => {
+                let otherwise = self.a.label();
+                let end = self.a.label();
+                self.read(*condition, A);
+                self.a.test(A, true);
+                self.a.condition(4, otherwise);
+                self.controls.push(Control::Conditional {
+                    otherwise,
+                    end,
+                    has_else: false,
+                });
+            }
+            Op::Else => {
+                let control = self
+                    .controls
+                    .pop()
+                    .ok_or_else(|| self.problem("checked else has no region"))?;
+                match control {
+                    Control::Conditional { otherwise, end, .. } => {
+                        self.a.jump(end);
+                        self.a.bind(otherwise);
+                        self.controls.push(Control::Conditional {
+                            otherwise,
+                            end,
+                            has_else: true,
+                        });
+                    }
+                    _ => return Err(self.problem("checked else belongs to a loop")),
                 }
             }
-            Instruction::Return => {
-                let result = self
-                    .regions
-                    .first()
-                    .ok_or("return outside function")?
-                    .result;
-                self.result(result)?;
+            Op::Loop => {
+                let start = self.a.label();
+                let end = self.a.label();
+                self.a.bind(start);
+                self.controls.push(Control::Loop { start, end });
             }
-            Instruction::Unreachable => {
-                self.a.jump(self.p.trap);
-                self.reachable = false;
+            Op::End => {
+                match self
+                    .controls
+                    .pop()
+                    .ok_or_else(|| self.problem("checked end has no region"))?
+                {
+                    Control::Conditional {
+                        otherwise,
+                        end,
+                        has_else,
+                    } => {
+                        if !has_else {
+                            self.a.bind(otherwise);
+                        }
+                        self.a.bind(end);
+                    }
+                    Control::Loop { start, end } => {
+                        self.a.jump(start);
+                        self.a.bind(end);
+                    }
+                }
             }
-            Instruction::MemorySize => {
-                self.a.load(A, GLOBALS, HEAP_USED);
-                self.a.shift(A, 5, 16);
-                self.push(A);
+            Op::Break | Op::Continue | Op::BreakTo { .. } | Op::ContinueTo { .. } => {
+                let mut depth = match instruction.op {
+                    Op::BreakTo { depth } | Op::ContinueTo { depth } => depth,
+                    _ => 0,
+                };
+                let continuation = matches!(instruction.op, Op::Continue | Op::ContinueTo { .. });
+                let mut index = self.controls.len();
+                let mut target = None;
+                while index != 0 {
+                    index -= 1;
+                    if let Control::Loop { start, end } = self.controls[index] {
+                        if depth == 0 {
+                            target = Some(if continuation { start } else { end });
+                            break;
+                        }
+                        depth -= 1;
+                    }
+                }
+                let target =
+                    target.ok_or_else(|| self.problem("checked loop transfer has no target"))?;
+                self.a.jump(target);
             }
-            Instruction::MemoryGrow => {
-                self.pop(DI)?;
-                self.a.call(self.p.grow);
-                self.push(A);
+            Op::Return { src } => {
+                if let Some(slot) = self.result_slot {
+                    self.a.load(DI, BP, slot);
+                    self.local_address(*src, SI);
+                    let result_ty = self.function.result;
+                    self.copy_value(DI, SI, result_ty);
+                    self.a.immediate(A, 0);
+                } else {
+                    self.read(*src, A);
+                }
+                self.a.jump(self.return_label);
             }
-            Instruction::MemoryCopy => {
-                self.pop(D)?;
-                self.pop(SI)?;
-                self.pop(DI)?;
-                self.a.call(self.p.copy);
+            Op::Trap { message } => {
+                let mut index = 0;
+                while index < self.messages.len() && self.messages[index] != *message {
+                    index += 1;
+                }
+                self.trap(16 + index as u64);
             }
-            _ => unreachable!(),
         }
         Ok(())
     }
 }
-
-fn function(
+struct Selection<'a> {
+    program: &'a Program,
+    layout: &'a Layouts,
+    functions: &'a [Label],
+    drops: &'a [Label],
+    runtime: RuntimeLabels,
+    messages: &'a [String],
+    source_lines: bool,
+}
+fn emit_function(
     a: &mut Assembler,
-    p: Platform,
-    program: &Program,
-    index: usize,
-    functions: &[Label],
-    signatures: &[Signature],
-    ids: &BTreeMap<Signature, u64>,
-) -> Result<()> {
-    let function = &program.functions[index];
-    let locals = function
-        .signature
-        .parameters
-        .len()
-        .checked_add(function.code.locals.len())
-        .ok_or("native local count overflow")?;
-    locals
-        .checked_add(function.code.instructions.len())
-        .and_then(|n| n.checked_add(1))
-        .and_then(|n| n.checked_mul(8))
-        .filter(|n| *n < 0x7fffffffffffffff_usize)
-        .ok_or("native frame exceeds signed offset representation")?;
-    a.bind(functions[program.imports.len() + index]);
-    let required = a.immediate(A, 0);
-    a.mov(C, SP);
-    a.rr(0x29, C, A, true);
-    a.condition(2, p.stack_exhausted);
-    a.compare(C, STACK);
-    a.condition(2, p.stack_exhausted);
-    a.raw(&[0x55]);
-    a.mov(BP, SP);
-    let allocated = a.immediate(A, 0);
-    a.rr(0x29, SP, A, true);
-    for (param, ty) in function.signature.parameters.iter().enumerate() {
-        a.load(A, DI, -(param as i64) * 8);
-        if *ty == ValueType::I32 {
-            a.rr(0x89, A, A, false);
+    p: platform::Platform,
+    selection: &Selection<'_>,
+    function_index: usize,
+    needed: &mut Vec<bool>,
+    needed_drops: &mut Vec<bool>,
+    literals: &mut BTreeMap<Vec<u8>, Label>,
+) -> Result<(), Diagnostic> {
+    let program = selection.program;
+    let layout = selection.layout;
+    let functions = selection.functions;
+    let drops = selection.drops;
+    let runtime = selection.runtime;
+    let messages = selection.messages;
+    let source_lines = selection.source_lines;
+    let function = &program.functions[function_index];
+    let site = first_site(function);
+    let mut frame = 0;
+    let mut slots = Vec::new();
+    for local in &function.locals {
+        let storage = layout.storage(local.ty);
+        slots.push(allocate_slot(
+            &mut frame,
+            storage.bytes,
+            storage.alignment,
+            site,
+        )?);
+    }
+    let mut scratch = Vec::new();
+    for _ in 0..8 {
+        scratch.push(allocate_slot(&mut frame, 8, 8, site)?);
+    }
+    let mut ownership = Ownership::new(function);
+    ownership.allocate(&mut frame, site)?;
+    let mut partial_scratch = Vec::new();
+    for _ in 0..ownership.depth + 2 {
+        partial_scratch.push(allocate_slot(&mut frame, 8, 8, site)?);
+    }
+    let mut incoming = Vec::new();
+    for _ in 0..function.params {
+        incoming.push(allocate_slot(&mut frame, 8, 8, site)?);
+    }
+    let result_slot = if layout.storage(function.result).scalar {
+        None
+    } else {
+        Some(allocate_slot(&mut frame, 8, 8, site)?)
+    };
+    let frame = frame_extent(frame, site)?;
+    let return_label = a.label();
+    a.location(site.file, site.line, site.column);
+    a.bind(functions[function_index]);
+    prologue(a, p, frame);
+    if let Some(slot) = result_slot {
+        a.store(BP, slot, DI);
+    }
+    let hidden = if result_slot.is_some() { 1 } else { 0 };
+    // Spill incoming words before an aggregate copy can clobber argument regs.
+    for index in 0..function.params {
+        let abi = index + hidden;
+        let register = if abi < 6 {
+            parameter_register(abi)
+        } else {
+            a.load(A, BP, 16 + (abi - 6) as i64 * 8);
+            A
+        };
+        a.store(BP, incoming[index], register);
+    }
+    for index in 0..function.params {
+        let storage = layout.storage(function.locals[index].ty);
+        if storage.scalar {
+            a.load(A, BP, incoming[index]);
+            a.store_width(BP, slots[index], A, storage.bytes as u8);
+        } else {
+            a.lea(DI, BP, slots[index]);
+            a.load(SI, BP, incoming[index]);
+            copy_bytes(a, p, storage.bytes);
         }
-        a.store(BP, -((param as i64 + 1) * 8), A);
     }
-    for local in function.signature.parameters.len()..locals {
-        a.immediate(A, 0);
-        a.store(BP, -((local as i64 + 1) * 8), A);
-    }
+    ownership.initialize(a, function.params);
     let mut body = Body {
         a,
-        p,
+        program,
+        function,
+        layout,
+        platform: p,
+        runtime,
+        slots,
+        scratch,
+        partial_scratch,
+        ownership,
+        site,
         functions,
-        signatures,
-        signature_ids: ids,
-        table_length: program.table.len(),
-        globals: &program.globals,
-        locals,
-        height: 0,
-        pending: Pending::None,
-        maximum: 0,
-        reachable: true,
-        regions: Vec::new(),
+        needed,
+        drops,
+        needed_drops,
+        literals,
+        messages,
+        controls: Vec::new(),
+        result_slot,
+        return_label,
+        source_lines,
     };
-    body.begin(RegionKind::Function, function.signature.result)?;
-    for instruction in &function.code.instructions {
-        body.instruction(instruction)?;
+    for instruction in &function.body {
+        body.emit(instruction)?;
     }
-    if !body.regions.is_empty() {
-        return Err("unfinished lowered control region".to_string());
-    }
-    let frame = ((locals + body.maximum) as u64 * 8 + 15) & !15;
-    put64(&mut body.a.bytes, allocated, frame);
-    put64(&mut body.a.bytes, required, frame + 24);
+    body.a.bind(return_label);
+    epilogue(body.a);
     Ok(())
 }
-
-// The ELF and x86 encodings are little-endian irrespective of the build host.
-// Use one byte loop for fixed-width writes rather than host conversion arrays.
-fn put_word(bytes: &mut [u8], at: usize, value: u64, count: usize) {
-    let mut index = 0;
-    while index < count {
-        bytes[at + index] = (value >> (index * 8)) as u8;
-        index += 1;
-    }
-}
-fn append_word(bytes: &mut Vec<u8>, value: u64, count: usize) {
-    let mut index = 0;
-    while index < count {
-        bytes.push((value >> (index * 8)) as u8);
-        index += 1;
-    }
-}
-fn copy_bytes(target: &mut [u8], at: usize, source: &[u8]) {
-    let mut index = 0;
-    while index < source.len() {
-        target[at + index] = source[index];
-        index += 1;
-    }
-}
-fn put16(bytes: &mut [u8], at: usize, value: u16) {
-    put_word(bytes, at, value as u64, 2);
-}
-fn put32(bytes: &mut [u8], at: usize, value: u32) {
-    put_word(bytes, at, value as u64, 4);
-}
-fn put64(bytes: &mut [u8], at: usize, value: u64) {
-    put_word(bytes, at, value, 8);
-}
-fn segment(bytes: &mut [u8], at: usize, flags: u32, offset: u64, size: u64) {
-    put32(bytes, at, 1);
-    put32(bytes, at + 4, flags);
-    put64(bytes, at + 8, offset);
-    put64(bytes, at + 16, IMAGE_BASE + offset);
-    put64(bytes, at + 24, IMAGE_BASE + offset);
-    put64(bytes, at + 32, size);
-    put64(bytes, at + 40, size);
-    put64(bytes, at + 48, 4096);
-}
-// IR checking validates every IR body before lowering. This graph only decides
-// which lowered bodies need machine code; it does not replace that safety boundary.
-// Preserve all signatures and table slots, including targets not called by entry.
-fn reachable_functions(program: &Program, entry: usize, count: usize) -> Result<Vec<bool>> {
-    let mut reachable = vec![false; count];
-    let mut pending = Vec::new();
-    reachable[entry] = true;
-    pending.push(entry);
-    for target in &program.table {
-        if *target >= count {
-            return Err("invalid lowered table function".to_string());
+fn emit_primitive(a: &mut Assembler, p: platform::Platform, label: Label, primitive: Primitive) {
+    a.bind(label);
+    match primitive {
+        Primitive::Load8 => {
+            a.load_width(A, DI, 0, 1, false);
+            a.ret();
         }
-        if !reachable[*target] {
-            reachable[*target] = true;
-            pending.push(*target);
+        Primitive::Load64 => {
+            a.load(A, DI, 0);
+            a.ret();
         }
+        Primitive::Store8 | Primitive::Store64 => {
+            a.store_width(
+                DI,
+                0,
+                SI,
+                if primitive == Primitive::Store8 { 1 } else { 8 },
+            );
+            a.immediate(A, 0);
+            a.ret();
+        }
+        Primitive::MemoryCopy => {
+            prologue(a, p, 0);
+            a.call(p.copy);
+            a.immediate(A, 0);
+            epilogue(a);
+        }
+        Primitive::Map => a.jump(p.map),
+        Primitive::Unmap => a.jump(p.unmap),
+        Primitive::AllocatorState => {
+            a.address(A, p.allocator_state);
+            a.ret();
+        }
+        Primitive::Fail => a.jump(p.heap_exhausted),
     }
-    // Keep index validation independent of reachability, even for omitted bodies.
+}
+fn drop_child(
+    a: &mut Assembler,
+    layout: &Layouts,
+    drops: &[Label],
+    needed_drops: &mut [bool],
+    ty: usize,
+) {
+    if layout.storage(ty).cleanup {
+        needed_drops[ty] = true;
+        a.call(drops[ty]);
+    }
+}
+fn emit_drop(
+    a: &mut Assembler,
+    p: platform::Platform,
+    selection: &Selection<'_>,
+    ty: usize,
+    needed_drops: &mut Vec<bool>,
+    needed: &mut Vec<bool>,
+) -> Result<(), Diagnostic> {
+    let program = selection.program;
+    let layout = selection.layout;
+    let functions = selection.functions;
+    let drops = selection.drops;
+    let runtime = selection.runtime;
+    a.bind(drops[ty]);
+    prologue(a, p, 48);
+    a.store(BP, -8, DI);
+    if let Some((_, function)) = program.destructors.iter().find(|entry| entry.0 == ty) {
+        needed[*function] = true;
+        a.call(functions[*function]);
+    }
+    match &program.types[ty].kind {
+        TypeKind::Struct { fields, .. } => {
+            for (index, field) in fields.iter().enumerate() {
+                if layout.storage(field.ty).cleanup {
+                    a.load(DI, BP, -8);
+                    a.lea(DI, DI, layout.field_offset(ty, None, index) as i64);
+                    drop_child(a, layout, drops, needed_drops, field.ty);
+                }
+            }
+        }
+        TypeKind::Enum { variants, .. } => {
+            let done = a.label();
+            for (variant, value) in variants.iter().enumerate() {
+                let next = a.label();
+                a.load(DI, BP, -8);
+                a.load(A, DI, 0);
+                a.immediate(C, variant as u64);
+                a.compare(A, C);
+                a.condition(5, next);
+                for (index, field) in value.fields.iter().enumerate() {
+                    if layout.storage(field.ty).cleanup {
+                        a.load(DI, BP, -8);
+                        a.lea(DI, DI, layout.field_offset(ty, Some(variant), index) as i64);
+                        drop_child(a, layout, drops, needed_drops, field.ty);
+                    }
+                }
+                a.jump(done);
+                a.bind(next);
+            }
+            a.bind(done);
+        }
+        TypeKind::Box { inner } => {
+            a.load(DI, BP, -8);
+            a.load(DI, DI, 0);
+            a.store(BP, -16, DI);
+            drop_child(a, layout, drops, needed_drops, *inner);
+            a.load(DI, BP, -16);
+            a.call(runtime.release);
+        }
+        TypeKind::Vec { inner } | TypeKind::Array { inner, .. } => {
+            a.load(DI, BP, -8);
+            match program.types[ty].kind {
+                TypeKind::Vec { .. } => {
+                    a.load(A, DI, 0);
+                    a.store(BP, -16, A);
+                    a.load(A, DI, 8);
+                    a.store(BP, -24, A);
+                }
+                TypeKind::Array { len, .. } => {
+                    a.store(BP, -16, DI);
+                    a.immediate(A, len as u64);
+                    a.store(BP, -24, A);
+                }
+                _ => {}
+            }
+            if layout.storage(*inner).cleanup {
+                a.immediate(A, 0);
+                a.store(BP, -32, A);
+                let next = a.label();
+                let done = a.label();
+                a.bind(next);
+                a.load(A, BP, -32);
+                a.load(C, BP, -24);
+                a.compare(A, C);
+                a.condition(3, done);
+                a.immediate(C, layout.stride(*inner));
+                a.imul(A, C);
+                a.load(DI, BP, -16);
+                a.rr(0x01, DI, A, true);
+                drop_child(a, layout, drops, needed_drops, *inner);
+                a.load(A, BP, -32);
+                a.immediate(C, 1);
+                a.rr(0x01, A, C, true);
+                a.store(BP, -32, A);
+                a.jump(next);
+                a.bind(done);
+            }
+            if matches!(program.types[ty].kind, TypeKind::Vec { .. }) {
+                a.load(DI, BP, -16);
+                a.call(runtime.release);
+            }
+        }
+        TypeKind::File | TypeKind::Directory => {
+            a.load(DI, BP, -8);
+            a.load(DI, DI, 0);
+            a.call(p.handle_close);
+        }
+        _ => {}
+    }
+    a.immediate(A, 0);
+    epilogue(a);
+    Ok(())
+}
+fn labels(a: &mut Assembler, count: usize) -> Vec<Label> {
+    let mut result = Vec::new();
+    for _ in 0..count {
+        result.push(a.label());
+    }
+    result
+}
+fn messages(program: &Program) -> Vec<String> {
+    let mut messages = Vec::new();
     for function in &program.functions {
-        for instruction in &function.code.instructions {
-            if let Instruction::Call(target) = instruction {
-                if *target >= count {
-                    return Err("invalid lowered call".to_string());
+        for instruction in &function.body {
+            if let Op::Trap { message } = &instruction.op {
+                if !messages.contains(message) {
+                    messages.push(message.clone());
                 }
             }
         }
     }
-    while let Some(index) = pending.pop() {
-        if index < program.imports.len() {
-            continue;
-        }
-        for instruction in &program.functions[index - program.imports.len()]
-            .code
-            .instructions
-        {
-            if let Instruction::Call(target) = instruction {
-                if !reachable[*target] {
-                    reachable[*target] = true;
-                    pending.push(*target);
-                }
-            }
-        }
-    }
-    Ok(reachable)
+    messages
 }
-pub fn encode(program: &Program, entry: Entry) -> Result<Vec<u8>> {
-    let mut signatures: Vec<Signature> = Vec::new();
-    for import in &program.imports {
-        signatures.push(import.signature.clone());
-    }
-    for function in &program.functions {
-        signatures.push(function.signature.clone());
-    }
-    let selected = signatures
-        .get(entry.function)
-        .ok_or("native entry is not a function")?;
-    if selected.parameters.len() != entry.arguments.len() {
-        return Err("native entry argument count differs".to_string());
-    }
-    let reachable = reachable_functions(program, entry.function, signatures.len())?;
-    let initial = program
-        .minimum_memory_pages
-        .checked_mul(65536)
-        .ok_or("native initial heap extent overflow")?;
-    if program
-        .data_offset
-        .checked_add(program.data.len() as u64)
-        .is_none_or(|end| end > initial)
-    {
-        return Err("lowered data exceeds initial memory".to_string());
-    }
-    if program.trap_code_global >= program.globals.len()
-        || program.trap_line_global >= program.globals.len()
-    {
-        return Err("missing lowered trap globals".to_string());
-    }
-    let mut ids: BTreeMap<Signature, u64> = BTreeMap::new();
-    for signature in &signatures {
-        let next = ids.len() as u64;
-        if !ids.contains_key(signature) {
-            ids.insert(signature.clone(), next);
-        }
-    }
-    for f in &program.functions {
-        for instruction in &f.code.instructions {
-            if let Instruction::CallIndirect(signature) = instruction {
-                let next = ids.len() as u64;
-                if !ids.contains_key(signature) {
-                    ids.insert(signature.clone(), next);
-                }
+pub fn encode(
+    checked: &CheckedProgram,
+    runtime: &Runtime,
+    entry: Entry,
+) -> Result<Image, Diagnostic> {
+    encode_program(checked.program(), runtime, entry, false)
+}
+pub fn encode_runtime(runtime: &Runtime, entry: Entry) -> Result<Image, Diagnostic> {
+    encode_program(runtime.checked_program(), runtime, entry, true)
+}
+fn scalar_entry(kind: &TypeKind) -> bool {
+    matches!(
+        kind,
+        TypeKind::Unit | TypeKind::Bool | TypeKind::Char | TypeKind::Int { .. } | TypeKind::F64
+    )
+}
+fn argument_fits(kind: &TypeKind, value: u64) -> bool {
+    match kind {
+        TypeKind::Unit => value == 0,
+        TypeKind::Bool => value <= 1,
+        TypeKind::Char => value <= 0x10ffff && !(value >= 0xd800 && value <= 0xdfff),
+        TypeKind::Int { bits, signed } => {
+            if *bits == 64 {
+                true
+            } else if *signed {
+                ((((value << (64 - *bits)) as i64) >> (64 - *bits)) as u64) == value
+            } else {
+                value < (1u64 << *bits)
             }
+        }
+        TypeKind::F64 => {
+            value & 0x7ff0000000000000 != 0x7ff0000000000000
+                || value & 0x000fffffffffffff == 0
+                || value == 0x7ff8000000000000
+        }
+        _ => false,
+    }
+}
+fn encode_program(
+    program: &Program,
+    runtime: &Runtime,
+    entry: Entry,
+    runtime_model: bool,
+) -> Result<Image, Diagnostic> {
+    let selected = match program.functions.get(entry.function) {
+        Some(function) => function,
+        None => {
+            return Err(Diagnostic::new(
+                Span::default(),
+                "E_ENTRY",
+                "native entry is not a function",
+            ));
+        }
+    };
+    let layout = Layouts::new(program)?;
+    if !scalar_entry(&program.types[selected.result].kind) {
+        return Err(Diagnostic::new(
+            first_site(selected),
+            "E_ENTRY",
+            "native entry result must be a scalar",
+        ));
+    }
+    if selected.params != entry.arguments.len() {
+        return Err(Diagnostic::new(
+            first_site(selected),
+            "E_ENTRY",
+            "native entry argument count differs",
+        ));
+    }
+    for index in 0..selected.params {
+        let kind = &program.types[selected.locals[index].ty].kind;
+        let value = entry.arguments[index] as u64;
+        let world =
+            !runtime_model && selected.params == 1 && matches!(kind, TypeKind::World) && value == 1;
+        if !world && !argument_fits(kind, value) {
+            return Err(Diagnostic::new(
+                first_site(selected),
+                "E_ENTRY",
+                "native entry arguments must be valid scalars or one granted World; addresses and derived capabilities cannot be supplied as bits",
+            ));
         }
     }
     let mut a = Assembler::new();
-    let p = Platform::new(&mut a, program);
-    let mut functions = Vec::new();
-    for _ in &signatures {
-        functions.push(a.label());
-    }
-    for (index, import) in program.imports.iter().enumerate() {
-        let (label, parameters) = p.io.import(import.host, p.stdout);
-        if import.signature != Signature::words(parameters) {
-            return Err("invalid host import signature".to_string());
+    let p = platform::Platform::new(&mut a);
+    let functions = labels(&mut a, program.functions.len());
+    let drops = labels(&mut a, program.types.len());
+    let runtime_functions = if runtime_model {
+        functions.clone()
+    } else {
+        labels(&mut a, runtime.checked_program().functions.len())
+    };
+    let runtime_labels = RuntimeLabels::new(runtime, &runtime_functions);
+    let trap_messages = messages(program);
+    let mut literals = BTreeMap::new();
+    let mut needed = vec![false; program.functions.len()];
+    let mut emitted = vec![false; program.functions.len()];
+    let mut needed_drops = vec![false; program.types.len()];
+    let mut emitted_drops = vec![false; program.types.len()];
+    needed[entry.function] = true;
+    if runtime_model {
+        for index in 0..needed.len() {
+            needed[index] = true;
         }
-        functions[index] = label;
     }
-    platform(&mut a, p, program, &entry, &functions, initial);
-    for index in 0..program.functions.len() {
-        if reachable[program.imports.len() + index] {
-            function(&mut a, p, program, index, &functions, &signatures, &ids)?;
+    platform::emit(&mut a, p, functions[entry.function], &entry);
+    {
+        let selection = Selection {
+            program,
+            layout: &layout,
+            functions: &functions,
+            drops: &drops,
+            runtime: runtime_labels,
+            messages: &trap_messages,
+            source_lines: !runtime_model,
+        };
+        loop {
+            let mut progress = false;
+            for index in 0..program.functions.len() {
+                if needed[index] && !emitted[index] {
+                    emitted[index] = true;
+                    progress = true;
+                    let primitive = if runtime_model {
+                        runtime.primitive(index)
+                    } else {
+                        None
+                    };
+                    if let Some(primitive) = primitive {
+                        emit_primitive(&mut a, p, functions[index], primitive);
+                    } else {
+                        emit_function(
+                            &mut a,
+                            p,
+                            &selection,
+                            index,
+                            &mut needed,
+                            &mut needed_drops,
+                            &mut literals,
+                        )?;
+                    }
+                }
+            }
+            for ty in 0..program.types.len() {
+                if needed_drops[ty] && !emitted_drops[ty] {
+                    emitted_drops[ty] = true;
+                    progress = true;
+                    emit_drop(&mut a, p, &selection, ty, &mut needed_drops, &mut needed)?;
+                }
+            }
+            if !progress {
+                break;
+            }
         }
     }
-    let data_offset = (CODE_OFFSET + a.bytes.len() + 4095) & !4095;
-    let mut data = vec![0u8; CONTEXT_GLOBALS as usize + program.globals.len() * 8];
-    put64(&mut data, HEAP_USED as usize, initial);
-    for (i, global) in program.globals.iter().enumerate() {
-        put64(
-            &mut data,
-            CONTEXT_GLOBALS as usize + i * 8,
-            global.initial as u64,
-        );
+    if !runtime_model {
+        let meaning = runtime.checked_program();
+        let runtime_layout = Layouts::new(meaning)?;
+        let runtime_drops = labels(&mut a, meaning.types.len());
+        let mut needed_runtime = vec![true; meaning.functions.len()];
+        let mut unused_drops = vec![false; meaning.types.len()];
+        let runtime_messages = messages(meaning);
+        let selection = Selection {
+            program: meaning,
+            layout: &runtime_layout,
+            functions: &runtime_functions,
+            drops: &runtime_drops,
+            runtime: runtime_labels,
+            messages: &runtime_messages,
+            source_lines: false,
+        };
+        for index in 0..meaning.functions.len() {
+            if let Some(primitive) = runtime.primitive(index) {
+                emit_primitive(&mut a, p, runtime_functions[index], primitive);
+            } else {
+                emit_function(
+                    &mut a,
+                    p,
+                    &selection,
+                    index,
+                    &mut needed_runtime,
+                    &mut unused_drops,
+                    &mut literals,
+                )?;
+            }
+        }
     }
-    a.data_label(p.context, data_offset);
-    a.data_label(p.table, data_offset + data.len());
-    let mut table_references = Vec::new();
-    for index in &program.table {
-        let signature = signatures
-            .get(*index)
-            .ok_or("invalid lowered table function")?;
-        table_references.push((data.len(), functions[*index]));
-        data.extend_from_slice(&[0u8; 8]);
-        append_word(
-            &mut data,
-            *ids.get(signature).expect("interned signature"),
-            8,
-        );
+    let data_offset = (a.bytes.len() + 4095) & !4095;
+    let mut data = Vec::new();
+    platform::data(&mut a, p, &mut data, data_offset);
+    for (bytes, label) in &literals {
+        a.data_label(*label, data_offset + data.len());
+        data.extend_from_slice(bytes);
     }
-    a.data_label(p.signal_action, data_offset + data.len());
-    append_word(&mut data, 1, 8);
-    data.extend_from_slice(&[0u8; 24]);
-    a.data_label(p.system_info, data_offset + data.len());
-    data.extend_from_slice(&[0u8; 112]);
-    a.data_label(p.resource_limit, data_offset + data.len());
-    data.extend_from_slice(&[0u8; 16]);
-    a.data_label(p.diagnostic_buffer, data_offset + data.len());
-    data.extend_from_slice(&[0u8; 128]);
-    p.io.data(&mut a, &mut data, data_offset);
-    let mut argument = entry.arguments.len();
-    while argument > 0 {
-        argument -= 1;
-        append_word(&mut data, entry.arguments[argument] as u64, 8);
+    while a.bytes.len() < data_offset {
+        a.bytes.push(0);
     }
-    a.data_label(
-        p.arguments,
-        data_offset + data.len() - if entry.arguments.is_empty() { 0 } else { 8 },
-    );
-    a.data_label(p.literals, data_offset + data.len());
-    data.extend_from_slice(&program.data);
-    let image_end = data_offset
-        .checked_add(data.len())
-        .and_then(|end| end.checked_add(4095))
-        .ok_or("native image size overflow")?
-        & !4095;
-    a.data_label(p.image_end, image_end);
-    for (at, label) in table_references {
-        put64(
-            &mut data,
-            at,
-            a.labels[label].ok_or("unbound native table function")?,
-        );
-    }
-    let code = a.finish()?;
-    let mut output = vec![0u8; data_offset + data.len()];
-    copy_bytes(
-        &mut output,
-        0,
-        &[0x7f, b'E', b'L', b'F', 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    );
-    put16(&mut output, 16, 2);
-    put16(&mut output, 18, 62);
-    put32(&mut output, 20, 1);
-    put64(&mut output, 24, IMAGE_BASE + CODE_OFFSET as u64);
-    put64(&mut output, 32, 64);
-    put16(&mut output, 52, 64);
-    put16(&mut output, 54, 56);
-    put16(&mut output, 56, 2);
-    segment(&mut output, 64, 5, 0, data_offset as u64);
-    segment(&mut output, 120, 6, data_offset as u64, data.len() as u64);
-    copy_bytes(&mut output, CODE_OFFSET, &code);
-    copy_bytes(&mut output, data_offset, &data);
-    Ok(output)
+    a.bytes.extend_from_slice(&data);
+    let image = a.finish()?;
+    let bytes = platform::elf(image, data_offset)?;
+    Ok(Image {
+        bytes,
+        trap_messages,
+    })
 }

@@ -2,13 +2,11 @@
 // A direct attack on checked IR: no source frontend, source fixtures or rustc oracle.
 import fs from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { run } from '../process.mjs';
 import { runCases } from '../batch.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const tokens = line => line.match(/"(?:\\.|[^"\\])*"|\S+/g) || [];
 const control = new Set(['if', 'else', 'end', 'loop', 'break', 'continue', 'break-to', 'continue-to', 'return']);
 const pureTypes = new Set(['unit', 'bool', 'int', 'f64', 'char', 'str', 'ref', 'array', 'slice', 'box', 'vec', 'struct', 'enum']);
@@ -122,7 +120,7 @@ export function generateMutations(seeds, seed, budget) {
     return Array.from({length: budget}, (_, index) => {
         const base = pick(prepared), mutation = pick(pick(base.groups));
         const text = applyMutation(base.text, mutation);
-        return {index, base: base.path, baseSha256: hash(base.text), entry: base.entry || 'probe', ...mutation, text, sha256: hash(text)};
+        return {index, base: base.path, entry: base.entry || 'probe', ...mutation, text};
     });
 }
 
@@ -155,11 +153,7 @@ export function compareRoutes(ir, native) {
     if ([ir, native].some(value => value.kind === 'model-error')) return {category: 'model-error', finding: true};
     if ([ir, native].some(value => value.kind === 'host-error')) return {category: 'host-error', finding: true};
     if ([ir, native].some(value => value.kind === 'timeout')) return {category: 'timeout', finding: false};
-    if (ir.kind === 'resource' || native.kind === 'resource') {
-        if (ir.kind !== 'resource' || native.kind !== 'resource') return {category: 'resource-limited', finding: false};
-        return {category: ir.code === native.code ? 'resource-equal' : 'resource-class-differs',
-            finding: ir.code !== native.code, locationEqual: sameLocation(ir.location, native.location)};
-    }
+    if (ir.kind === 'resource' || native.kind === 'resource') return {category: 'resource', finding: false};
     if (ir.kind !== native.kind) return {category: 'ending-differs', finding: true};
     if (ir.stdoutHex !== native.stdoutHex) return {category: 'value-differs', finding: true};
     if (ir.kind === 'value') return {category: 'value-equal', finding: false};
@@ -185,9 +179,6 @@ export async function main(argv = process.argv.slice(2)) {
     const [binaryInput, seed, budgetText, outputInput] = argv;
     const budget = integer(budgetText, 'mutation budget');
     const jobs = integer(process.env.LKJSCRIPT_IR_MUTATION_JOBS || 1, 'LKJSCRIPT_IR_MUTATION_JOBS');
-    const timeout = integer(process.env.LKJSCRIPT_IR_MUTATION_TIMEOUT_MS || 2000, 'LKJSCRIPT_IR_MUTATION_TIMEOUT_MS');
-    const memoryBytes = process.env.LKJSCRIPT_TEST_MEMORY_BYTES || '1073741824';
-    const stackBytes = process.env.LKJSCRIPT_RUN_STACK_BYTES || '1048576';
     const binarySource = path.resolve(binaryInput);
     const outputBase = path.resolve(outputInput || path.join(root, 'target/generated/ir-mutation'));
     fs.mkdirSync(outputBase, {recursive: true});
@@ -203,27 +194,14 @@ export async function main(argv = process.argv.slice(2)) {
     const seedFiles = seeds.map((source, index) => {
         const file = path.join(directory, 'seed-' + index + '.lkjir'); fs.writeFileSync(file, source.text); return file;
     });
-    const git = await run('git', ['rev-parse', 'HEAD'], {cwd: root, timeout: 2000});
-    const status = await run('git', ['status', '--porcelain'], {cwd: root, timeout: 2000});
-    const limits = process.platform === 'linux' ? fs.readFileSync('/proc/self/limits', 'utf8') : null;
-    const metadata = {format: 1, seed, budget, jobs, timeoutMs: timeout, memoryBytes, stackBytes,
-        inheritedLimits: limits, node: process.version, binarySource, binarySha256: hash(fs.readFileSync(binary)),
-        git: git.stdout.trim(), dirty: status.stdout, started: new Date().toISOString(),
-        generatorSha256: hash(fs.readFileSync(fileURLToPath(import.meta.url))),
-        processRunnerSha256: hash(fs.readFileSync(path.join(root, 'tools/process.mjs'))),
-        batchSha256: hash(fs.readFileSync(path.join(root, 'tools/batch.mjs'))),
-        seeds: seeds.map(source => ({path: source.path, entry: source.entry, sha256: hash(source.text)}))};
-    save(path.join(directory, 'metadata.json'), metadata);
-    save(path.join(directory, 'mutations.json'), mutants.map(({text, ...record}) => record));
-    const env = {...process.env, LKJSCRIPT_RUN_MEMORY_BYTES: memoryBytes, LKJSCRIPT_RUN_STACK_BYTES: stackBytes, LKJSCRIPT_TIMINGS: '0'};
-    const options = {cwd: root, encoding: null, memoryBytes, env, timeout, maxBuffer: 4 * 1024 * 1024};
+    const options = {cwd: root, encoding: null};
     const seedChecks = await runCases(binary, seeds.map((source, index) => ({path: seedFiles[index], mode: 'check', entry: source.entry})),
-        {...options, output: directory, jobs, timeout: Math.max(timeout, 30000)});
+        {...options, output: directory, jobs});
     for (let index = 0; index < seeds.length; index++) if (seedChecks[index].error || seedChecks[index].checkStatus !== 0) {
         throw new Error('canonical seed failed: ' + seeds[index].path + ': ' + seedChecks[index].stderr.toString());
     }
     const checks = await runCases(binary, mutants.map((mutant, index) => ({path: files[index], mode: 'check', entry: mutant.entry})),
-        {...options, output: directory, jobs, timeout: Math.max(timeout, 30000)});
+        {...options, output: directory, jobs});
     const results = new Array(budget), started = performance.now();
     await workers(budget, jobs, async index => {
         const mutant = mutants[index], check = checks[index];
@@ -240,15 +218,18 @@ export async function main(argv = process.argv.slice(2)) {
                 return {...classifyRoute(processResult), milliseconds: performance.now() - time};
             };
             const ir = await runRoute('interpreter');
-            const native = ['safety-error', 'model-error'].includes(ir.kind)
-                ? {kind: 'skipped', reason: 'independent model found a contract violation'}
-                : await runRoute('native');
+            const native = ir.kind === 'timeout'
+                ? {kind: 'skipped', reason: 'independent interpreter timed out'}
+                : ['safety-error', 'model-error'].includes(ir.kind)
+                    ? {kind: 'skipped', reason: 'independent model found a contract violation'}
+                    : await runRoute('native');
             result = {...compareRoutes(ir, native), interpreter: ir, native};
         }
-        results[index] = {index, base: mutant.base, kind: mutant.kind, sha256: mutant.sha256, ...result};
-        save(path.join(directory, index + '.result.json'), results[index]);
+        results[index] = {index, base: mutant.base, kind: mutant.kind, ...result};
+        if (result.finding || result.category === 'timeout') {
+            save(path.join(directory, index + '.result.json'), {...results[index], edits: mutant.edits});
+        }
     });
-    fs.writeFileSync(path.join(directory, 'results.jsonl'), results.map(record => JSON.stringify(record)).join('\n') + '\n');
     const counts = {}, routeCounts = {interpreter: {}, native: {}}, operators = {};
     for (const result of results) {
         counts[result.category] = (counts[result.category] || 0) + 1;
@@ -256,9 +237,7 @@ export async function main(argv = process.argv.slice(2)) {
         for (const engine of ['interpreter', 'native']) if (result[engine]) routeCounts[engine][result[engine].kind] = (routeCounts[engine][result[engine].kind] || 0) + 1;
     }
     const summary = {seed, budget, counts, routeCounts, operators, findings: results.filter(result => result.finding).length,
-        resourceLocationDifferences: results.filter(result => result.category === 'resource-equal' && !result.locationEqual).length,
         executionSeconds: (performance.now() - started) / 1000, directory};
-    save(path.join(directory, 'summary.json'), summary);
     process.stdout.write('IR mutation: ' + JSON.stringify(summary) + '\n');
     for (const result of results.filter(result => result.finding)) process.stderr.write('FINDING ' + result.index + ': ' + result.category + '\n');
     if (summary.findings) process.exitCode = 1;

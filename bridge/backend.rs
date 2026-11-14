@@ -7,7 +7,7 @@
 #[path = "../src/backend_lib.rs"]
 mod core;
 pub(crate) use core::facts;
-pub use core::{backend, check, diagnostic, ir, ir_text, lower, native, runtime};
+pub use core::{backend, check, diagnostic, ir, ir_text, native, runtime, x86};
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::process::ExitCode;

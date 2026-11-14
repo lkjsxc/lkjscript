@@ -50,15 +50,15 @@ test('value bytes and trap kind/location remain exact, including equal bounds tr
     assert.equal(panic.location.column, 3);
 });
 
-test('resource classes are compared, resource locations retained, and exhaustion never equals a value', () => {
-    const stack = observed('mutant.lkjir:114: R0008 stack extent exhausted\n');
-    const otherStack = observed('mutant.lkjir:62: R0008 stack extent exhausted\n');
+test('resource exhaustion remains a separate outcome without route comparison', () => {
+    const stack = observed('mutant.lkjir:114: R0008 stack exhausted\n');
+    const otherStack = observed('mutant.lkjir:62: R0008 stack exhausted\n');
     const heap = observed('mutant.lkjir:114: R0006 allocation failed\n');
-    assert.deepEqual(compareRoutes(stack, otherStack), {category: 'resource-equal', finding: false, locationEqual: false});
+    assert.deepEqual(compareRoutes(stack, otherStack), {category: 'resource', finding: false});
     assert.equal(stack.location.line, 114);
     assert.equal(otherStack.location.line, 62);
-    assert.deepEqual(compareRoutes(stack, heap), {category: 'resource-class-differs', finding: true, locationEqual: true});
-    assert.deepEqual(compareRoutes(stack, observed('', '42\n')), {category: 'resource-limited', finding: false});
+    assert.deepEqual(compareRoutes(stack, heap), {category: 'resource', finding: false});
+    assert.deepEqual(compareRoutes(stack, observed('', '42\n')), {category: 'resource', finding: false});
 });
 
 test('timeouts, safety/model errors and process failures cannot masquerade as traps or values', () => {
@@ -68,6 +68,7 @@ test('timeouts, safety/model errors and process failures cannot masquerade as tr
     const crash = observed('', '42\n', {signal: 'SIGSEGV', status: null});
     assert.equal(timeout.kind, 'timeout');
     assert.equal(compareRoutes(timeout, observed('', '42\n')).category, 'timeout');
+    assert.deepEqual(compareRoutes(timeout, {kind: 'skipped', reason: 'independent interpreter timed out'}), {category: 'timeout', finding: false});
     assert.equal(compareRoutes(safety, observed('', '42\n')).category, 'safety-error');
     assert.equal(compareRoutes(unsupported, observed('', '42\n')).category, 'model-error');
     assert.equal(compareRoutes(crash, observed('', '42\n')).category, 'host-error');

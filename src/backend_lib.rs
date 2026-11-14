@@ -6,7 +6,8 @@ pub mod diagnostic;
 pub(crate) mod facts;
 pub mod ir;
 pub mod ir_text;
-pub mod lower;
-pub mod native;
 pub mod result_wire;
+
+pub mod native;
 pub mod runtime;
+pub mod x86;

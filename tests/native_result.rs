@@ -209,7 +209,7 @@ fn traps_retain_diagnostic_label_line_and_custom_messages() {
         (5, "assertion failed"),
         (6, "heap allocation failed"),
         (7, "host output failure"),
-        (8, "stack extent exhausted"),
+        (8, "stack exhausted"),
         (16, "first"),
         (17, "custom\n\0π"),
     ] {
@@ -258,8 +258,8 @@ fn parent_status_is_checked_and_control_stream_is_fully_consumed() {
 }
 
 #[test]
-fn backend_default_bytes_and_optional_descriptor_use_the_same_lowering() {
-    use lkjscript::{backend, bootstrap_runtime, check, ir_text, lower, native};
+fn backend_default_bytes_and_optional_descriptor_use_the_same_encoder() {
+    use lkjscript::{backend, bootstrap_runtime, check, ir_text, native};
     let checked = check::check(
         ir_text::read(
             "lkjscript-ir 1\ntype \"()\" unit\ntype \"bool\" bool\ntype \"i32\" int 32 signed\n\
@@ -272,17 +272,15 @@ fn backend_default_bytes_and_optional_descriptor_use_the_same_lowering() {
     )
     .unwrap();
     let runtime = bootstrap_runtime::get().unwrap();
-    let program = lower::lower(&checked, runtime).unwrap();
-    let function = program
-        .exports
+    let function = checked
+        .program()
+        .functions
         .iter()
-        .find(|item| item.name == "fn:probe")
-        .unwrap()
-        .function;
-    // This is the exact pre-option encoder contract. Adding eval must not alter
-    // standalone bytes, and packet metadata must match this lowering's table.
+        .position(|function| function.name == "probe")
+        .unwrap();
     let ordinary = native::encode(
-        &program,
+        &checked,
+        runtime,
         native::Entry {
             function,
             arguments: vec![],
@@ -290,7 +288,10 @@ fn backend_default_bytes_and_optional_descriptor_use_the_same_lowering() {
         },
     )
     .unwrap();
-    assert_eq!(backend::emit(&checked, runtime, "probe").unwrap(), ordinary);
+    assert_eq!(
+        backend::emit(&checked, runtime, "probe").unwrap(),
+        ordinary.bytes
+    );
     let (eval, bytes) = backend::emit_for_eval(&checked, runtime, "probe").unwrap();
     let descriptor = result_wire::decode(&bytes).unwrap();
     assert!(
@@ -300,7 +301,7 @@ fn backend_default_bytes_and_optional_descriptor_use_the_same_lowering() {
                 signed: true
             }
     );
-    assert_eq!(descriptor.traps, program.trap_messages);
+    assert_eq!(descriptor.traps, ordinary.trap_messages);
     assert!(
         descriptor
             .traps
@@ -308,7 +309,8 @@ fn backend_default_bytes_and_optional_descriptor_use_the_same_lowering() {
             .any(|message| message == "custom message")
     );
     let expected_eval = native::encode(
-        &program,
+        &checked,
+        runtime,
         native::Entry {
             function,
             arguments: vec![],
@@ -316,7 +318,10 @@ fn backend_default_bytes_and_optional_descriptor_use_the_same_lowering() {
         },
     )
     .unwrap();
-    assert_eq!(eval, expected_eval);
-    assert_ne!(eval, ordinary);
-    assert_eq!(backend::emit(&checked, runtime, "probe").unwrap(), ordinary);
+    assert_eq!(eval, expected_eval.bytes);
+    assert_ne!(eval, ordinary.bytes);
+    assert_eq!(
+        backend::emit(&checked, runtime, "probe").unwrap(),
+        ordinary.bytes
+    );
 }

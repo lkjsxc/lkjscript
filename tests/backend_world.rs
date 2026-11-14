@@ -68,7 +68,7 @@ fn world_backend_driver_checks_declared_inputs_and_emits_identical_bytes() {
                  include!({driver:?});\n\
              }}\n\
              pub(crate) use driver::facts;\n\
-             pub use driver::{{check, diagnostic, ir, ir_text, backend, lower, native, runtime}};\n\
+             pub use driver::{{check, diagnostic, ir, ir_text, backend, native, runtime, x86}};\n\
              fn main() {{ host::enter(driver::main); }}\n",
             adapter = root.join("bridge/output.rs"),
             driver = root.join("src/backend_main.rs"),

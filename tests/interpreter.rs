@@ -28,13 +28,7 @@ fn execute(
         .iter()
         .position(|function| function.name == name)
         .unwrap();
-    interpreter::run(
-        program,
-        entry,
-        args,
-        &mut Vec::new(),
-        interpreter::Resources::unlimited(),
-    )
+    interpreter::run(program, entry, args, &mut Vec::new())
 }
 fn must_run(
     result: Result<interpreter::RunResult, interpreter::RunError>,
@@ -111,13 +105,7 @@ fn model_uses_an_explicit_stack_for_non_tail_calls_and_deep_cleanup() {
         .iter()
         .position(|function| function.name == "probe")
         .unwrap();
-    let result = must_run(interpreter::run(
-        &program,
-        entry,
-        &[],
-        &mut Vec::new(),
-        interpreter::Resources::unlimited(),
-    ));
+    let result = must_run(interpreter::run(&program, entry, &[], &mut Vec::new()));
     assert_eq!(observed(result.value), 20000);
     assert_eq!(result.peak_frames, 20002);
     let cleanup = "enum List {End,Next(Box<List>)} pub fn probe()->i64 {let mut v=List::End;let mut i:i64=0;while i<20000 {v=List::Next(Box::new(v));i=i+1;}i}";
@@ -189,15 +177,9 @@ fn drop_local(local: usize) -> ir::Op {
     }
 }
 fn fails(program: ir::Program, expected: InterpreterError) {
-    let error = interpreter::run(
-        &program,
-        0,
-        &[],
-        &mut Vec::new(),
-        interpreter::Resources::unlimited(),
-    )
-    .err()
-    .expect("expected a interpreter failure");
+    let error = interpreter::run(&program, 0, &[], &mut Vec::new())
+        .err()
+        .expect("expected a interpreter failure");
     assert!(
         error.kind == ErrorKind::Interpreter(expected),
         "{}: {}",
@@ -354,16 +336,10 @@ fn raw_ir_cannot_fabricate_host_authority_or_supply_it_as_integer_argument() {
         let mut entry = program;
         entry.functions[0].params = 1;
         assert!(
-            interpreter::run(
-                &entry,
-                0,
-                &[0],
-                &mut Vec::new(),
-                interpreter::Resources::unlimited()
-            )
-            .err()
-            .expect("expected a interpreter failure")
-            .kind
+            interpreter::run(&entry, 0, &[0], &mut Vec::new(),)
+                .err()
+                .expect("expected a interpreter failure")
+                .kind
                 == ErrorKind::Interpreter(InterpreterError::InvalidIr)
         );
     }
@@ -380,13 +356,7 @@ fn run_output<H: interpreter::Host>(
         .iter()
         .position(|function| function.name == "main")
         .unwrap();
-    interpreter::run(
-        program,
-        entry,
-        &[],
-        host,
-        interpreter::Resources::unlimited(),
-    )
+    interpreter::run(program, entry, &[], host)
 }
 
 #[test]
@@ -520,17 +490,7 @@ fn conditional_projected_drop_clears_moves_while_strict_drop_rejects_repeated_de
         ir::UNIT,
         ops,
     );
-    assert!(
-        must_run(interpreter::run(
-            &valid,
-            0,
-            &[],
-            &mut Vec::new(),
-            interpreter::Resources::unlimited()
-        ))
-        .value
-            == Scalar::Unit
-    );
+    assert!(must_run(interpreter::run(&valid, 0, &[], &mut Vec::new(),)).value == Scalar::Unit);
 }
 
 #[test]
@@ -576,14 +536,7 @@ fn strict_and_conditional_drops_have_independent_static_and_dynamic_checks() {
     lkjscript::check::check(accepted.clone())
         .unwrap_or_else(|problem| panic!("{}: {}", problem.code, problem.message));
     assert!(
-        must_run(interpreter::run(
-            &accepted,
-            0,
-            &[],
-            &mut Vec::new(),
-            interpreter::Resources::unlimited()
-        ))
-        .value
+        must_run(interpreter::run(&accepted, 0, &[], &mut Vec::new(),)).value
             == Scalar::Int {
                 value: 42,
                 bits: 64,
@@ -647,15 +600,9 @@ fn shared_reference_copy_keeps_real_carrier_and_exclusive_parent_conflicts() {
         let program = lkjscript::ir_text::read(text).unwrap();
         let diagnostic = lkjscript::check::check(program.clone()).err().unwrap();
         assert_eq!(diagnostic.code, "E_BORROW");
-        let error = interpreter::run(
-            &program,
-            0,
-            &[],
-            &mut Vec::new(),
-            interpreter::Resources::unlimited(),
-        )
-        .err()
-        .unwrap();
+        let error = interpreter::run(&program, 0, &[], &mut Vec::new())
+            .err()
+            .unwrap();
         assert!(
             error.kind == ErrorKind::Interpreter(InterpreterError::ConflictingAccess),
             "{}",
@@ -710,120 +657,14 @@ fn range_views_validate_types_loans_and_utf8_without_the_checker() {
         ),
     ] {
         let program = lkjscript::ir_text::read(text).unwrap();
-        let error = interpreter::run(
-            &program,
-            0,
-            &[],
-            &mut Vec::new(),
-            interpreter::Resources::unlimited(),
-        )
-        .err()
-        .unwrap();
+        let error = interpreter::run(&program, 0, &[], &mut Vec::new())
+            .err()
+            .unwrap();
         assert!(
             error.kind == expected,
             "{}: {}",
             error.code(),
             error.message
         );
-    }
-}
-
-#[test]
-fn model_frame_bytes_bound_recursion_and_are_released_on_return() {
-    let checked = compiled(
-        r#"
-fn finite(n: i64) -> i64 {
-    if n == 0 { 0 } else { finite(n - 1) + 1 }
-}
-fn direct(n: i64) -> i64 {
-    direct(n + 1) + 1
-}
-fn first(n: i64) -> i64 {
-    second(n + 1) + 1
-}
-fn second(n: i64) -> i64 {
-    first(n + 1) + 1
-}
-pub fn repeated() -> i64 {
-    let mut total = 0i64;
-    for _ in 0..20 { total += finite(64); }
-    total
-}
-pub fn runaway() -> i64 { direct(0) }
-pub fn mutual() -> i64 { first(0) }
-"#,
-    );
-    let program = checked.program();
-    let entry = |name: &str| {
-        program
-            .functions
-            .iter()
-            .position(|f| f.name == name)
-            .unwrap()
-    };
-    let resources = interpreter::Resources {
-        stack_bytes: 512 * 1024,
-    };
-    let result = must_run(interpreter::run(
-        program,
-        entry("repeated"),
-        &[],
-        &mut Vec::new(),
-        resources,
-    ));
-    assert_eq!(observed(result.value), 1280);
-    assert!(result.peak_stack_bytes > 0);
-    assert!(result.peak_stack_bytes <= resources.stack_bytes);
-    for name in ["runaway", "mutual"] {
-        let error = interpreter::run(
-            program,
-            entry(name),
-            &[],
-            &mut Vec::new(),
-            interpreter::Resources {
-                stack_bytes: 32 * 1024,
-            },
-        )
-        .err()
-        .expect("unbounded recursion exhausted its supplied frame extent");
-        assert_eq!(error.code(), "R0008");
-        assert!(error.line > 1);
-    }
-}
-
-#[test]
-fn model_heap_payloads_do_not_consume_the_frame_extent() {
-    let checked = compiled(
-        r#"
-pub fn payload() -> i64 {
-    let bytes = [7u8; 131072];
-    bytes.len() as i64 + bytes[0] as i64 + bytes[131071] as i64
-}
-pub fn unexecuted() -> i64 {
-    if false {
-        let bytes = [3u8; 100000000];
-        bytes[0] as i64
-    } else { 42 }
-}
-"#,
-    );
-    let program = checked.program();
-    for (name, expected) in [("payload", 131086), ("unexecuted", 42)] {
-        let entry = program
-            .functions
-            .iter()
-            .position(|f| f.name == name)
-            .unwrap();
-        let result = must_run(interpreter::run(
-            program,
-            entry,
-            &[],
-            &mut Vec::new(),
-            interpreter::Resources {
-                stack_bytes: 64 * 1024,
-            },
-        ));
-        assert_eq!(observed(result.value), expected);
-        assert!(result.peak_stack_bytes <= 64 * 1024);
     }
 }

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { run } from './process.mjs';
+import { run, WATCHDOG_MS } from './process.mjs';
 
 let serial = 0;
 // Compilation and lowering are shared. Execution state and results never are.
@@ -8,7 +8,7 @@ async function runShard(binary, cases, {
     engines = ['native', 'interpreter'],
     output = 'target/batch-input',
     encoding = 'utf8',
-    timeout = Number(process.env.LKJSCRIPT_TEST_TIMEOUT_MS || 30000),
+    timeout = WATCHDOG_MS,
     ...options
 } = {}) {
     if (!engines.length || new Set(engines).size !== engines.length

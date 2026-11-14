@@ -33,8 +33,6 @@ No bootstrap compiler or package manager is invoked.
 Relative source names retain their spelling. An absolute source name without
 --source-dir uses its parent directory and basename. Other source directories
 must be selected explicitly; module reads cannot escape their directory.
-LKJSCRIPT_RUN_MEMORY_BYTES and LKJSCRIPT_RUN_STACK_BYTES optionally tighten the target's
-inherited Linux limits. Unset or "unlimited" inherits; compilation is unaffected.
 HELP
 }
 
@@ -173,27 +171,6 @@ if [[ -n $output && $output != - ]]; then
     fi
 fi
 
-# Compare decimal strings without shell integer overflow.
-decimal_less() {
-    ((${#1} < ${#2})) || { ((${#1} == ${#2})) && [[ $1 < $2 ]]; }
-}
-target_prefix=()
-limit_flags=()
-add_limit() {
-    local name=$1 option=$2 value=${!1:-} inherited
-    [[ -n $value && $value != unlimited ]] || return 0
-    [[ $value =~ ^[1-9][0-9]*$ ]] || fail "$name must be positive bytes or unlimited"
-    if decimal_less 18446744073709551615 "$value"; then fail "$name exceeds a Linux limit"; fi
-    inherited=$(prlimit --pid "$$" "$option" --noheadings --raw --output SOFT)
-    if [[ $inherited != unlimited ]] && decimal_less "$inherited" "$value"; then value=$inherited; fi
-    limit_flags+=("$option=$value:")
-}
-if [[ $command == run || $command == eval ]]; then
-    add_limit LKJSCRIPT_RUN_MEMORY_BYTES --as
-    add_limit LKJSCRIPT_RUN_STACK_BYTES --stack
-    if ((${#limit_flags[@]})); then target_prefix=(prlimit "${limit_flags[@]}" --); fi
-fi
-
 work=
 publish_temp=
 cleanup() {
@@ -302,14 +279,14 @@ chmod 700 -- "$work/program.elf"
 if [[ $command == build ]]; then publish "$work/program.elf" 755; exit; fi
 if [[ $command == run ]]; then
     status=0
-    lkjscript_process_run "" 0 "${target_prefix[@]}" "$work/program.elf" "${program_args[@]}" || status=$?
+    lkjscript_process_run "" 0 "$work/program.elf" "${program_args[@]}" || status=$?
     exit "$status"
 fi
 
 # The packet arrives only at completion. A private file avoids introducing
 # a control pipeline or duplicating the target's ordinary process streams.
 status=0
-lkjscript_process_run "" 0 "${target_prefix[@]}" "$work/program.elf" "${program_args[@]}" \
+lkjscript_process_run "" 0 "$work/program.elf" "${program_args[@]}" \
     3>"$work/result.packet" || status=$?
 printf '\n%s\n' "$status" >>"$work/result.packet"
 lkjscript_process_run "$work" 1 "$result" result.desc "$input" <"$work/result.packet"

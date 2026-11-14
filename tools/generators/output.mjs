@@ -3,7 +3,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
 import { run } from '../process.mjs';
 import { runRoutes } from '../batch.mjs';
 import { oracleCache, packResult, unpackResult, worldOutcome } from '../oracle.mjs';
@@ -12,10 +11,7 @@ const bin=path.resolve(binary), seed=BigInt(seedText), count=Number(countText);
 const engines=(process.env.LKJSCRIPT_ENGINES || 'native,interpreter').split(',');
 let state=seed||1n;
 function random(n) {state^=(state<<13n)&0xffffffffffffffffn;state^=state>>7n;state^=(state<<17n)&0xffffffffffffffffn;return Number(state%BigInt(n));}
-const hash=file=>createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const generatorHash=createHash('sha256').update(fs.readFileSync(new URL(import.meta.url))).update(fs.readFileSync(new URL('../process.mjs',import.meta.url))).update(fs.readFileSync('bridge/output.rs')).digest('hex');
-const sh=(command,args)=>(spawnSync(command,args,{encoding:'utf8'}).stdout||'').trim();
-const metadata={compiler:sh('git',['rev-parse','HEAD']),compilerDirty:sh('git',['status','--porcelain','--untracked-files=no'])!=='',binarySha256:hash(bin),rustc:sh('rustc',['--version']),node:process.version};
 const dir=path.resolve(output,`output-${seedText}`);fs.mkdirSync(dir,{recursive:true});
 const sourceFiles=[],expected=[];
 const prelude=`fn write(out: &mut Stdout, bytes: &[u8]) { out.write(bytes); }
@@ -88,5 +84,5 @@ for(let i=0;i<count;i++) {
    if(!category.startsWith('equal-'))failures.push({file:sourceFiles[i],engine,category,diagnostic:actual.stderr.toString()});
  }
 }
-const record={generator:'output',sha256:generatorHash,...metadata,rustFlags,seed:seedText,programs:count,tally};
-console.log(JSON.stringify(record));fs.appendFileSync(path.join(output,'runs.jsonl'),JSON.stringify(record)+'\n');fs.writeFileSync(path.join(dir,'failures.json'),JSON.stringify(failures,null,2)+'\n');if(failures.length)process.exitCode=1;
+const record={generator:'output',rustFlags,seed:seedText,programs:count,tally};
+console.log(JSON.stringify(record));fs.writeFileSync(path.join(dir,'failures.json'),JSON.stringify(failures,null,2)+'\n');if(failures.length)process.exitCode=1;

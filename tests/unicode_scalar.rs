@@ -77,15 +77,9 @@ fn character_construction_checks_its_signature_on_both_ir_boundaries() {
             check::check(forged.clone()).is_err(),
             "checker accepted signature mutation {mutation}"
         );
-        let error = interpreter::run(
-            &forged,
-            entry,
-            &[],
-            &mut Vec::new(),
-            interpreter::Resources::unlimited(),
-        )
-        .err()
-        .expect("model accepted malformed construction");
+        let error = interpreter::run(&forged, entry, &[], &mut Vec::new())
+            .err()
+            .expect("model accepted malformed construction");
         assert!(
             matches!(error.kind, interpreter::ErrorKind::Interpreter(_)),
             "signature mutation {mutation}: {}",

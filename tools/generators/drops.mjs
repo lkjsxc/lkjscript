@@ -5,7 +5,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
 import { run } from '../process.mjs';
 import { runRoutes } from '../batch.mjs';
 import { oracleCache, packResult, unpackResult, worldOutcome } from '../oracle.mjs';
@@ -14,7 +13,6 @@ const bin = path.resolve(binArg); const repo = path.resolve(path.dirname(fs.real
 const ONE_SIDED = Number(process.env.ONE_SIDED || 6);
 const engines=(process.env.LKJSCRIPT_ENGINES || 'native,interpreter').split(',');
 const generatorHash=createHash('sha256').update(fs.readFileSync(new URL(import.meta.url))).digest('hex');
-const binarySha256=createHash('sha256').update(fs.readFileSync(bin)).digest('hex');
 let state = (BigInt(seedS) * 0x9E3779B97F4A7C15n & 0xFFFFFFFFFFFFFFFFn) || 1n;
 function rnd(n) { state ^= (state << 13n) & 0xFFFFFFFFFFFFFFFFn; state ^= state >> 7n; state ^= (state << 17n) & 0xFFFFFFFFFFFFFFFFn; return Number(state % BigInt(n)); }
 const pick = a => a[rnd(a.length)];
@@ -132,21 +130,21 @@ const dir = path.resolve(outArg, `drops-${seedS}`); fs.mkdirSync(dir, { recursiv
 const N = Number(countS); const srcs = []; const ranges = [];
 const host = '#![allow(warnings)]\nmod __lkjscript_host {\n' + fs.readFileSync(path.join(repo, 'bridge/output.rs'), 'utf8') + '\n}\n';
 for (let i = 0; i < N; i++) { let s = null; while (!s) s = gen(); srcs.push(s); fs.writeFileSync(`${dir}/c${i}.rs`, s); }
-function oracle(skip) {
+async function oracle(skip) {
   let text = host; let line = text.split('\n').length; ranges.length = 0;
   for (let i = 0; i < N; i++) { if (skip.has(i)) { ranges.push([0, 0]); continue; } const body = `mod c${i} { use crate::__lkjscript_host::{World,Stdout};\n${srcs[i]}}\n`; const n = body.split('\n').length - 1; ranges.push([line, line + n - 1]); line += n; text += body; }
   text += 'fn main() { match std::env::var("LKJSCRIPT_ORACLE_CASE").unwrap().as_str() {\n' + srcs.map((_, i) => skip.has(i) ? '' : `"${i}" => __lkjscript_host::enter(c${i}::main),\n`).join('') + '_ => std::process::exit(2) } }\n';
   fs.writeFileSync(`${dir}/oracle.rs`, text);
-  return spawnSync('rustc', ['--edition=2024', '--cfg', 'lkjscript_control', '--error-format=short', '-C', 'overflow-checks=yes', '-A', 'warnings', `${dir}/oracle.rs`, '-o', `${dir}/oracle`], { encoding: 'utf8', maxBuffer: 1 << 28 });
+  return run('rustc', ['--edition=2024', '--cfg', 'lkjscript_control', '--error-format=short', '-C', 'overflow-checks=yes', '-A', 'warnings', `${dir}/oracle.rs`, '-o', `${dir}/oracle`], { encoding: 'utf8' });
 }
 const referenceData=await oracleCache({generator:generatorHash,seed:seedS,count:N,oneSided:ONE_SIDED,host,source:srcs},async()=>{
-const invalid = new Map(); let rc = oracle(invalid);
-if (rc.status !== 0) { for (const l of rc.stderr.split('\n')) { const m = l.match(/oracle\.rs:(\d+):\d+: error(?:\[(E\d+)\])?/); if (!m) continue; const i = ranges.findIndex(r => Number(m[1]) >= r[0] && Number(m[1]) <= r[1]); if (i >= 0 && !invalid.has(i)) invalid.set(i, m[2] || 'error'); } if (!invalid.size) { console.log(rc.stderr.slice(0, 3000)); process.exit(1); } rc = oracle(invalid); if (rc.status !== 0) { console.log('oracle still fails:\n' + rc.stderr.slice(0, 3000)); process.exit(1); } }
+const invalid = new Map(); let rc = await oracle(invalid);
+if (rc.status !== 0) { for (const l of rc.stderr.split('\n')) { const m = l.match(/oracle\.rs:(\d+):\d+: error(?:\[(E\d+)\])?/); if (!m) continue; const i = ranges.findIndex(r => Number(m[1]) >= r[0] && Number(m[1]) <= r[1]); if (i >= 0 && !invalid.has(i)) invalid.set(i, m[2] || 'error'); } if (!invalid.size) { console.log(rc.stderr.slice(0, 3000)); process.exit(1); } rc = await oracle(invalid); if (rc.status !== 0) { console.log('oracle still fails:\n' + rc.stderr.slice(0, 3000)); process.exit(1); } }
 
-const outputs=[];for(let i=0;i<N;i++)outputs.push(invalid.has(i)?null:packResult(await run(dir+'/oracle',[],{encoding:null,timeout:20000,captureControl:true,env:{...process.env,LKJSCRIPT_ORACLE_CASE:String(i)}})));return {invalid:[...invalid],outputs};
+const outputs=[];for(let i=0;i<N;i++)outputs.push(invalid.has(i)?null:packResult(await run(dir+'/oracle',[],{encoding:null,captureControl:true,env:{...process.env,LKJSCRIPT_ORACLE_CASE:String(i)}})));return {invalid:[...invalid],outputs};
 });
 const invalid=new Map(referenceData.invalid);
-const actualResults=await runRoutes(bin,srcs.map((_,i)=>({path:dir+'/c'+i+'.rs'})),{engines,output:dir,encoding:null,timeout:30000});
+const actualResults=await runRoutes(bin,srcs.map((_,i)=>({path:dir+'/c'+i+'.rs'})),{engines,output:dir,encoding:null});
 const tally = Object.fromEntries(engines.map(engine=>[engine,{}])); const show = []; const bump = (o, c) => { o[c] = (o[c] || 0) + 1; }; let generatorInvalid = 0;
 const hex = b => Buffer.from(b).toString('hex').replace(/(..)/g, '$1 ').trim();
 for (let i = 0; i < N; i++) {
@@ -166,8 +164,7 @@ for (let i = 0; i < N; i++) {
     if (cls !== 'equal-output' && !(engine === 'interpreter' && cls.startsWith('valid-but-rejected'))) show.push(`${dir}/c${i}.rs ${engine} ${cls}` + (cls === 'DIFFERENT-OUTPUT' ? `\n  rustc ${hex(r.stdout)}\n  lkjscript   ${hex(l.stdout)}` : ` ${err.split('\n')[0].replace(/^\S*\.rs:/, '').slice(0, 160)}`));
   }
 }
-const sh = (c, a) => (spawnSync(c, a, { encoding: 'utf8' }).stdout || '').trim();
-const record={generator:'drops',sha256:generatorHash,compiler:sh('git',['-C',repo,'rev-parse','--short','HEAD']),binarySha256,rustc:sh('rustc',['--version']),nodeVersion:process.version,seed:seedS,programs:N,oneSided:ONE_SIDED,generatorInvalid,...tally};
-console.log(JSON.stringify(record));fs.appendFileSync(path.join(outArg,'runs.jsonl'),JSON.stringify(record)+'\n');
+const record={generator:'drops',seed:seedS,programs:N,oneSided:ONE_SIDED,generatorInvalid,...tally};
+console.log(JSON.stringify(record));
 if(generatorInvalid||Object.values(tally).some(classes=>Object.keys(classes).some(key=>key!=='equal-output')))process.exitCode=1;
 fs.writeFileSync(`${dir}/report.txt`, show.join('\n') + '\n');

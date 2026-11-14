@@ -36,45 +36,10 @@ fn located(program: &lkjscript::ast::Program, mut problem: Diagnostic) -> Diagno
     }
     problem
 }
-fn print_census(source: &source::SourceReport) {
-    let census = diagnostics::census(source);
-    println!("kind\tcount\tcategory");
-    for (kind, count) in &census.unsupported {
-        println!("{kind}\t{count}\tunsupported");
-    }
-    for (kind, count) in &census.blocked {
-        println!("{kind}\t{count}\tblocked");
-    }
-    println!(
-        "TOTAL\t{}\tunsupported",
-        census.unsupported.values().sum::<usize>()
-    );
-    println!("TOTAL\t{}\tblocked", census.blocked.values().sum::<usize>());
-    println!("\nsemantic dependency\tcount\tcategory");
-    let report = diagnostics::semantic_report(source);
-    let semantic = report.counts();
-    for (kind, count) in &semantic {
-        println!("{kind}\t{count}\tsemantic");
-    }
-    println!("TOTAL\t{}\tsemantic", semantic.values().sum::<usize>());
-    println!("\nsemantic phase\tcount\tcategory");
-    for (phase, count) in &report.coverage {
-        println!("{phase}\t{count}\tcoverage");
-    }
-    for (phase, count) in report.blocked_counts() {
-        println!("{phase}\t{count}\tblocked");
-    }
-    if !source.blocked.is_empty() || !report.blocked.is_empty() {
-        println!(
-            "Coverage counts each phase separately. Blocked analysis makes no claim that a name, method, or trait is absent."
-        );
-    }
-}
 fn analysis_failure(
     path: &str,
     source: &mut source::SourceReport,
     problems: Vec<Diagnostic>,
-    census: bool,
     blocked: Option<&str>,
 ) -> String {
     source.diagnostics.extend(
@@ -84,7 +49,6 @@ fn analysis_failure(
     );
     if let Some(reason) = blocked {
         source.blocked.push(diagnostics::BlockedRegion {
-            domain: None,
             path: path.to_string(),
             span: lkjscript::ast::Span {
                 file: 0,
@@ -98,9 +62,6 @@ fn analysis_failure(
         });
     }
     diagnostics::complete_unsupported(source);
-    if census {
-        print_census(source);
-    }
     let mut messages: Vec<String> = source
         .diagnostics
         .drain(..)
@@ -114,23 +75,13 @@ fn analysis_failure(
     }
     messages.join("\n")
 }
-// Reserve the bootstrap compiler stack only while compiler work is live.
-// Execution and stream capture continue after the thread has been joined.
 fn compiler_work<T: Send>(work: impl FnOnce() -> Result<T, String> + Send) -> Result<T, String> {
-    lkjscript::compiler_stack::run(work).map_err(|error| format!("E_HOST {error}"))?
+    work()
 }
-fn compile(
-    path: &str,
-    census: bool,
-    timings: &mut timing::Timings,
-) -> Result<ir::CheckedProgram, String> {
-    compiler_work(|| compile_inner(path, census, timings))
+fn compile(path: &str, timings: &mut timing::Timings) -> Result<ir::CheckedProgram, String> {
+    compiler_work(|| compile_inner(path, timings))
 }
-fn compile_inner(
-    path: &str,
-    census: bool,
-    timings: &mut timing::Timings,
-) -> Result<ir::CheckedProgram, String> {
+fn compile_inner(path: &str, timings: &mut timing::Timings) -> Result<ir::CheckedProgram, String> {
     if Path::new(path)
         .extension()
         .is_some_and(|ext| ext == "lkjir")
@@ -175,13 +126,7 @@ fn compile_inner(
     });
     timings.count("source_bytes", sizes.values().sum());
     if !loaded.diagnostics.is_empty() {
-        return Err(analysis_failure(
-            path,
-            &mut loaded,
-            Vec::new(),
-            census,
-            None,
-        ));
+        return Err(analysis_failure(path, &mut loaded, Vec::new(), None));
     }
     let resolved = match timings.measure("resolve", || resolve::resolve(&loaded.program)) {
         Ok(value) => value,
@@ -190,7 +135,6 @@ fn compile_inner(
                 path,
                 &mut loaded,
                 vec![problem],
-                census,
                 Some(
                     "declaration resolution failed; dependent definition and IR analysis was not attempted",
                 ),
@@ -205,7 +149,6 @@ fn compile_inner(
                 path,
                 &mut loaded,
                 problems,
-                census,
                 Some(
                     "definition analysis failed; dependent IR construction and checking was not attempted",
                 ),
@@ -219,7 +162,6 @@ fn compile_inner(
                 path,
                 &mut loaded,
                 problems,
-                census,
                 Some(
                     "failed bodies are blocked; independent typed bodies were constructed and checked",
                 ),
@@ -238,14 +180,10 @@ fn compile_inner(
                 path,
                 &mut loaded,
                 problems,
-                census,
                 Some("each invalid IR body stops at its diagnostic; no artifact is produced"),
             ));
         }
     };
-    if census {
-        print_census(&loaded);
-    }
     Ok(checked)
 }
 struct Arguments {
@@ -254,13 +192,13 @@ struct Arguments {
     entry: Option<String>,
     output: Option<String>,
     engine: String,
-    census: bool,
     unchecked: bool,
+    stats: bool,
     program_arguments: Vec<OsString>,
 }
 fn arguments(args: &[String]) -> Result<Arguments, String> {
     if args.len() < 2 {
-        return Err("usage: lkjscript check|run|test|build|ir <source> [--census] [--engine native|interpreter] [--entry name] [-o artifact] [-- program arguments]".to_string());
+        return Err("usage: lkjscript check|run|test|build|ir <source> [--stats] [--engine native|interpreter] [--entry name] [-o artifact] [-- program arguments]".to_string());
     }
     let mut result = Arguments {
         verb: args[1].clone(),
@@ -268,15 +206,15 @@ fn arguments(args: &[String]) -> Result<Arguments, String> {
         entry: None,
         output: None,
         engine: "native".to_string(),
-        census: false,
         unchecked: false,
+        stats: false,
         program_arguments: Vec::new(),
     };
     let mut at = 2;
     while at < args.len() {
         match args[at].as_str() {
-            "--census" => result.census = true,
             "--unchecked-ir" => result.unchecked = true,
+            "--stats" => result.stats = true,
             "--entry" | "--engine" | "-o" => {
                 let option = args[at].as_str();
                 at += 1;
@@ -316,9 +254,6 @@ fn arguments(args: &[String]) -> Result<Arguments, String> {
             "E_USAGE --unchecked-ir requires a .lkjir input, --engine interpreter, and run/test"
                 .to_string(),
         );
-    }
-    if result.census && result.verb != "check" {
-        return Err("E_USAGE --census is a check option".to_string());
     }
     Ok(result)
 }
@@ -402,21 +337,13 @@ fn execute_interpreter(
     timings: &mut timing::Timings,
 ) -> Result<u8, String> {
     let mut status = 0;
-    let resources = host_process::interpreter_resources()?;
-    timings.count("interpreter_stack_extent_bytes", resources.stack_bytes);
     for entry in entries(program, args)? {
-        let started = std::time::Instant::now();
         let mut host = world::Host::stdio(&args.program_arguments);
-        let result = interpreter::run(program, entry, &[], &mut host, resources);
+        let result = timings.measure("interpreter", || {
+            interpreter::run(program, entry, &[], &mut host)
+        });
         if status == 0 {
             status = host.status;
-        }
-        if std::env::var("LKJSCRIPT_TIMINGS").as_deref() == Ok("1") {
-            eprintln!(
-                "LKJSCRIPT_TIMING {{\"route\":\"interpreter\",\"run_ms\":{},\"stopped_stage\":\"{}\"}}",
-                started.elapsed().as_secs_f64() * 1000.0,
-                if result.is_ok() { "done" } else { "run" }
-            );
         }
         let result =
             result.map_err(|e| format!("{}:{}: {} {}", args.path, e.line, e.code(), e.message))?;
@@ -453,6 +380,12 @@ fn run() -> Result<u8, String> {
     {
         return Err("E_USAGE program arguments after -- require run or test".to_string());
     }
+    if argv.len() == 2 && (argv[1] == "--help" || argv[1] == "-h") {
+        println!(
+            "lkjscript check|build|run|test|ir <source.rs|program.lkjir> [options]\n\n  check  Check source or IR without emission\n  build  Write a static Linux x86-64 executable (-o PATH)\n  run    Execute one entry; arguments after -- belong to the program\n  test   Execute functions marked #[test]\n  ir     Write checked IR to stdout\n\n  --entry NAME                Select an entry (default main, then probe)\n  --engine native|interpreter Select execution route\n  --stats                     Report phase times, peak RSS and IR/code sizes\n  --unchecked-ir              Exercise the independent interpreter on unchecked IR\n  runtime-ir                  Write the sealed source runtime as IR\n\nEntry functions take no arguments or one World and return unit or a scalar.\nWorld derives arguments, stream and directory capabilities; file paths stay beneath the granted directory."
+        );
+        return Ok(0);
+    }
     if argv.len() == 2 && argv[1] == "runtime-ir" {
         let text = compiler_work(|| {
             Ok(ir_text::write(
@@ -467,7 +400,7 @@ fn run() -> Result<u8, String> {
     }
     let mut args = arguments(&argv)?;
     args.program_arguments = program_arguments;
-    let mut timings = timing::Timings::new();
+    let mut timings = timing::Timings::new(args.stats);
     if args.unchecked {
         let text = fs::read_to_string(&args.path).map_err(|e| format!("E_IO {e}"))?;
         let program = compiler_work(|| {
@@ -479,7 +412,10 @@ fn run() -> Result<u8, String> {
         timings.done();
         return Ok(status);
     }
-    let checked = compile(&args.path, args.census, &mut timings)?;
+    let checked = compile(&args.path, &mut timings)?;
+    if timings.enabled() {
+        timings.count("ir_bytes", ir_text::write(checked.program()).len());
+    }
     if args.verb == "check" {
         timings.done();
         return Ok(0);
@@ -502,14 +438,6 @@ fn run() -> Result<u8, String> {
 
 fn main() -> ExitCode {
     world::restore_closed_standard_streams();
-    match host_process::execution_worker() {
-        Ok(Some(status)) => return status,
-        Ok(None) => {}
-        Err(error) => {
-            let _ = writeln!(std::io::stderr(), "{error}");
-            return ExitCode::FAILURE;
-        }
-    }
     let result = run();
     match result {
         Ok(status) => ExitCode::from(status),

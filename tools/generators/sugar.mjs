@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 // The primary oracle is each generated sugar against an independently emitted
 // expansion on every route. LKJSCRIPT_SUGAR_RUST=0 keeps that oracle without rustc.
-// Rust's 32-way nested or product exceeds the observed oracle compilation budget;
-// those cases still compare every route with their independently expanded Rust forms.
+// Nested or-pattern cases compare every route with independently expanded Rust forms.
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -339,5 +338,5 @@ for(const engine of engines){
   if(!category.startsWith('equal-'))failures.push({index:i,family:pairs[i].family,engine,category,sugar:files[2*i],expanded:files[2*i+1],diagnostic:sugar.stderr.toString()+'\n'+expanded.stderr.toString()});
  }
 }
-const record={generator:'sugar',sha256:generatorHash,seed:seedText,pairs:count,rust:compareRust,rustSugarPairs:compareRust?pairs.filter(p=>p.rustSugar).length:0,rustExpansionPairs:compareRust?count:0,tally};
-console.log(JSON.stringify(record));fs.writeFileSync(path.join(dir,'failures.json'),JSON.stringify(failures,null,2)+'\n');fs.appendFileSync(path.join(output,'runs.jsonl'),JSON.stringify(record)+'\n');if(failures.length){console.error(JSON.stringify(failures.slice(0,4),null,2));process.exitCode=1;}
+const record={generator:'sugar',seed:seedText,pairs:count,rust:compareRust,rustSugarPairs:compareRust?pairs.filter(p=>p.rustSugar).length:0,rustExpansionPairs:compareRust?count:0,tally};
+console.log(JSON.stringify(record));fs.writeFileSync(path.join(dir,'failures.json'),JSON.stringify(failures,null,2)+'\n');if(failures.length){console.error(JSON.stringify(failures.slice(0,4),null,2));process.exitCode=1;}

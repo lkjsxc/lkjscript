@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Execute source data with explicit bytes, directories and Linux budgets.
+// Execute source data with explicit bytes and directory capabilities.
 import fs from 'node:fs';
 import path from 'node:path';
 import { run } from './process.mjs';
@@ -28,11 +28,11 @@ async function compile(name){
  if(!fs.readFileSync(native).equals(fs.readFileSync(backendElf)))summary.failures.push(name+': backend bytes differ');
  return {source,routes:[['standalone',native,[]],['native',binary,['run',source,'--engine','native','--']],['interpreter',binary,['run',source,'--engine','interpreter','--']],['rust',oracle,[]]]};
 }
-async function execute(route,args,input,close,nofile){
+async function execute(route,args,input,close){
  const [name,command,prefix]=route;
  const encoded=[...prefix,...args].map(x=>Buffer.isBuffer(x)?x.toString('hex'):Buffer.from(x).toString('hex'));
  const args_=[...(close===undefined?[]:[typeof close==='string'?close:'--close='+close]),command,...encoded];
- return run(nofile===undefined?launch:'prlimit',nofile===undefined?args_:['--nofile='+nofile,'--',launch,...args_],{encoding:null,input,captureControl:name==='rust',memoryBytes:'1073741824',timeout:30000});
+ return run(launch,args_,{encoding:null,input,captureControl:name==='rust'});
 }
 function check(result,status,stdout,stderr,label){
  summary.observations++;
@@ -63,7 +63,7 @@ for(const route of paths.routes){
 const closed=await compile('closed_stdin');
 for(const route of closed.routes){const dir=path.join(output,'closed-'+route[0]);fs.mkdirSync(dir,{recursive:true});check(await execute(route,[dir],undefined,0),0,Buffer.from('closed ok\n'),Buffer.alloc(0),'closed stdin/'+route[0]);}
 const cleanup=await compile('handle_cleanup');
-for(const route of cleanup.routes){const dir=path.join(output,'data-cleanup-'+route[0]);fs.mkdirSync(dir,{recursive:true});check(await execute(route,[dir],Buffer.alloc(0),undefined,64),0,Buffer.from('cleanup ok\n'),Buffer.alloc(0),'handle cleanup/'+route[0]);}
+for(const route of cleanup.routes){const dir=path.join(output,'data-cleanup-'+route[0]);fs.mkdirSync(dir,{recursive:true});check(await execute(route,[dir],Buffer.alloc(0)),0,Buffer.from('cleanup ok\n'),Buffer.alloc(0),'handle cleanup/'+route[0]);}
 const failure=await compile('output_failure');
 for(const mode of ['close','broken-pipe'])for(const fd of [1,2])for(const route of failure.routes){
  const dir=path.join(output,'data-output-'+mode+'-'+fd+'-'+route[0]);fs.mkdirSync(dir,{recursive:true});
@@ -90,5 +90,4 @@ for(const [engine,results] of Object.entries(routes)){
  if(r.status!==23||r.checkStatus!==0||r.stderr.length!==0||!r.stdout.equals(Buffer.from([0,255]))||!r.programStderr.equals(Buffer.from([255,0,128])))summary.failures.push('batch stderr/status '+engine+': '+detail(r));
 }
 summary.elapsedSeconds=(performance.now()-started)/1000;
-fs.writeFileSync(path.join(output,'summary.json'),JSON.stringify(summary,null,2)+'\n');
 console.log(JSON.stringify(summary));if(summary.failures.length)process.exitCode=1;

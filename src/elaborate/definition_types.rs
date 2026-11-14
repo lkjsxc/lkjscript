@@ -5,7 +5,6 @@ use super::{Bindings, Compiler, Result, a, err, ir, is_copy};
 use std::collections::BTreeMap;
 
 mod capabilities;
-pub(super) mod census;
 mod closures;
 mod method_headers;
 mod pattern_equations;
@@ -115,7 +114,6 @@ pub(super) struct DefinitionTypes {
     expressions: BTreeMap<a::ExprId, Variable>,
     bindings: BTreeMap<a::PatternId, Variable>,
     closures: BTreeMap<a::ExprId, closures::Closure>,
-    unresolved_paths: Vec<(a::ExprId, a::Diagnostic)>,
 }
 #[derive(Clone, Default)]
 pub(super) struct Types {
@@ -417,7 +415,6 @@ struct Infer<'a, 'b> {
     source: &'a a::Program,
     names: &'b crate::resolve::Resolver<'a>,
     implementations: &'b crate::generics::ImplementationIndex,
-    census: Option<&'b super::census::Context>,
     definition: DefinitionTypes,
     bindings: Bindings,
     environment: BTreeMap<String, Variable>,
@@ -977,12 +974,6 @@ impl Infer<'_, '_> {
         first: usize,
         span: a::Span,
     ) -> Result<Variable> {
-        if let Some(problem) = self
-            .census
-            .and_then(|context| context.readiness.signature_problem(index))
-        {
-            return Err(problem.clone());
-        }
         let function = self.source.functions[index].clone();
         let outer = self.environment.clone();
         let mut type_index = 0;
@@ -1407,7 +1398,6 @@ impl Infer<'_, '_> {
                 if let Some(value) = self.bindings.get(&path.name) {
                     value
                 } else {
-                    self.census_path(id, &path)?;
                     match self.names.value_path(node.scope, &path, span) {
                         Ok(path) => {
                             if let Some(declaration) = path.declaration {
@@ -1426,10 +1416,7 @@ impl Infer<'_, '_> {
                                 self.blocked()
                             }
                         }
-                        Err(problem) => {
-                            self.definition.unresolved_paths.push((id, problem));
-                            self.blocked()
-                        }
+                        Err(_) => self.blocked(),
                     }
                 }
             }
@@ -1561,12 +1548,10 @@ impl Infer<'_, '_> {
                     values.push(self.expr(*arg)?);
                 }
                 let path = match &self.source.exprs[callee].kind {
-                    a::Expr::Path(path) if self.bindings.get(&path.name).is_none() => {
-                        self.census_path(callee, path)?;
-                        self.names
-                            .value_path(self.source.exprs[callee].scope, path, span)
-                            .ok()
-                    }
+                    a::Expr::Path(path) if self.bindings.get(&path.name).is_none() => self
+                        .names
+                        .value_path(self.source.exprs[callee].scope, path, span)
+                        .ok(),
                     _ => None,
                 };
                 if let Some(path) = path {
@@ -2192,16 +2177,7 @@ impl Infer<'_, '_> {
                 let Some((base, shape)) = self.strip_references(receiver, id) else {
                     return Ok(false);
                 };
-                if self.census_inherent_complete(base, &name)
-                    && self.inherent_header(
-                        base,
-                        &name,
-                        &types,
-                        &arguments,
-                        result,
-                        (scope, span),
-                    )?
-                {
+                if self.inherent_header(base, &name, &types, &arguments, result, (scope, span))? {
                     return Ok(true);
                 }
                 let primitive = shape.primitive();
@@ -2219,7 +2195,6 @@ impl Infer<'_, '_> {
                     return Ok(true);
                 }
                 if direct.is_none()
-                    && self.census_contextual_complete(base, &name)
                     && self.contextual_header(
                         base,
                         &name,
@@ -2419,16 +2394,6 @@ pub(super) fn infer(
     implementations: &crate::generics::ImplementationIndex,
     index: usize,
 ) -> Result<DefinitionTypes> {
-    infer_available(source, names, implementations, index, None)
-}
-
-pub(super) fn infer_available(
-    source: &a::Program,
-    names: &crate::resolve::Resolver<'_>,
-    implementations: &crate::generics::ImplementationIndex,
-    index: usize,
-    census: Option<&super::census::Context>,
-) -> Result<DefinitionTypes> {
     let function = source.functions[index].clone();
     let mut inference = Infer {
         source_function: index,
@@ -2438,13 +2403,11 @@ pub(super) fn infer_available(
         source,
         names,
         implementations,
-        census,
         definition: DefinitionTypes {
             nodes: Vec::new(),
             expressions: BTreeMap::new(),
             bindings: BTreeMap::new(),
             closures: BTreeMap::new(),
-            unresolved_paths: Vec::new(),
         },
         bindings: Bindings::default(),
         environment: BTreeMap::new(),

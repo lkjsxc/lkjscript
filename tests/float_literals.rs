@@ -173,14 +173,10 @@ fn production_decimal_conversion_executes_on_both_routes() {
             .iter()
             .position(|function| function.name == name)
             .unwrap();
-        let result = interpreter::run(
-            checked.program(),
-            index,
-            &[],
-            &mut Vec::new(),
-            interpreter::Resources::unlimited(),
-        )
-        .unwrap_or_else(|error| panic!("{name}: {}:{}: {}", error.file, error.line, error.message));
+        let result = interpreter::run(checked.program(), index, &[], &mut Vec::new())
+            .unwrap_or_else(|error| {
+                panic!("{name}: {}:{}: {}", error.file, error.line, error.message)
+            });
         match result.value {
             interpreter::Scalar::Int {
                 value: 0,

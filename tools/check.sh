@@ -47,11 +47,8 @@ rust_checks() {
     step lint cargo clippy --quiet --all-targets -- -D warnings
 }
 check_binary="${CARGO_TARGET_DIR:-target}/release/lkjscript"
-step host-boundary bash tools/host-boundary.sh "$check_binary"
-# Reservations count active execution workers, including workers inside a suite.
-# Rust compilation and tests run in sequence, so their reservation is the larger
-# of their two explicit thread counts. Each generator outside IR mutation uses
-# one batch worker. A reservation is released only after its suite exits.
+# Account for workers inside each suite. Rust build and test phases are sequential;
+# their worker count is the larger of the two. Other generators use one worker.
 mkdir -p target/gate
 check_pids=()
 check_logs=()

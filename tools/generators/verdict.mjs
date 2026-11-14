@@ -4,7 +4,6 @@
 // accepted by lkjscript although rustc rejects, valid but rejected, and equal or different results when both run.
 // usage: node verdict.mjs <lkjscript-binary> <seed> <count>
 import fs from 'node:fs';
-import { spawnSync } from 'node:child_process';
 import { run } from '../process.mjs';
 import { runRoutes } from '../batch.mjs';
 import { oracleCache } from '../oracle.mjs';
@@ -13,9 +12,7 @@ import path from 'node:path';
 const [binary, seedS = '601', countS = '100', output = 'target/generators'] = process.argv.slice(2);
 const bin = path.resolve(binary || 'target/debug/lkjscript');
 const engines = (process.env.LKJSCRIPT_ENGINES || process.env.LKJSCRIPT_ENGINE || 'native').split(',');
-const sh = (c, a) => (spawnSync(c, a, { encoding: 'utf8' }).stdout || '').trim();
-// Capture identities before execution so later edits cannot relabel this run.
-const metadata = { sha256: createHash('sha256').update(fs.readFileSync(new URL(import.meta.url))).update(fs.readFileSync(new URL('../process.mjs', import.meta.url))).digest('hex'), binarySha256: createHash('sha256').update(fs.readFileSync(bin)).digest('hex'), compilerDirty: sh('git', ['status', '--porcelain', '--untracked-files=no']) !== '', compiler: sh('git', ['-C', path.dirname(fs.realpathSync(bin)), 'rev-parse', 'HEAD']) || 'unknown', rustc: sh('rustc', ['--version']), node: process.version };
+const generatorHash = createHash('sha256').update(fs.readFileSync(new URL(import.meta.url))).update(fs.readFileSync(new URL('../process.mjs', import.meta.url))).digest('hex');
 let state = (BigInt(seedS) * 0x9E3779B97F4A7C15n & 0xFFFFFFFFFFFFFFFFn) || 1n;
 function rnd(n) { state ^= (state << 13n) & 0xFFFFFFFFFFFFFFFFn; state ^= state >> 7n; state ^= (state << 17n) & 0xFFFFFFFFFFFFFFFFn; return Number(state % BigInt(n)); }
 const pick = a => a[rnd(a.length)];
@@ -91,8 +88,8 @@ for (let i = 0; i < N; i++) { const s = gen(); srcs.push(s); fs.writeFileSync(`$
 fs.writeFileSync(`${dir}/all.rs`, crate + 'fn main() {}\n');
 const OWN = new Set(['E0382', 'E0499', 'E0502', 'E0503', 'E0505', 'E0506', 'E0507', 'E0509', 'E0515', 'E0596', 'E0597', 'E0716', 'E0713', 'E0381', 'E0384', 'E0594']);
 const rustKind = m => /with overflow/.test(m) ? 'R0001' : /divide by zero|divisor of zero/.test(m) ? 'R0002' : /index out of bounds/.test(m) ? 'R0003' : /assertion/.test(m) ? 'R0005' : 'R0004';
-const references=await oracleCache({generator:metadata.sha256,seed:seedS,count:N,source:crate,flags:'2024 error-format=short overflow-checks=yes'},async()=>{
-const first = await run('rustc', ['--edition=2024', '--error-format=short', '-A', 'warnings', '--emit=metadata', '-o', `${dir}/all.rmeta`, `${dir}/all.rs`], { encoding: 'utf8', maxBuffer: 1 << 28 });
+const references=await oracleCache({generator:generatorHash,seed:seedS,count:N,source:crate,flags:'2024 error-format=short overflow-checks=yes'},async()=>{
+const first = await run('rustc', ['--edition=2024', '--error-format=short', '-A', 'warnings', '--emit=metadata', '-o', `${dir}/all.rmeta`, `${dir}/all.rs`], { encoding: 'utf8' });
 const rejected = new Map();
 for (const l of first.stderr.split('\n')) { const m = l.match(/all\.rs:(\d+):\d+: error\[(E\d+)\]/); if (!m) continue; const ln = Number(m[1]); const i = ranges.findIndex(r => ln >= r[0] && ln <= r[1]); if (i >= 0 && !rejected.has(i)) rejected.set(i, m[2]); }
 if (first.status !== 0 && rejected.size === 0) { console.log('rustc failed without attributable errors:\n' + first.stderr.slice(0, 2000)); process.exit(1); }
@@ -100,12 +97,12 @@ let ok = '#![allow(warnings)]\n';
 for (let i = 0; i < N; i++) if (!rejected.has(i)) ok += `mod c${i} {\n${srcs[i]}}\n`;
 ok += 'fn main() { let n: usize = std::env::args().nth(1).unwrap().parse().unwrap(); let r = match n {\n' + srcs.map((_, i) => rejected.has(i) ? '' : `${i} => c${i}::probe(),\n`).join('') + '_ => 0 }; println!("{}", r); }\n';
 fs.writeFileSync(`${dir}/ok.rs`, ok);
-const second = await run('rustc', ['--edition=2024', '-C', 'overflow-checks=yes', '-A', 'warnings', `${dir}/ok.rs`, '-o', `${dir}/ok`], { encoding: 'utf8', maxBuffer: 1 << 28 });
+const second = await run('rustc', ['--edition=2024', '-C', 'overflow-checks=yes', '-A', 'warnings', `${dir}/ok.rs`, '-o', `${dir}/ok`], { encoding: 'utf8' });
 if (second.status !== 0) { console.log('second rustc build failed:\n' + second.stderr.slice(0, 3000)); process.exit(1); }
 
-const results=[];for(let i=0;i<N;i++){let rust;if(rejected.has(i))rust={k:'reject',code:rejected.get(i)};else{const r=await run(dir+'/ok',[String(i)],{encoding:'utf8',timeout:10000});const m=r.stderr.match(/panicked at [^:\n]+:\d+:\d+:\n(.*)/);rust=r.status===0?{k:'value',v:r.stdout.trim()}:r.status===101&&m?{k:'trap',kind:rustKind(m[1])}:{k:'abnormal'};}if(rust.k==='abnormal')throw new Error('abnormal Rust oracle');results.push(rust);}return results;
+const results=[];for(let i=0;i<N;i++){let rust;if(rejected.has(i))rust={k:'reject',code:rejected.get(i)};else{const r=await run(dir+'/ok',[String(i)],{encoding:'utf8'});const m=r.stderr.match(/panicked at [^:\n]+:\d+:\d+:\n(.*)/);rust=r.status===0?{k:'value',v:r.stdout.trim()}:r.status===101&&m?{k:'trap',kind:rustKind(m[1])}:{k:'abnormal'};}if(rust.k==='abnormal')throw new Error('abnormal Rust oracle');results.push(rust);}return results;
 });
-const actualRoutes=await runRoutes(bin,srcs.map((_,i)=>({path:dir+'/c'+i+'.rs',entry:'probe'})),{engines,output:dir,timeout:20000});
+const actualRoutes=await runRoutes(bin,srcs.map((_,i)=>({path:dir+'/c'+i+'.rs',entry:'probe'})),{engines,output:dir});
 for(const engine of engines) {
 const actualResults=actualRoutes[engine];
 const tally = {}; const pairs = {}; const show = []; const bump = (o, c) => { o[c] = (o[c] || 0) + 1; };
@@ -128,9 +125,8 @@ for (let i = 0; i < N; i++) {
   bump(tally, cls);
   if (!cls.startsWith('both-')) show.push(`${dir}/c${i} ${cls} rust=${rust.k}:${rust.code || rust.v || rust.kind || ''} lkjscript=${text.replace(/^\S*\/c\d+\.rs:/, '').slice(0, 140)}`);
 }
-const record = { generator: 'verdict', engine, ...metadata, rustFlags: { verdict: '--edition=2024 --error-format=short -A warnings --emit=metadata', execution: '--edition=2024 -C overflow-checks=yes -A warnings' }, seed: seedS, programs: N, ...tally, rejectCodePairs: pairs };
+const record = { generator: 'verdict', engine, rustFlags: { verdict: '--edition=2024 --error-format=short -A warnings --emit=metadata', execution: '--edition=2024 -C overflow-checks=yes -A warnings' }, seed: seedS, programs: N, ...tally, rejectCodePairs: pairs };
 fs.mkdirSync(output, {recursive: true});
-fs.appendFileSync(path.join(output, 'runs.jsonl'), JSON.stringify(record) + '\n');
 console.log(JSON.stringify(record)); fs.writeFileSync(`${dir}/report-${engine}.txt`, show.join('\n') + '\n');
 
 const fatal = Object.keys(tally).some(key => /DIFFERS|VALUE-VS-TRAP|ACCEPTS-RUST-REJECTED|crash|timeout|oracle|generator|other-line|machine-error/.test(key));

@@ -29,7 +29,7 @@ Reproduce the original generated case, then reduce it:
 node tools/generators/verdict.mjs target/debug/lkjscript 601 2 target/generators
 node tools/generators/reduce.mjs target/debug/lkjscript \
   target/generators/verdict-601/c1.rs target/reduced/verdict-601-c1.rs \
-  --engine native --entry probe --category rejects-valid:E_BORROW --timeout 2000
+  --engine native --entry probe --category rejects-valid:E_BORROW
 ```
 
 The reducer removes balanced statements or items, trying larger deletions first,
@@ -40,8 +40,7 @@ not claim globally minimal source. `--profile value` also compares trap source
 lines; `--profile output --entry main` uses the World shim and compares raw bytes
 and the manner of ending. `--engine interpreter` selects the independent IR interpreter.
 
-`--timeout` is an operational timeout for each child process, not a language
-execution limit. The shared process runner kills the whole child process group.
+The shared test watchdog kills the whole child process group if it hangs.
 Every accepted reduction is saved before the next candidate runs. Runtime edits
 abort a run so a single record cannot mix different host implementations.
 

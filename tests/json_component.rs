@@ -58,11 +58,7 @@ fn run(artifact: &[u8]) -> Vec<u8> {
     ));
     std::fs::write(&path, artifact).unwrap();
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
-    let output = Command::new("prlimit")
-        .arg("--as=268435456")
-        .arg(&path)
-        .output()
-        .unwrap();
+    let output = Command::new(&path).output().unwrap();
     std::fs::remove_file(path).unwrap();
     assert!(
         output.status.success(),

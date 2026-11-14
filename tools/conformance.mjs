@@ -33,9 +33,8 @@ for (const c of cases) {
 }
 const out = path.join(root, 'target/conformance', engines.join('-'));
 fs.mkdirSync(out, { recursive: true });
-const timeout = Number(process.env.LKJSCRIPT_TEST_TIMEOUT_MS || 30000);
 function run(command, args, options = {}) {
-    return runProcess(command, args, { cwd: root, encoding: 'utf8', timeout, maxBuffer: 4 * 1024 * 1024, ...options });
+    return runProcess(command, args, { cwd: root, encoding: 'utf8', ...options });
 }
 function diagnostic(result) {
     return [result.stderr, result.stdout, result.error?.message].map(value => value?.toString().trim()).find(Boolean) || '';
@@ -93,7 +92,6 @@ for (const engine of engines) {
         signal: result.signal, error: result.error ? {message: result.error.message, code: result.error.code} : null,
     })).join('\n') + (cases.length ? '\n' : ''));
 }
-fs.writeFileSync(path.join(out, 'batch-summary.json'), JSON.stringify({jobs,cases:cases.length,engines,batchSeconds},null,2)+'\n');
 process.stdout.write('conformance batch: ' + cases.length + ' cases, ' + jobs + ' workers, ' + batchSeconds.toFixed(3) + ' s\n');
 for (const engine of engines) {
 const actualResults = actualRoutes[engine];

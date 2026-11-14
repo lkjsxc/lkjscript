@@ -1,31 +1,29 @@
-//! Raw-memory model for exercising the same runtime source on IR. This byte arena
-//! is separate from the interpreter's independently typed owner/loan heap.
-use crate::runtime::Primitive;
+//! Independent raw-address model for the sealed source allocator.
+//! Mappings are disjoint, independently released byte regions.
+use crate::runtime::{ALLOCATOR_STATE_BYTES, Primitive};
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum MemoryFault {
     Allocation,
     Bounds,
-    DropTarget,
 }
 impl MemoryFault {
     pub fn message(self) -> &'static str {
         match self {
             Self::Allocation => "runtime allocation failed",
-            Self::Bounds => "runtime raw memory access is out of bounds",
-            Self::DropTarget => "runtime cleanup target is missing",
+            Self::Bounds => "runtime raw address does not name live mapped storage",
         }
     }
 }
-pub(crate) enum Action {
-    Value(u64),
-    Call { function: usize, argument: u64 },
+struct Region {
+    base: u64,
+    bytes: Vec<u8>,
+    live: bool,
 }
 pub struct Memory {
-    bytes: Vec<u8>,
-    heap_tip: u64,
-    classes: u64,
-    drop_steps: Vec<usize>,
+    regions: Vec<Region>,
+    next_address: u64,
+    refuse_next: bool,
 }
 impl Default for Memory {
     fn default() -> Self {
@@ -35,63 +33,149 @@ impl Default for Memory {
 impl Memory {
     pub fn new() -> Self {
         Self {
-            bytes: vec![0; 65536],
-            heap_tip: 8,
-            classes: 0,
-            drop_steps: Vec::new(),
+            regions: vec![Region {
+                base: 4096,
+                bytes: vec![0; ALLOCATOR_STATE_BYTES as usize],
+                live: true,
+            }],
+            next_address: 8192,
+            refuse_next: false,
         }
     }
-    pub fn pages(&self) -> u64 {
-        self.bytes.len() as u64 / 65536
+    /// Inject a kernel mapping refusal for allocation-failure tests.
+    pub fn refuse_next_mapping(&mut self) {
+        self.refuse_next = true;
     }
-    pub fn heap_tip(&self) -> u64 {
-        self.heap_tip
+    pub fn mapped_bytes(&self) -> usize {
+        let mut total = 0;
+        for region in &self.regions {
+            if region.live {
+                total += region.bytes.len();
+            }
+        }
+        total
     }
-    pub fn set_drop_steps(&mut self, functions: Vec<usize>) {
-        self.drop_steps = functions;
+    pub fn mapping_count(&self) -> usize {
+        let mut total = 0;
+        for region in &self.regions {
+            if region.live {
+                total += 1;
+            }
+        }
+        total
     }
-    fn range(&self, address: u64, length: u64) -> Result<std::ops::Range<usize>, MemoryFault> {
+    fn range(&self, address: u64, length: u64) -> Result<(usize, usize, usize), MemoryFault> {
         let end = address.checked_add(length).ok_or(MemoryFault::Bounds)?;
-        if end > self.bytes.len() as u64 {
-            return Err(MemoryFault::Bounds);
+        for index in 0usize..self.regions.len() {
+            let region = &self.regions[index];
+            if region.live
+                && address >= region.base
+                && end >= address
+                && end - region.base <= region.bytes.len() as u64
+            {
+                return Ok((
+                    index,
+                    (address - region.base) as usize,
+                    (end - region.base) as usize,
+                ));
+            }
         }
-        Ok(address as usize..end as usize)
+        Err(MemoryFault::Bounds)
     }
     pub fn read(&self, address: u64, length: u64) -> Result<&[u8], MemoryFault> {
-        Ok(&self.bytes[self.range(address, length)?])
+        if length == 0 {
+            return Ok(&[]);
+        }
+        let (index, start, end) = self.range(address, length)?;
+        Ok(&self.regions[index].bytes[start..end])
     }
     pub fn write(&mut self, address: u64, bytes: &[u8]) -> Result<(), MemoryFault> {
-        let range = self.range(address, bytes.len() as u64)?;
-        self.bytes[range].copy_from_slice(bytes);
+        if bytes.is_empty() {
+            return Ok(());
+        }
+        let (index, start, end) = self.range(address, bytes.len() as u64)?;
+        self.regions[index].bytes[start..end].copy_from_slice(bytes);
         Ok(())
     }
     fn load(&self, address: u64, length: u64) -> Result<u64, MemoryFault> {
-        let mut value = 0;
+        let mut result = 0;
         for (index, byte) in self.read(address, length)?.iter().enumerate() {
-            value |= u64::from(*byte) << (index * 8);
+            result |= u64::from(*byte) << (index * 8);
         }
-        Ok(value)
+        Ok(result)
     }
-    fn grow(&mut self, pages: u64) -> u64 {
-        let old = self.pages();
-        let Some(end) = old.checked_add(pages).and_then(|n| n.checked_mul(65536)) else {
-            return u64::MAX;
-        };
-        let Ok(end) = usize::try_from(end) else {
-            return u64::MAX;
-        };
-        let extra = end - self.bytes.len();
-        if self.bytes.try_reserve(extra).is_err() {
-            return u64::MAX;
+    fn map(&mut self, bytes: u64) -> u64 {
+        if self.refuse_next {
+            self.refuse_next = false;
+            return 0;
         }
-        self.bytes.resize(end, 0);
-        old
+        if bytes == 0 {
+            return 0;
+        }
+        let Some(rounded) = bytes.checked_add(4095).map(|size| size & !4095) else {
+            return 0;
+        };
+        let Ok(length) = usize::try_from(rounded) else {
+            return 0;
+        };
+        let Some(next) = self
+            .next_address
+            .checked_add(rounded)
+            .and_then(|end| end.checked_add(4096))
+        else {
+            return 0;
+        };
+        let mut storage = Vec::new();
+        if storage.try_reserve_exact(length).is_err() {
+            return 0;
+        }
+        storage.resize(length, 0);
+        let base = self.next_address;
+        let region = Region {
+            base,
+            bytes: storage,
+            live: true,
+        };
+        let mut unused = None;
+        for index in 1usize..self.regions.len() {
+            if !self.regions[index].live {
+                unused = Some(index);
+                break;
+            }
+        }
+        if let Some(index) = unused {
+            self.regions[index] = region;
+        } else {
+            if self.regions.try_reserve(1).is_err() {
+                return 0;
+            }
+            self.regions.push(region);
+        }
+        self.next_address = next;
+        base
+    }
+    fn unmap(&mut self, address: u64, bytes: u64) -> Result<u64, MemoryFault> {
+        let rounded = bytes
+            .checked_add(4095)
+            .map(|size| size & !4095)
+            .ok_or(MemoryFault::Bounds)?;
+        for index in 1usize..self.regions.len() {
+            if self.regions[index].live
+                && self.regions[index].base == address
+                && self.regions[index].bytes.len() as u64 == rounded
+            {
+                self.regions[index].live = false;
+                self.regions[index].bytes = Vec::new();
+                return Ok(0);
+            }
+        }
+        Err(MemoryFault::Bounds)
     }
     pub(crate) fn invoke(
         &mut self,
         primitive: Primitive,
         args: &[u64],
-    ) -> Result<Action, MemoryFault> {
+    ) -> Result<u64, MemoryFault> {
         let value = match primitive {
             Primitive::Load8 => self.load(args[0], 1)?,
             Primitive::Load64 => self.load(args[0], 8)?,
@@ -103,34 +187,42 @@ impl Memory {
                 self.write(args[0], &args[1].to_le_bytes())?;
                 0
             }
-            Primitive::MemorySize => self.pages(),
-            Primitive::MemoryGrow => self.grow(args[0]),
             Primitive::MemoryCopy => {
-                let source = self.range(args[1], args[2])?;
-                let destination = self.range(args[0], args[2])?;
-                self.bytes.copy_within(source, destination.start);
+                let copied = self.read(args[1], args[2])?.to_vec();
+                self.write(args[0], &copied)?;
                 0
             }
-            Primitive::HeapTip => self.heap_tip,
-            Primitive::SetHeapTip => {
-                self.heap_tip = args[0];
-                0
-            }
-            Primitive::Classes => self.classes,
-            Primitive::SetClasses => {
-                self.classes = args[0];
-                0
-            }
+            Primitive::Map => self.map(args[0]),
+            Primitive::Unmap => self.unmap(args[0], args[1])?,
+            Primitive::AllocatorState => self.regions[0].base,
             Primitive::Fail => return Err(MemoryFault::Allocation),
-            Primitive::DropStep => {
-                let index = usize::try_from(args[1]).map_err(|_| MemoryFault::DropTarget)?;
-                let function = *self.drop_steps.get(index).ok_or(MemoryFault::DropTarget)?;
-                return Ok(Action::Call {
-                    function,
-                    argument: args[0],
-                });
-            }
         };
-        Ok(Action::Value(value))
+        Ok(value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mappings_are_disjoint_and_release_invalidates_raw_addresses() {
+        let mut memory = Memory::new();
+        let left = memory.invoke(Primitive::Map, &[4096]).unwrap();
+        let right = memory.invoke(Primitive::Map, &[4096]).unwrap();
+        assert!(right > left + 4096);
+        memory.write(left, &[1, 2, 3, 4, 5, 6]).unwrap();
+        memory
+            .invoke(Primitive::MemoryCopy, &[left + 2, left, 4])
+            .unwrap();
+        assert_eq!(memory.read(left, 6).unwrap(), &[1, 2, 1, 2, 3, 4]);
+        memory
+            .invoke(Primitive::MemoryCopy, &[right, left + 2, 4])
+            .unwrap();
+        assert_eq!(memory.read(right, 4).unwrap(), &[1, 2, 3, 4]);
+        assert_eq!(memory.read(left + 4095, 2), Err(MemoryFault::Bounds));
+        memory.invoke(Primitive::Unmap, &[left, 4096]).unwrap();
+        assert_eq!(memory.read(left, 1), Err(MemoryFault::Bounds));
+        assert_eq!(memory.read(right, 4).unwrap(), &[1, 2, 3, 4]);
     }
 }

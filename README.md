@@ -33,8 +33,8 @@ An installed native toolchain provides:
 
 `check` is silent on success. `run` preserves ordinary process streams and
 status; `eval` also prints a scalar return. `build` writes a static Linux
-x86-64 ELF with no libc or dynamic loader. The
-[native workflow](docs/native.md) documents installation and rebuilding.
+x86-64 ELF with no libc or dynamic loader. Run --help for options;
+`tools/rebuild-native.sh` rebuilds and verifies the current component toolchain.
 
 The Cargo-built driver also runs the independent IR interpreter:
 
@@ -66,8 +66,6 @@ the repository tools and documentation server.
 
 - [IR reference](docs/ir.md): text form, operations, ownership and backend contract.
 - [Language reference](docs/language.md): implemented source forms and rewrites.
-- [Source producer](docs/frontend.md): declared source/library inputs and bundles.
-- [Current execution implementation](docs/limits.md): representations and host boundary.
 
 The separate Cargo-built backend uses the production checker and emitter without
 linking the source frontend:

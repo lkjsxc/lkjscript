@@ -1459,21 +1459,6 @@ impl ImplementationIndex {
         }
         Ok(index)
     }
-    pub(crate) fn for_diagnostics(
-        source: &Program,
-        available: &[bool],
-    ) -> (Self, Vec<(usize, Diagnostic)>) {
-        let mut index = Self::empty(source);
-        let mut problems = Vec::new();
-        for (id, ready) in available.iter().enumerate() {
-            if *ready {
-                if let Err(problem) = index.insert(source, id) {
-                    problems.push((id, problem));
-                }
-            }
-        }
-        (index, problems)
-    }
     fn insert(&mut self, source: &Program, id: usize) -> Result<(), Diagnostic> {
         let implementation = &source.impls[id];
         let mut terms = Vec::new();
@@ -1992,7 +1977,7 @@ mod bound_tests {
         assert!(!satisfies(&source, &types, &BTreeMap::new(), link, "Copy"));
     }
     #[test]
-    fn derive_lookup_unions_matching_names_in_both_index_build_modes() {
+    fn derive_lookup_unions_matching_names() {
         let source = crate::syntax::parse(
             "#[derive(Clone)] #[derive(PartialEq)] struct Same; #[derive(Ord)] struct Same; #[derive(Eq)] enum Same{Value} #[other(Send)] struct Same; trait Marker{} impl Marker for Same{}",
         ).unwrap();
@@ -2003,19 +1988,15 @@ mod bound_tests {
                 fields: Vec::new(),
             },
         }];
-        let complete = ImplementationIndex::new(&source).unwrap();
-        let (partial, problems) = ImplementationIndex::for_diagnostics(&source, &[false]);
-        assert!(problems.is_empty());
-        for index in [&complete, &partial] {
-            for bound in ["Clone", "PartialEq", "Ord", "Eq"] {
-                assert!(index.derived(&types, &BTreeMap::new(), 0, bound), "{bound}");
-            }
-            for bound in ["Copy", "Send", "clone"] {
-                assert!(
-                    !index.derived(&types, &BTreeMap::new(), 0, bound),
-                    "{bound}"
-                );
-            }
+        let index = ImplementationIndex::new(&source).unwrap();
+        for bound in ["Clone", "PartialEq", "Ord", "Eq"] {
+            assert!(index.derived(&types, &BTreeMap::new(), 0, bound), "{bound}");
+        }
+        for bound in ["Copy", "Send", "clone"] {
+            assert!(
+                !index.derived(&types, &BTreeMap::new(), 0, bound),
+                "{bound}"
+            );
         }
     }
 

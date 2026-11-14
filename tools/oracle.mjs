@@ -4,8 +4,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
-const rustc=spawnSync('rustc',['--version','--verbose'],{encoding:'utf8'}).stdout;
+import { run } from './process.mjs';
+const rustc=(await run('rustc',['--version','--verbose'])).stdout;
 export async function oracleCache(key,produce) {
  const hash=createHash('sha256').update(JSON.stringify({rustc,...key})).digest('hex');
  const file=path.resolve('target/oracle-cache',hash+'.json');

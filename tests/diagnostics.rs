@@ -50,13 +50,21 @@ fn recovery_reaches_independent_statements_items_and_nested_methods() {
         3
     );
     assert!(report.diagnostics.iter().all(|e| e.path == "case/main.rs"));
-    let census = diagnostics::census(&report);
-    assert!(!census.unsupported.contains_key("let else"));
-    assert_eq!(census.unsupported["mystery!"], 1);
-    assert_eq!(census.unsupported["impl item"], 1);
-    assert_eq!(census.blocked["statement"], 4);
-    assert_eq!(census.blocked["item"], 1);
-    assert_eq!(census.blocked["semantic phase"], 1);
+    assert_eq!(
+        report
+            .blocked
+            .iter()
+            .filter(|region| region.kind == "statement")
+            .count(),
+        4
+    );
+    assert!(report.blocked.iter().any(|region| region.kind == "item"));
+    assert!(
+        report
+            .blocked
+            .iter()
+            .any(|region| region.kind == "semantic phase")
+    );
     assert!(compiler::compile(&input).is_err());
 }
 
@@ -104,7 +112,7 @@ fn poisoning_reports_blocked_semantics_instead_of_invented_name_errors() {
 }
 
 #[test]
-fn census_uses_parsed_constructs_and_ignores_comments_and_literal_text() {
+fn unsupported_diagnostics_use_parsed_constructs_and_ignore_literal_text() {
     let input = one(r#"
         fn probe() {
             let text = "? if let static format! closure"; // while let dyn ?
@@ -123,23 +131,16 @@ fn census_uses_parsed_constructs_and_ignores_comments_and_literal_text() {
             loop { break 7; }
         }
     "#);
-    let report = source::parse_bundle_report(&input);
+    let mut report = source::parse_bundle_report(&input);
     assert!(report.diagnostics.is_empty(), "{:?}", report.diagnostics);
-    let census = diagnostics::census(&report);
-    assert_eq!(census.unsupported.get("function pointer"), Some(&1));
-    assert_eq!(census.unsupported.len(), 1);
-    for supported in [
-        "char literal",
-        "closure",
-        "format!",
-        "repeated Vec literal",
-        "collection iteration",
-        "for binding pattern",
-        "range slicing",
-    ] {
-        assert!(!census.unsupported.contains_key(supported));
-    }
-    assert!(census.blocked.is_empty());
+    diagnostics::complete_unsupported(&mut report);
+    assert_eq!(report.diagnostics.len(), 1);
+    assert_eq!(report.diagnostics[0].code, "E_UNSUPPORTED");
+    assert_eq!(
+        report.diagnostics[0].message,
+        "unsupported construct: function pointer"
+    );
+    assert!(report.blocked.is_empty());
 }
 
 #[test]
@@ -147,7 +148,14 @@ fn unknown_lexical_boundaries_and_unbalanced_input_are_blocked() {
     let lexical = source::parse_bundle_report(&one("fn before() {} /* missing"));
     assert_eq!(lexical.diagnostics.len(), 1);
     assert_eq!(lexical.diagnostics[0].code, "E_LEX");
-    assert_eq!(diagnostics::census(&lexical).blocked["file"], 1);
+    assert_eq!(
+        lexical
+            .blocked
+            .iter()
+            .filter(|region| region.kind == "file")
+            .count(),
+        1
+    );
     let unbalanced = source::parse_bundle_report(&one("fn broken() { let x = missing("));
     assert!(!unbalanced.diagnostics.is_empty());
     assert!(unbalanced.blocked.iter().any(|r| r.kind == "item"));
@@ -160,7 +168,6 @@ fn the_same_recovering_parser_preserves_valid_compilation() {
     let report = source::parse_bundle_report(&one(text));
     assert!(report.diagnostics.is_empty());
     assert!(report.blocked.is_empty());
-    assert!(diagnostics::census(&report).unsupported.is_empty());
     assert_eq!(syntax::parse(text).unwrap().functions.len(), 2);
     assert!(compiler::compile(&one(text)).is_ok());
 }
@@ -193,7 +200,14 @@ fn missing_semicolon_does_not_hide_later_independent_statements() {
     ));
     assert_eq!(report.diagnostics.len(), 3);
     assert!(report.diagnostics[0].message.contains("expected `;`"));
-    assert_eq!(diagnostics::census(&report).blocked["statement"], 3);
+    assert_eq!(
+        report
+            .blocked
+            .iter()
+            .filter(|region| region.kind == "statement")
+            .count(),
+        3
+    );
     assert!(report.program.functions.iter().any(|f| f.name == "good"));
 }
 
@@ -330,22 +344,10 @@ fn cli_collects_independent_errors_marks_blocking_and_never_emits() {
     assert_eq!(errors.matches(": E_TYPE ").count(), 2, "{errors}");
     assert!(errors.contains("E_BLOCKED"), "{errors}");
     assert!(!output.exists());
-    let result = std::process::Command::new(env!("CARGO_BIN_EXE_lkjscript"))
-        .arg("check")
-        .arg("--census")
-        .arg(&input)
-        .output()
-        .unwrap();
-    assert!(!result.status.success());
-    assert!(
-        String::from_utf8(result.stdout)
-            .unwrap()
-            .contains("remaining semantic analysis\t1\tblocked")
-    );
 }
 
 #[test]
-fn census_counts_semantic_diagnostics_and_their_parsed_site_once() {
+fn unsupported_diagnostics_preserve_specific_existing_errors() {
     for (text, kind) in [
         (
             "fn consume(callback: fn(i64) -> i64) {}",
@@ -367,18 +369,19 @@ fn census_counts_semantic_diagnostics_and_their_parsed_site_once() {
             "{kind}: {errors:?}"
         );
         report.diagnostics.extend(errors);
-        let census = diagnostics::census(&report);
+        let existing: Vec<_> = report
+            .diagnostics
+            .iter()
+            .map(|problem| problem.message.clone())
+            .collect();
+        diagnostics::complete_unsupported(&mut report);
         assert_eq!(
-            census.unsupported.get(kind),
-            Some(&1),
-            "{kind}: {:?}",
-            census.unsupported
-        );
-        assert_eq!(
-            census.unsupported.values().sum::<usize>(),
-            1,
-            "{kind}: {:?}",
-            census.unsupported
+            report
+                .diagnostics
+                .iter()
+                .map(|problem| problem.message.clone())
+                .collect::<Vec<_>>(),
+            existing
         );
     }
 }

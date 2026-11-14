@@ -18,15 +18,13 @@ preserve arithmetic edges, storage/copy/drop behavior and UTF-8 boundaries after
 removal of the WebAssembly host. Engine layout assertions disappeared with that
 engine; ordinary allocation/refusal checks use the native boundary fixtures.
 
-Each case receives fresh execution state. A missing-progress watchdog, subprocess
-memory budgets and output envelopes are test-runner choices, never acceptance
-limits. LKJSCRIPT_GATE_JOBS controls parallel suite count. LKJSCRIPT_RUN_MEMORY_BYTES changes
-the program runner's budget; LKJSCRIPT_TEST_MEMORY_BYTES changes generator subprocess
-budgets. Seeds, expected observations and reduced failures stay in Git; disposable
-outputs and cached Rust comparisons stay under target/.
+Each case receives fresh execution state. The shared watchdog detects stalled
+processes; LKJSCRIPT_GATE_JOBS selects the number of parallel workers. Seeds,
+expectations and reduced failures stay in Git; working artifacts and cached Rust
+comparisons stay under target/.
 
 `node tools/backend.mjs` compares the cargo-built independent backend with B0 over
-this data. That boundary comparison must not be called self-compilation.
+this data, checking verdicts and executable bytes.
 
 World output records may also declare `stderrHex` (default empty) and normal
 `status` (default zero). Rust World runs use a dedicated control pipe; neither

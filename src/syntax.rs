@@ -2,7 +2,7 @@
 mod default;
 pub(crate) mod formatting;
 use crate::ast::*;
-use crate::diagnostics::{BlockedRegion, RecoveryDomain, RecoveryOwner};
+use crate::diagnostics::BlockedRegion;
 use std::collections::BTreeSet;
 
 #[derive(Clone, PartialEq, Eq)]
@@ -515,7 +515,6 @@ pub fn parse_file_report(
                 items: Vec::new(),
                 diagnostics: vec![error],
                 blocked: vec![BlockedRegion {
-                    domain: None,
                     path: program.files[file].path.clone(),
                     span,
                     kind: "file".to_string(),
@@ -711,34 +710,7 @@ impl Parser {
         }
     }
 
-    fn recovery_domain(&self, owner: Option<RecoveryOwner>) -> RecoveryDomain {
-        let kind = self.token().text.clone();
-        let name = if matches!(
-            kind.as_str(),
-            "fn" | "struct" | "enum" | "trait" | "type" | "const" | "mod"
-        ) {
-            self.tokens
-                .get(self.at + 1)
-                .filter(|token| token.kind == TokenKind::Ident)
-                .map(|token| token.text.clone())
-        } else {
-            None
-        };
-        RecoveryDomain {
-            scope: self.scope,
-            kind,
-            name,
-            owner,
-        }
-    }
-
-    fn recover_region(
-        &mut self,
-        start: usize,
-        kind: &str,
-        error: Diagnostic,
-        domain: Option<RecoveryDomain>,
-    ) {
+    fn recover_region(&mut self, start: usize, kind: &str, error: Diagnostic) {
         let span = self.tokens[start].span;
         let code = error.code.clone();
         self.record(error);
@@ -831,7 +803,6 @@ impl Parser {
             extent.end = self.tokens[at - 1].span.end;
         }
         self.blocked.push(BlockedRegion {
-            domain,
             path: self.program.files[span.file].path.clone(),
             span: extent,
             kind: kind.to_string(),
@@ -1135,11 +1106,7 @@ impl Parser {
         ))
     }
 
-    fn next_item(
-        &mut self,
-        domain: &mut Option<RecoveryDomain>,
-        disabled: &mut bool,
-    ) -> Result<Option<Item>, Diagnostic> {
+    fn next_item(&mut self, disabled: &mut bool) -> Result<Option<Item>, Diagnostic> {
         let attrs = self.attrs()?;
         if !self.enabled(&attrs)? {
             self.skip_disabled()?;
@@ -1150,7 +1117,6 @@ impl Parser {
             return Ok(None);
         }
         let public = self.visibility()?;
-        *domain = Some(self.recovery_domain(None));
         let item = self.item(attrs, public)?;
         Ok(Some(item))
     }
@@ -1163,9 +1129,8 @@ impl Parser {
             let start = self.at;
             let scope = self.scope;
             let module = self.module.clone();
-            let mut domain = None;
             let mut disabled = false;
-            let result = self.next_item(&mut domain, &mut disabled);
+            let result = self.next_item(&mut disabled);
             match result {
                 Ok(Some(item)) => items.push(item),
                 Ok(None) if disabled => continue,
@@ -1173,7 +1138,7 @@ impl Parser {
                 Err(error) => {
                     self.scope = scope;
                     self.module = module;
-                    self.recover_region(start, "item", error, domain);
+                    self.recover_region(start, "item", error);
                 }
             }
         }
@@ -1506,9 +1471,7 @@ impl Parser {
         }
     }
 
-    // Every input-shaped type edge is a continuation on this heap stack.
-    // Arena indices are returned between frames; neither parsing nor dropping
-    // nested types relies on the embedding thread's native stack size.
+    // Type parsing returns arena indices between explicit continuation frames.
     fn ty(&mut self) -> Result<TypeId, Diagnostic> {
         let mut frames = vec![TypeFrame::Parse];
         let mut value = 0;
@@ -2035,8 +1998,6 @@ impl Parser {
     }
     fn trait_member(
         &mut self,
-        name: &str,
-        domain: &mut Option<RecoveryDomain>,
         methods: &mut Vec<usize>,
         associated: &mut Vec<AssociatedType>,
     ) -> Result<(), Diagnostic> {
@@ -2045,9 +2006,6 @@ impl Parser {
             self.skip_disabled()?;
             return Ok(());
         }
-        *domain = Some(self.recovery_domain(Some(RecoveryOwner::Trait {
-            name: name.to_string(),
-        })));
         if self.is("fn") {
             methods.push(self.function(attrs, Visibility::Private)?);
         } else if self.is("type") {
@@ -2076,10 +2034,9 @@ impl Parser {
                 return Err(self.err("unterminated trait"));
             }
             let start = self.at;
-            let mut domain = None;
-            let result = self.trait_member(&name, &mut domain, &mut methods, &mut associated);
+            let result = self.trait_member(&mut methods, &mut associated);
             if let Err(error) = result {
-                self.recover_region(start, "item", error, domain);
+                self.recover_region(start, "item", error);
             }
         }
         self.expect("}")?;
@@ -2098,9 +2055,6 @@ impl Parser {
     }
     fn implementation_member(
         &mut self,
-        target: TypeId,
-        trait_ty: Option<TypeId>,
-        domain: &mut Option<RecoveryDomain>,
         methods: &mut Vec<usize>,
         associated: &mut Vec<AssociatedType>,
     ) -> Result<(), Diagnostic> {
@@ -2110,8 +2064,6 @@ impl Parser {
             return Ok(());
         }
         let public = self.visibility()?;
-        *domain =
-            Some(self.recovery_domain(Some(RecoveryOwner::Implementation { target, trait_ty })));
         if self.is("fn") {
             methods.push(self.function(attrs, public)?);
         } else if self.is("type") {
@@ -2144,16 +2096,9 @@ impl Parser {
                 return Err(self.err("unterminated impl"));
             }
             let start = self.at;
-            let mut domain = None;
-            let result = self.implementation_member(
-                target,
-                trait_ty,
-                &mut domain,
-                &mut methods,
-                &mut associated,
-            );
+            let result = self.implementation_member(&mut methods, &mut associated);
             if let Err(error) = result {
-                self.recover_region(start, "item", error, domain);
+                self.recover_region(start, "item", error);
             }
         }
         self.expect("}")?;
@@ -2261,7 +2206,7 @@ impl Parser {
                 Err(error) => {
                     self.scope = scope;
                     self.module = module;
-                    self.recover_region(start, "statement", error, None);
+                    self.recover_region(start, "statement", error);
                 }
             }
         }

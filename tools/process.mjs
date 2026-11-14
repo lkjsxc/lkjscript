@@ -1,11 +1,11 @@
-// Test-process envelopes are operational controls, never language acceptance rules.
+// Shared test watchdog and process capture.
 // Kill the complete process group on timeout: killing only a compiler can strand
 // its Node child, which happened in the original outside-review experiments.
 // Batch callers disable the total deadline and require stdout progress instead;
 // their protocol emits only completed cases or prepared modules, never program output.
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
-import path from 'node:path';
+export const WATCHDOG_MS = 120_000;
 const active = new Set();
 function stop(child) {
   if (!child.pid) return;
@@ -16,26 +16,13 @@ for (const [signal, status] of [['SIGINT', 130], ['SIGTERM', 143]]) {
   process.on(signal, () => { for (const child of active) stop(child); process.exit(status); });
 }
 export function run(command, args, options = {}) {
-  const { timeout = Number(process.env.LKJSCRIPT_TEST_TIMEOUT_MS || 30000),
-    maxBuffer = 32 * 1024 * 1024, encoding = 'utf8', sampleMemory = false, idleTimeout = 0, input, captureControl = false,
-    memoryBytes = process.env.LKJSCRIPT_TEST_MEMORY_BYTES || (path.basename(command) === 'rustc' ? '8589934592' : '2147483648'), ...spawnOptions } = options;
+  const { timeout = WATCHDOG_MS, encoding = 'utf8', sampleMemory = false,
+    idleTimeout = 0, input, captureControl = false, ...spawnOptions } = options;
   if (![timeout, idleTimeout].every(value => Number.isFinite(value) && value >= 0)) throw new Error('invalid process timeout');
   return new Promise(resolve => {
     const stdout = [], stderr = [], control = [];
-    let size = 0, error;
-    // Programs under test, including Rust references, inherit an explicit Linux
-    // address-space envelope. Capacity probes opt into a larger value or
-    // LKJSCRIPT_TEST_MEMORY_BYTES=unlimited. Node only orchestrates tests and reserves
-    // a large V8 address cage; generated programs never execute inside it.
-    const budget = String(memoryBytes);
-    if (budget !== 'unlimited' && (!/^[1-9][0-9]*$/.test(budget) || BigInt(budget) > 18446744073709551615n)) {
-      throw new Error('LKJSCRIPT_TEST_MEMORY_BYTES must be positive bytes or unlimited');
-    }
-    const node = ['node', 'nodejs'].includes(path.basename(command));
-    const executable = process.platform === 'linux' ? 'prlimit' : command;
-    const arguments_ = process.platform === 'linux'
-      ? ['--core=0', ...(node || budget === 'unlimited' ? [] : ['--as=' + budget]), '--', command, ...args] : args;
-    const child = spawn(executable, arguments_, { ...spawnOptions, detached: process.platform !== 'win32',
+    let error;
+    const child = spawn(command, args, { ...spawnOptions, detached: process.platform !== 'win32',
       stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe', ...(captureControl ? ['pipe'] : [])] });
     if (child.stdin) {
       child.stdin.on('error', problem => { if (problem.code !== 'EPIPE') error = problem; });
@@ -62,7 +49,7 @@ export function run(command, args, options = {}) {
       error = Object.assign(new Error(message), {code: 'ETIMEDOUT'});
       stop(child);
     }
-    const timer = timeout ? setTimeout(() => expire(`process exceeded test envelope of ${timeout} ms`), timeout) : undefined;
+    const timer = timeout ? setTimeout(() => expire(`test watchdog expired after ${timeout} ms`), timeout) : undefined;
     let idleTimer;
     function progress() {
       if (!idleTimeout) return;
@@ -73,11 +60,7 @@ export function run(command, args, options = {}) {
     for (const [stream, chunks] of [[child.stdout, stdout], [child.stderr, stderr], ...(captureControl ? [[child.stdio[3], control]] : [])]) {
       stream.on('data', chunk => {
         if (stream === child.stdout) progress();
-        size += chunk.length;
-        if (size > maxBuffer) {
-          error = Object.assign(new Error('process exceeded test output envelope'), {code: 'ENOBUFS'});
-          stop(child);
-        } else chunks.push(chunk);
+        chunks.push(chunk);
       });
     }
     child.on('error', problem => { error = problem; });

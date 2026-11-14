@@ -1,7 +1,7 @@
-//! The Rust bootstrap supplies code bytes, execution budgets and output/result
+//! The Rust witness supplies code bytes and output/result
 //! capabilities. The ELF itself has no Rust, Node, loader or libc dependency.
 use super::*;
-use lkjscript::{bootstrap_runtime, lower};
+use lkjscript::{bootstrap_runtime, native};
 use std::ffi::OsString;
 use std::io::Read;
 use std::os::unix::fs::PermissionsExt;
@@ -14,45 +14,35 @@ pub struct Outcome {
     pub value: u64,
     pub error: Option<String>,
 }
-pub fn lower(checked: &ir::CheckedProgram) -> Result<lower::Program, String> {
-    compiler_work(|| lower::lower(checked, bootstrap_runtime::get()?))
-}
 pub fn image(
-    program: &lower::Program,
-    meaning: &ir::Program,
+    checked: &ir::CheckedProgram,
     entry: usize,
     packet: bool,
-) -> Result<Vec<u8>, String> {
-    compiler_work(|| image_inner(program, meaning, entry, packet))
-}
-fn image_inner(
-    program: &lower::Program,
-    meaning: &ir::Program,
-    entry: usize,
-    packet: bool,
-) -> Result<Vec<u8>, String> {
-    let function = &meaning.functions[entry];
-    let world = entry_world(meaning, function)?;
-    let exported = program
-        .exports
-        .iter()
-        .find(|export| export.name == format!("fn:{}", function.name))
-        .ok_or_else(|| format!("E_ENTRY missing native entry {}", function.name))?;
-    lkjscript::native::encode(
-        program,
-        lkjscript::native::Entry {
-            function: exported.function,
+) -> Result<native::Image, String> {
+    let meaning = checked.program();
+    let world = entry_world(meaning, &meaning.functions[entry])?;
+    native::encode(
+        checked,
+        bootstrap_runtime::get()?,
+        native::Entry {
+            function: entry,
             arguments: if world { vec![1] } else { Vec::new() },
             result_fd: if packet { Some(3) } else { None },
         },
     )
+    .map_err(|error| {
+        format!(
+            "{}:{}: {} {}",
+            error.line, error.column, error.code, error.message
+        )
+    })
 }
 pub fn save(path: &Path, bytes: &[u8]) -> Result<(), String> {
     fs::write(path, bytes).map_err(|error| format!("E_IO {}: {error}", path.display()))?;
     fs::set_permissions(path, fs::Permissions::from_mode(0o755))
         .map_err(|error| format!("E_IO {}: {error}", path.display()))
 }
-fn trap_message(program: &lower::Program, code: u64) -> &str {
+fn trap_message(traps: &[String], code: u64) -> &str {
     match code {
         1 => "integer overflow",
         2 => "division by zero",
@@ -60,17 +50,16 @@ fn trap_message(program: &lower::Program, code: u64) -> &str {
         4 => "explicit trap",
         5 => "assertion failed",
         6 => "heap allocation failed",
-        8 => "stack extent exhausted",
+        8 => "stack exhausted",
         7 => "host output failure",
-        _ => program
-            .trap_messages
+        _ => traps
             .get(code.saturating_sub(16) as usize)
             .map_or("trap", String::as_str),
     }
 }
 pub fn execute(
     path: &Path,
-    program: &lower::Program,
+    traps: &[String],
     source: &str,
     capture: bool,
     arguments: &[OsString],
@@ -95,7 +84,7 @@ pub fn execute(
         });
     let mut channel = host_process::result_channel(&mut command)
         .map_err(|error| format!("E_HOST result channel: {error}"))?;
-    host_process::prepare_native_child(&mut command)?;
+    host_process::prepare_child(&mut command);
     let output = command
         .output()
         .map_err(|error| format!("E_HOST native: {error}"))?;
@@ -128,7 +117,7 @@ pub fn execute(
     } else if code != 0 {
         Some(format!(
             "{source}:{line}: R{code:04} {}",
-            trap_message(program, code)
+            trap_message(traps, code)
         ))
     } else {
         None
@@ -175,19 +164,16 @@ pub fn run(
     timings: &mut timing::Timings,
 ) -> Result<u8, String> {
     let mut status = 0;
-    let lowered = timings
-        .measure("lower", || lower(checked))
-        .map_err(|error| format!("E_EMIT {error}"))?;
     let meaning = checked.program();
     let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/run");
     fs::create_dir_all(&directory).map_err(|error| format!("E_IO {error}"))?;
     for entry in entries(meaning, args)? {
-        let bytes = timings
+        let image = timings
             .measure("native_encode", || {
-                image(&lowered, meaning, entry, args.verb != "build")
+                image(checked, entry, args.verb != "build")
             })
             .map_err(|error| format!("E_EMIT {error}"))?;
-        timings.count("emitted_bytes", bytes.len());
+        timings.count("emitted_bytes", image.bytes.len());
         if args.verb == "build" {
             let path = PathBuf::from(args.output.clone().unwrap_or_else(|| {
                 Path::new(&args.path)
@@ -195,12 +181,18 @@ pub fn run(
                     .to_string_lossy()
                     .into_owned()
             }));
-            save(&path, &bytes)?;
+            save(&path, &image.bytes)?;
         } else {
             let path = directory.join(format!("{}-{entry}.elf", std::process::id()));
-            save(&path, &bytes)?;
+            save(&path, &image.bytes)?;
             let outcome = timings.measure("native_run", || {
-                execute(&path, &lowered, &args.path, false, &args.program_arguments)
+                execute(
+                    &path,
+                    &image.trap_messages,
+                    &args.path,
+                    false,
+                    &args.program_arguments,
+                )
             });
             let _ = fs::remove_file(&path);
             let outcome = outcome?;

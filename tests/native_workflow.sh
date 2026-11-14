@@ -126,7 +126,6 @@ printf 'pub fn answer() -> i64 { 42 }\n' >app/calc.rs
 for fixture in main closed_stdin output_failure; do
     capture 0 "compile-$fixture" "$lkjscript" ir "tests/fixtures/world/$fixture.rs" --source-dir "$repo" -o "$work/$fixture.lkjir"
 done
-capture 0 compile-limits "$lkjscript" ir tests/fixtures/runtime_resource_limits.rs --source-dir "$repo" -o "$work/limits.lkjir"
 printf '\0\377A\n' >world.stdin
 payload=$'argument with spaces \377'
 { printf '%s' "$payload"; cat world.stdin; } >world.expected
@@ -145,11 +144,6 @@ for mode in run eval; do
     text_is "closed-error-$mode" ''
     silent_errors "closed-error-$mode"
 done
-LKJSCRIPT_RUN_MEMORY_BYTES=268435456 LKJSCRIPT_RUN_STACK_BYTES=1048576 \
-    capture 0 target-limits prlimit --as=536870912:536870912 --stack=2097152:unlimited \
-    "$lkjscript" run "$work/limits.lkjir"
-grep -Eq '^Max address space +268435456 +536870912 +bytes' "$work/target-limits.stdout"
-grep -Eq '^Max stack size +1048576 +unlimited +bytes' "$work/target-limits.stdout"
 capture 0 verify "$lkjscript" verify
 [[ ! -e $LKJSCRIPT_FORBIDDEN_LOG ]]
 printf 'Native workflow: %s process outcomes; source/bundle/IR identity, runtime, scalars, traps, streams, paths, controls, hashes; no Rust or Node\n' "$count"

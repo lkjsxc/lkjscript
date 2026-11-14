@@ -83,6 +83,9 @@ do not compare exhaustion locations across different representations.
 Recursion is fine; replace it only when a real program fails.
 Use at most eight workers, leave no background jobs, clean temporary directories.
 Add --stats for phase time, peak RSS, IR/code sizes.
+The Rust witness uses standard-library collections; the self-built compiler uses
+lkjscript's indexed AVL map. Keep the twin as a yardstick, but its full timing
+ratio includes library implementation differences (verified in code on 2026-11-14).
 Keep small bench/ programs and a table against the Rust-built twin and prior run.
 Investigate structural costs before source tuning.
 
@@ -91,7 +94,6 @@ Investigate structural costs before source tuning.
 0. Rename and reset: ir.rs, ir_text.rs, interpreter.rs, backend*.rs;
    IrProgram/IrFunction, source_to_ir, .lkjir, lkjscript ir/runtime-ir,
    --unchecked-ir, --engine interpreter, E_IR/E_IR_TEXT, LKJSCRIPT_*.
-   Rename the temporary operand-stack form lower/stack.rs.
    Text begins lkjscript-ir 1. Rename files, tests, tools and local IR variables;
    remove obsolete names without aliases. Delete docs/observations/ and limit
    disclaimers. Finish with the gate green and both compiler fixed points.

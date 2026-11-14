@@ -1348,7 +1348,7 @@
     "kind": "run",
     "value": "84",
     "rust": false,
-    "rustSkip": "The 32-way nested alternative product exceeds the Rust oracle test envelope; retain this width stress on every lkjscript route and compare its independent expansion."
+    "rustSkip": "The sugar generator compares this nested alternative family with its independently expanded Rust form."
   },
   {
     "id": "or_binding_reference",
@@ -6708,5 +6708,12 @@
     "rustAccept": false,
     "rustCode": "E0277",
     "pending": false
+  },
+  {
+    "id": "inline_call_result_reuses_argument",
+    "file": "ir/inline_call_result_reuses_argument.lkjir",
+    "kind": "run",
+    "value": "42",
+    "rust": false
   }
 ]

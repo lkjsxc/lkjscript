@@ -222,7 +222,7 @@ fn trap_message(descriptor: &Descriptor, code: u64) -> Result<String, String> {
         5u64 => "assertion failed",
         6u64 => "heap allocation failed",
         7u64 => "host output failure",
-        8u64 => "stack extent exhausted",
+        8u64 => "stack exhausted",
         _ => {
             if code < 16u64 {
                 return Err(format!("unknown native trap code {code}"));

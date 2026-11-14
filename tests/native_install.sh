@@ -28,15 +28,12 @@ printf '// nested bytes\r\n' > "$work/inputs/library/nested/with spaces.rs"
 for dependency in basename bash cat chmod cmp cp dirname find mkdir mktemp mv rm setsid sha256sum sort; do
     ln -s "$(command -v "$dependency")" "$work/path/$dependency"
 done
-export LKJSCRIPT_INSTALL_TEST_ADDRESS_SPACE
-LKJSCRIPT_INSTALL_TEST_ADDRESS_SPACE=$(ulimit -v)
 
 cat > "$work/inputs/frontend" <<'FRONTEND'
 #!/bin/bash
 set -euo pipefail
 source "$LKJSCRIPT_INSTALL_TEST_WAIT"
 installer_wait frontend
-[[ $(ulimit -v) == "$LKJSCRIPT_INSTALL_TEST_ADDRESS_SPACE" ]]
 [[ $# == 3 && $1 == --source && $3 == --no-library ]]
 [[ ${LKJSCRIPT_INSTALL_TEST_FAILURE:-} != frontend ]] || exit 19
 if [[ -n ${LKJSCRIPT_INSTALL_TEST_RACE_DEST:-} && ! -d $LKJSCRIPT_INSTALL_TEST_RACE_DEST ]]; then

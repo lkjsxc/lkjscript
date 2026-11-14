@@ -1,11 +1,11 @@
 #!/bin/bash
 # Contract tests for the native shell workflow, using executable compiler stubs.
-# Usage: bash tests/native_cli.sh [PATH_TO_LKJ]
+# Usage: bash tests/native_cli.sh [PATH_TO_LKJSCRIPT]
 # No source compilation or Rust/Node command is needed by this test.
 set -Eeuo pipefail
 repository=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 wrapper=$(realpath -e -- "${1:-$repository/tools/lkjscript}")
-[[ $# -le 1 ]] || { printf 'usage: native_cli.sh [PATH_TO_LKJ]\n' >&2; exit 1; }
+[[ $# -le 1 ]] || { printf 'usage: native_cli.sh [PATH_TO_LKJSCRIPT]\n' >&2; exit 1; }
 work=$(mktemp -d)
 case_name=setup
 cleanup() { rm -rf -- "$work"; }
@@ -34,7 +34,7 @@ printf 'format lkjscript-native-v1\nsource_commit cli-fixture\n' > "$toolchain/m
 printf 'stdin with spaces\nsecond line\n' > "$work/stdin"
 # This PATH deliberately lacks Rust, Cargo and Node. Keep the host tools needed
 # by the shell workflow and these fixtures, rather than an alternate compiler.
-for dependency in bash basename cat chmod cmp cp dirname find ln mkdir mktemp mv prlimit realpath rm setsid sha256sum sort; do
+for dependency in bash basename cat chmod cmp cp dirname find ln mkdir mktemp mv realpath rm setsid sha256sum sort; do
     ln -s -- "$(command -v "$dependency")" "$path/$dependency"
 done
 export LKJSCRIPT_CLI_TEST_TRACE=$trace
@@ -46,7 +46,7 @@ export LKJSCRIPT_CLI_TEST_SETSID
 LKJSCRIPT_CLI_TEST_SETSID=$(command -v setsid)
 mkfifo -- "$LKJSCRIPT_CLI_TEST_FIFO"
 export TMPDIR=$work/tmp
-unset LKJSCRIPT_TOOLCHAIN LKJSCRIPT_RUN_MEMORY_BYTES LKJSCRIPT_RUN_STACK_BYTES
+unset LKJSCRIPT_TOOLCHAIN
 
 cat > "$work/wait.sh" <<'WAIT'
 lkjscript_fixture_wait() {
@@ -75,7 +75,6 @@ set -euo pipefail
 source "$LKJSCRIPT_CLI_TEST_WAIT"
 lkjscript_fixture_wait frontend
 printf '%s\0' "$@" > "$LKJSCRIPT_CLI_TEST_TRACE/frontend.args"
-printf '%s %s\n' "$(ulimit -v)" "$(ulimit -s)" > "$LKJSCRIPT_CLI_TEST_TRACE/frontend.limits"
 root=
 directory=.
 library=
@@ -126,7 +125,6 @@ set -euo pipefail
 source "$LKJSCRIPT_CLI_TEST_WAIT"
 lkjscript_fixture_wait backend
 printf '%s\0' "$@" > "$LKJSCRIPT_CLI_TEST_TRACE/backend.args"
-printf '%s %s\n' "$(ulimit -v)" "$(ulimit -s)" > "$LKJSCRIPT_CLI_TEST_TRACE/backend.limits"
 program=$1
 shift
 runtime=
@@ -168,7 +166,6 @@ lkjscript_fixture_wait result
 [[ $# == 2 && -f $1 ]]
 [[ $(<"$1") == descriptor:* ]]
 printf '%s\n' "$2" > "$LKJSCRIPT_CLI_TEST_TRACE/result.label"
-printf '%s %s\n' "$(ulimit -v)" "$(ulimit -s)" > "$LKJSCRIPT_CLI_TEST_TRACE/result.limits"
 cat > "$LKJSCRIPT_CLI_TEST_TRACE/result.control"
 cmp -s -- "$LKJSCRIPT_CLI_TEST_CONTROL" "$LKJSCRIPT_CLI_TEST_TRACE/result.control" || {
     printf 'fixture result: malformed packet or wrong parent status\n' >&2
@@ -187,12 +184,6 @@ case ${LKJSCRIPT_CLI_TEST_TARGET_MODE:-io} in
         printf 'stdin='
         cat
         printf 'target stderr\n' >&2
-        ;;
-    limits)
-        printf '%s %s\n' "$(ulimit -v)" "$(ulimit -s)"
-        ;;
-    hard-limits)
-        printf '%s %s\n' "$(ulimit -Hv)" "$(ulimit -Hs)"
         ;;
     closed-stdin)
         if { exec {input_copy}<&0; } 2>/dev/null; then exit 92; fi
@@ -214,14 +205,13 @@ chmod 755 -- "$toolchain/bin/lkjscript" "$toolchain/libexec/"*
         while IFS= read -r -d '' file; do sha256sum -- "$file"; done > SHA256SUMS
 )
 
-launcher=()
 status=0
 invoke() {
     rm -f -- "$trace/"*
     status=0
     (
         cd -- "$caller"
-        PATH=$path "${launcher[@]}" bash "$wrapper" --toolchain "$toolchain" "$@"
+        PATH=$path bash "$wrapper" --toolchain "$toolchain" "$@"
     ) < "$work/stdin" > "$work/stdout" 2> "$work/stderr" || status=$?
 }
 expect_status() { [[ $status == "$1" ]] || failure "expected status $1, got $status"; }
@@ -357,52 +347,11 @@ expect_token "$trace/backend.args" --result-descriptor
 expect_no_work
 unset LKJSCRIPT_CLI_TEST_TARGET_STATUS
 
-case_name='target budgets inherit and cannot relax parent limits'
-export LKJSCRIPT_CLI_TEST_TARGET_MODE=limits
-launcher=(prlimit --as=536870912 --stack=8388608 --)
-invoke run project/input.rs
-expect_status 0
-expect_text "$work/stdout" $'524288 8192\n'
-export LKJSCRIPT_RUN_MEMORY_BYTES=268435456 LKJSCRIPT_RUN_STACK_BYTES=1048576
-invoke run project/input.rs
-expect_status 0
-expect_text "$work/stdout" $'262144 1024\n'
-expect_text "$trace/frontend.limits" $'524288 8192\n'
-expect_text "$trace/backend.limits" $'524288 8192\n'
-export LKJSCRIPT_CLI_TEST_TARGET_MODE=hard-limits
-invoke run project/input.rs
-expect_status 0
-expect_text "$work/stdout" $'524288 8192\n'
-export LKJSCRIPT_CLI_TEST_TARGET_MODE=limits
+# The remaining eval fixtures use a successful target status.
 {
     printf '\000\000\000\000\000\000\000\000\052\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000'
     printf '\n0\n'
 } > "$work/expected-control"
-invoke eval project/input.rs
-expect_status 0
-expect_text "$work/stdout" $'262144 1024\n42\n'
-expect_text "$trace/frontend.limits" $'524288 8192\n'
-expect_text "$trace/backend.limits" $'524288 8192\n'
-expect_text "$trace/result.limits" $'524288 8192\n'
-export LKJSCRIPT_RUN_MEMORY_BYTES=1073741824 LKJSCRIPT_RUN_STACK_BYTES=16777216
-invoke run project/input.rs
-expect_status 0
-expect_text "$work/stdout" $'524288 8192\n'
-export LKJSCRIPT_RUN_MEMORY_BYTES=unlimited LKJSCRIPT_RUN_STACK_BYTES=unlimited
-invoke run project/input.rs
-expect_status 0
-expect_text "$work/stdout" $'524288 8192\n'
-export LKJSCRIPT_RUN_MEMORY_BYTES=0 LKJSCRIPT_RUN_STACK_BYTES=0
-invoke run project/input.rs
-[[ $status != 0 ]] || failure 'zero target budget was accepted'
-expect_no_stage frontend
-# These controls are irrelevant to compilation, including invalid values.
-invoke build project/input.rs -o outputs/unlimited-compiler
-expect_status 0
-expect_text "$trace/frontend.limits" $'524288 8192\n'
-expect_text "$trace/backend.limits" $'524288 8192\n'
-unset LKJSCRIPT_RUN_MEMORY_BYTES LKJSCRIPT_RUN_STACK_BYTES LKJSCRIPT_CLI_TEST_TARGET_MODE
-launcher=()
 
 case_name='runtime preparation has explicit source and stable logical identity'
 printf 'replacement runtime source\n' > "$caller/runtime source.rs"

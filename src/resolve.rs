@@ -1,7 +1,6 @@
 //! Module and declaration identity. Later phases consume resolved paths, never bare-name guesses.
 mod import_scopes;
 mod iteration;
-pub(crate) mod recovery;
 use crate::ast::*;
 use crate::names::qualified;
 use import_scopes::ImportScopes;
@@ -17,11 +16,6 @@ struct Binding {
     glob: bool,
     ambiguous: bool,
 }
-pub(crate) struct ImportFailure {
-    pub import: usize,
-    pub problem: Diagnostic,
-}
-
 struct Resolved {
     name: String,
     binding: Option<Binding>,
@@ -209,21 +203,12 @@ impl<'a> Resolver<'a> {
     pub fn new(program: &'a Program) -> Result<Self> {
         let (resolver, problems) = Self::new_report(program)?;
         if let Some(failure) = problems.into_iter().next() {
-            Err(failure.problem)
+            Err(failure)
         } else {
             Ok(resolver)
         }
     }
-    pub(crate) fn new_report(program: &'a Program) -> Result<(Self, Vec<ImportFailure>)> {
-        Self::build_report(program, false)
-    }
-    pub(crate) fn new_recovery(program: &'a Program) -> Result<(Self, Vec<ImportFailure>)> {
-        Self::build_report(program, true)
-    }
-    fn build_report(
-        program: &'a Program,
-        unloaded_modules: bool,
-    ) -> Result<(Self, Vec<ImportFailure>)> {
+    fn new_report(program: &'a Program) -> Result<(Self, Vec<Diagnostic>)> {
         if program.resolved && program.function_owners.len() != program.functions.len() {
             return Err(Diagnostic::new(
                 Span::default(),
@@ -323,7 +308,7 @@ impl<'a> Resolver<'a> {
             )?;
         }
         for (id, item) in program.modules.iter().enumerate() {
-            if item.external && !unloaded_modules {
+            if item.external {
                 return Err(Diagnostic::new(
                     item.span,
                     "E_UNSUPPORTED",
@@ -949,7 +934,7 @@ impl<'a> Resolver<'a> {
             Ok((changed, found))
         }
     }
-    fn imports(&mut self) -> Vec<ImportFailure> {
+    fn imports(&mut self) -> Vec<Diagnostic> {
         loop {
             let mut problems = BTreeMap::new();
             let mut unresolved = Vec::new();
@@ -980,8 +965,8 @@ impl<'a> Resolver<'a> {
                     );
                 }
                 let mut failures = Vec::new();
-                for (import, problem) in problems {
-                    failures.push(ImportFailure { import, problem });
+                for (_, problem) in problems {
+                    failures.push(problem);
                 }
                 return failures;
             }
@@ -995,7 +980,7 @@ pub fn resolve(source: &Program) -> Result<Program> {
     }
     let resolver = Resolver::new(source)?;
     let mut result = source.clone();
-    resolve_nodes(&mut result, &resolver, &mut |_, problem| Err(problem))?;
+    resolve_nodes(&mut result, &resolver)?;
     result.declarations = resolver.declarations;
     result.function_owners = resolver
         .function_owners
@@ -1004,19 +989,13 @@ pub fn resolve(source: &Program) -> Result<Program> {
     Ok(result)
 }
 
-fn resolve_nodes<F: FnMut(recovery::Site, Diagnostic) -> Result<()>>(
-    result: &mut Program,
-    resolver: &Resolver<'_>,
-    failed: &mut F,
-) -> Result<()> {
+fn resolve_nodes(result: &mut Program, resolver: &Resolver<'_>) -> Result<()> {
     for id in 0..result.types.len() {
         let node = &mut result.types[id];
         let scope = node.scope;
         let span = node.span;
         if let Type::Path(path) = &mut node.kind {
-            if let Err(problem) = resolver.resolve_path(scope, path, Namespace::Type, span) {
-                failed(recovery::Site::Type(id), problem)?;
-            }
+            resolver.resolve_path(scope, path, Namespace::Type, span)?;
         }
     }
     for id in 0..result.patterns.len() {
@@ -1029,9 +1008,7 @@ fn resolve_nodes<F: FnMut(recovery::Site, Diagnostic) -> Result<()>>(
             _ => None,
         };
         if let Some((path, namespace)) = operand {
-            if let Err(problem) = resolver.resolve_path(scope, path, namespace, span) {
-                failed(recovery::Site::Pattern(id), problem)?;
-            }
+            resolver.resolve_path(scope, path, namespace, span)?;
         }
     }
     // Locals still resolve before declaration-valued expression paths.
@@ -1040,17 +1017,13 @@ fn resolve_nodes<F: FnMut(recovery::Site, Diagnostic) -> Result<()>>(
         let scope = node.scope;
         let span = node.span;
         if let Expr::Struct { path, .. } = &mut node.kind {
-            if let Err(problem) = resolver.resolve_path(scope, path, Namespace::Type, span) {
-                failed(recovery::Site::Expression(id), problem)?;
-            }
+            resolver.resolve_path(scope, path, Namespace::Type, span)?;
         }
     }
     if result.resolved {
         return Ok(());
     }
-    iteration::expand_recover(result, resolver, &mut |id, problem| {
-        failed(recovery::Site::Expression(id), problem)
-    })
+    iteration::expand(result, resolver)
 }
 
 impl Resolver<'_> {
@@ -1063,261 +1036,6 @@ impl Resolver<'_> {
 
     pub(crate) fn is_type_parameter(&self, path: &Path, span: Span) -> bool {
         !path.name.contains("::") && self.generic_path(path, span)
-    }
-
-    /// A failed import can change only lookups in its lexical domain. Known
-    /// strong bindings outrank an unresolved glob; explicit failed aliases do
-    /// not acquire an invented declaration.
-    fn lookup_sites(
-        &self,
-        scope: ModuleId,
-        name: &str,
-        namespace: Namespace,
-        span: Span,
-    ) -> Vec<(ModuleId, String, Namespace)> {
-        let mut parts: Vec<String> = Vec::new();
-        for part in name.split("::") {
-            if !part.is_empty() {
-                parts.push(part.to_string());
-            }
-        }
-        if parts.is_empty() {
-            return Vec::new();
-        }
-        let first = parts[0].as_str();
-        let mut current = scope;
-        let mut at = 0;
-        let rooted = match first {
-            "crate" => {
-                current = self.program.scopes[scope].crate_root;
-                at = 1;
-                true
-            }
-            "self" => {
-                at = 1;
-                true
-            }
-            "super" => {
-                while at < parts.len() && parts[at] == "super" {
-                    let Some(parent) = self.program.scopes[current].parent else {
-                        return Vec::new();
-                    };
-                    current = parent;
-                    at += 1;
-                }
-                true
-            }
-            _ => false,
-        };
-        if at == parts.len() {
-            return Vec::new();
-        }
-        let first_namespace = if at + 1 < parts.len() {
-            Namespace::Type
-        } else {
-            namespace
-        };
-        let mut result = vec![(current, parts[at].clone(), first_namespace)];
-        let mut binding = if rooted {
-            self.lookup(current, &parts[at], first_namespace)
-        } else {
-            self.path(scope, first, first_namespace, span, true)
-                .ok()
-                .flatten()
-                .and_then(|resolved| resolved.binding)
-        };
-        if !rooted
-            && first == "std"
-            && self
-                .lookup_lexical(scope, first, Namespace::Type, span)
-                .is_none()
-        {
-            if let Some(library) = self.modules.get(&"$std".to_string()).copied() {
-                current = library;
-                at += 1;
-                if at == parts.len() {
-                    return result;
-                }
-                let namespace = if at + 1 < parts.len() {
-                    Namespace::Type
-                } else {
-                    namespace
-                };
-                result.push((current, parts[at].clone(), namespace));
-                binding = self.lookup(current, &parts[at], namespace);
-            }
-        }
-        while at + 1 < parts.len() {
-            let Some(binding_value) = binding else {
-                break;
-            };
-            let Item::Module(module) = self.declarations[binding_value.declaration].item else {
-                break;
-            };
-            current = self.program.modules[module].scope;
-            at += 1;
-            let namespace = if at + 1 < parts.len() {
-                Namespace::Type
-            } else {
-                namespace
-            };
-            result.push((current, parts[at].clone(), namespace));
-            binding = self.lookup(current, &parts[at], namespace);
-        }
-        result
-    }
-    /// Resolved module-glob edges for diagnostic availability propagation.
-    /// This reads existing identities and never installs a missing binding.
-    pub(crate) fn recovery_globs(&self) -> Vec<(ModuleId, usize)> {
-        let mut edges = Vec::new();
-        for import in &self.program.uses {
-            if !import.glob {
-                continue;
-            }
-            let scope = *self.modules.get(&import.module).unwrap();
-            let target = self
-                .module_anchor(scope, &import.path, import.span)
-                .ok()
-                .flatten()
-                .or_else(|| {
-                    let resolved = self
-                        .path(scope, &import.path, Namespace::Type, import.span, false)
-                        .ok()
-                        .flatten()?;
-                    let declaration = resolved.binding?.declaration;
-                    if let Item::Module(module) = self.declarations[declaration].item {
-                        Some(self.program.modules[module].scope)
-                    } else {
-                        None
-                    }
-                });
-            if let Some(target) = target {
-                edges.push((target, self.import_scopes.import_owner(import, scope)));
-            }
-        }
-        edges
-    }
-    /// Whether an unavailable declaration could participate in this lookup.
-    /// Used only by diagnostic reports; it installs no binding.
-    pub(crate) fn recovery_name_visible(
-        &self,
-        lookup: (ModuleId, &str, Namespace, Span),
-        owner: ModuleId,
-        declared: Option<&str>,
-        glob: bool,
-    ) -> bool {
-        if self.generic(lookup.3, first_name(lookup.1)) && owner < self.program.scopes.len() {
-            return false;
-        }
-        for (scope, name, namespace) in self.lookup_sites(lookup.0, lookup.1, lookup.2, lookup.3) {
-            if declared.is_some_and(|declared| declared != name.as_str()) {
-                continue;
-            }
-            let mut at = self.import_scopes.at(scope, lookup.3);
-            loop {
-                let strong = self
-                    .names
-                    .get(&(at, name.to_string(), namespace))
-                    .is_some_and(|binding| !binding.glob);
-                if at == owner {
-                    if !glob || !strong {
-                        return true;
-                    }
-                    break;
-                }
-                if strong {
-                    break;
-                }
-                match self.import_scopes.parent(at) {
-                    Some(parent) => at = parent,
-                    None => {
-                        if self.modules.get(&"$std::prelude".to_string()).copied() == Some(owner) {
-                            return true;
-                        }
-                        break;
-                    }
-                }
-            }
-        }
-        false
-    }
-    pub(crate) fn uncertain_trait_import(
-        &self,
-        imports: &[usize],
-        scope: ModuleId,
-        span: Span,
-    ) -> Option<usize> {
-        let mut owners = BTreeSet::new();
-        let mut at = self.import_scopes.at(scope, span);
-        loop {
-            owners.insert(at);
-            let Some(parent) = self.import_scopes.parent(at) else {
-                break;
-            };
-            at = parent;
-        }
-        if let Some(prelude) = self.modules.get(&"$std::prelude".to_string()) {
-            owners.insert(*prelude);
-        }
-        for id in imports {
-            let import = &self.program.uses[*id];
-            let module = *self.modules.get(&import.module).unwrap();
-            if owners.contains(&self.import_scopes.import_owner(import, module)) {
-                return Some(*id);
-            }
-        }
-        None
-    }
-    pub(crate) fn uncertain_import(
-        &self,
-        imports: &[usize],
-        scope: ModuleId,
-        name: &str,
-        namespace: Namespace,
-        span: Span,
-    ) -> Option<usize> {
-        let generic = self.generic(span, first_name(name));
-        let lookups = self.lookup_sites(scope, name, namespace, span);
-        for (scope, name, namespace) in lookups {
-            for id in imports {
-                let import = &self.program.uses[*id];
-                if !import.glob && import.alias != name {
-                    continue;
-                }
-                let module = *self.modules.get(&import.module).unwrap();
-                let owner = self.import_scopes.import_owner(import, module);
-                if generic && owner < self.program.scopes.len() {
-                    continue;
-                }
-                let mut at = self.import_scopes.at(scope, span);
-                let prelude = self.modules.get(&"$std::prelude".to_string()).copied();
-                loop {
-                    let strong = self
-                        .names
-                        .get(&(at, name.to_string(), namespace))
-                        .is_some_and(|binding| !binding.glob);
-                    if at == owner {
-                        if !import.glob || !strong {
-                            return Some(*id);
-                        }
-                        break;
-                    }
-                    if strong {
-                        break;
-                    }
-                    match self.import_scopes.parent(at) {
-                        Some(parent) => at = parent,
-                        None => {
-                            if prelude == Some(owner) {
-                                return Some(*id);
-                            }
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        None
     }
 
     pub fn value_path(&self, scope: ModuleId, path: &Path, span: Span) -> Result<Path> {
@@ -1458,23 +1176,6 @@ impl Resolver<'_> {
     pub fn declaration_visible(&self, scope: ModuleId, declaration: DeclarationId) -> bool {
         let item = &self.declarations[declaration];
         visible(self.program, item.scope, item.public, scope)
-    }
-}
-
-/// Diagnostic inventory over the same declaration/import resolver. No resolved
-/// Program or checked authority escapes when an import or use is unresolved.
-/// Method bodies still require valid signatures; missing imports can account
-/// for later unresolved type uses, so the census reports them as dependencies.
-pub fn resolution_problems(source: &Program) -> Vec<Diagnostic> {
-    match recovery::resolve(source) {
-        Ok(report) => {
-            let mut problems = Vec::new();
-            for failure in report.failures {
-                problems.push(failure.problem);
-            }
-            problems
-        }
-        Err(problem) => vec![problem],
     }
 }
 

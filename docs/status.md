@@ -1,53 +1,60 @@
 # Status — 2026-11-14
 
-## Current milestone: 6.1, direct native backend
+## Current milestone: 6.2, one binary and a stored seed
 
-Milestone 6.0 is complete: lkjscript IR names throughout source, tools, tests and
-references; .lkjir files require the first line `lkjscript-ir 1`; execution uses
-`--engine interpreter`; the installed command is `lkjscript`.
-Both native compiler components reproduce their bytes and match the Rust-built
-witness output. The full eight-worker gate passes in 82.691 s: 462 Rust tests,
-17 harness tests, 883 conformance passes and four pending on each route,
-573 Rust comparisons, 91 World cases, zero IR mutation findings.
+Milestones 6.0 and 6.1 are complete. The only backend selects x86-64 directly
+from checked lkjscript IR: inline aggregates, machine references and stack
+frames, rel32 control flow, and a source allocator over kernel mappings.
+src/x86.rs separates encoding; --stats reports phases/RSS/sizes. Frontend, backend and result-reader executables match the Rust-built twin's bytes;
+frontend/backend fixed points and own-source/runtime IR identity hold.
 
-Deleted 31 observation files, the trusted command and its reporting tool.
-AGENTS.md/direction/status hold the new course; docs/ir.md is the IR reference.
-The gate prints one success line per suite and failure details.
+The eight-worker gate passes in 169.780 s: 452 Rust tests, 17 harness tests,
+884 conformance passes plus four pending on each route, 573 Rust comparisons,
+91 World observations and all source generators. Of 128 IR mutants, 100 reject,
+27 agree and one times out in the interpreter; native is skipped for that case.
+The shared 120 s watchdog accounts for most gate time. There are zero findings.
 
-Next: replace boxed aggregates and linear-memory execution with direct checked-IR
-selection, inline aggregates, machine references and stack slots, rel32 control
-flow, a source allocator over independent kernel mappings, and separate encoding.
-Keep old/new/interpreter comparison until the replacement passes; then remove the
-old lowering, encoder and resource-planning machinery in the same stretch.
+Deleted the operand-stack lowering, old encoder/linear-memory model, startup
+extent arithmetic, budget variables/tests, compiler-stack host code, census
+machinery, five unused tool scripts and native/frontend/limits documents.
+The language/IR references and --help describe current behavior. Old observation
+files and the trusted reporting command were removed in 6.0.
 
-## Rename checkpoint measurements
+Next: combine frontend, checker, backend, interpreter and CLI in lkjscript source.
+Add process/clock/directory mutation capabilities for the driver; port the
+interpreter to owned values/indices while preserving its independent checks.
+Pass IR in memory and check once, embed library/runtime, then store a compressed
+seed and verify a Rust/Node-free rebuild before removing the component pipeline.
 
-| Work | Self-built native | Rust-built twin |
-| --- | ---: | ---: |
-| Frontend source to IR | 216.54 s | 1.87 s |
-| Frontend IR to ELF | 110.68 s | 0.90 s |
-| Backend IR to ELF | 37.21 s | 0.31 s |
-| Frontend source peak RSS | 766.1 MiB | 205.8 MiB |
-| Frontend emission peak RSS | 735.1 MiB | 334.3 MiB |
-| Frontend executable | 51,431,226 bytes | Identical emitted bytes |
-| Backend executable | 16,845,618 bytes | Identical emitted bytes |
-| Frontend own-source IR | 18,750,365 bytes | Identical bytes |
+## Compiler measurements
 
-The review's 5068ad3a baseline remains the comparison for the new backend:
+| Work | Self-built | Rust-built twin | Previous self-built |
+| --- | ---: | ---: | ---: |
+| Hello build | 0.62 s | 0.04 s | 5.16 s |
+| Complete component rebuild | 59.08 s | 3.32 s | 443.56 s |
+| Frontend source to IR | 34.47 s | 1.73 s | 216.54 s |
+| Frontend IR to ELF | 12.73 s | 0.72 s | 110.68 s |
+| Backend IR to ELF | 3.67 s | 0.24 s | 37.21 s |
+| Frontend source peak RSS | 262.1 MiB | 196.0 MiB | 766.1 MiB |
+| Frontend executable | 16,742,209 bytes | Identical | 51,431,226 bytes |
+| Backend executable | 4,429,265 bytes | Identical | 16,845,618 bytes |
 
-| Work | lkjscript | Rust comparison |
-| --- | ---: | ---: |
-| Hello build | 5.16 s | 0.05 s, twin |
-| Complete native rebuild | 443.56 s | — |
-| 20 M two-field Copy calls | 5.82 s | 0.031 s unoptimized; 0.009 s optimized |
-| 200 M scalar iterations | 1.74 s | 0.17 s unoptimized; 0.05 s optimized |
-| 100 M Vec reads / 5 M pushes | 0.97 s | 0.33 s unoptimized |
+Previous compiler rows are the rename checkpoint, except hello/full rebuild
+from the supplied review. The twin uses Rust standard collections; lkjscript
+uses its indexed AVL map, so the 18–20x compiler ratio includes library differences.
+
+| bench/ workload | Native | Previous native | rustc opt=0 | rustc -O |
+| --- | ---: | ---: | ---: | ---: |
+| 20 M aggregate calls | 0.134 s | 5.708 s | 0.023 s | 0.018 s |
+| 200 M scalar iterations | 0.911 s | 1.414 s | 0.260 s | 0.262 s |
+| 5 M pushes + 100 M Vec reads | 0.535 s | 0.912 s | 0.263 s | 0.073 s |
+
+These are identical runtime-seeded sources across routes, with equal output.
+Vector RSS rose from 41.9 to 65.8 MiB during allocate-copy-release growth.
+Native selection still spills all IR locals; scalar parameter staging is redundant.
 
 ## Known gaps
 
-Four pending cases: concurrency_moved, concurrency_shared, concurrency_alias,
-borrowed_closure_escape. One conservative ownership rejection remains.
-The current backend still boxes aggregates, uses heap frames and linear memory.
-Resource traps lose source-file provenance at the host boundary.
-The interpreter, gate and development tools still require the Rust/Node host.
-No stored seed, single executable, HTTP consumer or entry grants yet.
+Pending: concurrency_moved/shared/alias and borrowed_closure_escape. One conservative
+ownership rejection remains. Interpreter/gate/tools still need
+Rust/Node; the single binary, stored seed, HTTP consumer and entry grants are next.

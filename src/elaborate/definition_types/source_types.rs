@@ -32,99 +32,91 @@ impl Infer<'_, '_> {
         let mut values: Vec<Variable> = Vec::new();
         while let Some(work) = pending.pop() {
             match work {
-                Work::Source { id, environment } => {
-                    if let Some(problem) = self
-                        .census
-                        .and_then(|context| context.readiness.types.get(id))
-                    {
-                        return Err(problem.clone());
+                Work::Source { id, environment } => match self.source.types[id].kind.clone() {
+                    a::Type::Infer => values.push(self.unknown()),
+                    a::Type::Never => values.push(self.shaped(Shape::Never)),
+                    a::Type::Ref { mutable, inner, .. } => {
+                        pending.push(Work::Reference(mutable));
+                        pending.push(Work::Source {
+                            id: inner,
+                            environment,
+                        });
                     }
-                    match self.source.types[id].kind.clone() {
-                        a::Type::Infer => values.push(self.unknown()),
-                        a::Type::Never => values.push(self.shaped(Shape::Never)),
-                        a::Type::Ref { mutable, inner, .. } => {
-                            pending.push(Work::Reference(mutable));
-                            pending.push(Work::Source {
-                                id: inner,
-                                environment,
-                            });
+                    a::Type::Slice(inner) => {
+                        pending.push(Work::Slice);
+                        pending.push(Work::Source {
+                            id: inner,
+                            environment,
+                        });
+                    }
+                    a::Type::Array { inner, len } => {
+                        pending.push(Work::Array(len));
+                        pending.push(Work::Source {
+                            id: inner,
+                            environment,
+                        });
+                    }
+                    a::Type::Tuple(fields) => {
+                        pending.push(Work::Tuple(fields.len()));
+                        let mut fields = fields;
+                        while let Some(id) = fields.pop() {
+                            pending.push(Work::Source { id, environment });
                         }
-                        a::Type::Slice(inner) => {
-                            pending.push(Work::Slice);
-                            pending.push(Work::Source {
-                                id: inner,
-                                environment,
-                            });
-                        }
-                        a::Type::Array { inner, len } => {
-                            pending.push(Work::Array(len));
-                            pending.push(Work::Source {
-                                id: inner,
-                                environment,
-                            });
-                        }
-                        a::Type::Tuple(fields) => {
-                            pending.push(Work::Tuple(fields.len()));
-                            let mut fields = fields;
-                            while let Some(id) = fields.pop() {
-                                pending.push(Work::Source { id, environment });
+                    }
+                    a::Type::Path(path) => {
+                        if path.declaration.is_none() && path.args.is_empty() {
+                            let bindings = if environment == 0 {
+                                base_environment
+                            } else {
+                                &environments[environment - 1]
+                            };
+                            if let Some(value) = bindings.get(&path.name) {
+                                values.push(*value);
+                                continue;
+                            }
+                            if integer_name(&path.name)
+                                || matches!(
+                                    path.name.as_str(),
+                                    "bool"
+                                        | "char"
+                                        | "f64"
+                                        | "str"
+                                        | "World"
+                                        | "Stdout"
+                                        | "Stdin"
+                                        | "Stderr"
+                                        | "Directory"
+                                        | "File"
+                                )
+                            {
+                                values.push(self.atom(&path.name));
+                                continue;
+                            }
+                            if path.name.contains("::") {
+                                values.push(self.blocked());
+                                continue;
                             }
                         }
-                        a::Type::Path(path) => {
-                            if path.declaration.is_none() && path.args.is_empty() {
-                                let bindings = if environment == 0 {
-                                    base_environment
-                                } else {
-                                    &environments[environment - 1]
-                                };
-                                if let Some(value) = bindings.get(&path.name) {
-                                    values.push(*value);
-                                    continue;
-                                }
-                                if integer_name(&path.name)
-                                    || matches!(
-                                        path.name.as_str(),
-                                        "bool"
-                                            | "char"
-                                            | "f64"
-                                            | "str"
-                                            | "World"
-                                            | "Stdout"
-                                            | "Stdin"
-                                            | "Stderr"
-                                            | "Directory"
-                                            | "File"
-                                    )
-                                {
-                                    values.push(self.atom(&path.name));
-                                    continue;
-                                }
-                                if path.name.contains("::") {
-                                    values.push(self.blocked());
-                                    continue;
-                                }
-                            }
-                            let mut arguments: Vec<a::TypeId> = Vec::new();
-                            for arg in &path.args {
-                                if !matches!(&self.source.types[*arg].kind,
+                        let mut arguments: Vec<a::TypeId> = Vec::new();
+                        for arg in &path.args {
+                            if !matches!(&self.source.types[*arg].kind,
                                     a::Type::Path(path) if path.name.starts_with('\''))
-                                {
-                                    arguments.push(*arg);
-                                }
-                            }
-                            pending.push(Work::Path {
-                                id,
-                                path,
-                                environment,
-                                arguments: arguments.len(),
-                            });
-                            while let Some(id) = arguments.pop() {
-                                pending.push(Work::Source { id, environment });
+                            {
+                                arguments.push(*arg);
                             }
                         }
-                        a::Type::Function { .. } => values.push(self.blocked()),
+                        pending.push(Work::Path {
+                            id,
+                            path,
+                            environment,
+                            arguments: arguments.len(),
+                        });
+                        while let Some(id) = arguments.pop() {
+                            pending.push(Work::Source { id, environment });
+                        }
                     }
-                }
+                    a::Type::Function { .. } => values.push(self.blocked()),
+                },
                 Work::Reference(mutable) => {
                     let inner = values.pop().expect("reference inference child");
                     values.push(self.shaped(Shape::Ref(mutable, inner)));

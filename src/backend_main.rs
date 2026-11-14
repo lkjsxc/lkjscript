@@ -6,10 +6,7 @@ pub(crate) mod facts;
 pub mod ir;
 pub mod ir_text;
 pub mod backend;
-pub mod lower;
-pub mod native;
 pub mod result_wire;
-pub mod runtime;
 
 struct Options {
     program: String,
@@ -168,3 +165,7 @@ pub fn main(mut world: World) {
         world.set_exit_status(1u8);
     }
 }
+
+pub mod native;
+pub mod runtime;
+pub mod x86;

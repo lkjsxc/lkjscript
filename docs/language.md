@@ -101,8 +101,9 @@ The owned loader handles inline modules, file modules (`child.rs` or
 `child/mod.rs`) and nested directories. Missing, ambiguous and duplicate inputs
 have distinct diagnostics. Source spans and IR functions retain file IDs;
 diagnostics identify the original file. The host supplies bytes only.
-The [source-producer interface](frontend.md) specifies the pure API, native World
-driver, explicit bundle encoding and input records.
+`frontend::check_bundle` accepts declared source/library inputs and returns checked IR;
+`frontend::source_to_ir` writes its text form. The World driver reads those inputs
+through directory capabilities.
 
 Resolution uses module/declaration identities, lexical scopes, imports/aliases,
 qualified `crate`/`self`/`super` paths and prelude priority. Private, `pub(self)`,
@@ -234,7 +235,7 @@ then reports E_MOVE. An actual Option<&mut T>, Holder<&mut T> or &mut T result
 context permits the corresponding Rust reborrow. Reference-bearing inference
 hints preserve this distinction through transparent aliases and nested types.
 
-## Diagnostics and census
+## Diagnostics
 
 The parser recovers at item, method and block-statement boundaries using balanced
 tokens. It reports independent syntax errors and marks skipped regions as
@@ -245,12 +246,6 @@ to be collected. Analysis of a failing body stops at its diagnostic; shared
 signature/resolution failures and subsequent mutable IR construction are explicitly
 blocked instead of supplying invented types or ownership facts. The single-error
 library API selects the first error from these same production paths.
-
-`check --census` prints recognized unsupported syntax and blocked regions by kind.
-It counts parsed constructs and unsupported parser diagnostics, not text matches
-inside strings or comments. Receiver-dependent operations are not guessed from
-method spelling. Regions skipped after an error are separate from counted syntax;
-a zero in this table is not a claim that blocked source compiles.
 
 ## Immutable text
 
@@ -607,8 +602,7 @@ Unique visible structurally compatible method headers can supply conditional
 closure argument equations. Primitive methods use their shared typed inventory
 before competing trait headers; ordinary selection still proves visibility,
 prerequisites, inherent priority, ambiguity and callable kind. Ambiguous or
-incomplete candidate domains supply no contextual evidence. Partial census
-recovery does not turn an unresolved trait import into proof of a unique method.
+incomplete candidate domains supply no contextual evidence.
 Structural parameter patterns wait for the subject's reference shape rather than
 forcing an unresolved associated Item into an owned tuple.
 
@@ -741,37 +735,47 @@ search. Only CheckedProgram reaches the backend; later stages rely on that gate.
 
 ## Memory and execution
 
-The current backend lowers checked IR to a typed operand-stack form before
-encoding static Linux x86-64 ELF. Layout, calls, copy/drop glue and sealed runtime
-calls are explicit. It emits functions reachable from the selected entry and
-indirect glue targets. The direct-native replacement is specified in
-[direction](direction.md); this section describes the implementation in the tree.
+The backend selects x86-64 instructions directly from checked IR and emits a
+static Linux ELF. Target encoding is separate from selection. Calls and branches
+use rel32; an unrepresentable displacement produces a located emission error.
 
-| Value or operation | Current representation |
+| Value or operation | Representation |
 | --- | --- |
-| Scalars | Natural 1/2/4/8-byte memory widths; signed loads extend; registers are 64-bit. |
-| Structs/enums | Heap payloads with aligned fields; enums carry an active tag. |
-| Vec/array | Data, length and capacity words; element strides follow the layout. |
-| Sized reference | One address word. |
-| Slice/text reference | Inline 16-byte address/count pair. |
-| View call/result | Flattened argument words; caller-owned result pair. |
-| Conditional cleanup | Initialization flags and moved-field state maintained by lowering. |
+| Scalars | Natural 1/2/4/8-byte stack storage and machine registers. |
+| Structs and tuples | Inline aligned fields, including in parents and collections. |
+| Enums | Inline tag and storage for the largest payload. |
+| Arrays | Inline elements at their natural aligned stride. |
+| Vec | Address, length and capacity; inline elements in its heap payload. |
+| Box | Address of its owned heap payload. |
+| Sized reference | Machine address. |
+| Slice/text reference | Inline address/count pair. |
+| Aggregate call/result | Callee frame copy and caller-provided result storage. |
+| Conditional cleanup | Frame flags for initialized paths and moved fields. |
+
+The machine stack holds frames. Startup maps a lazy stack with a guard page;
+prologues report exhaustion as R0008. The allocator requests kernel mappings as
+needed and reports refusal as R0006. Startup reads neither physical memory nor
+resource limits. Only Box, Vec and String payloads require heap storage.
 
 Collection access checks bounds. Integer arithmetic, division and invalid shifts
-trap. F64 arithmetic canonicalizes NaNs. Traps retain a code and source location.
+trap. F64 arithmetic canonicalizes NaNs. Traps retain a code and IR location.
+The source runtime implements allocation, reuse, growth and UTF-8 validation.
+Its checked IR is sealed over raw load/store/copy/map/unmap operations;
+ordinary program names cannot request those bindings.
 
-The source runtime implements allocation, reuse, growth, destruction traversal
-and UTF-8 validation. Preparation checks its ordinary IR, validates primitive
-signatures, then seals raw load/store/grow/copy/glue-call bindings.
-Ordinary program names cannot request those bindings.
-Structural destruction visits the custom destructor before children and preserves
-field/element order. Moved fields are skipped. Loop temporaries end before
-either edge, including index locals and owned receivers.
+Structural destruction invokes the custom destructor before fields, then visits
+fields/elements in declaration order. Moved fields are skipped. Loop temporaries
+end before either edge, including index locals and owned receivers.
 
-The current startup reserves linear memory and a stack using physical memory
-and rlimits; allocation and stack failures report R0006 and R0008.
-The implementation and runner controls are listed in [limits](limits.md).
-Build-host measurements do not affect artifact bytes.
+World derives byte arguments, streams and directory capabilities. Directory opens
+use Linux openat2 with RESOLVE_BENEATH and RESOLVE_NO_MAGICLINKS. File Results carry
+positive errno values; raw read/write leaves return negative errno. File handles
+close on destruction. Program bytes and requested exit status remain separate
+from runtime traps.
+
+The compiler's --help lists commands and input options. The Rust witness driver's
+--stats writes phase times, peak RSS, IR size and code size to stderr. The gate
+compares output bytes, statuses, file effects, directory escapes and stream errors.
 
 The independent IR interpreter executes over its own typed heap, initialization
 state, loan identities and call/control/drop stacks. It checks actual reference
@@ -806,8 +810,9 @@ relative to its current directory capability. A completed ELF is written to
 stdout; diagnostics use stderr and status 1.
 
 The production modules have one role each: src/ir.rs defines IR data;
-src/check.rs verifies it; src/lower.rs owns current layout/glue lowering;
-src/native.rs encodes ELF. library/runtime.rs implements source runtime
+src/check.rs verifies it; src/native.rs selects instructions and owns inline layout/drop glue;
+src/x86.rs encodes instructions; src/native/platform.rs emits ELF/startup and syscall bindings.
+library/runtime.rs implements source runtime
 algorithms and src/runtime.rs seals their raw interface. The bridge/ modules
 supply the Rust host and declared source inputs. The [IR reference](ir.md)
 identifies the trusted implementation.
@@ -892,27 +897,13 @@ Once signatures are valid, a body that passes definition inference proceeds to I
 construction and ownership checking even if a peer fails. Diagnostic-only trap
 bodies retain known signatures for dependent checks; the saved error list
 prevents such a program from becoming an emitted artifact. Unsupported source
-forms are enumerated across parsed regions. The census separates syntax sites,
-blocked regions and observed name/type/method/trait dependencies, with phase
-coverage and dependency blockers reported separately. It retains real source
-declaration identities and uses an indexed dependency worklist to recover
-independent bodies. A known field type remains available when a different field
-blocks its enclosing layout. Source type observations never fabricate that layout.
-
-Closed structural bodies with complete nongeneric dependencies can reach ordinary
-IR construction and ownership checking in the diagnostic pass. Unknown nominal,
-generic, callable, constant or region contracts remain ownership blockers.
-The public recovery result contains observations and locations only; it cannot
-supply checked IR or authorize emission. Missing modules and excluded implementation
-domains prevent method-absence claims. An unresolved import can affect trait
-visibility, but it cannot add an implementation to an otherwise complete supplied
-source graph. Existing candidates whose visibility or prerequisites are unknown
-remain blocked. A method's spelling alone is not evidence that it resolves.
+forms are diagnosed across parsed regions. Shared signature and resolution
+failures stop dependent analysis. Ordinary checks retain source locations and
+never invent types or ownership facts to continue after those failures.
 
 The bootstrap batch command accepts native, IR, or both. It checks each source
-once. IR uses fresh machine state per case inside its bounded worker; native cases
-execute separate images. Every batch route runs inside a bounded worker, including
-native-only batches whose captured streams grow in the Rust host. Each result
+once. The interpreter uses fresh state per case; native cases execute separate
+images. Each result
 records program stdout in `stdoutHex`, program stderr in `stderrHex`, normal
 status separately, and compiler/runtime diagnostics in `stderr`. Each case
 retains its own bytes and termination class.
