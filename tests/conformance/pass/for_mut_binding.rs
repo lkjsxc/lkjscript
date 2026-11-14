@@ -1,3 +1,5 @@
+// expect: value 123
+// witness: {}
 pub fn probe() -> i64 {
     let mut sequence: i64 = 0;
     for mut value in 1i64..4i64 {

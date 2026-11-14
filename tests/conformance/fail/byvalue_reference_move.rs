@@ -1,3 +1,5 @@
+// expect: reject E_MOVE
+// witness: {"rustCode":"E0382"}
 trait Take {
     fn take(self) -> i64;
 }

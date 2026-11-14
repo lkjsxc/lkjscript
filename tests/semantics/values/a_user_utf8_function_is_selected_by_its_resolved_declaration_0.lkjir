@@ -1,0 +1,49 @@
+lkjscript-ir 1
+# expect: value 42
+# entry: semantic_values
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+fn "std::str::from_utf8" 1 3
+local "value" 3 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+@4:55 read 1 copy 0
+@4:63 int 2 1
+@4:55 binary 3 "+" 1 2
+@4:21 drop 0
+@4:21 return 3
+endfn
+fn "probe" 0 3
+local "$" 3 let
+local "$" 3 let
+@7:53 int 0 41
+@7:33 call 1 0 0
+@7:13 return 1
+endfn
+fn "semantic_values" 0 3
+local "result" 3 let
+local "expected0" 3 let
+local "equal0" 1 let
+local "unit0" 0 let
+local "answer" 3 let
+@1 call 0 1
+@1 int 1 42
+@1 binary 2 == 0 1
+@1 intrinsic 3 assert 2
+@1 drop 3
+@1 int 4 42
+@1 return 4
+endfn

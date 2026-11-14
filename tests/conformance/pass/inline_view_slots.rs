@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 #[derive(Clone, Copy)]
 struct Mixed<'a> {
     head: u8,

@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 type Slot<'a> = &'a mut i64;
 struct Pair {
     left: i64,

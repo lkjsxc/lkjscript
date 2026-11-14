@@ -828,7 +828,7 @@ impl LocalPass<'_> {
                     | Op::Call { dst, .. }
                     | Op::Text { dst, .. } => Some(*dst),
                     Op::Intrinsic { dst, name, args } => {
-                        if *name == IntrinsicOp::Replace && state.views[function.locals[*dst].ty] {
+                        if *name == IntrinsicOp::Replace && state.views.at(function.locals[*dst].ty) {
                             for target in storage(
                                 state,
                                 &Place {
@@ -848,7 +848,7 @@ impl LocalPass<'_> {
                         Some(*dst)
                     }
                     Op::Assign { place, .. } => {
-                        if !state.views[place_type(&program.types, function, place).unwrap()] {
+                        if !state.views.at(place_type(&program.types, function, place).unwrap()) {
                             return Ok(());
                         }
                         for target in storage(state, place, function.body[index].line)? {

@@ -1,3 +1,5 @@
+// expect: output 41426364656667cebb
+// witness: {}
 #[derive(Clone, Copy)]
 struct Views<'a> { first: &'a [u8], second: &'a [u8] }
 fn swap<'a>(views: Views<'a>) -> Views<'a> {

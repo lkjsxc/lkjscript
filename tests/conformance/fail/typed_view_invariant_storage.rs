@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
 fn test<'a, 'b: 'a>(input: &'b i64) -> i64 {
     let mut pointer = input;
     {

@@ -6,9 +6,11 @@ pub fn main(mut world: World) {
     file.write_all(b"owned\n").unwrap();
     if arguments[1][0] == b'1' {
         let mut output = world.stdout();
+        output.write(b"");
         output.write(b"x");
     } else {
         let mut output = world.stderr();
+        output.write(b"");
         output.write(b"x");
     }
 }

@@ -1,3 +1,5 @@
+// expect: reject E_MOVE
+// witness: {"rustAccept":false}
 struct Ticket { value: i64 }
 pub fn probe() -> i64 {
     let first = Ticket { value: 21 };

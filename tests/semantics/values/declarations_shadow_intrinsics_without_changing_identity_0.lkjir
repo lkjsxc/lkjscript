@@ -1,0 +1,104 @@
+lkjscript-ir 1
+# expect: value 42
+# entry: semantic_values
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "Vec" struct move "value" 3
+type "Box" struct move "value" 3
+fn "drop" 1 3
+local "value" 3 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+@1:156 read 1 copy 0
+@1:162 int 2 10
+@1:156 binary 3 "+" 1 2
+@1:132 drop 0
+@1:132 return 3
+endfn
+fn "std::mem::replace" 2 3
+local "left" 3 let
+local "right" 3 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+@1:225 read 2 copy 0
+@1:230 read 3 copy 1
+@1:225 binary 4 "+" 2 3
+@1:189 drop 1
+@1:189 drop 0
+@1:189 return 4
+endfn
+fn "probe" 0 3
+local "$" 3 let
+local "$" 14 let
+local "a" 14 let
+local "$" 3 let
+local "$" 15 let
+local "b" 15 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+@1:269 int 0 2
+@1:260 call 1 3 0
+@1:238 assign 1 2
+@1:287 int 3 3
+@1:278 call 4 4 3
+@1:238 assign 4 5
+@1:295 read 6 copy 2 field 0
+@1:290 call 7 0 6
+@1:322 read 8 copy 5 field 0
+@1:330 int 9 4
+@1:304 call 10 1 8 9
+@1:290 binary 11 "+" 7 10
+@1:238 drop 5
+@1:238 drop 2
+@1:238 return 11
+endfn
+fn "new$f0<Self=t14;>" 1 14
+local "value" 3 let
+local "$" 3 let
+local "$" 14 let
+@1:59 read 1 copy 0
+@1:55 struct 2 1
+@1:32 drop 0
+@1:32 return 2
+endfn
+fn "new$f1<Self=t15;>" 1 15
+local "value" 3 let
+local "$" 3 let
+local "$" 15 let
+@1:124 read 1 copy 0
+@1:120 struct 2 1
+@1:97 drop 0
+@1:97 return 2
+endfn
+fn "semantic_values" 0 3
+local "result" 3 let
+local "expected0" 3 let
+local "equal0" 1 let
+local "unit0" 0 let
+local "answer" 3 let
+@1 call 0 2
+@1 int 1 19
+@1 binary 2 == 0 1
+@1 intrinsic 3 assert 2
+@1 drop 3
+@1 int 4 42
+@1 return 4
+endfn

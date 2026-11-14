@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 trait Score { fn score(&self) -> i64; }
 struct Ticket { value: i64 }
 impl Score for Ticket { fn score(&self) -> i64 { self.value } }

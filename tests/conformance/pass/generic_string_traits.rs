@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 fn copied<T: Clone>(value: &T) -> T { value.clone() }
 fn refreshed<T: Clone>(target: &mut T, source: &T) { target.clone_from(source); }
 fn same<T: PartialEq>(left: &T, right: &T) -> bool { left.eq(right) }

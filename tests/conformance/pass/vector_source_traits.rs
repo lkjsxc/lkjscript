@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 fn copied<T: Clone>(value: &T) -> T { value.clone() }
 pub fn probe() -> i64 {
     let mut values: Vec<String> = Vec::new();

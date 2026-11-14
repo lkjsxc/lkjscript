@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 fn literal_bytes() -> &'static [u8] {
     let text = "static\0bytes";
     text.as_bytes()

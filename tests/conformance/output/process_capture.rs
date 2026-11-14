@@ -1,3 +1,7 @@
+// expect: output 6265666f72657c6368696c642d6f75747c6166746572
+// stderr: 6265666f72657c6368696c642d6572727c6166746572
+// status: 0
+// witness: {}
 fn copy(world: &mut World, program: &File, bytes: &[u8], output: &File, errors: &File) {
     let mut input = world.temporary_file().unwrap();
     input.write_all(bytes).unwrap();

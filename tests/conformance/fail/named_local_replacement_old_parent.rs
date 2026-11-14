@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustCode":"E0506"}
 fn test<'a>(left: &'a mut i64, right: &'a mut i64) {
     let mut pointer: &'a mut i64 = &mut *left;
     pointer = &mut *right;

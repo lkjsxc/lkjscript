@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false,"rustCode":"E0597"}
 fn test<'a>(input: &'a i64) -> i64 {
     let local = 42i64;
     let short = &local;

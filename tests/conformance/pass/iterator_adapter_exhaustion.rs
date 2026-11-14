@@ -1,3 +1,6 @@
+// expect: value 42
+// entry: probe
+// witness: {}
 struct Pulse {
     position: usize,
 }

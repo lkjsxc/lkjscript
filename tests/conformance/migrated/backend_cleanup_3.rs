@@ -1,3 +1,5 @@
+// expect: value 20000
+// witness: {}
 enum List { End, Next(Vec<List>) }
         pub fn probe() -> i64 {
             let mut list = List::End;

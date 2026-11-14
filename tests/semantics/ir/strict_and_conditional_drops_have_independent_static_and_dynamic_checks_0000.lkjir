@@ -1,0 +1,55 @@
+lkjscript-ir 1
+# expect: check
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "&mut i64" ref mut 3
+type "Mark" struct move "value" 7
+type "&mut Mark" ref mut 8
+destructor 8 2
+fn "probe" 0 3
+local "counter" 3 mut
+local "reference" 7 let
+local "mark" 8 let
+local "call_result" 0 let
+local "answer" 3 let
+@1:1 int 0 0
+@2:1 borrow 1 mut 0
+@3:1 struct 2 1
+@4:1 read 2 move 2
+@5:1 call 3 1 2
+@6:1 drop-if 2
+@7:1 drop-if 2
+@8:1 read 4 copy 0
+@9:1 drop 0
+@10:1 drop 3
+@11:1 return 4
+endfn
+fn "dispose" 1 0
+local "mark" 8 let
+local "done" 0 let
+@12:1 drop-if 0
+@13:1 unit 1
+@14:1 return 1
+endfn
+fn "Mark::drop" 1 0
+local "self" 9 let
+local "counter" 7 let
+local "old" 3 let
+local "amount" 3 let
+local "next" 3 let
+local "done" 0 let
+@15:1 borrow 1 mut 0 deref field 0 deref
+@16:1 read 2 copy 1 deref
+@17:1 int 3 42
+@18:1 binary 4 "+" 2 3
+@19:1 assign 4 1 deref
+@20:1 drop 1
+@21:1 drop 0
+@22:1 unit 5
+@23:1 return 5
+endfn

@@ -1,3 +1,5 @@
+// expect: value 1201
+// witness: {}
 fn next(count: &mut usize) -> usize {
     let current = *count;
     *count = current + 1;

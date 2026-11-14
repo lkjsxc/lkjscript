@@ -1,3 +1,5 @@
+// expect: value 126
+// witness: {}
 struct Pair { a: i64, b: i64 }
 fn field() -> i64 {
     let mut pair = Pair { a: 2, b: 0 };

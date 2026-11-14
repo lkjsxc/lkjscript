@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 trait Measure { fn measure(&self) -> i64; }
 struct Item { value: i64 }
 impl Measure for Item { fn measure(&self) -> i64 { self.value } }

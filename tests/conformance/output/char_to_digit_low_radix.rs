@@ -1,3 +1,6 @@
+// expect: trap R0004
+// stdout: 6c6f77
+// witness: {}
 pub fn main(mut world: World) {
     let mut out = world.stdout();
     out.write(b"low");

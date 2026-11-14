@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 pub fn probe() -> i64 {
     let mut code = 0u16;
     while code < 256u16 {

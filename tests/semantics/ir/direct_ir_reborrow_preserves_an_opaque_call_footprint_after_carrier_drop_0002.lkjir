@@ -1,0 +1,48 @@
+lkjscript-ir 1
+# expect: reject E_BORROW
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "Cell" struct move "0" 3
+type "Pair" struct move "0" 7 "1" 7
+type "PairRef" ref shared 8
+type "CellRef" ref shared 7
+type "ScalarRef" ref shared 3
+fn "choose" 1 10 from 0
+local "v0" 9 let
+local "v1" 10 let
+@1:1 borrow 1 shared 0 deref field 1
+@2:1 drop 0
+@3:1 return 1
+endfn
+fn "probe" 0 3
+local "v0" 3 let
+local "v1" 3 let
+local "v2" 7 let
+local "v3" 7 let
+local "v4" 8 mut
+local "v5" 9 let
+local "v6" 10 let
+local "v7" 11 let
+local "v8" 3 let
+local "v9" 3 let
+@1:1 int 0 1
+@2:1 int 1 2
+@3:1 struct 2 0
+@4:1 struct 3 1
+@5:1 struct 4 2 3
+@6:1 borrow 5 shared 4
+@7:1 call 6 0 5
+@8:1 borrow 7 shared 6 deref field 0
+@9:1 drop 6
+@10:1 int 8 9
+@11:1 assign 8 4 field 1 field 0
+@12:1 read 9 copy 7 deref
+@13:1 drop 7
+@14:1 drop 4
+@15:1 return 9
+endfn

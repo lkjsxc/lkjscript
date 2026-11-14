@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 struct Ticket { value: i64 }
 pub fn probe() -> i64 {
     let mut tickets: Vec<Ticket> = Vec::new();

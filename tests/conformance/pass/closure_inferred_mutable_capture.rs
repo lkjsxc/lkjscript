@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 fn tail(moved: bool) -> i64 {
     let mut value = 42i64;
     let reference = &mut value;

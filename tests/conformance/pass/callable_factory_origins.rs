@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 fn choose<T, F: FnOnce() -> T>(value: Option<T>, make: F) -> T {
     match value {
         Some(value) => value,

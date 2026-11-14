@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 trait Leaf {}
 impl Leaf for i64 {}
 struct Wrap<T> {

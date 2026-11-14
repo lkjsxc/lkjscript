@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 fn invoke<F: FnMut(&mut i64) -> i64>(mut f: F, value: &mut i64) -> i64 {
     let mut index = 0usize;
     while index < 2 {

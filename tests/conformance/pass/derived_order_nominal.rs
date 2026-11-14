@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 use std::collections::BTreeMap;
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]

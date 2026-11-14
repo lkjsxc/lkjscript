@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false,"rustCode":"E0502","world":true}
 struct M { out: Stdout, b: u8 }
 impl Drop for M { fn drop(&mut self) { let a: [u8; 1] = [self.b]; self.out.write(a.as_slice()); } }
 struct Pair { a: M, b: M }

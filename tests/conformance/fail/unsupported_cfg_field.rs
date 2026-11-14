@@ -1,3 +1,5 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
 struct Record {
     #[cfg(test)]
     test_only: i64,

@@ -1,3 +1,5 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
 enum Value { Item }
 type Alias = Value;
 fn wrong(_value: Alias::Item) -> i64 { 42 }

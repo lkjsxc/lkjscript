@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 fn length(value: &str) -> usize { value.len() }
 fn borrowed<'a>(value: &'a String) -> &'a str { value }
 fn token(word: &str) -> i64 {

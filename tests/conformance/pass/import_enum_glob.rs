@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 mod values {
     pub enum Choice { Empty, Pair(i64, i64), Named { value: i64 } }
 }

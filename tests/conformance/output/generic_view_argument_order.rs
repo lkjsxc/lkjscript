@@ -1,3 +1,5 @@
+// expect: output 41424344
+// witness: {}
 fn make(out: &mut Stdout, tag: u8) -> Vec<i64> {
     out.write(&[tag]);
     vec![19i64, 23]

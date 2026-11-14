@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustCode":"E0502"}
 use std::collections::BTreeMap;
 pub fn probe() -> i64 {
     let mut map: BTreeMap<i64, i64> = BTreeMap::new();

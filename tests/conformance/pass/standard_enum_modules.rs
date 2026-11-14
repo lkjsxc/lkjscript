@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 use std::option::Option as Maybe;
 use std::option::Option::{None as Absent, Some as Present};
 use std::result::Result as Outcome;

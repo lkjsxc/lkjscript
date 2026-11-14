@@ -1,3 +1,5 @@
+// expect: reject E_TRAIT
+// witness: {"rustCode":"E0599"}
 trait Iterator {
     type Item;
     fn next(&mut self) -> Option<Self::Item>;

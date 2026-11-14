@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 struct Item { value: i64, generation: i64 }
 impl Item { fn clone(&self) -> Self { Item { value: 0, generation: 99 } } }
 impl Clone for Item { fn clone(&self) -> Self { Item { value: self.value, generation: self.generation + 1 } } }

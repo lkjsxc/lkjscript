@@ -1,0 +1,35 @@
+lkjscript-ir 1
+# expect: reject E_BORROW
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "&mut i64" ref mut 3
+type "&i64" ref shared 3
+type "&&i64" ref shared 8
+fn "probe" 0 3
+local "value" 3 mut
+local "parent" 7 let
+local "shared" 8 let
+local "carrier" 9 let
+local "output" 8 let
+local "replacement" 3 let
+local "result" 3 let
+@1:1 int 0 42
+@2:1 borrow 1 mut 0
+@3:1 borrow 2 shared 1 deref
+@4:1 borrow 3 shared 2
+@5:1 borrow 4 shared 3 deref deref
+@6:1 drop 3
+@7:1 drop 2
+@8:1 int 5 7
+@9:1 assign 5 1 deref
+@10:1 read 6 copy 4 deref
+@10:1 drop 4
+@11:1 drop 1
+@11:1 drop 0
+@12:1 return 6
+endfn

@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 // Independent source probes for static callable and capture contracts.
 mod case_0 {
     fn identity<T>(value: T) -> T {

@@ -1,4 +1,6 @@
 lkjscript-ir 1
+# expect: value 41
+# entry: memory
 type "()" unit
 type "bool" bool
 type "i32" int 32 signed

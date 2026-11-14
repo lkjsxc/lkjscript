@@ -1,3 +1,6 @@
+// expect: trap R0005
+// stdout: 5065666751a55a41
+// witness: {}
 struct M{out:Stdout,b:u8}
 impl Drop for M{fn drop(&mut self){self.out.write(&[self.b]);}}
 fn tick(world:&mut World,byte:u8){let mut out=world.stdout();out.write(&[byte]);}

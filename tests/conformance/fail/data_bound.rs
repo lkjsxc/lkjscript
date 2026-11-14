@@ -1,3 +1,5 @@
+// expect: reject E_TRAIT
+// entry: main
 fn data_only<F: Data>(mut callback: F) -> i64 where F: FnMut() -> i64 {
     callback()
 }

@@ -1,0 +1,45 @@
+lkjscript-ir 1
+# expect: check
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "ScalarRef" ref shared 3
+type "Input" struct copy "0" 7 "1" 7 "2" 3
+type "InputRef" ref shared 8
+type "Candidates" struct copy "0" 7 "1" 7
+fn "choose" 1 7 from 0
+local "v0" 10 let
+local "v1" 7 let
+@1:1 read 1 copy 0 field 0
+@2:1 drop 0
+@3:1 return 1
+endfn
+fn "retain" 1 7 from 0
+local "v0" 7 let
+local "v1" 7 let
+@1:1 read 1 copy 0
+@2:1 drop 0
+@3:1 return 1
+endfn
+fn "forward" 1 7 from 0 deref
+local "v0" 9 let
+local "v1" 7 let
+local "v2" 7 let
+local "v3" 10 let
+local "v4" 7 let
+local "v5" 7 let
+local "v6" 7 let
+@1:1 read 1 copy 0 deref field 0
+@2:1 read 2 copy 0 deref field 1
+@3:1 struct 3 1 2
+@4:1 call 4 0 3
+@5:1 borrow 5 shared 4 deref
+@6:1 drop 4
+@7:1 call 6 1 5
+@8:1 drop 0
+@9:1 return 6
+endfn

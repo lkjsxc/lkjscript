@@ -1,3 +1,6 @@
+// expect: value 42
+// entry: probe
+// witness: {}
 pub fn probe()->i64{
  let mut calls=0i64;
  let value=Some(Box::new(42i64));

@@ -1,0 +1,138 @@
+lkjscript-ir 1
+# expect: check
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "$rigid:IR:14" struct move
+type "$rigid:V:15" struct move
+type "$std::ordered_map::BTreeMap<t14,t15>" struct move "nodes" 20 "root" 4 "vacant" 4 "count" 4
+type "$std::ordered_map::Node<t14,t15>" struct move "entry" 19 "left" 4 "right" 4 "parent" 4 "height" 4
+type "$std::ordered_map::Pair<t14,t15>" struct move "key" 14 "value" 15
+type "$std::prelude::Option<t18>" enum move
+variant "None"
+variant "Some" "0" 18
+endtype
+type "Vec<t17>" vec 17
+type "&mut t16" ref mut 16
+destructor 16 1
+fn "$std::ordered_map::replace_parent$f185<IR=t14;Self=t16;V=t15;>" 3 0 file 6
+local "self" 21 let
+local "old" 4 let
+local "new" 4 let
+local "$" 4 let
+local "$" 4 let
+local "parent" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+@78:33 read 3 copy 1
+@78:22 read 4 copy 0 deref field 0 index 3 field 3
+@78:1 assign 4 5
+@78:1 drop 3
+@79:12 read 6 copy 5
+@79:22 int 7 0
+@79:12 read 8 copy 7
+@79:12 binary 9 "==" 6 8
+@79:9 if 9
+@80:25 read 10 copy 2
+@80:13 assign 10 0 deref field 1
+@80:13 unit 11
+@79:9 drop 11
+@79:9 unit 12
+@79:9 assign 12 13
+@79:9 else
+@81:30 read 14 copy 5
+@81:19 read 15 copy 0 deref field 0 index 14 field 1
+@81:19 read 16 copy 1
+@81:19 binary 17 "==" 15 16
+@81:16 if 17
+@82:39 read 18 copy 2
+@82:24 read 19 copy 5
+@82:13 assign 18 0 deref field 0 index 19 field 1
+@82:13 unit 20
+@81:16 drop 20
+@81:16 drop 19
+@81:16 unit 21
+@81:16 assign 21 22
+@81:16 else
+@84:40 read 23 copy 2
+@84:24 read 24 copy 5
+@84:13 assign 23 0 deref field 0 index 24 field 2
+@84:13 unit 25
+@83:16 drop 25
+@83:16 drop 24
+@83:16 unit 26
+@81:16 assign 26 22
+@81:16 end
+@79:9 assign 22 13
+@79:9 drop 14
+@79:9 end
+@77:5 drop 13
+@77:5 drop 7
+@86:12 read 27 copy 2
+@86:19 int 28 0
+@86:12 read 29 copy 28
+@86:12 binary 30 "!=" 27 29
+@86:9 if 30
+@87:38 read 31 copy 5
+@87:24 read 32 copy 2
+@87:13 assign 31 0 deref field 0 index 32 field 3
+@87:13 unit 33
+@86:9 drop 33
+@86:9 drop 32
+@86:9 unit 34
+@86:9 assign 34 35
+@86:9 else
+@86:9 unit 36
+@86:9 assign 36 35
+@86:9 end
+@77:5 drop 28
+@77:5 drop 5
+@77:5 drop 2
+@77:5 drop 1
+@77:5 drop 0
+@77:5 return 35
+endfn
+fn "$std::ordered_map::drop$f205<IR=t14;Self=t16;V=t15;>" 1 0 file 6
+local "self" 21 let
+@1:1 trap "abstract declared contract"
+endfn

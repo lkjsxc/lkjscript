@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 trait Substitute {
     fn len(&self) -> bool;
 }

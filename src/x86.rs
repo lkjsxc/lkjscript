@@ -72,6 +72,9 @@ impl Assembler {
         self.labels.push(None);
         label
     }
+    pub fn position(&self, label: Label) -> Option<usize> {
+        self.labels[label]
+    }
     pub fn bind(&mut self, label: Label) {
         let offset = self.bytes.len();
         self.data_label(label, offset);
@@ -326,6 +329,14 @@ impl Assembler {
     pub fn syscall(&mut self) {
         self.raw(&[0x0f, 0x05]);
     }
+    pub fn load128(&mut self, xmm: u8, base: u8, offset: i64) {
+        self.raw(&[0xf3]);
+        self.memory(&[0x0f, 0x6f], xmm, base, offset, false);
+    }
+    pub fn store128(&mut self, base: u8, offset: i64, xmm: u8) {
+        self.raw(&[0xf3]);
+        self.memory(&[0x0f, 0x7f], xmm, base, offset, false);
+    }
     pub fn mov_to_xmm(&mut self, xmm: u8, reg: u8) {
         self.bytes.push(0x66);
         self.rex_for(true, xmm, reg, false);
@@ -400,79 +411,5 @@ impl Assembler {
             }
         }
         Ok(self.bytes)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    fn finish(a: Assembler) -> Vec<u8> {
-        match a.finish() {
-            Ok(bytes) => bytes,
-            Err(problem) => panic!("{}", problem.message),
-        }
-    }
-    #[test]
-    fn immediates_preserve_flags_and_choose_the_smallest_mov_form() {
-        let mut a = Assembler::new();
-        a.immediate(A, 0);
-        a.immediate(R8, 0xffff_ffff);
-        a.immediate(C, (-1i64) as u64);
-        a.immediate(D, 0x0123_4567_89ab_cdef);
-        assert_eq!(
-            finish(a),
-            vec![
-                0xb8, 0, 0, 0, 0, 0x41, 0xb8, 0xff, 0xff, 0xff, 0xff, 0x48, 0xc7, 0xc1, 0xff, 0xff,
-                0xff, 0xff, 0x48, 0xba, 0xef, 0xcd, 0xab, 0x89, 0x67, 0x45, 0x23, 0x01
-            ]
-        );
-    }
-    #[test]
-    fn relative_calls_branches_and_rip_addresses_are_patched() {
-        let mut a = Assembler::new();
-        let start = a.label();
-        let end = a.label();
-        a.bind(start);
-        a.call(end);
-        a.condition(4, start);
-        a.address(R8, end);
-        a.bind(end);
-        a.ret();
-        assert_eq!(
-            finish(a),
-            vec![
-                0xe8, 13, 0, 0, 0, 0x0f, 0x84, 0xf5, 0xff, 0xff, 0xff, 0x4c, 0x8d, 0x05, 0, 0, 0,
-                0, 0xc3
-            ]
-        );
-    }
-    #[test]
-    fn memory_widths_handle_low_byte_registers_and_stack_bases() {
-        let mut a = Assembler::new();
-        a.store_width(SP, 0, SI, 1);
-        a.load_width(R9, R13, 0, 1, true);
-        a.store_width(R12, -8, R10, 2);
-        a.load(A, BP, -256);
-        assert_eq!(
-            finish(a),
-            vec![
-                0x40, 0x88, 0x34, 0x24, 0x4d, 0x0f, 0xbe, 0x4d, 0, 0x66, 0x45, 0x89, 0x54, 0x24,
-                0xf8, 0x48, 0x8b, 0x85, 0, 0xff, 0xff, 0xff
-            ]
-        );
-    }
-    #[test]
-    fn encoding_errors_retain_the_ir_location() {
-        let mut a = Assembler::new();
-        let far = a.label();
-        a.location(7, 42, 9);
-        a.jump(far);
-        a.data_label(far, 2147483653usize);
-        let problem = match a.finish() {
-            Ok(_) => panic!("far branch accepted"),
-            Err(problem) => problem,
-        };
-        assert_eq!((problem.file, problem.line, problem.column), (7, 42, 9));
-        assert_eq!(problem.code, "E_EMIT");
     }
 }

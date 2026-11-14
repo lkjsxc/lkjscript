@@ -1,0 +1,45 @@
+lkjscript-ir 1
+# expect: reject E_BORROW
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "&t3" ref shared 3
+type "View" struct move "value" 14
+type "&mut t15" ref mut 15
+fn "leak" 1 15
+return-leaf 0 field 0 bound 0
+local "external" 14 let
+local "$" 3 let
+local "local" 3 let
+local "$" 14 let
+local "$" 15 let
+local "view" 15 mut
+local "$" 16 let
+local "$" 14 let
+local "$" 15 let
+local "$" 15 let
+@4:30 int 1 7
+@4:1 assign 1 2
+@5:42 borrow 3 shared 2
+@5:28 struct 4 3
+@5:1 assign 4 5
+@6:31 borrow 6 mut 5
+@6:56 read 7 copy 0
+@6:42 struct 8 7
+@6:13 intrinsic 9 "replace" 6 8
+@3:9 drop 5
+@3:9 drop 2
+@3:9 drop 0
+@3:9 return 9
+endfn

@@ -1,3 +1,5 @@
+// expect: reject E_TRAIT
+// witness: {"rustCode":"E0275"}
 trait A {}
 trait B {}
 impl<T: B> A for T {}

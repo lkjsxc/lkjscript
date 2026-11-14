@@ -1,0 +1,59 @@
+lkjscript-ir 1
+# expect: check
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "$rigid:T:14" struct move
+type "&t14" ref shared 14
+type "&t3" ref shared 3
+type "&t16" ref shared 16
+type "$rigid:T:18" struct move
+type "&t18" ref shared 18
+fn "copied<T=t14;>" 1 14
+local "value" 15 let
+local "$" 15 let
+local "$" 14 let
+@2:33 borrow 1 shared 0 deref
+@2:33 call 2 1 1
+@2:1 drop 0
+@2:1 return 2
+endfn
+fn "$contract:clone:14" 1 14
+local "self" 15 let
+@1:1 trap "abstract declared contract"
+endfn
+fn "score$f2<Self=t16;>" 1 3
+local "self" 17 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+@4:43 read 1 copy 0 deref deref
+@4:50 int 2 1
+@4:43 binary 3 "+" 1 2
+@4:22 drop 0
+@4:22 return 3
+endfn
+fn "scored<T=t18;>" 1 3
+local "value" 19 let
+local "$" 19 let
+local "$" 3 let
+@5:35 borrow 1 shared 0 deref
+@5:35 call 2 4 1
+@5:1 drop 0
+@5:1 return 2
+endfn
+fn "score$f1<Self=t18;>" 1 3
+local "self" 19 let
+@1:1 trap "abstract declared contract"
+endfn

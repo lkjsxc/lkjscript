@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 struct C { value: char }
 fn all(value:char)->i64 {match value {'\0'..='\u{d7ff}'=>1,'\u{e000}'..='\u{10ffff}'=>2}}

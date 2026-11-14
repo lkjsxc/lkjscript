@@ -1,3 +1,5 @@
+// expect: value 58
+// witness: {}
 struct Pair { a: Box<i64>, b: i64 }
 fn add(value: Result<i64, i64>) -> Result<i64, i64> { let n = value?; Ok(n+2) }
 fn option(value: Option<i64>) -> Option<i64> { let n = value?; Some(n+3) }

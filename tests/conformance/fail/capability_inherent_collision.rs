@@ -1,3 +1,5 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false,"rustCode":"E0592","world":true}
 impl World {
     fn __lkjscript_arg_count(&mut self) -> usize {
         999

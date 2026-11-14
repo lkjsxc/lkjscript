@@ -1,0 +1,52 @@
+lkjscript-ir 1
+# expect: value 42
+# entry: semantic_values
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "ref7" ref shared 3
+type "ref8" ref shared 7
+type "ref9" ref shared 8
+type "View" struct copy "value" 7 "descriptor" 3
+type "refView" ref shared 10
+fn "copy" 1 7 from 0 deref
+local "" 8 let
+local "" 7 let
+@1:1 read 1 copy 0 deref
+@2:1 drop 0
+@3:1 return 1
+endfn
+fn "probe" 0 3
+local "" 3 let
+local "" 7 let
+local "" 8 let
+local "" 7 let
+local "" 3 let
+@1:1 int 0 42
+@2:1 borrow 1 shared 0
+@3:1 borrow 2 shared 1
+@4:1 call 3 0 2
+@5:1 drop 1
+@6:1 read 4 copy 3 deref
+@7:1 drop 3
+@8:1 drop 0
+@9:1 return 4
+endfn
+fn "semantic_values" 0 3
+local "result" 3 let
+local "expected0" 3 let
+local "equal0" 1 let
+local "unit0" 0 let
+local "answer" 3 let
+@1 call 0 1
+@1 int 1 42
+@1 binary 2 == 0 1
+@1 intrinsic 3 assert 2
+@1 drop 3
+@1 int 4 42
+@1 return 4
+endfn

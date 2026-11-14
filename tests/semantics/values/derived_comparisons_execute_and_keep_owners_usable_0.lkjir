@@ -1,0 +1,139 @@
+lkjscript-ir 1
+# expect: value 42
+# entry: semantic_values
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "Value" struct move "number" 3
+type "&t14" ref shared 14
+type "&t3" ref shared 3
+fn "probe" 0 3
+local "$" 3 let
+local "$" 14 let
+local "left" 14 let
+local "$" 3 let
+local "$" 14 let
+local "right" 14 let
+local "$" 15 let
+local "$" 15 let
+local "$" 1 let
+local "$" 1 let
+local "$if" 1 mut
+local "$" 1 let
+local "$" 15 let
+local "$" 15 let
+local "$" 1 let
+local "$" 3 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+@1:89 int 0 21
+@1:76 struct 1 0
+@1:51 assign 1 2
+@1:116 int 3 21
+@1:103 struct 4 3
+@1:51 assign 4 5
+@1:125 borrow 6 shared 2
+@1:125 borrow 7 shared 5
+@1:125 call 8 1 6 7
+@1:123 unary 9 "!" 8
+@1:123 if 9
+@1:123 int 11 1
+@1:123 assign 11 10
+@1:123 else
+@1:139 borrow 12 shared 2
+@1:139 borrow 13 shared 5
+@1:139 call 14 2 12 13
+@1:123 assign 14 10
+@1:123 end
+@1:120 if 10
+@1:158 int 15 0
+@1:151 drop 5
+@1:151 drop 2
+@1:151 return 15
+@1:120 unit 16
+@1:120 else
+@1:120 unit 18
+@1:120 assign 18 17
+@1:120 end
+@1:51 drop 17
+@1:161 read 19 copy 2 field 0
+@1:173 read 20 copy 5 field 0
+@1:161 binary 21 "+" 19 20
+@1:51 drop 5
+@1:51 drop 2
+@1:51 return 21
+endfn
+fn "$builtin:eq:t14" 2 1
+local "self" 15 let
+local "other" 15 let
+local "v2" 16 let
+local "v3" 16 let
+local "v4" 1 let
+local "v5" 1 let
+local "v6" 1 let
+@1:125 borrow 2 shared 0 deref field 0
+@1:125 borrow 3 shared 1 deref field 0
+@1:125 call 4 3 2 3
+@1:125 if 4
+@1:125 else
+@1:125 int 5 0
+@1:125 drop 1
+@1:125 drop 0
+@1:125 return 5
+@1:125 end
+@1:125 int 6 1
+@1:125 drop 1
+@1:125 drop 0
+@1:125 return 6
+endfn
+fn "$builtin:ne:t14" 2 1
+local "self" 15 let
+local "other" 15 let
+local "v2" 1 let
+local "v3" 1 let
+@1:139 call 2 1 0 1
+@1:139 unary 3 "!" 2
+@1:139 return 3
+endfn
+fn "$builtin:eq:t3" 2 1
+local "self" 16 let
+local "other" 16 let
+local "v2" 3 let
+local "v3" 3 let
+local "v4" 1 let
+@1:125 read 2 copy 0 deref
+@1:125 read 3 copy 1 deref
+@1:125 binary 4 "==" 2 3
+@1:125 drop 1
+@1:125 drop 0
+@1:125 return 4
+endfn
+fn "semantic_values" 0 3
+local "result" 3 let
+local "expected0" 3 let
+local "equal0" 1 let
+local "unit0" 0 let
+local "answer" 3 let
+@1 call 0 0
+@1 int 1 42
+@1 binary 2 == 0 1
+@1 intrinsic 3 assert 2
+@1 drop 3
+@1 int 4 42
+@1 return 4
+endfn

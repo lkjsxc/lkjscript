@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false,"rustCode":"E0596"}
 struct One { value: i64 }
 impl Iterator for One {
     type Item = i64;

@@ -1,0 +1,4958 @@
+lkjscript-ir 1
+# expect: value 42
+# entry: semantic_values
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "$std::string::String" struct move "bytes" 15
+type "Vec<t5>" vec 5
+type "&t14" ref shared 14
+type "str" str
+type "&t17" ref shared 17
+type "[t5]" slice shared 5
+type "&t19" ref shared 19
+type "&mut t14" ref mut 14
+type "&mut t15" ref mut 15
+type "&t15" ref shared 15
+type "$std::prelude::Option<t5>" enum copy
+variant "None"
+variant "Some" "0" 5
+endtype
+fn "same_bytes" 2 1
+local "value" 16 let
+local "expected" 18 let
+local "$" 16 let
+local "$" 20 let
+local "actual" 20 let
+local "$" 18 let
+local "$" 20 let
+local "expected_bytes" 20 let
+local "$" 20 let
+local "$" 4 let
+local "$" 4 let
+local "$" 20 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 1 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 4 let
+local "index" 4 mut
+local "$" 4 let
+local "$" 20 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 5 let
+local "$" 4 let
+local "$" 5 let
+local "$" 1 let
+local "$" 1 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$" 0 let
+local "$" 1 let
+@3:18 borrow 2 shared 0 deref
+@3:18 call 3 9 2
+@3:1 assign 3 4
+@4:26 borrow 5 shared 1 deref
+@4:26 intrinsic 6 "str_as_bytes" 5
+@4:1 assign 6 7
+@5:8 borrow 8 shared 4 deref
+@5:8 intrinsic 9 "vec_len" 8
+@5:8 read 10 copy 9
+@5:24 borrow 11 shared 7 deref
+@5:24 intrinsic 12 "vec_len" 11
+@5:8 read 13 copy 12
+@5:8 binary 14 "!=" 10 13
+@5:5 if 14
+@5:54 int 15 0
+@5:47 drop 12
+@5:47 drop 9
+@5:47 drop 7
+@5:47 drop 4
+@5:47 drop 1
+@5:47 drop 0
+@5:47 return 15
+@5:5 unit 16
+@5:5 else
+@5:5 unit 18
+@5:5 assign 18 17
+@5:5 end
+@2:1 drop 17
+@2:1 drop 12
+@2:1 drop 9
+@6:28 int 19 0
+@6:1 assign 19 20
+@7:5 loop
+@7:11 read 21 copy 20
+@7:19 borrow 22 shared 4 deref
+@7:19 intrinsic 23 "vec_len" 22
+@7:11 read 24 copy 23
+@7:11 binary 25 "<" 21 24
+@7:5 drop 23
+@7:5 unary 26 "!" 25
+@7:5 if 26
+@7:5 break
+@7:5 end
+@8:19 read 27 copy 20
+@8:12 read 28 copy 4 deref index 27
+@8:44 read 29 copy 20
+@8:12 read 30 copy 7 deref index 29
+@8:12 binary 31 "!=" 28 30
+@8:9 if 31
+@8:60 int 32 0
+@8:53 drop 29
+@8:53 drop 27
+@8:53 drop 20
+@8:53 drop 7
+@8:53 drop 4
+@8:53 drop 1
+@8:53 drop 0
+@8:53 return 32
+@8:9 unit 33
+@8:9 else
+@8:9 unit 35
+@8:9 assign 35 34
+@8:9 end
+@7:5 drop 34
+@7:5 drop 29
+@7:5 drop 27
+@9:17 read 36 copy 20
+@9:25 int 37 1
+@9:17 binary 38 "+" 36 37
+@9:9 assign 38 20
+@9:9 unit 39
+@7:5 drop 39
+@7:5 unit 40
+@7:5 drop 40
+@7:5 continue
+@7:5 end
+@7:5 unit 41
+@2:1 drop 41
+@2:1 drop 7
+@2:1 drop 4
+@11:5 int 42 1
+@2:1 drop 20
+@2:1 drop 1
+@2:1 drop 0
+@2:1 return 42
+endfn
+fn "lifecycle_0" 0 4
+local "$" 18 let
+local "$" 14 let
+local "original" 14 mut
+local "$" 16 let
+local "$" 14 let
+local "cloned" 14 mut
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 0 let
+local "$" 21 let
+local "$" 18 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 0 let
+local "$" 21 let
+local "$" 18 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 16 let
+local "$" 14 let
+local "survivor" 14 let
+local "$" 14 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 14 let
+local "$" 0 let
+local "$" 16 let
+local "$" 14 let
+local "discarded" 14 let
+local "$" 14 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 18 let
+local "$" 14 let
+local "target" 14 mut
+local "$" 18 let
+local "$" 14 let
+local "temporary" 14 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 14 let
+local "empty" 14 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 18 let
+local "$" 14 let
+local "long" 14 let
+local "$" 18 let
+local "$" 14 let
+local "short" 14 let
+local "$" 4 let
+local "round" 4 mut
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 1 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$" 0 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 14 let
+local "$" 0 let
+local "$" 21 let
+local "$" 18 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 4 let
+@14:37 text 0 ""
+@14:20 call 1 10 0
+@14:1 assign 1 2
+@15:18 borrow 3 shared 2
+@15:18 call 4 11 3
+@15:1 assign 4 5
+@16:16 borrow 6 shared 2
+@16:27 text 7 ""
+@16:5 call 8 0 6 7
+@16:4 unary 9 "!" 8
+@16:1 if 9
+@16:40 int 10 1
+@16:33 drop 5
+@16:33 drop 2
+@16:33 return 10
+@16:1 unit 11
+@16:1 else
+@16:1 unit 13
+@16:1 assign 13 12
+@16:1 end
+@13:5 drop 12
+@17:16 borrow 14 shared 5
+@17:25 text 15 ""
+@17:5 call 16 0 14 15
+@17:4 unary 17 "!" 16
+@17:1 if 17
+@17:38 int 18 2
+@17:31 drop 5
+@17:31 drop 2
+@17:31 return 18
+@17:1 unit 19
+@17:1 else
+@17:1 unit 21
+@17:1 assign 21 20
+@17:1 end
+@13:5 drop 20
+@18:1 borrow 22 mut 2
+@18:1 call 23 12 22
+@13:5 drop 23
+@18:19 borrow 24 mut 2
+@18:37 text 25 "6f726967696e616c00f09f9880"
+@18:19 call 26 13 24 25
+@13:5 drop 26
+@19:16 borrow 27 shared 2
+@19:27 text 28 "6f726967696e616c00f09f9880"
+@19:5 call 29 0 27 28
+@19:4 unary 30 "!" 29
+@19:1 if 30
+@19:54 int 31 3
+@19:47 drop 5
+@19:47 drop 2
+@19:47 return 31
+@19:1 unit 32
+@19:1 else
+@19:1 unit 34
+@19:1 assign 34 33
+@19:1 end
+@13:5 drop 33
+@20:16 borrow 35 shared 5
+@20:25 text 36 ""
+@20:5 call 37 0 35 36
+@20:4 unary 38 "!" 37
+@20:1 if 38
+@20:38 int 39 4
+@20:31 drop 5
+@20:31 drop 2
+@20:31 return 39
+@20:1 unit 40
+@20:1 else
+@20:1 unit 42
+@20:1 assign 42 41
+@20:1 end
+@13:5 drop 41
+@21:1 borrow 43 mut 5
+@21:1 call 44 12 43
+@13:5 drop 44
+@21:17 borrow 45 mut 5
+@21:33 text 46 "636c6f6e657fe6b0b4"
+@21:17 call 47 13 45 46
+@13:5 drop 47
+@22:16 borrow 48 shared 2
+@22:27 text 49 "6f726967696e616c00f09f9880"
+@22:5 call 50 0 48 49
+@22:4 unary 51 "!" 50
+@22:1 if 51
+@22:54 int 52 5
+@22:47 drop 5
+@22:47 drop 2
+@22:47 return 52
+@22:1 unit 53
+@22:1 else
+@22:1 unit 55
+@22:1 assign 55 54
+@22:1 end
+@13:5 drop 54
+@23:16 borrow 56 shared 5
+@23:25 text 57 "636c6f6e657fe6b0b4"
+@23:5 call 58 0 56 57
+@23:4 unary 59 "!" 58
+@23:1 if 59
+@23:52 int 60 6
+@23:45 drop 5
+@23:45 drop 2
+@23:45 return 60
+@23:1 unit 61
+@23:1 else
+@23:1 unit 63
+@23:1 assign 63 62
+@23:1 end
+@13:5 drop 62
+@24:16 borrow 64 shared 2
+@24:16 call 65 11 64
+@24:1 assign 65 66
+@24:39 read 67 move 2
+@24:34 drop 67
+@24:34 unit 68
+@13:5 drop 68
+@25:16 borrow 69 shared 66
+@25:27 text 70 "6f726967696e616c00f09f9880"
+@25:5 call 71 0 69 70
+@25:4 unary 72 "!" 71
+@25:1 if 72
+@25:54 int 73 7
+@25:47 drop 66
+@25:47 drop 5
+@25:47 return 73
+@25:1 unit 74
+@25:1 else
+@25:1 unit 76
+@25:1 assign 76 75
+@25:1 end
+@13:5 drop 75
+@26:6 read 77 move 5
+@26:1 drop 77
+@26:1 unit 78
+@13:5 drop 78
+@26:31 borrow 79 shared 66
+@26:31 call 80 11 79
+@26:1 assign 80 81
+@26:54 read 82 move 81
+@26:49 drop 82
+@26:49 unit 83
+@13:5 drop 83
+@27:16 borrow 84 shared 66
+@27:27 text 85 "6f726967696e616c00f09f9880"
+@27:5 call 86 0 84 85
+@27:4 unary 87 "!" 86
+@27:1 if 87
+@27:54 int 88 8
+@27:47 drop 66
+@27:47 return 88
+@27:1 unit 89
+@27:1 else
+@27:1 unit 91
+@27:1 assign 91 90
+@27:1 end
+@13:5 drop 90
+@28:35 text 92 "7072656578697374696e6720616c6c6f636174696f6e"
+@28:18 call 93 10 92
+@28:1 assign 93 94
+@29:36 text 95 ""
+@29:19 call 96 10 95
+@29:1 assign 96 97
+@29:41 borrow 98 mut 94
+@29:59 borrow 99 shared 97
+@29:41 call 100 14 98 99
+@29:1 drop 100
+@29:1 unit 101
+@29:1 drop 97
+@13:5 drop 101
+@30:16 borrow 102 shared 94
+@30:25 text 103 ""
+@30:5 call 104 0 102 103
+@30:4 unary 105 "!" 104
+@30:1 if 105
+@30:38 int 106 9
+@30:31 drop 94
+@30:31 drop 66
+@30:31 return 106
+@30:1 unit 107
+@30:1 else
+@30:1 unit 109
+@30:1 assign 109 108
+@30:1 end
+@13:5 drop 108
+@31:1 borrow 110 mut 94
+@31:19 borrow 111 shared 66
+@31:1 call 112 14 110 111
+@13:5 drop 112
+@32:16 borrow 113 shared 94
+@32:25 text 114 "6f726967696e616c00f09f9880"
+@32:5 call 115 0 113 114
+@32:4 unary 116 "!" 115
+@32:1 if 116
+@32:52 int 117 10
+@32:45 drop 94
+@32:45 drop 66
+@32:45 return 117
+@32:1 unit 118
+@32:1 else
+@32:1 unit 120
+@32:1 assign 120 119
+@32:1 end
+@13:5 drop 119
+@33:13 call 121 15
+@33:1 assign 121 122
+@33:28 borrow 123 mut 94
+@33:46 borrow 124 shared 122
+@33:28 call 125 14 123 124
+@13:5 drop 125
+@34:16 borrow 126 shared 94
+@34:25 text 127 ""
+@34:5 call 128 0 126 127
+@34:4 unary 129 "!" 128
+@34:1 if 129
+@34:38 int 130 11
+@34:31 drop 122
+@34:31 drop 94
+@34:31 drop 66
+@34:31 return 130
+@34:1 unit 131
+@34:1 else
+@34:1 unit 133
+@34:1 assign 133 132
+@34:1 end
+@13:5 drop 132
+@35:29 text 134 ""
+@35:12 call 135 10 134
+@35:1 assign 135 136
+@35:63 text 137 "73"
+@35:46 call 138 10 137
+@35:1 assign 138 139
+@36:21 int 140 0
+@36:1 assign 140 141
+@36:24 loop
+@36:30 read 142 copy 141
+@36:36 int 143 16
+@36:30 read 144 copy 143
+@36:30 binary 145 "<" 142 144
+@36:24 drop 143
+@36:24 unary 146 "!" 145
+@36:24 if 146
+@36:24 break
+@36:24 end
+@37:1 borrow 147 mut 94
+@37:19 borrow 148 shared 136
+@37:1 call 149 14 147 148
+@36:24 drop 149
+@37:42 borrow 150 shared 94
+@37:50 text 151 ""
+@37:31 call 152 0 150 151
+@37:30 unary 153 "!" 152
+@37:27 if 153
+@37:62 int 154 12
+@37:55 drop 141
+@37:55 drop 139
+@37:55 drop 136
+@37:55 drop 122
+@37:55 drop 94
+@37:55 drop 66
+@37:55 return 154
+@37:27 unit 155
+@37:27 else
+@37:27 unit 157
+@37:27 assign 157 156
+@37:27 end
+@36:24 drop 156
+@38:1 borrow 158 mut 94
+@38:19 borrow 159 shared 139
+@38:1 call 160 14 158 159
+@36:24 drop 160
+@38:43 borrow 161 shared 94
+@38:51 text 162 "73"
+@38:32 call 163 0 161 162
+@38:31 unary 164 "!" 163
+@38:28 if 164
+@38:64 int 165 13
+@38:57 drop 141
+@38:57 drop 139
+@38:57 drop 136
+@38:57 drop 122
+@38:57 drop 94
+@38:57 drop 66
+@38:57 return 165
+@38:28 unit 166
+@38:28 else
+@38:28 unit 168
+@38:28 assign 168 167
+@38:28 end
+@36:24 drop 167
+@39:1 borrow 169 mut 94
+@39:19 borrow 170 shared 122
+@39:1 call 171 14 169 170
+@36:24 drop 171
+@39:43 borrow 172 shared 94
+@39:51 text 173 ""
+@39:32 call 174 0 172 173
+@39:31 unary 175 "!" 174
+@39:28 if 175
+@39:63 int 176 14
+@39:56 drop 141
+@39:56 drop 139
+@39:56 drop 136
+@39:56 drop 122
+@39:56 drop 94
+@39:56 drop 66
+@39:56 return 176
+@39:28 unit 177
+@39:28 else
+@39:28 unit 179
+@39:28 assign 179 178
+@39:28 end
+@36:24 drop 178
+@40:7 read 180 copy 141
+@40:13 int 181 1
+@40:7 binary 182 "+" 180 181
+@40:1 assign 182 141
+@40:1 unit 183
+@36:24 drop 183
+@36:24 unit 184
+@36:24 drop 184
+@36:24 continue
+@36:24 end
+@36:24 unit 185
+@13:5 drop 185
+@41:1 borrow 186 mut 94
+@41:19 borrow 187 shared 66
+@41:1 call 188 14 186 187
+@13:5 drop 188
+@41:36 read 189 move 66
+@41:31 drop 189
+@41:31 unit 190
+@13:5 drop 190
+@41:47 borrow 191 mut 94
+@41:63 text 192 "21"
+@41:47 call 193 13 191 192
+@13:5 drop 193
+@42:16 borrow 194 shared 94
+@42:25 text 195 "6f726967696e616c00f09f988021"
+@42:5 call 196 0 194 195
+@42:4 unary 197 "!" 196
+@42:1 if 197
+@42:53 int 198 14
+@42:46 drop 141
+@42:46 drop 139
+@42:46 drop 136
+@42:46 drop 122
+@42:46 drop 94
+@42:46 return 198
+@42:1 unit 199
+@42:1 else
+@42:1 unit 201
+@42:1 assign 201 200
+@42:1 end
+@13:5 drop 200
+@43:1 int 202 0
+@13:5 drop 141
+@13:5 drop 139
+@13:5 drop 136
+@13:5 drop 122
+@13:5 drop 94
+@13:5 return 202
+endfn
+fn "lifecycle_1" 0 4
+local "$" 18 let
+local "$" 14 let
+local "original" 14 mut
+local "$" 16 let
+local "$" 14 let
+local "cloned" 14 mut
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 0 let
+local "$" 21 let
+local "$" 18 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 0 let
+local "$" 21 let
+local "$" 18 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 16 let
+local "$" 14 let
+local "survivor" 14 let
+local "$" 14 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 14 let
+local "$" 0 let
+local "$" 16 let
+local "$" 14 let
+local "discarded" 14 let
+local "$" 14 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 18 let
+local "$" 14 let
+local "target" 14 mut
+local "$" 18 let
+local "$" 14 let
+local "temporary" 14 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 14 let
+local "empty" 14 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 18 let
+local "$" 14 let
+local "long" 14 let
+local "$" 18 let
+local "$" 14 let
+local "short" 14 let
+local "$" 4 let
+local "round" 4 mut
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 1 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$" 0 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 14 let
+local "$" 0 let
+local "$" 21 let
+local "$" 18 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 4 let
+@46:37 text 0 "61"
+@46:20 call 1 10 0
+@46:1 assign 1 2
+@47:18 borrow 3 shared 2
+@47:18 call 4 11 3
+@47:1 assign 4 5
+@48:16 borrow 6 shared 2
+@48:27 text 7 "61"
+@48:5 call 8 0 6 7
+@48:4 unary 9 "!" 8
+@48:1 if 9
+@48:41 int 10 1
+@48:34 drop 5
+@48:34 drop 2
+@48:34 return 10
+@48:1 unit 11
+@48:1 else
+@48:1 unit 13
+@48:1 assign 13 12
+@48:1 end
+@45:5 drop 12
+@49:16 borrow 14 shared 5
+@49:25 text 15 "61"
+@49:5 call 16 0 14 15
+@49:4 unary 17 "!" 16
+@49:1 if 17
+@49:39 int 18 2
+@49:32 drop 5
+@49:32 drop 2
+@49:32 return 18
+@49:1 unit 19
+@49:1 else
+@49:1 unit 21
+@49:1 assign 21 20
+@49:1 end
+@45:5 drop 20
+@50:1 borrow 22 mut 2
+@50:1 call 23 12 22
+@45:5 drop 23
+@50:19 borrow 24 mut 2
+@50:37 text 25 "6f726967696e616c00f09f9880"
+@50:19 call 26 13 24 25
+@45:5 drop 26
+@51:16 borrow 27 shared 2
+@51:27 text 28 "6f726967696e616c00f09f9880"
+@51:5 call 29 0 27 28
+@51:4 unary 30 "!" 29
+@51:1 if 30
+@51:54 int 31 3
+@51:47 drop 5
+@51:47 drop 2
+@51:47 return 31
+@51:1 unit 32
+@51:1 else
+@51:1 unit 34
+@51:1 assign 34 33
+@51:1 end
+@45:5 drop 33
+@52:16 borrow 35 shared 5
+@52:25 text 36 "61"
+@52:5 call 37 0 35 36
+@52:4 unary 38 "!" 37
+@52:1 if 38
+@52:39 int 39 4
+@52:32 drop 5
+@52:32 drop 2
+@52:32 return 39
+@52:1 unit 40
+@52:1 else
+@52:1 unit 42
+@52:1 assign 42 41
+@52:1 end
+@45:5 drop 41
+@53:1 borrow 43 mut 5
+@53:1 call 44 12 43
+@45:5 drop 44
+@53:17 borrow 45 mut 5
+@53:33 text 46 "636c6f6e657fe6b0b4"
+@53:17 call 47 13 45 46
+@45:5 drop 47
+@54:16 borrow 48 shared 2
+@54:27 text 49 "6f726967696e616c00f09f9880"
+@54:5 call 50 0 48 49
+@54:4 unary 51 "!" 50
+@54:1 if 51
+@54:54 int 52 5
+@54:47 drop 5
+@54:47 drop 2
+@54:47 return 52
+@54:1 unit 53
+@54:1 else
+@54:1 unit 55
+@54:1 assign 55 54
+@54:1 end
+@45:5 drop 54
+@55:16 borrow 56 shared 5
+@55:25 text 57 "636c6f6e657fe6b0b4"
+@55:5 call 58 0 56 57
+@55:4 unary 59 "!" 58
+@55:1 if 59
+@55:52 int 60 6
+@55:45 drop 5
+@55:45 drop 2
+@55:45 return 60
+@55:1 unit 61
+@55:1 else
+@55:1 unit 63
+@55:1 assign 63 62
+@55:1 end
+@45:5 drop 62
+@56:16 borrow 64 shared 2
+@56:16 call 65 11 64
+@56:1 assign 65 66
+@56:39 read 67 move 2
+@56:34 drop 67
+@56:34 unit 68
+@45:5 drop 68
+@57:16 borrow 69 shared 66
+@57:27 text 70 "6f726967696e616c00f09f9880"
+@57:5 call 71 0 69 70
+@57:4 unary 72 "!" 71
+@57:1 if 72
+@57:54 int 73 7
+@57:47 drop 66
+@57:47 drop 5
+@57:47 return 73
+@57:1 unit 74
+@57:1 else
+@57:1 unit 76
+@57:1 assign 76 75
+@57:1 end
+@45:5 drop 75
+@58:6 read 77 move 5
+@58:1 drop 77
+@58:1 unit 78
+@45:5 drop 78
+@58:31 borrow 79 shared 66
+@58:31 call 80 11 79
+@58:1 assign 80 81
+@58:54 read 82 move 81
+@58:49 drop 82
+@58:49 unit 83
+@45:5 drop 83
+@59:16 borrow 84 shared 66
+@59:27 text 85 "6f726967696e616c00f09f9880"
+@59:5 call 86 0 84 85
+@59:4 unary 87 "!" 86
+@59:1 if 87
+@59:54 int 88 8
+@59:47 drop 66
+@59:47 return 88
+@59:1 unit 89
+@59:1 else
+@59:1 unit 91
+@59:1 assign 91 90
+@59:1 end
+@45:5 drop 90
+@60:35 text 92 "7072656578697374696e6720616c6c6f636174696f6e"
+@60:18 call 93 10 92
+@60:1 assign 93 94
+@61:36 text 95 "61"
+@61:19 call 96 10 95
+@61:1 assign 96 97
+@61:42 borrow 98 mut 94
+@61:60 borrow 99 shared 97
+@61:42 call 100 14 98 99
+@61:1 drop 100
+@61:1 unit 101
+@61:1 drop 97
+@45:5 drop 101
+@62:16 borrow 102 shared 94
+@62:25 text 103 "61"
+@62:5 call 104 0 102 103
+@62:4 unary 105 "!" 104
+@62:1 if 105
+@62:39 int 106 9
+@62:32 drop 94
+@62:32 drop 66
+@62:32 return 106
+@62:1 unit 107
+@62:1 else
+@62:1 unit 109
+@62:1 assign 109 108
+@62:1 end
+@45:5 drop 108
+@63:1 borrow 110 mut 94
+@63:19 borrow 111 shared 66
+@63:1 call 112 14 110 111
+@45:5 drop 112
+@64:16 borrow 113 shared 94
+@64:25 text 114 "6f726967696e616c00f09f9880"
+@64:5 call 115 0 113 114
+@64:4 unary 116 "!" 115
+@64:1 if 116
+@64:52 int 117 10
+@64:45 drop 94
+@64:45 drop 66
+@64:45 return 117
+@64:1 unit 118
+@64:1 else
+@64:1 unit 120
+@64:1 assign 120 119
+@64:1 end
+@45:5 drop 119
+@65:13 call 121 15
+@65:1 assign 121 122
+@65:28 borrow 123 mut 94
+@65:46 borrow 124 shared 122
+@65:28 call 125 14 123 124
+@45:5 drop 125
+@66:16 borrow 126 shared 94
+@66:25 text 127 ""
+@66:5 call 128 0 126 127
+@66:4 unary 129 "!" 128
+@66:1 if 129
+@66:38 int 130 11
+@66:31 drop 122
+@66:31 drop 94
+@66:31 drop 66
+@66:31 return 130
+@66:1 unit 131
+@66:1 else
+@66:1 unit 133
+@66:1 assign 133 132
+@66:1 end
+@45:5 drop 132
+@67:29 text 134 "61"
+@67:12 call 135 10 134
+@67:1 assign 135 136
+@67:64 text 137 "73"
+@67:47 call 138 10 137
+@67:1 assign 138 139
+@68:21 int 140 0
+@68:1 assign 140 141
+@68:24 loop
+@68:30 read 142 copy 141
+@68:36 int 143 16
+@68:30 read 144 copy 143
+@68:30 binary 145 "<" 142 144
+@68:24 drop 143
+@68:24 unary 146 "!" 145
+@68:24 if 146
+@68:24 break
+@68:24 end
+@69:1 borrow 147 mut 94
+@69:19 borrow 148 shared 136
+@69:1 call 149 14 147 148
+@68:24 drop 149
+@69:42 borrow 150 shared 94
+@69:50 text 151 "61"
+@69:31 call 152 0 150 151
+@69:30 unary 153 "!" 152
+@69:27 if 153
+@69:63 int 154 12
+@69:56 drop 141
+@69:56 drop 139
+@69:56 drop 136
+@69:56 drop 122
+@69:56 drop 94
+@69:56 drop 66
+@69:56 return 154
+@69:27 unit 155
+@69:27 else
+@69:27 unit 157
+@69:27 assign 157 156
+@69:27 end
+@68:24 drop 156
+@70:1 borrow 158 mut 94
+@70:19 borrow 159 shared 139
+@70:1 call 160 14 158 159
+@68:24 drop 160
+@70:43 borrow 161 shared 94
+@70:51 text 162 "73"
+@70:32 call 163 0 161 162
+@70:31 unary 164 "!" 163
+@70:28 if 164
+@70:64 int 165 13
+@70:57 drop 141
+@70:57 drop 139
+@70:57 drop 136
+@70:57 drop 122
+@70:57 drop 94
+@70:57 drop 66
+@70:57 return 165
+@70:28 unit 166
+@70:28 else
+@70:28 unit 168
+@70:28 assign 168 167
+@70:28 end
+@68:24 drop 167
+@71:1 borrow 169 mut 94
+@71:19 borrow 170 shared 122
+@71:1 call 171 14 169 170
+@68:24 drop 171
+@71:43 borrow 172 shared 94
+@71:51 text 173 ""
+@71:32 call 174 0 172 173
+@71:31 unary 175 "!" 174
+@71:28 if 175
+@71:63 int 176 14
+@71:56 drop 141
+@71:56 drop 139
+@71:56 drop 136
+@71:56 drop 122
+@71:56 drop 94
+@71:56 drop 66
+@71:56 return 176
+@71:28 unit 177
+@71:28 else
+@71:28 unit 179
+@71:28 assign 179 178
+@71:28 end
+@68:24 drop 178
+@72:7 read 180 copy 141
+@72:13 int 181 1
+@72:7 binary 182 "+" 180 181
+@72:1 assign 182 141
+@72:1 unit 183
+@68:24 drop 183
+@68:24 unit 184
+@68:24 drop 184
+@68:24 continue
+@68:24 end
+@68:24 unit 185
+@45:5 drop 185
+@73:1 borrow 186 mut 94
+@73:19 borrow 187 shared 66
+@73:1 call 188 14 186 187
+@45:5 drop 188
+@73:36 read 189 move 66
+@73:31 drop 189
+@73:31 unit 190
+@45:5 drop 190
+@73:47 borrow 191 mut 94
+@73:63 text 192 "21"
+@73:47 call 193 13 191 192
+@45:5 drop 193
+@74:16 borrow 194 shared 94
+@74:25 text 195 "6f726967696e616c00f09f988021"
+@74:5 call 196 0 194 195
+@74:4 unary 197 "!" 196
+@74:1 if 197
+@74:53 int 198 14
+@74:46 drop 141
+@74:46 drop 139
+@74:46 drop 136
+@74:46 drop 122
+@74:46 drop 94
+@74:46 return 198
+@74:1 unit 199
+@74:1 else
+@74:1 unit 201
+@74:1 assign 201 200
+@74:1 end
+@45:5 drop 200
+@75:1 int 202 0
+@45:5 drop 141
+@45:5 drop 139
+@45:5 drop 136
+@45:5 drop 122
+@45:5 drop 94
+@45:5 return 202
+endfn
+fn "lifecycle_2" 0 4
+local "$" 18 let
+local "$" 14 let
+local "original" 14 mut
+local "$" 16 let
+local "$" 14 let
+local "cloned" 14 mut
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 0 let
+local "$" 21 let
+local "$" 18 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 0 let
+local "$" 21 let
+local "$" 18 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 16 let
+local "$" 14 let
+local "survivor" 14 let
+local "$" 14 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 14 let
+local "$" 0 let
+local "$" 16 let
+local "$" 14 let
+local "discarded" 14 let
+local "$" 14 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 18 let
+local "$" 14 let
+local "target" 14 mut
+local "$" 18 let
+local "$" 14 let
+local "temporary" 14 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 14 let
+local "empty" 14 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 18 let
+local "$" 14 let
+local "long" 14 let
+local "$" 18 let
+local "$" 14 let
+local "short" 14 let
+local "$" 4 let
+local "round" 4 mut
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 1 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$" 0 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 14 let
+local "$" 0 let
+local "$" 21 let
+local "$" 18 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 4 let
+@78:37 text 0 "6162"
+@78:20 call 1 10 0
+@78:1 assign 1 2
+@79:18 borrow 3 shared 2
+@79:18 call 4 11 3
+@79:1 assign 4 5
+@80:16 borrow 6 shared 2
+@80:27 text 7 "6162"
+@80:5 call 8 0 6 7
+@80:4 unary 9 "!" 8
+@80:1 if 9
+@80:42 int 10 1
+@80:35 drop 5
+@80:35 drop 2
+@80:35 return 10
+@80:1 unit 11
+@80:1 else
+@80:1 unit 13
+@80:1 assign 13 12
+@80:1 end
+@77:5 drop 12
+@81:16 borrow 14 shared 5
+@81:25 text 15 "6162"
+@81:5 call 16 0 14 15
+@81:4 unary 17 "!" 16
+@81:1 if 17
+@81:40 int 18 2
+@81:33 drop 5
+@81:33 drop 2
+@81:33 return 18
+@81:1 unit 19
+@81:1 else
+@81:1 unit 21
+@81:1 assign 21 20
+@81:1 end
+@77:5 drop 20
+@82:1 borrow 22 mut 2
+@82:1 call 23 12 22
+@77:5 drop 23
+@82:19 borrow 24 mut 2
+@82:37 text 25 "6f726967696e616c00f09f9880"
+@82:19 call 26 13 24 25
+@77:5 drop 26
+@83:16 borrow 27 shared 2
+@83:27 text 28 "6f726967696e616c00f09f9880"
+@83:5 call 29 0 27 28
+@83:4 unary 30 "!" 29
+@83:1 if 30
+@83:54 int 31 3
+@83:47 drop 5
+@83:47 drop 2
+@83:47 return 31
+@83:1 unit 32
+@83:1 else
+@83:1 unit 34
+@83:1 assign 34 33
+@83:1 end
+@77:5 drop 33
+@84:16 borrow 35 shared 5
+@84:25 text 36 "6162"
+@84:5 call 37 0 35 36
+@84:4 unary 38 "!" 37
+@84:1 if 38
+@84:40 int 39 4
+@84:33 drop 5
+@84:33 drop 2
+@84:33 return 39
+@84:1 unit 40
+@84:1 else
+@84:1 unit 42
+@84:1 assign 42 41
+@84:1 end
+@77:5 drop 41
+@85:1 borrow 43 mut 5
+@85:1 call 44 12 43
+@77:5 drop 44
+@85:17 borrow 45 mut 5
+@85:33 text 46 "636c6f6e657fe6b0b4"
+@85:17 call 47 13 45 46
+@77:5 drop 47
+@86:16 borrow 48 shared 2
+@86:27 text 49 "6f726967696e616c00f09f9880"
+@86:5 call 50 0 48 49
+@86:4 unary 51 "!" 50
+@86:1 if 51
+@86:54 int 52 5
+@86:47 drop 5
+@86:47 drop 2
+@86:47 return 52
+@86:1 unit 53
+@86:1 else
+@86:1 unit 55
+@86:1 assign 55 54
+@86:1 end
+@77:5 drop 54
+@87:16 borrow 56 shared 5
+@87:25 text 57 "636c6f6e657fe6b0b4"
+@87:5 call 58 0 56 57
+@87:4 unary 59 "!" 58
+@87:1 if 59
+@87:52 int 60 6
+@87:45 drop 5
+@87:45 drop 2
+@87:45 return 60
+@87:1 unit 61
+@87:1 else
+@87:1 unit 63
+@87:1 assign 63 62
+@87:1 end
+@77:5 drop 62
+@88:16 borrow 64 shared 2
+@88:16 call 65 11 64
+@88:1 assign 65 66
+@88:39 read 67 move 2
+@88:34 drop 67
+@88:34 unit 68
+@77:5 drop 68
+@89:16 borrow 69 shared 66
+@89:27 text 70 "6f726967696e616c00f09f9880"
+@89:5 call 71 0 69 70
+@89:4 unary 72 "!" 71
+@89:1 if 72
+@89:54 int 73 7
+@89:47 drop 66
+@89:47 drop 5
+@89:47 return 73
+@89:1 unit 74
+@89:1 else
+@89:1 unit 76
+@89:1 assign 76 75
+@89:1 end
+@77:5 drop 75
+@90:6 read 77 move 5
+@90:1 drop 77
+@90:1 unit 78
+@77:5 drop 78
+@90:31 borrow 79 shared 66
+@90:31 call 80 11 79
+@90:1 assign 80 81
+@90:54 read 82 move 81
+@90:49 drop 82
+@90:49 unit 83
+@77:5 drop 83
+@91:16 borrow 84 shared 66
+@91:27 text 85 "6f726967696e616c00f09f9880"
+@91:5 call 86 0 84 85
+@91:4 unary 87 "!" 86
+@91:1 if 87
+@91:54 int 88 8
+@91:47 drop 66
+@91:47 return 88
+@91:1 unit 89
+@91:1 else
+@91:1 unit 91
+@91:1 assign 91 90
+@91:1 end
+@77:5 drop 90
+@92:35 text 92 "7072656578697374696e6720616c6c6f636174696f6e"
+@92:18 call 93 10 92
+@92:1 assign 93 94
+@93:36 text 95 "6162"
+@93:19 call 96 10 95
+@93:1 assign 96 97
+@93:43 borrow 98 mut 94
+@93:61 borrow 99 shared 97
+@93:43 call 100 14 98 99
+@93:1 drop 100
+@93:1 unit 101
+@93:1 drop 97
+@77:5 drop 101
+@94:16 borrow 102 shared 94
+@94:25 text 103 "6162"
+@94:5 call 104 0 102 103
+@94:4 unary 105 "!" 104
+@94:1 if 105
+@94:40 int 106 9
+@94:33 drop 94
+@94:33 drop 66
+@94:33 return 106
+@94:1 unit 107
+@94:1 else
+@94:1 unit 109
+@94:1 assign 109 108
+@94:1 end
+@77:5 drop 108
+@95:1 borrow 110 mut 94
+@95:19 borrow 111 shared 66
+@95:1 call 112 14 110 111
+@77:5 drop 112
+@96:16 borrow 113 shared 94
+@96:25 text 114 "6f726967696e616c00f09f9880"
+@96:5 call 115 0 113 114
+@96:4 unary 116 "!" 115
+@96:1 if 116
+@96:52 int 117 10
+@96:45 drop 94
+@96:45 drop 66
+@96:45 return 117
+@96:1 unit 118
+@96:1 else
+@96:1 unit 120
+@96:1 assign 120 119
+@96:1 end
+@77:5 drop 119
+@97:13 call 121 15
+@97:1 assign 121 122
+@97:28 borrow 123 mut 94
+@97:46 borrow 124 shared 122
+@97:28 call 125 14 123 124
+@77:5 drop 125
+@98:16 borrow 126 shared 94
+@98:25 text 127 ""
+@98:5 call 128 0 126 127
+@98:4 unary 129 "!" 128
+@98:1 if 129
+@98:38 int 130 11
+@98:31 drop 122
+@98:31 drop 94
+@98:31 drop 66
+@98:31 return 130
+@98:1 unit 131
+@98:1 else
+@98:1 unit 133
+@98:1 assign 133 132
+@98:1 end
+@77:5 drop 132
+@99:29 text 134 "6162"
+@99:12 call 135 10 134
+@99:1 assign 135 136
+@99:65 text 137 "73"
+@99:48 call 138 10 137
+@99:1 assign 138 139
+@100:21 int 140 0
+@100:1 assign 140 141
+@100:24 loop
+@100:30 read 142 copy 141
+@100:36 int 143 16
+@100:30 read 144 copy 143
+@100:30 binary 145 "<" 142 144
+@100:24 drop 143
+@100:24 unary 146 "!" 145
+@100:24 if 146
+@100:24 break
+@100:24 end
+@101:1 borrow 147 mut 94
+@101:19 borrow 148 shared 136
+@101:1 call 149 14 147 148
+@100:24 drop 149
+@101:42 borrow 150 shared 94
+@101:50 text 151 "6162"
+@101:31 call 152 0 150 151
+@101:30 unary 153 "!" 152
+@101:27 if 153
+@101:64 int 154 12
+@101:57 drop 141
+@101:57 drop 139
+@101:57 drop 136
+@101:57 drop 122
+@101:57 drop 94
+@101:57 drop 66
+@101:57 return 154
+@101:27 unit 155
+@101:27 else
+@101:27 unit 157
+@101:27 assign 157 156
+@101:27 end
+@100:24 drop 156
+@102:1 borrow 158 mut 94
+@102:19 borrow 159 shared 139
+@102:1 call 160 14 158 159
+@100:24 drop 160
+@102:43 borrow 161 shared 94
+@102:51 text 162 "73"
+@102:32 call 163 0 161 162
+@102:31 unary 164 "!" 163
+@102:28 if 164
+@102:64 int 165 13
+@102:57 drop 141
+@102:57 drop 139
+@102:57 drop 136
+@102:57 drop 122
+@102:57 drop 94
+@102:57 drop 66
+@102:57 return 165
+@102:28 unit 166
+@102:28 else
+@102:28 unit 168
+@102:28 assign 168 167
+@102:28 end
+@100:24 drop 167
+@103:1 borrow 169 mut 94
+@103:19 borrow 170 shared 122
+@103:1 call 171 14 169 170
+@100:24 drop 171
+@103:43 borrow 172 shared 94
+@103:51 text 173 ""
+@103:32 call 174 0 172 173
+@103:31 unary 175 "!" 174
+@103:28 if 175
+@103:63 int 176 14
+@103:56 drop 141
+@103:56 drop 139
+@103:56 drop 136
+@103:56 drop 122
+@103:56 drop 94
+@103:56 drop 66
+@103:56 return 176
+@103:28 unit 177
+@103:28 else
+@103:28 unit 179
+@103:28 assign 179 178
+@103:28 end
+@100:24 drop 178
+@104:7 read 180 copy 141
+@104:13 int 181 1
+@104:7 binary 182 "+" 180 181
+@104:1 assign 182 141
+@104:1 unit 183
+@100:24 drop 183
+@100:24 unit 184
+@100:24 drop 184
+@100:24 continue
+@100:24 end
+@100:24 unit 185
+@77:5 drop 185
+@105:1 borrow 186 mut 94
+@105:19 borrow 187 shared 66
+@105:1 call 188 14 186 187
+@77:5 drop 188
+@105:36 read 189 move 66
+@105:31 drop 189
+@105:31 unit 190
+@77:5 drop 190
+@105:47 borrow 191 mut 94
+@105:63 text 192 "21"
+@105:47 call 193 13 191 192
+@77:5 drop 193
+@106:16 borrow 194 shared 94
+@106:25 text 195 "6f726967696e616c00f09f988021"
+@106:5 call 196 0 194 195
+@106:4 unary 197 "!" 196
+@106:1 if 197
+@106:53 int 198 14
+@106:46 drop 141
+@106:46 drop 139
+@106:46 drop 136
+@106:46 drop 122
+@106:46 drop 94
+@106:46 return 198
+@106:1 unit 199
+@106:1 else
+@106:1 unit 201
+@106:1 assign 201 200
+@106:1 end
+@77:5 drop 200
+@107:1 int 202 0
+@77:5 drop 141
+@77:5 drop 139
+@77:5 drop 136
+@77:5 drop 122
+@77:5 drop 94
+@77:5 return 202
+endfn
+fn "lifecycle_3" 0 4
+local "$" 18 let
+local "$" 14 let
+local "original" 14 mut
+local "$" 16 let
+local "$" 14 let
+local "cloned" 14 mut
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 0 let
+local "$" 21 let
+local "$" 18 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 0 let
+local "$" 21 let
+local "$" 18 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 16 let
+local "$" 14 let
+local "survivor" 14 let
+local "$" 14 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 14 let
+local "$" 0 let
+local "$" 16 let
+local "$" 14 let
+local "discarded" 14 let
+local "$" 14 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 18 let
+local "$" 14 let
+local "target" 14 mut
+local "$" 18 let
+local "$" 14 let
+local "temporary" 14 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 14 let
+local "empty" 14 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 18 let
+local "$" 14 let
+local "long" 14 let
+local "$" 18 let
+local "$" 14 let
+local "short" 14 let
+local "$" 4 let
+local "round" 4 mut
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 1 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$" 0 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 14 let
+local "$" 0 let
+local "$" 21 let
+local "$" 18 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 4 let
+@110:37 text 0 "62"
+@110:20 call 1 10 0
+@110:1 assign 1 2
+@111:18 borrow 3 shared 2
+@111:18 call 4 11 3
+@111:1 assign 4 5
+@112:16 borrow 6 shared 2
+@112:27 text 7 "62"
+@112:5 call 8 0 6 7
+@112:4 unary 9 "!" 8
+@112:1 if 9
+@112:41 int 10 1
+@112:34 drop 5
+@112:34 drop 2
+@112:34 return 10
+@112:1 unit 11
+@112:1 else
+@112:1 unit 13
+@112:1 assign 13 12
+@112:1 end
+@109:5 drop 12
+@113:16 borrow 14 shared 5
+@113:25 text 15 "62"
+@113:5 call 16 0 14 15
+@113:4 unary 17 "!" 16
+@113:1 if 17
+@113:39 int 18 2
+@113:32 drop 5
+@113:32 drop 2
+@113:32 return 18
+@113:1 unit 19
+@113:1 else
+@113:1 unit 21
+@113:1 assign 21 20
+@113:1 end
+@109:5 drop 20
+@114:1 borrow 22 mut 2
+@114:1 call 23 12 22
+@109:5 drop 23
+@114:19 borrow 24 mut 2
+@114:37 text 25 "6f726967696e616c00f09f9880"
+@114:19 call 26 13 24 25
+@109:5 drop 26
+@115:16 borrow 27 shared 2
+@115:27 text 28 "6f726967696e616c00f09f9880"
+@115:5 call 29 0 27 28
+@115:4 unary 30 "!" 29
+@115:1 if 30
+@115:54 int 31 3
+@115:47 drop 5
+@115:47 drop 2
+@115:47 return 31
+@115:1 unit 32
+@115:1 else
+@115:1 unit 34
+@115:1 assign 34 33
+@115:1 end
+@109:5 drop 33
+@116:16 borrow 35 shared 5
+@116:25 text 36 "62"
+@116:5 call 37 0 35 36
+@116:4 unary 38 "!" 37
+@116:1 if 38
+@116:39 int 39 4
+@116:32 drop 5
+@116:32 drop 2
+@116:32 return 39
+@116:1 unit 40
+@116:1 else
+@116:1 unit 42
+@116:1 assign 42 41
+@116:1 end
+@109:5 drop 41
+@117:1 borrow 43 mut 5
+@117:1 call 44 12 43
+@109:5 drop 44
+@117:17 borrow 45 mut 5
+@117:33 text 46 "636c6f6e657fe6b0b4"
+@117:17 call 47 13 45 46
+@109:5 drop 47
+@118:16 borrow 48 shared 2
+@118:27 text 49 "6f726967696e616c00f09f9880"
+@118:5 call 50 0 48 49
+@118:4 unary 51 "!" 50
+@118:1 if 51
+@118:54 int 52 5
+@118:47 drop 5
+@118:47 drop 2
+@118:47 return 52
+@118:1 unit 53
+@118:1 else
+@118:1 unit 55
+@118:1 assign 55 54
+@118:1 end
+@109:5 drop 54
+@119:16 borrow 56 shared 5
+@119:25 text 57 "636c6f6e657fe6b0b4"
+@119:5 call 58 0 56 57
+@119:4 unary 59 "!" 58
+@119:1 if 59
+@119:52 int 60 6
+@119:45 drop 5
+@119:45 drop 2
+@119:45 return 60
+@119:1 unit 61
+@119:1 else
+@119:1 unit 63
+@119:1 assign 63 62
+@119:1 end
+@109:5 drop 62
+@120:16 borrow 64 shared 2
+@120:16 call 65 11 64
+@120:1 assign 65 66
+@120:39 read 67 move 2
+@120:34 drop 67
+@120:34 unit 68
+@109:5 drop 68
+@121:16 borrow 69 shared 66
+@121:27 text 70 "6f726967696e616c00f09f9880"
+@121:5 call 71 0 69 70
+@121:4 unary 72 "!" 71
+@121:1 if 72
+@121:54 int 73 7
+@121:47 drop 66
+@121:47 drop 5
+@121:47 return 73
+@121:1 unit 74
+@121:1 else
+@121:1 unit 76
+@121:1 assign 76 75
+@121:1 end
+@109:5 drop 75
+@122:6 read 77 move 5
+@122:1 drop 77
+@122:1 unit 78
+@109:5 drop 78
+@122:31 borrow 79 shared 66
+@122:31 call 80 11 79
+@122:1 assign 80 81
+@122:54 read 82 move 81
+@122:49 drop 82
+@122:49 unit 83
+@109:5 drop 83
+@123:16 borrow 84 shared 66
+@123:27 text 85 "6f726967696e616c00f09f9880"
+@123:5 call 86 0 84 85
+@123:4 unary 87 "!" 86
+@123:1 if 87
+@123:54 int 88 8
+@123:47 drop 66
+@123:47 return 88
+@123:1 unit 89
+@123:1 else
+@123:1 unit 91
+@123:1 assign 91 90
+@123:1 end
+@109:5 drop 90
+@124:35 text 92 "7072656578697374696e6720616c6c6f636174696f6e"
+@124:18 call 93 10 92
+@124:1 assign 93 94
+@125:36 text 95 "62"
+@125:19 call 96 10 95
+@125:1 assign 96 97
+@125:42 borrow 98 mut 94
+@125:60 borrow 99 shared 97
+@125:42 call 100 14 98 99
+@125:1 drop 100
+@125:1 unit 101
+@125:1 drop 97
+@109:5 drop 101
+@126:16 borrow 102 shared 94
+@126:25 text 103 "62"
+@126:5 call 104 0 102 103
+@126:4 unary 105 "!" 104
+@126:1 if 105
+@126:39 int 106 9
+@126:32 drop 94
+@126:32 drop 66
+@126:32 return 106
+@126:1 unit 107
+@126:1 else
+@126:1 unit 109
+@126:1 assign 109 108
+@126:1 end
+@109:5 drop 108
+@127:1 borrow 110 mut 94
+@127:19 borrow 111 shared 66
+@127:1 call 112 14 110 111
+@109:5 drop 112
+@128:16 borrow 113 shared 94
+@128:25 text 114 "6f726967696e616c00f09f9880"
+@128:5 call 115 0 113 114
+@128:4 unary 116 "!" 115
+@128:1 if 116
+@128:52 int 117 10
+@128:45 drop 94
+@128:45 drop 66
+@128:45 return 117
+@128:1 unit 118
+@128:1 else
+@128:1 unit 120
+@128:1 assign 120 119
+@128:1 end
+@109:5 drop 119
+@129:13 call 121 15
+@129:1 assign 121 122
+@129:28 borrow 123 mut 94
+@129:46 borrow 124 shared 122
+@129:28 call 125 14 123 124
+@109:5 drop 125
+@130:16 borrow 126 shared 94
+@130:25 text 127 ""
+@130:5 call 128 0 126 127
+@130:4 unary 129 "!" 128
+@130:1 if 129
+@130:38 int 130 11
+@130:31 drop 122
+@130:31 drop 94
+@130:31 drop 66
+@130:31 return 130
+@130:1 unit 131
+@130:1 else
+@130:1 unit 133
+@130:1 assign 133 132
+@130:1 end
+@109:5 drop 132
+@131:29 text 134 "62"
+@131:12 call 135 10 134
+@131:1 assign 135 136
+@131:64 text 137 "73"
+@131:47 call 138 10 137
+@131:1 assign 138 139
+@132:21 int 140 0
+@132:1 assign 140 141
+@132:24 loop
+@132:30 read 142 copy 141
+@132:36 int 143 16
+@132:30 read 144 copy 143
+@132:30 binary 145 "<" 142 144
+@132:24 drop 143
+@132:24 unary 146 "!" 145
+@132:24 if 146
+@132:24 break
+@132:24 end
+@133:1 borrow 147 mut 94
+@133:19 borrow 148 shared 136
+@133:1 call 149 14 147 148
+@132:24 drop 149
+@133:42 borrow 150 shared 94
+@133:50 text 151 "62"
+@133:31 call 152 0 150 151
+@133:30 unary 153 "!" 152
+@133:27 if 153
+@133:63 int 154 12
+@133:56 drop 141
+@133:56 drop 139
+@133:56 drop 136
+@133:56 drop 122
+@133:56 drop 94
+@133:56 drop 66
+@133:56 return 154
+@133:27 unit 155
+@133:27 else
+@133:27 unit 157
+@133:27 assign 157 156
+@133:27 end
+@132:24 drop 156
+@134:1 borrow 158 mut 94
+@134:19 borrow 159 shared 139
+@134:1 call 160 14 158 159
+@132:24 drop 160
+@134:43 borrow 161 shared 94
+@134:51 text 162 "73"
+@134:32 call 163 0 161 162
+@134:31 unary 164 "!" 163
+@134:28 if 164
+@134:64 int 165 13
+@134:57 drop 141
+@134:57 drop 139
+@134:57 drop 136
+@134:57 drop 122
+@134:57 drop 94
+@134:57 drop 66
+@134:57 return 165
+@134:28 unit 166
+@134:28 else
+@134:28 unit 168
+@134:28 assign 168 167
+@134:28 end
+@132:24 drop 167
+@135:1 borrow 169 mut 94
+@135:19 borrow 170 shared 122
+@135:1 call 171 14 169 170
+@132:24 drop 171
+@135:43 borrow 172 shared 94
+@135:51 text 173 ""
+@135:32 call 174 0 172 173
+@135:31 unary 175 "!" 174
+@135:28 if 175
+@135:63 int 176 14
+@135:56 drop 141
+@135:56 drop 139
+@135:56 drop 136
+@135:56 drop 122
+@135:56 drop 94
+@135:56 drop 66
+@135:56 return 176
+@135:28 unit 177
+@135:28 else
+@135:28 unit 179
+@135:28 assign 179 178
+@135:28 end
+@132:24 drop 178
+@136:7 read 180 copy 141
+@136:13 int 181 1
+@136:7 binary 182 "+" 180 181
+@136:1 assign 182 141
+@136:1 unit 183
+@132:24 drop 183
+@132:24 unit 184
+@132:24 drop 184
+@132:24 continue
+@132:24 end
+@132:24 unit 185
+@109:5 drop 185
+@137:1 borrow 186 mut 94
+@137:19 borrow 187 shared 66
+@137:1 call 188 14 186 187
+@109:5 drop 188
+@137:36 read 189 move 66
+@137:31 drop 189
+@137:31 unit 190
+@109:5 drop 190
+@137:47 borrow 191 mut 94
+@137:63 text 192 "21"
+@137:47 call 193 13 191 192
+@109:5 drop 193
+@138:16 borrow 194 shared 94
+@138:25 text 195 "6f726967696e616c00f09f988021"
+@138:5 call 196 0 194 195
+@138:4 unary 197 "!" 196
+@138:1 if 197
+@138:53 int 198 14
+@138:46 drop 141
+@138:46 drop 139
+@138:46 drop 136
+@138:46 drop 122
+@138:46 drop 94
+@138:46 return 198
+@138:1 unit 199
+@138:1 else
+@138:1 unit 201
+@138:1 assign 201 200
+@138:1 end
+@109:5 drop 200
+@139:1 int 202 0
+@109:5 drop 141
+@109:5 drop 139
+@109:5 drop 136
+@109:5 drop 122
+@109:5 drop 94
+@109:5 return 202
+endfn
+fn "lifecycle_4" 0 4
+local "$" 18 let
+local "$" 14 let
+local "original" 14 mut
+local "$" 16 let
+local "$" 14 let
+local "cloned" 14 mut
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 0 let
+local "$" 21 let
+local "$" 18 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 0 let
+local "$" 21 let
+local "$" 18 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 16 let
+local "$" 14 let
+local "survivor" 14 let
+local "$" 14 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 14 let
+local "$" 0 let
+local "$" 16 let
+local "$" 14 let
+local "discarded" 14 let
+local "$" 14 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 18 let
+local "$" 14 let
+local "target" 14 mut
+local "$" 18 let
+local "$" 14 let
+local "temporary" 14 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 14 let
+local "empty" 14 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 18 let
+local "$" 14 let
+local "long" 14 let
+local "$" 18 let
+local "$" 14 let
+local "short" 14 let
+local "$" 4 let
+local "round" 4 mut
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 1 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$" 0 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 14 let
+local "$" 0 let
+local "$" 21 let
+local "$" 18 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 4 let
+@142:37 text 0 "00"
+@142:20 call 1 10 0
+@142:1 assign 1 2
+@143:18 borrow 3 shared 2
+@143:18 call 4 11 3
+@143:1 assign 4 5
+@144:16 borrow 6 shared 2
+@144:27 text 7 "00"
+@144:5 call 8 0 6 7
+@144:4 unary 9 "!" 8
+@144:1 if 9
+@144:42 int 10 1
+@144:35 drop 5
+@144:35 drop 2
+@144:35 return 10
+@144:1 unit 11
+@144:1 else
+@144:1 unit 13
+@144:1 assign 13 12
+@144:1 end
+@141:5 drop 12
+@145:16 borrow 14 shared 5
+@145:25 text 15 "00"
+@145:5 call 16 0 14 15
+@145:4 unary 17 "!" 16
+@145:1 if 17
+@145:40 int 18 2
+@145:33 drop 5
+@145:33 drop 2
+@145:33 return 18
+@145:1 unit 19
+@145:1 else
+@145:1 unit 21
+@145:1 assign 21 20
+@145:1 end
+@141:5 drop 20
+@146:1 borrow 22 mut 2
+@146:1 call 23 12 22
+@141:5 drop 23
+@146:19 borrow 24 mut 2
+@146:37 text 25 "6f726967696e616c00f09f9880"
+@146:19 call 26 13 24 25
+@141:5 drop 26
+@147:16 borrow 27 shared 2
+@147:27 text 28 "6f726967696e616c00f09f9880"
+@147:5 call 29 0 27 28
+@147:4 unary 30 "!" 29
+@147:1 if 30
+@147:54 int 31 3
+@147:47 drop 5
+@147:47 drop 2
+@147:47 return 31
+@147:1 unit 32
+@147:1 else
+@147:1 unit 34
+@147:1 assign 34 33
+@147:1 end
+@141:5 drop 33
+@148:16 borrow 35 shared 5
+@148:25 text 36 "00"
+@148:5 call 37 0 35 36
+@148:4 unary 38 "!" 37
+@148:1 if 38
+@148:40 int 39 4
+@148:33 drop 5
+@148:33 drop 2
+@148:33 return 39
+@148:1 unit 40
+@148:1 else
+@148:1 unit 42
+@148:1 assign 42 41
+@148:1 end
+@141:5 drop 41
+@149:1 borrow 43 mut 5
+@149:1 call 44 12 43
+@141:5 drop 44
+@149:17 borrow 45 mut 5
+@149:33 text 46 "636c6f6e657fe6b0b4"
+@149:17 call 47 13 45 46
+@141:5 drop 47
+@150:16 borrow 48 shared 2
+@150:27 text 49 "6f726967696e616c00f09f9880"
+@150:5 call 50 0 48 49
+@150:4 unary 51 "!" 50
+@150:1 if 51
+@150:54 int 52 5
+@150:47 drop 5
+@150:47 drop 2
+@150:47 return 52
+@150:1 unit 53
+@150:1 else
+@150:1 unit 55
+@150:1 assign 55 54
+@150:1 end
+@141:5 drop 54
+@151:16 borrow 56 shared 5
+@151:25 text 57 "636c6f6e657fe6b0b4"
+@151:5 call 58 0 56 57
+@151:4 unary 59 "!" 58
+@151:1 if 59
+@151:52 int 60 6
+@151:45 drop 5
+@151:45 drop 2
+@151:45 return 60
+@151:1 unit 61
+@151:1 else
+@151:1 unit 63
+@151:1 assign 63 62
+@151:1 end
+@141:5 drop 62
+@152:16 borrow 64 shared 2
+@152:16 call 65 11 64
+@152:1 assign 65 66
+@152:39 read 67 move 2
+@152:34 drop 67
+@152:34 unit 68
+@141:5 drop 68
+@153:16 borrow 69 shared 66
+@153:27 text 70 "6f726967696e616c00f09f9880"
+@153:5 call 71 0 69 70
+@153:4 unary 72 "!" 71
+@153:1 if 72
+@153:54 int 73 7
+@153:47 drop 66
+@153:47 drop 5
+@153:47 return 73
+@153:1 unit 74
+@153:1 else
+@153:1 unit 76
+@153:1 assign 76 75
+@153:1 end
+@141:5 drop 75
+@154:6 read 77 move 5
+@154:1 drop 77
+@154:1 unit 78
+@141:5 drop 78
+@154:31 borrow 79 shared 66
+@154:31 call 80 11 79
+@154:1 assign 80 81
+@154:54 read 82 move 81
+@154:49 drop 82
+@154:49 unit 83
+@141:5 drop 83
+@155:16 borrow 84 shared 66
+@155:27 text 85 "6f726967696e616c00f09f9880"
+@155:5 call 86 0 84 85
+@155:4 unary 87 "!" 86
+@155:1 if 87
+@155:54 int 88 8
+@155:47 drop 66
+@155:47 return 88
+@155:1 unit 89
+@155:1 else
+@155:1 unit 91
+@155:1 assign 91 90
+@155:1 end
+@141:5 drop 90
+@156:35 text 92 "7072656578697374696e6720616c6c6f636174696f6e"
+@156:18 call 93 10 92
+@156:1 assign 93 94
+@157:36 text 95 "00"
+@157:19 call 96 10 95
+@157:1 assign 96 97
+@157:43 borrow 98 mut 94
+@157:61 borrow 99 shared 97
+@157:43 call 100 14 98 99
+@157:1 drop 100
+@157:1 unit 101
+@157:1 drop 97
+@141:5 drop 101
+@158:16 borrow 102 shared 94
+@158:25 text 103 "00"
+@158:5 call 104 0 102 103
+@158:4 unary 105 "!" 104
+@158:1 if 105
+@158:40 int 106 9
+@158:33 drop 94
+@158:33 drop 66
+@158:33 return 106
+@158:1 unit 107
+@158:1 else
+@158:1 unit 109
+@158:1 assign 109 108
+@158:1 end
+@141:5 drop 108
+@159:1 borrow 110 mut 94
+@159:19 borrow 111 shared 66
+@159:1 call 112 14 110 111
+@141:5 drop 112
+@160:16 borrow 113 shared 94
+@160:25 text 114 "6f726967696e616c00f09f9880"
+@160:5 call 115 0 113 114
+@160:4 unary 116 "!" 115
+@160:1 if 116
+@160:52 int 117 10
+@160:45 drop 94
+@160:45 drop 66
+@160:45 return 117
+@160:1 unit 118
+@160:1 else
+@160:1 unit 120
+@160:1 assign 120 119
+@160:1 end
+@141:5 drop 119
+@161:13 call 121 15
+@161:1 assign 121 122
+@161:28 borrow 123 mut 94
+@161:46 borrow 124 shared 122
+@161:28 call 125 14 123 124
+@141:5 drop 125
+@162:16 borrow 126 shared 94
+@162:25 text 127 ""
+@162:5 call 128 0 126 127
+@162:4 unary 129 "!" 128
+@162:1 if 129
+@162:38 int 130 11
+@162:31 drop 122
+@162:31 drop 94
+@162:31 drop 66
+@162:31 return 130
+@162:1 unit 131
+@162:1 else
+@162:1 unit 133
+@162:1 assign 133 132
+@162:1 end
+@141:5 drop 132
+@163:29 text 134 "00"
+@163:12 call 135 10 134
+@163:1 assign 135 136
+@163:65 text 137 "73"
+@163:48 call 138 10 137
+@163:1 assign 138 139
+@164:21 int 140 0
+@164:1 assign 140 141
+@164:24 loop
+@164:30 read 142 copy 141
+@164:36 int 143 16
+@164:30 read 144 copy 143
+@164:30 binary 145 "<" 142 144
+@164:24 drop 143
+@164:24 unary 146 "!" 145
+@164:24 if 146
+@164:24 break
+@164:24 end
+@165:1 borrow 147 mut 94
+@165:19 borrow 148 shared 136
+@165:1 call 149 14 147 148
+@164:24 drop 149
+@165:42 borrow 150 shared 94
+@165:50 text 151 "00"
+@165:31 call 152 0 150 151
+@165:30 unary 153 "!" 152
+@165:27 if 153
+@165:64 int 154 12
+@165:57 drop 141
+@165:57 drop 139
+@165:57 drop 136
+@165:57 drop 122
+@165:57 drop 94
+@165:57 drop 66
+@165:57 return 154
+@165:27 unit 155
+@165:27 else
+@165:27 unit 157
+@165:27 assign 157 156
+@165:27 end
+@164:24 drop 156
+@166:1 borrow 158 mut 94
+@166:19 borrow 159 shared 139
+@166:1 call 160 14 158 159
+@164:24 drop 160
+@166:43 borrow 161 shared 94
+@166:51 text 162 "73"
+@166:32 call 163 0 161 162
+@166:31 unary 164 "!" 163
+@166:28 if 164
+@166:64 int 165 13
+@166:57 drop 141
+@166:57 drop 139
+@166:57 drop 136
+@166:57 drop 122
+@166:57 drop 94
+@166:57 drop 66
+@166:57 return 165
+@166:28 unit 166
+@166:28 else
+@166:28 unit 168
+@166:28 assign 168 167
+@166:28 end
+@164:24 drop 167
+@167:1 borrow 169 mut 94
+@167:19 borrow 170 shared 122
+@167:1 call 171 14 169 170
+@164:24 drop 171
+@167:43 borrow 172 shared 94
+@167:51 text 173 ""
+@167:32 call 174 0 172 173
+@167:31 unary 175 "!" 174
+@167:28 if 175
+@167:63 int 176 14
+@167:56 drop 141
+@167:56 drop 139
+@167:56 drop 136
+@167:56 drop 122
+@167:56 drop 94
+@167:56 drop 66
+@167:56 return 176
+@167:28 unit 177
+@167:28 else
+@167:28 unit 179
+@167:28 assign 179 178
+@167:28 end
+@164:24 drop 178
+@168:7 read 180 copy 141
+@168:13 int 181 1
+@168:7 binary 182 "+" 180 181
+@168:1 assign 182 141
+@168:1 unit 183
+@164:24 drop 183
+@164:24 unit 184
+@164:24 drop 184
+@164:24 continue
+@164:24 end
+@164:24 unit 185
+@141:5 drop 185
+@169:1 borrow 186 mut 94
+@169:19 borrow 187 shared 66
+@169:1 call 188 14 186 187
+@141:5 drop 188
+@169:36 read 189 move 66
+@169:31 drop 189
+@169:31 unit 190
+@141:5 drop 190
+@169:47 borrow 191 mut 94
+@169:63 text 192 "21"
+@169:47 call 193 13 191 192
+@141:5 drop 193
+@170:16 borrow 194 shared 94
+@170:25 text 195 "6f726967696e616c00f09f988021"
+@170:5 call 196 0 194 195
+@170:4 unary 197 "!" 196
+@170:1 if 197
+@170:53 int 198 14
+@170:46 drop 141
+@170:46 drop 139
+@170:46 drop 136
+@170:46 drop 122
+@170:46 drop 94
+@170:46 return 198
+@170:1 unit 199
+@170:1 else
+@170:1 unit 201
+@170:1 assign 201 200
+@170:1 end
+@141:5 drop 200
+@171:1 int 202 0
+@141:5 drop 141
+@141:5 drop 139
+@141:5 drop 136
+@141:5 drop 122
+@141:5 drop 94
+@141:5 return 202
+endfn
+fn "lifecycle_5" 0 4
+local "$" 18 let
+local "$" 14 let
+local "original" 14 mut
+local "$" 16 let
+local "$" 14 let
+local "cloned" 14 mut
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 0 let
+local "$" 21 let
+local "$" 18 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 0 let
+local "$" 21 let
+local "$" 18 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 16 let
+local "$" 14 let
+local "survivor" 14 let
+local "$" 14 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 14 let
+local "$" 0 let
+local "$" 16 let
+local "$" 14 let
+local "discarded" 14 let
+local "$" 14 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 18 let
+local "$" 14 let
+local "target" 14 mut
+local "$" 18 let
+local "$" 14 let
+local "temporary" 14 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 14 let
+local "empty" 14 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 18 let
+local "$" 14 let
+local "long" 14 let
+local "$" 18 let
+local "$" 14 let
+local "short" 14 let
+local "$" 4 let
+local "round" 4 mut
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 1 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$" 0 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 14 let
+local "$" 0 let
+local "$" 21 let
+local "$" 18 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 4 let
+@174:37 text 0 "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f"
+@174:20 call 1 10 0
+@174:1 assign 1 2
+@175:18 borrow 3 shared 2
+@175:18 call 4 11 3
+@175:1 assign 4 5
+@176:16 borrow 6 shared 2
+@176:27 text 7 "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f"
+@176:5 call 8 0 6 7
+@176:4 unary 9 "!" 8
+@176:1 if 9
+@176:307 int 10 1
+@176:300 drop 5
+@176:300 drop 2
+@176:300 return 10
+@176:1 unit 11
+@176:1 else
+@176:1 unit 13
+@176:1 assign 13 12
+@176:1 end
+@173:5 drop 12
+@177:16 borrow 14 shared 5
+@177:25 text 15 "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f"
+@177:5 call 16 0 14 15
+@177:4 unary 17 "!" 16
+@177:1 if 17
+@177:305 int 18 2
+@177:298 drop 5
+@177:298 drop 2
+@177:298 return 18
+@177:1 unit 19
+@177:1 else
+@177:1 unit 21
+@177:1 assign 21 20
+@177:1 end
+@173:5 drop 20
+@178:1 borrow 22 mut 2
+@178:1 call 23 12 22
+@173:5 drop 23
+@178:19 borrow 24 mut 2
+@178:37 text 25 "6f726967696e616c00f09f9880"
+@178:19 call 26 13 24 25
+@173:5 drop 26
+@179:16 borrow 27 shared 2
+@179:27 text 28 "6f726967696e616c00f09f9880"
+@179:5 call 29 0 27 28
+@179:4 unary 30 "!" 29
+@179:1 if 30
+@179:54 int 31 3
+@179:47 drop 5
+@179:47 drop 2
+@179:47 return 31
+@179:1 unit 32
+@179:1 else
+@179:1 unit 34
+@179:1 assign 34 33
+@179:1 end
+@173:5 drop 33
+@180:16 borrow 35 shared 5
+@180:25 text 36 "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f"
+@180:5 call 37 0 35 36
+@180:4 unary 38 "!" 37
+@180:1 if 38
+@180:305 int 39 4
+@180:298 drop 5
+@180:298 drop 2
+@180:298 return 39
+@180:1 unit 40
+@180:1 else
+@180:1 unit 42
+@180:1 assign 42 41
+@180:1 end
+@173:5 drop 41
+@181:1 borrow 43 mut 5
+@181:1 call 44 12 43
+@173:5 drop 44
+@181:17 borrow 45 mut 5
+@181:33 text 46 "636c6f6e657fe6b0b4"
+@181:17 call 47 13 45 46
+@173:5 drop 47
+@182:16 borrow 48 shared 2
+@182:27 text 49 "6f726967696e616c00f09f9880"
+@182:5 call 50 0 48 49
+@182:4 unary 51 "!" 50
+@182:1 if 51
+@182:54 int 52 5
+@182:47 drop 5
+@182:47 drop 2
+@182:47 return 52
+@182:1 unit 53
+@182:1 else
+@182:1 unit 55
+@182:1 assign 55 54
+@182:1 end
+@173:5 drop 54
+@183:16 borrow 56 shared 5
+@183:25 text 57 "636c6f6e657fe6b0b4"
+@183:5 call 58 0 56 57
+@183:4 unary 59 "!" 58
+@183:1 if 59
+@183:52 int 60 6
+@183:45 drop 5
+@183:45 drop 2
+@183:45 return 60
+@183:1 unit 61
+@183:1 else
+@183:1 unit 63
+@183:1 assign 63 62
+@183:1 end
+@173:5 drop 62
+@184:16 borrow 64 shared 2
+@184:16 call 65 11 64
+@184:1 assign 65 66
+@184:39 read 67 move 2
+@184:34 drop 67
+@184:34 unit 68
+@173:5 drop 68
+@185:16 borrow 69 shared 66
+@185:27 text 70 "6f726967696e616c00f09f9880"
+@185:5 call 71 0 69 70
+@185:4 unary 72 "!" 71
+@185:1 if 72
+@185:54 int 73 7
+@185:47 drop 66
+@185:47 drop 5
+@185:47 return 73
+@185:1 unit 74
+@185:1 else
+@185:1 unit 76
+@185:1 assign 76 75
+@185:1 end
+@173:5 drop 75
+@186:6 read 77 move 5
+@186:1 drop 77
+@186:1 unit 78
+@173:5 drop 78
+@186:31 borrow 79 shared 66
+@186:31 call 80 11 79
+@186:1 assign 80 81
+@186:54 read 82 move 81
+@186:49 drop 82
+@186:49 unit 83
+@173:5 drop 83
+@187:16 borrow 84 shared 66
+@187:27 text 85 "6f726967696e616c00f09f9880"
+@187:5 call 86 0 84 85
+@187:4 unary 87 "!" 86
+@187:1 if 87
+@187:54 int 88 8
+@187:47 drop 66
+@187:47 return 88
+@187:1 unit 89
+@187:1 else
+@187:1 unit 91
+@187:1 assign 91 90
+@187:1 end
+@173:5 drop 90
+@188:35 text 92 "7072656578697374696e6720616c6c6f636174696f6e"
+@188:18 call 93 10 92
+@188:1 assign 93 94
+@189:36 text 95 "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f"
+@189:19 call 96 10 95
+@189:1 assign 96 97
+@189:308 borrow 98 mut 94
+@189:326 borrow 99 shared 97
+@189:308 call 100 14 98 99
+@189:1 drop 100
+@189:1 unit 101
+@189:1 drop 97
+@173:5 drop 101
+@190:16 borrow 102 shared 94
+@190:25 text 103 "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f"
+@190:5 call 104 0 102 103
+@190:4 unary 105 "!" 104
+@190:1 if 105
+@190:305 int 106 9
+@190:298 drop 94
+@190:298 drop 66
+@190:298 return 106
+@190:1 unit 107
+@190:1 else
+@190:1 unit 109
+@190:1 assign 109 108
+@190:1 end
+@173:5 drop 108
+@191:1 borrow 110 mut 94
+@191:19 borrow 111 shared 66
+@191:1 call 112 14 110 111
+@173:5 drop 112
+@192:16 borrow 113 shared 94
+@192:25 text 114 "6f726967696e616c00f09f9880"
+@192:5 call 115 0 113 114
+@192:4 unary 116 "!" 115
+@192:1 if 116
+@192:52 int 117 10
+@192:45 drop 94
+@192:45 drop 66
+@192:45 return 117
+@192:1 unit 118
+@192:1 else
+@192:1 unit 120
+@192:1 assign 120 119
+@192:1 end
+@173:5 drop 119
+@193:13 call 121 15
+@193:1 assign 121 122
+@193:28 borrow 123 mut 94
+@193:46 borrow 124 shared 122
+@193:28 call 125 14 123 124
+@173:5 drop 125
+@194:16 borrow 126 shared 94
+@194:25 text 127 ""
+@194:5 call 128 0 126 127
+@194:4 unary 129 "!" 128
+@194:1 if 129
+@194:38 int 130 11
+@194:31 drop 122
+@194:31 drop 94
+@194:31 drop 66
+@194:31 return 130
+@194:1 unit 131
+@194:1 else
+@194:1 unit 133
+@194:1 assign 133 132
+@194:1 end
+@173:5 drop 132
+@195:29 text 134 "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f"
+@195:12 call 135 10 134
+@195:1 assign 135 136
+@195:330 text 137 "73"
+@195:313 call 138 10 137
+@195:1 assign 138 139
+@196:21 int 140 0
+@196:1 assign 140 141
+@196:24 loop
+@196:30 read 142 copy 141
+@196:36 int 143 16
+@196:30 read 144 copy 143
+@196:30 binary 145 "<" 142 144
+@196:24 drop 143
+@196:24 unary 146 "!" 145
+@196:24 if 146
+@196:24 break
+@196:24 end
+@197:1 borrow 147 mut 94
+@197:19 borrow 148 shared 136
+@197:1 call 149 14 147 148
+@196:24 drop 149
+@197:42 borrow 150 shared 94
+@197:50 text 151 "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f"
+@197:31 call 152 0 150 151
+@197:30 unary 153 "!" 152
+@197:27 if 153
+@197:329 int 154 12
+@197:322 drop 141
+@197:322 drop 139
+@197:322 drop 136
+@197:322 drop 122
+@197:322 drop 94
+@197:322 drop 66
+@197:322 return 154
+@197:27 unit 155
+@197:27 else
+@197:27 unit 157
+@197:27 assign 157 156
+@197:27 end
+@196:24 drop 156
+@198:1 borrow 158 mut 94
+@198:19 borrow 159 shared 139
+@198:1 call 160 14 158 159
+@196:24 drop 160
+@198:43 borrow 161 shared 94
+@198:51 text 162 "73"
+@198:32 call 163 0 161 162
+@198:31 unary 164 "!" 163
+@198:28 if 164
+@198:64 int 165 13
+@198:57 drop 141
+@198:57 drop 139
+@198:57 drop 136
+@198:57 drop 122
+@198:57 drop 94
+@198:57 drop 66
+@198:57 return 165
+@198:28 unit 166
+@198:28 else
+@198:28 unit 168
+@198:28 assign 168 167
+@198:28 end
+@196:24 drop 167
+@199:1 borrow 169 mut 94
+@199:19 borrow 170 shared 122
+@199:1 call 171 14 169 170
+@196:24 drop 171
+@199:43 borrow 172 shared 94
+@199:51 text 173 ""
+@199:32 call 174 0 172 173
+@199:31 unary 175 "!" 174
+@199:28 if 175
+@199:63 int 176 14
+@199:56 drop 141
+@199:56 drop 139
+@199:56 drop 136
+@199:56 drop 122
+@199:56 drop 94
+@199:56 drop 66
+@199:56 return 176
+@199:28 unit 177
+@199:28 else
+@199:28 unit 179
+@199:28 assign 179 178
+@199:28 end
+@196:24 drop 178
+@200:7 read 180 copy 141
+@200:13 int 181 1
+@200:7 binary 182 "+" 180 181
+@200:1 assign 182 141
+@200:1 unit 183
+@196:24 drop 183
+@196:24 unit 184
+@196:24 drop 184
+@196:24 continue
+@196:24 end
+@196:24 unit 185
+@173:5 drop 185
+@201:1 borrow 186 mut 94
+@201:19 borrow 187 shared 66
+@201:1 call 188 14 186 187
+@173:5 drop 188
+@201:36 read 189 move 66
+@201:31 drop 189
+@201:31 unit 190
+@173:5 drop 190
+@201:47 borrow 191 mut 94
+@201:63 text 192 "21"
+@201:47 call 193 13 191 192
+@173:5 drop 193
+@202:16 borrow 194 shared 94
+@202:25 text 195 "6f726967696e616c00f09f988021"
+@202:5 call 196 0 194 195
+@202:4 unary 197 "!" 196
+@202:1 if 197
+@202:53 int 198 14
+@202:46 drop 141
+@202:46 drop 139
+@202:46 drop 136
+@202:46 drop 122
+@202:46 drop 94
+@202:46 return 198
+@202:1 unit 199
+@202:1 else
+@202:1 unit 201
+@202:1 assign 201 200
+@202:1 end
+@173:5 drop 200
+@203:1 int 202 0
+@173:5 drop 141
+@173:5 drop 139
+@173:5 drop 136
+@173:5 drop 122
+@173:5 drop 94
+@173:5 return 202
+endfn
+fn "lifecycle_6" 0 4
+local "$" 18 let
+local "$" 14 let
+local "original" 14 mut
+local "$" 16 let
+local "$" 14 let
+local "cloned" 14 mut
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 0 let
+local "$" 21 let
+local "$" 18 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 0 let
+local "$" 21 let
+local "$" 18 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 16 let
+local "$" 14 let
+local "survivor" 14 let
+local "$" 14 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 14 let
+local "$" 0 let
+local "$" 16 let
+local "$" 14 let
+local "discarded" 14 let
+local "$" 14 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 18 let
+local "$" 14 let
+local "target" 14 mut
+local "$" 18 let
+local "$" 14 let
+local "temporary" 14 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 14 let
+local "empty" 14 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 18 let
+local "$" 14 let
+local "long" 14 let
+local "$" 18 let
+local "$" 14 let
+local "short" 14 let
+local "$" 4 let
+local "round" 4 mut
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 1 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$" 0 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 14 let
+local "$" 0 let
+local "$" 21 let
+local "$" 18 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 4 let
+@206:37 text 0 "ceb1e6b0b4f09f988000f48fbfbf"
+@206:20 call 1 10 0
+@206:1 assign 1 2
+@207:18 borrow 3 shared 2
+@207:18 call 4 11 3
+@207:1 assign 4 5
+@208:16 borrow 6 shared 2
+@208:27 text 7 "ceb1e6b0b4f09f988000f48fbfbf"
+@208:5 call 8 0 6 7
+@208:4 unary 9 "!" 8
+@208:1 if 9
+@208:61 int 10 1
+@208:54 drop 5
+@208:54 drop 2
+@208:54 return 10
+@208:1 unit 11
+@208:1 else
+@208:1 unit 13
+@208:1 assign 13 12
+@208:1 end
+@205:5 drop 12
+@209:16 borrow 14 shared 5
+@209:25 text 15 "ceb1e6b0b4f09f988000f48fbfbf"
+@209:5 call 16 0 14 15
+@209:4 unary 17 "!" 16
+@209:1 if 17
+@209:59 int 18 2
+@209:52 drop 5
+@209:52 drop 2
+@209:52 return 18
+@209:1 unit 19
+@209:1 else
+@209:1 unit 21
+@209:1 assign 21 20
+@209:1 end
+@205:5 drop 20
+@210:1 borrow 22 mut 2
+@210:1 call 23 12 22
+@205:5 drop 23
+@210:19 borrow 24 mut 2
+@210:37 text 25 "6f726967696e616c00f09f9880"
+@210:19 call 26 13 24 25
+@205:5 drop 26
+@211:16 borrow 27 shared 2
+@211:27 text 28 "6f726967696e616c00f09f9880"
+@211:5 call 29 0 27 28
+@211:4 unary 30 "!" 29
+@211:1 if 30
+@211:54 int 31 3
+@211:47 drop 5
+@211:47 drop 2
+@211:47 return 31
+@211:1 unit 32
+@211:1 else
+@211:1 unit 34
+@211:1 assign 34 33
+@211:1 end
+@205:5 drop 33
+@212:16 borrow 35 shared 5
+@212:25 text 36 "ceb1e6b0b4f09f988000f48fbfbf"
+@212:5 call 37 0 35 36
+@212:4 unary 38 "!" 37
+@212:1 if 38
+@212:59 int 39 4
+@212:52 drop 5
+@212:52 drop 2
+@212:52 return 39
+@212:1 unit 40
+@212:1 else
+@212:1 unit 42
+@212:1 assign 42 41
+@212:1 end
+@205:5 drop 41
+@213:1 borrow 43 mut 5
+@213:1 call 44 12 43
+@205:5 drop 44
+@213:17 borrow 45 mut 5
+@213:33 text 46 "636c6f6e657fe6b0b4"
+@213:17 call 47 13 45 46
+@205:5 drop 47
+@214:16 borrow 48 shared 2
+@214:27 text 49 "6f726967696e616c00f09f9880"
+@214:5 call 50 0 48 49
+@214:4 unary 51 "!" 50
+@214:1 if 51
+@214:54 int 52 5
+@214:47 drop 5
+@214:47 drop 2
+@214:47 return 52
+@214:1 unit 53
+@214:1 else
+@214:1 unit 55
+@214:1 assign 55 54
+@214:1 end
+@205:5 drop 54
+@215:16 borrow 56 shared 5
+@215:25 text 57 "636c6f6e657fe6b0b4"
+@215:5 call 58 0 56 57
+@215:4 unary 59 "!" 58
+@215:1 if 59
+@215:52 int 60 6
+@215:45 drop 5
+@215:45 drop 2
+@215:45 return 60
+@215:1 unit 61
+@215:1 else
+@215:1 unit 63
+@215:1 assign 63 62
+@215:1 end
+@205:5 drop 62
+@216:16 borrow 64 shared 2
+@216:16 call 65 11 64
+@216:1 assign 65 66
+@216:39 read 67 move 2
+@216:34 drop 67
+@216:34 unit 68
+@205:5 drop 68
+@217:16 borrow 69 shared 66
+@217:27 text 70 "6f726967696e616c00f09f9880"
+@217:5 call 71 0 69 70
+@217:4 unary 72 "!" 71
+@217:1 if 72
+@217:54 int 73 7
+@217:47 drop 66
+@217:47 drop 5
+@217:47 return 73
+@217:1 unit 74
+@217:1 else
+@217:1 unit 76
+@217:1 assign 76 75
+@217:1 end
+@205:5 drop 75
+@218:6 read 77 move 5
+@218:1 drop 77
+@218:1 unit 78
+@205:5 drop 78
+@218:31 borrow 79 shared 66
+@218:31 call 80 11 79
+@218:1 assign 80 81
+@218:54 read 82 move 81
+@218:49 drop 82
+@218:49 unit 83
+@205:5 drop 83
+@219:16 borrow 84 shared 66
+@219:27 text 85 "6f726967696e616c00f09f9880"
+@219:5 call 86 0 84 85
+@219:4 unary 87 "!" 86
+@219:1 if 87
+@219:54 int 88 8
+@219:47 drop 66
+@219:47 return 88
+@219:1 unit 89
+@219:1 else
+@219:1 unit 91
+@219:1 assign 91 90
+@219:1 end
+@205:5 drop 90
+@220:35 text 92 "7072656578697374696e6720616c6c6f636174696f6e"
+@220:18 call 93 10 92
+@220:1 assign 93 94
+@221:36 text 95 "ceb1e6b0b4f09f988000f48fbfbf"
+@221:19 call 96 10 95
+@221:1 assign 96 97
+@221:62 borrow 98 mut 94
+@221:80 borrow 99 shared 97
+@221:62 call 100 14 98 99
+@221:1 drop 100
+@221:1 unit 101
+@221:1 drop 97
+@205:5 drop 101
+@222:16 borrow 102 shared 94
+@222:25 text 103 "ceb1e6b0b4f09f988000f48fbfbf"
+@222:5 call 104 0 102 103
+@222:4 unary 105 "!" 104
+@222:1 if 105
+@222:59 int 106 9
+@222:52 drop 94
+@222:52 drop 66
+@222:52 return 106
+@222:1 unit 107
+@222:1 else
+@222:1 unit 109
+@222:1 assign 109 108
+@222:1 end
+@205:5 drop 108
+@223:1 borrow 110 mut 94
+@223:19 borrow 111 shared 66
+@223:1 call 112 14 110 111
+@205:5 drop 112
+@224:16 borrow 113 shared 94
+@224:25 text 114 "6f726967696e616c00f09f9880"
+@224:5 call 115 0 113 114
+@224:4 unary 116 "!" 115
+@224:1 if 116
+@224:52 int 117 10
+@224:45 drop 94
+@224:45 drop 66
+@224:45 return 117
+@224:1 unit 118
+@224:1 else
+@224:1 unit 120
+@224:1 assign 120 119
+@224:1 end
+@205:5 drop 119
+@225:13 call 121 15
+@225:1 assign 121 122
+@225:28 borrow 123 mut 94
+@225:46 borrow 124 shared 122
+@225:28 call 125 14 123 124
+@205:5 drop 125
+@226:16 borrow 126 shared 94
+@226:25 text 127 ""
+@226:5 call 128 0 126 127
+@226:4 unary 129 "!" 128
+@226:1 if 129
+@226:38 int 130 11
+@226:31 drop 122
+@226:31 drop 94
+@226:31 drop 66
+@226:31 return 130
+@226:1 unit 131
+@226:1 else
+@226:1 unit 133
+@226:1 assign 133 132
+@226:1 end
+@205:5 drop 132
+@227:29 text 134 "ceb1e6b0b4f09f988000f48fbfbf"
+@227:12 call 135 10 134
+@227:1 assign 135 136
+@227:84 text 137 "73"
+@227:67 call 138 10 137
+@227:1 assign 138 139
+@228:21 int 140 0
+@228:1 assign 140 141
+@228:24 loop
+@228:30 read 142 copy 141
+@228:36 int 143 16
+@228:30 read 144 copy 143
+@228:30 binary 145 "<" 142 144
+@228:24 drop 143
+@228:24 unary 146 "!" 145
+@228:24 if 146
+@228:24 break
+@228:24 end
+@229:1 borrow 147 mut 94
+@229:19 borrow 148 shared 136
+@229:1 call 149 14 147 148
+@228:24 drop 149
+@229:42 borrow 150 shared 94
+@229:50 text 151 "ceb1e6b0b4f09f988000f48fbfbf"
+@229:31 call 152 0 150 151
+@229:30 unary 153 "!" 152
+@229:27 if 153
+@229:83 int 154 12
+@229:76 drop 141
+@229:76 drop 139
+@229:76 drop 136
+@229:76 drop 122
+@229:76 drop 94
+@229:76 drop 66
+@229:76 return 154
+@229:27 unit 155
+@229:27 else
+@229:27 unit 157
+@229:27 assign 157 156
+@229:27 end
+@228:24 drop 156
+@230:1 borrow 158 mut 94
+@230:19 borrow 159 shared 139
+@230:1 call 160 14 158 159
+@228:24 drop 160
+@230:43 borrow 161 shared 94
+@230:51 text 162 "73"
+@230:32 call 163 0 161 162
+@230:31 unary 164 "!" 163
+@230:28 if 164
+@230:64 int 165 13
+@230:57 drop 141
+@230:57 drop 139
+@230:57 drop 136
+@230:57 drop 122
+@230:57 drop 94
+@230:57 drop 66
+@230:57 return 165
+@230:28 unit 166
+@230:28 else
+@230:28 unit 168
+@230:28 assign 168 167
+@230:28 end
+@228:24 drop 167
+@231:1 borrow 169 mut 94
+@231:19 borrow 170 shared 122
+@231:1 call 171 14 169 170
+@228:24 drop 171
+@231:43 borrow 172 shared 94
+@231:51 text 173 ""
+@231:32 call 174 0 172 173
+@231:31 unary 175 "!" 174
+@231:28 if 175
+@231:63 int 176 14
+@231:56 drop 141
+@231:56 drop 139
+@231:56 drop 136
+@231:56 drop 122
+@231:56 drop 94
+@231:56 drop 66
+@231:56 return 176
+@231:28 unit 177
+@231:28 else
+@231:28 unit 179
+@231:28 assign 179 178
+@231:28 end
+@228:24 drop 178
+@232:7 read 180 copy 141
+@232:13 int 181 1
+@232:7 binary 182 "+" 180 181
+@232:1 assign 182 141
+@232:1 unit 183
+@228:24 drop 183
+@228:24 unit 184
+@228:24 drop 184
+@228:24 continue
+@228:24 end
+@228:24 unit 185
+@205:5 drop 185
+@233:1 borrow 186 mut 94
+@233:19 borrow 187 shared 66
+@233:1 call 188 14 186 187
+@205:5 drop 188
+@233:36 read 189 move 66
+@233:31 drop 189
+@233:31 unit 190
+@205:5 drop 190
+@233:47 borrow 191 mut 94
+@233:63 text 192 "21"
+@233:47 call 193 13 191 192
+@205:5 drop 193
+@234:16 borrow 194 shared 94
+@234:25 text 195 "6f726967696e616c00f09f988021"
+@234:5 call 196 0 194 195
+@234:4 unary 197 "!" 196
+@234:1 if 197
+@234:53 int 198 14
+@234:46 drop 141
+@234:46 drop 139
+@234:46 drop 136
+@234:46 drop 122
+@234:46 drop 94
+@234:46 return 198
+@234:1 unit 199
+@234:1 else
+@234:1 unit 201
+@234:1 assign 201 200
+@234:1 end
+@205:5 drop 200
+@235:1 int 202 0
+@205:5 drop 141
+@205:5 drop 139
+@205:5 drop 136
+@205:5 drop 122
+@205:5 drop 94
+@205:5 return 202
+endfn
+fn "lifecycle_7" 0 4
+local "$" 18 let
+local "$" 14 let
+local "original" 14 mut
+local "$" 16 let
+local "$" 14 let
+local "cloned" 14 mut
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 0 let
+local "$" 21 let
+local "$" 18 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 0 let
+local "$" 21 let
+local "$" 18 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 16 let
+local "$" 14 let
+local "survivor" 14 let
+local "$" 14 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 14 let
+local "$" 0 let
+local "$" 16 let
+local "$" 14 let
+local "discarded" 14 let
+local "$" 14 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 18 let
+local "$" 14 let
+local "target" 14 mut
+local "$" 18 let
+local "$" 14 let
+local "temporary" 14 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 14 let
+local "empty" 14 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 18 let
+local "$" 14 let
+local "long" 14 let
+local "$" 18 let
+local "$" 14 let
+local "short" 14 let
+local "$" 4 let
+local "round" 4 mut
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 1 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$" 0 let
+local "$" 21 let
+local "$" 16 let
+local "$" 0 let
+local "$" 14 let
+local "$" 0 let
+local "$" 21 let
+local "$" 18 let
+local "$" 0 let
+local "$" 16 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 4 let
+@238:37 text 0 "6c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f9880"
+@238:20 call 1 10 0
+@238:1 assign 1 2
+@239:18 borrow 3 shared 2
+@239:18 call 4 11 3
+@239:1 assign 4 5
+@240:16 borrow 6 shared 2
+@240:27 text 7 "6c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f9880"
+@240:5 call 8 0 6 7
+@240:4 unary 9 "!" 8
+@240:1 if 9
+@240:1960 int 10 1
+@240:1953 drop 5
+@240:1953 drop 2
+@240:1953 return 10
+@240:1 unit 11
+@240:1 else
+@240:1 unit 13
+@240:1 assign 13 12
+@240:1 end
+@237:5 drop 12
+@241:16 borrow 14 shared 5
+@241:25 text 15 "6c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f9880"
+@241:5 call 16 0 14 15
+@241:4 unary 17 "!" 16
+@241:1 if 17
+@241:1958 int 18 2
+@241:1951 drop 5
+@241:1951 drop 2
+@241:1951 return 18
+@241:1 unit 19
+@241:1 else
+@241:1 unit 21
+@241:1 assign 21 20
+@241:1 end
+@237:5 drop 20
+@242:1 borrow 22 mut 2
+@242:1 call 23 12 22
+@237:5 drop 23
+@242:19 borrow 24 mut 2
+@242:37 text 25 "6f726967696e616c00f09f9880"
+@242:19 call 26 13 24 25
+@237:5 drop 26
+@243:16 borrow 27 shared 2
+@243:27 text 28 "6f726967696e616c00f09f9880"
+@243:5 call 29 0 27 28
+@243:4 unary 30 "!" 29
+@243:1 if 30
+@243:54 int 31 3
+@243:47 drop 5
+@243:47 drop 2
+@243:47 return 31
+@243:1 unit 32
+@243:1 else
+@243:1 unit 34
+@243:1 assign 34 33
+@243:1 end
+@237:5 drop 33
+@244:16 borrow 35 shared 5
+@244:25 text 36 "6c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f9880"
+@244:5 call 37 0 35 36
+@244:4 unary 38 "!" 37
+@244:1 if 38
+@244:1958 int 39 4
+@244:1951 drop 5
+@244:1951 drop 2
+@244:1951 return 39
+@244:1 unit 40
+@244:1 else
+@244:1 unit 42
+@244:1 assign 42 41
+@244:1 end
+@237:5 drop 41
+@245:1 borrow 43 mut 5
+@245:1 call 44 12 43
+@237:5 drop 44
+@245:17 borrow 45 mut 5
+@245:33 text 46 "636c6f6e657fe6b0b4"
+@245:17 call 47 13 45 46
+@237:5 drop 47
+@246:16 borrow 48 shared 2
+@246:27 text 49 "6f726967696e616c00f09f9880"
+@246:5 call 50 0 48 49
+@246:4 unary 51 "!" 50
+@246:1 if 51
+@246:54 int 52 5
+@246:47 drop 5
+@246:47 drop 2
+@246:47 return 52
+@246:1 unit 53
+@246:1 else
+@246:1 unit 55
+@246:1 assign 55 54
+@246:1 end
+@237:5 drop 54
+@247:16 borrow 56 shared 5
+@247:25 text 57 "636c6f6e657fe6b0b4"
+@247:5 call 58 0 56 57
+@247:4 unary 59 "!" 58
+@247:1 if 59
+@247:52 int 60 6
+@247:45 drop 5
+@247:45 drop 2
+@247:45 return 60
+@247:1 unit 61
+@247:1 else
+@247:1 unit 63
+@247:1 assign 63 62
+@247:1 end
+@237:5 drop 62
+@248:16 borrow 64 shared 2
+@248:16 call 65 11 64
+@248:1 assign 65 66
+@248:39 read 67 move 2
+@248:34 drop 67
+@248:34 unit 68
+@237:5 drop 68
+@249:16 borrow 69 shared 66
+@249:27 text 70 "6f726967696e616c00f09f9880"
+@249:5 call 71 0 69 70
+@249:4 unary 72 "!" 71
+@249:1 if 72
+@249:54 int 73 7
+@249:47 drop 66
+@249:47 drop 5
+@249:47 return 73
+@249:1 unit 74
+@249:1 else
+@249:1 unit 76
+@249:1 assign 76 75
+@249:1 end
+@237:5 drop 75
+@250:6 read 77 move 5
+@250:1 drop 77
+@250:1 unit 78
+@237:5 drop 78
+@250:31 borrow 79 shared 66
+@250:31 call 80 11 79
+@250:1 assign 80 81
+@250:54 read 82 move 81
+@250:49 drop 82
+@250:49 unit 83
+@237:5 drop 83
+@251:16 borrow 84 shared 66
+@251:27 text 85 "6f726967696e616c00f09f9880"
+@251:5 call 86 0 84 85
+@251:4 unary 87 "!" 86
+@251:1 if 87
+@251:54 int 88 8
+@251:47 drop 66
+@251:47 return 88
+@251:1 unit 89
+@251:1 else
+@251:1 unit 91
+@251:1 assign 91 90
+@251:1 end
+@237:5 drop 90
+@252:35 text 92 "7072656578697374696e6720616c6c6f636174696f6e"
+@252:18 call 93 10 92
+@252:1 assign 93 94
+@253:36 text 95 "6c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f9880"
+@253:19 call 96 10 95
+@253:1 assign 96 97
+@253:1961 borrow 98 mut 94
+@253:1979 borrow 99 shared 97
+@253:1961 call 100 14 98 99
+@253:1 drop 100
+@253:1 unit 101
+@253:1 drop 97
+@237:5 drop 101
+@254:16 borrow 102 shared 94
+@254:25 text 103 "6c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f9880"
+@254:5 call 104 0 102 103
+@254:4 unary 105 "!" 104
+@254:1 if 105
+@254:1958 int 106 9
+@254:1951 drop 94
+@254:1951 drop 66
+@254:1951 return 106
+@254:1 unit 107
+@254:1 else
+@254:1 unit 109
+@254:1 assign 109 108
+@254:1 end
+@237:5 drop 108
+@255:1 borrow 110 mut 94
+@255:19 borrow 111 shared 66
+@255:1 call 112 14 110 111
+@237:5 drop 112
+@256:16 borrow 113 shared 94
+@256:25 text 114 "6f726967696e616c00f09f9880"
+@256:5 call 115 0 113 114
+@256:4 unary 116 "!" 115
+@256:1 if 116
+@256:52 int 117 10
+@256:45 drop 94
+@256:45 drop 66
+@256:45 return 117
+@256:1 unit 118
+@256:1 else
+@256:1 unit 120
+@256:1 assign 120 119
+@256:1 end
+@237:5 drop 119
+@257:13 call 121 15
+@257:1 assign 121 122
+@257:28 borrow 123 mut 94
+@257:46 borrow 124 shared 122
+@257:28 call 125 14 123 124
+@237:5 drop 125
+@258:16 borrow 126 shared 94
+@258:25 text 127 ""
+@258:5 call 128 0 126 127
+@258:4 unary 129 "!" 128
+@258:1 if 129
+@258:38 int 130 11
+@258:31 drop 122
+@258:31 drop 94
+@258:31 drop 66
+@258:31 return 130
+@258:1 unit 131
+@258:1 else
+@258:1 unit 133
+@258:1 assign 133 132
+@258:1 end
+@237:5 drop 132
+@259:29 text 134 "6c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f9880"
+@259:12 call 135 10 134
+@259:1 assign 135 136
+@259:1983 text 137 "73"
+@259:1966 call 138 10 137
+@259:1 assign 138 139
+@260:21 int 140 0
+@260:1 assign 140 141
+@260:24 loop
+@260:30 read 142 copy 141
+@260:36 int 143 16
+@260:30 read 144 copy 143
+@260:30 binary 145 "<" 142 144
+@260:24 drop 143
+@260:24 unary 146 "!" 145
+@260:24 if 146
+@260:24 break
+@260:24 end
+@261:1 borrow 147 mut 94
+@261:19 borrow 148 shared 136
+@261:1 call 149 14 147 148
+@260:24 drop 149
+@261:42 borrow 150 shared 94
+@261:50 text 151 "6c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f98806c6f6e6700ceb1e6b0b4f09f9880"
+@261:31 call 152 0 150 151
+@261:30 unary 153 "!" 152
+@261:27 if 153
+@261:1982 int 154 12
+@261:1975 drop 141
+@261:1975 drop 139
+@261:1975 drop 136
+@261:1975 drop 122
+@261:1975 drop 94
+@261:1975 drop 66
+@261:1975 return 154
+@261:27 unit 155
+@261:27 else
+@261:27 unit 157
+@261:27 assign 157 156
+@261:27 end
+@260:24 drop 156
+@262:1 borrow 158 mut 94
+@262:19 borrow 159 shared 139
+@262:1 call 160 14 158 159
+@260:24 drop 160
+@262:43 borrow 161 shared 94
+@262:51 text 162 "73"
+@262:32 call 163 0 161 162
+@262:31 unary 164 "!" 163
+@262:28 if 164
+@262:64 int 165 13
+@262:57 drop 141
+@262:57 drop 139
+@262:57 drop 136
+@262:57 drop 122
+@262:57 drop 94
+@262:57 drop 66
+@262:57 return 165
+@262:28 unit 166
+@262:28 else
+@262:28 unit 168
+@262:28 assign 168 167
+@262:28 end
+@260:24 drop 167
+@263:1 borrow 169 mut 94
+@263:19 borrow 170 shared 122
+@263:1 call 171 14 169 170
+@260:24 drop 171
+@263:43 borrow 172 shared 94
+@263:51 text 173 ""
+@263:32 call 174 0 172 173
+@263:31 unary 175 "!" 174
+@263:28 if 175
+@263:63 int 176 14
+@263:56 drop 141
+@263:56 drop 139
+@263:56 drop 136
+@263:56 drop 122
+@263:56 drop 94
+@263:56 drop 66
+@263:56 return 176
+@263:28 unit 177
+@263:28 else
+@263:28 unit 179
+@263:28 assign 179 178
+@263:28 end
+@260:24 drop 178
+@264:7 read 180 copy 141
+@264:13 int 181 1
+@264:7 binary 182 "+" 180 181
+@264:1 assign 182 141
+@264:1 unit 183
+@260:24 drop 183
+@260:24 unit 184
+@260:24 drop 184
+@260:24 continue
+@260:24 end
+@260:24 unit 185
+@237:5 drop 185
+@265:1 borrow 186 mut 94
+@265:19 borrow 187 shared 66
+@265:1 call 188 14 186 187
+@237:5 drop 188
+@265:36 read 189 move 66
+@265:31 drop 189
+@265:31 unit 190
+@237:5 drop 190
+@265:47 borrow 191 mut 94
+@265:63 text 192 "21"
+@265:47 call 193 13 191 192
+@237:5 drop 193
+@266:16 borrow 194 shared 94
+@266:25 text 195 "6f726967696e616c00f09f988021"
+@266:5 call 196 0 194 195
+@266:4 unary 197 "!" 196
+@266:1 if 197
+@266:53 int 198 14
+@266:46 drop 141
+@266:46 drop 139
+@266:46 drop 136
+@266:46 drop 122
+@266:46 drop 94
+@266:46 return 198
+@266:1 unit 199
+@266:1 else
+@266:1 unit 201
+@266:1 assign 201 200
+@266:1 end
+@237:5 drop 200
+@267:1 int 202 0
+@237:5 drop 141
+@237:5 drop 139
+@237:5 drop 136
+@237:5 drop 122
+@237:5 drop 94
+@237:5 return 202
+endfn
+fn "$std::string::as_bytes$f78<Self=t14;>" 1 20 file 3 from 0
+local "self" 16 let
+local "$" 20 let
+@111:9 slice-borrow 1 shared 0 deref field 0
+@110:9 drop 0
+@110:9 return 1
+endfn
+fn "$std::string::from_str$f60<Self=t14;>" 1 14 file 3
+local "value" 18 let
+local "$" 14 let
+local "result" 14 mut
+local "$" 21 let
+local "$" 18 let
+local "$" 0 let
+local "$" 14 let
+@32:26 call 1 15
+@32:1 assign 1 2
+@33:9 borrow 3 mut 2
+@33:25 read 4 copy 0
+@33:9 call 5 13 3 4
+@31:9 drop 5
+@34:9 read 6 move 2
+@31:9 drop 0
+@31:9 return 6
+endfn
+fn "$std::string::clone$f81<Self=t14;>" 1 14 file 3
+local "self" 16 let
+local "$" 15 let
+local "bytes" 15 mut
+local "$" 22 let
+local "$" 20 let
+local "$" 0 let
+local "$" 15 let
+local "$" 14 let
+@128:34 intrinsic 1 "vec_new"
+@128:1 assign 1 2
+@129:22 borrow 3 mut 2
+@129:34 slice-borrow 4 shared 0 deref field 0
+@129:9 call 5 16 3 4
+@127:5 drop 5
+@130:18 read 6 move 2
+@130:9 struct 7 6
+@127:5 drop 0
+@127:5 return 7
+endfn
+fn "$std::string::clear$f80<Self=t14;>" 1 0 file 3
+local "self" 21 let
+local "$" 23 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 1 let
+local "$" 22 let
+local "$" 24 let
+local "$" 0 let
+local "$" 0 let
+@119:9 loop
+@119:15 borrow 1 shared 0 deref field 0
+@119:15 intrinsic 2 "vec_len" 1
+@119:15 read 3 copy 2
+@119:34 int 4 0
+@119:15 read 5 copy 4
+@119:15 binary 6 ">" 3 5
+@119:9 drop 4
+@119:9 drop 2
+@119:9 unary 7 "!" 6
+@119:9 if 7
+@119:9 break
+@119:9 end
+@120:13 borrow 8 mut 0 deref field 0
+@120:13 intrinsic 9 "vec_pop" 8
+@119:9 drop 9
+@119:9 unit 10
+@119:9 drop 10
+@119:9 continue
+@119:9 end
+@119:9 unit 11
+@118:9 drop 0
+@118:9 return 11
+endfn
+fn "$std::string::push_str$f61<Self=t14;>" 2 0 file 3
+local "self" 21 let
+local "value" 18 let
+local "$" 22 let
+local "$" 18 let
+local "$" 20 let
+local "$" 0 let
+local "$" 0 let
+@38:22 borrow 2 mut 0 deref field 0
+@38:39 borrow 3 shared 1 deref
+@38:39 intrinsic 4 "str_as_bytes" 3
+@38:9 call 5 16 2 4
+@37:9 drop 5
+@37:9 unit 6
+@37:9 drop 1
+@37:9 drop 0
+@37:9 return 6
+endfn
+fn "$std::string::clone_from$f82<Self=t14;>" 2 0 file 3
+local "self" 21 let
+local "source" 16 let
+local "$" 21 let
+local "$" 0 let
+local "$" 22 let
+local "$" 20 let
+local "$" 0 let
+local "$" 0 let
+@134:9 borrow 2 mut 0 deref
+@134:9 call 3 12 2
+@133:5 drop 3
+@135:22 borrow 4 mut 0 deref field 0
+@135:39 slice-borrow 5 shared 1 deref field 0
+@135:9 call 6 16 4 5
+@133:5 drop 6
+@133:5 unit 7
+@133:5 drop 1
+@133:5 drop 0
+@133:5 return 7
+endfn
+fn "$std::string::new$f57<Self=t14;>" 0 14 file 3
+local "$" 15 let
+local "$" 14 let
+@16:25 intrinsic 0 "vec_new"
+@16:9 struct 1 0
+@15:9 return 1
+endfn
+fn "$std::bytes::append_bytes" 2 0 file 12
+local "target" 22 let
+local "source" 20 let
+local "$" 4 let
+local "i" 4 mut
+local "$" 4 let
+local "$" 20 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 5 let
+local "$" 22 let
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$" 0 let
+@30:24 int 2 0
+@30:1 assign 2 3
+@31:5 loop
+@31:11 read 4 copy 3
+@31:15 borrow 5 shared 1 deref
+@31:15 intrinsic 6 "vec_len" 5
+@31:11 read 7 copy 6
+@31:11 binary 8 "<" 4 7
+@31:5 drop 6
+@31:5 unary 9 "!" 8
+@31:5 if 9
+@31:5 break
+@31:5 end
+@32:28 read 10 copy 3
+@32:21 read 11 copy 1 deref index 10
+@32:9 borrow 12 mut 0 deref
+@32:9 intrinsic 13 "vec_push" 12 11
+@31:5 drop 13
+@31:5 drop 10
+@33:13 read 14 copy 3
+@33:17 int 15 1
+@33:13 binary 16 "+" 14 15
+@33:9 assign 16 3
+@33:9 unit 17
+@31:5 drop 17
+@31:5 unit 18
+@31:5 drop 18
+@31:5 continue
+@31:5 end
+@31:5 unit 19
+@29:5 drop 3
+@29:5 drop 1
+@29:5 drop 0
+@29:5 return 19
+endfn
+fn "semantic_values" 0 3
+local "result" 4 let
+local "expected0" 4 let
+local "equal0" 1 let
+local "unit0" 0 let
+local "result" 4 let
+local "expected1" 4 let
+local "equal1" 1 let
+local "unit1" 0 let
+local "result" 4 let
+local "expected2" 4 let
+local "equal2" 1 let
+local "unit2" 0 let
+local "result" 4 let
+local "expected3" 4 let
+local "equal3" 1 let
+local "unit3" 0 let
+local "result" 4 let
+local "expected4" 4 let
+local "equal4" 1 let
+local "unit4" 0 let
+local "result" 4 let
+local "expected5" 4 let
+local "equal5" 1 let
+local "unit5" 0 let
+local "result" 4 let
+local "expected6" 4 let
+local "equal6" 1 let
+local "unit6" 0 let
+local "result" 4 let
+local "expected7" 4 let
+local "equal7" 1 let
+local "unit7" 0 let
+local "answer" 3 let
+@1 call 0 1
+@1 int 1 0
+@1 binary 2 == 0 1
+@1 intrinsic 3 assert 2
+@1 drop 3
+@1 call 4 2
+@1 int 5 0
+@1 binary 6 == 4 5
+@1 intrinsic 7 assert 6
+@1 drop 7
+@1 call 8 3
+@1 int 9 0
+@1 binary 10 == 8 9
+@1 intrinsic 11 assert 10
+@1 drop 11
+@1 call 12 4
+@1 int 13 0
+@1 binary 14 == 12 13
+@1 intrinsic 15 assert 14
+@1 drop 15
+@1 call 16 5
+@1 int 17 0
+@1 binary 18 == 16 17
+@1 intrinsic 19 assert 18
+@1 drop 19
+@1 call 20 6
+@1 int 21 0
+@1 binary 22 == 20 21
+@1 intrinsic 23 assert 22
+@1 drop 23
+@1 call 24 7
+@1 int 25 0
+@1 binary 26 == 24 25
+@1 intrinsic 27 assert 26
+@1 drop 27
+@1 call 28 8
+@1 int 29 0
+@1 binary 30 == 28 29
+@1 intrinsic 31 assert 30
+@1 drop 31
+@1 int 32 42
+@1 return 32
+endfn

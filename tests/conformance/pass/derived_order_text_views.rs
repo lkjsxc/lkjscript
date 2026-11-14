@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 struct Label<'a> {
     text: &'a str,

@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 #[derive(Clone)]
 struct View<'a> { left: &'a i64, right: &'a i64, name: String }
 struct Numbers { left: i64, right: i64 }

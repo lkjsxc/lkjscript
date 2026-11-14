@@ -1,0 +1,42 @@
+lkjscript-ir 1
+# expect: check
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "Thing" struct copy "0" 3
+type "&t14" ref shared 14
+fn "probe" 0 3
+local "$" 3 let
+local "$" 14 mut
+local "$" 15 let
+local "$" 14 mut
+local "$" 3 let
+@1:110 int 0 1
+@1:104 struct 1 0
+@1:104 borrow 2 shared 1
+@1:104 call 3 1 2
+@1:104 read 4 copy 3 field 0
+@1:88 drop 3
+@1:88 drop 1
+@1:88 return 4
+endfn
+fn "clone$f0<Self=t14;>" 1 14
+local "self" 15 let
+local "$" 3 let
+local "$" 14 let
+@1:82 int 1 42
+@1:76 struct 2 1
+@1:53 drop 0
+@1:53 return 2
+endfn

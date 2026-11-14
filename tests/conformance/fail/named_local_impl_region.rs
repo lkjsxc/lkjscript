@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustCode":"E0506"}
 struct Holder<'a> {
     value: &'a mut i64,
 }

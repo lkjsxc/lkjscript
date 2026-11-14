@@ -1,0 +1,27 @@
+lkjscript-ir 1
+# expect: check
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "$rigid:U:14" struct copy
+type "Holder<t14>" struct move "value" 14
+fn "good<U=t14;>" 1 15
+local "x" 14 let
+local "$" 14 let
+local "$" 15 let
+@1:77 read 1 copy 0
+@1:64 struct 2 1
+@1:32 drop 0
+@1:32 return 2
+endfn

@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 use std::fmt::{self, Write};
 struct Bad;
 impl fmt::Display for Bad {

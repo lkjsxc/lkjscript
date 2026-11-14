@@ -1,14 +1,26 @@
 name: check
 on: [push, pull_request]
 jobs:
-  check:
+  gate:
     runs-on: ubuntu-latest
+    container: debian:bookworm-slim
+    steps:
+      - name: Checkout dependencies
+        run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates
+      - uses: actions/checkout@v4
+      - name: Seed-only native gate
+        env:
+          LKJSCRIPT_GATE_JOBS: '8'
+        run: |
+          ! command -v cargo
+          ! command -v rustc
+          ! command -v node
+          bash tools/check.sh
+  witness:
+    runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-      - run: bash tools/check.sh
+      - run: sh tools/bootstrap.sh
+      - run: bash witness/check.sh

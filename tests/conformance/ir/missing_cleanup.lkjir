@@ -1,4 +1,5 @@
 lkjscript-ir 1
+# expect: reject E_IR
 type "()" unit
 type "bool" bool
 type "i32" int 32 signed

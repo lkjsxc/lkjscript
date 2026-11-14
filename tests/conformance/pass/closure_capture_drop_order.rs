@@ -1,3 +1,5 @@
+// expect: output 413161
+// witness: {}
 struct Mark {
     out: Stdout,
     tag: u8,

@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 enum Packet<T> {
     Empty,
     Data { first: T, second: T },

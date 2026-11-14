@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 struct One { value: i64 }
 impl Iterator for One {
     type Item = i64;

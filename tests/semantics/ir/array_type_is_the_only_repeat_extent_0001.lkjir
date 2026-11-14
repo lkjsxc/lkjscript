@@ -1,0 +1,34 @@
+lkjscript-ir 1
+# expect: check
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "[t5;4]" array 5 7
+type "&t14" ref shared 14
+fn "probe" 0 3
+local "$" 5 let
+local "$" 14 let
+local "a" 14 let
+local "$" 15 let
+local "$" 4 let
+local "$" 3 let
+@1:30 int 0 7
+@1:29 intrinsic 1 "array_repeat" 0
+@1:5 assign 1 2
+@1:38 borrow 3 shared 2
+@1:38 intrinsic 4 "vec_len" 3
+@1:38 intrinsic 5 "cast" 4
+@1:5 drop 2
+@1:5 return 5
+endfn

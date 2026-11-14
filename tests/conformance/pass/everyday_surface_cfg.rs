@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 #[cfg(test)] mod nonexistent_test_module;
 #[cfg(test)] fn unavailable() { this_function_does_not_exist(); }
 #[cfg(any(test, not(unix)))] struct Missing { value: UnknownType }

@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 pub fn probe() -> i64 {
     let zero = 0.0f64;
     let nan = zero / zero;

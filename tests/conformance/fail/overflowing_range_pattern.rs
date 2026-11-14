@@ -1,3 +1,5 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
 pub fn probe() -> i64 {
     let value: u8 = 10;
     match value {

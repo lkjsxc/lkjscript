@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 struct Bytes<'a> { bytes: &'a [u8] }
 fn sum(view: Bytes<'_>) -> i64 {
     let mut result: i64 = 0;

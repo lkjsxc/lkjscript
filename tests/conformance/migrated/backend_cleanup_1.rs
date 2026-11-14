@@ -1,3 +1,5 @@
+// expect: value 20000
+// witness: {}
 enum List { End, Next(i64, Box<List>) }
         struct Pair { first: Box<List>, second: Box<List> }
         pub fn probe() -> i64 {

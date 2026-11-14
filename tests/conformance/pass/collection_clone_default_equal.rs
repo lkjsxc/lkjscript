@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 use std::collections::{BTreeMap, BTreeSet};
 #[derive(Clone, Default)]
 struct State {

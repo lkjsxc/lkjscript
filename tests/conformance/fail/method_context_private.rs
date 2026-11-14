@@ -1,3 +1,6 @@
+// expect: reject E_PRIVACY
+// entry: probe
+// witness: {"rustCode":"E0624"}
 mod hidden {
     pub struct Wrapper<T> { value: T }
     impl<T> Wrapper<T> {

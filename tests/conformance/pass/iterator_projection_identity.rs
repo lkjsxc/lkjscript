@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 mod numbers {
     pub trait Stream {
         type Item;

@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
 fn escape() -> &'static i64 {
     let value: i64 = 42;
     &value

@@ -1,0 +1,199 @@
+lkjscript-ir 1
+# expect: check
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "$std::string::String" struct move "bytes" 15
+type "Vec<t5>" vec 5
+type "$std::string::FromUtf8Error" struct move "bytes" 15
+type "$std::str::Utf8Error" struct copy
+type "$std::str::ParseIntError" struct copy
+type "$std::fmt::Error" struct move
+type "&t14" ref shared 14
+type "&mut t14" ref mut 14
+type "$rigid:T:22" struct move
+type "$std::ordered_set::BTreeSet<t22>" struct move "entries" 24
+type "$std::ordered_map::BTreeMap<t22,t0>" struct move "nodes" 28 "root" 4 "vacant" 4 "count" 4
+type "$std::ordered_map::Node<t22,t0>" struct move "entry" 27 "left" 4 "right" 4 "parent" 4 "height" 4
+type "$std::ordered_map::Pair<t22,t0>" struct move "key" 22 "value" 0
+type "$std::prelude::Option<t26>" enum move
+variant "None"
+variant "Some" "0" 26
+endtype
+type "Vec<t25>" vec 25
+type "&t23" ref shared 23
+type "&mut t23" ref mut 23
+type "$rigid:T:31" struct move
+type "$std::ordered_set::BTreeSet<t31>" struct move "entries" 33
+type "$std::ordered_map::BTreeMap<t31,t0>" struct move "nodes" 37 "root" 4 "vacant" 4 "count" 4
+type "$std::ordered_map::Node<t31,t0>" struct move "entry" 36 "left" 4 "right" 4 "parent" 4 "height" 4
+type "$std::ordered_map::Pair<t31,t0>" struct move "key" 31 "value" 0
+type "$std::prelude::Option<t35>" enum move
+variant "None"
+variant "Some" "0" 35
+endtype
+type "Vec<t34>" vec 34
+type "&t32" ref shared 32
+type "&mut t32" ref mut 32
+type "$rigid:IR:40" struct move
+type "$rigid:V:41" struct move
+type "$std::ordered_map::BTreeMap<t40,t41>" struct move "nodes" 46 "root" 4 "vacant" 4 "count" 4
+type "$std::ordered_map::Node<t40,t41>" struct move "entry" 45 "left" 4 "right" 4 "parent" 4 "height" 4
+type "$std::ordered_map::Pair<t40,t41>" struct move "key" 40 "value" 41
+type "$std::prelude::Option<t44>" enum move
+variant "None"
+variant "Some" "0" 44
+endtype
+type "Vec<t43>" vec 43
+type "&t42" ref shared 42
+type "&mut t42" ref mut 42
+type "$rigid:IR:49" struct move
+type "$rigid:V:50" struct move
+type "$std::ordered_map::BTreeMap<t49,t50>" struct move "nodes" 55 "root" 4 "vacant" 4 "count" 4
+type "$std::ordered_map::Node<t49,t50>" struct move "entry" 54 "left" 4 "right" 4 "parent" 4 "height" 4
+type "$std::ordered_map::Pair<t49,t50>" struct move "key" 49 "value" 50
+type "$std::prelude::Option<t53>" enum move
+variant "None"
+variant "Some" "0" 53
+endtype
+type "Vec<t52>" vec 52
+type "&t51" ref shared 51
+type "&mut t51" ref mut 51
+type "$rigid:T:58" struct move
+type "$std::ordered_map::BTreeMap<t58,t0>" struct move "nodes" 63 "root" 4 "vacant" 4 "count" 4
+type "$std::ordered_map::Node<t58,t0>" struct move "entry" 62 "left" 4 "right" 4 "parent" 4 "height" 4
+type "$std::ordered_map::Pair<t58,t0>" struct move "key" 58 "value" 0
+type "$std::prelude::Option<t61>" enum move
+variant "None"
+variant "Some" "0" 61
+endtype
+type "Vec<t60>" vec 60
+type "$std::ordered_set::BTreeSet<t58>" struct move "entries" 59
+type "$rigid:IR:65" struct move
+type "$rigid:V:66" struct move
+type "$std::ordered_map::Node<t65,t66>" struct move "entry" 69 "left" 4 "right" 4 "parent" 4 "height" 4
+type "$std::ordered_map::Pair<t65,t66>" struct move "key" 65 "value" 66
+type "$std::prelude::Option<t68>" enum move
+variant "None"
+variant "Some" "0" 68
+endtype
+type "Vec<t67>" vec 67
+type "$std::ordered_map::BTreeMap<t65,t66>" struct move "nodes" 70 "root" 4 "vacant" 4 "count" 4
+type "$rigid:IR:72" struct move
+type "$rigid:V:73" struct move
+type "$std::ordered_map::Pair<t72,t73>" struct move "key" 72 "value" 73
+type "$rigid:IR:75" struct move
+type "$rigid:V:76" struct move
+type "$std::ordered_map::Pair<t75,t76>" struct move "key" 75 "value" 76
+type "$std::prelude::Option<t77>" enum move
+variant "None"
+variant "Some" "0" 77
+endtype
+type "$std::ordered_map::Node<t75,t76>" struct move "entry" 78 "left" 4 "right" 4 "parent" 4 "height" 4
+type "$rigid:T:80" struct move
+type "$std::prelude::Option<t80>" enum move
+variant "None"
+variant "Some" "0" 80
+endtype
+type "$rigid:T:82" struct copy
+type "$std::prelude::Option<t82>" enum copy
+variant "None"
+variant "Some" "0" 82
+endtype
+type "$rigid:T:84" struct move
+type "$std::prelude::Option<t84>" enum move
+variant "None"
+variant "Some" "0" 84
+endtype
+type "$rigid:T:86" struct move
+type "$std::prelude::Option<t86>" enum move
+variant "None"
+variant "Some" "0" 86
+endtype
+type "$rigid:T:88" struct move
+type "$std::prelude::Option<t88>" enum move
+variant "None"
+variant "Some" "0" 88
+endtype
+type "$rigid:T:90" struct move
+type "$std::prelude::Option<t90>" enum move
+variant "None"
+variant "Some" "0" 90
+endtype
+type "$rigid:T:92" struct move
+type "$rigid:E:93" struct move
+type "$std::prelude::Result<t92,t93>" enum move
+variant "Ok" "0" 92
+variant "Err" "0" 93
+endtype
+type "$rigid:T:95" struct copy
+type "$rigid:E:96" struct copy
+type "$std::prelude::Result<t95,t96>" enum copy
+variant "Ok" "0" 95
+variant "Err" "0" 96
+endtype
+type "$rigid:T:98" struct move
+type "$rigid:E:99" struct move
+type "$std::prelude::Result<t98,t99>" enum move
+variant "Ok" "0" 98
+variant "Err" "0" 99
+endtype
+type "$rigid:T:101" struct move
+type "$rigid:E:102" struct move
+type "$std::prelude::Result<t101,t102>" enum move
+variant "Ok" "0" 101
+variant "Err" "0" 102
+endtype
+type "&t3" ref shared 3
+type "&mut t24" ref mut 24
+type "&mut t33" ref mut 33
+type "&mut t59" ref mut 59
+type "&mut t71" ref mut 71
+destructor 24 1
+destructor 33 2
+destructor 42 3
+destructor 51 4
+destructor 59 5
+destructor 71 6
+fn "a::pick$f1<Self=t3;>" 1 3
+local "self" 104 let
+local "$" 3 let
+@1:77 int 1 1
+@1:57 drop 0
+@1:57 return 1
+endfn
+fn "$std::ordered_map::drop$f207<IR=t22;Self=t24;V=t0;>" 1 0 file 6
+local "self" 105 let
+@1:1 trap "abstract declared contract"
+endfn
+fn "$std::ordered_map::drop$f207<IR=t31;Self=t33;V=t0;>" 1 0 file 6
+local "self" 106 let
+@1:1 trap "abstract declared contract"
+endfn
+fn "$std::ordered_map::drop$f207<IR=t40;Self=t42;V=t41;>" 1 0 file 6
+local "self" 48 let
+@1:1 trap "abstract declared contract"
+endfn
+fn "$std::ordered_map::drop$f207<IR=t49;Self=t51;V=t50;>" 1 0 file 6
+local "self" 57 let
+@1:1 trap "abstract declared contract"
+endfn
+fn "$std::ordered_map::drop$f207<IR=t58;Self=t59;V=t0;>" 1 0 file 6
+local "self" 107 let
+@1:1 trap "abstract declared contract"
+endfn
+fn "$std::ordered_map::drop$f207<IR=t65;Self=t71;V=t66;>" 1 0 file 6
+local "self" 108 let
+@1:1 trap "abstract declared contract"
+endfn

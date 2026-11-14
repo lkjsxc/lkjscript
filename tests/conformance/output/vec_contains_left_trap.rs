@@ -1,3 +1,6 @@
+// expect: trap R0005
+// stdout: 66675870
+// witness: {}
 struct M {
     out: Stdout,
     b: u8,

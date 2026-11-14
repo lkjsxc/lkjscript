@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
 pub fn probe() -> i64 {
     let bytes = "immutable".as_bytes();
     bytes[0] = 65u8;

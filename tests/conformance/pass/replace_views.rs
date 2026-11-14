@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 struct View<'a> { value: &'a mut i64 }
 struct Data { left: i64, right: i64 }
 pub fn probe() -> i64 {

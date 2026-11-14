@@ -1,0 +1,1293 @@
+lkjscript-ir 1
+# expect: value 42
+# entry: semantic_values
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "Field" struct move "value" 3
+type "&t3" ref shared 3
+type "[t3;1]" array 3 1
+type "$std::string::String" struct move "bytes" 18
+type "Vec<t5>" vec 5
+type "&mut t3" ref mut 3
+type "Tracked" struct move "count" 19
+type "&mut t20" ref mut 20
+destructor 20 36
+fn "if_before_dereference" 0 3
+local "$" 3 let
+local "value" 3 let
+local "$" 15 let
+local "reference" 15 let
+local "$" 1 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 3 let
+@3:22 int 0 42
+@3:1 assign 0 1
+@3:42 borrow 2 shared 1
+@3:1 assign 2 3
+@4:8 int 4 1
+@4:5 if 4
+@4:5 unit 5
+@4:5 assign 5 6
+@4:5 else
+@4:5 unit 7
+@4:5 assign 7 6
+@4:5 end
+@2:5 drop 6
+@4:16 read 8 copy 3 deref
+@2:5 drop 3
+@2:5 drop 1
+@2:5 return 8
+endfn
+fn "if_before_negative" 0 3
+local "$" 1 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 3 let
+@6:41 int 0 1
+@6:38 if 0
+@6:38 unit 1
+@6:38 assign 1 2
+@6:38 else
+@6:38 unit 3
+@6:38 assign 3 2
+@6:38 end
+@6:5 drop 2
+@6:49 int 4 -42
+@6:5 return 4
+endfn
+fn "block_before_dereference" 0 3
+local "$" 3 let
+local "value" 3 let
+local "$" 15 let
+local "reference" 15 let
+local "$" 0 let
+local "$" 3 let
+@8:22 int 0 42
+@8:1 assign 0 1
+@8:42 borrow 2 shared 1
+@8:1 assign 2 3
+@9:5 unit 4
+@7:5 drop 4
+@9:8 read 5 copy 3 deref
+@7:5 drop 3
+@7:5 drop 1
+@7:5 return 5
+endfn
+fn "block_before_group" 0 3
+local "$" 0 let
+local "$" 3 let
+@11:38 unit 0
+@11:5 drop 0
+@11:42 int 1 42
+@11:5 return 1
+endfn
+fn "if_before_array" 0 3
+local "$" 1 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 3 let
+local "$" 16 mut
+local "$" 4 let
+local "$" 3 let
+@12:38 int 0 1
+@12:35 if 0
+@12:35 unit 1
+@12:35 assign 1 2
+@12:35 else
+@12:35 unit 3
+@12:35 assign 3 2
+@12:35 end
+@12:5 drop 2
+@12:47 int 4 42
+@12:46 array 5 4
+@12:54 int 6 0
+@12:46 read 7 copy 5 index 6
+@12:5 drop 6
+@12:5 drop 5
+@12:5 return 7
+endfn
+fn "if_before_borrow" 0 3
+local "$" 3 let
+local "value" 3 let
+local "$" 1 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 15 let
+local "reference" 15 let
+local "$" 3 let
+@14:22 int 0 42
+@14:1 assign 0 1
+@15:26 int 2 1
+@15:23 if 2
+@15:23 unit 3
+@15:23 assign 3 4
+@15:23 else
+@15:23 unit 5
+@15:23 assign 5 4
+@15:23 end
+@15:21 drop 4
+@15:34 borrow 6 shared 1
+@15:1 assign 6 7
+@16:5 read 8 copy 7 deref
+@13:5 drop 7
+@13:5 drop 1
+@13:5 return 8
+endfn
+fn "if_before_not" 0 3
+local "$" 1 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 1 let
+local "$" 1 let
+local "value" 1 let
+local "$" 1 let
+local "$" 3 let
+local "$if" 3 mut
+local "$" 3 let
+@19:22 int 0 1
+@19:19 if 0
+@19:19 unit 1
+@19:19 assign 1 2
+@19:19 else
+@19:19 unit 3
+@19:19 assign 3 2
+@19:19 end
+@19:17 drop 2
+@19:31 int 4 0
+@19:30 unary 5 "!" 4
+@19:1 assign 5 6
+@20:8 read 7 copy 6
+@20:5 if 7
+@20:16 int 8 42
+@20:5 assign 8 9
+@20:5 else
+@20:28 int 10 0
+@20:5 assign 10 9
+@20:5 end
+@18:5 drop 6
+@18:5 return 9
+endfn
+fn "while_before_dereference" 0 3
+local "$" 3 let
+local "value" 3 let
+local "$" 15 let
+local "reference" 15 let
+local "$" 1 let
+local "$" 1 let
+local "$" 0 let
+local "$" 0 let
+local "$" 3 let
+@23:22 int 0 42
+@23:1 assign 0 1
+@23:42 borrow 2 shared 1
+@23:1 assign 2 3
+@24:5 loop
+@24:11 int 4 0
+@24:5 unary 5 "!" 4
+@24:5 if 5
+@24:5 break
+@24:5 end
+@24:5 unit 6
+@24:5 drop 6
+@24:5 continue
+@24:5 end
+@24:5 unit 7
+@22:5 drop 7
+@24:20 read 8 copy 3 deref
+@22:5 drop 3
+@22:5 drop 1
+@22:5 return 8
+endfn
+fn "loop_before_dereference" 0 3
+local "$" 3 let
+local "value" 3 let
+local "$" 15 let
+local "reference" 15 let
+local "$loop" 0 mut
+local "$" 0 let
+local "$" 0 let
+local "$" 0 let
+local "$" 3 let
+@27:22 int 0 42
+@27:1 assign 0 1
+@27:42 borrow 2 shared 1
+@27:1 assign 2 3
+@28:5 loop
+@28:12 unit 5
+@28:12 assign 5 4
+@28:12 break
+@28:12 unit 6
+@28:5 drop 6
+@28:5 unit 7
+@28:5 end
+@26:5 drop 4
+@28:21 read 8 copy 3 deref
+@26:5 drop 3
+@26:5 drop 1
+@26:5 return 8
+endfn
+fn "for_before_dereference" 0 3
+local "$" 3 let
+local "value" 3 let
+local "$" 15 let
+local "reference" 15 let
+local "$" 2 let
+local "$" 2 let
+local "$counter" 2 mut
+local "$end" 2 let
+local "$for:63:item" 2 mut
+local "$" 2 let
+local "$" 2 let
+local "$" 1 let
+local "$" 2 let
+local "$" 2 let
+local "index" 2 let
+local "$" 0 let
+local "$" 0 let
+local "$" 2 let
+local "$" 2 let
+local "$" 2 let
+local "$" 0 let
+local "$" 3 let
+@31:22 int 0 42
+@31:1 assign 0 1
+@31:42 borrow 2 shared 1
+@31:1 assign 2 3
+@32:18 int 4 0
+@32:21 int 5 2
+@32:5 assign 4 6
+@32:5 assign 5 7
+@32:5 loop
+@32:5 read 9 copy 6
+@32:5 read 10 copy 7
+@32:5 binary 11 ">=" 9 10
+@32:5 if 11
+@32:5 break
+@32:5 end
+@32:5 read 12 copy 6
+@32:5 assign 12 8
+@32:5 read 13 copy 8
+@32:5 assign 13 14
+@32:5 unit 15
+@32:5 drop 15
+@32:5 unit 16
+@32:5 drop 14
+@32:5 read 17 copy 6
+@32:5 int 18 1
+@32:5 binary 19 "+" 17 18
+@32:5 assign 19 6
+@32:5 drop 16
+@32:5 drop 8
+@32:5 continue
+@32:5 end
+@32:5 drop 6
+@32:5 drop 7
+@32:5 unit 20
+@30:5 drop 20
+@32:26 read 21 copy 3 deref
+@30:5 drop 3
+@30:5 drop 1
+@30:5 return 21
+endfn
+fn "match_before_dereference" 0 3
+local "$" 3 let
+local "value" 3 let
+local "$" 15 let
+local "reference" 15 let
+local "$" 3 mut
+local "$" 1 let
+local "$" 0 let
+local "$match" 0 mut
+local "$" 3 let
+@35:22 int 0 42
+@35:1 assign 0 1
+@35:42 borrow 2 shared 1
+@35:1 assign 2 3
+@36:11 int 4 0
+@36:5 int 5 1
+@36:5 if 5
+@36:23 unit 6
+@36:5 assign 6 7
+@36:5 drop 4
+@36:5 else
+@36:5 trap "unreachable arm after irrefutable pattern"
+@36:5 trap "unreachable match"
+@36:5 end
+@34:5 drop 7
+@36:28 read 8 copy 3 deref
+@34:5 drop 3
+@34:5 drop 1
+@34:5 return 8
+endfn
+fn "parenthesized_if_binary" 0 3
+local "$" 1 let
+local "$" 3 let
+local "$if" 3 mut
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+@38:47 int 0 1
+@38:44 if 0
+@38:54 int 1 6
+@38:44 assign 1 2
+@38:44 else
+@38:68 int 3 7
+@38:44 assign 3 2
+@38:44 end
+@38:78 int 4 7
+@38:44 binary 5 "*" 2 4
+@38:5 return 5
+endfn
+fn "parenthesized_block_binary" 0 3
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+@39:50 int 0 6
+@39:61 int 1 7
+@39:48 binary 2 "*" 0 1
+@39:5 return 2
+endfn
+fn "parenthesized_block_cast" 0 3
+local "$" 3 let
+local "$" 3 let
+@40:47 int 0 42
+@40:45 intrinsic 1 "cast" 0
+@40:5 return 1
+endfn
+fn "initializer_if_binary" 0 3
+local "$" 1 let
+local "$" 3 let
+local "$if" 3 mut
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+local "value" 3 let
+local "$" 3 let
+@42:20 int 0 1
+@42:17 if 0
+@42:27 int 1 6
+@42:17 assign 1 2
+@42:17 else
+@42:41 int 3 7
+@42:17 assign 3 2
+@42:17 end
+@42:50 int 4 7
+@42:17 binary 5 "*" 2 4
+@42:1 assign 5 6
+@43:5 read 7 copy 6
+@41:5 drop 6
+@41:5 return 7
+endfn
+fn "return_if_binary" 0 3
+local "$" 1 let
+local "$" 3 let
+local "$if" 3 mut
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+local "$" 0 let
+@45:46 int 0 1
+@45:43 if 0
+@45:53 int 1 6
+@45:43 assign 1 2
+@45:43 else
+@45:67 int 3 7
+@45:43 assign 3 2
+@45:43 end
+@45:76 int 4 7
+@45:43 binary 5 "*" 2 4
+@45:36 return 5
+@45:5 unit 6
+endfn
+fn "binary_right_block" 0 3
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+@46:38 int 0 2
+@46:47 int 1 40
+@46:38 binary 2 "+" 0 1
+@46:5 return 2
+endfn
+fn "binary_right_if" 0 3
+local "$" 3 let
+local "$" 1 let
+local "$" 3 let
+local "$if" 3 mut
+local "$" 3 let
+local "$" 3 let
+@47:35 int 0 2
+@47:45 int 1 1
+@47:42 if 1
+@47:52 int 2 40
+@47:42 assign 2 3
+@47:42 else
+@47:67 int 4 39
+@47:42 assign 4 3
+@47:42 end
+@47:35 binary 5 "+" 0 3
+@47:5 return 5
+endfn
+fn "identity" 1 3
+local "value" 3 let
+local "$" 3 let
+@48:34 read 1 copy 0
+@48:1 drop 0
+@48:1 return 1
+endfn
+fn "argument_if_binary" 0 3
+local "$" 1 let
+local "$" 3 let
+local "$if" 3 mut
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+@49:50 int 0 1
+@49:47 if 0
+@49:57 int 1 6
+@49:47 assign 1 2
+@49:47 else
+@49:71 int 3 7
+@49:47 assign 3 2
+@49:47 end
+@49:80 int 4 7
+@49:47 binary 5 "*" 2 4
+@49:38 call 6 18 5
+@49:5 return 6
+endfn
+fn "prefixed_block_value" 0 3
+local "$" 3 let
+local "$" 3 let
+@50:43 int 0 42
+@50:40 unary 1 "-" 0
+@50:5 return 1
+endfn
+fn "block_method_continuation" 0 3
+local "$" 3 mut
+local "$" 15 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+@51:47 int 0 6
+@51:45 borrow 1 shared 0
+@51:45 call 2 35 1
+@51:64 int 3 7
+@51:45 binary 4 "*" 2 3
+@51:5 drop 0
+@51:5 return 4
+endfn
+fn "if_method_continuation" 0 3
+local "$" 1 let
+local "$" 3 let
+local "$if" 3 mut
+local "$" 3 let
+local "$" 15 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+@52:45 int 0 1
+@52:42 if 0
+@52:52 int 1 6
+@52:42 assign 1 2
+@52:42 else
+@52:66 int 3 7
+@52:42 assign 3 2
+@52:42 end
+@52:42 borrow 4 shared 2
+@52:42 call 5 35 4
+@52:83 int 6 7
+@52:42 binary 7 "*" 5 6
+@52:5 drop 2
+@52:5 return 7
+endfn
+fn "if_field_continuation" 0 3
+local "$" 1 let
+local "$" 3 let
+local "$" 14 let
+local "$if" 14 mut
+local "$" 3 let
+local "$" 14 let
+local "$" 3 let
+@55:8 int 0 1
+@55:5 if 0
+@55:30 int 1 42
+@55:15 struct 2 1
+@55:5 assign 2 3
+@55:5 else
+@55:59 int 4 0
+@55:44 struct 5 4
+@55:5 assign 5 3
+@55:5 end
+@55:5 read 6 copy 3 field 0
+@54:5 drop 3
+@54:5 return 6
+endfn
+fn "parenthesized_index" 0 3
+local "$" 1 let
+local "$" 3 let
+local "$" 16 let
+local "$if" 16 mut
+local "$" 3 let
+local "$" 16 let
+local "$" 4 let
+local "$" 3 let
+@57:43 int 0 1
+@57:40 if 0
+@57:51 int 1 42
+@57:50 array 2 1
+@57:40 assign 2 3
+@57:40 else
+@57:68 int 4 0
+@57:67 array 5 4
+@57:40 assign 5 3
+@57:40 end
+@57:77 int 6 0
+@57:40 read 7 copy 3 index 6
+@57:5 drop 6
+@57:5 drop 3
+@57:5 return 7
+endfn
+fn "if_arm_before_negative_pattern" 0 3
+local "$" 3 mut
+local "$" 3 let
+local "$" 3 let
+local "$" 1 let
+local "$" 1 let
+local "$" 3 let
+local "$if" 3 mut
+local "$" 3 let
+local "$match" 3 mut
+local "$" 3 let
+local "$" 3 let
+local "$" 1 let
+local "$" 3 let
+local "$" 1 let
+local "$" 3 let
+@59:11 int 0 0
+@60:1 read 1 copy 0
+@60:9 int 2 0
+@60:1 binary 3 "==" 1 2
+@60:1 if 3
+@60:17 int 4 1
+@60:14 if 4
+@60:24 int 5 42
+@60:14 assign 5 6
+@60:14 else
+@60:39 int 7 0
+@60:14 assign 7 6
+@60:14 end
+@59:5 assign 6 8
+@59:5 drop 0
+@59:5 else
+@61:1 read 9 copy 0
+@61:9 int 10 -1
+@61:1 binary 11 "==" 9 10
+@61:1 if 11
+@61:15 int 12 1
+@59:5 assign 12 8
+@59:5 drop 0
+@59:5 else
+@62:1 int 13 1
+@62:1 if 13
+@62:14 int 14 2
+@59:5 assign 14 8
+@59:5 drop 0
+@59:5 else
+@59:5 trap "unreachable arm after irrefutable pattern"
+@59:5 trap "unreachable match"
+@59:5 end
+@59:5 end
+@59:5 end
+@58:5 return 8
+endfn
+fn "block_arm_method_continuation" 0 3
+local "$" 3 mut
+local "$" 3 let
+local "$" 3 let
+local "$" 1 let
+local "$" 3 mut
+local "$" 15 let
+local "$" 3 let
+local "$match" 3 mut
+local "$" 1 let
+local "$" 3 let
+@66:11 int 0 0
+@66:5 read 1 copy 0
+@66:18 int 2 0
+@66:5 binary 3 "==" 1 2
+@66:5 if 3
+@66:25 int 4 42
+@66:23 borrow 5 shared 4
+@66:23 call 6 35 5
+@66:5 assign 6 7
+@66:5 drop 4
+@66:5 drop 0
+@66:5 else
+@66:5 int 8 1
+@66:5 if 8
+@66:47 int 9 0
+@66:5 assign 9 7
+@66:5 drop 0
+@66:5 else
+@66:5 trap "unreachable arm after irrefutable pattern"
+@66:5 trap "unreachable match"
+@66:5 end
+@66:5 end
+@65:5 return 7
+endfn
+fn "control_flow_arms_can_omit_commas" 0 3
+local "$" 3 let
+local "value" 3 mut
+local "$" 3 mut
+local "$" 3 let
+local "$" 3 let
+local "$" 1 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+local "$" 1 let
+local "$" 1 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+local "$" 0 let
+local "$" 0 let
+local "$" 0 let
+local "$match" 0 mut
+local "$" 3 let
+local "$" 3 let
+local "$" 1 let
+local "$" 2 let
+local "$" 2 let
+local "$counter" 2 mut
+local "$end" 2 let
+local "$for:198:item" 2 mut
+local "$" 2 let
+local "$" 2 let
+local "$" 1 let
+local "$" 2 let
+local "$" 2 let
+local "index" 2 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+local "$" 0 let
+local "$" 0 let
+local "$" 0 let
+local "$" 2 let
+local "$" 2 let
+local "$" 2 let
+local "$" 0 let
+local "$" 1 let
+local "$loop" 0 mut
+local "$" 0 let
+local "$" 0 let
+local "$" 0 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+@69:26 int 0 0
+@69:1 assign 0 1
+@70:11 int 2 0
+@71:1 read 3 copy 2
+@71:9 int 4 0
+@71:1 binary 5 "==" 3 4
+@71:1 if 5
+@71:14 loop
+@71:20 read 6 copy 1
+@71:28 int 7 1
+@71:20 read 8 copy 7
+@71:20 binary 9 "<" 6 8
+@71:14 drop 7
+@71:14 unary 10 "!" 9
+@71:14 if 10
+@71:14 break
+@71:14 end
+@71:40 read 11 copy 1
+@71:48 int 12 1
+@71:40 binary 13 "+" 11 12
+@71:32 assign 13 1
+@71:32 unit 14
+@71:14 drop 14
+@71:14 unit 15
+@71:14 drop 15
+@71:14 continue
+@71:14 end
+@71:14 unit 16
+@70:5 assign 16 17
+@70:5 drop 2
+@70:5 else
+@72:1 read 18 copy 2
+@72:9 int 19 1
+@72:1 binary 20 "==" 18 19
+@72:1 if 20
+@72:27 int 21 0
+@72:30 int 22 1
+@72:14 assign 21 23
+@72:14 assign 22 24
+@72:14 loop
+@72:14 read 26 copy 23
+@72:14 read 27 copy 24
+@72:14 binary 28 ">=" 26 27
+@72:14 if 28
+@72:14 break
+@72:14 end
+@72:14 read 29 copy 23
+@72:14 assign 29 25
+@72:14 read 30 copy 25
+@72:14 assign 30 31
+@72:42 read 32 copy 1
+@72:50 int 33 1
+@72:42 binary 34 "+" 32 33
+@72:34 assign 34 1
+@72:34 unit 35
+@72:14 drop 35
+@72:14 unit 36
+@72:14 drop 36
+@72:14 unit 37
+@72:14 drop 31
+@72:14 read 38 copy 23
+@72:14 int 39 1
+@72:14 binary 40 "+" 38 39
+@72:14 assign 40 23
+@72:14 drop 37
+@72:14 drop 25
+@72:14 continue
+@72:14 end
+@72:14 drop 23
+@72:14 drop 24
+@72:14 unit 41
+@70:5 assign 41 17
+@70:5 drop 2
+@70:5 else
+@73:1 int 42 1
+@73:1 if 42
+@73:14 loop
+@73:21 unit 44
+@73:21 assign 44 43
+@73:21 break
+@73:21 unit 45
+@73:14 drop 45
+@73:14 unit 46
+@73:14 end
+@70:5 assign 43 17
+@70:5 drop 2
+@70:5 else
+@70:5 trap "unreachable arm after irrefutable pattern"
+@70:5 trap "unreachable match"
+@70:5 end
+@70:5 end
+@70:5 end
+@68:5 drop 17
+@75:5 read 47 copy 1
+@75:13 int 48 41
+@75:5 binary 49 "+" 47 48
+@68:5 drop 1
+@68:5 return 49
+endfn
+fn "explicit_semicolons_discard_block_values" 0 3
+local "$" 3 let
+local "$" 1 let
+local "$" 3 let
+local "$if" 3 mut
+local "$" 3 let
+local "$" 3 mut
+local "$" 1 let
+local "$" 3 let
+local "$match" 3 mut
+local "$" 3 let
+@78:7 int 0 1
+@77:5 drop 0
+@79:8 int 1 1
+@79:5 if 1
+@79:15 int 2 2
+@79:5 assign 2 3
+@79:5 else
+@79:29 int 4 3
+@79:5 assign 4 3
+@79:5 end
+@77:5 drop 3
+@80:11 int 5 0
+@80:5 int 6 1
+@80:5 if 6
+@80:23 int 7 4
+@80:5 assign 7 8
+@80:5 drop 5
+@80:5 else
+@80:5 trap "unreachable arm after irrefutable pattern"
+@80:5 trap "unreachable match"
+@80:5 end
+@77:5 drop 8
+@81:5 int 9 42
+@77:5 return 9
+endfn
+fn "unparenthesized_block_tail_is_a_value" 0 3
+local "$" 3 let
+@83:59 int 0 42
+@83:5 return 0
+endfn
+fn "parenthesized_block_tail_is_a_value" 0 3
+local "$" 3 let
+@84:58 int 0 42
+@84:5 return 0
+endfn
+fn "unparenthesized_if_tail_is_a_value" 0 3
+local "$" 1 let
+local "$" 3 let
+local "$if" 3 mut
+local "$" 3 let
+@85:57 int 0 1
+@85:54 if 0
+@85:64 int 1 42
+@85:54 assign 1 2
+@85:54 else
+@85:76 int 3 0
+@85:54 assign 3 2
+@85:54 end
+@85:5 return 2
+endfn
+fn "return_still_exits_before_later_effects" 0 3
+local "$" 3 let
+local "value" 3 mut
+local "$" 3 let
+local "$" 3 let
+local "$" 0 let
+local "$" 3 let
+local "$" 0 let
+@87:26 int 0 0
+@87:1 assign 0 1
+@88:12 int 2 42
+@88:5 drop 1
+@88:5 return 2
+@89:13 int 3 1
+@89:5 assign 3 1
+@89:5 unit 4
+@86:5 drop 4
+@90:5 read 5 copy 1
+@86:5 unit 6
+@86:5 drop 5
+@86:5 drop 4
+@86:5 drop 3
+@86:5 drop 2
+@86:5 drop 1
+@86:5 drop 0
+endfn
+fn "diverging_implicit_statement" 0 3
+local "$" 1 let
+local "$" 3 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 3 let
+local "$" 0 let
+local "$" 3 let
+local "$" 0 let
+@93:8 int 0 1
+@93:5 if 0
+@93:22 int 1 42
+@93:15 return 1
+@93:5 unit 2
+@93:5 else
+@93:42 int 4 0
+@93:35 return 4
+@93:33 unit 5
+@93:5 end
+@92:5 drop 5
+@94:5 int 6 1
+@92:5 unit 7
+@92:5 drop 6
+@92:5 drop 5
+@92:5 drop 4
+@92:5 drop 3
+@92:5 drop 2
+@92:5 drop 1
+@92:5 drop 0
+endfn
+fn "discarded_affine_block_values_drop_once" 0 3
+local "$" 3 let
+local "count" 3 mut
+local "$" 19 let
+local "$" 20 let
+local "$" 1 let
+local "$" 19 let
+local "$" 20 let
+local "$if" 20 mut
+local "$" 19 let
+local "$" 20 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+@99:26 int 0 0
+@99:1 assign 0 1
+@100:24 borrow 2 mut 1
+@100:7 struct 3 2
+@98:5 drop 3
+@101:8 int 4 1
+@101:5 if 4
+@101:32 borrow 5 mut 1
+@101:15 struct 6 5
+@101:5 assign 6 7
+@101:5 else
+@101:71 borrow 8 mut 1
+@101:54 struct 9 8
+@101:5 assign 9 7
+@101:5 end
+@98:5 drop 7
+@102:5 read 10 copy 1
+@102:13 int 11 21
+@102:5 binary 12 "*" 10 11
+@98:5 drop 1
+@98:5 return 12
+endfn
+fn "$builtin:clone:t3" 1 3
+local "self" 15 let
+local "v1" 3 let
+@51:45 read 1 copy 0 deref
+@51:45 drop 0
+@51:45 return 1
+endfn
+fn "drop$f34<Self=t20;>" 1 0
+local "self" 21 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+local "$" 0 let
+local "$" 0 let
+@97:68 read 1 copy 0 deref field 0 deref
+@97:82 int 2 1
+@97:68 binary 3 "+" 1 2
+@97:54 assign 3 0 deref field 0 deref
+@97:54 unit 4
+@97:33 drop 4
+@97:33 unit 5
+@97:33 drop 0
+@97:33 return 5
+endfn
+fn "semantic_values" 0 3
+local "result" 3 let
+local "expected0" 3 let
+local "equal0" 1 let
+local "unit0" 0 let
+local "result" 3 let
+local "expected1" 3 let
+local "equal1" 1 let
+local "unit1" 0 let
+local "result" 3 let
+local "expected2" 3 let
+local "equal2" 1 let
+local "unit2" 0 let
+local "result" 3 let
+local "expected3" 3 let
+local "equal3" 1 let
+local "unit3" 0 let
+local "result" 3 let
+local "expected4" 3 let
+local "equal4" 1 let
+local "unit4" 0 let
+local "result" 3 let
+local "expected5" 3 let
+local "equal5" 1 let
+local "unit5" 0 let
+local "result" 3 let
+local "expected6" 3 let
+local "equal6" 1 let
+local "unit6" 0 let
+local "result" 3 let
+local "expected7" 3 let
+local "equal7" 1 let
+local "unit7" 0 let
+local "result" 3 let
+local "expected8" 3 let
+local "equal8" 1 let
+local "unit8" 0 let
+local "result" 3 let
+local "expected9" 3 let
+local "equal9" 1 let
+local "unit9" 0 let
+local "result" 3 let
+local "expected10" 3 let
+local "equal10" 1 let
+local "unit10" 0 let
+local "result" 3 let
+local "expected11" 3 let
+local "equal11" 1 let
+local "unit11" 0 let
+local "result" 3 let
+local "expected12" 3 let
+local "equal12" 1 let
+local "unit12" 0 let
+local "result" 3 let
+local "expected13" 3 let
+local "equal13" 1 let
+local "unit13" 0 let
+local "result" 3 let
+local "expected14" 3 let
+local "equal14" 1 let
+local "unit14" 0 let
+local "result" 3 let
+local "expected15" 3 let
+local "equal15" 1 let
+local "unit15" 0 let
+local "result" 3 let
+local "expected16" 3 let
+local "equal16" 1 let
+local "unit16" 0 let
+local "result" 3 let
+local "expected17" 3 let
+local "equal17" 1 let
+local "unit17" 0 let
+local "result" 3 let
+local "expected18" 3 let
+local "equal18" 1 let
+local "unit18" 0 let
+local "result" 3 let
+local "expected19" 3 let
+local "equal19" 1 let
+local "unit19" 0 let
+local "result" 3 let
+local "expected20" 3 let
+local "equal20" 1 let
+local "unit20" 0 let
+local "result" 3 let
+local "expected21" 3 let
+local "equal21" 1 let
+local "unit21" 0 let
+local "result" 3 let
+local "expected22" 3 let
+local "equal22" 1 let
+local "unit22" 0 let
+local "result" 3 let
+local "expected23" 3 let
+local "equal23" 1 let
+local "unit23" 0 let
+local "result" 3 let
+local "expected24" 3 let
+local "equal24" 1 let
+local "unit24" 0 let
+local "result" 3 let
+local "expected25" 3 let
+local "equal25" 1 let
+local "unit25" 0 let
+local "result" 3 let
+local "expected26" 3 let
+local "equal26" 1 let
+local "unit26" 0 let
+local "result" 3 let
+local "expected27" 3 let
+local "equal27" 1 let
+local "unit27" 0 let
+local "result" 3 let
+local "expected28" 3 let
+local "equal28" 1 let
+local "unit28" 0 let
+local "result" 3 let
+local "expected29" 3 let
+local "equal29" 1 let
+local "unit29" 0 let
+local "result" 3 let
+local "expected30" 3 let
+local "equal30" 1 let
+local "unit30" 0 let
+local "result" 3 let
+local "expected31" 3 let
+local "equal31" 1 let
+local "unit31" 0 let
+local "result" 3 let
+local "expected32" 3 let
+local "equal32" 1 let
+local "unit32" 0 let
+local "result" 3 let
+local "expected33" 3 let
+local "equal33" 1 let
+local "unit33" 0 let
+local "answer" 3 let
+@1 call 0 0
+@1 int 1 42
+@1 binary 2 == 0 1
+@1 intrinsic 3 assert 2
+@1 drop 3
+@1 call 4 1
+@1 int 5 -42
+@1 binary 6 == 4 5
+@1 intrinsic 7 assert 6
+@1 drop 7
+@1 call 8 2
+@1 int 9 42
+@1 binary 10 == 8 9
+@1 intrinsic 11 assert 10
+@1 drop 11
+@1 call 12 3
+@1 int 13 42
+@1 binary 14 == 12 13
+@1 intrinsic 15 assert 14
+@1 drop 15
+@1 call 16 4
+@1 int 17 42
+@1 binary 18 == 16 17
+@1 intrinsic 19 assert 18
+@1 drop 19
+@1 call 20 5
+@1 int 21 42
+@1 binary 22 == 20 21
+@1 intrinsic 23 assert 22
+@1 drop 23
+@1 call 24 6
+@1 int 25 42
+@1 binary 26 == 24 25
+@1 intrinsic 27 assert 26
+@1 drop 27
+@1 call 28 7
+@1 int 29 42
+@1 binary 30 == 28 29
+@1 intrinsic 31 assert 30
+@1 drop 31
+@1 call 32 8
+@1 int 33 42
+@1 binary 34 == 32 33
+@1 intrinsic 35 assert 34
+@1 drop 35
+@1 call 36 9
+@1 int 37 42
+@1 binary 38 == 36 37
+@1 intrinsic 39 assert 38
+@1 drop 39
+@1 call 40 10
+@1 int 41 42
+@1 binary 42 == 40 41
+@1 intrinsic 43 assert 42
+@1 drop 43
+@1 call 44 11
+@1 int 45 42
+@1 binary 46 == 44 45
+@1 intrinsic 47 assert 46
+@1 drop 47
+@1 call 48 12
+@1 int 49 42
+@1 binary 50 == 48 49
+@1 intrinsic 51 assert 50
+@1 drop 51
+@1 call 52 13
+@1 int 53 42
+@1 binary 54 == 52 53
+@1 intrinsic 55 assert 54
+@1 drop 55
+@1 call 56 14
+@1 int 57 42
+@1 binary 58 == 56 57
+@1 intrinsic 59 assert 58
+@1 drop 59
+@1 call 60 15
+@1 int 61 42
+@1 binary 62 == 60 61
+@1 intrinsic 63 assert 62
+@1 drop 63
+@1 call 64 16
+@1 int 65 42
+@1 binary 66 == 64 65
+@1 intrinsic 67 assert 66
+@1 drop 67
+@1 call 68 17
+@1 int 69 42
+@1 binary 70 == 68 69
+@1 intrinsic 71 assert 70
+@1 drop 71
+@1 call 72 19
+@1 int 73 42
+@1 binary 74 == 72 73
+@1 intrinsic 75 assert 74
+@1 drop 75
+@1 call 76 20
+@1 int 77 -42
+@1 binary 78 == 76 77
+@1 intrinsic 79 assert 78
+@1 drop 79
+@1 call 80 21
+@1 int 81 42
+@1 binary 82 == 80 81
+@1 intrinsic 83 assert 82
+@1 drop 83
+@1 call 84 22
+@1 int 85 42
+@1 binary 86 == 84 85
+@1 intrinsic 87 assert 86
+@1 drop 87
+@1 call 88 23
+@1 int 89 42
+@1 binary 90 == 88 89
+@1 intrinsic 91 assert 90
+@1 drop 91
+@1 call 92 24
+@1 int 93 42
+@1 binary 94 == 92 93
+@1 intrinsic 95 assert 94
+@1 drop 95
+@1 call 96 25
+@1 int 97 42
+@1 binary 98 == 96 97
+@1 intrinsic 99 assert 98
+@1 drop 99
+@1 call 100 26
+@1 int 101 42
+@1 binary 102 == 100 101
+@1 intrinsic 103 assert 102
+@1 drop 103
+@1 call 104 27
+@1 int 105 42
+@1 binary 106 == 104 105
+@1 intrinsic 107 assert 106
+@1 drop 107
+@1 call 108 28
+@1 int 109 42
+@1 binary 110 == 108 109
+@1 intrinsic 111 assert 110
+@1 drop 111
+@1 call 112 29
+@1 int 113 42
+@1 binary 114 == 112 113
+@1 intrinsic 115 assert 114
+@1 drop 115
+@1 call 116 30
+@1 int 117 42
+@1 binary 118 == 116 117
+@1 intrinsic 119 assert 118
+@1 drop 119
+@1 call 120 31
+@1 int 121 42
+@1 binary 122 == 120 121
+@1 intrinsic 123 assert 122
+@1 drop 123
+@1 call 124 33
+@1 int 125 42
+@1 binary 126 == 124 125
+@1 intrinsic 127 assert 126
+@1 drop 127
+@1 call 128 32
+@1 int 129 42
+@1 binary 130 == 128 129
+@1 intrinsic 131 assert 130
+@1 drop 131
+@1 call 132 34
+@1 int 133 42
+@1 binary 134 == 132 133
+@1 intrinsic 135 assert 134
+@1 drop 135
+@1 int 136 42
+@1 return 136
+endfn

@@ -1,3 +1,5 @@
+// expect: reject E_TRAIT
+// witness: {"rustCode":"E0277"}
 trait Leaf {}
 struct Wrap<T> {
     value: T,

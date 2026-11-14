@@ -1,3 +1,5 @@
+// expect: output 6869585905040563
+// witness: {}
 struct M {
     out: Stdout,
     b: u8,

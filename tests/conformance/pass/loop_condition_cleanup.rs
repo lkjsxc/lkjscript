@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 pub fn probe() -> i64 {
     let values = vec![vec![20i64, 22i64]];
     let mut index: usize = 0;

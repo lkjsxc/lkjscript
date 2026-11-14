@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 struct Counter<'a> { count: &'a mut i64 }
 impl<'a> Counter<'a> { fn read(&self) -> i64 { 41 } }
 impl<'a> Drop for Counter<'a> {

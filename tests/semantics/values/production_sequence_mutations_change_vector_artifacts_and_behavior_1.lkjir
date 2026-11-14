@@ -1,0 +1,386 @@
+lkjscript-ir 1
+# expect: value 42
+# entry: semantic_values
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "Vec<t3>" vec 3
+type "&mut t14" ref mut 14
+type "$std::string::String" struct move "bytes" 17
+type "Vec<t5>" vec 5
+type "&t14" ref shared 14
+type "[t3]" slice shared 3
+type "&t19" ref shared 19
+type "&t3" ref shared 3
+fn "clone_probe" 0 3
+local "$" 3 let
+local "$" 3 let
+local "$vec" 14 mut
+local "$" 15 let
+local "$" 0 let
+local "$" 15 let
+local "$" 0 let
+local "values" 14 let
+local "$" 18 let
+local "$" 14 let
+local "copied" 14 let
+local "$" 4 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+local "$" 4 let
+local "$" 3 let
+local "$" 3 let
+@3:30 int 0 4
+@3:32 int 1 2
+@3:25 intrinsic 2 "vec_new"
+@3:25 borrow 3 mut 2
+@3:25 intrinsic 4 "vec_push" 3 0
+@3:25 drop 4
+@3:25 borrow 5 mut 2
+@3:25 intrinsic 6 "vec_push" 5 1
+@3:25 drop 6
+@3:1 assign 2 7
+@3:46 borrow 8 shared 7
+@3:46 call 9 3 8
+@3:1 assign 9 10
+@4:12 int 11 0
+@4:5 read 12 copy 10 index 11
+@4:15 int 13 10
+@4:5 binary 14 "*" 12 13
+@4:25 int 15 1
+@4:18 read 16 copy 10 index 15
+@4:5 binary 17 "+" 14 16
+@2:5 drop 15
+@2:5 drop 11
+@2:5 drop 10
+@2:5 drop 7
+@2:5 return 17
+endfn
+fn "eq_probe" 0 3
+local "$" 3 let
+local "$" 3 let
+local "$vec" 14 mut
+local "$" 15 let
+local "$" 0 let
+local "$" 15 let
+local "$" 0 let
+local "left" 14 let
+local "$" 3 let
+local "$" 3 let
+local "$vec" 14 mut
+local "$" 15 let
+local "$" 0 let
+local "$" 15 let
+local "$" 0 let
+local "right" 14 let
+local "$" 18 let
+local "$" 18 let
+local "$" 1 let
+local "$" 3 let
+local "$if" 3 mut
+local "$" 3 let
+@7:28 int 0 4
+@7:30 int 1 2
+@7:23 intrinsic 2 "vec_new"
+@7:23 borrow 3 mut 2
+@7:23 intrinsic 4 "vec_push" 3 0
+@7:23 drop 4
+@7:23 borrow 5 mut 2
+@7:23 intrinsic 6 "vec_push" 5 1
+@7:23 drop 6
+@7:1 assign 2 7
+@7:57 int 8 4
+@7:59 int 9 3
+@7:52 intrinsic 10 "vec_new"
+@7:52 borrow 11 mut 10
+@7:52 intrinsic 12 "vec_push" 11 8
+@7:52 drop 12
+@7:52 borrow 13 mut 10
+@7:52 intrinsic 14 "vec_push" 13 9
+@7:52 drop 14
+@7:1 assign 10 15
+@8:8 borrow 16 shared 7
+@8:8 borrow 17 shared 15
+@8:8 call 18 4 16 17
+@8:5 if 18
+@8:21 int 19 1
+@8:5 assign 19 20
+@8:5 else
+@8:30 int 21 0
+@8:5 assign 21 20
+@8:5 end
+@6:5 drop 15
+@6:5 drop 7
+@6:5 return 20
+endfn
+fn "ne_probe" 0 3
+local "$" 3 let
+local "$" 3 let
+local "$vec" 14 mut
+local "$" 15 let
+local "$" 0 let
+local "$" 15 let
+local "$" 0 let
+local "left" 14 let
+local "$" 3 let
+local "$" 3 let
+local "$vec" 14 mut
+local "$" 15 let
+local "$" 0 let
+local "$" 15 let
+local "$" 0 let
+local "right" 14 let
+local "$" 18 let
+local "$" 18 let
+local "$" 1 let
+local "$" 3 let
+local "$if" 3 mut
+local "$" 3 let
+@11:28 int 0 4
+@11:30 int 1 2
+@11:23 intrinsic 2 "vec_new"
+@11:23 borrow 3 mut 2
+@11:23 intrinsic 4 "vec_push" 3 0
+@11:23 drop 4
+@11:23 borrow 5 mut 2
+@11:23 intrinsic 6 "vec_push" 5 1
+@11:23 drop 6
+@11:1 assign 2 7
+@11:57 int 8 4
+@11:59 int 9 3
+@11:52 intrinsic 10 "vec_new"
+@11:52 borrow 11 mut 10
+@11:52 intrinsic 12 "vec_push" 11 8
+@11:52 drop 12
+@11:52 borrow 13 mut 10
+@11:52 intrinsic 14 "vec_push" 13 9
+@11:52 drop 14
+@11:1 assign 10 15
+@12:8 borrow 16 shared 7
+@12:16 borrow 17 shared 15
+@12:8 call 18 5 16 17
+@12:5 if 18
+@12:25 int 19 1
+@12:5 assign 19 20
+@12:5 else
+@12:34 int 21 0
+@12:5 assign 21 20
+@12:5 end
+@10:5 drop 15
+@10:5 drop 7
+@10:5 return 20
+endfn
+fn "$std::sequence::__lkjscript_vec_clone<T=t3;>" 1 14 file 2
+local "source" 18 let
+local "$" 14 let
+local "result" 14 mut
+local "$" 4 let
+local "index" 4 mut
+local "$" 4 let
+local "$" 18 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 21 let
+local "$" 3 let
+local "$" 15 let
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$" 0 let
+local "$" 14 let
+@4:30 intrinsic 1 "vec_new"
+@4:1 assign 1 2
+@5:28 int 3 0
+@5:1 assign 3 4
+@6:5 loop
+@6:11 read 5 copy 4
+@6:19 borrow 6 shared 0 deref
+@6:19 intrinsic 7 "vec_len" 6
+@6:11 read 8 copy 7
+@6:11 binary 9 "<" 5 8
+@6:5 drop 7
+@6:5 unary 10 "!" 9
+@6:5 if 10
+@6:5 break
+@6:5 end
+@7:28 read 11 copy 4
+@7:21 borrow 12 shared 0 deref index 11
+@7:21 call 13 6 12
+@7:9 borrow 14 mut 2
+@7:9 intrinsic 15 "vec_push" 14 13
+@6:5 drop 15
+@6:5 drop 11
+@8:17 read 16 copy 4
+@8:25 int 17 1
+@8:17 binary 18 "+" 16 17
+@8:9 assign 18 4
+@8:9 unit 19
+@6:5 drop 19
+@6:5 unit 20
+@6:5 drop 20
+@6:5 continue
+@6:5 end
+@6:5 unit 21
+@3:5 drop 21
+@10:5 read 22 move 2
+@3:5 drop 4
+@3:5 drop 0
+@3:5 return 22
+endfn
+fn "$std::sequence::__lkjscript_vec_equal<T=t3;>" 2 1 file 2
+local "left" 18 let
+local "right" 18 let
+local "$" 18 let
+local "$" 4 let
+local "$" 4 let
+local "$" 18 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 1 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 4 let
+local "index" 4 mut
+local "$" 4 let
+local "$" 18 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$" 0 let
+local "$" 1 let
+@14:8 borrow 2 shared 0 deref
+@14:8 intrinsic 3 "vec_len" 2
+@14:8 read 4 copy 3
+@14:22 borrow 5 shared 1 deref
+@14:22 intrinsic 6 "vec_len" 5
+@14:8 read 7 copy 6
+@14:8 binary 8 "!=" 4 7
+@14:5 if 8
+@15:16 int 9 0
+@15:9 drop 6
+@15:9 drop 3
+@15:9 drop 1
+@15:9 drop 0
+@15:9 return 9
+@14:5 unit 10
+@14:5 else
+@14:5 unit 12
+@14:5 assign 12 11
+@14:5 end
+@13:5 drop 11
+@13:5 drop 6
+@13:5 drop 3
+@17:28 int 13 0
+@17:1 assign 13 14
+@18:5 loop
+@18:11 read 15 copy 14
+@18:19 borrow 16 shared 0 deref
+@18:19 intrinsic 17 "vec_len" 16
+@18:11 read 18 copy 17
+@18:11 binary 19 "<" 15 18
+@18:5 drop 17
+@18:5 unary 20 "!" 19
+@18:5 if 20
+@18:5 break
+@18:5 end
+@20:12 int 21 0
+@20:9 if 21
+@21:20 int 22 0
+@21:13 drop 14
+@21:13 drop 1
+@21:13 drop 0
+@21:13 return 22
+@20:9 unit 23
+@20:9 else
+@20:9 unit 25
+@20:9 assign 25 24
+@20:9 end
+@18:5 drop 24
+@23:17 read 26 copy 14
+@23:25 int 27 1
+@23:17 binary 28 "+" 26 27
+@23:9 assign 28 14
+@23:9 unit 29
+@18:5 drop 29
+@18:5 unit 30
+@18:5 drop 30
+@18:5 continue
+@18:5 end
+@18:5 unit 31
+@13:5 drop 31
+@25:5 int 32 1
+@13:5 drop 14
+@13:5 drop 1
+@13:5 drop 0
+@13:5 return 32
+endfn
+fn "$builtin:ne:t14" 2 1
+local "self" 18 let
+local "other" 18 let
+local "v2" 1 let
+local "v3" 1 let
+@12:8 call 2 4 0 1
+@12:8 unary 3 "!" 2
+@12:8 return 3
+endfn
+fn "$builtin:clone:t3" 1 3 file 2
+local "self" 21 let
+local "v1" 3 let
+@7:21 read 1 copy 0 deref
+@7:21 drop 0
+@7:21 return 1
+endfn
+fn "semantic_values" 0 3
+local "result" 3 let
+local "expected0" 3 let
+local "equal0" 1 let
+local "unit0" 0 let
+local "result" 3 let
+local "expected1" 3 let
+local "equal1" 1 let
+local "unit1" 0 let
+local "answer" 3 let
+@1 call 0 1
+@1 int 1 1
+@1 binary 2 == 0 1
+@1 intrinsic 3 assert 2
+@1 drop 3
+@1 call 4 2
+@1 int 5 0
+@1 binary 6 == 4 5
+@1 intrinsic 7 assert 6
+@1 drop 7
+@1 int 8 42
+@1 return 8
+endfn

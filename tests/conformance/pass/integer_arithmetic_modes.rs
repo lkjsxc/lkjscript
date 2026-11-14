@@ -1,3 +1,5 @@
+// expect: value 8034312209100913927
+// witness: {}
 fn record(hash: &mut u64, value: u64) {
     *hash = (*hash).wrapping_mul(1099511628211u64).wrapping_add(value);
 }

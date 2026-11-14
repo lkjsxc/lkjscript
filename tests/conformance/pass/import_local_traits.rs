@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 mod first {
     pub struct Value { pub n: i64 }
     pub trait Read { fn read(&self) -> i64; }

@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 pub fn probe() -> i64 {
     let values = vec![
         String::from("|"),

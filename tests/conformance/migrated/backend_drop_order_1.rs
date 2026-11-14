@@ -1,3 +1,5 @@
+// expect: trap R0004 6
+// stdout:
 struct Mark { value:i64 }
 impl Drop for Mark {
  fn drop(&mut self) {

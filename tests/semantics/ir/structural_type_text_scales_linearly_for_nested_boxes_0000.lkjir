@@ -1,0 +1,60 @@
+lkjscript-ir 1
+# expect: check
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "Box<t3>" box 3
+type "Box<t14>" box 14
+type "Box<t15>" box 15
+type "Box<t16>" box 16
+type "Box<t17>" box 17
+type "Box<t18>" box 18
+type "Box<t19>" box 19
+type "Box<t20>" box 20
+type "Box<t21>" box 21
+type "Box<t22>" box 22
+type "Box<t23>" box 23
+type "Box<t24>" box 24
+type "Box<t25>" box 25
+type "Box<t26>" box 26
+type "Box<t27>" box 27
+type "Box<t28>" box 28
+type "Box<t29>" box 29
+type "Box<t30>" box 30
+type "Box<t31>" box 31
+type "Box<t32>" box 32
+type "Box<t33>" box 33
+type "Box<t34>" box 34
+type "Box<t35>" box 35
+type "Box<t36>" box 36
+type "Box<t37>" box 37
+type "Box<t38>" box 38
+type "Box<t39>" box 39
+type "Box<t40>" box 40
+type "Box<t41>" box 41
+type "Box<t42>" box 42
+type "Box<t43>" box 43
+type "Box<t44>" box 44
+fn "consume" 1 0
+local "_x" 45 let
+local "$" 0 let
+@1:1 unit 1
+@1:1 drop 0
+@1:1 return 1
+endfn
+fn "probe" 0 3
+local "$" 3 let
+@1:197 int 0 0
+@1:181 return 0
+endfn

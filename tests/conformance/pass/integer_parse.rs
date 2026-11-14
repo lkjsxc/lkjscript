@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 pub fn probe() -> i64 {
     assert!("255".parse::<u8>().unwrap() == 255u8);
     assert!("256".parse::<u8>().is_err());

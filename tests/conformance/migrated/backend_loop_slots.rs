@@ -1,3 +1,5 @@
+// expect: value 14862
+// witness: {}
 pub fn probe()->i64 { let mut borrowed=2i64; let mut total=0i64;
 let v0=0i64;
 let v1=1i64;

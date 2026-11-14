@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 use std::fmt;
 use std::fmt::Write;
 struct P {

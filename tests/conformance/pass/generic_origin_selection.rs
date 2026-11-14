@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 struct Capture<'a, 'b> { left: &'a i64, right: &'b i64 }
 fn choose<T>(first: T, second: T, left: bool) -> T {
     if left { first } else { second }

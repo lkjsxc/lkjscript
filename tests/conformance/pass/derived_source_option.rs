@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 #[derive(Clone, PartialEq)]
 struct Record { name: String }
 pub fn probe() -> i64 {

@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 #[derive(Clone, Copy)]
 struct Holder<'a> { text: &'a str }
 fn literal() -> &'static str { "nul\0é水😀" }

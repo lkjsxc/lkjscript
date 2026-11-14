@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
 #[derive(Copy, Clone)]
 struct View<'a> { value: &'a i64 }
 fn leak<'a>(external: &'a i64) -> View<'a> {

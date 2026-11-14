@@ -1,0 +1,112 @@
+lkjscript-ir 1
+# expect: check
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "Vec<t3>" vec 3
+type "$std::prelude::Option<t3>" enum copy
+variant "None"
+variant "Some" "0" 3
+endtype
+type "&mut t14" ref mut 14
+type "str" str
+type "&t17" ref shared 17
+fn "probe" 0 3
+local "$" 3 let
+local "$vec" 14 mut
+local "$" 16 let
+local "$" 0 let
+local "values" 14 mut
+local "$" 16 let
+local "$" 15 let
+local "result" 15 let
+local "$" 15 let
+local "$" 3 let
+@1:74 int 0 9
+@1:69 intrinsic 1 "vec_new"
+@1:69 borrow 2 mut 1
+@1:69 intrinsic 3 "vec_push" 2 0
+@1:69 drop 3
+@1:29 assign 1 4
+@1:105 borrow 5 mut 4
+@1:105 intrinsic 6 "vec_pop" 5
+@1:29 assign 6 7
+@1:118 read 8 copy 7
+@1:118 call 9 1 8
+@1:29 drop 7
+@1:29 drop 4
+@1:29 return 9
+endfn
+fn "$std::prelude::unwrap$f526<Self=t15;T=t3;>" 1 3 file 13
+local "self" 15 let
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 3 let
+local "value" 3 let
+local "$" 3 let
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 0 let
+local "$" 0 let
+@118:1 int 2 0
+@118:1 assign 2 1
+@118:1 tag-test-place 3 1 0
+@118:1 if 3
+@118:1 int 4 1
+@118:1 int 5 1
+@118:1 binary 6 "&" 4 5
+@118:1 assign 6 1
+@118:1 end
+@118:1 if 1
+@118:1 tag-test-place 7 1 0
+@118:1 if 7
+@118:1 else
+@118:1 trap "unreachable selected pattern"
+@118:1 end
+@118:1 read 8 copy 0 variant 1 0
+@118:1 assign 8 9
+@118:43 read 10 copy 9
+@118:36 drop 9
+@118:36 drop 0
+@118:36 return 10
+@117:9 else
+@119:1 int 12 0
+@119:1 assign 12 11
+@119:1 tag-test-place 13 0 0
+@119:1 if 13
+@119:1 int 14 1
+@119:1 assign 14 11
+@119:1 end
+@119:1 if 11
+@119:1 tag-test-place 15 0 0
+@119:1 if 15
+@119:1 else
+@119:1 trap "unreachable selected pattern"
+@119:1 end
+@119:29 trap "explicit panic"
+@119:29 unit 16
+@117:9 else
+@117:9 trap "unreachable match"
+@117:9 end
+@117:9 end
+@117:9 unit 17
+endfn

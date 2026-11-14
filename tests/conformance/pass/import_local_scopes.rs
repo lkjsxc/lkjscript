@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 mod first { pub fn answer() -> i64 { 20 } }
 mod second { pub fn answer() -> i64 { 22 } }
 fn value() -> i64 { 99 }

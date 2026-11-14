@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 enum Answer { Missing, Found(i64) }
 fn value(answer: Answer) -> i64 {
     match answer { Answer::Missing => 0, Answer::Found(value) => value }

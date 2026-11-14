@@ -1,3 +1,5 @@
+// expect: value 20000
+// witness: {}
 struct Node { ready: i64, next: List }
         enum List { End, Next(Box<Node>) }
         impl Drop for Node {

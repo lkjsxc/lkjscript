@@ -1,3 +1,5 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false,"rustCode":"E0599"}
 trait Value { type Item; fn get(&self)->Self::Item; }
 struct Number { value:i64 }
 impl Value for Number {type Item=i64;fn get(&self)->i64{self.value}}

@@ -1,3 +1,5 @@
+// expect: output 0302011604000563
+// witness: {}
 use std::collections::BTreeMap;
 struct Mark {
     out: Stdout,

@@ -1,3 +1,5 @@
+// expect: value 109
+// witness: {}
 fn sum(values: &[i64]) -> i64 {
             let mut i: usize = 0;
             let mut total: i64 = 0;

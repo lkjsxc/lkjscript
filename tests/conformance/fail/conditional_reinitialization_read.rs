@@ -1,3 +1,5 @@
+// expect: reject E_MOVE
+// witness: {"rustAccept":false}
 pub fn probe() -> i64 {
     let mut x: Box<i64> = Box::new(1i64);
     drop(x);

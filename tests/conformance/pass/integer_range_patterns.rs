@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 fn classify(value: &u8) -> i64 {
     match value {
         ..=31 => 1,

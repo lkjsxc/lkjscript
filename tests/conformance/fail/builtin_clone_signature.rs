@@ -1,3 +1,5 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false}
 struct Item { value: i64 }
 impl Clone for Item {
     fn clone(&self) -> i64 { self.value }

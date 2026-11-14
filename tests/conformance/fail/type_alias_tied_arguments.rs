@@ -1,3 +1,5 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
 struct Packet<A, B> { first: A, second: B }
 type Tied<T> = Packet<T, T>;
 pub fn probe() -> i64 {

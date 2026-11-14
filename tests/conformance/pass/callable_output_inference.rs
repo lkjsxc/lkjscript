@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 trait Next {
     type Item;
     fn next(&mut self) -> Option<Self::Item>;

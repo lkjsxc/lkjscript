@@ -1,3 +1,6 @@
+// expect: value 42
+// entry: probe
+// witness: {}
 fn window<'a>(text: &'a str) -> &'a str {
     &text[1..7]
 }

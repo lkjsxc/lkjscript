@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 pub fn probe() -> i64 {
     let text = "Aé水Bé";
     assert!(text.starts_with('A'));

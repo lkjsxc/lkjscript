@@ -1,3 +1,6 @@
+// expect: value 42
+// entry: probe
+// witness: {}
 fn mutable_window<'a>(bytes: &'a mut [u8]) -> &'a mut [u8] {
     &mut bytes[1..3]
 }

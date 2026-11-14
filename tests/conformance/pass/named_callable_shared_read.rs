@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 fn invoke<'a, F: FnOnce(&'a i64)>(f: F, value: &'a mut i64) -> i64 {
     f(&*value);
     *value

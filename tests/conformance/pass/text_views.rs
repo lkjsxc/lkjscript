@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 pub fn probe() -> i64 {
     let mut bytes = "a水".bytes();
     assert!(bytes.next().unwrap() == 97u8);

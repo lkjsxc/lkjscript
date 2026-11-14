@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 #[derive(Clone, Copy)]
 struct Point { x: i64, y: i64 }
 pub fn probe() -> i64 {

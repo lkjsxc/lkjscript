@@ -345,7 +345,7 @@ impl<'a> Resolver<'a> {
             self.generic_ranges.get_mut(&key).unwrap().push(span);
         }
     }
-    fn generic(&self, span: Span, name: &str) -> bool {
+    pub(crate) fn generic(&self, span: Span, name: &str) -> bool {
         if name == "Self" || name.starts_with('\'') {
             return true;
         }
@@ -1179,73 +1179,5 @@ impl Resolver<'_> {
     pub fn declaration_visible(&self, scope: ModuleId, declaration: DeclarationId) -> bool {
         let item = &self.declarations[declaration];
         visible(self.program, item.scope, item.public, scope)
-    }
-}
-
-#[cfg(test)]
-mod generic_range_tests {
-    use super::*;
-
-    #[test]
-    fn lookup_keeps_file_name_and_enclosing_span_boundaries() {
-        let source = crate::syntax::parse("  fn first<T>() {} fn second<U>() {}").unwrap();
-        let resolver = Resolver::new(&source).unwrap();
-        let range = source.functions[0].span;
-        assert!(resolver.generic(range, "T"));
-        assert!(resolver.generic(
-            Span {
-                end: range.start,
-                ..range
-            },
-            "T"
-        ));
-        assert!(resolver.generic(
-            Span {
-                start: range.end,
-                ..range
-            },
-            "T"
-        ));
-        assert!(!resolver.generic(
-            Span {
-                start: range.start - 1,
-                ..range
-            },
-            "T"
-        ));
-        assert!(!resolver.generic(
-            Span {
-                end: range.end + 1,
-                ..range
-            },
-            "T"
-        ));
-        assert!(!resolver.generic(
-            Span {
-                file: range.file + 1,
-                ..range
-            },
-            "T"
-        ));
-        assert!(!resolver.generic(range, "U"));
-        assert!(!resolver.generic(range, "TT"));
-        assert!(!resolver.generic(source.functions[1].span, "T"));
-        assert!(resolver.generic(source.functions[1].span, "U"));
-        assert!(resolver.generic(Span::default(), "Self"));
-        assert!(resolver.generic(Span::default(), "'a"));
-    }
-
-    #[test]
-    fn nested_method_and_impl_ranges_both_supply_parameters() {
-        let source = crate::syntax::parse(
-            "struct Holder<T>{value:T} impl<T> Holder<T>{fn pair<U>(self,extra:U)->(T,U){(self.value,extra)}}",
-        ).unwrap();
-        let resolver = Resolver::new(&source).unwrap();
-        let method = source.functions[0].span;
-        let implementation = source.impls[0].span;
-        assert!(resolver.generic(method, "T"));
-        assert!(resolver.generic(method, "U"));
-        assert!(resolver.generic(implementation, "T"));
-        assert!(!resolver.generic(implementation, "U"));
     }
 }

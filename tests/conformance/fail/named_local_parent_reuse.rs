@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustCode":"E0506"}
 fn bad<'a, 'b: 'a>(slot: &'b mut &'a mut i64) {
     let view: &'a mut i64 = &mut **slot;
     drop(view);

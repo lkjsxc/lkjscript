@@ -1,3 +1,6 @@
+// expect: value 42
+// entry: probe
+// witness: {}
 trait Eligible {}
 trait Extension {
     fn take(self) -> i64;

@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
 struct Pair<'a, 'b> { left: &'a i64, right: &'b i64 }
 fn identity<T>(value: T) -> T { value }
 pub fn probe() -> i64 {

@@ -1,3 +1,6 @@
+// expect: output 34320a
+// entry: main
+// witness: {}
 pub fn main(mut world: World) {
     let mut output: Stdout = world.stdout();
     let mut callback = move || {

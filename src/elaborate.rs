@@ -825,12 +825,11 @@ impl Compiler<'_> {
     }
     fn has_view(&self, ty: usize) -> bool {
         let mut todo = vec![ty];
-        let mut seen = vec![false; self.types.len()];
+        let mut seen = BTreeSet::new();
         while let Some(t) = todo.pop() {
-            if seen[t] {
+            if !seen.insert(t) {
                 continue;
             }
-            seen[t] = true;
             match &self.types[t].kind {
                 ir::TypeKind::Ref { .. } | ir::TypeKind::Slice { .. } => return true,
                 ir::TypeKind::Struct { fields, .. } => {

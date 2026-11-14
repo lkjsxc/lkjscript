@@ -1,3 +1,6 @@
+// expect: value 42
+// entry: probe
+// witness: {}
 fn window<'a>(items: &'a [i64]) -> &'a [i64] {
     &items[1..3]
 }

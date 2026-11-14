@@ -1,3 +1,5 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":false}
 fn identity<T>(value: T) -> T {
     value
 }

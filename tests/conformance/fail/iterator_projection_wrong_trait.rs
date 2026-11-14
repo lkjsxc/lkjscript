@@ -1,3 +1,5 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
 mod numbers {
     pub trait Stream {
         type Item;

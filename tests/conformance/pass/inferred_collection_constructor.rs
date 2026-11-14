@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 use std::collections::{BTreeMap, BTreeSet};
 struct Holder<T> { value: T }
 impl<T> Holder<T> { fn new(value: T) -> Self { Self { value } } }

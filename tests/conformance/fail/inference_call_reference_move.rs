@@ -1,3 +1,5 @@
+// expect: reject E_MOVE
+// witness: {"rustAccept":false}
 fn identity<T>(value: T) -> T { value }
 fn invalid() {
     let mut value = 1i64;

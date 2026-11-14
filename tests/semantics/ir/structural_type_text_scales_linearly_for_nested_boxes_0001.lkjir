@@ -1,0 +1,92 @@
+lkjscript-ir 1
+# expect: check
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "Box<t3>" box 3
+type "Box<t14>" box 14
+type "Box<t15>" box 15
+type "Box<t16>" box 16
+type "Box<t17>" box 17
+type "Box<t18>" box 18
+type "Box<t19>" box 19
+type "Box<t20>" box 20
+type "Box<t21>" box 21
+type "Box<t22>" box 22
+type "Box<t23>" box 23
+type "Box<t24>" box 24
+type "Box<t25>" box 25
+type "Box<t26>" box 26
+type "Box<t27>" box 27
+type "Box<t28>" box 28
+type "Box<t29>" box 29
+type "Box<t30>" box 30
+type "Box<t31>" box 31
+type "Box<t32>" box 32
+type "Box<t33>" box 33
+type "Box<t34>" box 34
+type "Box<t35>" box 35
+type "Box<t36>" box 36
+type "Box<t37>" box 37
+type "Box<t38>" box 38
+type "Box<t39>" box 39
+type "Box<t40>" box 40
+type "Box<t41>" box 41
+type "Box<t42>" box 42
+type "Box<t43>" box 43
+type "Box<t44>" box 44
+type "Box<t45>" box 45
+type "Box<t46>" box 46
+type "Box<t47>" box 47
+type "Box<t48>" box 48
+type "Box<t49>" box 49
+type "Box<t50>" box 50
+type "Box<t51>" box 51
+type "Box<t52>" box 52
+type "Box<t53>" box 53
+type "Box<t54>" box 54
+type "Box<t55>" box 55
+type "Box<t56>" box 56
+type "Box<t57>" box 57
+type "Box<t58>" box 58
+type "Box<t59>" box 59
+type "Box<t60>" box 60
+type "Box<t61>" box 61
+type "Box<t62>" box 62
+type "Box<t63>" box 63
+type "Box<t64>" box 64
+type "Box<t65>" box 65
+type "Box<t66>" box 66
+type "Box<t67>" box 67
+type "Box<t68>" box 68
+type "Box<t69>" box 69
+type "Box<t70>" box 70
+type "Box<t71>" box 71
+type "Box<t72>" box 72
+type "Box<t73>" box 73
+type "Box<t74>" box 74
+type "Box<t75>" box 75
+type "Box<t76>" box 76
+fn "consume" 1 0
+local "_x" 77 let
+local "$" 0 let
+@1:1 unit 1
+@1:1 drop 0
+@1:1 return 1
+endfn
+fn "probe" 0 3
+local "$" 3 let
+@1:357 int 0 0
+@1:341 return 0
+endfn

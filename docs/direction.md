@@ -22,123 +22,117 @@ rewrite consumers when a rare form would enlarge trusted semantics.
 
 ## Direct native execution (6.1, complete)
 
-Keep the direct x86-64 backend plain:
-- Materialize locations only on cold failure paths; preserve exact trap lines.
-  Allocation/stack failures may use a static function location.
-- Allocate registers to scalar locals/temporaries; keep aggregates and
-  address-taken locals in frames. Forward straight-line values. No inlining,
-  cross-block propagation or peephole collection; those are later IR passes.
-- Emit nothing for scalar drops, unit values and copies onto themselves.
-- The source allocator carves slabs and medium blocks from geometrically grown
-  regions, reuses size classes, and uses mremap for dedicated large allocations.
-- Reserve the stack above the ordinary mapping arena; halve failed requests.
-  Return unused reservation on heap refusal and regrow stack pages when needed.
-  Startup-only retries failed a 32 MiB actual-use probe; pressure must be shared
-  by heap and live frames without moving stack addresses.
-- Unary, binary and intrinsic operations are enums with stable text spellings.
+Keep direct x86-64 instruction selection plain. Materialize source locations on
+cold failure paths; allocation/stack failures may use a static function location.
+Allocate scalar locals/temporaries to registers; aggregates and address-taken
+locals occupy frames. Forward straight-line values. No register-allocation
+project, cross-block propagation or peephole collection in this milestone.
+Emit nothing for scalar drops, unit values or copies onto themselves.
+Aggregates/vector elements are inline; views are addresses or address/count pairs.
+Frames use the machine stack. Retain bounds, arithmetic, division, UTF-8, tag
+and stack checks. Reject unencodable rel32 calls/branches with a located error.
+The allocator grows regions geometrically, reuses size classes and mremaps
+dedicated large blocks. Reserve the stack above the mapping arena; halve refused
+requests, return unused reservation on heap refusal and regrow when needed.
+Stack/heap pressure shares the address space without moving live stack addresses.
+Operations are enums with stable IR spellings. Preserve byte reproduction and
+hello under a 4 GiB address-space limit.
 
-Aggregates and vector elements are inline; references are machine addresses,
-with address/count pairs for slice/text views. Frames use the machine stack.
-Retain bounds, arithmetic, division, UTF-8, tag and stack-exhaustion checks.
-Calls/branches use rel32; reject an unencodable program with a located error.
-Preserve compiler reproduction, witness byte identity, hello under a 4 GiB
-address-space limit and measured aggregate/scalar/buffer/compiler behavior.
-If the compiler gap exceeds tenfold, identify another structural cause first.
+## Profile first, then remove structural costs
 
-## One executable and bootstrap (6.2)
+build --profile embeds a function-address map and opts into OUTPUT.samples.PID.
+A Linux CPU timer samples instruction pointers and real frame chains without a
+depth cap. The shared samples file survives exit/signals; profile reports self
+and inclusive source function counts in at most 40 lines, without DWARF or perf.
+Instrumentation file/timer authority is granted by this explicit build option.
+The 43cc8ae9 profile found type-sized boolean initialization and cloning first,
+then called aggregate copies. Use sparse query visits and packed snapshot facts;
+emit known-size overlap-safe copies inline. This follows the profile rather
+than assuming aggregate copying alone explains the gap. Stop after these two
+causes or about 3x the witness. Trap stubs and a new register allocator can wait.
+Put self-build first in bench/, with 64-byte call chains and Vec construction/walks.
 
-One static executable named lkjscript contains frontend, checker, backend,
-interpreter, CLI, source library and runtime. Stages exchange IR in memory,
-checked once. Text IR remains for ir output, .lkjir input, tests and fuzzing.
-include_str!/include_bytes! read beneath the source Directory capability;
-embedded sources are ordinary source literals, with no generated source files.
-World derives processes with explicit argument bytes and streams, a monotonic
-clock, and directory listing/create/rename/remove. Owned Files carry child
-streams and executable authority. Interpreter values use owned cells and indices.
-An artifact returns eight raw scalar bytes on a driver-held descriptor; traps
-return diagnostic text there, preserving the program's stderr bytes separately.
-Standalone executables report traps on stderr. There is no reader or packet layer.
-Interpreter self-execution materializes a checked native artifact only on demand;
-unchecked mutation input cannot request native emission.
-Raw bit conversions expose NaN payloads: negation preserves them and flips the
-sign to match Rust; binary arithmetic retains canonical NaNs.
+## One executable and bootstrap (6.2, complete)
 
-All user bodies are checked. Library headers/layouts remain global; library body
-verification and lowering follow demand, retaining indexes across batches.
-check-library checks every library body during bootstrap and toolchain tests.
-Store a previous compressed executable in seed/. Compiler sources must build
-with it. Refresh rarely, before using a new form in compiler sources.
-sh tools/bootstrap.sh unpacks it, builds target/lkjscript, checks the complete
-library and compares a second build byte for byte, without Rust or Node.
-The gate also compares the Rust witness's output with the self-built binary.
-The component launcher, installer, rebuild scripts, manifests, result reader,
-packet/bundle formats and their shell suites are deleted in this milestone.
-Do not create releases or tags: the generation-one release line serves live apps.
+One static executable contains frontend, checker, backend, independent interpreter,
+CLI and embedded source library/runtime. Stages exchange checked IR in memory;
+text IR remains for output, .lkjir inputs, tests and fuzzing.
+include_str!/include_bytes! read beneath the source Directory capability.
+World derives process, clock and directory operations; process arguments and
+streams are explicit. Owned Files carry streams and executable authority.
+Interpreter values use owned cells/indices; self-execution emits checked native
+code only on demand. Unchecked mutation input cannot request native emission.
+A private descriptor returns eight scalar bytes or trap diagnostics, preserving
+program stderr. Standalone traps use stderr. There is no packet/reader layer.
+Raw negation preserves NaN payloads and flips the sign; binary arithmetic
+canonicalizes NaNs. All user bodies are checked; library bodies follow demand
+with reusable indexes. check-library verifies every body during bootstrap.
+Store a previous compressed executable in seed/; refresh after emitter changes or
+before adopting new source forms, checking two native generations and the witness. sh tools/bootstrap.sh builds target/lkjscript, checks
+the library and verifies a second build byte for byte, without Rust or Node.
+The optional Rust witness must emit identical compiler bytes.
+The component launcher, installers, source bundles, manifests and reader are gone.
+No releases/tags: generation-one releases still serve live applications.
 
-## Gate and optional witness (6.3)
+## Gate and optional witness (6.3, complete)
 
-Clippy is removed now; retain cargo fmt --check only until the witness moves.
 Cases are single files with expectation headers: value, output bytes, diagnostic,
-trap code and line. Replace cases.json and repetitive integer files with generated
-cases from a small table. lkjscript test discovers cases and executes both routes
-in parallel processes, printing one ok line per suite and details only on failure.
-Port pure seeded generators, direct IR mutation and reduction to lkjscript.
-Native/interpreter comparisons stay in the gate; rustc comparison moves to witness.
+trap code and line. Headers replace cases.json; repeated integer cases come from a
+small table. lkjscript test discovers and runs both routes in native
+worker processes, one ok line per suite and details only on failure.
+Seeded generators, direct IR mutation and disagreement reduction are lkjscript programs.
+Keep native/interpreter comparisons in the gate; rustc comparisons are optional.
 Run a fixed mutation slice every gate and a long campaign after each milestone;
-turn every finding into a permanent case. Extract executable programs in
-language/IR references and test them. Convert language/IR Cargo tests to cases;
-drop Rust-host tests.
-
-Move Cargo.toml, bridge and rustc shim under witness/; the root stops being Cargo.
-CI has a gate using only the stored seed, without cargo/rustc/node, and a
-nonblocking witness job. The witness rebuilds identical compiler bytes and runs
-marked comparable cases. Inspect failures, but never let Rust constrain design.
-Programs both compilers accept behave the same; lkjscript may reject what Rust
-accepts and accept what Rust rejects. Keep .rs while the witness lives; choose a
-native extension when deleting it. Delete the witness when it blocks needed
-source forms or stops finding useful differences.
+report count and mutants/minute, turning every finding into a permanent case.
+Extract reference programs into cases and remove prose those cases already state.
+Keep the language reference below 500 lines: form, meaning, lowering, rejection,
+rewrite. Port language/IR Cargo assertions; drop Rust-host tests.
+Retain the three scoped-concurrency cases and borrowed_closure_escape as intended
+pending specifications, each naming the missing implementation in one line.
+Holder liveness is a conservative rule, with a rejection and lexical-scope rewrite;
+it is not a pending promise to implement automatic lifetime shortening.
+Cargo, bridge and rustc shim live in witness/; the root is not a Cargo project.
+CI gates using only the stored seed, without cargo/rustc/node, with a nonblocking
+witness job. Inspect witness failures; never let Rust constrain language design.
+Programs accepted by both compilers behave the same. Keep .rs while the witness
+lives; choose a native extension when deleting it. Delete the witness when it
+blocks necessary source forms or stops finding useful differences.
 
 ## Real consumers (6.4)
 
-A persistent HTTP server serves docs/ beneath a Directory capability, using a
-Listener and time. Test generated requests for an hour on a fresh local port
-with flat memory; never deploy it or touch a running service.
+A persistent HTTP server serves docs/ beneath a Directory using Listener and time.
+Test generated requests for an hour on a fresh local port with flat memory, and
+profile it under load. Never deploy it or touch a running service.
 Capability-typed entries declare authority, for example main(Stdout, Directory,
-Listener). The CLI grants each explicitly and refuses missing grants before
+Listener). The CLI grants each explicitly and rejects missing grants before
 execution. World remains all authority. Report reachable authority from checked
-IR alone, including a .lkjir file. The compiler alone is not the only consumer.
+IR alone, including .lkjir inputs. The compiler must not be the only consumer.
 
 ## Resources and measurement
 
-No limit exists except facts of representation. Ask the kernel for memory when
-needed; do not read RAM or rlimits to plan extents. Adapt to refusal. A program
-must start and run under any external limit that leaves room for actual use.
-Report located allocation/stack traps when requests cannot be satisfied.
-Tools have no default memory envelope, output cap or stack override.
-The runner has a generous watchdog for programs expected to finish; generated or
-mutated programs that may loop have a separate short allowance and a
-"did not terminate" outcome. Neither is a language rule.
+No resource policy exists except representation facts. Ask the kernel when
+needed; never read RAM or rlimits to plan extents. Adapt to refusal and run under
+any external limit leaving room for actual use. Report located allocation/stack
+traps when requests cannot be satisfied. No default tool memory envelopes,
+output caps or stack overrides. Use a generous normal-program watchdog and a
+separate short allowance for generated/mutated nontermination, not a language rule.
 Keep one heap and one stack exhaustion test; do not compare their route locations.
-Recursion is fine; replace a traversal only when a real program fails.
-Use at most eight workers; leave no background jobs and remove temporary files.
-Measure phases/RSS/IR/code sizes with --stats and bench/. Report times in status
-and commits. Measurements do not gate. Find structural costs before tuning;
-measure any explanation for a remaining gap.
+Recursion is fine until a real program fails. Use at most eight workers and leave
+no background jobs or temporary files. Report --stats/bench timings, RSS, IR/code
+sizes in status and commits. Measurements do not gate. Measure remaining gaps.
 
 ## Horizon and working policy
 
-After consumers: rechecked inlining measured on bench/, verified range facts,
-content-addressed IR-closure/code/test reuse, checked-IR queries and diagnostics
-with machine-applicable edits, a formatter, an eventual checked-IR seed, a second
-target and structured concurrency. Do not start these early.
-
+After consumers: content-addressed IR-closure/code/test reuse before inlining;
+then rechecked inlining measured on bench/, verified range facts, checked-IR
+queries and diagnostics with machine-applicable edits, formatting, an eventual
+checked-IR seed, a second target and structured concurrency. Do not start early.
 Work on main inside /home/coder/workspace/lkjscript; preserve .generation-one,
 other projects, services and data. No Python, WebAssembly or Node execution host.
 No backward compatibility. Delete replaced components in the same change.
 No observation files, hash ledgers or manifests: the gate checks properties.
-Keep references concise: form, meaning, lowering, rejection and rewrite.
 Run the eight-worker gate, keep fixed points, commit coherent changes, recheck
-upstream, push main directly and inspect CI. Never force-push/rewrite history.
-Use unique gateway operation IDs and recover uncertain operations before retrying.
-Keep status within 60 lines and this direction within 150. Git is the history.
-A reversal of the semantic boundary, course or resource stance needs a reason here.
+upstream, push main directly and inspect CI. Never force-push or rewrite history.
+Use unique gateway IDs; recover uncertain operations before retrying.
+Keep status within 60 lines, direction within 150. Git holds history.
+Record a reason here for any reversal of the semantic boundary, course or resources.

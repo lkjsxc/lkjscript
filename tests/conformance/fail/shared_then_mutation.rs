@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
 pub fn probe() -> i64 {
     let mut value: i64 = 42;
     let borrowed = &value;

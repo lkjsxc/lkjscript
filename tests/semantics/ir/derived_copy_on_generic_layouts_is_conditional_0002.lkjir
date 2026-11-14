@@ -1,0 +1,39 @@
+lkjscript-ir 1
+# expect: check
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "$rigid:T:14" struct copy
+type "Maybe<t14>" enum copy
+variant "None"
+variant "Some" "0" 14
+endtype
+type "$rigid:T:16" struct move
+type "Maybe<t16>" enum move
+variant "None"
+variant "Some" "0" 16
+endtype
+type "$rigid:T:18" struct move
+type "Maybe<t18>" enum move
+variant "None"
+variant "Some" "0" 18
+endtype
+fn "wrap<T=t18;>" 1 19
+local "x" 18 let
+local "$" 18 let
+local "$" 19 let
+@1:89 read 1 move 0
+@1:77 variant 2 1 1
+@1:51 return 2
+endfn

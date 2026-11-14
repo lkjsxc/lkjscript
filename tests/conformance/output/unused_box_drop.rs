@@ -1,3 +1,5 @@
+// expect: output 4d51
+// witness: {}
 struct Mark { out: Stdout, byte: u8 }
 impl Drop for Mark {
     fn drop(&mut self) { self.out.write([self.byte].as_slice()); }

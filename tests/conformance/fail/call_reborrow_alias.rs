@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
 struct Cell{value:i64}
 struct Pair{left:Cell,right:Cell}
 fn choose<'a>(owner:&'a Pair)->&'a Cell{&owner.right}

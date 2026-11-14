@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
 struct Pair<'a, 'b> { left: &'a i64, right: &'b i64 }
 fn swap<'a, 'b>(left: &'a i64, right: &'b i64) -> Pair<'a, 'b> {
     Pair { left: right, right: left }

@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 enum Either<'a> { Left(&'a mut i64), Right(&'a mut i64) }
 struct Nested<'a> { value:Either<'a> }
 fn selected(value:Either<'_>)->i64 {

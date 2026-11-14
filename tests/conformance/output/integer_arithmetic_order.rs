@@ -1,3 +1,5 @@
+// expect: output 4142434445
+// witness: {}
 fn value(out: &mut Stdout, tag: u8, value: u8) -> u8 { out.write(&[tag]); value }
 pub fn main(mut world: World) {
     let mut out = world.stdout();

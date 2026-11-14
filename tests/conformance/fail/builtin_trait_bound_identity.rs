@@ -1,3 +1,5 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false}
 trait Clone {}
 trait Contract {
     fn take<T: crate::Clone>(&self, value: T) -> T;

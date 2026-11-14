@@ -1,0 +1,501 @@
+lkjscript-ir 1
+# expect: value 42
+# entry: semantic_values
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "Thing" struct move "value" 3
+type "Empty" struct move
+type "Holder<t3>" struct move "value" 3
+type "Pair<t5,t3>" struct move "first" 5 "second" 3
+type "Box<t3>" box 3
+type "Pair<t18,t5>" struct move "first" 18 "second" 5
+type "(t3,t5)" struct copy "0" 3 "1" 5
+type "Pair<t20,t5>" struct move "first" 20 "second" 5
+type "[t3;2]" array 3 2
+type "Pair<t22,t5>" struct move "first" 22 "second" 5
+type "&t3" ref shared 3
+type "Holder<t24>" struct move "value" 24
+fn "alias_argument_inference" 0 3
+local "$" 3 let
+local "$" 16 let
+local "$" 3 let
+@21:62 int 0 42
+@21:51 struct 1 0
+@21:40 call 2 16 1
+@21:5 return 2
+endfn
+fn "concrete" 0 3
+local "$" 3 let
+local "$" 14 mut
+local "$" 3 let
+@22:36 int 0 42
+@22:24 struct 1 0
+@22:24 read 2 copy 1 field 0
+@22:5 drop 1
+@22:5 return 2
+endfn
+fn "identity_alias" 0 3
+local "$" 3 let
+local "$" 14 mut
+local "$" 3 let
+@23:54 int 0 42
+@23:30 struct 1 0
+@23:30 read 2 copy 1 field 0
+@23:5 drop 1
+@23:5 return 2
+endfn
+fn "explicit" 0 3
+local "$" 3 let
+local "$" 5 let
+local "$" 17 let
+local "v" 17 let
+local "$" 3 let
+local "$" 5 let
+local "$" 3 let
+local "$" 3 let
+@24:55 int 0 40
+@24:64 int 1 2
+@24:30 struct 2 1 0
+@24:5 assign 2 3
+@24:67 read 4 copy 3 field 1
+@24:76 read 5 copy 3 field 0
+@24:76 intrinsic 6 "cast" 5
+@24:67 binary 7 "+" 4 6
+@24:5 drop 3
+@24:5 return 7
+endfn
+fn "inferred" 0 3
+local "$" 5 let
+local "$" 3 let
+local "$" 17 let
+local "v" 17 let
+local "$" 3 let
+local "$" 5 let
+local "$" 3 let
+local "$" 3 let
+@25:44 int 0 2
+@25:55 int 1 40
+@25:30 struct 2 0 1
+@25:5 assign 2 3
+@25:62 read 4 copy 3 field 1
+@25:71 read 5 copy 3 field 0
+@25:71 intrinsic 6 "cast" 5
+@25:62 binary 7 "+" 4 6
+@25:5 drop 3
+@25:5 return 7
+endfn
+fn "partial_arguments" 0 3
+local "$" 3 let
+local "$" 5 let
+local "$" 17 let
+local "v" 17 let
+local "$" 3 let
+local "$" 5 let
+local "$" 3 let
+local "$" 3 let
+@26:62 int 0 40
+@26:74 int 1 2
+@26:39 struct 2 1 0
+@26:5 assign 2 3
+@26:77 read 4 copy 3 field 1
+@26:86 read 5 copy 3 field 0
+@26:86 intrinsic 6 "cast" 5
+@26:77 binary 7 "+" 4 6
+@26:5 drop 3
+@26:5 return 7
+endfn
+fn "fixed_argument" 0 3
+local "$" 3 let
+local "$" 5 let
+local "$" 17 let
+local "v" 17 let
+local "$" 3 let
+local "$" 5 let
+local "$" 3 let
+local "$" 3 let
+@27:49 int 0 40
+@27:61 int 1 2
+@27:36 struct 2 1 0
+@27:5 assign 2 3
+@27:64 read 4 copy 3 field 1
+@27:73 read 5 copy 3 field 0
+@27:73 intrinsic 6 "cast" 5
+@27:64 binary 7 "+" 4 6
+@27:5 drop 3
+@27:5 return 7
+endfn
+fn "expected" 0 3
+local "$" 3 let
+local "$" 5 let
+local "$" 17 let
+local "v" 17 let
+local "$" 3 let
+local "$" 5 let
+local "$" 3 let
+local "$" 3 let
+@28:55 int 0 40
+@28:64 int 1 2
+@28:42 struct 2 1 0
+@28:5 assign 2 3
+@28:67 read 4 copy 3 field 1
+@28:76 read 5 copy 3 field 0
+@28:76 intrinsic 6 "cast" 5
+@28:67 binary 7 "+" 4 6
+@28:5 drop 3
+@28:5 return 7
+endfn
+fn "nested_chain" 0 3
+local "$" 3 let
+local "$" 18 let
+local "$" 5 let
+local "$" 19 let
+local "v" 19 let
+local "$" 3 let
+local "$" 5 let
+local "$" 3 let
+local "$" 3 let
+@29:55 int 0 40
+@29:46 intrinsic 1 "box_new" 0
+@29:69 int 2 2
+@29:34 struct 3 1 2
+@29:5 assign 3 4
+@29:72 read 5 copy 4 field 0 deref
+@29:81 read 6 copy 4 field 1
+@29:81 intrinsic 7 "cast" 6
+@29:72 binary 8 "+" 5 7
+@29:5 drop 4
+@29:5 return 8
+endfn
+fn "tuple_argument" 0 3
+local "$" 3 let
+local "$" 5 let
+local "$" 20 let
+local "$" 5 let
+local "$" 21 let
+local "v" 21 let
+local "$" 3 let
+local "a" 3 let
+local "$" 5 let
+local "b" 5 let
+local "$" 3 let
+local "$" 5 let
+local "$" 3 let
+local "$" 3 let
+local "$" 5 let
+local "$" 3 let
+local "$" 3 let
+@30:54 int 0 40
+@30:60 int 1 1
+@30:53 struct 2 0 1
+@30:72 int 3 1
+@30:36 struct 4 2 3
+@30:5 assign 4 5
+@30:5 read 6 copy 5 field 0 field 0
+@30:5 assign 6 7
+@30:5 read 8 copy 5 field 0 field 1
+@30:5 assign 8 9
+@30:93 read 10 copy 7
+@30:95 read 11 copy 9
+@30:95 intrinsic 12 "cast" 11
+@30:93 binary 13 "+" 10 12
+@30:104 read 14 copy 5 field 1
+@30:104 intrinsic 15 "cast" 14
+@30:93 binary 16 "+" 13 15
+@30:5 drop 9
+@30:5 drop 7
+@30:5 drop 5
+@30:5 return 16
+endfn
+fn "array_argument" 0 3
+local "$" 3 let
+local "$" 3 let
+local "$" 22 let
+local "$" 5 let
+local "$" 23 let
+local "v" 23 let
+local "$" 4 let
+local "$" 3 let
+local "$" 4 let
+local "$" 3 let
+local "$" 3 let
+local "$" 5 let
+local "$" 3 let
+local "$" 3 let
+@31:54 int 0 20
+@31:60 int 1 20
+@31:53 array 2 0 1
+@31:74 int 3 2
+@31:36 struct 4 2 3
+@31:5 assign 4 5
+@31:85 int 6 0
+@31:77 read 7 copy 5 field 0 index 6
+@31:96 int 8 1
+@31:88 read 9 copy 5 field 0 index 8
+@31:77 binary 10 "+" 7 9
+@31:99 read 11 copy 5 field 1
+@31:99 intrinsic 12 "cast" 11
+@31:77 binary 13 "+" 10 12
+@31:5 drop 8
+@31:5 drop 6
+@31:5 drop 5
+@31:5 return 13
+endfn
+fn "caller_parameter_is_not_a_constructor_parameter" 0 3
+local "$" 1 let
+local "$" 3 let
+@32:71 int 0 1
+@32:63 call 1 17 0
+@32:5 return 1
+endfn
+fn "parameter_transport" 0 3
+local "$" 3 let
+local "$" 16 mut
+local "$" 3 let
+@33:44 int 0 42
+@33:35 call 1 18 0
+@33:35 read 2 copy 1 field 0
+@33:5 drop 1
+@33:5 return 2
+endfn
+fn "stored_reference" 0 3
+local "$" 3 let
+local "number" 3 let
+local "$" 24 let
+local "$" 25 let
+local "v" 25 let
+local "$" 3 let
+@34:47 int 0 42
+@34:5 assign 0 1
+@34:71 borrow 2 shared 1
+@34:56 struct 3 2
+@34:5 assign 3 4
+@34:80 read 5 copy 4 field 0 deref
+@34:5 drop 4
+@34:5 drop 1
+@34:5 return 5
+endfn
+fn "self_constructor" 0 3
+local "$" 3 let
+local "$" 16 mut
+local "$" 3 let
+@35:52 int 0 42
+@35:32 call 1 19 0
+@35:32 read 2 copy 1 field 0
+@35:5 drop 1
+@35:5 return 2
+endfn
+fn "empty_alias" 0 3
+local "$" 15 let
+local "value" 15 let
+local "$" 15 let
+local "$" 0 let
+local "$" 3 let
+@36:37 struct 0
+@36:5 assign 0 1
+@36:55 read 2 move 1
+@36:50 drop 2
+@36:50 unit 3
+@36:5 drop 3
+@36:62 int 4 42
+@36:5 return 4
+endfn
+fn "take_alias<T=t3;>" 1 3
+local "value" 16 let
+local "$" 3 let
+@20:36 read 1 copy 0 field 0
+@20:1 drop 0
+@20:1 return 1
+endfn
+fn "generic<T=t1;>" 1 3
+local "unused" 1 let
+local "$" 3 let
+local "$" 16 let
+local "result" 16 let
+local "$" 3 let
+@18:52 int 1 42
+@18:41 struct 2 1
+@18:1 assign 2 3
+@18:59 read 4 copy 3 field 0
+@18:1 drop 3
+@18:1 drop 0
+@18:1 return 4
+endfn
+fn "preserve<T=t3;>" 1 16
+local "value" 3 let
+local "$" 3 let
+local "$" 16 let
+@19:41 read 1 copy 0
+@19:36 struct 2 1
+@19:1 drop 0
+@19:1 return 2
+endfn
+fn "make$f0<Self=t16;T=t3;>" 1 16
+local "value" 3 let
+local "$" 3 let
+local "$" 16 let
+@17:47 read 1 copy 0
+@17:42 struct 2 1
+@17:19 drop 0
+@17:19 return 2
+endfn
+fn "semantic_values" 0 3
+local "result" 3 let
+local "expected0" 3 let
+local "equal0" 1 let
+local "unit0" 0 let
+local "result" 3 let
+local "expected1" 3 let
+local "equal1" 1 let
+local "unit1" 0 let
+local "result" 3 let
+local "expected2" 3 let
+local "equal2" 1 let
+local "unit2" 0 let
+local "result" 3 let
+local "expected3" 3 let
+local "equal3" 1 let
+local "unit3" 0 let
+local "result" 3 let
+local "expected4" 3 let
+local "equal4" 1 let
+local "unit4" 0 let
+local "result" 3 let
+local "expected5" 3 let
+local "equal5" 1 let
+local "unit5" 0 let
+local "result" 3 let
+local "expected6" 3 let
+local "equal6" 1 let
+local "unit6" 0 let
+local "result" 3 let
+local "expected7" 3 let
+local "equal7" 1 let
+local "unit7" 0 let
+local "result" 3 let
+local "expected8" 3 let
+local "equal8" 1 let
+local "unit8" 0 let
+local "result" 3 let
+local "expected9" 3 let
+local "equal9" 1 let
+local "unit9" 0 let
+local "result" 3 let
+local "expected10" 3 let
+local "equal10" 1 let
+local "unit10" 0 let
+local "result" 3 let
+local "expected11" 3 let
+local "equal11" 1 let
+local "unit11" 0 let
+local "result" 3 let
+local "expected12" 3 let
+local "equal12" 1 let
+local "unit12" 0 let
+local "result" 3 let
+local "expected13" 3 let
+local "equal13" 1 let
+local "unit13" 0 let
+local "result" 3 let
+local "expected14" 3 let
+local "equal14" 1 let
+local "unit14" 0 let
+local "result" 3 let
+local "expected15" 3 let
+local "equal15" 1 let
+local "unit15" 0 let
+local "answer" 3 let
+@1 call 0 1
+@1 int 1 42
+@1 binary 2 == 0 1
+@1 intrinsic 3 assert 2
+@1 drop 3
+@1 call 4 2
+@1 int 5 42
+@1 binary 6 == 4 5
+@1 intrinsic 7 assert 6
+@1 drop 7
+@1 call 8 3
+@1 int 9 42
+@1 binary 10 == 8 9
+@1 intrinsic 11 assert 10
+@1 drop 11
+@1 call 12 4
+@1 int 13 42
+@1 binary 14 == 12 13
+@1 intrinsic 15 assert 14
+@1 drop 15
+@1 call 16 5
+@1 int 17 42
+@1 binary 18 == 16 17
+@1 intrinsic 19 assert 18
+@1 drop 19
+@1 call 20 6
+@1 int 21 42
+@1 binary 22 == 20 21
+@1 intrinsic 23 assert 22
+@1 drop 23
+@1 call 24 7
+@1 int 25 42
+@1 binary 26 == 24 25
+@1 intrinsic 27 assert 26
+@1 drop 27
+@1 call 28 8
+@1 int 29 42
+@1 binary 30 == 28 29
+@1 intrinsic 31 assert 30
+@1 drop 31
+@1 call 32 9
+@1 int 33 42
+@1 binary 34 == 32 33
+@1 intrinsic 35 assert 34
+@1 drop 35
+@1 call 36 10
+@1 int 37 42
+@1 binary 38 == 36 37
+@1 intrinsic 39 assert 38
+@1 drop 39
+@1 call 40 11
+@1 int 41 42
+@1 binary 42 == 40 41
+@1 intrinsic 43 assert 42
+@1 drop 43
+@1 call 44 12
+@1 int 45 42
+@1 binary 46 == 44 45
+@1 intrinsic 47 assert 46
+@1 drop 47
+@1 call 48 0
+@1 int 49 42
+@1 binary 50 == 48 49
+@1 intrinsic 51 assert 50
+@1 drop 51
+@1 call 52 13
+@1 int 53 42
+@1 binary 54 == 52 53
+@1 intrinsic 55 assert 54
+@1 drop 55
+@1 call 56 14
+@1 int 57 42
+@1 binary 58 == 56 57
+@1 intrinsic 59 assert 58
+@1 drop 59
+@1 call 60 15
+@1 int 61 42
+@1 binary 62 == 60 61
+@1 intrinsic 63 assert 62
+@1 drop 63
+@1 int 64 42
+@1 return 64
+endfn

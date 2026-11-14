@@ -1,0 +1,206 @@
+//! Repeat is one atomic IR construction with independent owned element storage.
+use crate::{check, embedded, frontend, interpreter, ir, ir_text, source};
+
+fn checked(text: &str) -> ir::CheckedProgram {
+    let parsed = source::load("repeat.rs", Some("$std/lib.rs"), &mut |path: &str| {
+        Ok(if path == "repeat.rs" {
+            Some(text.as_bytes().to_vec())
+        } else {
+            embedded::library(path)
+        })
+    })
+    .unwrap();
+    frontend::check_source(&parsed).unwrap()
+}
+fn entry_index(program: &ir::Program) -> usize {
+    program
+        .functions
+        .iter()
+        .position(|f| f.name == "probe")
+        .unwrap()
+}
+fn value(program: &ir::Program) -> i64 {
+    match interpreter::run(
+        program,
+        entry_index(program),
+        &[0u64; 0],
+        &mut Vec::<u8>::new(),
+    )
+    .unwrap_or_else(|error| panic!("{}:{}: {}", error.file, error.line, error.message))
+    .value
+    {
+        interpreter::Scalar::Int {
+            value,
+            bits: 64,
+            signed: true,
+        } => value as i64,
+        _ => panic!("unexpected repeat result"),
+    }
+}
+fn repeat(program: &ir::Program) -> (usize, usize, usize) {
+    let function = &program.functions[entry_index(program)];
+    for (index, instruction) in function.body.iter().enumerate() {
+        if let ir::Op::Intrinsic { dst, name, args } = &instruction.op {
+            if *name == ir::IntrinsicOp::ArrayRepeat {
+                assert_eq!(args.len(), 1usize);
+                return (index, *dst, args[0]);
+            }
+        }
+    }
+    panic!("repeat missing")
+}
+
+fn repeated_copy_aggregates_have_independent_storage_on_both_routes() {
+    let program = checked(include_str!(
+        "../../tests/conformance/pass/array_repeat_compact.rs"
+    ));
+    assert_eq!(value(program.program()), 42);
+}
+
+fn repeat_extent_does_not_expand_ir_locals_or_instructions() {
+    let small = checked("pub fn probe()->i64 { let a=[7u8;16]; a.len() as i64 }");
+    let large = checked("pub fn probe()->i64 { let a=[7u8;8192]; a.len() as i64 }");
+    let small_body = &small.program().functions[entry_index(small.program())];
+    let large_body = &large.program().functions[entry_index(large.program())];
+    assert_eq!(small_body.locals.len(), large_body.locals.len());
+    assert_eq!(small_body.body.len(), large_body.body.len());
+    atomic(small.program());
+    atomic(large.program());
+    assert_eq!(value(large.program()), 8192);
+}
+
+fn array_type_is_the_only_repeat_extent() {
+    let original = checked("pub fn probe()->i64 { let a=[7u8;4]; a.len() as i64 }");
+    let mut program = original.program().clone();
+    let (_, dst, _) = repeat(&program);
+    let array = program.functions[entry_index(&program)].locals[dst].ty;
+    {
+        let ir::TypeKind::Array { len, .. } = &mut program.types[array].kind else {
+            panic!("array")
+        };
+        *len = 7;
+    }
+    let checked = check::check(program).unwrap();
+    assert_eq!(value(checked.program()), 7);
+}
+
+fn repeat_rejects_malformed_ir_signatures_and_uninitialized_seeds() {
+    let original = checked("pub fn probe()->i64 {let a=[7u8;4];a.len() as i64}")
+        .program()
+        .clone();
+    let entry = entry_index(&original);
+    let (instruction, destination, seed) = repeat(&original);
+    let array = original.functions[entry].locals[destination].ty;
+    for mutation in 0usize..8usize {
+        let mut forged = original.clone();
+        match mutation {
+            0 => forged.functions[entry].locals[destination].ty = ir::I64,
+            1 => forged.functions[entry].locals[seed].ty = ir::I32,
+            2 | 3 => {
+                let ir::TypeKind::Array { len, .. } = &mut forged.types[array].kind else {
+                    panic!("array")
+                };
+                *len = mutation - 2;
+            }
+            4 | 5 => {
+                let ir::Op::Intrinsic { args, .. } =
+                    &mut forged.functions[entry].body[instruction].op
+                else {
+                    panic!("repeat")
+                };
+                if mutation == 4 {
+                    args.clear()
+                } else {
+                    args.push(seed)
+                }
+            }
+            6 => {
+                let ir::TypeKind::Array { inner, .. } = &mut forged.types[array].kind else {
+                    panic!("array")
+                };
+                *inner = ir::I64;
+            }
+            7 => {
+                let local = forged.functions[entry].locals.len();
+                forged.functions[entry].locals.push(ir::Local {
+                    name: "uninitialized".to_string(),
+                    ty: ir::U8,
+                    mutable: false,
+                });
+                let ir::Op::Intrinsic { args, .. } =
+                    &mut forged.functions[entry].body[instruction].op
+                else {
+                    panic!("repeat")
+                };
+                args[0] = local;
+            }
+            _ => unreachable!(),
+        }
+        assert!(
+            check::check(forged.clone()).is_err(),
+            "checker accepted mutation {mutation}"
+        );
+        let error = interpreter::run(&forged, entry, &[0u64; 0], &mut Vec::<u8>::new())
+            .err()
+            .expect("model accepted malformed repeat");
+        assert!(
+            matches!(error.kind, interpreter::ErrorKind::Interpreter(_)),
+            "mutation {mutation}: {}",
+            error.message
+        );
+    }
+    let mut noncopy=checked("#[derive(Clone,Copy)]struct Item {value:i64} pub fn probe()->i64 {let a=[Item {value:7};4];a.len() as i64}").program().clone();
+    let (_, _, seed) = repeat(&noncopy);
+    let noncopy_entry = entry_index(&noncopy);
+    let item = noncopy.functions[noncopy_entry].locals[seed].ty;
+    {
+        let ir::TypeKind::Struct { copy, .. } = &mut noncopy.types[item].kind else {
+            panic!("item")
+        };
+        *copy = false;
+    }
+    assert!(check::check(noncopy.clone()).is_err());
+    let error = interpreter::run(&noncopy, noncopy_entry, &[0u64; 0], &mut Vec::<u8>::new())
+        .err()
+        .expect("model accepted affine repeat");
+    assert!(matches!(error.kind, interpreter::ErrorKind::Interpreter(_)));
+}
+
+fn atomic(program: &ir::Program) {
+    let mut count = 0usize;
+    for instruction in &program.functions[entry_index(program)].body {
+        if matches!(&instruction.op,ir::Op::Intrinsic{name,..} if *name==ir::IntrinsicOp::ArrayRepeat)
+        {
+            count += 1;
+        }
+    }
+    assert_eq!(count, 1usize);
+    assert!(*program == ir_text::read(&ir_text::write(program)).unwrap());
+}
+pub fn run(world: &mut World, trace: bool) -> usize {
+    if trace {
+        world
+            .stdout()
+            .write(b"repeated_copy_aggregates_have_independent_storage_on_both_routes\n");
+    }
+    repeated_copy_aggregates_have_independent_storage_on_both_routes();
+    if trace {
+        world
+            .stdout()
+            .write(b"repeat_extent_does_not_expand_ir_locals_or_instructions\n");
+    }
+    repeat_extent_does_not_expand_ir_locals_or_instructions();
+    if trace {
+        world
+            .stdout()
+            .write(b"array_type_is_the_only_repeat_extent\n");
+    }
+    array_type_is_the_only_repeat_extent();
+    if trace {
+        world
+            .stdout()
+            .write(b"repeat_rejects_malformed_ir_signatures_and_uninitialized_seeds\n");
+    }
+    repeat_rejects_malformed_ir_signatures_and_uninitialized_seeds();
+    4usize
+}

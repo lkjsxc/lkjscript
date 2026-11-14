@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 #[derive(PartialEq, PartialOrd)]
 struct Pair {
     first: f64,

@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
 fn test<'a, 'b: 'a>(mut input: &'b i64) -> i64 {
     let short: &mut &'a i64 = &mut input;
     drop(short);

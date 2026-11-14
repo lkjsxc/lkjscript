@@ -1,4 +1,7 @@
 lkjscript-ir 1
+# expect: trap R0003
+# stdout:
+# entry: probe
 type "()" unit
 type "bool" bool
 type "i32" int 32 signed

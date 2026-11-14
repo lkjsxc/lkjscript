@@ -1,3 +1,5 @@
+// expect: reject E_TYPE
+// witness: {"rustCode":"E0308"}
 fn apply<B, F: FnOnce() -> B>(function: F, witness: B) -> B {
     drop(witness);
     function()

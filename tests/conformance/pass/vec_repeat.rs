@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 #[derive(Clone)]
 struct V { value: i64 }
 fn repeat<T:Clone>(x:T,n:usize)->Vec<T>{vec![x;n]}

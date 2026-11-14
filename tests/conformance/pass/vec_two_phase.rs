@@ -1,3 +1,5 @@
+// expect: value 11
+// witness: {}
 pub fn probe() -> i64 {
     let mut values: Vec<usize> = Vec::new();
     values.push(10);

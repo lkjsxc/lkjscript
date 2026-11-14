@@ -1,0 +1,107 @@
+lkjscript-ir 1
+# expect: value 42
+# entry: semantic_values
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "Choice" enum move
+variant "None"
+variant "Some" "0" 3
+endtype
+fn "a::value" 0 3
+local "$" 3 let
+@1:36 int 0 5
+@1:20 return 0
+endfn
+fn "probe" 0 3
+local "$" 3 let
+local "$" 14 let
+local "v" 14 let
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 3 let
+local "x" 3 let
+local "$" 3 let
+local "$match" 3 mut
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 3 let
+@1:151 call 0 0
+@1:143 variant 1 1 0
+@1:121 assign 1 2
+@1:160 int 4 0
+@1:160 assign 4 3
+@1:160 tag-test-place 5 1 2
+@1:160 if 5
+@1:160 int 6 1
+@1:160 int 7 1
+@1:160 binary 8 "&" 6 7
+@1:160 assign 8 3
+@1:160 end
+@1:160 if 3
+@1:160 tag-test-place 9 1 2
+@1:160 if 9
+@1:160 else
+@1:160 trap "unreachable selected pattern"
+@1:160 end
+@1:160 read 10 copy 2 variant 1 0
+@1:160 assign 10 11
+@1:185 read 12 copy 11
+@1:160 assign 12 13
+@1:160 drop 11
+@1:160 else
+@1:160 int 15 0
+@1:160 assign 15 14
+@1:160 tag-test-place 16 0 2
+@1:160 if 16
+@1:160 int 17 1
+@1:160 assign 17 14
+@1:160 end
+@1:160 if 14
+@1:160 tag-test-place 18 0 2
+@1:160 if 18
+@1:160 else
+@1:160 trap "unreachable selected pattern"
+@1:160 end
+@1:201 int 19 0
+@1:160 assign 19 13
+@1:160 else
+@1:160 trap "unreachable match"
+@1:160 end
+@1:160 end
+@1:121 drop 2
+@1:121 return 13
+endfn
+fn "semantic_values" 0 3
+local "result" 3 let
+local "expected0" 3 let
+local "equal0" 1 let
+local "unit0" 0 let
+local "answer" 3 let
+@1 call 0 1
+@1 int 1 5
+@1 binary 2 == 0 1
+@1 intrinsic 3 assert 2
+@1 drop 3
+@1 int 4 42
+@1 return 4
+endfn

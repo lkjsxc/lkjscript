@@ -2344,112 +2344,112 @@ fn run_inner<'a, H: Host>(
     })
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+// Internal invariant probe, called only by the separate native semantic suite.
+fn reference_probe_checked<T>(value: Result<T, RunError>) -> T {
+    value.unwrap_or_else(|error| panic!("{}: {}", error.code(), error.message))
+}
 
-    #[test]
-    fn stale_reference_never_aliases_a_reused_slot_or_loan_number() {
-        fn checked<T>(value: Result<T, RunError>) -> T {
-            value.unwrap_or_else(|error| panic!("{}: {}", error.code(), error.message))
-        }
-        let program = Program {
-            types: ir::primitives(),
-            functions: Vec::new(),
-            destructors: Vec::new(),
-        };
-        let mut host = Vec::new();
-        let mut interpreter = Interpreter {
-            program: &program,
-            host: &mut host,
-            runtime: None,
-            cells: Vec::new(),
-            free: Vec::new(),
-            live_cells: 0,
-            peak_cells: 0,
-            loans: BTreeMap::new(),
-            next_tag: 0,
-            free_tags: Vec::new(),
-            work: Vec::new(),
-            frames: 0,
-            peak_frames: 0,
-            flow: Vec::new(),
-            texts: BTreeMap::new(),
-            site: Site {
-                function: 0,
-                file: 0,
-                line: 1,
-            },
-            result: None,
-        };
-        let old = checked(interpreter.allocate(ir::I64, Some(Value::Bits(1)), false));
-        let old_access = Access {
-            extent: None,
-            cell: old,
-            ty: ir::I64,
-            permissions: Vec::new(),
-            writable: true,
-        };
-        let Value::Reference(stale) = checked(interpreter.borrow(&old_access, ir::I64, false))
-        else {
-            panic!("borrow did not return a reference")
-        };
-        // Force the lifetime violation directly: ordinary IR execution reports
-        // the conflicting destruction before this allocator boundary is reached.
-        interpreter.cells[old.index].value = None;
-        checked(interpreter.release(old));
-        let replacement = checked(interpreter.allocate(ir::I64, Some(Value::Bits(2)), false));
-        assert_eq!(old.index, replacement.index);
-        let error = interpreter
-            .reference_access(&stale)
-            .err()
-            .expect("stale slot reference accepted");
-        assert!(error.kind == ErrorKind::Interpreter(InterpreterError::DanglingReference));
-        checked(interpreter.release_reference(&stale));
-        let access = Access {
-            extent: None,
-            cell: replacement,
-            ty: ir::I64,
-            permissions: Vec::new(),
-            writable: true,
-        };
-        let Value::Reference(current) = checked(interpreter.borrow(&access, ir::I64, false)) else {
-            panic!("borrow did not return a reference")
-        };
-        assert_eq!(stale.tag, current.tag);
-        let error = interpreter
-            .reference_access(&stale)
-            .err()
-            .expect("stale tag reference accepted");
-        assert!(error.kind == ErrorKind::Interpreter(InterpreterError::DanglingReference));
-        checked(interpreter.reference_access(&current));
-        checked(interpreter.release_reference(&current));
-        let other = checked(interpreter.allocate(ir::I64, Some(Value::Bits(3)), false));
-        let other_access = Access {
-            extent: None,
-            cell: other,
-            ty: ir::I64,
-            permissions: Vec::new(),
-            writable: true,
-        };
-        let Value::Reference(other_reference) =
-            checked(interpreter.borrow(&other_access, ir::I64, false))
-        else {
-            panic!("borrow did not return a reference")
-        };
-        assert_eq!(stale.tag, other_reference.tag);
-        assert_eq!(stale.identity, other_reference.identity);
-        assert_ne!(stale.target.index, other_reference.target.index);
-        let error = interpreter
-            .reference_access(&stale)
-            .err()
-            .expect("stale reference reached another cell");
-        assert!(error.kind == ErrorKind::Interpreter(InterpreterError::DanglingReference));
-        let error = interpreter
-            .release_reference(&stale)
-            .err()
-            .expect("stale reference released another cell's loan");
-        assert!(error.kind == ErrorKind::Interpreter(InterpreterError::DanglingReference));
-        checked(interpreter.reference_access(&other_reference));
-    }
+pub(crate) fn assert_reference_reuse() {
+    let program = Program {
+        types: ir::primitives(),
+        functions: Vec::new(),
+        destructors: Vec::new(),
+    };
+    let mut host: Vec<u8> = Vec::new();
+    let mut interpreter = Interpreter {
+        program: &program,
+        host: &mut host,
+        runtime: None,
+        cells: Vec::new(),
+        free: Vec::new(),
+        live_cells: 0,
+        peak_cells: 0,
+        loans: BTreeMap::new(),
+        next_tag: 0,
+        free_tags: Vec::new(),
+        work: Vec::new(),
+        frames: 0,
+        peak_frames: 0,
+        flow: Vec::new(),
+        texts: BTreeMap::new(),
+        site: Site {
+            function: 0,
+            file: 0,
+            line: 1,
+        },
+        result: None,
+    };
+    let old = reference_probe_checked(interpreter.allocate(ir::I64, Some(Value::Bits(1)), false));
+    let old_access = Access {
+        extent: None,
+        cell: old,
+        ty: ir::I64,
+        permissions: Vec::new(),
+        writable: true,
+    };
+    let Value::Reference(stale) =
+        reference_probe_checked(interpreter.borrow(&old_access, ir::I64, false))
+    else {
+        panic!("borrow did not return a reference")
+    };
+    // Force the lifetime violation directly: ordinary IR execution reports
+    // the conflicting destruction before this allocator boundary is reached.
+    interpreter.cells[old.index].value = None;
+    reference_probe_checked(interpreter.release(old));
+    let replacement =
+        reference_probe_checked(interpreter.allocate(ir::I64, Some(Value::Bits(2)), false));
+    assert_eq!(old.index, replacement.index);
+    let error = interpreter
+        .reference_access(&stale)
+        .err()
+        .expect("stale slot reference accepted");
+    assert!(error.kind == ErrorKind::Interpreter(InterpreterError::DanglingReference));
+    reference_probe_checked(interpreter.release_reference(&stale));
+    let access = Access {
+        extent: None,
+        cell: replacement,
+        ty: ir::I64,
+        permissions: Vec::new(),
+        writable: true,
+    };
+    let Value::Reference(current) =
+        reference_probe_checked(interpreter.borrow(&access, ir::I64, false))
+    else {
+        panic!("borrow did not return a reference")
+    };
+    assert_eq!(stale.tag, current.tag);
+    let error = interpreter
+        .reference_access(&stale)
+        .err()
+        .expect("stale tag reference accepted");
+    assert!(error.kind == ErrorKind::Interpreter(InterpreterError::DanglingReference));
+    reference_probe_checked(interpreter.reference_access(&current));
+    reference_probe_checked(interpreter.release_reference(&current));
+    let other = reference_probe_checked(interpreter.allocate(ir::I64, Some(Value::Bits(3)), false));
+    let other_access = Access {
+        extent: None,
+        cell: other,
+        ty: ir::I64,
+        permissions: Vec::new(),
+        writable: true,
+    };
+    let Value::Reference(other_reference) =
+        reference_probe_checked(interpreter.borrow(&other_access, ir::I64, false))
+    else {
+        panic!("borrow did not return a reference")
+    };
+    assert_eq!(stale.tag, other_reference.tag);
+    assert_eq!(stale.identity, other_reference.identity);
+    assert_ne!(stale.target.index, other_reference.target.index);
+    let error = interpreter
+        .reference_access(&stale)
+        .err()
+        .expect("stale reference reached another cell");
+    assert!(error.kind == ErrorKind::Interpreter(InterpreterError::DanglingReference));
+    let error = interpreter
+        .release_reference(&stale)
+        .err()
+        .expect("stale reference released another cell's loan");
+    assert!(error.kind == ErrorKind::Interpreter(InterpreterError::DanglingReference));
+    reference_probe_checked(interpreter.reference_access(&other_reference));
 }

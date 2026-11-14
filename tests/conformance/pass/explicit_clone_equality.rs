@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 struct Item { value: i64 }
 
 impl Clone for Item {

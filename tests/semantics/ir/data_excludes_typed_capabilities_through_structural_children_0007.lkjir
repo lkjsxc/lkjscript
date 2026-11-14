@@ -1,0 +1,43 @@
+lkjscript-ir 1
+# expect: check
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "World" struct move "value" 3
+type "$rigid:T:15" struct move
+type "$rigid:U:16" struct move
+type "&t14" ref shared 14
+fn "need<T=t15;>" 1 0
+local "value" 15 let
+local "$" 0 let
+@1:79 unit 1
+@1:79 drop 0
+@1:79 return 1
+endfn
+fn "ordinary<U=t16;>" 1 0
+local "value" 17 let
+local "$" 17 let
+local "$" 0 let
+local "$" 0 let
+@1:140 read 1 copy 0
+@1:135 call 2 2 1
+@1:106 drop 2
+@1:106 unit 3
+@1:106 drop 0
+@1:106 return 3
+endfn
+fn "need<T=t17;>" 1 0
+local "value" 17 let
+@1:1 trap "abstract declared contract"
+endfn

@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 fn some<I:Iterator,F:FnMut(I::Item)->bool>(input:&mut I,predicate:F)->bool{input.any(predicate)}
 pub fn probe()->i64{
  let values=vec![1i64,2,3,4];let mut input=values.iter();let mut calls=0i64;

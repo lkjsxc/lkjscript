@@ -1,0 +1,78 @@
+lkjscript-ir 1
+# expect: value 42
+# entry: semantic_values
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "Data" struct move "a" 3 "b" 3
+type "&mut t3" ref mut 3
+type "&mut t15" ref mut 15
+fn "probe" 0 3
+local "$" 3 let
+local "$" 3 let
+local "$" 14 let
+local "data" 14 mut
+local "$" 15 let
+local "pointer" 15 mut
+local "$" 16 let
+local "$" 15 let
+local "$" 15 let
+local "old" 15 let
+local "$" 3 let
+local "$" 0 let
+local "$" 3 let
+local "$" 0 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+@4:38 int 0 1
+@4:44 int 1 2
+@4:28 struct 2 0 1
+@4:1 assign 2 3
+@5:31 borrow 4 mut 3 field 0
+@5:1 assign 4 5
+@6:41 borrow 6 mut 5
+@6:55 borrow 7 mut 3 field 1
+@6:23 intrinsic 8 "replace" 6 7
+@6:1 assign 8 9
+@7:20 int 10 19
+@7:13 assign 10 9 deref
+@7:13 unit 11
+@3:9 drop 11
+@8:24 int 12 23
+@8:13 assign 12 5 deref
+@8:13 unit 13
+@3:9 drop 13
+@9:13 read 14 copy 9 deref
+@9:20 read 15 copy 5 deref
+@9:13 binary 16 "+" 14 15
+@3:9 drop 9
+@3:9 drop 5
+@3:9 drop 3
+@3:9 return 16
+endfn
+fn "semantic_values" 0 3
+local "result" 3 let
+local "expected0" 3 let
+local "equal0" 1 let
+local "unit0" 0 let
+local "answer" 3 let
+@1 call 0 0
+@1 int 1 42
+@1 binary 2 == 0 1
+@1 intrinsic 3 assert 2
+@1 drop 3
+@1 int 4 42
+@1 return 4
+endfn

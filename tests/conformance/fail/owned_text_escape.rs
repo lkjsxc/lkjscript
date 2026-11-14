@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
 fn leak() -> &'static str {
     let owned = "local".to_string();
     owned.as_str()

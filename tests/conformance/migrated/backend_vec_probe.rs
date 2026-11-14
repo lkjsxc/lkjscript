@@ -1,3 +1,5 @@
+// expect: value 1999
+// witness: {}
 pub fn probe() -> i64 {
     let mut values: Vec<i64> = Vec::new();
     let mut i: i64 = 0;

@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 pub fn probe() -> i64 {
     let mut calls: i64 = 0;
     let none: Option<i64> = None;

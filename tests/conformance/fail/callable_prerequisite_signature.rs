@@ -1,3 +1,5 @@
+// expect: reject E_TYPE
+// witness: {"rustCode":"E0631"}
 trait Next {
     type Item;
     fn next(&mut self) -> Option<Self::Item>;

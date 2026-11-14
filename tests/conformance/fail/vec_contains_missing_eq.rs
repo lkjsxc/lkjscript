@@ -1,3 +1,5 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false,"rustCode":"E0277"}
 struct NoEq {
     value: Box<i64>,
 }

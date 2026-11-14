@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustCode":"E0596"}
 trait Touch {
     fn touch(&mut self);
 }

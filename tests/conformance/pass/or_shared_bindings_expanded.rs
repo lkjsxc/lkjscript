@@ -1,3 +1,5 @@
+// expect: value 84
+// witness: {}
 enum E { A(Box<i64>), B(Box<i64>) }
 fn uniform()->i64{let p=(true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,Box::new(42i64));let x=p.32;*x}
 fn selected()->i64{let p=(E::A(Box::new(42i64)),E::B(Box::new(0i64)),E::A(Box::new(0i64)),E::B(Box::new(0i64)),E::A(Box::new(0i64)),E::B(Box::new(0i64)),E::A(Box::new(0i64)),E::B(Box::new(0i64)),E::A(Box::new(0i64)),E::B(Box::new(0i64)),E::A(Box::new(0i64)),E::B(Box::new(0i64)),E::A(Box::new(0i64)),E::B(Box::new(0i64)),E::A(Box::new(0i64)),E::B(Box::new(0i64)),E::A(Box::new(0i64)),E::B(Box::new(0i64)),E::A(Box::new(0i64)),E::B(Box::new(0i64)),E::A(Box::new(0i64)),E::B(Box::new(0i64)),E::A(Box::new(0i64)),E::B(Box::new(0i64)),E::A(Box::new(0i64)),E::B(Box::new(0i64)),E::A(Box::new(0i64)),E::B(Box::new(0i64)),E::A(Box::new(0i64)),E::B(Box::new(0i64)),E::A(Box::new(0i64)),E::B(Box::new(0i64)));

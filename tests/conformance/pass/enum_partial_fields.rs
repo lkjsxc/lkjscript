@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 enum Packet { Empty, Data(Box<i64>, i64) }
 pub fn probe() -> i64 {
     let packet = Packet::Data(Box::new(20), 22);

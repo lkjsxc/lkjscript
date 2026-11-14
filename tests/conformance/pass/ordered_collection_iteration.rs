@@ -1,3 +1,6 @@
+// expect: value 42
+// entry: probe
+// witness: {}
 use std::collections::{BTreeMap, BTreeSet};
 fn retained<'a>(map: &'a BTreeMap<i64, i64>) -> (&'a i64, &'a i64) {
     let mut iterator = map.iter();

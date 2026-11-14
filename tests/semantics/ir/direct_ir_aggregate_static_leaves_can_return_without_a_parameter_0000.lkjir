@@ -1,0 +1,23 @@
+lkjscript-ir 1
+# expect: check
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "str" str
+type "&str" ref shared 7
+type "[u8]" slice shared 5
+type "&[u8]" ref shared 9
+type "Pair" struct copy "left" 8 "right" 8
+fn "pair" 0 11 from static
+local "" 8 let
+local "" 8 let
+local "" 11 let
+@1:1 text 0 "6c656674"
+@2:1 text 1 "7269676874"
+@3:1 struct 2 0 1
+@4:1 return 2
+endfn

@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustCode":"E0499"}
 pub fn probe() -> i64 {
     let mut values = vec![1i64, 2, 3, 4];
     let first = &mut values[..2];

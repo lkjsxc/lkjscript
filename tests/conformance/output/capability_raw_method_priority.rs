@@ -1,3 +1,5 @@
+// expect: output 7072696f72697479206f6b0a
+// witness: {}
 trait Substitute {
     fn __lkjscript_arg_count(&mut self) -> usize;
     fn __lkjscript_directory(&mut self, bytes: &[u8]) -> Result<Directory, i64>;

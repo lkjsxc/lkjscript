@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 use std::collections::{BTreeMap, BTreeSet};
 
 pub fn probe() -> i64 {

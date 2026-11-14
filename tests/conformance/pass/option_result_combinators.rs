@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 pub fn probe() -> i64 {
     let first = Some(Some(20i64)).flatten().expect("value");
     let input: Option<Result<i64, i64>> = Some(Ok(22i64));

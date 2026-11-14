@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false,"rustCode":"E0506"}
 fn select<'a>(left: &'a mut i64, right: &'a mut i64, yes: bool) -> &'a mut i64 {
     if yes { left } else { right }
 }

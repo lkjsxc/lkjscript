@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {}
 struct Holder<'x> {
     pointer: &'x i64,
 }

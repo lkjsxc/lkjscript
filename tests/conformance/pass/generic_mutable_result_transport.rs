@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 fn apply<A, B, F: FnOnce(A) -> B>(function: F, value: A) -> B {
     function(value)
 }

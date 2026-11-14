@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
 type Inner<'x> = &'x i64;
 fn test<'a, 'b>(input: &'a Inner<'b>) -> &i64 {
     *input

@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 use std::collections::BTreeMap;
 pub fn probe() -> i64 {
     let mut values: BTreeMap<String, i64> = BTreeMap::new();

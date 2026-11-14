@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 fn literal() -> &'static [u8; 3] { b"\xff\0x" }
 fn slice() -> &'static [u8] { b"\xff\0x" }
 fn text() -> &'static str { "same" }

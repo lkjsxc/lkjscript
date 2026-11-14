@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 // Inferred result shape must not turn moved capture values into reborrows.
 fn option_shared(yes:bool)->i64{let value=42i64; let reference=&value; let once=move || if yes { None } else { Some(reference) }; match once(){Some(x)=>*x,None=>42}}
 fn option_mutable(yes:bool)->i64{let mut value=42i64; let reference=&mut value; let once=move || if yes { None } else { Some(reference) }; match once(){Some(x)=>*x,None=>42}}

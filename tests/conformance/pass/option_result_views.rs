@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 pub fn probe() -> i64 {
     let mut value = Some(Box::new(20i64));
     assert!(**value.as_ref().unwrap() == 20);

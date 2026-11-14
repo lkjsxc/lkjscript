@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 enum Choice<'a> {
     Held(&'a mut i64),
     Empty,

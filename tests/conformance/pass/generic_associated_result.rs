@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 trait Source {
     type Item;
     fn get(&self) -> Self::Item;

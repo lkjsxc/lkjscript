@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 // A scalar write through a checked alternative result changes no descriptor storage.
 fn select<'a, F: FnOnce(&'a mut i64)>(
     callback: F,

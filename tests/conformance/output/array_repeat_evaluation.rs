@@ -1,3 +1,5 @@
+// expect: output 414d30424d433144
+// witness: {}
 struct Mark {
     out: Stdout,
     byte: u8,

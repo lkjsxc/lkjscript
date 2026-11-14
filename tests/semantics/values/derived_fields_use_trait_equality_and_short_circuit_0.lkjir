@@ -1,0 +1,792 @@
+lkjscript-ir 1
+# expect: value 42
+# entry: semantic_values
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "Leaf" struct move "value" 3
+type "Pair" struct move "first" 14 "second" 14
+type "Choice" enum move
+variant "Empty"
+variant "Named" "first" 14 "second" 14
+variant "Tuple" "0" 14
+endtype
+type "&t15" ref shared 15
+type "(t14,t14)" struct move "0" 14 "1" 14
+type "[t14;2]" array 14 2
+type "$std::string::String" struct move "bytes" 21
+type "Vec<t5>" vec 5
+type "&t16" ref shared 16
+type "&t18" ref shared 18
+type "&t19" ref shared 19
+type "&t0" ref shared 0
+type "&t14" ref shared 14
+type "&t3" ref shared 3
+fn "fields" 0 3
+local "$" 3 let
+local "$" 14 let
+local "$" 3 let
+local "$" 14 let
+local "$" 15 let
+local "left" 15 let
+local "$" 3 let
+local "$" 14 let
+local "$" 3 let
+local "$" 14 let
+local "$" 15 let
+local "right" 15 let
+local "$" 17 let
+local "$" 17 let
+local "$" 1 let
+local "$if" 1 mut
+local "$" 1 let
+local "$" 17 let
+local "$" 17 let
+local "$" 1 let
+local "$" 1 let
+local "$if" 1 mut
+local "$" 1 let
+local "$" 17 let
+local "$" 17 let
+local "$" 1 let
+local "$" 3 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 3 let
+local "$" 14 let
+local "$" 3 let
+local "$" 14 let
+local "$" 16 let
+local "left" 16 let
+local "$" 3 let
+local "$" 14 let
+local "$" 3 let
+local "$" 14 let
+local "$" 16 let
+local "right" 16 let
+local "$" 22 let
+local "$" 22 let
+local "$" 1 let
+local "$if" 1 mut
+local "$" 1 let
+local "$" 22 let
+local "$" 16 let
+local "$" 22 let
+local "$" 1 let
+local "$if" 1 mut
+local "$" 1 let
+local "$" 22 let
+local "$" 3 let
+local "$" 14 let
+local "$" 16 let
+local "$" 22 let
+local "$" 1 let
+local "$" 3 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 3 let
+local "$" 14 let
+local "$" 3 let
+local "$" 14 let
+local "$" 15 let
+local "first" 15 let
+local "$" 17 let
+local "$" 15 let
+local "second" 15 let
+local "$" 17 let
+local "$" 17 let
+local "$" 1 let
+local "$if" 1 mut
+local "$" 1 let
+local "$" 17 let
+local "$" 17 let
+local "$" 1 let
+local "$" 1 let
+local "$if" 1 mut
+local "$" 1 let
+local "$" 17 let
+local "$" 17 let
+local "$" 1 let
+local "$" 3 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 3 let
+local "$" 14 let
+local "$" 3 let
+local "$" 14 let
+local "$" 18 let
+local "tuples" 18 let
+local "$" 23 let
+local "$" 23 let
+local "$" 18 let
+local "$" 23 let
+local "$" 1 let
+local "$" 3 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 3 let
+local "$" 14 let
+local "$" 3 let
+local "$" 14 let
+local "$" 19 let
+local "array" 19 let
+local "$" 24 let
+local "$" 24 let
+local "$" 19 let
+local "$" 24 let
+local "$" 1 let
+local "$" 3 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 0 let
+local "$" 25 let
+local "$" 0 let
+local "$" 25 let
+local "$" 1 let
+local "$" 3 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 3 let
+@13:33 int 0 1
+@13:22 struct 1 0
+@13:54 int 2 100
+@13:43 struct 3 2
+@13:11 struct 4 1 3
+@13:1 assign 4 5
+@14:34 int 6 2
+@14:23 struct 7 6
+@14:55 int 8 100
+@14:44 struct 9 8
+@14:12 struct 10 7 9
+@14:1 assign 10 11
+@15:5 borrow 12 shared 5
+@15:5 borrow 13 shared 11
+@15:5 call 14 1 12 13
+@15:5 if 14
+@15:5 int 16 1
+@15:5 assign 16 15
+@15:5 else
+@15:21 borrow 17 shared 5
+@15:29 borrow 18 shared 11
+@15:21 call 19 2 17 18
+@15:20 unary 20 "!" 19
+@15:5 assign 20 15
+@15:5 end
+@15:5 if 15
+@15:5 int 22 1
+@15:5 assign 22 21
+@15:5 else
+@15:46 borrow 23 shared 5
+@15:52 borrow 24 shared 11
+@15:40 call 25 3 23 24
+@15:5 assign 25 21
+@15:5 end
+@15:2 if 21
+@15:67 int 26 1
+@15:60 drop 11
+@15:60 drop 5
+@15:60 return 26
+@15:2 unit 27
+@15:2 else
+@15:2 unit 29
+@15:2 assign 29 28
+@15:2 end
+@12:5 drop 28
+@16:42 int 30 1
+@16:31 struct 31 30
+@16:63 int 32 100
+@16:52 struct 33 32
+@16:11 variant 34 1 31 33
+@16:1 assign 34 35
+@17:43 int 36 2
+@17:32 struct 37 36
+@17:64 int 38 100
+@17:53 struct 39 38
+@17:12 variant 40 1 37 39
+@17:1 assign 40 41
+@18:5 borrow 42 shared 35
+@18:5 borrow 43 shared 41
+@18:5 call 44 4 42 43
+@18:5 if 44
+@18:5 int 46 1
+@18:5 assign 46 45
+@18:5 else
+@18:20 borrow 47 shared 35
+@18:26 variant 48 0
+@18:20 borrow 49 shared 48
+@18:20 call 50 4 47 49
+@18:5 assign 50 45
+@18:5 drop 48
+@18:5 end
+@18:5 if 45
+@18:5 int 52 1
+@18:5 assign 52 51
+@18:5 else
+@18:43 borrow 53 shared 35
+@18:74 int 54 1
+@18:63 struct 55 54
+@18:49 variant 56 2 55
+@18:43 borrow 57 shared 56
+@18:43 call 58 4 53 57
+@18:5 assign 58 51
+@18:5 drop 56
+@18:5 end
+@18:2 if 51
+@18:86 int 59 2
+@18:79 drop 41
+@18:79 drop 35
+@18:79 drop 11
+@18:79 drop 5
+@18:79 return 59
+@18:2 unit 60
+@18:2 else
+@18:2 unit 62
+@18:2 assign 62 61
+@18:2 end
+@12:5 drop 61
+@19:34 int 63 1
+@19:23 struct 64 63
+@19:55 int 65 2
+@19:44 struct 66 65
+@19:12 struct 67 64 66
+@19:1 assign 67 68
+@20:13 borrow 69 shared 68
+@20:13 call 70 5 69
+@20:1 assign 70 71
+@21:5 borrow 72 shared 68
+@21:5 borrow 73 shared 71
+@21:5 call 74 2 72 73
+@21:5 if 74
+@21:5 int 76 1
+@21:5 assign 76 75
+@21:5 else
+@21:23 borrow 77 shared 68
+@21:32 borrow 78 shared 71
+@21:23 call 79 1 77 78
+@21:22 unary 80 "!" 79
+@21:5 assign 80 75
+@21:5 end
+@21:5 if 75
+@21:5 int 82 1
+@21:5 assign 82 81
+@21:5 else
+@21:44 borrow 83 shared 68
+@21:53 borrow 84 shared 71
+@21:44 call 85 2 83 84
+@21:5 assign 85 81
+@21:5 end
+@21:2 if 81
+@21:69 int 86 3
+@21:62 drop 71
+@21:62 drop 68
+@21:62 drop 41
+@21:62 drop 35
+@21:62 drop 11
+@21:62 drop 5
+@21:62 return 86
+@21:2 unit 87
+@21:2 else
+@21:2 unit 89
+@21:2 assign 89 88
+@21:2 end
+@12:5 drop 88
+@22:25 int 90 1
+@22:14 struct 91 90
+@22:39 int 92 2
+@22:28 struct 93 92
+@22:13 struct 94 91 93
+@22:1 assign 94 95
+@23:5 borrow 96 shared 95
+@23:13 borrow 97 shared 95
+@23:13 call 98 7 97
+@23:5 borrow 99 shared 98
+@23:5 call 100 6 96 99
+@23:2 if 100
+@23:35 int 101 4
+@23:28 drop 98
+@23:28 drop 95
+@23:28 drop 71
+@23:28 drop 68
+@23:28 drop 41
+@23:28 drop 35
+@23:28 drop 11
+@23:28 drop 5
+@23:28 return 101
+@23:2 unit 102
+@23:2 else
+@23:2 unit 104
+@23:2 assign 104 103
+@23:2 end
+@12:5 drop 103
+@12:5 drop 98
+@24:24 int 105 1
+@24:13 struct 106 105
+@24:38 int 107 2
+@24:27 struct 108 107
+@24:12 array 109 106 108
+@24:1 assign 109 110
+@25:5 borrow 111 shared 110
+@25:12 borrow 112 shared 110
+@25:12 call 113 9 112
+@25:5 borrow 114 shared 113
+@25:5 call 115 8 111 114
+@25:2 if 115
+@25:33 int 116 5
+@25:26 drop 113
+@25:26 drop 110
+@25:26 drop 95
+@25:26 drop 71
+@25:26 drop 68
+@25:26 drop 41
+@25:26 drop 35
+@25:26 drop 11
+@25:26 drop 5
+@25:26 return 116
+@25:2 unit 117
+@25:2 else
+@25:2 unit 119
+@25:2 assign 119 118
+@25:2 end
+@12:5 drop 118
+@12:5 drop 113
+@26:6 unit 120
+@26:6 borrow 121 shared 120
+@26:10 unit 122
+@26:6 borrow 123 shared 122
+@26:6 call 124 10 121 123
+@26:2 if 124
+@26:19 int 125 6
+@26:12 drop 122
+@26:12 drop 120
+@26:12 drop 110
+@26:12 drop 95
+@26:12 drop 71
+@26:12 drop 68
+@26:12 drop 41
+@26:12 drop 35
+@26:12 drop 11
+@26:12 drop 5
+@26:12 return 125
+@26:2 unit 126
+@26:2 else
+@26:2 unit 128
+@26:2 assign 128 127
+@26:2 end
+@12:5 drop 127
+@12:5 drop 122
+@12:5 drop 120
+@27:2 int 129 0
+@12:5 drop 110
+@12:5 drop 95
+@12:5 drop 71
+@12:5 drop 68
+@12:5 drop 41
+@12:5 drop 35
+@12:5 drop 11
+@12:5 drop 5
+@12:5 return 129
+endfn
+fn "$builtin:eq:t15" 2 1
+local "self" 17 let
+local "other" 17 let
+local "v2" 26 let
+local "v3" 26 let
+local "v4" 1 let
+local "v5" 1 let
+local "v6" 26 let
+local "v7" 26 let
+local "v8" 1 let
+local "v9" 1 let
+local "v10" 1 let
+@15:5 borrow 2 shared 0 deref field 0
+@15:5 borrow 3 shared 1 deref field 0
+@15:5 call 4 11 2 3
+@15:5 if 4
+@15:5 else
+@15:5 int 5 0
+@15:5 drop 1
+@15:5 drop 0
+@15:5 return 5
+@15:5 end
+@15:5 borrow 6 shared 0 deref field 1
+@15:5 borrow 7 shared 1 deref field 1
+@15:5 call 8 11 6 7
+@15:5 if 8
+@15:5 else
+@15:5 int 9 0
+@15:5 drop 1
+@15:5 drop 0
+@15:5 return 9
+@15:5 end
+@15:5 int 10 1
+@15:5 drop 1
+@15:5 drop 0
+@15:5 return 10
+endfn
+fn "$builtin:ne:t15" 2 1
+local "self" 17 let
+local "other" 17 let
+local "v2" 1 let
+local "v3" 1 let
+@15:21 call 2 1 0 1
+@15:21 unary 3 "!" 2
+@15:21 return 3
+endfn
+fn "equal<T=t15;>" 2 1
+local "left" 17 let
+local "right" 17 let
+local "$" 17 let
+local "$" 17 let
+local "$" 1 let
+@11:47 borrow 2 shared 0 deref
+@11:55 read 3 copy 1
+@11:47 call 4 1 2 3
+@11:1 drop 1
+@11:1 drop 0
+@11:1 return 4
+endfn
+fn "$builtin:eq:t16" 2 1
+local "self" 22 let
+local "other" 22 let
+local "v2" 1 let
+local "v3" 1 let
+local "v4" 1 let
+local "v5" 1 let
+local "v6" 1 let
+local "v7" 1 let
+local "v8" 26 let
+local "v9" 26 let
+local "v10" 1 let
+local "v11" 1 let
+local "v12" 26 let
+local "v13" 26 let
+local "v14" 1 let
+local "v15" 1 let
+local "v16" 1 let
+local "v17" 1 let
+local "v18" 1 let
+local "v19" 1 let
+local "v20" 26 let
+local "v21" 26 let
+local "v22" 1 let
+local "v23" 1 let
+local "v24" 1 let
+local "v25" 1 let
+@18:5 tag-test-place 2 0 0
+@18:5 if 2
+@18:5 tag-test-place 3 0 1
+@18:5 if 3
+@18:5 int 4 1
+@18:5 drop 1
+@18:5 drop 0
+@18:5 return 4
+@18:5 else
+@18:5 int 5 0
+@18:5 drop 1
+@18:5 drop 0
+@18:5 return 5
+@18:5 end
+@18:5 end
+@18:5 tag-test-place 6 1 0
+@18:5 if 6
+@18:5 tag-test-place 7 1 1
+@18:5 if 7
+@18:5 borrow 8 shared 0 deref variant 1 0
+@18:5 borrow 9 shared 1 deref variant 1 0
+@18:5 call 10 11 8 9
+@18:5 if 10
+@18:5 else
+@18:5 int 11 0
+@18:5 drop 1
+@18:5 drop 0
+@18:5 return 11
+@18:5 end
+@18:5 borrow 12 shared 0 deref variant 1 1
+@18:5 borrow 13 shared 1 deref variant 1 1
+@18:5 call 14 11 12 13
+@18:5 if 14
+@18:5 else
+@18:5 int 15 0
+@18:5 drop 1
+@18:5 drop 0
+@18:5 return 15
+@18:5 end
+@18:5 int 16 1
+@18:5 drop 1
+@18:5 drop 0
+@18:5 return 16
+@18:5 else
+@18:5 int 17 0
+@18:5 drop 1
+@18:5 drop 0
+@18:5 return 17
+@18:5 end
+@18:5 end
+@18:5 tag-test-place 18 2 0
+@18:5 if 18
+@18:5 tag-test-place 19 2 1
+@18:5 if 19
+@18:5 borrow 20 shared 0 deref variant 2 0
+@18:5 borrow 21 shared 1 deref variant 2 0
+@18:5 call 22 11 20 21
+@18:5 if 22
+@18:5 else
+@18:5 int 23 0
+@18:5 drop 1
+@18:5 drop 0
+@18:5 return 23
+@18:5 end
+@18:5 int 24 1
+@18:5 drop 1
+@18:5 drop 0
+@18:5 return 24
+@18:5 else
+@18:5 int 25 0
+@18:5 drop 1
+@18:5 drop 0
+@18:5 return 25
+@18:5 end
+@18:5 end
+@18:5 trap "invalid enum discriminant"
+endfn
+fn "$builtin:clone:t15" 1 15
+local "self" 17 let
+local "v1" 26 let
+local "v2" 14 let
+local "v3" 26 let
+local "v4" 14 let
+local "v5" 15 let
+@20:13 borrow 1 shared 0 deref field 0
+@20:13 call 2 12 1
+@20:13 borrow 3 shared 0 deref field 1
+@20:13 call 4 12 3
+@20:13 struct 5 2 4
+@20:13 drop 0
+@20:13 return 5
+endfn
+fn "$builtin:ne:t18" 2 1
+local "self" 23 let
+local "other" 23 let
+local "v2" 1 let
+local "v3" 1 let
+@23:5 call 2 13 0 1
+@23:5 unary 3 "!" 2
+@23:5 return 3
+endfn
+fn "$builtin:clone:t18" 1 18
+local "self" 23 let
+local "v1" 26 let
+local "v2" 14 let
+local "v3" 26 let
+local "v4" 14 let
+local "v5" 18 let
+@23:13 borrow 1 shared 0 deref field 0
+@23:13 call 2 12 1
+@23:13 borrow 3 shared 0 deref field 1
+@23:13 call 4 12 3
+@23:13 struct 5 2 4
+@23:13 drop 0
+@23:13 return 5
+endfn
+fn "$builtin:ne:t19" 2 1
+local "self" 24 let
+local "other" 24 let
+local "v2" 1 let
+local "v3" 1 let
+@25:5 call 2 14 0 1
+@25:5 unary 3 "!" 2
+@25:5 return 3
+endfn
+fn "$builtin:clone:t19" 1 19
+local "self" 24 let
+local "v1" 4 let
+local "v2" 26 let
+local "v3" 14 let
+local "v4" 4 let
+local "v5" 26 let
+local "v6" 14 let
+local "v7" 19 let
+@25:12 int 1 0
+@25:12 borrow 2 shared 0 deref index 1
+@25:12 call 3 12 2
+@25:12 drop 1
+@25:12 int 4 1
+@25:12 borrow 5 shared 0 deref index 4
+@25:12 call 6 12 5
+@25:12 drop 4
+@25:12 array 7 3 6
+@25:12 drop 0
+@25:12 return 7
+endfn
+fn "$builtin:ne:t0" 2 1
+local "self" 25 let
+local "other" 25 let
+local "v2" 1 let
+local "v3" 1 let
+@26:6 call 2 15 0 1
+@26:6 unary 3 "!" 2
+@26:6 return 3
+endfn
+fn "eq$f0<Self=t14;>" 2 1
+local "self" 26 let
+local "other" 26 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+local "$" 1 let
+local "$" 0 let
+local "$" 3 let
+local "$" 3 let
+local "$" 1 let
+@4:41 read 2 copy 0 deref field 0
+@4:52 int 3 100
+@4:41 read 4 copy 3
+@4:41 binary 5 "<" 2 4
+@4:33 intrinsic 6 "assert" 5
+@4:2 drop 6
+@4:2 drop 3
+@4:57 read 7 copy 0 deref field 0
+@4:57 read 8 copy 1 deref field 0
+@4:57 binary 9 "==" 7 8
+@4:2 drop 1
+@4:2 drop 0
+@4:2 return 9
+endfn
+fn "$builtin:clone:t14" 1 14
+local "self" 26 let
+local "v1" 27 let
+local "v2" 3 let
+local "v3" 14 let
+@20:13 borrow 1 shared 0 deref field 0
+@20:13 call 2 16 1
+@20:13 struct 3 2
+@20:13 drop 0
+@20:13 return 3
+endfn
+fn "$builtin:eq:t18" 2 1
+local "self" 23 let
+local "other" 23 let
+local "v2" 26 let
+local "v3" 26 let
+local "v4" 1 let
+local "v5" 1 let
+local "v6" 26 let
+local "v7" 26 let
+local "v8" 1 let
+local "v9" 1 let
+local "v10" 1 let
+@23:5 borrow 2 shared 0 deref field 0
+@23:5 borrow 3 shared 1 deref field 0
+@23:5 call 4 11 2 3
+@23:5 if 4
+@23:5 else
+@23:5 int 5 0
+@23:5 drop 1
+@23:5 drop 0
+@23:5 return 5
+@23:5 end
+@23:5 borrow 6 shared 0 deref field 1
+@23:5 borrow 7 shared 1 deref field 1
+@23:5 call 8 11 6 7
+@23:5 if 8
+@23:5 else
+@23:5 int 9 0
+@23:5 drop 1
+@23:5 drop 0
+@23:5 return 9
+@23:5 end
+@23:5 int 10 1
+@23:5 drop 1
+@23:5 drop 0
+@23:5 return 10
+endfn
+fn "$builtin:eq:t19" 2 1
+local "self" 24 let
+local "other" 24 let
+local "v2" 4 let
+local "v3" 26 let
+local "v4" 26 let
+local "v5" 1 let
+local "v6" 1 let
+local "v7" 4 let
+local "v8" 26 let
+local "v9" 26 let
+local "v10" 1 let
+local "v11" 1 let
+local "v12" 1 let
+@25:5 int 2 0
+@25:5 borrow 3 shared 0 deref index 2
+@25:5 borrow 4 shared 1 deref index 2
+@25:5 call 5 11 3 4
+@25:5 drop 2
+@25:5 if 5
+@25:5 else
+@25:5 int 6 0
+@25:5 drop 1
+@25:5 drop 0
+@25:5 return 6
+@25:5 end
+@25:5 int 7 1
+@25:5 borrow 8 shared 0 deref index 7
+@25:5 borrow 9 shared 1 deref index 7
+@25:5 call 10 11 8 9
+@25:5 drop 7
+@25:5 if 10
+@25:5 else
+@25:5 int 11 0
+@25:5 drop 1
+@25:5 drop 0
+@25:5 return 11
+@25:5 end
+@25:5 int 12 1
+@25:5 drop 1
+@25:5 drop 0
+@25:5 return 12
+endfn
+fn "$builtin:eq:t0" 2 1
+local "self" 25 let
+local "other" 25 let
+local "v2" 1 let
+@26:6 int 2 1
+@26:6 drop 1
+@26:6 drop 0
+@26:6 return 2
+endfn
+fn "$builtin:clone:t3" 1 3
+local "self" 27 let
+local "v1" 3 let
+@20:13 read 1 copy 0 deref
+@20:13 drop 0
+@20:13 return 1
+endfn
+fn "semantic_values" 0 3
+local "result" 3 let
+local "expected0" 3 let
+local "equal0" 1 let
+local "unit0" 0 let
+local "answer" 3 let
+@1 call 0 0
+@1 int 1 0
+@1 binary 2 == 0 1
+@1 intrinsic 3 assert 2
+@1 drop 3
+@1 int 4 42
+@1 return 4
+endfn

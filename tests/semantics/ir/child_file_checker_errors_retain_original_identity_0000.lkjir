@@ -1,0 +1,43 @@
+lkjscript-ir 1
+# expect: reject E_BORROW
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "&t3" ref shared 3
+type "&mut t3" ref mut 3
+fn "probe" 0 3
+local "$" 3 let
+@1:27 call 0 1
+@1:11 return 0
+endfn
+fn "child::probe" 0 3 file 1
+local "$" 3 let
+local "x" 3 let
+local "$" 14 let
+local "view" 14 let
+local "$" 15 let
+local "second" 15 let
+local "$" 3 let
+@1:31 int 0 1
+@1:5 assign 0 1
+@1:42 borrow 2 shared 1
+@1:5 assign 2 3
+@1:56 borrow 4 mut 1
+@1:5 assign 4 5
+@1:5 drop 5
+@1:63 read 6 copy 3 deref
+@1:5 drop 3
+@1:5 drop 1
+@1:5 return 6
+endfn

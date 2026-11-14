@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 enum List { End, Next(i64, Box<List>) }
 fn sum(list: &List) -> i64 {
     match list { List::End => 0, List::Next(value, next) => *value + sum(next) }

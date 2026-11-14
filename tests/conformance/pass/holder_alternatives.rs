@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 fn shared(left: bool) -> i64 {
     let first: i64 = 20;
     let second: i64 = 22;

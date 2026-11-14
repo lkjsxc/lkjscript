@@ -1,3 +1,5 @@
+// expect: value 10
+// witness: {}
 struct Counter<'a> { count: &'a mut i64 }
         impl<'a> Drop for Counter<'a> {
             fn drop(&mut self) { *self.count = *self.count + 1; }

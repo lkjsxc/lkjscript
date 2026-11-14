@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 struct Capture<'a, 'b> { left: &'a i64, right: &'b i64 }
 struct Exclusive<'a, 'b> { left: &'a mut i64, right: &'b mut i64 }
 fn identity<T>(value: T) -> T { value }

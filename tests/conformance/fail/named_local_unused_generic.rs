@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustCode":"E0499"}
 fn bad<'a, T>(value: &'a mut T) {
     let pointer: &'a mut T = &mut *value;
     drop(pointer);

@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 struct Ticket { value: i64 }
 fn redeem(ticket: Ticket) -> i64 { ticket.value }
 pub fn probe() -> i64 {

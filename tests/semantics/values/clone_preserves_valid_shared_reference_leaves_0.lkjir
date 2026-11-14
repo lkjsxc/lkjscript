@@ -1,0 +1,73 @@
+lkjscript-ir 1
+# expect: value 42
+# entry: semantic_values
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "&t3" ref shared 3
+type "View" struct copy "value" 14
+type "&t15" ref shared 15
+fn "copied" 1 15
+return-leaf 0 field 0 bound 0
+local "external" 14 let
+local "$" 14 let
+local "$" 15 let
+local "view" 15 let
+local "$" 16 let
+local "$" 15 let
+@5:38 read 1 copy 0
+@5:24 struct 2 1
+@5:1 assign 2 3
+@6:13 borrow 4 shared 3
+@6:13 call 5 2 4
+@4:9 drop 3
+@4:9 drop 0
+@4:9 return 5
+endfn
+fn "probe" 0 3
+local "$" 3 let
+local "value" 3 let
+local "$" 14 let
+local "$" 15 mut
+local "$" 3 let
+@9:30 int 0 42
+@9:1 assign 0 1
+@10:21 borrow 2 shared 1
+@10:14 call 3 0 2
+@10:13 read 4 copy 3 field 0 deref
+@8:9 drop 3
+@8:9 drop 1
+@8:9 return 4
+endfn
+fn "$builtin:clone:t15" 1 15 from 0 deref
+local "self" 16 let
+local "v1" 15 let
+@6:13 read 1 copy 0 deref
+@6:13 drop 0
+@6:13 return 1
+endfn
+fn "semantic_values" 0 3
+local "result" 3 let
+local "expected0" 3 let
+local "equal0" 1 let
+local "unit0" 0 let
+local "answer" 3 let
+@1 call 0 1
+@1 int 1 42
+@1 binary 2 == 0 1
+@1 intrinsic 3 assert 2
+@1 drop 3
+@1 int 4 42
+@1 return 4
+endfn

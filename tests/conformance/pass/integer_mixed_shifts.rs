@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 pub fn probe() -> i64 {
     let count = 3u8;
     let left = 5_i64 << count;

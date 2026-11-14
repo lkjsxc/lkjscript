@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 fn invoke<'short, 'long: 'short, F: FnOnce(&'short i64) -> i64>(f: F, value: &'long i64) -> i64 {
     f(value)
 }

@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 #[derive(Copy)]
 struct Number { value: i64 }
 impl Clone for Number { fn clone(&self) -> Self { Number { value: self.value + 1 } } }

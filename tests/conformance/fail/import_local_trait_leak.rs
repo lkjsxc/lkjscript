@@ -1,3 +1,5 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false,"rustCode":"E0599"}
 mod values {
     pub struct Value { pub n: i64 }
     pub trait Read { fn read(&self) -> i64; }

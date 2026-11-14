@@ -1,3 +1,5 @@
+// expect: reject E_MOVE
+// witness: {"rustAccept":false,"rustCode":"E0382"}
 pub fn probe() -> i64 {
     let capture = Box::new(42i64);
     let predicate = move |value: i64| { drop(capture); value == 42 };

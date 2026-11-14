@@ -1,3 +1,5 @@
+// expect: reject E_MOVE
+// witness: {"rustAccept":false}
 struct Held<T> { value: T }
 fn invalid() {
     let mut value = 1i64;

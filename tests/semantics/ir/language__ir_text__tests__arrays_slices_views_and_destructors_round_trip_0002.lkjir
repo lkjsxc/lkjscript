@@ -1,0 +1,95 @@
+lkjscript-ir 1
+# expect: check
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "[t5]" slice shared 5
+type "&t14" ref shared 14
+type "&t5" ref shared 5
+type "&mut t3" ref mut 3
+type "Guard" struct move "count" 17
+type "[t5;2]" array 5 2
+type "&t19" ref shared 19
+type "&mut t18" ref mut 18
+destructor 18 2
+fn "first" 1 16 from 0
+local "values" 15 let
+local "$" 4 let
+local "$" 16 let
+@1:155 int 1 0
+@1:147 borrow 2 shared 0 deref index 1
+@1:117 drop 1
+@1:117 drop 0
+@1:117 return 2
+endfn
+fn "probe" 0 3
+local "$" 3 let
+local "count" 3 mut
+local "$" 17 let
+local "$" 18 let
+local "_guard" 18 let
+local "$" 0 let
+local "$" 5 let
+local "$" 5 let
+local "$" 19 let
+local "bytes" 19 let
+local "$" 3 let
+local "$" 20 let
+local "$" 15 let
+local "$" 16 mut
+local "$" 5 let
+local "$" 3 let
+local "$" 3 let
+@1:200 int 0 0
+@1:164 assign 0 1
+@1:227 borrow 2 mut 1
+@1:215 struct 3 2
+@1:203 assign 3 4
+@1:203 unit 5
+@1:203 drop 4
+@1:164 drop 5
+@1:259 int 6 20
+@1:262 int 7 22
+@1:258 array 8 6 7
+@1:164 assign 8 9
+@1:267 read 10 copy 1
+@1:280 borrow 11 shared 9
+@1:280 slice-borrow 12 shared 11 deref
+@1:280 drop 11
+@1:274 call 13 0 12
+@1:273 read 14 copy 13 deref
+@1:273 intrinsic 15 "cast" 14
+@1:267 binary 16 "+" 10 15
+@1:164 drop 13
+@1:164 drop 9
+@1:164 drop 1
+@1:164 return 16
+endfn
+fn "drop$f0<Self=t18;>" 1 0
+local "self" 21 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+local "$" 0 let
+local "$" 0 let
+@1:99 read 1 copy 0 deref field 0 deref
+@1:111 int 2 1
+@1:99 binary 3 "+" 1 2
+@1:87 assign 3 0 deref field 0 deref
+@1:87 unit 4
+@1:68 drop 4
+@1:68 unit 5
+@1:68 drop 0
+@1:68 return 5
+endfn

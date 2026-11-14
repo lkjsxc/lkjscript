@@ -1,4 +1,5 @@
 lkjscript-ir 1
+# expect: value 42
 # A self-move preserves the owner's cleanup state although no bytes move.
 type "()" unit
 type "bool" bool

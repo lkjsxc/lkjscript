@@ -1,3 +1,6 @@
+// expect: reject E_TYPE
+// entry: probe
+// witness: {"rustCode":"E0631"}
 trait Alternative { fn apply<F: FnOnce(bool) -> i64>(self, function: F) -> i64; }
 struct Wrapper<T> { value: T }
 impl<T> Wrapper<T> {

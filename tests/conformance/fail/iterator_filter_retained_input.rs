@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
 pub fn probe() -> i64 {
     let values = [42i64];
     let mut retained: Option<&&i64> = None;

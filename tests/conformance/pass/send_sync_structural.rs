@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 struct Packet { value: i64 }
 fn send<T: Send>(value: T) -> T { value }
 fn sync<T: Sync>(value: &T) -> &T { value }

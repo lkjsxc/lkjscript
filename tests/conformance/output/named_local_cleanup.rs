@@ -1,3 +1,5 @@
+// expect: output 413161
+// witness: {}
 struct Stamp<'a> {
     output: &'a mut Stdout,
 }

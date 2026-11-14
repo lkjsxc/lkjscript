@@ -1,3 +1,5 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":false}
 struct Wrap<T> {
     value: T,
 }

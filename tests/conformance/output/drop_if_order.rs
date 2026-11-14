@@ -1,3 +1,5 @@
+// expect: output 43414244
+// witness: {}
 struct Traced { output: Stdout, byte: u8 }
 impl Drop for Traced {
     fn drop(&mut self) {

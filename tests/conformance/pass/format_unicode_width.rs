@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 use std::fmt::Write;
 pub fn probe() -> i64 {
     let value = format!(

@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 fn next(value: Option<i32>) -> Result<i32, String> {
     Ok(value.ok_or("missing")? + 1)
 }

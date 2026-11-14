@@ -1,0 +1,137 @@
+lkjscript-ir 1
+# expect: value 42
+# entry: semantic_values
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "&t3" ref shared 3
+type "Wrapped" struct move "choice" 16
+type "Maybe" enum move
+variant "None"
+variant "Some" "0" 14
+endtype
+type "&mut t15" ref mut 15
+fn "empty" 1 15
+return-leaf 0 field 0 variant 1 0 bound 0
+local "external" 14 let
+local "$" 14 let
+local "$" 16 let
+local "$" 15 let
+local "view" 15 mut
+local "$" 17 let
+local "$" 16 let
+local "$" 15 let
+local "$" 15 let
+local "old" 15 let
+local "$" 15 let
+@5:58 read 1 copy 0
+@5:46 variant 2 1 1
+@5:28 struct 3 2
+@5:1 assign 3 4
+@6:41 borrow 5 mut 4
+@6:70 variant 6 0
+@6:52 struct 7 6
+@6:23 intrinsic 8 "replace" 5 7
+@6:1 assign 8 9
+@7:13 read 10 move 4
+@4:9 drop 9
+@4:9 drop 0
+@4:9 return 10
+endfn
+fn "probe" 0 3
+local "$" 3 let
+local "value" 3 let
+local "$" 14 let
+local "$" 15 let
+local "view" 15 let
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 3 let
+local "$match" 3 mut
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 14 let
+local "found" 14 let
+local "$" 3 let
+@10:30 int 0 42
+@10:1 assign 0 1
+@11:30 borrow 2 shared 1
+@11:24 call 3 0 2
+@11:1 assign 3 4
+@12:13 int 6 0
+@12:13 assign 6 5
+@12:13 tag-test-place 7 0 4 field 0
+@12:13 if 7
+@12:13 int 8 1
+@12:13 assign 8 5
+@12:13 end
+@12:13 if 5
+@12:13 tag-test-place 9 0 4 field 0
+@12:13 if 9
+@12:13 else
+@12:13 trap "unreachable selected pattern"
+@12:13 end
+@12:48 int 10 42
+@12:13 assign 10 11
+@12:13 else
+@12:13 int 13 0
+@12:13 assign 13 12
+@12:13 tag-test-place 14 1 4 field 0
+@12:13 if 14
+@12:13 int 15 1
+@12:13 int 16 1
+@12:13 binary 17 "&" 15 16
+@12:13 assign 17 12
+@12:13 end
+@12:13 if 12
+@12:13 tag-test-place 18 1 4 field 0
+@12:13 if 18
+@12:13 else
+@12:13 trap "unreachable selected pattern"
+@12:13 end
+@12:13 read 19 copy 4 field 0 variant 1 0
+@12:13 assign 19 20
+@12:74 read 21 copy 20 deref
+@12:13 assign 21 11
+@12:13 drop 20
+@12:13 else
+@12:13 trap "unreachable match"
+@12:13 end
+@12:13 end
+@9:9 drop 4
+@9:9 drop 1
+@9:9 return 11
+endfn
+fn "semantic_values" 0 3
+local "result" 3 let
+local "expected0" 3 let
+local "equal0" 1 let
+local "unit0" 0 let
+local "answer" 3 let
+@1 call 0 1
+@1 int 1 42
+@1 binary 2 == 0 1
+@1 intrinsic 3 assert 2
+@1 drop 3
+@1 int 4 42
+@1 return 4
+endfn

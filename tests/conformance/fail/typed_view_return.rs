@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
 fn test<'a, 'b: 'a>(input: &'b i64) -> &'b i64 {
     let pointer = input;
     let short: &&'a i64 = &pointer;

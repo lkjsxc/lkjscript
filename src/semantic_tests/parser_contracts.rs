@@ -1,0 +1,122 @@
+use crate::{
+    ast::{Expr, Stmt},
+    syntax,
+};
+fn block_statements_stop_before_ambiguous_prefix_expressions() {
+    for statement in vec![
+        "{}".to_string(),
+        "if true {}".to_string(),
+        "if let Some(value)=input {}".to_string(),
+        "while false {}".to_string(),
+        "while let Some(value)=input {}".to_string(),
+        "loop{break;}".to_string(),
+        "for value in 0..1{}".to_string(),
+        "match input{_=>{}}".to_string(),
+    ] {
+        let source = format!("fn f(){{{statement} *reference}}");
+        let parsed = syntax::parse(&source).unwrap();
+        let body = &parsed.blocks[parsed.functions[0].body.unwrap()];
+        assert_eq!(body.statements.len(), 1, "{source}");
+        assert!(
+            matches!(
+                body.statements[0],
+                Stmt::Expr {
+                    semicolon: false,
+                    ..
+                }
+            ),
+            "{source}"
+        );
+        assert!(
+            matches!(&parsed.exprs[body.tail.unwrap()].kind, Expr::Unary { op, .. } if op=="*"),
+            "{source}"
+        );
+    }
+}
+
+fn written_semicolons_are_preserved_without_changing_tail_values() {
+    let parsed = syntax::parse("fn f(){ {} {1}; if true {} {42} }").unwrap();
+    let body = &parsed.blocks[parsed.functions[0].body.unwrap()];
+    assert_eq!(body.statements.len(), 3);
+    assert!(matches!(
+        body.statements[0],
+        Stmt::Expr {
+            semicolon: false,
+            ..
+        }
+    ));
+    assert!(matches!(
+        body.statements[1],
+        Stmt::Expr {
+            semicolon: true,
+            ..
+        }
+    ));
+    assert!(matches!(
+        body.statements[2],
+        Stmt::Expr {
+            semicolon: false,
+            ..
+        }
+    ));
+    assert!(matches!(
+        parsed.exprs[body.tail.unwrap()].kind,
+        Expr::Block(_)
+    ));
+}
+
+fn parenthesized_blocks_keep_call_and_index_expression_syntax() {
+    let calls = syntax::parse("fn f(){(if true {callee}else{callee})(42)}").unwrap();
+    let body = &calls.blocks[calls.functions[0].body.unwrap()];
+    assert!(body.statements.is_empty());
+    assert!(matches!(
+        calls.exprs[body.tail.unwrap()].kind,
+        Expr::Call { .. }
+    ));
+    let index = syntax::parse("fn f(){({[42]})[0]}").unwrap();
+    let body = &index.blocks[index.functions[0].body.unwrap()];
+    assert!(body.statements.is_empty());
+    assert!(matches!(
+        index.exprs[body.tail.unwrap()].kind,
+        Expr::Index { .. }
+    ));
+}
+
+fn postfix_question_mark_continues_block_expression_syntax() {
+    let parsed = syntax::parse("fn pending()->Option<i64>{{Some(1i64)}?;Some(42)}").unwrap();
+    let body = &parsed.blocks[parsed.functions[0].body.unwrap()];
+    assert_eq!(body.statements.len(), 1);
+    let Stmt::Expr { value, semicolon } = body.statements[0] else {
+        panic!("missing expression statement");
+    };
+    assert!(semicolon);
+    assert!(matches!(parsed.exprs[value].kind, Expr::Try(_)));
+}
+
+pub fn run(world: &mut World, trace: bool) -> usize {
+    if trace {
+        world
+            .stdout()
+            .write(b"block_statements_stop_before_ambiguous_prefix_expressions\n");
+    }
+    block_statements_stop_before_ambiguous_prefix_expressions();
+    if trace {
+        world
+            .stdout()
+            .write(b"written_semicolons_are_preserved_without_changing_tail_values\n");
+    }
+    written_semicolons_are_preserved_without_changing_tail_values();
+    if trace {
+        world
+            .stdout()
+            .write(b"parenthesized_blocks_keep_call_and_index_expression_syntax\n");
+    }
+    parenthesized_blocks_keep_call_and_index_expression_syntax();
+    if trace {
+        world
+            .stdout()
+            .write(b"postfix_question_mark_continues_block_expression_syntax\n");
+    }
+    postfix_question_mark_continues_block_expression_syntax();
+    4usize
+}

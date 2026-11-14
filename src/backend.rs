@@ -18,7 +18,7 @@ pub fn emit(
     runtime: &runtime::Runtime,
     entry: &str,
 ) -> Result<Vec<u8>, Diagnostic> {
-    emit_artifact(checked, runtime, entry, None)
+    emit_artifact(checked, runtime, entry, None, None)
 }
 
 /// The driver holds fd3. A normal return writes only the raw eight-byte scalar;
@@ -28,7 +28,11 @@ pub fn emit_for_run(
     runtime: &runtime::Runtime,
     entry: &str,
 ) -> Result<Vec<u8>, Diagnostic> {
-    emit_artifact(checked, runtime, entry, Some(3))
+    emit_artifact(checked, runtime, entry, Some(3), None)
+}
+
+pub fn emit_profile(checked: &CheckedProgram, runtime: &runtime::Runtime, entry: &str, path: &str) -> Result<Vec<u8>, Diagnostic> {
+    emit_artifact(checked, runtime, entry, None, Some(path))
 }
 
 fn emit_artifact(
@@ -36,6 +40,7 @@ fn emit_artifact(
     runtime: &runtime::Runtime,
     entry: &str,
     result_fd: Option<u32>,
+    profile_path: Option<&str>,
 ) -> Result<Vec<u8>, Diagnostic> {
     let meaning = checked.program();
     let mut selected = None;
@@ -60,14 +65,10 @@ fn emit_artifact(
     } else if function.params != 0 {
         return Err(error("entry takes no arguments or exactly one World"));
     }
-    Ok(native::encode(
-        checked,
-        runtime,
-        native::Entry {
-            function: index,
-            arguments,
-            result_fd,
-        },
-    )?
-    .bytes)
+    let entry = native::Entry { function: index, arguments, result_fd };
+    let image = match profile_path {
+        Some(path) => native::encode_profile(checked, runtime, entry, path)?,
+        None => native::encode(checked, runtime, entry)?,
+    };
+    Ok(image.bytes)
 }

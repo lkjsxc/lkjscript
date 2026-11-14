@@ -1,3 +1,6 @@
+// expect: trap R0005
+// stdout:
+// entry: probe
 pub fn probe() {
     let mut values = vec![0u8, 0u8];
     let source = vec![1u8];

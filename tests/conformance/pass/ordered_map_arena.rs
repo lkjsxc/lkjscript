@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 use std::collections::BTreeMap;
 fn verify(map: &BTreeMap<usize, i64>, expected: &Vec<Option<i64>>) {
     let mut previous = 0usize;

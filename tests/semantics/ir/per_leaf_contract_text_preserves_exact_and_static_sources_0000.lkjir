@@ -1,0 +1,50 @@
+lkjscript-ir 1
+# expect: check
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "&i64" ref shared 3
+type "Pair" struct move "left" 7 "right" 7
+fn "capture" 2 8
+return-leaf 0 field 0 exact 0
+return-leaf 0 field 1 exact 1
+local "left" 7 let
+local "right" 7 let
+local "pair" 8 let
+@1:1 struct 2 0 1
+@2:1 return 2
+endfn
+fn "identity" 1 8
+return-leaf 0 field 0 exact 0 field 0
+return-leaf 0 field 1 exact 0 field 1
+local "value" 8 let
+@3:1 return 0
+endfn
+fn "probe" 0 3
+local "left" 3 let
+local "right" 3 let
+local "a" 7 let
+local "b" 7 let
+local "pair" 8 let
+local "transported" 8 let
+local "x" 3 let
+local "y" 3 let
+local "result" 3 let
+@4:1 int 0 20
+@5:1 int 1 22
+@6:1 borrow 2 shared 0
+@7:1 borrow 3 shared 1
+@8:1 call 4 0 2 3
+@9:1 call 5 1 4
+@10:1 read 6 copy 5 field 0 deref
+@11:1 read 7 copy 5 field 1 deref
+@12:1 binary 8 "+" 6 7
+@13:1 drop 5
+@14:1 drop 1
+@15:1 drop 0
+@16:1 return 8
+endfn

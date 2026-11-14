@@ -1,0 +1,27 @@
+lkjscript-ir 1
+# expect: check
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "M" struct move
+type "$rigid:U:15" struct move
+type "&t14" ref shared 14
+fn "take$f1<Self=t14;U=t15;>" 2 15
+local "self" 16 let
+local "x" 15 let
+local "$" 15 let
+@1:95 read 2 move 1
+@1:70 drop 0
+@1:70 return 2
+endfn

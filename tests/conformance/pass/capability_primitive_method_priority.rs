@@ -1,3 +1,5 @@
+// expect: output 2a
+// witness: {}
 trait Substitute {
     fn write(&mut self, bytes: &[u8]) -> i64;
 }

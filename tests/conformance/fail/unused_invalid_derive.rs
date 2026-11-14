@@ -1,3 +1,5 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false}
 struct NoClone;
 #[derive(Clone)]
 struct Item<T> {

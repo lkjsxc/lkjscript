@@ -1,3 +1,6 @@
+// expect: value 42
+// entry: probe
+// witness: {}
 trait Required {}
 trait Alternative {
     fn apply<F: FnOnce(bool) -> i64>(self, function: F) -> i64;

@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 mod outer {
     pub mod inner {
         pub mod leaf {

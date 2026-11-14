@@ -1,3 +1,5 @@
+// expect: value 7
+// witness: {}
 #[derive(Copy, Clone)]
         struct Inner { x: i64 }
         #[derive(Copy, Clone)]

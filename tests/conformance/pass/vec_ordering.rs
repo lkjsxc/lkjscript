@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 pub fn probe() -> i64 {
     let first: Vec<i64> = vec![1, 2];
     let second: Vec<i64> = vec![1, 3];

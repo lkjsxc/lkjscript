@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 struct Pulse{step:u8}
 impl Iterator for Pulse{type Item=i64;fn next(&mut self)->Option<i64>{self.step=self.step+1u8;match self.step{1=>Some(1),2=>None,3=>Some(3),4=>Some(4),_=>None}}}
 pub fn probe()->i64{

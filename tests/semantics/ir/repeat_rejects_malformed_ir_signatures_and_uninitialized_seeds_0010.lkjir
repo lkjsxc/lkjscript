@@ -1,0 +1,37 @@
+lkjscript-ir 1
+# expect: reject E_TYPE
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "Item" struct move "value" 3
+type "[t14;4]" array 14 4
+type "&t15" ref shared 15
+fn "probe" 0 3
+local "$" 3 let
+local "$" 14 let
+local "$" 15 let
+local "a" 15 let
+local "$" 16 let
+local "$" 4 let
+local "$" 3 let
+@1:86 int 0 7
+@1:74 struct 1 0
+@1:73 intrinsic 2 "array_repeat" 1
+@1:50 assign 2 3
+@1:92 borrow 4 shared 3
+@1:92 intrinsic 5 "vec_len" 4
+@1:92 intrinsic 6 "cast" 5
+@1:50 drop 3
+@1:50 return 6
+endfn

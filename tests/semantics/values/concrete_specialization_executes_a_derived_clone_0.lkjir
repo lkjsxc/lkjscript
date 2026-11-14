@@ -1,0 +1,100 @@
+lkjscript-ir 1
+# expect: value 42
+# entry: semantic_values
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "Item" struct move "value" 15
+type "Box<t3>" box 3
+type "&t14" ref shared 14
+type "&t15" ref shared 15
+type "&t3" ref shared 3
+fn "probe" 0 3
+local "$" 3 let
+local "$" 15 let
+local "$" 14 let
+local "value" 14 let
+local "$" 16 let
+local "$" 14 let
+local "copy" 14 let
+local "$" 14 let
+local "$" 0 let
+local "$" 3 let
+@1:143 int 0 42
+@1:134 intrinsic 1 "box_new" 0
+@1:123 struct 2 1
+@1:97 assign 2 3
+@1:164 borrow 4 shared 3
+@1:157 call 5 1 4
+@1:97 assign 5 6
+@1:177 read 7 move 3
+@1:172 drop 7
+@1:172 unit 8
+@1:97 drop 8
+@1:184 read 9 copy 6 field 0 deref
+@1:97 drop 6
+@1:97 return 9
+endfn
+fn "copied<T=t14;>" 1 14
+local "value" 16 let
+local "$" 16 let
+local "$" 14 let
+@1:78 borrow 1 shared 0 deref
+@1:78 call 2 2 1
+@1:46 drop 0
+@1:46 return 2
+endfn
+fn "$builtin:clone:t14" 1 14
+local "self" 16 let
+local "v1" 17 let
+local "v2" 15 let
+local "v3" 14 let
+@1:78 borrow 1 shared 0 deref field 0
+@1:78 call 2 3 1
+@1:78 struct 3 2
+@1:78 drop 0
+@1:78 return 3
+endfn
+fn "$builtin:clone:t15" 1 15
+local "self" 17 let
+local "v1" 18 let
+local "v2" 3 let
+local "v3" 15 let
+@1:78 borrow 1 shared 0 deref deref
+@1:78 call 2 4 1
+@1:78 intrinsic 3 "box_new" 2
+@1:78 drop 0
+@1:78 return 3
+endfn
+fn "$builtin:clone:t3" 1 3
+local "self" 18 let
+local "v1" 3 let
+@1:78 read 1 copy 0 deref
+@1:78 drop 0
+@1:78 return 1
+endfn
+fn "semantic_values" 0 3
+local "result" 3 let
+local "expected0" 3 let
+local "equal0" 1 let
+local "unit0" 0 let
+local "answer" 3 let
+@1 call 0 0
+@1 int 1 42
+@1 binary 2 == 0 1
+@1 intrinsic 3 assert 2
+@1 drop 3
+@1 int 4 42
+@1 return 4
+endfn

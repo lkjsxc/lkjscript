@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 trait Value {
     fn value(&self) -> i64;
 }

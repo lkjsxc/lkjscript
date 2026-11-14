@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 fn width(text: &str) -> usize { text.len() }
 fn failed() -> Result<usize, String> { Err("xx".to_string()) }
 pub fn probe() -> i64 {

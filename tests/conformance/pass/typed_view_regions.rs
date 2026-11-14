@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 // Typed views constrain their own paths; original shared descriptors retain their regions.
 mod original {
     fn test<'a, 'b: 'a>(input: &'b i64) -> i64 {

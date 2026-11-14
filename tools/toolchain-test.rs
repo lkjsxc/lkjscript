@@ -322,6 +322,97 @@ fn scalars() -> Vec<Scalar> {
     ]
 }
 
+fn occurrences(bytes: &[u8], needle: &[u8]) -> usize {
+    let mut count = 0usize;
+    let mut index = 0usize;
+    while index + needle.len() <= bytes.len() {
+        if &bytes[index..index + needle.len()] == needle {
+            count = count + 1;
+            index = index + needle.len();
+        } else {
+            index = index + 1;
+        }
+    }
+    count
+}
+
+fn diagnostics(
+    world: &mut World,
+    executable: &File,
+    directory: &mut Directory,
+    config: &Config,
+    report: &mut Report,
+) -> Result<(), String> {
+    write(directory, "recovered.rs", b"fn broken() { let = 1; } fn probe() -> i64 { 42 }")?;
+    write(directory, "independent.rs", b"fn first() -> i64 { true }\nfn second() -> bool { 1i64 }\n")?;
+    for name in pair("recovered.rs", "independent.rs") {
+        let mut arguments = command(config, "build", &name);
+        option(&mut arguments, "-o", &path(config, "rejected-artifact"));
+        let result = invoke(world, executable, &arguments, b"")?;
+        report.require(
+            result.status == 1 && result.output.is_empty(),
+            format!("build {name}: rejection status/stdout differs"),
+        );
+        if name == "recovered.rs" {
+            report.require(contains(&result.errors, b": E_PARSE "), format!("build {name}: missing parse diagnostic"));
+        } else {
+            report.require(
+                occurrences(&result.errors, b": E_TYPE ") == 2 && contains(&result.errors, b"E_BLOCKED"),
+                format!("build {name}: independent errors or blocking diagnostic missing: {}", display_bytes(&result.errors)),
+            );
+        }
+        report.require(
+            directory.open("rejected-artifact").is_err(),
+            format!("build {name} published a rejected artifact"),
+        );
+    }
+    write(directory, "four-errors.rs", include_str!("../tests/diagnostics/four_errors.rs").as_bytes())?;
+    let arguments = command(config, "check", "four-errors.rs");
+    let result = invoke(world, executable, &arguments, b"")?;
+    report.require(result.status == 1, "four independent diagnostics: expected rejection".to_string());
+    for code in vec!["E_TYPE".to_string(), "E_NAME".to_string(), "E_BORROW".to_string(), "E_MOVE".to_string()] {
+        report.require(
+            contains(&result.errors, format!(": {code} ").as_bytes()),
+            format!("four independent diagnostics: missing {code}"),
+        );
+    }
+    let callable = "fn invalid<'a, F: FnMut(&'a mut i64) -> i64>(mut function: F, value: &'a mut i64) -> i64 {\n    let result = function(value);\n    *value = 0;\n    result\n}\nfn probe() -> i64 { 42 }\n";
+    write(directory, "retained-callable.rs", callable.as_bytes())?;
+    let arguments = command(config, "check", "retained-callable.rs");
+    let result = invoke(world, executable, &arguments, b"")?;
+    report.require(
+        result.status == 1
+            && contains(&result.errors, b":3:5: E_BORROW value.*:")
+            && contains(&result.errors, b"created at 2:18"),
+        format!("retained callable omitted place or either source location: {}", display_bytes(&result.errors)),
+    );
+    write(directory, "view-entry.rs", include_str!("../tests/conformance/pass/inline_view_values.rs").as_bytes())?;
+    for engine in pair("native", "interpreter") {
+        let mut arguments = command(config, "run", "view-entry.rs");
+        option(&mut arguments, "--entry", "text");
+        option(&mut arguments, "--engine", &engine);
+        let result = invoke(world, executable, &arguments, b"")?;
+        report.require(
+            result.status == 1 && result.output.is_empty()
+                && contains(&result.errors, b"E_ENTRY host entry result must be unit or a scalar"),
+            format!("view entry {engine}: result was not rejected before execution"),
+        );
+    }
+    let recursion = "fn direct(n: i64) -> i64 { if n == 0 { 0 } else { 1 + direct(n - 1) } }\nfn left(n: i64) -> i64 { if n == 0 { 0 } else { 1 + right(n - 1) } }\nfn right(n: i64) -> i64 { if n == 0 { 0 } else { 1 + left(n - 1) } }\nfn probe() -> i64 { direct(100000) + left(100000) }\n";
+    write(directory, "recursion.rs", recursion.as_bytes())?;
+    let mut arguments = command(config, "run", "recursion.rs");
+    option(&mut arguments, "--engine", "native");
+    let result = invoke(world, executable, &arguments, b"")?;
+    report.outcome("native direct and mutual recursion", &result, 0, b"200000\n", b"");
+    let cleanup = "struct Node { depth: i64 }\nfn destroy(depth: i64) { let node = Node { depth }; }\nimpl Drop for Node { fn drop(&mut self) { if self.depth > 0 { destroy(self.depth - 1); } } }\n#[test] fn deep_cleanup() { destroy(30000); }\n";
+    write(directory, "recursive-drop.rs", cleanup.as_bytes())?;
+    let mut arguments = command(config, "test", "recursive-drop.rs");
+    option(&mut arguments, "--engine", "native");
+    let result = invoke(world, executable, &arguments, b"")?;
+    report.outcome("native recursive cleanup", &result, 0, b"ok 1 tests\n", b"");
+    Ok(())
+}
+
 fn exercise(
     world: &mut World,
     executable: &File,
@@ -636,6 +727,7 @@ fn exercise(
             b"existing artifact\0\xff",
         );
     }
+    diagnostics(world, executable, directory, config, report)?;
     Ok(())
 }
 

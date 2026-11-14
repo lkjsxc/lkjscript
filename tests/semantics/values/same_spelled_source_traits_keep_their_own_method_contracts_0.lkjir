@@ -1,0 +1,146 @@
+lkjscript-ir 1
+# expect: value 42
+# entry: semantic_values
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "Item" struct move "0" 3
+type "&t14" ref shared 14
+fn "custom_probe" 0 3
+local "$" 3 let
+local "$" 14 let
+local "left" 14 let
+local "$" 3 let
+local "$" 14 let
+local "right" 14 let
+local "$" 15 let
+local "$" 3 let
+local "$" 15 let
+local "$" 15 let
+local "$" 3 let
+local "$" 3 let
+local "$" 15 let
+local "$" 15 let
+local "$" 3 let
+local "$" 3 let
+@14:19 int 0 4
+@14:14 struct 1 0
+@14:1 assign 1 2
+@14:37 int 3 5
+@14:32 struct 4 3
+@14:1 assign 4 5
+@15:16 borrow 6 shared 2
+@15:5 call 7 1 6
+@15:35 borrow 8 shared 2
+@15:41 borrow 9 shared 5
+@15:23 call 10 2 8 9
+@15:5 binary 11 "+" 7 10
+@15:63 borrow 12 shared 2
+@15:69 borrow 13 shared 5
+@15:49 call 14 3 12 13
+@15:5 binary 15 "+" 11 14
+@13:5 drop 5
+@13:5 drop 2
+@13:5 return 15
+endfn
+fn "copy_value<T=t14;>" 1 3
+local "value" 15 let
+local "$" 15 let
+local "$" 3 let
+@10:39 borrow 1 shared 0 deref
+@10:39 call 2 4 1
+@10:1 drop 0
+@10:1 return 2
+endfn
+fn "equal_value<T=t14;>" 2 3
+local "left" 15 let
+local "right" 15 let
+local "$" 15 let
+local "$" 15 let
+local "$" 3 let
+@11:52 borrow 2 shared 0 deref
+@11:60 read 3 copy 1
+@11:52 call 4 5 2 3
+@11:1 drop 1
+@11:1 drop 0
+@11:1 return 4
+endfn
+fn "unequal_value<T=t14;>" 2 3
+local "left" 15 let
+local "right" 15 let
+local "$" 15 let
+local "$" 15 let
+local "$" 3 let
+@12:54 borrow 2 shared 0 deref
+@12:62 read 3 copy 1
+@12:54 call 4 6 2 3
+@12:1 drop 1
+@12:1 drop 0
+@12:1 return 4
+endfn
+fn "clone$f3<Self=t14;>" 1 3
+local "self" 15 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+@5:43 read 1 copy 0 deref field 0
+@5:50 int 2 30
+@5:43 binary 3 "+" 1 2
+@5:22 drop 0
+@5:22 return 3
+endfn
+fn "eq$f4<Self=t14;>" 2 3
+local "self" 15 let
+local "other" 15 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+@7:35 read 2 copy 0 deref field 0
+@7:42 read 3 copy 1 deref field 0
+@7:35 binary 4 "+" 2 3
+@7:5 drop 1
+@7:5 drop 0
+@7:5 return 4
+endfn
+fn "ne$f5<Self=t14;>" 2 3
+local "self" 15 let
+local "other" 15 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+@8:35 read 2 copy 0 deref field 0
+@8:42 read 3 copy 1 deref field 0
+@8:35 binary 4 "+" 2 3
+@8:50 int 5 100
+@8:35 binary 6 "+" 4 5
+@8:5 drop 1
+@8:5 drop 0
+@8:5 return 6
+endfn
+fn "semantic_values" 0 3
+local "result" 3 let
+local "expected0" 3 let
+local "equal0" 1 let
+local "unit0" 0 let
+local "answer" 3 let
+@1 call 0 0
+@1 int 1 152
+@1 binary 2 == 0 1
+@1 intrinsic 3 assert 2
+@1 drop 3
+@1 int 4 42
+@1 return 4
+endfn

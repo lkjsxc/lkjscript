@@ -1,0 +1,26 @@
+lkjscript-ir 1
+# expect: reject E_MOVE
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "Box<i64>" box 3
+type "Guard" struct move "value" 7
+type "&mut Guard" ref mut 8
+destructor 8 1
+fn "probe" 1 7
+local "" 8 let
+local "" 7 let
+@1:1 read 1 move 0 field 0
+@1:1 return 1
+endfn
+fn "drop" 1 0
+local "" 9 let
+local "" 0 let
+@1:1 drop 0
+@1:1 unit 1
+@1:1 return 1
+endfn

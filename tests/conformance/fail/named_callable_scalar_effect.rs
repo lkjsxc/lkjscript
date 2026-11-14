@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustCode":"E0506"}
 fn invalid<'a, F: FnMut(&'a mut i64) -> i64>(mut function: F, value: &'a mut i64) -> i64 {
     let result = function(value);
     *value = 0;

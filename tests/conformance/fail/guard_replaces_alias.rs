@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
 fn reset(value: &mut Option<i64>) { *value = None; }
 pub fn probe() -> i64 {
     let mut value = Some(1i64);

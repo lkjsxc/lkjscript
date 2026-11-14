@@ -1,3 +1,5 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false}
 trait Value { fn value(&self) -> i64; }
 struct Owner { value: i64 }
 impl<T> Value for T { fn value(&self) -> i64 { 0 } }

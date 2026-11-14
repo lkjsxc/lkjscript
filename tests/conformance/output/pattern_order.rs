@@ -1,3 +1,5 @@
+// expect: output 41783272353545464847444342
+// witness: {}
 struct Pair { a: Mark, b: Mark }
 struct Mark { output: Stdout, value: u8 }
 impl Drop for Mark { fn drop(&mut self) { self.output.write(&[self.value]); } }

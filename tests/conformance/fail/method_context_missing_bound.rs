@@ -1,3 +1,6 @@
+// expect: reject E_TRAIT
+// entry: probe
+// witness: {"rustCode":"E0599"}
 trait Required {}
 struct Wrapper<T> { value: T }
 impl<T: Required> Wrapper<T> {

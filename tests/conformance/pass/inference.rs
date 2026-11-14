@@ -1,3 +1,5 @@
+// expect: output 2a2a2a2a2a2a2a2a
+// witness: {}
 fn pair() -> (i64, i64) { (40, 2) }
 fn identity<T>(value: T) -> T { value }
 fn singleton<T>(value: T) -> Vec<T> {

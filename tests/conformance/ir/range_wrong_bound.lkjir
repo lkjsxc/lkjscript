@@ -1,4 +1,6 @@
 lkjscript-ir 1
+# expect: reject E_TYPE
+# entry: probe
 type "()" unit
 type "bool" bool
 type "i32" int 32 signed

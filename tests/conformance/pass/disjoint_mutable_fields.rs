@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 struct Pair { left: i64, right: i64 }
 pub fn probe() -> i64 {
     let mut pair = Pair { left: 0, right: 0 };

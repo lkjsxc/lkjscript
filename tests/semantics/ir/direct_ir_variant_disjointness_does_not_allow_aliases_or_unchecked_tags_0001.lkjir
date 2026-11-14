@@ -1,0 +1,38 @@
+lkjscript-ir 1
+# expect: reject E_TYPE
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "Pair" enum move
+variant "Pair" "left" 3 "right" 3
+variant "Other" "left" 3 "right" 3
+endtype
+type "&mut i64" ref mut 3
+fn "borrow_fields" 0 3
+local "v0" 3 let
+local "v1" 3 let
+local "v2" 7 mut
+local "v3" 1 let
+local "v4" 8 let
+local "v5" 8 let
+local "v6" 3 let
+@1:1 int 0 1
+@2:1 int 1 2
+@3:1 variant 2 0 0 1
+@4:1 tag-test-place 3 0 2
+@5:1 if 3
+@6:1 borrow 4 mut 2 variant 0 0
+@7:1 borrow 5 mut 2 variant 1 1
+@8:1 drop 5
+@9:1 drop 4
+@10:1 drop 2
+@11:1 int 6 42
+@12:1 return 6
+@13:1 else
+@14:1 trap "unreachable variant"
+@15:1 end
+endfn

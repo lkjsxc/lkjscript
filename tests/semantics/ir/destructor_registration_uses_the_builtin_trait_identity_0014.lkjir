@@ -1,0 +1,41 @@
+lkjscript-ir 1
+# expect: reject E_TYPE
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "Thing" struct move
+type "&mut t14" ref mut 14
+destructor 14 1
+fn "probe" 0 0
+local "$" 14 let
+local "value" 14 mut
+local "$" 15 let
+local "$" 0 let
+local "$" 0 let
+@1:83 struct 0
+@1:58 assign 0 1
+@1:91 borrow 2 mut 1
+@1:91 call 3 1 2
+@1:58 drop 3
+@1:58 unit 4
+@1:58 drop 1
+@1:58 return 4
+endfn
+fn "drop$f0<Self=t14;>" 1 0
+local "self" 15 let
+local "$" 0 let
+@1:36 unit 1
+@1:36 drop 0
+@1:36 return 1
+endfn

@@ -1,3 +1,5 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
 pub fn probe() -> i64 {
     let value = Box::new(1i64);
     drop(value);

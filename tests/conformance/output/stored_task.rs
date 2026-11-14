@@ -1,3 +1,6 @@
+// expect: output 34320a
+// entry: main
+// witness: {}
 struct Task<F> {
     call: F,
 }

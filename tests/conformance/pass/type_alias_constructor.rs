@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 struct Packet<A, B> { first: A, second: B }
 type Alias<T> = Packet<T, i64>;
 pub fn probe() -> i64 {

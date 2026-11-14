@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 fn helper<'a, F: FnOnce(&'a mut i64)>(f: F, value: &'a mut i64) -> &'a mut i64 {
     drop(f);
     value

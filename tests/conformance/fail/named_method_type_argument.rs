@@ -1,3 +1,5 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":false}
 struct Maker;
 impl Maker {
     fn wrap<T>(&self, value: T) -> T {

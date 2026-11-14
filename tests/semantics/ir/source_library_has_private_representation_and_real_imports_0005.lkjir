@@ -1,0 +1,84 @@
+lkjscript-ir 1
+# expect: check
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "$rigid:T:14" struct move
+type "$rigid:E:15" struct move
+type "$std::prelude::Result<t14,t15>" enum move
+variant "Ok" "0" 14
+variant "Err" "0" 15
+endtype
+type "&t16" ref shared 16
+fn "$std::prelude::is_ok$f533<E=t15;Self=t16;T=t14;>" 1 1 file 13
+local "self" 17 let
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$match" 1 mut
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+@169:1 int 2 0
+@169:1 assign 2 1
+@169:1 tag-test-place 3 0 0 deref
+@169:1 if 3
+@169:1 int 4 1
+@169:1 int 5 1
+@169:1 binary 6 "&" 4 5
+@169:1 assign 6 1
+@169:1 end
+@169:1 if 1
+@169:1 tag-test-place 7 0 0 deref
+@169:1 if 7
+@169:1 else
+@169:1 trap "unreachable selected pattern"
+@169:1 end
+@169:30 int 8 1
+@168:9 assign 8 9
+@168:9 else
+@170:1 int 11 0
+@170:1 assign 11 10
+@170:1 tag-test-place 12 1 0 deref
+@170:1 if 12
+@170:1 int 13 1
+@170:1 int 14 1
+@170:1 binary 15 "&" 13 14
+@170:1 assign 15 10
+@170:1 end
+@170:1 if 10
+@170:1 tag-test-place 16 1 0 deref
+@170:1 if 16
+@170:1 else
+@170:1 trap "unreachable selected pattern"
+@170:1 end
+@170:31 int 17 0
+@168:9 assign 17 9
+@168:9 else
+@168:9 trap "unreachable match"
+@168:9 end
+@168:9 end
+@167:9 drop 0
+@167:9 return 9
+endfn

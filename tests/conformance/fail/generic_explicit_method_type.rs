@@ -1,3 +1,5 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
 trait Mapper {
     fn take<T>(&self, value: T) -> T;
 }

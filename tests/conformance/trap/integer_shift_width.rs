@@ -1,3 +1,5 @@
+// expect: trap R0001
+// stdout:
 fn shift(count: u16) -> u8 {
     1u8 << count
 }

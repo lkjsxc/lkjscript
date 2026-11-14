@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
 struct Pair { number: i64, item: Option<i64> }
 pub fn probe() -> i64 {
     let mut pair = Pair { number: 1, item: Some(2) };

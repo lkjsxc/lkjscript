@@ -1,0 +1,90 @@
+lkjscript-ir 1
+# expect: reject E_TYPE
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "$std::prelude::Option<t13>" enum copy
+variant "None"
+variant "Some" "0" 13
+endtype
+fn "probe" 0 3
+local "$" 10 let
+local "$" 14 mut
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 13 let
+local "c" 13 let
+local "$" 13 let
+local "$" 10 let
+local "$" 3 let
+local "$match" 3 mut
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 3 let
+@1:44 int 0 97
+@1:29 intrinsic 1 "char_from_u32" 0 0
+@1:23 int 3 0
+@1:23 assign 3 2
+@1:23 tag-test-place 4 1 1
+@1:23 if 4
+@1:23 int 5 1
+@1:23 int 6 1
+@1:23 binary 7 "&" 5 6
+@1:23 assign 7 2
+@1:23 end
+@1:23 if 2
+@1:23 tag-test-place 8 1 1
+@1:23 if 8
+@1:23 else
+@1:23 trap "unreachable selected pattern"
+@1:23 end
+@1:23 read 9 copy 1 variant 1 0
+@1:23 assign 9 10
+@1:64 read 11 copy 10
+@1:64 intrinsic 12 "cast" 11
+@1:64 intrinsic 13 "cast" 12
+@1:23 assign 13 14
+@1:23 drop 10
+@1:23 drop 1
+@1:23 else
+@1:23 int 16 0
+@1:23 assign 16 15
+@1:23 tag-test-place 17 0 1
+@1:23 if 17
+@1:23 int 18 1
+@1:23 assign 18 15
+@1:23 end
+@1:23 if 15
+@1:23 tag-test-place 19 0 1
+@1:23 if 19
+@1:23 else
+@1:23 trap "unreachable selected pattern"
+@1:23 end
+@1:89 int 20 0
+@1:23 assign 20 14
+@1:23 drop 1
+@1:23 else
+@1:23 trap "unreachable match"
+@1:23 end
+@1:23 end
+@1:5 return 14
+endfn

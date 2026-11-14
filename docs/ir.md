@@ -21,23 +21,8 @@ Quoted words use JSON-style string escapes. Instructions begin with
 `@line:column`; `@line` means column 1. A function may specify its file index.
 Text-format errors use E_IR_TEXT; checker errors retain instruction locations.
 
-A complete scalar program:
-
-```text
-lkjscript-ir 1
-type "()" unit
-type "bool" bool
-type "i32" int 32 signed
-type "i64" int 64 signed
-type "usize" int 64 unsigned
-type "u8" int 8 unsigned
-type "f64" f64
-fn "probe" 0 3
-local "answer" 3 let
-@1:1 int 0 42
-@1:1 return 0
-endfn
-```
+The complete [scalar program](../tests/reference/scalar.lkjir) is an executable
+reference case: its expectation is 42 and the native gate runs both routes.
 
 The first seven types must match this primitive prefix exactly, including names.
 

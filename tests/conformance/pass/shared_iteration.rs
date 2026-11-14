@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 fn held_items() -> i64 {
     let values = vec![20i64, 22i64];
     let mut iterator = values.iter();

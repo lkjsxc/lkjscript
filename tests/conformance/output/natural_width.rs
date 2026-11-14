@@ -1,3 +1,6 @@
+// expect: output 01feff046c61796f75740a
+// entry: main
+// witness: {}
 #[derive(Clone)]
 struct Packed { byte: u8, short: i16, word: u32, owned: Box<i8>, flag: bool, tail: u8 }
 #[derive(Clone)]

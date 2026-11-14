@@ -1,3 +1,5 @@
+// expect: output 506566820b1e820c1e01023c506566830b1f01023d506566840b200102506566850b21850c2101023f5a
+// witness: {}
 struct M {
     out: Stdout,
     b: u8,

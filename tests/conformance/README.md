@@ -1,39 +1,55 @@
-# Conformance
+# Native cases
 
-`node tools/conformance.mjs target/release/lkjscript` runs source/IR case data.
-`LKJSCRIPT_ENGINES=native,interpreter` shares source checking and runs both independent execution
-routes. The routine gate uses those routes, Rust reference comparisons, and
-seeded value/verdict/output/destruction/sugar/closure generators.
+Run a case or directory with the complete compiler:
 
-`cases.json` declares expected values, output bytes, trap/diagnostic codes and
-optional trap lines. Source values expose a public `probe`; capability cases have
-a World-taking `main`. Direct IR fixtures reach the independent safety gate.
-The Rust oracle checks comparable source behavior with overflow checks enabled.
-Pending source cases count as pending only for E_UNSUPPORTED/E_PARSE; a wrong
-result, unrelated diagnostic or incomplete process result fails the suite.
+```sh
+target/lkjscript test tests/conformance --jobs 8
+target/lkjscript test tests/reference
+```
 
-Cases are regression evidence, not a score for language width. New features follow
-real compiler/tool consumers and fresh outside programs. Migrated backend cases
-preserve arithmetic edges, storage/copy/drop behavior and UTF-8 boundaries after
-removal of the WebAssembly host. Engine layout assertions disappeared with that
-engine; ordinary allocation/refusal checks use the native boundary fixtures.
+The compiler discovers source and IR files recursively. Each case declares its
+expectation in comments beside its program. Source comments use `//`;
+IR comments use `#` after the mandatory `lkjscript-ir 1` first line.
 
-Each case receives fresh execution state. The shared watchdog detects stalled
-processes; LKJSCRIPT_GATE_JOBS selects the number of parallel workers. Seeds,
-expectations and reduced failures stay in Git; working artifacts and cached Rust
-comparisons stay under target/.
+| Comment | Meaning |
+| --- | --- |
+| `expect: value 42` | Scalar return text, with its trailing newline ignored |
+| `expect: output 00ff0a` | Exact stdout bytes; an omitted hex value means empty |
+| `expect: reject E_BORROW` | The checker must reject with this diagnostic code |
+| `expect: trap R0003 12` | Runtime trap code and optional source line |
+| `expect: check` | Accept without executing |
+| `expect: compare` | Compare native and interpreter outcomes |
+| `stdout: HEX`, `stderr: HEX` | Exact bytes; default empty |
+| `status: 7` | Normal exit status; default zero |
+| `entry: NAME` | Select an entry instead of main/probe |
+| `reference: PATH` | Compare with an independent source expansion, on both routes |
+| `pending: REASON` | An intended rule blocked only by E_PARSE/E_UNSUPPORTED |
+| `witness: JSON` | Optional Rust comparison metadata |
 
-`node tools/backend.mjs` compares the cargo-built independent backend with B0 over
-this data, checking verdicts and executable bytes.
+Reference paths are relative to the command's working directory. Reference
+files have no expectation header and are executed alongside the originating
+case. Comparisons preserve exit status, stdout, stderr, and termination kind;
+same-source engine pairs also agree on trap line. Diagnostic locations can differ
+between independently written programs.
+An explicit trap expectation checks its line when supplied. R0004 also includes
+artifact-local panic message codes R0016 and above.
 
-World output records may also declare `stderrHex` (default empty) and normal
-`status` (default zero). Rust World runs use a dedicated control pipe; neither
-program stderr nor an intentional status 101 can impersonate a trap. Selectors
-are harness environment metadata, so World sees only application arguments.
-The separate `tools/world-io.mjs` suite exercises declared binary input/arguments,
-filesystem state and process descriptor conditions that do not fit a batch row.
+Workers are native compiler processes. They share each case's checked IR between
+routes, round-trip serialized IR through the independent checker, and compare
+source/IR executable bytes. Each execution has fresh owned state. Passing suites
+print one line; failures identify the case and route. The shell gate applies a
+generous suite watchdog and accounts for all workers within LKJSCRIPT_GATE_JOBS.
 
-For an explicit panic, expected code `R0004` includes the artifact-local message
-codes `R0016` and above. Their slot numbers can move when unrelated library
-functions change. Drop-order cases also assert the source line of the first
-panic, so a different destructor cannot satisfy the observation.
+The four pending cases specify scoped tasks and rejection of escaping borrowed
+closures. They remain tests of intended language rules; unrelated rejection,
+wrong results, and malformed worker output fail the suite.
+
+The mandatory gate requires no Rust or Node. `bash witness/check.sh` optionally
+builds the Rust witness, compares complete compiler bytes, and checks every
+marked case with overflow checks enabled. Its native test coordinator keeps
+program stderr and Rust trap/status records separate.
+
+`tools/world-test.rs` checks binary arguments and streams, directory confinement,
+closed and broken descriptors, process ownership, and source/IR identity.
+`tools/resource-test.sh` keeps one heap and one stack refusal case and verifies
+startup/reservation reuse under explicit test limits.

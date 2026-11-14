@@ -15,6 +15,11 @@ struct Options {
     engine: String,
     engines: Vec<String>,
     stats: bool,
+    profile: bool,
+    roundtrip: bool,
+    jobs: usize,
+    witness: Option<String>,
+    tool_arguments: Vec<String>,
     unchecked: bool,
     source_directory: Option<String>,
     library_directory: Option<String>,
@@ -24,7 +29,7 @@ struct Options {
 }
 
 fn usage() -> &'static str {
-    "lkjscript check|build|run|test|ir <source.rs|program.lkjir> [options]\n\n  check  Check all source or input IR\n  build  Write a static Linux x86-64 executable\n  run    Execute main (or probe); bytes after -- are program arguments\n  test   Run #[test] functions through native and interpreter routes\n  ir     Write checked lkjscript IR\n\n  --entry NAME                 Select an entry\n  --engine native|interpreter  Select the execution route\n  -o PATH                     Write an artifact or IR\n  --stats                     Report phase times, counts and peak RSS\n  --source-dir DIR            Grant a root for source reads\n  --library-dir DIR           Use explicit library sources\n  --no-library                Compile without the source library\n  --runtime-source PATH       Use an explicit source runtime\n  --unchecked-ir              Interpret raw IR for checker testing\n  runtime-ir                  Write the checked source runtime as IR\n  check-library               Check every source library body\n\nScalar runs print the value; f64 prints exact bits as f64:0x0123456789abcdef.\n"
+    "lkjscript check|build|run|test|ir <source.rs|program.lkjir> [options]\n\n  check  Check all source or input IR\n  build  Write a static Linux x86-64 executable\n  run    Execute main (or probe); bytes after -- are program arguments\n  test   Run #[test] functions through native and interpreter routes\n  ir     Write checked lkjscript IR\n\n  --entry NAME                 Select an entry\n  --engine native|interpreter  Select the execution route\n  -o PATH                     Write an artifact or IR\n  --stats                     Report phase times, counts and peak RSS\n  --profile                   Sample CPU to OUTPUT.samples.PID in built programs\n  profile SAMPLES             Report top self and inclusive functions\n  --jobs N                    Native test workers (1..8)\n  --witness RUSTC             Compare marked cases with optional rustc\n  --source-dir DIR            Grant a root for source reads\n  --library-dir DIR           Use explicit library sources\n  --no-library                Compile without the source library\n  --runtime-source PATH       Use an explicit source runtime\n  --unchecked-ir              Interpret raw IR for checker testing\n  runtime-ir                  Write the checked source runtime as IR\n  check-library               Check every source library body\n\nScalar runs print the value; f64 prints exact bits as f64:0x0123456789abcdef.\n"
 }
 
 fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
@@ -61,6 +66,11 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
         engine: "native".to_string(),
         engines: vec!["native".to_string(), "interpreter".to_string()],
         stats: false,
+        profile: false,
+        roundtrip: false,
+        jobs: 1,
+        witness: None,
+        tool_arguments: Vec::new(),
         unchecked: false,
         source_directory: None,
         library_directory: None,
@@ -68,15 +78,21 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
         no_library: false,
         arguments,
     };
+    if out.command == "generate" || out.command == "mutate" || out.command == "reduce" || out.command == "mutate-run" {
+        out.tool_arguments = values;
+        return Ok(out);
+    }
     let mut at = 1usize;
     while at < values.len() {
         let option = values[at].clone();
         match option.as_str() {
             "--stats" => out.stats = true,
+            "--profile" => out.profile = true,
+            "--roundtrip" => out.roundtrip = true,
             "--unchecked-ir" => out.unchecked = true,
             "--no-library" => out.no_library = true,
             "--entry" | "-o" | "--engine" | "--engines" | "--source-dir" | "--library-dir"
-            | "--runtime-source" => {
+            | "--runtime-source" | "--jobs" | "--witness" => {
                 at += 1;
                 if at == values.len() {
                     return Err(format!("E_USAGE {option} needs a value"));
@@ -95,6 +111,15 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
                             out.engines.push(name);
                         }
                     }
+                    "--jobs" => {
+                        out.jobs = 0;
+                        for byte in value.as_bytes() {
+                            if *byte < b'0' || *byte > b'9' || out.jobs > 8 { return Err("E_USAGE --jobs must be between 1 and 8".to_string()); }
+                            out.jobs = out.jobs * 10 + (*byte - b'0') as usize;
+                        }
+                        if out.jobs == 0 || out.jobs > 8 { return Err("E_USAGE --jobs must be between 1 and 8".to_string()); }
+                    }
+                    "--witness" => out.witness = Some(value),
                     "--source-dir" => out.source_directory = Some(value),
                     "--library-dir" => out.library_directory = Some(value),
                     _ => out.runtime_source = Some(value),
@@ -120,9 +145,13 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
         && out.command != "test"
         && out.command != "ir"
         && out.command != "batch"
+        && out.command != "profile"
     {
         return Err("E_USAGE expected check|build|run|test|ir".to_string());
     }
+    if out.command == "test" && out.path.is_empty() { out.path = "tests/conformance".to_string(); }
+    if out.witness.is_some() && out.command != "test" { return Err("E_USAGE --witness requires test".to_string()); }
+    if out.profile && out.command != "build" { return Err("E_USAGE --profile requires build".to_string()); }
     if out.command != "runtime-ir" && out.command != "check-library" && out.path.is_empty() {
         return Err("E_USAGE a source or IR path is required".to_string());
     }
@@ -507,7 +536,7 @@ fn compile(
     Ok(checked)
 }
 
-fn load_runtime(
+pub(crate) fn load_runtime(
     world: &mut World,
     runtime_source: &Option<String>,
 ) -> Result<runtime::Runtime, String> {
@@ -601,7 +630,7 @@ fn checked_entry(program: &ir::Program, requested: &Option<String>) -> Result<us
     Ok(index)
 }
 
-fn scalar(value: interpreter::Scalar) -> String {
+pub(crate) fn scalar(value: interpreter::Scalar) -> String {
     match value {
         interpreter::Scalar::Unit => String::new(),
         interpreter::Scalar::Bool(value) => format!("{value}\n"),
@@ -621,7 +650,7 @@ fn scalar(value: interpreter::Scalar) -> String {
         interpreter::Scalar::F64 { bits } => format!("f64:0x{bits:016x}\n"),
     }
 }
-fn raw_scalar(program: &ir::Program, index: usize, bytes: &[u8]) -> Result<String, String> {
+pub(crate) fn raw_scalar(program: &ir::Program, index: usize, bytes: &[u8]) -> Result<String, String> {
     if bytes.len() != 8 {
         return Err(format!(
             "E_HOST expected eight scalar bytes, got {}",
@@ -726,7 +755,7 @@ fn interpret(
     }
 }
 
-fn normalize_trap(path: &str, raw: &[u8]) -> Option<String> {
+pub(crate) fn normalize_trap(path: &str, raw: &[u8]) -> Option<String> {
     let text = String::from_utf8(raw.to_vec()).ok()?;
     let parts = split(&text, b' ', 7);
     if parts.len() != 7 || parts[1] != "at" || parts[2] != "line" || parts[4] != "file" {
@@ -960,6 +989,34 @@ fn batch(world: &mut World, options: &Options, stats: &mut Stats) -> Result<u8, 
                 continue;
             }
         };
+        if options.roundtrip {
+            let encoded = ir_text::write(checked.program());
+            let decoded = match ir_text::read(&encoded) {
+                Ok(decoded) => decoded,
+                Err(problem) => return Err(report(&request.path, problem)),
+            };
+            let replay = match check::check(decoded) {
+                Ok(replay) => replay,
+                Err(problem) => return Err(report(&request.path, problem)),
+            };
+
+            if ir_text::write(replay.program()) != encoded {
+                return Err(format!("E_TEST IR roundtrip changed {}", request.path));
+            }
+            if let Ok(selected) = checked_entry(checked.program(), &request.entry) {
+                ensure_runtime(world, &request, &mut runtime)?;
+                let name = &checked.program().functions[selected].name;
+                let original = match backend::emit(&checked, runtime.as_ref().unwrap(), name) {
+                    Ok(bytes) => bytes,
+                    Err(problem) => return Err(report(&request.path, problem)),
+                };
+                let repeated = match backend::emit(&replay, runtime.as_ref().unwrap(), name) {
+                    Ok(bytes) => bytes,
+                    Err(problem) => return Err(report(&request.path, problem)),
+                };
+                if original != repeated { return Err(format!("E_TEST IR roundtrip changed native bytes for {}", request.path)); }
+            }
+        }
         for engine in &options.engines {
             let outcome = if request.command == "check" {
                 Outcome {
@@ -1020,6 +1077,23 @@ fn execute(world: &mut World, options: &Options, stats: &mut Stats) -> Result<u8
         world.stdout().write(usage().as_bytes());
         return Ok(0);
     }
+    if !options.tool_arguments.is_empty() {
+        return crate::test_generators::run(world, &options.tool_arguments);
+    }
+    if options.command == "profile" {
+        let bytes = read_path(world, &options.path)?;
+        let report = crate::native::profiling::report(&bytes)?;
+        world.stdout().write(report.as_bytes());
+        return Ok(0);
+    }
+    if options.command == "test" {
+        if let Some(rustc) = &options.witness {
+            return crate::test_runner::witness(world, &options.path, rustc);
+        }
+    }
+    if options.command == "test" && crate::test_runner::has_cases(world, &options.path)? {
+        return crate::test_runner::run(world, &options.path, options.jobs, &options.engines);
+    }
     if options.command == "batch" {
         return batch(world, options, stats);
     }
@@ -1055,18 +1129,18 @@ fn execute(world: &mut World, options: &Options, stats: &mut Stats) -> Result<u8
         let selected = checked_entry(checked.program(), &options.entry)?;
         ensure_runtime(world, options, &mut runtime)?;
         stats.mark("runtime")?;
-        let bytes = backend::emit(
-            &checked,
-            runtime.as_ref().unwrap(),
-            &checked.program().functions[selected].name,
-        )
-        .map_err(|problem| report(&options.path, problem))?;
-        stats.count("emitted_bytes", bytes.len());
-        stats.mark("native_encode")?;
         let path: String = match &options.output {
             Some(path) => path.to_string(),
             None => format!("{}.elf", options.path),
         };
+        let name = &checked.program().functions[selected].name;
+        let bytes = if options.profile {
+            backend::emit_profile(&checked, runtime.as_ref().unwrap(), name, &format!("{path}.samples"))
+        } else {
+            backend::emit(&checked, runtime.as_ref().unwrap(), name)
+        }.map_err(|problem| report(&options.path, problem))?;
+        stats.count("emitted_bytes", bytes.len());
+        stats.mark("native_encode")?;
         publish(world, &path, &bytes, true)?;
         return Ok(0);
     }

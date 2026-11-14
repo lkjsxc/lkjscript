@@ -22,6 +22,8 @@ pub mod runtime;
 pub mod runtime_memory;
 pub mod source;
 pub mod syntax;
+pub mod test_runner;
+pub mod test_generators;
 pub mod x86;
 
 pub fn main(world: World) {

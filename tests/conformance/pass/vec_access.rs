@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 struct Affine {
     value: Box<i64>,
 }

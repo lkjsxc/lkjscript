@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 fn invoke<'a, F: FnMut(&&'a mut i64)>(value: &'a mut i64, mut f: F) -> i64 {
     let pointer = &mut *value;
     f(&pointer);

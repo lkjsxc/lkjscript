@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 #[derive(Clone, Copy)]
 struct Leaf {
     bytes: [u8; 3],

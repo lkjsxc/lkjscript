@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false,"rustCode":"E0506"}
 fn bad<'a>(value: &'a mut i64) {
     let Some(pointer): Option<&'a mut i64> = Some(&mut *value) else {
         return;

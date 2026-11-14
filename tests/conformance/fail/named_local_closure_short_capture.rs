@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustCode":"E0597"}
 fn test<'a>() -> i64 {
     let value = 42i64;
     let read = || {

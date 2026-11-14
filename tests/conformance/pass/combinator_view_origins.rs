@@ -1,3 +1,6 @@
+// expect: value 42
+// entry: probe
+// witness: {}
 fn argument_selected()->i64{
  let value=42i64;let result:&i64;
  {let short=1i64;let capture=&short;result=Some(&value).map(move|input:&i64|{let _=*capture;input}).unwrap();}

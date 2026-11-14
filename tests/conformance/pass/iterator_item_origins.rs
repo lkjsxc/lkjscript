@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 fn next<I: Iterator>(iterator: &mut I) -> Option<I::Item> {
     iterator.next()
 }

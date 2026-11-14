@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustCode":"E0597"}
 fn choose<T, F: FnOnce() -> T>(value: Option<T>, make: F) -> T {
     match value {
         Some(value) => value,

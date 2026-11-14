@@ -1,3 +1,5 @@
+// expect: output 506768695851a35a3f055a3fc85a04045a03035b5363
+// witness: {}
 struct M{out:Stdout,b:u8}
 impl Drop for M{fn drop(&mut self){self.out.write(&[self.b]);}}
 fn tick(world:&mut World,byte:u8){let mut out=world.stdout();out.write(&[byte]);}

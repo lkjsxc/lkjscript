@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustCode":"E0503"}
 enum Choice<'a> {
     Held(&'a mut i64),
     Empty,

@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 struct Source {
     value: i64,
 }

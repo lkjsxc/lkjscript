@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
 struct Slot<'a> { value: &'a mut i64 }
 fn fill(value: &mut i64) { *value = 42; }
 pub fn probe() -> i64 {

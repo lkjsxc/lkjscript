@@ -1,985 +1,476 @@
 # Language
 
-This reference describes implemented lkjscript source forms.
-[Status](status.md) names the current milestone and known gaps.
+lkjscript has a Rust-shaped surface over independently checked monomorphic IR.
+Programs both compilers accept behave the same. [Status](status.md) records gaps;
+[IR](ir.md) defines the admission boundary. Executable reference examples live in
+[tests/reference](../tests/reference/), with expectations checked by the native gate.
 
-## Source and values
+## Scalars and evaluation
 
-The surface has Rust shape. Programs both compilers accept behave the same.
-Integer literal fallback is i32; annotations and
-suffixes retain distinct types, including usize/u64 and isize/i64. Arithmetic is
-checked. Signed minimum literals are accepted; out-of-range integer and non-finite
-floating literals are rejected. Explicit casts follow Rust conversion behavior.
-Integer wrapping_add, wrapping_sub and wrapping_mul use modulo arithmetic at the
-receiver's width; the argument must have the same integer type. The checked_add,
-checked_sub and checked_mul methods are ordinary source-library implementations
-returning Some(result) or None on overflow for all ten supported integer types.
-Both operands evaluate once in receiver-then-argument order. Ordinary arithmetic
-operators remain checked and trap on overflow. Arithmetic, bitwise and unary
-operators forward one shared reference to a primitive scalar. Shift counts may
-have a different integer width; negative or out-of-range counts trap before any
-count narrowing. Booleans and Unicode scalar
-characters are distinct from integers. Characters
-occupy four bytes; surrogate code points and values above U+10FFFF are rejected.
-Characters compare by scalar value, cast to integers, and can be constructed by
-casting u8. char::from_u32 returns Some for Unicode scalar values and None for
-surrogates or values above U+10FFFF. Other integer-to-character casts and
-character arithmetic reject.
-Character patterns include scalar ranges and account for the surrogate gap.
-Expressions evaluate
-left to right; logical operators short circuit. Assignment and the supported
-primitive compound assignments evaluate the RHS before the destination and its
-index expressions; compound assignment then reads the destination value. Each
-operand executes once. There is no unwinding.
-
-Functions, structs, enums, constants, type aliases, generic declarations, trait
-implementations, matches, if, while, loop and for are implemented. For-loop
-continue advances the iterator; an inclusive maximum endpoint does not overflow.
-Assertions, panic and the implemented vec forms are fixed syntax. Named
-diagnostics reject unsupported constructs.
-
-Unparenthesized block forms in statement position end before a following binary
-operator, call or index that can start a new expression; dot and question-mark
-postfixes continue the expression. Parentheses select ordinary value-expression
-parsing, as do initializers, arguments, returns and operator right-hand sides.
-Match arms use the same block boundary and require commas after grouped or
-postfix expressions. An implicit block statement must produce unit unless it
-diverges; an explicit semicolon may discard any value with ordinary cleanup.
-Statements and tails after an unconditional return are still checked. `if let`
-and `while let` lower to ordinary matches and loops. `let else` requires its
-failure branch to diverge and extends borrowed initializer temporaries through
-the binding scope. Result/Option `?` branches to ordinary early return; Result
-errors either retain the same type or convert &str to the canonical source String
-through its ordinary constructor. General From evidence is not implemented.
-Loops accept a value on `break`, unified
-across their exit edges. Struct update evaluates explicit fields in source order,
-then the base once, transferring only the remaining fields.
-
-Integer, byte and character literal patterns support inclusive, half-open and open ranges:
-`a..=b`, `a..b`, `a..`, `..b` and `..=b`. Endpoints share ordinary integer literal
-type, suffix, radix, sign and overflow checks. Empty/reversed ranges reject.
-Exhaustiveness unions closed intervals over the concrete integer domain, including
-signed minima and u64::MAX; it does not enumerate the domain. Source arm order
-controls execution. Every arm is checked, including bodies after a wildcard or
-binding default and bodies in unused generic definitions. Scalar matches through
-references read the referent and preserve mutable-reference reborrowing.
-Named/runtime range endpoints remain unsupported. Nested tuple, struct and enum
-patterns, reference binding modes, or-patterns and match guards execute in source
-order. Failed pattern tests and guards do not move payloads. Guard bindings are
-protected by shared loans until the guard succeeds; mutation or moving an affine
-binding in a guard is rejected. Overlapping or alternatives retry the guard in
-source order. All alternative products share their source tree and continuations,
-including guarded products, nonuniform reference bindings and irrefutable lets.
-Pure pattern tests are cached before guards; impossible subtrees are skipped.
-The selector retries feasible choices in source order without expanding a static
-Cartesian product. An effectful guard can still require visiting many choices.
-Guards cannot assign or mutably borrow a tested place or its ancestor; unrelated
-untested fields remain writable. Copy bindings are frozen too. A wildcard does
-not inspect storage. Discriminant-only later arms can use the cached test after
-a guard consumes an owner; any later payload access still requires ownership.
-Targeted IR loop transfers preserve enclosing source loops when lowering needs an
-internal loop; invalid depths reject even in unreachable IR.
-
-Enums retain distinct unit, tuple and named-field variant shapes. Named constructors
-evaluate initializers in written order and store payloads in declaration order.
-Tuple and tuple-variant rest patterns select typed prefix/suffix fields. Unannotated
-let patterns preserve the initializer's reference binding mode. Named patterns support
-reordered fields, renamed/shorthand bindings, wildcards and rest patterns. Constructor and pattern fields are checked for names, completeness,
-duplicates, type and declared shape. Unit/empty-tuple variants also accept empty
-braces, as in the common Rust subset. Enum fields inherit enum visibility; explicit
-field visibility is invalid. Nonempty tuple numeric-brace syntax remains unsupported.
-
-Explicit ref/ref mut match bindings refer to the original storage. Nonmoving
-matches preserve the owner, mutability and destructor timing. Distinct fields of
-one proven enum variant may be mutably borrowed together; other tags or the same
-field do not gain disjointness. Existing-place matches may combine affine moves and
-explicit reference bindings of disjoint fields. Tag tests name projected enum
-places, so testing a nested payload preserves its owner and lexical cleanup.
-
-Source bundles declare their root, source files and optional source-library root.
-The owned loader handles inline modules, file modules (`child.rs` or
-`child/mod.rs`) and nested directories. Missing, ambiguous and duplicate inputs
-have distinct diagnostics. Source spans and IR functions retain file IDs;
-diagnostics identify the original file. The host supplies bytes only.
-`frontend::check_bundle` accepts declared source/library inputs and returns checked IR;
-`frontend::source_to_ir` writes its text form. The World driver reads those inputs
-through directory capabilities.
-
-Resolution uses module/declaration identities, lexical scopes, imports/aliases,
-qualified `crate`/`self`/`super` paths and prelude priority. Private, `pub(self)`,
-`pub(super)`, `pub(crate)` and `pub` visibility is checked for items, construction,
-fields, methods and re-exports. Unsupported visibility forms are rejected. Local
-declarations shadow prelude items and intrinsic spellings. Aliases preserve
-nominal identity; identically spelled sibling declarations remain distinct.
-Struct and enum construction follows the resolved declaration through transparent
-alias chains and imports, preserving visibility, field privacy and evaluation
-order. Constructor parameters have fresh bindings separate from the caller.
-Explicit, omitted and inferred alias arguments can constrain fixed, reordered
-and nested field types. A type alias does not introduce a tuple constructor in
-the value namespace; a use alias can refer to the original tuple constructor.
-Nested alias targets participate in the same structural type constraints as their
-expanded constructors. An enum variant is a constructor or pattern, never a type;
-resolved suffixes cannot reuse the nominal identity of their enclosing enum.
-
-Module and enum glob imports preserve binding visibility. Explicit declarations
-and imports shadow globs; unused glob ambiguities are tolerated and a conflicting
-use is diagnosed. Public globs retain private binding restrictions instead of
-making a private alias public. Function/block imports apply throughout their
-lexical block, including nested blocks, and do not leak to neighboring functions.
-Qualified module paths keep their module meaning. Anonymous trait imports
-(`use Trait as _`) add method evidence without introducing a name.
-
-Generic parameter binding uses its original lexical/file scope. It shadows an
-unrelated declaration, while qualified paths keep their declaration identity.
-Substitution, inference, coherence and implementation selection do not turn a
-resolved nominal type or an intrinsic type such as str into a same-spelled parameter.
-
-Types and instances use structural keys built from declaration/child-type IDs
-and substitutions. Printable names are diagnostic labels with compact child IDs;
-they are not expanded semantic identity keys.
-
-Struct/enum fields have declaration order. Scalars and shared references are Copy.
-Nominal types opt into Copy with `#[derive(Copy, Clone)]`, whose fields must all be
-Copy; other values move even if their fields are scalar. Box and Vec own their
-contents. Arrays contain their declared fixed number of elements. Array repeats
-evaluate their seed once. Counts of at least two require Copy and use one compact
-IR array_repeat intrinsic, with physical copies rather than calls to Clone. A zero
-count still evaluates and destroys the seed; one element transfers it. Native
-lowering uses a loop and the independent IR interpreter allocates distinct elements.
-Partial moves
-can be reinitialized. A type with custom Drop cannot be Copy or partially moved.
-Custom Drop runs before owned fields, including on early return/break; temporary
-receivers are cleaned at the end of their statement. Source cannot call Drop
-directly. Traps terminate the program without cleanup or recovery.
-
-References have local, parameter, or immutable static provenance. Mutable
-references are exclusive; fields can be borrowed disjointly. A view aggregate may
-contain independently rooted reference leaves. Each leaf retains its own source
-and parent dependencies. A result declares possible input leaves or an immutable
-static origin for every output leaf; exact maps preserve the selected input
-referent while bounded maps permit its descendants. The checker requires complete,
-unique output coverage and validates every possible source at calls and returns.
-Source rigid T input-to-T transport preserves its abstract leaf origins; equal
-concrete types alone do not authorize that correspondence. Named lifetimes and
-repeated generic input candidates map to explicit alternatives. Exact transport
-of a bounded input keeps its conservative footprint; it cannot forge exact storage.
-Borrow endings and cleanup are explicit in IR.
-Whole-array/Vec slice projections, view structs and implicit mutable reborrowing
-are implemented. Generic arguments declared as &[T] or &mut [T] can infer T from
-an array or vector reference, including through transparent aliases. This is an
-argument reference coercion; trait matching retains exact type equations. A bare
-generic T still moves a mutable reference instead of creating an implicit reborrow.
-
-Range indexing supports start..end, ..end, start.., .., start..=end and ..=end on
-vectors, arrays, slices, str and the canonical source String. Base, start and end
-evaluate once in that order, with the source borrow established before the bounds.
-String uses its ordinary source as_str implementation. Shared and mutable slice
-ranges preserve the original owner's lifetime and parent loans; mutable text
-ranges remain unsupported. Nested ranges compose their extents. A range keeps a
-conservative owner footprint even when empty; numeric bounds do not establish
-that two mutable ranges are disjoint.
-
-Exclusive ranges require start <= end <= length. Inclusive ranges require
-end < length before adding one, then start <= end + 1. Text endpoints must also
-be UTF-8 boundaries. Invalid ranges and text boundaries trap R0003. An inclusive
-range such as 4..=3 at length 4 is empty; a maximum endpoint is checked before
-addition and cannot wrap.
-
-Every initialized reference leaf has checked source provenance. Inactive enum
-alternatives carry explicit absence evidence. Moves, construction, assignment,
-cloning and replacement preserve this inventory; return checks its completeness.
-Replacement transfers the old value's provenance to its result and installs the
-new value's provenance in the destination, including through local borrows.
-Reference-field writes recheck the enclosing view's source and exclusivity.
-Assignment to initialized borrowed/indexed owned storage uses checked replacement
-and destroys the separate old owner; it does not move a hole into the container.
-
-IR does not yet express cross-parameter mutation contracts. Writes through an
-external parameter may retain the exact symbolic origin of each reference leaf
-or clear it, but changing that origin is rejected with `E_BORROW`. The comparison
-includes projections, not just the parameter root. This conservative restriction
-prevents a callee from silently invalidating the caller's lifetime assumptions;
-explicit write contracts remain required for more general view mutation. A
-reference-bearing write through an opaque call result additionally needs an exact
-destination contract. Its conservative alias footprint is not a storage identity;
-using it to clear reference leaves would erase sibling evidence. Reference-free
-writes remain supported and preserve the other leaves and their tag witnesses.
-
-## Inference and coercions
-
-Each function definition has one constraint plan over lexical bindings and source
-expression identities. Generic parameters are rigid under the definition's
-stated assumptions. Structural constraints propagate through locals, assignments,
-returns, known call signatures, tuples, arrays, Vec, Box, nominal fields, aliases,
-projections and scalar patterns. A dependency worklist propagates known answers;
-union/find represents equal type variables. Concrete instances consume the
-recorded definition plan and instantiate its symbolic types.
-
-Expected types flow into composite expressions. Integer suffixes fix their types.
-An unsuffixed integer component defaults to i32 only after its surrounding known
-constraints have propagated; its value must fit the selected width. Thus
-`let mut v = Vec::new(); v.push(42i64)`, an index initialized with `let mut i = 0`
-and later compared with `v.len()`, and `fn pair() -> (i64, i64) { (40, 2) }`
-are accepted. Conflicting types or out-of-range literals report E_TYPE. There is
-no implicit numeric conversion between fixed types; an explicit cast supplies it.
-Unresolved generic arguments or receiver obligations still require enough source
-context for the ordinary method/type gate and can report E_TYPE or E_UNSUPPORTED.
-This contract covers these constraints; it does not promise all Rust inference.
-
-A solved type is not itself a coercion site. Actual annotations, declared
-reference parameters and explicit expected result types can authorize the
-supported dereference/reborrow coercions. A generic T learned only from an
-operand cannot silently change a move into a reborrow: Some(r), Holder { value: r }
-and identity(r) move an otherwise unconstrained mutable reference r. Later use
-then reports E_MOVE. An actual Option<&mut T>, Holder<&mut T> or &mut T result
-context permits the corresponding Rust reborrow. Reference-bearing inference
-hints preserve this distinction through transparent aliases and nested types.
-
-## Diagnostics
-
-The parser recovers at item, method and block-statement boundaries using balanced
-tokens. It reports independent syntax errors and marks skipped regions as
-E_BLOCKED. A recovered source graph never authorizes an artifact. A valid shared
-declaration graph permits independent definition constraint errors to be
-collected. A structurally valid IR graph permits independent function-body errors
-to be collected. Analysis of a failing body stops at its diagnostic; shared
-signature/resolution failures and subsequent mutable IR construction are explicitly
-blocked instead of supplying invented types or ownership facts. The single-error
-library API selects the first error from these same production paths.
-
-## Immutable text
-
-String literals produce shared UTF-8 text views with immutable module-long storage.
-The unsized `str` referent is used through `&str`; bare or mutable text is not
-implemented. Text provides byte `len`, `is_empty`, `as_bytes` and source-owned
-`to_string`. Byte projections preserve the original static or borrowed origin,
-including after a local reference carrier is destroyed. No byte mutation or owned
-destruction can reach literal storage.
-
-`std::str::from_utf8(&[u8])` validates bytes at the trusted runtime boundary and
-returns the source Result with `Ok(&str)` or `Err(Utf8Error)`. The error is an
-opaque marker; byte-position/error-length reporting is not implemented. Successful
-conversion borrows the original storage. No unchecked source conversion exists.
-String keeps its private Vec bytes and implements Clone, clone_from, PartialEq,
-Eq, `push`, `push_str`, `to_string` and `as_str` in source. Cloning copies already-valid
-bytes directly; clone_from reuses the target buffer when capacity suffices.
-Equality compares byte length and contents. `as_str`
-currently validates on conversion; retained UTF-8 evidence for avoiding that scan
-remains future work.
-
-Text and character helpers live in source. Supported text operations include
-prefix/suffix tests, contains/find/rfind, ASCII case conversion/comparison,
-repeat and replace, bytes/chars, LF/CRLF lines, strip_prefix, split_once and text
-split (including an empty pattern). Checked decimal parse covers all ten integer
-primitives and rejects malformed or out-of-range input. These iterators retain
-borrowed storage through ordinary source view types. A source Pattern trait shares the implementation for text
-and character needles. Character helpers include UTF-8/UTF-16 lengths, ASCII
-predicates and case conversion, Unicode whitespace/control checks, to_digit, and to_string. General
-Unicode case conversion is not implemented. Range slicing follows the checked
-view and UTF-8 endpoint contract above.
-
-Formatting macros resolve argument expressions once in source order and lower
-to ordinary calls into source String/Formatter traits. The supported format
-language includes Display, integer x/X/b/o, positional/named/captured arguments,
-escaped braces, fixed width, Unicode fill, alignment, signs, prefixes and zero
-padding. Explicit zero width remains distinct from absent width for custom
-Display implementations. write!/writeln! currently target source String and
-Formatter; String requires Write in scope. Arbitrary user Write sinks remain
-unimplemented. These macros preserve formatter errors and stop
-before later formatting operations; format! traps on a failed formatting
-implementation. Temporary values retain statement destruction order. Debug,
-floating formatting, dynamic widths and precision remain unsupported.
-
-Option and Result have canonical source declarations with standard option/result
-module re-exports. Their source methods include shared/exclusive views, owned
-and/or, and transpose. Option also supplies xor, zip/unzip, flatten, replace,
-insert and get_or_insert. Owned arguments retain source evaluation and destruction
-order even when their payload is not selected. Both types provide source
-map, map_or, map_or_else, and_then, or_else and unwrap_or_else; Option also has
-filter and Result has map_err. Eager defaults are evaluated before the call;
-lazy defaults invoke their callable only on the selected alternative. Every
-unused callable and payload still cleans up in source order. filter borrows its
-payload for the predicate, then returns or destroys the original owned value.
-Returned views preserve their owner and exclusivity requirements. Option::expect has the same value and trap
-outcome contract as unwrap; its supplied message is evaluated but currently does
-not replace the fixed trap text. Some nested generic receiver expressions still
-need explicit type annotations before a method call.
-
-Option additionally supplies consuming is_some_and/is_none_or predicates and
-ok_or/ok_or_else conversion to Result. Predicates execute only for Some; the
-None result is respectively false/true. ok_or evaluates its error argument
-before the call, while ok_or_else invokes its factory only for None. Unused
-arguments and captures retain ordinary function/branch destruction order.
-Returned views retain the actual selected input or factory origin.
-Option<&T> and Option<&mut T> additionally provide copied under Copy and cloned
-under Clone. copied reads the payload without invoking Clone; cloned invokes the
-trait operation exactly once for Some and never for None. The returned owned
-value is independent where cloning makes ownership, while any references inside
-that value still retain their actual external origins.
-
-Vec shared access and search also live in source. is_empty compares length with
-zero; get returns None for every index at or beyond length, including usize::MAX;
-first uses the zero-index case. Their returned elements retain the collection's
-shared owner footprint. contains requires PartialEq separately, borrows elements
-and its query, and visits elements in order until equality succeeds. It invokes
-eq rather than an independently overridden ne, and neither copies nor consumes
-an element. Receiver/query/index expressions retain left-to-right evaluation.
-extend_from_slice requires Clone, visits the shared input in order, and appends
-one independent clone per element. Empty input performs no clones. It preserves
-existing target elements and the source remains usable. A same-spelled inherent
-clone method cannot replace the generic Clone contract.
-
-Repeated Vec literals evaluate their element and count once,
-clone all but the final element, and move the original last; a zero count still
-evaluates and destroys the supplied value. This expands through a source helper
-constrained by Clone. Ordered BTreeMap storage uses an indexed AVL arena with
-logarithmic lookup, insertion and removal. BTreeSet reuses that map's ordering
-and storage. Shared and owned iterators preserve sorted key order; maps expose
-keys, values, first_key_value, pop_first and retain. Sets provide first/pop_first.
-Map clear and partially consumed owned iterators destroy entries in key order.
-Clone, Default and semantic equality operate independently of arena shape.
-
-Shared collection iteration is ordinary source. Iterator declares Item and next;
-IntoIterator declares an iterator type constrained by Iterator. The iter method on vectors and slices,
-borrowed Vec/slice iteration and iterator values use those resolved
-declarations. Collection for lowers to an outer match holding iterable temporaries,
-a while loop, a next call and an irrefutable let binding for each item. Break,
-continue, early return and ordinary completion preserve item and iterator cleanup.
-Refutable item patterns and non-unit bodies are rejected. Numeric range loops use
-the same binding subsystem. No iteration IR operation or nominal-type shortcut is
-required. Borrowed map/set iteration uses the same source protocols. enumerate,
-skip, take and zip are source adapters; chain currently requires two identical
-iterator types so Item equality follows from the type contract. Adapters retain
-the underlying owners and release items/iterators on exhaustion or early exit.
-map, filter, filter_map and inspect are ordinary source structs containing the
-iterator and callable. Their next methods follow the underlying iterator on
-every call, including a Some after a preceding None; they do not silently fuse
-an iterator. filter and inspect borrow each item for a fresh callback input;
-map and filter_map transfer ownership into the callback. Rejected filter items,
-unused captures and partially consumed adapters retain ordinary cleanup order.
-fold and for_each consume items in order and stop at the first None. The fold
-accumulator is an ordinary owned value passed through each call.
-any and all borrow the iterator mutably, pass each item by value to FnMut, and
-stop at the first decisive predicate result or None. Empty input returns false
-for any and true for all. The next call resumes after the consumed decisive item;
-a temporary None does not permanently fuse the iterator. The predicate and its
-captures are destroyed when the consumer returns; remaining iterator items stay
-owned by the iterator. Receiver expressions execute before predicate construction.
-Owned value expressions provide writable temporary receiver storage, including
-projected fields and indexed elements. This does not change the mutability of
-named bindings or permission through shared references.
-Owned Vec, Option, map and set iteration are implemented. find borrows each item
-for its predicate and returns the owned matching item; position consumes items
-and returns a zero-based index. Exclusive collection iteration, Sum/FromIterator
-and the broader adapter library remain separate work.
-
-The explicit static-lifetime subset covers wholly static function outputs,
-including view aggregates. IR records `ReturnSource::Static` and checks every live
-reference leaf. Static constraints on inputs, local annotations, fields, aliases,
-bounds, or mixed static/dynamic source result annotations remain named unsupported.
-Direct IR can already describe mixed static/dynamic per-leaf result maps. Validation includes unused definitions and dead source.
-Ordinary dynamic outputs may contain static literals with their lifetime shortened.
-A named shared output lifetime with no source input is universal: elaboration
-records an explicit static IR contract and the body must satisfy it. Inactive enum
-reference leaves satisfy that contract too. A call with no active input reference
-leaves may still return static data; it does not prove the output leaves absent.
-
-Ancestor-restricted visibility such as `pub(in super::super)` and
-`pub(in crate::outer)` resolves once to a module identity in the declaring crate.
-Only an actual ancestor can be named; imports and aliases do not redefine that
-region. Fields, methods and re-exports use the existing access and widening
-checks. External files and the source library retain their own module identities.
-
-## Generic declarations and traits
-
-Traits describe methods and associated types. Implementations must be unique;
-overlap is rejected. Full implementation signatures, prerequisite/supertrait
-bounds, associated types and instantiated arguments are validated. Send, Sync and
-Data predicates are derived structurally; Data excludes capabilities. Generic
-parameter-flow strongly connected components reject expanding instantiation.
-Aliases participate in these checks. Bounds with extra type arguments remain
-unsupported. Method calls resolve to concrete function applications. Callable
-bounds such as F: FnMut(I::Item) prepare associated substitutions from I's declared
-trait evidence before checking the callable signature. Generic parameter
-source order does not hide that evidence; missing, ambiguous and incompatible
-associated bounds still reject. Implementation prerequisite solving separates
-input/output type equations, ordinary child trait proofs and full callable
-signature validation. A pending or cyclic nonstructural goal is never a proof;
-associated projections consume the checked child witnesses.
-
-Inference indexes associated equations by the receiver variable, canonical
-trait declaration and associated member. Same-spelled members of different
-traits cannot become one rigid type. A unique structurally compatible
-implementation can contribute conditional type equations, but those equations
-provide no trait or lifetime proof. Ordinary selection still checks the
-implementation's prerequisites. Unresolved caller types are not specialized to
-make a candidate fit. Contextual method headers and primitive result contracts
-supply argument shape; final method, callable and provenance checks still apply.
-
-Generic function, impl-method and trait-default bodies are checked even when
-never instantiated. Definition checking reuses production elaboration and IR
-ownership/type checking under rigid parameter identities and declared trait
-contracts. It does not sample concrete parameter types. Bounds, associated-type
-relationships, method signatures and explicit method type arguments are checked;
-unreachable expressions must still type-check. User traits named Copy, Clone or
-Drop do not acquire builtin semantics by spelling. Symbolic signature and
-supertrait checks retain resolved trait identities, including imports and aliases.
-Derived Copy on a generic layout is conditional on its fields.
-
-Generic Clone::clone/clone_from and PartialEq::eq/ne calls have typed contracts
-with checked receiver modes, arguments and results. Copy supplies Clone evidence;
-Eq supplies PartialEq evidence. Ambiguous builtin and declared methods reject.
-After successful definition checking, source expression identities retain their
-selected trait or source method and exact receiver dereference count. Concrete
-specialization verifies that selection against the actual receiver and compiles
-the selected source implementation. A newly applicable inherent method cannot
-replace a checked generic trait call. Rigid verification types/functions never
-enter the executable program.
-
-Equality operators evaluate operands once, left to right. Scalar values are read
-before right-side effects; nominal owners are borrowed for the comparison.
-Nominal == and != select the builtin PartialEq implementation, independently of
-inherent methods or same-spelled user traits. An explicit ne executes when present;
-otherwise the operator negates the selected eq. Reference operands of the same
-type compare their referents. Comparison loans end with the Boolean result;
-owned temporaries retain their ordinary statement cleanup.
-
-Copy, Clone, PartialEq, Eq, PartialOrd and Ord derive declarations have their
-structural field requirements checked even when unused. Generic derive checks use
-rigid parameters with the required conditional assumptions, not a sample concrete
-type. Supertrait evidence is required; duplicate derives and overlapping explicit
-implementations reject. The current overlap rule is conservative about conditional
-implementations, like ordinary implementation coherence. Unsupported derives,
-including Debug, receive E_UNSUPPORTED instead of being ignored.
-
-Explicit builtin Clone and PartialEq implementations on source nominal structs
-and enums are checked against the
-clone/clone_from and eq/ne signatures, including required methods, receiver modes,
-argument/result types and generic arity. Eq requires PartialEq evidence. User
-traits with the same names remain different declarations. Explicit builtin Copy,
-Ord, PartialOrd, Data, Send and Sync implementations remain named unsupported;
-Copy derives and the existing structural automatic predicates retain their rules.
-
-Derived Clone and PartialEq execute as memoized monomorphic IR functions. Source
-and generated bodies share a pending-function queue and all bodies reach the
-normal IR checker, including those generated for definition checking. Headers are
-registered before bodies, so recursive layouts reuse their function identities.
-Field operations select the exact builtin trait implementation, with explicit
-implementations taking precedence over derives and inherent methods excluded.
-Structs, enums, tuples, arrays, nested vectors and boxed recursive layouts execute.
-Clone visits fields in declaration order; equality checks both enum tags and
-short-circuits over active fields. Eq has no executable method.
-
-A nominal Clone derive with Copy and no type parameters copies the whole value,
-including lifetime-only declarations. Type-generic derives invoke field Clone
-even when a concrete application is Copy, matching the checked Rust subset.
-Explicit Clone overrides still execute. Default nominal/tuple/scalar clone_from
-uses clone, replacement and old-value cleanup; default ne negates eq, and scalar
-eq/ne methods execute. Direct Box/array/Vec clone_from remains named unsupported
-until element clone_from forwarding, vector reuse/truncation/append and their order
-contracts are implemented. Default view-bearing clone_from requires a mutation
-provenance contract. Source trait-default execution remains unfinished.
-
-Vec<T> cloning uses the source helper constrained by T: Clone; each element
-executes its selected Clone implementation. Vec equality requires T: PartialEq,
-without Ord, and compares lengths followed by element == in order. Vec != and
-ne negate that whole-vector result; they do not call element ne. Nested vectors,
-source String, floats and explicit affine element implementations follow these
-rules. Direct methods, operators and retained generic calls use the same source
-helpers. Helper lookup names the actual library declaration, validates its
-signature and checks the operation's element constraint independently of the
-supplied helper header. Ordinary method lookup diagnoses competing visible
-source traits. Vec clone_from default-body execution remains unsupported.
-
-The emitted program remains monomorphic. The generic validation context names
-declared evidence, but a complete independently replayable generic/witness IR
-contract is unfinished. Reference-bearing content hidden inside arbitrary type
-parameters is not fully modeled at this generic boundary; concrete specializations
-still receive full IR provenance checks. This is not complete generic lifetime or
-external mutation-contract closure.
-
-Fixed input regions on callable bounds now have declaration-scoped proof
-obligations in the discarded definition-verification program. Reference leaves
-are followed through aliases, tuples and nominal fields. Each actual source must
-outlive the required region using input-region facts and declared or implied
-outlives edges; a local owner's lifetime cannot establish a universal input region.
-Helper calls transport these requirements through their callable type arguments,
-including fixed leaves of a type family. Explicitly fixed closure inputs do not
-satisfy a fresh higher-ranked callable input.
-
-A fixed callable input can retain a borrow independently of its result or the
-callable's destruction. Retained effects are indexed by source root. Access
-through a returned descendant requires the checked result's input-leaf selectors;
-source overlap alone grants no permission. Shared access to stored reference
-descriptors preserves the exact current holder while keeping its reborrowed
-parent suspended. Reusing a call site revokes obsolete overlapping permissions.
-Branches retain every possible effect and only permissions justified on each
-relevant edge. Loop effects are replayed to a finite monotone fixed point; ordinary
-initialization and loan backedges still require their existing equality contract.
-
-These annotations are private diagnostic evidence. Text IR cannot declare them,
-and their checking API returns no executable authority. Mutable access to stored
-reference origins still needs a mutation contract and is explicitly unsupported
-at opaque calls. General output/capture origin families remain unfinished.
-
-A named lifetime on a local type is checked at definition time, including unused
-lifetime-only functions and rigid generic definitions. Each active reference
-stored in the binding must outlive the declared region. This includes delayed
-initialization, destructuring, aliases, fields, replacement and a later Some
-after None. Retained loans survive moving, dropping or replacing the descriptor;
-the current holder and its checked descendants keep their ordinary permissions.
-An elided annotation permits the existing shorter reborrow. An undeclared
-lifetime is a source error, including in unreachable source.
-
-An annotation on borrowed descriptor storage constrains its earlier and later
-contents. The ordinary checker observes exact storage and transfer identities;
-a backward worklist propagates region requirements, then the private verifier
-checks all reachable stores from entry. These observations only add restrictions.
-Fresh reborrows must establish their issuing reference chain as well as their
-referent origin. Moving or copying an existing descriptor preserves its original
-contract. External reference-bearing writes retain the ordinary IR mutation rule.
-
-Typed views separately retain the declared regions of their visible reference
-leaves. A shared view of a descriptor can shorten what is obtained through that
-view without shortening the original descriptor. Mutable nested views preserve
-invariance and constrain the stored descriptor as well. Requirements follow
-checked value transfers, borrows, constructor fields and exact call-result
-selectors. Named output types, elided outputs tied to their input or borrowed
-receiver, and fixed callable inputs apply the same declared-view check. A longer
-source origin alone does not override a shorter declared view. Bounded projected
-call results and growing recursive projection equations remain explicit
-unsupported cases; finite projection cycles use a visited worklist.
-Explicit generic type arguments containing named reference regions, including
-regions hidden in concrete aliases, currently require a checked type-instantiation
-contract and report E_UNSUPPORTED. This boundary covers free and method calls,
-qualified paths, constructors and patterns. Inferred arguments, scalar arguments and
-explicit elided reference arguments retain their existing behavior.
-
-Annotation metadata belongs to its compiling body and uses actual local,
-projection and instruction identities. Discarded type probes publish no caller
-metadata. A closure body can request a named region for an exact captured leaf;
-every construction must prove that requirement from its actual capture source.
-The body is checked under only those per-leaf input guarantees. CapturePlan remapping transforms both
-places and metadata. Concrete type equality never establishes a source region.
-
-Owning reference-bearing collections retain their existing unsupported boundary.
-Named reference leaves inside borrowed slice elements are also rejected until
-a collection reference inventory exists. No private source annotation can alter
-the meaning or acceptance of a parsed IR program.
-
-## Closures
-
-Closures are anonymous environment structs plus ordinary IR functions. Their
-capture requirements come from the body operations; source binding identity and
-capture order determine fields, including disjoint field captures. Owned captures
-move into the environment. Shared and mutable captures use existing loans, and
-unique immutable access to a captured mutable-reference binding retains the
-exclusive descriptor relationship. Capture destruction follows source capture
-order; projections within one captured root follow field order.
-
-Fn, FnMut and FnOnce select shared, mutable and consuming calls statically.
-Generic callable bounds are checked under rigid assumptions; specialization
-retains that selection. The declared callable input/output equations can infer
-otherwise missing type parameters, including a result parameter used only by a
-callable bound. These equations grant no new origin authority, and the completed
-bound signature is validated separately. Inferred/contextual parameters, irrefutable parameter
-patterns, nested closures and borrowed callable adapters are supported. The
-environment has ordinary Copy eligibility and cleanup. Last-use cleanup may end
-only its reference capture leaves while owned captures remain alive to their
-lexical destruction point.
-
-Inferred return types constrain expression shape without creating a reborrow
-context. A bare captured mutable reference therefore moves out of an inferred
-closure result and requires FnOnce. This distinction is preserved through
-constructors, tuples, if/match, loop breaks and explicit return statements.
-Declared return annotations keep their ordinary coercion behavior. An inferred
-struct-update base supplies type equations, not an annotation for its fields.
-Partially inferred return annotations still need per-position coercion evidence;
-contextual FnOnce demands are not yet used to permit escaping reborrows of
-captured references. These remain explicit reduced gaps.
-
-Unique visible structurally compatible method headers can supply conditional
-closure argument equations. Primitive methods use their shared typed inventory
-before competing trait headers; ordinary selection still proves visibility,
-prerequisites, inherent priority, ambiguity and callable kind. Ambiguous or
-incomplete candidate domains supply no contextual evidence.
-Structural parameter patterns wait for the subject's reference shape rather than
-forcing an unresolved associated Item into an owned tuple.
-
-Ordinary shared or mutable closure calls do not lend references to owned
-environment storage. Returned references must come from captured reference
-origins, explicit arguments or static storage. Every result leaf has its own
-contract. Return inference observes the ordinary checker's validated provenance,
-narrows the initial allowed input set, then submits the resulting program to
-independent complete IR validation. These observations carry no execution
-authority. Disjoint mutable result leaves remain disjoint across a call; shared
-results may outlive a copied reference's environment while their referents remain
-live. Generic and associated result families can likewise begin with explicit
-per-leaf candidate bounds and refine from fully checked concrete body returns.
-Acyclic callees refine before callers; recursive groups retain conservative
-contracts. The final complete IR check validates every resulting mapping. These
-concrete observations do not prove an unused generic definition's hidden effects.
-Explicit reference results hidden behind an opaque generic callable still
-require a fuller origin inventory and remain a named unsupported boundary.
-Returning closures through impl Trait, lending closures, dynamic function
-objects and concurrency scope APIs remain unfinished.
-
-An ordinary selected constructor establishes its tag even when it binds no fields.
-Guarded matches retain their cached pure tests: a guard may consume an unbound
-scrutinee, so only required binding projections reread its storage after a guard.
-At a join, a reference template proven inactive on every feasible predecessor
-remains absent after individual tag facts disappear. A holder active on any
-incoming edge still participates in ownership and borrow checks.
-
-## IR and checking
-
-The [lkjscript IR reference](ir.md) defines text, operations and admission rules.
-Files use .lkjir and begin with lkjscript-ir 1.
-
-Dropping a proven tree of scalar and reference descriptors can release its old
-descriptor storage while descendants continue to refer to external owners.
-Eligibility is computed once for the type graph and excludes every owned
-destructor. Actual loans into the released storage still conflict. Replacement,
-assignment and custom destruction retain their original parent restrictions.
-The IR interpreter checks the same programs independently.
-
-
-IR is a monomorphic program of explicit types, function signatures, local slots,
-places, instructions and structured control. It distinguishes copies, moves,
-borrows and drops. A function declares a parameter or immutable static source for
-returned views. Literal instructions carry bytes that the IR checker validates as
-UTF-8, independently of source parsing. Text IR serializes those bytes as hexadecimal
-and static result contracts as `from static`.
-A parameter result source carries an explicit reference projection path before
-selecting its stored reference leaves (text IR: `from 0 deref deref`). An empty
-path selects the parameter itself. The path contains explicit projection entries. Projected
-contracts currently require shared leaves;
-exclusive reborrows retain their outer lifetime. The checker verifies returned
-origins against the exact selected input leaves, then callers transport their
-underlying provenance and parent dependencies. A local reference carrier can die
-without invalidating a copied shared reference; its actual referent must remain
-live. Each live reference leaf retains a nonempty set of possible source bounds
-and a conservative footprint for access and lifetime checks. Direct origins are
-exact; an opaque call may select descendants of its declared input sources.
-Projecting through such a bound does not narrow it. A later return verifies every
-candidate against the permitted source leaves, preserving generic forwarding of
-multi-leaf views without accepting an unrelated owned field. Parent dependencies
-survive calls and reborrows. Exact storage identity remains separate from the
-footprint, and no positional input/output leaf correspondence is assumed.
-Early source cleanup tracks immediate carrier dependencies through reference
-creation, value transport, calls and control flow. A textually dead descriptor
-remains live while another live value needs its storage. Dead reference chains
-are dropped in dependency order; IR independently verifies every emitted drop.
-Concrete trait method selection is represented by an explicit function call.
-Bounded slice/text views use ViewRange, written in text IR as
-`view-range DST shared|mut exclusive|inclusive START END PLACE`. Bounds are
-separate consumed usize values; element and result reference types must match.
-Every source root and parent loan survives with a bounded footprint. The IR
-interpreter independently tracks sequence start/count and checks UTF-8 endpoints;
-common lowering computes inline data/count using existing scalar operations.
-No range-specific runtime function or encoder operation is required.
-IR has a readable/writable text form accepted by `check` for direct tests.
-Instructions preserve source lines and columns (`@line:column`; `@line` reads
-as column 1). Ownership errors name the place, conflicting holder and loan
-creation site; parameter-supplied authority is identified as a parameter.
-
-Strict destruction (`drop` in text IR) requires the named place to be initialized.
-An already moved or dropped exact place, or an absent ancestor, produces
-`E_MOVE` with the concrete place path. Structural destruction of a remaining
-aggregate shell skips its moved children. A custom destructor requires every
-field it may inspect to be initialized.
-
-Conditional destruction (`drop-if`) skips an absent root or exact owned place.
-Every projected ancestor must still be initialized; the operation cannot recover
-a missing container or manufacture an owner. Both destruction operations reject
-paths through a reference or an indexed collection under `E_BORROW`. Replacement
-of such storage moves the old value through checked `replace` before destroying
-that separate owner, keeping the destination initialized.
-
-Shared lowering maintains initialization flags for roots used by conditional
-destruction and clears moved owned payload slots. Consumed call arguments do not
-remain initialized merely because their old bits remain in a physical slot.
-IR cannot supply a flag value. The independent interpreter tests its own cell state.
-Conditional cleanup runs at the original destruction or replacement point;
-it does not move destruction to a branch join. Initialization joins intersect
-definite roots and union possible roots, with corresponding must/may projected
-holes. A later read requires definite initialization; overwriting a possible
-owner, strict destruction of a maybe-owner, projection through an absent shell
-and leaking a possible owner all reject. Branch joins unite possible reference
-holders, source bounds, parent dependencies and absence evidence. Loans are indexed
-under every possible root. A later access must be valid against every possibility;
-possible presence cannot justify a read. Writes that change reference inventory
-need one exact destination identity, not merely a conservative alias footprint.
-Loop backedges still require equality until an inclusion contract is implemented.
-
-A by-value enum parameter initially carries reference templates for every
-alternative. An exact checked tag witness excludes holders below the other
-variants from conflicts. A borrowed witness does not prove that every possible
-referent has the same tag. Tag invalidation restores conservative activity. At a
-join, a holder moved on one edge and proven inactive on the other contributes
-absence; losing the tag must not revive it. A holder live on any feasible edge
-still participates in the join.
-
-The checker validates all type references, signatures and operation shapes,
-including dead code, then checks ownership through each function. Variant payload
-access needs a proven tag. Moving, dropping or replacing a payload field preserves
-the enclosing discriminant proof; replacing the enum, its tag witness or an
-ancestor invalidates it, including predicates saved before a branch. Writing or
-moving an index local used by the actual witness also invalidates that proof;
-changing an old index does not retarget an already-created borrowed pointer.
-A loop back edge must reproduce entry ownership state.
-Return and break edges must carry correct live owners and loans; no fixed-point
-iteration is used. Local storage or a local reference carrier cannot become the
-source of an escaping view. The checker performs no source inference or trait
-search. Only CheckedProgram reaches the backend; later stages rely on that gate.
-
-## Memory and execution
-
-The backend selects x86-64 instructions directly from checked IR and emits a
-static Linux ELF. Target encoding is separate from selection. Calls and branches
-use rel32; an unrepresentable displacement produces a located emission error.
-
-| Value or operation | Representation |
-| --- | --- |
-| Scalars | Allocated registers; natural 1/2/4/8-byte frame storage when spilled or addressed. |
-| Structs and tuples | Inline aligned fields, including in parents and collections. |
-| Enums | Inline tag and storage for the largest payload. |
-| Arrays | Inline elements at their natural aligned stride. |
-| Vec | Address, length and capacity; inline elements in its heap payload. |
-| Box | Address of its owned heap payload. |
-| Sized reference | Machine address. |
-| Slice/text reference | Inline address/count pair. |
-| Aggregate call/result | Callee frame copy and caller-provided result storage. |
-| Conditional cleanup | Frame flags for initialized paths and moved fields. |
-
-| Mechanism | Contract |
-| --- | --- |
-| Stack | Stable machine addresses; lazy reservation retries smaller extents. Heap pressure releases unused reservation; recursive calls regrow pages. Exhaustion reports R0008. |
-| Small/medium allocations | Slabs and reusable size classes carved from geometrically grown regions. Refused region requests retry down to the required extent. |
-| Large allocations | Dedicated kernel mappings; growth remaps existing storage. Persistent refusal reports R0006. |
-| Runtime authority | Checked source sealed over raw load/store/copy/map/unmap/remap. Ordinary names cannot obtain these bindings. |
-| Runtime checks | Collection bounds; integer overflow, division and shift validity; UTF-8 and active tags. F64 binary arithmetic canonicalizes NaNs; negation flips only the sign bit. |
-| Trap locations | Materialized on failure paths. Checked-operation lines remain exact; allocation/stack failures may name a runtime or function location. |
-
-Neither stack nor allocator reads physical memory or resource limits. Box, Vec
-and String payloads require heap storage; aggregate values remain inline.
-
-Structural destruction invokes the custom destructor before fields, then visits
-fields/elements in declaration order. Moved fields are skipped. Loop temporaries
-end before either edge, including index locals and owned receivers.
-
-World derives byte arguments, streams and directory capabilities. Directory opens
-use Linux openat2 with RESOLVE_BENEATH and RESOLVE_NO_MAGICLINKS. File Results carry
-positive errno values; raw read/write leaves return negative errno. File handles
-close on destruction. Program bytes and requested exit status remain separate
-from runtime traps.
-
-The independent IR interpreter executes over its own typed heap, initialization
-state, loan identities and call/control/drop stacks. It checks actual reference
-access and active variants independently of the checker and lowering.
-M_* diagnostics identify interpreter safety failures; R* codes identify program
-traps. Program output is compared as exact bytes across routes.
-
-## Compiler commands
-
-The static lkjscript executable contains the frontend, checker, native backend,
-independent interpreter and command line, plus embedded library and runtime source.
-`sh tools/bootstrap.sh` unpacks the stored seed, builds `target/lkjscript`, then
-checks that it reproduces itself byte for byte. This needs neither Rust nor Node.
-
-| Command | Input and result |
-| --- | --- |
-| lkjscript check PATH | Check source or .lkjir; silent success, located diagnostics on stderr. |
-| lkjscript ir PATH [-o FILE] | Produce checked IR text; stdout unless an output file is selected. |
-| lkjscript build PATH [-o FILE] | Write a static Linux x86-64 executable; default PATH.elf. Publication uses a temporary file and rename. Rejection preserves any existing destination. |
-| lkjscript run PATH [--entry NAME] | Execute main, or probe when main is absent; print its scalar result. |
-| lkjscript test PATH | Run the input's #[test] functions or IR test entries through both routes; one ok N tests line on success, failures only otherwise. N counts executions across routes. |
-
-All five commands accept source or .lkjir. `run` selects native execution by
-default; `--engine interpreter` selects independent IR execution. The same
-option restricts `test` to one route. Entries take no parameter or one World.
-Arguments after `--` are exact program bytes; compiler arguments must be UTF-8.
-`test` currently accepts one source or IR file. Directory discovery and
-expectation-header cases are planned for milestone 6.3. Failed assertions, traps,
-nonzero exit status, or a diagnostic fail a test; successful output is suppressed.
-
-| Entry result | Driver stdout after program output |
-| --- | --- |
-| () | No added bytes. |
-| Signed or unsigned integer | Decimal value followed by newline. |
-| bool | true or false followed by newline. |
-| char | Its UTF-8 bytes followed by newline, including U+0000. |
-| f64 | f64:0x followed by exactly 16 lowercase hexadecimal digits and newline; preserves every returned bit. |
-
-For a native run, the artifact writes its raw eight-byte scalar to a descriptor
-held by the driver. A trap returns a located text diagnostic through that private
-descriptor, keeping it separate from program stderr. The driver interprets scalar
-bits using the checked entry type and reports diagnostics on stderr. Standalone
-build artifacts expose program streams and exit status, reporting traps directly
-on stderr. Traps preserve prior output and exit with status 1.
-Both routes use the same scalar formatting; exhaustion locations may differ.
-
-`--stats` writes phase times in milliseconds, IR/code counts and peak RSS to
-stderr. `--source-dir DIR` supplies the source read root. `--library-dir DIR`
-and `--runtime-source PATH` select explicit source replacements for the embedded
-components; ordinary use needs neither. `--help` lists the available options.
-
-## Source library, trusted modules and imports
-
-The source library implements Option/Result with conditional Clone, Copy,
-PartialEq and Eq derives, byte operations, UTF-8 validation,
-String, vector/slice cloning and equality, structural ordering, and the
-implemented ordered-map/set APIs. Vector cloning and equality execute ordinary source loops
-using the element Clone or PartialEq contract; allocation/storage still use the
-existing memory primitives.
-BTreeMap uses an indexed AVL arena with logarithmic lookup, insertion and removal. String constructors validate bytes and its private representation is
-protected across modules. The library loads through ordinary module scopes.
-Library and runtime sources are embedded with the ordinary include forms below.
-The frontend produces IR in memory; the checker admits it before native emission
-or checked interpretation. Explicit IR input, output, tests and mutation use the
-text representation. `std::mem::replace` transfers ownership through an exclusive
-reference. Vec/Box storage and memory operations remain checked intrinsics.
-
-| Compile-time form | Result and source access | Rejection or rewrite |
+| Form | Meaning and lowering | Rejection or rewrite |
 | --- | --- | --- |
-| include_str!("path") | Static str reference to UTF-8 file contents. Read relative to the containing source file beneath its source directory capability. | Missing file, invalid UTF-8, nonliteral path or path outside the granted source root. Use include_bytes! for arbitrary bytes. |
-| include_bytes!("path") | Static shared reference to an exact-size byte array containing every file byte. Same path resolution and capability. | Missing file, nonliteral path or escape from the source root. |
+| Integer literals/types | Unsuffixed literals default to i32 after constraints propagate. Signed/unsigned 8/16/32/64-bit types, usize and isize remain distinct. Signed minima, radix and suffix rules apply to patterns too. | An out-of-range literal or conflicting fixed type is E_TYPE; choose a wider type or explicit cast. |
+| Integer operators | Checked arithmetic; wrapping_add/sub/mul operate modulo the receiver width. Source checked_add/sub/mul return Option for all ten types. Operands execute once, receiver before argument. | Ordinary overflow traps R0001. Wrapping/checked methods require matching operand types. |
+| Shifts | Counts may have another integer width; validate sign and width before narrowing. | Negative or excessive counts trap; choose a valid count explicitly. |
+| Primitive references | Arithmetic, bitwise and unary operators forward one shared reference to a scalar. | Further indirection requires explicit dereferencing. |
+| bool and char | Distinct types; char is a four-byte Unicode scalar, ordered by scalar value. Cast char to integers or u8 to char; char::from_u32 returns Option. | Surrogates/values above U+10FFFF reject; other integer-to-char casts and character arithmetic reject. Use from_u32. |
+| f64 | Finite literals; explicit numeric casts follow Rust. Binary arithmetic canonicalizes NaNs; negation flips only the sign bit. | Nonfinite literals reject; construct special representations with from_bits. |
+| f64::from_bits(u64), value.to_bits() | Preserve every bit, including signed zero, signaling state and NaN payloads, through dedicated checked operations. | Wrong receiver, argument/type-argument count or type rejects. Use casts for numeric conversion. |
 
-The production modules have one role each: src/ir.rs defines IR data;
-src/check.rs verifies it; src/native.rs selects instructions and owns inline layout/drop glue;
-src/x86.rs encodes instructions; src/native/platform.rs emits ELF/startup and syscall bindings.
-library/runtime.rs implements source runtime
-algorithms and src/runtime.rs seals their raw interface. The bridge/ modules
-supply the Rust host and declared source inputs. The [IR reference](ir.md)
-identifies the trusted implementation.
+Expressions execute left to right; logical operators short circuit. Assignment
+and primitive compound assignment evaluate RHS before destination/index expressions,
+then compound assignment reads the old value. Each operand executes once.
+Traps terminate without cleanup or recovery; there is no unwinding.
+Cases: [scalar bits](../tests/reference/scalar_bits.rs), [evaluation order](../tests/reference/evaluation_order.rs).
 
-Generated programs have no ambient filesystem, environment or process imports.
-Only checked operations on capability values can request host I/O. Source cannot
-declare host imports or construct capabilities from scalar words. Traps record a
-code and source line and terminate the selected route without requiring an
-application output capability. Structured task scopes remain unimplemented.
+## Statements, control and patterns
 
-## Binary64 bit representation
+Functions, structs, enums, constants, aliases, generics, trait implementations,
+match, if, while, loop and for are implemented. Assertions, panic and vec forms
+are fixed syntax. Unsupported forms receive named diagnostics.
 
-| Form | Meaning and lowering | Rejection |
+Unparenthesized block forms in statement position end before a binary operator,
+call or index that can start another expression; dot and ? continue the expression.
+Parentheses, initializers, arguments, returns and operator RHS use value parsing.
+Match arms follow this boundary and need commas after grouped/postfix expressions.
+Implicit block statements must return unit or diverge; a semicolon discards any
+value with normal cleanup. Unreachable statements, tails and definitions still check.
+
+if let/while let lower to match/loop. let else requires a diverging failure branch
+and retains borrowed initializer temporaries through the binding scope. Option/Result
+? lowers to early return; Result errors keep their type or convert &str through
+the canonical String constructor. General From evidence is unsupported.
+Loop break values unify across exits. continue advances a for iterator; an inclusive
+maximum endpoint does not overflow. Struct update evaluates explicit fields in
+written order, then its base once, transferring only the remaining fields.
+
+Integer/byte/character patterns accept inclusive, half-open and open literal ranges.
+Empty/reversed ranges reject. Exhaustiveness unions intervals over the concrete
+domain, including signed minima, u64::MAX and the Unicode surrogate gap; it never
+enumerates the domain. Runtime/named endpoints need ordinary guards instead.
+Every arm checks, including arms after a default and unused generic bodies.
+Scalar reference matches read the referent and preserve mutable reborrows.
+
+Nested tuple/struct/enum patterns, reference binding modes, or-patterns and guards
+run in source order. Failed tests/guards do not move payloads. Guard bindings,
+including Copy bindings, retain shared loans: guards cannot move affine bindings
+or mutate a tested place/ancestor; unrelated untested fields remain writable.
+A wildcard does not inspect storage. Pure tests are cached; overlapping alternatives
+retry guards in order. Shared pattern trees/continuations avoid static Cartesian
+expansion, though effectful guards may visit many feasible choices.
+A guard may consume an unbound owner: later discriminant-only tests use cached facts,
+but later payload access still needs ownership. Internal lowering loops use checked
+transfer depths; invalid depths reject even in unreachable IR.
+
+Enums retain unit, tuple and named-field shapes. Named initializers execute in
+written order and store in declaration order. Tuple/rest patterns select typed
+prefix/suffix fields; unannotated lets preserve initializer binding mode.
+Named patterns accept reordered/renamed/shorthand fields, wildcards and rest.
+Names, completeness, duplicates, types and shapes all check. Unit/empty tuple
+variants accept empty braces; nonempty tuple numeric-brace syntax is unsupported.
+Enum fields inherit enum visibility; explicit field visibility is invalid.
+
+ref/ref mut binds original storage; nonmoving matches preserve owner, mutability
+and destruction timing. Distinct fields of one proven variant permit exclusive
+borrows; other tags/same fields do not. Existing-place matches may move affine
+fields and borrow disjoint fields together. Projected tag tests retain owner cleanup.
+A selected constructor establishes its tag even if the pattern binds no fields.
+
+## Source graph and names
+
+The owned loader reads inline/file modules, child.rs or child/mod.rs, and nested
+directories through the source Directory. Missing, ambiguous and duplicate inputs
+have distinct diagnostics. File identities survive into IR and diagnostics.
+include_str!("path") produces static UTF-8 text; include_bytes!("path") produces
+a static reference to an exact-size byte array. Paths are literal, relative to the
+containing file and beneath the granted source root. Missing/escaping paths reject;
+invalid UTF-8 needs include_bytes. [Include case](../tests/reference/include.rs).
+
+Resolution uses declaration/module identities, lexical scopes, aliases, qualified
+crate/self/super paths and prelude priority. Local declarations shadow prelude and
+intrinsic spellings. Private, pub(self), pub(super), pub(crate), pub and ancestor
+pub(in PATH) visibility applies to items, construction, fields, methods and re-exports.
+Ancestor restrictions resolve once to actual ancestor modules; aliases/imports
+cannot redefine the region. Unsupported/widening visibility rejects.
+
+Aliases preserve nominal identity; sibling declarations with equal spelling remain
+distinct. Struct/enum constructors follow transparent alias/import chains, preserving
+visibility and written evaluation order. Constructor parameters bind separately
+from caller parameters. Fixed/reordered/nested alias arguments participate in normal
+structural constraints. Type aliases create no tuple constructor in the value
+namespace: use the original constructor or a use alias. Variants are constructors
+or patterns, never types; suffixes cannot reuse an enclosing enum's type identity.
+
+Explicit declarations/imports shadow module/enum globs. Unused glob ambiguity is
+allowed; conflicting use is diagnosed. Public globs preserve private binding
+restrictions. Block imports cover their entire lexical block and nested blocks,
+not neighboring functions. Qualified paths retain module meaning. use Trait as _
+adds method evidence without a name. Generic parameters retain original lexical/file
+scope and shadow unrelated declarations, not resolved nominal/intrinsic identities.
+
+Types/instances use structural declaration/child IDs and substitutions. Printable
+names, including compact child IDs, are labels rather than semantic identity.
+Non-test compilation evaluates cfg(test) as false, including all/any/not; excluded
+declarations never enter resolution.
+
+## Ownership, storage and views
+
+Scalars/shared references are Copy. Nominal types require a valid Copy derive;
+otherwise even scalar-only aggregates move. Box/Vec own contents. Arrays have fixed
+length: repeats evaluate the seed once, copy it without Clone for counts >=2,
+move it for one, and evaluate/destroy it for zero. Repetition is compact IR/native
+loop work; interpreted elements are independent. Repeated Vec literals instead
+evaluate element/count once, Clone all but the final element and move it last;
+zero still evaluates/destroys the seed.
+
+Partial moves can be reinitialized. Custom Drop excludes Copy/partial moves,
+runs before owned fields and executes on normal early return/break. Source cannot
+call Drop directly. Fields/elements destroy in declaration order; moved fields skip.
+Owned temporaries last through their statement; loop temporaries end before edges,
+including indexed locals and owned receivers. Traps bypass all cleanup.
+
+References have local, parameter or immutable-static origins. Mutable references
+are exclusive; proven distinct fields may be borrowed together. View structs/enums
+may live in locals, parameters and results. Box, Vec and owned arrays of views,
+including nested view aggregates, reject: use owned values, indices or separate views.
+Each reference leaf retains its own possible sources and parent dependencies.
+Moves, construction, assignment, clone and replacement preserve the complete leaf
+inventory; inactive enum alternatives carry checked absence evidence.
+
+Whole-array/Vec slices, view aggregates and implicit mutable reborrows are supported.
+Declared &[T]/&mut [T] arguments can infer T from array/Vec references, including
+aliases; trait matching still uses exact equations. A bare generic T moves a
+mutable reference. Actual reference annotations/parameters/results can authorize
+coercion; inferred type equality alone never converts a move to a reborrow.
+
+| View operation | Meaning and checked lowering | Rejection or rewrite |
 | --- | --- | --- |
-| f64::from_bits(bits: u64) | Preserve all 64 bits through f64_from_bits, including negative zero and NaN payloads. | Wrong argument count or type. |
-| value.to_bits() on f64 | Return its exact u64 representation through f64_to_bits. | Arguments, type arguments or a non-f64 receiver. |
+| Range indexing | start..end, ..end, start.., .., start..=end and ..=end on arrays, Vec, slices, str and canonical String. Base/start/end execute once in order; establish the source loan before bounds. Nested ranges compose extents. | Exclusive requires start <= end <= length. Inclusive checks end < length before addition, then start <= end+1. Invalid bounds or non-UTF-8 text endpoints trap R0003. |
+| Mutable ranges | Preserve owner/parent loans and conservative footprints, even when empty. | Numeric bounds do not prove two mutable ranges disjoint. Mutable text remains unsupported. |
+| Returned views | Every leaf declares possible input leaves or static origin; exact maps retain selected referents, bounded maps permit descendants. Complete unique coverage and every candidate check at calls/returns. | Concrete type equality does not establish generic T-to-T origin transport. Bounded footprints do not create exact storage identities. |
+| Reference-bearing replacement | Returns old provenance and installs new provenance; initialized borrowed/indexed storage stays initialized while the separate old owner is destroyed. | Reference-field writes must preserve enclosing source/exclusivity contracts. |
+| External parameter writes | May preserve each leaf's exact symbolic origin, including projections, or clear it. | Changing origins is E_BORROW until cross-parameter mutation contracts exist. Use explicit local views/owned values. |
+| Writes through opaque results | Reference-free writes preserve sibling leaves/tag facts. Reference-bearing writes require an exact destination identity. | A conservative alias footprint cannot authorize clearing sibling reference evidence; mutate through the original exact place. |
+| Holder lifetime | A reference stored in a live view aggregate may retain its loan despite its last apparent source use. | End the carrier's lexical scope before borrowing the owner exclusively; this conservative rejection is intentional. |
 
-Binary arithmetic retains canonical NaNs. Unary negation flips only the sign bit,
-preserving payloads and signaling state as Rust does. Bit conversion itself
-preserves every binary64 representation. Use a numeric cast when the intended
-operation is value conversion.
+Cases: [ranges](../tests/reference/range_views.rs), [UTF-8 trap](../tests/reference/text_boundary.rs),
+[holder rejection](../tests/reference/holder_liveness.rs), [scope rewrite](../tests/reference/holder_scope.rs).
 
-## World and I/O capabilities
+Wholly static outputs, including aggregates, lower to Static result contracts
+checked on each live leaf. A named shared output lifetime without a source input
+is universal and also requires static origin. Inactive leaves satisfy that contract;
+absence of active input leaves does not prove output absence. Ordinary dynamic
+outputs may shorten static literals. Explicit static input/local/field/alias/bound
+constraints or mixed static/dynamic source output annotations remain unsupported;
+direct IR can express mixed per-leaf maps. [Static view](../tests/reference/static_view.rs).
 
-The host entry creates World. Entries take no argument or one World; ordinary calls
-supply their own arguments. World, Stdout, Stdin, Stderr, Directory, File, Process,
-Clock and Child are affine intrinsic types. They have no source constructor,
-Copy, Clone, Data, Send or Sync implementation. Same-spelled source declarations,
-integers and casts cannot create authority. The IR checker verifies every capability
-operation independently. All methods below take an exclusive receiver borrow.
-Derived capabilities may outlive that borrow and move into other owners.
+## Inference, generics and traits
 
-| Form | Result and meaning |
+Definition checking solves structural constraints over lexical bindings/expression
+identities using rigid generic parameters and declared assumptions. Constraints
+cover assignment/return, signatures, composite literals, fields, aliases, projections
+and scalar patterns; expected types flow inward. Unsuffixed integers default only
+after known constraints propagate. Concrete specialization uses that checked plan.
+Insufficient generic/receiver context may still require annotations; there is no
+promise of complete Rust inference. [Inference case](../tests/reference/inference.rs).
+
+A solved type is not a coercion site. Some(r), an inferred generic field and
+identity(r) move an unconstrained mutable r; later use is E_MOVE. Explicit
+Option<&mut T>, view-field or result expectations can authorize a reborrow.
+Aliases and nesting preserve this distinction.
+
+Traits specify methods/associated types; implementations must be unique.
+Signatures, prerequisites, supertraits, associated equations and instantiated
+arguments check. Send/Sync/Data derive structurally; Data excludes capabilities.
+Expanding generic-instantiation SCCs reject, including alias paths.
+Bounds with extra type arguments remain unsupported. Method calls become
+concrete function calls; trait spelling alone never grants builtin semantics.
+
+Associated equations key on receiver variable, resolved trait and member, so
+same-spelled members of different traits remain distinct. A unique structurally
+compatible implementation may contribute conditional equations, never proof.
+Selection still validates prerequisites and does not specialize unresolved caller
+types to fit. Associated callable inputs can use declared trait evidence regardless
+of generic parameter order. Missing/ambiguous/incompatible bounds reject.
+Pending/cyclic nonstructural goals are not proofs; associated projections require
+checked child witnesses.
+
+Unused generic function/impl/default bodies and unreachable expressions check under
+rigid parameters through production elaboration and ownership checking, without
+sampling concrete types. Bounds, associated relationships, method signatures and
+explicit arguments check. Selected trait/source methods and receiver dereference
+counts survive specialization; newly applicable inherent methods cannot replace
+them. Rigid verification types/functions never reach execution.
+[Generic selection](../tests/reference/generic_selection.rs).
+
+| Trait operation | Meaning and lowering | Rejection or rewrite |
+| --- | --- | --- |
+| Clone / PartialEq methods | Typed receiver/argument/result contracts; Copy provides Clone evidence and Eq provides PartialEq. Explicit builtin nominal implementations validate required methods, modes and arity. | Ambiguous builtin/source methods reject. Same-spelled user traits are distinct. |
+| == / != | Evaluate operands once left-to-right. Read scalar left before RHS effects; borrow nominal owners. Same-type references compare referents. Explicit ne executes, otherwise negate eq. | Inherent methods/user PartialEq spellings do not replace the selected builtin contract. |
+| Copy/Clone/PartialEq/Eq/PartialOrd/Ord derives | Validate structural fields, supertraits, conditional generic assumptions and coherence even when unused. Generated monomorphic functions use ordinary IR checking and memoized identities. | Duplicate/overlapping implementations and invalid fields reject. Debug and other unsupported derives report E_UNSUPPORTED. |
+| Clone derive | Visit fields in order, selecting builtin traits rather than inherent methods. Nongeneric Copy nominal derives copy wholesale, including lifetime-only declarations; type-generic derives call field Clone even if a specialization is Copy. Explicit Clone still wins. | Default view-bearing clone_from needs a mutation contract. |
+| Equality derive | Compare tags and short-circuit active fields in declaration order, including tuples/arrays/nested Vec/boxed recursion. Eq has no method. | Fields need the proper selected evidence. |
+| Ordering derive | Nominal fields and enum declaration order; arrays/slices/Vec lexicographic. A decisive unordered float stops comparison and makes all four relations false. str/String compare UTF-8 bytes. | Ordering does not use custom PartialEq as an equality oracle. |
+| Default derive | Ordinary generated implementation using field defaults under declared bounds. | Unsupported field evidence rejects. |
+| Explicit Copy/Ord/PartialOrd/Data/Send/Sync | Not implemented as source impls. | Use supported derives/structural predicates, or ordinary methods. |
+
+Default nominal/tuple/scalar clone_from uses clone, replacement and old-owner
+cleanup; default ne negates eq and scalar eq/ne execute. Direct Box/array/Vec
+clone_from is unsupported pending forwarding/reuse/truncation/order contracts.
+General source trait-default execution is unfinished.
+
+The executable remains monomorphic. Generic definition evidence is not yet a
+complete independently replayable generic/witness IR contract; arbitrary hidden
+reference content and external mutation effects are not fully modeled there.
+Concrete specializations still receive complete IR provenance checking.
+
+## Declared regions and closures
+
+Fixed callable input regions create private definition-verification obligations.
+Reference leaves through aliases/tuples/nominal fields must outlive required regions
+using input facts and declared/implied outlives edges; local storage cannot prove a
+universal input region. Helper calls transport fixed type-family leaf requirements.
+A fixed closure input cannot satisfy a fresh higher-ranked input.
+
+Fixed callable inputs may retain loans independently of their result or callable
+destruction. Effects track source roots; descendant access requires checked
+result selectors, not mere source overlap. Shared stored-descriptor access retains
+the exact holder and suspends its parent reborrow. Repeated calls revoke obsolete
+overlapping permissions; branches union possible effects and retain only justified
+permissions. Effects use finite monotone loop replay; initialization/loan backedges
+still require equality.
+
+Named local lifetimes check even in unused/lifetime-only definitions, including
+delayed initialization, patterns, aliases, fields, replacement and later Some after
+None. Loans persist across moving/dropping/replacing descriptors; checked current
+holders/descendants retain permissions. Elided annotations allow shorter reborrows;
+undeclared names reject even in dead source. Storage annotations constrain earlier
+and later contents through exact transfer identities and backward requirements,
+then a private verifier checks reachable stores. These observations only restrict.
+
+Typed views retain their visible leaf regions separately from referent origins.
+Shared descriptor views may shorten access without shortening the original;
+nested mutable views preserve invariance and constrain stored descriptors too.
+Requirements follow checked transfers, constructors, exact result selectors, named/
+input-tied outputs and fixed callable inputs. Fresh reborrows prove their issuing
+chain; moving/copying a descriptor retains its original contract.
+Finite projection cycles use a visited worklist; bounded result projections,
+growing recursive equations and explicit generic arguments with named reference
+regions (including concrete aliases, calls, constructors and patterns) remain
+E_UNSUPPORTED pending type-instantiation contracts. Infer the arguments or use
+elided reference arguments where sufficient. Borrowed slice elements with named
+reference leaves need a collection inventory and remain unsupported.
+
+Annotation metadata uses the compiling body's actual local/projection/instruction
+identities. Probes publish none. Closure bodies may require regions for exact
+capture leaves; each construction proves them from actual sources, and capture
+remapping transforms metadata too. Concrete type equality grants no region.
+Private annotations cannot be declared in text IR or change its acceptance/meaning.
+
+Closures lower to environment structs plus ordinary functions. Body operations
+select captures by source binding identity/order, including disjoint fields.
+Owned captures move; shared/mutable captures use loans; unique immutable access to
+a captured mutable-reference descriptor retains exclusivity. Capture destruction
+uses capture order, with projections of one root in field order. Last-use cleanup
+may end reference captures while owned captures retain lexical destruction.
+
+Fn/FnMut/FnOnce choose shared/mutable/consuming calls statically. Rigid bounds and
+specialization retain that selection. Callable equations can infer inputs/results,
+including result-only generic parameters, but grant no origins; signatures still
+validate. Contextual/inferred parameters, irrefutable patterns, nested closures
+and borrowed adapters work. Environments have ordinary Copy/cleanup rules.
+
+Inferred return types constrain shape without granting reborrows: returning a
+captured mutable reference consumes it and requires FnOnce, through constructors,
+tuples, branches, loop breaks and explicit returns. Declared outputs retain
+coercion behavior; inferred struct-update bases only supply equations.
+Partial return annotations need per-position coercion evidence, and contextual
+FnOnce demands do not yet authorize captured escaping reborrows.
+Unique visible compatible method headers can provide conditional closure equations;
+primitive inventory precedes competing traits, but full selection still checks.
+Ambiguous/incomplete domains supply none; structural patterns wait for reference shape.
+
+Shared/mutable calls never lend owned environment storage. Results come from
+captured reference origins, arguments or static storage, with per-leaf contracts.
+Checked body observations may narrow candidate origins, followed by full independent
+IR checking; they grant no authority. Disjoint mutable outputs stay disjoint, and
+shared results may outlive reference-only environments while owners live.
+Generic/associated result families can refine similarly: acyclic callees first,
+recursive groups conservatively. This does not prove unused generic hidden effects.
+Opaque generic reference outputs, impl Trait closure returns, lending closures,
+dynamic callables and scoped concurrency remain unfinished. Pending escape/three
+concurrency cases specify intended ownership rules, with their missing features.
+
+## Source library
+
+| Facility | Source behavior and lowering | Limit or rewrite |
+| --- | --- | --- |
+| Text/String | Literals are immutable module-long UTF-8 views; str is unsized and shared. len counts bytes; is_empty/as_bytes/to_string preserve origins. String privately owns Vec bytes; Clone/clone_from copy valid bytes and reuse target capacity; equality compares length/bytes. | Bare/mutable text rejects. as_str currently revalidates UTF-8. |
+| str::from_utf8 | Checked runtime validation returns source Result<&str, Utf8Error>, borrowing original bytes. Utf8Error is an opaque marker. | No unchecked conversion or error-position/length API. |
+| Text methods | Prefix/suffix, contains/find/rfind, ASCII case/comparison, repeat/replace, bytes/chars, LF/CRLF lines, strip_prefix, split_once and split (including empty patterns). Pattern shares text/char needles; integer decimal parse covers ten types with validity/range checks. | General Unicode case conversion is unsupported. Borrowed iterators retain owners. |
+| Character helpers | UTF-8/UTF-16 lengths, ASCII predicates/case, Unicode whitespace/control, to_digit and to_string. | Operate on Unicode scalars, never arbitrary code points. |
+| Formatting | Arguments evaluate once in order; macros call source String/Formatter traits. Display, x/X/b/o, positional/named/captured arguments, escaped braces, fixed width, Unicode fill, alignment, sign/prefix/zero padding. Explicit zero width remains distinguishable. | write!/writeln! target String (Write in scope) or Formatter; arbitrary Write sinks, Debug, float formatting, dynamic width/precision are unsupported. Errors stop later formatting; format! traps on failure. |
+| Option/Result | Canonical source declarations and re-exports; conditional derives, views, owned and/or/transpose and selected map/default combinators. Eager arguments evaluate before call, lazy callbacks only on selected variants; unused captures/payloads still clean up normally. | Some nested receiver expressions need annotations. Option::expect evaluates its message but retains fixed trap text. |
+| Option extras | xor, zip/unzip, flatten, replace/insert/get_or_insert, is_some_and/is_none_or, ok_or/ok_or_else. None predicates yield false/true respectively. filter borrows the payload then keeps/drops the owner. | Returned views preserve selected input/factory origins. |
+| Option<&T>/Option<&mut T> | copied uses Copy without Clone; cloned invokes Clone once for Some, never None. | Owned clones may be independent, but nested views retain external origins. |
+| Vec/slice access | is_empty/get/first/last and mutable slice counterparts; invalid get returns None, including usize::MAX. contains borrows query/elements and uses eq in order without copying/consuming. | Returned references retain collection footprints. |
+| Collection copying/equality | extend_from_slice/to_vec clone in order; empty input does no clones. Vec Clone requires Clone; equality requires only PartialEq, checks length then element ==, and Vec ne negates the whole result. Nested types/floats/custom implementations follow selected traits. | Inherent clone/ne cannot replace generic contracts. Helper signatures and element constraints check independently. |
+| Slice/Vec helpers | starts_with borrows; copy_from_slice needs Copy and equal lengths; predicate split retains empty groups at delimiters. clear/truncate destroy removed elements forward; stable sort/retain are source operations. | General From/Into, Sum/FromIterator and exclusive iter_mut need their own contracts. |
+| Ordered maps/sets | BTreeMap uses an indexed AVL arena/free slots with logarithmic lookup/insertion/removal; BTreeSet reuses it. Sorted shared/owned iteration, map keys/values/first_key_value/pop_first/retain and set first/pop_first. Clear/drop and partially consumed iterators destroy in key order; Clone/Default/equality ignore arena shape. | Entirely source algorithms over existing storage, not new trusted primitives. |
+
+Option/Result also provide map, map_or/map_or_else, and_then/or_else/unwrap_or_else;
+Option has filter and Result map_err. String ordering/from conversion, scalar
+ASCII helpers and min/max are ordinary source conveniences, not general trait evidence.
+[Formatting case](../tests/reference/formatting.rs).
+
+Iteration resolves source Iterator::Item/next and IntoIterator evidence.
+Collection for holds iterable temporaries in an outer match, loops over next and
+binds each item with an irrefutable let. Non-unit bodies/refutable patterns reject;
+break/continue/return/exhaustion preserve item/iterator cleanup. Numeric ranges
+share binding machinery. No iteration IR operation or nominal-name shortcut exists.
+Shared Vec/slice/map/set and owned Vec/Option/map/set iteration are supported.
+
+enumerate/skip/take/zip are source adapters; chain currently needs identical
+iterator types to prove Item equality. map/filter/filter_map/inspect store the
+iterator/callable. filter/inspect borrow fresh items; map/filter_map transfer them.
+Adapters follow next even after a previous None and do not silently fuse.
+fold/for_each stop at first None and consume in order; fold owns its accumulator.
+any/all borrow the iterator mutably, pass items by value to FnMut and stop at a
+decisive result/None; empty answers are false/true. Iteration resumes after that
+consumed item; callbacks/captures drop on return and remaining items stay owned.
+find borrows predicate inputs and returns the matching owned item; position
+consumes and returns an index. Receiver evaluation precedes callback construction.
+Owned temporary receivers, including projected/indexed values, are writable without
+making named bindings or shared references mutable.
+[Iterator/Option case](../tests/reference/iterator_options.rs).
+
+## Checked IR and execution
+
+IR has explicit types, signatures, locals, places, copy/move/borrow/drop and
+structured control. Every type/signature/operation shape checks, including dead
+code; source inference/trait search never occurs below admission.
+Only CheckedProgram can reach emission; optimizer output must be rechecked.
+See [IR rules](ir.md) for exact provenance, tag, join, destruction and loop contracts,
+and [executable scalar IR](../tests/reference/scalar.lkjir) for the primitive prefix.
+
+Strict drop requires initialized storage; drop-if skips an absent exact owned place
+but still requires initialized ancestors. Neither moves/drops through a reference
+or indexed collection; use checked replace and destroy its separate result.
+Conditional cleanup stays at lexical destruction/replacement, never branch joins.
+Live owners/loans must agree at loop backedges. Definite initialization intersects
+at branches while possible owners/holes/loans union; reads need definite presence
+and every possible holder participates in borrow checks. Safe descriptor-only
+storage may end before descendants referring to external owners, never before
+actual loans into that storage. Early cleanup honors carrier dependencies.
+Exact storage identity remains separate from a conservative lifetime/alias footprint.
+
+The backend selects x86-64 directly and emits static Linux ELF; encoding is separate.
+Calls/branches use rel32 and an unrepresentable displacement gives a located error.
+Scalars use registers or natural-width frame storage; structs/tuples/arrays/enum
+payloads and collection elements are inline. Vec is address/length/capacity; Box
+and sized references are addresses; slice/text views are address/count pairs.
+Aggregate calls/results use frame storage and caller-provided result storage.
+Conditional cleanup uses compiler-owned initialization flags, never IR-supplied bits.
+
+Stack addresses remain stable. Reservation retries smaller extents; heap pressure
+returns unused reservation and calls regrow pages. Small/medium allocations reuse
+slabs/size classes from grown regions; large allocations use mapping/remapping.
+Neither allocator nor stack reads RAM/rlimits to plan capacity. Exhaustion is
+R0006 (allocation) or R0008 (stack), with located diagnostics.
+Bounds, arithmetic, division/shift, UTF-8 and active-tag checks remain.
+Locations materialize on cold failure paths; checked-operation lines stay exact,
+while allocation/stack failures may name runtime/function locations.
+Sealed checked-source runtime alone gets raw load/store/copy/map/unmap/remap.
+
+The independent interpreter uses its own typed heap, initialization/loan identities
+and call/control/drop stacks, checking actual references/tags independently.
+M_* indicates interpreter safety failure; R* indicates a program trap.
+
+## Commands and diagnostics
+
+One static executable embeds frontend, checker, backend, interpreter, CLI and source
+library/runtime. sh tools/bootstrap.sh uses the stored seed and verifies byte-for-byte
+reproduction without Rust or Node. The optional witness lives under witness/.
+
+| Command | Result |
 | --- | --- |
-| World.args() | Vec<Vec<u8>> of argument bytes, excluding argv0. |
-| World.stdout(), stdin(), stderr() | A corresponding stream capability. |
-| World.directory(path: &str) | Result<Directory, i64>; acquire the named root. |
-| World.process(), clock() | Process-spawning or monotonic-clock authority. |
-| World.temporary_file() | Result<File, i64>; anonymous read/write storage. |
-| World.stdin_file(), stdout_file(), stderr_file() | Result<File, i64>; owned duplicate of an inherited standard stream, preserving a closed stream. |
-| World.executable() | Result<File, i64>; read-only running executable with a fresh offset. Checked interpretation prepares its native image lazily; unchecked IR receives ENOSYS. |
-| World.set_exit_status(u8) | Select normal exit status; execution and cleanup continue. Last setting wins. |
-| Directory.open(path), create(path) | Result<File, i64>; read a file or create/truncate a writable file beneath the root. |
-| Directory.open_directory(path) | Result<Directory, i64>; derive a readable descendant directory. |
-| Directory.list() | Result<Vec<Vec<u8>>, i64>; entry-name bytes, excluding dot and dot-dot; order is unspecified. |
-| Directory.create_directory(path), remove(path), remove_directory(path) | Result<(), i64>; create a directory, unlink an entry or remove an empty directory. |
-| Directory.rename(old, new) | Result<(), i64>; rename beneath the same root, replacing an existing destination as Linux permits. |
-| Stdin.read(&mut [u8]), File.read(&mut [u8]) | Result<usize, i64>; possibly short read; zero means EOF for nonempty input. |
-| Stdin.read_to_end(), File.read_to_end() | Result<Vec<u8>, i64>; collect remaining bytes. |
-| File.write(&[u8]), write_all(&[u8]) | Result<usize, i64> for one write, or Result<(), i64> for the complete sequence. |
-| File.duplicate() | Result<File, i64>; another owned handle sharing the same offset and closed state. |
-| File.readonly() | Result<File, i64>; reopen the granted file read-only with an independent offset starting at zero. Closed files remain closed. |
-| File.rewind(), set_executable() | Result<(), i64>; seek to zero, or set mode 0755. |
-| Stdout.write(&[u8]), Stderr.write(&[u8]) | Complete the write or trap R0007 at the call. |
-| Clock.nanoseconds() | Result<usize, i64>; monotonic time for differences and deadlines. |
-| Process.spawn_file(executable: &File, args: &[Vec<u8>], stdin: &File, stdout: &File, stderr: &File, result: &File) | Result<Child, i64>; execute that File with explicit streams; result is child descriptor 3. |
-| Child.wait(), try_wait() | Result<i64, i64> or Result<Option<i64>, i64>; status is exit code or 128 + signal. Polling returns None while running. Successful reap makes later waits fail ECHILD. |
-| Child.terminate() | Result<(), i64>; request SIGKILL, then wait to collect status. Drop terminates and reaps a live direct child. |
+| lkjscript check PATH | Source/.lkjir check; silent success or located diagnostics. |
+| lkjscript ir PATH [-o FILE] | Checked textual IR, to stdout unless an output file is supplied. |
+| lkjscript build PATH [-o FILE] | Static executable, default PATH.elf; temporary publication plus rename preserves an existing destination on rejection. |
+| lkjscript run PATH [--entry NAME] | Execute main, else probe, with native default or --engine interpreter. |
+| lkjscript test PATH | Discover expectation cases or execute #[test]/IR test functions across native/interpreter routes; details on failure. |
 
-Convenience algorithms live in library/io.rs and lower to checked capability
-operations. I/O Results contain positive Linux errno. EINTR is retried except
-for close, which consumes the handle. Paths reject embedded NUL; raw path bytes
-require exactly one final NUL. Descendant resolution uses openat2 with
-RESOLVE_BENEATH | RESOLVE_NO_MAGICLINKS; an escape or absolute descendant path
-fails. Mutations first derive the parent, then operate on a checked basename.
-New files use mode 0666 and directories 0777, subject to the inherited umask.
+Program arguments after -- remain exact bytes; compiler arguments require UTF-8.
+Scalar runs print integer decimal, bool text, UTF-8 char (including NUL), or
+f64:0x plus 16 lowercase hex digits and newline; unit adds nothing.
+Native scalar results use a driver-owned raw eight-byte descriptor. Trap diagnostics
+use that channel separately from program stderr; standalone artifacts report traps
+on stderr and exit 1, preserving prior output. Both routes format scalars identically.
 
-File-backed process streams share their offsets; rewind captured files before
-reading. A closed File returns EBADF on I/O, drops harmlessly, and closes its
-assigned child stream. Spawn validates NUL-free argument bytes, supplies argv0
-as lkjscript, and uses an empty environment. It executes the File directly with
-execveat, without PATH search or shell fallback. Exec failure returns errno.
-Dropping File or Directory closes its owned descriptor once. Dropping a standard
-stream capability leaves the inherited stream open. Spawn sets a parent-death
-SIGKILL for its direct child. No caller byte-slice pointer survives a host operation.
+--stats reports phase milliseconds, IR/code counts and peak RSS. --source-dir grants
+the source root; --library-dir/--runtime-source replace embedded components explicitly.
+--help gives options. Test expectation headers declare value, output bytes, diagnostic
+or trap; pending headers name the missing intended feature. The gate compares exact
+values/bytes/status/file effects and trap kinds; exhaustion locations may differ.
+Terminating cases use generous watchdogs, mutants a separate short allowance.
 
-Output before a trap remains observable; traps exit without unwinding. Normal
-destructor order agrees with Rust in the supported intersection. Opening or
-duplicating another capability preserves inherited closed standard streams.
-The rustc conformance adapter in bridge/output.rs supplies the same methods;
-tests compare bytes, normal status and trap kind through a separate oracle channel.
+Parser recovery synchronizes balanced item/method/statement boundaries, marking
+skipped regions E_BLOCKED. Recovered source never authorizes emission. With valid
+shared signatures, independent inference/IR body errors accumulate; each failing
+body stops at its diagnostic. Diagnostic-only placeholders preserve known signatures
+for dependent checks, never executable authority. Shared resolution/signature errors
+block dependent work; no fabricated types or ownership facts continue analysis.
+Single-error APIs select the first diagnostic from these same production paths.
 
-## Diagnostic recovery and test oracles
+## World and capabilities
 
-Once signatures are valid, a body that passes definition inference proceeds to IR
-construction and ownership checking even if a peer fails. Diagnostic-only trap
-bodies retain known signatures for dependent checks; the saved error list
-prevents such a program from becoming an emitted artifact. Unsupported source
-forms are diagnosed across parsed regions. Shared signature and resolution
-failures stop dependent analysis. Ordinary checks retain source locations and
-never invent types or ownership facts to continue after those failures.
+Entries currently take no argument or World; ordinary calls supply their arguments.
+World, Stdout/Stdin/Stderr, Directory, File, Process, Clock and Child are affine
+intrinsic types with no source constructor, Copy/Clone/Data/Send/Sync implementation.
+Names, integers or casts cannot forge authority. Every capability operation checks
+independently in IR; methods below exclusively borrow the receiver. Derived owners
+can outlive that borrow and move normally.
 
-The gate compares native and interpreter values, exact output bytes, exit statuses,
-file effects and trap codes. Generated source and direct IR mutations exercise
-both routes. Programs expected to finish use the suite watchdog; potentially
-nonterminating mutants have a short allowance and a separate outcome. Cases that
-exhaust heap or stack compare trap codes without comparing exhaustion locations.
-The native toolchain integration harness in tools/toolchain-test.rs covers command
-behavior, scalar representations, binary streams, embedding and rejected builds.
+| Form | Result and authority |
+| --- | --- |
+| World.args() | Vec<Vec<u8>> excluding argv0. |
+| World.stdout()/stdin()/stderr() | Corresponding inherited stream capability. |
+| World.directory(path) | Result<Directory,i64> acquiring a root. |
+| World.process()/clock() | Process or monotonic-clock capability. |
+| World.temporary_file() | Result<File,i64>, anonymous read/write storage. |
+| World.stdin_file()/stdout_file()/stderr_file() | Owned inherited-stream duplicate, preserving closed streams. |
+| World.executable() | Read-only running executable at fresh offset; checked interpretation prepares a native image lazily, unchecked IR returns ENOSYS. |
+| World.set_exit_status(u8) | Set normal status and continue cleanup/execution; last value wins. |
+| Directory.open/create(path) | Read or create/truncate a writable descendant File. |
+| Directory.open_directory(path), list() | Descendant Directory; Vec<Vec<u8>> names excluding dot/dot-dot, unspecified order. |
+| Directory.create_directory/remove/remove_directory(path) | Create directory, unlink entry or remove empty directory. |
+| Directory.rename(old,new) | Rename within root, replacing destination as Linux allows. |
+| Stdin/File.read(&mut [u8]), read_to_end() | Result with short-read count or collected bytes; zero is EOF for nonempty buffers. |
+| File.write/write_all(&[u8]) | One-write count or complete-write Result. |
+| File.duplicate()/readonly() | Duplicate sharing offset/state; or read-only reopen with independent zero offset. Closed remains closed. |
+| File.rewind()/set_executable() | Seek zero or set mode 0755. |
+| Stdout/Stderr.write(&[u8]) | Complete write or R0007 at the call. |
+| Clock.nanoseconds() | Result<usize,i64> monotonic differences/deadlines. |
+| Process.spawn_file(executable,&args,stdin,stdout,stderr,result) | Result<Child,i64>, explicit executable File, argument byte vectors and four File streams; result maps to descriptor3. |
+| Child.wait()/try_wait() | Exit code or 128+signal, with Option for polling; reaped children later fail ECHILD. |
+| Child.terminate() | SIGKILL then reap; dropping a live Child also kills/reaps its direct child. |
 
-## Consumer-driven surface additions
+Convenience methods are source in library/io.rs; Result failures carry positive Linux
+errno, raw read/write leaves negative errno. EINTR retries except close, which
+consumes once. Paths reject NUL; raw paths need exactly one trailing NUL.
+Descendants use openat2 RESOLVE_BENEATH|RESOLVE_NO_MAGICLINKS without weaker fallback;
+absolute/escaping paths fail. Mutations derive a parent then validate the basename.
+New files/directories use 0666/0777 subject to inherited umask.
 
-Non-test compilation evaluates cfg(test) as false, including nested all/any/not
-conditions; excluded declarations never reach name resolution. Derived Default
-is an ordinary generated implementation using field defaults under declared
-trait bounds. Text equality and string-literal patterns follow Rust's reference
-matching depth. String references coerce to str at declared argument and receiver
-sites. Byte-string literals have static shared references to exact-size byte
-arrays; the IR constant contract checks their type and extent.
+Captured process files share offsets; rewind before reading. Closed File returns
+EBADF, drops harmlessly and closes the assigned child stream. Spawn validates
+NUL-free arguments, chooses argv0 lkjscript, clears environment and executes the
+File with execveat, without PATH/shell fallback; exec failure returns errno.
+Direct children receive parent-death SIGKILL. No caller slice pointer survives I/O.
+File/Directory drops close once; standard-stream capability drops leave inherited
+streams open. Acquiring another capability preserves inherited closed streams.
 
-The source library provides String ordering/from conversion, scalar ASCII tests
-and min/max, owned Vec iteration, stable sort and retain. Source bodies specify
-method behavior and destruction order. General From/Into evidence and exclusive
-iter_mut still need their real generic/provenance contracts; they are not claimed
-by the implemented conveniences. Arrays and Vec/Box of views still reject with
-located alternatives: owned values, indices, or separate local views.
-
-The ordered map uses an owned AVL node arena with index links and free-slot reuse.
-Insertion, lookup and removal follow tree height; ordered iteration and clear/drop
-preserve key order. This is library source, not a new trusted primitive.
-
-## First compiler consumer additions
-
-Derived structural ordering executes ordinary checked IR for nominal fields and
-enum declaration order. Arrays, slices and vectors compare lexicographically.
-Floating-point unordered results stop comparison at the decisive field and make
-all four ordering relations false. Ordering does not use custom PartialEq as an
-equality oracle. Borrowed str compares UTF-8 bytes; String uses its owned bytes.
-
-Slice access includes is_empty, get/first/last and mutable counterparts; to_vec
-clones in order, starts_with borrows elements, and copy_from_slice requires Copy
-and equal lengths. Predicate split returns borrowed groups, including empty
-groups at adjacent/endpoint delimiters. Vec clear/truncate drop removed elements
-in forward order. These are source library operations over existing IR storage.
+Generated programs have no ambient filesystem/environment/process imports or
+source-declared host imports. Normal destructor order matches the supported Rust
+intersection; outputs and normal statuses stay distinct from traps. The optional
+witness/bridge/output.rs adapter observes bytes/status/trap kind separately.

@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 fn forward<'a>(value: &'a str) -> &'a str {
     value
 }

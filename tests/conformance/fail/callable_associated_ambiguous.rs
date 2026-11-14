@@ -1,3 +1,5 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false,"rustCode":"E0221"}
 trait First { type Item; }
 trait Second { type Item; }
 fn invalid<F:Fn(I::Item)->i64,I:First+Second>(value:I,function:F)->i64 { 42 }

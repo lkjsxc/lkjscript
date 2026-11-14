@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 #[derive(Copy, Clone)]
 struct Thing { value: i64 }
 impl Thing {

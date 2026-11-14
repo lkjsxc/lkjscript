@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustCode":"E0505"}
 use std::collections::BTreeSet;
 pub fn probe() -> i64 {
     let mut values: BTreeSet<i64> = BTreeSet::new();

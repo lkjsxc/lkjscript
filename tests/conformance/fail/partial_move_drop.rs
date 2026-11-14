@@ -1,3 +1,5 @@
+// expect: reject E_MOVE
+// witness: {"rustAccept":false}
 struct Guard { value: Box<i64> }
 impl Drop for Guard { fn drop(&mut self) {} }
 pub fn probe() -> i64 {

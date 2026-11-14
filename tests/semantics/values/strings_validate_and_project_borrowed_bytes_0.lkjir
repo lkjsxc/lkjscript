@@ -1,0 +1,507 @@
+lkjscript-ir 1
+# expect: value 42
+# entry: semantic_values
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "Vec<t5>" vec 5
+type "$std::string::String" struct move "bytes" 14
+type "$std::string::FromUtf8Error" struct move "bytes" 14
+type "$std::prelude::Result<t15,t16>" enum move
+variant "Ok" "0" 15
+variant "Err" "0" 16
+endtype
+type "[t5]" slice shared 5
+type "&t18" ref shared 18
+type "&mut t14" ref mut 14
+type "&t15" ref shared 15
+type "&mut t15" ref mut 15
+type "&t14" ref shared 14
+type "str" str
+type "&t24" ref shared 24
+type "$std::prelude::Option<t5>" enum copy
+variant "None"
+variant "Some" "0" 5
+endtype
+type "$std::str::Utf8Error" struct copy
+type "$std::prelude::Result<t25,t27>" enum copy
+variant "Ok" "0" 25
+variant "Err" "0" 27
+endtype
+type "&t28" ref shared 28
+fn "string_probe" 0 3
+local "$" 5 let
+local "$" 5 let
+local "$" 5 let
+local "$" 5 let
+local "$" 5 let
+local "$vec" 14 mut
+local "$" 20 let
+local "$" 0 let
+local "$" 20 let
+local "$" 0 let
+local "$" 20 let
+local "$" 0 let
+local "$" 20 let
+local "$" 0 let
+local "$" 20 let
+local "$" 0 let
+local "input" 14 let
+local "$" 14 let
+local "$" 17 mut
+local "$" 17 let
+local "$" 15 let
+local "text" 15 mut
+local "$" 21 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 0 let
+local "$" 21 let
+local "$" 19 let
+local "view" 19 let
+local "$" 4 let
+local "$" 5 let
+local "$" 3 let
+local "first" 3 let
+local "$" 22 let
+local "$" 0 let
+local "$" 21 let
+local "$" 1 let
+local "$" 0 let
+local "$" 5 let
+local "$vec" 14 mut
+local "$" 20 let
+local "$" 0 let
+local "invalid" 14 let
+local "$" 14 let
+local "$" 17 mut
+local "$" 17 let
+local "$" 16 let
+local "failure" 16 let
+local "$" 16 let
+local "$" 14 let
+local "recovered" 14 let
+local "$" 3 let
+local "$" 4 let
+local "$" 5 let
+local "$" 3 let
+local "$" 3 let
+@4:39 int 0 65
+@4:43 int 1 240
+@4:48 int 2 159
+@4:53 int 3 152
+@4:58 int 4 128
+@4:34 intrinsic 5 "vec_new"
+@4:34 borrow 6 mut 5
+@4:34 intrinsic 7 "vec_push" 6 0
+@4:34 drop 7
+@4:34 borrow 8 mut 5
+@4:34 intrinsic 9 "vec_push" 8 1
+@4:34 drop 9
+@4:34 borrow 10 mut 5
+@4:34 intrinsic 11 "vec_push" 10 2
+@4:34 drop 11
+@4:34 borrow 12 mut 5
+@4:34 intrinsic 13 "vec_push" 12 3
+@4:34 drop 13
+@4:34 borrow 14 mut 5
+@4:34 intrinsic 15 "vec_push" 14 4
+@4:34 drop 15
+@4:1 assign 5 16
+@5:46 read 17 move 16
+@5:28 call 18 1 17
+@5:28 read 19 move 18
+@5:28 call 20 2 19
+@5:1 assign 20 21
+@6:24 borrow 22 shared 21
+@6:24 call 23 3 22
+@6:13 read 24 copy 23
+@6:36 int 25 5
+@6:13 read 26 copy 25
+@6:13 binary 27 "==" 24 26
+@6:13 intrinsic 28 "assert" 27
+@3:9 drop 28
+@3:9 drop 25
+@3:9 drop 23
+@8:35 borrow 29 shared 21
+@8:35 call 30 4 29
+@8:1 assign 30 31
+@9:22 int 32 0
+@9:17 read 33 copy 31 deref index 32
+@9:17 intrinsic 34 "cast" 33
+@7:25 drop 32
+@7:25 drop 31
+@7:1 assign 34 35
+@11:13 borrow 36 mut 21
+@11:13 call 37 5 36
+@3:9 drop 37
+@12:21 borrow 38 shared 21
+@12:21 call 39 6 38
+@12:13 intrinsic 40 "assert" 39
+@3:9 drop 40
+@13:41 int 41 255
+@13:36 intrinsic 42 "vec_new"
+@13:36 borrow 43 mut 42
+@13:36 intrinsic 44 "vec_push" 43 41
+@13:36 drop 44
+@13:1 assign 42 45
+@14:45 read 46 move 45
+@14:27 call 47 1 46
+@14:27 read 48 move 47
+@14:27 call 49 7 48
+@14:1 assign 49 50
+@15:29 read 51 move 50
+@15:29 call 52 8 51
+@15:1 assign 52 53
+@16:13 read 54 copy 35
+@16:31 int 55 0
+@16:21 read 56 copy 53 index 55
+@16:21 intrinsic 57 "cast" 56
+@16:13 binary 58 "+" 54 57
+@3:9 drop 55
+@3:9 drop 53
+@3:9 drop 35
+@3:9 drop 21
+@3:9 return 58
+endfn
+fn "$std::string::from_utf8$f50<Self=t15;>" 1 17 file 3
+local "bytes" 14 let
+local "$" 23 let
+local "$" 19 let
+local "$" 1 let
+local "$" 14 let
+local "$" 15 let
+local "$" 17 let
+local "$if" 17 mut
+local "$" 14 let
+local "$" 16 let
+local "$" 17 let
+@20:23 borrow 1 shared 0
+@20:23 slice-borrow 2 shared 1 deref
+@20:23 drop 1
+@20:12 call 3 9 2
+@20:9 if 3
+@21:33 read 4 move 0
+@21:24 struct 5 4
+@21:13 variant 6 0 5
+@20:9 assign 6 7
+@20:9 else
+@23:41 read 8 move 0
+@23:25 struct 9 8
+@23:13 variant 10 1 9
+@20:9 assign 10 7
+@20:9 end
+@19:9 return 7
+endfn
+fn "$std::prelude::unwrap$f535<E=t16;Self=t17;T=t15;>" 1 15 file 13
+local "self" 17 let
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 15 let
+local "value" 15 let
+local "$" 15 let
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 0 let
+local "$" 0 let
+@180:1 int 2 0
+@180:1 assign 2 1
+@180:1 tag-test-place 3 0 0
+@180:1 if 3
+@180:1 int 4 1
+@180:1 int 5 1
+@180:1 binary 6 "&" 4 5
+@180:1 assign 6 1
+@180:1 end
+@180:1 if 1
+@180:1 tag-test-place 7 0 0
+@180:1 if 7
+@180:1 else
+@180:1 trap "unreachable selected pattern"
+@180:1 end
+@180:1 read 8 move 0 variant 0 0
+@180:1 assign 8 9
+@180:41 read 10 move 9
+@180:34 drop 0
+@180:34 return 10
+@179:9 else
+@181:1 int 12 0
+@181:1 assign 12 11
+@181:1 tag-test-place 13 1 0
+@181:1 if 13
+@181:1 int 14 1
+@181:1 int 15 1
+@181:1 binary 16 "&" 14 15
+@181:1 assign 16 11
+@181:1 end
+@181:1 if 11
+@181:1 tag-test-place 17 1 0
+@181:1 if 17
+@181:1 else
+@181:1 trap "unreachable selected pattern"
+@181:1 end
+@181:31 trap "explicit panic"
+@181:31 unit 18
+@179:9 else
+@179:9 trap "unreachable match"
+@179:9 end
+@179:9 end
+@179:9 unit 19
+endfn
+fn "$std::string::len$f68<Self=t15;>" 1 4 file 3
+local "self" 21 let
+local "$" 23 let
+local "$" 4 let
+@103:9 borrow 1 shared 0 deref field 0
+@103:9 intrinsic 2 "vec_len" 1
+@102:9 drop 0
+@102:9 return 2
+endfn
+fn "$std::string::as_bytes$f70<Self=t15;>" 1 19 file 3 from 0
+local "self" 21 let
+local "$" 19 let
+@111:9 slice-borrow 1 shared 0 deref field 0
+@110:9 drop 0
+@110:9 return 1
+endfn
+fn "$std::string::clear$f72<Self=t15;>" 1 0 file 3
+local "self" 22 let
+local "$" 23 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 1 let
+local "$" 20 let
+local "$" 26 let
+local "$" 0 let
+local "$" 0 let
+@119:9 loop
+@119:15 borrow 1 shared 0 deref field 0
+@119:15 intrinsic 2 "vec_len" 1
+@119:15 read 3 copy 2
+@119:34 int 4 0
+@119:15 read 5 copy 4
+@119:15 binary 6 ">" 3 5
+@119:9 drop 4
+@119:9 drop 2
+@119:9 unary 7 "!" 6
+@119:9 if 7
+@119:9 break
+@119:9 end
+@120:13 borrow 8 mut 0 deref field 0
+@120:13 intrinsic 9 "vec_pop" 8
+@119:9 drop 9
+@119:9 unit 10
+@119:9 drop 10
+@119:9 continue
+@119:9 end
+@119:9 unit 11
+@118:9 drop 0
+@118:9 return 11
+endfn
+fn "$std::string::is_empty$f69<Self=t15;>" 1 1 file 3
+local "self" 21 let
+local "$" 23 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+@107:9 borrow 1 shared 0 deref field 0
+@107:9 intrinsic 2 "vec_len" 1
+@107:9 read 3 copy 2
+@107:29 int 4 0
+@107:9 read 5 copy 4
+@107:9 binary 6 "==" 3 5
+@106:9 drop 4
+@106:9 drop 2
+@106:9 drop 0
+@106:9 return 6
+endfn
+fn "$std::prelude::unwrap_err$f536<E=t16;Self=t17;T=t15;>" 1 16 file 13
+local "self" 17 let
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 16 let
+local "value" 16 let
+local "$" 16 let
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 0 let
+local "$" 0 let
+@187:1 int 2 0
+@187:1 assign 2 1
+@187:1 tag-test-place 3 1 0
+@187:1 if 3
+@187:1 int 4 1
+@187:1 int 5 1
+@187:1 binary 6 "&" 4 5
+@187:1 assign 6 1
+@187:1 end
+@187:1 if 1
+@187:1 tag-test-place 7 1 0
+@187:1 if 7
+@187:1 else
+@187:1 trap "unreachable selected pattern"
+@187:1 end
+@187:1 read 8 move 0 variant 1 0
+@187:1 assign 8 9
+@187:42 read 10 move 9
+@187:35 drop 0
+@187:35 return 10
+@186:9 else
+@188:1 int 12 0
+@188:1 assign 12 11
+@188:1 tag-test-place 13 0 0
+@188:1 if 13
+@188:1 int 14 1
+@188:1 int 15 1
+@188:1 binary 16 "&" 14 15
+@188:1 assign 16 11
+@188:1 end
+@188:1 if 11
+@188:1 tag-test-place 17 0 0
+@188:1 if 17
+@188:1 else
+@188:1 trap "unreachable selected pattern"
+@188:1 end
+@188:30 trap "explicit panic"
+@188:30 unit 18
+@186:9 else
+@186:9 trap "unreachable match"
+@186:9 end
+@186:9 end
+@186:9 unit 19
+endfn
+fn "$std::string::into_bytes$f78<Self=t16;>" 1 14 file 3
+local "self" 16 let
+local "$" 14 let
+@160:9 read 1 move 0 field 0
+@159:9 drop 0
+@159:9 return 1
+endfn
+fn "$std::bytes::valid_utf8" 1 1 file 12
+local "bytes" 19 let
+local "$" 19 let
+local "$" 28 mut
+local "$" 29 let
+local "$" 1 let
+@39:25 read 1 copy 0
+@39:5 intrinsic 2 "str_from_utf8" 1
+@39:5 borrow 3 shared 2
+@39:5 call 4 10 3
+@38:5 drop 2
+@38:5 drop 0
+@38:5 return 4
+endfn
+fn "$std::prelude::is_ok$f533<E=t27;Self=t28;T=t25;>" 1 1 file 13
+local "self" 29 let
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$match" 1 mut
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+@169:1 int 2 0
+@169:1 assign 2 1
+@169:1 tag-test-place 3 0 0 deref
+@169:1 if 3
+@169:1 int 4 1
+@169:1 int 5 1
+@169:1 binary 6 "&" 4 5
+@169:1 assign 6 1
+@169:1 end
+@169:1 if 1
+@169:1 tag-test-place 7 0 0 deref
+@169:1 if 7
+@169:1 else
+@169:1 trap "unreachable selected pattern"
+@169:1 end
+@169:30 int 8 1
+@168:9 assign 8 9
+@168:9 else
+@170:1 int 11 0
+@170:1 assign 11 10
+@170:1 tag-test-place 12 1 0 deref
+@170:1 if 12
+@170:1 int 13 1
+@170:1 int 14 1
+@170:1 binary 15 "&" 13 14
+@170:1 assign 15 10
+@170:1 end
+@170:1 if 10
+@170:1 tag-test-place 16 1 0 deref
+@170:1 if 16
+@170:1 else
+@170:1 trap "unreachable selected pattern"
+@170:1 end
+@170:31 int 17 0
+@168:9 assign 17 9
+@168:9 else
+@168:9 trap "unreachable match"
+@168:9 end
+@168:9 end
+@167:9 drop 0
+@167:9 return 9
+endfn
+fn "semantic_values" 0 3
+local "result" 3 let
+local "expected0" 3 let
+local "equal0" 1 let
+local "unit0" 0 let
+local "answer" 3 let
+@1 call 0 0
+@1 int 1 320
+@1 binary 2 == 0 1
+@1 intrinsic 3 assert 2
+@1 drop 3
+@1 int 4 42
+@1 return 4
+endfn

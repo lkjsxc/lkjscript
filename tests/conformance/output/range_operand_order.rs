@@ -1,3 +1,5 @@
+// expect: output 415345424356534542434c534542434d534541585944
+// witness: {}
 fn tick(world: &mut World, byte: u8) {
     let mut out = world.stdout();
     out.write(&[byte]);

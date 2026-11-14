@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 enum Option {
     Unrelated,
 }

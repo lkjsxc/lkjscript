@@ -1,0 +1,24 @@
+lkjscript-ir 1
+# expect: check
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "str" str
+type "&str" ref shared 7
+type "[u8]" slice shared 5
+type "&[u8]" ref shared 9
+type "Utf8Error" struct copy
+type "Result" enum copy
+variant "Ok" "0" 8
+variant "Err" "0" 11
+endtype
+fn "validate" 1 12 from 0
+local "" 10 let
+local "" 12 let
+@1:1 intrinsic 1 "str_from_utf8" 0
+@2:1 return 1
+endfn

@@ -1,3 +1,5 @@
+// expect: reject E_TRAIT
+// witness: {"rustCode":"E0599"}
 trait Eligible {}
 trait Build {
     fn make() -> i64;

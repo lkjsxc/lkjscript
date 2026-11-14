@@ -1,0 +1,2636 @@
+lkjscript-ir 1
+# expect: value 42
+# entry: semantic_values
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "Box<t3>" box 3
+type "$std::ordered_map::BTreeMap<t3,t14>" struct move "nodes" 19 "root" 4 "vacant" 4 "count" 4
+type "$std::ordered_map::Node<t3,t14>" struct move "entry" 18 "left" 4 "right" 4 "parent" 4 "height" 4
+type "$std::ordered_map::Pair<t3,t14>" struct move "key" 3 "value" 14
+type "$std::prelude::Option<t17>" enum move
+variant "None"
+variant "Some" "0" 17
+endtype
+type "Vec<t16>" vec 16
+type "$std::prelude::Option<t14>" enum move
+variant "None"
+variant "Some" "0" 14
+endtype
+type "&t3" ref shared 3
+type "&t14" ref shared 14
+type "$std::prelude::Option<t22>" enum copy
+variant "None"
+variant "Some" "0" 22
+endtype
+type "&mut t14" ref mut 14
+type "$std::prelude::Option<t24>" enum move
+variant "None"
+variant "Some" "0" 24
+endtype
+type "&mut t15" ref mut 15
+type "&t20" ref shared 20
+type "&t15" ref shared 15
+type "&mut t18" ref mut 18
+type "&mut t17" ref mut 17
+type "str" str
+type "&t31" ref shared 31
+type "&t18" ref shared 18
+type "&t17" ref shared 17
+type "&mut t16" ref mut 16
+type "&t19" ref shared 19
+type "&mut t19" ref mut 19
+destructor 15 12
+fn "map_probe" 0 3
+local "$" 15 let
+local "map" 15 mut
+local "$" 26 let
+local "$" 3 let
+local "$" 3 let
+local "$" 14 let
+local "$" 20 mut
+local "$" 27 let
+local "$" 1 let
+local "$" 0 let
+local "$" 26 let
+local "$" 3 let
+local "$" 3 let
+local "$" 14 let
+local "$" 20 mut
+local "$" 27 let
+local "$" 1 let
+local "$" 0 let
+local "$" 26 let
+local "$" 3 let
+local "$" 3 let
+local "$" 14 let
+local "$" 20 mut
+local "$" 27 let
+local "$" 1 let
+local "$" 0 let
+local "$" 26 let
+local "$" 3 let
+local "$" 3 let
+local "$" 14 let
+local "$" 20 mut
+local "$" 20 let
+local "$" 14 let
+local "previous" 14 let
+local "$" 28 let
+local "$" 3 let
+local "$" 21 let
+local "$" 1 let
+local "$" 0 let
+local "$" 28 let
+local "$" 3 let
+local "$" 21 let
+local "$" 1 let
+local "$" 1 let
+local "$" 0 let
+local "$" 28 let
+local "$" 3 let
+local "$" 21 let
+local "$" 23 mut
+local "$" 23 let
+local "$" 22 let
+local "found" 22 let
+local "$" 3 let
+local "observed" 3 let
+local "$" 26 let
+local "$" 3 let
+local "$" 21 let
+local "$" 25 mut
+local "$" 25 let
+local "$" 24 let
+local "found" 24 let
+local "$" 3 let
+local "$" 0 let
+local "$" 0 let
+local "$" 28 let
+local "$" 3 let
+local "$" 21 let
+local "$" 23 mut
+local "$" 23 let
+local "$" 22 let
+local "found" 22 let
+local "$" 3 let
+local "changed" 3 let
+local "$" 26 let
+local "$" 3 let
+local "$" 21 let
+local "$" 20 mut
+local "$" 20 let
+local "$" 14 let
+local "removed" 14 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+local "$" 28 let
+local "$" 4 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+@4:52 call 0 1
+@4:1 assign 0 1
+@5:21 borrow 2 mut 1
+@5:32 int 3 4
+@5:44 int 4 40
+@5:35 intrinsic 5 "box_new" 4
+@5:21 call 6 2 2 3 5
+@5:21 borrow 7 shared 6
+@5:21 call 8 3 7
+@5:13 intrinsic 9 "assert" 8
+@3:9 drop 9
+@3:9 drop 6
+@6:21 borrow 10 mut 1
+@6:32 int 11 1
+@6:44 int 12 10
+@6:35 intrinsic 13 "box_new" 12
+@6:21 call 14 2 10 11 13
+@6:21 borrow 15 shared 14
+@6:21 call 16 3 15
+@6:13 intrinsic 17 "assert" 16
+@3:9 drop 17
+@3:9 drop 14
+@7:21 borrow 18 mut 1
+@7:32 int 19 3
+@7:44 int 20 30
+@7:35 intrinsic 21 "box_new" 20
+@7:21 call 22 2 18 19 21
+@7:21 borrow 23 shared 22
+@7:21 call 24 3 23
+@7:13 intrinsic 25 "assert" 24
+@3:9 drop 25
+@3:9 drop 22
+@8:28 borrow 26 mut 1
+@8:39 int 27 3
+@8:51 int 28 33
+@8:42 intrinsic 29 "box_new" 28
+@8:28 call 30 2 26 27 29
+@8:28 read 31 move 30
+@8:28 call 32 4 31
+@8:1 assign 32 33
+@9:21 borrow 34 shared 1
+@9:39 int 35 1
+@9:38 borrow 36 shared 35
+@9:21 call 37 5 34 36
+@9:13 intrinsic 38 "assert" 37
+@3:9 drop 38
+@3:9 drop 35
+@10:22 borrow 39 shared 1
+@10:40 int 40 2
+@10:39 borrow 41 shared 40
+@10:22 call 42 5 39 41
+@10:21 unary 43 "!" 42
+@10:13 intrinsic 44 "assert" 43
+@3:9 drop 44
+@3:9 drop 40
+@11:42 borrow 45 shared 1
+@11:51 int 46 3
+@11:50 borrow 47 shared 46
+@11:42 call 48 6 45 47
+@11:42 read 49 copy 48
+@11:42 call 50 7 49
+@11:28 assign 50 51
+@11:28 drop 48
+@11:28 drop 46
+@11:64 read 52 copy 51 deref deref
+@11:28 drop 51
+@11:1 assign 52 53
+@12:27 borrow 54 mut 1
+@12:40 int 55 4
+@12:39 borrow 56 shared 55
+@12:27 call 57 8 54 56
+@12:27 read 58 move 57
+@12:27 call 59 9 58
+@12:13 assign 59 60
+@12:13 drop 55
+@12:63 int 61 44
+@12:53 assign 61 60 deref deref
+@12:53 unit 62
+@12:13 drop 62
+@12:13 drop 60
+@12:13 unit 63
+@3:9 drop 63
+@13:41 borrow 64 shared 1
+@13:50 int 65 4
+@13:49 borrow 66 shared 65
+@13:41 call 67 6 64 66
+@13:41 read 68 copy 67
+@13:41 call 69 7 68
+@13:27 assign 69 70
+@13:27 drop 67
+@13:27 drop 65
+@13:63 read 71 copy 70 deref deref
+@13:27 drop 70
+@13:1 assign 71 72
+@14:27 borrow 73 mut 1
+@14:39 int 74 1
+@14:38 borrow 75 shared 74
+@14:27 call 76 10 73 75
+@14:27 read 77 move 76
+@14:27 call 78 4 77
+@14:1 assign 78 79
+@14:1 drop 74
+@15:13 read 80 copy 33 deref
+@15:25 read 81 copy 79 deref
+@15:13 binary 82 "+" 80 81
+@15:36 borrow 83 shared 1
+@15:36 call 84 11 83
+@15:36 intrinsic 85 "cast" 84
+@15:13 binary 86 "+" 82 85
+@15:55 read 87 copy 53
+@15:13 binary 88 "+" 86 87
+@15:66 read 89 copy 72
+@15:13 binary 90 "+" 88 89
+@3:9 drop 79
+@3:9 drop 72
+@3:9 drop 53
+@3:9 drop 33
+@3:9 drop 1
+@3:9 return 90
+endfn
+fn "$std::ordered_map::new$f178<IR=t3;Self=t15;V=t14;>" 0 15 file 6
+local "$" 19 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 15 let
+@33:20 intrinsic 0 "vec_new"
+@34:19 int 1 0
+@35:21 int 2 0
+@36:20 int 3 0
+@32:9 struct 4 0 1 2 3
+@31:9 return 4
+endfn
+fn "$std::ordered_map::insert$f203<IR=t3;Self=t15;V=t14;>" 3 20 file 6
+local "self" 26 let
+local "key" 3 let
+local "value" 14 let
+local "$" 4 let
+local "parent" 4 mut
+local "$" 4 let
+local "index" 4 mut
+local "$" 1 let
+local "left" 1 mut
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$" 28 let
+local "$" 4 let
+local "$" 21 let
+local "$" 2 let
+local "ordering" 2 let
+local "$" 2 let
+local "$" 2 let
+local "$" 2 let
+local "$" 1 let
+local "$" 1 let
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 2 let
+local "$" 2 let
+local "$" 2 let
+local "$" 1 let
+local "$" 1 let
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 4 let
+local "$" 29 mut
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 30 let
+local "entry" 30 let
+local "$" 24 let
+local "$" 14 let
+local "$" 14 let
+local "$" 20 let
+local "$" 0 let
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 0 let
+local "$" 0 let
+local "$" 0 let
+local "$" 26 let
+local "$" 3 let
+local "$" 14 let
+local "$" 4 let
+local "$" 4 let
+local "index" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 1 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 26 let
+local "$" 4 let
+local "$" 0 let
+local "$" 20 let
+@313:26 int 3 0
+@313:1 assign 3 4
+@314:25 read 5 copy 0 deref field 1
+@314:1 assign 5 6
+@315:24 int 7 0
+@315:1 assign 7 8
+@316:9 loop
+@316:15 read 9 copy 6
+@316:24 int 10 0
+@316:15 read 11 copy 10
+@316:15 binary 12 "!=" 9 11
+@316:9 drop 10
+@316:9 unary 13 "!" 12
+@316:9 if 13
+@316:9 break
+@316:9 end
+@317:22 read 14 copy 6
+@317:13 assign 14 4
+@317:13 unit 15
+@316:9 drop 15
+@318:28 borrow 16 shared 0 deref
+@318:45 read 17 copy 6
+@318:52 borrow 18 shared 1
+@318:28 call 19 13 16 17 18
+@318:1 assign 19 20
+@319:16 read 21 copy 20
+@319:27 int 22 0
+@319:16 read 23 copy 22
+@319:16 binary 24 "<" 21 23
+@319:13 if 24
+@320:24 int 25 1
+@320:17 assign 25 8
+@320:17 unit 26
+@319:13 drop 26
+@321:36 read 27 copy 6
+@321:25 read 28 copy 0 deref field 0 index 27 field 1
+@321:17 assign 28 6
+@321:17 unit 29
+@319:13 drop 29
+@319:13 drop 27
+@319:13 unit 30
+@319:13 assign 30 31
+@319:13 else
+@322:23 read 32 copy 20
+@322:34 int 33 0
+@322:23 read 34 copy 33
+@322:23 binary 35 ">" 32 34
+@322:20 if 35
+@323:24 int 36 0
+@323:17 assign 36 8
+@323:17 unit 37
+@322:20 drop 37
+@324:36 read 38 copy 6
+@324:25 read 39 copy 0 deref field 0 index 38 field 2
+@324:17 assign 39 6
+@324:17 unit 40
+@322:20 drop 40
+@322:20 drop 38
+@322:20 unit 41
+@322:20 assign 41 42
+@322:20 else
+@326:39 read 43 copy 6
+@326:23 borrow 44 mut 0 deref field 0 index 43 field 0
+@327:1 int 46 0
+@327:1 assign 46 45
+@327:1 tag-test-place 47 1 44 deref
+@327:1 if 47
+@327:1 int 48 1
+@327:1 int 49 1
+@327:1 binary 50 "&" 48 49
+@327:1 assign 50 45
+@327:1 end
+@327:1 if 45
+@327:1 tag-test-place 51 1 44 deref
+@327:1 if 51
+@327:1 else
+@327:1 trap "unreachable selected pattern"
+@327:1 end
+@327:1 borrow 52 mut 44 deref variant 1 0
+@327:1 assign 52 53
+@328:63 borrow 54 mut 53 deref field 1
+@328:81 read 55 move 2
+@328:45 intrinsic 56 "replace" 54 55
+@328:32 variant 57 1 56
+@328:25 drop 53
+@328:25 drop 44
+@328:25 drop 43
+@328:25 drop 33
+@328:25 drop 22
+@328:25 drop 20
+@328:25 drop 8
+@328:25 drop 6
+@328:25 drop 4
+@328:25 drop 1
+@328:25 drop 0
+@328:25 return 57
+@327:44 unit 58
+@326:17 else
+@330:1 int 60 0
+@330:1 assign 60 59
+@330:1 tag-test-place 61 0 44 deref
+@330:1 if 61
+@330:1 int 62 1
+@330:1 assign 62 59
+@330:1 end
+@330:1 if 59
+@330:1 tag-test-place 63 0 44 deref
+@330:1 if 63
+@330:1 else
+@330:1 trap "unreachable selected pattern"
+@330:1 end
+@330:37 trap "explicit panic"
+@330:37 unit 64
+@326:17 else
+@326:17 trap "unreachable match"
+@326:17 end
+@326:17 end
+@326:17 unit 65
+@325:20 drop 44
+@325:20 drop 43
+@322:20 end
+@319:13 assign 42 31
+@319:13 drop 33
+@319:13 end
+@316:9 drop 22
+@316:9 drop 20
+@316:9 drop 31
+@316:9 continue
+@316:9 end
+@316:9 unit 66
+@312:9 drop 66
+@334:21 borrow 67 mut 0 deref
+@334:35 read 68 copy 1
+@334:40 read 69 move 2
+@334:47 read 70 copy 4
+@334:21 call 71 14 67 68 69 70
+@334:1 assign 71 72
+@335:12 read 73 copy 4
+@335:22 int 74 0
+@335:12 read 75 copy 74
+@335:12 binary 76 "==" 73 75
+@335:9 if 76
+@336:25 read 77 copy 72
+@336:13 assign 77 0 deref field 1
+@336:13 unit 78
+@335:9 drop 78
+@335:9 unit 79
+@335:9 assign 79 80
+@335:9 else
+@337:19 read 81 copy 8
+@337:16 if 81
+@338:39 read 82 copy 72
+@338:24 read 83 copy 4
+@338:13 assign 82 0 deref field 0 index 83 field 1
+@338:13 unit 84
+@337:16 drop 84
+@337:16 drop 83
+@337:16 unit 85
+@337:16 assign 85 86
+@337:16 else
+@340:40 read 87 copy 72
+@340:24 read 88 copy 4
+@340:13 assign 87 0 deref field 0 index 88 field 2
+@340:13 unit 89
+@339:16 drop 89
+@339:16 drop 88
+@339:16 unit 90
+@337:16 assign 90 86
+@337:16 end
+@335:9 assign 86 80
+@335:9 end
+@312:9 drop 80
+@312:9 drop 74
+@342:22 read 91 copy 0 deref field 3
+@342:35 int 92 1
+@342:22 binary 93 "+" 91 92
+@342:9 assign 93 0 deref field 3
+@342:9 unit 94
+@312:9 drop 94
+@343:9 borrow 95 mut 0 deref
+@343:22 read 96 copy 4
+@343:9 call 97 15 95 96
+@312:9 drop 97
+@344:9 variant 98 0
+@312:9 drop 72
+@312:9 drop 8
+@312:9 drop 6
+@312:9 drop 4
+@312:9 drop 1
+@312:9 drop 0
+@312:9 return 98
+endfn
+fn "$std::prelude::is_none$f521<Self=t20;T=t14;>" 1 1 file 13
+local "self" 27 let
+local "$" 27 let
+local "$" 1 let
+local "$" 1 let
+@85:10 borrow 1 shared 0 deref
+@85:10 call 2 16 1
+@85:9 unary 3 "!" 2
+@84:9 drop 0
+@84:9 return 3
+endfn
+fn "$std::prelude::unwrap$f526<Self=t20;T=t14;>" 1 14 file 13
+local "self" 20 let
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 14 let
+local "value" 14 let
+local "$" 14 let
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 0 let
+local "$" 0 let
+@118:1 int 2 0
+@118:1 assign 2 1
+@118:1 tag-test-place 3 1 0
+@118:1 if 3
+@118:1 int 4 1
+@118:1 int 5 1
+@118:1 binary 6 "&" 4 5
+@118:1 assign 6 1
+@118:1 end
+@118:1 if 1
+@118:1 tag-test-place 7 1 0
+@118:1 if 7
+@118:1 else
+@118:1 trap "unreachable selected pattern"
+@118:1 end
+@118:1 read 8 move 0 variant 1 0
+@118:1 assign 8 9
+@118:43 read 10 move 9
+@118:36 drop 0
+@118:36 return 10
+@117:9 else
+@119:1 int 12 0
+@119:1 assign 12 11
+@119:1 tag-test-place 13 0 0
+@119:1 if 13
+@119:1 int 14 1
+@119:1 assign 14 11
+@119:1 end
+@119:1 if 11
+@119:1 tag-test-place 15 0 0
+@119:1 if 15
+@119:1 else
+@119:1 trap "unreachable selected pattern"
+@119:1 end
+@119:29 trap "explicit panic"
+@119:29 unit 16
+@117:9 else
+@117:9 trap "unreachable match"
+@117:9 end
+@117:9 end
+@117:9 unit 17
+endfn
+fn "$std::ordered_map::contains_key$f200<IR=t3;Self=t15;V=t14;>" 2 1 file 6
+local "self" 28 let
+local "key" 21 let
+local "$" 28 let
+local "$" 21 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+@288:9 borrow 2 shared 0 deref
+@288:24 read 3 copy 1
+@288:9 call 4 17 2 3
+@288:9 read 5 copy 4
+@288:32 int 6 0
+@288:9 read 7 copy 6
+@288:9 binary 8 "!=" 5 7
+@287:9 drop 6
+@287:9 drop 4
+@287:9 drop 1
+@287:9 drop 0
+@287:9 return 8
+endfn
+fn "$std::ordered_map::get$f201<IR=t3;Self=t15;V=t14;>" 2 23 file 6 from 0
+local "self" 28 let
+local "key" 21 let
+local "$" 28 let
+local "$" 21 let
+local "$" 4 let
+local "index" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 23 let
+local "$if" 23 mut
+local "$" 4 let
+local "$" 33 mut
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 34 let
+local "entry" 34 let
+local "$" 22 let
+local "$" 23 let
+local "$match" 23 mut
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 0 let
+@291:21 borrow 2 shared 0 deref
+@291:36 read 3 copy 1
+@291:21 call 4 17 2 3
+@291:1 assign 4 5
+@292:12 read 6 copy 5
+@292:21 int 7 0
+@292:12 read 8 copy 7
+@292:12 binary 9 "==" 6 8
+@292:9 if 9
+@293:13 variant 10 0
+@292:9 assign 10 11
+@292:9 else
+@295:31 read 12 copy 5
+@295:19 borrow 13 shared 0 deref field 0 index 12 field 0
+@296:1 int 15 0
+@296:1 assign 15 14
+@296:1 tag-test-place 16 1 13 deref
+@296:1 if 16
+@296:1 int 17 1
+@296:1 int 18 1
+@296:1 binary 19 "&" 17 18
+@296:1 assign 19 14
+@296:1 end
+@296:1 if 14
+@296:1 tag-test-place 20 1 13 deref
+@296:1 if 20
+@296:1 else
+@296:1 trap "unreachable selected pattern"
+@296:1 end
+@296:1 borrow 21 shared 13 deref variant 1 0
+@296:1 assign 21 22
+@296:53 borrow 23 shared 22 deref field 1
+@296:40 variant 24 1 23
+@295:13 assign 24 25
+@295:13 drop 22
+@295:13 drop 13
+@295:13 else
+@297:1 int 27 0
+@297:1 assign 27 26
+@297:1 tag-test-place 28 0 13 deref
+@297:1 if 28
+@297:1 int 29 1
+@297:1 assign 29 26
+@297:1 end
+@297:1 if 26
+@297:1 tag-test-place 30 0 13 deref
+@297:1 if 30
+@297:1 else
+@297:1 trap "unreachable selected pattern"
+@297:1 end
+@297:33 trap "explicit panic"
+@297:33 unit 31
+@295:13 else
+@295:13 trap "unreachable match"
+@295:13 end
+@295:13 end
+@294:16 drop 12
+@292:9 assign 25 11
+@292:9 end
+@290:9 drop 7
+@290:9 drop 5
+@290:9 drop 1
+@290:9 drop 0
+@290:9 return 11
+endfn
+fn "$std::prelude::unwrap$f526<Self=t23;T=t22;>" 1 22 file 13
+return-leaf 0 exact 0 variant 1 0
+local "self" 23 let
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 22 let
+local "value" 22 let
+local "$" 22 let
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 0 let
+local "$" 0 let
+@118:1 int 2 0
+@118:1 assign 2 1
+@118:1 tag-test-place 3 1 0
+@118:1 if 3
+@118:1 int 4 1
+@118:1 int 5 1
+@118:1 binary 6 "&" 4 5
+@118:1 assign 6 1
+@118:1 end
+@118:1 if 1
+@118:1 tag-test-place 7 1 0
+@118:1 if 7
+@118:1 else
+@118:1 trap "unreachable selected pattern"
+@118:1 end
+@118:1 read 8 copy 0 variant 1 0
+@118:1 assign 8 9
+@118:43 read 10 copy 9
+@118:36 drop 9
+@118:36 drop 0
+@118:36 return 10
+@117:9 else
+@119:1 int 12 0
+@119:1 assign 12 11
+@119:1 tag-test-place 13 0 0
+@119:1 if 13
+@119:1 int 14 1
+@119:1 assign 14 11
+@119:1 end
+@119:1 if 11
+@119:1 tag-test-place 15 0 0
+@119:1 if 15
+@119:1 else
+@119:1 trap "unreachable selected pattern"
+@119:1 end
+@119:29 trap "explicit panic"
+@119:29 unit 16
+@117:9 else
+@117:9 trap "unreachable match"
+@117:9 end
+@117:9 end
+@117:9 unit 17
+endfn
+fn "$std::ordered_map::get_mut$f202<IR=t3;Self=t15;V=t14;>" 2 25 file 6 from 0
+local "self" 26 let
+local "key" 21 let
+local "$" 28 let
+local "$" 21 let
+local "$" 4 let
+local "index" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 25 let
+local "$if" 25 mut
+local "$" 4 let
+local "$" 29 mut
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 30 let
+local "entry" 30 let
+local "$" 24 let
+local "$" 25 let
+local "$match" 25 mut
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 0 let
+@302:21 borrow 2 shared 0 deref
+@302:36 read 3 copy 1
+@302:21 call 4 17 2 3
+@302:1 assign 4 5
+@303:12 read 6 copy 5
+@303:21 int 7 0
+@303:12 read 8 copy 7
+@303:12 binary 9 "==" 6 8
+@303:9 if 9
+@304:13 variant 10 0
+@303:9 assign 10 11
+@303:9 else
+@306:35 read 12 copy 5
+@306:19 borrow 13 mut 0 deref field 0 index 12 field 0
+@307:1 int 15 0
+@307:1 assign 15 14
+@307:1 tag-test-place 16 1 13 deref
+@307:1 if 16
+@307:1 int 17 1
+@307:1 int 18 1
+@307:1 binary 19 "&" 17 18
+@307:1 assign 19 14
+@307:1 end
+@307:1 if 14
+@307:1 tag-test-place 20 1 13 deref
+@307:1 if 20
+@307:1 else
+@307:1 trap "unreachable selected pattern"
+@307:1 end
+@307:1 borrow 21 mut 13 deref variant 1 0
+@307:1 assign 21 22
+@307:53 borrow 23 mut 22 deref field 1
+@307:40 variant 24 1 23
+@306:13 assign 24 25
+@306:13 drop 22
+@306:13 drop 13
+@306:13 else
+@308:1 int 27 0
+@308:1 assign 27 26
+@308:1 tag-test-place 28 0 13 deref
+@308:1 if 28
+@308:1 int 29 1
+@308:1 assign 29 26
+@308:1 end
+@308:1 if 26
+@308:1 tag-test-place 30 0 13 deref
+@308:1 if 30
+@308:1 else
+@308:1 trap "unreachable selected pattern"
+@308:1 end
+@308:33 trap "explicit panic"
+@308:33 unit 31
+@306:13 else
+@306:13 trap "unreachable match"
+@306:13 end
+@306:13 end
+@305:16 drop 12
+@303:9 assign 25 11
+@303:9 end
+@301:9 drop 7
+@301:9 drop 5
+@301:9 drop 1
+@301:9 drop 0
+@301:9 return 11
+endfn
+fn "$std::prelude::unwrap$f526<Self=t25;T=t24;>" 1 24 file 13
+return-leaf 0 exact 0 variant 1 0
+local "self" 25 let
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 24 let
+local "value" 24 let
+local "$" 24 let
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 0 let
+local "$" 0 let
+@118:1 int 2 0
+@118:1 assign 2 1
+@118:1 tag-test-place 3 1 0
+@118:1 if 3
+@118:1 int 4 1
+@118:1 int 5 1
+@118:1 binary 6 "&" 4 5
+@118:1 assign 6 1
+@118:1 end
+@118:1 if 1
+@118:1 tag-test-place 7 1 0
+@118:1 if 7
+@118:1 else
+@118:1 trap "unreachable selected pattern"
+@118:1 end
+@118:1 read 8 move 0 variant 1 0
+@118:1 assign 8 9
+@118:43 borrow 10 mut 9 deref
+@118:36 drop 9
+@118:36 drop 0
+@118:36 return 10
+@117:9 else
+@119:1 int 12 0
+@119:1 assign 12 11
+@119:1 tag-test-place 13 0 0
+@119:1 if 13
+@119:1 int 14 1
+@119:1 assign 14 11
+@119:1 end
+@119:1 if 11
+@119:1 tag-test-place 15 0 0
+@119:1 if 15
+@119:1 else
+@119:1 trap "unreachable selected pattern"
+@119:1 end
+@119:29 trap "explicit panic"
+@119:29 unit 16
+@117:9 else
+@117:9 trap "unreachable match"
+@117:9 end
+@117:9 end
+@117:9 unit 17
+endfn
+fn "$std::ordered_map::remove$f204<IR=t3;Self=t15;V=t14;>" 2 20 file 6
+local "self" 26 let
+local "key" 21 let
+local "$" 28 let
+local "$" 21 let
+local "$" 4 let
+local "index" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 20 let
+local "$if" 20 mut
+local "$" 26 let
+local "$" 4 let
+local "$" 17 mut
+local "$" 14 let
+local "$" 20 let
+@347:21 borrow 2 shared 0 deref
+@347:36 read 3 copy 1
+@347:21 call 4 17 2 3
+@347:1 assign 4 5
+@348:12 read 6 copy 5
+@348:21 int 7 0
+@348:12 read 8 copy 7
+@348:12 binary 9 "==" 6 8
+@348:9 if 9
+@349:13 variant 10 0
+@348:9 assign 10 11
+@348:9 else
+@351:26 borrow 12 mut 0 deref
+@351:43 read 13 copy 5
+@351:26 call 14 18 12 13
+@351:26 read 15 move 14 field 1
+@351:13 variant 16 1 15
+@350:16 drop 14
+@348:9 assign 16 11
+@348:9 end
+@346:9 drop 7
+@346:9 drop 5
+@346:9 drop 1
+@346:9 drop 0
+@346:9 return 11
+endfn
+fn "$std::ordered_map::len$f179<IR=t3;Self=t15;V=t14;>" 1 4 file 6
+local "self" 28 let
+local "$" 4 let
+@40:9 read 1 copy 0 deref field 3
+@39:9 drop 0
+@39:9 return 1
+endfn
+fn "$std::ordered_map::drop$f205<IR=t3;Self=t15;V=t14;>" 1 0 file 6
+local "self" 26 let
+local "$" 26 let
+local "$" 0 let
+local "$" 0 let
+@358:9 borrow 1 mut 0 deref
+@358:9 call 2 19 1
+@357:5 drop 2
+@357:5 unit 3
+@357:5 drop 0
+@357:5 return 3
+endfn
+fn "$std::ordered_map::compare_key$f198<IR=t3;Self=t15;V=t14;>" 3 2 file 6
+local "self" 28 let
+local "index" 4 let
+local "key" 21 let
+local "$" 4 let
+local "$" 33 mut
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 34 let
+local "entry" 34 let
+local "$" 3 let
+local "$" 3 let
+local "$" 1 let
+local "$" 2 let
+local "$if" 2 mut
+local "$" 3 let
+local "$" 3 let
+local "$" 1 let
+local "$" 2 let
+local "$if" 2 mut
+local "$" 2 let
+local "$match" 2 mut
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 0 let
+@260:27 read 3 copy 1
+@260:15 borrow 4 shared 0 deref field 0 index 3 field 0
+@261:1 int 6 0
+@261:1 assign 6 5
+@261:1 tag-test-place 7 1 4 deref
+@261:1 if 7
+@261:1 int 8 1
+@261:1 int 9 1
+@261:1 binary 10 "&" 8 9
+@261:1 assign 10 5
+@261:1 end
+@261:1 if 5
+@261:1 tag-test-place 11 1 4 deref
+@261:1 if 11
+@261:1 else
+@261:1 trap "unreachable selected pattern"
+@261:1 end
+@261:1 borrow 12 shared 4 deref variant 1 0
+@261:1 assign 12 13
+@262:20 read 14 copy 2 deref
+@262:20 read 15 copy 13 deref field 0
+@262:20 binary 16 "<" 14 15
+@262:17 if 16
+@263:21 int 17 -1
+@262:17 assign 17 18
+@262:17 else
+@264:27 read 19 copy 2 deref
+@264:27 read 20 copy 13 deref field 0
+@264:27 binary 21 ">" 19 20
+@264:24 if 21
+@265:21 int 22 1
+@264:24 assign 22 23
+@264:24 else
+@267:21 int 24 0
+@264:24 assign 24 23
+@264:24 end
+@262:17 assign 23 18
+@262:17 end
+@260:9 assign 18 25
+@260:9 drop 13
+@260:9 drop 4
+@260:9 else
+@270:1 int 27 0
+@270:1 assign 27 26
+@270:1 tag-test-place 28 0 4 deref
+@270:1 if 28
+@270:1 int 29 1
+@270:1 assign 29 26
+@270:1 end
+@270:1 if 26
+@270:1 tag-test-place 30 0 4 deref
+@270:1 if 30
+@270:1 else
+@270:1 trap "unreachable selected pattern"
+@270:1 end
+@270:29 trap "explicit panic"
+@270:29 unit 31
+@260:9 else
+@260:9 trap "unreachable match"
+@260:9 end
+@260:9 end
+@259:5 drop 3
+@259:5 drop 2
+@259:5 drop 1
+@259:5 drop 0
+@259:5 return 25
+endfn
+fn "$std::ordered_map::allocate$f189<IR=t3;Self=t15;V=t14;>" 4 4 file 6
+local "self" 26 let
+local "key" 3 let
+local "value" 14 let
+local "parent" 4 let
+local "$" 3 let
+local "$" 14 let
+local "$" 17 let
+local "$" 18 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 16 let
+local "node" 16 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 4 let
+local "index" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 16 let
+local "$" 4 let
+local "$" 35 let
+local "$" 16 let
+local "$" 0 let
+local "$" 4 let
+local "$if" 4 mut
+local "$" 36 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 18 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 16 let
+local "$" 37 let
+local "$" 0 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 36 let
+local "$" 4 let
+local "index" 4 let
+local "$" 16 let
+local "$" 37 let
+local "$" 0 let
+local "$" 4 let
+@141:40 read 4 copy 1
+@141:45 read 5 move 2
+@141:33 struct 6 4 5
+@141:20 variant 7 1 6
+@142:19 int 8 0
+@143:20 int 9 0
+@144:13 read 10 copy 3
+@145:21 int 11 1
+@140:20 struct 12 7 8 9 10 11
+@140:1 assign 12 13
+@147:12 read 14 copy 0 deref field 2
+@147:27 int 15 0
+@147:12 read 16 copy 15
+@147:12 binary 17 "!=" 14 16
+@147:9 if 17
+@148:25 read 18 copy 0 deref field 2
+@148:1 assign 18 19
+@149:38 read 20 copy 19
+@149:27 read 21 copy 0 deref field 0 index 20 field 2
+@149:13 assign 21 0 deref field 2
+@149:13 unit 22
+@147:9 drop 22
+@147:9 drop 20
+@150:33 read 23 move 13
+@150:24 read 24 copy 19
+@150:13 borrow 25 mut 0 deref field 0 index 24
+@150:13 intrinsic 26 "replace" 25 23
+@150:13 drop 26
+@150:13 unit 27
+@147:9 drop 27
+@147:9 drop 24
+@151:13 read 28 copy 19
+@147:9 drop 19
+@147:9 assign 28 29
+@147:9 else
+@153:16 borrow 30 shared 0 deref field 0
+@153:16 intrinsic 31 "vec_len" 30
+@153:16 read 32 copy 31
+@153:36 int 33 0
+@153:16 read 34 copy 33
+@153:16 binary 35 "==" 32 34
+@153:13 if 35
+@156:28 variant 36 0
+@157:27 int 37 0
+@158:28 int 38 0
+@159:29 int 39 0
+@160:29 int 40 0
+@155:33 struct 41 36 37 38 39 40
+@155:17 borrow 42 mut 0 deref field 0
+@155:17 intrinsic 43 "vec_push" 42 41
+@153:13 drop 43
+@153:13 unit 44
+@153:13 assign 44 45
+@153:13 else
+@153:13 unit 46
+@153:13 assign 46 45
+@153:13 end
+@152:16 drop 45
+@152:16 drop 33
+@152:16 drop 31
+@163:25 borrow 47 shared 0 deref field 0
+@163:25 intrinsic 48 "vec_len" 47
+@163:1 assign 48 49
+@164:29 read 50 move 13
+@164:13 borrow 51 mut 0 deref field 0
+@164:13 intrinsic 52 "vec_push" 51 50
+@152:16 drop 52
+@165:13 read 53 copy 49
+@152:16 drop 49
+@147:9 assign 53 29
+@147:9 end
+@139:5 drop 15
+@139:5 drop 3
+@139:5 drop 1
+@139:5 drop 0
+@139:5 return 29
+endfn
+fn "$std::ordered_map::balance$f188<IR=t3;Self=t15;V=t14;>" 2 0 file 6
+local "self" 26 let
+local "index" 4 mut
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 1 let
+local "$" 26 let
+local "$" 4 let
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "left" 4 let
+local "$" 4 let
+local "$" 4 let
+local "right" 4 let
+local "$" 28 let
+local "$" 4 let
+local "$" 4 let
+local "left_height" 4 let
+local "$" 28 let
+local "$" 4 let
+local "$" 4 let
+local "right_height" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 28 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 28 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 26 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 26 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 28 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 28 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 26 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 26 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$" 0 let
+@119:9 loop
+@119:15 read 2 copy 1
+@119:24 int 3 0
+@119:15 read 4 copy 3
+@119:15 binary 5 "!=" 2 4
+@119:9 drop 3
+@119:9 unary 6 "!" 5
+@119:9 if 6
+@119:9 break
+@119:9 end
+@120:13 borrow 7 mut 0 deref
+@120:32 read 8 copy 1
+@120:13 call 9 20 7 8
+@119:9 drop 9
+@121:35 read 10 copy 1
+@121:24 read 11 copy 0 deref field 0 index 10 field 1
+@121:1 assign 11 12
+@121:1 drop 10
+@122:36 read 13 copy 1
+@122:25 read 14 copy 0 deref field 0 index 13 field 2
+@122:1 assign 14 15
+@122:1 drop 13
+@123:31 borrow 16 shared 0 deref
+@123:43 read 17 copy 12
+@123:31 call 18 21 16 17
+@123:1 assign 18 19
+@124:32 borrow 20 shared 0 deref
+@124:44 read 21 copy 15
+@124:32 call 22 21 20 21
+@124:1 assign 22 23
+@125:16 read 24 copy 19
+@125:30 read 25 copy 23
+@125:45 int 26 1
+@125:30 binary 27 "+" 25 26
+@125:16 read 28 copy 27
+@125:16 binary 29 ">" 24 28
+@125:13 if 29
+@126:20 borrow 30 shared 0 deref
+@126:43 read 31 copy 12
+@126:32 read 32 copy 0 deref field 0 index 31 field 1
+@126:20 call 33 21 30 32
+@126:20 read 34 copy 33
+@126:57 borrow 35 shared 0 deref
+@126:80 read 36 copy 12
+@126:69 read 37 copy 0 deref field 0 index 36 field 2
+@126:57 call 38 21 35 37
+@126:20 read 39 copy 38
+@126:20 binary 40 "<" 34 39
+@126:17 if 40
+@127:21 borrow 41 mut 0 deref
+@127:38 read 42 copy 12
+@127:21 call 43 22 41 42
+@126:17 drop 43
+@126:17 unit 44
+@126:17 assign 44 45
+@126:17 else
+@126:17 unit 46
+@126:17 assign 46 45
+@126:17 end
+@125:13 drop 45
+@125:13 drop 38
+@125:13 drop 36
+@125:13 drop 33
+@125:13 drop 31
+@129:25 borrow 47 mut 0 deref
+@129:43 read 48 copy 1
+@129:25 call 49 23 47 48
+@129:17 assign 49 1
+@129:17 unit 50
+@125:13 drop 50
+@125:13 unit 51
+@125:13 assign 51 52
+@125:13 else
+@130:23 read 53 copy 23
+@130:38 read 54 copy 19
+@130:52 int 55 1
+@130:38 binary 56 "+" 54 55
+@130:23 read 57 copy 56
+@130:23 binary 58 ">" 53 57
+@130:20 if 58
+@131:20 borrow 59 shared 0 deref
+@131:43 read 60 copy 15
+@131:32 read 61 copy 0 deref field 0 index 60 field 2
+@131:20 call 62 21 59 61
+@131:20 read 63 copy 62
+@131:59 borrow 64 shared 0 deref
+@131:82 read 65 copy 15
+@131:71 read 66 copy 0 deref field 0 index 65 field 1
+@131:59 call 67 21 64 66
+@131:20 read 68 copy 67
+@131:20 binary 69 "<" 63 68
+@131:17 if 69
+@132:21 borrow 70 mut 0 deref
+@132:39 read 71 copy 15
+@132:21 call 72 23 70 71
+@131:17 drop 72
+@131:17 unit 73
+@131:17 assign 73 74
+@131:17 else
+@131:17 unit 75
+@131:17 assign 75 74
+@131:17 end
+@130:20 drop 74
+@130:20 drop 67
+@130:20 drop 65
+@130:20 drop 62
+@130:20 drop 60
+@134:25 borrow 76 mut 0 deref
+@134:42 read 77 copy 1
+@134:25 call 78 22 76 77
+@134:17 assign 78 1
+@134:17 unit 79
+@130:20 drop 79
+@130:20 unit 80
+@130:20 assign 80 81
+@130:20 else
+@130:20 unit 82
+@130:20 assign 82 81
+@130:20 end
+@125:13 assign 81 52
+@125:13 drop 56
+@125:13 end
+@119:9 drop 52
+@119:9 drop 27
+@136:32 read 83 copy 1
+@136:21 read 84 copy 0 deref field 0 index 83 field 3
+@136:13 assign 84 1
+@136:13 unit 85
+@119:9 drop 85
+@119:9 drop 83
+@119:9 unit 86
+@119:9 drop 23
+@119:9 drop 19
+@119:9 drop 15
+@119:9 drop 12
+@119:9 drop 86
+@119:9 continue
+@119:9 end
+@119:9 unit 87
+@118:5 drop 1
+@118:5 drop 0
+@118:5 return 87
+endfn
+fn "$std::prelude::is_some$f520<Self=t20;T=t14;>" 1 1 file 13
+local "self" 27 let
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$match" 1 mut
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+@79:1 int 2 0
+@79:1 assign 2 1
+@79:1 tag-test-place 3 0 0 deref
+@79:1 if 3
+@79:1 int 4 1
+@79:1 assign 4 1
+@79:1 end
+@79:1 if 1
+@79:1 tag-test-place 5 0 0 deref
+@79:1 if 5
+@79:1 else
+@79:1 trap "unreachable selected pattern"
+@79:1 end
+@79:29 int 6 0
+@78:9 assign 6 7
+@78:9 else
+@80:1 int 9 0
+@80:1 assign 9 8
+@80:1 tag-test-place 10 1 0 deref
+@80:1 if 10
+@80:1 int 11 1
+@80:1 int 12 1
+@80:1 binary 13 "&" 11 12
+@80:1 assign 13 8
+@80:1 end
+@80:1 if 8
+@80:1 tag-test-place 14 1 0 deref
+@80:1 if 14
+@80:1 else
+@80:1 trap "unreachable selected pattern"
+@80:1 end
+@80:32 int 15 1
+@78:9 assign 15 7
+@78:9 else
+@78:9 trap "unreachable match"
+@78:9 end
+@78:9 end
+@77:9 drop 0
+@77:9 return 7
+endfn
+fn "$std::ordered_map::find_node$f199<IR=t3;Self=t15;V=t14;>" 2 4 file 6
+local "self" 28 let
+local "key" 21 let
+local "$" 4 let
+local "index" 4 mut
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 1 let
+local "$" 28 let
+local "$" 4 let
+local "$" 21 let
+local "$" 2 let
+local "ordering" 2 let
+local "$" 2 let
+local "$" 2 let
+local "$" 2 let
+local "$" 1 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 2 let
+local "$" 2 let
+local "$" 2 let
+local "$" 1 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$" 4 let
+@274:25 read 2 copy 0 deref field 1
+@274:1 assign 2 3
+@275:9 loop
+@275:15 read 4 copy 3
+@275:24 int 5 0
+@275:15 read 6 copy 5
+@275:15 binary 7 "!=" 4 6
+@275:9 drop 5
+@275:9 unary 8 "!" 7
+@275:9 if 8
+@275:9 break
+@275:9 end
+@276:28 borrow 9 shared 0 deref
+@276:45 read 10 copy 3
+@276:52 read 11 copy 1
+@276:28 call 12 13 9 10 11
+@276:1 assign 12 13
+@277:16 read 14 copy 13
+@277:27 int 15 0
+@277:16 read 16 copy 15
+@277:16 binary 17 "<" 14 16
+@277:13 if 17
+@278:36 read 18 copy 3
+@278:25 read 19 copy 0 deref field 0 index 18 field 1
+@278:17 assign 19 3
+@278:17 unit 20
+@277:13 drop 20
+@277:13 drop 18
+@277:13 unit 21
+@277:13 assign 21 22
+@277:13 else
+@279:23 read 23 copy 13
+@279:34 int 24 0
+@279:23 read 25 copy 24
+@279:23 binary 26 ">" 23 25
+@279:20 if 26
+@280:36 read 27 copy 3
+@280:25 read 28 copy 0 deref field 0 index 27 field 2
+@280:17 assign 28 3
+@280:17 unit 29
+@279:20 drop 29
+@279:20 drop 27
+@279:20 unit 30
+@279:20 assign 30 31
+@279:20 else
+@282:24 read 32 copy 3
+@282:17 drop 24
+@282:17 drop 15
+@282:17 drop 13
+@282:17 drop 3
+@282:17 drop 1
+@282:17 drop 0
+@282:17 return 32
+@281:20 unit 33
+@279:20 end
+@277:13 assign 31 22
+@277:13 drop 24
+@277:13 end
+@275:9 drop 15
+@275:9 drop 13
+@275:9 drop 22
+@275:9 continue
+@275:9 end
+@275:9 unit 34
+@273:5 drop 34
+@285:9 int 35 0
+@273:5 drop 3
+@273:5 drop 1
+@273:5 drop 0
+@273:5 return 35
+endfn
+fn "$std::ordered_map::remove_node$f190<IR=t3;Self=t15;V=t14;>" 2 17 file 6
+local "self" 26 let
+local "index" 4 mut
+local "$" 4 let
+local "$" 29 let
+local "$" 18 mut
+local "$" 18 let
+local "$" 17 let
+local "removed" 17 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$if" 1 mut
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 1 let
+local "$" 28 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "next" 4 let
+local "$" 4 let
+local "$" 29 let
+local "$" 18 let
+local "$" 4 let
+local "$" 29 let
+local "$" 18 let
+local "$" 0 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "parent" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 4 let
+local "$" 4 let
+local "$if" 4 mut
+local "$" 4 let
+local "$" 4 let
+local "child" 4 let
+local "$" 26 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 4 let
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 26 let
+local "$" 4 let
+local "$" 0 let
+local "$" 17 let
+@169:34 read 2 copy 1
+@169:23 borrow 3 mut 0 deref field 0 index 2 field 0
+@169:23 call 4 24 3
+@169:23 read 5 move 4
+@169:23 call 6 25 5
+@169:1 assign 6 7
+@169:1 drop 2
+@170:23 read 8 copy 1
+@170:12 read 9 copy 0 deref field 0 index 8 field 1
+@170:38 int 10 0
+@170:12 read 11 copy 10
+@170:12 binary 12 "!=" 9 11
+@170:12 if 12
+@170:54 read 14 copy 1
+@170:43 read 15 copy 0 deref field 0 index 14 field 2
+@170:70 int 16 0
+@170:43 read 17 copy 16
+@170:43 binary 18 "!=" 15 17
+@170:12 assign 18 13
+@170:12 drop 16
+@170:12 drop 14
+@170:12 else
+@170:12 int 19 0
+@170:12 assign 19 13
+@170:12 end
+@170:9 if 13
+@171:24 borrow 20 shared 0 deref
+@171:51 read 21 copy 1
+@171:40 read 22 copy 0 deref field 0 index 21 field 2
+@171:24 call 23 26 20 22
+@171:1 assign 23 24
+@171:1 drop 21
+@172:50 read 25 copy 24
+@172:39 borrow 26 mut 0 deref field 0 index 25 field 0
+@172:39 call 27 24 26
+@172:24 read 28 copy 1
+@172:13 borrow 29 mut 0 deref field 0 index 28 field 0
+@172:13 intrinsic 30 "replace" 29 27
+@172:13 drop 30
+@172:13 unit 31
+@170:9 drop 31
+@170:9 drop 28
+@170:9 drop 25
+@173:21 read 32 copy 24
+@173:13 assign 32 1
+@173:13 unit 33
+@170:9 drop 33
+@170:9 unit 34
+@170:9 drop 24
+@170:9 assign 34 35
+@170:9 else
+@170:9 unit 36
+@170:9 assign 36 35
+@170:9 end
+@168:5 drop 35
+@168:5 drop 10
+@168:5 drop 8
+@175:33 read 37 copy 1
+@175:22 read 38 copy 0 deref field 0 index 37 field 3
+@175:1 assign 38 39
+@175:1 drop 37
+@176:35 read 40 copy 1
+@176:24 read 41 copy 0 deref field 0 index 40 field 1
+@176:50 int 42 0
+@176:24 read 43 copy 42
+@176:24 binary 44 "!=" 41 43
+@176:21 if 44
+@177:24 read 45 copy 1
+@177:13 read 46 copy 0 deref field 0 index 45 field 1
+@176:21 drop 45
+@176:21 assign 46 47
+@176:21 else
+@179:24 read 48 copy 1
+@179:13 read 49 copy 0 deref field 0 index 48 field 2
+@178:16 drop 48
+@176:21 assign 49 47
+@176:21 end
+@176:1 assign 47 50
+@176:1 drop 42
+@176:1 drop 40
+@181:9 borrow 51 mut 0 deref
+@181:29 read 52 copy 1
+@181:36 read 53 copy 50
+@181:9 call 54 27 51 52 53
+@168:5 drop 54
+@182:34 int 55 0
+@182:20 read 56 copy 1
+@182:9 assign 55 0 deref field 0 index 56 field 1
+@182:9 unit 57
+@168:5 drop 57
+@168:5 drop 56
+@183:35 read 58 copy 0 deref field 2
+@183:20 read 59 copy 1
+@183:9 assign 58 0 deref field 0 index 59 field 2
+@183:9 unit 60
+@168:5 drop 60
+@168:5 drop 59
+@184:36 int 61 0
+@184:20 read 62 copy 1
+@184:9 assign 61 0 deref field 0 index 62 field 3
+@184:9 unit 63
+@168:5 drop 63
+@168:5 drop 62
+@185:36 int 64 0
+@185:20 read 65 copy 1
+@185:9 assign 64 0 deref field 0 index 65 field 4
+@185:9 unit 66
+@168:5 drop 66
+@168:5 drop 65
+@186:23 read 67 copy 1
+@186:9 assign 67 0 deref field 2
+@186:9 unit 68
+@168:5 drop 68
+@187:22 read 69 copy 0 deref field 3
+@187:35 int 70 1
+@187:22 binary 71 "-" 69 70
+@187:9 assign 71 0 deref field 3
+@187:9 unit 72
+@168:5 drop 72
+@188:9 borrow 73 mut 0 deref
+@188:22 read 74 copy 39
+@188:9 call 75 15 73 74
+@168:5 drop 75
+@189:9 read 76 move 7
+@168:5 drop 50
+@168:5 drop 39
+@168:5 drop 1
+@168:5 drop 0
+@168:5 return 76
+endfn
+fn "$std::ordered_map::clear$f191<IR=t3;Self=t15;V=t14;>" 1 0 file 6
+local "self" 26 let
+local "$" 28 let
+local "$" 4 let
+local "$" 4 let
+local "index" 4 mut
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 1 let
+local "$" 28 let
+local "$" 4 let
+local "$" 4 let
+local "next" 4 let
+local "$" 4 let
+local "$" 29 let
+local "$" 18 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$" 0 let
+local "$" 19 let
+local "$" 37 let
+local "$" 19 let
+local "$" 0 let
+local "$" 4 let
+local "$" 0 let
+local "$" 4 let
+local "$" 0 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+@192:25 borrow 1 shared 0 deref
+@192:41 read 2 copy 0 deref field 1
+@192:25 call 3 26 1 2
+@192:1 assign 3 4
+@193:9 loop
+@193:15 read 5 copy 4
+@193:24 int 6 0
+@193:15 read 7 copy 6
+@193:15 binary 8 "!=" 5 7
+@193:9 drop 6
+@193:9 unary 9 "!" 8
+@193:9 if 9
+@193:9 break
+@193:9 end
+@194:24 borrow 10 shared 0 deref
+@194:39 read 11 copy 4
+@194:24 call 12 28 10 11
+@194:1 assign 12 13
+@196:24 read 14 copy 4
+@196:13 borrow 15 mut 0 deref field 0 index 14 field 0
+@196:13 call 16 24 15
+@193:9 drop 16
+@193:9 drop 14
+@197:21 read 17 copy 13
+@197:13 assign 17 4
+@197:13 unit 18
+@193:9 drop 18
+@193:9 unit 19
+@193:9 drop 13
+@193:9 drop 19
+@193:9 continue
+@193:9 end
+@193:9 unit 20
+@191:9 drop 20
+@199:22 intrinsic 21 "vec_new"
+@199:9 borrow 22 mut 0 deref field 0
+@199:9 intrinsic 23 "replace" 22 21
+@199:9 drop 23
+@199:9 unit 24
+@191:9 drop 24
+@200:21 int 25 0
+@200:9 assign 25 0 deref field 1
+@200:9 unit 26
+@191:9 drop 26
+@201:23 int 27 0
+@201:9 assign 27 0 deref field 2
+@201:9 unit 28
+@191:9 drop 28
+@202:22 int 29 0
+@202:9 assign 29 0 deref field 3
+@202:9 unit 30
+@191:9 drop 30
+@191:9 unit 31
+@191:9 drop 4
+@191:9 drop 0
+@191:9 return 31
+endfn
+fn "$std::ordered_map::update_height$f184<IR=t3;Self=t15;V=t14;>" 2 0 file 6
+local "self" 26 let
+local "index" 4 let
+local "$" 28 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "left" 4 let
+local "$" 28 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "right" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 4 let
+local "$if" 4 mut
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+@73:20 borrow 2 shared 0 deref
+@73:43 read 3 copy 1
+@73:32 read 4 copy 0 deref field 0 index 3 field 1
+@73:20 call 5 21 2 4
+@73:1 assign 5 6
+@73:1 drop 3
+@74:21 borrow 7 shared 0 deref
+@74:44 read 8 copy 1
+@74:33 read 9 copy 0 deref field 0 index 8 field 2
+@74:21 call 10 21 7 9
+@74:1 assign 10 11
+@74:1 drop 8
+@75:36 int 12 1
+@75:48 read 13 copy 6
+@75:48 read 14 copy 11
+@75:48 binary 15 ">" 13 14
+@75:45 if 15
+@75:63 read 16 copy 6
+@75:45 assign 16 17
+@75:45 else
+@75:77 read 18 copy 11
+@75:45 assign 18 17
+@75:45 end
+@75:36 binary 19 "+" 12 17
+@75:20 read 20 copy 1
+@75:9 assign 19 0 deref field 0 index 20 field 4
+@75:9 unit 21
+@72:5 drop 21
+@72:5 drop 20
+@72:5 unit 22
+@72:5 drop 11
+@72:5 drop 6
+@72:5 drop 1
+@72:5 drop 0
+@72:5 return 22
+endfn
+fn "$std::ordered_map::height$f183<IR=t3;Self=t15;V=t14;>" 2 4 file 6
+local "self" 28 let
+local "index" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 4 let
+local "$if" 4 mut
+local "$" 4 let
+local "$" 4 let
+@66:12 read 2 copy 1
+@66:21 int 3 0
+@66:12 read 4 copy 3
+@66:12 binary 5 "==" 2 4
+@66:9 if 5
+@67:13 int 6 0
+@66:9 assign 6 7
+@66:9 else
+@69:24 read 8 copy 1
+@69:13 read 9 copy 0 deref field 0 index 8 field 4
+@68:16 drop 8
+@66:9 assign 9 7
+@66:9 end
+@65:5 drop 3
+@65:5 drop 1
+@65:5 drop 0
+@65:5 return 7
+endfn
+fn "$std::ordered_map::rotate_left$f186<IR=t3;Self=t15;V=t14;>" 2 4 file 6
+local "self" 26 let
+local "index" 4 let
+local "$" 4 let
+local "$" 4 let
+local "top" 4 let
+local "$" 4 let
+local "$" 4 let
+local "transferred" 4 let
+local "$" 26 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 26 let
+local "$" 4 let
+local "$" 0 let
+local "$" 26 let
+local "$" 4 let
+local "$" 0 let
+local "$" 4 let
+@91:30 read 2 copy 1
+@91:19 read 3 copy 0 deref field 0 index 2 field 2
+@91:1 assign 3 4
+@91:1 drop 2
+@92:38 read 5 copy 4
+@92:27 read 6 copy 0 deref field 0 index 5 field 1
+@92:1 assign 6 7
+@92:1 drop 5
+@93:9 borrow 8 mut 0 deref
+@93:29 read 9 copy 1
+@93:36 read 10 copy 4
+@93:9 call 11 27 8 9 10
+@90:5 drop 11
+@94:35 read 12 copy 7
+@94:20 read 13 copy 1
+@94:9 assign 12 0 deref field 0 index 13 field 2
+@94:9 unit 14
+@90:5 drop 14
+@90:5 drop 13
+@95:12 read 15 copy 7
+@95:27 int 16 0
+@95:12 read 17 copy 16
+@95:12 binary 18 "!=" 15 17
+@95:9 if 18
+@96:46 read 19 copy 1
+@96:24 read 20 copy 7
+@96:13 assign 19 0 deref field 0 index 20 field 3
+@96:13 unit 21
+@95:9 drop 21
+@95:9 drop 20
+@95:9 unit 22
+@95:9 assign 22 23
+@95:9 else
+@95:9 unit 24
+@95:9 assign 24 23
+@95:9 end
+@90:5 drop 23
+@90:5 drop 16
+@98:32 read 25 copy 1
+@98:20 read 26 copy 4
+@98:9 assign 25 0 deref field 0 index 26 field 1
+@98:9 unit 27
+@90:5 drop 27
+@90:5 drop 26
+@99:36 read 28 copy 4
+@99:20 read 29 copy 1
+@99:9 assign 28 0 deref field 0 index 29 field 3
+@99:9 unit 30
+@90:5 drop 30
+@90:5 drop 29
+@100:9 borrow 31 mut 0 deref
+@100:28 read 32 copy 1
+@100:9 call 33 20 31 32
+@90:5 drop 33
+@101:9 borrow 34 mut 0 deref
+@101:28 read 35 copy 4
+@101:9 call 36 20 34 35
+@90:5 drop 36
+@102:9 read 37 copy 4
+@90:5 drop 7
+@90:5 drop 4
+@90:5 drop 1
+@90:5 drop 0
+@90:5 return 37
+endfn
+fn "$std::ordered_map::rotate_right$f187<IR=t3;Self=t15;V=t14;>" 2 4 file 6
+local "self" 26 let
+local "index" 4 let
+local "$" 4 let
+local "$" 4 let
+local "top" 4 let
+local "$" 4 let
+local "$" 4 let
+local "transferred" 4 let
+local "$" 26 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 26 let
+local "$" 4 let
+local "$" 0 let
+local "$" 26 let
+local "$" 4 let
+local "$" 0 let
+local "$" 4 let
+@105:30 read 2 copy 1
+@105:19 read 3 copy 0 deref field 0 index 2 field 1
+@105:1 assign 3 4
+@105:1 drop 2
+@106:38 read 5 copy 4
+@106:27 read 6 copy 0 deref field 0 index 5 field 2
+@106:1 assign 6 7
+@106:1 drop 5
+@107:9 borrow 8 mut 0 deref
+@107:29 read 9 copy 1
+@107:36 read 10 copy 4
+@107:9 call 11 27 8 9 10
+@104:5 drop 11
+@108:34 read 12 copy 7
+@108:20 read 13 copy 1
+@108:9 assign 12 0 deref field 0 index 13 field 1
+@108:9 unit 14
+@104:5 drop 14
+@104:5 drop 13
+@109:12 read 15 copy 7
+@109:27 int 16 0
+@109:12 read 17 copy 16
+@109:12 binary 18 "!=" 15 17
+@109:9 if 18
+@110:46 read 19 copy 1
+@110:24 read 20 copy 7
+@110:13 assign 19 0 deref field 0 index 20 field 3
+@110:13 unit 21
+@109:9 drop 21
+@109:9 drop 20
+@109:9 unit 22
+@109:9 assign 22 23
+@109:9 else
+@109:9 unit 24
+@109:9 assign 24 23
+@109:9 end
+@104:5 drop 23
+@104:5 drop 16
+@112:33 read 25 copy 1
+@112:20 read 26 copy 4
+@112:9 assign 25 0 deref field 0 index 26 field 2
+@112:9 unit 27
+@104:5 drop 27
+@104:5 drop 26
+@113:36 read 28 copy 4
+@113:20 read 29 copy 1
+@113:9 assign 28 0 deref field 0 index 29 field 3
+@113:9 unit 30
+@104:5 drop 30
+@104:5 drop 29
+@114:9 borrow 31 mut 0 deref
+@114:28 read 32 copy 1
+@114:9 call 33 20 31 32
+@104:5 drop 33
+@115:9 borrow 34 mut 0 deref
+@115:28 read 35 copy 4
+@115:9 call 36 20 34 35
+@104:5 drop 36
+@116:9 read 37 copy 4
+@104:5 drop 7
+@104:5 drop 4
+@104:5 drop 1
+@104:5 drop 0
+@104:5 return 37
+endfn
+fn "$std::prelude::take$f527<Self=t18;T=t17;>" 1 18 file 13
+local "self" 29 let
+local "$" 29 let
+local "$" 18 let
+local "$" 18 let
+@124:27 borrow 1 mut 0 deref
+@124:33 variant 2 0
+@124:9 intrinsic 3 "replace" 1 2
+@123:9 drop 0
+@123:9 return 3
+endfn
+fn "$std::prelude::unwrap$f526<Self=t18;T=t17;>" 1 17 file 13
+local "self" 18 let
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 17 let
+local "value" 17 let
+local "$" 17 let
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 0 let
+local "$" 0 let
+@118:1 int 2 0
+@118:1 assign 2 1
+@118:1 tag-test-place 3 1 0
+@118:1 if 3
+@118:1 int 4 1
+@118:1 int 5 1
+@118:1 binary 6 "&" 4 5
+@118:1 assign 6 1
+@118:1 end
+@118:1 if 1
+@118:1 tag-test-place 7 1 0
+@118:1 if 7
+@118:1 else
+@118:1 trap "unreachable selected pattern"
+@118:1 end
+@118:1 read 8 move 0 variant 1 0
+@118:1 assign 8 9
+@118:43 read 10 move 9
+@118:36 drop 0
+@118:36 return 10
+@117:9 else
+@119:1 int 12 0
+@119:1 assign 12 11
+@119:1 tag-test-place 13 0 0
+@119:1 if 13
+@119:1 int 14 1
+@119:1 assign 14 11
+@119:1 end
+@119:1 if 11
+@119:1 tag-test-place 15 0 0
+@119:1 if 15
+@119:1 else
+@119:1 trap "unreachable selected pattern"
+@119:1 end
+@119:29 trap "explicit panic"
+@119:29 unit 16
+@117:9 else
+@117:9 trap "unreachable match"
+@117:9 end
+@117:9 end
+@117:9 unit 17
+endfn
+fn "$std::ordered_map::first_node$f181<IR=t3;Self=t15;V=t14;>" 2 4 file 6
+local "self" 28 let
+local "index" 4 mut
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 4 let
+@47:12 read 2 copy 1
+@47:21 int 3 0
+@47:12 read 4 copy 3
+@47:12 binary 5 "!=" 2 4
+@47:9 if 5
+@48:13 loop
+@48:30 read 6 copy 1
+@48:19 read 7 copy 0 deref field 0 index 6 field 1
+@48:45 int 8 0
+@48:19 read 9 copy 8
+@48:19 binary 10 "!=" 7 9
+@48:13 drop 8
+@48:13 drop 6
+@48:13 unary 11 "!" 10
+@48:13 if 11
+@48:13 break
+@48:13 end
+@49:36 read 12 copy 1
+@49:25 read 13 copy 0 deref field 0 index 12 field 1
+@49:17 assign 13 1
+@49:17 unit 14
+@48:13 drop 14
+@48:13 drop 12
+@48:13 unit 15
+@48:13 drop 15
+@48:13 continue
+@48:13 end
+@48:13 unit 16
+@47:9 assign 16 17
+@47:9 else
+@47:9 unit 18
+@47:9 assign 18 17
+@47:9 end
+@46:5 drop 17
+@46:5 drop 3
+@52:9 read 19 copy 1
+@46:5 drop 1
+@46:5 drop 0
+@46:5 return 19
+endfn
+fn "$std::ordered_map::replace_parent$f185<IR=t3;Self=t15;V=t14;>" 3 0 file 6
+local "self" 26 let
+local "old" 4 let
+local "new" 4 let
+local "$" 4 let
+local "$" 4 let
+local "parent" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+@78:33 read 3 copy 1
+@78:22 read 4 copy 0 deref field 0 index 3 field 3
+@78:1 assign 4 5
+@78:1 drop 3
+@79:12 read 6 copy 5
+@79:22 int 7 0
+@79:12 read 8 copy 7
+@79:12 binary 9 "==" 6 8
+@79:9 if 9
+@80:25 read 10 copy 2
+@80:13 assign 10 0 deref field 1
+@80:13 unit 11
+@79:9 drop 11
+@79:9 unit 12
+@79:9 assign 12 13
+@79:9 else
+@81:30 read 14 copy 5
+@81:19 read 15 copy 0 deref field 0 index 14 field 1
+@81:19 read 16 copy 1
+@81:19 binary 17 "==" 15 16
+@81:16 if 17
+@82:39 read 18 copy 2
+@82:24 read 19 copy 5
+@82:13 assign 18 0 deref field 0 index 19 field 1
+@82:13 unit 20
+@81:16 drop 20
+@81:16 drop 19
+@81:16 unit 21
+@81:16 assign 21 22
+@81:16 else
+@84:40 read 23 copy 2
+@84:24 read 24 copy 5
+@84:13 assign 23 0 deref field 0 index 24 field 2
+@84:13 unit 25
+@83:16 drop 25
+@83:16 drop 24
+@83:16 unit 26
+@81:16 assign 26 22
+@81:16 end
+@79:9 assign 22 13
+@79:9 drop 14
+@79:9 end
+@77:5 drop 13
+@77:5 drop 7
+@86:12 read 27 copy 2
+@86:19 int 28 0
+@86:12 read 29 copy 28
+@86:12 binary 30 "!=" 27 29
+@86:9 if 30
+@87:38 read 31 copy 5
+@87:24 read 32 copy 2
+@87:13 assign 31 0 deref field 0 index 32 field 3
+@87:13 unit 33
+@86:9 drop 33
+@86:9 drop 32
+@86:9 unit 34
+@86:9 assign 34 35
+@86:9 else
+@86:9 unit 36
+@86:9 assign 36 35
+@86:9 end
+@77:5 drop 28
+@77:5 drop 5
+@77:5 drop 2
+@77:5 drop 1
+@77:5 drop 0
+@77:5 return 35
+endfn
+fn "$std::ordered_map::successor$f182<IR=t3;Self=t15;V=t14;>" 2 4 file 6
+local "self" 28 let
+local "index" 4 mut
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 28 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "parent" 4 mut
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$if" 1 mut
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$" 0 let
+local "$" 4 let
+@55:23 read 2 copy 1
+@55:12 read 3 copy 0 deref field 0 index 2 field 2
+@55:39 int 4 0
+@55:12 read 5 copy 4
+@55:12 binary 6 "!=" 3 5
+@55:9 if 6
+@56:20 borrow 7 shared 0 deref
+@56:47 read 8 copy 1
+@56:36 read 9 copy 0 deref field 0 index 8 field 2
+@56:20 call 10 26 7 9
+@56:13 drop 8
+@56:13 drop 4
+@56:13 drop 2
+@56:13 drop 1
+@56:13 drop 0
+@56:13 return 10
+@55:9 unit 11
+@55:9 else
+@55:9 unit 13
+@55:9 assign 13 12
+@55:9 end
+@54:5 drop 12
+@54:5 drop 4
+@54:5 drop 2
+@58:37 read 14 copy 1
+@58:26 read 15 copy 0 deref field 0 index 14 field 3
+@58:1 assign 15 16
+@58:1 drop 14
+@59:9 loop
+@59:15 read 17 copy 16
+@59:25 int 18 0
+@59:15 read 19 copy 18
+@59:15 binary 20 "!=" 17 19
+@59:15 if 20
+@59:41 read 22 copy 16
+@59:30 read 23 copy 0 deref field 0 index 22 field 2
+@59:30 read 24 copy 1
+@59:30 binary 25 "==" 23 24
+@59:15 assign 25 21
+@59:15 drop 22
+@59:15 else
+@59:15 int 26 0
+@59:15 assign 26 21
+@59:15 end
+@59:9 drop 18
+@59:9 unary 27 "!" 21
+@59:9 if 27
+@59:9 break
+@59:9 end
+@60:21 read 28 copy 16
+@60:13 assign 28 1
+@60:13 unit 29
+@59:9 drop 29
+@61:33 read 30 copy 1
+@61:22 read 31 copy 0 deref field 0 index 30 field 3
+@61:13 assign 31 16
+@61:13 unit 32
+@59:9 drop 32
+@59:9 drop 30
+@59:9 unit 33
+@59:9 drop 33
+@59:9 continue
+@59:9 end
+@59:9 unit 34
+@54:5 drop 34
+@63:9 read 35 copy 16
+@54:5 drop 16
+@54:5 drop 1
+@54:5 drop 0
+@54:5 return 35
+endfn
+fn "semantic_values" 0 3
+local "result" 3 let
+local "expected0" 3 let
+local "equal0" 1 let
+local "unit0" 0 let
+local "answer" 3 let
+@1 call 0 0
+@1 int 1 119
+@1 binary 2 == 0 1
+@1 intrinsic 3 assert 2
+@1 drop 3
+@1 int 4 42
+@1 return 4
+endfn

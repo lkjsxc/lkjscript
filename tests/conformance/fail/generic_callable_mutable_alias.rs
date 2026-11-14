@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustCode":"E0499"}
 fn apply<A, B, F: FnOnce(A) -> B>(function: F, value: A) -> B {
     function(value)
 }

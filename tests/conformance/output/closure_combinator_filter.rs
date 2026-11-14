@@ -1,3 +1,5 @@
+// expect: output 5a664f77631302465a4f7713465b664f771346025b664f776313460262
+// witness: {}
 struct M { out: Stdout, b: u8 }
 impl Drop for M { fn drop(&mut self) { self.out.write(&[self.b]); } }
 struct P { a: M, b: M }

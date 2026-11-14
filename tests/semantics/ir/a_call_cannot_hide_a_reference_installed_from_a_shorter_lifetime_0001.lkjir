@@ -1,0 +1,71 @@
+lkjscript-ir 1
+# expect: reject E_BORROW
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "View" struct move "value" 15
+type "&t3" ref shared 3
+type "&mut t14" ref mut 14
+fn "install" 2 0
+local "slot" 16 let
+local "replacement" 15 let
+local "$" 16 let
+local "$" 15 let
+local "$" 14 let
+local "$" 14 let
+local "old" 14 let
+local "$" 0 let
+@4:41 borrow 2 mut 0 deref
+@4:61 read 3 copy 1
+@4:47 struct 4 3
+@4:23 intrinsic 5 "replace" 2 4
+@4:1 assign 5 6
+@3:9 unit 7
+@3:9 drop 6
+@3:9 drop 1
+@3:9 drop 0
+@3:9 return 7
+endfn
+fn "probe" 0 3
+local "$" 3 let
+local "external" 3 let
+local "$" 15 let
+local "$" 14 let
+local "view" 14 mut
+local "$" 3 let
+local "local" 3 let
+local "$" 16 let
+local "$" 15 let
+local "$" 0 let
+local "$" 0 let
+local "$" 3 let
+@7:33 int 0 42
+@7:1 assign 0 1
+@8:42 borrow 2 shared 1
+@8:28 struct 3 2
+@8:1 assign 3 4
+@10:34 int 5 7
+@10:1 assign 5 6
+@11:25 borrow 7 mut 4
+@11:36 borrow 8 shared 6
+@11:17 call 9 0 7 8
+@9:13 drop 9
+@9:13 unit 10
+@9:13 drop 6
+@6:9 drop 10
+@13:13 read 11 copy 4 field 0 deref
+@6:9 drop 4
+@6:9 drop 1
+@6:9 return 11
+endfn

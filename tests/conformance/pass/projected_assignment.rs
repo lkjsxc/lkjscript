@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 fn replace(slot: &mut Box<i64>) { *slot = Box::new(42); }
 pub fn probe() -> i64 {
     let mut values = vec![Box::new(7i64)];

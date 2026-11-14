@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 fn scalar(count: &mut i64) -> i64 {
     *count += 1;
     *count

@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 trait Value { fn value(&self) -> i64; }
 trait Forward { fn forward(&self) -> i64; }
 struct Left { value: i64 }

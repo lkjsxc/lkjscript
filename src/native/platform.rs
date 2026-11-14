@@ -118,7 +118,7 @@ impl Platform {
 }
 
 /// Platform leaves preserve callee-saved registers except on terminal failures.
-pub fn emit(a: &mut Assembler, p: Platform, entry_label: Label, entry: &Entry) {
+pub fn emit(a: &mut Assembler, p: Platform, entry_label: Label, entry: &Entry, profile: Option<super::profiling::Labels>) {
     a.address(CONTEXT, p.context);
     a.store(CONTEXT, INITIAL_STACK, SP);
     // SIGPIPE is reported through the ordinary output trap.
@@ -205,6 +205,9 @@ pub fn emit(a: &mut Assembler, p: Platform, entry_label: Label, entry: &Entry) {
     a.bind(reserved);
     a.load(SP, CONTEXT, STACK_TOP);
     a.immediate(BP, 0);
+    if let Some(profile) = profile {
+        a.call(profile.start);
+    }
 
     let registers = [DI, SI, D, C, R8, R9];
     let extra = if entry.arguments.len() > registers.len() {

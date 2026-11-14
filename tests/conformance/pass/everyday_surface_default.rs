@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 struct Marker { number: i64 }
 impl Marker { fn default() -> Marker { Marker { number: 99 } } }
 impl Default for Marker { fn default() -> Marker { Marker { number: 42 } } }

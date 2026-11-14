@@ -1,3 +1,5 @@
+// expect: output 6162630a
+// witness: {}
 struct Mark<'a> { out: &'a mut Stdout, byte: u8 }
 impl<'a> Drop for Mark<'a> {
     fn drop(&mut self) {

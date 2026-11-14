@@ -34,6 +34,7 @@ target/hello
 target/lkjscript run examples/hello.rs
 target/lkjscript run examples/hello.rs --engine interpreter
 target/lkjscript test path/to/tests.rs
+target/lkjscript test tests/conformance --jobs 8
 ```
 
 All five commands accept source or `.lkjir` input. `check` is silent on success.
@@ -46,12 +47,18 @@ The driver prints a scalar entry's return value: integers in decimal, bool as
 `true` or `false`, char as UTF-8, and f64 as its exact `f64:0x0123456789abcdef`
 bit representation, each followed by a newline. Unit adds no output.
 
-`test` runs the `#[test]` functions in one source file, or the test entries in one
-IR file, on both routes by default. Select one with `--engine native` or
-`--engine interpreter`. Passing tests produce one `ok N tests` line; failures
-identify the entry and route. Directory discovery and expectation headers belong
-to milestone 6.3. `--help` lists options; `--stats` reports phase times, counts and
-peak RSS on stderr.
+`test` runs `#[test]` functions, IR test entries, or single-file expectation
+cases found recursively in a directory. Native workers execute both routes and
+check source/IR byte identity. Select one route with `--engine native` or
+`--engine interpreter`; `--jobs` selects up to eight workers. Passing suites
+produce one line; failures identify the entry and route. See the
+[case format](tests/conformance/README.md). `--help` lists options; `--stats`
+reports phase times, counts and peak RSS on stderr.
+
+`build --profile` adds CPU sampling and a function-address map to the executable.
+Each process writes its own `OUTPUT.samples.PID` file, with a twenty-digit PID.
+Use `lkjscript profile SAMPLE_FILE` for a compact report of self and inclusive
+function samples. Profiling needs no external profiler or symbol/debug package.
 
 ## Language and authority
 
@@ -75,14 +82,18 @@ grants follow in milestone 6.4.
 - [Status](docs/status.md): current milestone, measurements and known gaps.
 - [Direction](docs/direction.md): the ordered development course.
 
-The current development gate still uses Cargo and Node:
+The development gate bootstraps from the stored seed and needs no Rust or Node:
 
 ```sh
 LKJSCRIPT_GATE_JOBS=8 bash tools/check.sh
 ```
 
-It compares native execution with the independent interpreter, checks
-Rust-comparable programs, runs seeded source generators, mutates IR directly and
-checks compiler reproduction. The interpreter shares no checker or backend
-implementation. Milestone 6.3 moves the gate into lkjscript and Rust into an
-optional witness.
+It compares native execution with the independent interpreter, checks serialized
+IR and executable identity, runs seeded source generators, mutates and reduces
+IR, and verifies compiler reproduction. Semantic tests, the runner, generators,
+mutator, reducer, and process tests are lkjscript programs. The interpreter shares
+no checker or backend implementation.
+
+Rust is an optional witness under `witness/`; the repository root is not a Cargo
+package. `bash witness/check.sh` compares compiler bytes and marked source cases
+using Rust, with a native coordinator. Its CI job is advisory.

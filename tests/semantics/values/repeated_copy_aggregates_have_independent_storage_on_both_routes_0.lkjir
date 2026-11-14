@@ -1,0 +1,598 @@
+lkjscript-ir 1
+# expect: value 42
+# entry: semantic_values
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "Leaf" struct copy "bytes" 15 "value" 3
+type "[t5;3]" array 5 3
+type "NoClone" struct copy "value" 3
+type "Choice" enum copy
+variant "Empty"
+variant "Leaf" "0" 14
+endtype
+type "&mut t3" ref mut 3
+type "[t14;5]" array 14 5
+type "[t14;2]" array 14 2
+type "[t20;3]" array 20 3
+type "[t17;3]" array 17 3
+type "&mut t17" ref mut 17
+type "&mut t14" ref mut 14
+type "&t17" ref shared 17
+type "&t14" ref shared 14
+type "[t17;2]" array 17 2
+type "[t5;8192]" array 5 8192
+type "[t13;3]" array 13 3
+type "[t1;3]" array 1 3
+type "[t6;3]" array 6 3
+type "[t16;3]" array 16 3
+type "&t28" ref shared 28
+fn "seed" 1 14
+local "calls" 18 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+local "$" 0 let
+local "$" 5 let
+local "$" 5 let
+local "$" 5 let
+local "$" 15 let
+local "$" 3 let
+local "$" 14 let
+@21:15 int 1 1
+@21:5 read 2 copy 0 deref
+@21:5 binary 3 "+" 2 1
+@21:5 assign 3 0 deref
+@21:5 unit 4
+@20:1 drop 4
+@23:17 int 5 1
+@23:22 int 6 2
+@23:27 int 7 3
+@23:16 array 8 5 6 7
+@24:16 int 9 7
+@22:5 struct 10 8 9
+@20:1 drop 0
+@20:1 return 10
+endfn
+fn "probe" 0 3
+local "$" 3 let
+local "calls" 3 mut
+local "$" 18 let
+local "$" 14 let
+local "$" 19 let
+local "leaves" 19 mut
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+local "$" 1 let
+local "$" 0 let
+local "$" 5 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 3 let
+local "$" 4 let
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 5 let
+local "$" 5 let
+local "$" 5 let
+local "$" 1 let
+local "$if" 1 mut
+local "$" 4 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+local "$" 1 let
+local "$" 1 let
+local "$" 0 let
+local "$" 4 let
+local "$" 14 let
+local "$" 20 let
+local "$" 21 let
+local "matrix" 21 mut
+local "$" 5 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 5 let
+local "$" 5 let
+local "$" 5 let
+local "$" 1 let
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 5 let
+local "$" 5 let
+local "$" 5 let
+local "$" 1 let
+local "$" 0 let
+local "$" 4 let
+local "$" 4 let
+local "$" 5 let
+local "$" 5 let
+local "$" 5 let
+local "$" 1 let
+local "$" 0 let
+local "$" 4 let
+local "$" 14 let
+local "$" 17 let
+local "$" 22 let
+local "choices" 22 mut
+local "$" 4 let
+local "$" 23 mut
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 24 let
+local "value" 24 let
+local "$" 5 let
+local "$" 4 let
+local "$" 0 let
+local "$match" 0 mut
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 0 let
+local "$" 4 let
+local "$" 25 mut
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 26 let
+local "value" 26 let
+local "$" 4 let
+local "$" 5 let
+local "$" 5 let
+local "$" 5 let
+local "$" 1 let
+local "$" 0 let
+local "$match" 0 mut
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 0 let
+local "$" 17 let
+local "$" 27 let
+local "absent" 27 let
+local "$" 4 let
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$match" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 0 let
+local "$" 5 let
+local "$" 28 let
+local "bytes" 28 let
+local "$" 33 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$if" 1 mut
+local "$" 4 let
+local "$" 5 let
+local "$" 5 let
+local "$" 5 let
+local "$" 1 let
+local "$" 1 let
+local "$if" 1 mut
+local "$" 4 let
+local "$" 5 let
+local "$" 5 let
+local "$" 5 let
+local "$" 1 let
+local "$" 1 let
+local "$" 0 let
+local "$" 13 let
+local "$" 29 let
+local "chars" 29 let
+local "$" 4 let
+local "$" 13 let
+local "$" 13 let
+local "$" 13 let
+local "$" 1 let
+local "$" 0 let
+local "$" 1 let
+local "$" 30 let
+local "flags" 30 let
+local "$" 4 let
+local "$" 1 let
+local "$" 0 let
+local "$" 6 let
+local "$" 31 let
+local "numbers" 31 let
+local "$" 4 let
+local "$" 6 let
+local "$" 6 let
+local "$" 6 let
+local "$" 1 let
+local "$" 0 let
+local "$" 3 let
+local "$" 16 let
+local "$" 32 let
+local "copies" 32 let
+local "$" 4 let
+local "$" 3 let
+@28:21 int 0 0
+@28:1 assign 0 1
+@29:28 borrow 2 mut 1
+@29:23 call 3 0 2
+@29:22 intrinsic 4 "array_repeat" 3
+@29:1 assign 4 5
+@30:13 read 6 copy 1
+@30:22 int 7 1
+@30:13 read 8 copy 7
+@30:13 binary 9 "==" 6 8
+@30:5 intrinsic 10 "assert" 9
+@27:5 drop 10
+@27:5 drop 7
+@31:26 int 11 99
+@31:12 int 12 0
+@31:21 int 13 1
+@31:5 assign 11 5 index 12 field 0 index 13
+@31:5 unit 14
+@27:5 drop 14
+@27:5 drop 13
+@27:5 drop 12
+@32:23 int 15 88
+@32:12 int 16 0
+@32:5 assign 15 5 index 16 field 1
+@32:5 unit 17
+@27:5 drop 17
+@27:5 drop 16
+@33:20 int 18 1
+@33:29 int 19 1
+@33:13 read 20 copy 5 index 18 field 0 index 19
+@33:35 int 21 2
+@33:13 read 22 copy 21
+@33:13 binary 23 "==" 20 22
+@33:13 if 23
+@33:49 int 25 4
+@33:42 read 26 copy 5 index 25 field 1
+@33:61 int 27 7
+@33:42 read 28 copy 27
+@33:42 binary 29 "==" 26 28
+@33:13 assign 29 24
+@33:13 drop 27
+@33:13 drop 25
+@33:13 else
+@33:13 int 30 0
+@33:13 assign 30 24
+@33:13 end
+@33:5 intrinsic 31 "assert" 24
+@27:5 drop 31
+@27:5 drop 21
+@27:5 drop 19
+@27:5 drop 18
+@34:31 int 32 1
+@34:24 read 33 copy 5 index 32
+@34:23 intrinsic 34 "array_repeat" 33
+@34:22 intrinsic 35 "array_repeat" 34
+@34:1 assign 35 36
+@34:1 drop 32
+@35:29 int 37 55
+@35:12 int 38 0
+@35:15 int 39 0
+@35:24 int 40 0
+@35:5 assign 37 36 index 38 index 39 field 0 index 40
+@35:5 unit 41
+@27:5 drop 41
+@27:5 drop 40
+@27:5 drop 39
+@27:5 drop 38
+@36:20 int 42 0
+@36:23 int 43 1
+@36:32 int 44 0
+@36:13 read 45 copy 36 index 42 index 43 field 0 index 44
+@36:38 int 46 1
+@36:13 read 47 copy 46
+@36:13 binary 48 "==" 45 47
+@36:5 intrinsic 49 "assert" 48
+@27:5 drop 49
+@27:5 drop 46
+@27:5 drop 44
+@27:5 drop 43
+@27:5 drop 42
+@37:20 int 50 1
+@37:23 int 51 0
+@37:32 int 52 0
+@37:13 read 53 copy 36 index 50 index 51 field 0 index 52
+@37:38 int 54 1
+@37:13 read 55 copy 54
+@37:13 binary 56 "==" 53 55
+@37:5 intrinsic 57 "assert" 56
+@27:5 drop 57
+@27:5 drop 54
+@27:5 drop 52
+@27:5 drop 51
+@27:5 drop 50
+@38:20 int 58 1
+@38:29 int 59 0
+@38:13 read 60 copy 5 index 58 field 0 index 59
+@38:35 int 61 1
+@38:13 read 62 copy 61
+@38:13 binary 63 "==" 60 62
+@38:5 intrinsic 64 "assert" 63
+@27:5 drop 64
+@27:5 drop 61
+@27:5 drop 59
+@27:5 drop 58
+@39:44 int 65 1
+@39:37 read 66 copy 5 index 65
+@39:24 variant 67 1 66
+@39:23 intrinsic 68 "array_repeat" 67
+@39:1 assign 68 69
+@39:1 drop 65
+@40:24 int 70 0
+@40:11 borrow 71 mut 69 index 70
+@41:1 int 73 0
+@41:1 assign 73 72
+@41:1 tag-test-place 74 1 71 deref
+@41:1 if 74
+@41:1 int 75 1
+@41:1 int 76 1
+@41:1 binary 77 "&" 75 76
+@41:1 assign 77 72
+@41:1 end
+@41:1 if 72
+@41:1 tag-test-place 78 1 71 deref
+@41:1 if 78
+@41:1 else
+@41:1 trap "unreachable selected pattern"
+@41:1 end
+@41:1 borrow 79 mut 71 deref variant 1 0
+@41:1 assign 79 80
+@41:49 int 81 77
+@41:44 int 82 2
+@41:32 assign 81 80 deref field 0 index 82
+@41:32 unit 83
+@40:5 assign 83 84
+@40:5 drop 82
+@40:5 drop 80
+@40:5 drop 71
+@40:5 else
+@42:1 int 86 0
+@42:1 assign 86 85
+@42:1 tag-test-place 87 0 71 deref
+@42:1 if 87
+@42:1 int 88 1
+@42:1 assign 88 85
+@42:1 end
+@42:1 if 85
+@42:1 tag-test-place 89 0 71 deref
+@42:1 if 89
+@42:1 else
+@42:1 trap "unreachable selected pattern"
+@42:1 end
+@42:26 trap "explicit panic"
+@42:26 unit 90
+@40:5 else
+@40:5 trap "unreachable match"
+@40:5 end
+@40:5 end
+@27:5 drop 84
+@27:5 drop 70
+@44:20 int 91 2
+@44:11 borrow 92 shared 69 index 91
+@45:1 int 94 0
+@45:1 assign 94 93
+@45:1 tag-test-place 95 1 92 deref
+@45:1 if 95
+@45:1 int 96 1
+@45:1 int 97 1
+@45:1 binary 98 "&" 96 97
+@45:1 assign 98 93
+@45:1 end
+@45:1 if 93
+@45:1 tag-test-place 99 1 92 deref
+@45:1 if 99
+@45:1 else
+@45:1 trap "unreachable selected pattern"
+@45:1 end
+@45:1 borrow 100 shared 92 deref variant 1 0
+@45:1 assign 100 101
+@45:52 int 102 2
+@45:40 read 103 copy 101 deref field 0 index 102
+@45:58 int 104 3
+@45:40 read 105 copy 104
+@45:40 binary 106 "==" 103 105
+@45:32 intrinsic 107 "assert" 106
+@44:5 assign 107 108
+@44:5 drop 104
+@44:5 drop 102
+@44:5 drop 101
+@44:5 drop 92
+@44:5 else
+@46:1 int 110 0
+@46:1 assign 110 109
+@46:1 tag-test-place 111 0 92 deref
+@46:1 if 111
+@46:1 int 112 1
+@46:1 assign 112 109
+@46:1 end
+@46:1 if 109
+@46:1 tag-test-place 113 0 92 deref
+@46:1 if 113
+@46:1 else
+@46:1 trap "unreachable selected pattern"
+@46:1 end
+@46:26 trap "explicit panic"
+@46:26 unit 114
+@44:5 else
+@44:5 trap "unreachable match"
+@44:5 end
+@44:5 end
+@27:5 drop 108
+@27:5 drop 91
+@48:19 variant 115 0
+@48:18 intrinsic 116 "array_repeat" 115
+@48:1 assign 116 117
+@49:29 int 118 1
+@49:13 int 120 0
+@49:13 assign 120 119
+@49:13 tag-test-place 121 0 117 index 118
+@49:13 if 121
+@49:13 int 122 1
+@49:13 assign 122 119
+@49:13 end
+@49:13 if 119
+@49:13 tag-test-place 123 0 117 index 118
+@49:13 if 123
+@49:13 else
+@49:13 trap "unreachable selected pattern"
+@49:13 end
+@49:13 int 124 1
+@49:13 assign 124 125
+@49:13 else
+@49:13 int 126 1
+@49:13 if 126
+@49:13 int 127 0
+@49:13 assign 127 125
+@49:13 else
+@49:13 trap "unreachable arm after irrefutable pattern"
+@49:13 trap "unreachable match"
+@49:13 end
+@49:13 end
+@49:5 intrinsic 128 "assert" 125
+@27:5 drop 128
+@27:5 drop 118
+@50:18 int 129 7
+@50:17 intrinsic 130 "array_repeat" 129
+@50:1 assign 130 131
+@51:13 borrow 132 shared 131
+@51:13 intrinsic 133 "vec_len" 132
+@51:13 read 134 copy 133
+@51:28 int 135 8192
+@51:13 read 136 copy 135
+@51:13 binary 137 "==" 134 136
+@51:13 if 137
+@51:42 int 139 0
+@51:36 read 140 copy 131 index 139
+@51:48 int 141 7
+@51:36 read 142 copy 141
+@51:36 binary 143 "==" 140 142
+@51:13 assign 143 138
+@51:13 drop 141
+@51:13 drop 139
+@51:13 else
+@51:13 int 144 0
+@51:13 assign 144 138
+@51:13 end
+@51:13 if 138
+@51:61 int 146 8191
+@51:55 read 147 copy 131 index 146
+@51:70 int 148 7
+@51:55 read 149 copy 148
+@51:55 binary 150 "==" 147 149
+@51:13 assign 150 145
+@51:13 drop 148
+@51:13 drop 146
+@51:13 else
+@51:13 int 151 0
+@51:13 assign 151 145
+@51:13 end
+@51:5 intrinsic 152 "assert" 145
+@27:5 drop 152
+@27:5 drop 135
+@27:5 drop 133
+@52:18 int 153 27700
+@52:17 intrinsic 154 "array_repeat" 153
+@52:1 assign 154 155
+@53:19 int 156 2
+@53:13 read 157 copy 155 index 156
+@53:25 int 158 27700
+@53:13 read 159 copy 158
+@53:13 binary 160 "==" 157 159
+@53:5 intrinsic 161 "assert" 160
+@27:5 drop 161
+@27:5 drop 158
+@27:5 drop 156
+@54:18 int 162 1
+@54:17 intrinsic 163 "array_repeat" 162
+@54:1 assign 163 164
+@55:19 int 165 2
+@55:13 read 166 copy 164 index 165
+@55:5 intrinsic 167 "assert" 166
+@27:5 drop 167
+@27:5 drop 165
+@56:20 float 168 4609434218613702656
+@56:19 intrinsic 169 "array_repeat" 168
+@56:1 assign 169 170
+@57:21 int 171 2
+@57:13 read 172 copy 170 index 171
+@57:27 float 173 4609434218613702656
+@57:13 read 174 copy 173
+@57:13 binary 175 "==" 172 174
+@57:5 intrinsic 176 "assert" 175
+@27:5 drop 176
+@27:5 drop 173
+@27:5 drop 171
+@58:36 int 177 42
+@58:19 struct 178 177
+@58:18 intrinsic 179 "array_repeat" 178
+@58:1 assign 179 180
+@59:12 int 181 2
+@59:5 read 182 copy 180 index 181 field 0
+@27:5 drop 181
+@27:5 drop 180
+@27:5 drop 170
+@27:5 drop 164
+@27:5 drop 155
+@27:5 drop 131
+@27:5 drop 117
+@27:5 drop 69
+@27:5 drop 36
+@27:5 drop 5
+@27:5 drop 1
+@27:5 return 182
+endfn
+fn "semantic_values" 0 3
+local "result" 3 let
+local "expected0" 3 let
+local "equal0" 1 let
+local "unit0" 0 let
+local "answer" 3 let
+@1 call 0 1
+@1 int 1 42
+@1 binary 2 == 0 1
+@1 intrinsic 3 assert 2
+@1 drop 3
+@1 int 4 42
+@1 return 4
+endfn

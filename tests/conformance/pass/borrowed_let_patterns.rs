@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 struct Triple<T>(T,T,T);
 pub fn probe() -> i64 {
     let pair = (20i64,22i64);

@@ -1,3 +1,6 @@
+// expect: value 42
+// entry: probe
+// witness: {}
 pub fn probe()->i64{
  let some:Option<i64>=Some(41);let none:Option<i64>=None;
  assert!(some.map(|x:i64|x+1).unwrap()==42);

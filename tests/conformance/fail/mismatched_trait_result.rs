@@ -1,3 +1,5 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false}
 trait Score {
     fn score(&self) -> i64;
 }

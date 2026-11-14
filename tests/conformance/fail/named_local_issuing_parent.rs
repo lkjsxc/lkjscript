@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {}
 fn bad<'a, 'b>(slot: &'b mut &'a mut i64) {
     let view: &'a mut i64 = &mut **slot;
     *view = 42;

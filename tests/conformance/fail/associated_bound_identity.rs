@@ -1,3 +1,5 @@
+// expect: reject E_TRAIT
+// witness: {"rustCode":"E0277"}
 mod left {
     pub trait Leaf {}
 }

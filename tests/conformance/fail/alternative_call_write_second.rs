@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
 fn choose<'a>(first: &'a i64, second: &'a i64, left: bool) -> &'a i64 {
     if left { first } else { second }
 }

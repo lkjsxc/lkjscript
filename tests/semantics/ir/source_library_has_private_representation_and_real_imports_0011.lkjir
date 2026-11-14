@@ -1,0 +1,207 @@
+lkjscript-ir 1
+# expect: check
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "Vec<t5>" vec 5
+type "$std::string::String" struct move "bytes" 14
+type "$std::string::FromUtf8Error" struct move "bytes" 14
+type "$std::prelude::Result<t15,t16>" enum move
+variant "Ok" "0" 15
+variant "Err" "0" 16
+endtype
+type "&mut t14" ref mut 14
+type "&t14" ref shared 14
+type "[t5]" slice shared 5
+type "&t20" ref shared 20
+type "str" str
+type "&t22" ref shared 22
+type "$std::str::Utf8Error" struct copy
+type "$std::prelude::Result<t23,t24>" enum copy
+variant "Ok" "0" 23
+variant "Err" "0" 24
+endtype
+type "&t25" ref shared 25
+fn "probe" 0 3
+@1:1 trap "body blocked by a source diagnostic"
+endfn
+fn "$std::string::from_utf8$f50<Self=t15;>" 1 17 file 3
+local "bytes" 14 let
+local "$" 19 let
+local "$" 21 let
+local "$" 1 let
+local "$" 14 let
+local "$" 15 let
+local "$" 17 let
+local "$if" 17 mut
+local "$" 14 let
+local "$" 16 let
+local "$" 17 let
+@20:23 borrow 1 shared 0
+@20:23 slice-borrow 2 shared 1 deref
+@20:23 drop 1
+@20:12 call 3 3 2
+@20:9 if 3
+@21:33 read 4 move 0
+@21:24 struct 5 4
+@21:13 variant 6 0 5
+@20:9 assign 6 7
+@20:9 else
+@23:41 read 8 move 0
+@23:25 struct 9 8
+@23:13 variant 10 1 9
+@20:9 assign 10 7
+@20:9 end
+@19:9 return 7
+endfn
+fn "$std::prelude::unwrap$f535<E=t16;Self=t17;T=t15;>" 1 15 file 13
+local "self" 17 let
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 15 let
+local "value" 15 let
+local "$" 15 let
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 0 let
+local "$" 0 let
+@180:1 int 2 0
+@180:1 assign 2 1
+@180:1 tag-test-place 3 0 0
+@180:1 if 3
+@180:1 int 4 1
+@180:1 int 5 1
+@180:1 binary 6 "&" 4 5
+@180:1 assign 6 1
+@180:1 end
+@180:1 if 1
+@180:1 tag-test-place 7 0 0
+@180:1 if 7
+@180:1 else
+@180:1 trap "unreachable selected pattern"
+@180:1 end
+@180:1 read 8 move 0 variant 0 0
+@180:1 assign 8 9
+@180:41 read 10 move 9
+@180:34 drop 0
+@180:34 return 10
+@179:9 else
+@181:1 int 12 0
+@181:1 assign 12 11
+@181:1 tag-test-place 13 1 0
+@181:1 if 13
+@181:1 int 14 1
+@181:1 int 15 1
+@181:1 binary 16 "&" 14 15
+@181:1 assign 16 11
+@181:1 end
+@181:1 if 11
+@181:1 tag-test-place 17 1 0
+@181:1 if 17
+@181:1 else
+@181:1 trap "unreachable selected pattern"
+@181:1 end
+@181:31 trap "explicit panic"
+@181:31 unit 18
+@179:9 else
+@179:9 trap "unreachable match"
+@179:9 end
+@179:9 end
+@179:9 unit 19
+endfn
+fn "$std::bytes::valid_utf8" 1 1 file 12
+local "bytes" 21 let
+local "$" 21 let
+local "$" 25 mut
+local "$" 26 let
+local "$" 1 let
+@39:25 read 1 copy 0
+@39:5 intrinsic 2 "str_from_utf8" 1
+@39:5 borrow 3 shared 2
+@39:5 call 4 4 3
+@38:5 drop 2
+@38:5 drop 0
+@38:5 return 4
+endfn
+fn "$std::prelude::is_ok$f533<E=t24;Self=t25;T=t23;>" 1 1 file 13
+local "self" 26 let
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$match" 1 mut
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+@169:1 int 2 0
+@169:1 assign 2 1
+@169:1 tag-test-place 3 0 0 deref
+@169:1 if 3
+@169:1 int 4 1
+@169:1 int 5 1
+@169:1 binary 6 "&" 4 5
+@169:1 assign 6 1
+@169:1 end
+@169:1 if 1
+@169:1 tag-test-place 7 0 0 deref
+@169:1 if 7
+@169:1 else
+@169:1 trap "unreachable selected pattern"
+@169:1 end
+@169:30 int 8 1
+@168:9 assign 8 9
+@168:9 else
+@170:1 int 11 0
+@170:1 assign 11 10
+@170:1 tag-test-place 12 1 0 deref
+@170:1 if 12
+@170:1 int 13 1
+@170:1 int 14 1
+@170:1 binary 15 "&" 13 14
+@170:1 assign 15 10
+@170:1 end
+@170:1 if 10
+@170:1 tag-test-place 16 1 0 deref
+@170:1 if 16
+@170:1 else
+@170:1 trap "unreachable selected pattern"
+@170:1 end
+@170:31 int 17 0
+@168:9 assign 17 9
+@168:9 else
+@168:9 trap "unreachable match"
+@168:9 end
+@168:9 end
+@167:9 drop 0
+@167:9 return 9
+endfn

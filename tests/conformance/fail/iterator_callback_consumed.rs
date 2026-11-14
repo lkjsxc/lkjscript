@@ -1,3 +1,5 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false}
 pub fn probe() -> i64 {
     let values = [1i64, 2];
     let captured = Box::new(42i64);

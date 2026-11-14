@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 pub fn probe() -> i64 {
     let values = [0u32, 0x7fu32, 0x80u32, 0xd7ffu32, 0xe000u32, 0x10ffffu32];
     let mut index = 0usize;

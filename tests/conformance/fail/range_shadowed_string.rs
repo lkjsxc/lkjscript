@@ -1,3 +1,5 @@
+// expect: reject E_TYPE
+// witness: {"rustCode":"E0608"}
 struct String {
     bytes: Vec<u8>,
 }

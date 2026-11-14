@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 trait Take {
     fn take(self) -> i64;
 }

@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 fn stored<'a>(carrier: &&'a i64) -> &'a i64 { *carrier }
 fn through_carrier<'a>(value: &'a i64) -> &'a i64 {
     let carrier = value;

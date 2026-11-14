@@ -1,3 +1,5 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
 fn bad<T>(unused: T) -> i64 {
     match 0i64 {
         _ => 1,

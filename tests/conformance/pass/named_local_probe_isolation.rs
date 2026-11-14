@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 fn test<'a>(input: &'a i64) -> i64 {
     let mut target = Box::new(0i64);
     let mut other = Box::new(1i64);

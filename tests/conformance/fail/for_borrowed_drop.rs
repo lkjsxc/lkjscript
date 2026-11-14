@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustCode":"E0505"}
 pub fn probe() -> i64 {
     let values = vec![42i64];
     for value in &values {

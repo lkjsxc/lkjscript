@@ -1,0 +1,457 @@
+lkjscript-ir 1
+# expect: value 42
+# entry: semantic_values
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "Box<t3>" box 3
+type "$std::prelude::Option<t14>" enum move
+variant "None"
+variant "Some" "0" 14
+endtype
+type "$std::prelude::Option<t3>" enum copy
+variant "None"
+variant "Some" "0" 3
+endtype
+type "$std::prelude::Result<t3,t3>" enum copy
+variant "Ok" "0" 3
+variant "Err" "0" 3
+endtype
+type "&t15" ref shared 15
+type "&mut t15" ref mut 15
+type "&t17" ref shared 17
+type "str" str
+type "&t21" ref shared 21
+fn "prelude_probe" 0 3
+local "$" 3 let
+local "$" 14 let
+local "$" 15 let
+local "present" 15 mut
+local "$" 18 let
+local "$" 1 let
+local "$" 0 let
+local "$" 19 let
+local "$" 15 let
+local "held" 15 let
+local "$" 18 let
+local "$" 1 let
+local "$" 0 let
+local "$" 15 let
+local "$" 14 let
+local "value" 14 let
+local "$" 16 let
+local "absent" 16 let
+local "$" 16 let
+local "$" 3 let
+local "$" 3 let
+local "fallback" 3 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+local "$" 17 let
+local "result" 17 let
+local "$" 20 let
+local "$" 1 let
+local "$" 0 let
+local "$" 17 let
+local "$" 3 let
+@4:71 int 0 17
+@4:62 intrinsic 1 "box_new" 0
+@4:49 variant 2 1 1
+@4:1 assign 2 3
+@5:21 borrow 4 shared 3
+@5:21 call 5 1 4
+@5:13 intrinsic 6 "assert" 5
+@3:9 drop 6
+@6:24 borrow 7 mut 3
+@6:24 call 8 2 7
+@6:1 assign 8 9
+@7:21 borrow 10 shared 3
+@7:21 call 11 3 10
+@7:13 intrinsic 12 "assert" 11
+@3:9 drop 12
+@8:25 read 13 move 9
+@8:25 call 14 4 13
+@8:1 assign 14 15
+@9:39 variant 16 0
+@9:1 assign 16 17
+@10:28 read 18 copy 17
+@10:45 int 19 5
+@10:28 call 20 5 18 19
+@10:1 assign 20 21
+@11:55 read 22 copy 15 deref
+@11:64 read 23 copy 21
+@11:55 binary 24 "+" 22 23
+@11:44 variant 25 0 24
+@11:1 assign 25 26
+@12:21 borrow 27 shared 26
+@12:21 call 28 6 27
+@12:13 intrinsic 29 "assert" 28
+@3:9 drop 29
+@13:13 read 30 copy 26
+@13:13 call 31 7 30
+@3:9 drop 26
+@3:9 drop 21
+@3:9 drop 17
+@3:9 drop 15
+@3:9 drop 3
+@3:9 return 31
+endfn
+fn "$std::prelude::is_some$f520<Self=t15;T=t14;>" 1 1 file 13
+local "self" 18 let
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$match" 1 mut
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+@79:1 int 2 0
+@79:1 assign 2 1
+@79:1 tag-test-place 3 0 0 deref
+@79:1 if 3
+@79:1 int 4 1
+@79:1 assign 4 1
+@79:1 end
+@79:1 if 1
+@79:1 tag-test-place 5 0 0 deref
+@79:1 if 5
+@79:1 else
+@79:1 trap "unreachable selected pattern"
+@79:1 end
+@79:29 int 6 0
+@78:9 assign 6 7
+@78:9 else
+@80:1 int 9 0
+@80:1 assign 9 8
+@80:1 tag-test-place 10 1 0 deref
+@80:1 if 10
+@80:1 int 11 1
+@80:1 int 12 1
+@80:1 binary 13 "&" 11 12
+@80:1 assign 13 8
+@80:1 end
+@80:1 if 8
+@80:1 tag-test-place 14 1 0 deref
+@80:1 if 14
+@80:1 else
+@80:1 trap "unreachable selected pattern"
+@80:1 end
+@80:32 int 15 1
+@78:9 assign 15 7
+@78:9 else
+@78:9 trap "unreachable match"
+@78:9 end
+@78:9 end
+@77:9 drop 0
+@77:9 return 7
+endfn
+fn "$std::prelude::take$f527<Self=t15;T=t14;>" 1 15 file 13
+local "self" 19 let
+local "$" 19 let
+local "$" 15 let
+local "$" 15 let
+@124:27 borrow 1 mut 0 deref
+@124:33 variant 2 0
+@124:9 intrinsic 3 "replace" 1 2
+@123:9 drop 0
+@123:9 return 3
+endfn
+fn "$std::prelude::is_none$f521<Self=t15;T=t14;>" 1 1 file 13
+local "self" 18 let
+local "$" 18 let
+local "$" 1 let
+local "$" 1 let
+@85:10 borrow 1 shared 0 deref
+@85:10 call 2 1 1
+@85:9 unary 3 "!" 2
+@84:9 drop 0
+@84:9 return 3
+endfn
+fn "$std::prelude::unwrap$f526<Self=t15;T=t14;>" 1 14 file 13
+local "self" 15 let
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 14 let
+local "value" 14 let
+local "$" 14 let
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 0 let
+local "$" 0 let
+@118:1 int 2 0
+@118:1 assign 2 1
+@118:1 tag-test-place 3 1 0
+@118:1 if 3
+@118:1 int 4 1
+@118:1 int 5 1
+@118:1 binary 6 "&" 4 5
+@118:1 assign 6 1
+@118:1 end
+@118:1 if 1
+@118:1 tag-test-place 7 1 0
+@118:1 if 7
+@118:1 else
+@118:1 trap "unreachable selected pattern"
+@118:1 end
+@118:1 read 8 move 0 variant 1 0
+@118:1 assign 8 9
+@118:43 read 10 move 9
+@118:36 drop 0
+@118:36 return 10
+@117:9 else
+@119:1 int 12 0
+@119:1 assign 12 11
+@119:1 tag-test-place 13 0 0
+@119:1 if 13
+@119:1 int 14 1
+@119:1 assign 14 11
+@119:1 end
+@119:1 if 11
+@119:1 tag-test-place 15 0 0
+@119:1 if 15
+@119:1 else
+@119:1 trap "unreachable selected pattern"
+@119:1 end
+@119:29 trap "explicit panic"
+@119:29 unit 16
+@117:9 else
+@117:9 trap "unreachable match"
+@117:9 end
+@117:9 end
+@117:9 unit 17
+endfn
+fn "$std::prelude::unwrap_or$f528<Self=t16;T=t3;>" 2 3 file 13
+local "self" 16 let
+local "default" 3 let
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 3 let
+local "value" 3 let
+local "$" 3 let
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 3 let
+local "$" 0 let
+@129:1 int 3 0
+@129:1 assign 3 2
+@129:1 tag-test-place 4 1 0
+@129:1 if 4
+@129:1 int 5 1
+@129:1 int 6 1
+@129:1 binary 7 "&" 5 6
+@129:1 assign 7 2
+@129:1 end
+@129:1 if 2
+@129:1 tag-test-place 8 1 0
+@129:1 if 8
+@129:1 else
+@129:1 trap "unreachable selected pattern"
+@129:1 end
+@129:1 read 9 copy 0 variant 1 0
+@129:1 assign 9 10
+@129:43 read 11 copy 10
+@129:36 drop 10
+@129:36 drop 1
+@129:36 drop 0
+@129:36 return 11
+@128:9 else
+@130:1 int 13 0
+@130:1 assign 13 12
+@130:1 tag-test-place 14 0 0
+@130:1 if 14
+@130:1 int 15 1
+@130:1 assign 15 12
+@130:1 end
+@130:1 if 12
+@130:1 tag-test-place 16 0 0
+@130:1 if 16
+@130:1 else
+@130:1 trap "unreachable selected pattern"
+@130:1 end
+@130:36 read 17 copy 1
+@130:29 drop 1
+@130:29 drop 0
+@130:29 return 17
+@128:9 else
+@128:9 trap "unreachable match"
+@128:9 end
+@128:9 end
+@128:9 unit 18
+endfn
+fn "$std::prelude::is_ok$f533<E=t3;Self=t17;T=t3;>" 1 1 file 13
+local "self" 20 let
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$match" 1 mut
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+@169:1 int 2 0
+@169:1 assign 2 1
+@169:1 tag-test-place 3 0 0 deref
+@169:1 if 3
+@169:1 int 4 1
+@169:1 int 5 1
+@169:1 binary 6 "&" 4 5
+@169:1 assign 6 1
+@169:1 end
+@169:1 if 1
+@169:1 tag-test-place 7 0 0 deref
+@169:1 if 7
+@169:1 else
+@169:1 trap "unreachable selected pattern"
+@169:1 end
+@169:30 int 8 1
+@168:9 assign 8 9
+@168:9 else
+@170:1 int 11 0
+@170:1 assign 11 10
+@170:1 tag-test-place 12 1 0 deref
+@170:1 if 12
+@170:1 int 13 1
+@170:1 int 14 1
+@170:1 binary 15 "&" 13 14
+@170:1 assign 15 10
+@170:1 end
+@170:1 if 10
+@170:1 tag-test-place 16 1 0 deref
+@170:1 if 16
+@170:1 else
+@170:1 trap "unreachable selected pattern"
+@170:1 end
+@170:31 int 17 0
+@168:9 assign 17 9
+@168:9 else
+@168:9 trap "unreachable match"
+@168:9 end
+@168:9 end
+@167:9 drop 0
+@167:9 return 9
+endfn
+fn "$std::prelude::unwrap$f535<E=t3;Self=t17;T=t3;>" 1 3 file 13
+local "self" 17 let
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 3 let
+local "value" 3 let
+local "$" 3 let
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 0 let
+local "$" 0 let
+@180:1 int 2 0
+@180:1 assign 2 1
+@180:1 tag-test-place 3 0 0
+@180:1 if 3
+@180:1 int 4 1
+@180:1 int 5 1
+@180:1 binary 6 "&" 4 5
+@180:1 assign 6 1
+@180:1 end
+@180:1 if 1
+@180:1 tag-test-place 7 0 0
+@180:1 if 7
+@180:1 else
+@180:1 trap "unreachable selected pattern"
+@180:1 end
+@180:1 read 8 copy 0 variant 0 0
+@180:1 assign 8 9
+@180:41 read 10 copy 9
+@180:34 drop 9
+@180:34 drop 0
+@180:34 return 10
+@179:9 else
+@181:1 int 12 0
+@181:1 assign 12 11
+@181:1 tag-test-place 13 1 0
+@181:1 if 13
+@181:1 int 14 1
+@181:1 int 15 1
+@181:1 binary 16 "&" 14 15
+@181:1 assign 16 11
+@181:1 end
+@181:1 if 11
+@181:1 tag-test-place 17 1 0
+@181:1 if 17
+@181:1 else
+@181:1 trap "unreachable selected pattern"
+@181:1 end
+@181:31 trap "explicit panic"
+@181:31 unit 18
+@179:9 else
+@179:9 trap "unreachable match"
+@179:9 end
+@179:9 end
+@179:9 unit 19
+endfn
+fn "semantic_values" 0 3
+local "result" 3 let
+local "expected0" 3 let
+local "equal0" 1 let
+local "unit0" 0 let
+local "answer" 3 let
+@1 call 0 0
+@1 int 1 22
+@1 binary 2 == 0 1
+@1 intrinsic 3 assert 2
+@1 drop 3
+@1 int 4 42
+@1 return 4
+endfn

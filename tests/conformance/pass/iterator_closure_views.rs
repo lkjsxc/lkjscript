@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 pub fn probe() -> i64 {
     let values = [42i64, 0];
     let mut input = values.as_slice().iter().map(|value| value);

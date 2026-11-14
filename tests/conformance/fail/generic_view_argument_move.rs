@@ -1,3 +1,5 @@
+// expect: reject E_MOVE
+// witness: {"rustCode":"E0382"}
 fn identity<T>(value: T) -> T { value }
 pub fn probe() -> i64 {
     let mut value = 42i64;

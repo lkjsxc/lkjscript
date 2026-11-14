@@ -1,3 +1,6 @@
+// expect: value 42
+// entry: probe
+// witness: {}
 trait Touch {
     fn touch(&mut self);
 }

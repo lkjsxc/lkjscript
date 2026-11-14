@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 fn choose<'a>(input: Option<&'a str>) -> &'a str {
     match input {
         Option::Some(value) => return value,

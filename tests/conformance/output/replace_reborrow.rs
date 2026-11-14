@@ -1,3 +1,5 @@
+// expect: output 2a2a2a2a2a
+// witness: {}
 fn replace_twice(slot: &mut i64) {
     let old = std::mem::replace(slot, 20);
     let middle = std::mem::replace(slot, old + 20);

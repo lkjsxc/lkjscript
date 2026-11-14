@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 const BASE: i64 = 20;
 mod outer {
     use super::*;

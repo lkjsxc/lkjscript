@@ -1,3 +1,5 @@
+// expect: output 2a2a2a2a2a2a
+// witness: {}
 struct Held<T> { value: T }
 struct Borrowed<'a, T> { value: &'a mut T }
 type Ref<'a, T> = &'a mut T;

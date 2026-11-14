@@ -1,3 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
 struct View<'a> { value: &'a mut i64 }
 fn change(view: &mut View<'_>) { *view.value = 0; }
 pub fn probe() -> i64 {

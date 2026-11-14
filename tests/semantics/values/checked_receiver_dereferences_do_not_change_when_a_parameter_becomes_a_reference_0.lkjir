@@ -1,0 +1,118 @@
+lkjscript-ir 1
+# expect: value 42
+# entry: semantic_values
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u64" int 64 unsigned
+type "isize" int 64 signed
+type "u16" int 16 unsigned
+type "u32" int 32 unsigned
+type "i8" int 8 signed
+type "i16" int 16 signed
+type "char" char
+type "&t3" ref shared 3
+type "&t14" ref shared 14
+fn "cloned_reference" 0 3
+local "$" 3 let
+local "value" 3 let
+local "$" 14 let
+local "reference" 14 let
+local "$" 15 let
+local "$" 14 let
+local "copied_reference" 14 let
+local "$" 3 let
+@7:19 int 0 42
+@7:1 assign 0 1
+@7:36 borrow 2 shared 1
+@7:1 assign 2 3
+@8:41 borrow 4 shared 3
+@8:26 call 5 2 4
+@8:1 assign 5 6
+@9:5 read 7 copy 6 deref
+@6:5 drop 6
+@6:5 drop 3
+@6:5 drop 1
+@6:5 return 7
+endfn
+fn "scored_reference" 0 3
+local "$" 3 let
+local "value" 3 let
+local "$" 14 let
+local "reference" 14 let
+local "$" 15 let
+local "$" 3 let
+@12:19 int 0 42
+@12:1 assign 0 1
+@12:36 borrow 2 shared 1
+@12:1 assign 2 3
+@13:20 borrow 4 shared 3
+@13:5 call 5 3 4
+@11:5 drop 3
+@11:5 drop 1
+@11:5 return 5
+endfn
+fn "copied<T=t14;>" 1 14
+return-leaf 0 bound 0 deref
+local "value" 15 let
+local "$" 15 let
+local "$" 14 let
+@2:33 borrow 1 shared 0 deref
+@2:33 call 2 4 1
+@2:1 drop 0
+@2:1 return 2
+endfn
+fn "scored<T=t14;>" 1 3
+local "value" 15 let
+local "$" 15 let
+local "$" 3 let
+@5:35 borrow 1 shared 0 deref
+@5:35 call 2 5 1
+@5:1 drop 0
+@5:1 return 2
+endfn
+fn "$builtin:clone:t14" 1 14 from 0 deref
+local "self" 15 let
+local "v1" 14 let
+@2:33 read 1 copy 0 deref
+@2:33 drop 0
+@2:33 return 1
+endfn
+fn "score$f2<Self=t14;>" 1 3
+local "self" 15 let
+local "$" 3 let
+local "$" 3 let
+local "$" 3 let
+@4:43 read 1 copy 0 deref deref
+@4:50 int 2 1
+@4:43 binary 3 "+" 1 2
+@4:22 drop 0
+@4:22 return 3
+endfn
+fn "semantic_values" 0 3
+local "result" 3 let
+local "expected0" 3 let
+local "equal0" 1 let
+local "unit0" 0 let
+local "result" 3 let
+local "expected1" 3 let
+local "equal1" 1 let
+local "unit1" 0 let
+local "answer" 3 let
+@1 call 0 0
+@1 int 1 42
+@1 binary 2 == 0 1
+@1 intrinsic 3 assert 2
+@1 drop 3
+@1 call 4 1
+@1 int 5 43
+@1 binary 6 == 4 5
+@1 intrinsic 7 assert 6
+@1 drop 7
+@1 int 8 42
+@1 return 8
+endfn

@@ -1,3 +1,6 @@
+// expect: value 42
+// entry: probe
+// witness: {}
 fn enumeration() -> i64 {
     let values = [18i64, 22i64];
     let mut total = 0i64;

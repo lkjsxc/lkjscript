@@ -1,0 +1,342 @@
+use crate::{frontend as compiler, interpreter, runtime, runtime_memory, source};
+
+fn bundle(text: String) -> source::SourceBundle {
+    source::SourceBundle {
+        root: "runtime.rs".to_string(),
+        library: None,
+        files: vec![source::SourceInput {
+            path: "runtime.rs".to_string(),
+            text,
+        }],
+    }
+}
+fn source_text() -> String {
+    format!(
+        "{}\n{}",
+        include_str!("../../library/runtime.rs"),
+        include_str!("allocator_fixture.rs")
+    )
+}
+fn prepared() -> runtime::Runtime {
+    runtime::seal(compiler::check_bundle(&bundle(source_text())).unwrap()).unwrap()
+}
+fn value(
+    runtime: &runtime::Runtime,
+    name: &str,
+    arguments: &[u64],
+    memory: &mut runtime_memory::Memory,
+) -> u64 {
+    let result = interpreter::run_runtime(
+        runtime.checked_program(),
+        runtime.function(name).unwrap(),
+        arguments,
+        memory,
+        &mut Vec::<u8>::new(),
+    )
+    .unwrap_or_else(|error| panic!("{}: {}", error.code(), error.message));
+    match result.value {
+        interpreter::Scalar::Int { value, .. } => value,
+        _ => panic!("expected a runtime word"),
+    }
+}
+
+fn source_allocator_reuses_regions_and_releases_dedicated_mappings() {
+    let runtime = prepared();
+    let mut memory = runtime_memory::Memory::new();
+    assert_eq!(
+        value(&runtime, "probe_allocator", &[0u64; 0], &mut memory),
+        42
+    );
+    let retained = memory.mapped_bytes();
+    let regions = memory.mapping_count();
+    assert_eq!(
+        value(&runtime, "probe_allocator", &[0u64; 0], &mut memory),
+        42
+    );
+    assert_eq!(memory.mapped_bytes(), retained);
+    assert_eq!(memory.mapping_count(), regions);
+    let medium = value(&runtime, "allocate", &[65536], &mut memory);
+    assert_eq!(memory.mapped_bytes(), retained);
+    value(&runtime, "release", &[medium], &mut memory);
+    assert_eq!(value(&runtime, "allocate", &[65536], &mut memory), medium);
+    value(&runtime, "release", &[medium], &mut memory);
+    let large = value(&runtime, "allocate", &[2097152], &mut memory);
+    assert!(memory.mapped_bytes() > retained);
+    value(&runtime, "release", &[large], &mut memory);
+    assert_eq!(memory.mapped_bytes(), retained);
+    assert!(matches!(
+        memory.read(large, 1),
+        Err(runtime_memory::MemoryFault::Bounds)
+    ));
+}
+
+fn region_growth_preserves_live_blocks_and_reuses_medium_classes() {
+    let runtime = prepared();
+    let mut memory = runtime_memory::Memory::new();
+    assert_eq!(
+        value(&runtime, "probe_medium_regions", &[0u64; 0], &mut memory),
+        42
+    );
+    let retained = memory.mapped_bytes();
+    let regions = memory.mapping_count();
+    assert_eq!(
+        value(&runtime, "probe_medium_regions", &[0u64; 0], &mut memory),
+        42
+    );
+    assert_eq!(memory.mapped_bytes(), retained);
+    assert_eq!(memory.mapping_count(), regions);
+}
+
+fn refused_geometric_region_retries_a_smaller_request() {
+    let runtime = prepared();
+    let mut memory = runtime_memory::Memory::new();
+    memory.refuse_next_mapping();
+    let pointer = value(&runtime, "allocate", &[8], &mut memory);
+    memory.write(pointer, &[42]).unwrap();
+    assert_eq!(memory.read(pointer, 1).unwrap().to_vec(), vec![42]);
+    assert_eq!(
+        memory.mapped_bytes(),
+        runtime::ALLOCATOR_STATE_BYTES as usize + 32768
+    );
+    value(&runtime, "release", &[pointer], &mut memory);
+}
+
+fn source_utf8_validation_matches_independent_decoding() {
+    let runtime = prepared();
+    let mut memory = runtime_memory::Memory::new();
+    let cases = vec![
+        vec![],
+        vec![0, 127],
+        vec![194, 128],
+        vec![223, 191],
+        vec![224, 160, 128],
+        vec![237, 159, 191],
+        vec![240, 144, 128, 128],
+        vec![244, 143, 191, 191],
+        vec![128],
+        vec![192, 128],
+        vec![224, 159, 191],
+        vec![237, 160, 128],
+        vec![244, 144, 128, 128],
+        vec![240, 144, 128],
+    ];
+    for bytes in cases {
+        let address = value(&runtime, "allocate", &[bytes.len() as u64], &mut memory);
+        memory.write(address, &bytes).unwrap();
+        assert_eq!(
+            value(
+                &runtime,
+                "utf8_validate",
+                &[address, bytes.len() as u64],
+                &mut memory
+            ),
+            if std::str::from_utf8(&bytes).is_ok() {
+                1u64
+            } else {
+                0u64
+            }
+        );
+        value(&runtime, "release", &[address], &mut memory);
+    }
+}
+
+fn kernel_refusal_and_unrepresentable_allocation_report_heap_failure() {
+    let runtime = prepared();
+    let mut memory = runtime_memory::Memory::new();
+    memory.refuse_mappings();
+    let refused = interpreter::run_runtime(
+        runtime.checked_program(),
+        runtime.function("allocate").unwrap(),
+        &[8],
+        &mut memory,
+        &mut Vec::<u8>::new(),
+    )
+    .err()
+    .unwrap();
+    assert_eq!(refused.code(), "R0006");
+    let overflow = interpreter::run_runtime(
+        runtime.checked_program(),
+        runtime.function("probe_overflow").unwrap(),
+        &[0u64; 0],
+        &mut memory,
+        &mut Vec::<u8>::new(),
+    )
+    .err()
+    .unwrap();
+    assert_eq!(overflow.code(), "R0006");
+}
+
+fn raw_names_require_an_explicit_checked_runtime_seal() {
+    let input = bundle(source_text());
+    let checked = compiler::check_bundle(&input).unwrap();
+    let entry = checked
+        .program()
+        .functions
+        .iter()
+        .position(|function| function.name == "probe_allocator")
+        .unwrap();
+    let result = interpreter::run(checked.program(), entry, &[0u64; 0], &mut Vec::<u8>::new());
+    assert!(matches!(result.err().unwrap().kind, interpreter::ErrorKind::Trap(code) if code >= 16));
+    let replaced = replace_first(
+        &input.files[0].text,
+        "panic!(\"unsealed runtime primitive\")",
+        "0",
+    );
+    assert!(runtime::seal(compiler::check_bundle(&bundle(replaced)).unwrap()).is_err());
+    let wrong_entry = input.files[0].text.as_str().replace(
+        "pub fn utf8_validate(data: u64, length: u64) -> u64 {\n    valid_utf8_bytes(data, length)\n}",
+        "pub fn utf8_validate(data: u64) -> u64 { valid_utf8_bytes(data, 0) }",
+    );
+    let error = runtime::seal(compiler::check_bundle(&bundle(wrong_entry)).unwrap())
+        .err()
+        .unwrap();
+    assert_eq!(error.code, "E_RUNTIME");
+    assert!(error.message.contains("utf8_validate"));
+}
+
+fn replace_first(text: &str, from: &str, to: &str) -> String {
+    let at = text.find(from).unwrap();
+    let mut out = text[..at].to_string();
+    out.push_str(to);
+    out.push_str(&text[at + from.len()..]);
+    out
+}
+pub fn run(world: &mut World) -> usize {
+    native_allocator_model(world);
+    entry_guards();
+    json_escapes();
+    source_allocator_reuses_regions_and_releases_dedicated_mappings();
+    region_growth_preserves_live_blocks_and_reuses_medium_classes();
+    refused_geometric_region_retries_a_smaller_request();
+    source_utf8_validation_matches_independent_decoding();
+    kernel_refusal_and_unrepresentable_allocation_report_heap_failure();
+    raw_names_require_an_explicit_checked_runtime_seal();
+    9usize
+}
+fn entry_guards() {
+    let runtime = prepared();
+    for (text, argument) in vec![
+        ("pub fn probe(value:&i64)->i64{*value}".to_string(), 1i64),
+        ("pub fn probe(value:bool)->bool{value}".to_string(), 2i64),
+    ] {
+        let checked = compiler::check_bundle(&bundle(text)).unwrap();
+        let mut function = 0usize;
+        while checked.program().functions[function].name != "probe" {
+            function += 1;
+        }
+        let result = crate::native::encode(
+            &checked,
+            &runtime,
+            crate::native::Entry {
+                function,
+                arguments: vec![argument],
+                result_fd: Some(2u32),
+            },
+        );
+        assert!(matches!(result,Err(error) if error.code == "E_ENTRY"));
+    }
+}
+fn json_escapes() {
+    for (input, expected) in vec![
+        ("".to_string(), "\"\"".to_string()),
+        ("plain /".to_string(), "\"plain /\"".to_string()),
+        ("\"\\".to_string(), "\"\\\"\\\\\"".to_string()),
+        (
+            "\0\t\n\r\u{1f}".to_string(),
+            "\"\\u0000\\u0009\\u000a\\u000d\\u001f\"".to_string(),
+        ),
+        (
+            "é\u{85}\u{9f}水".to_string(),
+            "\"é\u{85}\u{9f}水\"".to_string(),
+        ),
+    ] {
+        let mut bytes = Vec::new();
+        crate::json::write_string(&mut bytes, &input);
+        assert!(bytes == expected.as_bytes().to_vec());
+    }
+    let mut input = String::new();
+    let mut expected = "\"".to_string();
+    for byte in 0u8..=31u8 {
+        input.push(byte as char);
+        expected.push_str(&format!("\\u{byte:04x}"));
+    }
+    expected.push('"');
+    let mut bytes = Vec::new();
+    crate::json::write_string(&mut bytes, &input);
+    assert!(bytes == expected.as_bytes().to_vec());
+}
+
+fn native_result(world: &mut World, bytes: Vec<u8>) -> Result<u64, String> {
+    let mut storage = world.temporary_file().unwrap();
+    storage.write_all(&bytes).unwrap();
+    storage.set_executable().unwrap();
+    let executable = storage.readonly().unwrap();
+    drop(storage);
+    let input = world.temporary_file().unwrap();
+    let mut output = world.temporary_file().unwrap();
+    let mut errors = world.temporary_file().unwrap();
+    let mut result = world.temporary_file().unwrap();
+    let mut process = world.process();
+    let arguments: Vec<Vec<u8>> = Vec::new();
+    let mut child = process
+        .spawn_file(&executable, &arguments, &input, &output, &errors, &result)
+        .unwrap();
+    let status = child.wait().unwrap();
+    output.rewind().unwrap();
+    errors.rewind().unwrap();
+    result.rewind().unwrap();
+    assert!(output.read_to_end().unwrap().is_empty());
+    assert!(result.read_to_end().unwrap().is_empty());
+    let bytes = errors.read_to_end().unwrap();
+    if status != 0 {
+        return Err(String::from_utf8(bytes).unwrap());
+    }
+    assert_eq!(bytes.len(), 8usize);
+    let mut value = 0u64;
+    for index in 0usize..8usize {
+        value |= (bytes[index] as u64) << ((index * 8usize) as u64);
+    }
+    Ok(value)
+}
+fn native_allocator_model(world: &mut World) {
+    let runtime = prepared();
+    let names: Vec<String> = vec![
+        "probe_allocator".to_string(),
+        "probe_medium_regions".to_string(),
+    ];
+    for name in names {
+        let mut memory = runtime_memory::Memory::new();
+        let expected = value(&runtime, name.as_str(), &[0u64; 0], &mut memory);
+        let image = crate::native::encode_runtime(
+            &runtime,
+            crate::native::Entry {
+                function: runtime.function(name.as_str()).unwrap(),
+                arguments: Vec::new(),
+                result_fd: Some(2u32),
+            },
+        )
+        .unwrap();
+        assert_eq!(native_result(world, image.bytes).unwrap(), expected);
+    }
+    let ordinary = compiler::check_bundle(&bundle(source_text())).unwrap();
+    let mut index = 0usize;
+    while ordinary.program().functions[index].name != "probe_allocator" {
+        index += 1;
+    }
+    let image = crate::native::encode(
+        &ordinary,
+        &runtime,
+        crate::native::Entry {
+            function: index,
+            arguments: Vec::new(),
+            result_fd: Some(2u32),
+        },
+    )
+    .unwrap();
+    assert!(
+        native_result(world, image.bytes)
+            .err()
+            .unwrap()
+            .starts_with("R0016 at line ")
+    );
+}

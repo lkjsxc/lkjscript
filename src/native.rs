@@ -14,6 +14,7 @@ mod layout;
 mod ownership;
 pub(crate) mod platform;
 mod process;
+pub mod profiling;
 mod registers;
 mod scalar;
 
@@ -159,7 +160,7 @@ fn prologue(a: &mut Assembler, p: platform::Platform, bytes: u64, site: Span) {
         a.rr(0x29, SP, A, true);
     }
 }
-fn copy_bytes(a: &mut Assembler, p: platform::Platform, bytes: u64) {
+fn copy_bytes(a: &mut Assembler, _p: platform::Platform, bytes: u64) {
     if bytes == 0 {
         return;
     }
@@ -173,9 +174,62 @@ fn copy_bytes(a: &mut Assembler, p: platform::Platform, bytes: u64) {
         for word in 0..bytes / 8 {
             a.store(DI, word as i64 * 8, R8 + word as u8);
         }
+    } else if bytes <= 128 {
+        // Every load precedes every store, preserving memmove semantics even
+        // when projected aggregates overlap. x86-64 supplies SSE2 unconditionally.
+        let chunks = bytes / 16;
+        for chunk in 0..chunks {
+            a.load128(chunk as u8, SI, chunk as i64 * 16);
+        }
+        let mut remaining = bytes % 16;
+        let mut offset = chunks * 16;
+        let mut register = R8;
+        let mut width = 8u8;
+        while width != 0 {
+            if remaining >= width as u64 {
+                a.load_width(register, SI, offset as i64, width, false);
+                offset += width as u64;
+                remaining -= width as u64;
+                register += 1;
+            }
+            width /= 2;
+        }
+        for chunk in 0..chunks {
+            a.store128(DI, chunk as i64 * 16, chunk as u8);
+        }
+        remaining = bytes % 16;
+        offset = chunks * 16;
+        register = R8;
+        let mut width = 8u8;
+        while width != 0 {
+            if remaining >= width as u64 {
+                a.store_width(DI, offset as i64, register, width);
+                offset += width as u64;
+                remaining -= width as u64;
+                register += 1;
+            }
+            width /= 2;
+        }
     } else {
-        a.immediate(D, bytes);
-        a.call(p.copy);
+        let forward = a.label();
+        let done = a.label();
+        a.compare(DI, SI);
+        a.condition(6, forward);
+        a.mov(A, SI);
+        a.immediate(C, bytes);
+        a.rr(0x01, A, C, true);
+        a.compare(DI, A);
+        a.condition(3, forward);
+        a.rr(0x01, DI, C, true);
+        a.rr(0x01, SI, C, true);
+        a.lea(DI, DI, -1);
+        a.lea(SI, SI, -1);
+        a.raw(&[0xfd, 0xf3, 0xa4, 0xfc]);
+        a.jump(done);
+        a.bind(forward);
+        a.immediate(C, bytes);
+        a.raw(&[0xfc, 0xf3, 0xa4]);
+        a.bind(done);
     }
 }
 fn epilogue(a: &mut Assembler) {
@@ -297,7 +351,7 @@ impl<'a> Body<'a> {
         self.a.bind(valid);
     }
     // Small inline copies read every source word before writing any destination;
-    // larger copies use the overlap-safe platform leaf. Registers are caller-saved.
+    // larger copies use inline directional rep movsb. Registers are caller-saved.
     fn copy_value(&mut self, destination: u8, source: u8, ty: usize) {
         let bytes = self.layout.storage(ty).bytes;
         if destination == SI && source == DI {
@@ -1328,10 +1382,13 @@ pub fn encode(
     runtime: &Runtime,
     entry: Entry,
 ) -> Result<Image, Diagnostic> {
-    encode_program(checked.program(), runtime, entry, false)
+    encode_program(checked.program(), runtime, entry, false, None)
 }
 pub fn encode_runtime(runtime: &Runtime, entry: Entry) -> Result<Image, Diagnostic> {
-    encode_program(runtime.checked_program(), runtime, entry, true)
+    encode_program(runtime.checked_program(), runtime, entry, true, None)
+}
+pub fn encode_profile(checked: &CheckedProgram, runtime: &Runtime, entry: Entry, path: &str) -> Result<Image, Diagnostic> {
+    encode_program(checked.program(), runtime, entry, false, Some(path))
 }
 fn scalar_entry(kind: &TypeKind) -> bool {
     matches!(
@@ -1362,6 +1419,7 @@ fn encode_program(
     runtime: &Runtime,
     entry: Entry,
     runtime_model: bool,
+    profile_path: Option<&str>,
 ) -> Result<Image, Diagnostic> {
     let selected = match program.functions.get(entry.function) {
         Some(function) => function,
@@ -1403,6 +1461,50 @@ fn encode_program(
     }
     let mut a = Assembler::new();
     let p = platform::Platform::new(&mut a);
+    let profile = if profile_path.is_some() { Some(profiling::Labels::new(&mut a)) } else { None };
+    let image_start = a.label();
+    a.bind(image_start);
+    let mut symbols: Vec<(Label, String)> = Vec::new();
+    if profile.is_some() {
+        symbols.push((image_start, "$platform::entry".to_string()));
+        symbols.push((p.trap, "$platform::trap".to_string()));
+        symbols.push((p.heap_exhausted, "$platform::heap_exhausted".to_string()));
+        symbols.push((p.stack_exhausted, "$platform::stack_exhausted".to_string()));
+        symbols.push((p.grow_stack, "$platform::grow_stack".to_string()));
+        symbols.push((p.trim_stack, "$platform::trim_stack".to_string()));
+        symbols.push((p.copy, "$platform::copy".to_string()));
+        symbols.push((p.map, "$platform::map".to_string()));
+        symbols.push((p.unmap, "$platform::unmap".to_string()));
+        symbols.push((p.remap, "$platform::remap".to_string()));
+        symbols.push((p.complete, "$platform::complete".to_string()));
+        symbols.push((p.stdout_write, "$platform::stdout_write".to_string()));
+        symbols.push((p.stderr_write, "$platform::stderr_write".to_string()));
+        symbols.push((p.stdin_read, "$platform::stdin_read".to_string()));
+        symbols.push((p.argument_count, "$platform::argument_count".to_string()));
+        symbols.push((p.argument_length, "$platform::argument_length".to_string()));
+        symbols.push((p.argument_copy, "$platform::argument_copy".to_string()));
+        symbols.push((p.set_exit_status, "$platform::set_exit_status".to_string()));
+        symbols.push((p.directory_open, "$platform::directory_open".to_string()));
+        symbols.push((p.file_open, "$platform::file_open".to_string()));
+        symbols.push((p.file_read, "$platform::file_read".to_string()));
+        symbols.push((p.file_write, "$platform::file_write".to_string()));
+        symbols.push((p.handle_close, "$platform::handle_close".to_string()));
+        symbols.push((p.world_file, "$platform::world_file".to_string()));
+        symbols.push((p.clock_read, "$platform::clock_read".to_string()));
+        symbols.push((p.process_spawn, "$platform::process_spawn".to_string()));
+        symbols.push((p.child_wait, "$platform::child_wait".to_string()));
+        symbols.push((p.child_terminate, "$platform::child_terminate".to_string()));
+        symbols.push((p.child_drop, "$platform::child_drop".to_string()));
+        symbols.push((p.directory_open_directory, "$platform::directory_open_directory".to_string()));
+        symbols.push((p.directory_read, "$platform::directory_read".to_string()));
+        symbols.push((p.handle_rewind, "$platform::handle_rewind".to_string()));
+        symbols.push((p.directory_create, "$platform::directory_create".to_string()));
+        symbols.push((p.directory_remove, "$platform::directory_remove".to_string()));
+        symbols.push((p.directory_rename, "$platform::directory_rename".to_string()));
+        symbols.push((p.file_executable, "$platform::file_executable".to_string()));
+        symbols.push((p.file_duplicate, "$platform::file_duplicate".to_string()));
+        symbols.push((p.file_readonly, "$platform::file_readonly".to_string()));
+    }
     let functions = labels(&mut a, program.functions.len());
     let drops = labels(&mut a, program.types.len());
     let runtime_functions = if runtime_model {
@@ -1423,7 +1525,11 @@ fn encode_program(
             needed[index] = true;
         }
     }
-    platform::emit(&mut a, p, functions[entry.function], &entry);
+    platform::emit(&mut a, p, functions[entry.function], &entry, profile);
+    if let Some(profile) = profile {
+        symbols.push((profile.start, "$profiler".to_string()));
+        profiling::emit(&mut a, p, profile, profile_path.unwrap().len());
+    }
     {
         let selection = Selection {
             program,
@@ -1504,9 +1610,26 @@ fn encode_program(
             }
         }
     }
-    let data_offset = (a.bytes.len() + 4095) & !4095;
+    if profile.is_some() {
+        for (index, function) in program.functions.iter().enumerate() {
+            symbols.push((functions[index], format!("{} [file {}:{}]", function.name, function.file, first_site(function).line)));
+        }
+        for (index, ty) in program.types.iter().enumerate() {
+            symbols.push((drops[index], format!("$drop::{}", ty.name)));
+        }
+        if !runtime_model {
+            for (index, function) in runtime.checked_program().functions.iter().enumerate() {
+                symbols.push((runtime_functions[index], format!("$runtime::{}", function.name)));
+            }
+        }
+    }
+    let code_end = a.bytes.len();
+    let data_offset = (code_end + 4095) & !4095;
     let mut data = Vec::new();
     platform::data(&mut a, p, &mut data, data_offset, &trap_messages);
+    if let Some(profile) = profile {
+        profiling::data(&mut a, profile, &mut data, data_offset, profile_path.unwrap(), &symbols, code_end);
+    }
     for (bytes, label) in &literals {
         a.data_label(*label, data_offset + data.len());
         data.extend_from_slice(bytes);

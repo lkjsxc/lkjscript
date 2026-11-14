@@ -1,3 +1,5 @@
+// expect: value 42
+// witness: {}
 struct Triple<T>(T, T, T);
 enum Choice { Empty, Values(i64, i64, i64) }
 fn ends<T>(value: (T,T,T)) -> (T,T) { let (first, .., last) = value; (first,last) }
