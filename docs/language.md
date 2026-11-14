@@ -100,6 +100,8 @@ The owned loader handles inline modules, file modules (`child.rs` or
 `child/mod.rs`) and nested directories. Missing, ambiguous and duplicate inputs
 have distinct diagnostics. Source spans and K functions retain file IDs;
 diagnostics identify the original file. The host supplies bytes only.
+The [source-producer interface](frontend.md) specifies the pure API, native World
+driver, explicit bundle encoding and input records.
 
 Resolution uses module/declaration identities, lexical scopes, imports/aliases,
 qualified `crate`/`self`/`super` paths and prelude priority. Private, `pub(self)`,

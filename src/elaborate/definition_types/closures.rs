@@ -25,16 +25,23 @@ impl Infer<'_, '_> {
         let Some((entry, value)) = self.bindings.entry(name) else {
             return;
         };
-        for frame in &mut self.capture_frames {
+        for index in 0..self.capture_frames.len() {
+            let frame = &mut self.capture_frames[index];
             if entry < frame.start {
+                if !frame.captures.contains_key(&entry) {
+                    frame.captures.insert(
+                        entry,
+                        Capture {
+                            name: name.to_string(),
+                            value,
+                            uses: Vec::new(),
+                        },
+                    );
+                }
                 frame
                     .captures
-                    .entry(entry)
-                    .or_insert_with(|| Capture {
-                        name: name.to_string(),
-                        value,
-                        uses: Vec::new(),
-                    })
+                    .get_mut(&entry)
+                    .unwrap()
                     .uses
                     .push(expression);
             }
@@ -57,30 +64,43 @@ impl Infer<'_, '_> {
             start,
             captures: BTreeMap::new(),
         });
-        for (parameter, pattern) in params.iter().zip(patterns) {
-            let value = self.source_type(parameter.ty, &environment)?;
+        let mut index = 0;
+        while index < params.len() && index < patterns.len() {
+            let value = self.source_type(params[index].ty, &environment)?;
             arguments.push(value);
-            self.definition.bindings.insert(*pattern, value);
-            self.bind_pattern(*pattern, value, true)?;
+            self.definition.bindings.insert(patterns[index], value);
+            self.bind_pattern(patterns[index], value, true)?;
+            index += 1;
         }
         let result = match annotation {
             Some(ty) => self.source_type(ty, &environment)?,
             None => self.unknown(),
         };
         let enclosing_result = std::mem::replace(&mut self.result, result);
-        let enclosing_loops = std::mem::take(&mut self.loops);
+        let enclosing_loops = std::mem::replace(&mut self.loops, Vec::new());
         let value = self.expr(body)?;
         self.coerce(value, result, span)?;
         self.result = enclosing_result;
         self.loops = enclosing_loops;
         self.bindings.truncate(start);
-        let frame = self.capture_frames.pop().unwrap();
-        // Environment fields follow first source use, independently of names or
-        // inference-variable union representatives.
-        let mut captures: Vec<_> = frame.captures.into_values().collect();
-        captures.sort_by_key(|capture| self.source.exprs[capture.uses[0]].span.start);
-        let mut children: Vec<_> = captures.iter().map(|capture| capture.value).collect();
-        children.extend_from_slice(&arguments);
+        let mut frame = self.capture_frames.pop().unwrap();
+        // The entry key breaks equal source positions exactly as the original
+        // stable sort of the map's ordered values did.
+        let mut order: Vec<(usize, usize)> = Vec::new();
+        for (entry, capture) in &frame.captures {
+            order.push((self.source.exprs[capture.uses[0]].span.start, *entry));
+        }
+        order.sort();
+        let mut captures = Vec::new();
+        let mut children = Vec::new();
+        for (_, entry) in order {
+            let capture = frame.captures.remove(&entry).unwrap();
+            children.push(capture.value);
+            captures.push(capture);
+        }
+        for argument in &arguments {
+            children.push(*argument);
+        }
         children.push(result);
         self.definition.closures.insert(
             expression,
@@ -113,10 +133,10 @@ impl Infer<'_, '_> {
         let a::Type::Tuple(parameters) = self.source.types[path.args[0]].kind.clone() else {
             return Ok(());
         };
-        let arguments = parameters
-            .into_iter()
-            .map(|ty| self.source_type(ty, environment))
-            .collect::<Result<Vec<_>>>()?;
+        let mut arguments = Vec::new();
+        for ty in parameters {
+            arguments.push(self.source_type(ty, environment)?);
+        }
         let result = self.source_type(path.args[1], environment)?;
         if let Some(Shape::Rigid(name)) = self.shape(receiver) {
             self.callable_parameters.insert(name, (arguments, result));
@@ -152,7 +172,7 @@ impl Infer<'_, '_> {
                 if !produced {
                     span = self.source.exprs[expression].span;
                 }
-                let closure = &self.definition.closures[&expression];
+                let closure = self.definition.closures.get(&expression).unwrap();
                 Some((closure.arguments.clone(), closure.result))
             }
             Shape::Rigid(name) => self.callable_parameters.get(&name).cloned(),
@@ -164,8 +184,8 @@ impl Infer<'_, '_> {
         if parameters.len() != arguments.len() {
             return Err(err(span, "E_TYPE", "callable argument count differs"));
         }
-        for (value, parameter) in arguments.into_iter().zip(parameters) {
-            self.coerce(value, parameter, span)?;
+        for index in 0..arguments.len() {
+            self.coerce(arguments[index], parameters[index], span)?;
         }
         self.unify(result, output, span)?;
         Ok(true)

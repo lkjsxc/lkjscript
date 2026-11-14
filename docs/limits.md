@@ -7,7 +7,7 @@ of the accepted language and can be changed explicitly.
 | Stage | Actual constraint |
 | --- | --- |
 | Representation | Indices, extents and pointers use the supported 64-bit host representation. Checked arithmetic detects overflow. ELF and virtual-address formats remain finite. |
-| Rust bootstrap | Recursive compiler paths use a scoped native thread stack provisioned from host resources. Compiler threads join before execution or stream capture. Rust/Cargo still build the source front end. The production K compiler source closure is complete. |
+| Rust bootstrap | Recursive compiler paths use a scoped native thread stack provisioned from host resources. Compiler threads join before execution or stream capture. The production source front end and K compiler have native fixed points. Rust/Cargo remain bootstrap/reference and development-test tools. |
 | Native code | Linux x86-64 static ELF; absolute call/branch addresses avoid a signed-32-bit code-distance ceiling. No external engine imposes function/local counts. |
 | Native stack/heap | Startup reads physical memory, excluding swap, RLIMIT_AS and RLIMIT_STACK. It reserves the stack first and gives the heap the remaining extent after the image and actual startup mappings. Stack exhaustion is R0008; heap refusal/growth/exhaustion is R0006. Linux can still kill an overcommitted process under physical or cgroup pressure. Execution readings never affect artifact bytes. |
 | K execution and batch capture | A separate worker inherits the caller's address-space limit or a tighter explicitly selected limit. The model receives a separate stack-byte extent, charging live frames, local location tables and root cells. Array/aggregate/container payloads remain heap allocations. Fallible paths report R0008/R0006; other Rust collection allocations may abort, reported by the parent as a host failure. |
@@ -86,6 +86,14 @@ The follow-up CI investigation is recorded in
 observations/2026-11-13e-host-resources.json. With the same 256 MiB process and
 1 MiB model-stack budgets, 24 direct/mutual recursion cases report located R0008.
 The idle model observation drops from 200,576 to 17,096 KiB mapped address space.
+
+The 2026-11-14 native source producer rebuilds from its 1.7 MB explicit bundle
+with an 18.5 MB K output and a 50.7 MB ELF. Its first own-source pass uses
+775,348,224 bytes peak RSS. The recorded experiment selected 8 GiB address space
+and inherited an 8 MiB stack. These are experiment controls, not source
+acceptance limits.
+The exact protocol and staging tools are in [frontend.md](frontend.md), and the
+measurements are in observations/2026-11-14-frontend-selfhost.json.
 
 Virtual reservation, committed memory, RSS and logical heap size are different
 measurements. Multiple processes compete for physical memory even after mappings

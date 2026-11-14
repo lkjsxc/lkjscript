@@ -1,0 +1,616 @@
+{
+  "date": "2026-11-14",
+  "stage": "production source front-end port",
+  "base_commit": "9e81f9bfa4cb5982a6d4c1f2668330822760b4c4",
+  "evidence_directory": "/home/coder/lkjscript-codex-20261114-frontend-port/",
+  "first_complete_ownership": "2026-11-14-frontend-first-ownership.json",
+  "ownership": {
+    "initial_source_bodies_attempted": 1424,
+    "initial_diagnostics": {
+      "E_BORROW": 62,
+      "E_MOVE": 1
+    },
+    "initial_sites": 63,
+    "subsequently_observed_sites": 15,
+    "total_distinct_observed_sites_repaired": 78,
+    "current_diagnostics": 0,
+    "ownership_rule_changes": 0,
+    "notes": "Diagnostic sites are observed first faults, not a count of every edit. Same-family rewrites can clear latent sites before a separate diagnostic.",
+    "groups": [
+      {
+        "file": "root-ownership-repairs.json",
+        "record": {
+          "scope": [
+            "src/diagnostics/lookup_domains.rs",
+            "src/syntax.rs",
+            "src/elaborate/census.rs",
+            "src/elaborate/derive_methods.rs"
+          ],
+          "initial_diagnostics": 10,
+          "initial": [
+            {
+              "file": "src/diagnostics/lookup_domains.rs",
+              "line": 285,
+              "column": 1,
+              "code": "E_BORROW",
+              "message": "$ conflicts with shared borrow held by $::Some.0 (created at 286:9)"
+            },
+            {
+              "file": "src/syntax.rs",
+              "line": 433,
+              "column": 21,
+              "code": "E_BORROW",
+              "message": "self.* conflicts with shared borrow held by $ (created at 373:28)"
+            },
+            {
+              "file": "src/syntax.rs",
+              "line": 2836,
+              "column": 25,
+              "code": "E_BORROW",
+              "message": "self.*.program.blocks[$].span conflicts with exclusive borrow held by $ (created at 2834:32)"
+            },
+            {
+              "file": "src/syntax.rs",
+              "line": 3330,
+              "column": 25,
+              "code": "E_BORROW",
+              "message": "named conflicts with shared borrow held by $::Some.0 (created at 3317:49)"
+            },
+            {
+              "file": "src/elaborate/derive_methods.rs",
+              "line": 44,
+              "column": 20,
+              "code": "E_BORROW",
+              "message": "self.* conflicts with shared borrow held by $::Some.0 (created at 39:12)"
+            },
+            {
+              "file": "src/elaborate/derive_methods.rs",
+              "line": 400,
+              "column": 30,
+              "code": "E_BORROW",
+              "message": "self.*.compiler.*.functions[$].result conflicts with exclusive borrow held by $ (created at 400:19)"
+            },
+            {
+              "file": "src/diagnostics/lookup_domains.rs",
+              "line": 266,
+              "column": 17,
+              "code": "E_BORROW",
+              "message": "$for:79126:iterator conflicts with shared borrow held by $::Some.0 (created at 266:29)"
+            },
+            {
+              "file": "src/diagnostics/lookup_domains.rs",
+              "line": 220,
+              "column": 13,
+              "code": "E_BORROW",
+              "message": "self.*.methods conflicts with exclusive borrow held by $::Some.0 (created at 217:32)"
+            },
+            {
+              "file": "src/diagnostics/lookup_domains.rs",
+              "line": 229,
+              "column": 17,
+              "code": "E_BORROW",
+              "message": "edges conflicts with exclusive borrow held by $::Some.0 (created at 226:41)"
+            },
+            {
+              "file": "src/elaborate/census.rs",
+              "line": 341,
+              "column": 17,
+              "code": "E_BORROW",
+              "message": "loop backedge changes the reference holders or origins required at loop entry"
+            }
+          ],
+          "newly_exposed": [
+            {
+              "file": "src/syntax.rs",
+              "line": 2881,
+              "column": 68,
+              "code": "E_BORROW",
+              "message": "read the while-let body span before mutably borrowing the parser"
+            }
+          ],
+          "repair_sites": 11,
+          "remaining_diagnostics_in_scope": 0,
+          "observation": "15-root.stderr",
+          "ownership_rule_changes": 0,
+          "repairs": [
+            "End lexeme view scope before advancing the lexer.",
+            "Compute if-let/while-let block spans before parser arena mutation.",
+            "Copy optional map lookup results before formatting-name insertion.",
+            "Choose map insertion or mutation using an owned presence test.",
+            "Use indexed domain traversal so returned diagnostics borrow their stored owner directly.",
+            "End a temporary Result carrying source views before iterating its owned error vector.",
+            "Compute the rigid-receiver flag and call result type before mutating the builder."
+          ]
+        }
+      },
+      {
+        "file": "owned-ownership-repairs.json",
+        "record": {
+          "initial": 14,
+          "repairs": [
+            {
+              "observation": "owned-17.stderr",
+              "diagnostic": "src/elaborate/text_format.rs:182:18: E_BORROW self.* conflicts with shared borrow held by $ (created at 177:37)"
+            },
+            {
+              "observation": "owned-17.stderr",
+              "diagnostic": "src/elaborate/pattern_choices.rs:121:48: E_BORROW possible conflicts with exclusive borrow held by $ (created at 121:13)"
+            },
+            {
+              "observation": "owned-17.stderr",
+              "diagnostic": "src/elaborate/scoped_locals.rs:346:17: E_BORROW self.*.scoped_body.annotations.checkpoints conflicts with exclusive borrow held by $::Some.0 (created at 343:36)"
+            },
+            {
+              "observation": "owned-17.stderr",
+              "diagnostic": "src/elaborate/scoped_calls.rs:127:25: E_BORROW elisions conflicts with shared borrow held by $::Some.0 (created at 122:42)"
+            },
+            {
+              "observation": "owned-17.stderr",
+              "diagnostic": "src/elaborate/patterns.rs:566:25: E_BORROW signature conflicts with shared borrow held by $ (created at 557:45)"
+            },
+            {
+              "observation": "owned-17.stderr",
+              "diagnostic": "src/elaborate/patterns.rs:1482:29: E_BORROW tagged conflicts with exclusive borrow held by $::Some.0 (created at 1479:49)"
+            },
+            {
+              "observation": "owned-17.stderr",
+              "diagnostic": "src/elaborate/inference.rs:179:37: E_BORROW environments[$] conflicts with shared borrow held by $::Some.0 (created at 174:57)"
+            },
+            {
+              "observation": "owned-17.stderr",
+              "diagnostic": "src/elaborate/borrow_cleanup.rs:87:21: E_BORROW self.*.dependents conflicts with exclusive borrow held by $::Some.0 (created at 82:41)"
+            },
+            {
+              "observation": "owned-17.stderr",
+              "diagnostic": "src/elaborate/static_lifetimes.rs:246:21: E_BORROW interned conflicts with shared borrow held by $::Some.0 (created at 241:48)"
+            },
+            {
+              "observation": "owned-17.stderr",
+              "diagnostic": "src/elaborate/scoped_calls.rs:29:9: E_BORROW edges.* conflicts with exclusive borrow held by $::Some.0 (created at 24:27)"
+            },
+            {
+              "observation": "owned-17.stderr",
+              "diagnostic": "src/elaborate/scoped_calls.rs:38:9: E_BORROW bindings.* conflicts with exclusive borrow held by $::Some.0 (created at 33:28)"
+            },
+            {
+              "observation": "owned-17.stderr",
+              "diagnostic": "src/elaborate/scoped_calls.rs:53:13: E_BORROW unique conflicts with exclusive borrow held by $::Some.0 (created at 49:30)"
+            },
+            {
+              "observation": "owned-17.stderr",
+              "diagnostic": "src/elaborate/origins.rs:60:9: E_BORROW inputs.* conflicts with exclusive borrow held by $::Some.0 (created at 57:31)"
+            },
+            {
+              "observation": "owned-17.stderr",
+              "diagnostic": "src/elaborate/derive_check.rs:172:9: E_BORROW compiler.* conflicts with shared borrow held by $ (created at 143:35)"
+            }
+          ],
+          "totalRepairs": 14,
+          "newlyExposed": 0,
+          "postRepairObservation": "owned-18.stderr",
+          "postRepairDiagnostics": 0,
+          "rustCheck": "passed",
+          "scopeFiles": [
+            "src/elaborate/assignment.rs",
+            "src/elaborate/borrow_cleanup.rs",
+            "src/elaborate/capabilities.rs",
+            "src/elaborate/constructors.rs",
+            "src/elaborate/derive_check.rs",
+            "src/elaborate/inference.rs",
+            "src/elaborate/integers.rs",
+            "src/elaborate/operators.rs",
+            "src/elaborate/origins.rs",
+            "src/elaborate/pattern_choices.rs",
+            "src/elaborate/patterns.rs",
+            "src/elaborate/scoped_calls.rs",
+            "src/elaborate/scoped_locals.rs",
+            "src/elaborate/sequences.rs",
+            "src/elaborate/static_lifetimes.rs",
+            "src/elaborate/sugars.rs",
+            "src/elaborate/text_format.rs",
+            "src/elaborate/trait_proofs.rs",
+            "src/elaborate/type_display.rs",
+            "src/elaborate/type_resolve.rs",
+            "src/elaborate/variants.rs"
+          ],
+          "wholeRootCountsAtObservation": {
+            "E_BORROW": 48,
+            "E_MOVE": 1,
+            "E_BLOCKED": 1
+          },
+          "focusedTests": {
+            "range_patterns": 11,
+            "source_bounds": 6,
+            "text": 27,
+            "total": 44,
+            "failed": 0
+          },
+          "diffCheck": "passed"
+        }
+      },
+      {
+        "file": "types-ownership-summary.json",
+        "record": {
+          "scope": [
+            "src/elaborate/definition_types.rs",
+            "src/elaborate/definition_types/",
+            "src/elaborate/generic_check.rs",
+            "src/elaborate/closures.rs"
+          ],
+          "initial_observed": 17,
+          "newly_exposed_observed": 8,
+          "total_observed_repaired": 25,
+          "remaining": 0,
+          "sequence": [
+            {
+              "stage": "first complete ownership",
+              "remaining": 17
+            },
+            {
+              "stage": "types-own-01.stderr",
+              "remaining": 4
+            },
+            {
+              "stage": "types-own-02.stderr",
+              "remaining": 2
+            },
+            {
+              "stage": "types-own-03.stderr",
+              "remaining": 2
+            },
+            {
+              "stage": "types-own-04.stderr",
+              "remaining": 0
+            }
+          ],
+          "notes": "Observed diagnostic sites only; same-family guard/temporary rewrites sometimes cleared latent sites before a separate diagnostic. No library, trusted K or core float changes."
+        }
+      },
+      {
+        "file": "boundary-ownership-repairs.json",
+        "record": {
+          "initial_diagnostics": [
+            {
+              "file": "src/generics.rs",
+              "line": 202,
+              "column": 17,
+              "code": "E_BORROW",
+              "message": "self.*.heads conflicts with exclusive borrow held by $::Some.0 (created at 199:35)"
+            },
+            {
+              "file": "src/generics.rs",
+              "line": 658,
+              "column": 33,
+              "code": "E_BORROW",
+              "message": "self.* conflicts with shared borrow held by function (created at 616:24)"
+            },
+            {
+              "file": "src/generics/signature_bounds.rs",
+              "line": 24,
+              "column": 28,
+              "code": "E_BORROW",
+              "message": "$ conflicts with shared borrow held by $match (created at 26:22)"
+            },
+            {
+              "file": "src/elaborate.rs",
+              "line": 979,
+              "column": 23,
+              "code": "E_MOVE",
+              "message": "sub.* points to an owner that may be moved"
+            },
+            {
+              "file": "src/elaborate.rs",
+              "line": 1217,
+              "column": 17,
+              "code": "E_BORROW",
+              "message": "self.*.visible conflicts with exclusive borrow held by locals (created at 1214:26)"
+            },
+            {
+              "file": "src/elaborate.rs",
+              "line": 1670,
+              "column": 34,
+              "code": "E_BORROW",
+              "message": "self.*.compiler.*.types conflicts with exclusive borrow held by $ (created at 1666:9)"
+            },
+            {
+              "file": "src/elaborate.rs",
+              "line": 1678,
+              "column": 46,
+              "code": "E_BORROW",
+              "message": "self.*.active_span conflicts with exclusive borrow held by $ (created at 1678:13)"
+            },
+            {
+              "file": "src/elaborate.rs",
+              "line": 1738,
+              "column": 45,
+              "code": "E_BORROW",
+              "message": "cannot move out of a borrow or indexed collection"
+            },
+            {
+              "file": "src/elaborate.rs",
+              "line": 1800,
+              "column": 45,
+              "code": "E_BORROW",
+              "message": "cannot move out of a borrow or indexed collection"
+            },
+            {
+              "file": "src/elaborate.rs",
+              "line": 1860,
+              "column": 17,
+              "code": "E_BORROW",
+              "message": "self.* conflicts with shared borrow held by $ (created at 1854:15)"
+            },
+            {
+              "file": "src/elaborate.rs",
+              "line": 2058,
+              "column": 17,
+              "code": "E_BORROW",
+              "message": "self.* conflicts with shared borrow held by name (created at 2056:24)"
+            },
+            {
+              "file": "src/elaborate.rs",
+              "line": 2274,
+              "column": 13,
+              "code": "E_BORROW",
+              "message": "self.*.compiler.*.source.*.exprs[$].span conflicts with exclusive borrow held by $ (created at 2271:9)"
+            },
+            {
+              "file": "src/elaborate.rs",
+              "line": 2426,
+              "column": 20,
+              "code": "E_BORROW",
+              "message": "self.* conflicts with shared borrow held by $::Some.0 (created at 2425:30)"
+            },
+            {
+              "file": "src/elaborate.rs",
+              "line": 3498,
+              "column": 21,
+              "code": "E_BORROW",
+              "message": "self.*.compiler.*.types[$].name conflicts with exclusive borrow held by $ (created at 3497:25)"
+            },
+            {
+              "file": "src/elaborate.rs",
+              "line": 4097,
+              "column": 21,
+              "code": "E_BORROW",
+              "message": "self.*.compiler.*.types[$].name conflicts with exclusive borrow held by $ (created at 4096:29)"
+            },
+            {
+              "file": "src/elaborate.rs",
+              "line": 2897,
+              "column": 13,
+              "code": "E_BORROW",
+              "message": "self.*.compiler.*.types[$].name conflicts with exclusive borrow held by $ (created at 2896:18)"
+            },
+            {
+              "file": "src/elaborate.rs",
+              "line": 4686,
+              "column": 48,
+              "code": "E_BORROW",
+              "message": "self.* conflicts with exclusive borrow held by $ (created at 4683:25)"
+            },
+            {
+              "file": "src/elaborate.rs",
+              "line": 4535,
+              "column": 21,
+              "code": "E_BORROW",
+              "message": "self.*.compiler.*.types[$].name conflicts with exclusive borrow held by $ (created at 4534:26)"
+            },
+            {
+              "file": "src/generics.rs",
+              "line": 2135,
+              "column": 34,
+              "code": "E_BORROW",
+              "message": "done conflicts with exclusive borrow held by $ (created at 2135:17)"
+            },
+            {
+              "file": "src/generics/signature_bounds.rs",
+              "line": 80,
+              "column": 21,
+              "code": "E_BORROW",
+              "message": "substitutions conflicts with shared borrow held by $::Some.0 (created at 75:41)"
+            },
+            {
+              "file": "src/generics/signature_bounds.rs",
+              "line": 290,
+              "column": 17,
+              "code": "E_BORROW",
+              "message": "state conflicts with shared borrow held by $::Some.0 (created at 282:16)"
+            },
+            {
+              "file": "src/elaborate.rs",
+              "line": 332,
+              "column": 34,
+              "code": "E_BORROW",
+              "message": "c.declaration_names conflicts with exclusive borrow held by $ (created at 330:21)"
+            }
+          ],
+          "newly_exposed": [
+            {
+              "file": "src/elaborate.rs",
+              "line": 1006,
+              "column": 21,
+              "code": "E_BORROW",
+              "message": "self.* conflicts with shared borrow held by bound (created at 995:25)",
+              "observed_after_group": 1
+            },
+            {
+              "file": "src/elaborate.rs",
+              "line": 1771,
+              "column": 44,
+              "code": "E_BORROW",
+              "message": "self.*.compiler.*.source.*.exprs[$].span conflicts with exclusive borrow held by $ (created at 1770:28)",
+              "observed_after_group": 1
+            },
+            {
+              "file": "src/elaborate.rs",
+              "line": 2722,
+              "column": 21,
+              "code": "E_BORROW",
+              "message": "self.*.compiler.*.types[$].name conflicts with exclusive borrow held by $ (created at 2721:26)",
+              "observed_after_group": 1
+            },
+            {
+              "file": "src/elaborate.rs",
+              "line": 3729,
+              "column": 30,
+              "code": "E_BORROW",
+              "message": "self.* conflicts with shared borrow held by $::Some.0 (created at 3724:39)",
+              "observed_after_group": 1
+            },
+            {
+              "file": "src/elaborate.rs",
+              "line": 4177,
+              "column": 31,
+              "code": "E_BORROW",
+              "message": "self.*.compiler.*.names conflicts with exclusive borrow held by $ (created at 4174:26)",
+              "observed_after_group": 1
+            },
+            {
+              "file": "src/elaborate.rs",
+              "line": 3747,
+              "column": 53,
+              "code": "E_BORROW",
+              "message": "self.*.compiler.*.source.*.exprs[$].span conflicts with exclusive borrow held by $ (created at 3747:17)",
+              "observed_after_group": 2
+            }
+          ],
+          "groups": [
+            {
+              "id": 1,
+              "actions": [
+                "End temporary map borrows before insertion/removal",
+                "Retain the independent source view before mutable generic analysis",
+                "Keep an explicit owner for empty child slices",
+                "Use an initialized optional owner for prepared substitutions",
+                "Compute immutable call arguments before exclusive receiver borrows",
+                "End guard/pattern borrows before mutation",
+                "Keep guarded affine enum fields owned in their selected branch",
+                "Remove ignored intern description formatting",
+                "Preserve match-arm and nominal declaration construction order"
+              ],
+              "initial_sites": 22
+            },
+            {
+              "id": 2,
+              "actions": [
+                "Own each generic AST function and completed expression node while mutating generic analysis; callee paths are copied per call",
+                "Own bound names across mutable satisfaction checks",
+                "Copy range span before mutable builder call",
+                "Remove ignored repeat-array intern description",
+                "Copy optional inferred type before consulting mutable hint",
+                "Resolve Option name before constructing mutable nominal type"
+              ],
+              "initial_sites_retried": 1,
+              "new_sites": 5
+            },
+            {
+              "id": 3,
+              "actions": [
+                "Copy argument span before coercion receiver borrow"
+              ],
+              "new_sites": 1
+            }
+          ],
+          "final": {
+            "initial_sites": 22,
+            "newly_exposed_sites": 6,
+            "total_distinct_sites": 28,
+            "remaining_owned_diagnostics": 0,
+            "validation": [
+              {
+                "command": "/home/coder/lkjscript-codex-20261114-frontend-port/b0 check src/frontend_lib.rs",
+                "exit_code": 0,
+                "stdout": "boundary-ownership-3.stdout",
+                "stderr": "boundary-ownership-3.stderr",
+                "stderr_bytes": 0
+              },
+              {
+                "command": "cargo check",
+                "exit_code": 0,
+                "stdout": "boundary-ownership-rust.stdout",
+                "stderr": "boundary-ownership-rust.stderr"
+              }
+            ],
+            "trusted_checker_changes": false
+          }
+        }
+      }
+    ]
+  },
+  "source_boundary": {
+    "pure_root": "src/frontend_lib.rs",
+    "world_root": "src/frontend_main.rs",
+    "driver_source_bodies_attempted": 1433,
+    "driver_k_functions": 7334,
+    "driver_k": {
+      "bytes": 18489341,
+      "sha256": "75393007990e5b99d01d6ab5f3b678c0082b6ea60f0b3fb6c308f9e113dedcc6"
+    },
+    "check_command": "/home/coder/lkjscript-codex-20261114-frontend-port/b0 check src/frontend_main.rs",
+    "check_exit_code": 0,
+    "census": "/home/coder/lkjscript-codex-20261114-frontend-port/frontend-main-census.stdout"
+  },
+  "host_exact_k": {
+    "compiler": {
+      "path": "/home/coder/workspace/lkjscript/target/release/lkjscript",
+      "bytes": 5827616,
+      "sha256": "96f7c7a2809a839537199ad294826cab7d2766c2b41d837ca80383ea965c0953"
+    },
+    "baseline": {
+      "directory": "/home/coder/lkjscript-codex-20261114-frontend-port/source-baseline-complete",
+      "compiler": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/b0",
+        "bytes": 6251848,
+        "sha256": "cbc65d4d667bd81f53588084c83643a7377761259229e5d5bb12a96617bb5297"
+      }
+    },
+    "manifest": {
+      "path": "tests/conformance/cases.json",
+      "bytes": 164387,
+      "sha256": "fb956d5e9a288ac9577a31cecdefb86501d7ce9108e5c050b07b4ac5d9862149",
+      "total_cases": 887,
+      "direct_k_cases": 295
+    },
+    "source_root": "/home/coder/lkjscript-codex-20261114-frontend-port/baseline",
+    "counts": {
+      "identical-k": 268,
+      "pending-equal": 4,
+      "rejection-equal": 321
+    },
+    "failures": [],
+    "elapsed_seconds": 7.98389578,
+    "rejection_comparison": "exit status and first diagnostic code; full stderr is retained but not required equal",
+    "library_changes": [],
+    "records": "/home/coder/lkjscript-codex-20261114-frontend-port/03-owned-comparison/"
+  },
+  "decisions": [
+    "Port the existing algorithms while retaining declaration/type/function/local numbering and cleanup order.",
+    "Use concrete owned vectors, indices and short lookup scopes for rare host forms; do not extend reference contracts.",
+    "Replace the host float parser with exact ordinary-source decimal-to-binary64 rounding and compare it with Rust bit results.",
+    "Keep one pure SourceBundle-to-K implementation and supply all source/library bytes through an explicit World bundle.",
+    "Diagnose unsized source locals while their defining instruction location remains available; independent K checking stays authoritative."
+  ],
+  "trust": {
+    "k_checker_changes": false,
+    "k_rule_changes": false,
+    "native_encoder_changes": false,
+    "source_library_changes": false
+  },
+  "validation": {
+    "float_corpus": {
+      "cases": 752,
+      "finite_bits_equal": 635,
+      "overflow_equal": 108,
+      "invalid_equal": 9,
+      "mismatches": 0,
+      "production_helper_route_cases": 14,
+      "routes": [
+        "native",
+        "K machine"
+      ]
+    },
+    "new_bundle_tests": 10,
+    "scope": "Full gate and native fixed-point evidence are recorded separately."
+  }
+}

@@ -66,10 +66,26 @@ pub(super) fn has_static(source: &a::Program, result: usize) -> bool {
     false
 }
 
-#[derive(Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Default)]
 struct Environment {
     lifetimes: BTreeMap<String, String>,
     types: BTreeMap<String, (usize, usize)>,
+}
+
+type EnvironmentKey = (Vec<(String, String)>, Vec<(String, (usize, usize))>);
+
+impl Environment {
+    fn key(&self) -> EnvironmentKey {
+        let mut lifetimes = Vec::new();
+        for (name, value) in &self.lifetimes {
+            lifetimes.push((name.clone(), value.clone()));
+        }
+        let mut types = Vec::new();
+        for (name, value) in &self.types {
+            types.push((name.clone(), *value));
+        }
+        (lifetimes, types)
+    }
 }
 
 fn substitution(
@@ -97,8 +113,8 @@ fn substitution(
 /// native stack. Generic expansion has already passed the finite-data analysis.
 fn wholly_static(source: &a::Program, result: usize) -> bool {
     let mut environments = vec![Environment::default()];
-    let mut interned = BTreeMap::new();
-    interned.insert(Environment::default(), 0);
+    let mut interned: BTreeMap<EnvironmentKey, usize> = BTreeMap::new();
+    interned.insert(Environment::default().key(), 0);
     let mut pending = vec![(result, 0)];
     let mut seen = BTreeSet::new();
     while let Some((id, environment)) = pending.pop() {
@@ -161,25 +177,25 @@ fn wholly_static(source: &a::Program, result: usize) -> bool {
                     // dynamic reference leaves even beside a static reference.
                     return false;
                 };
-                let (parameters, fields): (&[a::GenericParam], Vec<usize>) =
+                let (parameters, fields): (&Vec<a::GenericParam>, Vec<usize>) =
                     match source.declarations[declaration].item {
                         a::Item::Struct(index) => {
                             let definition = &source.structs[index];
-                            (
-                                &definition.generics,
-                                definition.fields.iter().map(|field| field.ty).collect(),
-                            )
+                            let mut fields = Vec::new();
+                            for field in &definition.fields {
+                                fields.push(field.ty);
+                            }
+                            (&definition.generics, fields)
                         }
                         a::Item::Enum(index) => {
                             let definition = &source.enums[index];
-                            (
-                                &definition.generics,
-                                definition
-                                    .variants
-                                    .iter()
-                                    .flat_map(|variant| variant.fields.iter().map(|field| field.ty))
-                                    .collect(),
-                            )
+                            let mut fields = Vec::new();
+                            for variant in &definition.variants {
+                                for field in &variant.fields {
+                                    fields.push(field.ty);
+                                }
+                            }
+                            (&definition.generics, fields)
                         }
                         a::Item::Alias(index) => {
                             let definition = &source.aliases[index];
@@ -188,13 +204,15 @@ fn wholly_static(source: &a::Program, result: usize) -> bool {
                         _ => return false,
                     };
                 let mut bindings = Environment::default();
-                let mut arguments = path.args.iter().copied().peekable();
+                let mut argument_index = 0;
                 for parameter in parameters {
                     if parameter.lifetime {
-                        let value = if let Some(arg) = arguments.peek() {
-                            if let a::Type::Path(path) = &source.types[*arg].kind {
+                        let value = if argument_index < path.args.len() {
+                            if let a::Type::Path(path) =
+                                &source.types[path.args[argument_index]].kind
+                            {
                                 if path.name.starts_with('\'') {
-                                    arguments.next();
+                                    argument_index += 1;
                                     environments[environment]
                                         .lifetimes
                                         .get(&path.name)
@@ -210,19 +228,23 @@ fn wholly_static(source: &a::Program, result: usize) -> bool {
                             String::new()
                         };
                         bindings.lifetimes.insert(parameter.name.clone(), value);
-                    } else if let Some(argument) = arguments.next() {
+                    } else if argument_index < path.args.len() {
+                        let argument = path.args[argument_index];
+                        argument_index += 1;
                         bindings.types.insert(
                             parameter.name.clone(),
                             substitution(source, &environments, argument, environment),
                         );
                     }
                 }
-                let nested = if let Some(id) = interned.get(&bindings) {
-                    *id
+                let key = bindings.key();
+                let known = interned.get(&key).copied();
+                let nested = if let Some(id) = known {
+                    id
                 } else {
                     let id = environments.len();
-                    environments.push(bindings.clone());
-                    interned.insert(bindings, id);
+                    environments.push(bindings);
+                    interned.insert(key, id);
                     id
                 };
                 for field in fields {

@@ -17,38 +17,46 @@ struct Canonical {
 impl Canonical {
     fn term(&mut self, terms: &[Term], first: usize) -> usize {
         let mut work = vec![(first, false)];
+        let empty: Vec<usize> = Vec::new();
         while let Some((id, finish)) = work.pop() {
             if self.ids.contains_key(&id) {
                 continue;
             }
             let children = match &terms[id] {
                 Term::Named(_, children) | Term::DeclaredTrait(_, children) => children.as_slice(),
-                _ => &[],
+                _ => empty.as_slice(),
             };
             if !finish {
                 work.push((id, true));
-                for child in children.iter().rev() {
-                    work.push((*child, false));
+                let mut index = children.len();
+                while index > 0 {
+                    index -= 1;
+                    work.push((children[index], false));
                 }
                 continue;
             }
+            let mut child_ids = Vec::new();
+            for child in children {
+                child_ids.push(*self.ids.get(child).unwrap());
+            }
             let key = match &terms[id] {
-                Term::Named(name, children) => Term::Named(
-                    name.clone(),
-                    children.iter().map(|child| self.ids[child]).collect(),
-                ),
-                Term::DeclaredTrait(declaration, children) => Term::DeclaredTrait(
-                    *declaration,
-                    children.iter().map(|child| self.ids[child]).collect(),
-                ),
+                Term::Named(name, _) => Term::Named(name.clone(), child_ids),
+                Term::DeclaredTrait(declaration, _) => Term::DeclaredTrait(*declaration, child_ids),
                 leaf => leaf.clone(),
             };
-            let canonical = *self.terms.entry(key).or_insert(id);
+            let canonical = match self.terms.get(&key) {
+                Some(previous) => *previous,
+                None => {
+                    self.terms.insert(key, id);
+                    id
+                }
+            };
             self.ids.insert(id, canonical);
         }
-        self.ids[&first]
+        *self.ids.get(&first).unwrap()
     }
-    fn goal(&mut self, terms: &[Term], (ty, bound): Goal) -> Goal {
+    fn goal(&mut self, terms: &[Term], goal: Goal) -> Goal {
+        let (ty, bound) = goal;
         (self.term(terms, ty), self.term(terms, bound))
     }
 }
@@ -65,8 +73,9 @@ fn match_terms(
     while let Some((pattern, actual)) = pending.pop() {
         if let Term::Variable(variable) = terms[pattern] {
             if flexible.contains(&variable) {
-                if let Some(previous) = substitutions.get(&variable) {
-                    if !equivalent(terms, *previous, actual) {
+                let previous = substitutions.get(&variable).copied();
+                if let Some(previous) = previous {
+                    if !equivalent(terms, previous, actual) {
                         return None;
                     }
                 } else {
@@ -78,12 +87,16 @@ fn match_terms(
         match (&terms[pattern], &terms[actual]) {
             (Term::Variable(a), Term::Variable(b)) if a == b => {}
             (Term::Named(a, ac), Term::Named(b, bc)) if a == b && ac.len() == bc.len() => {
-                pending.extend(ac.iter().copied().zip(bc.iter().copied()));
+                for index in 0..ac.len() {
+                    pending.push((ac[index], bc[index]));
+                }
             }
             (Term::DeclaredTrait(a, ac), Term::DeclaredTrait(b, bc))
                 if a == b && ac.len() == bc.len() =>
             {
-                pending.extend(ac.iter().copied().zip(bc.iter().copied()));
+                for index in 0..ac.len() {
+                    pending.push((ac[index], bc[index]));
+                }
             }
             _ => return None,
         }
@@ -95,9 +108,10 @@ fn prerequisites(
     source: &Program,
     index: &ImplementationIndex,
     terms: &mut Vec<Term>,
-    (ty, bound): Goal,
+    goal: Goal,
     known: &[Goal],
 ) -> Result<Option<Vec<Goal>>, Diagnostic> {
+    let (ty, bound) = goal;
     let declaration = match &terms[bound] {
         Term::DeclaredTrait(declaration, args) if args.is_empty() => *declaration,
         _ => return Ok(None),
@@ -107,7 +121,7 @@ fn prerequisites(
     };
     let head = term_head(terms, ty);
     let mut selected = None;
-    for candidate in candidates.matching(head.as_deref()) {
+    for candidate in candidates.matching(optional_name(&head)) {
         let implementation = &source.impls[candidate];
         let Some(trait_ty) = implementation.trait_ty else {
             continue;
@@ -115,13 +129,12 @@ fn prerequisites(
         // All existing variable identities are below the arena's next index.
         let mut next = terms.len();
         let environment = variables(source, &implementation.generics, terms, &mut next);
-        let flexible: BTreeSet<_> = environment
-            .values()
-            .filter_map(|id| match terms[*id] {
-                Term::Variable(variable) => Some(variable),
-                _ => None,
-            })
-            .collect();
+        let mut flexible = BTreeSet::new();
+        for id in environment.values() {
+            if let Term::Variable(variable) = terms[*id] {
+                flexible.insert(variable);
+            }
+        }
         let target = signature_type(source, implementation.target, &environment, terms)?;
         let implemented = signature_type(source, trait_ty, &environment, terms)?;
         let Some(mut substitutions) = match_terms(
@@ -137,23 +150,21 @@ fn prerequisites(
         // flexible; the caller's type/region variables remain rigid.
         loop {
             let before = substitutions.len();
-            let current: BTreeMap<_, _> = environment
-                .iter()
-                .map(|(name, id)| {
-                    let value = match terms[*id] {
-                        Term::Variable(variable) => {
-                            substitutions.get(&variable).copied().unwrap_or(*id)
-                        }
-                        _ => *id,
-                    };
-                    (name.clone(), value)
-                })
-                .collect();
+            let mut current = BTreeMap::new();
+            for (name, id) in &environment {
+                let value = match terms[*id] {
+                    Term::Variable(variable) => {
+                        substitutions.get(&variable).copied().unwrap_or(*id)
+                    }
+                    _ => *id,
+                };
+                current.insert(name.clone(), value);
+            }
             for parameter in &implementation.generics {
                 if parameter.lifetime {
                     continue;
                 }
-                let value = current[&parameter.name];
+                let value = *current.get(&parameter.name).unwrap();
                 if matches!(terms[value], Term::Variable(variable) if flexible.contains(&variable))
                 {
                     continue;
@@ -203,35 +214,43 @@ fn prerequisites(
                 break;
             }
         }
-        let mut environment = environment
-            .into_iter()
-            .map(|(name, id)| match terms[id] {
-                Term::Variable(variable) => substitutions
-                    .get(&variable)
-                    .copied()
-                    .map(|value| (name, value)),
+        let mut resolved = BTreeMap::new();
+        let mut complete = true;
+        for (name, id) in environment {
+            let value = match terms[id] {
+                Term::Variable(variable) => substitutions.get(&variable).copied(),
                 _ => None,
-            })
-            .collect::<Option<BTreeMap<_, _>>>();
-        let Some(environment) = environment.as_mut() else {
+            };
+            if let Some(value) = value {
+                resolved.insert(name, value);
+            } else {
+                complete = false;
+                break;
+            }
+        }
+        if !complete {
             continue;
-        };
+        }
+        let mut environment = resolved;
         environment.insert("Self".to_string(), ty);
         let mut children = Vec::new();
         for parameter in &implementation.generics {
             if parameter.lifetime {
                 continue;
             }
-            let value = environment[&parameter.name];
+            let value = *environment.get(&parameter.name).unwrap();
             for constraint in &parameter.bounds {
                 children.push((
                     value,
-                    signature_type(source, *constraint, environment, terms)?,
+                    signature_type(source, *constraint, &environment, terms)?,
                 ));
             }
         }
         for constraint in &source.traits[declaration].bounds {
-            children.push((ty, signature_type(source, *constraint, environment, terms)?));
+            children.push((
+                ty,
+                signature_type(source, *constraint, &environment, terms)?,
+            ));
         }
         // Coherence normally ensures uniqueness; never choose arbitrarily if a
         // caller provides source that has not passed that global validation.
@@ -259,17 +278,25 @@ pub(super) fn prove(
     // 0 is active, 1 disproved, 2 proved. A user-implementation cycle is not
     // evidence; structural builtin proofs are already handled independently.
     let mut state = BTreeMap::<Goal, u8>::new();
-    let mut pending = vec![(first, None::<Vec<Goal>>)];
+    let mut pending: Vec<(Goal, Option<Vec<Goal>>)> = vec![(first, None)];
     while let Some((goal, children)) = pending.pop() {
         if let Some(children) = children {
-            if state.get(&goal) != Some(&1) {
-                let valid = children.iter().all(|child| state.get(child) == Some(&2));
-                state.insert(goal, if valid { 2 } else { 1 });
+            let unfinished = state.get(&goal).copied() != Some(1u8);
+            if unfinished {
+                let mut valid = true;
+                for child in &children {
+                    if state.get(child).copied() != Some(2u8) {
+                        valid = false;
+                        break;
+                    }
+                }
+                state.insert(goal, if valid { 2u8 } else { 1u8 });
             }
             continue;
         }
-        if let Some(previous) = state.get(&goal) {
-            if *previous == 0 {
+        let previous = state.get(&goal).copied();
+        if let Some(previous) = previous {
+            if previous == 0 {
                 state.insert(goal, 1);
             }
             continue;
@@ -282,13 +309,16 @@ pub(super) fn prove(
             state.insert(goal, 1);
             continue;
         };
-        let children: Vec<_> = children
-            .into_iter()
-            .map(|child| canonical.goal(terms, child))
-            .collect();
+        let mut canonical_children: Vec<Goal> = Vec::new();
+        for child in children {
+            canonical_children.push(canonical.goal(terms, child));
+        }
+        let mut children = canonical_children;
         state.insert(goal, 0);
         pending.push((goal, Some(children.clone())));
-        pending.extend(children.into_iter().rev().map(|child| (child, None)));
+        while let Some(child) = children.pop() {
+            pending.push((child, None));
+        }
     }
-    Ok(state.get(&first) == Some(&2))
+    Ok(state.get(&first).copied() == Some(2u8))
 }

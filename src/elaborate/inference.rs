@@ -38,26 +38,29 @@ impl Compiler<'_> {
             match &node.kind {
                 a::Type::Infer => return Ok(None),
                 a::Type::Path(path) => {
+                    let first_end = path.name.find("::").unwrap_or(path.name.len());
+                    let first = path.name[..first_end].to_string();
                     if self.names.generic_path(path, node.span)
                         && !substitutions.contains_key(&path.name)
-                        && !substitutions.contains_key(path.name.split("::").next().unwrap())
+                        && !substitutions.contains_key(&first)
                     {
                         return Ok(None);
                     }
-                    pending.extend(path.args.iter().copied());
+                    pending.extend_from_slice(&path.args);
                 }
                 a::Type::Ref { inner, .. }
                 | a::Type::Slice(inner)
                 | a::Type::Array { inner, .. } => pending.push(*inner),
-                a::Type::Tuple(elements) => pending.extend(elements.iter().copied()),
+                a::Type::Tuple(elements) => pending.extend_from_slice(elements),
                 a::Type::Function { params, result } => {
                     pending.push(*result);
-                    pending.extend(params.iter().copied());
+                    pending.extend_from_slice(params);
                 }
                 _ => {}
             }
         }
-        self.resolve(id, substitutions).map(Some)
+        let resolved = self.resolve(id, substitutions)?;
+        Ok(Some(resolved))
     }
 }
 
@@ -135,9 +138,17 @@ impl Compiler<'_> {
                     alias_environment,
                     caller_environment,
                 } => {
-                    for (argument, parameter) in arguments.into_iter().zip(parameters).rev() {
-                        if let Some(actual) =
-                            environments[alias_environment].get(&parameter).copied()
+                    let mut index = if arguments.len() < parameters.len() {
+                        arguments.len()
+                    } else {
+                        parameters.len()
+                    };
+                    while index != 0 {
+                        index -= 1;
+                        let argument = arguments[index];
+                        if let Some(actual) = environments[alias_environment]
+                            .get(&parameters[index])
+                            .copied()
                         {
                             pending.push(Work::Match {
                                 pattern: argument,
@@ -160,8 +171,9 @@ impl Compiler<'_> {
                             if path.args.is_empty()
                                 && self.names.is_type_parameter(&path, node.span)
                             {
-                                if let Some(existing) = environments[environment].get(&path.name) {
-                                    if *existing != actual {
+                                let known = environments[environment].get(&path.name).copied();
+                                if let Some(existing) = known {
+                                    if existing != actual {
                                         return Ok(false);
                                     }
                                 } else {
@@ -169,25 +181,24 @@ impl Compiler<'_> {
                                 }
                                 continue;
                             }
-                            let arguments: Vec<_> = path
-                                .args
-                                .iter()
-                                .copied()
-                                .filter(|id| {
-                                    !matches!(&self.source.types[*id].kind,
+                            let mut arguments: Vec<usize> = Vec::new();
+                            for id in &path.args {
+                                if !matches!(&self.source.types[*id].kind,
                                     a::Type::Path(path) if path.name.starts_with('\''))
-                                })
-                                .collect();
+                                {
+                                    arguments.push(*id);
+                                }
+                            }
                             let declaration =
                                 path.declaration.map(|id| self.source.declarations[id].item);
                             if let Some(a::Item::Alias(index)) = declaration {
                                 let alias = self.source.aliases[index].clone();
-                                let parameters: Vec<_> = alias
-                                    .generics
-                                    .iter()
-                                    .filter(|parameter| !parameter.lifetime)
-                                    .map(|parameter| parameter.name.clone())
-                                    .collect();
+                                let mut parameters: Vec<String> = Vec::new();
+                                for parameter in &alias.generics {
+                                    if !parameter.lifetime {
+                                        parameters.push(parameter.name.clone());
+                                    }
+                                }
                                 if arguments.len() != parameters.len() {
                                     return Err(err(
                                         node.span,
@@ -196,7 +207,7 @@ impl Compiler<'_> {
                                     ));
                                 }
                                 let caller = environments[environment].clone();
-                                let mut bindings = BTreeMap::new();
+                                let mut bindings: BTreeMap<String, usize> = BTreeMap::new();
                                 for (parameter, argument) in parameters.iter().zip(&arguments) {
                                     if let Some(ty) = self.resolve_if_known(*argument, &caller)? {
                                         bindings.insert(parameter.clone(), ty);
@@ -224,14 +235,12 @@ impl Compiler<'_> {
                                     && path.declaration == actual_declaration
                                     && arguments.len() == actual_arguments.len()
                                 {
-                                    for (pattern, actual) in arguments
-                                        .into_iter()
-                                        .zip(actual_arguments.iter().copied())
-                                        .rev()
-                                    {
+                                    let mut index = arguments.len();
+                                    while index != 0 {
+                                        index -= 1;
                                         pending.push(Work::Match {
-                                            pattern,
-                                            actual,
+                                            pattern: arguments[index],
+                                            actual: actual_arguments[index],
                                             environment,
                                             mode: MatchMode::Exact,
                                         });
@@ -303,12 +312,12 @@ impl Compiler<'_> {
                                 if let k::TypeKind::Struct { fields, .. } = &self.types[actual].kind
                                 {
                                     if elements.len() == fields.len() {
-                                        for (pattern, field) in
-                                            elements.into_iter().zip(fields).rev()
-                                        {
+                                        let mut index = elements.len();
+                                        while index != 0 {
+                                            index -= 1;
                                             pending.push(Work::Match {
-                                                pattern,
-                                                actual: field.ty,
+                                                pattern: elements[index],
+                                                actual: fields[index].ty,
                                                 environment,
                                                 mode: MatchMode::Exact,
                                             });
@@ -322,7 +331,7 @@ impl Compiler<'_> {
                 }
             }
         }
-        *substitutions = environments.remove(0);
+        *substitutions = std::mem::replace(&mut environments[0], BTreeMap::new());
         Ok(true)
     }
 }

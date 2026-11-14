@@ -36,21 +36,22 @@ impl Compiler<'_> {
                 ),
             ));
         }
-        if self
+        let rigid_receiver = self
             .contracts
             .as_ref()
-            .is_some_and(|c| c.rigid.contains_key(&receiver))
-        {
+            .is_some_and(|c| c.rigid.contains_key(&receiver));
+        if rigid_receiver {
             return self.builtin_method_contract(receiver, method, span);
         }
         if let Some(witness) = self.implementation_witness(receiver, &identity) {
-            let implementation = &self.source.impls[witness.implementation];
-            if let Some(source) = implementation
-                .methods
-                .iter()
-                .copied()
-                .find(|index| self.source.functions[*index].name == method.name())
-            {
+            let mut selected = None;
+            for index in &self.source.impls[witness.implementation].methods {
+                if self.source.functions[*index].name.as_str() == method.name() {
+                    selected = Some(*index);
+                    break;
+                }
+            }
+            if let Some(source) = selected {
                 if self.source.functions[source].body.is_none() {
                     return Err(err(
                         span,
@@ -60,7 +61,8 @@ impl Compiler<'_> {
                 }
                 let mut substitutions = witness.substitutions;
                 substitutions.insert("Self".to_string(), receiver);
-                self.bounds(&implementation.generics, &substitutions)?;
+                let parameters = self.source.impls[witness.implementation].generics.clone();
+                self.bounds(&parameters, &substitutions)?;
                 return self.instantiate(source, substitutions);
             }
         }
@@ -349,7 +351,13 @@ impl Generated<'_, '_> {
     }
 
     fn restored(&mut self, mut live: Vec<bool>) {
-        live.resize(self.function.locals.len(), false);
+        let length = self.function.locals.len();
+        while live.len() < length {
+            live.push(false);
+        }
+        while live.len() > length {
+            live.pop();
+        }
         self.live = live;
     }
 
@@ -389,7 +397,8 @@ impl Generated<'_, '_> {
     }
 
     fn call(&mut self, function: usize, args: Vec<usize>) -> usize {
-        let dst = self.local(self.compiler.functions[function].result);
+        let result = self.compiler.functions[function].result;
+        let dst = self.local(result);
         self.emit(k::Op::Call {
             dst,
             function,
@@ -399,7 +408,9 @@ impl Generated<'_, '_> {
     }
 
     fn finish(&mut self, result: usize) {
-        for local in (0..self.live.len()).rev() {
+        let mut local = self.live.len();
+        while local > 0 {
+            local -= 1;
             if local != result && self.live[local] {
                 self.emit(k::Op::Drop {
                     place: k::Place::local(local),
@@ -413,7 +424,7 @@ impl Generated<'_, '_> {
         let dst = self.local(k::BOOL);
         self.emit(k::Op::Int {
             dst,
-            value: i64::from(value),
+            value: if value { 1 } else { 0 },
         });
         dst
     }
@@ -545,7 +556,7 @@ impl Generated<'_, '_> {
         let result = self.local(k::I32);
         self.emit(k::Op::Int {
             dst: result,
-            value: i64::from(value),
+            value: value as i64,
         });
         result
     }
@@ -650,7 +661,9 @@ impl Generated<'_, '_> {
                 self.finish_order(-1);
             }
             k::TypeKind::Char | k::TypeKind::Int { .. } | k::TypeKind::F64 => {
-                for (operation, value) in [("<", -1), (">", 1)] {
+                for ordering in 0..2 {
+                    let operation = if ordering == 0 { "<" } else { ">" };
+                    let value = if ordering == 0 { -1 } else { 1 };
                     let left = self.read(Self::referent(0), ty);
                     let right = self.read(Self::referent(1), ty);
                     let condition = self.binary(operation, left, right);
@@ -673,7 +686,9 @@ impl Generated<'_, '_> {
             k::TypeKind::Enum { variants, .. } => {
                 let left = self.enum_rank(0, variants.len());
                 let right = self.enum_rank(1, variants.len());
-                for (operation, value) in [("<", -1), (">", 1)] {
+                for ordering in 0..2 {
+                    let operation = if ordering == 0 { "<" } else { ">" };
+                    let value = if ordering == 0 { -1 } else { 1 };
                     let left_value = self.read(k::Place::local(left), k::U64);
                     let right_value = self.read(k::Place::local(right), k::U64);
                     let condition = self.binary(operation, left_value, right_value);
@@ -918,12 +933,16 @@ impl Builder<'_, '_> {
             .required();
         let builtin = self.compiler.satisfies_bound(receiver, required);
         let mut declared_trait = false;
-        for implementation in self.compiler.source.impls.clone() {
-            if !implementation
-                .methods
-                .iter()
-                .any(|method| self.compiler.source.functions[*method].name == name)
-            {
+        for implementation_index in 0..self.compiler.source.impls.len() {
+            let implementation = self.compiler.source.impls[implementation_index].clone();
+            let mut named_method = false;
+            for method in &implementation.methods {
+                if self.compiler.source.functions[*method].name.as_str() == name {
+                    named_method = true;
+                    break;
+                }
+            }
+            if !named_method {
                 continue;
             }
             let mut substitutions = BTreeMap::new();
@@ -947,15 +966,16 @@ impl Builder<'_, '_> {
             if implementation.trait_ty.is_none() {
                 return Ok(false);
             }
-            let identity =
-                implementation
-                    .trait_ty
-                    .and_then(|id| match &self.compiler.source.types[id].kind {
-                        a::Type::Path(path) => {
-                            Some(crate::generics::bound_identity(self.compiler.source, path))
-                        }
-                        _ => None,
-                    });
+            let identity = if let Some(id) = implementation.trait_ty {
+                match &self.compiler.source.types[id].kind {
+                    a::Type::Path(path) => {
+                        Some(crate::generics::bound_identity(self.compiler.source, path))
+                    }
+                    _ => None,
+                }
+            } else {
+                None
+            };
             if identity
                 != Some(crate::generics::TraitIdentity::Builtin(
                     required.to_string(),

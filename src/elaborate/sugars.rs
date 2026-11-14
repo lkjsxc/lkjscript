@@ -36,15 +36,15 @@ impl Builder<'_, '_> {
         };
         let success = variants
             .iter()
-            .position(|variant| variant.name == success_name)
+            .position(|variant: &k::Variant| variant.name == success_name)
             .unwrap();
         let failure = variants
             .iter()
-            .position(|variant| variant.name == failure_name)
+            .position(|variant: &k::Variant| variant.name == failure_name)
             .unwrap();
         let output_failure = outputs
             .iter()
-            .position(|variant| variant.name == failure_name)
+            .position(|variant: &k::Variant| variant.name == failure_name)
             .unwrap();
         let input_fields = &variants[failure].fields;
         let output_fields = &outputs[output_failure].fields;
@@ -56,12 +56,13 @@ impl Builder<'_, '_> {
                 k::TypeKind::Ref { inner, mutable: false }
                     if matches!(self.compiler.types[inner].kind, k::TypeKind::Str)
             );
-        if !convert_text
-            && input_fields
-                .iter()
-                .map(|field| field.ty)
-                .ne(output_fields.iter().map(|field| field.ty))
-        {
+        let mut fields_differ = input_fields.len() != output_fields.len();
+        let mut field = 0;
+        while !fields_differ && field < input_fields.len() {
+            fields_differ = input_fields[field].ty != output_fields[field].ty;
+            field += 1;
+        }
+        if !convert_text && fields_differ {
             return Err(err(
                 span,
                 "E_TYPE",
@@ -130,13 +131,14 @@ impl Builder<'_, '_> {
             let value = if convert_text {
                 // This is an ordinary source-library allocation/copy, with no
                 // implicit coercion for Result constructors or assignments.
+                let arguments: Vec<usize> = Vec::new();
                 self.text_method(
                     k::Place {
                         local: value,
                         projections: vec![k::Projection::Deref],
                     },
                     "to_string",
-                    &[],
+                    &arguments,
                     span,
                 )?
                 .0

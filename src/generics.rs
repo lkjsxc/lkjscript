@@ -67,7 +67,7 @@ fn type_term(
         let kids = type_children(source, ty);
         let mut values = Vec::new();
         for child in kids {
-            values.push(done[&child]);
+            values.push(*done.get(&child).unwrap());
         }
         let term = match &source.types[ty].kind {
             Type::Infer => Term::Unknown,
@@ -92,7 +92,7 @@ fn type_term(
         let value = push(terms, term);
         done.insert(ty, value);
     }
-    done[&id]
+    *done.get(&id).unwrap()
 }
 fn variables(
     source: &Program,
@@ -196,7 +196,11 @@ impl Candidates {
     fn insert(&mut self, head: Option<String>, value: usize) {
         self.all.push(value);
         if let Some(head) = head {
-            self.heads.entry(head).or_default().push(value);
+            if self.heads.contains_key(&head) {
+                self.heads.get_mut(&head).unwrap().push(value);
+            } else {
+                self.heads.insert(head, vec![value]);
+            }
         } else {
             self.generic.push(value);
         }
@@ -206,10 +210,16 @@ impl Candidates {
             return self.all.clone();
         };
         let mut values = self.generic.clone();
-        if let Some(specific) = self.heads.get(head) {
+        if let Some(specific) = self.heads.get(&head.to_string()) {
             values.extend_from_slice(specific);
         }
         values
+    }
+}
+fn optional_name(value: &Option<String>) -> Option<&str> {
+    match value {
+        Some(name) => Some(name.as_str()),
+        None => None,
     }
 }
 fn term_head(terms: &[Term], term: usize) -> Option<String> {
@@ -240,7 +250,7 @@ fn coherence(source: &Program) -> Result<(), Diagnostic> {
         let at = signature_type(source, trait_ty, &environment, &mut terms)?;
         let head = term_head(&terms, a);
         if let Some(previous) = by_trait.get(&identity) {
-            for j in previous.matching(head.as_deref()) {
+            for j in previous.matching(optional_name(&head)) {
                 let (b, bt) = normalized[j];
                 if unify(&terms, vec![(a, b), (at, bt)]) {
                     return Err(Diagnostic::new(
@@ -253,10 +263,10 @@ fn coherence(source: &Program) -> Result<(), Diagnostic> {
         }
         let index = normalized.len();
         normalized.push((a, at));
-        by_trait
-            .entry(identity.clone())
-            .or_default()
-            .insert(head, index);
+        if !by_trait.contains_key(&identity) {
+            by_trait.insert(identity.clone(), Candidates::default());
+        }
+        by_trait.get_mut(&identity).unwrap().insert(head, index);
         if let TraitIdentity::Declared(t) = identity {
             let trait_def = &source.traits[t];
             let mut names = BTreeMap::new();
@@ -381,17 +391,17 @@ fn components(count: usize, edges: &[Edge]) -> Vec<usize> {
             }
         }
     }
-    let mut result = vec![usize::MAX; count];
+    let mut result = vec![count; count];
     let mut group = 0;
     while let Some(start) = order.pop() {
-        if result[start] != usize::MAX {
+        if result[start] != count {
             continue;
         }
         result[start] = group;
         let mut stack = vec![start];
         while let Some(v) = stack.pop() {
             for next in &reverse[v] {
-                if result[*next] == usize::MAX {
+                if result[*next] == count {
                     result[*next] = group;
                     stack.push(*next);
                 }
@@ -456,7 +466,9 @@ fn infer(
                     }
                 }
                 if parameter {
-                    env.entry(path.name.clone()).or_insert(a);
+                    if !env.contains_key(&path.name) {
+                        env.insert(path.name.clone(), a);
+                    }
                     continue;
                 }
             }
@@ -601,7 +613,7 @@ impl Analysis<'_> {
         }
     }
     fn function(&mut self, caller: usize) {
-        let function = &self.source.functions[caller];
+        let function = self.source.functions[caller].clone();
         let body = match function.body {
             Some(body) => body,
             None => return,
@@ -680,18 +692,18 @@ impl Analysis<'_> {
                         }
                         Expr::Call { callee, args } => {
                             kids.push(*callee);
-                            kids.extend(args.clone());
+                            kids.extend_from_slice(args);
                         }
                         Expr::Method { receiver, args, .. } => {
                             kids.push(*receiver);
-                            kids.extend(args.clone());
+                            kids.extend_from_slice(args);
                         }
                         Expr::Index { value, index } => {
                             kids.push(*value);
                             kids.push(*index);
                         }
                         Expr::Tuple(v) | Expr::Array(v) | Expr::Macro { args: v, .. } => {
-                            kids.extend(v.clone())
+                            kids.extend_from_slice(v)
                         }
                         Expr::Repeat { value, count } => {
                             kids.push(*value);
@@ -780,7 +792,7 @@ impl Analysis<'_> {
                     }
                 }
                 Task::Done(id) => {
-                    let expression = &self.source.exprs[id];
+                    let expression = self.source.exprs[id].clone();
                     let value = match &expression.kind {
                         Expr::Path(p) => {
                             let mut t = 0;
@@ -810,11 +822,11 @@ impl Analysis<'_> {
                         Expr::Float(_) => self.term(Term::Named("f64".to_string(), Vec::new())),
                         Expr::Borrow { mutable, value } => self.term(Term::Named(
                             if *mutable { "&mut" } else { "&" }.to_string(),
-                            vec![exprs[value]],
+                            vec![*exprs.get(value).unwrap()],
                         )),
                         Expr::Cast { ty, .. } => type_term(self.source, *ty, &env, &mut self.terms),
                         Expr::Unary { op, value } => {
-                            let t = exprs[value];
+                            let t = *exprs.get(value).unwrap();
                             if op == "*" {
                                 match &self.terms[t] {
                                     Term::Named(name, kids)
@@ -829,7 +841,7 @@ impl Analysis<'_> {
                                 t
                             }
                         }
-                        Expr::Try(value) => match &self.terms[exprs[value]] {
+                        Expr::Try(value) => match &self.terms[*exprs.get(value).unwrap()] {
                             Term::Named(name, children)
                                 if (name == "$std::prelude::Result"
                                     || name == "$std::prelude::Option")
@@ -843,7 +855,7 @@ impl Analysis<'_> {
                         Expr::Tuple(items) => {
                             let mut ts = Vec::new();
                             for e in items {
-                                ts.push(exprs[e]);
+                                ts.push(*exprs.get(e).unwrap());
                             }
                             self.term(Term::Named("tuple".to_string(), ts))
                         }
@@ -851,25 +863,30 @@ impl Analysis<'_> {
                             let first = if items.is_empty() {
                                 0
                             } else {
-                                exprs[&items[0]]
+                                *exprs.get(&items[0]).unwrap()
                             };
                             self.term(Term::Named(format!("[;{}]", items.len()), vec![first]))
                         }
-                        Expr::Repeat { value, .. } => {
-                            self.term(Term::Named("[]".to_string(), vec![exprs[value]]))
-                        }
+                        Expr::Repeat { value, .. } => self.term(Term::Named(
+                            "[]".to_string(),
+                            vec![*exprs.get(value).unwrap()],
+                        )),
                         Expr::Macro { name, args, .. } if name == "vec" => {
-                            let first = if args.is_empty() { 0 } else { exprs[&args[0]] };
+                            let first = if args.is_empty() {
+                                0
+                            } else {
+                                *exprs.get(&args[0]).unwrap()
+                            };
                             self.term(Term::Named("Vec".to_string(), vec![first]))
                         }
                         Expr::Call { callee, args } => {
-                            if let Expr::Path(path) = &self.source.exprs[*callee].kind {
+                            if let Expr::Path(path) = self.source.exprs[*callee].kind.clone() {
                                 let mut ts = Vec::new();
                                 for e in args {
-                                    ts.push(exprs[e]);
+                                    ts.push(*exprs.get(e).unwrap());
                                 }
                                 if let Some(target) =
-                                    self.lookup(&function.module, path, expression.span)
+                                    self.lookup(&function.module, &path, expression.span)
                                 {
                                     self.call(
                                         caller,
@@ -903,28 +920,32 @@ impl Analysis<'_> {
                             ..
                         } => {
                             if name == "clone" && args.is_empty() {
-                                exprs[receiver]
+                                *exprs.get(receiver).unwrap()
                             } else {
                                 // Method syntax never denotes a same-spelled free
                                 // function. Its selected witness belongs to typing.
                                 0
                             }
                         }
-                        Expr::Index { value, .. } => match &self.terms[exprs[value]] {
-                            Term::Named(name, kids)
-                                if (name == "Vec" || name == "[]" || name.starts_with("[;"))
-                                    && !kids.is_empty() =>
-                            {
-                                kids[0]
+                        Expr::Index { value, .. } => {
+                            match &self.terms[*exprs.get(value).unwrap()] {
+                                Term::Named(name, kids)
+                                    if (name == "Vec"
+                                        || name == "[]"
+                                        || name.starts_with("[;"))
+                                        && !kids.is_empty() =>
+                                {
+                                    kids[0]
+                                }
+                                _ => 0,
                             }
-                            _ => 0,
-                        },
+                        }
                         Expr::Block(b) => *blocks.get(b).unwrap_or(&0),
                         Expr::If { then_block, .. } | Expr::IfLet { then_block, .. } => {
                             *blocks.get(then_block).unwrap_or(&0)
                         }
-                        Expr::Binary { left, .. } => exprs[left],
-                        Expr::Return(Some(e)) | Expr::Break(Some(e)) => exprs[e],
+                        Expr::Binary { left, .. } => *exprs.get(left).unwrap(),
+                        Expr::Return(Some(e)) | Expr::Break(Some(e)) => *exprs.get(e).unwrap(),
                         Expr::Struct { path, .. } => {
                             let mut ts = Vec::new();
                             for t in &path.args {
@@ -1098,7 +1119,7 @@ fn impl_arguments(
         let actual_type = types.get(actual)?;
         match &source.types[pattern].kind {
             Type::Path(path) => {
-                let name = path.name.as_str();
+                let name: &str = path.name.as_str();
                 let mut generic = false;
                 for param in &implementation.generics {
                     if path.declaration.is_none()
@@ -1198,11 +1219,12 @@ fn impl_arguments(
                 }
             }
             Type::Array { inner, len } => {
-                let extent = len
-                    .replace('_', "")
-                    .trim_end_matches("usize")
-                    .parse::<usize>()
-                    .ok()?;
+                let text = len.replace('_', "");
+                let mut end = text.len();
+                while text[..end].ends_with("usize") {
+                    end -= 5;
+                }
+                let extent = text[..end].parse::<usize>().ok()?;
                 if let TypeKind::Array {
                     inner: actual_inner,
                     len: actual_len,
@@ -1220,7 +1242,7 @@ fn impl_arguments(
                 TypeKind::Unit if parts.is_empty() => {}
                 TypeKind::Struct { fields, .. } if parts.len() == fields.len() => {
                     for i in 0..parts.len() {
-                        if fields[i].name != i.to_string() {
+                        if fields[i].name != format!("{i}") {
                             return None;
                         }
                         work.push((parts[i], fields[i].ty));
@@ -1243,12 +1265,16 @@ pub(crate) enum TraitIdentity {
     Unknown(String),
 }
 /// Builtin supertrait contracts shared by assumptions and derive validation.
-pub(crate) fn builtin_parents(name: &str) -> &'static [&'static str] {
+pub(crate) fn builtin_parents(name: &str) -> Vec<String> {
     match name {
-        "Copy" => &["Clone"],
-        "Ord" => &["Eq", "PartialOrd", "PartialEq"],
-        "Eq" | "PartialOrd" => &["PartialEq"],
-        _ => &[],
+        "Copy" => vec!["Clone".to_string()],
+        "Ord" => vec![
+            "Eq".to_string(),
+            "PartialOrd".to_string(),
+            "PartialEq".to_string(),
+        ],
+        "Eq" | "PartialOrd" => vec!["PartialEq".to_string()],
+        _ => Vec::new(),
     }
 }
 
@@ -1359,7 +1385,7 @@ fn derived(
     ty: usize,
     bound: &str,
 ) -> bool {
-    let name = match applications.get(&ty) {
+    let name: &str = match applications.get(&ty) {
         Some((name, _)) => name.as_str(),
         None => types[ty].name.as_str(),
     };
@@ -1466,19 +1492,27 @@ impl ImplementationIndex {
         };
         if let Some(trait_type) = implementation.trait_ty {
             if let Type::Path(path) = &source.types[trait_type].kind {
+                let identity = bound_identity(source, path);
+                if !self.by_trait.contains_key(&identity) {
+                    self.by_trait
+                        .insert(identity.clone(), Candidates::default());
+                }
                 self.by_trait
-                    .entry(bound_identity(source, path))
-                    .or_default()
+                    .get_mut(&identity)
+                    .unwrap()
                     .insert(head.clone(), id);
             }
         }
-        let mut methods = BTreeSet::new();
+        let mut methods: BTreeSet<String> = BTreeSet::new();
         for method in &implementation.methods {
             let name = &source.functions[*method].name;
-            if methods.insert(name) {
+            if methods.insert(name.clone()) {
+                if !self.by_method.contains_key(name) {
+                    self.by_method.insert(name.clone(), Candidates::default());
+                }
                 self.by_method
-                    .entry(name.clone())
-                    .or_default()
+                    .get_mut(name)
+                    .unwrap()
                     .insert(head.clone(), id);
             }
         }
@@ -1508,11 +1542,10 @@ impl ImplementationIndex {
         ty: usize,
         bound: &TraitIdentity,
     ) -> Vec<usize> {
-        self.by_trait
-            .get(bound)
-            .map_or_else(Vec::new, |candidates| {
-                candidates.matching(Self::receiver_head(types, applications, ty))
-            })
+        match self.by_trait.get(bound) {
+            Some(candidates) => candidates.matching(Self::receiver_head(types, applications, ty)),
+            None => Vec::new(),
+        }
     }
     /// Source inference uses this filter only to add conditional type equations.
     /// Final implementation selection and prerequisite proofs remain separate.
@@ -1521,9 +1554,10 @@ impl ImplementationIndex {
         trait_index: usize,
         head: Option<&str>,
     ) -> Vec<usize> {
-        self.by_trait
-            .get(&TraitIdentity::Declared(trait_index))
-            .map_or_else(Vec::new, |candidates| candidates.matching(head))
+        match self.by_trait.get(&TraitIdentity::Declared(trait_index)) {
+            Some(candidates) => candidates.matching(head),
+            None => Vec::new(),
+        }
     }
     /// A method name and nominal receiver exclude unrelated implementations;
     /// generic and structural targets still require the complete matcher.
@@ -1539,12 +1573,12 @@ impl ImplementationIndex {
     /// Definition inference uses the same canonical candidate filter before K
     /// types exist. This query supplies no implementation or bound authority.
     pub(crate) fn method_candidates_by_head(&self, head: Option<&str>, name: &str) -> Vec<usize> {
-        let mut values = self
-            .by_method
-            .get(name)
-            .map_or_else(Vec::new, |candidates| candidates.matching(head));
+        let mut values = match self.by_method.get(&name.to_string()) {
+            Some(candidates) => candidates.matching(head),
+            None => Vec::new(),
+        };
         // Preserve source-order diagnostics when fallback and nominal entries mix.
-        values.sort_unstable();
+        values.sort();
         values
     }
 }
@@ -1712,7 +1746,7 @@ fn trait_requirements(
             TypeKind::Struct { fields, .. } => {
                 let mut tuple = ty.name.starts_with('(') && ty.name.ends_with(')');
                 for i in 0..fields.len() {
-                    if fields[i].name != i.to_string() {
+                    if fields[i].name != format!("{i}") {
                         tuple = false;
                     }
                 }
@@ -2016,19 +2050,28 @@ pub(crate) fn alias_cycle_problems(source: &Program) -> Vec<(usize, Diagnostic)>
                     }
                 }
             }
-            stack.extend(type_children(source, ty));
+            for child in type_children(source, ty) {
+                stack.push(child);
+            }
         }
     }
     let groups = components(source.aliases.len(), &edges);
     let mut problems = BTreeMap::new();
     for edge in edges {
         if groups[edge.from] == groups[edge.to] {
-            problems
-                .entry(edge.from)
-                .or_insert_with(|| Diagnostic::new(edge.span, "E_TYPE", "recursive type alias"));
+            if !problems.contains_key(&edge.from) {
+                problems.insert(
+                    edge.from,
+                    Diagnostic::new(edge.span, "E_TYPE", "recursive type alias"),
+                );
+            }
         }
     }
-    problems.into_iter().collect()
+    let mut result = Vec::new();
+    for problem in problems {
+        result.push(problem);
+    }
+    result
 }
 #[derive(Clone)]
 enum Normalize {
@@ -2089,24 +2132,28 @@ fn normalize(source: &Program, term: usize, terms: &mut Vec<Term>) -> Result<usi
                 }
             }
             Normalize::Alias(id, expanded) => {
-                done.insert(id, done[&expanded]);
+                let normalized = *done.get(&expanded).unwrap();
+                done.insert(id, normalized);
             }
             Normalize::DeclaredTrait(id, declaration, kids) => {
-                let normalized = kids.into_iter().map(|child| done[&child]).collect();
+                let mut normalized = Vec::new();
+                for child in kids {
+                    normalized.push(*done.get(&child).unwrap());
+                }
                 let new = push(terms, Term::DeclaredTrait(declaration, normalized));
                 done.insert(id, new);
             }
             Normalize::Node(id, name, kids) => {
                 let mut normalized = Vec::new();
                 for k in kids {
-                    normalized.push(done[&k]);
+                    normalized.push(*done.get(&k).unwrap());
                 }
                 let new = push(terms, Term::Named(name, normalized));
                 done.insert(id, new);
             }
         }
     }
-    Ok(done[&term])
+    Ok(*done.get(&term).unwrap())
 }
 fn equivalent(terms: &[Term], a: usize, b: usize) -> bool {
     let mut stack = vec![(a, b)];
@@ -2157,16 +2204,13 @@ fn bound_closure(
         result.push(bound);
         match terms[bound].clone() {
             Term::Named(name, args) => {
-                let parents: &[&str] = match name.as_str() {
-                    "Fn" => &["FnMut"],
-                    "FnMut" => &["FnOnce"],
+                let parents = match name.as_str() {
+                    "Fn" => vec!["FnMut".to_string()],
+                    "FnMut" => vec!["FnOnce".to_string()],
                     _ => builtin_parents(&name),
                 };
                 for parent in parents {
-                    pending.push(push(
-                        terms,
-                        Term::Named((*parent).to_string(), args.clone()),
-                    ));
+                    pending.push(push(terms, Term::Named(parent, args.clone())));
                 }
             }
             Term::DeclaredTrait(index, args) => {
@@ -2326,7 +2370,9 @@ fn associated_dependencies(source: &Program, ty: TypeId, env: &BTreeMap<String, 
                 return false;
             }
         }
-        work.extend(type_children(source, t));
+        for child in type_children(source, t) {
+            work.push(child);
+        }
     }
     true
 }
@@ -2368,7 +2414,7 @@ fn signatures(source: &Program) -> Result<(), Diagnostic> {
             if generic.lifetime {
                 continue;
             }
-            let concrete = expected_env[&generic.name];
+            let concrete = *expected_env.get(&generic.name).unwrap();
             for bound in &generic.bounds {
                 let b = signature_type(source, *bound, &expected_env, &mut terms)?;
                 if !signature_bounds::prove(
@@ -2387,7 +2433,7 @@ fn signatures(source: &Program) -> Result<(), Diagnostic> {
                 }
             }
         }
-        let mut associated = Vec::new();
+        let mut associated: Vec<(String, TypeId, bool)> = Vec::new();
         for expected in &declaration.associated {
             let value = implementation
                 .associated
@@ -2503,12 +2549,14 @@ fn signatures(source: &Program) -> Result<(), Diagnostic> {
                 }
             }
             let mut available = known.clone();
-            available.extend(known_bounds(source, &expected.generics, &eenv, &mut terms)?);
+            for bound in known_bounds(source, &expected.generics, &eenv, &mut terms)? {
+                available.push(bound);
+            }
             for g in &actual.generics {
                 if g.lifetime {
                     continue;
                 }
-                let ty = aenv[&g.name];
+                let ty = *aenv.get(&g.name).unwrap();
                 for b in &g.bounds {
                     let bound = signature_type(source, *b, &aenv, &mut terms)?;
                     if !signature_bounds::prove(
@@ -2717,24 +2765,38 @@ fn constant_cycles(source: &Program) -> Result<(), Diagnostic> {
         names.insert(qualified(&c.module, &c.name), i);
         starts.insert(source.exprs[c.value].span.start, i);
     }
+    let mut ordered_starts = Vec::new();
+    for start in starts {
+        ordered_starts.push(start);
+    }
     let mut edges = Vec::new();
     for expression in &source.exprs {
         let path = match &expression.kind {
             Expr::Path(p) => p,
             _ => continue,
         };
-        let from = match starts.range(..=expression.span.start).next_back() {
-            Some((_, i)) => *i,
-            None => continue,
-        };
+        let mut at = 0;
+        let mut end = ordered_starts.len();
+        while at < end {
+            let middle = at + (end - at) / 2;
+            if ordered_starts[middle].0 <= expression.span.start {
+                at = middle + 1;
+            } else {
+                end = middle;
+            }
+        }
+        if at == 0 {
+            continue;
+        }
+        let from = ordered_starts[at - 1].1;
         let constant = &source.constants[from];
         if expression.span.end > source.exprs[constant.value].span.end {
             continue;
         }
         let mut name = qualified(&constant.module, &path.name);
-        if let Some(rest) = path.name.strip_prefix("crate::") {
+        if let Some(rest) = path.name.as_str().strip_prefix("crate::") {
             name = rest.to_string();
-        } else if let Some(rest) = path.name.strip_prefix("self::") {
+        } else if let Some(rest) = path.name.as_str().strip_prefix("self::") {
             name = qualified(&constant.module, rest);
         }
         let to = names.get(&name).or_else(|| names.get(&path.name));
@@ -2760,23 +2822,34 @@ fn constant_cycles(source: &Program) -> Result<(), Diagnostic> {
     }
     Ok(())
 }
-struct DataDeclaration<'a> {
+#[derive(Clone, Copy)]
+enum DataOwner {
+    Struct(usize),
+    Enum(usize),
+}
+struct DataDeclaration {
     name: String,
-    params: &'a [GenericParam],
+    owner: DataOwner,
     fields: Vec<TypeId>,
     span: Span,
 }
 fn finite_data(source: &Program) -> Result<(), Diagnostic> {
-    let mut declarations = Vec::new();
-    for s in &source.structs {
+    let mut declarations: Vec<DataDeclaration> = Vec::new();
+    for index in 0..source.structs.len() {
+        let s = &source.structs[index];
+        let mut fields = Vec::new();
+        for field in &s.fields {
+            fields.push(field.ty);
+        }
         declarations.push(DataDeclaration {
             name: qualified(&s.module, &s.name),
-            params: &s.generics,
-            fields: s.fields.iter().map(|f| f.ty).collect(),
+            owner: DataOwner::Struct(index),
+            fields,
             span: s.span,
         });
     }
-    for e in &source.enums {
+    for index in 0..source.enums.len() {
+        let e = &source.enums[index];
         let mut fields = Vec::new();
         for v in &e.variants {
             for f in &v.fields {
@@ -2785,25 +2858,29 @@ fn finite_data(source: &Program) -> Result<(), Diagnostic> {
         }
         declarations.push(DataDeclaration {
             name: qualified(&e.module, &e.name),
-            params: &e.generics,
+            owner: DataOwner::Enum(index),
             fields,
             span: e.span,
         });
     }
     let mut terms = Vec::new();
     let mut count = 0;
-    let mut environments = Vec::new();
-    let mut target_nodes = Vec::new();
-    let mut names = BTreeMap::new();
+    let mut environments: Vec<BTreeMap<String, usize>> = Vec::new();
+    let mut target_nodes: Vec<Vec<usize>> = Vec::new();
+    let mut names: BTreeMap<String, usize> = BTreeMap::new();
     for i in 0..declarations.len() {
         let declaration = &declarations[i];
-        let env = variables(source, declaration.params, &mut terms, &mut count);
+        let params: &[GenericParam] = match declaration.owner {
+            DataOwner::Struct(index) => &source.structs[index].generics,
+            DataOwner::Enum(index) => &source.enums[index].generics,
+        };
+        let env = variables(source, params, &mut terms, &mut count);
         let mut nodes = Vec::new();
-        for p in declaration.params {
+        for p in params {
             if p.lifetime {
                 continue;
             }
-            if let Term::Variable(v) = terms[env[&p.name]] {
+            if let Term::Variable(v) = terms[*env.get(&p.name).unwrap()] {
                 nodes.push(v);
             }
         }
@@ -2841,7 +2918,9 @@ fn finite_data(source: &Program) -> Result<(), Diagnostic> {
                             }
                         }
                     }
-                    pending.extend(args);
+                    for arg in args {
+                        pending.push(arg);
+                    }
                 }
             }
         }

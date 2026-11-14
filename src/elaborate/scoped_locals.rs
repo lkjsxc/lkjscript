@@ -4,7 +4,7 @@ use super::{Builder, Result, a, err, k};
 use crate::check::scoped::{
     Annotation, Annotations, Construction, Environment, Region, ResultLeaf,
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Default)]
 pub(super) struct Body {
@@ -24,25 +24,42 @@ impl Body {
             && self.parameters.is_empty()
             && self.results.is_empty()
     }
-    pub(super) fn places_mut(&mut self) -> impl Iterator<Item = &mut k::Place> {
-        self.annotations
-            .bindings
-            .iter_mut()
-            .map(|entry| &mut entry.place)
-            .chain(
-                self.annotations
-                    .checkpoints
-                    .values_mut()
-                    .flatten()
-                    .map(|entry| &mut entry.place),
-            )
-            .chain(
-                self.constructions
-                    .values_mut()
-                    .flatten()
-                    .map(|entry| &mut entry.place),
-            )
+    pub(super) fn remap_places(&mut self, remap: &super::closures::CaptureRemap<'_>) -> Result<()> {
+        let mut index = 0;
+        while index < self.annotations.bindings.len() {
+            remap.apply(&mut self.annotations.bindings[index].place)?;
+            index += 1;
+        }
+        let mut checkpoints: Vec<usize> = Vec::new();
+        for key in self.annotations.checkpoints.keys() {
+            checkpoints.push(*key);
+        }
+        for key in checkpoints {
+            let entries = self.annotations.checkpoints.get_mut(&key).unwrap();
+            let mut index = 0;
+            while index < entries.len() {
+                remap.apply(&mut entries[index].place)?;
+                index += 1;
+            }
+        }
+        let mut constructions: Vec<usize> = Vec::new();
+        for key in self.constructions.keys() {
+            constructions.push(*key);
+        }
+        for key in constructions {
+            let entries = self.constructions.get_mut(&key).unwrap();
+            let mut index = 0;
+            while index < entries.len() {
+                remap.apply(&mut entries[index].place)?;
+                index += 1;
+            }
+        }
+        Ok(())
     }
+}
+
+fn named_region_argument(name: &str, bound: &BTreeSet<String>) -> bool {
+    !name.is_empty() && name != "'_" && !bound.contains(&name.to_string())
 }
 
 impl Builder<'_, '_> {
@@ -51,16 +68,18 @@ impl Builder<'_, '_> {
         arguments: &[a::TypeId],
         span: a::Span,
     ) -> Result<()> {
-        use std::collections::BTreeSet;
-        use std::rc::Rc;
         if arguments.is_empty() {
             return Ok(());
         }
-        let empty = Rc::new(BTreeSet::<String>::new());
-        let mut pending: Vec<_> = arguments.iter().map(|ty| (*ty, empty.clone())).collect();
+        // Bound-name tables are immutable. Pending types share their owned
+        // table by index rather than storing reference-counted sets.
+        let mut environments = vec![BTreeSet::<String>::new()];
+        let mut pending: Vec<(a::TypeId, usize)> = Vec::new();
+        for ty in arguments {
+            pending.push((*ty, 0));
+        }
         let mut declarations = BTreeSet::new();
         while let Some((ty, bound)) = pending.pop() {
-            let named = |name: &str| !name.is_empty() && name != "'_" && !bound.contains(name);
             let unsupported = || {
                 err(
                     span,
@@ -72,18 +91,25 @@ impl Builder<'_, '_> {
                 a::Type::Ref {
                     lifetime, inner, ..
                 } => {
-                    if named(lifetime) {
+                    if named_region_argument(lifetime, &environments[bound]) {
                         return Err(unsupported());
                     }
                     pending.push((*inner, bound));
                 }
                 a::Type::Path(path) => {
-                    if path.name.starts_with('\'') && named(&path.name) {
+                    if path.name.starts_with('\'')
+                        && named_region_argument(&path.name, &environments[bound])
+                    {
                         return Err(unsupported());
                     }
-                    pending.extend(path.args.iter().map(|ty| (*ty, bound.clone())));
-                    if let Some(id) = path.declaration.filter(|id| declarations.insert(*id)) {
-                        let (parameters, fields): (&[a::GenericParam], Vec<a::TypeId>) =
+                    for ty in &path.args {
+                        pending.push((*ty, bound));
+                    }
+                    if let Some(id) = path.declaration {
+                        if !declarations.insert(id) {
+                            continue;
+                        }
+                        let (parameters, fields): (&Vec<a::GenericParam>, Vec<a::TypeId>) =
                             match self.compiler.source.declarations[id].item {
                                 a::Item::Alias(index) => {
                                     let definition = &self.compiler.source.aliases[index];
@@ -91,44 +117,49 @@ impl Builder<'_, '_> {
                                 }
                                 a::Item::Struct(index) => {
                                     let definition = &self.compiler.source.structs[index];
-                                    (
-                                        &definition.generics,
-                                        definition.fields.iter().map(|field| field.ty).collect(),
-                                    )
+                                    let mut fields = Vec::new();
+                                    for field in &definition.fields {
+                                        fields.push(field.ty);
+                                    }
+                                    (&definition.generics, fields)
                                 }
                                 a::Item::Enum(index) => {
                                     let definition = &self.compiler.source.enums[index];
-                                    (
-                                        &definition.generics,
-                                        definition
-                                            .variants
-                                            .iter()
-                                            .flat_map(|variant| {
-                                                variant.fields.iter().map(|field| field.ty)
-                                            })
-                                            .collect(),
-                                    )
+                                    let mut fields = Vec::new();
+                                    for variant in &definition.variants {
+                                        for field in &variant.fields {
+                                            fields.push(field.ty);
+                                        }
+                                    }
+                                    (&definition.generics, fields)
                                 }
                                 _ => continue,
                             };
-                        let bound: Rc<BTreeSet<String>> = Rc::new(
-                            parameters
-                                .iter()
-                                .filter(|parameter| parameter.lifetime)
-                                .map(|parameter| parameter.name.clone())
-                                .collect(),
-                        );
-                        pending.extend(fields.into_iter().map(|ty| (ty, bound.clone())));
+                        let mut names = BTreeSet::new();
+                        for parameter in parameters {
+                            if parameter.lifetime {
+                                names.insert(parameter.name.clone());
+                            }
+                        }
+                        let environment = environments.len();
+                        environments.push(names);
+                        for ty in fields {
+                            pending.push((ty, environment));
+                        }
                     }
                 }
                 a::Type::Tuple(fields) => {
-                    pending.extend(fields.iter().map(|ty| (*ty, bound.clone())))
+                    for ty in fields {
+                        pending.push((*ty, bound));
+                    }
                 }
                 a::Type::Array { inner, .. } | a::Type::Slice(inner) => {
                     pending.push((*inner, bound))
                 }
                 a::Type::Function { params, result } => {
-                    pending.extend(params.iter().map(|ty| (*ty, bound.clone())));
+                    for ty in params {
+                        pending.push((*ty, bound));
+                    }
                     pending.push((*result, bound));
                 }
                 _ => {}
@@ -150,20 +181,28 @@ impl Builder<'_, '_> {
                     "invalid annotated place",
                 )
             })?;
-        Ok(self
-            .fixed_regions(syntax, ty)?
-            .into_iter()
-            .map(|leaf| {
-                let mut projected = place.clone();
-                projected.projections.extend(leaf.projections);
-                Annotation {
-                    place: projected,
-                    region: leaf.region,
-                    created: leaf.created,
-                    invariant: leaf.invariant,
-                }
-            })
-            .collect())
+        let mut annotations = Vec::new();
+        for leaf in self.fixed_regions(syntax, ty)? {
+            let mut projected = place.clone();
+            for projection in leaf.projections {
+                projected.projections.push(projection);
+            }
+            annotations.push(Annotation {
+                place: projected,
+                region: leaf.region,
+                created: leaf.created,
+                invariant: leaf.invariant,
+            });
+        }
+        Ok(annotations)
+    }
+    fn declared_region(&self, name: &str) -> bool {
+        for parameter in self.compiler.scoped_parameters(self.source_function) {
+            if parameter.lifetime && parameter.name == name {
+                return true;
+            }
+        }
+        false
     }
     pub(super) fn fixed_regions(&self, syntax: a::TypeId, ty: usize) -> Result<Vec<ResultLeaf>> {
         let mut pending = vec![syntax];
@@ -174,12 +213,7 @@ impl Builder<'_, '_> {
                 if name.is_empty() || name == "'_" || name == "'static" {
                     return Ok(());
                 }
-                if !self
-                    .compiler
-                    .scoped_parameters(self.source_function)
-                    .iter()
-                    .any(|parameter| parameter.lifetime && parameter.name == name)
-                {
+                if !self.declared_region(name) {
                     return Err(err(
                         node.span,
                         "E_TYPE",
@@ -231,13 +265,7 @@ impl Builder<'_, '_> {
                 super::origins::Label::Static => "'static".to_string(),
                 _ => continue,
             };
-            if name != "'static"
-                && !self
-                    .compiler
-                    .scoped_parameters(self.source_function)
-                    .iter()
-                    .any(|parameter| parameter.lifetime && parameter.name == name)
-            {
+            if name != "'static" && !self.declared_region(&name) {
                 return Err(err(
                     self.compiler.source.types[syntax].span,
                     "E_TYPE",
@@ -284,12 +312,16 @@ impl Builder<'_, '_> {
                     | k::TypeKind::Vec { inner }
                     | k::TypeKind::Array { inner, .. } => pending.push((*inner, in_slice)),
                     k::TypeKind::Struct { fields, .. } => {
-                        pending.extend(fields.iter().map(|field| (field.ty, in_slice)))
+                        for field in fields {
+                            pending.push((field.ty, in_slice));
+                        }
                     }
                     k::TypeKind::Enum { variants, .. } => {
-                        pending.extend(variants.iter().flat_map(|variant| {
-                            variant.fields.iter().map(|field| (field.ty, in_slice))
-                        }))
+                        for variant in variants {
+                            for field in &variant.fields {
+                                pending.push((field.ty, in_slice));
+                            }
+                        }
                     }
                     _ => {}
                 }
@@ -307,12 +339,26 @@ impl Builder<'_, '_> {
             None => Vec::new(),
         };
         if !annotations.is_empty() {
-            self.scoped_body
+            let position = self.function.body.len();
+            if self
+                .scoped_body
                 .annotations
                 .checkpoints
-                .entry(self.function.body.len())
-                .or_default()
-                .extend(annotations.clone());
+                .contains_key(&position)
+            {
+                let entries = self
+                    .scoped_body
+                    .annotations
+                    .checkpoints
+                    .get_mut(&position)
+                    .unwrap();
+                entries.extend_from_slice(&annotations);
+            } else {
+                self.scoped_body
+                    .annotations
+                    .checkpoints
+                    .insert(position, annotations.clone());
+            }
         }
         self.typed_bindings = annotations;
         Ok(())
@@ -323,7 +369,9 @@ impl Builder<'_, '_> {
         local: usize,
     ) -> Result<()> {
         let annotations = self.fixed_annotation(syntax, &k::Place::local(local))?;
-        self.scoped_body.annotations.bindings.extend(annotations);
+        for annotation in annotations {
+            self.scoped_body.annotations.bindings.push(annotation);
+        }
         Ok(())
     }
     pub(super) fn annotation_binding(&mut self, from: &k::Place, local: usize, borrowed: bool) {

@@ -1,0 +1,137 @@
+{
+  "stage": "source producer exact-K compare",
+  "mode": "compare",
+  "route": "world-bundle",
+  "source_root": "/home/coder/lkjscript-codex-20261114-frontend-port/baseline",
+  "compiler": {
+    "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/frontend2.elf",
+    "bytes": 50703986,
+    "sha256": "fe77fac131af2d03b851eac59b503abf1f6dcdccea14a427a967a7bbcdb426f7"
+  },
+  "manifest": {
+    "path": "tests/conformance/cases.json",
+    "bytes": 164387,
+    "sha256": "fb956d5e9a288ac9577a31cecdefb86501d7ce9108e5c050b07b4ac5d9862149",
+    "total_cases": 887,
+    "direct_k_cases": 295
+  },
+  "library": [
+    {
+      "path": "library/lib.rs",
+      "bytes": 1304,
+      "sha256": "d5744ce9e5f3439278d248a2eef51beeef8fad42ea5068c512a803b5544b1bfd",
+      "logical_path": "$std/lib.rs"
+    },
+    {
+      "path": "library/prelude.rs",
+      "bytes": 12692,
+      "sha256": "396875f9a1f6a096ab21b107b391fef8d47ccaae8284c799fbee11140e0c2091",
+      "logical_path": "$std/prelude.rs"
+    },
+    {
+      "path": "library/sequence.rs",
+      "bytes": 12695,
+      "sha256": "247ab4be55aae23ab91eb8ebc4c10e2d22142e1acd797758dc479fe2cdb71eb6",
+      "logical_path": "$std/sequence.rs"
+    },
+    {
+      "path": "library/bytes.rs",
+      "bytes": 968,
+      "sha256": "8448ec831069dcb9af7255684f7cab55941450774d7207df05441e21da76c140",
+      "logical_path": "$std/bytes.rs"
+    },
+    {
+      "path": "library/string.rs",
+      "bytes": 5664,
+      "sha256": "fb632adee16785ce55d20afff34cf19aa65bd184f3e1150166598bd51399139a",
+      "logical_path": "$std/string.rs"
+    },
+    {
+      "path": "library/str.rs",
+      "bytes": 16357,
+      "sha256": "8d881ed82eae10d517df742c80efdae094af1f5156e78c990c3670ea2ff19e4a",
+      "logical_path": "$std/str.rs"
+    },
+    {
+      "path": "library/char.rs",
+      "bytes": 2912,
+      "sha256": "3c27220a3f943be898c275229eeb3b34dde9d85534187c56233f7b00deee57e6",
+      "logical_path": "$std/char.rs"
+    },
+    {
+      "path": "library/fmt.rs",
+      "bytes": 14381,
+      "sha256": "925f1000ca789f9ec53b2e7fba779e3dde941d46bd78c1306e7e47233d925b4b",
+      "logical_path": "$std/fmt.rs"
+    },
+    {
+      "path": "library/iter.rs",
+      "bytes": 14764,
+      "sha256": "720d3fa5b6670edae9f1d20a4bdb56693f7414b8381cae14df7646e1349baf1e",
+      "logical_path": "$std/iter.rs"
+    },
+    {
+      "path": "library/integer.rs",
+      "bytes": 11342,
+      "sha256": "4a6aee75de5f562487765f0ef10f21853082abeb79784692bdd4e870bf20dba9",
+      "logical_path": "$std/integer.rs"
+    },
+    {
+      "path": "library/io.rs",
+      "bytes": 3078,
+      "sha256": "1f2e6d31aac3bf4bd1fa43e5fa5740602ef976fb1b5937eecc2b1705d77a1e61",
+      "logical_path": "$std/io.rs"
+    },
+    {
+      "path": "library/ordered_map.rs",
+      "bytes": 15043,
+      "sha256": "5723bab30921dde6eb1effd91415b0fea2ce5501e1ceebbb2a5cf5f80d43ac98",
+      "logical_path": "$std/ordered_map.rs"
+    },
+    {
+      "path": "library/ordered_set.rs",
+      "bytes": 2714,
+      "sha256": "374842accfffca999a5ec91469653d2b853ce682d2d64a4e22843de5d0d3a4e7",
+      "logical_path": "$std/ordered_set.rs"
+    }
+  ],
+  "library_changes": [],
+  "controls": {
+    "jobs": 4,
+    "timeout_ms": 600000,
+    "memory_bytes": "8589934592",
+    "stack_bytes": "inherited",
+    "max_output_bytes": 134217728
+  },
+  "cases": 593,
+  "counts": {
+    "identical-k": 268,
+    "pending-equal": 4,
+    "rejection-equal": 321
+  },
+  "failures": [],
+  "baseline": {
+    "directory": "/home/coder/lkjscript-codex-20261114-frontend-port/source-baseline-complete",
+    "compiler": {
+      "path": "/home/coder/lkjscript-codex-20261114-frontend-port/b0",
+      "bytes": 6251848,
+      "sha256": "cbc65d4d667bd81f53588084c83643a7377761259229e5d5bb12a96617bb5297"
+    }
+  },
+  "elapsed_seconds": 761.7139533659999,
+  "observations": "observations.json",
+  "evidence_directory": "/home/coder/lkjscript-codex-20261114-frontend-port/native-corpus/",
+  "records": {
+    "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-corpus/observations.json",
+    "sha256": "70edf6a542665b65e934a91ffdc825daa7105dbf55370058c1e00b03875c1281"
+  },
+  "harness": {
+    "path": "tools/frontend.mjs",
+    "sha256": "60208e57efe59489970d2935248e616c9787c510640d958ffe5b4538e417c7ef"
+  },
+  "input_packer": {
+    "path": "tools/source-bundle.mjs",
+    "sha256": "3873e87c4cedc0bc741bf151c1188ea781b41a38a84bca2484b8702361ddd746"
+  },
+  "interpretation": "All 592 source conformance files plus the K compiler source closure agree with preserved B0: accepted K bytes exactly, rejected/pending exit status and first diagnostic code. Direct K cases belong to the separate K-compiler corpus. No source/library input changed."
+}

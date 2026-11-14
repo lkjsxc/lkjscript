@@ -73,7 +73,10 @@ impl Resolution {
     }
 
     fn take_values(&mut self, count: usize) -> Vec<usize> {
-        self.values.split_off(self.values.len() - count)
+        let start = self.values.len() - count;
+        let values = self.values[start..].to_vec();
+        self.values.truncate(start);
+        values
     }
 
     fn environment(&mut self, bindings: BTreeMap<String, usize>) -> usize {
@@ -159,9 +162,11 @@ impl Compiler<'_> {
                             work.pending.push(Work::Tuple {
                                 fields: fields.len(),
                             });
-                            for field in fields.iter().rev() {
+                            let mut index = fields.len();
+                            while index != 0 {
+                                index -= 1;
                                 work.pending.push(Work::Source {
-                                    id: *field,
+                                    id: fields[index],
                                     environment,
                                 });
                             }
@@ -230,7 +235,7 @@ impl Compiler<'_> {
                             continue;
                         }
                     }
-                    let mut arguments = Vec::new();
+                    let mut arguments: Vec<usize> = Vec::new();
                     for arg in &path.args {
                         if !matches!(&self.source.types[*arg].kind, a::Type::Path(p) if p.name.starts_with('\''))
                         {
@@ -243,7 +248,7 @@ impl Compiler<'_> {
                         span,
                         arguments: arguments.len(),
                     });
-                    for argument in arguments.into_iter().rev() {
+                    while let Some(argument) = arguments.pop() {
                         work.pending.push(Work::Source {
                             id: argument,
                             environment,
@@ -283,9 +288,25 @@ impl Compiler<'_> {
                 }
                 Work::Array { len, span } => {
                     let inner = work.values.pop().expect("array child");
-                    let len = len.replace('_', "").parse::<usize>().map_err(|_| {
-                        err(span, "E_TYPE", "array length must be an integer literal")
-                    })?;
+                    let digits = len.replace('_', "");
+                    let magnitude: u64 = match super::integers::magnitude(&digits, 10) {
+                        Some(value) => value,
+                        None => {
+                            return Err(err(
+                                span,
+                                "E_TYPE",
+                                "array length must be an integer literal",
+                            ));
+                        }
+                    };
+                    let len = magnitude as usize;
+                    if len as u64 != magnitude {
+                        return Err(err(
+                            span,
+                            "E_TYPE",
+                            "array length must be an integer literal",
+                        ));
+                    }
                     self.check_owned_element(inner, span)?;
                     let id = self.intern(String::new(), k::TypeKind::Array { inner, len });
                     work.values.push(id);
@@ -299,7 +320,7 @@ impl Compiler<'_> {
                     let mut fields = Vec::new();
                     for (index, ty) in values.into_iter().enumerate() {
                         fields.push(k::Field {
-                            name: index.to_string(),
+                            name: format!("{index}"),
                             ty,
                         });
                     }
@@ -352,11 +373,10 @@ impl Compiler<'_> {
                     span,
                 } => {
                     let definition = &self.source.enums[source];
-                    let count = definition
-                        .variants
-                        .iter()
-                        .map(|variant| variant.fields.len())
-                        .sum();
+                    let mut count = 0;
+                    for variant in &definition.variants {
+                        count += variant.fields.len();
+                    }
                     let values = work.take_values(count);
                     let mut at = 0;
                     let mut variants = Vec::new();
@@ -474,10 +494,10 @@ impl Compiler<'_> {
             .or_else(|| self.declaration_names.get(&path.name).copied());
         let item = declaration.map(|id| self.source.declarations[id].item);
         if args.is_empty() {
-            let parameters = match item {
-                Some(a::Item::Struct(index)) => &self.source.structs[index].generics[..],
-                Some(a::Item::Enum(index)) => &self.source.enums[index].generics[..],
-                _ => &[],
+            let parameters: Vec<a::GenericParam> = match item {
+                Some(a::Item::Struct(index)) => self.source.structs[index].generics.clone(),
+                Some(a::Item::Enum(index)) => self.source.enums[index].generics.clone(),
+                _ => Vec::new(),
             };
             for parameter in parameters {
                 if !parameter.lifetime {
@@ -494,16 +514,18 @@ impl Compiler<'_> {
             work.values.push(*id);
             return Ok(());
         }
-        let parameters = match item {
-            Some(a::Item::Struct(index)) => &self.source.structs[index].generics,
-            Some(a::Item::Enum(index)) => &self.source.enums[index].generics,
-            Some(a::Item::Alias(index)) => &self.source.aliases[index].generics,
+        let parameters: Vec<a::GenericParam> = match item {
+            Some(a::Item::Struct(index)) => self.source.structs[index].generics.clone(),
+            Some(a::Item::Enum(index)) => self.source.enums[index].generics.clone(),
+            Some(a::Item::Alias(index)) => self.source.aliases[index].generics.clone(),
             _ => return Err(err(span, "E_TYPE", &format!("unknown type {}", path.name))),
         };
-        let type_parameters: Vec<_> = parameters
-            .iter()
-            .filter(|parameter| !parameter.lifetime)
-            .collect();
+        let mut type_parameters: Vec<String> = Vec::new();
+        for parameter in &parameters {
+            if !parameter.lifetime {
+                type_parameters.push(parameter.name.clone());
+            }
+        }
         if type_parameters.len() != args.len() {
             return Err(err(
                 span,
@@ -517,9 +539,9 @@ impl Compiler<'_> {
         }
         let mut bindings = work.environments[environment].clone();
         for (parameter, argument) in type_parameters.iter().zip(&args) {
-            bindings.insert(parameter.name.clone(), *argument);
+            bindings.insert(parameter.clone(), *argument);
         }
-        self.bounds(parameters, &bindings)
+        self.bounds(&parameters, &bindings)
             .map_err(|problem| super::at_use_site(problem, span))?;
         let environment = work.environment(bindings);
         if let Some(a::Item::Alias(index)) = item {
@@ -534,14 +556,18 @@ impl Compiler<'_> {
         let description = if args.is_empty() {
             canonical.clone()
         } else {
-            format!(
-                "{}<{}>",
-                canonical,
-                args.iter()
-                    .map(|ty| format!("t{ty}"))
-                    .collect::<Vec<_>>()
-                    .join(",")
-            )
+            let mut description = canonical.clone();
+            description.push('<');
+            let mut index = 0;
+            while index < args.len() {
+                if index != 0 {
+                    description.push(',');
+                }
+                description.push_str(&format!("t{}", args[index]));
+                index += 1;
+            }
+            description.push('>');
+            description
         };
         let id = self.types.len();
         self.type_keys.insert(key, id);
@@ -557,9 +583,12 @@ impl Compiler<'_> {
                     args,
                     span,
                 });
-                for field in self.source.structs[index].fields.iter().rev() {
+                let fields = &self.source.structs[index].fields;
+                let mut field = fields.len();
+                while field != 0 {
+                    field -= 1;
                     work.pending.push(Work::Source {
-                        id: field.ty,
+                        id: fields[field].ty,
                         environment,
                     });
                 }
@@ -571,10 +600,16 @@ impl Compiler<'_> {
                     args,
                     span,
                 });
-                for variant in self.source.enums[index].variants.iter().rev() {
-                    for field in variant.fields.iter().rev() {
+                let variants = &self.source.enums[index].variants;
+                let mut variant = variants.len();
+                while variant != 0 {
+                    variant -= 1;
+                    let fields = &variants[variant].fields;
+                    let mut field = fields.len();
+                    while field != 0 {
+                        field -= 1;
                         work.pending.push(Work::Source {
-                            id: field.ty,
+                            id: fields[field].ty,
                             environment,
                         });
                     }

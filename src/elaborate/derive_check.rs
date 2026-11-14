@@ -7,32 +7,32 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub(super) fn validate(compiler: &mut Compiler<'_>) -> Result<()> {
     implementation_contracts(compiler)?;
-    let source = compiler.source;
-    for (declaration, item) in source.declarations.iter().enumerate() {
+    for declaration in 0..compiler.source.declarations.len() {
+        let item = compiler.source.declarations[declaration].clone();
         let (parameters, attrs, fields) = match item.item {
             a::Item::Struct(index) => {
-                let definition = &source.structs[index];
+                let definition = &compiler.source.structs[index];
                 (
-                    &definition.generics,
-                    &definition.attrs,
-                    definition.fields.iter().collect::<Vec<_>>(),
+                    definition.generics.clone(),
+                    definition.attrs.clone(),
+                    definition.fields.clone(),
                 )
             }
             a::Item::Enum(index) => {
-                let definition = &source.enums[index];
+                let definition = &compiler.source.enums[index];
+                let mut fields = Vec::new();
+                for variant in &definition.variants {
+                    fields.extend_from_slice(&variant.fields);
+                }
                 (
-                    &definition.generics,
-                    &definition.attrs,
-                    definition
-                        .variants
-                        .iter()
-                        .flat_map(|variant| &variant.fields)
-                        .collect(),
+                    definition.generics.clone(),
+                    definition.attrs.clone(),
+                    fields,
                 )
             }
             _ => continue,
         };
-        let mut seen = BTreeSet::new();
+        let mut seen: BTreeSet<String> = BTreeSet::new();
         for attr in attrs {
             if attr.name != "derive" {
                 continue;
@@ -50,11 +50,27 @@ pub(super) fn validate(compiler: &mut Compiler<'_>) -> Result<()> {
                         .names
                         .library_type("prelude", "Default", attr.span)?
                         .declaration;
-                    let generated = source.impls.iter().find(|implementation| {
-                        implementation.span == item.span && matches!(&source.types[implementation.target].kind, a::Type::Path(path) if path.declaration == Some(declaration))
-                    });
-                    if generated.and_then(|implementation| implementation.trait_ty).is_none_or(|ty| !matches!(&source.types[ty].kind, a::Type::Path(path) if path.declaration == standard)) {
-                        return Err(err(attr.span, "E_TRAIT", "derive Default requires the standard Default trait; help: avoid shadowing std at this derive"));
+                    let mut generated = None;
+                    for implementation in &compiler.source.impls {
+                        if implementation.span == item.span
+                            && matches!(&compiler.source.types[implementation.target].kind, a::Type::Path(path) if path.declaration == Some(declaration))
+                        {
+                            generated = implementation.trait_ty;
+                            break;
+                        }
+                    }
+                    let valid = match generated {
+                        Some(ty) => {
+                            matches!(&compiler.source.types[ty].kind, a::Type::Path(path) if path.declaration == standard)
+                        }
+                        None => false,
+                    };
+                    if !valid {
+                        return Err(err(
+                            attr.span,
+                            "E_TRAIT",
+                            "derive Default requires the standard Default trait; help: avoid shadowing std at this derive",
+                        ));
                     }
                     continue;
                 }
@@ -68,16 +84,16 @@ pub(super) fn validate(compiler: &mut Compiler<'_>) -> Result<()> {
                         &format!("derive {bound} is not implemented"),
                     ));
                 }
-                if !seen.insert(bound) {
+                if !seen.insert(bound.clone()) {
                     return Err(err(
                         attr.span,
                         "E_TRAIT",
                         &format!("duplicate derive {bound}"),
                     ));
                 }
-                crate::generics::derived_coherence(source, declaration, bound)?;
+                crate::generics::derived_coherence(compiler.source, declaration, bound)?;
                 let mut substitutions = BTreeMap::new();
-                compiler.declare_parameters(parameters, &mut substitutions)?;
+                compiler.declare_parameters(&parameters, &mut substitutions)?;
                 for ty in substitutions.values() {
                     compiler.assume_builtin(*ty, bound);
                 }
@@ -104,7 +120,7 @@ pub(super) fn validate(compiler: &mut Compiler<'_>) -> Result<()> {
                     attr.span,
                 )?;
                 for parent in crate::generics::builtin_parents(bound) {
-                    if !compiler.satisfies_bound(ty, parent) {
+                    if !compiler.satisfies_bound(ty, &parent) {
                         return Err(err(
                             attr.span,
                             "E_TRAIT",
@@ -119,18 +135,21 @@ pub(super) fn validate(compiler: &mut Compiler<'_>) -> Result<()> {
 }
 
 fn implementation_contracts(compiler: &mut Compiler<'_>) -> Result<()> {
-    let source = compiler.source;
-    for implementation in &source.impls {
+    for implementation_index in 0..compiler.source.impls.len() {
+        let implementation = compiler.source.impls[implementation_index].clone();
         let Some(trait_ty) = implementation.trait_ty else {
             continue;
         };
-        let a::Type::Path(path) = &source.types[trait_ty].kind else {
-            continue;
-        };
-        let crate::generics::TraitIdentity::Builtin(bound) =
-            crate::generics::bound_identity(source, path)
-        else {
-            continue;
+        let (bound, has_type_arguments) = {
+            let a::Type::Path(path) = &compiler.source.types[trait_ty].kind else {
+                continue;
+            };
+            let crate::generics::TraitIdentity::Builtin(bound) =
+                crate::generics::bound_identity(compiler.source, path)
+            else {
+                continue;
+            };
+            (bound, !path.args.is_empty())
         };
         if !matches!(bound.as_str(), "Clone" | "PartialEq" | "Eq") {
             if matches!(
@@ -145,7 +164,7 @@ fn implementation_contracts(compiler: &mut Compiler<'_>) -> Result<()> {
             }
             continue;
         }
-        if !path.args.is_empty() || !implementation.associated.is_empty() {
+        if has_type_arguments || !implementation.associated.is_empty() {
             return Err(err(
                 implementation.span,
                 "E_UNSUPPORTED",
@@ -165,21 +184,17 @@ fn implementation_contracts(compiler: &mut Compiler<'_>) -> Result<()> {
         environment.insert("Self".to_string(), receiver);
         let shared = compiler.reference(receiver, false);
         let exclusive = compiler.reference(receiver, true);
-        let mut methods = BTreeSet::new();
+        let mut methods: BTreeSet<String> = BTreeSet::new();
         for method in &implementation.methods {
-            let function = &source.functions[*method];
-            if !methods.insert(function.name.as_str()) {
+            let function = compiler.source.functions[*method].clone();
+            if !methods.insert(function.name.clone()) {
                 return Err(err(
                     function.span,
                     "E_TRAIT",
                     "duplicate builtin implementation method",
                 ));
             }
-            if function
-                .params
-                .first()
-                .is_none_or(|parameter| parameter.name != "self")
-            {
+            if function.params.is_empty() || function.params[0].name != "self" {
                 return Err(err(
                     function.span,
                     "E_TRAIT",
@@ -198,13 +213,13 @@ fn implementation_contracts(compiler: &mut Compiler<'_>) -> Result<()> {
                     ));
                 }
             };
-            if function.body.is_none()
-                || function
-                    .generics
-                    .iter()
-                    .any(|parameter| !parameter.lifetime)
-                || function.params.len() != parameters.len()
-            {
+            let mut generic = false;
+            for parameter in &function.generics {
+                if !parameter.lifetime {
+                    generic = true;
+                }
+            }
+            if function.body.is_none() || generic || function.params.len() != parameters.len() {
                 return Err(err(
                     function.span,
                     "E_TRAIT",
@@ -233,7 +248,7 @@ fn implementation_contracts(compiler: &mut Compiler<'_>) -> Result<()> {
             "PartialEq" => Some("eq"),
             _ => None,
         };
-        if required.is_some_and(|name| !methods.contains(name)) {
+        if required.is_some_and(|name| !methods.contains(&name.to_string())) {
             return Err(err(
                 implementation.span,
                 "E_TRAIT",
@@ -241,7 +256,7 @@ fn implementation_contracts(compiler: &mut Compiler<'_>) -> Result<()> {
             ));
         }
         for parent in crate::generics::builtin_parents(&bound) {
-            if !compiler.satisfies_bound(receiver, parent) {
+            if !compiler.satisfies_bound(receiver, &parent) {
                 return Err(err(
                     implementation.span,
                     "E_TRAIT",

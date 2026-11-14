@@ -10,6 +10,7 @@ mod definition_types;
 mod derive_check;
 mod derive_methods;
 mod diagnostic_inference;
+mod floats;
 mod generic_check;
 mod inference;
 mod integers;
@@ -100,6 +101,70 @@ struct Compiler<'a> {
     diagnostic_functions: Option<&'a BTreeSet<usize>>,
 }
 
+fn live_indices(facts: &Facts, start: usize) -> Vec<usize> {
+    let mut indices = Vec::new();
+    let mut remaining = facts.indices_from(start);
+    while let Some(index) = remaining.next() {
+        indices.push(index);
+    }
+    indices
+}
+// Source construction retains the defining instruction's location. Diagnose an
+// impossible owned unsized local here before K's independent structural gate;
+// this provenance check never grants checked-program authority.
+fn unsized_local_problem(
+    types: &[k::Type],
+    function: &k::Function,
+    source_span: a::Span,
+) -> Option<a::Diagnostic> {
+    for local_index in 0..function.locals.len() {
+        let local = &function.locals[local_index];
+        let Some(ty) = types.get(local.ty) else {
+            continue;
+        };
+        if !matches!(ty.kind, k::TypeKind::Slice { .. } | k::TypeKind::Str) {
+            continue;
+        }
+        let mut problem = err(
+            source_span,
+            "E_UNSUPPORTED",
+            &format!(
+                "unsized values need a borrowed type: local {} ({}) in function {}",
+                local.name, ty.name, function.name
+            ),
+        );
+        for instruction in &function.body {
+            let destination = match &instruction.op {
+                k::Op::Text { dst, .. }
+                | k::Op::Int { dst, .. }
+                | k::Op::Float { dst, .. }
+                | k::Op::Unit { dst }
+                | k::Op::Read { dst, .. }
+                | k::Op::Borrow { dst, .. }
+                | k::Op::SliceBorrow { dst, .. }
+                | k::Op::ViewRange { dst, .. }
+                | k::Op::Array { dst, .. }
+                | k::Op::Unary { dst, .. }
+                | k::Op::Binary { dst, .. }
+                | k::Op::Call { dst, .. }
+                | k::Op::Struct { dst, .. }
+                | k::Op::Variant { dst, .. }
+                | k::Op::Discriminant { dst, .. }
+                | k::Op::TagTest { dst, .. }
+                | k::Op::Intrinsic { dst, .. } => Some(*dst),
+                k::Op::Assign { place, .. } if place.projections.is_empty() => Some(place.local),
+                _ => None,
+            };
+            if destination == Some(local_index) {
+                problem.line = instruction.line;
+                problem.column = instruction.column;
+                break;
+            }
+        }
+        return Some(problem);
+    }
+    None
+}
 fn first_problem(problems: Vec<a::Diagnostic>) -> a::Diagnostic {
     problems
         .into_iter()
@@ -108,18 +173,27 @@ fn first_problem(problems: Vec<a::Diagnostic>) -> a::Diagnostic {
 }
 
 pub fn elaborate(source: &a::Program) -> Result<k::Program> {
-    elaborate_all(source).map_err(first_problem)
+    match elaborate_all(source) {
+        std::result::Result::Ok(program) => std::result::Result::Ok(program),
+        std::result::Result::Err(problems) => std::result::Result::Err(first_problem(problems)),
+    }
 }
 
 /// Resolve declarations before collecting independent definition diagnostics.
 pub fn elaborate_all(source: &a::Program) -> std::result::Result<k::Program, Vec<a::Diagnostic>> {
-    let resolved = crate::resolve::resolve(source).map_err(|error| vec![error])?;
+    let resolved = match crate::resolve::resolve(source) {
+        std::result::Result::Ok(resolved) => resolved,
+        std::result::Result::Err(error) => return std::result::Result::Err(vec![error]),
+    };
     elaborate_resolved_all(&resolved)
 }
 
 /// Elaborate an already resolved source graph; the independent K gate follows.
 pub fn elaborate_resolved(source: &a::Program) -> Result<k::Program> {
-    elaborate_resolved_all(source).map_err(first_problem)
+    match elaborate_resolved_all(source) {
+        std::result::Result::Ok(program) => std::result::Result::Ok(program),
+        std::result::Result::Err(problems) => std::result::Result::Err(first_problem(problems)),
+    }
 }
 
 /// Recorded definition constraints and rigid generic evidence. Only this phase
@@ -136,23 +210,37 @@ pub struct TypedDefinitions<'source> {
 pub fn infer_resolved_report(
     source: &a::Program,
 ) -> std::result::Result<TypedDefinitions<'_>, Vec<a::Diagnostic>> {
-    static_lifetimes::annotations(source).map_err(|error| vec![error])?;
-    crate::generics::validate(source).map_err(|error| vec![error])?;
-    static_lifetimes::outputs(source).map_err(|error| vec![error])?;
-    let mut compiler = Compiler::new(source).map_err(|error| vec![error])?;
-    compiler
-        .check_capability_methods()
-        .map_err(|error| vec![error])?;
+    if let std::result::Result::Err(error) = static_lifetimes::annotations(source) {
+        return std::result::Result::Err(vec![error]);
+    }
+    if let std::result::Result::Err(error) = crate::generics::validate(source) {
+        return std::result::Result::Err(vec![error]);
+    }
+    if let std::result::Result::Err(error) = static_lifetimes::outputs(source) {
+        return std::result::Result::Err(vec![error]);
+    }
+    let mut compiler = match Compiler::new(source) {
+        std::result::Result::Ok(compiler) => compiler,
+        std::result::Result::Err(error) => return std::result::Result::Err(vec![error]),
+    };
+    if let std::result::Result::Err(error) = compiler.check_capability_methods() {
+        return std::result::Result::Err(vec![error]);
+    }
     let inferred =
         diagnostic_inference::infer_all(source, &compiler.names, &compiler.implementations);
-    let (evidence, mut problems) = generic_check::validate_report(source, inferred.definitions)
-        .map_err(|error| {
-            let mut errors = inferred.problems.clone();
+    let (evidence, reported) = match generic_check::validate_report(source, inferred.definitions) {
+        std::result::Result::Ok(report) => report,
+        std::result::Result::Err(error) => {
+            let mut errors = inferred.problems;
             errors.push(error);
-            errors
-        })?;
-    problems.splice(0..0, inferred.problems);
-    Ok(TypedDefinitions {
+            return std::result::Result::Err(errors);
+        }
+    };
+    let mut problems = inferred.problems;
+    for problem in reported {
+        problems.push(problem);
+    }
+    std::result::Result::Ok(TypedDefinitions {
         compiler,
         evidence,
         problems,
@@ -165,9 +253,9 @@ pub fn infer_resolved_all(
 ) -> std::result::Result<TypedDefinitions<'_>, Vec<a::Diagnostic>> {
     let definitions = infer_resolved_report(source)?;
     if definitions.problems.is_empty() {
-        Ok(definitions)
+        std::result::Result::Ok(definitions)
     } else {
-        Err(definitions.problems)
+        std::result::Result::Err(definitions.problems)
     }
 }
 
@@ -179,32 +267,49 @@ pub fn lower_definitions(
 ) -> std::result::Result<k::Program, Vec<a::Diagnostic>> {
     let source = definitions.compiler.source;
     let mut problems = definitions.problems;
-    let meaning = elaborate_definitions(
+    let meaning = match elaborate_definitions(
         source,
         definitions.compiler,
         definitions.evidence,
         &mut problems,
-    )
-    .map_err(|error| {
-        let mut errors = problems.clone();
-        errors.push(error);
-        errors
-    })?;
+    ) {
+        std::result::Result::Ok(meaning) => meaning,
+        std::result::Result::Err(error) => {
+            problems.push(error);
+            return std::result::Result::Err(problems);
+        }
+    };
     if problems.is_empty() {
-        return Ok(meaning);
+        return std::result::Result::Ok(meaning);
     }
-    if let Err(errors) = crate::check::check_all(meaning) {
-        problems.extend(errors);
+    if let std::result::Result::Err(errors) = crate::check::check_all(meaning) {
+        for error in errors {
+            problems.push(error);
+        }
     }
-    let mut seen = std::collections::BTreeSet::new();
-    problems.retain(|p| seen.insert((p.file, p.line, p.column, p.code.clone(), p.message.clone())));
-    Err(problems)
+    let mut seen: BTreeSet<(usize, usize, usize, String, String)> = BTreeSet::new();
+    let mut unique = Vec::new();
+    for problem in problems {
+        if seen.insert((
+            problem.file,
+            problem.line,
+            problem.column,
+            problem.code.clone(),
+            problem.message.clone(),
+        )) {
+            unique.push(problem);
+        }
+    }
+    std::result::Result::Err(unique)
 }
 
 pub fn elaborate_resolved_all(
     source: &a::Program,
 ) -> std::result::Result<k::Program, Vec<a::Diagnostic>> {
-    lower_definitions(infer_resolved_report(source)?)
+    match infer_resolved_report(source) {
+        std::result::Result::Ok(definitions) => lower_definitions(definitions),
+        std::result::Result::Err(problems) => std::result::Result::Err(problems),
+    }
 }
 
 fn elaborate_definitions(
@@ -219,12 +324,13 @@ fn elaborate_definitions(
     let empty = BTreeMap::new();
     for s in &source.structs {
         if s.generics.is_empty() {
+            let declaration = c
+                .declaration_names
+                .get(&qualified(&s.module, &s.name))
+                .copied();
             let _ = c.named_type(
                 &a::Path {
-                    declaration: c
-                        .declaration_names
-                        .get(&qualified(&s.module, &s.name))
-                        .copied(),
+                    declaration,
                     name: qualified(&s.module, &s.name),
                     args: Vec::new(),
                 },
@@ -235,12 +341,13 @@ fn elaborate_definitions(
     }
     for e in &source.enums {
         if e.generics.is_empty() {
+            let declaration = c
+                .declaration_names
+                .get(&qualified(&e.module, &e.name))
+                .copied();
             let _ = c.named_type(
                 &a::Path {
-                    declaration: c
-                        .declaration_names
-                        .get(&qualified(&e.module, &e.name))
-                        .copied(),
+                    declaration,
                     name: qualified(&e.module, &e.name),
                     args: Vec::new(),
                 },
@@ -302,20 +409,28 @@ fn elaborate_definitions(
         }
     }
     let mut refinement = c.closures.checked_functions.clone();
-    refinement.extend(&c.return_inference);
-    let scoped_roots = c.scoped_bodies.keys().copied().collect();
+    for function in &c.return_inference {
+        refinement.insert(*function);
+    }
+    let mut scoped_roots = BTreeSet::new();
+    for function in c.scoped_bodies.keys() {
+        scoped_roots.insert(*function);
+    }
     let (scopes, scoped_problems) = c.scoped_definitions(&scoped_roots);
-    problems.extend(scoped_problems);
+    for problem in scoped_problems {
+        problems.push(problem);
+    }
     let mut program = k::Program {
         types: c.types,
         functions: c.functions,
         destructors: c.destructors,
     };
-    problems.extend(crate::check::refine_return_contracts(
-        &mut program,
-        &refinement,
-    ));
-    problems.extend(crate::check::scoped::check_definitions(&program, &scopes));
+    for problem in crate::check::refine_return_contracts(&mut program, &refinement) {
+        problems.push(problem);
+    }
+    for problem in crate::check::scoped::check_definitions(&program, &scopes) {
+        problems.push(problem);
+    }
     Ok(program)
 }
 
@@ -332,44 +447,37 @@ impl<'a> Compiler<'a> {
         names: crate::resolve::Resolver<'a>,
         implementations: crate::generics::ImplementationIndex,
     ) -> Self {
+        let mut field_positions = Vec::new();
+        for definition in &source.structs {
+            let mut positions = BTreeMap::new();
+            for i in 0..definition.fields.len() {
+                positions.insert(definition.fields[i].name.clone(), i);
+            }
+            field_positions.push(positions);
+        }
+        let mut variant_positions = Vec::new();
+        for definition in &source.enums {
+            let mut positions = BTreeMap::new();
+            for i in 0..definition.variants.len() {
+                positions.insert(definition.variants[i].name.clone(), i);
+            }
+            variant_positions.push(positions);
+        }
+        let mut declaration_names = BTreeMap::new();
+        for id in 0..source.declarations.len() {
+            declaration_names.insert(source.declarations[id].name.clone(), id);
+        }
         let mut c = Compiler {
             source,
             names,
             implementations,
-            field_positions: source
-                .structs
-                .iter()
-                .map(|definition| {
-                    definition
-                        .fields
-                        .iter()
-                        .enumerate()
-                        .map(|(i, field)| (field.name.clone(), i))
-                        .collect()
-                })
-                .collect(),
-            variant_positions: source
-                .enums
-                .iter()
-                .map(|definition| {
-                    definition
-                        .variants
-                        .iter()
-                        .enumerate()
-                        .map(|(i, variant)| (variant.name.clone(), i))
-                        .collect()
-                })
-                .collect(),
+            field_positions,
+            variant_positions,
             anonymous_fields: BTreeMap::new(),
             types: k::primitives(),
             type_names: BTreeMap::new(),
             type_keys: BTreeMap::new(),
-            declaration_names: source
-                .declarations
-                .iter()
-                .enumerate()
-                .map(|(id, d)| (d.name.clone(), id))
-                .collect(),
+            declaration_names,
             functions: Vec::new(),
             pending_functions: Vec::new(),
             derived_functions: BTreeMap::new(),
@@ -389,14 +497,15 @@ impl<'a> Compiler<'a> {
         for i in 0..c.types.len() {
             c.type_names.insert(c.types[i].name.clone(), i);
         }
-        for (name, bits, signed) in [
-            ("u64", 64, false),
-            ("isize", 64, true),
-            ("u16", 16, false),
-            ("u32", 32, false),
-            ("i8", 8, true),
-            ("i16", 16, true),
-        ] {
+        for index in 0..6 {
+            let (name, bits, signed): (&str, u8, bool) = match index {
+                0 => ("u64", 64, false),
+                1 => ("isize", 64, true),
+                2 => ("u16", 16, false),
+                3 => ("u32", 32, false),
+                4 => ("i8", 8, true),
+                _ => ("i16", 16, true),
+            };
             let id = c.types.len();
             c.types.push(k::Type {
                 name: name.to_string(),
@@ -412,15 +521,19 @@ impl<'a> Compiler<'a> {
         c.type_names.insert("char".to_string(), character);
         for node in &source.exprs {
             if let a::Expr::Path(path) = &node.kind {
-                c.uses
-                    .entry((node.span.file, path.name.clone()))
-                    .or_default()
-                    .push(node.span.start);
+                let key = (node.span.file, path.name.clone());
+                if !c.uses.contains_key(&key) {
+                    c.uses.insert(key.clone(), Vec::new());
+                }
+                c.uses.get_mut(&key).unwrap().push(node.span.start);
             }
         }
-        for positions in c.uses.values_mut() {
-            positions.sort_unstable();
+        let mut sorted_uses = BTreeMap::new();
+        for (key, mut positions) in c.uses {
+            positions.sort();
+            sorted_uses.insert(key, positions);
         }
+        c.uses = sorted_uses;
         c
     }
 }
@@ -439,23 +552,24 @@ impl Compiler<'_> {
                 .get(owner)
                 .map(|id| self.source.declarations[*id].item)
             {
-                return self.field_positions[index].get(name).copied();
+                return self.field_positions[index].get(&name.to_string()).copied();
             }
         }
         if !self.anonymous_fields.contains_key(&ty) {
             let k::TypeKind::Struct { fields, .. } = &self.types[ty].kind else {
                 return None;
             };
-            self.anonymous_fields.insert(
-                ty,
-                fields
-                    .iter()
-                    .enumerate()
-                    .map(|(i, field)| (field.name.clone(), i))
-                    .collect(),
-            );
+            let mut positions = BTreeMap::new();
+            for i in 0..fields.len() {
+                positions.insert(fields[i].name.clone(), i);
+            }
+            self.anonymous_fields.insert(ty, positions);
         }
-        self.anonymous_fields[&ty].get(name).copied()
+        self.anonymous_fields
+            .get(&ty)
+            .unwrap()
+            .get(&name.to_string())
+            .copied()
     }
     fn field_access(&self, ty: usize, name: &str, scope: a::ModuleId, span: a::Span) -> Result<()> {
         if let Some((owner, _)) = self.applications.get(&ty) {
@@ -465,7 +579,7 @@ impl Compiler<'_> {
                 .map(|id| self.source.declarations[*id].item)
             {
                 let definition = &self.source.structs[index];
-                if let Some(position) = self.field_positions[index].get(name) {
+                if let Some(position) = self.field_positions[index].get(&name.to_string()) {
                     self.declared_field_access(
                         definition,
                         &definition.fields[*position],
@@ -545,14 +659,17 @@ impl Compiler<'_> {
                 format!("[t{};{}]", inner, len),
             ),
             k::TypeKind::Struct { fields, .. } => {
-                let ids: Vec<_> = fields.iter().map(|f| f.ty).collect();
-                let name = format!(
-                    "({})",
-                    ids.iter()
-                        .map(|t| format!("t{t}"))
-                        .collect::<Vec<_>>()
-                        .join(",")
-                );
+                let mut ids = Vec::new();
+                let mut name = "(".to_string();
+                for i in 0..fields.len() {
+                    let ty = fields[i].ty;
+                    ids.push(ty);
+                    if i > 0 {
+                        name.push(',');
+                    }
+                    name.push_str(&format!("t{ty}"));
+                }
+                name.push(')');
                 (TypeKey::Tuple(ids), name)
             }
             k::TypeKind::Vec { inner } => (TypeKey::Vec(*inner), format!("Vec<t{inner}>")),
@@ -576,14 +693,7 @@ impl Compiler<'_> {
     }
 
     fn reference(&mut self, inner: usize, mutable: bool) -> usize {
-        self.intern(
-            format!(
-                "&{}{}",
-                if mutable { "mut " } else { "" },
-                self.types[inner].name
-            ),
-            k::TypeKind::Ref { inner, mutable },
-        )
+        self.intern(String::new(), k::TypeKind::Ref { inner, mutable })
     }
     fn has_view(&self, ty: usize) -> bool {
         let mut todo = vec![ty];
@@ -670,7 +780,7 @@ impl Compiler<'_> {
                 "a returned view has one source lifetime",
             ));
         }
-        let mut candidates = Vec::new();
+        let mut candidates: Vec<usize> = Vec::new();
         if let Some(lifetime) = lifetimes.first() {
             for i in 0..source.params.len() {
                 if self.lifetimes(source.params[i].ty).contains(lifetime) {
@@ -767,10 +877,11 @@ impl Compiler<'_> {
         }
         self.prepare_associated(index, &mut sub)?;
         let source = self.source.functions[index].clone();
-        let key = (
-            index,
-            sub.iter().map(|(name, ty)| (name.clone(), *ty)).collect(),
-        );
+        let mut substitutions = Vec::new();
+        for (name, ty) in &sub {
+            substitutions.push((name.clone(), *ty));
+        }
+        let key = (index, substitutions);
         if let Some(id) = self.instance_names.get(&key) {
             return Ok(*id);
         }
@@ -812,6 +923,13 @@ impl Compiler<'_> {
                 substitutions: sub,
             }),
         ));
+        let mut test = false;
+        for attribute in &source.attrs {
+            if attribute.name == "test" {
+                test = true;
+                break;
+            }
+        }
         self.functions.push(k::Function {
             file: source.span.file,
             name,
@@ -820,7 +938,7 @@ impl Compiler<'_> {
             return_source,
             locals,
             body: Vec::new(),
-            test: source.attrs.iter().any(|a| a.name == "test"),
+            test,
         });
         Ok(id)
     }
@@ -832,18 +950,29 @@ impl Compiler<'_> {
         // Method selection checks implementation bounds before it instantiates
         // the selected method. Callable signatures need the same concrete
         // associated substitutions that ordinary function instantiation uses.
-        let mut prepared;
-        let sub = if parameters
-            .iter()
-            .flat_map(|parameter| &parameter.bounds)
-            .any(|bound| self.is_callable_bound(*bound))
-        {
-            prepared = sub.clone();
+        let mut callable = false;
+        for parameter in parameters {
+            for bound in &parameter.bounds {
+                if self.is_callable_bound(*bound) {
+                    callable = true;
+                    break;
+                }
+            }
+            if callable {
+                break;
+            }
+        }
+        let prepared: Option<BTreeMap<String, usize>> = if callable {
+            let mut prepared = sub.clone();
             self.prepare_callable_arguments(parameters, &mut prepared)?;
             self.prepare_parameter_associated(parameters, &mut prepared)?;
-            &prepared
+            Some(prepared)
         } else {
-            sub
+            None
+        };
+        let sub = match &prepared {
+            Some(prepared) => prepared,
+            None => sub,
         };
         for parameter in parameters {
             if parameter.lifetime {
@@ -860,7 +989,7 @@ impl Compiler<'_> {
                 }
                 let (bound, identity) = match &self.source.types[*id].kind {
                     a::Type::Path(p) if p.args.is_empty() => (
-                        p.name.as_str(),
+                        p.name.clone(),
                         crate::generics::bound_identity(self.source, p),
                     ),
                     _ => {
@@ -917,7 +1046,13 @@ impl Compiler<'_> {
                     if pattern.name != name {
                         continue;
                     }
-                    let parameters=pattern.args.iter().filter(|p|!matches!(&self.source.types[**p].kind,a::Type::Path(path) if path.name.starts_with("'"))).copied().collect::<Vec<_>>();
+                    let mut parameters = Vec::new();
+                    for parameter in &pattern.args {
+                        if !matches!(&self.source.types[*parameter].kind, a::Type::Path(path) if path.name.starts_with("'"))
+                        {
+                            parameters.push(*parameter);
+                        }
+                    }
                     if parameters.len() != actual.len() {
                         continue;
                     }
@@ -937,12 +1072,12 @@ impl Compiler<'_> {
                     }
                     sub.insert("Self".to_string(), ty);
                     self.bounds(&im.generics, &sub)?;
-                    let methods = im
-                        .methods
-                        .iter()
-                        .filter(|i| self.source.functions[**i].name == "drop")
-                        .copied()
-                        .collect::<Vec<_>>();
+                    let mut methods = Vec::new();
+                    for method in &im.methods {
+                        if self.source.functions[*method].name == "drop" {
+                            methods.push(*method);
+                        }
+                    }
                     if methods.len() != 1 {
                         return Err(err(im.span, "E_TRAIT", "Drop requires one drop method"));
                     }
@@ -957,7 +1092,8 @@ impl Compiler<'_> {
         let source = &self.source.functions[instance.source];
         let span = source.span;
         let name = qualified(&source.module, &source.name);
-        self.compile_function_body(index, instance)
+        let function = self
+            .compile_function_body(index, instance)
             .map_err(|problem| {
                 if problem.line == 0 {
                     err(
@@ -968,8 +1104,13 @@ impl Compiler<'_> {
                 } else {
                     problem
                 }
-            })
+            })?;
+        if let Some(problem) = unsized_local_problem(&self.types, &function, span) {
+            return Err(problem);
+        }
+        Ok(function)
     }
+    #[allow(clippy::mem_replace_with_default)]
     fn compile_function_body(&mut self, index: usize, instance: &Instance) -> Result<k::Function> {
         let definition = match self.definition_types.remove(&instance.source) {
             Some(definition) => definition,
@@ -982,15 +1123,10 @@ impl Compiler<'_> {
         };
         let inferred = definition.instantiate(self, &instance.substitutions);
         self.definition_types.insert(instance.source, definition);
-        let inferred = std::rc::Rc::new(inferred?);
+        let inferred = inferred?;
         let source = self.source.functions[instance.source].clone();
         let mut function = self.functions[index].clone();
-        let bindings = function
-            .locals
-            .iter()
-            .enumerate()
-            .map(|(i, l)| (l.name.clone(), i))
-            .collect();
+        let bindings = Bindings::from_locals(&function.locals, 0);
         let live = Facts::filled(function.locals.len(), true);
         let references = Facts::new(live.len());
         let scope = self.names.scope(&source.module);
@@ -1025,12 +1161,11 @@ impl Compiler<'_> {
             reachable: true,
         };
         let result_ty = builder.function.result;
-        let result = builder.block(
-            source
-                .body
-                .ok_or_else(|| err(source.span, "E_TYPE", "function has no body"))?,
-            Some(result_ty),
-        )?;
+        let source_body = match source.body {
+            Some(body) => body,
+            None => return Err(err(source.span, "E_TYPE", "function has no body")),
+        };
+        let result = builder.block(source_body, Some(result_ty))?;
         if builder.reachable {
             if result.1 != result_ty {
                 return Err(err(source.span, "E_TYPE", "function result type differs"));
@@ -1038,7 +1173,7 @@ impl Compiler<'_> {
             builder.cleanup(0, Some(result.0), source.span.line);
             builder.emit(k::Op::Return { src: result.0 }, source.span.line);
         }
-        let body = std::mem::take(&mut builder.scoped_body);
+        let body = std::mem::replace(&mut builder.scoped_body, scoped_locals::Body::default());
         drop(builder);
         if !body.is_empty() {
             self.scoped_bodies.insert(index, body);
@@ -1056,9 +1191,12 @@ struct Bindings {
 }
 impl Bindings {
     fn push(&mut self, binding: (String, usize)) {
+        if !self.visible.contains_key(&binding.0) {
+            self.visible.insert(binding.0.clone(), Vec::new());
+        }
         self.visible
-            .entry(binding.0.clone())
-            .or_default()
+            .get_mut(&binding.0)
+            .unwrap()
             .push(self.entries.len());
         self.entries.push(binding);
     }
@@ -1066,7 +1204,7 @@ impl Bindings {
         self.entries.len()
     }
     fn entry(&self, name: &str) -> Option<(usize, usize)> {
-        let entry = *self.visible.get(name)?.last()?;
+        let entry = *self.visible.get(&name.to_string())?.last()?;
         Some((entry, self.entries[entry].1))
     }
     fn get(&self, name: &str) -> Option<usize> {
@@ -1075,19 +1213,24 @@ impl Bindings {
     fn truncate(&mut self, len: usize) {
         while self.entries.len() > len {
             let (name, _) = self.entries.pop().unwrap();
-            let locals = self.visible.get_mut(&name).unwrap();
-            locals.pop();
-            if locals.is_empty() {
+            let empty = {
+                let locals = self.visible.get_mut(&name).unwrap();
+                locals.pop();
+                locals.is_empty()
+            };
+            if empty {
                 self.visible.remove(&name);
             }
         }
     }
 }
-impl FromIterator<(String, usize)> for Bindings {
-    fn from_iter<I: IntoIterator<Item = (String, usize)>>(iter: I) -> Self {
+impl Bindings {
+    fn from_locals(locals: &[k::Local], offset: usize) -> Self {
         let mut bindings = Self::default();
-        for binding in iter {
-            bindings.push(binding);
+        let mut index = 0;
+        while index < locals.len() {
+            bindings.push((locals[index].name.clone(), offset + index));
+            index += 1;
         }
         bindings
     }
@@ -1146,7 +1289,7 @@ struct Builder<'a, 'b> {
     dependents: borrow_cleanup::Dependencies,
     assignment_types: BTreeMap<usize, usize>,
     range_borrows: BTreeMap<usize, usize>,
-    inferred: std::rc::Rc<definition_types::Types>,
+    inferred: definition_types::Types,
     live: Facts,
     definite_live: Facts,
     written: Facts,
@@ -1232,7 +1375,7 @@ impl Builder<'_, '_> {
             if self.parameter_allows_trait(&owner.generics, base, declaration) {
                 return true;
             }
-            if self.sub.get("Self") == Some(&base) {
+            if self.sub.get(&"Self".to_string()) == Some(&base) {
                 if let Some(trait_ty) = owner.trait_ty {
                     if let a::Type::Path(path) = &self.compiler.source.types[trait_ty].kind {
                         if path
@@ -1423,8 +1566,9 @@ impl Builder<'_, '_> {
                     _ => 0,
                 };
                 let state = self.snapshot();
-                if let Some(scope) = self.loops.iter_mut().rev().nth(depth) {
-                    scope.exits.push(state);
+                if depth < self.loops.len() {
+                    let index = self.loops.len() - depth - 1;
+                    self.loops[index].exits.push(state);
                 }
                 self.reachable = false;
             }
@@ -1444,7 +1588,7 @@ impl Builder<'_, '_> {
         });
     }
     fn cleanup(&mut self, start: usize, except: Option<usize>, line: usize) {
-        let locals: Vec<_> = self.live.indices_from(start).collect();
+        let locals = live_indices(&self.live, start);
         for i in locals {
             if Some(i) != except && !self.capture_locals.contains(&i) {
                 self.cleanup_place(k::Place::local(i), line);
@@ -1524,20 +1668,15 @@ impl Builder<'_, '_> {
             )
         })?;
         let dst = self.temp(ty);
-        self.emit(
-            k::Op::Read {
-                dst,
-                place,
-                moving: !is_copy(&self.compiler.types, ty),
-            },
-            line,
-        );
+        let moving = !is_copy(&self.compiler.types, ty);
+        self.emit(k::Op::Read { dst, place, moving }, line);
         Ok((dst, ty))
     }
     fn borrow(&mut self, place: k::Place, mutable: bool, line: usize) -> Result<(usize, usize)> {
         if mutable {
-            self.promote_range_place(&place, self.active_span)?;
-            self.guard_write(&place, self.active_span)?;
+            let span = self.active_span;
+            self.promote_range_place(&place, span)?;
+            self.guard_write(&place, span)?;
         }
         let ty = place_type(&self.compiler.types, self.function, &place).ok_or_else(|| {
             err(
@@ -1571,14 +1710,22 @@ impl Builder<'_, '_> {
             }
         }
         match self.compiler.source.exprs[id].kind.clone() {
-            a::Expr::Path(p) => self
-                .guard_aliases
-                .get(&p.name)
-                .and_then(|place| place_type(&self.compiler.types, self.function, place))
-                .or_else(|| self.binding(&p.name).map(|i| self.ty(i))),
+            a::Expr::Path(p) => {
+                let guarded = match self.guard_aliases.get(&p.name) {
+                    Some(place) => place_type(&self.compiler.types, self.function, place),
+                    None => None,
+                };
+                match guarded {
+                    Some(ty) => Some(ty),
+                    None => match self.binding(&p.name) {
+                        Some(local) => Some(self.ty(local)),
+                        None => None,
+                    },
+                }
+            }
             a::Expr::Cast { ty, .. } => self.compiler.resolve(ty, &self.sub).ok(),
             a::Expr::Bool(_) => Some(k::BOOL),
-            a::Expr::Char(_) => self.compiler.type_names.get("char").copied(),
+            a::Expr::Char(_) => self.compiler.type_names.get(&"char".to_string()).copied(),
             a::Expr::Float(_) => Some(k::F64),
             a::Expr::Int(s) => {
                 for (name, t) in &self.compiler.type_names {
@@ -1588,7 +1735,10 @@ impl Builder<'_, '_> {
                 }
                 None
             }
-            a::Expr::Unary { op, value } if op == "*" => {
+            a::Expr::Unary { op, value } => {
+                if op != "*" {
+                    return None;
+                }
                 let ty = self.hint(value)?;
                 match self.compiler.types[ty].kind {
                     k::TypeKind::Ref { inner, .. } | k::TypeKind::Box { inner } => Some(inner),
@@ -1614,9 +1764,8 @@ impl Builder<'_, '_> {
                     t = inner;
                 }
                 if self.is_range(index) {
-                    return self
-                        .range_referent(t, self.compiler.source.exprs[id].span)
-                        .ok();
+                    let span = self.compiler.source.exprs[id].span;
+                    return self.range_referent(t, span).ok();
                 }
                 match self.compiler.types[t].kind {
                     k::TypeKind::Vec { inner }
@@ -1637,21 +1786,33 @@ impl Builder<'_, '_> {
         }
         let node = self.compiler.source.exprs[id].clone();
         match node.kind {
-            a::Expr::Path(path) => self
-                .guard_aliases
-                .get(&path.name)
-                .cloned()
-                .or_else(|| self.binding(&path.name).map(k::Place::local))
-                .ok_or_else(|| err(node.span, "E_TYPE", &format!("unknown value {}", path.name))),
-            a::Expr::Unary { op, value } if op == "*" => {
+            a::Expr::Path(path) => {
+                if let Some(place) = self.guard_aliases.get(&path.name) {
+                    Ok(place.clone())
+                } else if let Some(local) = self.binding(&path.name) {
+                    Ok(k::Place::local(local))
+                } else {
+                    Err(err(
+                        node.span,
+                        "E_TYPE",
+                        &format!("unknown value {}", path.name),
+                    ))
+                }
+            }
+            a::Expr::Unary { op, value } => {
+                if op != "*" {
+                    return Err(err(node.span, "E_TYPE", "expression is not a place"));
+                }
                 let mut place = self.addressable_with_mutability(value, mutable)?;
                 place.projections.push(k::Projection::Deref);
                 Ok(place)
             }
             a::Expr::Field { value, name } => {
                 let mut place = self.addressable_with_mutability(value, mutable)?;
-                let mut ty = place_type(&self.compiler.types, self.function, &place)
-                    .ok_or_else(|| err(node.span, "E_TYPE", "invalid field base"))?;
+                let mut ty = match place_type(&self.compiler.types, self.function, &place) {
+                    Some(ty) => ty,
+                    None => return Err(err(node.span, "E_TYPE", "invalid field base")),
+                };
                 while let k::TypeKind::Ref { inner, .. } | k::TypeKind::Box { inner } =
                     self.compiler.types[ty].kind
                 {
@@ -1659,10 +1820,10 @@ impl Builder<'_, '_> {
                     ty = inner;
                 }
                 if matches!(&self.compiler.types[ty].kind, k::TypeKind::Struct { .. }) {
-                    let index = self
-                        .compiler
-                        .field_index(ty, &name)
-                        .ok_or_else(|| err(node.span, "E_TYPE", "unknown field"))?;
+                    let index = match self.compiler.field_index(ty, &name) {
+                        Some(index) => index,
+                        None => return Err(err(node.span, "E_TYPE", "unknown field")),
+                    };
                     self.compiler
                         .field_access(ty, &name, self.scope, node.span)?;
                     place.projections.push(k::Projection::Field(index));
@@ -1676,8 +1837,10 @@ impl Builder<'_, '_> {
                     return self.range_place(value, index, mutable, node.span);
                 }
                 let mut place = self.addressable_with_mutability(value, mutable)?;
-                let mut ty = place_type(&self.compiler.types, self.function, &place)
-                    .ok_or_else(|| err(node.span, "E_TYPE", "invalid index base"))?;
+                let mut ty = match place_type(&self.compiler.types, self.function, &place) {
+                    Some(ty) => ty,
+                    None => return Err(err(node.span, "E_TYPE", "invalid index base")),
+                };
                 while let k::TypeKind::Ref { inner, .. } = self.compiler.types[ty].kind {
                     place.projections.push(k::Projection::Deref);
                     ty = inner;
@@ -1693,26 +1856,25 @@ impl Builder<'_, '_> {
         self.addressable_with_mutability(id, false)
     }
     fn addressable_with_mutability(&mut self, id: usize, mutable: bool) -> Result<k::Place> {
-        match &self.compiler.source.exprs[id].kind {
-            a::Expr::Path(path)
-                if self.capture_aliases.contains_key(&id)
+        let place = match &self.compiler.source.exprs[id].kind {
+            a::Expr::Path(path) => {
+                self.capture_aliases.contains_key(&id)
                     || self.binding(&path.name).is_some()
-                    || self.guard_aliases.contains_key(&path.name) =>
-            {
-                self.place_with_mutability(id, mutable)
+                    || self.guard_aliases.contains_key(&path.name)
             }
-            a::Expr::Field { .. } | a::Expr::Index { .. } => {
-                self.place_with_mutability(id, mutable)
-            }
-            a::Expr::Unary { op, .. } if op == "*" => self.place_with_mutability(id, mutable),
-            _ => {
-                let v = self.expr(id, None)?;
-                // Value expressions create writable temporary storage. This
-                // does not change a named binding or permission through a
-                // reference. Range borrows still follow the requested mode.
-                self.function.locals[v.0].mutable = true;
-                Ok(k::Place::local(v.0))
-            }
+            a::Expr::Field { .. } | a::Expr::Index { .. } => true,
+            a::Expr::Unary { op, .. } => op == "*",
+            _ => false,
+        };
+        if place {
+            self.place_with_mutability(id, mutable)
+        } else {
+            let v = self.expr(id, None)?;
+            // Value expressions create writable temporary storage. This
+            // does not change a named binding or permission through a
+            // reference. Range borrows still follow the requested mode.
+            self.function.locals[v.0].mutable = true;
+            Ok(k::Place::local(v.0))
         }
     }
     fn end_unused_borrows(&mut self, start: usize, position: usize, end: usize, line: usize) {
@@ -1720,27 +1882,42 @@ impl Builder<'_, '_> {
         // block. Changed bindings and restored branch states invalidate only
         // their own entry; a statement never rescans all live references.
         let key = (start, end);
-        let mut schedule = self.reference_schedules.remove(&key).unwrap_or_default();
-        let updated: Vec<_> = self.reference_updates.indices_from(start).collect();
+        let mut schedule = match self.reference_schedules.remove(&key) {
+            Some(schedule) => schedule,
+            None => borrow_cleanup::ReferenceSchedule::default(),
+        };
+        let updated = live_indices(&self.reference_updates, start);
         for local in updated {
             self.reference_updates.set(local, false);
             if !self.references.at(local) {
                 continue;
             }
             let name = &self.function.locals[local].name;
-            let last = self
-                .compiler
-                .uses
-                .get(&(self.file, name.clone()))
-                .and_then(|positions| {
-                    let before_end = positions.partition_point(|p| *p < end);
-                    before_end.checked_sub(1).map(|i| positions[i])
-                });
-            schedule
-                .deadlines
-                .entry(last.unwrap_or(0))
-                .or_default()
-                .insert(local);
+            let last = match self.compiler.uses.get(&(self.file, name.clone())) {
+                Some(positions) => {
+                    let mut at = 0;
+                    let mut limit = positions.len();
+                    while at < limit {
+                        let middle = at + (limit - at) / 2;
+                        if positions[middle] < end {
+                            at = middle + 1;
+                        } else {
+                            limit = middle;
+                        }
+                    }
+                    if at == 0 {
+                        None
+                    } else {
+                        Some(positions[at - 1])
+                    }
+                }
+                None => None,
+            };
+            let deadline = last.unwrap_or(0);
+            if !schedule.deadlines.contains_key(&deadline) {
+                schedule.deadlines.insert(deadline, BTreeSet::new());
+            }
+            schedule.deadlines.get_mut(&deadline).unwrap().insert(local);
         }
         while schedule
             .deadlines
@@ -1748,11 +1925,25 @@ impl Builder<'_, '_> {
             .is_some_and(|(last, _)| *last < position)
         {
             let (_, locals) = schedule.deadlines.pop_first().unwrap();
-            schedule.pending.extend(locals);
+            for local in locals {
+                schedule.pending.insert(local);
+            }
         }
-        schedule.pending.retain(|local| self.references.at(*local));
+        let mut pending = BTreeSet::new();
+        for local in schedule.pending {
+            if self.references.at(local) {
+                pending.insert(local);
+            }
+        }
+        schedule.pending = pending;
         self.drop_unused_references(schedule.pending.clone(), line);
-        schedule.pending.retain(|local| self.references.at(*local));
+        let mut pending = BTreeSet::new();
+        for local in schedule.pending {
+            if self.references.at(local) {
+                pending.insert(local);
+            }
+        }
+        schedule.pending = pending;
         self.reference_schedules.insert(key, schedule);
     }
     fn bind_name(
@@ -1828,9 +2019,11 @@ impl Builder<'_, '_> {
                 a::Pattern::Bind { by_ref: true, .. } => return true,
                 a::Pattern::Tuple(fields)
                 | a::Pattern::Variant { fields, .. }
-                | a::Pattern::Or(fields) => patterns.extend(fields),
+                | a::Pattern::Or(fields) => patterns.extend_from_slice(fields),
                 a::Pattern::Struct { fields, .. } => {
-                    patterns.extend(fields.iter().map(|(_, id)| *id))
+                    for (_, id) in fields {
+                        patterns.push(*id);
+                    }
                 }
                 a::Pattern::Ref { inner, .. } => patterns.push(*inner),
                 _ => {}
@@ -1862,10 +2055,13 @@ impl Builder<'_, '_> {
         false
     }
     fn cleanup_temporaries(&mut self, start: usize, line: usize) {
-        let locals: Vec<_> = self.live.indices_from(start).collect();
+        let locals = live_indices(&self.live, start);
         for local in locals {
-            let name = &self.function.locals[local].name;
-            if name.starts_with('$') && self.binding(name) != Some(local) {
+            let temporary = {
+                let name = &self.function.locals[local].name;
+                name.starts_with('$') && self.binding(name) != Some(local)
+            };
+            if temporary {
                 self.cleanup_place(k::Place::local(local), line);
             }
         }
@@ -1923,9 +2119,16 @@ impl Builder<'_, '_> {
                     } else {
                         let p = self.compiler.source.patterns[pattern].clone();
                         if let a::Pattern::Bind { name, mutable, .. } = p.kind {
-                            let t = expected.ok_or_else(|| {
-                                err(span, "E_TYPE", "uninitialized binding requires a type")
-                            })?;
+                            let t = match expected {
+                                Some(ty) => ty,
+                                None => {
+                                    return Err(err(
+                                        span,
+                                        "E_TYPE",
+                                        "uninitialized binding requires a type",
+                                    ));
+                                }
+                            };
                             let local = self.local(t, &name, mutable);
                             self.bindings.push((name, local));
                             self.annotation_uninitialized(ty.unwrap(), local)?;
@@ -1998,7 +2201,12 @@ impl Builder<'_, '_> {
     // A declared return annotation keeps its ordinary coercion behavior.
     fn return_value(&mut self, id: usize) -> Result<(usize, usize)> {
         let result = self.function.result;
-        self.expr_with_inference(id, self.return_annotated.then_some(result), Some(result))
+        let expected = if self.return_annotated {
+            Some(result)
+        } else {
+            None
+        };
+        self.expr_with_inference(id, expected, Some(result))
     }
     fn expr(&mut self, id: usize, expected: Option<usize>) -> Result<(usize, usize)> {
         self.expr_with_inference(id, expected, None)
@@ -2067,11 +2275,8 @@ impl Builder<'_, '_> {
         };
         // A solved target may require a conversion after evaluation. It does
         // not create the place reborrow above: an inferred &mut value moves.
-        self.coerce_value(
-            value,
-            expected.or(inferred),
-            self.compiler.source.exprs[id].span,
-        )
+        let span = self.compiler.source.exprs[id].span;
+        self.coerce_value(value, expected.or(inferred), span)
     }
     // Apply a declared reference conversion after evaluating its operand once.
     // This does not reborrow a source binding that has already been moved.
@@ -2221,14 +2426,18 @@ impl Builder<'_, '_> {
             }
             _ => {}
         }
-        if let Some(place) = self.capture_aliases.get(&id).cloned() {
+        let capture: Option<k::Place> = match self.capture_aliases.get(&id) {
+            Some(place) => Some((*place).clone()),
+            None => None,
+        };
+        if let Some(place) = capture {
             return self.read(place, node.span.line);
         }
         let line = node.span.line;
         match node.kind {
             a::Expr::Int(text) => self.integer(&text, expected, false, node.span),
             a::Expr::Char(value) => {
-                let ty = self.compiler.type_names["char"];
+                let ty = *self.compiler.type_names.get(&"char".to_string()).unwrap();
                 let dst = self.temp(ty);
                 self.emit(
                     k::Op::Int {
@@ -2270,33 +2479,33 @@ impl Builder<'_, '_> {
                 self.emit(
                     k::Op::Int {
                         dst: d,
-                        value: i64::from(value),
+                        value: if value { 1i64 } else { 0i64 },
                     },
                     line,
                 );
                 Ok((d, k::BOOL))
             }
             a::Expr::Float(text) => {
-                let value = text
-                    .trim_end_matches("f64")
-                    .replace('_', "")
-                    .parse::<f64>()
-                    .map_err(|_| err(node.span, "E_TYPE", "invalid float literal"))?;
-                if !value.is_finite() {
-                    return Err(err(
-                        node.span,
-                        "E_TYPE",
-                        "floating-point literal exceeds f64",
-                    ));
+                let mut end = text.len();
+                while text[..end].ends_with("f64") {
+                    end -= 3;
                 }
+                let normalized = text[..end].replace('_', "");
+                let bits = match floats::decimal_bits(&normalized) {
+                    floats::Parsed::Finite(bits) => bits,
+                    floats::Parsed::Invalid => {
+                        return Err(err(node.span, "E_TYPE", "invalid float literal"));
+                    }
+                    floats::Parsed::Overflow => {
+                        return Err(err(
+                            node.span,
+                            "E_TYPE",
+                            "floating-point literal exceeds f64",
+                        ));
+                    }
+                };
                 let dst = self.temp(k::F64);
-                self.emit(
-                    k::Op::Float {
-                        dst,
-                        bits: value.to_bits(),
-                    },
-                    line,
-                );
+                self.emit(k::Op::Float { dst, bits }, line);
                 Ok((dst, k::F64))
             }
             a::Expr::Path(path) => {
@@ -2321,14 +2530,25 @@ impl Builder<'_, '_> {
                     let t = self.compiler.resolve(constant.ty, &self.sub)?;
                     return self.expr(constant.value, Some(t));
                 }
-                if let Some(value) =
-                    self.construct_variant(&path, &[], a::VariantStyle::Unit, context, node.span)?
-                {
+                let empty_fields: Vec<(String, usize)> = Vec::new();
+                if let Some(value) = self.construct_variant(
+                    &path,
+                    &empty_fields,
+                    a::VariantStyle::Unit,
+                    context,
+                    node.span,
+                )? {
                     return Ok(value);
                 }
                 if let Some(a::Item::Struct(index)) = self.compiler.declaration_item(&path) {
                     if self.compiler.source.structs[index].unit {
-                        return self.construct_struct(&path, &[], None, context, node.span);
+                        return self.construct_struct(
+                            &path,
+                            &empty_fields,
+                            None,
+                            context,
+                            node.span,
+                        );
                     }
                 }
                 Err(err(
@@ -2455,13 +2675,19 @@ impl Builder<'_, '_> {
             a::Expr::Array(elements) => self.array_expr(&elements, expected, node.span),
             a::Expr::Repeat { value, count } => {
                 let length = match &self.compiler.source.exprs[count].kind {
-                    a::Expr::Int(text) => text.replace('_', "").parse::<usize>().map_err(|_| {
-                        err(
-                            node.span,
-                            "E_TYPE",
-                            "array repeat length must be an integer literal",
-                        )
-                    })?,
+                    a::Expr::Int(text) => {
+                        let digits = text.replace('_', "");
+                        match digits.as_str().parse::<usize>().ok() {
+                            Some(length) => length,
+                            None => {
+                                return Err(err(
+                                    node.span,
+                                    "E_TYPE",
+                                    "array repeat length must be an integer literal",
+                                ));
+                            }
+                        }
+                    }
                     _ => {
                         return Err(err(
                             node.span,
@@ -2489,7 +2715,7 @@ impl Builder<'_, '_> {
                     }
                 }
                 let ty = self.compiler.intern(
-                    format!("[{};{}]", self.compiler.types[v.1].name, length),
+                    String::new(),
                     k::TypeKind::Array {
                         inner: v.1,
                         len: length,
@@ -2533,20 +2759,15 @@ impl Builder<'_, '_> {
                     let inferred = context.inferred.and_then(field_type);
                     let v = self.expr_with_inference(*item, declared, inferred)?;
                     fields.push(k::Field {
-                        name: i.to_string(),
+                        name: format!("{i}"),
                         ty: v.1,
                     });
                     values.push(v.0);
                 }
-                let names = fields
-                    .iter()
-                    .map(|f| self.compiler.types[f.ty].name.clone())
-                    .collect::<Vec<_>>()
-                    .join(",");
                 let copy = fields.iter().all(|f| is_copy(&self.compiler.types, f.ty));
                 let ty = self
                     .compiler
-                    .intern(format!("({names})"), k::TypeKind::Struct { fields, copy });
+                    .intern(String::new(), k::TypeKind::Struct { fields, copy });
                 let dst = self.temp(ty);
                 self.emit(
                     k::Op::Struct {
@@ -2584,11 +2805,10 @@ impl Builder<'_, '_> {
                 Ok(result)
             }
             a::Expr::Break(value) => {
-                let index = self
-                    .loops
-                    .iter()
-                    .rposition(|scope| !scope.synthetic)
-                    .ok_or_else(|| err(node.span, "E_TYPE", "break outside loop"))?;
+                let index = match self.last_loop() {
+                    Some(index) => index,
+                    None => return Err(err(node.span, "E_TYPE", "break outside loop")),
+                };
                 let scope = &self.loops[index];
                 let (start, result, typed, declared) = (
                     scope.start,
@@ -2598,7 +2818,8 @@ impl Builder<'_, '_> {
                 );
                 if let Some(result) = result {
                     let value = if let Some(value) = value {
-                        self.expr_with_inference(value, declared, typed.then_some(self.ty(result)))?
+                        let inferred = if typed { Some(self.ty(result)) } else { None };
+                        self.expr_with_inference(value, declared, inferred)?
                     } else {
                         self.unit(line)
                     };
@@ -2624,11 +2845,10 @@ impl Builder<'_, '_> {
                 Ok(self.unit(line))
             }
             a::Expr::Continue => {
-                let index = self
-                    .loops
-                    .iter()
-                    .rposition(|scope| !scope.synthetic)
-                    .ok_or_else(|| err(node.span, "E_TYPE", "continue outside loop"))?;
+                let index = match self.last_loop() {
+                    Some(index) => index,
+                    None => return Err(err(node.span, "E_TYPE", "continue outside loop")),
+                };
                 let start = self.loops[index].start;
                 self.advance_range(line)?;
                 self.cleanup(start, None, line);
@@ -2682,7 +2902,7 @@ impl Builder<'_, '_> {
             inner.ok_or_else(|| err(span, "E_TYPE", "empty array needs an element type"))?;
         self.compiler.check_owned_element(inner, span)?;
         let ty = self.compiler.intern(
-            format!("[{};{}]", self.compiler.types[inner].name, elements.len()),
+            String::new(),
             k::TypeKind::Array {
                 inner,
                 len: elements.len(),
@@ -2782,13 +3002,12 @@ impl Builder<'_, '_> {
         self.restore(&state);
         self.bindings.truncate(bindings);
         let second = if let Some(other) = otherwise {
-            self.expr_with_inference(
-                other,
-                context.expected,
-                context
-                    .inferred
-                    .or_else(|| first_reachable.then_some(self.ty(result))),
-            )?
+            let inferred = match context.inferred {
+                Some(ty) => Some(ty),
+                None if first_reachable => Some(self.ty(result)),
+                None => None,
+            };
+            self.expr_with_inference(other, context.expected, inferred)?
         } else {
             self.unit(line)
         };
@@ -2815,6 +3034,16 @@ impl Builder<'_, '_> {
         self.reachable = first_reachable || second_reachable;
         Ok((result, self.ty(result)))
     }
+    fn last_loop(&self) -> Option<usize> {
+        let mut index = self.loops.len();
+        while index > 0 {
+            index -= 1;
+            if !self.loops[index].synthetic {
+                return Some(index);
+            }
+        }
+        None
+    }
     fn loop_transfer(&mut self, index: usize, continuing: bool, line: usize) {
         let depth = self.loops.len() - index - 1;
         let op = match (continuing, depth) {
@@ -2826,7 +3055,7 @@ impl Builder<'_, '_> {
         self.emit(op, line);
     }
     fn advance_range(&mut self, line: usize) -> Result<()> {
-        let Some(index) = self.loops.iter().rposition(|scope| !scope.synthetic) else {
+        let Some(index) = self.last_loop() else {
             return Ok(());
         };
         let (start, range) = (self.loops[index].start, self.loops[index].range);
@@ -3148,9 +3377,9 @@ impl Builder<'_, '_> {
                     "char::from_u32 requires one u32 argument",
                 ));
             }
-            let integer = self.compiler.type_names["u32"];
+            let integer = *self.compiler.type_names.get(&"u32".to_string()).unwrap();
             let value = self.expr(args[0], Some(integer))?;
-            let character = self.compiler.type_names["char"];
+            let character = *self.compiler.type_names.get(&"char".to_string()).unwrap();
             let path = self
                 .compiler
                 .names
@@ -3273,10 +3502,9 @@ impl Builder<'_, '_> {
             } else if boxed && args.len() == 1 {
                 let value = self.expr(args[0], None)?;
                 self.compiler.check_owned_element(value.1, span)?;
-                let t = self.compiler.intern(
-                    format!("Box<{}>", self.compiler.types[value.1].name),
-                    k::TypeKind::Box { inner: value.1 },
-                );
+                let t = self
+                    .compiler
+                    .intern(String::new(), k::TypeKind::Box { inner: value.1 });
                 let d = self.temp(t);
                 self.emit(
                     k::Op::Intrinsic {
@@ -3318,11 +3546,10 @@ impl Builder<'_, '_> {
             );
             return Ok((dst, ty));
         }
-        let fields: Vec<_> = args
-            .iter()
-            .enumerate()
-            .map(|(index, expression)| (index.to_string(), *expression))
-            .collect();
+        let mut fields = Vec::new();
+        for index in 0..args.len() {
+            fields.push((format!("{index}"), args[index]));
+        }
         if let Some(value) =
             self.construct_variant(&path, &fields, a::VariantStyle::Tuple, context, span)?
         {
@@ -3341,7 +3568,9 @@ impl Builder<'_, '_> {
         }
         let mut initial_sub = BTreeMap::new();
         let mut associated = None;
-        if let Some((owner, method)) = path.name.rsplit_once("::") {
+        if let Some(at) = path.name.rfind("::") {
+            let owner = &path.name[..at];
+            let method = &path.name[at + 2..];
             let target_type = if path.args.is_empty()
                 && expected.is_some_and(|t| {
                     self.compiler
@@ -3378,21 +3607,20 @@ impl Builder<'_, '_> {
                         method,
                     )
                 };
-                let mut candidates = Vec::new();
-                let mut inherent = Vec::new();
+                let mut candidates: Vec<(usize, BTreeMap<String, usize>)> = Vec::new();
+                let mut inherent: Vec<(usize, BTreeMap<String, usize>)> = Vec::new();
                 let mut prerequisite_problem = None;
                 for index in impls {
                     let im = self.compiler.source.impls[index].clone();
-                    let methods: Vec<_> = im
-                        .methods
-                        .iter()
-                        .copied()
-                        .filter(|candidate| {
-                            let function = &self.compiler.source.functions[*candidate];
-                            function.name == method
-                                && function.params.first().is_none_or(|p| p.name != "self")
-                        })
-                        .collect();
+                    let mut methods = Vec::new();
+                    for candidate in &im.methods {
+                        let function = &self.compiler.source.functions[*candidate];
+                        if function.name == method
+                            && function.params.first().is_none_or(|p| p.name != "self")
+                        {
+                            methods.push(*candidate);
+                        }
+                    }
                     if methods.is_empty() {
                         continue;
                     }
@@ -3459,14 +3687,19 @@ impl Builder<'_, '_> {
             return Err(err(span, "E_TYPE", "function argument count differs"));
         }
         let mut sub = initial_sub;
-        let generic: Vec<_> = target.generics.iter().filter(|g| !g.lifetime).collect();
+        let mut generic = Vec::new();
+        for index in 0..target.generics.len() {
+            if !target.generics[index].lifetime {
+                generic.push(index);
+            }
+        }
         if !path.args.is_empty() && associated.is_none() {
             if path.args.len() != generic.len() {
                 return Err(err(span, "E_TYPE", "wrong generic argument count"));
             }
             for i in 0..generic.len() {
                 sub.insert(
-                    generic[i].name.clone(),
+                    target.generics[generic[i]].name.clone(),
                     self.compiler.resolve(path.args[i], &self.sub)?,
                 );
             }
@@ -3484,13 +3717,12 @@ impl Builder<'_, '_> {
             // Only an unresolved declared reference shape needs early inference;
             // a bare T still keeps ordinary move behavior.
             if parameter.is_none() && self.declared_reference_shape(declared, &sub) {
-                if let Some(actual) = self
-                    .inferred
-                    .expressions
-                    .get(&args[i])
-                    .copied()
-                    .or_else(|| self.hint(args[i]))
-                {
+                let inferred = self.inferred.expressions.get(&args[i]).copied();
+                let actual = match inferred {
+                    Some(actual) => Some(actual),
+                    None => self.hint(args[i]),
+                };
+                if let Some(actual) = actual {
                     if !self
                         .compiler
                         .infer_argument_bindings(declared, actual, &mut sub)?
@@ -3508,8 +3740,8 @@ impl Builder<'_, '_> {
                 return Err(err(span, "E_TYPE", "generic argument types disagree"));
             }
             let parameter = self.compiler.resolve(declared, &sub).ok();
-            let value =
-                self.coerce_value(value, parameter, self.compiler.source.exprs[args[i]].span)?;
+            let argument_span = self.compiler.source.exprs[args[i]].span;
+            let value = self.coerce_value(value, parameter, argument_span)?;
             values.push(value.0);
         }
         if let Some(inferred) = context.inferred {
@@ -3558,11 +3790,14 @@ impl Builder<'_, '_> {
         );
         for index in implementations {
             let implementation = self.compiler.source.impls[index].clone();
-            if !implementation
-                .methods
-                .iter()
-                .any(|method| self.compiler.source.functions[*method].name == name)
-            {
+            let mut has_name = false;
+            for method in &implementation.methods {
+                if self.compiler.source.functions[*method].name == name {
+                    has_name = true;
+                    break;
+                }
+            }
+            if !has_name {
                 continue;
             }
             let mut substitutions = BTreeMap::new();
@@ -3801,7 +4036,7 @@ impl Builder<'_, '_> {
             let value = self.read(target, span.line)?.0;
             let mut arguments = vec![value];
             if name == "to_digit" {
-                let integer = self.compiler.type_names["u32"];
+                let integer = *self.compiler.type_names.get(&"u32".to_string()).unwrap();
                 arguments.push(self.expr(args[0], Some(integer))?.0);
             }
             let source =
@@ -3865,7 +4100,7 @@ impl Builder<'_, '_> {
                     _ => return Err(err(span, "E_TYPE", "slice projection needs a collection")),
                 };
                 let slice = self.compiler.intern(
-                    format!("[{}]", self.compiler.types[inner].name),
+                    String::new(),
                     k::TypeKind::Slice {
                         inner,
                         mutable: false,
@@ -3931,10 +4166,11 @@ impl Builder<'_, '_> {
                 };
                 let mut sub = BTreeMap::new();
                 sub.insert("T".to_string(), inner);
+                let option_name = self.compiler.names.prelude_type("Option", span)?;
                 let ty = self.compiler.named_type(
                     &a::Path {
                         declaration: None,
-                        name: self.compiler.names.prelude_type("Option", span)?,
+                        name: option_name,
                         args: Vec::new(),
                     },
                     &sub,
@@ -3953,8 +4189,8 @@ impl Builder<'_, '_> {
                 Ok((dst, ty))
             }
             _ => {
-                let mut candidates = Vec::new();
-                let mut inherent_candidates = Vec::new();
+                let mut candidates: Vec<(usize, BTreeMap<String, usize>)> = Vec::new();
+                let mut inherent_candidates: Vec<(usize, BTreeMap<String, usize>)> = Vec::new();
                 let mut unavailable_trait = false;
                 let mut private_trait = false;
                 let mut prerequisite_problem = None;
@@ -3973,11 +4209,14 @@ impl Builder<'_, '_> {
                     sub.insert("Self".to_string(), base);
                     if let Ok(t) = self.compiler.resolve(im.target, &sub) {
                         if t == base {
-                            if !im
-                                .methods
-                                .iter()
-                                .any(|m| self.compiler.source.functions[*m].name == name)
-                            {
+                            let mut has_name = false;
+                            for method in &im.methods {
+                                if self.compiler.source.functions[*method].name == name {
+                                    has_name = true;
+                                    break;
+                                }
+                            }
+                            if !has_name {
                                 continue;
                             }
                             if !self.trait_available(&im, base, span) {
@@ -4299,10 +4538,9 @@ impl Builder<'_, '_> {
                 }
                 let inner =
                     inferred.ok_or_else(|| err(span, "E_TYPE", "empty Vec needs a type"))?;
-                let ty = self.compiler.intern(
-                    format!("Vec<{}>", self.compiler.types[inner].name),
-                    k::TypeKind::Vec { inner },
-                );
+                let ty = self
+                    .compiler
+                    .intern(String::new(), k::TypeKind::Vec { inner });
                 let dst = self.local(ty, "$vec", true);
                 self.emit(
                     k::Op::Intrinsic {
@@ -4378,19 +4616,22 @@ impl Builder<'_, '_> {
         if !self.patterns_exhaustive(&plan, &coverage, ty)? {
             return Err(err(span, "E_TYPE", "match is not exhaustive"));
         }
-        let tested_places = roots
-            .iter()
-            .flat_map(|root| plan.tested_places(*root, original.clone()))
-            .collect::<std::collections::BTreeSet<_>>()
-            .into_iter()
-            .collect::<Vec<_>>();
+        let mut unique_places = BTreeSet::new();
+        for root in &roots {
+            for place in plan.tested_places(*root, original.clone()) {
+                unique_places.insert(place);
+            }
+        }
+        let mut tested_places = Vec::new();
+        for place in unique_places {
+            tested_places.push(place);
+        }
         let start = self.live.len();
         let cache = if arms.iter().any(|arm| arm.guard.is_some()) {
             Some(self.prepare_pattern_cache(&plan, &roots, original.clone(), span.line)?)
         } else {
             None
         };
-        let entries: Vec<_> = arms.iter().zip(roots).collect();
         let binding_count = self.bindings.len();
         let mut result: Option<usize> = None;
         let mut exit_state: Option<Snapshot> = None;
@@ -4401,15 +4642,17 @@ impl Builder<'_, '_> {
                 a::Expr::Diverge(_)
             )
         });
-        for (arm, pattern) in &entries {
+        for index in 0..arms.len() {
+            let arm = &arms[index];
+            let pattern = roots[index];
             let test_start = self.live.len();
             let mut choices = None;
             let condition = if let Some(guard) = arm.guard {
                 let cache = cache.as_ref().unwrap();
-                if plan.has_or(*pattern) {
+                if plan.has_or(pattern) {
                     let (condition, selected) = self.retry_pattern_guard(
                         &plan,
-                        *pattern,
+                        pattern,
                         original.clone(),
                         guard,
                         cache,
@@ -4418,10 +4661,10 @@ impl Builder<'_, '_> {
                     choices = Some(selected);
                     condition
                 } else {
-                    let condition = self.cached_pattern_condition(&plan, *pattern, cache, None)?;
+                    let condition = self.cached_pattern_condition(&plan, pattern, cache, None)?;
                     self.pattern_guard(
                         &plan,
-                        *pattern,
+                        pattern,
                         original.clone(),
                         guard,
                         condition,
@@ -4429,25 +4672,22 @@ impl Builder<'_, '_> {
                     )?
                 }
             } else if let Some(cache) = &cache {
-                self.cached_pattern_condition(&plan, *pattern, cache, None)?
+                self.cached_pattern_condition(&plan, pattern, cache, None)?
             } else {
-                self.pattern_condition(&plan, *pattern, original.clone())?
+                self.pattern_condition(&plan, pattern, original.clone())?
             };
             self.emit(k::Op::If { condition }, arm.span.line);
             let failure = self.snapshot();
             self.bind_pattern_choice(
                 &plan,
-                *pattern,
+                pattern,
                 original.clone(),
                 choices.as_ref(),
                 cache.is_none(),
                 arm.span.line,
             )?;
-            let value = self.expr_with_inference(
-                arm.value,
-                context.expected,
-                context.inferred.or(result.map(|id| self.ty(id))),
-            )?;
+            let inferred = context.inferred.or(result.map(|id| self.ty(id)));
+            let value = self.expr_with_inference(arm.value, context.expected, inferred)?;
             if self.reachable && !exhausted {
                 let target = if let Some(target) = result {
                     target
@@ -4480,7 +4720,7 @@ impl Builder<'_, '_> {
             }
             self.bindings.truncate(binding_count);
             self.emit(k::Op::Else, span.line);
-            if arm.guard.is_none() && self.pattern_irrefutable(&plan, *pattern) {
+            if arm.guard.is_none() && self.pattern_irrefutable(&plan, pattern) {
                 self.emit(
                     k::Op::Trap {
                         message: "unreachable arm after irrefutable pattern".to_string(),
@@ -4500,7 +4740,7 @@ impl Builder<'_, '_> {
             },
             span.line,
         );
-        for _ in &entries {
+        for _ in arms {
             self.emit(k::Op::End, span.line);
         }
         if let Some(exit) = exit_state {

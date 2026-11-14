@@ -22,14 +22,22 @@ impl Infer<'_, '_> {
         // Establish projected names before callable signatures use them. A
         // declaration's bounds, not the spelling `Item`, choose its identity.
         for parameter in parameters {
-            if let Some(receiver) = environment.get(&parameter.name).copied() {
+            let receiver = match environment.get(&parameter.name) {
+                Some(receiver) => Some(*receiver),
+                None => None,
+            };
+            if let Some(receiver) = receiver {
                 for bound in &parameter.bounds {
                     self.trait_equations(receiver, &parameter.name, *bound, environment, rigid)?;
                 }
             }
         }
         for parameter in parameters {
-            if let Some(receiver) = environment.get(&parameter.name).copied() {
+            let receiver = match environment.get(&parameter.name) {
+                Some(receiver) => Some(*receiver),
+                None => None,
+            };
+            if let Some(receiver) = receiver {
                 for bound in &parameter.bounds {
                     self.callable_bound(receiver, *bound, environment)?;
                 }
@@ -47,12 +55,13 @@ impl Infer<'_, '_> {
         rigid: bool,
     ) -> Result<()> {
         let mut pending = vec![bound];
-        let mut seen = BTreeSet::new();
+        let mut seen = BTreeSet::<Variable>::new();
         while let Some(bound) = pending.pop() {
-            let a::Type::Path(path) = &self.source.types[bound].kind else {
-                continue;
+            let declaration = match &self.source.types[bound].kind {
+                a::Type::Path(path) if path.args.is_empty() => path.declaration,
+                _ => None,
             };
-            let Some(declaration) = path.declaration else {
+            let Some(declaration) = declaration else {
                 continue;
             };
             let a::Item::Trait(index) = self.source.declarations[declaration].item else {
@@ -61,17 +70,23 @@ impl Infer<'_, '_> {
             // Parameterized associated families need their argument identity in
             // the key. Leave that existing boundary unresolved rather than
             // conflating two applications of the same trait.
-            if !path.args.is_empty() || !seen.insert(declaration) {
+            if !seen.insert(declaration) {
                 continue;
             }
             let definition = self.source.traits[index].clone();
-            pending.extend(definition.bounds.iter().copied());
+            for bound in &definition.bounds {
+                pending.push(*bound);
+            }
             for associated in definition.associated {
                 let name = format!("{alias}::{}", associated.name);
                 let root = self.root(receiver);
                 let key = (declaration, associated.name.clone());
-                let value = if let Some(previous) = self.projections[root].get(&key) {
-                    *previous
+                let previous = match self.projections[root].get(&key) {
+                    Some(previous) => Some(*previous),
+                    None => None,
+                };
+                let value = if let Some(previous) = previous {
+                    previous
                 } else {
                     let result = if rigid {
                         self.shaped(Shape::Projected(declaration, name.clone()))
@@ -92,7 +107,11 @@ impl Infer<'_, '_> {
                 };
                 // Ambiguous same-spelled associated members do not establish an
                 // equation. The declaration checker diagnoses that source path.
-                if let Some(previous) = environment.get(&name).copied() {
+                let previous = match environment.get(&name) {
+                    Some(previous) => Some(*previous),
+                    None => None,
+                };
+                if let Some(previous) = previous {
                     if self.definition.root(previous) != self.definition.root(value) {
                         environment.insert(name, self.blocked());
                     }
@@ -118,7 +137,7 @@ impl Infer<'_, '_> {
 
     pub(super) fn watch_shape(&mut self, variable: Variable, obligation: usize) {
         let mut pending = vec![variable];
-        let mut seen = BTreeSet::new();
+        let mut seen = BTreeSet::<Variable>::new();
         while let Some(variable) = pending.pop() {
             let root = self.root(variable);
             if !seen.insert(root) {
@@ -126,7 +145,9 @@ impl Infer<'_, '_> {
             }
             self.watch(root, obligation);
             if let Some(shape) = self.shape(root) {
-                pending.extend(shape.children());
+                for child in shape.children() {
+                    pending.push(child);
+                }
             }
         }
     }
@@ -145,16 +166,23 @@ impl Infer<'_, '_> {
                 environment.insert(parameter.name.clone(), self.unknown());
             }
         }
-        let flexible: BTreeSet<_> = environment.values().copied().collect();
+        let mut flexible = BTreeSet::<Variable>::new();
+        for value in environment.values() {
+            flexible.insert(*value);
+        }
         let target = self.source_type(implementation.target, &environment)?;
-        let mut substitutions = BTreeMap::new();
+        let mut substitutions: BTreeMap<Variable, Variable> = BTreeMap::new();
         let mut pending = vec![(target, receiver)];
         let mut deferred = false;
         while let Some((pattern, actual)) = pending.pop() {
             let pattern = self.definition.root(pattern);
             let actual = self.definition.root(actual);
             if flexible.contains(&pattern) {
-                if let Some(previous) = substitutions.get(&pattern).copied() {
+                let previous = match substitutions.get(&pattern) {
+                    Some(previous) => Some(*previous),
+                    None => None,
+                };
+                if let Some(previous) = previous {
                     pending.push((previous, actual));
                 } else {
                     substitutions.insert(pattern, actual);
@@ -176,27 +204,37 @@ impl Infer<'_, '_> {
                     pending.push((a, b))
                 }
                 (Some(Shape::Tuple(a)), Some(Shape::Tuple(b))) if a.len() == b.len() => {
-                    pending.extend(a.into_iter().zip(b))
+                    for index in 0..a.len() {
+                        pending.push((a[index], b[index]));
+                    }
                 }
                 (Some(Shape::Nominal(ad, a)), Some(Shape::Nominal(bd, b)))
                     if ad == bd && a.len() == b.len() =>
                 {
-                    pending.extend(a.into_iter().zip(b))
+                    for index in 0..a.len() {
+                        pending.push((a[index], b[index]));
+                    }
                 }
-                (Some(a), Some(b)) if a == b => {}
-                _ => return Ok(Match::No),
+                (Some(a), Some(b)) => {
+                    if a != b {
+                        return Ok(Match::No);
+                    }
+                }
             }
         }
         if deferred {
             return Ok(Match::Deferred);
         }
-        for value in environment.values_mut() {
-            if let Some(actual) = substitutions.get(value) {
-                *value = *actual;
-            }
+        let mut resolved = BTreeMap::new();
+        for (name, value) in environment {
+            let actual = match substitutions.get(&value) {
+                Some(actual) => *actual,
+                None => value,
+            };
+            resolved.insert(name, actual);
         }
-        environment.insert("Self".to_string(), receiver);
-        Ok(Match::Yes(environment))
+        resolved.insert("Self".to_string(), receiver);
+        Ok(Match::Yes(resolved))
     }
 
     pub(super) fn solve_projection(
@@ -221,9 +259,13 @@ impl Infer<'_, '_> {
             return Ok(false);
         };
         let head = self.shape_head(receiver);
+        let head_view = match &head {
+            Some(head) => Some(head.as_str()),
+            None => None,
+        };
         let candidates = self
             .implementations
-            .trait_candidates_by_head(trait_index, head.as_deref());
+            .trait_candidates_by_head(trait_index, head_view);
         let mut selected = None;
         for candidate in candidates {
             match self.implementation_environment(candidate, receiver)? {
@@ -248,18 +290,21 @@ impl Infer<'_, '_> {
         if let Some(bound) = implementation.trait_ty {
             self.trait_equations(receiver, "Self", bound, &mut environment, false)?;
         }
-        let associated = implementation
-            .associated
-            .iter()
-            .find(|item| item.name == member)
-            .and_then(|item| item.value)
-            .or_else(|| {
-                self.source.traits[trait_index]
-                    .associated
-                    .iter()
-                    .find(|item| item.name == member)
-                    .and_then(|item| item.value)
-            });
+        let mut associated = None;
+        for item in &implementation.associated {
+            if item.name == member {
+                associated = item.value;
+                break;
+            }
+        }
+        if associated.is_none() {
+            for item in &self.source.traits[trait_index].associated {
+                if item.name == member {
+                    associated = item.value;
+                    break;
+                }
+            }
+        }
         let Some(associated) = associated else {
             return Ok(false);
         };

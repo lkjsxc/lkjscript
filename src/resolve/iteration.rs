@@ -101,12 +101,13 @@ impl Expansion<'_> {
             scope: self.scope,
             span: body_span,
         });
+        let pattern_span = self.program.patterns[pattern].span;
         self.block(vec![
             Stmt::Let {
                 pattern,
                 ty: None,
                 value: Some(value),
-                span: self.program.patterns[pattern].span,
+                span: pattern_span,
             },
             Stmt::Let {
                 pattern: wild,
@@ -147,6 +148,7 @@ impl Expansion<'_> {
         let body = self.item_body(&item_name, pattern, body);
         let body = self.expression(Expr::Block(body));
         let exhausted = self.expression(Expr::Break(None));
+        let span = self.span;
         let selection = self.expression(Expr::Match {
             value: next,
             arms: vec![
@@ -154,13 +156,13 @@ impl Expansion<'_> {
                     pattern: some,
                     guard: None,
                     value: body,
-                    span: self.span,
+                    span,
                 },
                 Arm {
                     pattern: none,
                     guard: None,
                     value: exhausted,
-                    span: self.span,
+                    span,
                 },
             ],
         });
@@ -187,10 +189,10 @@ impl Expansion<'_> {
     }
 }
 
-pub(super) fn expand_recover(
+pub(super) fn expand_recover<F: FnMut(ExprId, Diagnostic) -> Result<()>>(
     program: &mut Program,
     resolver: &Resolver<'_>,
-    failed: &mut impl FnMut(ExprId, Diagnostic) -> Result<()>,
+    failed: &mut F,
 ) -> Result<()> {
     let mut helpers = None;
     // Appended source nodes contain no collection-for. Original ids and spans

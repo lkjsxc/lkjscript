@@ -20,42 +20,66 @@ fn named_region(scope: usize, label: &Label) -> Option<Region> {
         _ => None,
     }
 }
-fn normalize(requirements: Vec<Requirement>) -> Vec<Requirement> {
-    let mut unique = BTreeMap::new();
-    for requirement in requirements {
-        let entry = unique
-            .entry((
-                requirement.argument,
-                requirement.projections,
-                requirement.region,
-            ))
-            .or_insert((false, false));
-        entry.0 |= requirement.preserve;
-        entry.1 |= requirement.mutable_storage;
+fn insert_outlives(edges: &mut BTreeMap<Region, BTreeSet<Region>>, long: Region, short: Region) {
+    if edges.contains_key(&long) {
+        edges.get_mut(&long).unwrap().insert(short);
+    } else {
+        let mut shorts = BTreeSet::new();
+        shorts.insert(short);
+        edges.insert(long, shorts);
     }
-    unique
-        .into_iter()
-        .map(
-            |((argument, projections, region), (preserve, mutable_storage))| Requirement {
-                argument,
-                projections,
-                region,
-                preserve,
-                mutable_storage,
-            },
-        )
-        .collect()
+}
+fn insert_region(bindings: &mut RegionBindings, label: Label, region: Region) {
+    if bindings.contains_key(&label) {
+        bindings.get_mut(&label).unwrap().insert(region);
+    } else {
+        let mut regions = BTreeSet::new();
+        regions.insert(region);
+        bindings.insert(label, regions);
+    }
+}
+fn normalize(requirements: Vec<Requirement>) -> Vec<Requirement> {
+    let mut unique: BTreeMap<(usize, Vec<k::Projection>, Region), (bool, bool)> = BTreeMap::new();
+    for requirement in requirements {
+        let key = (
+            requirement.argument,
+            requirement.projections,
+            requirement.region,
+        );
+        if unique.contains_key(&key) {
+            let entry = unique.get_mut(&key).unwrap();
+            entry.0 |= requirement.preserve;
+            entry.1 |= requirement.mutable_storage;
+        } else {
+            unique.insert(key, (requirement.preserve, requirement.mutable_storage));
+        }
+    }
+    let mut normalized = Vec::new();
+    for ((argument, projections, region), (preserve, mutable_storage)) in unique {
+        normalized.push(Requirement {
+            argument,
+            projections,
+            region,
+            preserve,
+            mutable_storage,
+        });
+    }
+    normalized
 }
 
 impl Compiler<'_> {
-    pub(super) fn scoped_parameters(&self, index: usize) -> Vec<&a::GenericParam> {
-        let mut parameters: Vec<_> = self.source.functions[index].generics.iter().collect();
+    pub(super) fn scoped_parameters(&self, index: usize) -> Vec<a::GenericParam> {
+        let mut parameters = self.source.functions[index].generics.clone();
         match self.source.function_owner(a::FunctionId { index }) {
             a::FunctionOwner::Implementation(owner) => {
-                parameters.extend(&self.source.impls[owner.index].generics)
+                for parameter in &self.source.impls[owner.index].generics {
+                    parameters.push(parameter.clone());
+                }
             }
             a::FunctionOwner::Trait(owner) => {
-                parameters.extend(&self.source.traits[owner.index].generics)
+                for parameter in &self.source.traits[owner.index].generics {
+                    parameters.push(parameter.clone());
+                }
             }
             a::FunctionOwner::Free => {}
         }
@@ -70,10 +94,11 @@ impl Compiler<'_> {
             for bound in &parameter.bounds {
                 if let a::Type::Path(path) = &self.source.types[*bound].kind {
                     if path.name.starts_with('\'') {
-                        edges
-                            .entry(region(index, &parameter.name))
-                            .or_default()
-                            .insert(region(index, &path.name));
+                        insert_outlives(
+                            &mut edges,
+                            region(index, &parameter.name),
+                            region(index, &path.name),
+                        );
                     }
                 }
             }
@@ -86,8 +111,8 @@ impl Compiler<'_> {
             outlives: self.region_edges(instance.source),
             ..Scope::default()
         };
-        let mut elisions = BTreeMap::new();
-        let mut input_regions = BTreeMap::new();
+        let mut elisions: BTreeMap<Label, Region> = BTreeMap::new();
+        let mut input_regions: BTreeMap<Label, Region> = BTreeMap::new();
         for (index, parameter) in source.params.iter().enumerate() {
             let leaves =
                 self.region_leaves(instance.source, parameter.ty, function.locals[index].ty);
@@ -95,12 +120,15 @@ impl Compiler<'_> {
                 let region = if let Some(named) = named_region(instance.source, &leaf.label) {
                     named
                 } else if matches!(leaf.label, Label::Elided { .. }) {
-                    elisions
-                        .entry(leaf.label.clone())
-                        .or_insert_with(|| {
-                            region(instance.source, &format!("@input{index}:leaf{leaf_index}"))
-                        })
-                        .clone()
+                    let known = elisions.get(&leaf.label).cloned();
+                    if let Some(found) = known {
+                        found
+                    } else {
+                        let found =
+                            region(instance.source, &format!("@input{index}:leaf{leaf_index}"));
+                        elisions.insert(leaf.label.clone(), found.clone());
+                        found
+                    }
                 } else {
                     region(instance.source, &format!("@input{index}:leaf{leaf_index}"))
                 };
@@ -168,11 +196,7 @@ impl Compiler<'_> {
                     projections: leaf.projections[..cut].to_vec(),
                 };
                 if let Some(outer) = scope.parameters.get(&outer) {
-                    scope
-                        .outlives
-                        .entry(inner.clone())
-                        .or_default()
-                        .insert(outer.clone());
+                    insert_outlives(&mut scope.outlives, inner.clone(), outer.clone());
                 }
             }
         }
@@ -191,12 +215,12 @@ impl Compiler<'_> {
         }
     }
     fn opaque_requirements(&self, ty: usize) -> Vec<Requirement> {
-        let signature = &self.closures.assumptions[&ty];
+        let signature = self.closures.assumptions.get(&ty).unwrap();
         let mut requirements = Vec::new();
         // Every registered assumption has already passed ordinary callable
         // signature agreement. Multiple declarations conservatively retain all
         // their fixed regions; fresh inputs contribute no retained obligation.
-        for bound in &self.closures.region_bounds[&ty] {
+        for bound in self.closures.region_bounds.get(&ty).unwrap() {
             for (argument, (syntax, concrete)) in
                 bound.arguments.iter().zip(&signature.arguments).enumerate()
             {
@@ -247,11 +271,11 @@ impl Compiler<'_> {
                         .zip(&actual.arguments)
                         .zip(&signature.arguments)
                     {
-                        let actual_leaves: BTreeMap<_, _> = self
-                            .region_leaves(actual.scope, *actual_syntax, *concrete)
-                            .into_iter()
-                            .map(|leaf| (leaf.path, leaf.label))
-                            .collect();
+                        let mut actual_leaves: BTreeMap<Vec<k::Projection>, Label> =
+                            BTreeMap::new();
+                        for leaf in self.region_leaves(actual.scope, *actual_syntax, *concrete) {
+                            actual_leaves.insert(leaf.path, leaf.label);
+                        }
                         for leaf in self.region_leaves(instance.source, *formal, *concrete) {
                             let Some(actual_label) = actual_leaves.get(&leaf.path) else {
                                 continue;
@@ -274,7 +298,7 @@ impl Compiler<'_> {
                                     | Label::Parameter(_, _)
                                     | Label::Associated(_, _)
                             ) {
-                                bindings.entry(leaf.label).or_default().insert(required);
+                                insert_region(bindings, leaf.label, required);
                             }
                         }
                     }
@@ -300,13 +324,15 @@ impl Compiler<'_> {
                     let required = bindings
                         .get(&Label::Lifetime(short.name.clone()))
                         .cloned()
-                        .unwrap_or_default();
-                    let entry = bindings
-                        .entry(Label::Lifetime(long.name.clone()))
-                        .or_default();
-                    let before = entry.len();
-                    entry.extend(required);
-                    changed |= before != entry.len();
+                        .unwrap_or(BTreeSet::new());
+                    let label = Label::Lifetime(long.name.clone());
+                    if !bindings.contains_key(&label) {
+                        bindings.insert(label.clone(), BTreeSet::new());
+                    }
+                    let entry = bindings.get_mut(&label).unwrap();
+                    for region in required {
+                        changed |= entry.insert(region);
+                    }
                 }
             }
             if !changed {
@@ -323,9 +349,14 @@ impl Compiler<'_> {
                 self.region_leaves(instance.source, parameter.ty, function.locals[argument].ty)
             {
                 let regions = if leaf.label == Label::Static {
-                    BTreeSet::from([region(0, "'static")])
+                    let mut regions = BTreeSet::new();
+                    regions.insert(region(0, "'static"));
+                    regions
                 } else {
-                    bindings.get(&leaf.label).cloned().unwrap_or_default()
+                    bindings
+                        .get(&leaf.label)
+                        .cloned()
+                        .unwrap_or(BTreeSet::new())
                 };
                 for region in regions {
                     requirements.push(Requirement {
@@ -348,23 +379,16 @@ impl Compiler<'_> {
         if checked.is_empty() {
             return (BTreeMap::new(), Vec::new());
         }
-        let instances: BTreeMap<_, _> = self
-            .pending_functions
-            .iter()
-            .filter_map(|(function, pending)| {
-                if let PendingFunction::Source(instance) = pending {
-                    Some((*function, instance.clone()))
-                } else {
-                    None
-                }
-            })
-            .collect();
-        let mut opaque: BTreeMap<_, _> = self
-            .closures
-            .assumed_functions
-            .iter()
-            .map(|(ty, function)| (*function, *ty))
-            .collect();
+        let mut instances: BTreeMap<usize, Instance> = BTreeMap::new();
+        for (function, pending) in &self.pending_functions {
+            if let PendingFunction::Source(instance) = pending {
+                instances.insert(*function, instance.clone());
+            }
+        }
+        let mut opaque: BTreeMap<usize, usize> = BTreeMap::new();
+        for (ty, function) in &self.closures.assumed_functions {
+            opaque.insert(*function, *ty);
+        }
         for ((ty, _), function) in &self.closures.wrappers {
             if let Some(ty) = self.opaque_callable(*ty) {
                 opaque.insert(*function, ty);
@@ -392,10 +416,12 @@ impl Compiler<'_> {
         }
         for (function, body) in &self.scoped_bodies {
             if !body.parameters.is_empty() {
-                calls
-                    .entry(*function)
-                    .or_default()
-                    .extend(body.parameters.iter().map(|parameter| Requirement {
+                if !calls.contains_key(function) {
+                    calls.insert(*function, Vec::new());
+                }
+                let requirements = calls.get_mut(function).unwrap();
+                for parameter in &body.parameters {
+                    requirements.push(Requirement {
                         argument: parameter.place.local,
                         projections: parameter.place.projections.clone(),
                         region: parameter.region.clone(),
@@ -403,7 +429,8 @@ impl Compiler<'_> {
                         // Concrete closure bodies receive the ordinary external-store
                         // identity check; this is not an opaque mutation promise.
                         mutable_storage: false,
-                    }));
+                    });
+                }
             }
         }
         let mut scopes = BTreeMap::new();
@@ -422,8 +449,10 @@ impl Compiler<'_> {
                 // Internal borrowed-callable wrappers forward exactly these
                 // declared arguments. Their caller must prove the same regions.
                 let mut scope = Scope::default();
-                for bound in &self.closures.region_bounds[ty] {
-                    scope.outlives.extend(self.region_edges(bound.scope));
+                for bound in self.closures.region_bounds.get(ty).unwrap() {
+                    for (long, shorts) in self.region_edges(bound.scope) {
+                        scope.outlives.insert(long, shorts);
+                    }
                 }
                 for requirement in self.opaque_requirements(*ty) {
                     scope.parameters.insert(
@@ -443,7 +472,9 @@ impl Compiler<'_> {
             };
             if let Some(body) = self.scoped_bodies.get(function_index) {
                 if let Some(owner) = body.source_scope {
-                    scope.outlives.extend(self.region_edges(owner));
+                    for (long, shorts) in self.region_edges(owner) {
+                        scope.outlives.insert(long, shorts);
+                    }
                 }
                 for parameter in &body.parameters {
                     scope.parameter_sites.insert(

@@ -49,6 +49,17 @@ struct Candidate {
     transport: bool,
     mutable: bool,
 }
+fn insert_candidate(
+    inputs: &mut BTreeMap<Label, Vec<Candidate>>,
+    label: Label,
+    candidate: Candidate,
+) {
+    if inputs.contains_key(&label) {
+        inputs.get_mut(&label).unwrap().push(candidate);
+    } else {
+        inputs.insert(label, vec![candidate]);
+    }
+}
 fn substituted(
     source: &a::Program,
     environments: &[Environment],
@@ -68,6 +79,14 @@ fn substituted(
     }
     (syntax, environment)
 }
+fn associated_parameter(name: &str, parameters: &BTreeSet<String>) -> bool {
+    if let Some(end) = name.find("::") {
+        let owner = &name[..end];
+        owner == "Self" || parameters.contains(&owner.to_string())
+    } else {
+        false
+    }
+}
 fn lifetime(
     environments: &[Environment],
     environment: usize,
@@ -77,7 +96,7 @@ fn lifetime(
 ) -> Label {
     environments[environment]
         .lifetimes
-        .get(name)
+        .get(&name.to_string())
         .cloned()
         .unwrap_or_else(|| {
             if name == "'static" {
@@ -118,15 +137,22 @@ impl Compiler<'_> {
         concrete: usize,
     ) -> Vec<RegionLeaf> {
         let source = &self.source.functions[source_index];
-        self.signature_leaf_inventory(source, source_index, syntax, concrete, LeafPurpose::Regions)
-            .into_iter()
-            .map(|leaf| RegionLeaf {
+        let mut regions = Vec::new();
+        for leaf in self.signature_leaf_inventory(
+            source,
+            source_index,
+            syntax,
+            concrete,
+            LeafPurpose::Regions,
+        ) {
+            regions.push(RegionLeaf {
                 path: leaf.path,
                 label: leaf.label,
                 preserve: leaf.borrowed,
                 mutable_storage: leaf.mutable_storage,
-            })
-            .collect()
+            });
+        }
+        regions
     }
 
     fn signature_leaf_inventory(
@@ -137,12 +163,12 @@ impl Compiler<'_> {
         concrete: usize,
         purpose: LeafPurpose,
     ) -> Vec<Leaf> {
-        let mut parameters: BTreeSet<String> = source
-            .generics
-            .iter()
-            .filter(|p| !p.lifetime)
-            .map(|p| p.name.clone())
-            .collect();
+        let mut parameters: BTreeSet<String> = BTreeSet::new();
+        for parameter in &source.generics {
+            if !parameter.lifetime {
+                parameters.insert(parameter.name.clone());
+            }
+        }
         let mut root = Environment::default();
         if let a::FunctionOwner::Implementation(owner) = self.source.function_owner(a::FunctionId {
             index: source_index,
@@ -228,9 +254,7 @@ impl Compiler<'_> {
                 }
                 (a::Type::Path(named), _)
                     if named.declaration.is_none()
-                        && named.name.split_once("::").is_some_and(|(owner, _)| {
-                            owner == "Self" || parameters.contains(owner)
-                        }) =>
+                        && associated_parameter(&named.name, &parameters) =>
                 {
                     for (relative, mutable) in crate::check::reference_paths(&self.types, concrete)
                     {
@@ -251,7 +275,7 @@ impl Compiler<'_> {
                 }
                 (a::Type::Path(named), _) if named.declaration.is_some() => {
                     let declaration = named.declaration.unwrap();
-                    let (parameters, children): (&[a::GenericParam], Vec<SignatureChild>) =
+                    let (parameters, children): (&Vec<a::GenericParam>, Vec<SignatureChild>) =
                         match self.source.declarations[declaration].item {
                             a::Item::Struct(index) => {
                                 let definition = &self.source.structs[index];
@@ -259,18 +283,17 @@ impl Compiler<'_> {
                                 else {
                                     continue;
                                 };
-                                (
-                                    &definition.generics,
-                                    definition
-                                        .fields
-                                        .iter()
-                                        .zip(fields)
-                                        .enumerate()
-                                        .map(|(index, (syntax, field))| {
-                                            (syntax.ty, field.ty, vec![k::Projection::Field(index)])
-                                        })
-                                        .collect(),
-                                )
+                                let mut children = Vec::new();
+                                for (index, (syntax, field)) in
+                                    definition.fields.iter().zip(fields).enumerate()
+                                {
+                                    children.push((
+                                        syntax.ty,
+                                        field.ty,
+                                        vec![k::Projection::Field(index)],
+                                    ));
+                                }
+                                (&definition.generics, children)
                             }
                             a::Item::Enum(index) => {
                                 let definition = &self.source.enums[index];
@@ -304,14 +327,14 @@ impl Compiler<'_> {
                             _ => continue,
                         };
                     let mut nested = Environment::default();
-                    let mut arguments = named.args.iter().peekable();
+                    let mut argument_index = 0;
                     for (parameter_index, parameter) in parameters.iter().enumerate() {
                         if parameter.lifetime {
-                            let name = if let Some(argument) = arguments.peek() {
-                                let argument = **argument;
+                            let name = if argument_index < named.args.len() {
+                                let argument = named.args[argument_index];
                                 if let a::Type::Path(path) = &self.source.types[argument].kind {
                                     if path.name.starts_with('\'') {
-                                        arguments.next();
+                                        argument_index += 1;
                                         lifetime(
                                             &environments,
                                             environment,
@@ -338,17 +361,21 @@ impl Compiler<'_> {
                                 }
                             };
                             nested.lifetimes.insert(parameter.name.clone(), name);
-                        } else if let Some(argument) = arguments.next() {
+                        } else if argument_index < named.args.len() {
+                            let argument = named.args[argument_index];
+                            argument_index += 1;
                             nested
                                 .types
-                                .insert(parameter.name.clone(), (*argument, environment));
+                                .insert(parameter.name.clone(), (argument, environment));
                         }
                     }
                     let nested_id = environments.len();
                     environments.push(nested);
                     for (syntax, concrete, suffix) in children {
                         let mut nested_path = path.clone();
-                        nested_path.extend(suffix);
+                        for projection in suffix {
+                            nested_path.push(projection);
+                        }
                         pending.push((syntax, concrete, nested_id, nested_path, access));
                     }
                 }
@@ -356,7 +383,9 @@ impl Compiler<'_> {
                     for (relative, mutable) in crate::check::reference_paths(&self.types, concrete)
                     {
                         let mut leaf_path = path.clone();
-                        leaf_path.extend(relative);
+                        for projection in relative {
+                            leaf_path.push(projection);
+                        }
                         result.push(Leaf {
                             borrowed,
                             mutable_storage: access == BorrowAccess::Mutable,
@@ -441,14 +470,18 @@ impl Compiler<'_> {
             for leaf in
                 self.signature_leaves(source, source_index, parameter.ty, locals[index].ty, true)
             {
-                inputs.entry(leaf.label).or_default().push(Candidate {
-                    input: k::InputLeaf {
-                        index,
-                        projections: leaf.path,
+                insert_candidate(
+                    &mut inputs,
+                    leaf.label,
+                    Candidate {
+                        input: k::InputLeaf {
+                            index,
+                            projections: leaf.path,
+                        },
+                        transport: leaf.transport,
+                        mutable: leaf.mutable,
                     },
-                    transport: leaf.transport,
-                    mutable: leaf.mutable,
-                });
+                );
             }
         }
         let mut mappings = Vec::new();
@@ -461,13 +494,13 @@ impl Compiler<'_> {
                         return Ok(None);
                     };
                     let exact = matches!(label, Label::Parameter(_, _) | Label::Associated(_, _));
-                    let candidates: Vec<_> = candidates
-                        .iter()
-                        .filter(|candidate| {
-                            (!exact || candidate.transport) && (!leaf.mutable || candidate.mutable)
-                        })
-                        .map(|candidate| candidate.input.clone())
-                        .collect();
+                    let mut selected: Vec<k::InputLeaf> = Vec::new();
+                    for candidate in candidates {
+                        if (!exact || candidate.transport) && (!leaf.mutable || candidate.mutable) {
+                            selected.push(candidate.input.clone());
+                        }
+                    }
+                    let candidates = selected;
                     if candidates.is_empty() {
                         return Ok(None);
                     }
@@ -495,7 +528,7 @@ impl Compiler<'_> {
         if let a::FunctionOwner::Implementation(owner) = self.source.function_owner(a::FunctionId {
             index: source_index,
         }) {
-            parameters.extend(self.source.impls[owner.index].generics.clone());
+            parameters.extend_from_slice(&self.source.impls[owner.index].generics);
         }
         let mut produced = BTreeSet::new();
         for parameter in parameters {
@@ -553,14 +586,18 @@ impl Compiler<'_> {
             for leaf in
                 self.signature_leaves(source, source_index, parameter.ty, locals[index].ty, true)
             {
-                inputs.entry(leaf.label).or_default().push(Candidate {
-                    input: k::InputLeaf {
-                        index,
-                        projections: leaf.path,
+                insert_candidate(
+                    &mut inputs,
+                    leaf.label,
+                    Candidate {
+                        input: k::InputLeaf {
+                            index,
+                            projections: leaf.path,
+                        },
+                        transport: leaf.transport,
+                        mutable: leaf.mutable,
                     },
-                    transport: leaf.transport,
-                    mutable: leaf.mutable,
-                });
+                );
             }
         }
         let produced = self.callable_produced_labels(source_index, source, substitutions);
@@ -571,15 +608,15 @@ impl Compiler<'_> {
                 k::LeafOrigin::Static
             } else {
                 let family = matches!(leaf.label, Label::Parameter(_, _) | Label::Associated(_, _));
-                let matching: Vec<_> = inputs
-                    .get(&leaf.label)
-                    .into_iter()
-                    .flatten()
-                    .filter(|candidate| {
-                        (!family || candidate.transport) && (!leaf.mutable || candidate.mutable)
-                    })
-                    .map(|candidate| candidate.input.clone())
-                    .collect();
+                let mut matching: Vec<k::InputLeaf> = Vec::new();
+                if let Some(candidates) = inputs.get(&leaf.label) {
+                    for candidate in candidates {
+                        if (!family || candidate.transport) && (!leaf.mutable || candidate.mutable)
+                        {
+                            matching.push(candidate.input.clone());
+                        }
+                    }
+                }
                 if !matching.is_empty() && !produced.contains(&leaf.label) {
                     k::LeafOrigin::Inputs {
                         inputs: matching,
@@ -587,20 +624,26 @@ impl Compiler<'_> {
                     }
                 } else if family {
                     widened = true;
-                    let candidates: BTreeSet<_> = inputs
-                        .values()
-                        .flatten()
-                        .filter(|candidate| !leaf.mutable || candidate.mutable)
-                        .map(|candidate| candidate.input.clone())
-                        .collect();
+                    let mut candidates: BTreeSet<k::InputLeaf> = BTreeSet::new();
+                    for entries in inputs.values() {
+                        for candidate in entries {
+                            if !leaf.mutable || candidate.mutable {
+                                candidates.insert(candidate.input.clone());
+                            }
+                        }
+                    }
                     if candidates.is_empty() {
                         if leaf.mutable {
                             return None;
                         }
                         k::LeafOrigin::Static
                     } else {
+                        let mut ordered = Vec::new();
+                        for candidate in candidates {
+                            ordered.push(candidate);
+                        }
                         k::LeafOrigin::Inputs {
-                            inputs: candidates.into_iter().collect(),
+                            inputs: ordered,
                             exact: false,
                         }
                     }
@@ -613,6 +656,6 @@ impl Compiler<'_> {
                 origin,
             });
         }
-        widened.then_some(mappings)
+        if widened { Some(mappings) } else { None }
     }
 }

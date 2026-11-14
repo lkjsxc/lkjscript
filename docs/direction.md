@@ -58,35 +58,51 @@ ritual substitutes for this result. The native seed and its exact K/runtime
 inputs are retained independently of the build directory. Removing Cargo is an
 observed hand-over, not a renamed bootstrap.
 
-## Source front end: port
+## Source front end: native fixed point
 
-The measured choice is to port the existing SourceBundle-to-K producer with the
-two-way rule. Its declared module closure adds 55 files / 31,703 physical lines
-to nine already-self-built K files. Physical totals include test text and do
-not measure porting distance.
+The measured route was a port of the existing SourceBundle-to-K producer. Its
+AST already used owned arenas and index relationships. Preserving the algorithms
+also retained declaration/type/function/local numbering, instantiation and
+cleanup order, helper names and source locations. A replacement with identical K
+would have had to rediscover those choices. The initial census and decision are
+retained in observations/2026-11-14-frontend-census.json.
 
-A temporary valid-Rust patch changed 15 files, adding 109 lines and deleting 91,
-without deleting or stubbing an existing compiler body. It crossed the observed
-declaration barriers and exposed 310 diagnostics: 149 type, 100 unsupported,
-48 borrow, eight trait and five name errors. This is a first-fault worklist of
-the modified probe, not a complete ownership verdict or an edit estimate.
-No K artifact or equivalence result is claimed for that patch. The complete
-boundary, blocker chain and caveats are in
-observations/2026-11-14-frontend-census.json.
+The first complete ownership pass reached 1,424 source bodies and reported
+62 borrow errors plus one move error, with no declaration or type blockers.
+The port repaired 78 observed sites, including later first faults, without
+changing ownership rules, K, the encoder, runtime or source library. Rare host
+forms became concrete owned collections and index traversals. Decimal floating
+conversion is ordinary source code with an exact binary64 rounding oracle.
+See observations/2026-11-14-frontend-port.json.
 
-The AST already uses owned arenas and index relationships. The current
-algorithms preserve declaration/type/function/local numbering, instantiation and
-cleanup order, helper names and source locations. K text serializes these
-choices. A byte-identical replacement would have to recreate them while also
-rebuilding parsing, inference and ownership-sensitive lowering. The observed
-barriers do not justify that work or a new trusted K rule.
+The production pure root is src/frontend_lib.rs. The World driver in
+src/frontend_main.rs consumes one explicit bundle of source and library bytes;
+frontend.rs owns the single shared pipeline. Its 1,433 source-body attempts
+produce 7,334 K functions. Both native generations emit exactly B0's 18,489,341
+own-source K bytes, and the already self-built K compiler produces identical
+50,703,986-byte ELF files: frontend-b0 = frontend1 = frontend2. Here frontend-b0
+is the front-end artifact emitted by the Rust bootstrap. The input protocol and
+commands are in frontend.md; hashes and measurements are in
+observations/2026-11-14-frontend-selfhost.json. Native corpus parity covers all
+592 source conformance files and the K compiler source: 268 identical K outputs,
+321 matching rejections, four unchanged pending and zero failures. The complete
+record is observations/2026-11-14-frontend-native-corpus.json.
 
-Retain exact B0 K baselines before implementation. Deliberately port the rare
-declaration and representation forms; do not merge the census patch wholesale.
-Then recount actual body diagnostics, choosing ordinary library/frontend
-support or owned-value/index rewrites per family. Require B0-identical K on
-conformance and the producer's own source, then reach a source-producer fixed
-point. This is the next compiler obligation; unrelated width remains deferred.
+The unprofiled native source-to-K observation is 246.20 seconds and 739 MiB peak
+RSS, beside B0's 2.24 seconds and 206 MiB. Emitting the same frontend K takes
+110.82 seconds and 733 MiB through native kc, beside B0's 0.91 seconds and
+335 MiB. These are measured costs, not acceptance limits. The full source
+compiler core can therefore operate without Rust; Cargo tests and Rust reference
+observations remain development tools. Node still packs inputs and orchestrates
+experiments. Move routine compiler work onto the native pipeline, and replace
+remaining host work when it stops supplying independent evidence.
+
+Use a complete workload profile before selecting the next speed change. The
+bounded elaboration sample in observations/2026-11-14-frontend-profile-window.json
+finds repeated full-type-table boolean-vector construction in has_view and
+is_copy, plus allocator and function-prologue costs. That eight-second window
+identifies questions to measure; it does not establish a whole-build ranking.
+Keep unrelated surface width behind these actual consumer costs.
 
 ## Order and execution
 

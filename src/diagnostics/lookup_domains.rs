@@ -29,7 +29,7 @@ fn blocked(span: a::Span, reason: &str) -> a::Diagnostic {
     a::Diagnostic::new(span, "E_BLOCKED", reason)
 }
 fn head(source: &a::Program, types: &UnavailableTypes, mut ty: a::TypeId) -> Option<String> {
-    let mut seen = BTreeSet::new();
+    let mut seen: BTreeSet<usize> = BTreeSet::new();
     while seen.insert(ty) && types.get(ty).is_none() {
         let a::Type::Path(path) = &source.types[ty].kind else {
             return None;
@@ -46,7 +46,7 @@ fn head(source: &a::Program, types: &UnavailableTypes, mut ty: a::TypeId) -> Opt
                 _ => None,
             };
         }
-        return matches!(
+        let builtin = matches!(
             path.name.as_str(),
             "bool"
                 | "u8"
@@ -66,8 +66,12 @@ fn head(source: &a::Program, types: &UnavailableTypes, mut ty: a::TypeId) -> Opt
                 | "Box"
                 | "World"
                 | "Stdout"
-        )
-        .then(|| path.name.clone());
+        );
+        return if builtin {
+            Some(path.name.clone())
+        } else {
+            None
+        };
     }
     None
 }
@@ -84,7 +88,10 @@ impl LookupDomains {
             all_methods: Vec::new(),
             names: Vec::new(),
         };
-        let failed: BTreeMap<_, _> = failed.iter().map(|(id, problem)| (*id, problem)).collect();
+        let mut failed_indices: BTreeMap<usize, usize> = BTreeMap::new();
+        for (index, (id, _)) in failed.iter().enumerate() {
+            failed_indices.insert(*id, index);
+        }
         for module in &source.modules {
             if module.external {
                 result.names.push(NameDomain {
@@ -106,26 +113,25 @@ impl LookupDomains {
             }
         }
         for (id, implementation) in source.impls.iter().enumerate() {
-            if implementations[id] && !failed.contains_key(&id) {
+            if implementations[id] && !failed_indices.contains_key(&id) {
                 continue;
             }
-            let reason = types
-                .get(implementation.target)
-                .cloned()
-                .or_else(|| failed.get(&id).map(|problem| (*problem).clone()))
-                .unwrap_or_else(|| {
-                    blocked(implementation.span, "implementation target is unavailable")
-                });
+            let reason = if let Some(problem) = types.get(implementation.target) {
+                problem.clone()
+            } else if let Some(index) = failed_indices.get(&id) {
+                failed[*index].1.clone()
+            } else {
+                blocked(implementation.span, "implementation target is unavailable")
+            };
             for method in &implementation.methods {
-                result
-                    .methods
-                    .entry(source.functions[*method].name.clone())
-                    .or_default()
-                    .push(MethodDomain {
+                result.add_method(
+                    source.functions[*method].name.clone(),
+                    MethodDomain {
                         head: head(source, types, implementation.target),
                         inherent: implementation.trait_ty.is_none(),
                         problem: reason.clone(),
-                    });
+                    },
+                );
             }
         }
         for region in blocked_regions {
@@ -143,7 +149,7 @@ impl LookupDomains {
                         };
                         if domain.kind == "fn" {
                             if let Some(name) = &domain.name {
-                                result.methods.entry(name.clone()).or_default().push(entry);
+                                result.add_method(name.clone(), entry);
                             } else {
                                 result.all_methods.push(entry);
                             }
@@ -158,7 +164,7 @@ impl LookupDomains {
                             problem,
                         };
                         if let Some(name) = &domain.name {
-                            result.methods.entry(name.clone()).or_default().push(entry);
+                            result.add_method(name.clone(), entry);
                         } else {
                             result.all_methods.push(entry);
                         }
@@ -207,27 +213,43 @@ impl LookupDomains {
         }
         result
     }
+    fn add_method(&mut self, name: String, domain: MethodDomain) {
+        if self.methods.contains_key(&name) {
+            self.methods.get_mut(&name).unwrap().push(domain);
+        } else {
+            self.methods.insert(name, vec![domain]);
+        }
+    }
     pub fn propagate_globs(mut self, resolver: &Resolver<'_>) -> Self {
         let mut edges: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
         for (source, destination) in resolver.recovery_globs() {
-            edges.entry(source).or_default().push(destination);
+            if edges.contains_key(&source) {
+                edges.get_mut(&source).unwrap().push(destination);
+            } else {
+                edges.insert(source, vec![destination]);
+            }
         }
-        let mut pending = std::collections::VecDeque::new();
-        let mut seen = BTreeSet::new();
+        let mut pending = Vec::new();
+        let mut seen: BTreeSet<(usize, usize)> = BTreeSet::new();
         for (id, domain) in self.names.iter().enumerate() {
-            pending.push_back((id, id));
+            pending.push((id, id));
             seen.insert((id, domain.owner));
         }
-        while let Some((root, id)) = pending.pop_front() {
+        let mut head = 0;
+        while head < pending.len() {
+            let (root, id) = pending[head];
+            head += 1;
             let domain = self.names[id].clone();
-            for destination in edges.get(&domain.owner).into_iter().flatten() {
-                if seen.insert((root, *destination)) {
-                    let mut imported = domain.clone();
-                    imported.owner = *destination;
-                    imported.glob = true;
-                    let next = self.names.len();
-                    self.names.push(imported);
-                    pending.push_back((root, next));
+            if let Some(destinations) = edges.get(&domain.owner) {
+                for destination in destinations {
+                    if seen.insert((root, *destination)) {
+                        let mut imported = domain.clone();
+                        imported.owner = *destination;
+                        imported.glob = true;
+                        let next = self.names.len();
+                        self.names.push(imported);
+                        pending.push((root, next));
+                    }
                 }
             }
         }
@@ -239,16 +261,23 @@ impl LookupDomains {
         name: &str,
         inherent_only: bool,
     ) -> Option<&a::Diagnostic> {
-        self.all_methods
-            .iter()
-            .chain(self.methods.get(name).into_iter().flatten())
-            .find(|domain| {
-                (!inherent_only || domain.inherent)
-                    && (domain.head.is_none()
-                        || receiver.is_none()
-                        || domain.head.as_deref() == receiver)
-            })
-            .map(|domain| &domain.problem)
+        let mut index = 0;
+        while index < self.all_methods.len() {
+            if method_matches(&self.all_methods[index], receiver, inherent_only) {
+                return Some(&self.all_methods[index].problem);
+            }
+            index += 1;
+        }
+        if let Some(domains) = self.methods.get(&name.to_string()) {
+            let mut index = 0;
+            while index < domains.len() {
+                if method_matches(&domains[index], receiver, inherent_only) {
+                    return Some(&domains[index].problem);
+                }
+                index += 1;
+            }
+        }
+        None
     }
     pub fn name_problem(
         &self,
@@ -258,20 +287,33 @@ impl LookupDomains {
         namespace: Namespace,
         span: a::Span,
     ) -> Option<&a::Diagnostic> {
-        self.names
-            .iter()
-            .find(|domain| {
-                (if namespace == Namespace::Type {
-                    domain.types
-                } else {
-                    domain.values
-                }) && names.recovery_name_visible(
+        let mut index = 0;
+        while index < self.names.len() {
+            let domain = &self.names[index];
+            let namespace_matches = if namespace == Namespace::Type {
+                domain.types
+            } else {
+                domain.values
+            };
+            if namespace_matches
+                && names.recovery_name_visible(
                     (scope, name, namespace, span),
                     domain.owner,
-                    domain.name.as_deref(),
+                    domain.name.as_ref().map(|name| name.as_str()),
                     domain.glob,
                 )
-            })
-            .map(|domain| &domain.problem)
+            {
+                return Some(&self.names[index].problem);
+            }
+            index += 1;
+        }
+        None
     }
+}
+
+fn method_matches(domain: &MethodDomain, receiver: Option<&str>, inherent_only: bool) -> bool {
+    (!inherent_only || domain.inherent)
+        && (domain.head.is_none()
+            || receiver.is_none()
+            || domain.head.as_ref().map(|name| name.as_str()) == receiver)
 }

@@ -110,7 +110,9 @@ impl Builder<'_, '_> {
                 self.equality_call(function, false, left, right, span)
             }
         };
-        for local in (first_temporary..self.live.len()).rev() {
+        let mut local = self.live.len();
+        while local > first_temporary {
+            local -= 1;
             if self.live.at(local)
                 && matches!(
                     self.compiler.types[self.ty(local)].kind,
@@ -411,7 +413,9 @@ impl Builder<'_, '_> {
         // Operand reference temporaries do not escape a boolean comparison.
         // End their loans here while retaining owned operand temporaries until
         // their ordinary enclosing statement cleanup (and destructor order).
-        for local in (first_temporary..self.live.len()).rev() {
+        let mut local = self.live.len();
+        while local > first_temporary {
+            local -= 1;
             if self.live.at(local)
                 && matches!(
                     self.compiler.types[self.ty(local)].kind,

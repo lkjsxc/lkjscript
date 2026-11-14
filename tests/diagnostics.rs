@@ -410,3 +410,24 @@ fn retained_callable_effect_names_the_place_and_both_sites() {
     assert!(text.contains(":3:5: E_BORROW value.*:"), "{text}");
     assert!(text.contains("created at 2:18"), "{text}");
 }
+
+#[test]
+fn unsized_source_locals_keep_their_module_and_construction_location() {
+    for (text, line, column, local) in [
+        (
+            "\nfn consume(text: &str) {\n    let value = *text;\n}\n",
+            3,
+            17,
+            "$",
+        ),
+        ("\n\nfn consume(value: str) {}\n", 3, 1, "value"),
+    ] {
+        let input = bundle(&[("case/main.rs", "mod nested;"), ("case/nested.rs", text)]);
+        let problem = compiler::check_bundle(&input).err().unwrap();
+        assert_eq!(problem.code, "E_UNSUPPORTED");
+        assert_eq!(problem.path, "case/nested.rs");
+        assert_eq!((problem.line, problem.column), (line, column));
+        assert!(problem.message.contains(&format!("local {local} (str)")));
+        assert!(problem.message.contains("function nested::consume"));
+    }
+}

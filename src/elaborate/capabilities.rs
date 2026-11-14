@@ -161,14 +161,16 @@ fn reserved(name: &str) -> bool {
 
 impl super::Compiler<'_> {
     pub(super) fn check_capability_methods(&mut self) -> super::Result<()> {
-        let source = self.source;
-        for implementation in &source.impls {
+        let mut implementation_index = 0;
+        while implementation_index < self.source.impls.len() {
+            let implementation = self.source.impls[implementation_index].clone();
+            implementation_index += 1;
             if implementation.trait_ty.is_some() {
                 continue;
             }
             let mut relevant = false;
             for method in &implementation.methods {
-                if reserved(&source.functions[*method].name) {
+                if reserved(&self.source.functions[*method].name) {
                     relevant = true;
                 }
             }
@@ -182,7 +184,7 @@ impl super::Compiler<'_> {
             };
             let receiver = super::methods::receiver(&self.types[target].kind);
             for index in &implementation.methods {
-                let function = &source.functions[*index];
+                let function = &self.source.functions[*index];
                 if method(receiver, &function.name).is_some() {
                     return Err(super::err(
                         function.span,

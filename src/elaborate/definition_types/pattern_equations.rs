@@ -43,7 +43,7 @@ impl Infer<'_, '_> {
         mode: Option<bool>,
     ) {
         let mut names = Vec::new();
-        let mut seen = BTreeSet::new();
+        let mut seen = BTreeSet::<String>::new();
         let mut pending = vec![pattern];
         while let Some(pattern) = pending.pop() {
             match self.source.patterns[pattern].kind.clone() {
@@ -55,11 +55,22 @@ impl Infer<'_, '_> {
                     }
                 }
                 a::Pattern::Tuple(children) | a::Pattern::Or(children) => {
-                    pending.extend(children.into_iter().rev())
+                    let mut children = children;
+                    while let Some(child) = children.pop() {
+                        pending.push(child);
+                    }
                 }
-                a::Pattern::Variant { fields, .. } => pending.extend(fields.into_iter().rev()),
+                a::Pattern::Variant { fields, .. } => {
+                    let mut fields = fields;
+                    while let Some(field) = fields.pop() {
+                        pending.push(field);
+                    }
+                }
                 a::Pattern::Struct { fields, .. } => {
-                    pending.extend(fields.into_iter().rev().map(|(_, pattern)| pattern))
+                    let mut fields = fields;
+                    while let Some((_, pattern)) = fields.pop() {
+                        pending.push(pattern);
+                    }
                 }
                 a::Pattern::Ref { inner, .. } => pending.push(inner),
                 _ => {}
@@ -87,7 +98,11 @@ impl Infer<'_, '_> {
         }
         let scope = self.bindings.len();
         self.bind_pattern_mode(pattern, subject, mode)?;
-        let actual: BTreeMap<_, _> = self.bindings.entries[scope..].iter().cloned().collect();
+        let mut actual = BTreeMap::new();
+        for index in scope..self.bindings.entries.len() {
+            let binding = &self.bindings.entries[index];
+            actual.insert(binding.0.clone(), binding.1);
+        }
         self.bindings.truncate(scope);
         let span = self.source.patterns[pattern].span;
         for (name, placeholder) in names {

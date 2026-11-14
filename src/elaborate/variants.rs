@@ -25,7 +25,14 @@ impl Builder<'_, '_> {
         } else {
             return None;
         };
-        let name = path.name.strip_prefix(owner)?.strip_prefix("::")?;
+        if !path.name.starts_with(owner) {
+            return None;
+        }
+        let remainder = &path.name[owner.len()..];
+        if !remainder.starts_with("::") {
+            return None;
+        }
+        let name = &remainder[2..];
         if name.contains("::") {
             None
         } else {
@@ -76,7 +83,8 @@ impl Builder<'_, '_> {
         else {
             return Ok(None);
         };
-        let Some(tag) = self.compiler.variant_positions[index].get(&name).copied() else {
+        let selected = self.compiler.variant_positions[index].get(&name).copied();
+        let Some(tag) = selected else {
             if style == a::VariantStyle::Named {
                 return Err(err(span, "E_TYPE", "unknown enum variant"));
             }
@@ -152,7 +160,7 @@ impl Builder<'_, '_> {
             ordered[field] = Some(value);
         }
         let ty = self.finish_constructor(target, span)?;
-        let k::TypeKind::Enum { variants, .. } = &self.compiler.types[ty].kind else {
+        let k::TypeKind::Enum { variants, .. } = self.compiler.types[ty].kind.clone() else {
             unreachable!()
         };
         let mut fields = Vec::new();

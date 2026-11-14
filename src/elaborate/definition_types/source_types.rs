@@ -1,7 +1,6 @@
 //! Source-type inference uses heap work frames, including transparent aliases.
 //! Repeated syntax still creates fresh inference variables in its environment.
 use super::{Infer, Result, Shape, Variable, a, integer_name, parameters};
-use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 enum Work {
@@ -25,11 +24,12 @@ impl Infer<'_, '_> {
     pub(super) fn source_type(
         &mut self,
         id: a::TypeId,
-        environment: &BTreeMap<String, Variable>,
+        base_environment: &BTreeMap<String, Variable>,
     ) -> Result<Variable> {
         let mut pending = vec![Work::Source { id, environment: 0 }];
-        let mut environments = vec![Cow::Borrowed(environment)];
-        let mut values = Vec::new();
+        // Zero names the borrowed input; only alias substitutions need owned maps.
+        let mut environments: Vec<BTreeMap<String, Variable>> = Vec::new();
+        let mut values: Vec<Variable> = Vec::new();
         while let Some(work) = pending.pop() {
             match work {
                 Work::Source { id, environment } => {
@@ -65,13 +65,19 @@ impl Infer<'_, '_> {
                         }
                         a::Type::Tuple(fields) => {
                             pending.push(Work::Tuple(fields.len()));
-                            for id in fields.into_iter().rev() {
+                            let mut fields = fields;
+                            while let Some(id) = fields.pop() {
                                 pending.push(Work::Source { id, environment });
                             }
                         }
                         a::Type::Path(path) => {
                             if path.declaration.is_none() && path.args.is_empty() {
-                                if let Some(value) = environments[environment].get(&path.name) {
+                                let bindings = if environment == 0 {
+                                    base_environment
+                                } else {
+                                    &environments[environment - 1]
+                                };
+                                if let Some(value) = bindings.get(&path.name) {
                                     values.push(*value);
                                     continue;
                                 }
@@ -98,22 +104,21 @@ impl Infer<'_, '_> {
                                     continue;
                                 }
                             }
-                            let arguments: Vec<_> = path
-                                .args
-                                .iter()
-                                .copied()
-                                .filter(|arg| {
-                                    !matches!(&self.source.types[*arg].kind,
+                            let mut arguments: Vec<a::TypeId> = Vec::new();
+                            for arg in &path.args {
+                                if !matches!(&self.source.types[*arg].kind,
                                     a::Type::Path(path) if path.name.starts_with('\''))
-                                })
-                                .collect();
+                                {
+                                    arguments.push(*arg);
+                                }
+                            }
                             pending.push(Work::Path {
                                 id,
                                 path,
                                 environment,
                                 arguments: arguments.len(),
                             });
-                            for id in arguments.into_iter().rev() {
+                            while let Some(id) = arguments.pop() {
                                 pending.push(Work::Source { id, environment });
                             }
                         }
@@ -130,13 +135,14 @@ impl Infer<'_, '_> {
                 }
                 Work::Array(len) => {
                     let inner = values.pop().expect("array inference child");
-                    values.push(match len.replace('_', "").parse::<usize>() {
-                        Ok(len) => self.shaped(Shape::Array(inner, len)),
-                        Err(_) => self.blocked(),
+                    let len = len.replace('_', "");
+                    values.push(match len.as_str().parse::<usize>().ok() {
+                        Some(len) => self.shaped(Shape::Array(inner, len)),
+                        None => self.blocked(),
                     });
                 }
                 Work::Tuple(count) => {
-                    let fields = values.split_off(values.len() - count);
+                    let fields = take_values(&mut values, count);
                     values.push(if fields.is_empty() {
                         self.atom("()")
                     } else {
@@ -149,7 +155,7 @@ impl Infer<'_, '_> {
                     environment,
                     arguments,
                 } => {
-                    let arguments = values.split_off(values.len() - arguments);
+                    let arguments = take_values(&mut values, arguments);
                     if path.declaration.is_none() && arguments.len() == 1 {
                         if path.name == "Vec" {
                             values.push(self.shaped(Shape::Vec(arguments[0])));
@@ -167,22 +173,33 @@ impl Infer<'_, '_> {
                         }
                         let item = self.source.declarations[declaration].item;
                         if let a::Item::Alias(index) = item {
-                            let mut aliases = environments[environment].as_ref().clone();
-                            for (parameter, value) in parameters(self.source, declaration)
-                                .into_iter()
-                                .zip(arguments)
-                            {
-                                aliases
-                                    .retain(|name, _| !name.starts_with(&format!("{parameter}::")));
-                                aliases.insert(parameter, value);
+                            let mut aliases = if environment == 0 {
+                                base_environment.clone()
+                            } else {
+                                environments[environment - 1].clone()
+                            };
+                            let mut argument_index = 0;
+                            for parameter in parameters(self.source, declaration) {
+                                if argument_index >= arguments.len() {
+                                    break;
+                                }
+                                let prefix = format!("{parameter}::");
+                                let mut removed: Vec<String> = Vec::new();
+                                for name in aliases.keys() {
+                                    if name.starts_with(&prefix) {
+                                        removed.push(name.clone());
+                                    }
+                                }
+                                for name in removed {
+                                    aliases.remove(&name);
+                                }
+                                aliases.insert(parameter, arguments[argument_index]);
+                                argument_index += 1;
                             }
-                            self.parameter_equations(
-                                &self.source.aliases[index].generics.clone(),
-                                &mut aliases,
-                                false,
-                            )?;
-                            let environment = environments.len();
-                            environments.push(Cow::Owned(aliases));
+                            let generics = self.source.aliases[index].generics.clone();
+                            self.parameter_equations(&generics, &mut aliases, false)?;
+                            let environment = environments.len() + 1;
+                            environments.push(aliases);
                             pending.push(Work::Source {
                                 id: self.source.aliases[index].ty,
                                 environment,
@@ -200,4 +217,14 @@ impl Infer<'_, '_> {
         }
         Ok(values.pop().expect("source inference type"))
     }
+}
+
+fn take_values(values: &mut Vec<Variable>, count: usize) -> Vec<Variable> {
+    let start = values.len() - count;
+    let mut result = Vec::new();
+    for index in start..values.len() {
+        result.push(values[index]);
+    }
+    values.truncate(start);
+    result
 }

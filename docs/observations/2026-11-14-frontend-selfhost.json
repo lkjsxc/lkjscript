@@ -1,0 +1,1043 @@
+{
+  "stage": "source producer self-host fixed point",
+  "status": "fixed point",
+  "started_at": "2026-11-14T03:11:51.942Z",
+  "source_root": "/home/coder/workspace/lkjscript",
+  "source": "src/frontend_main.rs",
+  "snapshot": {
+    "directory": "/home/coder/lkjscript-codex-20261114-frontend-port/frontend-own-baseline",
+    "summary": {
+      "path": "/home/coder/lkjscript-codex-20261114-frontend-port/frontend-own-baseline/summary.json",
+      "bytes": 3298,
+      "sha256": "be8c7079d9225de47fa138e72e804eff73f004fd4382e0f730c90441e298373c"
+    },
+    "observations": {
+      "path": "/home/coder/lkjscript-codex-20261114-frontend-port/frontend-own-baseline/observations.json",
+      "bytes": 18610,
+      "sha256": "fb3a80f091494eaeccf6772a42cf78e1864491b20d08575d3189915164d5e6d5"
+    }
+  },
+  "compilers": {
+    "b0": {
+      "path": "/home/coder/lkjscript-codex-20261114-frontend-port/b0",
+      "bytes": 6251848,
+      "sha256": "cbc65d4d667bd81f53588084c83643a7377761259229e5d5bb12a96617bb5297"
+    },
+    "kc": {
+      "path": "/home/coder/lkjscript-codex-20261113e-selfhost-class-index/kc.elf",
+      "bytes": 16712946,
+      "sha256": "9b841d507e0adb23ccda41100ff075e2ab5655ca1be732e79e1370effeb5f291"
+    }
+  },
+  "runtime_origin": {
+    "path": "/home/coder/lkjscript-codex-20261113e-selfhost-class-index/runtime.k",
+    "bytes": 28472,
+    "sha256": "f7760407c7c5a7004648d7d28ba7ce8e006c86ce5c71f390039e2e9ce063d936"
+  },
+  "declared_source_files": [
+    {
+      "path": "/home/coder/workspace/lkjscript/src/ast.rs",
+      "bytes": 9828,
+      "sha256": "1bcecbb8dcbafb84f1acfc15ea3bdff294895747800549b7226e17a8023ed523",
+      "logical_path": "src/ast.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/check.rs",
+      "bytes": 190743,
+      "sha256": "8a039c3236ec77efdde0c8289ed2bab19e9e3074260e9c309c3c9d5f3f8cba7f",
+      "logical_path": "src/check.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/check/io.rs",
+      "bytes": 3761,
+      "sha256": "ce83278bbda650ded5875abcc81a26bb885690d8e97daf34c5000511776cca3a",
+      "logical_path": "src/check/io.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/check/scoped.rs",
+      "bytes": 24969,
+      "sha256": "ecf402879c315acd0b10fcb077e80af007fb6bafac33d6c16db760741c105b80",
+      "logical_path": "src/check/scoped.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/check/scoped/locals.rs",
+      "bytes": 33261,
+      "sha256": "cd41c2054cf6686d2e11f2d38a11ebeaddc72d4cd3d955c27711674b1ae9e937",
+      "logical_path": "src/check/scoped/locals.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/check/scoped/views.rs",
+      "bytes": 8599,
+      "sha256": "fb1adb0136f122b4eb65c731e669ea2177cc1eb4268b62f4704592eda4432a30",
+      "logical_path": "src/check/scoped/views.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/diagnostic.rs",
+      "bytes": 768,
+      "sha256": "2c7dca55f837bc1951dfdde5e182e2fb7a5cb0013be525b52e6fc4b87de11f11",
+      "logical_path": "src/diagnostic.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/diagnostics.rs",
+      "bytes": 7780,
+      "sha256": "af493becafa7ca1c6015cba16e2be982215951ecc71f912bcf724d473715c68f",
+      "logical_path": "src/diagnostics.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/diagnostics/lookup_domains.rs",
+      "bytes": 11629,
+      "sha256": "a0759df8572189fd9ce6c4f880fd0e634bec8d538722aa85d4968594fad08f43",
+      "logical_path": "src/diagnostics/lookup_domains.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/diagnostics/readiness.rs",
+      "bytes": 9182,
+      "sha256": "d6db930cff483980f41c134af7ac1c495af7edce85a94c5b3df7a445a0ef8228",
+      "logical_path": "src/diagnostics/readiness.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate.rs",
+      "bytes": 184216,
+      "sha256": "91c38b3e00e628de8dc290d2465bf742852031cfe926a7cdf061d7a1ea6166bb",
+      "logical_path": "src/elaborate.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/assignment.rs",
+      "bytes": 9651,
+      "sha256": "2b2ddf1472922c0df3f402622d778adef21f147b50e7e33ce2fb281329490389",
+      "logical_path": "src/elaborate/assignment.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/borrow_cleanup.rs",
+      "bytes": 14250,
+      "sha256": "8f8ecf9b5b55d5bf5a5fd6eec40fde1fa8f98329f4560027edd96014737d5348",
+      "logical_path": "src/elaborate/borrow_cleanup.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/capabilities.rs",
+      "bytes": 7680,
+      "sha256": "f964bed7c1346a5f6f4987052c391bcb9628504f053a9542603fbadfe62b2f43",
+      "logical_path": "src/elaborate/capabilities.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/census_ownership.rs",
+      "bytes": 11654,
+      "sha256": "e55c8fbf0a1bf088f16b30564080eb5fa3af6b3d7a7bb7b1b06a781c189f366a",
+      "logical_path": "src/elaborate/census_ownership.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/census.rs",
+      "bytes": 20638,
+      "sha256": "55fa3dc0b47b30fabe7867fbc2e7c1af0e332c32439fbfc2918fb2e830c5c5d7",
+      "logical_path": "src/elaborate/census.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/closures.rs",
+      "bytes": 51469,
+      "sha256": "58b42ce6c3fd9f76bebce01508ee497143a353d772b88f19d1fdca8e67363128",
+      "logical_path": "src/elaborate/closures.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/constructors.rs",
+      "bytes": 14199,
+      "sha256": "2bb65111389e8a0edadc1070f56b0c10d6ce6c56e4f52a9ffafdf13501ee97df",
+      "logical_path": "src/elaborate/constructors.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/definition_types.rs",
+      "bytes": 100684,
+      "sha256": "78fb14995d8e9c40367787afcb1258de2c92deb109b8fb35e03f0a7e92874ec2",
+      "logical_path": "src/elaborate/definition_types.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/definition_types/capabilities.rs",
+      "bytes": 2484,
+      "sha256": "00dd6027b2cb31149f0f19f12714bcd8f15a104ab9a618bab4e81d37a3663bab",
+      "logical_path": "src/elaborate/definition_types/capabilities.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/definition_types/census.rs",
+      "bytes": 6049,
+      "sha256": "7bf18072a929013297f075bb8709aa551960cfc6dec865c056ad2c3fdae0de04",
+      "logical_path": "src/elaborate/definition_types/census.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/definition_types/closures.rs",
+      "bytes": 6766,
+      "sha256": "4000641a782400e6a443b38dfc9e44b19a069e39162cc94e1022138c4ec637d6",
+      "logical_path": "src/elaborate/definition_types/closures.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/definition_types/method_headers.rs",
+      "bytes": 10762,
+      "sha256": "a4bd4ef74ac93d38ccd1f5a9f67915ffa268068e78fc1947fa39aad11296074e",
+      "logical_path": "src/elaborate/definition_types/method_headers.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/definition_types/pattern_equations.rs",
+      "bytes": 4246,
+      "sha256": "f7d5486fddfc3433082f117c0bdc3cca8cb9f4d3c62279d8decbfe2b761fc5b4",
+      "logical_path": "src/elaborate/definition_types/pattern_equations.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/definition_types/projection_equations.rs",
+      "bytes": 12174,
+      "sha256": "5c455a38a1d151b7b5963908a916e1368c6e65cda6ae42011cacc5df1d2ba701",
+      "logical_path": "src/elaborate/definition_types/projection_equations.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/definition_types/source_types.rs",
+      "bytes": 10603,
+      "sha256": "d07fa5276babbb32f90d21e8e7527c6045084e853b6e13dcf36723c4648374c1",
+      "logical_path": "src/elaborate/definition_types/source_types.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/derive_check.rs",
+      "bytes": 11266,
+      "sha256": "5943c2cdb5a5447a3addf9bf4c779caaa31a4f5ce4698b40f2b110e33229f04f",
+      "logical_path": "src/elaborate/derive_check.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/derive_methods.rs",
+      "bytes": 38975,
+      "sha256": "8e3ff9687d80b39a47370897b6319ded871a30f302cef8a0bbe8bb2c206a8b1b",
+      "logical_path": "src/elaborate/derive_methods.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/diagnostic_inference.rs",
+      "bytes": 974,
+      "sha256": "23ad94958cea02c6919d5c7c36fb5a3790792cfb8b212da2cbb514c1dd453055",
+      "logical_path": "src/elaborate/diagnostic_inference.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/floats.rs",
+      "bytes": 9854,
+      "sha256": "6130d8268fcd8dcea8d08499a5e1b5361fd2130540ff0686212203edaa3dba5f",
+      "logical_path": "src/elaborate/floats.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/generic_check.rs",
+      "bytes": 54864,
+      "sha256": "60e7e18552b54e7b00a0eefd71a27c53bb5cf2a0f337aa0781975176b5167a91",
+      "logical_path": "src/elaborate/generic_check.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/inference.rs",
+      "bytes": 14885,
+      "sha256": "e2d4de89b8aa5709e4d911f095c84b2882ac2d8f53bf9ea8ae7641e6d0532b16",
+      "logical_path": "src/elaborate/inference.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/integers.rs",
+      "bytes": 9357,
+      "sha256": "5dea1c95716a4d5a4aafd231e590cdf5c8a50734722b572e85e898e1d69eaffb",
+      "logical_path": "src/elaborate/integers.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/methods.rs",
+      "bytes": 2981,
+      "sha256": "94fc5e5ab0cb62d52c11fde3071c033998f1d235c1bc23d82e5c57bc96e2e695",
+      "logical_path": "src/elaborate/methods.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/operators.rs",
+      "bytes": 18982,
+      "sha256": "b13b213a64993ffd598a067139d380a937daeb41b34316d3976c3954c2f5a61d",
+      "logical_path": "src/elaborate/operators.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/origins.rs",
+      "bytes": 26260,
+      "sha256": "85b116ea5d7217a8be0c5c27dd0baf9872444d56120ff01d52e0bfe845e17f6b",
+      "logical_path": "src/elaborate/origins.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/output.rs",
+      "bytes": 5858,
+      "sha256": "ad8fc1fd00304870b22cca0277a2c98dcb8d7da390e5396a7e8e0817c7d036a4",
+      "logical_path": "src/elaborate/output.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/pattern_choices.rs",
+      "bytes": 22845,
+      "sha256": "8955d8af847abfcd73e3e14a6c4f56cc8a48d5c7658151954cd4a59730ed63ca",
+      "logical_path": "src/elaborate/pattern_choices.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/patterns.rs",
+      "bytes": 62170,
+      "sha256": "406f05d8458e76c70af9a455cac2beb7043ce5bd6e4c89c2b92428ec85233192",
+      "logical_path": "src/elaborate/patterns.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/ranges.rs",
+      "bytes": 7419,
+      "sha256": "23228a6aa7b2405dc4d18ededf6775e1a0e97d4057b70df8fcf5588ca60103c2",
+      "logical_path": "src/elaborate/ranges.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/scoped_calls.rs",
+      "bytes": 22415,
+      "sha256": "2539f9f03fdbcc158dc53a6514a71c2bf64287f83d8320bb8452b6a07b69fbc7",
+      "logical_path": "src/elaborate/scoped_calls.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/scoped_locals.rs",
+      "bytes": 15934,
+      "sha256": "1724029c102586478b23617922b1c3c1a1c8ba1cf8a05a59ac0aa8795866c69e",
+      "logical_path": "src/elaborate/scoped_locals.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/sequences.rs",
+      "bytes": 5314,
+      "sha256": "76805580b959506b94c24e3ba522a509298c1b98e03e52ed2c312c96abf48bce",
+      "logical_path": "src/elaborate/sequences.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/static_lifetimes.rs",
+      "bytes": 11612,
+      "sha256": "175b85d6a601aa39328aca11f001d306b65ba6805e47385a61cd3e16b6ba0b12",
+      "logical_path": "src/elaborate/static_lifetimes.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/sugars.rs",
+      "bytes": 8736,
+      "sha256": "2ed2c4265aa60d414663bd6004d49c32d1825ce0c43a30cb31b97301235f1ed5",
+      "logical_path": "src/elaborate/sugars.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/text_format.rs",
+      "bytes": 13345,
+      "sha256": "f75b919c53fb5c1d69b3e1cbc41115cbbda215b1b76233fd82ab16337cb2c72d",
+      "logical_path": "src/elaborate/text_format.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/trait_proofs.rs",
+      "bytes": 5759,
+      "sha256": "c252248217fa2b59e25c53f2cb6590ba0d8ea15cc02c92c82bb933646bbc37c7",
+      "logical_path": "src/elaborate/trait_proofs.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/type_display.rs",
+      "bytes": 2549,
+      "sha256": "91a405f13bb14a34f4ce4cba70dd881997c35eae85b5b6cb26acc25dc71bf365",
+      "logical_path": "src/elaborate/type_display.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/type_resolve.rs",
+      "bytes": 24433,
+      "sha256": "a9df297709c7e5476928686889f020451b61afa914d872cfc4527adf53ed89f7",
+      "logical_path": "src/elaborate/type_resolve.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/elaborate/variants.rs",
+      "bytes": 7230,
+      "sha256": "dce6d58244fc5bbb934d5383c2aff009f5a85e781026781b29112e78fc1e282f",
+      "logical_path": "src/elaborate/variants.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/facts.rs",
+      "bytes": 8612,
+      "sha256": "821f9587755d56edb94ccb01e4d4ca3c7df4d976213b797075c7d2aac90e5caa",
+      "logical_path": "src/facts.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/frontend_bundle.rs",
+      "bytes": 3349,
+      "sha256": "906e5bb26215d276c277d11f9eb2c3ae35eb3eaa053e509d5c5a1d81a0a70b04",
+      "logical_path": "src/frontend_bundle.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/frontend_main.rs",
+      "bytes": 2552,
+      "sha256": "cb405b00ab58896513ae997610d3f10beed6fb0a6f95717e2f65e7cfc841f99e",
+      "logical_path": "src/frontend_main.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/frontend.rs",
+      "bytes": 1266,
+      "sha256": "1fba66d2ee642b7bf0973ef56973157df646cc6bac38cb5bb4ce36b1106555a9",
+      "logical_path": "src/frontend.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/generics.rs",
+      "bytes": 108276,
+      "sha256": "b9ccdcb97213da92fa263a453b1a772f2d959870012af81a10ab40a0e981b75e",
+      "logical_path": "src/generics.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/generics/bound_solver.rs",
+      "bytes": 5288,
+      "sha256": "2b7fe644ae8e05916f03c1513d10af0ce0488b4f58243828509ca706694b8888",
+      "logical_path": "src/generics/bound_solver.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/generics/signature_bounds.rs",
+      "bytes": 12349,
+      "sha256": "a99c1ac45bece2a59ba270a7a35da7f73a1863fdc4f66d5339d8bfb6d6f9b4bb",
+      "logical_path": "src/generics/signature_bounds.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/k_text.rs",
+      "bytes": 43358,
+      "sha256": "32d22465b449fb8467732e4cefed0ebf41b838ddf3430c574898585e48c3637f",
+      "logical_path": "src/k_text.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/k.rs",
+      "bytes": 7232,
+      "sha256": "c536d212577736ecd36855399c9d93f58dd0e6a41b277341ebd17bb20368a846",
+      "logical_path": "src/k.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/names.rs",
+      "bytes": 371,
+      "sha256": "d62ce42092821a3a6f33058377fe53fb6a0f7a577e9ebd067f363638672fe0c4",
+      "logical_path": "src/names.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/resolve.rs",
+      "bytes": 52824,
+      "sha256": "7171fb3f2ceaf1e08380f63013ff5bb797796fc40d6683f8464de30518bd19dd",
+      "logical_path": "src/resolve.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/resolve/import_scopes.rs",
+      "bytes": 4215,
+      "sha256": "bc52b438b83b7ddad39398d453ea37c5dba02454c50f99df496c02dffb684ad1",
+      "logical_path": "src/resolve/import_scopes.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/resolve/iteration.rs",
+      "bytes": 8017,
+      "sha256": "0ade0aaf8ed4935373a4a9fba886a0ae2a1143183aebbe14755ed08cc7fe66e3",
+      "logical_path": "src/resolve/iteration.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/resolve/recovery.rs",
+      "bytes": 2361,
+      "sha256": "a3d2b9495d1feed6e578e5b39fdc96d2c4e15c176881a988ca86e4bee91cbdc7",
+      "logical_path": "src/resolve/recovery.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/source.rs",
+      "bytes": 12406,
+      "sha256": "81ae553c95a14f5a13d4fe59417df51c477ce7848bf77e43d90204de6a99e220",
+      "logical_path": "src/source.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/syntax.rs",
+      "bytes": 133853,
+      "sha256": "aa835f58672b5bf3f31f356a2dd53604239770e1e2b65d42b5673520fdbd5421",
+      "logical_path": "src/syntax.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/syntax/default.rs",
+      "bytes": 4093,
+      "sha256": "d2f838363971861d3dc29342d6e1e793c1487a3f4325142649582931bdfb2fb0",
+      "logical_path": "src/syntax/default.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/src/syntax/formatting.rs",
+      "bytes": 5903,
+      "sha256": "e1699026a980f60cc0cee32666847b0e282a010eb623234d12c5b1764891ef8a",
+      "logical_path": "src/syntax/formatting.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/library/lib.rs",
+      "bytes": 1304,
+      "sha256": "d5744ce9e5f3439278d248a2eef51beeef8fad42ea5068c512a803b5544b1bfd",
+      "logical_path": "$std/lib.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/library/prelude.rs",
+      "bytes": 12692,
+      "sha256": "396875f9a1f6a096ab21b107b391fef8d47ccaae8284c799fbee11140e0c2091",
+      "logical_path": "$std/prelude.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/library/sequence.rs",
+      "bytes": 12695,
+      "sha256": "247ab4be55aae23ab91eb8ebc4c10e2d22142e1acd797758dc479fe2cdb71eb6",
+      "logical_path": "$std/sequence.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/library/bytes.rs",
+      "bytes": 968,
+      "sha256": "8448ec831069dcb9af7255684f7cab55941450774d7207df05441e21da76c140",
+      "logical_path": "$std/bytes.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/library/string.rs",
+      "bytes": 5664,
+      "sha256": "fb632adee16785ce55d20afff34cf19aa65bd184f3e1150166598bd51399139a",
+      "logical_path": "$std/string.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/library/str.rs",
+      "bytes": 16357,
+      "sha256": "8d881ed82eae10d517df742c80efdae094af1f5156e78c990c3670ea2ff19e4a",
+      "logical_path": "$std/str.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/library/char.rs",
+      "bytes": 2912,
+      "sha256": "3c27220a3f943be898c275229eeb3b34dde9d85534187c56233f7b00deee57e6",
+      "logical_path": "$std/char.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/library/fmt.rs",
+      "bytes": 14381,
+      "sha256": "925f1000ca789f9ec53b2e7fba779e3dde941d46bd78c1306e7e47233d925b4b",
+      "logical_path": "$std/fmt.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/library/iter.rs",
+      "bytes": 14764,
+      "sha256": "720d3fa5b6670edae9f1d20a4bdb56693f7414b8381cae14df7646e1349baf1e",
+      "logical_path": "$std/iter.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/library/integer.rs",
+      "bytes": 11342,
+      "sha256": "4a6aee75de5f562487765f0ef10f21853082abeb79784692bdd4e870bf20dba9",
+      "logical_path": "$std/integer.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/library/io.rs",
+      "bytes": 3078,
+      "sha256": "1f2e6d31aac3bf4bd1fa43e5fa5740602ef976fb1b5937eecc2b1705d77a1e61",
+      "logical_path": "$std/io.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/library/ordered_map.rs",
+      "bytes": 15043,
+      "sha256": "5723bab30921dde6eb1effd91415b0fea2ce5501e1ceebbb2a5cf5f80d43ac98",
+      "logical_path": "$std/ordered_map.rs"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript/library/ordered_set.rs",
+      "bytes": 2714,
+      "sha256": "374842accfffca999a5ec91469653d2b853ce682d2d64a4e22843de5d0d3a4e7",
+      "logical_path": "$std/ordered_set.rs"
+    }
+  ],
+  "absent_source_files": [
+    "/home/coder/workspace/lkjscript/src/ast/mod.rs",
+    "/home/coder/workspace/lkjscript/src/check/io/mod.rs",
+    "/home/coder/workspace/lkjscript/src/check/mod.rs",
+    "/home/coder/workspace/lkjscript/src/check/scoped/locals/mod.rs",
+    "/home/coder/workspace/lkjscript/src/check/scoped/mod.rs",
+    "/home/coder/workspace/lkjscript/src/check/scoped/views/mod.rs",
+    "/home/coder/workspace/lkjscript/src/diagnostic/mod.rs",
+    "/home/coder/workspace/lkjscript/src/diagnostics/lookup_domains/mod.rs",
+    "/home/coder/workspace/lkjscript/src/diagnostics/mod.rs",
+    "/home/coder/workspace/lkjscript/src/diagnostics/readiness/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/assignment/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/borrow_cleanup/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/capabilities/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/census_ownership/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/census/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/closures/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/constructors/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/definition_types/capabilities/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/definition_types/census/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/definition_types/closures/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/definition_types/method_headers/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/definition_types/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/definition_types/pattern_equations/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/definition_types/projection_equations/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/definition_types/source_types/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/derive_check/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/derive_methods/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/diagnostic_inference/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/floats/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/generic_check/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/inference/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/integers/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/methods/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/operators/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/origins/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/output/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/pattern_choices/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/patterns/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/ranges/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/scoped_calls/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/scoped_locals/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/sequences/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/static_lifetimes/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/sugars/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/text_format/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/trait_proofs/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/type_display/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/type_resolve/mod.rs",
+    "/home/coder/workspace/lkjscript/src/elaborate/variants/mod.rs",
+    "/home/coder/workspace/lkjscript/src/facts/mod.rs",
+    "/home/coder/workspace/lkjscript/src/frontend_bundle/mod.rs",
+    "/home/coder/workspace/lkjscript/src/frontend/mod.rs",
+    "/home/coder/workspace/lkjscript/src/generics/bound_solver/mod.rs",
+    "/home/coder/workspace/lkjscript/src/generics/mod.rs",
+    "/home/coder/workspace/lkjscript/src/generics/signature_bounds/mod.rs",
+    "/home/coder/workspace/lkjscript/src/k_text/mod.rs",
+    "/home/coder/workspace/lkjscript/src/k/mod.rs",
+    "/home/coder/workspace/lkjscript/src/names/mod.rs",
+    "/home/coder/workspace/lkjscript/src/resolve/import_scopes/mod.rs",
+    "/home/coder/workspace/lkjscript/src/resolve/iteration/mod.rs",
+    "/home/coder/workspace/lkjscript/src/resolve/mod.rs",
+    "/home/coder/workspace/lkjscript/src/resolve/recovery/mod.rs",
+    "/home/coder/workspace/lkjscript/src/source/mod.rs",
+    "/home/coder/workspace/lkjscript/src/syntax/default/mod.rs",
+    "/home/coder/workspace/lkjscript/src/syntax/formatting/mod.rs",
+    "/home/coder/workspace/lkjscript/src/syntax/mod.rs"
+  ],
+  "inputs": {
+    "program": {
+      "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/frontend.k",
+      "bytes": 18489341,
+      "sha256": "75393007990e5b99d01d6ab5f3b678c0082b6ea60f0b3fb6c308f9e113dedcc6"
+    },
+    "runtime": {
+      "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/runtime.k",
+      "bytes": 28472,
+      "sha256": "f7760407c7c5a7004648d7d28ba7ce8e006c86ce5c71f390039e2e9ce063d936"
+    },
+    "bundle": {
+      "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/frontend.lkjsb",
+      "bytes": 1705610,
+      "sha256": "cd23a3ee342849017ca9258885450c0d45bd868a08d7dfeb1530a568dcebadc5"
+    },
+    "bundle_manifest": {
+      "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/bundle.json",
+      "bytes": 19236,
+      "sha256": "92ddf81270e62e2e991bce5934b0c53db880e2c3c13af37601e7e3d911cf4868"
+    }
+  },
+  "artifacts": {
+    "b0": {
+      "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/frontend-b0.elf",
+      "bytes": 50703986,
+      "sha256": "fe77fac131af2d03b851eac59b503abf1f6dcdccea14a427a967a7bbcdb426f7"
+    },
+    "frontend1": {
+      "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/frontend1.elf",
+      "bytes": 50703986,
+      "sha256": "fe77fac131af2d03b851eac59b503abf1f6dcdccea14a427a967a7bbcdb426f7"
+    },
+    "frontend2": {
+      "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/frontend2.elf",
+      "bytes": 50703986,
+      "sha256": "fe77fac131af2d03b851eac59b503abf1f6dcdccea14a427a967a7bbcdb426f7"
+    }
+  },
+  "commands": [
+    {
+      "name": "b0_source",
+      "executable": "/home/coder/lkjscript-codex-20261114-frontend-port/b0",
+      "args": [
+        "k",
+        "src/frontend_main.rs"
+      ],
+      "cwd": "/home/coder/workspace/lkjscript",
+      "status": 0,
+      "signal": null,
+      "error": null,
+      "failure_kind": null,
+      "wall_ms": 2248.384268,
+      "timing": {
+        "elapsed_seconds": 2.24,
+        "max_rss_bytes": 215580672,
+        "exit_status": 0
+      },
+      "stdout": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/b0-source.k",
+        "bytes": 18489341,
+        "sha256": "75393007990e5b99d01d6ab5f3b678c0082b6ea60f0b3fb6c308f9e113dedcc6"
+      },
+      "stderr": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/b0_source.stderr",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "timing_file": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/b0_source.time.tsv",
+        "bytes": 14,
+        "sha256": "7f302f12abc2745b41fc7886c9057e0471d1c3883d57a8d8a8cf064a07a66404"
+      }
+    },
+    {
+      "name": "b0_runtime",
+      "executable": "/home/coder/lkjscript-codex-20261114-frontend-port/b0",
+      "args": [
+        "runtime-k"
+      ],
+      "cwd": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost",
+      "status": 0,
+      "signal": null,
+      "error": null,
+      "failure_kind": null,
+      "wall_ms": 5.612601000000268,
+      "timing": {
+        "elapsed_seconds": 0,
+        "max_rss_bytes": 6520832,
+        "exit_status": 0
+      },
+      "stdout": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/b0-runtime.k",
+        "bytes": 28472,
+        "sha256": "f7760407c7c5a7004648d7d28ba7ce8e006c86ce5c71f390039e2e9ce063d936"
+      },
+      "stderr": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/b0_runtime.stderr",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "timing_file": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/b0_runtime.time.tsv",
+        "bytes": 12,
+        "sha256": "c4d21c67d57d536b4fe4ce6ce4fa82e8c210adadf2ff326af97bd568af5a633a"
+      }
+    },
+    {
+      "name": "b0_emit",
+      "executable": "/home/coder/lkjscript-codex-20261114-frontend-port/b0",
+      "args": [
+        "build",
+        "frontend.k",
+        "--entry",
+        "main",
+        "-o",
+        "frontend-b0.elf"
+      ],
+      "cwd": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost",
+      "status": 0,
+      "signal": null,
+      "error": null,
+      "failure_kind": null,
+      "wall_ms": 917.7351880000001,
+      "timing": {
+        "elapsed_seconds": 0.91,
+        "max_rss_bytes": 350912512,
+        "exit_status": 0
+      },
+      "stdout": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/b0_emit.stdout",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "stderr": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/b0_emit.stderr",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "timing_file": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/b0_emit.time.tsv",
+        "bytes": 14,
+        "sha256": "3a0580efeb91dfe6e8036390a7acc9c11f1d6f66379fc99bf6f247a598c73298"
+      },
+      "artifact": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/frontend-b0.elf",
+        "bytes": 50703986,
+        "sha256": "fe77fac131af2d03b851eac59b503abf1f6dcdccea14a427a967a7bbcdb426f7"
+      }
+    },
+    {
+      "name": "kc_emit_frontend1",
+      "executable": "/home/coder/lkjscript-codex-20261113e-selfhost-class-index/kc.elf",
+      "args": [
+        "frontend.k",
+        "--runtime",
+        "runtime.k",
+        "--entry",
+        "main"
+      ],
+      "cwd": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost",
+      "status": 0,
+      "signal": null,
+      "error": null,
+      "failure_kind": null,
+      "wall_ms": 110836.79776799999,
+      "timing": {
+        "elapsed_seconds": 110.82,
+        "max_rss_bytes": 768110592,
+        "exit_status": 0
+      },
+      "stdout": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/frontend1.elf",
+        "bytes": 50703986,
+        "sha256": "fe77fac131af2d03b851eac59b503abf1f6dcdccea14a427a967a7bbcdb426f7"
+      },
+      "stderr": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/kc_emit_frontend1.stderr",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "timing_file": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/kc_emit_frontend1.time.tsv",
+        "bytes": 16,
+        "sha256": "eb1bfb89c137afeec709bd6b61372ac16e18869b6fa8176a8230911f5f57422e"
+      }
+    },
+    {
+      "name": "frontend1_source",
+      "executable": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/frontend1.elf",
+      "args": [
+        "frontend.lkjsb"
+      ],
+      "cwd": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost",
+      "status": 0,
+      "signal": null,
+      "error": null,
+      "failure_kind": null,
+      "wall_ms": 246211.96630899998,
+      "timing": {
+        "elapsed_seconds": 246.2,
+        "max_rss_bytes": 775348224,
+        "exit_status": 0
+      },
+      "stdout": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/frontend1.k",
+        "bytes": 18489341,
+        "sha256": "75393007990e5b99d01d6ab5f3b678c0082b6ea60f0b3fb6c308f9e113dedcc6"
+      },
+      "stderr": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/frontend1_source.stderr",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "timing_file": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/frontend1_source.time.tsv",
+        "bytes": 16,
+        "sha256": "8dd34c5f6510f1b4cba916dabba8b5acc72b8de05ca52ee245fd674410d01b84"
+      }
+    },
+    {
+      "name": "kc_emit_frontend2",
+      "executable": "/home/coder/lkjscript-codex-20261113e-selfhost-class-index/kc.elf",
+      "args": [
+        "frontend1.k",
+        "--runtime",
+        "runtime.k",
+        "--entry",
+        "main"
+      ],
+      "cwd": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost",
+      "status": 0,
+      "signal": null,
+      "error": null,
+      "failure_kind": null,
+      "wall_ms": 108937.93598999997,
+      "timing": {
+        "elapsed_seconds": 108.92,
+        "max_rss_bytes": 768499712,
+        "exit_status": 0
+      },
+      "stdout": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/frontend2.elf",
+        "bytes": 50703986,
+        "sha256": "fe77fac131af2d03b851eac59b503abf1f6dcdccea14a427a967a7bbcdb426f7"
+      },
+      "stderr": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/kc_emit_frontend2.stderr",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "timing_file": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/kc_emit_frontend2.time.tsv",
+        "bytes": 16,
+        "sha256": "4b1681f8f786d173973c24b98719648d93bbad11dd01e1da6e5c02ad433bb8e7"
+      }
+    },
+    {
+      "name": "frontend2_source",
+      "executable": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/frontend2.elf",
+      "args": [
+        "frontend.lkjsb"
+      ],
+      "cwd": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost",
+      "status": 0,
+      "signal": null,
+      "error": null,
+      "failure_kind": null,
+      "wall_ms": 253550.576342,
+      "timing": {
+        "elapsed_seconds": 253.54,
+        "max_rss_bytes": 775405568,
+        "exit_status": 0
+      },
+      "stdout": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/frontend2.k",
+        "bytes": 18489341,
+        "sha256": "75393007990e5b99d01d6ab5f3b678c0082b6ea60f0b3fb6c308f9e113dedcc6"
+      },
+      "stderr": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/frontend2_source.stderr",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "timing_file": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/frontend2_source.time.tsv",
+        "bytes": 16,
+        "sha256": "3726ff560867c9edb155488b1fb323eab1db8f88bd44fd9824435e5f264fc69f"
+      }
+    }
+  ],
+  "comparisons": [
+    {
+      "name": "B0 source reproduces the declared K",
+      "left": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/frontend.k",
+        "bytes": 18489341,
+        "sha256": "75393007990e5b99d01d6ab5f3b678c0082b6ea60f0b3fb6c308f9e113dedcc6"
+      },
+      "right": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/b0-source.k",
+        "bytes": 18489341,
+        "sha256": "75393007990e5b99d01d6ab5f3b678c0082b6ea60f0b3fb6c308f9e113dedcc6"
+      },
+      "identical": true
+    },
+    {
+      "name": "B0 runtime matches declared native runtime",
+      "left": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/runtime.k",
+        "bytes": 28472,
+        "sha256": "f7760407c7c5a7004648d7d28ba7ce8e006c86ce5c71f390039e2e9ce063d936"
+      },
+      "right": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/b0-runtime.k",
+        "bytes": 28472,
+        "sha256": "f7760407c7c5a7004648d7d28ba7ce8e006c86ce5c71f390039e2e9ce063d936"
+      },
+      "identical": true
+    },
+    {
+      "name": "B0 versus native K compiler frontend ELF",
+      "left": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/frontend-b0.elf",
+        "bytes": 50703986,
+        "sha256": "fe77fac131af2d03b851eac59b503abf1f6dcdccea14a427a967a7bbcdb426f7"
+      },
+      "right": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/frontend1.elf",
+        "bytes": 50703986,
+        "sha256": "fe77fac131af2d03b851eac59b503abf1f6dcdccea14a427a967a7bbcdb426f7"
+      },
+      "identical": true
+    },
+    {
+      "name": "frontend1 versus B0 own-source K",
+      "left": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/frontend.k",
+        "bytes": 18489341,
+        "sha256": "75393007990e5b99d01d6ab5f3b678c0082b6ea60f0b3fb6c308f9e113dedcc6"
+      },
+      "right": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/frontend1.k",
+        "bytes": 18489341,
+        "sha256": "75393007990e5b99d01d6ab5f3b678c0082b6ea60f0b3fb6c308f9e113dedcc6"
+      },
+      "identical": true
+    },
+    {
+      "name": "frontend1 versus frontend2 ELF",
+      "left": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/frontend1.elf",
+        "bytes": 50703986,
+        "sha256": "fe77fac131af2d03b851eac59b503abf1f6dcdccea14a427a967a7bbcdb426f7"
+      },
+      "right": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/frontend2.elf",
+        "bytes": 50703986,
+        "sha256": "fe77fac131af2d03b851eac59b503abf1f6dcdccea14a427a967a7bbcdb426f7"
+      },
+      "identical": true
+    },
+    {
+      "name": "frontend2 versus B0 own-source K",
+      "left": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/frontend.k",
+        "bytes": 18489341,
+        "sha256": "75393007990e5b99d01d6ab5f3b678c0082b6ea60f0b3fb6c308f9e113dedcc6"
+      },
+      "right": {
+        "path": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/frontend2.k",
+        "bytes": 18489341,
+        "sha256": "75393007990e5b99d01d6ab5f3b678c0082b6ea60f0b3fb6c308f9e113dedcc6"
+      },
+      "identical": true
+    }
+  ],
+  "runs": [
+    {
+      "stage": "prepare",
+      "controls": {
+        "memory_bytes": "8589934592",
+        "stack_bytes": "inherited",
+        "timeout_ms": 600000,
+        "max_output_bytes": 268435456
+      },
+      "harness": {
+        "path": "/home/coder/workspace/lkjscript/tools/frontend-selfhost.mjs",
+        "bytes": 13467,
+        "sha256": "c335ea8f0ac99d82b5682e5bed62688d6d39ed588e41dd27e1814441c00118ed"
+      },
+      "encoder": {
+        "path": "/home/coder/workspace/lkjscript/tools/source-bundle.mjs",
+        "bytes": 6606,
+        "sha256": "9c040ea3ea413d4ace6bd5c262f0db5a185a40bec29f4914e48a5517b1d2a52e"
+      },
+      "finished_at": "2026-11-14T03:11:51.979Z",
+      "status": "prepared"
+    },
+    {
+      "stage": "emit",
+      "controls": {
+        "memory_bytes": "8589934592",
+        "stack_bytes": "inherited",
+        "timeout_ms": 600000,
+        "max_output_bytes": 268435456
+      },
+      "harness": {
+        "path": "/home/coder/workspace/lkjscript/tools/frontend-selfhost.mjs",
+        "bytes": 13467,
+        "sha256": "c335ea8f0ac99d82b5682e5bed62688d6d39ed588e41dd27e1814441c00118ed"
+      },
+      "started_at": "2026-11-14T03:11:52.002Z",
+      "status": "emitted",
+      "elapsed_ms": 114264.87392499999,
+      "finished_at": "2026-11-14T03:13:46.268Z"
+    },
+    {
+      "stage": "run",
+      "controls": {
+        "memory_bytes": "8589934592",
+        "stack_bytes": "inherited",
+        "timeout_ms": 600000,
+        "max_output_bytes": 268435456
+      },
+      "harness": {
+        "path": "/home/coder/workspace/lkjscript/tools/frontend-selfhost.mjs",
+        "bytes": 13467,
+        "sha256": "c335ea8f0ac99d82b5682e5bed62688d6d39ed588e41dd27e1814441c00118ed"
+      },
+      "started_at": "2026-11-14T03:14:13.288Z",
+      "status": "fixed point",
+      "elapsed_ms": 608950.485166,
+      "finished_at": "2026-11-14T03:24:22.239Z"
+    }
+  ],
+  "failures": [],
+  "evidence_directory": "/home/coder/lkjscript-codex-20261114-frontend-port/native-selfhost/",
+  "interpretation": {
+    "claim": "The production SourceBundle-to-K front end reaches an exact K/ELF fixed point through the independently self-built native K compiler.",
+    "comparisons": 6,
+    "source_k_bytes": 18489341,
+    "elf_bytes": 50703986,
+    "first_native_measurements": "Unprofiled and separate from the full gate.",
+    "second_backend_measurement": "Overlapped the 8-worker full gate.",
+    "second_frontend_measurement": "Includes a 0.89-second host address-map reconstruction and one 8-second 99 Hz attached profile window. The map ELF was byte-identical; profiling overhead on the target was not separately measured.",
+    "scope": "This closes the source compiler production core. Rust remains a bootstrap/reference and development-test dependency; Node still orchestrates tests and packs explicit source bundles.",
+    "corpus_record": "2026-11-14-frontend-native-corpus.json"
+  }
+}

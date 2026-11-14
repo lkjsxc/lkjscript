@@ -2,7 +2,7 @@
 //! before K construction; integer fallback happens only after those constraints
 //! have propagated. Method selection and ownership remain checked separately.
 use super::{Bindings, Compiler, Result, a, err, is_copy, k};
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::BTreeMap;
 
 mod capabilities;
 pub(super) mod census;
@@ -73,11 +73,29 @@ fn integer_name(name: &str) -> bool {
     )
 }
 fn integer_suffix(text: &str) -> Option<&'static str> {
-    [
-        "usize", "isize", "i64", "u64", "i32", "u32", "i16", "u16", "i8", "u8",
-    ]
-    .into_iter()
-    .find(|suffix| text.ends_with(suffix))
+    if text.ends_with("usize") {
+        Some("usize")
+    } else if text.ends_with("isize") {
+        Some("isize")
+    } else if text.ends_with("i64") {
+        Some("i64")
+    } else if text.ends_with("u64") {
+        Some("u64")
+    } else if text.ends_with("i32") {
+        Some("i32")
+    } else if text.ends_with("u32") {
+        Some("u32")
+    } else if text.ends_with("i16") {
+        Some("i16")
+    } else if text.ends_with("u16") {
+        Some("u16")
+    } else if text.ends_with("i8") {
+        Some("i8")
+    } else if text.ends_with("u8") {
+        Some("u8")
+    } else {
+        None
+    }
 }
 #[derive(Clone)]
 struct Node {
@@ -99,7 +117,7 @@ pub(super) struct DefinitionTypes {
     closures: BTreeMap<a::ExprId, closures::Closure>,
     unresolved_paths: Vec<(a::ExprId, a::Diagnostic)>,
 }
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(super) struct Types {
     pub(super) expressions: BTreeMap<a::ExprId, usize>,
     pub(super) bindings: BTreeMap<a::PatternId, usize>,
@@ -159,15 +177,17 @@ impl DefinitionTypes {
             let children = shape.children();
             if !ready && !children.is_empty() {
                 pending.push((id, true));
-                for child in children.into_iter().rev() {
-                    pending.push((self.root(child), false));
+                let mut next = children.len();
+                while next > 0 {
+                    next -= 1;
+                    pending.push((self.root(children[next]), false));
                 }
                 continue;
             }
-            let mut values = Vec::new();
+            let mut values: Vec<usize> = Vec::new();
             let mut complete = true;
             for child in children {
-                match known[&self.root(child)] {
+                match *known.get(&self.root(child)).unwrap() {
                     Some(value) => values.push(value),
                     None => complete = false,
                 }
@@ -181,8 +201,12 @@ impl DefinitionTypes {
             }
             let ty = match shape {
                 Shape::Atom(name) => {
-                    if let Some(ty) = compiler.type_names.get(&name) {
-                        Some(*ty)
+                    let named = match compiler.type_names.get(&name) {
+                        Some(ty) => Some(*ty),
+                        None => None,
+                    };
+                    if let Some(ty) = named {
+                        Some(ty)
                     } else if name == "()" {
                         Some(k::UNIT)
                     } else {
@@ -233,27 +257,32 @@ impl DefinitionTypes {
                     if values.is_empty() {
                         Some(k::UNIT)
                     } else {
-                        let fields: Vec<_> = values
-                            .into_iter()
-                            .enumerate()
-                            .map(|(i, ty)| k::Field {
-                                name: i.to_string(),
-                                ty,
-                            })
-                            .collect();
-                        let copy = fields
-                            .iter()
-                            .all(|field| is_copy(&compiler.types, field.ty));
+                        let mut fields = Vec::new();
+                        for index in 0..values.len() {
+                            fields.push(k::Field {
+                                name: format!("{index}"),
+                                ty: values[index],
+                            });
+                        }
+                        let mut copy = true;
+                        for field in &fields {
+                            if !is_copy(&compiler.types, field.ty) {
+                                copy = false;
+                                break;
+                            }
+                        }
                         Some(compiler.intern(String::new(), k::TypeKind::Struct { fields, copy }))
                     }
                 }
                 Shape::Nominal(declaration, _) => {
                     let mut arguments = substitutions.clone();
-                    for (parameter, ty) in parameters(compiler.source, declaration)
-                        .into_iter()
-                        .zip(values)
-                    {
-                        arguments.insert(parameter, ty);
+                    let mut index = 0;
+                    for parameter in parameters(compiler.source, declaration) {
+                        if index >= values.len() {
+                            break;
+                        }
+                        arguments.insert(parameter, values[index]);
+                        index += 1;
                     }
                     let name = compiler.source.declarations[declaration].name.clone();
                     Some(compiler.named_type(
@@ -267,18 +296,19 @@ impl DefinitionTypes {
                     )?)
                 }
                 Shape::Closure(expression, _) => {
-                    let closure = &self.closures[&expression];
+                    let closure = self.closures.get(&expression).unwrap();
                     let capture_count = closure.captures.len();
-                    let captures = closure
-                        .captures
-                        .iter()
-                        .zip(&values)
-                        .map(|(capture, ty)| super::closures::VariableCapture {
+                    let mut captures = Vec::new();
+                    let mut index = 0;
+                    while index < closure.captures.len() && index < values.len() {
+                        let capture = &closure.captures[index];
+                        captures.push(super::closures::VariableCapture {
                             name: capture.name.clone(),
-                            ty: *ty,
+                            ty: values[index],
                             uses: capture.uses.clone(),
-                        })
-                        .collect();
+                        });
+                        index += 1;
+                    }
                     Some(compiler.closure_type(
                         expression,
                         closure.source_function,
@@ -292,7 +322,7 @@ impl DefinitionTypes {
             };
             known.insert(id, ty);
         }
-        Ok(known[&root])
+        Ok(*known.get(&root).unwrap())
     }
 }
 fn parameters(source: &a::Program, declaration: a::DeclarationId) -> Vec<String> {
@@ -302,11 +332,13 @@ fn parameters(source: &a::Program, declaration: a::DeclarationId) -> Vec<String>
         a::Item::Alias(i) => &source.aliases[i].generics,
         _ => return Vec::new(),
     };
-    parameters
-        .iter()
-        .filter(|p| !p.lifetime)
-        .map(|p| p.name.clone())
-        .collect()
+    let mut names = Vec::new();
+    for parameter in parameters {
+        if !parameter.lifetime {
+            names.push(parameter.name.clone());
+        }
+    }
+    names
 }
 #[derive(Clone)]
 enum Obligation {
@@ -392,8 +424,8 @@ struct Infer<'a, 'b> {
     result: Variable,
     waiting: Vec<Vec<usize>>,
     obligations: Vec<Option<Obligation>>,
-    queue: VecDeque<usize>,
-    fallback: VecDeque<usize>,
+    queue: Vec<usize>,
+    fallback: Vec<usize>,
     queued: Vec<bool>,
     field_types: BTreeMap<a::DeclarationId, BTreeMap<String, a::TypeId>>,
     variant_fields: BTreeMap<a::DeclarationId, BTreeMap<String, Vec<a::Field>>>,
@@ -444,61 +476,60 @@ impl Infer<'_, '_> {
     fn shape(&self, v: Variable) -> Option<Shape> {
         self.definition.shape(v)
     }
-    fn display_variable(&self, variable: Variable) -> String {
-        fn render(infer: &Infer<'_, '_>, variable: Variable) -> String {
-            match infer.shape(variable) {
-                None => "_".to_string(),
-                Some(Shape::Atom(name) | Shape::Rigid(name)) => name,
-                Some(Shape::Vec(inner)) => format!("Vec<{}>", render(infer, inner)),
-                Some(Shape::Box(inner)) => format!("Box<{}>", render(infer, inner)),
-                Some(Shape::Ref(mutable, inner)) => format!(
-                    "&{}{}",
-                    if mutable { "mut " } else { "" },
-                    render(infer, inner)
-                ),
-                Some(Shape::Slice(inner)) => format!("[{}]", render(infer, inner)),
-                Some(Shape::Array(inner, len)) => format!("[{}; {len}]", render(infer, inner)),
-                Some(Shape::Tuple(fields)) => format!(
-                    "({})",
-                    fields
-                        .iter()
-                        .map(|ty| render(infer, *ty))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ),
-                Some(Shape::Nominal(declaration, args)) => {
-                    let name = infer.source.declarations[declaration]
-                        .name
-                        .trim_start_matches("$std::");
-                    if args.is_empty() {
-                        name.to_string()
-                    } else {
-                        format!(
-                            "{name}<{}>",
-                            args.iter()
-                                .map(|ty| render(infer, *ty))
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        )
-                    }
-                }
-                Some(Shape::Projected(_, member)) => format!("associated type {member}"),
-                Some(Shape::Source(id)) => match &infer.source.types[id].kind {
-                    a::Type::Path(path) => path.name.clone(),
-                    _ => "declared type".to_string(),
-                },
-                Some(Shape::Closure(..)) => "closure".to_string(),
-                Some(Shape::Never) => "!".to_string(),
+    fn display_variables(&self, variables: &[Variable]) -> String {
+        let mut result = String::new();
+        let mut first = true;
+        for variable in variables {
+            if !first {
+                result.push_str(", ");
             }
+            first = false;
+            result.push_str(&self.display_variable(*variable));
         }
-        render(self, variable)
+        result
+    }
+    fn display_variable(&self, variable: Variable) -> String {
+        match self.shape(variable) {
+            None => "_".to_string(),
+            Some(Shape::Atom(name) | Shape::Rigid(name)) => name,
+            Some(Shape::Vec(inner)) => format!("Vec<{}>", self.display_variable(inner)),
+            Some(Shape::Box(inner)) => format!("Box<{}>", self.display_variable(inner)),
+            Some(Shape::Ref(mutable, inner)) => format!(
+                "&{}{}",
+                if mutable { "mut " } else { "" },
+                self.display_variable(inner)
+            ),
+            Some(Shape::Slice(inner)) => format!("[{}]", self.display_variable(inner)),
+            Some(Shape::Array(inner, len)) => format!("[{}; {len}]", self.display_variable(inner)),
+            Some(Shape::Tuple(fields)) => format!("({})", self.display_variables(&fields)),
+            Some(Shape::Nominal(declaration, args)) => {
+                let full_name = self.source.declarations[declaration].name.as_str();
+                let mut start = 0;
+                while full_name[start..].starts_with("$std::") {
+                    start += 6;
+                }
+                let name = &full_name[start..];
+                if args.is_empty() {
+                    name.to_string()
+                } else {
+                    format!("{name}<{}>", self.display_variables(&args))
+                }
+            }
+            Some(Shape::Projected(_, member)) => format!("associated type {member}"),
+            Some(Shape::Source(id)) => match &self.source.types[id].kind {
+                a::Type::Path(path) => path.name.clone(),
+                _ => "declared type".to_string(),
+            },
+            Some(Shape::Closure(..)) => "closure".to_string(),
+            Some(Shape::Never) => "!".to_string(),
+        }
     }
     fn never(&self, v: Variable) -> bool {
         self.shape(v) == Some(Shape::Never)
     }
     fn occurs(&self, variable: Variable, within: Variable) -> bool {
         let mut pending = vec![within];
-        let mut seen = std::collections::BTreeSet::new();
+        let mut seen = std::collections::BTreeSet::<Variable>::new();
         while let Some(id) = pending.pop() {
             let id = self.definition.root(id);
             if id == variable {
@@ -506,7 +537,9 @@ impl Infer<'_, '_> {
             }
             if seen.insert(id) {
                 if let Some(shape) = &self.definition.nodes[id].shape {
-                    pending.extend(shape.children());
+                    for child in shape.children() {
+                        pending.push(child);
+                    }
                 }
             }
         }
@@ -514,7 +547,7 @@ impl Infer<'_, '_> {
     }
     fn enqueue(&mut self, id: usize) {
         if !self.queued[id] && self.obligations[id].is_some() {
-            self.queue.push_back(id);
+            self.queue.push(id);
             self.queued[id] = true;
         }
     }
@@ -525,7 +558,9 @@ impl Infer<'_, '_> {
         shape: Option<Shape>,
     ) -> Vec<(Variable, Variable)> {
         if self.definition.nodes[a].rank < self.definition.nodes[b].rank {
-            std::mem::swap(&mut a, &mut b);
+            let previous = a;
+            a = b;
+            b = previous;
         }
         if self.definition.nodes[a].rank == self.definition.nodes[b].rank {
             self.definition.nodes[a].rank += 1;
@@ -535,13 +570,16 @@ impl Infer<'_, '_> {
         self.definition.nodes[a].integer |= self.definition.nodes[b].integer;
         self.definition.nodes[a].blocked |= self.definition.nodes[b].blocked;
         self.definition.nodes[a].producers += self.definition.nodes[b].producers;
-        let mut waiting = std::mem::take(&mut self.waiting[a]);
-        waiting.extend(std::mem::take(&mut self.waiting[b]));
-        for id in waiting {
+        let waiting_a = std::mem::replace(&mut self.waiting[a], Vec::new());
+        let waiting_b = std::mem::replace(&mut self.waiting[b], Vec::new());
+        for id in waiting_a {
+            self.enqueue(id);
+        }
+        for id in waiting_b {
             self.enqueue(id);
         }
         let mut equations = Vec::new();
-        for (key, value) in std::mem::take(&mut self.projections[b]) {
+        for (key, value) in std::mem::replace(&mut self.projections[b], BTreeMap::new()) {
             if let Some(previous) = self.projections[a].insert(key, value) {
                 equations.push((previous, value));
             }
@@ -584,7 +622,7 @@ impl Infer<'_, '_> {
                     "integer inference requires an integer type",
                 ));
             }
-            match (&sa, &sb) {
+            let merge = match (&sa, &sb) {
                 (None, _) | (_, None) => {
                     if self.occurs(a, b) || self.occurs(b, a) {
                         return Err(err(
@@ -593,31 +631,35 @@ impl Infer<'_, '_> {
                             "inference would require an infinite type",
                         ));
                     }
-                    pending.extend(self.join_roots(a, b, sa.or(sb)));
+                    true
                 }
                 (Some(Shape::Vec(x)), Some(Shape::Vec(y)))
                 | (Some(Shape::Box(x)), Some(Shape::Box(y)))
                 | (Some(Shape::Slice(x)), Some(Shape::Slice(y))) => {
                     pending.push((*x, *y));
-                    pending.extend(self.join_roots(a, b, sa));
+                    true
                 }
                 (Some(Shape::Array(x, nx)), Some(Shape::Array(y, ny))) if nx == ny => {
                     pending.push((*x, *y));
-                    pending.extend(self.join_roots(a, b, sa));
+                    true
                 }
                 (Some(Shape::Ref(mx, x)), Some(Shape::Ref(my, y))) if mx == my => {
                     pending.push((*x, *y));
-                    pending.extend(self.join_roots(a, b, sa));
+                    true
                 }
                 (Some(Shape::Tuple(xs)), Some(Shape::Tuple(ys))) if xs.len() == ys.len() => {
-                    pending.extend(xs.iter().copied().zip(ys.iter().copied()));
-                    pending.extend(self.join_roots(a, b, sa));
+                    for index in 0..xs.len() {
+                        pending.push((xs[index], ys[index]));
+                    }
+                    true
                 }
                 (Some(Shape::Nominal(nx, xs)), Some(Shape::Nominal(ny, ys)))
                     if nx == ny && xs.len() == ys.len() =>
                 {
-                    pending.extend(xs.iter().copied().zip(ys.iter().copied()));
-                    pending.extend(self.join_roots(a, b, sa));
+                    for index in 0..xs.len() {
+                        pending.push((xs[index], ys[index]));
+                    }
+                    true
                 }
                 (Some(Shape::Nominal(left, _)), Some(Shape::Nominal(right, _)))
                     if left != right =>
@@ -634,11 +676,9 @@ impl Infer<'_, '_> {
                 }
                 (Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Source(_)), _)
                 | (_, Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Source(_))) => {
-                    if sa == sb {
-                        pending.extend(self.join_roots(a, b, sa));
-                    }
+                    sa == sb
                 }
-                _ if sa == sb => pending.extend(self.join_roots(a, b, sa)),
+                _ if sa == sb => true,
                 _ => {
                     return Err(err(
                         span,
@@ -649,6 +689,11 @@ impl Infer<'_, '_> {
                             self.display_variable(left)
                         ),
                     ));
+                }
+            };
+            if merge {
+                for equation in self.join_roots(a, b, sa.or(sb)) {
+                    pending.push(equation);
                 }
             }
         }
@@ -711,14 +756,18 @@ impl Infer<'_, '_> {
         let root = self.root(variable);
         self.definition.nodes[root].producers -= 1;
         if self.definition.nodes[root].producers == 0 {
-            let waiting = std::mem::take(&mut self.waiting[root]);
+            let waiting = std::mem::replace(&mut self.waiting[root], Vec::new());
             for id in waiting {
                 self.enqueue(id);
             }
         }
     }
     fn coerce_referents(&mut self, mut from: Variable, to: Variable, span: a::Span) -> Result<()> {
-        if matches!(self.shape(to), Some(Shape::Atom(name)) if name == "str") {
+        let text = match self.shape(to) {
+            Some(Shape::Atom(name)) => name == "str",
+            _ => false,
+        };
+        if text {
             if let Some(Shape::Nominal(declaration, _)) = self.shape(from) {
                 if self
                     .names
@@ -777,10 +826,14 @@ impl Infer<'_, '_> {
         declaration: a::DeclarationId,
         args: &[Variable],
     ) -> BTreeMap<String, Variable> {
-        parameters(self.source, declaration)
-            .into_iter()
-            .zip(args.iter().copied())
-            .collect()
+        let parameters = parameters(self.source, declaration);
+        let mut environment = BTreeMap::new();
+        let mut index = 0;
+        while index < parameters.len() && index < args.len() {
+            environment.insert(parameters[index].clone(), args[index]);
+            index += 1;
+        }
+        environment
     }
     fn struct_field_type(
         &mut self,
@@ -791,16 +844,21 @@ impl Infer<'_, '_> {
             let a::Item::Struct(index) = self.source.declarations[declaration].item else {
                 return None;
             };
-            self.field_types.insert(
-                declaration,
-                self.source.structs[index]
-                    .fields
-                    .iter()
-                    .map(|field| (field.name.clone(), field.ty))
-                    .collect(),
-            );
+            let mut fields = BTreeMap::new();
+            for field in &self.source.structs[index].fields {
+                fields.insert(field.name.clone(), field.ty);
+            }
+            self.field_types.insert(declaration, fields);
         }
-        self.field_types[&declaration].get(name).copied()
+        match self
+            .field_types
+            .get(&declaration)
+            .unwrap()
+            .get(&name.to_string())
+        {
+            Some(ty) => Some(*ty),
+            None => None,
+        }
     }
     fn enum_variant_fields(
         &mut self,
@@ -811,16 +869,17 @@ impl Infer<'_, '_> {
             let a::Item::Enum(index) = self.source.declarations[declaration].item else {
                 return None;
             };
-            self.variant_fields.insert(
-                declaration,
-                self.source.enums[index]
-                    .variants
-                    .iter()
-                    .map(|variant| (variant.name.clone(), variant.fields.clone()))
-                    .collect(),
-            );
+            let mut variants = BTreeMap::new();
+            for variant in &self.source.enums[index].variants {
+                variants.insert(variant.name.clone(), variant.fields.clone());
+            }
+            self.variant_fields.insert(declaration, variants);
         }
-        self.variant_fields[&declaration].get(name).cloned()
+        self.variant_fields
+            .get(&declaration)
+            .unwrap()
+            .get(&name.to_string())
+            .cloned()
     }
     fn constructor(
         &mut self,
@@ -848,10 +907,13 @@ impl Infer<'_, '_> {
         if arguments.len() != params.len() {
             return Ok(None);
         }
-        let environment: BTreeMap<_, _> =
-            params.into_iter().zip(arguments.iter().copied()).collect();
+        let mut environment = BTreeMap::new();
+        for index in 0..params.len() {
+            environment.insert(params[index].clone(), arguments[index]);
+        }
         let nominal = if let a::Item::Alias(index) = self.source.declarations[declaration].item {
-            self.source_type(self.source.aliases[index].ty, &environment)?
+            let ty = self.source.aliases[index].ty;
+            self.source_type(ty, &environment)?
         } else {
             self.shaped(Shape::Nominal(declaration, arguments))
         };
@@ -867,9 +929,10 @@ impl Infer<'_, '_> {
                 self.source.structs[index].fields.clone()
             }
             a::Item::Enum(_) => {
-                let Some((_, variant)) = path.name.rsplit_once("::") else {
+                let Some(separator) = path.name.rfind("::") else {
                     return Ok(None);
                 };
+                let variant = &path.name.as_str()[separator + 2..];
                 let Some(fields) = self.enum_variant_fields(declaration, variant) else {
                     return Ok(None);
                 };
@@ -877,13 +940,13 @@ impl Infer<'_, '_> {
             }
             _ => return Ok(None),
         };
-        let declared: BTreeMap<_, _> = declared
-            .into_iter()
-            .map(|field| (field.name.clone(), field))
-            .collect();
+        let mut declared_fields = BTreeMap::new();
+        for field in declared {
+            declared_fields.insert(field.name.clone(), field);
+        }
         let generic = !parameters(self.source, declaration).is_empty();
         for (name, value) in fields {
-            if let Some(field) = declared.get(name) {
+            if let Some(field) = declared_fields.get(name) {
                 let expected = self.source_type(field.ty, &environment)?;
                 let reason = if !generic {
                     "constructor field type differs"
@@ -921,20 +984,26 @@ impl Infer<'_, '_> {
             return Err(problem.clone());
         }
         let function = self.source.functions[index].clone();
-        let parameters: Vec<_> = function.generics.iter().filter(|p| !p.lifetime).collect();
         let outer = self.environment.clone();
-        for (i, parameter) in parameters.iter().enumerate() {
-            let value = if let Some(ty) = type_args.get(i) {
-                self.source_type(*ty, &outer)?
-            } else {
-                self.unknown()
-            };
-            environment.insert(parameter.name.clone(), value);
+        let mut type_index = 0;
+        for parameter in &function.generics {
+            if !parameter.lifetime {
+                let value = if let Some(ty) = type_args.get(type_index) {
+                    self.source_type(*ty, &outer)?
+                } else {
+                    self.unknown()
+                };
+                environment.insert(parameter.name.clone(), value);
+                type_index += 1;
+            }
         }
         self.parameter_equations(&function.generics, &mut environment, false)?;
-        for (parameter, value) in function.params[first..].iter().zip(values) {
-            let expected = self.source_type(parameter.ty, &environment)?;
-            self.coerce(*value, expected, span)?;
+        let parameters = &function.params[first..];
+        let mut index = 0;
+        while index < parameters.len() && index < values.len() {
+            let expected = self.source_type(parameters[index].ty, &environment)?;
+            self.coerce(values[index], expected, span)?;
+            index += 1;
         }
         self.source_type(function.result, &environment)
     }
@@ -980,7 +1049,11 @@ impl Infer<'_, '_> {
                 self.unify(subject, value, node.span)?;
             }
             a::Pattern::Range { start, end, .. } => {
-                for expression in [start, end].into_iter().flatten() {
+                if let Some(expression) = start {
+                    let value = self.expr(expression)?;
+                    self.unify(subject, value, node.span)?;
+                }
+                if let Some(expression) = end {
                     let value = self.expr(expression)?;
                     self.unify(subject, value, node.span)?;
                 }
@@ -1044,13 +1117,26 @@ impl Infer<'_, '_> {
                 self.bindings.push((name, value));
             }
             a::Pattern::Tuple(fields) => {
-                let rest = fields
-                    .iter()
-                    .any(|field| matches!(self.source.patterns[*field].kind, a::Pattern::Rest));
+                let mut rest = false;
+                for field in &fields {
+                    if matches!(self.source.patterns[*field].kind, a::Pattern::Rest) {
+                        rest = true;
+                        break;
+                    }
+                }
                 let values = if rest {
                     match self.shape(value) {
                         Some(Shape::Tuple(values)) => values,
-                        Some(Shape::Atom(name)) if name == "()" => Vec::new(),
+                        Some(Shape::Atom(name)) => {
+                            if name != "()" {
+                                return Err(err(
+                                    node.span,
+                                    "E_TYPE",
+                                    "tuple rest pattern requires a tuple",
+                                ));
+                            }
+                            Vec::new()
+                        }
                         None => {
                             // A method without a known result contract stays
                             // blocked; concrete pattern construction checks arity.
@@ -1071,7 +1157,11 @@ impl Infer<'_, '_> {
                         }
                     }
                 } else {
-                    fields.iter().map(|_| self.unknown()).collect()
+                    let mut values = Vec::new();
+                    for _ in &fields {
+                        values.push(self.unknown());
+                    }
+                    values
                 };
                 let tuple = if values.is_empty() {
                     self.atom("()")
@@ -1100,15 +1190,22 @@ impl Infer<'_, '_> {
                 } else {
                     self.names.value_path(node.scope, &path, node.span)?
                 };
-                let count = if let Some(nominal) = self.constructor(&path, &[], node.span)? {
+                let no_fields: Vec<(String, Variable)> = Vec::new();
+                let count = if let Some(nominal) = self.constructor(&path, &no_fields, node.span)? {
                     if let Some(Shape::Nominal(declaration, _)) = self.shape(nominal) {
                         match self.source.declarations[declaration].item {
                             a::Item::Struct(index) => self.source.structs[index].fields.len(),
-                            a::Item::Enum(_) => path
-                                .name
-                                .rsplit_once("::")
-                                .and_then(|(_, name)| self.enum_variant_fields(declaration, name))
-                                .map_or(0, |fields| fields.len()),
+                            a::Item::Enum(_) => {
+                                if let Some(separator) = path.name.rfind("::") {
+                                    let name = &path.name.as_str()[separator + 2..];
+                                    match self.enum_variant_fields(declaration, name) {
+                                        Some(fields) => fields.len(),
+                                        None => 0,
+                                    }
+                                } else {
+                                    0
+                                }
+                            }
                             _ => fields.len(),
                         }
                     } else {
@@ -1117,18 +1214,20 @@ impl Infer<'_, '_> {
                 } else {
                     fields.len()
                 };
-                let fields =
-                    super::patterns::positional_fields(self.source, &fields, count, node.span)?
-                        .into_iter()
-                        .map(|(index, pattern)| (index.to_string(), pattern))
-                        .collect::<Vec<_>>();
+                let positions =
+                    super::patterns::positional_fields(self.source, &fields, count, node.span)?;
+                let mut fields = Vec::new();
+                for (index, pattern) in positions {
+                    fields.push((format!("{index}"), pattern));
+                }
                 self.bind_nominal_pattern(&path, &fields, value, mode, node.scope, node.span)?;
             }
             a::Pattern::Struct { path, fields, .. } => {
                 self.bind_nominal_pattern(&path, &fields, value, mode, node.scope, node.span)?;
             }
             a::Pattern::Path(path) => {
-                self.bind_nominal_pattern(&path, &[], value, mode, node.scope, node.span)?;
+                let no_fields: Vec<(String, a::PatternId)> = Vec::new();
+                self.bind_nominal_pattern(&path, &no_fields, value, mode, node.scope, node.span)?;
             }
             a::Pattern::Or(alternatives) => {
                 let scope = self.bindings.len();
@@ -1136,10 +1235,21 @@ impl Infer<'_, '_> {
                 for alternative in alternatives {
                     self.bindings.truncate(scope);
                     self.bind_pattern_mode(alternative, value, mode)?;
-                    let bindings: BTreeMap<_, _> =
-                        self.bindings.entries[scope..].iter().cloned().collect();
-                    if let Some(first) = &first {
-                        if first.len() != bindings.len() || first.keys().ne(bindings.keys()) {
+                    let mut bindings = BTreeMap::new();
+                    for index in scope..self.bindings.entries.len() {
+                        let binding = &self.bindings.entries[index];
+                        bindings.insert(binding.0.clone(), binding.1);
+                    }
+                    if first.is_some() {
+                        let first = first.as_ref().unwrap();
+                        let mut same_names = first.len() == bindings.len();
+                        for name in bindings.keys() {
+                            if !first.contains_key(name) {
+                                same_names = false;
+                                break;
+                            }
+                        }
+                        if !same_names {
                             return Err(err(
                                 node.span,
                                 "E_TYPE",
@@ -1147,14 +1257,18 @@ impl Infer<'_, '_> {
                             ));
                         }
                         for (name, ty) in &bindings {
-                            self.unify(*ty, first[name], node.span)?;
+                            self.unify(*ty, *first.get(name).unwrap(), node.span)?;
                         }
                     } else {
                         first = Some(bindings);
                     }
                 }
                 self.bindings.truncate(scope);
-                for binding in first.unwrap_or_default() {
+                let first = match first {
+                    Some(first) => first,
+                    None => BTreeMap::new(),
+                };
+                for binding in first {
                     self.bindings.push(binding);
                 }
             }
@@ -1176,7 +1290,8 @@ impl Infer<'_, '_> {
         } else {
             self.names.value_path(scope, path, span)?
         };
-        let Some(nominal) = self.constructor(&path, &[], span)? else {
+        let no_fields: Vec<(String, Variable)> = Vec::new();
+        let Some(nominal) = self.constructor(&path, &no_fields, span)? else {
             for (_, pattern) in fields {
                 let value = self.blocked();
                 self.bind_pattern_mode(*pattern, value, mode)?;
@@ -1188,19 +1303,19 @@ impl Infer<'_, '_> {
             return Ok(());
         };
         let environment = self.nominal_environment(declaration, &arguments);
-        let variant = if matches!(self.source.declarations[declaration].item, a::Item::Enum(_)) {
-            path.name
-                .rsplit_once("::")
-                .and_then(|(_, name)| self.enum_variant_fields(declaration, name))
-                .map(|fields| {
-                    fields
-                        .into_iter()
-                        .map(|field| (field.name, field.ty))
-                        .collect::<BTreeMap<_, _>>()
-                })
-        } else {
-            None
-        };
+        let mut variant = None;
+        if matches!(self.source.declarations[declaration].item, a::Item::Enum(_)) {
+            if let Some(separator) = path.name.rfind("::") {
+                let name = &path.name.as_str()[separator + 2..];
+                if let Some(fields) = self.enum_variant_fields(declaration, name) {
+                    let mut types = BTreeMap::new();
+                    for field in fields {
+                        types.insert(field.name, field.ty);
+                    }
+                    variant = Some(types);
+                }
+            }
+        }
         for (name, pattern) in fields {
             let declared = if let Some(variant) = &variant {
                 variant.get(name).copied()
@@ -1300,9 +1415,11 @@ impl Infer<'_, '_> {
                                     self.source.declarations[declaration].item
                                 {
                                     let environment = self.environment.clone();
-                                    self.source_type(self.source.constants[index].ty, &environment)?
+                                    let ty = self.source.constants[index].ty;
+                                    self.source_type(ty, &environment)?
                                 } else {
-                                    self.constructor(&path, &[], span)?
+                                    let no_fields: Vec<(String, Variable)> = Vec::new();
+                                    self.constructor(&path, &no_fields, span)?
                                         .unwrap_or_else(|| self.blocked())
                                 }
                             } else {
@@ -1341,13 +1458,20 @@ impl Infer<'_, '_> {
                 let count_value = self.expr(count)?;
                 let usize = self.atom("usize");
                 self.unify(count_value, usize, span)?;
-                if let a::Expr::Int(text) = &self.source.exprs[count].kind {
-                    let text = text.trim_end_matches("usize").replace('_', "");
-                    if let Ok(len) = text.parse() {
-                        self.shaped(Shape::Array(value, len))
-                    } else {
-                        self.blocked()
+                let length = match &self.source.exprs[count].kind {
+                    a::Expr::Int(text) => {
+                        let text = text.as_str();
+                        let mut end = text.len();
+                        while text[..end].ends_with("usize") {
+                            end -= 5;
+                        }
+                        let text = text[..end].replace('_', "");
+                        text.as_str().parse::<usize>().ok()
                     }
+                    _ => None,
+                };
+                if let Some(len) = length {
+                    self.shaped(Shape::Array(value, len))
                 } else {
                     self.blocked()
                 }
@@ -1431,6 +1555,7 @@ impl Infer<'_, '_> {
                 self.source_type(ty, &environment)?
             }
             a::Expr::Call { callee, args } => {
+                let callee_scope = self.source.exprs[callee].scope;
                 let mut values = Vec::new();
                 for arg in &args {
                     values.push(self.expr(*arg)?);
@@ -1474,13 +1599,10 @@ impl Infer<'_, '_> {
                         let integer = self.atom("u32");
                         self.coerce(values[0], integer, span)?;
                         let character = self.atom("char");
-                        let option = self
-                            .names
-                            .library_type("prelude", "Option", span)?
-                            .declaration
-                            .ok_or_else(|| {
-                                err(span, "E_TYPE", "Option declaration is unavailable")
-                            })?;
+                        let path = self.names.library_type("prelude", "Option", span)?;
+                        let Some(option) = path.declaration else {
+                            return Err(err(span, "E_TYPE", "Option declaration is unavailable"));
+                        };
                         self.shaped(Shape::Nominal(option, vec![character]))
                     } else if path.declaration.is_none()
                         && matches!(path.name.as_str(), "drop" | "std::mem::drop")
@@ -1490,19 +1612,15 @@ impl Infer<'_, '_> {
                         path.declaration.map(|id| self.source.declarations[id].item)
                     {
                         self.call_signature(index, &path.args, &values, span)?
-                    } else if let Some(result) = self.associated_header(
-                        &path,
-                        &values,
-                        self.source.exprs[callee].scope,
-                        span,
-                    )? {
+                    } else if let Some(result) =
+                        self.associated_header(&path, &values, callee_scope, span)?
+                    {
                         result
                     } else {
-                        let fields: Vec<_> = values
-                            .iter()
-                            .enumerate()
-                            .map(|(i, v)| (i.to_string(), *v))
-                            .collect();
+                        let mut fields = Vec::new();
+                        for index in 0..values.len() {
+                            fields.push((format!("{index}"), values[index]));
+                        }
                         self.constructor(&path, &fields, span)?
                             .unwrap_or_else(|| self.blocked())
                     }
@@ -1566,7 +1684,11 @@ impl Infer<'_, '_> {
                 let range = if let a::Expr::Range { start, end, .. } =
                     self.source.exprs[index].kind.clone()
                 {
-                    for bound in [start, end].into_iter().flatten() {
+                    if let Some(bound) = start {
+                        let bound = self.expr(bound)?;
+                        self.unify(bound, usize, span)?;
+                    }
+                    if let Some(bound) = end {
                         let bound = self.expr(bound)?;
                         self.unify(bound, usize, span)?;
                     }
@@ -1696,7 +1818,8 @@ impl Infer<'_, '_> {
             a::Expr::Return(value) => {
                 if let Some(value) = value {
                     let value = self.expr(value)?;
-                    self.coerce(value, self.result, span)
+                    let result = self.result;
+                    self.coerce(value, result, span)
                         .map_err(|problem| context(problem, "function result type differs"))?;
                 }
                 self.shaped(Shape::Never)
@@ -1726,44 +1849,46 @@ impl Infer<'_, '_> {
                 name,
                 args,
                 separator,
-            } if name == "vec" => {
-                let element = self.unknown();
-                if separator == ";" {
-                    if args.len() != 2 {
-                        return Err(err(
-                            span,
-                            "E_TYPE",
-                            "Vec repetition requires an element and count",
-                        ));
+            } => {
+                if name == "vec" {
+                    let element = self.unknown();
+                    if separator == ";" {
+                        if args.len() != 2 {
+                            return Err(err(
+                                span,
+                                "E_TYPE",
+                                "Vec repetition requires an element and count",
+                            ));
+                        }
+                        let value = self.expr(args[0])?;
+                        self.coerce(value, element, span)?;
+                        let count = self.expr(args[1])?;
+                        let size = self.atom("usize");
+                        self.coerce(count, size, span)?;
+                    } else {
+                        for arg in args {
+                            let value = self.expr(arg)?;
+                            self.coerce(value, element, span)?;
+                        }
                     }
-                    let value = self.expr(args[0])?;
-                    self.coerce(value, element, span)?;
-                    let count = self.expr(args[1])?;
-                    let size = self.atom("usize");
-                    self.coerce(count, size, span)?;
+                    self.shaped(Shape::Vec(element))
                 } else {
                     for arg in args {
-                        let value = self.expr(arg)?;
-                        self.coerce(value, element, span)?;
+                        self.expr(arg)?;
                     }
-                }
-                self.shaped(Shape::Vec(element))
-            }
-            a::Expr::Macro { name, args, .. } => {
-                for arg in args {
-                    self.expr(arg)?;
-                }
-                if name == "panic" || name == "unreachable" {
-                    self.shaped(Shape::Never)
-                } else {
-                    self.blocked()
+                    if name == "panic" || name == "unreachable" {
+                        self.shaped(Shape::Never)
+                    } else {
+                        self.blocked()
+                    }
                 }
             }
             a::Expr::Try(value) => {
                 let source = self.expr(value)?;
                 let result = self.operation_type();
+                let target = self.result;
                 self.obligation(Obligation::Try {
-                    target: self.result,
+                    target,
                     source,
                     result,
                     span,
@@ -1830,7 +1955,8 @@ impl Infer<'_, '_> {
                 span,
             } => {
                 if self.coercion_pending(source, target) {
-                    for mut variable in [source, target] {
+                    for index in 0..2usize {
+                        let mut variable = if index == 0 { source } else { target };
                         loop {
                             self.watch(variable, id);
                             match self.shape(variable) {
@@ -1840,7 +1966,7 @@ impl Infer<'_, '_> {
                         }
                     }
                     if !self.pending_operation(source) && !self.pending_operation(target) {
-                        self.fallback.push_back(id);
+                        self.fallback.push(id);
                     }
                     return Ok(false);
                 }
@@ -1869,8 +1995,7 @@ impl Infer<'_, '_> {
                         "question-mark requires Result or Option",
                     ));
                 };
-                let name = self.source.declarations[declaration].name.as_str();
-                let arity = match name {
+                let arity = match self.source.declarations[declaration].name.as_str() {
                     "$std::prelude::Result" => 2,
                     "$std::prelude::Option" => 1,
                     _ => {
@@ -1919,7 +2044,10 @@ impl Infer<'_, '_> {
                                 self.watch(inner, id);
                                 return Ok(false);
                             }
-                            matches!(self.shape(inner), Some(Shape::Atom(name)) if name == "str")
+                            match self.shape(inner) {
+                                Some(Shape::Atom(name)) => name == "str",
+                                _ => false,
+                            }
                         }
                         None if text_output => {
                             // Argument coercions can still resolve the error to
@@ -1940,10 +2068,12 @@ impl Infer<'_, '_> {
                 span,
             } => match self.shape(source) {
                 Some(Shape::Ref(false, inner)) => match self.shape(inner) {
-                    Some(Shape::Atom(name))
-                        if name == "bool" || name == "f64" || integer_name(&name) =>
-                    {
-                        self.unify(result, inner, span)?
+                    Some(Shape::Atom(name)) => {
+                        if name == "bool" || name == "f64" || integer_name(&name) {
+                            self.unify(result, inner, span)?;
+                        } else {
+                            self.unify(result, source, span)?;
+                        }
                     }
                     None => {
                         self.watch(inner, id);
@@ -1993,7 +2123,10 @@ impl Infer<'_, '_> {
                         };
                         self.unify(result, selected, span)?
                     }
-                    Shape::Atom(name) if range && name == "str" => {
+                    Shape::Atom(name) => {
+                        if !range || name != "str" {
+                            return Ok(false);
+                        }
                         let text = self.atom("str");
                         self.unify(result, text, span)?;
                     }
@@ -2026,13 +2159,13 @@ impl Infer<'_, '_> {
                 };
                 match shape {
                     Shape::Tuple(fields) => {
-                        let Some(field) = name
-                            .parse::<usize>()
-                            .ok()
-                            .and_then(|i| fields.get(i))
-                            .copied()
-                        else {
-                            return Ok(false);
+                        let index = match name.as_str().parse::<usize>().ok() {
+                            Some(index) => index,
+                            None => return Ok(false),
+                        };
+                        let field = match fields.get(index) {
+                            Some(field) => *field,
+                            None => return Ok(false),
                         };
                         self.unify(result, field, span)?;
                     }
@@ -2149,15 +2282,24 @@ impl Infer<'_, '_> {
                         let reference = self.shaped(Shape::Ref(name == "as_mut_slice", slice));
                         self.unify(result, reference, span)?;
                     }
-                    ("len", Shape::Atom(atom)) if atom == "str" && arguments.is_empty() => {
+                    ("len", Shape::Atom(atom)) => {
+                        if atom != "str" || !arguments.is_empty() {
+                            return Ok(false);
+                        }
                         let usize = self.atom("usize");
                         self.unify(result, usize, span)?;
                     }
-                    ("is_empty", Shape::Atom(atom)) if atom == "str" && arguments.is_empty() => {
+                    ("is_empty", Shape::Atom(atom)) => {
+                        if atom != "str" || !arguments.is_empty() {
+                            return Ok(false);
+                        }
                         let boolean = self.atom("bool");
                         self.unify(result, boolean, span)?;
                     }
-                    ("as_bytes", Shape::Atom(atom)) if atom == "str" && arguments.is_empty() => {
+                    ("as_bytes", Shape::Atom(atom)) => {
+                        if atom != "str" || !arguments.is_empty() {
+                            return Ok(false);
+                        }
                         let byte = self.atom("u8");
                         let slice = self.shaped(Shape::Slice(byte));
                         let reference = self.shaped(Shape::Ref(false, slice));
@@ -2170,7 +2312,10 @@ impl Infer<'_, '_> {
         Ok(true)
     }
     fn solve(&mut self) -> Result<()> {
-        while let Some(id) = self.queue.pop_front() {
+        let mut next = 0;
+        while next < self.queue.len() {
+            let id = self.queue[next];
+            next += 1;
             self.queued[id] = false;
             if let Some(obligation) = self.obligations[id].clone() {
                 let result = match &obligation {
@@ -2201,6 +2346,7 @@ impl Infer<'_, '_> {
                 }
             }
         }
+        self.queue.clear();
         Ok(())
     }
     fn finish(mut self) -> Result<DefinitionTypes> {
@@ -2208,7 +2354,10 @@ impl Infer<'_, '_> {
         // If no surrounding constraint selects a reference coercion, infer the
         // intact referent. Each choice can wake ordinary constraints and another
         // coercion; process those before choosing the next unresolved fallback.
-        while let Some(id) = self.fallback.pop_front() {
+        let mut next_fallback = 0;
+        while next_fallback < self.fallback.len() {
+            let id = self.fallback[next_fallback];
+            next_fallback += 1;
             if let Some(Obligation::Coercion {
                 source,
                 target,
@@ -2224,20 +2373,22 @@ impl Infer<'_, '_> {
         }
         // An operation still missing its type contract can constrain every leaf
         // of an adjacent coercion later. Leave those defaults to the old gate.
-        let mut blocked = Vec::new();
-        for obligation in self.obligations.iter().flatten() {
-            if let Obligation::Coercion { source, target, .. } = obligation {
+        let mut blocked: Vec<Variable> = Vec::new();
+        for obligation in &self.obligations {
+            if let Some(Obligation::Coercion { source, target, .. }) = obligation {
                 blocked.push(*source);
                 blocked.push(*target);
             }
         }
-        let mut seen = std::collections::BTreeSet::new();
+        let mut seen = std::collections::BTreeSet::<Variable>::new();
         while let Some(variable) = blocked.pop() {
             let root = self.root(variable);
             if seen.insert(root) {
                 self.definition.nodes[root].blocked = true;
                 if let Some(shape) = self.shape(root) {
-                    blocked.extend(shape.children());
+                    for child in shape.children() {
+                        blocked.push(child);
+                    }
                 }
             }
         }
@@ -2298,8 +2449,8 @@ pub(super) fn infer_available(
         result: 0,
         waiting: Vec::new(),
         obligations: Vec::new(),
-        queue: VecDeque::new(),
-        fallback: VecDeque::new(),
+        queue: Vec::new(),
+        fallback: Vec::new(),
         queued: Vec::new(),
         field_types: BTreeMap::new(),
         variant_fields: BTreeMap::new(),
@@ -2349,7 +2500,7 @@ pub(super) fn infer_available(
             let implementation = source.impls[owner.index].clone();
             inference.parameter_equations(&implementation.generics, &mut environment, true)?;
             if let Some(bound) = implementation.trait_ty {
-                let receiver = environment["Self"];
+                let receiver = *environment.get(&"Self".to_string()).unwrap();
                 inference.trait_equations(receiver, "Self", bound, &mut environment, true)?;
             }
         }
@@ -2371,8 +2522,9 @@ pub(super) fn infer_available(
     }
     if let Some(body) = function.body {
         let body = inference.block(body)?;
+        let result = inference.result;
         inference
-            .coerce(body, inference.result, function.span)
+            .coerce(body, result, function.span)
             .map_err(|problem| context(problem, "function result type differs"))?;
     }
     inference.finish()

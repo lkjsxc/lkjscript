@@ -27,7 +27,8 @@ impl Builder<'_, '_> {
         dst
     }
     fn pattern_assign_scalar(&mut self, local: usize, value: i64, line: usize) {
-        let src = self.pattern_scalar(self.ty(local), value, line);
+        let ty = self.ty(local);
+        let src = self.pattern_scalar(ty, value, line);
         self.emit(
             k::Op::Assign {
                 place: k::Place::local(local),
@@ -44,15 +45,15 @@ impl Builder<'_, '_> {
         }
     }
     fn cache_test(&mut self, cache: &PatternCache, id: usize, value: usize, line: usize) {
-        let place = self.cache_place(cache, cache.slots[&id], line);
+        let place = self.cache_place(cache, *cache.slots.get(&id).unwrap(), line);
         self.emit(k::Op::Assign { place, src: value }, line);
     }
     fn cached_test(&mut self, cache: &PatternCache, id: usize, line: usize) -> Result<usize> {
-        let place = self.cache_place(cache, cache.slots[&id], line);
+        let place = self.cache_place(cache, *cache.slots.get(&id).unwrap(), line);
         Ok(self.read(place, line)?.0)
     }
     fn cached_possible(&mut self, cache: &PatternCache, id: usize, line: usize) -> Result<usize> {
-        let place = self.cache_place(cache, cache.possible[&id], line);
+        let place = self.cache_place(cache, *cache.possible.get(&id).unwrap(), line);
         Ok(self.read(place, line)?.0)
     }
     fn fold_possible(
@@ -97,23 +98,28 @@ impl Builder<'_, '_> {
                 PatternKind::Variant { fields, .. } => {
                     let index = slots.len();
                     slots.insert(id, index);
-                    pending.extend(fields.iter().map(|(_, child)| *child));
+                    for (_, child) in fields {
+                        pending.push(*child);
+                    }
                 }
                 PatternKind::Literal(_) | PatternKind::Range(_) => {
                     let index = slots.len();
                     slots.insert(id, index);
                 }
                 PatternKind::Product(fields) => {
-                    pending.extend(fields.iter().map(|(_, child)| *child))
+                    for (_, child) in fields {
+                        pending.push(*child);
+                    }
                 }
                 PatternKind::Deref(inner) => pending.push(*inner),
-                PatternKind::Or(alternatives) => pending.extend(alternatives),
+                PatternKind::Or(alternatives) => pending.extend_from_slice(alternatives),
                 _ => {}
             }
         }
         let mut possible = BTreeMap::new();
         for id in &visited {
-            possible.insert(*id, slots.len() + possible.len());
+            let position = slots.len() + possible.len();
+            possible.insert(*id, position);
         }
         let length = slots.len() + possible.len();
         let ty = self.compiler.intern(
@@ -161,7 +167,10 @@ impl Builder<'_, '_> {
                     } else {
                         self.pattern_scalar(k::BOOL, 1, line)
                     };
-                    let children = fields.iter().map(|(_, child)| *child).collect::<Vec<_>>();
+                    let mut children = Vec::new();
+                    for (_, child) in fields {
+                        children.push(*child);
+                    }
                     self.fold_possible(&cache, initial, &children, false, line)?
                 }
                 PatternKind::Or(alternatives) => {
@@ -169,7 +178,7 @@ impl Builder<'_, '_> {
                     self.fold_possible(&cache, initial, alternatives, true, line)?
                 }
             };
-            let destination = self.cache_place(&cache, cache.possible[&id], line);
+            let destination = self.cache_place(&cache, *cache.possible.get(&id).unwrap(), line);
             self.emit(
                 k::Op::Assign {
                     place: destination,
@@ -419,10 +428,18 @@ impl Builder<'_, '_> {
                         },
                     );
                     choices.order.push(id);
-                    pending.extend(alternatives.iter().rev());
+                    let mut index = alternatives.len();
+                    while index != 0 {
+                        index -= 1;
+                        pending.push(alternatives[index]);
+                    }
                 }
                 PatternKind::Product(fields) | PatternKind::Variant { fields, .. } => {
-                    pending.extend(fields.iter().rev().map(|(_, child)| *child));
+                    let mut index = fields.len();
+                    while index != 0 {
+                        index -= 1;
+                        pending.push(fields[index].1);
+                    }
                 }
                 PatternKind::Deref(inner) => pending.push(*inner),
                 _ => {}
@@ -433,8 +450,11 @@ impl Builder<'_, '_> {
     fn advance_pattern_choices(&mut self, choices: &PatternChoices, line: usize) -> Result<usize> {
         let carry = self.local(k::BOOL, "$alternative_carry", true);
         self.pattern_assign_scalar(carry, 1, line);
-        for id in choices.order.iter().rev() {
-            let choice = choices.slots[id];
+        let mut index = choices.order.len();
+        while index != 0 {
+            index -= 1;
+            let id = choices.order[index];
+            let choice = *choices.slots.get(&id).unwrap();
             let left = self.read(k::Place::local(carry), line)?.0;
             let right = self.read(k::Place::local(choice.active), line)?.0;
             let condition = self.temp(k::BOOL);

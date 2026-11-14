@@ -3,13 +3,16 @@ use super::*;
 impl Parser {
     pub(super) fn derive_default(&mut self, index: usize) -> Result<(), Diagnostic> {
         let definition = self.program.structs[index].clone();
-        let requested = definition
-            .attrs
-            .iter()
-            .filter(|attr| attr.name == "derive")
-            .flat_map(|attr| &attr.args)
-            .filter(|name| *name == "Default")
-            .count();
+        let mut requested = 0;
+        for attr in &definition.attrs {
+            if attr.name == "derive" {
+                for name in &attr.args {
+                    if name == "Default" {
+                        requested += 1;
+                    }
+                }
+            }
+        }
         if requested == 0 {
             return Ok(());
         }
@@ -31,7 +34,9 @@ impl Parser {
         );
         let mut generics = definition.generics.clone();
         let mut arguments = Vec::new();
-        for parameter in &mut generics {
+        let mut parameter_index = 0;
+        while parameter_index < generics.len() {
+            let parameter = &mut generics[parameter_index];
             if !parameter.lifetime {
                 parameter.bounds.push(bound);
             }
@@ -43,6 +48,7 @@ impl Parser {
                 }),
                 parameter.span,
             ));
+            parameter_index += 1;
         }
         let target_path = Path {
             declaration: None,
@@ -73,13 +79,11 @@ impl Parser {
             self.add_expr(Expr::Path(target_path), span)
         } else if definition.tuple {
             let callee = self.add_expr(Expr::Path(target_path), span);
-            self.add_expr(
-                Expr::Call {
-                    callee,
-                    args: fields.into_iter().map(|(_, value)| value).collect(),
-                },
-                span,
-            )
+            let mut args = Vec::new();
+            for (_, value) in fields {
+                args.push(value);
+            }
+            self.add_expr(Expr::Call { callee, args }, span)
         } else {
             self.add_expr(
                 Expr::Struct {

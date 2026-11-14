@@ -20,25 +20,24 @@ pub(crate) struct Report {
 
 pub(crate) fn resolve(source: &Program) -> Result<Report> {
     let (resolver, imports) = Resolver::new_recovery(source)?;
-    let mut failures: Vec<_> = imports
-        .into_iter()
-        .map(|failure| Failure {
+    let mut failures = Vec::new();
+    for failure in imports {
+        failures.push(Failure {
             site: Site::Import(failure.import),
             problem: failure.problem,
-        })
-        .collect();
+        });
+    }
     let mut program = source.clone();
     resolve_nodes(&mut program, &resolver, &mut |site, problem| {
         failures.push(Failure { site, problem });
         Ok(())
     })?;
-    let imports: Vec<_> = failures
-        .iter()
-        .filter_map(|failure| match failure.site {
-            Site::Import(id) => Some(id),
-            _ => None,
-        })
-        .collect();
+    let mut imports = Vec::new();
+    for failure in &failures {
+        if let Site::Import(id) = failure.site {
+            imports.push(id);
+        }
+    }
     for (id, node) in source.types.iter().enumerate() {
         if let Type::Path(path) = &node.kind {
             if let Some(import) = resolver.uncertain_import(

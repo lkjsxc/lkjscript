@@ -2,14 +2,54 @@
 use super::{Builder, Result, a, err, k};
 use std::collections::BTreeMap;
 
-const SUFFIXES: [&str; 10] = [
-    "usize", "isize", "u64", "i64", "u32", "i32", "u16", "i16", "u8", "i8",
-];
+fn integer_suffix(index: usize) -> &'static str {
+    match index {
+        0 => "usize",
+        1 => "isize",
+        2 => "u64",
+        3 => "i64",
+        4 => "u32",
+        5 => "i32",
+        6 => "u16",
+        7 => "i16",
+        8 => "u8",
+        9 => "i8",
+        _ => unreachable!(),
+    }
+}
+
+pub(super) fn magnitude(text: &str, radix: u64) -> Option<u64> {
+    let bytes = text.as_bytes();
+    let mut index = if bytes.first() == Some(&b'+') { 1 } else { 0 };
+    if index == bytes.len() {
+        return None;
+    }
+    let mut value = 0_u64;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        let digit = if byte >= b'0' && byte <= b'9' {
+            (byte - b'0') as u64
+        } else if byte >= b'a' && byte <= b'f' {
+            (byte - b'a' + 10) as u64
+        } else if byte >= b'A' && byte <= b'F' {
+            (byte - b'A' + 10) as u64
+        } else {
+            return None;
+        };
+        if digit >= radix || value > (!0_u64 - digit) / radix {
+            return None;
+        }
+        value = value * radix + digit;
+        index += 1;
+    }
+    Some(value)
+}
 
 pub(super) fn suffix_type(names: &BTreeMap<String, usize>, text: &str) -> Option<usize> {
-    for suffix in SUFFIXES {
+    for index in 0..10 {
+        let suffix = integer_suffix(index);
         if text.ends_with(suffix) {
-            return names.get(suffix).copied();
+            return names.get(&suffix.to_string()).copied();
         }
     }
     None
@@ -25,12 +65,14 @@ pub(super) fn literal(
 ) -> Result<(i64, usize)> {
     let mut digits = text.replace('_', "");
     let mut ty = expected.unwrap_or(k::I32);
-    for suffix in SUFFIXES {
+    for index in 0..10 {
+        let suffix = integer_suffix(index);
         if digits.ends_with(suffix) {
             ty = *names
-                .get(suffix)
+                .get(&suffix.to_string())
                 .ok_or_else(|| err(span, "E_TYPE", "unknown integer suffix"))?;
-            digits.truncate(digits.len() - suffix.len());
+            let shortened = digits[..digits.len() - suffix.len()].to_string();
+            digits = shortened;
             if expected.is_some_and(|expected| expected != ty) {
                 return Err(err(
                     span,
@@ -50,8 +92,15 @@ pub(super) fn literal(
     } else {
         10
     };
-    let magnitude = u64::from_str_radix(if radix == 10 { &digits } else { &digits[2..] }, radix)
-        .map_err(|_| err(span, "E_TYPE", "integer literal exceeds its representation"))?;
+    let magnitude = magnitude(
+        if radix == 10 {
+            digits.as_str()
+        } else {
+            &digits[2..]
+        },
+        radix,
+    )
+    .ok_or_else(|| err(span, "E_TYPE", "integer literal exceeds its representation"))?;
     let (bits, signed) = match types[ty].kind {
         k::TypeKind::Int { bits, signed } => (bits, signed),
         _ => {
@@ -72,7 +121,7 @@ pub(super) fn literal(
             (1_u64 << (bits - 1)) - 1
         }
     } else if bits == 64 {
-        u64::MAX
+        !0_u64
     } else {
         (1_u64 << bits) - 1
     };
@@ -150,13 +199,12 @@ impl Builder<'_, '_> {
         expected: Option<usize>,
         span: a::Span,
     ) -> Result<(usize, usize)> {
-        let borrowed = self
-            .inferred
-            .expressions
-            .get(&expression)
-            .copied()
-            .or_else(|| self.hint(expression))
-            .is_some_and(|ty| self.primitive_value_type(ty) != ty);
+        let inferred = self.inferred.expressions.get(&expression).copied();
+        let inferred = match inferred {
+            Some(ty) => Some(ty),
+            None => self.hint(expression),
+        };
+        let borrowed = inferred.is_some_and(|ty| self.primitive_value_type(ty) != ty);
         let value = self.expr(expression, if borrowed { None } else { expected })?;
         if self.primitive_value_type(value.1) != value.1 {
             self.read(

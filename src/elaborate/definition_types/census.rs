@@ -37,8 +37,12 @@ impl DefinitionTypes {
     pub(crate) fn unresolved_paths(&self) -> &[(a::ExprId, a::Diagnostic)] {
         &self.unresolved_paths
     }
-    pub(crate) fn expressions(&self) -> impl Iterator<Item = a::ExprId> + '_ {
-        self.expressions.keys().copied()
+    pub(crate) fn expressions(&self) -> Vec<a::ExprId> {
+        let mut expressions = Vec::new();
+        for expression in self.expressions.keys() {
+            expressions.push(*expression);
+        }
+        expressions
     }
     pub(crate) fn receiver(&self, expression: a::ExprId) -> Option<Receiver> {
         let mut variable = *self.expressions.get(&expression)?;
@@ -119,9 +123,13 @@ impl Infer<'_, '_> {
             return true;
         };
         let head = self.shape_head(variable);
+        let head_view = match &head {
+            Some(head) => Some(head.as_str()),
+            None => None,
+        };
         context
             .domains
-            .method_problem(head.as_deref(), name, false)
+            .method_problem(head_view, name, false)
             .is_none()
     }
     pub(super) fn census_inherent_complete(&self, variable: Variable, name: &str) -> bool {
@@ -139,12 +147,10 @@ impl Infer<'_, '_> {
 }
 impl DefinitionTypes {
     pub(crate) fn structural(&self) -> bool {
-        self.nodes
-            .iter()
-            .enumerate()
-            .filter(|(id, node)| node.parent == *id)
-            .all(|(_, node)| {
-                matches!(
+        for id in 0..self.nodes.len() {
+            let node = &self.nodes[id];
+            if node.parent == id
+                && !matches!(
                     node.shape,
                     Some(
                         Shape::Atom(_)
@@ -157,6 +163,10 @@ impl DefinitionTypes {
                             | Shape::Never
                     )
                 )
-            })
+            {
+                return false;
+            }
+        }
+        true
     }
 }

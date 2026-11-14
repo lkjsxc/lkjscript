@@ -123,16 +123,19 @@ pub(super) fn validate_report(
     definitions: BTreeMap<usize, super::definition_types::DefinitionTypes>,
 ) -> Result<(DefinitionEvidence, Vec<a::Diagnostic>)> {
     let mut roots = Vec::new();
-    for (index, function) in source.functions.iter().enumerate() {
+    for index in 0..source.functions.len() {
+        let function = &source.functions[index];
         if function.body.is_none() || !definitions.contains_key(&index) {
             continue;
         }
-        if function
-            .generics
-            .iter()
-            .any(|parameter| !parameter.lifetime)
-            || source.function_owner(a::FunctionId { index }) != a::FunctionOwner::Free
-        {
+        let mut generic = false;
+        for parameter in &function.generics {
+            if !parameter.lifetime {
+                generic = true;
+                break;
+            }
+        }
+        if generic || source.function_owner(a::FunctionId { index }) != a::FunctionOwner::Free {
             roots.push(index);
         }
     }
@@ -150,8 +153,8 @@ pub(super) fn validate_report(
             Vec::new(),
         ));
     }
-    let mut checked_roots = BTreeSet::new();
-    let mut problems = Vec::new();
+    let mut checked_roots = BTreeSet::<usize>::new();
+    let mut problems: Vec<a::Diagnostic> = Vec::new();
     for index in roots {
         let substitutions = compiler.definition_parameters(index)?;
         let function = compiler.instantiate(index, substitutions.clone())?;
@@ -178,9 +181,14 @@ pub(super) fn validate_report(
             compiler.register_drop(next_type)?;
             next_type += 1;
         }
-        if let Some((index, pending)) = compiler.pending_functions.get(next_function).cloned() {
+        let pending = match compiler.pending_functions.get(next_function) {
+            Some(pending) => Some(pending.clone()),
+            None => None,
+        };
+        if let Some((index, pending)) = pending {
             if let super::PendingFunction::Derived(instance) = pending {
-                compiler.functions[index] = compiler.compile_derived(index, &instance)?;
+                let body = compiler.compile_derived(index, &instance)?;
+                compiler.functions[index] = body;
                 checked_roots.insert(index);
             }
             next_function += 1;
@@ -191,23 +199,33 @@ pub(super) fn validate_report(
     // trait/builtin contract. It does not recursively re-check a specialization
     // of the callee. Each production definition has its own rigid root above;
     // nongeneric free functions still go through the normal concrete pipeline.
-    let declared: BTreeSet<usize> = compiler.instance_names.values().copied().collect();
-    checked_roots.extend(&compiler.closures.checked_functions);
+    let mut declared = BTreeSet::<usize>::new();
+    for function in compiler.instance_names.values() {
+        declared.insert(*function);
+    }
+    for function in &compiler.closures.checked_functions {
+        checked_roots.insert(*function);
+    }
     let callable_functions = compiler.assumed_callable_functions();
     let builtin_methods = compiler.validate_builtin_methods()?;
     let contracts = compiler.contracts.as_ref().unwrap();
-    for (index, function) in compiler.functions.iter_mut().enumerate() {
+    for index in 0..compiler.functions.len() {
+        let function = &mut compiler.functions[index];
         if checked_roots.contains(&index) {
             continue;
         }
         if let Some(witness) = contracts.methods.get(&index) {
-            let receiver = witness.substitutions.get("Self").copied().ok_or_else(|| {
-                err(
-                    a::Span::default(),
-                    "E_GENERIC",
-                    "trait witness is missing its receiver type",
-                )
-            })?;
+            let receiver = witness
+                .substitutions
+                .get(&"Self".to_string())
+                .copied()
+                .ok_or_else(|| {
+                    err(
+                        a::Span::default(),
+                        "E_GENERIC",
+                        "trait witness is missing its receiver type",
+                    )
+                })?;
             if !source.traits[witness.declaration]
                 .methods
                 .contains(&witness.method)
@@ -222,9 +240,15 @@ pub(super) fn validate_report(
                 ));
             }
         }
-        let builtin = callable_functions.contains(&index)
-            || builtin_methods.contains(&index)
-            || contracts.comparisons.values().any(|value| *value == index);
+        let mut builtin = callable_functions.contains(&index) || builtin_methods.contains(&index);
+        if !builtin {
+            for value in contracts.comparisons.values() {
+                if *value == index {
+                    builtin = true;
+                    break;
+                }
+            }
+        }
         if !declared.contains(&index) && !builtin {
             return Err(err(
                 a::Span {
@@ -244,21 +268,28 @@ pub(super) fn validate_report(
         }];
     }
     let mut refinement = compiler.closures.checked_functions.clone();
-    refinement.extend(&compiler.return_inference);
+    for function in &compiler.return_inference {
+        refinement.insert(*function);
+    }
     let (scopes, scoped_problems) = compiler.scoped_definitions(&checked_roots);
-    problems.extend(scoped_problems);
+    for problem in scoped_problems {
+        problems.push(problem);
+    }
     let mut program = k::Program {
         types: compiler.types,
         functions: compiler.functions,
         destructors: compiler.destructors,
     };
-    problems.extend(crate::check::refine_return_contracts(
-        &mut program,
-        &refinement,
-    ));
-    problems.extend(crate::check::scoped::check_definitions(&program, &scopes));
-    if let Err(errors) = crate::check::check_all(program) {
-        problems.extend(errors);
+    for problem in crate::check::refine_return_contracts(&mut program, &refinement) {
+        problems.push(problem);
+    }
+    for problem in crate::check::scoped::check_definitions(&program, &scopes) {
+        problems.push(problem);
+    }
+    if let Some(errors) = crate::check::check_all(program).err() {
+        for problem in errors {
+            problems.push(problem);
+        }
     }
     Ok((
         DefinitionEvidence {
@@ -310,12 +341,13 @@ impl Compiler<'_> {
         // Associated identities come from declared trait bounds. Establish all
         // of them before a callable signature resolves a sibling's I::Item,
         // regardless of the source order of generic parameter declarations.
-        for callable in [false, true] {
+        for phase in 0..2usize {
+            let callable = phase != 0;
             for parameter in parameters {
                 if parameter.lifetime {
                     continue;
                 }
-                let ty = substitutions[&parameter.name];
+                let ty = *substitutions.get(&parameter.name).unwrap();
                 for bound in &parameter.bounds {
                     if self.is_callable_bound(*bound) == callable {
                         self.assume_bound(ty, *bound, substitutions)?;
@@ -330,7 +362,7 @@ impl Compiler<'_> {
         let assumptions = self.contracts.as_mut().unwrap().rigid.get_mut(&ty).unwrap();
         assumptions.insert(TraitIdentity::Builtin(name.to_string()));
         for parent in crate::generics::builtin_parents(name) {
-            assumptions.insert(TraitIdentity::Builtin((*parent).to_string()));
+            assumptions.insert(TraitIdentity::Builtin(parent));
         }
         if name == "Copy" {
             self.types[ty].kind = k::TypeKind::Struct {
@@ -393,26 +425,25 @@ impl Compiler<'_> {
             };
             if let Some(trait_index) = trait_index {
                 let declaration = self.source.traits[trait_index].clone();
-                if declaration
-                    .generics
-                    .iter()
-                    .any(|parameter| !parameter.lifetime)
-                {
-                    return Err(err(
-                        node.span,
-                        "E_UNSUPPORTED",
-                        "parameterized trait witnesses need explicit type arguments",
-                    ));
+                for parameter in &declaration.generics {
+                    if !parameter.lifetime {
+                        return Err(err(
+                            node.span,
+                            "E_UNSUPPORTED",
+                            "parameterized trait witnesses need explicit type arguments",
+                        ));
+                    }
                 }
-                pending.extend_from_slice(&declaration.bounds);
+                for bound in &declaration.bounds {
+                    pending.push(*bound);
+                }
                 // Associated projections are introduced lazily. A valid bound
                 // such as A::Next: A must not eagerly create an infinite family.
-                self.contracts
-                    .as_mut()
-                    .unwrap()
-                    .traits
-                    .entry((ty, trait_index))
-                    .or_default();
+                let traits = &mut self.contracts.as_mut().unwrap().traits;
+                let key = (ty, trait_index);
+                if !traits.contains_key(&key) {
+                    traits.insert(key, BTreeMap::new());
+                }
             } else if !matches!(
                 builtin,
                 "Copy"
@@ -448,15 +479,15 @@ impl Compiler<'_> {
             let mut remaining = implementation.associated.clone();
             while !remaining.is_empty() {
                 let before = remaining.len();
-                let mut retry = Vec::new();
+                let mut retry: Vec<a::AssociatedType> = Vec::new();
                 for associated in remaining {
-                    let value = associated.value.ok_or_else(|| {
-                        err(
+                    let Some(value) = associated.value else {
+                        return Err(err(
                             associated.span,
                             "E_TRAIT",
                             "implementation associated type needs a definition",
-                        )
-                    })?;
+                        ));
+                    };
                     match self.resolve(value, &substitutions) {
                         Ok(ty) => {
                             substitutions.insert(format!("Self::{}", associated.name), ty);
@@ -486,7 +517,7 @@ impl Compiler<'_> {
                 .get_mut(&self_ty)
                 .unwrap()
                 .insert(TraitIdentity::Declared(trait_index));
-            let mut associated = BTreeMap::new();
+            let mut associated: BTreeMap<String, usize> = BTreeMap::new();
             for item in &declaration.associated {
                 let ty = self.rigid_type(&format!("Self::{}", item.name));
                 associated.insert(item.name.clone(), ty);
@@ -502,7 +533,11 @@ impl Compiler<'_> {
             }
             for item in &declaration.associated {
                 for bound in &item.bounds {
-                    self.assume_bound(associated[&item.name], *bound, &substitutions)?;
+                    self.assume_bound(
+                        *associated.get(&item.name).unwrap(),
+                        *bound,
+                        &substitutions,
+                    )?;
                 }
             }
         }
@@ -525,7 +560,14 @@ impl Compiler<'_> {
                     crate::generics::bound_identity(self.source, path)
                 {
                     for item in &self.source.traits[trait_index].associated {
-                        if !pending.iter().any(|entry| entry.name == item.name) {
+                        let mut found = false;
+                        for entry in &pending {
+                            if entry.name == item.name {
+                                found = true;
+                                break;
+                            }
+                        }
+                        if !found {
                             pending.push(item.clone());
                         }
                     }
@@ -535,16 +577,16 @@ impl Compiler<'_> {
         let mut result = BTreeMap::new();
         while !pending.is_empty() {
             let before = pending.len();
-            let mut retry = Vec::new();
+            let mut retry: Vec<a::AssociatedType> = Vec::new();
             let mut failure = None;
             for associated in pending {
-                let value = associated.value.ok_or_else(|| {
-                    err(
+                let Some(value) = associated.value else {
+                    return Err(err(
                         associated.span,
                         "E_TRAIT",
                         "associated witness is missing its type definition",
-                    )
-                })?;
+                    ));
+                };
                 match self.resolve(value, &environment) {
                     Ok(ty) => {
                         environment.insert(format!("Self::{}", associated.name), ty);
@@ -573,8 +615,9 @@ impl Compiler<'_> {
             if parameter.lifetime {
                 continue;
             }
-            let Some(ty) = substitutions.get(&parameter.name).copied() else {
-                continue;
+            let ty = match substitutions.get(&parameter.name) {
+                Some(ty) => *ty,
+                None => continue,
             };
             if self
                 .contracts
@@ -625,14 +668,17 @@ impl Compiler<'_> {
         };
         let mut parameters = function.generics.clone();
         if let Some(owner) = owner {
-            parameters.extend(self.source.impls[owner].generics.clone());
+            for parameter in &self.source.impls[owner].generics {
+                parameters.push(parameter.clone());
+            }
         }
         self.prepare_callable_arguments(&parameters, substitutions)?;
         self.prepare_parameter_associated(&parameters, substitutions)?;
         if let Some(owner) = owner {
             let mut environment = substitutions.clone();
-            if !environment.contains_key("Self") {
-                let ty = self.resolve(self.source.impls[owner].target, &environment)?;
+            if !environment.contains_key(&"Self".to_string()) {
+                let target = self.source.impls[owner].target;
+                let ty = self.resolve(target, &environment)?;
                 environment.insert("Self".to_string(), ty);
             }
             let associated = self.implementation_associated(owner, environment)?;
@@ -655,24 +701,27 @@ impl Compiler<'_> {
             .unwrap()
             .traits
             .get(&(receiver, trait_index))
-            .and_then(|items| items.get(name))
+            .and_then(|items| items.get(&name.to_string()))
         {
             return Ok(*ty);
         }
-        let declaration = self.source.traits[trait_index]
-            .associated
-            .iter()
-            .find(|item| item.name == name)
-            .cloned()
-            .unwrap();
+        let mut declaration: Option<a::AssociatedType> = None;
+        for item in &self.source.traits[trait_index].associated {
+            if item.name == name {
+                declaration = Some(item.clone());
+                break;
+            }
+        }
+        let declaration = declaration.unwrap();
         let ty = self.rigid_type(&format!("t{receiver}::trait{trait_index}::{name}"));
-        self.contracts
-            .as_mut()
-            .unwrap()
-            .traits
-            .entry((receiver, trait_index))
-            .or_default()
-            .insert(name.to_string(), ty);
+        {
+            let traits = &mut self.contracts.as_mut().unwrap().traits;
+            let key = (receiver, trait_index);
+            if !traits.contains_key(&key) {
+                traits.insert(key, BTreeMap::new());
+            }
+            traits.get_mut(&key).unwrap().insert(name.to_string(), ty);
+        }
         let mut substitutions = BTreeMap::new();
         substitutions.insert("Self".to_string(), receiver);
         substitutions.insert(format!("Self::{name}"), ty);
@@ -688,26 +737,33 @@ impl Compiler<'_> {
         substitutions: &BTreeMap<String, usize>,
         span: a::Span,
     ) -> Result<Option<usize>> {
-        let Some(contracts) = &self.contracts else {
+        if self.contracts.is_none() {
             return Ok(None);
-        };
-        let Some((owner, name)) = path.name.rsplit_once("::") else {
-            return Ok(None);
-        };
-        let Some(ty) = substitutions.get(owner) else {
-            return Ok(None);
-        };
-        let mut declarations = Vec::new();
-        for (receiver, trait_index) in contracts.traits.keys() {
-            if receiver == ty
-                && self.source.traits[*trait_index]
-                    .associated
-                    .iter()
-                    .any(|item| item.name == name)
-            {
-                declarations.push(*trait_index);
-            }
         }
+        let Some(separator) = path.name.rfind("::") else {
+            return Ok(None);
+        };
+        let owner = &path.name.as_str()[..separator];
+        let name = &path.name.as_str()[separator + 2..];
+        let ty = match substitutions.get(&owner.to_string()) {
+            Some(ty) => *ty,
+            None => return Ok(None),
+        };
+        let declarations = {
+            let contracts = self.contracts.as_ref().unwrap();
+            let mut declarations = Vec::new();
+            for (receiver, trait_index) in contracts.traits.keys() {
+                if *receiver == ty {
+                    for item in &self.source.traits[*trait_index].associated {
+                        if item.name == name {
+                            declarations.push(*trait_index);
+                            break;
+                        }
+                    }
+                }
+            }
+            declarations
+        };
         if declarations.len() > 1 {
             return Err(err(
                 span,
@@ -716,7 +772,7 @@ impl Compiler<'_> {
             ));
         }
         if let Some(trait_index) = declarations.first() {
-            Ok(Some(self.associated_identity(*ty, *trait_index, name)?))
+            Ok(Some(self.associated_identity(ty, *trait_index, name)?))
         } else {
             Ok(None)
         }
@@ -726,7 +782,7 @@ impl Compiler<'_> {
         let Some(contracts) = &self.contracts else {
             return false;
         };
-        let mut seen = BTreeSet::new();
+        let mut seen = BTreeSet::<usize>::new();
         let mut pending = vec![ty];
         while let Some(ty) = pending.pop() {
             if !seen.insert(ty) {
@@ -742,11 +798,15 @@ impl Compiler<'_> {
                 | k::TypeKind::Box { inner }
                 | k::TypeKind::Array { inner, .. } => pending.push(*inner),
                 k::TypeKind::Struct { fields, .. } => {
-                    pending.extend(fields.iter().map(|field| field.ty))
+                    for field in fields {
+                        pending.push(field.ty);
+                    }
                 }
                 k::TypeKind::Enum { variants, .. } => {
                     for variant in variants {
-                        pending.extend(variant.fields.iter().map(|field| field.ty));
+                        for field in &variant.fields {
+                            pending.push(field.ty);
+                        }
                     }
                 }
                 _ => {}
@@ -814,14 +874,13 @@ impl Compiler<'_> {
         method: BuiltinMethod,
         span: a::Span,
     ) -> Result<usize> {
-        if !self
+        let rigid = self
             .contracts
             .as_ref()
             .unwrap()
             .rigid
-            .contains_key(&receiver)
-            || !self.satisfies_bound(receiver, method.required())
-        {
+            .contains_key(&receiver);
+        if !rigid || !self.satisfies_bound(receiver, method.required()) {
             return Err(err(
                 span,
                 "E_TRAIT",
@@ -871,33 +930,36 @@ impl Compiler<'_> {
 
     fn validate_builtin_methods(&mut self) -> Result<BTreeSet<usize>> {
         let methods = self.contracts.as_ref().unwrap().builtin_methods.clone();
-        let mut checked = BTreeSet::new();
+        let mut checked = BTreeSet::<usize>::new();
         for ((receiver, method), index) in &methods {
-            let function = &self.functions[*index];
-            let signature_matches = function.params == method.arguments() + 1
-                && function.locals.len() == function.params
-                && function.result == method.result(*receiver)
-                && function.return_source.is_none()
-                && function
-                    .locals
-                    .iter()
-                    .enumerate()
-                    .all(|(parameter, local)| {
-                        matches!(self.types[local.ty].kind,
+            let (signature_matches, file) = {
+                let function = &self.functions[*index];
+                let mut signature_matches = function.params == method.arguments() + 1
+                    && function.locals.len() == function.params
+                    && function.result == method.result(*receiver)
+                    && function.return_source.is_none();
+                if signature_matches {
+                    for parameter in 0..function.locals.len() {
+                        let local = &function.locals[parameter];
+                        if !matches!(self.types[local.ty].kind,
                         k::TypeKind::Ref { inner, mutable }
                         if inner == *receiver
                             && mutable == (parameter == 0 && *method == BuiltinMethod::CloneFrom))
-                    });
-            let file = function.file;
-            if !self
+                        {
+                            signature_matches = false;
+                            break;
+                        }
+                    }
+                }
+                (signature_matches, function.file)
+            };
+            let rigid = self
                 .contracts
                 .as_ref()
                 .unwrap()
                 .rigid
-                .contains_key(receiver)
-                || !self.satisfies_bound(*receiver, method.required())
-                || !signature_matches
-            {
+                .contains_key(receiver);
+            if !rigid || !self.satisfies_bound(*receiver, method.required()) || !signature_matches {
                 return Err(err(
                     a::Span {
                         file,
@@ -919,17 +981,25 @@ impl Compiler<'_> {
         expression: a::ExprId,
         span: a::Span,
     ) -> Result<Option<Instance>> {
+        let selection = if self.contracts.is_none() {
+            match self.method_selections.get(&expression) {
+                Some(selection) => Some(selection.clone()),
+                None => None,
+            }
+        } else {
+            None
+        };
         if self.contracts.is_some() {
-            let candidates: Vec<_> = self
-                .declared_methods(base, name)?
-                .into_iter()
-                .filter(|candidate| {
-                    self.source.functions[candidate.method]
-                        .params
-                        .first()
-                        .is_none_or(|p| p.name != "self")
-                })
-                .collect();
+            let mut candidates = Vec::new();
+            for candidate in self.declared_methods(base, name)? {
+                if self.source.functions[candidate.method]
+                    .params
+                    .first()
+                    .is_none_or(|p| p.name != "self")
+                {
+                    candidates.push(candidate);
+                }
+            }
             if candidates.len() > 1 {
                 return Err(err(
                     span,
@@ -939,7 +1009,7 @@ impl Compiler<'_> {
                     ),
                 ));
             }
-            if let Some(witness) = candidates.into_iter().next() {
+            if let Some(witness) = candidates.pop() {
                 self.method_selections.insert(
                     expression,
                     MethodSelection {
@@ -955,7 +1025,7 @@ impl Compiler<'_> {
         } else if let Some(MethodSelection {
             target: MethodTarget::Trait(identity),
             ..
-        }) = self.method_selections.get(&expression).cloned()
+        }) = selection
         {
             if !self.satisfies_identity(base, &identity) {
                 return Err(err(
@@ -965,12 +1035,11 @@ impl Compiler<'_> {
                 ));
             }
             if let Some(witness) = self.implementation_witness(base, &identity) {
-                if let Some(source) = self.source.impls[witness.implementation]
-                    .methods
-                    .iter()
-                    .copied()
-                    .find(|index| self.source.functions[*index].name == name)
-                {
+                if let Some(source) = named_method(
+                    self.source,
+                    &self.source.impls[witness.implementation].methods,
+                    name,
+                ) {
                     let mut substitutions = witness.substitutions;
                     substitutions.insert("Self".to_string(), base);
                     return Ok(Some(Instance {
@@ -1011,15 +1080,18 @@ impl Compiler<'_> {
     }
 
     fn declared_methods(&mut self, base: usize, name: &str) -> Result<Vec<MethodWitness>> {
-        let Some(contracts) = &self.contracts else {
-            return Ok(Vec::new());
+        let declarations = {
+            let Some(contracts) = &self.contracts else {
+                return Ok(Vec::new());
+            };
+            let mut declarations = Vec::new();
+            for (receiver, trait_index) in contracts.traits.keys() {
+                if *receiver == base {
+                    declarations.push(*trait_index);
+                }
+            }
+            declarations
         };
-        let declarations: Vec<_> = contracts
-            .traits
-            .keys()
-            .filter(|(receiver, _)| *receiver == base)
-            .map(|(_, trait_index)| *trait_index)
-            .collect();
         let mut candidates = Vec::new();
         for trait_index in declarations {
             let declaration = self.source.traits[trait_index].clone();
@@ -1111,7 +1183,7 @@ impl super::Builder<'_, '_> {
         args: &[usize],
     ) -> Result<(usize, usize)> {
         let span = self.compiler.source.exprs[expression].span;
-        let name = match &self.compiler.source.exprs[expression].kind {
+        let name: String = match &self.compiler.source.exprs[expression].kind {
             a::Expr::Method { name, .. } => name.clone(),
             _ => {
                 return Err(err(
@@ -1130,13 +1202,11 @@ impl super::Builder<'_, '_> {
         }
         let implementation = self.compiler.implementation_witness(base, identity);
         if let Some(witness) = implementation {
-            let implementation = &self.compiler.source.impls[witness.implementation];
-            if let Some(index) = implementation
-                .methods
-                .iter()
-                .find(|index| self.compiler.source.functions[**index].name == name)
-                .copied()
-            {
+            let method = {
+                let implementation = &self.compiler.source.impls[witness.implementation];
+                named_method(self.compiler.source, &implementation.methods, &name)
+            };
+            if let Some(index) = method {
                 return self.source_method(
                     target,
                     base,
@@ -1229,18 +1299,14 @@ impl super::Builder<'_, '_> {
         self.compiler.method_access(index, self.scope, span)?;
         let definition = self.compiler.source.functions[index].clone();
         substitutions.insert("Self".to_string(), base);
-        let parameters: Vec<_> = definition
-            .generics
-            .iter()
-            .filter(|parameter| !parameter.lifetime)
-            .collect();
+        let parameters = type_parameter_indices(&definition.generics);
         if !types.is_empty() {
             if types.len() != parameters.len() {
                 return Err(err(span, "E_TYPE", "wrong generic method argument count"));
             }
-            for (parameter, argument) in parameters.iter().zip(types) {
-                let ty = self.compiler.resolve(*argument, &self.sub)?;
-                substitutions.insert(parameter.name.clone(), ty);
+            for index in 0..parameters.len() {
+                let ty = self.compiler.resolve(types[index], &self.sub)?;
+                substitutions.insert(definition.generics[parameters[index]].name.clone(), ty);
             }
         }
         if definition.params.is_empty() {
@@ -1273,10 +1339,11 @@ impl super::Builder<'_, '_> {
             ));
         };
         let mut values = vec![receiver.0];
-        for (parameter, argument) in definition.params[1..].iter().zip(args) {
-            let expected = self.compiler.resolve(parameter.ty, &substitutions).ok();
-            let value = self.expr(*argument, expected)?;
-            self.infer_type(parameter.ty, value.1, &mut substitutions)?;
+        for index in 0..args.len() {
+            let ty = definition.params[index + 1].ty;
+            let expected = self.compiler.resolve(ty, &substitutions).ok();
+            let value = self.expr(args[index], expected)?;
+            self.infer_type(ty, value.1, &mut substitutions)?;
             values.push(value.0);
         }
         let called = self
@@ -1315,7 +1382,7 @@ impl super::Builder<'_, '_> {
         });
         let proven =
             builtin.filter(|method| self.compiler.satisfies_bound(base, method.required()));
-        if candidates.len() + usize::from(proven.is_some()) > 1 {
+        if candidates.len() + if proven.is_some() { 1 } else { 0 } > 1 {
             return Err(err(
                 span,
                 "E_TRAIT",
@@ -1338,9 +1405,9 @@ impl super::Builder<'_, '_> {
                 .unwrap()
                 .target =
                 MethodTarget::Trait(TraitIdentity::Builtin(method.required().to_string()));
-            return self
-                .builtin_method(target, base, method, types, args, span)
-                .map(Some);
+            return Ok(Some(
+                self.builtin_method(target, base, method, types, args, span)?,
+            ));
         }
         if candidates.is_empty() {
             if let Some(method) = builtin {
@@ -1370,18 +1437,14 @@ impl super::Builder<'_, '_> {
         let index = witness.method;
         let mut substitutions = witness.substitutions;
         let function = self.compiler.source.functions[index].clone();
-        let parameters: Vec<_> = function
-            .generics
-            .iter()
-            .filter(|parameter| !parameter.lifetime)
-            .collect();
+        let parameters = type_parameter_indices(&function.generics);
         if !types.is_empty() {
             if types.len() != parameters.len() {
                 return Err(err(span, "E_TYPE", "wrong generic method argument count"));
             }
-            for (parameter, argument) in parameters.iter().zip(types) {
-                let ty = self.compiler.resolve(*argument, &self.sub)?;
-                substitutions.insert(parameter.name.clone(), ty);
+            for index in 0..parameters.len() {
+                let ty = self.compiler.resolve(types[index], &self.sub)?;
+                substitutions.insert(function.generics[parameters[index]].name.clone(), ty);
             }
         }
         if function.params.len() != args.len() + 1 {
@@ -1399,10 +1462,11 @@ impl super::Builder<'_, '_> {
             _ => self.read(target.clone(), span.line)?,
         };
         let mut values = vec![receiver.0];
-        for (parameter, argument) in function.params[1..].iter().zip(args) {
-            let expected = self.compiler.resolve(parameter.ty, &substitutions).ok();
-            let value = self.expr(*argument, expected)?;
-            self.infer_type(parameter.ty, value.1, &mut substitutions)?;
+        for index in 0..args.len() {
+            let ty = function.params[index + 1].ty;
+            let expected = self.compiler.resolve(ty, &substitutions).ok();
+            let value = self.expr(args[index], expected)?;
+            self.infer_type(ty, value.1, &mut substitutions)?;
             values.push(value.0);
         }
         let called = self.compiler.instantiate(index, substitutions.clone())?;
@@ -1426,4 +1490,23 @@ impl super::Builder<'_, '_> {
         );
         Ok(Some((dst, result)))
     }
+}
+
+fn named_method(source: &a::Program, methods: &[usize], name: &str) -> Option<usize> {
+    for method in methods {
+        if source.functions[*method].name == name {
+            return Some(*method);
+        }
+    }
+    None
+}
+
+fn type_parameter_indices(parameters: &[a::GenericParam]) -> Vec<usize> {
+    let mut indices = Vec::new();
+    for index in 0..parameters.len() {
+        if !parameters[index].lifetime {
+            indices.push(index);
+        }
+    }
+    indices
 }

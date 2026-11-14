@@ -5,6 +5,7 @@ pub mod diagnostic;
 pub mod diagnostics;
 pub mod elaborate;
 pub(crate) mod facts;
+pub mod frontend;
 pub mod generics;
 pub mod json;
 pub mod k;

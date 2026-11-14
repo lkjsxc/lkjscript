@@ -12,39 +12,42 @@ impl Infer<'_, '_> {
         type_args: &[a::TypeId],
         arguments: &[Variable],
         result: Variable,
-        (scope, span): (a::ModuleId, a::Span),
+        location: (a::ModuleId, a::Span),
     ) -> Result<bool> {
+        let (scope, span) = location;
         let Some(Shape::Nominal(declaration, receiver_arguments)) = self.shape(receiver) else {
             return Ok(false);
         };
-        let head = &self.source.declarations[declaration].name;
-        let candidates = self
+        let head = self.source.declarations[declaration].name.as_str();
+        let mut candidates = Vec::new();
+        for index in self
             .implementations
             .method_candidates_by_head(Some(head), name)
-            .into_iter()
-            .filter(|index| self.source.impls[*index].trait_ty.is_none())
-            .collect::<Vec<_>>();
-        let [implementation] = candidates.as_slice() else {
-            return Ok(false);
-        };
-        let implementation = self.source.impls[*implementation].clone();
-        if implementation
-            .generics
-            .iter()
-            .any(|parameter| !parameter.bounds.is_empty())
         {
+            if self.source.impls[index].trait_ty.is_none() {
+                candidates.push(index);
+            }
+        }
+        if candidates.len() != 1 {
             return Ok(false);
         }
-        let methods = implementation
-            .methods
-            .iter()
-            .copied()
-            .filter(|index| self.source.functions[*index].name == name)
-            .collect::<Vec<_>>();
-        let [method] = methods.as_slice() else {
+        let implementation = self.source.impls[candidates[0]].clone();
+        for parameter in &implementation.generics {
+            if !parameter.bounds.is_empty() {
+                return Ok(false);
+            }
+        }
+        let mut methods = Vec::new();
+        for index in &implementation.methods {
+            if self.source.functions[*index].name == name {
+                methods.push(*index);
+            }
+        }
+        if methods.len() != 1 {
             return Ok(false);
-        };
-        let function = &self.source.functions[*method];
+        }
+        let method = methods[0];
+        let function = &self.source.functions[method];
         if !crate::resolve::visible(
             self.source,
             self.names.scope(&function.module),
@@ -53,7 +56,7 @@ impl Infer<'_, '_> {
         ) || function.params.first().is_none_or(|p| p.name != "self")
             || function.params.len() != arguments.len() + 1
             || (!type_args.is_empty()
-                && type_args.len() != function.generics.iter().filter(|p| !p.lifetime).count())
+                && type_args.len() != type_parameter_count(&function.generics))
         {
             return Ok(false);
         }
@@ -73,15 +76,20 @@ impl Infer<'_, '_> {
         // Owner<A, B> with each impl parameter used once covers the entire
         // canonical receiver head. Owner<Option<A>>, fixed arguments, repeated
         // parameters and unresolved prerequisites cannot establish this fact.
-        let parameters = environment.values().copied().collect::<BTreeSet<_>>();
-        if target_arguments.iter().copied().collect::<BTreeSet<_>>() != parameters
-            || target_arguments.len() != parameters.len()
-        {
+        let mut parameters = BTreeSet::<Variable>::new();
+        for parameter in environment.values() {
+            parameters.insert(*parameter);
+        }
+        let mut targets = BTreeSet::<Variable>::new();
+        for argument in &target_arguments {
+            targets.insert(*argument);
+        }
+        if targets != parameters || target_arguments.len() != parameters.len() {
             return Ok(false);
         }
         self.unify(target, receiver, span)?;
         environment.insert("Self".to_string(), receiver);
-        let output = self.header_signature(*method, type_args, arguments, environment, 1, span)?;
+        let output = self.header_signature(method, type_args, arguments, environment, 1, span)?;
         self.unify(result, output, span)?;
         Ok(true)
     }
@@ -98,17 +106,22 @@ impl Infer<'_, '_> {
         type_args: &[a::TypeId],
         arguments: &[Variable],
         result: Variable,
-        (id, scope, span): (usize, a::ModuleId, a::Span),
+        location: (usize, a::ModuleId, a::Span),
     ) -> Result<bool> {
+        let (id, scope, span) = location;
         if matches!(self.shape(receiver), None | Some(Shape::Rigid(_))) {
             self.watch(receiver, id);
             return Ok(false);
         }
         let head = self.shape_head(receiver);
+        let head_view = match &head {
+            Some(head) => Some(head.as_str()),
+            None => None,
+        };
         let candidates = self
             .implementations
-            .method_candidates_by_head(head.as_deref(), name);
-        let mut selected = None;
+            .method_candidates_by_head(head_view, name);
+        let mut selected: Option<(usize, usize, BTreeMap<String, Variable>)> = None;
         for candidate in candidates {
             let implementation = self.source.impls[candidate].clone();
             let trait_declaration =
@@ -149,8 +162,7 @@ impl Infer<'_, '_> {
                     || function.params.first().is_none_or(|p| p.name != "self")
                     || function.params.len() != arguments.len() + 1
                     || (!type_args.is_empty()
-                        && type_args.len()
-                            != function.generics.iter().filter(|p| !p.lifetime).count())
+                        && type_args.len() != type_parameter_count(&function.generics))
                 {
                     return Ok(false);
                 }
@@ -163,11 +175,8 @@ impl Infer<'_, '_> {
         let Some((candidate, method, mut environment)) = selected else {
             return Ok(false);
         };
-        self.parameter_equations(
-            &self.source.impls[candidate].generics.clone(),
-            &mut environment,
-            false,
-        )?;
+        let generics = self.source.impls[candidate].generics.clone();
+        self.parameter_equations(&generics, &mut environment, false)?;
         if let Some(bound) = self.source.impls[candidate].trait_ty {
             self.trait_equations(receiver, "Self", bound, &mut environment, false)?;
         }
@@ -187,9 +196,11 @@ impl Infer<'_, '_> {
         scope: a::ModuleId,
         span: a::Span,
     ) -> Result<Option<Variable>> {
-        let Some((owner, name)) = path.name.rsplit_once("::") else {
+        let Some(separator) = path.name.rfind("::") else {
             return Ok(None);
         };
+        let owner = &path.name.as_str()[..separator];
+        let name = &path.name.as_str()[separator + 2..];
         let Some(declaration) = path.declaration else {
             return Ok(None);
         };
@@ -226,11 +237,11 @@ impl Infer<'_, '_> {
                 }
             }
         }
-        let [(implementation, method)] = candidates.as_slice() else {
+        if candidates.len() != 1 {
             return Ok(None);
-        };
-        let implementation = self.source.impls[*implementation].clone();
-        let method = *method;
+        }
+        let (implementation, method) = candidates[0];
+        let implementation = self.source.impls[implementation].clone();
         let mut environment = BTreeMap::new();
         for parameter in &implementation.generics {
             if !parameter.lifetime {
@@ -243,13 +254,24 @@ impl Infer<'_, '_> {
         }
         environment.insert("Self".to_string(), target);
         self.parameter_equations(&implementation.generics, &mut environment, false)?;
+        let no_type_args: Vec<a::TypeId> = Vec::new();
         Ok(Some(self.header_signature(
             method,
-            &[],
+            &no_type_args,
             arguments,
             environment,
             0,
             span,
         )?))
     }
+}
+
+fn type_parameter_count(parameters: &[a::GenericParam]) -> usize {
+    let mut count = 0;
+    for parameter in parameters {
+        if !parameter.lifetime {
+            count += 1;
+        }
+    }
+    count
 }

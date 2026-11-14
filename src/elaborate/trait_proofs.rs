@@ -64,7 +64,10 @@ impl Compiler<'_> {
             bound: bound.clone(),
         };
         let outermost = self.trait_proofs.is_none();
-        let session = self.trait_proofs.get_or_insert_with(Session::default);
+        if self.trait_proofs.is_none() {
+            self.trait_proofs = Some(Session::default());
+        }
+        let session = self.trait_proofs.as_mut().unwrap();
         if let Some(proof) = session.proved.get(&goal) {
             return Some(proof.clone());
         }
@@ -85,14 +88,28 @@ impl Compiler<'_> {
                 applications: &self.applications,
                 rigid,
             });
-            self.trait_proofs
-                .as_mut()
-                .unwrap()
-                .proved
-                .extend(solver.completed());
+            for (completed_goal, evidence) in solver.completed() {
+                self.trait_proofs
+                    .as_mut()
+                    .unwrap()
+                    .proved
+                    .insert(completed_goal, evidence);
+            }
             match step {
                 BoundStep::Done(valid) => {
-                    break valid.then(|| self.trait_proofs.as_ref().unwrap().proved[&goal].clone());
+                    break if valid {
+                        Some(
+                            self.trait_proofs
+                                .as_ref()
+                                .unwrap()
+                                .proved
+                                .get(&goal)
+                                .unwrap()
+                                .clone(),
+                        )
+                    } else {
+                        None
+                    };
                 }
                 BoundStep::Infer { goal, witness } => {
                     let completed = self.infer_implementation(witness).ok();

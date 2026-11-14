@@ -48,3 +48,18 @@ len_zero = "allow"
 needless_return = "allow"
 ptr_arg = "allow"
 map_entry = "allow"
+
+# Map lookups use the declared key type; heterogeneous borrowed-key lookup is absent.
+unnecessary_to_owned = "allow"
+# Keep explicit Option handling where helpers are absent or a lookup loan must end.
+option_as_ref_deref = "allow"
+unnecessary_unwrap = "allow"
+manual_unwrap_or_default = "allow"
+# Concrete cursors and Vec iteration avoid absent adapters and owned-array IntoIterator.
+explicit_counter_loop = "allow"
+while_let_on_iterator = "allow"
+useless_vec = "allow"
+# These host convenience methods/functions are outside the current source library.
+manual_swap = "allow"
+manual_strip = "allow"
+implicit_saturating_sub = "allow"

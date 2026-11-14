@@ -19,6 +19,17 @@ fn parameters(source: &a::Program, declaration: a::DeclarationId) -> Vec<a::Gene
 }
 
 impl Builder<'_, '_> {
+    fn constructor_type_arguments(&self, arguments: &[a::TypeId]) -> Vec<a::TypeId> {
+        let mut types = Vec::new();
+        for id in arguments {
+            if !matches!(&self.compiler.source.types[*id].kind, a::Type::Path(path) if path.name.starts_with('\''))
+            {
+                types.push(*id);
+            }
+        }
+        types
+    }
+
     /// Preserve the distinction between a source coercion context and a type
     /// discovered from the operands. A generic T inferred to be &mut U still
     /// moves its first operand; it does not grant an automatic reborrow.
@@ -71,16 +82,16 @@ impl Builder<'_, '_> {
                         return false;
                     };
                     let alias = &self.compiler.source.aliases[index];
-                    let arguments = path.args.iter().filter(|id| !matches!(&self.compiler.source.types[**id].kind, a::Type::Path(path) if path.name.starts_with('\'')));
-                    let bindings = alias
-                        .generics
-                        .iter()
-                        .filter(|parameter| !parameter.lifetime)
-                        .zip(arguments)
-                        .map(|(parameter, argument)| {
-                            (parameter.name.clone(), (*argument, environment))
-                        })
-                        .collect();
+                    let arguments = self.constructor_type_arguments(&path.args);
+                    let mut bindings: BTreeMap<String, (a::TypeId, usize)> = BTreeMap::new();
+                    let mut argument = 0;
+                    for parameter in &alias.generics {
+                        if !parameter.lifetime && argument < arguments.len() {
+                            bindings
+                                .insert(parameter.name.clone(), (arguments[argument], environment));
+                            argument += 1;
+                        }
+                    }
                     environments.push(bindings);
                     environment = environments.len() - 1;
                     ty = alias.ty;
@@ -113,13 +124,14 @@ impl Builder<'_, '_> {
         infer_omitted: bool,
         span: a::Span,
     ) -> Result<BTreeMap<String, usize>> {
-        let parameters: Vec<_> = parameters(self.compiler.source, declaration)
-            .into_iter()
-            .filter(|parameter| !parameter.lifetime)
-            .collect();
-        let arguments: Vec<_> = arguments.iter().copied().filter(|id| {
-            !matches!(&self.compiler.source.types[*id].kind, a::Type::Path(path) if path.name.starts_with('\''))
-        }).collect();
+        let mut filtered = Vec::new();
+        for parameter in parameters(self.compiler.source, declaration) {
+            if !parameter.lifetime {
+                filtered.push(parameter);
+            }
+        }
+        let parameters = filtered;
+        let arguments = self.constructor_type_arguments(arguments);
         if arguments.len() != parameters.len() && !(infer_omitted && arguments.is_empty()) {
             return Err(err(
                 span,
@@ -150,12 +162,14 @@ impl Builder<'_, '_> {
                 "constructor names a different declaration",
             ));
         }
-        let (_, arguments) = &self.compiler.applications[&ty];
-        for (parameter, argument) in parameters(self.compiler.source, declaration)
-            .iter()
-            .filter(|parameter| !parameter.lifetime)
-            .zip(arguments)
-        {
+        let (_, arguments) = self.compiler.applications.get(&ty).unwrap();
+        let mut argument_index = 0;
+        for parameter in parameters(self.compiler.source, declaration) {
+            if parameter.lifetime || argument_index >= arguments.len() {
+                continue;
+            }
+            let argument = &arguments[argument_index];
+            argument_index += 1;
             if substitutions
                 .get(&parameter.name)
                 .is_some_and(|previous| previous != argument)
@@ -201,7 +215,7 @@ impl Builder<'_, '_> {
         } else if path.name == "Self" || path.name.starts_with("Self::") {
             let ty = self
                 .sub
-                .get("Self")
+                .get(&"Self".to_string())
                 .copied()
                 .ok_or_else(|| err(span, "E_TYPE", "Self has no concrete constructor type"))?;
             resolved = Some(ty);
@@ -310,11 +324,13 @@ impl Builder<'_, '_> {
         target: ConstructorTarget,
         span: a::Span,
     ) -> Result<usize> {
-        let definition = &self.compiler.source.declarations[target.declaration];
+        let name = self.compiler.source.declarations[target.declaration]
+            .name
+            .clone();
         let ty = self.compiler.named_type(
             &a::Path {
                 declaration: Some(target.declaration),
-                name: definition.name.clone(),
+                name,
                 args: Vec::new(),
             },
             &target.substitutions,
@@ -330,9 +346,13 @@ impl Builder<'_, '_> {
         if let Some((index, mut substitutions)) = target.alias {
             let alias = self.compiler.source.aliases[index].clone();
             self.infer_type(alias.ty, ty, &mut substitutions)?;
-            if alias.generics.iter().any(|parameter| {
-                !parameter.lifetime && !substitutions.contains_key(&parameter.name)
-            }) {
+            let mut missing = false;
+            for parameter in &alias.generics {
+                if !parameter.lifetime && !substitutions.contains_key(&parameter.name) {
+                    missing = true;
+                }
+            }
+            if missing {
                 return Err(err(
                     span,
                     "E_TYPE",

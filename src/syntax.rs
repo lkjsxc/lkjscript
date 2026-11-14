@@ -39,6 +39,37 @@ fn span_at(start: usize, end: usize, line: usize, column: usize) -> Span {
     }
 }
 
+fn unicode_escape(digits: &str) -> Option<u32> {
+    let mut at = if digits.starts_with('+') { 1 } else { 0 };
+    if at == digits.len() {
+        return None;
+    }
+    let mut value = 0u32;
+    while at < digits.len() {
+        let byte = digits.as_bytes()[at];
+        let digit = if byte.is_ascii_digit() {
+            (byte - b'0') as u32
+        } else if b'a' <= byte && byte <= b'f' {
+            (byte - b'a' + 10) as u32
+        } else if b'A' <= byte && byte <= b'F' {
+            (byte - b'A' + 10) as u32
+        } else {
+            return None;
+        };
+        value = value.checked_mul(16)?.checked_add(digit)?;
+        at += 1;
+    }
+    Some(value)
+}
+
+fn trim_module_separators(path: &str) -> &str {
+    let mut end = path.len();
+    while end >= 2 && &path[end - 2..end] == "::" {
+        end -= 2;
+    }
+    &path[..end]
+}
+
 struct Lexer<'a> {
     source: &'a str,
     at: usize,
@@ -92,9 +123,9 @@ impl Lexer<'_> {
                             let b = self.byte(0);
                             let digit = if b.is_ascii_digit() {
                                 (b - b'0') as u32
-                            } else if (b'a'..=b'f').contains(&b) {
+                            } else if b'a' <= b && b <= b'f' {
                                 (b - b'a' + 10) as u32
-                            } else if (b'A'..=b'F').contains(&b) {
+                            } else if b'A' <= b && b <= b'F' {
                                 (b - b'A' + 10) as u32
                             } else {
                                 return Err(self.error("expected two hexadecimal digits after \\x"));
@@ -136,9 +167,9 @@ impl Lexer<'_> {
                             return Err(self.error("unterminated Unicode escape"));
                         }
                         self.advance();
-                        let value = match u32::from_str_radix(&digits, 16) {
-                            Ok(value) => value,
-                            Err(_) => return Err(self.error("invalid Unicode escape")),
+                        let value = match unicode_escape(&digits) {
+                            Some(value) => value,
+                            None => return Err(self.error("invalid Unicode escape")),
                         };
                         match char::from_u32(value) {
                             Some(ch) => result.push(ch),
@@ -153,10 +184,12 @@ impl Lexer<'_> {
                     _ => return Err(self.error("unknown escape sequence")),
                 }
             } else {
-                let rest = &self.source[self.at..];
-                let ch = match rest.chars().next() {
-                    Some(ch) => ch,
-                    None => return Err(self.error("unterminated literal")),
+                let ch = {
+                    let rest = &self.source[self.at..];
+                    match rest.chars().next() {
+                        Some(ch) => ch,
+                        None => return Err(self.error("unterminated literal")),
+                    }
                 };
                 if bytes && !ch.is_ascii() {
                     return Err(self.error("non-ASCII byte literals require hexadecimal escapes"));
@@ -218,14 +251,18 @@ impl Lexer<'_> {
                 continue;
             }
             let mut span = self.here();
-            let kind;
-            let text;
+            let kind: TokenKind;
+            let text: String;
             if b == b'b' && (self.byte(1) == b'"' || self.byte(1) == b'\'') {
                 self.advance();
                 let quote = self.byte(0);
                 let s = self.quoted(quote, true)?;
                 if quote == b'\'' {
-                    if s.chars().count() != 1 {
+                    let mut scalar_count = 0;
+                    for _ch in s.as_str().chars() {
+                        scalar_count += 1;
+                    }
+                    if scalar_count != 1 {
                         return Err(Diagnostic::new(
                             span,
                             "E_LEX",
@@ -233,7 +270,7 @@ impl Lexer<'_> {
                         ));
                     }
                     kind = TokenKind::Number;
-                    text = format!("{}u8", s.chars().next().unwrap() as u32);
+                    text = format!("{}u8", s.as_str().chars().next().unwrap() as u32);
                 } else {
                     kind = TokenKind::Bytes;
                     text = s;
@@ -292,7 +329,11 @@ impl Lexer<'_> {
                 } else {
                     kind = TokenKind::Char;
                     text = self.quoted(b'\'', false)?;
-                    if text.chars().count() != 1 {
+                    let mut scalar_count = 0;
+                    for _ch in text.as_str().chars() {
+                        scalar_count += 1;
+                    }
+                    if scalar_count != 1 {
                         return Err(Diagnostic::new(
                             span,
                             "E_LEX",
@@ -329,33 +370,69 @@ impl Lexer<'_> {
                 kind = TokenKind::Number;
                 text = self.source[span.start..self.at].to_string();
             } else {
-                let rest = &self.source[self.at..];
-                let mut width = 1;
-                let triples = ["<<=", ">>=", "..="];
-                let mut i = 0;
-                while i < triples.len() {
-                    if rest.starts_with(triples[i]) {
+                let width = {
+                    let rest = &self.source[self.at..];
+                    let mut width = 1;
+                    if rest.starts_with("<<=") || rest.starts_with(">>=") || rest.starts_with("..=")
+                    {
                         width = 3;
                     }
-                    i += 1;
-                }
-                if width == 1 {
-                    let doubles = [
-                        "::", "->", "=>", "==", "!=", "<=", ">=", "&&", "||", "+=", "-=", "*=",
-                        "/=", "%=", "&=", "|=", "^=", "<<", ">>", "..",
-                    ];
-                    i = 0;
-                    while i < doubles.len() {
-                        if rest.starts_with(doubles[i]) {
-                            width = 2;
-                        }
-                        i += 1;
+                    if width == 1
+                        && (rest.starts_with("::")
+                            || rest.starts_with("->")
+                            || rest.starts_with("=>")
+                            || rest.starts_with("==")
+                            || rest.starts_with("!=")
+                            || rest.starts_with("<=")
+                            || rest.starts_with(">=")
+                            || rest.starts_with("&&")
+                            || rest.starts_with("||")
+                            || rest.starts_with("+=")
+                            || rest.starts_with("-=")
+                            || rest.starts_with("*=")
+                            || rest.starts_with("/=")
+                            || rest.starts_with("%=")
+                            || rest.starts_with("&=")
+                            || rest.starts_with("|=")
+                            || rest.starts_with("^=")
+                            || rest.starts_with("<<")
+                            || rest.starts_with(">>")
+                            || rest.starts_with(".."))
+                    {
+                        width = 2;
                     }
-                }
-                if !b"(){}[];,:.#?+-*/%&|^!~=<>".contains(&b) {
+                    width
+                };
+                if !matches!(
+                    b,
+                    b'(' | b')'
+                        | b'{'
+                        | b'}'
+                        | b'['
+                        | b']'
+                        | b';'
+                        | b','
+                        | b':'
+                        | b'.'
+                        | b'#'
+                        | b'?'
+                        | b'+'
+                        | b'-'
+                        | b'*'
+                        | b'/'
+                        | b'%'
+                        | b'&'
+                        | b'|'
+                        | b'^'
+                        | b'!'
+                        | b'~'
+                        | b'='
+                        | b'<'
+                        | b'>'
+                ) {
                     return Err(self.error("unsupported character in source"));
                 }
-                i = 0;
+                let mut i = 0;
                 while i < width {
                     self.advance();
                     i += 1;
@@ -447,15 +524,17 @@ pub fn parse_file_report(
             };
         }
     };
-    for token in &mut tokens {
-        token.span.file = file;
+    let mut token_index = 0;
+    while token_index < tokens.len() {
+        tokens[token_index].span.file = file;
+        token_index += 1;
     }
     let mut parser = Parser {
         tokens,
         at: 0,
         module: program.scopes[scope].path.clone(),
         scope,
-        program: std::mem::take(program),
+        program: std::mem::replace(program, Program::default()),
         diagnostics: Vec::new(),
         blocked: Vec::new(),
         diagnostic_keys: BTreeSet::new(),
@@ -476,6 +555,78 @@ pub fn parse_file_report(
         items,
         diagnostics: parser.diagnostics,
         blocked: parser.blocked,
+    }
+}
+
+fn cfg_predicate(args: &[String], at: &mut usize, span: Span) -> Result<bool, Diagnostic> {
+    let Some(name) = args.get(*at) else {
+        return Err(Diagnostic::new(span, "E_PARSE", "missing cfg predicate"));
+    };
+    *at += 1;
+    if matches!(name.as_str(), "all" | "any" | "not") {
+        if args.get(*at).map(|text| text.as_str()) != Some("(") {
+            return Err(Diagnostic::new(
+                span,
+                "E_PARSE",
+                "cfg combinator needs parentheses",
+            ));
+        }
+        *at += 1;
+        let mut values = Vec::new();
+        while args.get(*at).is_some_and(|part| part != ")") {
+            values.push(cfg_predicate(args, at, span)?);
+        }
+        if args.get(*at).map(|text| text.as_str()) != Some(")") {
+            return Err(Diagnostic::new(
+                span,
+                "E_PARSE",
+                "unterminated cfg predicate",
+            ));
+        }
+        *at += 1;
+        return match name.as_str() {
+            "all" => Ok(values.iter().all(|value| *value)),
+            "any" => Ok(values.iter().any(|value| *value)),
+            "not" if values.len() == 1 => Ok(!values[0]),
+            _ => Err(Diagnostic::new(
+                span,
+                "E_PARSE",
+                "cfg not needs exactly one predicate",
+            )),
+        };
+    }
+    if args.get(*at).map(|text| text.as_str()) == Some("=") {
+        *at += 1;
+        let Some(value) = args.get(*at) else {
+            return Err(Diagnostic::new(span, "E_PARSE", "missing cfg value"));
+        };
+        *at += 1;
+        return match name.as_str() {
+            "target_os" => Ok(value == "linux"),
+            "target_arch" => Ok(value == "x86_64"),
+            "target_family" => Ok(value == "unix"),
+            "target_pointer_width" => Ok(value == "64"),
+            "target_endian" => Ok(value == "little"),
+            "feature" => Ok(false),
+            _ => Err(Diagnostic::new(
+                span,
+                "E_UNSUPPORTED",
+                &format!(
+                    "cfg predicate {name} is not supported; help: use test, target_os, target_arch, target_family, target_pointer_width or target_endian"
+                ),
+            )),
+        };
+    }
+    match name.as_str() {
+        "test" | "windows" | "false" => Ok(false),
+        "unix" | "true" => Ok(true),
+        _ => Err(Diagnostic::new(
+            span,
+            "E_UNSUPPORTED",
+            &format!(
+                "cfg predicate {name} is not supported; help: use #[cfg(test)] for test-only declarations"
+            ),
+        )),
     }
 }
 
@@ -598,7 +749,7 @@ impl Parser {
         } else {
             start
         };
-        let mut delimiters: Vec<&str> = Vec::new();
+        let mut delimiters: Vec<u8> = Vec::new();
         let block_statement = kind == "statement"
             && matches!(
                 self.tokens[start].kind,
@@ -635,16 +786,17 @@ impl Parser {
             }
             if token.kind == TokenKind::Symbol {
                 match token.text.as_str() {
-                    "(" | "[" | "{" => delimiters.push(token.text.as_str()),
+                    "(" | "[" | "{" => delimiters.push(token.text.as_bytes()[0]),
                     ")" | "]" | "}" => {
                         let expected = match token.text.as_str() {
-                            ")" => "(",
-                            "]" => "[",
-                            _ => "{",
+                            ")" => b'(',
+                            "]" => b'[',
+                            _ => b'{',
                         };
-                        if delimiters.last().copied() == Some(expected) {
+                        let matches = delimiters.last().copied() == Some(expected);
+                        if matches {
                             delimiters.pop();
-                            if expected == "{"
+                            if expected == b'{'
                                 && delimiters.is_empty()
                                 && (kind == "item" || block_statement)
                             {
@@ -656,7 +808,7 @@ impl Parser {
                                 }
                                 continue;
                             }
-                        } else if token.text == "}" && !delimiters.contains(&"{") {
+                        } else if token.text == "}" && !delimiters.contains(&b'{') {
                             // Leave the enclosing block's close for its caller.
                             break;
                         }
@@ -762,6 +914,18 @@ impl Parser {
         });
         id
     }
+    fn add_finished_type(&mut self, kind: Type, span: Span) -> TypeId {
+        let span = self.finish_span(span);
+        self.add_type(kind, span)
+    }
+    fn add_finished_expr(&mut self, kind: Expr, span: Span) -> ExprId {
+        let span = self.finish_span(span);
+        self.add_expr(kind, span)
+    }
+    fn add_finished_pattern(&mut self, kind: Pattern, span: Span) -> PatternId {
+        let span = self.finish_span(span);
+        self.add_pattern(kind, span)
+    }
     fn attrs(&mut self) -> Result<Vec<Attribute>, Diagnostic> {
         let mut attrs = Vec::new();
         while self.take("#") {
@@ -816,81 +980,10 @@ impl Parser {
         Ok(attrs)
     }
     fn enabled(&self, attrs: &[Attribute]) -> Result<bool, Diagnostic> {
-        fn predicate(args: &[String], at: &mut usize, span: Span) -> Result<bool, Diagnostic> {
-            let Some(name) = args.get(*at) else {
-                return Err(Diagnostic::new(span, "E_PARSE", "missing cfg predicate"));
-            };
-            *at += 1;
-            if matches!(name.as_str(), "all" | "any" | "not") {
-                if args.get(*at).map(String::as_str) != Some("(") {
-                    return Err(Diagnostic::new(
-                        span,
-                        "E_PARSE",
-                        "cfg combinator needs parentheses",
-                    ));
-                }
-                *at += 1;
-                let mut values = Vec::new();
-                while args.get(*at).is_some_and(|part| part != ")") {
-                    values.push(predicate(args, at, span)?);
-                }
-                if args.get(*at).map(String::as_str) != Some(")") {
-                    return Err(Diagnostic::new(
-                        span,
-                        "E_PARSE",
-                        "unterminated cfg predicate",
-                    ));
-                }
-                *at += 1;
-                return match name.as_str() {
-                    "all" => Ok(values.iter().all(|value| *value)),
-                    "any" => Ok(values.iter().any(|value| *value)),
-                    "not" if values.len() == 1 => Ok(!values[0]),
-                    _ => Err(Diagnostic::new(
-                        span,
-                        "E_PARSE",
-                        "cfg not needs exactly one predicate",
-                    )),
-                };
-            }
-            if args.get(*at).map(String::as_str) == Some("=") {
-                *at += 1;
-                let Some(value) = args.get(*at) else {
-                    return Err(Diagnostic::new(span, "E_PARSE", "missing cfg value"));
-                };
-                *at += 1;
-                return match name.as_str() {
-                    "target_os" => Ok(value == "linux"),
-                    "target_arch" => Ok(value == "x86_64"),
-                    "target_family" => Ok(value == "unix"),
-                    "target_pointer_width" => Ok(value == "64"),
-                    "target_endian" => Ok(value == "little"),
-                    "feature" => Ok(false),
-                    _ => Err(Diagnostic::new(
-                        span,
-                        "E_UNSUPPORTED",
-                        &format!(
-                            "cfg predicate {name} is not supported; help: use test, target_os, target_arch, target_family, target_pointer_width or target_endian"
-                        ),
-                    )),
-                };
-            }
-            match name.as_str() {
-                "test" | "windows" | "false" => Ok(false),
-                "unix" | "true" => Ok(true),
-                _ => Err(Diagnostic::new(
-                    span,
-                    "E_UNSUPPORTED",
-                    &format!(
-                        "cfg predicate {name} is not supported; help: use #[cfg(test)] for test-only declarations"
-                    ),
-                )),
-            }
-        }
         for attr in attrs {
             if attr.name == "cfg" {
                 let mut at = 0;
-                let value = predicate(&attr.args, &mut at, attr.span)?;
+                let value = cfg_predicate(&attr.args, &mut at, attr.span)?;
                 if at != attr.args.len() {
                     return Err(Diagnostic::new(
                         attr.span,
@@ -908,10 +1001,10 @@ impl Parser {
     // Disabled declarations do not contribute names, bodies or recovery sites.
     // Only balanced tokens are needed, just as for Rust conditional compilation.
     fn skip_disabled(&mut self) -> Result<(), Diagnostic> {
-        let mut delimiters = Vec::new();
+        let mut delimiters: Vec<String> = Vec::new();
         let mut braced_item = false;
         while self.token().kind != TokenKind::End {
-            let token = self.token();
+            let token = &self.tokens[self.at];
             if delimiters.is_empty()
                 && matches!(
                     token.text.as_str(),
@@ -929,7 +1022,7 @@ impl Parser {
                             "]" => "[",
                             _ => "{",
                         };
-                        if delimiters.last().map(String::as_str) != Some(expected) {
+                        if delimiters.last().map(|text| text.as_str()) != Some(expected) {
                             return Err(self.err("unbalanced disabled declaration"));
                         }
                         delimiters.pop();
@@ -1042,6 +1135,25 @@ impl Parser {
         ))
     }
 
+    fn next_item(
+        &mut self,
+        domain: &mut Option<RecoveryDomain>,
+        disabled: &mut bool,
+    ) -> Result<Option<Item>, Diagnostic> {
+        let attrs = self.attrs()?;
+        if !self.enabled(&attrs)? {
+            self.skip_disabled()?;
+            *disabled = true;
+            return Ok(None);
+        }
+        if self.token().kind == TokenKind::End {
+            return Ok(None);
+        }
+        let public = self.visibility()?;
+        *domain = Some(self.recovery_domain(None));
+        let item = self.item(attrs, public)?;
+        Ok(Some(item))
+    }
     fn items(&mut self, nested: bool) -> Result<Vec<Item>, Diagnostic> {
         let mut items = Vec::new();
         while self.token().kind != TokenKind::End && !(nested && self.is("}")) {
@@ -1053,20 +1165,7 @@ impl Parser {
             let module = self.module.clone();
             let mut domain = None;
             let mut disabled = false;
-            let result = (|| {
-                let attrs = self.attrs()?;
-                if !self.enabled(&attrs)? {
-                    self.skip_disabled()?;
-                    disabled = true;
-                    return Ok(None);
-                }
-                if self.token().kind == TokenKind::End {
-                    return Ok(None);
-                }
-                let public = self.visibility()?;
-                domain = Some(self.recovery_domain(None));
-                self.item(attrs, public).map(Some)
-            })();
+            let result = self.next_item(&mut domain, &mut disabled);
             match result {
                 Ok(Some(item)) => items.push(item),
                 Ok(None) if disabled => continue,
@@ -1185,7 +1284,8 @@ impl Parser {
             return Ok(());
         }
         if self.is(">>") || self.is(">>=") || self.is(">=") {
-            self.tokens[self.at].text.remove(0);
+            let remaining = self.tokens[self.at].text[1..].to_string();
+            self.tokens[self.at].text = remaining;
             self.tokens[self.at].span.start += 1;
             self.tokens[self.at].span.column += 1;
             return Ok(());
@@ -1253,7 +1353,7 @@ impl Parser {
         while !self.at_gt() {
             let span = self.token().span;
             let lifetime = self.token().kind == TokenKind::Lifetime;
-            let name;
+            let name: String;
             if lifetime {
                 name = self.token().text.clone();
                 self.at += 1;
@@ -1296,7 +1396,9 @@ impl Parser {
             let mut i = 0;
             while i < generics.len() {
                 if generics[i].name == name {
-                    generics[i].bounds.extend(bounds.clone());
+                    for bound in &bounds {
+                        generics[i].bounds.push(*bound);
+                    }
                     found = true;
                     break;
                 }
@@ -1343,22 +1445,22 @@ impl Parser {
         if name == "std::thread::scope" {
             return Ok(());
         }
-        let denied = [
-            "std::fs",
-            "std::env",
-            "std::time",
-            "std::net",
-            "std::process",
-            "std::thread",
-            "std::io",
-            "std::sync",
-            "std::cell",
-            "core::cell",
-        ];
         let mut i = 0;
-        while i < denied.len() {
-            if name == denied[i] || name.starts_with(&format!("{}::", denied[i])) {
-                let help = match denied[i] {
+        while i < 10 {
+            let denied = match i {
+                0 => "std::fs",
+                1 => "std::env",
+                2 => "std::time",
+                3 => "std::net",
+                4 => "std::process",
+                5 => "std::thread",
+                6 => "std::io",
+                7 => "std::sync",
+                8 => "std::cell",
+                _ => "core::cell",
+            };
+            if name == denied || name.starts_with(&format!("{}::", denied)) {
+                let help = match denied {
                     "std::fs" => {
                         "use world.directory(path), then directory.open(name) or directory.create(name)"
                     }
@@ -1396,11 +1498,11 @@ impl Parser {
     ) -> TypeId {
         match path {
             Some(mut path) => {
-                let tuple = self.add_type(Type::Tuple(params), self.finish_span(span));
+                let tuple = self.add_finished_type(Type::Tuple(params), span);
                 path.args = vec![tuple, result];
-                self.add_type(Type::Path(path), self.finish_span(span))
+                self.add_finished_type(Type::Path(path), span)
             }
-            None => self.add_type(Type::Function { params, result }, self.finish_span(span)),
+            None => self.add_finished_type(Type::Function { params, result }, span),
         }
     }
 
@@ -1485,13 +1587,13 @@ impl Parser {
                     lifetime,
                     span,
                 } => {
-                    value = self.add_type(
+                    value = self.add_finished_type(
                         Type::Ref {
                             mutable,
                             lifetime,
                             inner: value,
                         },
-                        self.finish_span(span),
+                        span,
                     );
                 }
                 TypeFrame::Array { span } => {
@@ -1502,11 +1604,10 @@ impl Parser {
                         let len = self.token().text.clone();
                         self.at += 1;
                         self.expect("]")?;
-                        value = self
-                            .add_type(Type::Array { inner: value, len }, self.finish_span(span));
+                        value = self.add_finished_type(Type::Array { inner: value, len }, span);
                     } else {
                         self.expect("]")?;
-                        value = self.add_type(Type::Slice(value), self.finish_span(span));
+                        value = self.add_finished_type(Type::Slice(value), span);
                     }
                 }
                 TypeFrame::List {
@@ -1545,7 +1646,7 @@ impl Parser {
                             value = if items.len() == 1 && !comma {
                                 items[0]
                             } else {
-                                self.add_type(Type::Tuple(items), self.finish_span(span))
+                                self.add_finished_type(Type::Tuple(items), span)
                             };
                             continue;
                         }
@@ -1638,7 +1739,7 @@ impl Parser {
                             kind: TypeListKind::Callable(path),
                         });
                     } else {
-                        value = self.add_type(Type::Path(path), self.finish_span(span));
+                        value = self.add_finished_type(Type::Path(path), span);
                     }
                 }
                 TypeFrame::Arguments {
@@ -1716,7 +1817,7 @@ impl Parser {
             };
             let mutable = self.take("mut");
             let param_name = self.ident()?;
-            let mut ty;
+            let mut ty: TypeId;
             if param_name == "self" && !self.is(":") {
                 ty = self.add_type(
                     Type::Path(Path {
@@ -1794,7 +1895,7 @@ impl Parser {
                 self.expect(":")?;
                 n
             } else {
-                fields.len().to_string()
+                format!("{}", fields.len())
             };
             let ty = self.ty()?;
             fields.push(Field {
@@ -1822,7 +1923,7 @@ impl Parser {
         self.where_clause(&mut generics)?;
         let tuple = self.take("(");
         let unit = !tuple && !self.is("{");
-        let fields;
+        let fields: Vec<Field>;
         if tuple {
             fields = self.fields(false, ")")?;
             self.expect(";")?;
@@ -1932,6 +2033,30 @@ impl Parser {
             span: self.finish_span(span),
         })
     }
+    fn trait_member(
+        &mut self,
+        name: &str,
+        domain: &mut Option<RecoveryDomain>,
+        methods: &mut Vec<usize>,
+        associated: &mut Vec<AssociatedType>,
+    ) -> Result<(), Diagnostic> {
+        let attrs = self.attrs()?;
+        if !self.enabled(&attrs)? {
+            self.skip_disabled()?;
+            return Ok(());
+        }
+        *domain = Some(self.recovery_domain(Some(RecoveryOwner::Trait {
+            name: name.to_string(),
+        })));
+        if self.is("fn") {
+            methods.push(self.function(attrs, Visibility::Private)?);
+        } else if self.is("type") {
+            associated.push(self.associated_type()?);
+        } else {
+            return Err(self.unsupported("trait item"));
+        }
+        Ok(())
+    }
     fn trait_item(&mut self, public: Visibility) -> Result<usize, Diagnostic> {
         let span = self.token().span;
         self.expect("trait")?;
@@ -1952,23 +2077,7 @@ impl Parser {
             }
             let start = self.at;
             let mut domain = None;
-            let result = (|| {
-                let attrs = self.attrs()?;
-                if !self.enabled(&attrs)? {
-                    self.skip_disabled()?;
-                    return Ok(());
-                }
-                domain =
-                    Some(self.recovery_domain(Some(RecoveryOwner::Trait { name: name.clone() })));
-                if self.is("fn") {
-                    methods.push(self.function(attrs, Visibility::Private)?);
-                } else if self.is("type") {
-                    associated.push(self.associated_type()?);
-                } else {
-                    return Err(self.unsupported("trait item"));
-                }
-                Ok(())
-            })();
+            let result = self.trait_member(&name, &mut domain, &mut methods, &mut associated);
             if let Err(error) = result {
                 self.recover_region(start, "item", error, domain);
             }
@@ -1987,13 +2096,38 @@ impl Parser {
         });
         Ok(id)
     }
+    fn implementation_member(
+        &mut self,
+        target: TypeId,
+        trait_ty: Option<TypeId>,
+        domain: &mut Option<RecoveryDomain>,
+        methods: &mut Vec<usize>,
+        associated: &mut Vec<AssociatedType>,
+    ) -> Result<(), Diagnostic> {
+        let attrs = self.attrs()?;
+        if !self.enabled(&attrs)? {
+            self.skip_disabled()?;
+            return Ok(());
+        }
+        let public = self.visibility()?;
+        *domain =
+            Some(self.recovery_domain(Some(RecoveryOwner::Implementation { target, trait_ty })));
+        if self.is("fn") {
+            methods.push(self.function(attrs, public)?);
+        } else if self.is("type") {
+            associated.push(self.associated_type()?);
+        } else {
+            return Err(self.unsupported("impl item"));
+        }
+        Ok(())
+    }
     fn impl_item(&mut self) -> Result<usize, Diagnostic> {
         let span = self.token().span;
         self.expect("impl")?;
         let mut generics = self.generics()?;
         let first = self.ty()?;
-        let trait_ty;
-        let target;
+        let trait_ty: Option<TypeId>;
+        let target: TypeId;
         if self.take("for") {
             trait_ty = Some(first);
             target = self.ty()?;
@@ -2011,25 +2145,13 @@ impl Parser {
             }
             let start = self.at;
             let mut domain = None;
-            let result = (|| {
-                let attrs = self.attrs()?;
-                if !self.enabled(&attrs)? {
-                    self.skip_disabled()?;
-                    return Ok(());
-                }
-                let public = self.visibility()?;
-                domain = Some(
-                    self.recovery_domain(Some(RecoveryOwner::Implementation { target, trait_ty })),
-                );
-                if self.is("fn") {
-                    methods.push(self.function(attrs, public)?);
-                } else if self.is("type") {
-                    associated.push(self.associated_type()?);
-                } else {
-                    return Err(self.unsupported("impl item"));
-                }
-                Ok(())
-            })();
+            let result = self.implementation_member(
+                target,
+                trait_ty,
+                &mut domain,
+                &mut methods,
+                &mut associated,
+            );
             if let Err(error) = result {
                 self.recover_region(start, "item", error, domain);
             }
@@ -2071,7 +2193,7 @@ impl Parser {
             return Ok(());
         }
         if self.take("*") {
-            let path = prefix.trim_end_matches("::").to_string();
+            let path = trim_module_separators(&prefix).to_string();
             self.capability_path(&path)?;
             self.program.uses.push(Use {
                 module: self.module.clone(),
@@ -2085,7 +2207,7 @@ impl Parser {
         }
         let name = self.ident()?;
         let path = if name == "self" && !prefix.is_empty() {
-            prefix.trim_end_matches("::").to_string()
+            trim_module_separators(&prefix).to_string()
         } else {
             format!("{prefix}{name}")
         };
@@ -2095,12 +2217,11 @@ impl Parser {
         let alias = if self.take("as") {
             self.ident()?
         } else if name == "self" && !prefix.is_empty() {
-            prefix
-                .trim_end_matches("::")
-                .rsplit("::")
-                .next()
-                .unwrap()
-                .to_string()
+            {
+                let trimmed = trim_module_separators(&prefix);
+                let start = trimmed.rfind("::").map(|at: usize| at + 2).unwrap_or(0);
+                trimmed[start..].to_string()
+            }
         } else {
             name
         };
@@ -2171,14 +2292,14 @@ impl Parser {
             let (pattern, value, ty) = if self.take("else") {
                 let value = value.ok_or_else(|| self.err("let-else requires an initializer"))?;
                 let block = self.block()?;
-                let otherwise = self.add_expr(Expr::Block(block), self.program.blocks[block].span);
-                let otherwise =
-                    self.add_expr(Expr::Diverge(otherwise), self.program.blocks[block].span);
+                let block_span = self.program.blocks[block].span;
+                let otherwise = self.add_expr(Expr::Block(block), block_span);
+                let otherwise = self.add_expr(Expr::Diverge(otherwise), block_span);
                 // A match produces exactly the bindings exported by the pattern.
                 // Generated tuple bindings do not repeat ref binding modes.
                 let mut pending = vec![pattern];
-                let mut bindings = Vec::new();
-                let mut seen = BTreeSet::new();
+                let mut bindings: Vec<(String, bool)> = Vec::new();
+                let mut seen: BTreeSet<String> = BTreeSet::new();
                 while let Some(id) = pending.pop() {
                     match self.program.patterns[id].kind.clone() {
                         Pattern::Bind { name, mutable, .. } => {
@@ -2187,10 +2308,18 @@ impl Parser {
                             }
                         }
                         Pattern::Tuple(fields) | Pattern::Variant { fields, .. } => {
-                            pending.extend(fields.into_iter().rev())
+                            let mut at = fields.len();
+                            while at > 0 {
+                                at -= 1;
+                                pending.push(fields[at]);
+                            }
                         }
                         Pattern::Struct { fields, .. } => {
-                            pending.extend(fields.into_iter().rev().map(|(_, pattern)| pattern))
+                            let mut at = fields.len();
+                            while at > 0 {
+                                at -= 1;
+                                pending.push(fields[at].1);
+                            }
                         }
                         Pattern::Ref { inner, .. } => pending.push(inner),
                         Pattern::Or(alternatives) => {
@@ -2272,7 +2401,7 @@ impl Parser {
                 } else {
                     value
                 };
-                let value = self.add_expr(
+                let value = self.add_finished_expr(
                     Expr::Match {
                         value: initializer,
                         arms: vec![
@@ -2290,7 +2419,7 @@ impl Parser {
                             },
                         ],
                     },
-                    self.finish_span(start),
+                    start,
                 );
                 let pattern = self.add_pattern(Pattern::Tuple(outer), start);
                 (pattern, Some(value), None)
@@ -2408,7 +2537,7 @@ impl Parser {
             } else {
                 Expr::Unary { op, value }
             };
-            value = self.add_expr(kind, self.finish_span(span));
+            value = self.add_finished_expr(kind, span);
         }
         Ok(value)
     }
@@ -2422,13 +2551,13 @@ impl Parser {
             let span = self.program.exprs[left].span;
             if self.take("(") {
                 let args = self.expr_list(")")?;
-                left = self.add_expr(Expr::Call { callee: left, args }, self.finish_span(span));
+                left = self.add_finished_expr(Expr::Call { callee: left, args }, span);
                 continue;
             }
             if self.take("[") {
                 let index = self.expr(true)?;
                 self.expect("]")?;
-                left = self.add_expr(Expr::Index { value: left, index }, self.finish_span(span));
+                left = self.add_finished_expr(Expr::Index { value: left, index }, span);
                 continue;
             }
             if self.take(".") {
@@ -2440,17 +2569,26 @@ impl Parser {
                     // even though the lexer can read it as a decimal token.
                     let text = self.token().text.clone();
                     let mut indices = Vec::new();
-                    for part in text.split('.') {
-                        let index = part
-                            .replace('_', "")
-                            .parse::<usize>()
-                            .map_err(|_| self.err("tuple field requires a decimal index"))?;
-                        indices.push(index.to_string());
+                    let mut start = 0;
+                    loop {
+                        let end = text[start..]
+                            .find('.')
+                            .map(|at: usize| start + at)
+                            .unwrap_or(text.len());
+                        let digits = text[start..end].replace('_', "");
+                        let index = match digits.as_str().parse::<usize>().ok() {
+                            Some(index) => index,
+                            None => return Err(self.err("tuple field requires a decimal index")),
+                        };
+                        indices.push(format!("{index}"));
+                        if end == text.len() {
+                            break;
+                        }
+                        start = end + 1;
                     }
                     self.at += 1;
                     for name in indices {
-                        left = self
-                            .add_expr(Expr::Field { value: left, name }, self.finish_span(span));
+                        left = self.add_finished_expr(Expr::Field { value: left, name }, span);
                     }
                     continue;
                 }
@@ -2462,31 +2600,31 @@ impl Parser {
                 };
                 if self.take("(") {
                     let args = self.expr_list(")")?;
-                    left = self.add_expr(
+                    left = self.add_finished_expr(
                         Expr::Method {
                             receiver: left,
                             name,
                             types,
                             args,
                         },
-                        self.finish_span(span),
+                        span,
                     );
                 } else {
                     if !types.is_empty() {
                         return Err(self.err("method type arguments require a call"));
                     }
-                    left = self.add_expr(Expr::Field { value: left, name }, self.finish_span(span));
+                    left = self.add_finished_expr(Expr::Field { value: left, name }, span);
                 }
                 continue;
             }
             if self.take("?") {
-                left = self.add_expr(Expr::Try(left), self.finish_span(span));
+                left = self.add_finished_expr(Expr::Try(left), span);
                 continue;
             }
             if self.is("as") && min <= 12 {
                 self.at += 1;
                 let ty = self.ty()?;
-                left = self.add_expr(Expr::Cast { value: left, ty }, self.finish_span(span));
+                left = self.add_finished_expr(Expr::Cast { value: left, ty }, span);
                 continue;
             }
             if self.token().kind != TokenKind::Symbol {
@@ -2520,13 +2658,13 @@ impl Parser {
                 if op == "..=" && end.is_none() {
                     return Err(self.err("inclusive range needs an end"));
                 }
-                left = self.add_expr(
+                left = self.add_finished_expr(
                     Expr::Range {
                         start: Some(left),
                         end,
                         inclusive: op == "..=",
                     },
-                    self.finish_span(span),
+                    span,
                 );
                 continue;
             }
@@ -2540,7 +2678,7 @@ impl Parser {
             } else {
                 Expr::Binary { op, left, right }
             };
-            left = self.add_expr(kind, self.finish_span(span));
+            left = self.add_finished_expr(kind, span);
         }
         Ok(left)
     }
@@ -2563,11 +2701,16 @@ impl Parser {
                 let radix = token.text.starts_with("0x")
                     || token.text.starts_with("0b")
                     || token.text.starts_with("0o");
-                let integer_suffix = [
-                    "usize", "isize", "u64", "i64", "u32", "i32", "u16", "i16", "u8", "i8",
-                ]
-                .iter()
-                .any(|suffix| token.text.ends_with(suffix));
+                let integer_suffix = token.text.ends_with("usize")
+                    || token.text.ends_with("isize")
+                    || token.text.ends_with("u64")
+                    || token.text.ends_with("i64")
+                    || token.text.ends_with("u32")
+                    || token.text.ends_with("i32")
+                    || token.text.ends_with("u16")
+                    || token.text.ends_with("i16")
+                    || token.text.ends_with("u8")
+                    || token.text.ends_with("i8");
                 if !radix
                     && !integer_suffix
                     && (token.text.contains('.')
@@ -2582,8 +2725,14 @@ impl Parser {
                 }
             }
             TokenKind::String => Expr::String(token.text),
-            TokenKind::Bytes => Expr::Bytes(token.text.chars().map(|ch| ch as u8).collect()),
-            TokenKind::Char => match token.text.chars().next() {
+            TokenKind::Bytes => {
+                let mut bytes = Vec::new();
+                for ch in token.text.as_str().chars() {
+                    bytes.push(ch as u8);
+                }
+                Expr::Bytes(bytes)
+            }
+            TokenKind::Char => match token.text.as_str().chars().next() {
                 Some(ch) => Expr::Char(ch),
                 None => return Err(self.err("empty character literal")),
             },
@@ -2611,9 +2760,10 @@ impl Parser {
             while self.take("(") {
                 openings.push(self.tokens[self.at - 1].span);
             }
-            let mut value;
+            let mut value: ExprId;
             if self.is(")") {
-                value = self.add_expr(Expr::Tuple(Vec::new()), self.token().span);
+                let empty_span = self.token().span;
+                value = self.add_expr(Expr::Tuple(Vec::new()), empty_span);
             } else {
                 value = self.expr(true)?;
             }
@@ -2626,7 +2776,7 @@ impl Parser {
                             break;
                         }
                     }
-                    value = self.add_expr(Expr::Tuple(fields), self.finish_span(start));
+                    value = self.add_finished_expr(Expr::Tuple(fields), start);
                 }
                 self.expect(")")?;
                 if !openings.is_empty() {
@@ -2637,18 +2787,18 @@ impl Parser {
         }
         if self.take("[") {
             if self.take("]") {
-                return Ok(self.add_expr(Expr::Array(Vec::new()), self.finish_span(span)));
+                return Ok(self.add_finished_expr(Expr::Array(Vec::new()), span));
             }
             let first = self.expr(true)?;
             if self.take(";") {
                 let count = self.expr(true)?;
                 self.expect("]")?;
-                return Ok(self.add_expr(
+                return Ok(self.add_finished_expr(
                     Expr::Repeat {
                         value: first,
                         count,
                     },
-                    self.finish_span(span),
+                    span,
                 ));
             }
             let mut values = vec![first];
@@ -2659,11 +2809,11 @@ impl Parser {
                 values.push(self.expr(true)?);
             }
             self.expect("]")?;
-            return Ok(self.add_expr(Expr::Array(values), self.finish_span(span)));
+            return Ok(self.add_finished_expr(Expr::Array(values), span));
         }
         if self.is("{") {
             let block = self.block()?;
-            return Ok(self.add_expr(Expr::Block(block), self.finish_span(span)));
+            return Ok(self.add_finished_expr(Expr::Block(block), span));
         }
         if self.take("if") {
             let pattern = if self.take("let") {
@@ -2686,10 +2836,8 @@ impl Parser {
             };
             let kind = match pattern {
                 Some(pattern) => {
-                    let body = self.add_expr(
-                        Expr::Block(then_block),
-                        self.program.blocks[then_block].span,
-                    );
+                    let then_span = self.program.blocks[then_block].span;
+                    let body = self.add_expr(Expr::Block(then_block), then_span);
                     let fallback =
                         otherwise.unwrap_or_else(|| self.add_expr(Expr::Tuple(Vec::new()), span));
                     let wild = self.add_pattern(Pattern::Wild, span);
@@ -2717,7 +2865,7 @@ impl Parser {
                     otherwise,
                 },
             };
-            return Ok(self.add_expr(kind, self.finish_span(span)));
+            return Ok(self.add_finished_expr(kind, span));
         }
         if self.take("while") {
             let pattern = if self.take("let") {
@@ -2731,7 +2879,8 @@ impl Parser {
             let body = self.block()?;
             let kind = match pattern {
                 Some(pattern) => {
-                    let matched = self.add_expr(Expr::Block(body), self.program.blocks[body].span);
+                    let body_span = self.program.blocks[body].span;
+                    let matched = self.add_expr(Expr::Block(body), body_span);
                     let fallback = self.add_expr(Expr::Break(None), span);
                     let wild = self.add_pattern(Pattern::Wild, span);
                     let selection = self.add_expr(
@@ -2767,24 +2916,24 @@ impl Parser {
                 }
                 None => Expr::While { condition, body },
             };
-            return Ok(self.add_expr(kind, self.finish_span(span)));
+            return Ok(self.add_finished_expr(kind, span));
         }
         if self.take("loop") {
             let body = self.block()?;
-            return Ok(self.add_expr(Expr::Loop { body }, self.finish_span(span)));
+            return Ok(self.add_finished_expr(Expr::Loop { body }, span));
         }
         if self.take("for") {
             let pattern = self.pattern()?;
             self.expect("in")?;
             let iterator = self.expr(false)?;
             let body = self.block()?;
-            return Ok(self.add_expr(
+            return Ok(self.add_finished_expr(
                 Expr::For {
                     pattern,
                     iterator,
                     body,
                 },
-                self.finish_span(span),
+                span,
             ));
         }
         if self.take("match") {
@@ -2814,7 +2963,7 @@ impl Parser {
                 }
             }
             self.expect("}")?;
-            return Ok(self.add_expr(Expr::Match { value, arms }, self.finish_span(span)));
+            return Ok(self.add_finished_expr(Expr::Match { value, arms }, span));
         }
         if self.take("return") {
             let value = if self.expression_end() {
@@ -2822,7 +2971,7 @@ impl Parser {
             } else {
                 Some(self.expr(true)?)
             };
-            return Ok(self.add_expr(Expr::Return(value), self.finish_span(span)));
+            return Ok(self.add_finished_expr(Expr::Return(value), span));
         }
         if self.take("break") {
             if self.token().kind == TokenKind::Lifetime {
@@ -2833,13 +2982,13 @@ impl Parser {
             } else {
                 Some(self.expr(true)?)
             };
-            return Ok(self.add_expr(Expr::Break(value), self.finish_span(span)));
+            return Ok(self.add_finished_expr(Expr::Break(value), span));
         }
         if self.take("continue") {
             if self.token().kind == TokenKind::Lifetime {
                 return Err(self.unsupported("labeled continue"));
             }
-            return Ok(self.add_expr(Expr::Continue, self.finish_span(span)));
+            return Ok(self.add_finished_expr(Expr::Continue, span));
         }
         if self.is("move") || self.is("|") || self.is("||") {
             let moved = self.take("move");
@@ -2879,7 +3028,7 @@ impl Parser {
                 None
             };
             let body = self.expr(true)?;
-            return Ok(self.add_expr(
+            return Ok(self.add_finished_expr(
                 Expr::Closure {
                     moved,
                     params,
@@ -2887,7 +3036,7 @@ impl Parser {
                     result,
                     body,
                 },
-                self.finish_span(span),
+                span,
             ));
         }
         if self.is("..") || self.is("..=") {
@@ -2901,13 +3050,13 @@ impl Parser {
             if inclusive && end.is_none() {
                 return Err(self.err("inclusive range needs an end"));
             }
-            return Ok(self.add_expr(
+            return Ok(self.add_finished_expr(
                 Expr::Range {
                     start: None,
                     end,
                     inclusive,
                 },
-                self.finish_span(span),
+                span,
             ));
         }
         if self.is("unsafe")
@@ -2985,7 +3134,7 @@ impl Parser {
                 let yes = self.add_expr(Expr::Bool(true), span);
                 let no = self.add_expr(Expr::Bool(false), span);
                 let wildcard = self.add_pattern(Pattern::Wild, span);
-                return Ok(self.add_expr(
+                return Ok(self.add_finished_expr(
                     Expr::Match {
                         value,
                         arms: vec![
@@ -3003,7 +3152,7 @@ impl Parser {
                             },
                         ],
                     },
-                    self.finish_span(span),
+                    span,
                 ));
             }
             let mut args = Vec::new();
@@ -3020,13 +3169,13 @@ impl Parser {
             if matches!(path.name.as_str(), "format" | "write" | "writeln") {
                 self.normalize_format(&path.name, &mut args, span)?;
             }
-            return Ok(self.add_expr(
+            return Ok(self.add_finished_expr(
                 Expr::Macro {
                     name: path.name,
                     args,
                     separator,
                 },
-                self.finish_span(span),
+                span,
             ));
         }
         if allow_struct && self.take("{") {
@@ -3058,9 +3207,9 @@ impl Parser {
                 }
             }
             self.expect("}")?;
-            return Ok(self.add_expr(Expr::Struct { path, fields, base }, self.finish_span(span)));
+            return Ok(self.add_finished_expr(Expr::Struct { path, fields, base }, span));
         }
-        Ok(self.add_expr(Expr::Path(path), self.finish_span(span)))
+        Ok(self.add_finished_expr(Expr::Path(path), span))
     }
     fn normalize_format(
         &mut self,
@@ -3068,7 +3217,11 @@ impl Parser {
         args: &mut Vec<ExprId>,
         span: Span,
     ) -> Result<(), Diagnostic> {
-        let format_index = usize::from(name == "write" || name == "writeln");
+        let format_index = if name == "write" || name == "writeln" {
+            1
+        } else {
+            0
+        };
         if name == "writeln" && args.len() == 1 {
             let literal = self.add_expr(Expr::String(String::new()), span);
             args.push(literal);
@@ -3087,17 +3240,18 @@ impl Parser {
                 "format argument must be a string literal",
             ));
         };
-        let mut parts = formatting::parse(&text, span)?;
+        let parts = formatting::parse(&text, span)?;
         let offset = format_index + 1;
         let count = args.len() - offset;
-        let mut named = std::collections::BTreeMap::new();
+        let mut named: std::collections::BTreeMap<String, usize> =
+            std::collections::BTreeMap::new();
         let mut seen_named = false;
         for index in 0..count {
             if let Expr::Assign { op, place, value } =
                 self.program.exprs[args[offset + index]].kind.clone()
             {
                 if op == "=" {
-                    if let Expr::Path(path) = &self.program.exprs[place].kind {
+                    if let Expr::Path(path) = self.program.exprs[place].kind.clone() {
                         if path.declaration.is_none() && !path.name.contains("::") {
                             if named.insert(path.name.clone(), index).is_some() {
                                 return Err(Diagnostic::new(
@@ -3125,7 +3279,7 @@ impl Parser {
         let mut used = vec![false; count];
         let mut automatic = 0usize;
         let mut normalized = String::new();
-        for part in &mut parts {
+        for part in &parts {
             match part {
                 formatting::Part::Text(text) => {
                     normalized.push_str(&text.replace('{', "{{").replace('}', "}}"));
@@ -3144,8 +3298,12 @@ impl Parser {
                             ));
                         }
                         index
-                    } else if argument.bytes().all(|value| value.is_ascii_digit()) {
-                        let index = argument.parse::<usize>().map_err(|_| {
+                    } else if argument
+                        .as_str()
+                        .bytes()
+                        .all(|value| value.is_ascii_digit())
+                    {
+                        let index = argument.as_str().parse::<usize>().map_err(|_| {
                             Diagnostic::new(
                                 span,
                                 "E_FORMAT",
@@ -3160,21 +3318,24 @@ impl Parser {
                             ));
                         }
                         index
-                    } else if let Some(index) = named.get(argument) {
-                        *index
                     } else {
-                        let index = args.len() - offset;
-                        let value = self.add_expr(
-                            Expr::Path(Path {
-                                declaration: None,
-                                name: argument.clone(),
-                                args: Vec::new(),
-                            }),
-                            span,
-                        );
-                        args.push(value);
-                        named.insert(argument.clone(), index);
-                        index
+                        let existing = named.get(argument).copied();
+                        if let Some(index) = existing {
+                            index
+                        } else {
+                            let index = args.len() - offset;
+                            let value = self.add_expr(
+                                Expr::Path(Path {
+                                    declaration: None,
+                                    name: argument.clone(),
+                                    args: Vec::new(),
+                                }),
+                                span,
+                            );
+                            args.push(value);
+                            named.insert(argument.clone(), index);
+                            index
+                        }
                     };
                     if index >= args.len() - offset {
                         return Err(Diagnostic::new(
@@ -3187,7 +3348,7 @@ impl Parser {
                         used[index] = true;
                     }
                     normalized.push('{');
-                    normalized.push_str(&index.to_string());
+                    normalized.push_str(&format!("{index}"));
                     if !spelling.is_empty() {
                         normalized.push(':');
                         normalized.push_str(spelling);
@@ -3223,7 +3384,7 @@ impl Parser {
                 break;
             }
         }
-        Ok(self.add_pattern(Pattern::Or(arms), self.finish_span(span)))
+        Ok(self.add_finished_pattern(Pattern::Or(arms), span))
     }
     fn pattern_bound(&mut self) -> Result<ExprId, Diagnostic> {
         let span = self.token().span;
@@ -3233,17 +3394,17 @@ impl Parser {
                 || self.is("::")
             {
                 let path = self.value_path()?;
-                self.add_expr(Expr::Path(path), self.finish_span(span))
+                self.add_finished_expr(Expr::Path(path), span)
             } else {
                 self.literal()?
             };
         if negative {
-            Ok(self.add_expr(
+            Ok(self.add_finished_expr(
                 Expr::Unary {
                     op: "-".to_string(),
                     value,
                 },
-                self.finish_span(span),
+                span,
             ))
         } else {
             Ok(value)
@@ -3272,13 +3433,13 @@ impl Parser {
         if !self.expression_end() && !self.is("|") && !self.is("if") && !self.is("=") {
             return Err(self.unsupported("range endpoint expressions"));
         }
-        Ok(self.add_pattern(
+        Ok(self.add_finished_pattern(
             Pattern::Range {
                 start,
                 end,
                 inclusive,
             },
-            self.finish_span(span),
+            span,
         ))
     }
     fn tuple_pattern_field(&mut self) -> Result<PatternId, Diagnostic> {
@@ -3305,7 +3466,7 @@ impl Parser {
         if self.take("&") {
             let mutable = self.take("mut");
             let inner = self.pattern_atom()?;
-            return Ok(self.add_pattern(Pattern::Ref { mutable, inner }, self.finish_span(span)));
+            return Ok(self.add_finished_pattern(Pattern::Ref { mutable, inner }, span));
         }
         if self.take("(") {
             let mut fields = Vec::new();
@@ -3324,7 +3485,7 @@ impl Parser {
             {
                 return Ok(fields[0]);
             }
-            return Ok(self.add_pattern(Pattern::Tuple(fields), self.finish_span(span)));
+            return Ok(self.add_finished_pattern(Pattern::Tuple(fields), span));
         }
         if self.is("-")
             || self.token().kind == TokenKind::Number
@@ -3337,7 +3498,7 @@ impl Parser {
             if self.is("..") || self.is("..=") {
                 return self.pattern_range(Some(value), span);
             }
-            return Ok(self.add_pattern(Pattern::Literal(value), self.finish_span(span)));
+            return Ok(self.add_finished_pattern(Pattern::Literal(value), span));
         }
         let by_ref = self.take("ref");
         let mutable = self.take("mut");
@@ -3346,7 +3507,7 @@ impl Parser {
             if by_ref || mutable {
                 return Err(self.unsupported("binding range endpoint"));
             }
-            let value = self.add_expr(Expr::Path(path), self.finish_span(span));
+            let value = self.add_finished_expr(Expr::Path(path), span);
             return self.pattern_range(Some(value), span);
         }
         if self.take("(") {
@@ -3358,7 +3519,7 @@ impl Parser {
                 }
             }
             self.expect(")")?;
-            return Ok(self.add_pattern(Pattern::Variant { path, fields }, self.finish_span(span)));
+            return Ok(self.add_finished_pattern(Pattern::Variant { path, fields }, span));
         }
         if self.take("{") {
             let mut fields = Vec::new();
@@ -3392,10 +3553,7 @@ impl Parser {
                 }
             }
             self.expect("}")?;
-            return Ok(self.add_pattern(
-                Pattern::Struct { path, fields, rest },
-                self.finish_span(span),
-            ));
+            return Ok(self.add_finished_pattern(Pattern::Struct { path, fields, rest }, span));
         }
         if self.is("@") {
             return Err(self.unsupported("binding pattern with @"));
@@ -3411,7 +3569,7 @@ impl Parser {
                 ref_mut: mutable && by_ref,
             }
         };
-        Ok(self.add_pattern(kind, self.finish_span(span)))
+        Ok(self.add_finished_pattern(kind, span))
     }
 }
 

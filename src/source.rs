@@ -35,10 +35,11 @@ pub fn parse_bundle(bundle: &SourceBundle) -> Result<Program, Diagnostic> {
 }
 
 pub fn parse_bundle_report(bundle: &SourceBundle) -> SourceReport {
-    let mut files = BTreeMap::new();
+    let mut files: BTreeMap<String, usize> = BTreeMap::new();
     let mut duplicates = Vec::new();
-    for file in &bundle.files {
-        if files.contains_key(file.path.as_str()) {
+    for index in 0..bundle.files.len() {
+        let file = &bundle.files[index];
+        if files.contains_key(&file.path) {
             let mut error = Diagnostic::new(
                 Span::default(),
                 "E_SOURCE_DUPLICATE",
@@ -47,15 +48,25 @@ pub fn parse_bundle_report(bundle: &SourceBundle) -> SourceReport {
             error.path = file.path.clone();
             duplicates.push(error);
         } else {
-            files.insert(file.path.as_str(), file.text.as_str());
+            files.insert(file.path.clone(), index);
         }
     }
-    let mut report = load_report(&bundle.root, bundle.library.as_deref(), &mut |path| {
-        Ok(files.get(path).map(|s| s.to_string()))
+    let library = match &bundle.library {
+        Some(path) => Some(path.as_str()),
+        None => None,
+    };
+    let mut report = load_report(&bundle.root, library, &mut |path: &str| {
+        let text = match files.get(&path.to_string()) {
+            Some(index) => Some(bundle.files[*index].text.clone()),
+            None => None,
+        };
+        Ok(text)
     });
     if !duplicates.is_empty() {
         let mut diagnostics = duplicates;
-        diagnostics.append(&mut report.diagnostics);
+        for diagnostic in report.diagnostics {
+            diagnostics.push(diagnostic);
+        }
         report.diagnostics = diagnostics;
         report.blocked.push(BlockedRegion {
             domain: None,
@@ -69,7 +80,10 @@ pub fn parse_bundle_report(bundle: &SourceBundle) -> SourceReport {
 }
 
 fn parent(path: &str) -> &str {
-    path.rsplit_once('/').map(|(p, _)| p).unwrap_or("")
+    match path.rfind('/') {
+        Some(at) => &path[..at],
+        None => "",
+    }
 }
 fn join(directory: &str, file: &str) -> String {
     if directory.is_empty() {
@@ -79,11 +93,16 @@ fn join(directory: &str, file: &str) -> String {
     }
 }
 fn stem(path: &str) -> &str {
-    path.rsplit('/')
-        .next()
-        .unwrap_or(path)
-        .strip_suffix(".rs")
-        .unwrap_or(path)
+    let start = match path.rfind('/') {
+        Some(at) => at + 1,
+        None => 0,
+    };
+    let name = &path[start..];
+    if name.ends_with(".rs") {
+        &name[..name.len() - 3]
+    } else {
+        path
+    }
 }
 
 fn read_source<F: FnMut(&str) -> std::result::Result<Option<String>, String>>(
@@ -123,7 +142,7 @@ pub fn load_report<F: FnMut(&str) -> std::result::Result<Option<String>, String>
         parent: None,
         crate_root: 0,
     });
-    let mut pending = Vec::new();
+    let mut pending: Vec<(String, ModuleId, Option<usize>)> = Vec::new();
     if let Some(path) = standard {
         program.scopes.push(ModuleScope {
             path: "$std".to_string(),
@@ -133,8 +152,8 @@ pub fn load_report<F: FnMut(&str) -> std::result::Result<Option<String>, String>
         pending.push((path.to_string(), 1, None));
     }
     pending.push((root.to_string(), 0, None));
-    let mut directories = BTreeMap::new();
-    let mut loaded = BTreeMap::new();
+    let mut directories: BTreeMap<ModuleId, String> = BTreeMap::new();
+    let mut loaded: BTreeMap<ModuleId, String> = BTreeMap::new();
     let mut next_module = 0;
     while let Some((path, scope, owner)) = pending.pop() {
         let text = match read_source(read, &path, Span::default()) {
@@ -199,16 +218,22 @@ pub fn load_report<F: FnMut(&str) -> std::result::Result<Option<String>, String>
             join(parent(&path), stem(&path))
         };
         directories.insert(scope, base);
-        let mut parsed = syntax::parse_file_report(&mut program, &text, file, scope);
-        diagnostics.append(&mut parsed.diagnostics);
-        blocked.append(&mut parsed.blocked);
+        let parsed = syntax::parse_file_report(&mut program, &text, file, scope);
+        for diagnostic in parsed.diagnostics {
+            diagnostics.push(diagnostic);
+        }
+        for region in parsed.blocked {
+            blocked.push(region);
+        }
         let items = parsed.items;
         if let Some(index) = owner {
             let module: &mut Module = &mut program.modules[index];
             module.items = items;
             module.external = false;
         } else {
-            program.items.extend(items);
+            for item in items {
+                program.items.push(item);
+            }
         }
         while next_module < program.modules.len() {
             let index = next_module;
@@ -217,10 +242,14 @@ pub fn load_report<F: FnMut(&str) -> std::result::Result<Option<String>, String>
             let parent_scope = program.scopes[module.scope].parent.unwrap();
             let mut parent_path = directories.get(&parent_scope).cloned();
             let mut at = parent_scope;
-            let mut inline = Vec::new();
+            let mut inline: Vec<String> = Vec::new();
             while parent_path.is_none() {
                 let info = &program.scopes[at];
-                inline.push(info.path.rsplit("::").next().unwrap().to_string());
+                let start = match info.path.rfind("::") {
+                    Some(position) => position + 2,
+                    None => 0,
+                };
+                inline.push(info.path[start..].to_string());
                 at = info.parent.unwrap();
                 parent_path = directories.get(&at).cloned();
             }
@@ -239,15 +268,17 @@ pub fn load_report<F: FnMut(&str) -> std::result::Result<Option<String>, String>
             let (first, second) = match (first, second) {
                 (Ok(first), Ok(second)) => (first, second),
                 (first, second) => {
-                    for error in [first.err(), second.err()].into_iter().flatten() {
-                        blocked.push(BlockedRegion {
-                            domain: None,
-                            path: error.path.clone(),
-                            span: module.span,
-                            kind: "module".to_string(),
-                            reason: error.message.clone(),
-                        });
-                        diagnostics.push(error);
+                    for candidate in vec![first.err(), second.err()] {
+                        if let Some(error) = candidate {
+                            blocked.push(BlockedRegion {
+                                domain: None,
+                                path: error.path.clone(),
+                                span: module.span,
+                                kind: "module".to_string(),
+                                reason: error.message.clone(),
+                            });
+                            diagnostics.push(error);
+                        }
                     }
                     continue;
                 }

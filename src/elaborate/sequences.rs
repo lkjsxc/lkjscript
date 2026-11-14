@@ -105,11 +105,12 @@ impl Compiler<'_> {
         span: a::Span,
     ) -> Result<usize> {
         let source = self.names.sequence_function(name, span)?;
-        let parameters: Vec<_> = self.source.functions[source]
-            .generics
-            .iter()
-            .filter(|parameter| !parameter.lifetime)
-            .collect();
+        let mut parameters: Vec<String> = Vec::new();
+        for parameter in &self.source.functions[source].generics {
+            if !parameter.lifetime {
+                parameters.push(parameter.name.clone());
+            }
+        }
         if parameters.len() != 1 {
             return Err(err(
                 span,
@@ -118,7 +119,7 @@ impl Compiler<'_> {
             ));
         }
         let mut substitutions = BTreeMap::new();
-        substitutions.insert(parameters[0].name.clone(), element);
+        substitutions.insert(parameters[0].clone(), element);
         let function = self.instantiate(source, substitutions)?;
         let vector = self.intern(String::new(), k::TypeKind::Vec { inner: element });
         let reference = self.reference(vector, false);

@@ -21,7 +21,10 @@ fn invalid(span: Span, message: &str) -> Diagnostic {
     Diagnostic::new(span, "E_FORMAT", message)
 }
 fn specification(text: &str, span: Span) -> Result<Specification, Diagnostic> {
-    let chars: Vec<char> = text.chars().collect();
+    let mut chars: Vec<char> = Vec::new();
+    for ch in text.chars() {
+        chars.push(ch);
+    }
     let mut at = 0usize;
     let mut result = Specification {
         width: 0,
@@ -98,7 +101,10 @@ fn specification(text: &str, span: Span) -> Result<Specification, Diagnostic> {
     Ok(result)
 }
 pub(crate) fn parse(text: &str, span: Span) -> Result<Vec<Part>, Diagnostic> {
-    let chars: Vec<char> = text.chars().collect();
+    let mut chars: Vec<char> = Vec::new();
+    for ch in text.chars() {
+        chars.push(ch);
+    }
     let mut at = 0usize;
     let mut literal = String::new();
     let mut parts = Vec::new();
@@ -110,7 +116,7 @@ pub(crate) fn parse(text: &str, span: Span) -> Result<Vec<Part>, Diagnostic> {
                 continue;
             }
             if !literal.is_empty() {
-                parts.push(Part::Text(std::mem::take(&mut literal)));
+                parts.push(Part::Text(std::mem::replace(&mut literal, String::new())));
             }
             at += 1;
             let start = at;
@@ -123,10 +129,34 @@ pub(crate) fn parse(text: &str, span: Span) -> Result<Vec<Part>, Diagnostic> {
             if at == chars.len() {
                 return Err(invalid(span, "unclosed format argument"));
             }
-            let field: String = chars[start..at].iter().collect();
+            let mut field = String::new();
+            for ch in &chars[start..at] {
+                field.push(*ch);
+            }
             at += 1;
-            let (argument, spelling) = field.split_once(':').unwrap_or((&field, ""));
-            let argument = argument.trim();
+            let (argument, spelling) = field
+                .as_str()
+                .split_once(':')
+                .unwrap_or((field.as_str(), ""));
+            let mut argument_start = 0;
+            let mut argument_end = 0;
+            let mut byte_offset = 0;
+            let mut leading = true;
+            for ch in argument.chars() {
+                byte_offset += ch.len_utf8();
+                if leading && ch.is_whitespace() {
+                    argument_start = byte_offset;
+                } else {
+                    leading = false;
+                }
+                if !ch.is_whitespace() {
+                    argument_end = byte_offset;
+                }
+            }
+            if leading {
+                argument_end = argument_start;
+            }
+            let argument = &argument[argument_start..argument_end];
             if !argument
                 .chars()
                 .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')

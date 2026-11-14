@@ -94,37 +94,55 @@ fn qualify_skipped_nodes(
     resolved: &mut crate::resolve::recovery::Report,
     skipped: &[crate::diagnostics::BlockedRegion],
 ) {
-    let mut regions: Vec<_> = skipped
-        .iter()
-        .filter(|region| matches!(region.kind.as_str(), "item" | "statement" | "file"))
-        .collect();
-    regions.sort_by_key(|region| (region.span.file, region.span.start));
-    let mut ranges: Vec<(a::Span, &str)> = Vec::new();
-    for region in regions {
-        if let Some((last, _)) = ranges.last_mut() {
+    let mut regions: Vec<(usize, usize, usize)> = Vec::new();
+    for (index, region) in skipped.iter().enumerate() {
+        if matches!(region.kind.as_str(), "item" | "statement" | "file") {
+            regions.push((region.span.file, region.span.start, index));
+        }
+    }
+    regions.sort();
+    let mut ranges: Vec<(a::Span, usize)> = Vec::new();
+    for (_, _, index) in regions {
+        let region = &skipped[index];
+        if !ranges.is_empty() {
+            let last_index = ranges.len() - 1;
+            let last = ranges[last_index].0;
             if last.file == region.span.file && region.span.start <= last.end {
-                last.end = last.end.max(region.span.end);
+                ranges[last_index].0.end = last.end.max(region.span.end);
                 continue;
             }
         }
-        ranges.push((region.span, &region.reason));
+        ranges.push((region.span, index));
     }
-    for failure in &mut resolved.failures {
-        use crate::resolve::recovery::Site;
+    let mut failure_index = 0;
+    while failure_index < resolved.failures.len() {
+        let failure = &mut resolved.failures[failure_index];
         let source = &resolved.program;
         let span = match failure.site {
-            Site::Import(id) => source.uses[id].span,
-            Site::Type(id) => source.types[id].span,
-            Site::Pattern(id) => source.patterns[id].span,
-            Site::Expression(id) => source.exprs[id].span,
+            crate::resolve::recovery::Site::Import(id) => source.uses[id].span,
+            crate::resolve::recovery::Site::Type(id) => source.types[id].span,
+            crate::resolve::recovery::Site::Pattern(id) => source.patterns[id].span,
+            crate::resolve::recovery::Site::Expression(id) => source.exprs[id].span,
         };
-        let index = ranges
-            .partition_point(|(range, _)| (range.file, range.start) <= (span.file, span.start));
-        if let Some((range, reason)) = index.checked_sub(1).map(|index| ranges[index]) {
+        let mut low = 0;
+        let mut high = ranges.len();
+        while low < high {
+            let middle = low + (high - low) / 2;
+            let range = ranges[middle].0;
+            if (range.file, range.start) <= (span.file, span.start) {
+                low = middle + 1;
+            } else {
+                high = middle;
+            }
+        }
+        if low > 0 {
+            let (range, region_index) = ranges[low - 1];
             if range.file == span.file && span.end <= range.end {
+                let reason = &skipped[region_index].reason;
                 failure.problem = blocked(span, &format!("lookup lies in skipped input: {reason}"));
             }
         }
+        failure_index += 1;
     }
 }
 pub(crate) fn report(input: &crate::source::SourceReport) -> SemanticReport {
@@ -189,7 +207,9 @@ pub(crate) fn report(input: &crate::source::SourceReport) -> SemanticReport {
         }
     }
     if !additional.is_empty() {
-        resolved.failures.extend(additional);
+        for failure in additional {
+            resolved.failures.push(failure);
+        }
         readiness = Readiness::new(&resolved);
     }
     let (implementations, failed_index) = crate::generics::ImplementationIndex::for_diagnostics(
@@ -204,25 +224,23 @@ pub(crate) fn report(input: &crate::source::SourceReport) -> SemanticReport {
         &input.blocked,
     )
     .propagate_globs(&names);
-    let imports = resolved
-        .failures
-        .iter()
-        .filter_map(|failure| match failure.site {
-            crate::resolve::recovery::Site::Import(id) => Some(id),
-            _ => None,
-        })
-        .collect();
+    let mut imports = Vec::new();
+    for failure in &resolved.failures {
+        if let crate::resolve::recovery::Site::Import(id) = failure.site {
+            imports.push(id);
+        }
+    }
     let context = Context {
         readiness,
         domains,
         imports,
     };
-    let blocked_sites: BTreeSet<_> = resolved
-        .failures
-        .iter()
-        .filter(|failure| failure.problem.code == "E_BLOCKED")
-        .map(|failure| failure.site)
-        .collect();
+    let mut blocked_sites: BTreeSet<crate::resolve::recovery::Site> = BTreeSet::new();
+    for failure in &resolved.failures {
+        if failure.problem.code == "E_BLOCKED" {
+            blocked_sites.insert(failure.site);
+        }
+    }
     for failure in &resolved.failures {
         if failure.problem.code != "E_BLOCKED" && blocked_sites.contains(&failure.site) {
             continue;
@@ -281,16 +299,19 @@ pub(crate) fn report(input: &crate::source::SourceReport) -> SemanticReport {
         )
     });
     if resolved.failures.is_empty() && syntax_complete {
-        match super::infer_resolved_report(source) {
+        let declaration_problems = match super::infer_resolved_report(source) {
             Ok(definitions) => {
-                *output
-                    .coverage
-                    .entry("complete pipeline attempted".to_string())
-                    .or_default() += source
-                    .functions
-                    .iter()
-                    .filter(|function| function.body.is_some())
-                    .count();
+                let mut body_count = 0;
+                for function in &source.functions {
+                    if function.body.is_some() {
+                        body_count += 1;
+                    }
+                }
+                crate::diagnostics::add_count(
+                    &mut output.coverage,
+                    "complete pipeline attempted",
+                    body_count,
+                );
                 match super::lower_definitions(definitions) {
                     Ok(program) => {
                         if let Err(problems) = crate::check::check_all(program) {
@@ -316,19 +337,18 @@ pub(crate) fn report(input: &crate::source::SourceReport) -> SemanticReport {
                 output.deduplicate();
                 return output;
             }
-            Err(problems) => {
-                for problem in problems {
-                    record(
-                        &mut output,
-                        source,
-                        None,
-                        "declaration validation",
-                        problem,
-                        None,
-                        None,
-                    );
-                }
-            }
+            Err(problems) => problems,
+        };
+        for problem in declaration_problems {
+            record(
+                &mut output,
+                source,
+                None,
+                "declaration validation",
+                problem,
+                None,
+                None,
+            );
         }
     }
     let mut definitions = std::collections::BTreeMap::new();
@@ -336,10 +356,7 @@ pub(crate) fn report(input: &crate::source::SourceReport) -> SemanticReport {
         if definition.body.is_none() {
             continue;
         }
-        *output
-            .coverage
-            .entry("bodies present".to_string())
-            .or_default() += 1;
+        crate::diagnostics::count(&mut output.coverage, "bodies present");
         if let Some(problem) = context.readiness.signature_problem(function) {
             record(
                 &mut output,
@@ -393,10 +410,7 @@ pub(crate) fn report(input: &crate::source::SourceReport) -> SemanticReport {
             );
             continue;
         }
-        *output
-            .coverage
-            .entry("source bodies attempted".to_string())
-            .or_default() += 1;
+        crate::diagnostics::count(&mut output.coverage, "source bodies attempted");
         let inferred = match definition_types::infer_available(
             source,
             &names,
@@ -416,24 +430,18 @@ pub(crate) fn report(input: &crate::source::SourceReport) -> SemanticReport {
                     None,
                     None,
                 );
-                *output
-                    .coverage
-                    .entry(
-                        if unavailable {
-                            "source attempts blocked"
-                        } else {
-                            "source attempts failed"
-                        }
-                        .to_string(),
-                    )
-                    .or_default() += 1;
+                crate::diagnostics::count(
+                    &mut output.coverage,
+                    if unavailable {
+                        "source attempts blocked"
+                    } else {
+                        "source attempts failed"
+                    },
+                );
                 continue;
             }
         };
-        *output
-            .coverage
-            .entry("source inference returned facts".to_string())
-            .or_default() += 1;
+        crate::diagnostics::count(&mut output.coverage, "source inference returned facts");
         for (_, problem) in inferred.unresolved_paths() {
             record(
                 &mut output,
@@ -465,12 +473,14 @@ pub(crate) fn report(input: &crate::source::SourceReport) -> SemanticReport {
             let display = receiver.display(source);
             let head = receiver.head(source);
             if methods::direct(receiver.primitive(), name).is_some() {
-                *output
-                    .coverage
-                    .entry("direct method sites with known receiver".to_string())
-                    .or_default() += 1;
+                crate::diagnostics::count(
+                    &mut output.coverage,
+                    "direct method sites with known receiver",
+                );
             } else if let Some(problem) =
-                context.domains.method_problem(head.as_deref(), name, false)
+                context
+                    .domains
+                    .method_problem(head.as_ref().map(|name| name.as_str()), name, false)
             {
                 record(
                     &mut output,
@@ -511,7 +521,8 @@ pub(crate) fn report(input: &crate::source::SourceReport) -> SemanticReport {
                     Some(name.clone()),
                 );
             } else {
-                let candidates = implementations.method_candidates_by_head(head.as_deref(), name);
+                let candidates = implementations
+                    .method_candidates_by_head(head.as_ref().map(|name| name.as_str()), name);
                 if candidates.is_empty() {
                     record(
                         &mut output,
@@ -530,12 +541,12 @@ pub(crate) fn report(input: &crate::source::SourceReport) -> SemanticReport {
                     let visibility = candidates.iter().any(|id| source.impls[*id].trait_ty.is_some_and(|ty| {
                         matches!(&source.types[ty].kind, a::Type::Path(path) if path.declaration.is_some_and(|declaration| !names.trait_in_scope(node.scope, declaration, node.span)))
                     }));
-                    let reason = if let Some(import) = visibility
-                        .then(|| {
-                            names.uncertain_trait_import(&context.imports, node.scope, node.span)
-                        })
-                        .flatten()
-                    {
+                    let uncertain_import = if visibility {
+                        names.uncertain_trait_import(&context.imports, node.scope, node.span)
+                    } else {
+                        None
+                    };
+                    let reason: String = if let Some(import) = uncertain_import {
                         format!(
                             "trait candidate visibility depends on unresolved import {}",
                             source.uses[import].path

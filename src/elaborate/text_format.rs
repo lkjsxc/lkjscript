@@ -148,12 +148,9 @@ impl Builder<'_, '_> {
     ) -> Result<()> {
         let receiver = self.borrow(k::Place::local(formatter), true, span.line)?.0;
         let width = self.format_constant(k::U64, specification.width as i64, span.line);
-        let flags = self.format_constant(k::U8, i64::from(specification.flags), span.line);
-        let fill = self.format_constant(
-            self.compiler.type_names["char"],
-            specification.fill as i64,
-            span.line,
-        );
+        let flags = self.format_constant(k::U8, specification.flags as i64, span.line);
+        let character = *self.compiler.type_names.get(&"char".to_string()).unwrap();
+        let fill = self.format_constant(character, specification.fill as i64, span.line);
         let unit = self
             .source_library_call(
                 "fmt",
@@ -173,14 +170,16 @@ impl Builder<'_, '_> {
         span: a::Span,
     ) -> Result<(usize, usize)> {
         let writing = name != "format";
-        let format_index = usize::from(writing);
+        let format_index = writing as usize;
         let Some(&literal) = args.get(format_index) else {
             return Err(err(span, "E_FORMAT", "format macro requires a literal"));
         };
-        let a::Expr::String(text) = &self.compiler.source.exprs[literal].kind else {
-            return Err(err(span, "E_FORMAT", "format argument must be a literal"));
+        let parts = {
+            let a::Expr::String(text) = &self.compiler.source.exprs[literal].kind else {
+                return Err(err(span, "E_FORMAT", "format argument must be a literal"));
+            };
+            formatting::parse(text, span)?
         };
-        let parts = formatting::parse(text, span)?;
         let target = if writing {
             Some(self.addressable(args[0])?)
         } else {
@@ -271,6 +270,7 @@ impl Builder<'_, '_> {
                     ..
                 } => {
                     let index = argument
+                        .as_str()
                         .parse::<usize>()
                         .map_err(|_| err(span, "E_FORMAT", "format argument was not normalized"))?;
                     let Some(&(reference, ty)) = arguments.get(index) else {

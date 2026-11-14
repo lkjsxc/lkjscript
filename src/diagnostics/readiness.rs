@@ -2,7 +2,6 @@
 //! nominal identity remains usable in source inference when one field is absent.
 use crate::ast as a;
 use crate::resolve::recovery::{Report, Site};
-use std::collections::VecDeque;
 
 pub(crate) struct UnavailableTypes {
     pub causes: Vec<Option<usize>>,
@@ -32,17 +31,20 @@ impl Graph {
         self.reverse[dependency].push(node);
     }
     fn finish(mut self) -> Vec<Option<usize>> {
-        let mut pending: VecDeque<_> = self
-            .causes
-            .iter()
-            .enumerate()
-            .filter_map(|(id, cause)| cause.map(|_| id))
-            .collect();
-        while let Some(dependency) = pending.pop_front() {
+        let mut pending: Vec<usize> = Vec::new();
+        for (id, cause) in self.causes.iter().enumerate() {
+            if cause.is_some() {
+                pending.push(id);
+            }
+        }
+        let mut head = 0;
+        while head < pending.len() {
+            let dependency = pending[head];
+            head += 1;
             for node in &self.reverse[dependency] {
                 if self.causes[*node].is_none() {
                     self.causes[*node] = self.causes[dependency];
-                    pending.push_back(*node);
+                    pending.push(*node);
                 }
             }
         }
@@ -73,8 +75,13 @@ fn dependency(problem: &a::Diagnostic) -> a::Diagnostic {
     result.code = "E_BLOCKED".to_string();
     result
 }
-fn first(types: &UnavailableTypes, roots: impl IntoIterator<Item = usize>) -> Option<usize> {
-    roots.into_iter().find_map(|id| types.causes[id])
+fn first(types: &UnavailableTypes, roots: &[usize]) -> Option<usize> {
+    for id in roots {
+        if let Some(cause) = types.causes[*id] {
+            return Some(cause);
+        }
+    }
+    None
 }
 pub(crate) struct Readiness {
     pub types: UnavailableTypes,
@@ -121,18 +128,21 @@ impl Readiness {
                 }
             }
         }
-        let explicit_lifetimes = lifetimes
-            .finish()
-            .into_iter()
-            .map(|cause| cause.is_some())
-            .collect();
+        let mut explicit_lifetimes = Vec::new();
+        for cause in lifetimes.finish() {
+            explicit_lifetimes.push(cause.is_some());
+        }
         let types = UnavailableTypes {
             causes: graph.finish(),
             problems,
         };
         let count = source.types.len();
         let mut layout = Graph::new(count + source.declarations.len());
-        layout.causes[..count].clone_from_slice(&types.causes);
+        let mut cause_index = 0;
+        while cause_index < count {
+            layout.causes[cause_index] = types.causes[cause_index];
+            cause_index += 1;
+        }
         for (id, node) in source.types.iter().enumerate() {
             for child in type_children(&node.kind) {
                 layout.needs(id, child);
@@ -144,54 +154,54 @@ impl Readiness {
             }
         }
         for (declaration, item) in source.declarations.iter().enumerate() {
-            let fields: Vec<_> = match item.item {
-                a::Item::Struct(id) => source.structs[id]
-                    .fields
-                    .iter()
-                    .map(|field| field.ty)
-                    .collect(),
-                a::Item::Enum(id) => source.enums[id]
-                    .variants
-                    .iter()
-                    .flat_map(|variant| variant.fields.iter().map(|field| field.ty))
-                    .collect(),
-                a::Item::Alias(id) => vec![source.aliases[id].ty],
-                _ => Vec::new(),
-            };
-            for field in fields {
-                layout.needs(count + declaration, field);
+            match item.item {
+                a::Item::Struct(id) => {
+                    for field in &source.structs[id].fields {
+                        layout.needs(count + declaration, field.ty);
+                    }
+                }
+                a::Item::Enum(id) => {
+                    for variant in &source.enums[id].variants {
+                        for field in &variant.fields {
+                            layout.needs(count + declaration, field.ty);
+                        }
+                    }
+                }
+                a::Item::Alias(id) => layout.needs(count + declaration, source.aliases[id].ty),
+                _ => {}
             }
         }
         let layouts = layout.finish();
         let mut signatures = Vec::new();
         for (index, function) in source.functions.iter().enumerate() {
             let mut roots = vec![function.result];
-            roots.extend(function.params.iter().map(|parameter| parameter.ty));
-            roots.extend(
-                function
-                    .generics
-                    .iter()
-                    .flat_map(|parameter| parameter.bounds.iter().copied()),
-            );
+            for parameter in &function.params {
+                roots.push(parameter.ty);
+            }
+            for parameter in &function.generics {
+                for bound in &parameter.bounds {
+                    roots.push(*bound);
+                }
+            }
             if let a::FunctionOwner::Implementation(owner) =
                 source.function_owner(a::FunctionId { index })
             {
                 roots.push(source.impls[owner.index].target);
-                roots.extend(source.impls[owner.index].trait_ty);
-                roots.extend(
-                    source.impls[owner.index]
-                        .generics
-                        .iter()
-                        .flat_map(|parameter| parameter.bounds.iter().copied()),
-                );
+                if let Some(trait_ty) = source.impls[owner.index].trait_ty {
+                    roots.push(trait_ty);
+                }
+                for parameter in &source.impls[owner.index].generics {
+                    for bound in &parameter.bounds {
+                        roots.push(*bound);
+                    }
+                }
             }
-            signatures.push(first(&types, roots));
+            signatures.push(first(&types, &roots));
         }
-        let implementation_headers = source
-            .impls
-            .iter()
-            .map(|implementation| types.get(implementation.target).is_none())
-            .collect();
+        let mut implementation_headers = Vec::new();
+        for implementation in &source.impls {
+            implementation_headers.push(types.get(implementation.target).is_none());
+        }
         Self {
             types,
             layouts,
@@ -207,16 +217,20 @@ impl Readiness {
     pub fn layout_problem(&self, source: &a::Program, function: usize) -> Option<&a::Diagnostic> {
         let definition = &source.functions[function];
         let mut roots = vec![definition.result];
-        roots.extend(definition.params.iter().map(|parameter| parameter.ty));
+        for parameter in &definition.params {
+            roots.push(parameter.ty);
+        }
         if let a::FunctionOwner::Implementation(owner) =
             source.function_owner(a::FunctionId { index: function })
         {
             roots.push(source.impls[owner.index].target);
         }
-        roots
-            .into_iter()
-            .find_map(|id| self.layouts[id])
-            .map(|cause| &self.types.problems[cause])
+        for id in roots {
+            if let Some(cause) = self.layouts[id] {
+                return Some(&self.types.problems[cause]);
+            }
+        }
+        None
     }
     pub fn body_problem(
         &self,

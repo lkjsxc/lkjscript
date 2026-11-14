@@ -3,15 +3,16 @@
 use super::{Bindings, Builder, Facts, LoopScope, Result, a, err, k, place_type};
 use std::collections::BTreeMap;
 
+enum HintStep {
+    Deref,
+    Field(String),
+    Index,
+}
+
 impl Builder<'_, '_> {
     /// Structural place types do not evaluate their index expressions. In
     /// particular, a method's spelling is never evidence of its result type.
     fn assignment_type_hint(&self, mut expression: usize) -> Option<usize> {
-        enum Step<'a> {
-            Deref,
-            Field(&'a str),
-            Index,
-        }
         let mut steps = Vec::new();
         let mut ty = loop {
             match &self.compiler.source.exprs[expression].kind {
@@ -23,15 +24,15 @@ impl Builder<'_, '_> {
                         .or_else(|| self.binding(&path.name).map(|local| self.ty(local)))?;
                 }
                 a::Expr::Unary { op, value } if op == "*" => {
-                    steps.push(Step::Deref);
+                    steps.push(HintStep::Deref);
                     expression = *value;
                 }
                 a::Expr::Field { value, name } => {
-                    steps.push(Step::Field(name));
+                    steps.push(HintStep::Field(name.clone()));
                     expression = *value;
                 }
                 a::Expr::Index { value, .. } => {
-                    steps.push(Step::Index);
+                    steps.push(HintStep::Index);
                     expression = *value;
                 }
                 _ => return None,
@@ -39,11 +40,11 @@ impl Builder<'_, '_> {
         };
         while let Some(step) = steps.pop() {
             ty = match step {
-                Step::Deref => match self.compiler.types[ty].kind {
+                HintStep::Deref => match self.compiler.types[ty].kind {
                     k::TypeKind::Ref { inner, .. } | k::TypeKind::Box { inner } => inner,
                     _ => return None,
                 },
-                Step::Field(name) => {
+                HintStep::Field(name) => {
                     while let k::TypeKind::Ref { inner, .. } | k::TypeKind::Box { inner } =
                         self.compiler.types[ty].kind
                     {
@@ -51,12 +52,19 @@ impl Builder<'_, '_> {
                     }
                     match &self.compiler.types[ty].kind {
                         k::TypeKind::Struct { fields, .. } => {
-                            fields.iter().find(|field| field.name == name)?.ty
+                            let mut found = None;
+                            for field in fields {
+                                if field.name == name {
+                                    found = Some(field.ty);
+                                    break;
+                                }
+                            }
+                            found?
                         }
                         _ => return None,
                     }
                 }
-                Step::Index => {
+                HintStep::Index => {
                     while let k::TypeKind::Ref { inner, .. } = self.compiler.types[ty].kind {
                         ty = inner;
                     }
@@ -114,10 +122,9 @@ impl Builder<'_, '_> {
             written.push(self.written.at(*original));
         }
         let references = Facts::new(function.locals.len());
-        let loops = self
-            .loops
-            .iter()
-            .map(|scope| LoopScope {
+        let mut loops = Vec::new();
+        for scope in &self.loops {
+            loops.push(LoopScope {
                 synthetic: scope.synthetic,
                 start: 0,
                 range: None,
@@ -125,12 +132,12 @@ impl Builder<'_, '_> {
                 result: None,
                 result_typed: true,
                 result_expected: scope.result_expected,
-            })
-            .collect();
+            });
+        }
         // The memo belongs to this one function instance. Nested probes share
         // it by transfer, so an effectful target nested inside another target is
         // elaborated for its type once rather than expanding repeated work.
-        let assignment_types = std::mem::take(&mut self.assignment_types);
+        let assignment_types = std::mem::replace(&mut self.assignment_types, BTreeMap::new());
         let (result, assignment_types) = {
             let mut probe = Builder {
                 source_function: self.source_function,
@@ -162,17 +169,17 @@ impl Builder<'_, '_> {
                 loops,
                 reachable: self.reachable,
             };
-            let result = probe
-                .place_with_mutability(expression, true)
-                .and_then(|place| {
-                    place_type(&probe.compiler.types, probe.function, &place).ok_or_else(|| {
-                        err(
-                            probe.compiler.source.exprs[expression].span,
-                            "E_TYPE",
-                            "invalid assignment place",
-                        )
-                    })
-                });
+            let result = match probe.place_with_mutability(expression, true) {
+                Ok(place) => match place_type(&probe.compiler.types, probe.function, &place) {
+                    Some(ty) => Ok(ty),
+                    None => Err(err(
+                        probe.compiler.source.exprs[expression].span,
+                        "E_TYPE",
+                        "invalid assignment place",
+                    )),
+                },
+                Err(problem) => Err(problem),
+            };
             (result, probe.assignment_types)
         };
         self.assignment_types = assignment_types;
@@ -208,10 +215,14 @@ impl Builder<'_, '_> {
             // RHS is evaluated before both the destination and its scalar read.
             let left = self.read(place.clone(), span.line)?.0;
             let dst = self.temp(ty);
+            let mut end = operation.len();
+            while end != 0 && operation.as_bytes()[end - 1] == b'=' {
+                end -= 1;
+            }
             self.emit(
                 k::Op::Binary {
                     dst,
-                    op: operation.trim_end_matches('=').to_string(),
+                    op: operation[..end].to_string(),
                     left,
                     right: incoming.0,
                 },

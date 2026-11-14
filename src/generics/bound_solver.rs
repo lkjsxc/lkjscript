@@ -65,19 +65,20 @@ impl BoundSolver {
             self.state.insert(goal, 1);
         }
     }
+    #[allow(clippy::mem_replace_with_default)]
     pub(crate) fn completed(&mut self) -> Vec<(Goal, Option<ImplementationWitness>)> {
-        std::mem::take(&mut self.completed)
+        std::mem::replace(&mut self.completed, Vec::new())
     }
     pub(crate) fn advance(&mut self, context: BoundContext<'_>) -> BoundStep {
         while let Some(task) = self.tasks.pop() {
             match task {
                 Task::Finish(goal, requirements) => {
-                    if self.state.get(&goal) == Some(&1) {
+                    if self.state.get(&goal).copied() == Some(1u8) {
                         continue;
                     }
                     let valid = requirements.children.iter().all(|child| {
-                        self.state.get(child) == Some(&2)
-                            || (self.state.get(child) == Some(&0)
+                        self.state.get(child).copied() == Some(2u8)
+                            || (self.state.get(child).copied() == Some(0u8)
                                 && self.structural.contains(child))
                     });
                     if !valid {
@@ -95,8 +96,9 @@ impl BoundSolver {
                     self.completed.push((goal, requirements.witness));
                 }
                 Task::Enter(goal) => {
-                    if let Some(previous) = self.state.get(&goal) {
-                        if *previous == 0 && !self.structural.contains(&goal) {
+                    let previous = self.state.get(&goal).copied();
+                    if let Some(previous) = previous {
+                        if previous == 0 && !self.structural.contains(&goal) {
                             self.state.insert(goal, 1);
                         }
                         continue;
@@ -123,13 +125,14 @@ impl BoundSolver {
                     if requirements.structural {
                         self.structural.insert(goal.clone());
                     }
-                    let children = requirements.children.clone();
+                    let mut children = requirements.children.clone();
                     self.tasks.push(Task::Finish(goal, requirements));
-                    self.tasks
-                        .extend(children.into_iter().rev().map(Task::Enter));
+                    while let Some(child) = children.pop() {
+                        self.tasks.push(Task::Enter(child));
+                    }
                 }
             }
         }
-        BoundStep::Done(self.state.get(&self.first) == Some(&2))
+        BoundStep::Done(self.state.get(&self.first).copied() == Some(2u8))
     }
 }

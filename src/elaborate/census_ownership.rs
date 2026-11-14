@@ -3,7 +3,7 @@
 use super::{Compiler, Instance, PendingFunction, a, census, definition_types, methods};
 use crate::diagnostics::SemanticReport;
 use crate::resolve::Resolver;
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet};
 
 enum Body {
     Ready(Vec<usize>),
@@ -26,16 +26,21 @@ fn dependencies(
             "ownership requires complete nominal, generic, or callable contracts".to_string(),
         );
     }
-    if std::iter::once(definition.result)
-        .chain(definition.params.iter().map(|parameter| parameter.ty))
-        .any(|ty| context.readiness.explicit_lifetimes[ty])
-    {
+    let mut named_lifetimes = context.readiness.explicit_lifetimes[definition.result];
+    for parameter in &definition.params {
+        if context.readiness.explicit_lifetimes[parameter.ty] {
+            named_lifetimes = true;
+        }
+    }
+    if named_lifetimes {
         return Body::Blocked(
             "named lifetime obligations require their scoped declaration checks".to_string(),
         );
     }
     let mut blocks = BTreeSet::new();
-    blocks.extend(definition.body);
+    if let Some(body) = definition.body {
+        blocks.insert(body);
+    }
     let mut calls = Vec::new();
     for expression in inferred.expressions() {
         let node = &source.exprs[expression];
@@ -112,12 +117,13 @@ fn dependencies(
             // Only scalar operators bypass trait selection. The other body
             // forms are constrained through their actual source inference.
             a::Expr::Binary { left, right, .. } => {
-                if ![left, right].iter().all(|operand| {
-                    matches!(
-                        inferred.receiver(**operand),
-                        Some(definition_types::census::Receiver::Atom(_))
-                    )
-                }) {
+                if !matches!(
+                    inferred.receiver(*left),
+                    Some(definition_types::census::Receiver::Atom(_))
+                ) || !matches!(
+                    inferred.receiver(*right),
+                    Some(definition_types::census::Receiver::Atom(_))
+                ) {
                     return Body::Blocked("operator requires complete trait contracts".to_string());
                 }
             }
@@ -149,7 +155,7 @@ pub(super) fn analyze(
     let mut available = BTreeSet::new();
     let mut blockers = BTreeMap::new();
     let mut reverse = vec![Vec::new(); source.functions.len()];
-    let mut pending = VecDeque::new();
+    let mut pending = Vec::new();
     for function in 0..source.functions.len() {
         let Some(inferred) = definitions.get(&function) else {
             if source.functions[function].body.is_some() {
@@ -158,12 +164,12 @@ pub(super) fn analyze(
                     "source type analysis is incomplete or failed".to_string(),
                 );
             }
-            pending.push_back(function);
+            pending.push(function);
             continue;
         };
         if let Some(problem) = context.readiness.layout_problem(source, function) {
             blockers.insert(function, problem.message.clone());
-            pending.push_back(function);
+            pending.push(function);
             continue;
         }
         match dependencies(source, &names, function, inferred, context) {
@@ -175,11 +181,14 @@ pub(super) fn analyze(
             }
             Body::Blocked(reason) => {
                 blockers.insert(function, reason);
-                pending.push_back(function);
+                pending.push(function);
             }
         }
     }
-    while let Some(callee) = pending.pop_front() {
+    let mut head = 0;
+    while head < pending.len() {
+        let callee = pending[head];
+        head += 1;
         for function in &reverse[callee] {
             if available.remove(function) {
                 blockers.insert(
@@ -189,7 +198,7 @@ pub(super) fn analyze(
                         source.functions[callee].name
                     ),
                 );
-                pending.push_back(*function);
+                pending.push(*function);
             }
         }
     }
@@ -260,10 +269,10 @@ pub(super) fn analyze(
         ) {
             Ok(body) => {
                 compiler.functions[function] = body;
-                *report
-                    .coverage
-                    .entry("structural ownership bodies constructed".to_string())
-                    .or_default() += 1;
+                crate::diagnostics::count(
+                    &mut report.coverage,
+                    "structural ownership bodies constructed",
+                );
             }
             Err(problem) => {
                 census::record(
@@ -294,7 +303,9 @@ pub(super) fn analyze(
     let mut problems =
         crate::check::refine_return_contracts(&mut program, &compiler.return_inference);
     if let Err(errors) = crate::check::check_all(program) {
-        problems.extend(errors);
+        for error in errors {
+            problems.push(error);
+        }
     }
     for problem in problems {
         census::record(report, source, None, "ownership", problem, None, None);

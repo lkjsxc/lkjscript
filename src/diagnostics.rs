@@ -41,8 +41,13 @@ pub struct Census {
     pub blocked: BTreeMap<String, usize>,
 }
 
-fn count(counts: &mut BTreeMap<String, usize>, kind: &str) {
-    *counts.entry(kind.to_string()).or_insert(0) += 1;
+pub(crate) fn add_count(counts: &mut BTreeMap<String, usize>, kind: &str, amount: usize) {
+    let key = kind.to_string();
+    let previous = counts.get(&key).copied().unwrap_or(0);
+    counts.insert(key, previous + amount);
+}
+pub(crate) fn count(counts: &mut BTreeMap<String, usize>, kind: &str) {
+    add_count(counts, kind, 1);
 }
 
 /// Count recognized constructs whose lowering is unconditionally unavailable.
@@ -53,18 +58,19 @@ pub fn census(report: &SourceReport) -> Census {
     let mut result = Census::default();
     // A semantic error can name an already counted syntax node. Retain its
     // diagnostic for the caller, but count the unsupported source site once.
-    let mut recognized = Vec::new();
-    let mut sites = BTreeSet::new();
+    let mut recognized: Vec<Span> = Vec::new();
+    let mut sites: BTreeSet<(usize, usize, usize)> = BTreeSet::new();
     for region in &report.blocked {
         count(&mut result.blocked, &region.kind);
     }
     let program = &report.program;
     for node in &program.types {
         if matches!(node.kind, Type::Function { .. }) {
-            recognized.push(("function pointer", node.span));
+            recognized.push(node.span);
         }
     }
-    for (kind, span) in recognized {
+    for span in recognized {
+        let kind = "function pointer";
         count(&mut result.unsupported, kind);
         result.unsupported_sites.push((kind.to_string(), span));
         sites.insert((span.file, span.line, span.column));
@@ -73,13 +79,15 @@ pub fn census(report: &SourceReport) -> Census {
         let kind = if problem.code == "E_UNSUPPORTED" {
             problem
                 .message
+                .as_str()
                 .strip_prefix("unsupported construct: ")
-                .unwrap_or(&problem.message)
+                .unwrap_or(problem.message.as_str())
         } else if problem.code == "E_UNSUPPORTED_MACRO" {
             problem
                 .message
+                .as_str()
                 .strip_prefix("unsupported macro: ")
-                .unwrap_or(&problem.message)
+                .unwrap_or(problem.message.as_str())
         } else {
             continue;
         };
@@ -94,11 +102,10 @@ pub fn census(report: &SourceReport) -> Census {
 /// failed body. Existing diagnostics retain their more specific explanation.
 pub fn complete_unsupported(report: &mut SourceReport) {
     let sites = census(report).unsupported_sites;
-    let mut seen: BTreeSet<_> = report
-        .diagnostics
-        .iter()
-        .map(|p| (p.file, p.line, p.column))
-        .collect();
+    let mut seen: BTreeSet<(usize, usize, usize)> = BTreeSet::new();
+    for problem in &report.diagnostics {
+        seen.insert((problem.file, problem.line, problem.column));
+    }
     for (kind, span) in sites {
         if seen.insert((span.file, span.line, span.column)) {
             let mut problem = crate::ast::Diagnostic::new(
@@ -157,7 +164,7 @@ impl SemanticReport {
         result
     }
     pub(crate) fn deduplicate(&mut self) {
-        let mut seen = BTreeSet::new();
+        let mut seen: BTreeSet<(usize, usize, usize, String, String)> = BTreeSet::new();
         self.observations.retain(|observation| {
             seen.insert((
                 observation.problem.file,
@@ -167,7 +174,8 @@ impl SemanticReport {
                 observation.problem.message.clone(),
             ))
         });
-        let mut seen = BTreeSet::new();
+        let mut seen: BTreeSet<(Option<String>, String, usize, usize, usize, String)> =
+            BTreeSet::new();
         self.blocked.retain(|observation| {
             seen.insert((
                 observation.function.clone(),
@@ -182,9 +190,10 @@ impl SemanticReport {
 }
 pub(crate) fn semantic_problem(problem: &crate::ast::Diagnostic) -> bool {
     (problem.code == "E_UNSUPPORTED"
-        && ["trait", "method", "import", "lifetime"]
-            .iter()
-            .any(|word| problem.message.contains(word)))
+        && (problem.message.contains("trait")
+            || problem.message.contains("method")
+            || problem.message.contains("import")
+            || problem.message.contains("lifetime")))
         || matches!(
             problem.code.as_str(),
             "E_NAME"

@@ -14,13 +14,16 @@ pub(super) struct ReferenceSchedule {
 
 impl Builder<'_, '_> {
     fn storage_dependencies(&self, place: &k::Place) -> BTreeSet<usize> {
-        let mut storage = BTreeSet::from([place.local]);
+        let mut storage = BTreeSet::new();
+        storage.insert(place.local);
         for projection in &place.projections {
             if matches!(projection, k::Projection::Deref) {
                 let mut next = BTreeSet::new();
                 for local in storage {
                     if let Some(parents) = self.carriers.get(&local) {
-                        next.extend(parents);
+                        for parent in parents {
+                            next.insert(*parent);
+                        }
                     }
                 }
                 storage = next;
@@ -39,7 +42,9 @@ impl Builder<'_, '_> {
         let mut dependencies = BTreeSet::new();
         for local in self.storage_dependencies(place) {
             if let Some(parents) = self.carriers.get(&local) {
-                dependencies.extend(parents);
+                for parent in parents {
+                    dependencies.insert(*parent);
+                }
             }
         }
         dependencies
@@ -58,11 +63,14 @@ impl Builder<'_, '_> {
     fn remove_dependencies(&mut self, local: usize) -> Option<BTreeSet<usize>> {
         let parents = self.carriers.remove(&local)?;
         for parent in &parents {
-            if let Some(children) = self.dependents.get_mut(parent) {
+            let empty = if let Some(children) = self.dependents.get_mut(parent) {
                 children.remove(&local);
-                if children.is_empty() {
-                    self.dependents.remove(parent);
-                }
+                children.is_empty()
+            } else {
+                false
+            };
+            if empty {
+                self.dependents.remove(parent);
             }
         }
         Some(parents)
@@ -71,7 +79,13 @@ impl Builder<'_, '_> {
         self.remove_dependencies(local);
         if !dependencies.is_empty() {
             for parent in &dependencies {
-                self.dependents.entry(*parent).or_default().insert(local);
+                if self.dependents.contains_key(parent) {
+                    self.dependents.get_mut(parent).unwrap().insert(local);
+                } else {
+                    let mut children = BTreeSet::new();
+                    children.insert(local);
+                    self.dependents.insert(*parent, children);
+                }
             }
             self.carriers.insert(local, dependencies);
         }
@@ -85,8 +99,14 @@ impl Builder<'_, '_> {
             // scheduling approximation may keep carriers longer; K checks the
             // exact projected loans and moves independently.
             for local in self.storage_dependencies(place) {
-                let mut parents = self.carriers.get(&local).cloned().unwrap_or_default();
-                parents.extend(&dependencies);
+                let mut parents = self
+                    .carriers
+                    .get(&local)
+                    .cloned()
+                    .unwrap_or(BTreeSet::new());
+                for dependency in &dependencies {
+                    parents.insert(*dependency);
+                }
                 self.set_dependencies(local, parents);
             }
         }
@@ -108,7 +128,7 @@ impl Builder<'_, '_> {
                 self.set_dependencies(*dst, dependencies);
             }
             k::Op::Assign { place, src } => {
-                let dependencies = self.carriers.get(src).cloned().unwrap_or_default();
+                let dependencies = self.carriers.get(src).cloned().unwrap_or(BTreeSet::new());
                 self.remove_dependencies(*src);
                 self.store_dependencies(place, dependencies);
             }
@@ -121,7 +141,9 @@ impl Builder<'_, '_> {
                 let mut dependencies = BTreeSet::new();
                 for field in fields {
                     if let Some(parents) = self.remove_dependencies(*field) {
-                        dependencies.extend(parents);
+                        for parent in parents {
+                            dependencies.insert(parent);
+                        }
                     }
                 }
                 self.set_dependencies(*dst, dependencies);
@@ -142,10 +164,12 @@ impl Builder<'_, '_> {
                         for leaf in leaves {
                             if let k::LeafOrigin::Inputs { inputs, .. } = &leaf.origin {
                                 for input in inputs {
-                                    dependencies.extend(self.value_dependencies(&k::Place {
+                                    for parent in self.value_dependencies(&k::Place {
                                         local: args[input.index],
                                         projections: input.projections.clone(),
-                                    }));
+                                    }) {
+                                        dependencies.insert(parent);
+                                    }
                                 }
                             }
                         }
@@ -167,7 +191,11 @@ impl Builder<'_, '_> {
                     };
                     dependencies = self.value_dependencies(&source);
                     if name == "replace" {
-                        let incoming = self.carriers.get(&args[1]).cloned().unwrap_or_default();
+                        let incoming = self
+                            .carriers
+                            .get(&args[1])
+                            .cloned()
+                            .unwrap_or(BTreeSet::new());
                         let destinations = self.storage_dependencies(&source);
                         for destination in destinations {
                             self.set_dependencies(destination, incoming.clone());
@@ -176,7 +204,9 @@ impl Builder<'_, '_> {
                 } else if self.carries_references(self.ty(*dst)) {
                     for argument in args {
                         if let Some(parents) = self.carriers.get(argument) {
-                            dependencies.extend(parents);
+                            for parent in parents {
+                                dependencies.insert(*parent);
+                            }
                         }
                     }
                 }
@@ -206,8 +236,10 @@ impl Builder<'_, '_> {
         self.references = self.references.union(&state.references);
         for (local, parents) in &state.carriers {
             if state.live.at(*local) {
-                let mut combined = self.carriers.get(local).cloned().unwrap_or_default();
-                combined.extend(parents);
+                let mut combined = self.carriers.get(local).cloned().unwrap_or(BTreeSet::new());
+                for parent in parents {
+                    combined.insert(*parent);
+                }
                 self.set_dependencies(*local, combined);
             }
         }
@@ -221,28 +253,39 @@ impl Builder<'_, '_> {
         // value outside the set protects its carriers and their ancestors.
         let mut pending = Vec::new();
         for local in &candidates {
-            if self.dependents.get(local).is_some_and(|children| {
-                children
-                    .iter()
-                    .any(|child| self.live.at(*child) && !candidates.contains(child))
-            }) {
-                pending.push(*local);
-            }
-        }
-        let mut needed = BTreeSet::new();
-        while let Some(local) = pending.pop() {
-            if needed.insert(local) {
-                if let Some(parents) = self.carriers.get(&local) {
-                    pending.extend(parents);
+            if let Some(children) = self.dependents.get(local) {
+                for child in children {
+                    if self.live.at(*child) && !candidates.contains(child) {
+                        pending.push(*local);
+                        break;
+                    }
                 }
             }
         }
-        candidates.retain(|local| !needed.contains(local));
+        let mut needed: BTreeSet<usize> = BTreeSet::new();
+        while let Some(local) = pending.pop() {
+            if needed.insert(local) {
+                if let Some(parents) = self.carriers.get(&local) {
+                    for parent in parents {
+                        pending.push(*parent);
+                    }
+                }
+            }
+        }
+        let mut remaining = BTreeSet::new();
+        for local in candidates {
+            if !needed.contains(&local) {
+                remaining.insert(local);
+            }
+        }
+        candidates = remaining;
 
         // Destroy a dead dependent before its carrier, including when a later
         // assignment made an older binding depend on a newer descriptor.
-        let mut dependents: BTreeMap<usize, usize> =
-            candidates.iter().map(|local| (*local, 0)).collect();
+        let mut dependents: BTreeMap<usize, usize> = BTreeMap::new();
+        for local in &candidates {
+            dependents.insert(*local, 0);
+        }
         for local in &candidates {
             if let Some(parents) = self.carriers.get(local) {
                 for parent in parents {
@@ -252,12 +295,21 @@ impl Builder<'_, '_> {
                 }
             }
         }
-        let mut ready: BTreeSet<usize> = dependents
-            .iter()
-            .filter_map(|(local, count)| (*count == 0).then_some(*local))
-            .collect();
-        while let Some(local) = ready.pop_last() {
-            let parents = self.carriers.get(&local).cloned().unwrap_or_default();
+        // Inverting the key lets the ordinary ascending cursor select the
+        // greatest local first, retaining the original cleanup priority.
+        let mut ready: BTreeSet<usize> = BTreeSet::new();
+        for (local, count) in &dependents {
+            if *count == 0 {
+                ready.insert(!*local);
+            }
+        }
+        while let Some(key) = ready.pop_first() {
+            let local = !key;
+            let parents = self
+                .carriers
+                .get(&local)
+                .cloned()
+                .unwrap_or(BTreeSet::new());
             let fields = self.compiler.closure_reference_fields(self.ty(local));
             if fields.is_empty() {
                 self.emit(
@@ -288,7 +340,7 @@ impl Builder<'_, '_> {
                 if let Some(count) = dependents.get_mut(&parent) {
                     *count -= 1;
                     if *count == 0 {
-                        ready.insert(parent);
+                        ready.insert(!parent);
                     }
                 }
             }
