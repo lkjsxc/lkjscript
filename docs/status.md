@@ -8,7 +8,7 @@ frames, rel32 control flow, and a source allocator over kernel mappings.
 src/x86.rs separates encoding; --stats reports phases/RSS/sizes. Frontend, backend and result-reader executables match the Rust-built twin's bytes;
 frontend/backend fixed points and own-source/runtime IR identity hold.
 
-The eight-worker gate passes in 169.780 s: 452 Rust tests, 17 harness tests,
+The eight-worker gate passes in 176.680 s: 452 Rust tests, 17 harness tests,
 884 conformance passes plus four pending on each route, 573 Rust comparisons,
 91 World observations and all source generators. Of 128 IR mutants, 100 reject,
 27 agree and one times out in the interpreter; native is skipped for that case.

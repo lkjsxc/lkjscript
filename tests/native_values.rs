@@ -70,8 +70,10 @@ fn checked_case(
     );
     let words: Vec<u64> = output
         .stderr
-        .chunks_exact(8)
-        .map(|word| u64::from_le_bytes(word.try_into().unwrap()))
+        .as_chunks::<8>()
+        .0
+        .iter()
+        .map(|word| u64::from_le_bytes(*word))
         .collect();
     assert_eq!(words[0], 0, "{name}: trap packet {words:?}");
     assert_eq!(words[1], expected, "{name}: scalar result");
