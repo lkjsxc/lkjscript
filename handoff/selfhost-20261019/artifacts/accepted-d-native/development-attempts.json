@@ -1,0 +1,70 @@
+{
+  "schema": "lkjscript.selfhost.attempts.v1",
+  "attempts": [
+    {
+      "log": "byte-inventory-1.log",
+      "status": "build failed",
+      "resolution": "Test helper u32 reader was out of scope; corrected test plumbing.",
+      "bytes": 3436,
+      "sha256": "6a2ea98c1f00af587df30c583b97dc6a0d03995b03b4787968a31104b5e9a351"
+    },
+    {
+      "log": "byte-inventory-2.log",
+      "status": "failed",
+      "resolution": "Closed generic list instantiation was unsupported; retained selfhost-generic-list.lkjc and projected one checked closed instantiation per declaration.",
+      "bytes": 1236,
+      "sha256": "d7b7719901e06291f8a800b1e21b62e9725658e5d8281078692820340a17616e"
+    },
+    {
+      "log": "byte-inventory-3.log",
+      "status": "build failed",
+      "resolution": "Pattern binding introduced during closed-type collection; corrected before execution.",
+      "bytes": 1158,
+      "sha256": "a036634c187c0d95838c9cf514ad3e4b7077ae07ed2596727334ba66fa2bb57e"
+    },
+    {
+      "log": "byte-validation-1.log",
+      "status": "build failed",
+      "resolution": "Validator test used incorrect module and byte conversion paths; corrected test plumbing.",
+      "bytes": 2693,
+      "sha256": "4115b48cdcfcb2782df7e3bab053568a1a37f609588865aab638b3cb179cef67"
+    },
+    {
+      "log": "byte-native-1.log",
+      "status": "4 passed, 1 failed",
+      "resolution": "Retained selfhost-buffer-borrow-tail.lkjc; derived tail-dispatch hints now retain the call and lexical cleanup when owned buffer locals remain.",
+      "bytes": 4573,
+      "sha256": "24ae0a280de08bc9d85ec5d4cda55f9c120629eca459f75e924ff77b67dd7049"
+    },
+    {
+      "log": "byte-complete-1-compact.log",
+      "status": "16 passed, 4 failed",
+      "resolution": "Retained selfhost-forgotten-buffer.json and publicly admitted the missing custody edge update. Fixed structural field fixture syntax and shared buffer trap expectations. Whole compiler creation exceeded ordinary impact bounds; reconstructed interfaces and bodies through bounded public transactions.",
+      "bytes": 57352,
+      "sha256": "e2e576e533e114a686da1f1276393712cdf3b6e126b97c7c5caff2ac3f487796"
+    },
+    {
+      "log": "byte-complete-2.log",
+      "status": "18 passed, 2 failed",
+      "resolution": "Test authoring bootstrap lacked the List<I64> default; added the valid empty-list body.",
+      "bytes": 59229,
+      "sha256": "c1bf2c9fb83765fe5584d89a32c30a077a448d69175b18345e9d2614a1765c8b"
+    },
+    {
+      "log": "byte-complete-3.log",
+      "status": "21 passed, 1 failed",
+      "resolution": "A new test incorrectly required replay to preserve publication identities. Public u32 draft matched the maintained body; compare full normalized closure after public replay on a private graph copy instead.",
+      "bytes": 62039,
+      "sha256": "f13fa133ada4c256d6730c0a3ed7349618c647ae73ffb09ddbedbffb5915b793"
+    },
+    {
+      "log": "byte-complete-4.log",
+      "status": "21 passed, 1 failed",
+      "resolution": "Replay of complete accepted compiler bodies exhausted the finite 128 MiB memory arena. Use a temporary ordinary disk repository to retain accepted replay history; no capacity policy change.",
+      "bytes": 61688,
+      "sha256": "ab3e9bad4bdf8923ae1d54b1fea0c84874f2e05132e64d20aa305660730832f7"
+    }
+  ],
+  "authoritative_revision": "rev_fa3baff1a76b6c7b69ace4f1867daf445ace9d0e1f854b6d3a1d49d0cab1c0a4",
+  "policy": "No production quota increase, bypass, weakened gate, or direct repository-object authoring."
+}

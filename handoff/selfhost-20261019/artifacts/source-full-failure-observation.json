@@ -1,0 +1,16 @@
+{
+  "status": "confirmed terminal test failure",
+  "source": "352f0997142d9fed279f3964a76102d61f7ac1e6",
+  "test": "platform::storage::directory::gc::tests::every_compaction_durability_checkpoint_preserves_reachable_objects_and_retry",
+  "terminal_diagnostic": "gc/tests.rs:93:63: gc_readers_active after dropping the reopened reader",
+  "hypothesis": "Reported lease contention after explicit reader drop is consistent with a duplicated descriptor retained by another concurrently spawned child. Add deterministic duplicated-descriptor control and bounded test-only reader-release retry; production nonblocking GC remains unchanged.",
+  "primary_sources": [
+    "https://man7.org/linux/man-pages/man2/flock.2.html",
+    "https://man7.org/linux/man-pages/man2/execve.2.html"
+  ],
+  "facts": [
+    "flock ownership follows open file descriptions across duplicated descriptors",
+    "Current root-directory opens use CLOEXEC",
+    "Production GC intentionally uses nonblocking exclusive admission and returns gc_readers_active instead of waiting under publication lock"
+  ]
+}

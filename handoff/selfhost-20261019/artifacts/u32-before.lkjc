@@ -1,0 +1,28 @@
+request base=rev_fa3baff1a76b6c7b69ace4f1867daf445ace9d0e1f854b6d3a1d49d0cab1c0a4 repository=repo_55e2a80f37adf01ece7e8f0529fe1f43 package=pkg_3be630861275811679d4b4ee4926199b
+
+declarations.begin
+(units
+  ; Reconstructed from canonical meaning. Original comments, formatting and type aliases are not stored.
+  (reference ref_add_0 declaration pkg_3be630861275811679d4b4ee4926199b/decl_08a72aeb50bf6fe0607630dfb4bbea63)
+  (reference ref_mul_2 declaration pkg_3be630861275811679d4b4ee4926199b/decl_3d1ac698586ebcd469a0ba8ed88b83ca)
+  (reference ref_get_1 declaration pkg_3be630861275811679d4b4ee4926199b/decl_b7a95eccf6d122b9a3b971572cf64cf2)
+  (module edit mod_a969b34dbe930ca9d70d70a03e6fa447 ci
+    (function edit decl_3830f5254e00260a4fc1e0ac25527122 u32
+      (visibility public)
+      (returns I64 (value))
+      (effect pure)
+      (body (call ref_add_0 (scopes) (call ref_get_1 (scopes) (local data) (local at)) (call ref_mul_2
+            (scopes) (i64 256) (call ref_add_0 (scopes) (call ref_get_1 (scopes) (local data) (call ref_add_0
+                  (scopes) (local at) (i64 1))) (call ref_mul_2 (scopes) (i64 256) (call ref_add_0 (scopes)
+                  (call ref_get_1 (scopes) (local data) (call ref_add_0 (scopes) (local at) (i64 2)))
+                  (call ref_mul_2 (scopes) (i64 256) (call ref_get_1 (scopes) (local data) (call ref_add_0
+                        (scopes) (local at) (i64 3))))))))))
+      (parameter edit param_85cdec2a5860eaa1aa38c6638973cf72 data
+        (type Bytes)
+        (use unrestricted))
+      (parameter edit param_d5994e6feb8d396392658012413888db at
+        (type I64)
+        (use unrestricted)))
+  )
+)
+declarations.end

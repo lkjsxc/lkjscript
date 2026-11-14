@@ -1,0 +1,377 @@
+declarations.begin
+(units
+  (module create source-fields
+    (function create tag
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create maximum (type I64))
+      (returns I64)
+      (body
+        (if
+          (call source-read::range (local data) (local at) (i64 1) (local end))
+          (if
+            (if
+              (call ci::lt (i64 -1) (local maximum))
+              (if
+                (call ci::lt (local maximum) (i64 251))
+                (if
+                  (if
+                    (call ci::lt (local maximum) (call ci::get (local data) (local at)))
+                    (bool false)
+                    (bool true))
+                  (bool true)
+                  (bool false))
+                (bool false))
+              (bool false))
+            (call ci::add (local at) (i64 1))
+            (i64 -1))
+          (i64 -1))))
+    (function create zero
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (returns I64)
+      (body
+        (let
+          (binding value (call source-read::unsigned (local data) (local at) (local end)))
+          (in
+            (if
+              (call ci::eq (field (local value) (name code)) (i64 0))
+              (if
+                (call ci::eq (field (local value) (name value)) (i64 0))
+                (field (local value) (name next))
+                (i64 -2))
+              (i64 -1))))))
+    (function create only-zero
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create maximum (type I64))
+      (returns I64)
+      (body
+        (let
+          (binding next (call tag (local data) (local at) (local end) (local maximum)))
+          (in
+            (if
+              (call ci::lt (i64 -1) (local next))
+              (if
+                (call ci::eq (call ci::get (local data) (local at)) (i64 0))
+                (local next)
+                (i64 -2))
+              (i64 -1))))))
+    (function create optional-reference
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create tag (type I64))
+      (returns I64)
+      (body
+        (if
+          (call source-read::range (local data) (local at) (i64 1) (local end))
+          (if
+            (call ci::eq (call ci::get (local data) (local at)) (i64 0))
+            (call ci::add (local at) (i64 1))
+            (if
+              (call ci::eq (call ci::get (local data) (local at)) (i64 1))
+              (call source-read::reference
+                (local data)
+                (call ci::add (local at) (i64 1))
+                (local end)
+                (local tag))
+              (i64 -1)))
+          (i64 -1))))
+    (function create nonempty-array
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create tag (type I64))
+      (parameter create width (type I64))
+      (returns I64)
+      (body
+        (let
+          (binding value
+            (call source-read::array (local data) (local at) (local end) (local tag) (local width)))
+          (in
+            (if
+              (if
+                (call ci::eq (field (local value) (name code)) (i64 0))
+                (if
+                  (call ci::lt (i64 0) (field (local value) (name length)))
+                  (bool true)
+                  (bool false))
+                (bool false))
+              (field (local value) (name next))
+              (i64 -1))))))
+    (function create implementation-scan
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create first (type Bool))
+      (returns Bool)
+      (body
+        (if
+          (call source-read::range (local data) (local at) (i64 0) (local end))
+          (if
+            (call ci::eq (local at) (local end))
+            (if (local first) (bool false) (bool true))
+            (let
+              (binding byte (call ci::get (local data) (local at)))
+              (in
+                (if
+                  (call ci::eq (local byte) (i64 46))
+                  (if
+                    (local first)
+                    (bool false)
+                    (call implementation-scan
+                      (local data)
+                      (call ci::add (local at) (i64 1))
+                      (local end)
+                      (bool true)))
+                  (if
+                    (call source-read::name-char (local byte) (local first))
+                    (call implementation-scan
+                      (local data)
+                      (call ci::add (local at) (i64 1))
+                      (local end)
+                      (bool false))
+                    (bool false))))))
+          (bool false))))
+    (function create implementation
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (returns I64)
+      (body
+        (let
+          (binding value
+            (call source-read::string (local data) (local at) (local end) (i64 1) (i64 128)))
+          (in
+            (if
+              (if
+                (call ci::eq (field (local value) (name code)) (i64 0))
+                (if
+                  (call implementation-scan
+                    (local data)
+                    (field (local value) (name start))
+                    (field (local value) (name next))
+                    (bool true))
+                  (bool true)
+                  (bool false))
+                (bool false))
+              (field (local value) (name next))
+              (i64 -1))))))
+    (function create selector
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (returns I64)
+      (body
+        (if
+          (call source-read::range (local data) (local at) (i64 1) (local end))
+          (if
+            (call ci::eq (call ci::get (local data) (local at)) (i64 0))
+            (call source-read::reference
+              (local data)
+              (call ci::add (local at) (i64 1))
+              (local end)
+              (i64 4))
+            (if
+              (call ci::eq (call ci::get (local data) (local at)) (i64 1))
+              (call source-shape::span-cursor
+                (call source-read::name (local data) (call ci::add (local at) (i64 1)) (local end)))
+              (i64 -1)))
+          (i64 -1))))
+    (function create record-field
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create nominal (type I64))
+      (returns (record (code I64) (next I64) (start I64) (length I64)))
+      (body
+        (if
+          (call source-read::range (local data) (local at) (i64 1) (local end))
+          (if
+            (call ci::eq (call ci::get (local data) (local at)) (local nominal))
+            (if
+              (call ci::eq (local nominal) (i64 0))
+              (let
+                (binding next
+                  (call source-read::reference
+                    (local data)
+                    (call ci::add (local at) (i64 1))
+                    (local end)
+                    (i64 4)))
+                (in
+                  (if
+                    (call ci::lt (i64 -1) (local next))
+                    (record structural
+                      (field code (i64 0))
+                      (field next (local next))
+                      (field start (call ci::add (local at) (i64 1)))
+                      (field length (i64 34)))
+                    (record structural
+                      (field code (i64 12))
+                      (field next (local at))
+                      (field start (i64 0))
+                      (field length (i64 0))))))
+              (call source-read::name (local data) (call ci::add (local at) (i64 1)) (local end)))
+            (record structural
+              (field code (i64 12))
+              (field next (local at))
+              (field start (i64 0))
+              (field length (i64 0))))
+          (record structural
+            (field code (i64 12))
+            (field next (local at))
+            (field start (i64 0))
+            (field length (i64 0))))))
+    (function create record-fields
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create count (type I64))
+      (parameter create nominal (type I64))
+      (parameter create previous (type I64))
+      (parameter create previous-length (type I64))
+      (returns I64)
+      (body
+        (if
+          (if
+            (call ci::lt (i64 -1) (local count))
+            (if
+              (call ci::lt (local count) (i64 100001))
+              (if
+                (call source-read::range (local data) (local at) (i64 0) (local end))
+                (bool true)
+                (bool false))
+              (bool false))
+            (bool false))
+          (if
+            (call ci::eq (local count) (i64 0))
+            (local at)
+            (let
+              (binding value
+                (call record-field (local data) (local at) (local end) (local nominal)))
+              (in
+                (if
+                  (if
+                    (call ci::eq (field (local value) (name code)) (i64 0))
+                    (if
+                      (if
+                        (call ci::eq (local previous-length) (i64 0))
+                        (bool true)
+                        (call source-shape::name-less
+                          (local data)
+                          (local previous)
+                          (local previous-length)
+                          (field (local value) (name start))
+                          (field (local value) (name length))))
+                      (bool true)
+                      (bool false))
+                    (bool false))
+                  (let
+                    (binding next
+                      (call source-read::typed
+                        (local data)
+                        (field (local value) (name next))
+                        (local end)
+                        (i64 9)
+                        (i64 17)))
+                    (in
+                      (if
+                        (call ci::lt (i64 -1) (local next))
+                        (call record-fields
+                          (local data)
+                          (local next)
+                          (local end)
+                          (call ci::sub (local count) (i64 1))
+                          (local nominal)
+                          (field (local value) (name start))
+                          (field (local value) (name length)))
+                        (i64 -1))))
+                  (i64 -1)))))
+          (i64 -1))))
+    (function create record
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (returns I64)
+      (body
+        (if
+          (call source-read::range (local data) (local at) (i64 1) (local end))
+          (let
+            (binding nominal (call ci::get (local data) (local at)))
+            (binding next
+              (call source-fields::optional-reference (local data) (local at) (local end) (i64 3)))
+            (in
+              (if
+                (call ci::lt (i64 -1) (local next))
+                (let
+                  (binding arguments
+                    (call source-read::array (local data) (local next) (local end) (i64 2) (i64 33)))
+                  (in
+                    (if
+                      (if
+                        (call ci::eq (field (local arguments) (name code)) (i64 0))
+                        (if
+                          (if
+                            (call ci::eq (local nominal) (i64 0))
+                            (call ci::eq (field (local arguments) (name length)) (i64 0))
+                            (bool true))
+                          (bool true)
+                          (bool false))
+                        (bool false))
+                      (let
+                        (binding count
+                          (call source-read::unsigned
+                            (local data)
+                            (field (local arguments) (name next))
+                            (local end)))
+                        (in
+                          (if
+                            (if
+                              (call ci::eq (field (local count) (name code)) (i64 0))
+                              (if
+                                (call ci::lt (i64 0) (field (local count) (name value)))
+                                (if
+                                  (call ci::lt (field (local count) (name value)) (i64 100001))
+                                  (bool true)
+                                  (bool false))
+                                (bool false))
+                              (bool false))
+                            (call record-fields
+                              (local data)
+                              (field (local count) (name next))
+                              (local end)
+                              (field (local count) (name value))
+                              (call ci::sub (i64 1) (local nominal))
+                              (i64 0)
+                              (i64 0))
+                            (i64 -1))))
+                      (i64 -1))))
+                (i64 -1))))
+          (i64 -1))))))
+declarations.end

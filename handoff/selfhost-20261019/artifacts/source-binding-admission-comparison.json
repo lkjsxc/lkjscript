@@ -1,0 +1,34 @@
+{
+  "status": "Measured source validation improvement; later reference preparation recovered by test-probe factoring; all source cases passed across focused runs",
+  "source_revision": "rev_0bd74eef27ed085a6c9fb29be9af37de0d67f649413247e425b66d12687220db",
+  "owners": 20001,
+  "metadata_limit_bytes": 67108864,
+  "before": {
+    "affine_metadata_bytes": 66060451,
+    "affine_associated_work": 1143792,
+    "full_associated_metadata_bytes": 575704,
+    "full_associated_work": 5161,
+    "total_work": 1777039
+  },
+  "after": {
+    "affine_metadata_bytes": 18832593,
+    "affine_associated_work": 1143792,
+    "full_associated_metadata_bytes": 266982,
+    "full_associated_work": 5161,
+    "total_work": 1777039
+  },
+  "unchanged_probe_full_admission": {
+    "owners": 20585,
+    "affine_metadata_bytes": 19406625,
+    "total_work": 1824651
+  },
+  "scope": "Cumulative modeled host admission storage; no RSS or lkjscript Region memory claim",
+  "mechanism": "First traversal authority context and pending node use fixed inline slots; spills and visited entries reserve cumulative growth; canonical source is reread each invocation",
+  "recovery": {
+    "decoder_tests": 6,
+    "failed": 0,
+    "elapsed_seconds": 121.79,
+    "log": "source-binding-decoder-v10.log",
+    "mechanism": "Factored test-only output encoding and cursor chain; full compiler source and all assertions retained"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "scope": "Focused execution before candidate acceptance; executables remain in the single Cargo target.",
+  "files": [
+    {
+      "path": "target/release/deps/lkjscript-e2fdc52c2bd3596c",
+      "bytes": 194363904,
+      "sha256": "a1d4c399ee2483fcc2dea201b0484d6f1ba93f1921861dd90489366f8504d6c7"
+    },
+    {
+      "path": "target/release/deps/public_cli-ee349648d4b49b22",
+      "bytes": 88783816,
+      "sha256": "6d955da3c290dfa31591c4fce21b85746b7d16dba3393b20fb8b4a0bb21edf8e"
+    },
+    {
+      "path": "target/release/lkjscript",
+      "bytes": 78354088,
+      "sha256": "235ecef83544fcb80b364f1f701bebe00e6e71bddea00f353c94a18932d0296a"
+    }
+  ]
+}

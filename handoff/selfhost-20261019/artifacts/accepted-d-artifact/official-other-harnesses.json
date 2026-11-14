@@ -1,0 +1,48 @@
+{
+  "source": "108906b51259f00fae4c4fd1c53d16a05b3df1b5",
+  "scope": "Seven completed non-library harnesses; full gate matrix still required",
+  "results": [
+    {
+      "path": "0-run.stdout",
+      "result": "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "bytes": 113,
+      "sha256": "df166913f47ff1f04202cae9b31df67ed272d692d99a0023a8117dc3029100dd"
+    },
+    {
+      "path": "2-run.stdout",
+      "result": "test result: ok. 347 passed; 0 failed; 1 ignored; 0 measured; 1 filtered out; finished in 475.61s",
+      "bytes": 44353,
+      "sha256": "c99b0002943be8c1d052388e5a228be92b799063af3cedb172c7479a89206ea3"
+    },
+    {
+      "path": "3-run.stdout",
+      "result": "test result: ok. 334 passed; 0 failed; 16 ignored; 0 measured; 0 filtered out; finished in 9.80s",
+      "bytes": 38206,
+      "sha256": "f151232ca2f61523b6fc2e952b9a8406edd2a80aee588174d343c97d66d359ee"
+    },
+    {
+      "path": "4-run.stdout",
+      "result": "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "bytes": 113,
+      "sha256": "df166913f47ff1f04202cae9b31df67ed272d692d99a0023a8117dc3029100dd"
+    },
+    {
+      "path": "5-run.stdout",
+      "result": "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "bytes": 113,
+      "sha256": "df166913f47ff1f04202cae9b31df67ed272d692d99a0023a8117dc3029100dd"
+    },
+    {
+      "path": "6-run.stdout",
+      "result": "test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "bytes": 712,
+      "sha256": "90be4a2d1ffa1af6c7169615fe778f85539d1c05e46bbc2e72c4aa0d40b08afe"
+    },
+    {
+      "path": "7-run.stdout",
+      "result": "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "bytes": 172,
+      "sha256": "e99d58895399a09f94c61dcc4377952f201b21fda8c35d4097963c02a49b15d3"
+    }
+  ]
+}

@@ -1,0 +1,125 @@
+{
+  "status": "second clean-candidate official acceptance running",
+  "slice": "E source-record decoding; not graph or semantic admission",
+  "base_commit": "108906b51259f00fae4c4fd1c53d16a05b3df1b5",
+  "source_revision": "rev_86554bc5414236b4903b609bbd0b2887c742de8b0941913f1d0e5478bca61fe4",
+  "functions": 42,
+  "files": [
+    {
+      "path": "tools/selfhost/source-read.lkjc",
+      "bytes": 24485,
+      "sha256": "8d8281426f73df0b4c9186bdac115c15293a361a50fcec3d6dbafb21f54ed9fa"
+    },
+    {
+      "path": "tools/selfhost/source-shape.lkjc",
+      "bytes": 10747,
+      "sha256": "6d5815c1903bb5ed3babaa448f294b7e6be1437676701fb30a5d2911a0b6f0c4"
+    },
+    {
+      "path": "tools/selfhost/source-fields.lkjc",
+      "bytes": 14180,
+      "sha256": "2af43bc92d00b9b5ee25a81e75dda2a4dc24a93efd8ec943ca861d338b65d43e"
+    },
+    {
+      "path": "tools/selfhost/source-expr.lkjc",
+      "bytes": 23670,
+      "sha256": "b6208efed3403667f9b068895b520070fec439933fc7a99462dfd183c0b33188"
+    },
+    {
+      "path": "tools/selfhost/source-owner.lkjc",
+      "bytes": 51546,
+      "sha256": "4c81bcefe98876bee36e865dd086df731eeba6a5f6726061905af4158d94763a"
+    }
+  ],
+  "attempts": [
+    {
+      "log": "source-decoder-v1.log",
+      "result": "Rust test-helper compile error; fixed Vec-to-slice conversion"
+    },
+    {
+      "log": "source-decoder-v2.log",
+      "result": "Fixture module header omitted before target admission; fixed public update ordering"
+    },
+    {
+      "log": "source-decoder-v3.log",
+      "result": "Fixture buffer expressions were not named local owners; fixed without changing custody rules"
+    },
+    {
+      "log": "source-decoder-v4.log",
+      "result": "6 decoder tests passed in121.11s. Complete selfhost run:39passed,1failed; failure is bounded replay witness budget, fixed by replaying final definitions in small public changes."
+    },
+    {
+      "log": "source-replay-v5.log",
+      "result": "Bounded public replay succeeded; comparison incorrectly used a filter-only export for arbitrary helper signatures. Fixed comparison to every canonical unit tables/payload plus the original backend entry export."
+    },
+    {
+      "log": "source-replay-v6.log",
+      "result": "Passed: 1 test, 322.77s; all289 canonical unit tables/payloads and native backend export matched. Release workspace Clippy passed in31.99s."
+    }
+  ],
+  "private_public_authoring": {
+    "field_probes": "rev_40261a82a79e83a78646b6a0757d6cae45b120334b9ac767d0db4db56f19964e",
+    "record_probes": "rev_5bfa2110ef0d13231e44249fb407364b615abc9cdd51966eda986b459d01650c"
+  },
+  "cleanup": [
+    "source-preview-cleanup.json",
+    "source-probe-cleanup.json"
+  ],
+  "limitations": [
+    "No source graph reference resolution or cycle check",
+    "No source type, affine, borrow, region or effect/witness admission",
+    "No normalization from source graph",
+    "Current backend still consumes host-admitted profile4 projections",
+    "No lexical Region arenas or RSS claim"
+  ],
+  "decoding": {
+    "types": 18,
+    "dependency_types": 0,
+    "owners": 18572,
+    "packet_bytes": 2082756,
+    "packet_sha256": "6d5a6113bb3b6e53f3306d845544766af249ee071a62fc5782c131b2ebb3a70e",
+    "independent_programs": [
+      "selfhost-aggregates.lkjc",
+      "selfhost-generic-list.lkjc",
+      "selfhost-source-nominal.lkjc"
+    ],
+    "native_batch_producer": {
+      "bytes": 104444,
+      "sha256": "dec8e55b2e93e4df3d253676d4fb741f59e896f0759b604160c2395f376486e5"
+    }
+  },
+  "expanded_backend": {
+    "canonical_units": 289,
+    "functions": 287,
+    "artifact_input_bytes": 5124896,
+    "artifact_input_sha256": "8f3f5c2d4fbc45b4456633c2e3283da5824a40617d93d805ad1f56d167f65483",
+    "artifact_bytes": 5406581,
+    "artifact_sha256": "dfd6891497b23d5c5c12e8f1939663778ff12b03622e471302b42786dc9f5cde",
+    "native_fixed_point_bytes": 2519420,
+    "native_fixed_point_sha256": "b1c4371af385bf91421e66dee2a5a7a481c1a2747f34ce786a161354ba0623ce",
+    "scope": "Focused cases passed in aggregate run with one unrelated replay resource failure; not official acceptance.",
+    "mutated_artifact": {
+      "input_bytes": 5126091,
+      "input_sha256": "6c85b0ba0ef2cfeb39ba5113466d24acef96e3c316fb7f3fd183b99a0b85534c",
+      "bytes": 5407981,
+      "sha256": "a5a947de83ed3fc707381a6588a2bdd5ee0f5537189635b9afa8d6a310b7b8f4"
+    }
+  },
+  "candidate_source": "c282cfcabcdc4ad41bae1e7ff9652eb63e5d5f6f",
+  "candidate_tree": "9d33845bf8d4b761ceadc6d97afd52a36eba8f3b",
+  "official_first_attempt": {
+    "source": "352f0997142d9fed279f3964a76102d61f7ac1e6",
+    "receipt": "source-full-v1.json",
+    "failure_log": "source-official-gc-failure.log",
+    "selfhost_passed": 40,
+    "native_passed": 10,
+    "library": "2594passed,1failed,5ignored;856.55s"
+  },
+  "gc_test_correction": {
+    "source": "src/platform/storage/directory/gc/tests.rs",
+    "scope": "Test-only descriptor-retention control and bounded positive admission retry after local readers drop",
+    "focused": "3passed,0failed,2.74s",
+    "focused_log": "source-gc-focused-v1.log",
+    "clippy": "release workspace alltargets allfeatures passed,32.33s"
+  }
+}

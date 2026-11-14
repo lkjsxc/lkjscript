@@ -1,0 +1,135 @@
+{
+  "schema": "lkjscript.selfhost.slice.v1",
+  "status": "passed",
+  "tier": 1,
+  "milestone": "D scalar closure step; D incomplete",
+  "profile": 2,
+  "source": "90e215bfc216e4a673c41f8c24b8f6eca90cba8e",
+  "tree": "d3cf43a7b5564d53608ba910f09559e8d1399211",
+  "parent": "32f0d1dc27c39cf7ddc607ea4929ee6da6d00fce",
+  "remote_main": "90e215bfc216e4a673c41f8c24b8f6eca90cba8e",
+  "focused": {
+    "compiler_tests": 9,
+    "native_tests": 8,
+    "public_cli_tests": 2,
+    "scalar_programs": 10,
+    "arithmetic_and_trap_cases": 14,
+    "stack_alignment_probes": 16
+  },
+  "compiler_variants": [
+    {
+      "sha256": "43beeab7d21d58eb5d5c9ce0a84c52bdd850b6e47c0a690caa086f7660934cf7",
+      "bytes": 84547
+    },
+    {
+      "sha256": "dc4b35524dc56e9ade2354a98bc02277965dcf1c6a9e3a533b083b3d725e27be",
+      "bytes": 84547
+    },
+    {
+      "sha256": "50a5c83f5ed6f906c5658d854435dd933e1d2e31fc20858a85eb0a8e8e594f87",
+      "bytes": 84547
+    }
+  ],
+  "changed": {
+    "status": "passed",
+    "selected": 2,
+    "passed": 2,
+    "fresh": 2,
+    "reused": 0,
+    "input_stable": true,
+    "input_digest": "verification_298133de2f173e117f627af07308290c5996d0cdd739133e31f212c65eb16aae"
+  },
+  "changed_scope": "Clean candidate: two Git-status-selected gates; full coverage below.",
+  "full": {
+    "status": "passed",
+    "selected": 29,
+    "passed": 29,
+    "fresh": 29,
+    "reused": 0,
+    "input_stable": true,
+    "input_digest": "verification_298133de2f173e117f627af07308290c5996d0cdd739133e31f212c65eb16aae"
+  },
+  "workspace_test_executables": 8,
+  "release_target_policy": "passed",
+  "boundary_measurement": {
+    "nodes": 4096,
+    "input_bytes": 137598,
+    "output_bytes": 530048,
+    "result": 2047,
+    "vm_steps": 14511121,
+    "vm_cumulative_allocation": 1599109325,
+    "reference_expressions": 7903698,
+    "reference_cumulative_allocation": 1962239106,
+    "policy": "Existing trusted foreground policy for this boundary compiler invocation only; default finite allocation quota rejection retained. Cumulative modeled charges are not live memory or RSS."
+  },
+  "initial_attempt": {
+    "status": "failed",
+    "reasons": [
+      "Unregistered core.bool.equal fixture",
+      "4096-node compiler input exceeded default cumulative allocation quota",
+      "Previously unsupported untaken scalar branch became supported"
+    ],
+    "resolution": "Retained fixtures/logs; authored Boolean equality, measured existing trusted foreground policy, replaced obsolete rejection with untaken F64 negative fixture. No production runtime or verifier policy change."
+  },
+  "remaining_host_boundaries": [
+    "Rust source semantic admission and normalization",
+    "Rust normalized input exporter",
+    "Rust initial native bootstrap",
+    "External atomic file launcher"
+  ],
+  "known_limitations": [
+    "No self-emitted .lkja",
+    "No complete compiler backend closure: Bytes/buffers/Text/aggregates/digest still rejected by scalar input profile",
+    "No lkjscript source-graph semantic admission",
+    "No phase-local native regions",
+    "No C2/C3 semantic fixed point"
+  ],
+  "native_memory": "Unmetered scalar output execution; the bootstrap compiler uses a process-owned heap. Input bounds are separate from work quotas.",
+  "publication": "Integrated on origin/main; no hosted release or production promotion.",
+  "evidence": {
+    "full.json": {
+      "bytes": 24662,
+      "sha256": "42fdac4ff16b411ec2e6aa96caf56f8bf38305412eeed8b2c9f20b5d2e16f4fc"
+    },
+    "changed.json": {
+      "bytes": 2425,
+      "sha256": "84161d855b2fd012970afec888aa1cae0fec40801e7780780a8d40cfdca90779"
+    },
+    "release-target.json": {
+      "bytes": 1657,
+      "sha256": "a15a5d8e7edde5fa876d808eb7ffbbaf3a1ac79f788178ff5c8bae4dd0c3557b"
+    },
+    "compiler.log": {
+      "bytes": 30845,
+      "sha256": "ea399e026bd975993c38eccd85c42e67588082c530af2b8b6ccdc5ddab25a25a"
+    },
+    "runtime.log": {
+      "bytes": 1372,
+      "sha256": "ae0d506bfcf3e54821332fd1fb9d77b67894b2fc230f55f623004b7cdeef441f"
+    },
+    "public-cli.log": {
+      "bytes": 574,
+      "sha256": "152206ce2e3440cc9e437361b5d87d3b63b3c3887449143bbf314a181147b7cb"
+    },
+    "inputs.sha256": {
+      "bytes": 2735,
+      "sha256": "280bcdb48b061e4976607ccd834fce00559b16794214a0cb84dcd386d7030baf"
+    },
+    "initial-focused-failure.log": {
+      "bytes": 31541,
+      "sha256": "c7b04109bc30b35715617d27a4cf12f82a78d378dc104f1b1f742b8c729e99ff"
+    },
+    "measurement-build-failure.log": {
+      "bytes": 629,
+      "sha256": "305aec78b19fd4d5da5c1cf0b1752f2d4b669f3cc73d945637e3280fc7fbecb4"
+    },
+    "harness.log": {
+      "bytes": 33402,
+      "sha256": "6f55b10e880f63645bec89737523088d40cd2ae4016e429238ab00d2efa183b9"
+    },
+    "bootstrap.json": {
+      "bytes": 600,
+      "sha256": "7e5dca89c099b462b1b3d5dbf86b9a24cc363bb6b597c99f3d914f5bfc5d147b"
+    }
+  }
+}

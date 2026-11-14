@@ -1,0 +1,78 @@
+{
+  "base_commit": "45c088f9053098fc5aeb50a7e9cc92bcc9f638e2",
+  "status": "draft; not applied or tested",
+  "edits": [
+    {
+      "path": "src/platform/intrinsic_contract.rs",
+      "before": "        \"core.bytes.blake3\" => exact(signature, &[IntrinsicType::Bytes], &IntrinsicType::Bytes),",
+      "after": "        \"core.bytes.blake3\" => exact(signature, &[IntrinsicType::Bytes], &IntrinsicType::Bytes),\n        \"core.bytes.blake3-derive-key\" => exact(\n            signature,\n            &[IntrinsicType::Text, IntrinsicType::Bytes],\n            &IntrinsicType::Bytes,\n        ),",
+      "base_sha256": "ab1d92e89969bdb4d15802b90d8c725abcd401995bdef4a2fa4ae0783c814a6f"
+    },
+    {
+      "path": "src/platform/execution/normalized/vm.rs",
+      "before": "        \"core.value.equal\" => {\n            if type_arguments.iter().any(|ty| {",
+      "after": "        \"core.bytes.blake3-derive-key\" => {\n            let [NormalizedValue::Text(context), NormalizedValue::Bytes(material)] = arguments else {\n                return Err(type_error(\"BLAKE3 derivation received foreign values\"));\n            };\n            Ok(NormalizedValue::bytes(blake3::derive_key(context, material).to_vec()))\n        }\n        \"core.value.equal\" => {\n            if type_arguments.iter().any(|ty| {",
+      "base_sha256": "1e97a773be11e45b31f166eb7b28a5562b2a4bee2bb2c7f9f573a326e00b110f"
+    },
+    {
+      "path": "src/platform/execution/normalized/reference.rs",
+      "before": "        \"core.value.equal\" => {\n            if type_arguments\n",
+      "after": "        \"core.bytes.blake3-derive-key\" => match arguments.as_slice() {\n            [NormalizedValue::Text(context), NormalizedValue::Bytes(material)] => Ok(\n                NormalizedValue::bytes(blake3::derive_key(context, material).to_vec()),\n            ),\n            _ => Err(reference_type_error(\"BLAKE3 derivation received foreign values\")),\n        },\n        \"core.value.equal\" => {\n            if type_arguments\n",
+      "base_sha256": "19dfce35864bbbde40908ed60054256ded0e012d1835c302de2a648f918afcc1"
+    },
+    {
+      "path": "src/platform/compiler/elf_x86_64/blake3.rs",
+      "before": "//! Unkeyed 32-byte BLAKE3, emitted as native integer instructions. The bounded",
+      "after": "//! Unkeyed and derive-key 32-byte BLAKE3 emitted as native integer instructions. The bounded",
+      "base_sha256": "0185c54fcd0f62f94f6fc60a2cd7fb313202490fd6a380daef41ce7d6e354625"
+    },
+    {
+      "path": "src/platform/compiler/elf_x86_64/blake3.rs",
+      "before": "fn initial_cv(a: &mut Asm) {\n    for (i, word) in IV.into_iter().enumerate() {\n        a.imm(Ax, u64::from(word));\n        a.store32(R12, CV + i as i32 * 4, Ax);\n    }\n}",
+      "after": "fn initial_cv(a: &mut Asm) {\n    let iv = a.label();\n    let done = a.label();\n    a.load(R9, R12, 48);\n    a.bin(0x85, R9, R9);\n    a.when(E, iv);\n    for i in 0..4 {\n        a.load(Ax, R9, i * 8);\n        a.store(R12, CV + i * 8, Ax);\n    }\n    a.jump(done);\n    a.bind(iv);\n    for (i, word) in IV.into_iter().enumerate() {\n        a.imm(Ax, u64::from(word));\n        a.store32(R12, CV + i as i32 * 4, Ax);\n    }\n    a.bind(done);\n}\n\nfn child_parameters(a: &mut Asm) {\n    a.load(Cx, R12, 24);\n    a.group(4, Cx, !8); // Preserve derivation flags while clearing ROOT.\n    a.load(R9, R12, 48);\n}",
+      "base_sha256": "0185c54fcd0f62f94f6fc60a2cd7fb313202490fd6a380daef41ce7d6e354625"
+    },
+    {
+      "path": "src/platform/compiler/elf_x86_64/blake3.rs",
+      "before": "    // Inputs: Di data, Si length, Dx chunk counter, Cx root flag, R8 output.\n    for (offset, register) in [(0, Di), (8, Si), (16, Dx), (24, Cx), (32, R8)] {",
+      "after": "    // Di data, Si length, Dx chunk counter, Cx mode/root flags, R8 output.\n    // R9 points to 32 key bytes, or is zero for the IV. It stays live in the caller.\n    for (offset, register) in [(0, Di), (8, Si), (16, Dx), (24, Cx), (32, R8), (48, R9)] {",
+      "base_sha256": "0185c54fcd0f62f94f6fc60a2cd7fb313202490fd6a380daef41ce7d6e354625"
+    },
+    {
+      "path": "src/platform/compiler/elf_x86_64/blake3.rs",
+      "before": "    a.mov(Si, Bx);\n    a.imm(Cx, 0);\n    a.lea(R8, R12, LEFT);",
+      "after": "    a.mov(Si, Bx);\n    child_parameters(a);\n    a.lea(R8, R12, LEFT);",
+      "base_sha256": "0185c54fcd0f62f94f6fc60a2cd7fb313202490fd6a380daef41ce7d6e354625"
+    },
+    {
+      "path": "src/platform/compiler/elf_x86_64/blake3.rs",
+      "before": "    a.bin(0x01, Dx, Bx);\n    a.imm(Cx, 0);\n    a.lea(R8, R12, RIGHT);",
+      "after": "    a.bin(0x01, Dx, Bx);\n    child_parameters(a);\n    a.lea(R8, R12, RIGHT);",
+      "base_sha256": "0185c54fcd0f62f94f6fc60a2cd7fb313202490fd6a380daef41ce7d6e354625"
+    },
+    {
+      "path": "src/platform/compiler/elf_x86_64/blake3.rs",
+      "before": "    a.bind(middle);\n    a.call(compress);",
+      "after": "    a.bind(middle);\n    a.load(Ax, R12, 24);\n    a.group(4, Ax, !8);\n    a.bin(0x09, R8, Ax); // Every chunk block carries the derivation mode.\n    a.call(compress);",
+      "base_sha256": "0185c54fcd0f62f94f6fc60a2cd7fb313202490fd6a380daef41ce7d6e354625"
+    },
+    {
+      "path": "src/platform/compiler/elf_x86_64/bytes.rs",
+      "before": "                self.a.lea(R8, R13, 24);\n                self.a.call(self.runtime.blake3);",
+      "after": "                self.a.lea(R8, R13, 24);\n                self.a.imm(R9, 0);\n                self.a.call(self.runtime.blake3);",
+      "base_sha256": "6fe2770d54f3276e995d9bc6ab38f2494bbac6fe814c00f895e698b149a3d71d"
+    },
+    {
+      "path": "src/platform/compiler/elf_x86_64/bytes.rs",
+      "before": "            _ => return self.buffer_external(name),",
+      "after": "            \"core.bytes.blake3-derive-key\" => self.bytes_derive_key(),\n            _ => return self.buffer_external(name),",
+      "base_sha256": "6fe2770d54f3276e995d9bc6ab38f2494bbac6fe814c00f895e698b149a3d71d"
+    },
+    {
+      "path": "src/platform/compiler/elf_x86_64/bytes.rs",
+      "before": "    /// Bx is the validated byte length. R13 receives the new object pointer.",
+      "after": "    fn bytes_derive_key(&mut self) {\n        self.a.mov(R12, Ax);\n        self.a.imm(Bx, 32);\n        self.bytes_allocate();\n        // The intermediate context key has lexical stack storage, outside output.\n        self.a.group(5, Sp, 32);\n        self.a.load(Si, R12, 24);\n        self.a.group(7, Si, 256 * 1024 * 1024 + 1);\n        self.a.when(AE, self.runtime.bytes_capacity);\n        self.a.load(Di, R12, 32);\n        self.a.imm(Dx, 0);\n        self.a.imm(Cx, 32 | 8); // DERIVE_KEY_CONTEXT | ROOT.\n        self.a.mov(R8, Sp);\n        self.a.imm(R9, 0);\n        self.a.call(self.runtime.blake3);\n        self.argument(Ax, 0);\n        self.a.load(Si, Ax, 8);\n        self.a.group(7, Si, 256 * 1024 * 1024 + 1);\n        self.a.when(AE, self.runtime.bytes_capacity);\n        self.a.load(Di, Ax, 16);\n        self.a.imm(Dx, 0);\n        self.a.imm(Cx, 64 | 8); // DERIVE_KEY_MATERIAL | ROOT.\n        self.a.mov(R9, Sp);\n        self.a.lea(R8, R13, 24);\n        self.a.call(self.runtime.blake3);\n        self.a.group(0, Sp, 32);\n        self.a.mov(Ax, R13);\n    }\n\n    /// Bx is the validated byte length. R13 receives the new object pointer.",
+      "base_sha256": "6fe2770d54f3276e995d9bc6ab38f2494bbac6fe814c00f895e698b149a3d71d"
+    }
+  ]
+}

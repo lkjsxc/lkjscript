@@ -1,0 +1,54 @@
+{
+  "status": "Read-only next-dependency inventory; no Region implementation change",
+  "observed_workload": {
+    "owner_records": 20001,
+    "type_objects": 18,
+    "source_packet_bytes": 2242244,
+    "source_binding_packet_bytes": 4530966
+  },
+  "facts": [
+    {
+      "owner": "src/platform/execution/region.rs",
+      "fact": "Storage owner already has allocate_slice, read_slice, read_item and resolve_slice APIs."
+    },
+    {
+      "owner": "docs/spec/regions.md",
+      "fact": "Language region expressions cover scalar cell allocation/read/write and lexical scope; RegionSlice has no language array expressions yet."
+    },
+    {
+      "owner": "src/platform/execution/normalized/vm_region.rs",
+      "fact": "Region Begin/End use arena identity, explicit typed capability and scoped cleanup. VM and independent reference exist."
+    },
+    {
+      "owner": "src/platform/compiler/elf_x86_64.rs",
+      "fact": "Current native emitter has no Region instruction case; required native work must preserve existing custody and trap semantics."
+    }
+  ],
+  "next": [
+    "Define neutral canonical source-graph directory with exact package/root/object bindings; source compiler must independently validate every included object and reference.",
+    "Evaluate immutable sorted input indexes for lookups. Use actual decoder workload to choose bounded Region tables; do not require unrelated optimizer or parallel work.",
+    "Native lexical Region support and indexed table operations need a concrete compiler table workload, independent bounds/custody/cleanup tests, and both evaluators.",
+    "Source semantic admission and normalization, witnesses, required corpus features and native source-graph fixed point remain unimplemented."
+  ],
+  "existing_indexing_candidate": {
+    "status": "Hypothesis grounded in existing language operations; no implementation or native verification yet",
+    "owners": [
+      "tests/fixtures/region-persistence.lkjc",
+      "tests/fixtures/region-parallel.lkjc",
+      "src/platform/execution/normalized/vm_region.rs"
+    ],
+    "facts": [
+      "region-offset returns a relative pointer offset; region-resolve checks an offset under an exact live capability and type.",
+      "Generic region-constrained functions may consume and return unique custody; ordinary scoped reads and writes already execute in VM/reference."
+    ],
+    "proposal": "Prototype compiler phase tables with repeated same-layout I64 cells, offset/resolve and measured adjacent-cell stride before adding new RegionSlice language syntax. Immutable canonical input supplies sorted lookup keys; derived colors, inferred types and IR indices live in lexical arenas.",
+    "constraints": [
+      "Every resolved cell must retain exact arena/generation/layout admission.",
+      "Native Region instructions are still absent and must be implemented before native phase tables.",
+      "Use scalar table cells to avoid ordinary heap record allocation on each read.",
+      "Do not claim dense-array or whole-compiler reclamation until measured on the actual source workload."
+    ],
+    "proposal_file": ".artifacts/selfhost/source-region-table-draft.lkjc",
+    "proposal_status": "Four-function unadmitted draft only; not included in S, not compiled or executed. Count bounded0..100000, scalar cells, stride derived from adjacent actual allocations, bounded8MiBlexical arena, reverse indexed sum."
+  }
+}

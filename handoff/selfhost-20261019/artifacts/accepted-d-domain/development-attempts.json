@@ -1,0 +1,32 @@
+{
+  "attempts": [
+    {
+      "path": "derive-native-initial.log",
+      "status": "failed",
+      "resolution": "9 passed, 1 fixture failed; JSON Unicode escape replaced by structural quoting",
+      "bytes": 2525,
+      "sha256": "a409a11bf556c8be70b8c1b5e964144daaa82583a72a806184a740032c02550e"
+    },
+    {
+      "path": "derive-public.log",
+      "status": "failed",
+      "resolution": "2 passed, 1 stdin fixture failed; support::spawn preserves file input",
+      "bytes": 1172,
+      "sha256": "65098c49b04713f6dd5f25aa70e96b61b24933ff950dbd9eb552e291ad30653c"
+    },
+    {
+      "path": "derive-clippy.log",
+      "status": "failed",
+      "resolution": "Wrong development profile, plus constant chunks_exact lint; fixed as_chunks and reran official release profile",
+      "bytes": 7990,
+      "sha256": "66d1f86d3b44423dfd18a1ea87bfa309a4c5963820177e09fea0ffcb6d3d3d0e"
+    },
+    {
+      "path": "derive-unkeyed-runtime.log",
+      "status": "not_run",
+      "resolution": "Incorrect exact filter selected zero tests; selected test rerun passed",
+      "bytes": 116,
+      "sha256": "2c3b419bd6ac98fdbf74ba5544712b9942bfd7666d6a23ce1c8a583dc0d9fa4e"
+    }
+  ]
+}

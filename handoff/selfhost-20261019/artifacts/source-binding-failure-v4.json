@@ -1,0 +1,11 @@
+{
+  "status": "failed",
+  "terminal": "test result: FAILED. 2 passed; 4 failed; 0 ignored; 0 measured; 2602 filtered out; finished in 72.56s",
+  "cause": "Direct compilation still requires current validation and rejects the source-probe graph at the unchanged associated-metadata capacity. Other probe families pass.",
+  "log": {
+    "path": ".artifacts/selfhost/source-binding-decoder-v4.log",
+    "bytes": 5329,
+    "sha256": "ec483e479eb462c2c47d39670be2dad0d349c0bfd4722e60d56f69f3b7a0d557"
+  },
+  "next": "Reduce repeated type inference in the test packet cursor chain using explicit, checked cursor-result annotations; validate through ordinary public authoring and build in a detached project."
+}

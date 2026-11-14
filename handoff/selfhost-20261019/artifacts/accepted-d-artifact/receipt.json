@@ -1,0 +1,192 @@
+{
+  "schema": "lkjscript.selfhost.slice.v1",
+  "status": "passed",
+  "tier": 1,
+  "milestone": "D: complete backend closure over native ELF and current .lkja",
+  "profile": 4,
+  "source": "108906b51259f00fae4c4fd1c53d16a05b3df1b5",
+  "tree": "5f9eb4c268c886aa6c60cf7b1d6842233ba57fc2",
+  "parent": "b2aaa22ef2529e531058e09898c1645468fbea9d",
+  "remote_main": "108906b51259f00fae4c4fd1c53d16a05b3df1b5",
+  "authoritative_revision": "rev_785e128c7c5e53cc35510129cf1d34422597eebcac7260e03f4f55f4e15faccf",
+  "stage": {
+    "source_revision": "rev_785e128c7c5e53cc35510129cf1d34422597eebcac7260e03f4f55f4e15faccf",
+    "normalized_functions": 244,
+    "normalized_instructions": 16111,
+    "normalized_bytes": 794236,
+    "C1_bytes": 322615,
+    "C1_sha256": "45524badcc95fb204a1672e41b09942b29669e76c4d96e7b0a8f91b8f679d0ee",
+    "C2_C3_bytes": 2519420,
+    "C2_C3_sha256": "b1c4371af385bf91421e66dee2a5a7a481c1a2747f34ce786a161354ba0623ce",
+    "artifact_functions": 245,
+    "canonical_units": 247,
+    "artifact_input_bytes": 4126413,
+    "artifact_input_sha256": "1a1d579c2e08e2a984da20b76bcf8baaf9603bdde2a296cf610a4bbd6d8dedae",
+    "A1_A2_A3_bytes": 4349511,
+    "A1_A2_A3_sha256": "e4dc2bd19a308bae2d44a3beda3b13ebda88fc972c17b4358a5014321b5d27e3",
+    "vm_steps": 296112311,
+    "vm_cumulative_allocation": 31909160503,
+    "ref_expressions": 153493373,
+    "ref_cumulative_allocation": 36294774728,
+    "vm_max_call_depth": 19,
+    "ref_max_call_depth": 20,
+    "normalized_sha256": "2d37678274cb7163eb4ba61ed2533fdf5df23c13f14a10131a6a9c206ee0be2b"
+  },
+  "mutation": {
+    "normalized_sha256": "cc2467e82b32b78540c3e3fc4c4167f2ef7c325068f24d7ea52970cf0e340fc6",
+    "native_sha256": "d458ab4a4701259c592afcdc73f343d063a1337cc996df8d5ea9d68d8ffb2b27",
+    "native_bytes": 2519420,
+    "artifact_input_bytes": 4127846,
+    "artifact_input_sha256": "61b0b5f0a8836d471929a98c1e9cfdf23a4e8394f395a49680ee4e3a1db2e92e",
+    "artifact_bytes": 4351190,
+    "artifact_sha256": "f35a28bb8d3283efb12155886575cfe62c9ee20dd5f1f347e0bb3f6ed8bfc4dc",
+    "behavior": "C2/C3 compile changed source; resulting ELF and artifact compilers emit matching program with mutant_argument diagnostic, expected 42 result."
+  },
+  "validation": {
+    "focused": "Initial v3 32 passed/2 failed; both capacity failures resolved by ordinary disk-backed authoring. Targeted retry 2 passed,655.44s. No limit raised.",
+    "public_cli": "3 passed,197.29s",
+    "native_runtime": "10 passed,2.94s",
+    "clippy": "release workspace all targets all features passed",
+    "official_full": "29/29 fresh, stable",
+    "negative": "Malformed headers, checksums, pointers, metadata, object domains/hashes/order, unsupported unit opcodes and untaken code reject with empty output. Existing native type/custody/trap controls retained.",
+    "artifact_reader": "Strict Rust loader and canonical codecs unchanged",
+    "independent": "42/-91, branches, recursion, self-tail calls, checked signed arithmetic limits, division by zero, overflow and trap order",
+    "library_result": "test result: ok. 2589 passed; 0 failed; 5 ignored; 0 measured; 0 filtered out; finished in 747.33s",
+    "official_compiler_tests": 34,
+    "official_native_tests": 10
+  },
+  "compiler_work": {
+    "policy": "Existing trusted foreground evaluator policy; cumulative modeled charges are not live heap or RSS.",
+    "elf_vm_steps": 105866005,
+    "elf_vm_cumulative_allocation": 10275753351,
+    "elf_ref_expressions": 59048940,
+    "elf_ref_cumulative_allocation": 13326093983,
+    "artifact_vm_steps": 296112311,
+    "artifact_vm_cumulative_allocation": 31909160503,
+    "artifact_ref_expressions": 153493373,
+    "artifact_ref_cumulative_allocation": 36294774728
+  },
+  "changed": {
+    "status": "passed",
+    "selected": 2,
+    "passed": 2,
+    "fresh": 2,
+    "reused": 0,
+    "input_stable": true,
+    "input_digest": "verification_3724a5d0ead2d5d966cfe4ed018f529a5ee5d59f28d905856e6aeda7fb825a82",
+    "elapsed_seconds": 0.731939783
+  },
+  "remaining_host_boundaries": [
+    "Rust source semantic admission and normalization",
+    "Rust normalized/native and canonical-unit/artifact input exporters",
+    "Initial Rust native bootstrap",
+    "External atomic file launcher"
+  ],
+  "known_limitations": [
+    "No lkjscript source-graph semantic admission or normalization",
+    "No native lexical region reclamation or RSS claim",
+    "Nominal records/choices, closures, witnesses, regions and broader final profile remain required",
+    "No Tier2 source-graph fixed point"
+  ],
+  "native_memory": "Unmetered process-owned heap; input bounds/traversal fuel are distinct from evaluator quotas.",
+  "disk": {
+    "prior_stale_products_removed_bytes": 509599153,
+    "public_gc": {
+      "operation": "gc",
+      "status": "compacted",
+      "revision": "rev_785e128c7c5e53cc35510129cf1d34422597eebcac7260e03f4f55f4e15faccf",
+      "objects_before": 98543,
+      "objects_retained": 98543,
+      "objects_reclaimed": 0,
+      "canonical_bytes_retained": 103374296,
+      "disk": {
+        "objects_retained": 98543,
+        "packs_before": 198,
+        "packs_after": 1,
+        "pack_bytes_before": 101689265,
+        "pack_bytes_after": 91120504,
+        "pack_bytes_reclaimed": 10568761
+      }
+    },
+    "remote_warning": "Push succeeded; GitHub warned that the86.90MiB compacted source pack exceeds its50MiB recommendation. Retained accepted history was preserved."
+  },
+  "publication": "Accepted and integrated on origin/main; independent fetch and ancestry verified. No hosted release or production deployment.",
+  "changed_scope": "Clean candidate selected rust_only_tooling and diff_check; full fresh matrix establishes complete coverage.",
+  "full": {
+    "status": "passed",
+    "selected": 29,
+    "passed": 29,
+    "fresh": 29,
+    "reused": 0,
+    "input_stable": true,
+    "input_digest": "verification_3724a5d0ead2d5d966cfe4ed018f529a5ee5d59f28d905856e6aeda7fb825a82",
+    "elapsed_seconds": 1125.960984667
+  },
+  "release_target_policy": "passed",
+  "workspace_test_executables": 8,
+  "environment": {
+    "platform": "Linux x86_64",
+    "rustc": "1.98.0 (88d9e12ae 2026-08-18)",
+    "cargo_jobs": 8,
+    "checker_jobs": 4,
+    "native_children": "Cleared environment, static ELF, no external VM or runtime loader"
+  },
+  "evidence": {
+    "full.json": {
+      "bytes": 24661,
+      "sha256": "e376b6c42cbd49a44cb06270e805fe7f554d97e6d8e2172515ef305307e348ec"
+    },
+    "changed.json": {
+      "bytes": 2425,
+      "sha256": "fa3d5bc576f5283f8bf9f388fa8142ca1ded7c1c2169794353b0bb53ceea0444"
+    },
+    "bootstrap.json": {
+      "bytes": 600,
+      "sha256": "dcb69ba51357e73c9c0e5e6794c7bf03c724ae0ba7ea499d5df0d176251685ee"
+    },
+    "release-target.json": {
+      "bytes": 1657,
+      "sha256": "a15a5d8e7edde5fa876d808eb7ffbbaf3a1ac79f788178ff5c8bae4dd0c3557b"
+    },
+    "stage.log": {
+      "bytes": 6432,
+      "sha256": "cbd0bb98198e60e2951498d925786a5d8fec16bb4eaa179777b14e5506b89d19"
+    },
+    "official-library.json": {
+      "bytes": 7823,
+      "sha256": "bc22f60fc1b1329714d29c979b570433cc460f4294829365f6f7ab445c0998a2"
+    },
+    "official-other-harnesses.json": {
+      "bytes": 1987,
+      "sha256": "6839052483638ff0ac8eada3c65403d2e0e55095a1134e71d3a6237e2cc6c8ed"
+    },
+    "public-cli.log": {
+      "bytes": 731,
+      "sha256": "32a73c749b52403cdf037c8b142646b6814789e0ebdae529d3be251799452fff"
+    },
+    "native-runtime.log": {
+      "bytes": 1526,
+      "sha256": "8d077aa17f5b48c6f92296fbe32785757ab8bd03b21da787e70301138dd8cb53"
+    },
+    "clippy.log": {
+      "bytes": 306,
+      "sha256": "3121323275184f2655c1d0f0c42375ab47145f8c17eccd9b651c0c881b2d8767"
+    },
+    "development-attempts.json": {
+      "bytes": 7310,
+      "sha256": "54df251f6a5b1e25f1bd83b5211e0f18bf46efc86af26145723deff62da482a9"
+    },
+    "v3-result.json": {
+      "bytes": 8511,
+      "sha256": "24195d6abc26fdfce765e26a7ccb559f347f1c40e109e991fc139bdbccfa7bfb"
+    },
+    "gc.log": {
+      "bytes": 388,
+      "sha256": "924de030056fa47624c65a9b2afce56e37513cb7450a537515cc9aa503c24b3f"
+    },
+    "stale-products-cleanup.json": {
+      "bytes": 1439,
+      "sha256": "877b35a136f9616b57f4629620fdba4a41e20c3181b0b50d26d47ea01f52240f"
+    }
+  }
+}

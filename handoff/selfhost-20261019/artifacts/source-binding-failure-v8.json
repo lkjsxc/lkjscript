@@ -1,0 +1,115 @@
+{
+  "status": "failed",
+  "terminal": "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2607 filtered out; finished in 16.51s",
+  "cause": "Full compiler affine validation reserves66060451bytes of67108864; source-probe crosses unchanged cumulative metadata bound",
+  "observations": [
+    "source admission affine final=(1143792, 66060451)",
+    "source admission full owners=20001 associated=(5161, 575704) work=1777039 codes=reported_in_trace",
+    "source admission affine final=(1683, 141229)",
+    "source admission affine final=(1145475, 66201680)",
+    "source admission full owners=20046 associated=(5278, 587970) work=1781449 codes=reported_in_trace",
+    "source admission affine final=(0, 0)",
+    "source admission full owners=20047 associated=(5278, 587970) work=1781463 codes=reported_in_trace",
+    "source admission full owners=20048 associated=(5278, 587970) work=1781477 codes=reported_in_trace",
+    "source admission full owners=20049 associated=(5278, 587970) work=1781491 codes=reported_in_trace",
+    "source admission full owners=20050 associated=(5278, 587970) work=1781505 codes=reported_in_trace",
+    "source admission affine final=(5532, 330877)",
+    "source admission affine final=(1149927, 66446153)",
+    "source admission full owners=20129 associated=(5278, 587970) work=1788127 codes=reported_in_trace",
+    "source admission affine final=(24533, 1371891)",
+    "source admission affine final=(1168713, 67108835)",
+    "source admission full owners=20585 associated=(5278, 587970) work=1779336 codes=reported_in_trace"
+  ],
+  "largest_owner_reservations": [
+    {
+      "name": "body",
+      "bytes": 1567539
+    },
+    {
+      "name": "declaration-payload",
+      "bytes": 1289310
+    },
+    {
+      "name": "observe-fields",
+      "bytes": 1080690
+    },
+    {
+      "name": "parent",
+      "bytes": 1006215
+    },
+    {
+      "name": "runtime-closure",
+      "bytes": 914010
+    },
+    {
+      "name": "owner-key",
+      "bytes": 872434
+    },
+    {
+      "name": "instruction",
+      "bytes": 871372
+    },
+    {
+      "name": "leaf",
+      "bytes": 849381
+    },
+    {
+      "name": "local-step",
+      "bytes": 778996
+    },
+    {
+      "name": "invoke",
+      "bytes": 682473
+    },
+    {
+      "name": "push",
+      "bytes": 672989
+    },
+    {
+      "name": "layout",
+      "bytes": 667872
+    },
+    {
+      "name": "compile-admitted",
+      "bytes": 644077
+    },
+    {
+      "name": "allocate",
+      "bytes": 621705
+    },
+    {
+      "name": "utf8",
+      "bytes": 614965
+    },
+    {
+      "name": "equal",
+      "bytes": 606358
+    },
+    {
+      "name": "tables",
+      "bytes": 584808
+    },
+    {
+      "name": "sequence",
+      "bytes": 567276
+    },
+    {
+      "name": "encode",
+      "bytes": 557587
+    },
+    {
+      "name": "step",
+      "bytes": 538293
+    }
+  ],
+  "raw": {
+    "path": ".artifacts/selfhost/source-binding-admission-trace-v8.log",
+    "bytes": 611395,
+    "sha256": "0391c65226b98b5e13d6fcc4c7519ec8faec7673deefcde61e8fec8f2da4bfc3"
+  },
+  "retained_archive": {
+    "path": ".artifacts/selfhost/source-binding-admission-trace-v8.log.gz",
+    "bytes": 37926,
+    "sha256": "20e2addae25e70f919a0d6efb76ad95726d47a21741cea7f422aee1b430bed9e"
+  }
+}

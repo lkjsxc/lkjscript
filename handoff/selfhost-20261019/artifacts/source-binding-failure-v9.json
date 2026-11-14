@@ -1,0 +1,18 @@
+{
+  "status": "failed",
+  "terminal": "test result: FAILED. 10 passed; 4 failed; 0 ignored; 0 measured; 2595 filtered out; finished in 386.41s",
+  "new_binding_cases_passed": 8,
+  "original_decoder_cases_passed": 2,
+  "original_decoder_cases_failed": 4,
+  "cause": "Full source admission succeeds after inline queue change; four original probe cases now exhaust the unchanged composed callable-flow work admission during reference interpreter preparation",
+  "raw": {
+    "path": ".artifacts/selfhost/source-binding-tests-v9.log",
+    "bytes": 873662,
+    "sha256": "8da91d198dfc7e5b0669d860f08a28c507be03164551b66116d46f64ba83f66a"
+  },
+  "retained_archive": {
+    "path": ".artifacts/selfhost/source-binding-tests-v9.log.gz",
+    "bytes": 13044,
+    "sha256": "9434e0d74361f6f334139a5e74bff6a710359a9131c9d3fcb2dc7e835db5b97c"
+  }
+}

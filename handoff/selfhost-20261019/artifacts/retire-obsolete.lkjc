@@ -1,0 +1,6 @@
+request base=rev_1f513327588de20c98349bc5706709d110111b0553b3a98994dcb65f9378ddcb
+delete.owner owner=decl_7fd1c0b5f57771f35fcf1d5ffc9f0e9a policy=owned-closure
+delete.owner owner=decl_57d4982a3989b521e1e77fda427e4933 policy=owned-closure
+delete.owner owner=decl_698bbb1a209de09cf360748c3020d819 policy=owned-closure
+delete.owner owner=decl_8fc42da4b08801c7a08eedb0a6da56a5 policy=owned-closure
+delete.owner owner=decl_f7389fddda6c242ea89d1a04b2655339 policy=owned-closure

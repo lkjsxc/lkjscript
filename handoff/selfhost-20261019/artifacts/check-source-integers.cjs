@@ -1,0 +1,12 @@
+const fs=require('fs'),cp=require('child_process'),crypto=require('crypto'),assert=require('assert/strict');
+function unsigned(n){if(n<251n)return Buffer.from([Number(n)]);const width=n<65536n?2:n<4294967296n?4:8;const b=Buffer.alloc(width+1);b[0]=width===2?251:width===4?252:253;for(let i=0;i<width;i++)b[i+1]=Number((n>>BigInt(8*i))&255n);return b;}
+function signed(n){return unsigned(n>=0n?2n*n:-2n*n-1n);}
+function run(kind,input,expected){const p='.artifacts/selfhost/source-preview-'+kind;const r=cp.spawnSync(p,{input,env:{},timeout:5000,maxBuffer:1024*1024});if(r.error)throw r.error;if(expected===null){assert.equal(r.status,65);assert.deepEqual(r.stdout,Buffer.alloc(0));assert.deepEqual(r.stderr,Buffer.from('compiler_rejected:12\n'));}else{assert.equal(r.status,0,String(r.stderr));assert.equal(r.stderr.length,0);assert.deepEqual(r.stdout,expected);}}
+const result={status:'running',scope:'Native integer decoder prototype; C0 public build from temporary public-tx graph. VM/reference scalar checks still required.',valid_signed:0,valid_unsigned:0,rejected_encodings:0,subspan_cases:0,executables:{}};
+for(const kind of ['signed','unsigned']){const p='.artifacts/selfhost/source-preview-'+kind,b=fs.readFileSync(p);result.executables[kind]={bytes:b.length,sha256:crypto.createHash('sha256').update(b).digest('hex')};}
+const sv=[0n,1n,-1n,125n,-125n,126n,-126n,32767n,-32768n,32768n,-32769n,2147483647n,-2147483648n,2147483648n,-9223372036854775808n,9223372036854775807n];
+const uv=[0n,1n,250n,251n,65535n,65536n,4294967295n,4294967296n,9223372036854775807n];
+for(const [kind,values,encode] of [['signed',sv,signed],['unsigned',uv,unsigned]])for(const value of values){const b=encode(value),prefix=Buffer.alloc(4);prefix.writeUInt32LE(b.length);run(kind,b,Buffer.concat([prefix,b]));result['valid_'+kind]++;for(let n=0;n<b.length;n++){run(kind,b.subarray(0,n),null);result.rejected_encodings++;}run(kind,Buffer.concat([b,Buffer.from([254,255])]),Buffer.concat([prefix,b]));result.subspan_cases++;}
+for(const malformed of [[251,0,0],[251,250,0],[252,255,255,0,0],[253,255,255,255,255,0,0,0,0],[254],[255]])for(const kind of ['signed','unsigned']){run(kind,Buffer.from(malformed),null);result.rejected_encodings++;}
+for(const value of [9223372036854775808n,18446744073709551615n]){run('unsigned',unsigned(value),null);result.rejected_encodings++;}
+result.status='passed';fs.writeFileSync('.artifacts/selfhost/source-integer-preview-result.json',JSON.stringify(result,null,2)+'\n');console.log(JSON.stringify(result));

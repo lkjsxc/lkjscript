@@ -1,0 +1,37 @@
+DRAFT ONLY; not yet admitted, implemented by exporter, or selected as a public input schema.
+Canonical unit emission projection. Pure baseline, pre-tail canonical instructions, no serialized unit/key output supplied by host. Source digests and exact identity/reference fields are Tier 1 host-admitted facts. All input offsets absolute u32 LE into the one bounded input byte pool.
+
+Unit descriptor: 256 bytes.
+0 owner enum ordinal u32; 4 owner-kind enum ordinal u32; 8 owner-kind wire tag u32; 12 reserved zero.
+16 package ID16; 32 owner ID16.
+48 semantic-interface digest32; 80 implementation digest32; 112 type digest32; 144 effect digest32; 176 capability digest32; 208 validation-dependencies digest32. Test summary is absent in this profile.
+240 compilation-tables pointer u32; 244 signature pointer u32 or zero; 248 payload kind u32; 252 payload pointer u32.
+
+Tables: ten (pointer,count) pairs,8 bytes each, same semantic order as CompilationTables. First seven arrays are32-byte references/digests; structural_names index7 is array of8-byte string spans; read_view_fields index8 must empty; texts index9 is array of8-byte string spans (Inline only).
+Span:offset u32,length u32. Plain UTF8 bytes, no bincode prefix.
+
+Signature:20 bytes. Type-parameter-array pointer/count at0/4 (16-byte IDs, all constraints None); parameter-array pointer/count at8/12; result type index16. Other signature vectors empty, effect Pure, result relation Value.
+Parameter:32 bytes.ID16, name span8, type index u32, use ordinal u32; resource requirement absent.
+
+Payload6 External:8-byte implementation-name span; signature required.
+Payload7 Function:16-byte code header.parameter_count0,local_count4,instruction pointer8,count12; signature required.
+Payload9 Component:8-byte port pointer/count; no requirements. Port16:port table index0,function-type index4,implementation kind8=0,function declaration index12.
+Payload11 Target:16 bytes.component declaration index0,port-present4 (0/1),port table index8 (0 if absent),runner ordinal12 (Command0 only).
+
+Instructions:32 bytes. canonical tag0,A4,B8,C12,imm signed LE64 at16,extra-pointer24,extra-count28. Unused fields zero.
+2 Unit,9 Drop,27 Return: no fields.
+3 Bool:A0/1.
+4 I64:imm64.
+5 Text,6 StaticText,8 StoreLocal,10 JumpIfFalse,11 Jump:A.
+7 LoadLocal:A local,B use ordinal.
+12 Call:A function table index,B argument count,extra type-argument u32 array; requirement/effect/read-scope argument vectors empty.
+15 Record:extra structural-name indices u32 array; nominal absent and type arguments empty.
+17 Field:A structural-name index.
+18 List:A type index,B item count.
+No host NativeInstruction/TailCall/MoveLocal bytes and no output template. Unsupported payloads/instructions/forms must reject explicitly before native emission.
+
+Unit emission computes CompilationSource bincode, key core and derived key; current unit fields/tables/signature/code bincode; LKJCUNIT envelope and object digest.
+Unit source digest field ordering in bincode places absent test tag before validation-dependencies.
+Map bindings are sorted82-byte rows (EncodedOwnerKey17 + owner-kind wire tag1 + unit key32 + unit object digest32).
+
+Observed correction from strict byte comparison: typed identities have explicit bincode u8 tags in addition to their fixed bytes. PackageId18; DeclarationId3; TargetId12; ParameterId7; TypeParameterId17; TypeObjectDigest2; SemanticDigest5. Reference tables encode PackageId18 followed by the typed local ID: declaration3,field4,case5,requirement10,operation6,port11. Unit source OwnerKey adds its enum ordinal before the typed ID. Fixed input fields remain raw IDs/digests; S inserts tags. After public correction all193 compiler units matched exact canonical bytes on VM/reference/native (49.06s focused test).

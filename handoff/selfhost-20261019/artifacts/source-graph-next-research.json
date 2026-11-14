@@ -1,0 +1,139 @@
+{
+  "status": "Current E2 binding slice authored and under verification; source-graph profile remains unimplemented",
+  "observed_source": {
+    "revision": "rev_0bd74eef27ed085a6c9fb29be9af37de0d67f649413247e425b66d12687220db",
+    "owners": 20001,
+    "types": 18,
+    "retirements": 6125,
+    "dependencies": 0,
+    "semantic_state": "semantic_state_5be96f934c6465dce05b9489aed5f6aa72a10f0d5fd73457c354a4a174894368",
+    "shape_packet_bytes": 2242244,
+    "binding_packet_bytes": 4530966
+  },
+  "facts": [
+    {
+      "owner": "src/platform/kernel/validate.rs:KernelSnapshot",
+      "fact": "The full local snapshot contains owners, types, exact dependency interfaces/types/selections, blobs, dependencies and retirements. Dependency interfaces alone do not carry supplier bodies."
+    },
+    {
+      "owner": "src/platform/package_transport/source.rs:PackageContainer",
+      "fact": "Existing source containers carry exact source objects and package selections. Their admitted closure has complete per-package snapshots. Deriving admission from its witness would retain a Rust semantic boundary."
+    },
+    {
+      "owner": "src/platform/kernel/root.rs:SemanticRoot",
+      "fact": "Root stores three map roots: owners, dependencies and retirements. Package identity, repository identity and package name are bound. Owners include unused syntax."
+    },
+    {
+      "owner": "src/platform/persistent_map.rs:MapContentRoot",
+      "fact": "Logical map commitments can be recomputed from sorted key/value entries without physical map pages. Current unit-map code is specialized to 17-byte keys and 65-byte values."
+    },
+    {
+      "owner": "src/platform/kernel/state.rs:semantic_state_digest / bind_state",
+      "fact": "Semantic state binds schema versions, package ID/name and logical owner/dependency/retirement map roots. It deliberately excludes repository identity and physical page locators. A source schema can recompute exact state from complete sorted records without porting the repository page reader."
+    },
+    {
+      "owner": "src/platform/publication/revision.rs:RevisionCore",
+      "fact": "Revision identity separately binds repository ID, up to2ordered parents and semantic state. Digest includes epochLE16 and canonical payload lengthBE64; semantic state deliberately excludes repository ID."
+    }
+  ],
+  "proposed_next_slice": [
+    "Implement general fixed-width logical map commitments needed for owner (17-byte key/33-byte value), dependency (16/32) and retirement (17/32) maps, with independent current MapContentRoot comparisons. Existing artifact map code only accepts 17/65.",
+    "Define neutral source-graph LKJCI1 directories over complete canonical bytes and exact package selections; use recomputed logical semantic-state identity for root binding.",
+    "Use only byte serialization/closure collection in the initial Rust exporter; no trusted type tables, semantic validation certificates, normalized instructions or serialized executable output.",
+    "First port root/object binding and lookup to lkjscript. Independently rehash objects and map content, prove offsets/partition/order, reject duplicates and missing references before semantic execution.",
+    "Evaluate direct binary search on immutable sorted input for source lookups; phase-local inferred types, traversal colors and normalized IR remain candidates for bounded lexical Region tables.",
+    "Add dependent-package source fixtures and unused/untaken malformed owners, not just artifact reachable functions."
+  ],
+  "open_decisions": [
+    "Exact current source forms supported initially, with deterministic unsupported rejection",
+    "Traversal fuel bound and native Region/indexed-cell dependency"
+  ],
+  "map_prototype": {
+    "proposal": "source-map-draft.lkjc",
+    "functions": 6,
+    "private_revision": "rev_3ffc57c4729228f109ae745e9357c9e821679ac9d9b1770599f00b48dfb28eaf",
+    "native_probe": "source-map-native-preview-result.json",
+    "pending_tests": "source-map-tests-draft.rs",
+    "scope": "Next slice only, outside current official decoder candidate",
+    "cleanup": "source-map-preview-cleanup.json",
+    "native_exact_bounds": "100000entries and8388608table bytes passed framing/execution preview; digest oracle still pending"
+  },
+  "schema_candidates": [
+    {
+      "choice": "Separate sorted logical map rows and matching object-span arrays",
+      "reason": "Reuses fixed-width commitments directly without copying or including physical object offsets in semantic identity; every index/count/object binding remains checked."
+    },
+    {
+      "choice": "Single-package source profile first, with explicit unsupported dependency rejection",
+      "reason": "Current complete S has zero dependencies. Exact supplier body collection is required before accepting imports; interfaces or prior witness certificates cannot replace it."
+    }
+  ],
+  "next_slice_tests": [
+    "Current source owner, dependency and retirement logical roots against independent MapContentRoot::from_sorted and retained root summaries",
+    "Positive exact entry and byte ceilings, long common prefixes, all256radix edges, duplicate and reversed keys, truncated extents and invalid widths",
+    "VM/reference/native agreement plus source-derived expected digest binding; no semantic-admission claim for map commitments"
+  ],
+  "state_prototype": {
+    "status": "Integrated into the E2 candidate; independent semantic-state tests passed in v3/v9.",
+    "proposal": "source-state-draft.lkjc",
+    "functions": 2,
+    "probe": "source-state-probe-draft.lkjc",
+    "tests": "source-state-tests-draft.rs",
+    "binding": "Current semantic-state digest: schema and graph versions, package ID/name, and three recomputed logical map roots. No graph admission claim."
+  },
+  "next_slice_drafts": {
+    "status": "E2 functions are publicly authored in main S; eight new binding cases and six original decoder regressions passed across focused runs. Exact-source official acceptance is pending.",
+    "modules": [
+      [
+        "source-map",
+        6
+      ],
+      [
+        "source-state",
+        2
+      ],
+      [
+        "source-history",
+        6
+      ],
+      [
+        "source-object",
+        4
+      ]
+    ],
+    "tests": 8,
+    "scope": "Independent logical maps/state/revisions, current dependency/retirement record readers, and owner/type/dependency/retirement directory binding. Not semantic admission.",
+    "integration": ".artifacts/selfhost/run-source-binding-development.sh",
+    "prerequisite": "Terminal exact-source acceptance and normal integration of c282cfca"
+  },
+  "artifact_followup": {
+    "owner": "src/platform/compiler/artifact.rs:validate_nominal_instruction_inventory",
+    "fact": "Strict artifact loading compares constructor occurrences, canonical references and manifest/package identities in addition to code/flow validity. Self-hosted normalization must preserve these source correspondences.",
+    "next": "Do not trust host-built lowered units or flow certificates. Build normalization and flow state from complete canonical source in lkjscript."
+  },
+  "index_prototype": {
+    "proposal": ".artifacts/selfhost/source-index-draft.lkjc",
+    "generator": ".artifacts/selfhost/draft-source-index.cjs",
+    "status": "Unadmitted six-function draft; generator syntax and proposal AST roundtrip checked only. Not part of S and not executed.",
+    "scope": "Bounded fixed-width source-directory ordering and binary lookup; immutable source bytes remain authoritative. Private helpers receive checked ranges. Public lookup checks ranges but requires prior validate for strict ordering; -1 absent, -2 malformed arguments.",
+    "limits": {
+      "rows": 100000,
+      "key_bytes": [
+        1,
+        32
+      ],
+      "stride_max": 128,
+      "input_bytes": 8388608
+    },
+    "next_tests": [
+      "Compare lookup of every complete S owner/type key against independent sorted BTreeMap positions.",
+      "Exercise absent keys, duplicate/reversed ordering, empty/singleton ranges and hostile I64 bounds on VM/reference/native.",
+      "Outer source graph must bind offsets, directories and canonical objects before lookup; lookup alone never admits source semantics."
+    ]
+  },
+  "next_after_e2": [
+    "Bind a complete canonical source directory and root without host-normalized instructions or certificates.",
+    "Use source-directory lookups for reference/type admission; implement smallest end-to-end semantic compilation before widening to full S.",
+    "Validate existing region offset/resolve indexing on compiler-sized scalar tables before inventing array syntax; native Region support remains absent."
+  ]
+}

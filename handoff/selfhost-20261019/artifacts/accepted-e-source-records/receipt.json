@@ -1,0 +1,1222 @@
+{
+  "schema": "lkjscript.selfhost.slice.v1",
+  "status": "passed",
+  "milestone": "E source-record decoding groundwork; semantic admission remains incomplete",
+  "tier": 1,
+  "source": "c282cfcabcdc4ad41bae1e7ff9652eb63e5d5f6f",
+  "tree": "9d33845bf8d4b761ceadc6d97afd52a36eba8f3b",
+  "parent": "352f0997142d9fed279f3964a76102d61f7ac1e6",
+  "authoritative_revision": "rev_86554bc5414236b4903b609bbd0b2887c742de8b0941913f1d0e5478bca61fe4",
+  "functions_added": 42,
+  "source_files": [
+    {
+      "path": "tools/selfhost/source-read.lkjc",
+      "bytes": 24485,
+      "sha256": "8d8281426f73df0b4c9186bdac115c15293a361a50fcec3d6dbafb21f54ed9fa"
+    },
+    {
+      "path": "tools/selfhost/source-shape.lkjc",
+      "bytes": 10747,
+      "sha256": "6d5815c1903bb5ed3babaa448f294b7e6be1437676701fb30a5d2911a0b6f0c4"
+    },
+    {
+      "path": "tools/selfhost/source-fields.lkjc",
+      "bytes": 14180,
+      "sha256": "2af43bc92d00b9b5ee25a81e75dda2a4dc24a93efd8ec943ca861d338b65d43e"
+    },
+    {
+      "path": "tools/selfhost/source-expr.lkjc",
+      "bytes": 23670,
+      "sha256": "b6208efed3403667f9b068895b520070fec439933fc7a99462dfd183c0b33188"
+    },
+    {
+      "path": "tools/selfhost/source-owner.lkjc",
+      "bytes": 51546,
+      "sha256": "4c81bcefe98876bee36e865dd086df731eeba6a5f6726061905af4158d94763a"
+    }
+  ],
+  "decoding": {
+    "types": 18,
+    "dependency_types": 0,
+    "owners": 18572,
+    "packet_bytes": 2082756,
+    "packet_sha256": "6d5a6113bb3b6e53f3306d845544766af249ee071a62fc5782c131b2ebb3a70e",
+    "independent_programs": [
+      "selfhost-aggregates.lkjc",
+      "selfhost-generic-list.lkjc",
+      "selfhost-source-nominal.lkjc"
+    ],
+    "native_batch_producer": {
+      "bytes": 104444,
+      "sha256": "dec8e55b2e93e4df3d253676d4fb741f59e896f0759b604160c2395f376486e5"
+    }
+  },
+  "expanded_backend": {
+    "canonical_units": 289,
+    "functions": 287,
+    "artifact_input_bytes": 5124896,
+    "artifact_input_sha256": "8f3f5c2d4fbc45b4456633c2e3283da5824a40617d93d805ad1f56d167f65483",
+    "artifact_bytes": 5406581,
+    "artifact_sha256": "dfd6891497b23d5c5c12e8f1939663778ff12b03622e471302b42786dc9f5cde",
+    "native_fixed_point_bytes": 2519420,
+    "native_fixed_point_sha256": "b1c4371af385bf91421e66dee2a5a7a481c1a2747f34ce786a161354ba0623ce",
+    "scope": "Numeric stage observations are retained from the focused run; all 40 self-host tests also passed in the exact-source official full retry. This remains a Tier 1 fixed point.",
+    "mutated_artifact": {
+      "input_bytes": 5126091,
+      "input_sha256": "6c85b0ba0ef2cfeb39ba5113466d24acef96e3c316fb7f3fd183b99a0b85534c",
+      "bytes": 5407981,
+      "sha256": "a5a947de83ed3fc707381a6588a2bdd5ee0f5537189635b9afa8d6a310b7b8f4"
+    }
+  },
+  "focused": {
+    "source_tests": "6 passed,121.11s",
+    "aggregate": "39passed,1failed,880.71s; bounded replay witness budget failure retained",
+    "replay_retry": "1passed,322.77s; every289canonicalunit table/payload plus native backend export match",
+    "clippy": "release workspace alltargets allfeatures passed,31.99s",
+    "gc_test_correction": "3 focused release storage tests passed; release workspace all-target/all-feature Clippy passed"
+  },
+  "bootstrap": {
+    "schema": "lkjscript.bootstrap.v1",
+    "status": "passed",
+    "source": {
+      "source": "c282cfcabcdc4ad41bae1e7ff9652eb63e5d5f6f",
+      "tree": "9d33845bf8d4b761ceadc6d97afd52a36eba8f3b",
+      "status": ""
+    },
+    "target": "/home/coder/workspace/lkjscript/target",
+    "context_sha256": "298bd4465a8d497bea5a3852ff0010d0a8d31affe28dc7bb978a767d83955e61",
+    "binaries": [
+      {
+        "name": "lkjscript-dev",
+        "output": {
+          "path": "/home/coder/workspace/lkjscript/target/bootstrap/lkjscript-dev",
+          "mode": "0750",
+          "kind": "file",
+          "bytes": 126934832,
+          "sha256": "c53d953751f7565953d49cfadf926560ccbce0cdd90911ea6aea800241695d9b"
+        }
+      }
+    ],
+    "originals_retained": false,
+    "cargo_reused": 4
+  },
+  "changed": {
+    "archive": null,
+    "completed_unix_nanoseconds": 1792347528993071000,
+    "elapsed_nanoseconds": 728327983,
+    "failure": null,
+    "final_worktree_input_digest": "verification_34e99ecdd5a26a8b2b9319aabd9bedb99d12bbb677d5d8521128c2103f1a0540",
+    "fresh_passed_gates": 2,
+    "fresh_required": true,
+    "gates": [
+      {
+        "cargo": null,
+        "elapsed_nanoseconds": 99621386,
+        "evidence_digest": "verification_b121b168164502d64c02adf5759e48564778f3a770ae63afd66924564dd8f065",
+        "execution": "fresh",
+        "exit_code": 0,
+        "input_fingerprint": "verification_22fa59ee82c1d47d42fcf50ca77b6f6f5fd2389e308d82b5bc3eac51a2965a42",
+        "inputs": [],
+        "name": "rust_only_tooling",
+        "outputs": [],
+        "reason": null,
+        "signal": null,
+        "status": "passed",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_excerpt": null,
+        "stdout_digest": "verification_e79333093501eaa9e7ee0158aecb7ddfbc2079d3d9cbd952c2d58e9ca052599f",
+        "stdout_excerpt": null
+      },
+      {
+        "cargo": null,
+        "elapsed_nanoseconds": 16982935,
+        "evidence_digest": "verification_a987b1380a7724492eab366e6cc595680cbfc9b35294bb4f383b9073a2e6b4fa",
+        "execution": "fresh",
+        "exit_code": 0,
+        "input_fingerprint": "verification_3d8aa9172f11827a503f4dd7fbc2c2cc89b6e55cc94c1513602c5128ad207c1a",
+        "inputs": [],
+        "name": "diff_check",
+        "outputs": [],
+        "reason": null,
+        "signal": null,
+        "status": "passed",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_excerpt": null,
+        "stdout_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stdout_excerpt": null
+      }
+    ],
+    "git_head": "c282cfcabcdc4ad41bae1e7ff9652eb63e5d5f6f",
+    "harness": {
+      "bytes": 126934832,
+      "digest": "verification_7230e80a634f0af81358ab7e652d5e6142e907b64d1323b2ffda5dea0e0201f5",
+      "kind": "file",
+      "mode": 488,
+      "path": "/home/coder/workspace/lkjscript/target/bootstrap/lkjscript-dev"
+    },
+    "input_stable": true,
+    "maximum_workers": 4,
+    "originals_retained": false,
+    "passed_gates": 2,
+    "profile": "changed",
+    "profile_definition_digest": "verification_a1b8afd5d34fd203928ef66ae4f9e5abcda3234c66af94f04adb5af64351f315",
+    "requested_gates": [
+      "rust_only_tooling",
+      "diff_check"
+    ],
+    "reused_passed_gates": 0,
+    "runtime_digest": "verification_b3a946f315fbebe6d8b386848366990bb4137b91c98b3719cf6ce986549e6fd5",
+    "schema": "lkjscript-check-compact-1",
+    "selected_gates": [
+      "rust_only_tooling",
+      "diff_check"
+    ],
+    "started_unix_nanoseconds": 1792347528264743200,
+    "status": "passed",
+    "unrun_gates": [],
+    "worktree_input_digest": "verification_34e99ecdd5a26a8b2b9319aabd9bedb99d12bbb677d5d8521128c2103f1a0540"
+  },
+  "remaining_host_boundaries": [
+    "Rust semantic source admission and normalization",
+    "Rust native/artifact profile4 input exporters",
+    "Initial Rust native bootstrap",
+    "External atomic output launcher"
+  ],
+  "known_limitations": [
+    "No source graph reference resolution or cycle check",
+    "No source type, affine, borrow, region or effect/witness admission",
+    "No normalization from source graph",
+    "Current backend still consumes host-admitted profile4 projections",
+    "No lexical Region arenas or RSS claim"
+  ],
+  "publication": "Normal push to origin/main completed; independent fetch and ancestry check confirm the accepted source. No hosted release or deployment.",
+  "next_slice": {
+    "note": "Source-map prototype is separate and is not part of this acceptance candidate",
+    "evidence": "source-map-native-preview-result.json"
+  },
+  "full": {
+    "archive": null,
+    "completed_unix_nanoseconds": 1792348633245463300,
+    "elapsed_nanoseconds": 1104242486553,
+    "failure": null,
+    "final_worktree_input_digest": "verification_34e99ecdd5a26a8b2b9319aabd9bedb99d12bbb677d5d8521128c2103f1a0540",
+    "fresh_passed_gates": 29,
+    "fresh_required": true,
+    "gates": [
+      {
+        "cargo": null,
+        "elapsed_nanoseconds": 4474671036,
+        "evidence_digest": "verification_b2bda5b2988ad78c1850ed8b485664751274efc9d386d8e07cef32008c598a1c",
+        "execution": "fresh",
+        "exit_code": 0,
+        "input_fingerprint": "verification_c245274da253ea401e658916477b2e269b091c80e40f8ade0ff0e89d5325f3be",
+        "inputs": [],
+        "name": "fmt",
+        "outputs": [],
+        "reason": null,
+        "signal": null,
+        "status": "passed",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_excerpt": null,
+        "stdout_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stdout_excerpt": null
+      },
+      {
+        "cargo": null,
+        "elapsed_nanoseconds": 885785161,
+        "evidence_digest": "verification_5d4b9454be04f2c3e7ac1646980d4fc8a43433ed253f5ef3845b473b9abba95e",
+        "execution": "fresh",
+        "exit_code": 0,
+        "input_fingerprint": "verification_1a3edfcd87954ba875cf1a7c58980bacd2949559c5f092e1494e19fed6fad7bd",
+        "inputs": [],
+        "name": "clippy",
+        "outputs": [],
+        "reason": null,
+        "signal": null,
+        "status": "passed",
+        "stderr_digest": "verification_99a0b2db4b4b034c85d8512a5a21de7d8da2ca8b483a344126a029b288da6d31",
+        "stderr_excerpt": null,
+        "stdout_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stdout_excerpt": null
+      },
+      {
+        "cargo": null,
+        "elapsed_nanoseconds": 860931506246,
+        "evidence_digest": "verification_0cecd6f072d2c22af1bd758f2afbd7d2dbcff501c18a13001c8fe45c18e5555f",
+        "execution": "fresh",
+        "exit_code": 0,
+        "input_fingerprint": "verification_394209f4acb93234985df1a8923303af8435772be249af5e82a8a7f20ac6ba83",
+        "inputs": [
+          {
+            "bytes": 78357552,
+            "digest": "verification_fc6076616e11721340b4aa506216a24771204b2771a12f23ac84e0a00c4d664f",
+            "kind": "file",
+            "mode": 488,
+            "path": "target/release/lkjscript"
+          },
+          {
+            "bytes": 853360,
+            "digest": "verification_dd8e31510d13c92668bad62a36b639fe04fc223c1bcdf0b8d29d90ccb8836446",
+            "kind": "file",
+            "mode": 488,
+            "path": "target/release/deps/lkjscript-2aaecec150222688"
+          },
+          {
+            "bytes": 195388832,
+            "digest": "verification_05f8992e3b908f9331f4b95780a448112f96f13bb0f93e35cb0b984bc8840db3",
+            "kind": "file",
+            "mode": 488,
+            "path": "target/release/deps/lkjscript-e62cb20ef26e8b12"
+          },
+          {
+            "bytes": 89090664,
+            "digest": "verification_9eed14da1e4273994c234b6eaccdc846d295c2825174f11c168646ce2e1e3de2",
+            "kind": "file",
+            "mode": 488,
+            "path": "target/release/deps/public_cli-411b0a00ac463de7"
+          },
+          {
+            "bytes": 104000584,
+            "digest": "verification_61e31ee6b519b39efda2f5668f9f6cd9a13ea309bac08dbf77e1ce36e4f3e71e",
+            "kind": "file",
+            "mode": 488,
+            "path": "target/release/deps/lkjscript_dev-057965911fcd0a7d"
+          },
+          {
+            "bytes": 853360,
+            "digest": "verification_dd8e31510d13c92668bad62a36b639fe04fc223c1bcdf0b8d29d90ccb8836446",
+            "kind": "file",
+            "mode": 488,
+            "path": "target/release/deps/lkjscript_dev-6cdfaa1d71762bef"
+          },
+          {
+            "bytes": 853360,
+            "digest": "verification_dd8e31510d13c92668bad62a36b639fe04fc223c1bcdf0b8d29d90ccb8836446",
+            "kind": "file",
+            "mode": 488,
+            "path": "target/release/deps/lkjscript_release_controller-bcfd92dc04a3a59c"
+          },
+          {
+            "bytes": 2129064,
+            "digest": "verification_53e761d2bfaddaf4c167690e9f94c97f483c4028a581b91b6784672b392c4c23",
+            "kind": "file",
+            "mode": 488,
+            "path": "target/release/deps/lkjscript_site-80ef455ce68bb386"
+          },
+          {
+            "bytes": 862856,
+            "digest": "verification_b92d29417b9b8b8aa664ff358e787b29f795a8ff8cd3f73a0a24b830f9fa7e06",
+            "kind": "file",
+            "mode": 488,
+            "path": "target/release/deps/lkjscript_site-cdb344deeea83f23"
+          }
+        ],
+        "name": "workspace_tests",
+        "outputs": [],
+        "reason": null,
+        "signal": null,
+        "status": "passed",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_excerpt": null,
+        "stdout_digest": "verification_8bffa26b4e5df1a7b5b5e40f66d68a9dd58195493b63b1adaaf54500bd22e641",
+        "stdout_excerpt": null
+      },
+      {
+        "cargo": {
+          "bytes": 1059311991,
+          "cargo_fresh_units": 11,
+          "context_digest": "verification_c3a0be202263285898f9ef6a6ad6f0e77f59225f14ed4e1f62a2c1c793861e34",
+          "files": 43,
+          "inventory_digest": "verification_3ffb3b9c8078cc0a5e5016418eaaf09ea33200469a4d37562d2ba138a95c5b98",
+          "schema": "lkjscript-live-cargo-1",
+          "test_executables": 1,
+          "test_executables_digest": "verification_c6ddbf3681c38bc4efb1d2657f1dad96699b21394a9dba29eb61ed2c4e4b33b4",
+          "units": 16,
+          "workspace_test_executables": 8,
+          "workspace_test_executables_digest": "verification_f57557c0e6869a6c5ebab0056fe3c78e10c65c563456d75ffe887ade7dc394d6"
+        },
+        "elapsed_nanoseconds": 238185300059,
+        "evidence_digest": "verification_4da67762fce7c15032d6677f47ee8a42e735860ec729aea62890c3f0ec4af16d",
+        "execution": "fresh",
+        "exit_code": 0,
+        "input_fingerprint": "verification_de4d7d5e34625941cae651c19b6826183da6aef0b1915dedd21607d46b33a6be",
+        "inputs": [],
+        "name": "release_build",
+        "outputs": [
+          {
+            "bytes": 78357552,
+            "digest": "verification_fc6076616e11721340b4aa506216a24771204b2771a12f23ac84e0a00c4d664f",
+            "kind": "file",
+            "mode": 488,
+            "path": "target/release/lkjscript"
+          }
+        ],
+        "reason": null,
+        "signal": null,
+        "status": "passed",
+        "stderr_digest": "verification_8d73d454458c087d63d254273624b26ffc7b10cc73dad8eb882e9b6b3166909e",
+        "stderr_excerpt": null,
+        "stdout_digest": "verification_4262e4e424e8c31dbf01c75b2240e834c09877ff83be260b794df6f62322b63d",
+        "stdout_excerpt": null
+      },
+      {
+        "cargo": null,
+        "elapsed_nanoseconds": 18822569904,
+        "evidence_digest": "verification_fd3a8f8d5cadccf0e590337bc9b9c0717cb96f7f4415fcbfe71b3366fefa3229",
+        "execution": "fresh",
+        "exit_code": 0,
+        "input_fingerprint": "verification_815bf0c8830a246c05c2c6405c8af5b42f5bce3b6e24ed6ffa97d0e1794f922a",
+        "inputs": [
+          {
+            "bytes": 78357552,
+            "digest": "verification_fc6076616e11721340b4aa506216a24771204b2771a12f23ac84e0a00c4d664f",
+            "kind": "file",
+            "mode": 488,
+            "path": "target/release/lkjscript"
+          },
+          {
+            "bytes": 89090664,
+            "digest": "verification_9eed14da1e4273994c234b6eaccdc846d295c2825174f11c168646ce2e1e3de2",
+            "kind": "file",
+            "mode": 488,
+            "path": "target/release/deps/public_cli-411b0a00ac463de7"
+          }
+        ],
+        "name": "release_command_lifecycle",
+        "outputs": [],
+        "reason": null,
+        "signal": null,
+        "status": "passed",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_excerpt": null,
+        "stdout_digest": "verification_4ab9135c0f1fe8cb958699a587d2e6feca66d720e03862df081bcc011d448293",
+        "stdout_excerpt": null
+      },
+      {
+        "cargo": null,
+        "elapsed_nanoseconds": 51046878067,
+        "evidence_digest": "verification_d07d6b25a153cdda2a2ffaba764b43393589a01601ec16a4c9b5ff59d653d6a9",
+        "execution": "fresh",
+        "exit_code": 0,
+        "input_fingerprint": "verification_6bc1c18dbaa070f54447b20fbe762e0f97a785468b94f6d1051ec0c865666cfc",
+        "inputs": [],
+        "name": "distributed_http_application",
+        "outputs": [],
+        "reason": null,
+        "signal": null,
+        "status": "passed",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_excerpt": null,
+        "stdout_digest": "verification_fbe5739a40940e086432c161767fed0befa4e015fc553525afb1b35091248faa",
+        "stdout_excerpt": null
+      },
+      {
+        "cargo": null,
+        "elapsed_nanoseconds": 31880623187,
+        "evidence_digest": "verification_58ed6ed9365c26dfa0b85e93282077f7343a14b69442c136a2c67a60d6605d49",
+        "execution": "fresh",
+        "exit_code": 0,
+        "input_fingerprint": "verification_7c921ceb1f11540742e4977a2db7dfa87d35adb122a0846230e6e2c823a04382",
+        "inputs": [],
+        "name": "outbound_http_application",
+        "outputs": [],
+        "reason": null,
+        "signal": null,
+        "status": "passed",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_excerpt": null,
+        "stdout_digest": "verification_395507ebca19a62f22565290f87ae2f2a862861d4ce19c1a78579cb49084846a",
+        "stdout_excerpt": null
+      },
+      {
+        "cargo": null,
+        "elapsed_nanoseconds": 315708938859,
+        "evidence_digest": "verification_08a19285352b61c4a97becadc89e7943fb77b1667d5aad2e4dd5a3f042917779",
+        "execution": "fresh",
+        "exit_code": 0,
+        "input_fingerprint": "verification_65dae9e0835c98b7418d272eee7eb4d505af7b5168798676f4d64e0bb74e4a08",
+        "inputs": [],
+        "name": "offline_packages",
+        "outputs": [
+          {
+            "bytes": 47702508,
+            "digest": "verification_a1b24680897f972eab5081d02343ececfcc1001540f6f670f4f4319f7a79c93d",
+            "kind": "file",
+            "mode": 384,
+            "path": ".artifacts/lkjscript-dev/check/transient/outputs/offline-packages/receipt.json"
+          }
+        ],
+        "reason": null,
+        "signal": null,
+        "status": "passed",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_excerpt": null,
+        "stdout_digest": "verification_428b8377bf24dbed5d94afc765ea2aff044719e00d2b7508bd22404fbab93295",
+        "stdout_excerpt": null
+      },
+      {
+        "cargo": null,
+        "elapsed_nanoseconds": 128716025020,
+        "evidence_digest": "verification_780b3f4e911078cd7c1a5ec472553d0a5f615ffbcc3c331eaad010ee9923f379",
+        "execution": "fresh",
+        "exit_code": 0,
+        "input_fingerprint": "verification_06b07e8a0a32ce6569391ff4befc5e6d7b2e962956133a81e37edc370ceaabcd",
+        "inputs": [],
+        "name": "pure_tail",
+        "outputs": [
+          {
+            "bytes": 10341539,
+            "digest": "verification_43942b51a497be19e8d871a24a3fdd9550b48b32f90d25d6ae7d0fe51aca009e",
+            "kind": "file",
+            "mode": 384,
+            "path": ".artifacts/lkjscript-dev/check/transient/outputs/pure-tail/receipt.json"
+          }
+        ],
+        "reason": null,
+        "signal": null,
+        "status": "passed",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_excerpt": null,
+        "stdout_digest": "verification_2e958a8c3c5e76d5c3c6a77096f871df4d0ee92fc041f7e4677cb20bec88f715",
+        "stdout_excerpt": null
+      },
+      {
+        "cargo": null,
+        "elapsed_nanoseconds": 112993101916,
+        "evidence_digest": "verification_39c2f53dcb8d3af81ffd289ece31552c20032fc518fa2b68614c63a9c4de2177",
+        "execution": "fresh",
+        "exit_code": 0,
+        "input_fingerprint": "verification_417cebf90ee224d5bda77e4e32470ba39476fa1169f198c4cc6b2fa61f4a9dc0",
+        "inputs": [],
+        "name": "stateful_http_application",
+        "outputs": [],
+        "reason": null,
+        "signal": null,
+        "status": "passed",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_excerpt": null,
+        "stdout_digest": "verification_1a6f790965829601f4ff51eb589999b1ebb0ab66e6005a6ce319fd3146af299f",
+        "stdout_excerpt": null
+      },
+      {
+        "cargo": null,
+        "elapsed_nanoseconds": 1046970860,
+        "evidence_digest": "verification_88f870c552b25846479ac76b61f3febd64160e7636267e6ff35029ff4b1af5cf",
+        "execution": "fresh",
+        "exit_code": 0,
+        "input_fingerprint": "verification_f2e4ab73ecdb6a05d58f26aa93f68c166b6393f5f0a9106e8b78ae0b209cf6d6",
+        "inputs": [],
+        "name": "checker_self_test",
+        "outputs": [],
+        "reason": null,
+        "signal": null,
+        "status": "passed",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_excerpt": null,
+        "stdout_digest": "verification_8a4b9f14fcb4075c5f9d0376cfc69f2e60e351a31ee08bcd6b29f1995130e85c",
+        "stdout_excerpt": null
+      },
+      {
+        "cargo": null,
+        "elapsed_nanoseconds": 136188610,
+        "evidence_digest": "verification_fae62c8671247aed5b90db34f07ec7221313df68264735a60acd7ae973327bb6",
+        "execution": "fresh",
+        "exit_code": 0,
+        "input_fingerprint": "verification_d2d331a40d00c5f851c6638000277820cb68f092f5c95b559a4e92456b6c4a59",
+        "inputs": [],
+        "name": "rust_only_tooling",
+        "outputs": [],
+        "reason": null,
+        "signal": null,
+        "status": "passed",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_excerpt": null,
+        "stdout_digest": "verification_e79333093501eaa9e7ee0158aecb7ddfbc2079d3d9cbd952c2d58e9ca052599f",
+        "stdout_excerpt": null
+      },
+      {
+        "cargo": null,
+        "elapsed_nanoseconds": 2605720842,
+        "evidence_digest": "verification_1481061cbd805d078481b2c0aae567b867feb505d3231e96138389c58bbad3ab",
+        "execution": "fresh",
+        "exit_code": 0,
+        "input_fingerprint": "verification_39a6d3a0fac88d317ffa9c06524b7252cf41a0fd2c80b16bcdf4b0c63c547cc1",
+        "inputs": [],
+        "name": "generated_public_guides",
+        "outputs": [],
+        "reason": null,
+        "signal": null,
+        "status": "passed",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_excerpt": null,
+        "stdout_digest": "verification_c8594e87d9c6fdd72bf2e2253cfc21f56035463063291369fa06443dd6ee060f",
+        "stdout_excerpt": null
+      },
+      {
+        "cargo": null,
+        "elapsed_nanoseconds": 473231483,
+        "evidence_digest": "verification_b5ca1da040f5a3512b319c6756f0475d83a0fd62692bc74d5149abeeb6efcc4d",
+        "execution": "fresh",
+        "exit_code": 0,
+        "input_fingerprint": "verification_eecebf0ea66a944306ae597f17ea06458baa282abd1064eeda41fbe978a1cd40",
+        "inputs": [],
+        "name": "product_surface_audit",
+        "outputs": [],
+        "reason": null,
+        "signal": null,
+        "status": "passed",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_excerpt": null,
+        "stdout_digest": "verification_db70bc3230acc4fbc9b6bb789c52a552c4e3473f5123b0877d9daa5b0355e877",
+        "stdout_excerpt": null
+      },
+      {
+        "cargo": null,
+        "elapsed_nanoseconds": 3873254062,
+        "evidence_digest": "verification_41b70923e4f76b7637f506d163fd78ef7d23ec8a82c8b1da1df98d2b404c211c",
+        "execution": "fresh",
+        "exit_code": 0,
+        "input_fingerprint": "verification_6520b63e5181b55b110d7336d40909313bfd982a817c10a83a3a84831592313d",
+        "inputs": [],
+        "name": "standard_package_test",
+        "outputs": [],
+        "reason": null,
+        "signal": null,
+        "status": "passed",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_excerpt": null,
+        "stdout_digest": "verification_db91dfa85ba6bf0c5e0ab123ab8772efbf65c156119c97340b6321a5ed0732d0",
+        "stdout_excerpt": null
+      },
+      {
+        "cargo": null,
+        "elapsed_nanoseconds": 7949728280,
+        "evidence_digest": "verification_095a8824a80c2462c5228c7aeff19f84bc37bdac4c641e8132918bd89f822b4a",
+        "execution": "fresh",
+        "exit_code": 0,
+        "input_fingerprint": "verification_d08c956d9417623a602171ab83c97fe13e05d8a78ba87006007a3470f9c6bf0a",
+        "inputs": [],
+        "name": "application_package_test",
+        "outputs": [],
+        "reason": null,
+        "signal": null,
+        "status": "passed",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_excerpt": null,
+        "stdout_digest": "verification_be0b394020d43d4f48a0cd7f5666f9d3c1a5a73e2c0699475895aa7c960a6561",
+        "stdout_excerpt": null
+      },
+      {
+        "cargo": null,
+        "elapsed_nanoseconds": 4156764317,
+        "evidence_digest": "verification_c7f7a30daacb4a444c6549df351a1a745bb2941e23d8fc194c3359c5c47c5ff3",
+        "execution": "fresh",
+        "exit_code": 0,
+        "input_fingerprint": "verification_ac1148189a6814269d90349d1095b91cba56ccea24db95918e1ea4f8dccd4b20",
+        "inputs": [],
+        "name": "standard_artifact_build",
+        "outputs": [
+          {
+            "bytes": 1278543,
+            "digest": "verification_bac568c37b993596702da818ae12faa0101810539fd7c33871f45c29b6a7b99f",
+            "kind": "file",
+            "mode": 416,
+            "path": ".artifacts/lkjscript-dev/check/transient/outputs/standard.lkja"
+          }
+        ],
+        "reason": null,
+        "signal": null,
+        "status": "passed",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_excerpt": null,
+        "stdout_digest": "verification_d5184d0c449a72f4fe6f275f98f557e40a2a06c1f17ab11f5763ff54f1560012",
+        "stdout_excerpt": null
+      },
+      {
+        "cargo": null,
+        "elapsed_nanoseconds": 16523730,
+        "evidence_digest": "verification_1b2883fcc8a6746998c88732814eb8c331fd73d071bdaac3c953607fa6fc8b7f",
+        "execution": "fresh",
+        "exit_code": 0,
+        "input_fingerprint": "verification_98f87eea4361735b354fb37219efe425b02e5eb0ce0823a02487f0c8d5d46e87",
+        "inputs": [],
+        "name": "standard_artifact_compare",
+        "outputs": [],
+        "reason": null,
+        "signal": null,
+        "status": "passed",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_excerpt": null,
+        "stdout_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stdout_excerpt": null
+      },
+      {
+        "cargo": null,
+        "elapsed_nanoseconds": 1460739895,
+        "evidence_digest": "verification_68a434073e42146da3d76d68b927311302d14f8dfac9d2ba86515dac8c6442da",
+        "execution": "fresh",
+        "exit_code": 0,
+        "input_fingerprint": "verification_63a17fed4aea626e46cddceb0dba13982726fe7d9428a95b8370eb27aded727e",
+        "inputs": [],
+        "name": "builtin_package_export",
+        "outputs": [
+          {
+            "bytes": 1278543,
+            "digest": "verification_bac568c37b993596702da818ae12faa0101810539fd7c33871f45c29b6a7b99f",
+            "kind": "file",
+            "mode": 416,
+            "path": ".artifacts/lkjscript-dev/check/transient/outputs/builtin-standard.lkja"
+          }
+        ],
+        "reason": null,
+        "signal": null,
+        "status": "passed",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_excerpt": null,
+        "stdout_digest": "verification_a452ca8df1641eb7702b498b2c38e00638d19c628756fede56cb5ea5dd1ac075",
+        "stdout_excerpt": null
+      },
+      {
+        "cargo": null,
+        "elapsed_nanoseconds": 17286895,
+        "evidence_digest": "verification_18be49965330a21cd04faaa9423f7906adf6c838ca486f92869963d816d6ee7c",
+        "execution": "fresh",
+        "exit_code": 0,
+        "input_fingerprint": "verification_88d43ee60efd9238007fb55127f9cd2c35f7b22267443317d9886efeeae07827",
+        "inputs": [],
+        "name": "builtin_package_compare",
+        "outputs": [],
+        "reason": null,
+        "signal": null,
+        "status": "passed",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_excerpt": null,
+        "stdout_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stdout_excerpt": null
+      },
+      {
+        "cargo": null,
+        "elapsed_nanoseconds": 1410153095,
+        "evidence_digest": "verification_6e5e18c9d0a9d7480cb578a2dbcdbb9081fff35938dfbe93985fd7d895b8810f",
+        "execution": "fresh",
+        "exit_code": 0,
+        "input_fingerprint": "verification_1ba6a61bb4fed4e1c92a160fa8ac72b57378c6a5db892eb325bb874d3902b89f",
+        "inputs": [],
+        "name": "builtin_transport_export",
+        "outputs": [
+          {
+            "bytes": 1064337,
+            "digest": "verification_af067c34383ac0e4ff0e0e20b2184e8d4489e85c62f5dcebc7a1e4316c3cd08b",
+            "kind": "file",
+            "mode": 416,
+            "path": ".artifacts/lkjscript-dev/check/transient/outputs/builtin-standard.lkjp"
+          }
+        ],
+        "reason": null,
+        "signal": null,
+        "status": "passed",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_excerpt": null,
+        "stdout_digest": "verification_7c0691ee5e1835d63e5ab3413bef2911565432ff79bad32a6b3c15aa58951c6c",
+        "stdout_excerpt": null
+      },
+      {
+        "cargo": null,
+        "elapsed_nanoseconds": 18770154,
+        "evidence_digest": "verification_4199a6bd70a6f4b029f94ff06f81d8a1238e8a00a60137fd1d9d8f3a91242191",
+        "execution": "fresh",
+        "exit_code": 0,
+        "input_fingerprint": "verification_d5d664c928660a3b2cfdd86d57f2ee127f885836445728e89aff0a7f66dfd381",
+        "inputs": [],
+        "name": "builtin_transport_compare",
+        "outputs": [],
+        "reason": null,
+        "signal": null,
+        "status": "passed",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_excerpt": null,
+        "stdout_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stdout_excerpt": null
+      },
+      {
+        "cargo": null,
+        "elapsed_nanoseconds": 7211837410,
+        "evidence_digest": "verification_f1f231b6b41d333e82d92223ff56db384168782ba0f7f96ab751654fe393800b",
+        "execution": "fresh",
+        "exit_code": 0,
+        "input_fingerprint": "verification_7850c634ed5a309a6f27ac57252780743ea9651c9e6e511117cb69a235d2a14b",
+        "inputs": [],
+        "name": "application_artifact_build",
+        "outputs": [
+          {
+            "bytes": 1378045,
+            "digest": "verification_407db0b74b4c1b29eb5cdf22bfeed8f9011daaf60b553edfd203c34d7e7c254c",
+            "kind": "file",
+            "mode": 416,
+            "path": ".artifacts/lkjscript-dev/check/transient/outputs/lkjournal.lkja"
+          }
+        ],
+        "reason": null,
+        "signal": null,
+        "status": "passed",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_excerpt": null,
+        "stdout_digest": "verification_e1225ef4aa453c8fd9b010d8bb1665dcc23a57fe05b600585ab1f199e24510c6",
+        "stdout_excerpt": null
+      },
+      {
+        "cargo": null,
+        "elapsed_nanoseconds": 15856045,
+        "evidence_digest": "verification_eb3a59e54c992b57f6464f1de6f1debf1968e8f100f2504aaa4d978b1281cc0d",
+        "execution": "fresh",
+        "exit_code": 0,
+        "input_fingerprint": "verification_85c2ff4681813eb2c9cf5489ceede0c4036ee9641c77ee27de2f7273dc809bfa",
+        "inputs": [],
+        "name": "application_artifact_compare",
+        "outputs": [],
+        "reason": null,
+        "signal": null,
+        "status": "passed",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_excerpt": null,
+        "stdout_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stdout_excerpt": null
+      },
+      {
+        "cargo": null,
+        "elapsed_nanoseconds": 14983329833,
+        "evidence_digest": "verification_50962c65a4754bf234eef160bc6859a8631adfb4addccdd39d4f27e33972d998",
+        "execution": "fresh",
+        "exit_code": 0,
+        "input_fingerprint": "verification_5da80ac5a594081d3c894a4e414c154db5f5ad4c0252836404ac89f14aaaceb0",
+        "inputs": [],
+        "name": "native_package_plan_test",
+        "outputs": [],
+        "reason": null,
+        "signal": null,
+        "status": "passed",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_excerpt": null,
+        "stdout_digest": "verification_8be2d36113e8bb8c715d40b055c7588a2da5ab19e0c82f71173784be4995f77f",
+        "stdout_excerpt": null
+      },
+      {
+        "cargo": null,
+        "elapsed_nanoseconds": 12573099800,
+        "evidence_digest": "verification_fa3daf337c90dbd1854cce2d8240caa145a44d8302a29362dd01cce91fba6204",
+        "execution": "fresh",
+        "exit_code": 0,
+        "input_fingerprint": "verification_c418948429f63d226e8597fe314ddc89175231408f464b8fa9bed5328f5795cb",
+        "inputs": [],
+        "name": "native_package_plan_build",
+        "outputs": [
+          {
+            "bytes": 3717601,
+            "digest": "verification_ab876e311f5032acac69f2975106935ad11e062f83f8d56f83cda8ed3636d467",
+            "kind": "file",
+            "mode": 416,
+            "path": ".artifacts/lkjscript-dev/check/transient/outputs/package-plan.lkja"
+          }
+        ],
+        "reason": null,
+        "signal": null,
+        "status": "passed",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_excerpt": null,
+        "stdout_digest": "verification_3eec8721ffaaa6966feb96035bbaaf2926cda1c2f3dcac9756385398f2733d45",
+        "stdout_excerpt": null
+      },
+      {
+        "cargo": null,
+        "elapsed_nanoseconds": 16371113,
+        "evidence_digest": "verification_8ddb06269aeab17455b46a84e29550d4a1d488ba7971500e26defc1c20767e10",
+        "execution": "fresh",
+        "exit_code": 0,
+        "input_fingerprint": "verification_9cca68477897ae776a3eb24ec7616821d5f59ae02267e249326a3632c12f960c",
+        "inputs": [],
+        "name": "native_package_plan_compare",
+        "outputs": [],
+        "reason": null,
+        "signal": null,
+        "status": "passed",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_excerpt": null,
+        "stdout_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stdout_excerpt": null
+      },
+      {
+        "cargo": null,
+        "elapsed_nanoseconds": 37159655675,
+        "evidence_digest": "verification_47829fff5d29ef1436300175315ce128428c34d39caca004e2caefce460203c2",
+        "execution": "fresh",
+        "exit_code": 0,
+        "input_fingerprint": "verification_4ccc983ad8b153ede5f5c3c01beff9f2ed13ba5a7b7dc9b692db6d8b99a308f1",
+        "inputs": [],
+        "name": "service_acceptance",
+        "outputs": [],
+        "reason": null,
+        "signal": null,
+        "status": "passed",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_excerpt": null,
+        "stdout_digest": "verification_143267f60fb57d1e872665ba5203d677039f3e8a717affb5de052864ef14cf9a",
+        "stdout_excerpt": null
+      },
+      {
+        "cargo": null,
+        "elapsed_nanoseconds": 23635523,
+        "evidence_digest": "verification_8fb47f2edb09764051dc159a5674457aa6401bd5f42bf90678fc9d9171cf3675",
+        "execution": "fresh",
+        "exit_code": 0,
+        "input_fingerprint": "verification_aeb56344a523a3e513c25b5061760d4d22a6b8bee6e7d8fe866cd8de862964b5",
+        "inputs": [],
+        "name": "diff_check",
+        "outputs": [],
+        "reason": null,
+        "signal": null,
+        "status": "passed",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_excerpt": null,
+        "stdout_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stdout_excerpt": null
+      }
+    ],
+    "git_head": "c282cfcabcdc4ad41bae1e7ff9652eb63e5d5f6f",
+    "harness": {
+      "bytes": 126934832,
+      "digest": "verification_7230e80a634f0af81358ab7e652d5e6142e907b64d1323b2ffda5dea0e0201f5",
+      "kind": "file",
+      "mode": 488,
+      "path": "/home/coder/workspace/lkjscript/target/bootstrap/lkjscript-dev"
+    },
+    "input_stable": true,
+    "maximum_workers": 4,
+    "originals_retained": false,
+    "passed_gates": 29,
+    "profile": "full",
+    "profile_definition_digest": "verification_4fabd98e3d99f84bf0d284a7d000b6c49f26ef4f90434a219ea448050567a478",
+    "requested_gates": [
+      "fmt",
+      "checker_self_test",
+      "rust_only_tooling",
+      "clippy",
+      "workspace_tests",
+      "release_build",
+      "release_command_lifecycle",
+      "distributed_http_application",
+      "outbound_http_application",
+      "offline_packages",
+      "pure_tail",
+      "stateful_http_application",
+      "generated_public_guides",
+      "product_surface_audit",
+      "standard_package_test",
+      "application_package_test",
+      "standard_artifact_build",
+      "standard_artifact_compare",
+      "builtin_package_export",
+      "builtin_package_compare",
+      "builtin_transport_export",
+      "builtin_transport_compare",
+      "application_artifact_build",
+      "application_artifact_compare",
+      "native_package_plan_test",
+      "native_package_plan_build",
+      "native_package_plan_compare",
+      "service_acceptance",
+      "diff_check"
+    ],
+    "reused_passed_gates": 0,
+    "runtime_digest": "verification_b55cacc4fbefb03eaae182289d7df8d10c9b1a5c951ed2df30ec3874312e1d0d",
+    "schema": "lkjscript-check-compact-1",
+    "selected_gates": [
+      "fmt",
+      "clippy",
+      "workspace_tests",
+      "release_build",
+      "release_command_lifecycle",
+      "distributed_http_application",
+      "outbound_http_application",
+      "offline_packages",
+      "pure_tail",
+      "stateful_http_application",
+      "checker_self_test",
+      "rust_only_tooling",
+      "generated_public_guides",
+      "product_surface_audit",
+      "standard_package_test",
+      "application_package_test",
+      "standard_artifact_build",
+      "standard_artifact_compare",
+      "builtin_package_export",
+      "builtin_package_compare",
+      "builtin_transport_export",
+      "builtin_transport_compare",
+      "application_artifact_build",
+      "application_artifact_compare",
+      "native_package_plan_test",
+      "native_package_plan_build",
+      "native_package_plan_compare",
+      "service_acceptance",
+      "diff_check"
+    ],
+    "started_unix_nanoseconds": 1792347529002976800,
+    "status": "passed",
+    "unrun_gates": [],
+    "worktree_input_digest": "verification_34e99ecdd5a26a8b2b9319aabd9bedb99d12bbb677d5d8521128c2103f1a0540"
+  },
+  "official_harnesses": {
+    "source": "c282cfcabcdc4ad41bae1e7ff9652eb63e5d5f6f",
+    "scope": "Captured terminal harness output; official full receipt owns gate success and executable provenance",
+    "harnesses": [
+      {
+        "file": "2-run.stdout",
+        "terminal_result": "test result: ok. 347 passed; 0 failed; 1 ignored; 0 measured; 1 filtered out; finished in 567.26s",
+        "bytes": 44390,
+        "sha256": "6212016cb9ba3c5b54519d275fb9fc1040c54357660f545b59a4a70207c8cf8c",
+        "selfhost": [],
+        "native": [],
+        "ignored": [
+          "test reviewed_change_plan_scale_streams_detail_beyond_stdout_envelope ... ignored, release-scale fixture; run explicitly with --ignored --nocapture"
+        ]
+      },
+      {
+        "file": "3-run.stdout",
+        "terminal_result": "test result: ok. 334 passed; 0 failed; 16 ignored; 0 measured; 0 filtered out; finished in 9.40s",
+        "bytes": 38206,
+        "sha256": "47c6f0262d4dd821d5849dec0a22aec9f5d60437366bf9783fde447e616c73e5",
+        "selfhost": [],
+        "native": [],
+        "ignored": [
+          "test offline_packages::effects_iteration::author_task_standard_through_public_change ... ignored, requires an explicitly selected maintained project, linked host and absent evidence path",
+          "test offline_packages::effects_iteration::author_transported_task_library_through_public_change ... ignored, requires a linked host and absent evidence path",
+          "test offline_packages::effects_iteration::copied_task_library_foreground_iteration ... ignored, requires linked host and absent evidence path",
+          "test offline_packages::effects_iteration::copied_task_library_http_iteration ... ignored, requires linked host and absent evidence path",
+          "test offline_packages::effects_iteration::iteration_reader_rejects_consistently_rehashed_false_observations ... ignored, requires authentic LKJSCRIPT_ITERATION_READER_FIXTURE from the public effect workflow",
+          "test offline_packages::effects_iteration::linked_named_reference_iteration ... ignored, requires an explicitly linked host and a fresh evidence directory",
+          "test offline_packages::f64::tests::argument_file_originals_reject_rehashed_substitution ... ignored, requires retained focused F64 receipt and its original verifier",
+          "test offline_packages::maps::tests::window_originals_reject_omission_and_rehashed_substitution ... ignored, requires retained current offline or focused persistent-map receipt and its original verifier",
+          "test offline_packages::recursive::batch::tests::retained_recursive_batches_reject_omission_retargeting_and_probe_reordering ... ignored, requires an authentic current full offline receipt and its exact candidate/verifier",
+          "test offline_packages::requirements::reader_tests::composition_reader_requires_new_evidence_and_exact_invocations ... ignored, requires an authentic retained requirement composition receipt",
+          "test offline_packages::tests::retained_offline_receipt_passes_current_reader ... ignored, requires an authentic retained offline receipt and its exact candidate/verifier",
+          "test pure_tail::boundary::tests::actual_final_receipt_rejects_boundary_relabeling_and_semantic_forgery ... ignored, requires original current source/final receipts and exact candidate/verifier executables",
+          "test pure_tail::measurement_tests::prepared_pure_tool_cold_and_warm_measurements ... ignored, requires exact external pure-tail artifact/N and exclusive bounded measurement execution",
+          "test pure_tail::source_batch::tests::actual_source_batch_rows_reject_missing_results_identity_forgery_and_live_resources ... ignored, requires LKJSCRIPT_PURE_TAIL_BATCH_FIXTURE from an actual completed current pure-tail gate",
+          "test release::admission::nominal_tests::live_nominal_receipt_omissions_reject_at_target_admission ... ignored, requires owned target admission and its authenticated original source fixtures",
+          "test release::transferred::pair::lifecycle::tests::live_small_lifecycle_and_selector_continuity_with_current_container ... ignored, requires current-format archive assets and an owned absent evidence root"
+        ]
+      },
+      {
+        "file": "0-run.stdout",
+        "terminal_result": "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "bytes": 113,
+        "sha256": "df166913f47ff1f04202cae9b31df67ed272d692d99a0023a8117dc3029100dd",
+        "selfhost": [],
+        "native": [],
+        "ignored": []
+      },
+      {
+        "file": "4-run.stdout",
+        "terminal_result": "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "bytes": 113,
+        "sha256": "df166913f47ff1f04202cae9b31df67ed272d692d99a0023a8117dc3029100dd",
+        "selfhost": [],
+        "native": [],
+        "ignored": []
+      },
+      {
+        "file": "5-run.stdout",
+        "terminal_result": "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "bytes": 113,
+        "sha256": "df166913f47ff1f04202cae9b31df67ed272d692d99a0023a8117dc3029100dd",
+        "selfhost": [],
+        "native": [],
+        "ignored": []
+      },
+      {
+        "file": "6-run.stdout",
+        "terminal_result": "test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "bytes": 712,
+        "sha256": "8a25e86be1c96e491f3092a618d7434e4b6e9b3671b29a721b6a4a7a2a99e2da",
+        "selfhost": [],
+        "native": [],
+        "ignored": []
+      },
+      {
+        "file": "7-run.stdout",
+        "terminal_result": "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "bytes": 172,
+        "sha256": "e99d58895399a09f94c61dcc4377952f201b21fda8c35d4097963c02a49b15d3",
+        "selfhost": [],
+        "native": [],
+        "ignored": []
+      },
+      {
+        "file": "1-run.stdout",
+        "terminal_result": "test result: ok. 2595 passed; 0 failed; 5 ignored; 0 measured; 0 filtered out; finished in 859.83s",
+        "bytes": 346558,
+        "sha256": "91660ba3144e673f2fa9dd031f97b8d4a274a54f1a798968d73a8ff1275d9fa7",
+        "selfhost": [
+          "test platform::execution::normalized::tests::selfhost_tests::admission::selfhost_admission_checks_derived_hash_signatures_and_unknown_codes ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::admission::selfhost_admission_accepts_empty_and_maximum_width_records ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::admission::selfhost_admission_rejects_cyclic_affine_or_noncanonical_record_metadata ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::admission::selfhost_admission_rejects_buffer_aliases_loans_and_forgotten_custody ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::artifact::selfhost_artifact_raw_packs_match_current_strict_reader ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::admission::selfhost_admission_checks_text_utf8_before_native_emission ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::artifact::selfhost_artifact_container_executes_independent_and_mutated_programs ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::bytes::selfhost_byte_blake3_matches_independent_block_chunk_and_tree_vectors ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::bytes::selfhost_byte_borrowed_final_call_retains_lexical_cleanup ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::bytes::selfhost_byte_runtime_emits_an_independent_integer_program ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::artifact::selfhost_artifact_signed_wire_preserves_independent_boundaries ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::closure::selfhost_closure_rejects_unsupported_untaken_syntax_and_unregistered_intrinsics ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::bytes::selfhost_byte_filter_bounds_usage_raw_octets_and_traps ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::artifact::selfhost_artifact_executes_control_flow_and_exact_arithmetic_traps ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::artifact::selfhost_artifact_map_pages_match_independent_logical_roots ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::artifact::selfhost_artifact_object_scans_keep_bounded_call_frames ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::selfhost_exporter_rejects_unsupported_complete_function_bodies ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::bytes::selfhost_byte_aggregates_preserve_field_order_nesting_and_list_bounds ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::artifact::selfhost_artifact_unit_layout_rejects_malformed_and_unsupported_ir ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::closure::selfhost_closure_rejects_uninitialized_reads_types_and_inconsistent_edges ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::artifact::selfhost_artifact_input_rejects_malformed_complete_bundles ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::bytes::selfhost_byte_blake3_derivation_preserves_independent_vectors_and_contexts ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::closure::selfhost_closure_executes_calls_branches_recursion_and_lexical_locals ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::closure::selfhost_closure_calls_align_the_machine_stack_at_every_operand_depth ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::selfhost_compiler_emits_runtime_arithmetic_and_exact_traps_on_both_engines ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::selfhost_compiler_rejects_malformed_inputs_before_emission ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::source::selfhost_source_type_shapes_match_current_codec_and_complete_source_types ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::bytes::selfhost_byte_operations_preserve_independent_values_and_traps ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::source::selfhost_source_fields_reject_hostile_ranges_tags_names_and_counts ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::source::selfhost_source_decodes_all_authoritative_records_and_independent_programs ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::source::selfhost_source_type_shapes_reject_rehashed_malformed_payloads_and_foreign_envelopes ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::selfhost_normalized_byte_inventory_exports_current_compiler ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::source::selfhost_source_owners_reject_mismatched_headers_and_noncanonical_expressions ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::source::selfhost_source_integers_decode_values_canonically_on_three_engines ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::selfhost_compiler_accepts_exact_input_and_fuel_limits ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::artifact::selfhost_artifact_units_match_canonical_complete_compiler_ir ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::selfhost_compiler_is_deterministic_and_source_mutation_changes_emitted_behavior ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::artifact::selfhost_artifact_container_carries_complete_compiler_and_executes_it ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::selfhost_maintained_proposals_match_authoritative_function_bodies ... ok",
+          "test platform::execution::normalized::tests::selfhost_tests::bytes::selfhost_byte_backend_reproduces_its_complete_native_closure ... ok"
+        ],
+        "native": [
+          "test platform::compiler::elf_x86_64::stack_tests::native_elf_calls_align_stack_and_restore_every_argument_depth ... ok",
+          "test platform::execution::normalized::tests::native_derive_tests::native_elf_blake3_derivation_matches_independent_block_chunk_and_tree_vectors ... ok",
+          "test platform::execution::normalized::tests::native_derive_tests::native_elf_blake3_derivation_preserves_context_bytes_and_tree_boundaries ... ok",
+          "test platform::execution::normalized::tests::native_elf_tests::native_egraph_plan_is_bounded_and_preserves_exact_vm_quota_boundaries ... ok",
+          "test platform::execution::normalized::tests::native_elf_tests::native_elf_checked_traps_and_unsupported_code_never_become_build_time_results ... ok",
+          "test platform::execution::normalized::tests::native_elf_tests::native_egraph_fuses_exact_standard_map_fold_only_after_trap_free_proof ... ok",
+          "test platform::execution::normalized::tests::native_filter_tests::native_elf_binary_filter_bounds_usage_raw_octets_and_traps ... ok",
+          "test platform::execution::normalized::tests::native_elf_tests::native_elf_executes_runtime_arguments_recursion_closures_and_structured_json ... ok",
+          "test platform::execution::normalized::tests::native_filter_tests::native_elf_blake3_matches_independent_block_chunk_and_tree_vectors ... ok",
+          "test platform::execution::normalized::tests::native_elf_tests::native_elf_compiler_byte_operations_preserve_octets_text_ranges_and_traps ... ok"
+        ],
+        "ignored": [
+          "test platform::data::tests::cross_process_writer_helper ... ignored, invoked as a controlled subprocess by the cross-process writer proof",
+          "test platform::execution::normalized::vm::self_tail_locals_tests::call_argument_storage_cost_control ... ignored, matched argument-storage cost control; run explicitly",
+          "test platform::execution::normalized::vm::self_tail_locals_tests::checked_owned_children_nested_cost_control ... ignored, matched nested ordinary-child admission cost control; run explicitly",
+          "test platform::installation::tests::native_crash_child ... ignored, subprocess fixture; native_process_interruption_releases_lock_and_recovers invokes every cut",
+          "test platform::publication::repository_tests::authored_owned_closure_scale_emits_complete_plan_under_default_admission ... ignored, release-scale ownership closure; run explicitly with --ignored --nocapture"
+        ]
+      }
+    ]
+  },
+  "release_target": {
+    "policy": {
+      "archive_name": "lkjscript-x86_64-unknown-linux-musl.tar.gz",
+      "c_compiler": "musl-gcc",
+      "elf_inspector": "lkjscript-elf64-little-endian-inspector-1",
+      "linker": "musl-gcc",
+      "musl_packages": [
+        {
+          "architecture": "amd64",
+          "file_name": "musl_1.2.4-2_amd64.deb",
+          "name": "musl",
+          "sha256": "9f0883c20b4b746e05e947bafd99cb933f5494ffaaa6fcd360cbe1fbcf264883",
+          "url": "https://archive.ubuntu.com/ubuntu/pool/universe/m/musl/musl_1.2.4-2_amd64.deb",
+          "version": "1.2.4-2"
+        },
+        {
+          "architecture": "amd64",
+          "file_name": "musl-dev_1.2.4-2_amd64.deb",
+          "name": "musl-dev",
+          "sha256": "4b451ecb6a0f8469883058cf22a807f3bd9cc16d115cc08b7efc35fe8eb44db2",
+          "url": "https://archive.ubuntu.com/ubuntu/pool/universe/m/musl/musl-dev_1.2.4-2_amd64.deb",
+          "version": "1.2.4-2"
+        },
+        {
+          "architecture": "amd64",
+          "file_name": "musl-tools_1.2.4-2_amd64.deb",
+          "name": "musl-tools",
+          "sha256": "46c01d212d3eb3a1322693089037f0a5c92383a089d39c392db3c86c19ffb229",
+          "url": "https://archive.ubuntu.com/ubuntu/pool/universe/m/musl/musl-tools_1.2.4-2_amd64.deb",
+          "version": "1.2.4-2"
+        }
+      ],
+      "runtime_linkage": "static-musl",
+      "rust_toolchain": "1.98.0",
+      "schema": {
+        "identity": "lkjscript-release-target-policy",
+        "version": 2
+      },
+      "target_triple": "x86_64-unknown-linux-musl",
+      "userlands": [
+        {
+          "architecture": "amd64",
+          "expected_libc": "musl-1.2",
+          "image": "alpine@sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6",
+          "operating_system": "linux",
+          "role": "musl"
+        },
+        {
+          "architecture": "amd64",
+          "expected_libc": "glibc-2.31",
+          "image": "debian@sha256:70509c95d1857a3704c0a5d92ee2e0adac95f612a9386889d70760bfd7c1ebba",
+          "operating_system": "linux",
+          "role": "older-glibc"
+        }
+      ]
+    },
+    "policy_sha256": "29ed9107ba81801cb96af9410182bd508ae546cfba14b9a074e5a11e207d8152",
+    "status": "passed"
+  },
+  "previous_attempt": {
+    "source": "352f0997142d9fed279f3964a76102d61f7ac1e6",
+    "status": "failed",
+    "receipt": "../source-first-attempt.json",
+    "reason": "One storage compaction test immediately reopened GC while an inherited reader lease could still be active. All compiler cases passed. The correction preserves immediate production refusal and adds explicit duplicated-descriptor coverage plus bounded test-only retry after reader drop."
+  },
+  "hygiene": "The final changed/full/policy runs observed this exact clean committed tree. Its status file was written before acceptance; no post-acceptance tracked edits were made.",
+  "compiler_work": "Native execution remains unmetered. Input bytes, traversal fuel and cumulative modeled allocations are separate quantities; no live heap or RSS reduction is claimed.",
+  "validation": {
+    "library": "test result: ok. 2595 passed; 0 failed; 5 ignored; 0 measured; 0 filtered out; finished in 859.83s",
+    "selfhost_tests": 40,
+    "native_runtime_tests": 10,
+    "gates": 29,
+    "fresh": 29,
+    "reused": 0,
+    "release_target": "passed"
+  },
+  "evidence_files": [
+    {
+      "path": "../source-stage-observations.log",
+      "bytes": 3127,
+      "sha256": "e40f2712c66573cdc512df3909be8a66f210befe13a6aed287cc55064254da2a"
+    },
+    {
+      "path": "../source-replay-v6.log",
+      "bytes": 557,
+      "sha256": "c64897ad0ca7fce38e1076bebdc612bd462bef63550df2a9b44ee56f71a403de"
+    },
+    {
+      "path": "../source-gc-focused-v1.log",
+      "bytes": 686,
+      "sha256": "f719d005471e81472d9705acb8a001e60b9cefde2898314d8946c4896aaf7368"
+    },
+    {
+      "path": "../source-gc-clippy-v1.log",
+      "bytes": 218,
+      "sha256": "904f5e1d247ed1abbf5469b9d5307c3b3a282532f07ddb2645e71fcc00b98289"
+    }
+  ],
+  "remote_main": "c282cfcabcdc4ad41bae1e7ff9652eb63e5d5f6f"
+}

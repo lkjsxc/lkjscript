@@ -1,0 +1,25 @@
+{
+  "schema": "lkjscript.bootstrap.v1",
+  "status": "passed",
+  "source": {
+    "source": "13771737a4a9bc49179927fdc0eaaea68003eee1",
+    "tree": "8f6d26f14248f97deb2cf97d0b5810a6ac0de01f",
+    "status": ""
+  },
+  "target": "/home/coder/workspace/lkjscript/target",
+  "context_sha256": "298bd4465a8d497bea5a3852ff0010d0a8d31affe28dc7bb978a767d83955e61",
+  "binaries": [
+    {
+      "name": "lkjscript-dev",
+      "output": {
+        "path": "/home/coder/workspace/lkjscript/target/bootstrap/lkjscript-dev",
+        "mode": "0750",
+        "kind": "file",
+        "bytes": 127001872,
+        "sha256": "6b617e915ef4cec25a86c401f00cbd9fbe9e9f07eee0d02dba65f1502205fdd8"
+      }
+    }
+  ],
+  "originals_retained": false,
+  "cargo_reused": 1
+}

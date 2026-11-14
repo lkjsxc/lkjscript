@@ -1,0 +1,29 @@
+{
+  "status": "removed_after_terminal_validation_and_hash_recheck",
+  "reason": "Obsolete derived release products from earlier joined goal builds; current accepted CLI uses ba0d197f44073fb0 and current library17a43f4a2ad282c7. Current focused harness and bootstrap products are excluded. Recheck hashes and join v10 before deletion.",
+  "files": [
+    {
+      "path": "target/release/deps/liblkjscript-313279ebbabcfe35.rlib",
+      "bytes": 260045570,
+      "nlink": 1,
+      "mtime": "2026-10-18T15:59:07.310Z",
+      "sha256": "17f1570af9a3f8f84e3ad7f67b8ad07ee385cf70f731da95d8973ada9a27830c"
+    },
+    {
+      "path": "target/release/deps/liblkjscript-313279ebbabcfe35.rmeta",
+      "bytes": 92837578,
+      "nlink": 1,
+      "mtime": "2026-10-18T15:57:44.894Z",
+      "sha256": "8e0ac2260ebffa0c8090b36afccc7d0867aacf80ba32d97913cc46007a8717ca"
+    },
+    {
+      "path": "target/release/deps/lkjscript-600f28ab9fa220d5",
+      "bytes": 78355568,
+      "nlink": 1,
+      "mtime": "2026-10-18T15:59:11.381Z",
+      "sha256": "53cd6339fe1eb341a0e20ae8a898e47a59c1197db813a3d623ee04e255077472"
+    }
+  ],
+  "total_bytes": 431238716,
+  "validation": "v10 stage test terminal ok; Clippy finished; no live repository build process; target lease acquired"
+}

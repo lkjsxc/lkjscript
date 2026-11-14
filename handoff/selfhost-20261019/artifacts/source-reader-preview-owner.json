@@ -1,0 +1,7 @@
+{
+  "path": ".artifacts/selfhost/source-reader-preview-108906b5",
+  "source": "108906b51259f00fae4c4fd1c53d16a05b3df1b5",
+  "purpose": "Temporary copy of accepted source graph for public-tx prototype checks; not a Git checkout",
+  "initial_head_bytes": 135,
+  "initial_head_sha256": "96027eb0718f0951d8fc4bca1c0ea1b7123a8fa7f2387d4253136d7f4ef6c48e"
+}

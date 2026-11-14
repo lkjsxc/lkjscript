@@ -1,0 +1,34 @@
+{
+  "purpose": "Inventory only: stale derived release products from earlier goal builds. Current focused harness and current CLI use distinct paths. No deletion yet; readers must join first.",
+  "files": [
+    {
+      "path": "target/release/deps/liblkjscript-78326564a401e928.rlib",
+      "bytes": 260049204,
+      "nlink": 1,
+      "mtime": "2026-10-18T13:57:58.568Z",
+      "sha256": "d29cf1d728e577db5addd56c2e22336bbedf44c576870e34b25305c4e279dadd"
+    },
+    {
+      "path": "target/release/deps/liblkjscript-78326564a401e928.rmeta",
+      "bytes": 92837533,
+      "nlink": 1,
+      "mtime": "2026-10-18T13:56:41.838Z",
+      "sha256": "1abd5c0a5d923de119a2a6e1d843cd88199dfe65af039b411a99a322c915c174"
+    },
+    {
+      "path": "target/release/deps/lkjscript-23d594c6467229a9",
+      "bytes": 78354864,
+      "nlink": 1,
+      "mtime": "2026-10-18T13:58:01.816Z",
+      "sha256": "10654855495a7e09f0cf677baa9a1447186d17fb57ff3fcb82dc73c5008046e9"
+    },
+    {
+      "path": "target/release/deps/lkjscript-ba0d197f44073fb0",
+      "bytes": 78357552,
+      "nlink": 1,
+      "mtime": "2026-10-18T14:21:48.793Z",
+      "sha256": "5949f8d3a3283f85ae53e347448cae4e7118035babf4f0c48dcd8703814c0f18"
+    }
+  ],
+  "total_bytes": 509599153
+}

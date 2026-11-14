@@ -1,0 +1,5 @@
+{
+  "path": ".artifacts/selfhost/source-probe-preview-86554bc5",
+  "purpose": "Temporary public fixture-authoring check over current main source graph",
+  "initial_head_sha256": "6ac4542283e0d88986ef1c0f2b8d30b9378ba65ecb73c038f03bf2a8ad4283d5"
+}

@@ -1,0 +1,26 @@
+{
+  "reason": "Owned focused outputs superseded by accepted official fresh full; no build or test readers live",
+  "source": "45c088f9053098fc5aeb50a7e9cc92bcc9f638e2",
+  "files": [
+    {
+      "path": "target/release/deps/lkjscript-e2fdc52c2bd3596c",
+      "bytes": 194363904,
+      "sha256": "a1d4c399ee2483fcc2dea201b0484d6f1ba93f1921861dd90489366f8504d6c7"
+    },
+    {
+      "path": "target/release/deps/public_cli-ee349648d4b49b22",
+      "bytes": 88783816,
+      "sha256": "6d955da3c290dfa31591c4fce21b85746b7d16dba3393b20fb8b4a0bb21edf8e"
+    },
+    {
+      "path": "target/release/deps/liblkjscript-313279ebbabcfe35.rlib",
+      "bytes": 260041744,
+      "sha256": "a8a09124fe5d76510fb0fe6711a706d77d51038253950700fcb3332689100408"
+    },
+    {
+      "path": "target/release/deps/liblkjscript-313279ebbabcfe35.rmeta",
+      "bytes": 92836404,
+      "sha256": "55227215c2faeda4c94089cc1e6ebbe22553cbf0b2d72ba4cb1c5981ca5fcd31"
+    }
+  ]
+}

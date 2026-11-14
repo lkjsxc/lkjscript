@@ -1,0 +1,294 @@
+{
+  "schema": "lkjscript.selfhost.slice.v1",
+  "status": "passed",
+  "milestone": "E logical source identities and exact canonical object bindings; graph semantic admission and normalization remain incomplete",
+  "tier": 1,
+  "source": "13771737a4a9bc49179927fdc0eaaea68003eee1",
+  "tree": "8f6d26f14248f97deb2cf97d0b5810a6ac0de01f",
+  "parent": "c282cfcabcdc4ad41bae1e7ff9652eb63e5d5f6f",
+  "authoritative_revision": "rev_0bd74eef27ed085a6c9fb29be9af37de0d67f649413247e425b66d12687220db",
+  "public_authoring": [
+    {
+      "base": "rev_86554bc5414236b4903b609bbd0b2887c742de8b0941913f1d0e5478bca61fe4",
+      "created": 406,
+      "differential": "equal",
+      "operation": "tx",
+      "revision": "rev_4e0b3b701c628d388a6172f26a4dbe9a0903e52619a5fbd2eac5bc6ce02833a4",
+      "run": null,
+      "status": "accepted",
+      "tests_passed": 0,
+      "tests_selected": 0,
+      "transaction": "transaction_2916039045b53b8211d60a5f2e91265c4d9c5a19c85a70411f14407bd676e172",
+      "updated": 0
+    },
+    {
+      "base": "rev_4e0b3b701c628d388a6172f26a4dbe9a0903e52619a5fbd2eac5bc6ce02833a4",
+      "created": 179,
+      "differential": "equal",
+      "operation": "tx",
+      "revision": "rev_49baa4314e3119e1a6a257eee82cc281735486e2088aca4c665ec9a98b1b016b",
+      "run": null,
+      "status": "accepted",
+      "tests_passed": 0,
+      "tests_selected": 0,
+      "transaction": "transaction_4359ff2ad796f28131519af7a31e7d456f381abf4490e7d7a4754f6bb70fdc1e",
+      "updated": 0
+    },
+    {
+      "base": "rev_49baa4314e3119e1a6a257eee82cc281735486e2088aca4c665ec9a98b1b016b",
+      "created": 628,
+      "differential": "equal",
+      "operation": "tx",
+      "revision": "rev_292fd0ec4341c567e08a72cf140db9fb821f56842aed18e1a1b7324ae50e7ab2",
+      "run": null,
+      "status": "accepted",
+      "tests_passed": 0,
+      "tests_selected": 0,
+      "transaction": "transaction_da91b82496b8433df6499234a5b08dabc3703a6f3696de87f4ff173696acf0da",
+      "updated": 0
+    },
+    {
+      "base": "rev_292fd0ec4341c567e08a72cf140db9fb821f56842aed18e1a1b7324ae50e7ab2",
+      "created": 216,
+      "differential": "equal",
+      "operation": "tx",
+      "revision": "rev_0bd74eef27ed085a6c9fb29be9af37de0d67f649413247e425b66d12687220db",
+      "run": null,
+      "status": "accepted",
+      "tests_passed": 0,
+      "tests_selected": 0,
+      "transaction": "transaction_44a6fe1b9cf43e44a102337c12ddbaee02619d2ad0c1978b68b6eabb92dfa346",
+      "updated": 0
+    }
+  ],
+  "source_files": [
+    {
+      "path": "tools/selfhost/source-map.lkjc",
+      "bytes": 12002,
+      "sha256": "ba7ca8e069d45c7a82a036e0e2a3c32f213d950c8d1cb3343229c7fb32c4860a"
+    },
+    {
+      "path": "tools/selfhost/source-state.lkjc",
+      "bytes": 5957,
+      "sha256": "8c2f387eac86e74056b38bd99c645132b0ed1277bd9f3c03f1cb9454f2672c49"
+    },
+    {
+      "path": "tools/selfhost/source-history.lkjc",
+      "bytes": 23313,
+      "sha256": "fee6d1810c4b705d17c2ff500a50e4fe898ab45dac2039fcbd6bba23d5abec64"
+    },
+    {
+      "path": "tools/selfhost/source-object.lkjc",
+      "bytes": 5601,
+      "sha256": "39ada0b4b4f9535321b31c91677595b1ce0980109e8b370bbabea62aecec8c3c"
+    }
+  ],
+  "functions_added": 18,
+  "observations": {
+    "status": "All 48 selfhost and 10 native runtime tests passed inside official fresh full acceptance on the exact committed tree.",
+    "source": {
+      "owners": 20001,
+      "types": 18,
+      "retirements": 6125,
+      "dependencies": 0,
+      "authoritative_revision": "rev_0bd74eef27ed085a6c9fb29be9af37de0d67f649413247e425b66d12687220db",
+      "semantic_state": "semantic_state_5be96f934c6465dce05b9489aed5f6aa72a10f0d5fd73457c354a4a174894368"
+    },
+    "object_bindings": {
+      "objects": 26144,
+      "packet_bytes": 4530966,
+      "packet_sha256": "511fc154eaab4c8de8db356b8339689e31cb37fee22e1bf407c36c9056adf12a"
+    },
+    "state": {
+      "packet_bytes": 1300224,
+      "packet_sha256": "7856564e5f2519ec51b12debb2a72d2bd5a10969cc8c5c253517c6667364e38f"
+    },
+    "cross_engine": "VM/reference/native equality against independent current codec/root oracles",
+    "passed_new_tests": 8,
+    "pending": null,
+    "proposal_replay": {
+      "canonical_units": 307,
+      "status": "passed",
+      "elapsed_seconds": 370.85
+    },
+    "native_backend_fixed_point": {
+      "status": "passed",
+      "tier": 1,
+      "functions": 244,
+      "nodes": 16111,
+      "input_bytes": 794236,
+      "C2_C3_bytes": 2519420,
+      "sha256": "b1c4371af385bf91421e66dee2a5a7a481c1a2747f34ce786a161354ba0623ce"
+    },
+    "artifact_backend_fixed_point": {
+      "status": "passed",
+      "tier": 1,
+      "canonical_units": 307,
+      "functions": 305,
+      "input_bytes": 5538441,
+      "input_sha256": "4364f7d2d1a979b2f93fffa88f7a83018adcf6b11ccce967b9334c74504ac976",
+      "A1_A2_A3_bytes": 5846556,
+      "sha256": "c91054d5ee06904fb06678d5bc9539577c90213208da43b273117a5c2b359dc7",
+      "vm_cumulative_allocation": 42985302554,
+      "reference_cumulative_allocation": 48883743596
+    },
+    "mutated_artifact": {
+      "input_bytes": 5539635,
+      "input_sha256": "f0bb38c99e56b67e21b3bd7d118b12666566a54d7b4994851c893d71c8a485a6",
+      "bytes": 5847955,
+      "sha256": "3358bab74489a0d5697dde0f68b5cef44ba6892a3b74a1612a32f229b39cd6c6",
+      "behavior": "passed"
+    }
+  },
+  "admission_storage": {
+    "status": "Measured source validation improvement; later reference preparation recovered by test-probe factoring; all source cases passed across focused runs",
+    "source_revision": "rev_0bd74eef27ed085a6c9fb29be9af37de0d67f649413247e425b66d12687220db",
+    "owners": 20001,
+    "metadata_limit_bytes": 67108864,
+    "before": {
+      "affine_metadata_bytes": 66060451,
+      "affine_associated_work": 1143792,
+      "full_associated_metadata_bytes": 575704,
+      "full_associated_work": 5161,
+      "total_work": 1777039
+    },
+    "after": {
+      "affine_metadata_bytes": 18832593,
+      "affine_associated_work": 1143792,
+      "full_associated_metadata_bytes": 266982,
+      "full_associated_work": 5161,
+      "total_work": 1777039
+    },
+    "unchanged_probe_full_admission": {
+      "owners": 20585,
+      "affine_metadata_bytes": 19406625,
+      "total_work": 1824651
+    },
+    "scope": "Cumulative modeled host admission storage; no RSS or lkjscript Region memory claim",
+    "mechanism": "First traversal authority context and pending node use fixed inline slots; spills and visited entries reserve cumulative growth; canonical source is reread each invocation",
+    "recovery": {
+      "decoder_tests": 6,
+      "failed": 0,
+      "elapsed_seconds": 121.79,
+      "log": "source-binding-decoder-v10.log",
+      "mechanism": "Factored test-only output encoding and cursor chain; full compiler source and all assertions retained"
+    }
+  },
+  "validation": {
+    "library": "test result: ok. 2604 passed; 0 failed; 5 ignored; 0 measured; 0 filtered out; finished in 965.85s",
+    "selfhost_tests": 48,
+    "native_runtime_tests": 10,
+    "harnesses": [
+      {
+        "file": "2-run.stdout",
+        "terminal": "test result: ok. 347 passed; 0 failed; 1 ignored; 0 measured; 1 filtered out; finished in 665.45s"
+      },
+      {
+        "file": "3-run.stdout",
+        "terminal": "test result: ok. 334 passed; 0 failed; 16 ignored; 0 measured; 0 filtered out; finished in 9.43s"
+      },
+      {
+        "file": "0-run.stdout",
+        "terminal": "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+      },
+      {
+        "file": "4-run.stdout",
+        "terminal": "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+      },
+      {
+        "file": "5-run.stdout",
+        "terminal": "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+      },
+      {
+        "file": "6-run.stdout",
+        "terminal": "test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+      },
+      {
+        "file": "7-run.stdout",
+        "terminal": "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+      },
+      {
+        "file": "1-run.stdout",
+        "terminal": "test result: ok. 2604 passed; 0 failed; 5 ignored; 0 measured; 0 filtered out; finished in 965.85s"
+      }
+    ],
+    "changed_gates": 2,
+    "full_gates": 29,
+    "fresh": 29,
+    "reused": 0,
+    "input_digest": "verification_5907e6c325642593049fd85019cd45235a475552403919bbe739fd6615be287e",
+    "release_target": "passed"
+  },
+  "receipts": [
+    {
+      "path": ".artifacts/selfhost/accepted-e-source-bindings/bootstrap.json",
+      "bytes": 740,
+      "sha256": "c4a512056fd434e771c246fdcfbc130e24781ae2673d0dbae04b565d14c075d1"
+    },
+    {
+      "path": ".artifacts/selfhost/accepted-e-source-bindings/changed.json",
+      "bytes": 2865,
+      "sha256": "8f32cfa11066709ee28e645401544efb4c2fc1ded826c1c520248eaba7bca62e"
+    },
+    {
+      "path": ".artifacts/selfhost/accepted-e-source-bindings/full.json",
+      "bytes": 30766,
+      "sha256": "8fa1c618736d6d93d1ef4273cccf3d10be6fdd5f7ce42d24f85d80583f58822c"
+    },
+    {
+      "path": ".artifacts/selfhost/accepted-e-source-bindings/release-target.json",
+      "bytes": 2114,
+      "sha256": "0a7bdf55d37aed6556a7b3028d5a09844d97e18d571c17d37e7bb83ea334db84"
+    },
+    {
+      "path": ".artifacts/selfhost/accepted-e-source-bindings/harnesses.json",
+      "bytes": 16064,
+      "sha256": "60be8c64f23edca13c5b974b9fba4c53e6bb17ff137699d5ac644a0b9b13c29f"
+    }
+  ],
+  "evidence_files": [
+    {
+      "path": ".artifacts/selfhost/source-binding-tests-v9-observations.log",
+      "bytes": 8098,
+      "sha256": "8ffb4772508389e1ef06dad68e52883b21b80484cceff2507774e22d5510d206"
+    },
+    {
+      "path": ".artifacts/selfhost/source-binding-associated-v9.log",
+      "bytes": 4628,
+      "sha256": "a3fc736c984f929fd24659ffeb7bee9dd9c4f8d0a7b13ea8e5ef4199e6cebd62"
+    },
+    {
+      "path": ".artifacts/selfhost/source-binding-decoder-v10.log",
+      "bytes": 2897,
+      "sha256": "8d0d9a40f79d046ba78bf8415aa22ebdb7b4344be282fa5a9d34be437da0aecc"
+    },
+    {
+      "path": ".artifacts/selfhost/source-binding-replay-v10.log",
+      "bytes": 491,
+      "sha256": "80d7a417792e982d27590cd0254dd9878cc4df20eba0ab7031dec6c44fb3398c"
+    },
+    {
+      "path": ".artifacts/selfhost/source-binding-clippy-v10.log",
+      "bytes": 306,
+      "sha256": "a5f9b98f8a23df75b87ef1726576597eed435cfd364cb6597283721b2769bdc4"
+    },
+    {
+      "path": ".artifacts/selfhost/source-binding-stage-observations.log",
+      "bytes": 4647,
+      "sha256": "8e0e1104070455af7167b1c6dd109572de54f29fac50a26e44dffadc377a960a"
+    }
+  ],
+  "limits": [
+    "Current compiler entrypoints still consume Rust-admitted Tier 1 input.",
+    "Logical commitments and canonical record bindings do not establish reference existence, ownership, cycles, type correctness, effects or witnesses.",
+    "No phase-local Region reclamation or RSS claim.",
+    "Tier 2 source-graph normalization and native C2/C3 plus artifact A2/A3 fixed points remain required."
+  ],
+  "hygiene": "Official changed, fresh full and release target observed this exact clean committed tree; no tracked edits followed acceptance.",
+  "publication": {
+    "status": "published_to_origin_main",
+    "remote": "https://github.com/lkjsxc/lkjscript.git",
+    "verified_remote_head": "13771737a4a9bc49179927fdc0eaaea68003eee1",
+    "method": "Normal push followed by independent fetch and ancestry verification; no force push or history rewrite"
+  }
+}

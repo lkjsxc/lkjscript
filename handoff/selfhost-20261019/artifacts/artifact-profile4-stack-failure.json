@@ -1,0 +1,29 @@
+{
+  "status": "failed",
+  "source": "rev_b97444b9a091b83a12e41f036bc80a354e6702ae485dd35a797115dfcf6a9681",
+  "scope": "Focused profile4 v2; process aborted with stack overflow; no full suite conclusion",
+  "log_bytes": 13845,
+  "log_sha256": "1a871ff75dc52f6b7b7d586bc9f98589710945e95106eca75a7330e4c4869077",
+  "observed_fixture": "tests/fixtures/selfhost-closure.lkjc",
+  "cause": "Artifact object/owner scans returned if recursive_call then true else false, preventing tail dispatch and causing linear call-stack growth",
+  "completed": [
+    "test platform::execution::normalized::tests::selfhost_tests::admission::selfhost_admission_checks_derived_hash_signatures_and_unknown_codes ... ok",
+    "test platform::execution::normalized::tests::selfhost_tests::admission::selfhost_admission_accepts_empty_and_maximum_width_records ... ok",
+    "test platform::execution::normalized::tests::selfhost_tests::admission::selfhost_admission_rejects_buffer_aliases_loans_and_forgotten_custody ... ok",
+    "test platform::execution::normalized::tests::selfhost_tests::admission::selfhost_admission_checks_text_utf8_before_native_emission ... ok",
+    "test platform::execution::normalized::tests::selfhost_tests::admission::selfhost_admission_rejects_cyclic_affine_or_noncanonical_record_metadata ... ok",
+    "test platform::execution::normalized::tests::selfhost_tests::artifact::selfhost_artifact_container_executes_independent_and_mutated_programs ... ok"
+  ],
+  "failure": [
+    "selfhost artifact native producer entry=probe-map bytes=32130 sha256=185ec7b5146e0c41d3598d493805d7782d901f723512fad0555460d5f3b2671b",
+    "selfhost artifact encoder input_bytes=159 C1_bytes=322727 C1_sha256=fe737a019262ab7721da23db79310e768114edf8d399403d20b7226c5e9a13ff vm_steps=26 vm_cumulative_allocation=6014098 ref_expressions=18 ref_cumulative_allocation=1819150",
+    "",
+    "thread 'platform::execution::normalized::tests::selfhost_tests::artifact::selfhost_artifact_executes_control_flow_and_exact_arithmetic_traps' (4087198) has overflowed its stack",
+    "fatal runtime error: stack overflow, aborting",
+    "error: test failed, to rerun pass `--lib`",
+    "",
+    "Caused by:",
+    "  process didn't exit successfully: `/home/coder/workspace/lkjscript/target/release/deps/lkjscript-e2fdc52c2bd3596c selfhost_ --test-threads=4 --nocapture` (signal: 6, SIGABRT: process abort signal)",
+    ""
+  ]
+}

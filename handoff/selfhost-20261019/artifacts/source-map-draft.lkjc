@@ -1,0 +1,310 @@
+declarations.begin
+(units
+  (module create source-map
+    (function create prefix
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create start (type I64))
+      (parameter create end (type I64))
+      (parameter create at (type I64))
+      (parameter create key-bytes (type I64))
+      (parameter create value-bytes (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (local at) (local key-bytes))
+          (local at)
+          (if
+            (call ci::eq
+              (call ci::get (local data) (call ci::add (local start) (local at)))
+              (call ci::get
+                (local data)
+                (call ci::add
+                  (call ci::sub (local end) (call ci::add (local key-bytes) (local value-bytes)))
+                  (local at))))
+            (call prefix
+              (local data)
+              (local start)
+              (local end)
+              (call ci::add (local at) (i64 1))
+              (local key-bytes)
+              (local value-bytes))
+            (local at)))))
+    (function create group-end
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create prefix (type I64))
+      (parameter create edge (type I64))
+      (parameter create key-bytes (type I64))
+      (parameter create value-bytes (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (local at) (local end))
+          (local at)
+          (if
+            (call ci::eq
+              (call ci::get (local data) (call ci::add (local at) (local prefix)))
+              (local edge))
+            (call group-end
+              (local data)
+              (call ci::add (local at) (call ci::add (local key-bytes) (local value-bytes)))
+              (local end)
+              (local prefix)
+              (local edge)
+              (local key-bytes)
+              (local value-bytes))
+            (local at)))))
+    (function create children
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create prefix (type I64))
+      (parameter create key-bytes (type I64))
+      (parameter create value-bytes (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local at) (local end))
+          (local out)
+          (let
+            (binding edge (call ci::get (local data) (call ci::add (local at) (local prefix))))
+            (binding next
+              (call group-end
+                (local data)
+                (call ci::add (local at) (call ci::add (local key-bytes) (local value-bytes)))
+                (local end)
+                (local prefix)
+                (local edge)
+                (local key-bytes)
+                (local value-bytes)))
+            (binding digest
+              (call content
+                (local data)
+                (local at)
+                (local next)
+                (local key-bytes)
+                (local value-bytes)))
+            (binding a (type ByteBuffer) (call ci::push (local edge) (local out)))
+            (binding b
+              (type ByteBuffer)
+              (call ci::le
+                (call ci::div
+                  (call ci::sub (local next) (local at))
+                  (call ci::add (local key-bytes) (local value-bytes)))
+                (i64 8)
+                (local a)))
+            (binding c (type ByteBuffer) (call ci::push (i64 1) (local b)))
+            (binding d (type ByteBuffer) (call ci::append (local digest) (i64 0) (local c)))
+            (in
+              (call children
+                (local data)
+                (local next)
+                (local end)
+                (local prefix)
+                (local key-bytes)
+                (local value-bytes)
+                (local d)))))))
+    (function create content
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create start (type I64))
+      (parameter create end (type I64))
+      (parameter create key-bytes (type I64))
+      (parameter create value-bytes (type I64))
+      (returns Bytes)
+      (body
+        (let
+          (binding count
+            (call ci::div
+              (call ci::sub (local end) (local start))
+              (call ci::add (local key-bytes) (local value-bytes))))
+          (binding canonical
+            (if
+              (call ci::eq (local count) (i64 0))
+              (let
+                (binding wire-temp-20
+                  (type ByteBuffer)
+                  (let
+                    (binding wire-temp-18 (i64 0))
+                    (binding wire-temp-19 (type ByteBuffer) (call ci::empty))
+                    (in (call ci::push (local wire-temp-18) (local wire-temp-19)))))
+                (in (call ci::freeze (local wire-temp-20))))
+              (if
+                (call ci::eq (local count) (i64 1))
+                (let
+                  (binding a
+                    (type ByteBuffer)
+                    (let
+                      (binding wire-temp-21 (i64 1))
+                      (binding wire-temp-22 (type ByteBuffer) (call ci::empty))
+                      (in (call ci::push (local wire-temp-21) (local wire-temp-22)))))
+                  (binding b (type ByteBuffer) (call ci::le (local key-bytes) (i64 2) (local a)))
+                  (binding c
+                    (type ByteBuffer)
+                    (call wire::range
+                      (local data)
+                      (local start)
+                      (call ci::add (local start) (local key-bytes))
+                      (local b)))
+                  (binding d (type ByteBuffer) (call ci::le (local value-bytes) (i64 4) (local c)))
+                  (binding e
+                    (type ByteBuffer)
+                    (call wire::range
+                      (local data)
+                      (call ci::add (local start) (local key-bytes))
+                      (local end)
+                      (local d)))
+                  (in (call ci::freeze (local e))))
+                (let
+                  (binding prefix
+                    (call prefix
+                      (local data)
+                      (local start)
+                      (local end)
+                      (i64 0)
+                      (local key-bytes)
+                      (local value-bytes)))
+                  (binding children
+                    (let
+                      (binding wire-temp-24
+                        (type ByteBuffer)
+                        (let
+                          (binding wire-temp-23 (type ByteBuffer) (call ci::empty))
+                          (in
+                            (call children
+                              (local data)
+                              (local start)
+                              (local end)
+                              (local prefix)
+                              (local key-bytes)
+                              (local value-bytes)
+                              (local wire-temp-23)))))
+                      (in (call ci::freeze (local wire-temp-24)))))
+                  (binding a
+                    (type ByteBuffer)
+                    (let
+                      (binding wire-temp-25 (i64 2))
+                      (binding wire-temp-26 (type ByteBuffer) (call ci::empty))
+                      (in (call ci::push (local wire-temp-25) (local wire-temp-26)))))
+                  (binding b (type ByteBuffer) (call ci::le (local prefix) (i64 2) (local a)))
+                  (binding c
+                    (type ByteBuffer)
+                    (call wire::range
+                      (local data)
+                      (local start)
+                      (call ci::add (local start) (local prefix))
+                      (local b)))
+                  (binding d (type ByteBuffer) (call ci::push (i64 0) (local c)))
+                  (binding e
+                    (type ByteBuffer)
+                    (call ci::le
+                      (call ci::div (call ci::length (local children)) (i64 42))
+                      (i64 2)
+                      (local d)))
+                  (in (call ci::concat (call ci::freeze (local e)) (local children)))))))
+          (in (call wire::digest (text "lkjscript.persistent-map-content.v1") (local canonical))))))
+    (function create ordered
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create stride (type I64))
+      (parameter create key-bytes (type I64))
+      (returns Bool)
+      (body
+        (if
+          (call ci::eq (local at) (local end))
+          (bool true)
+          (if
+            (call ci::lt
+              (call artifact-input::bytes-order
+                (local data)
+                (call ci::sub (local at) (local stride))
+                (local at)
+                (local key-bytes))
+              (i64 0))
+            (call ordered
+              (local data)
+              (call ci::add (local at) (local stride))
+              (local end)
+              (local stride)
+              (local key-bytes))
+            (bool false)))))
+    (function create root
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create key-bytes (type I64))
+      (parameter create value-bytes (type I64))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (if
+          (if
+            (call ci::lt (i64 0) (local key-bytes))
+            (if
+              (call ci::lt (local key-bytes) (i64 33))
+              (if
+                (call ci::lt (i64 0) (local value-bytes))
+                (if
+                  (call ci::lt (local value-bytes) (i64 129))
+                  (if
+                    (call ci::lt (call ci::length (local data)) (i64 8388609))
+                    (bool true)
+                    (bool false))
+                  (bool false))
+                (bool false))
+              (bool false))
+            (bool false))
+          (let
+            (binding stride (call ci::add (local key-bytes) (local value-bytes)))
+            (binding count (call ci::div (call ci::length (local data)) (local stride)))
+            (in
+              (if
+                (if
+                  (call ci::lt (local count) (i64 100001))
+                  (if
+                    (call ci::eq
+                      (call ci::mul (local count) (local stride))
+                      (call ci::length (local data)))
+                    (bool true)
+                    (bool false))
+                  (bool false))
+                (if
+                  (if
+                    (call ci::eq (local count) (i64 0))
+                    (bool true)
+                    (call ordered
+                      (local data)
+                      (local stride)
+                      (call ci::length (local data))
+                      (local stride)
+                      (local key-bytes)))
+                  (record structural
+                    (field diagnostic (i64 0))
+                    (field image
+                      (call content
+                        (local data)
+                        (i64 0)
+                        (call ci::length (local data))
+                        (local key-bytes)
+                        (local value-bytes))))
+                  (record structural
+                    (field diagnostic (i64 12))
+                    (field image (call ci::text-bytes (text "")))))
+                (record structural
+                  (field diagnostic (i64 12))
+                  (field image (call ci::text-bytes (text "")))))))
+          (record structural
+            (field diagnostic (i64 12))
+            (field image (call ci::text-bytes (text "")))))))))
+declarations.end

@@ -1,0 +1,101 @@
+{
+  "source": "352f0997142d9fed279f3964a76102d61f7ac1e6",
+  "scope": "Observed terminal harness output; official full receipt owns overall success and producer identities",
+  "harnesses": [
+    {
+      "file": "1-run.stdout",
+      "terminal_result": "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2599 filtered out; finished in 0.10s",
+      "bytes": 77703,
+      "sha256": "0fcd43c815cbad02ddc3776fc1d4af005abbd37f0b94ceb4f918cf76a2df78db",
+      "selfhost": [],
+      "native": [
+        "test platform::compiler::elf_x86_64::stack_tests::native_elf_calls_align_stack_and_restore_every_argument_depth ... ok"
+      ],
+      "ignored": [
+        "test platform::data::tests::cross_process_writer_helper ... ignored, invoked as a controlled subprocess by the cross-process writer proof"
+      ]
+    },
+    {
+      "file": "2-run.stdout",
+      "terminal_result": "test result: ok. 347 passed; 0 failed; 1 ignored; 0 measured; 1 filtered out; finished in 568.93s",
+      "bytes": 44169,
+      "sha256": "d8876fd3118e963cc1a5572c32fbb46f78aeaee48554b27038281acebc9bba47",
+      "selfhost": [],
+      "native": [],
+      "ignored": [
+        "test reviewed_change_plan_scale_streams_detail_beyond_stdout_envelope ... ignored, release-scale fixture; run explicitly with --ignored --nocapture"
+      ]
+    },
+    {
+      "file": "0-run.stdout",
+      "terminal_result": "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "bytes": 113,
+      "sha256": "df166913f47ff1f04202cae9b31df67ed272d692d99a0023a8117dc3029100dd",
+      "selfhost": [],
+      "native": [],
+      "ignored": []
+    },
+    {
+      "file": "3-run.stdout",
+      "terminal_result": "test result: ok. 334 passed; 0 failed; 16 ignored; 0 measured; 0 filtered out; finished in 9.54s",
+      "bytes": 38206,
+      "sha256": "3d7ab40c40c199fccc1c87cb08fbb8d08f2539ba47eaf8c339b0fdabbb69c55c",
+      "selfhost": [],
+      "native": [],
+      "ignored": [
+        "test offline_packages::effects_iteration::author_task_standard_through_public_change ... ignored, requires an explicitly selected maintained project, linked host and absent evidence path",
+        "test offline_packages::effects_iteration::author_transported_task_library_through_public_change ... ignored, requires a linked host and absent evidence path",
+        "test offline_packages::effects_iteration::copied_task_library_foreground_iteration ... ignored, requires linked host and absent evidence path",
+        "test offline_packages::effects_iteration::copied_task_library_http_iteration ... ignored, requires linked host and absent evidence path",
+        "test offline_packages::effects_iteration::iteration_reader_rejects_consistently_rehashed_false_observations ... ignored, requires authentic LKJSCRIPT_ITERATION_READER_FIXTURE from the public effect workflow",
+        "test offline_packages::effects_iteration::linked_named_reference_iteration ... ignored, requires an explicitly linked host and a fresh evidence directory",
+        "test offline_packages::f64::tests::argument_file_originals_reject_rehashed_substitution ... ignored, requires retained focused F64 receipt and its original verifier",
+        "test offline_packages::maps::tests::window_originals_reject_omission_and_rehashed_substitution ... ignored, requires retained current offline or focused persistent-map receipt and its original verifier",
+        "test offline_packages::recursive::batch::tests::retained_recursive_batches_reject_omission_retargeting_and_probe_reordering ... ignored, requires an authentic current full offline receipt and its exact candidate/verifier",
+        "test offline_packages::requirements::reader_tests::composition_reader_requires_new_evidence_and_exact_invocations ... ignored, requires an authentic retained requirement composition receipt",
+        "test offline_packages::tests::retained_offline_receipt_passes_current_reader ... ignored, requires an authentic retained offline receipt and its exact candidate/verifier",
+        "test pure_tail::boundary::tests::actual_final_receipt_rejects_boundary_relabeling_and_semantic_forgery ... ignored, requires original current source/final receipts and exact candidate/verifier executables",
+        "test pure_tail::measurement_tests::prepared_pure_tool_cold_and_warm_measurements ... ignored, requires exact external pure-tail artifact/N and exclusive bounded measurement execution",
+        "test pure_tail::source_batch::tests::actual_source_batch_rows_reject_missing_results_identity_forgery_and_live_resources ... ignored, requires LKJSCRIPT_PURE_TAIL_BATCH_FIXTURE from an actual completed current pure-tail gate",
+        "test release::admission::nominal_tests::live_nominal_receipt_omissions_reject_at_target_admission ... ignored, requires owned target admission and its authenticated original source fixtures",
+        "test release::transferred::pair::lifecycle::tests::live_small_lifecycle_and_selector_continuity_with_current_container ... ignored, requires current-format archive assets and an owned absent evidence root"
+      ]
+    },
+    {
+      "file": "4-run.stdout",
+      "terminal_result": "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "bytes": 113,
+      "sha256": "df166913f47ff1f04202cae9b31df67ed272d692d99a0023a8117dc3029100dd",
+      "selfhost": [],
+      "native": [],
+      "ignored": []
+    },
+    {
+      "file": "5-run.stdout",
+      "terminal_result": "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "bytes": 113,
+      "sha256": "df166913f47ff1f04202cae9b31df67ed272d692d99a0023a8117dc3029100dd",
+      "selfhost": [],
+      "native": [],
+      "ignored": []
+    },
+    {
+      "file": "6-run.stdout",
+      "terminal_result": "test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "bytes": 712,
+      "sha256": "3ec77ab65a6e161f34f1b7fedbd4d7748f8e11b59180f82d74192991d1652780",
+      "selfhost": [],
+      "native": [],
+      "ignored": []
+    },
+    {
+      "file": "7-run.stdout",
+      "terminal_result": "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "bytes": 172,
+      "sha256": "e99d58895399a09f94c61dcc4377952f201b21fda8c35d4097963c02a49b15d3",
+      "selfhost": [],
+      "native": [],
+      "ignored": []
+    }
+  ]
+}

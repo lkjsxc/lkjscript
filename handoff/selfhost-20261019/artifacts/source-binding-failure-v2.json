@@ -1,0 +1,11 @@
+{
+  "status": "failed_and_stopped",
+  "log": {
+    "path": ".artifacts/selfhost/source-binding-tests-v2.log",
+    "bytes": 2284,
+    "sha256": "55e6c6b840cc0fc6aabe66d0a50834f612a2ebc11eb7ec2bfc816a924d6434fa"
+  },
+  "cause": "One-body transactions still exhaust full-snapshot kernel_affine_work at combined fixture proposal18. No behavioral tests reached execution.",
+  "termination": "Owned test process151613 SIGTERM after repeated setup failure; session37523 joined with exit101.",
+  "next": "Independent probe-family graphs each retaining complete S; restore four-body batching because changing batch size did not resolve this full-snapshot bound."
+}

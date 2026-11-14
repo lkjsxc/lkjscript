@@ -1,0 +1,13 @@
+{
+  "status": "failed",
+  "terminal": "test result: FAILED. 10 passed; 4 failed; 0 ignored; 0 measured; 2594 filtered out; finished in 386.54s",
+  "new_binding_tests": "8 passed",
+  "old_decoder_tests": "2 passed,4 failed",
+  "cause": "Four source-probe tests fail in prepare_snapshot when GraphRepository::create_memory reimports the already accepted fixture snapshot: kernel_owned_associated_capacity. The original public authoring completed.",
+  "log": {
+    "path": ".artifacts/selfhost/source-binding-tests-v3.log",
+    "bytes": 8893,
+    "sha256": "e864be4126f44f229ce59e916692a95b488f2063c066b4458194350b9c4c1e93"
+  },
+  "next": "Compile directly from the owning public transaction repository using existing build/link/strict-loader preparation. No validation/metadata/storage limits changed."
+}

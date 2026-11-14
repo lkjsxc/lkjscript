@@ -1,0 +1,162 @@
+declarations.begin
+(units
+  (module create source-object-probe
+    (function create bind-type
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (if
+          (call ci::lt (call ci::length (local data)) (i64 32))
+          (record structural
+            (field diagnostic (i64 12))
+            (field image (call ci::text-bytes (text ""))))
+          (record structural
+            (field diagnostic
+              (call source-object::type
+                (call ci::slice (local data) (i64 32) (call ci::length (local data)))
+                (call ci::slice (local data) (i64 0) (i64 32))))
+            (field image (call ci::text-bytes (text "")))))))
+    (function create bind-owner
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (if
+          (call ci::lt (call ci::length (local data)) (i64 50))
+          (record structural
+            (field diagnostic (i64 12))
+            (field image (call ci::text-bytes (text ""))))
+          (record structural
+            (field diagnostic
+              (call source-object::owner
+                (call ci::slice (local data) (i64 50) (call ci::length (local data)))
+                (call ci::slice (local data) (i64 0) (i64 50))))
+            (field image (call ci::text-bytes (text "")))))))
+    (function create bind-dependency
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (if
+          (call ci::lt (call ci::length (local data)) (i64 48))
+          (record structural
+            (field diagnostic (i64 12))
+            (field image (call ci::text-bytes (text ""))))
+          (record structural
+            (field diagnostic
+              (call source-object::dependency
+                (call ci::slice (local data) (i64 48) (call ci::length (local data)))
+                (call ci::slice (local data) (i64 0) (i64 48))))
+            (field image (call ci::text-bytes (text "")))))))
+    (function create bind-retirement
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (if
+          (call ci::lt (call ci::length (local data)) (i64 49))
+          (record structural
+            (field diagnostic (i64 12))
+            (field image (call ci::text-bytes (text ""))))
+          (record structural
+            (field diagnostic
+              (call source-object::retirement
+                (call ci::slice (local data) (i64 49) (call ci::length (local data)))
+                (call ci::slice (local data) (i64 0) (i64 49))))
+            (field image (call ci::text-bytes (text "")))))))
+    (function create bindings-loop
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create output (type ByteBuffer) (use consume))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (if
+          (call ci::eq (local at) (local end))
+          (record structural
+            (field diagnostic (i64 0))
+            (field image (call ci::freeze (local output))))
+          (if
+            (call source-read::range (local data) (local at) (i64 5) (local end))
+            (let
+              (binding kind (call ci::get (local data) (local at)))
+              (binding size (call ci::u32 (local data) (call ci::add (local at) (i64 1))))
+              (binding width
+                (if
+                  (call ci::eq (local kind) (i64 0))
+                  (i64 32)
+                  (if
+                    (call ci::eq (local kind) (i64 1))
+                    (i64 50)
+                    (if
+                      (call ci::eq (local kind) (i64 2))
+                      (i64 48)
+                      (if (call ci::eq (local kind) (i64 3)) (i64 49) (i64 0))))))
+              (binding start (call ci::add (local at) (i64 5)))
+              (in
+                (if
+                  (if
+                    (call ci::lt (local kind) (i64 4))
+                    (if
+                      (call source-read::range
+                        (local data)
+                        (local start)
+                        (call ci::add (local width) (local size))
+                        (local end))
+                      (bool true)
+                      (bool false))
+                    (bool false))
+                  (let
+                    (binding object-start (call ci::add (local start) (local width)))
+                    (binding next (call ci::add (local object-start) (local size)))
+                    (binding entry (call ci::slice (local data) (local start) (local object-start)))
+                    (binding object (call ci::slice (local data) (local object-start) (local next)))
+                    (binding code
+                      (if
+                        (call ci::eq (local kind) (i64 0))
+                        (call source-object::type (local object) (local entry))
+                        (if
+                          (call ci::eq (local kind) (i64 1))
+                          (call source-object::owner (local object) (local entry))
+                          (if
+                            (call ci::eq (local kind) (i64 2))
+                            (call source-object::dependency (local object) (local entry))
+                            (if
+                              (call ci::eq (local kind) (i64 3))
+                              (call source-object::retirement (local object) (local entry))
+                              (i64 12))))))
+                    (binding continued
+                      (type ByteBuffer)
+                      (call ci::push (local code) (local output)))
+                    (in
+                      (call bindings-loop (local data) (local next) (local end) (local continued))))
+                  (let
+                    (binding discarded (call ci::freeze (local output)))
+                    (in
+                      (record structural
+                        (field diagnostic (i64 12))
+                        (field image (call ci::text-bytes (text "")))))))))
+            (let
+              (binding discarded (call ci::freeze (local output)))
+              (in
+                (record structural
+                  (field diagnostic (i64 12))
+                  (field image (call ci::text-bytes (text ""))))))))))
+    (function create read-bindings
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (let
+          (binding initial (type ByteBuffer) (call ci::empty))
+          (in
+            (call bindings-loop (local data) (i64 0) (call ci::length (local data)) (local initial))))))))
+declarations.end

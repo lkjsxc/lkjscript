@@ -1,0 +1,104 @@
+declarations.begin
+(units
+  (module create source-state-probe
+    (function create read-state
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (if
+          (call ci::lt (call ci::length (local data)) (i64 32))
+          (record structural
+            (field diagnostic (i64 12))
+            (field image (call ci::text-bytes (text ""))))
+          (let
+            (binding name-end (call ci::add (i64 32) (call ci::u32 (local data) (i64 16))))
+            (in
+              (if
+                (call source-read::range
+                  (local data)
+                  (i64 32)
+                  (call ci::u32 (local data) (i64 16))
+                  (call ci::length (local data)))
+                (let
+                  (binding name (call ci::slice (local data) (i64 32) (local name-end)))
+                  (in
+                    (let
+                      (binding owners-end
+                        (call ci::add (local name-end) (call ci::u32 (local data) (i64 20))))
+                      (in
+                        (if
+                          (call source-read::range
+                            (local data)
+                            (local name-end)
+                            (call ci::u32 (local data) (i64 20))
+                            (call ci::length (local data)))
+                          (let
+                            (binding owners
+                              (call ci::slice (local data) (local name-end) (local owners-end)))
+                            (in
+                              (let
+                                (binding dependencies-end
+                                  (call ci::add
+                                    (local owners-end)
+                                    (call ci::u32 (local data) (i64 24))))
+                                (in
+                                  (if
+                                    (call source-read::range
+                                      (local data)
+                                      (local owners-end)
+                                      (call ci::u32 (local data) (i64 24))
+                                      (call ci::length (local data)))
+                                    (let
+                                      (binding dependencies
+                                        (call ci::slice
+                                          (local data)
+                                          (local owners-end)
+                                          (local dependencies-end)))
+                                      (in
+                                        (let
+                                          (binding retirements-end
+                                            (call ci::add
+                                              (local dependencies-end)
+                                              (call ci::u32 (local data) (i64 28))))
+                                          (in
+                                            (if
+                                              (call source-read::range
+                                                (local data)
+                                                (local dependencies-end)
+                                                (call ci::u32 (local data) (i64 28))
+                                                (call ci::length (local data)))
+                                              (let
+                                                (binding retirements
+                                                  (call ci::slice
+                                                    (local data)
+                                                    (local dependencies-end)
+                                                    (local retirements-end)))
+                                                (in
+                                                  (if
+                                                    (call ci::eq
+                                                      (local retirements-end)
+                                                      (call ci::length (local data)))
+                                                    (call source-state::root
+                                                      (call ci::slice (local data) (i64 0) (i64 16))
+                                                      (local name)
+                                                      (local owners)
+                                                      (local dependencies)
+                                                      (local retirements))
+                                                    (record structural
+                                                      (field diagnostic (i64 12))
+                                                      (field image (call ci::text-bytes (text "")))))))
+                                              (record structural
+                                                (field diagnostic (i64 12))
+                                                (field image (call ci::text-bytes (text "")))))))))
+                                    (record structural
+                                      (field diagnostic (i64 12))
+                                      (field image (call ci::text-bytes (text "")))))))))
+                          (record structural
+                            (field diagnostic (i64 12))
+                            (field image (call ci::text-bytes (text "")))))))))
+                (record structural
+                  (field diagnostic (i64 12))
+                  (field image (call ci::text-bytes (text ""))))))))))))
+declarations.end

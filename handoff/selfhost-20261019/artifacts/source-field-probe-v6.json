@@ -1,0 +1,6 @@
+{
+  "path": "tests/fixtures/selfhost-source-probes.lkjc",
+  "bytes": 20314,
+  "sha256": "f112e145c7078176260f258bc480ad4065a17ddc8e782b63fbba77763394c56c",
+  "status": "Unaccepted experiment; public tx rejected at metadata capacity"
+}

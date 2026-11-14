@@ -1,0 +1,1 @@
+Focused tests: 5 passed; invocation exited 127 after an edit to the running shell script changed its read position: tools/selfhost/verify.sh: line 19: ture: command not found. Re-run the completed script without concurrent edits.

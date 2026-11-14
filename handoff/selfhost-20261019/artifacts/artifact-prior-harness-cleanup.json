@@ -1,0 +1,15 @@
+{
+  "ownership": "Both executables were selected by the joined official full job for b2aaa22e; bounded acceptance retained. No live verifier or executable users remain.",
+  "files": [
+    {
+      "path": "target/release/deps/lkjscript-e62cb20ef26e8b12",
+      "bytes": 194439496,
+      "sha256": "3742a50fdea3bdd58d46cdb0d4e53b7882080c625ff88153e4a1d794b07543ea"
+    },
+    {
+      "path": "target/release/deps/public_cli-411b0a00ac463de7",
+      "bytes": 88803784,
+      "sha256": "8a537af0559d1176da0498395dd7135eca38d49c8ccd1fa33d6012d056d7bcd6"
+    }
+  ]
+}

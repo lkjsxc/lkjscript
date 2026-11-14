@@ -1,0 +1,28 @@
+declarations.begin
+(units
+  (module create source-history-probe
+    (function create read-dependency
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (record structural
+          (field diagnostic (call source-history::dependency (local data)))
+          (field image (call ci::text-bytes (text ""))))))
+    (function create read-retirement
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (record structural
+          (field diagnostic (call source-history::retirement (local data)))
+          (field image (call ci::text-bytes (text ""))))))
+    (function create read-revision
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body (call source-history::revision (local data))))))
+declarations.end
