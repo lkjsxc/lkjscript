@@ -10,6 +10,7 @@ mod library_demand;
 mod parser_contracts;
 mod resolver;
 mod reuse;
+mod scalar_clone;
 mod return_contracts;
 mod source_cases;
 mod source_contracts;
@@ -101,6 +102,7 @@ pub fn run(world: &mut World, shard: usize, workers: usize, trace: bool) -> (usi
         count += parser_contracts::run(world, trace);
         count += return_contracts::run(world, trace);
         count += array_repeat::run(world, trace);
+        count += scalar_clone::run(world, trace);
         count += interpreter_contracts::run(world, trace);
         count += entry_grants::run(world, trace);
         count += allocator::run(world);

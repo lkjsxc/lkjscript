@@ -1,4 +1,4 @@
-//! Executable builtin trait operations use ordinary, checked IR functions.
+//! Builtin trait operations use ordinary checked IR; scalar Clone is a read.
 //!
 //! Headers are interned before their bodies enter the shared compilation queue.
 //! Recursive nominal layouts therefore reuse an existing function identity;
@@ -7,6 +7,20 @@ use super::generic_check::BuiltinMethod;
 use super::{Builder, Compiler, PendingFunction, Result, a, err, ir, is_copy};
 use crate::generics::TraitIdentity;
 use std::collections::BTreeMap;
+
+// Copy nominals may have observable Clone implementations. This shortcut is
+// restricted to builtin values whose Clone contract is an unchanged read.
+fn clone_is_read(kind: &ir::TypeKind) -> bool {
+    matches!(
+        kind,
+        ir::TypeKind::Unit
+            | ir::TypeKind::Bool
+            | ir::TypeKind::Char
+            | ir::TypeKind::Int { .. }
+            | ir::TypeKind::F64
+            | ir::TypeKind::Ref { mutable: false, .. }
+    )
+}
 
 #[derive(Clone)]
 pub(super) struct DerivedInstance {
@@ -247,12 +261,16 @@ impl Compiler<'_> {
                 body.finish(result);
             }
             BuiltinMethod::CloneFrom => {
-                let clone = body.compiler.builtin_operation(
-                    instance.receiver,
-                    BuiltinMethod::Clone,
-                    instance.span,
-                )?;
-                let cloned = body.call(clone, vec![1]);
+                let cloned = if clone_is_read(&body.compiler.types[instance.receiver].kind) {
+                    body.read(Generated::referent(1), instance.receiver)
+                } else {
+                    let clone = body.compiler.builtin_operation(
+                        instance.receiver,
+                        BuiltinMethod::Clone,
+                        instance.span,
+                    )?;
+                    body.call(clone, vec![1])
+                };
                 let old = body.local(instance.receiver);
                 body.emit(ir::Op::Intrinsic {
                     dst: old,
@@ -444,6 +462,9 @@ impl Generated<'_, '_> {
     }
 
     fn clone_place(&mut self, place: ir::Place, ty: usize) -> Result<usize> {
+        if clone_is_read(&self.compiler.types[ty].kind) {
+            return Ok(self.read(place, ty));
+        }
         let function = self
             .compiler
             .builtin_operation(ty, BuiltinMethod::Clone, self.span)?;
@@ -464,15 +485,7 @@ impl Generated<'_, '_> {
 
     fn clone_value(&mut self, ty: usize) -> Result<()> {
         let kind = self.compiler.types[ty].kind.clone();
-        if matches!(
-            kind,
-            ir::TypeKind::Unit
-                | ir::TypeKind::Bool
-                | ir::TypeKind::Char
-                | ir::TypeKind::Int { .. }
-                | ir::TypeKind::F64
-                | ir::TypeKind::Ref { mutable: false, .. }
-        ) || self.compiler.derived_copy_clone(ty)
+        if clone_is_read(&kind) || self.compiler.derived_copy_clone(ty)
         {
             let result = self.read(Self::referent(0), ty);
             self.finish(result);
@@ -1023,6 +1036,9 @@ impl Builder<'_, '_> {
                 "E_TYPE",
                 "builtin trait method argument count differs from its contract",
             ));
+        }
+        if method == BuiltinMethod::Clone && clone_is_read(&self.compiler.types[receiver].kind) {
+            return self.read(target.clone(), span.line);
         }
         let function = self.compiler.builtin_operation(receiver, method, span)?;
         let borrowed = self
