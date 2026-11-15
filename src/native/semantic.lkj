@@ -1,0 +1,19 @@
+//! Layout facts use the emitter's actual checked-IR layout implementation.
+use super::{CheckedProgram, Diagnostic, Layouts};
+pub struct Layout {
+    pub bytes: u64,
+    pub alignment: u8,
+    pub fields: Vec<u64>,
+    pub variants: Vec<Vec<u64>>,
+    pub cleanup: bool,
+}
+pub fn layouts(checked: &CheckedProgram) -> Result<Vec<Layout>, Diagnostic> {
+    let layouts = Layouts::new(checked.program())?;
+    let mut result = Vec::new();
+    for index in 0usize..checked.program().types.len() {
+        let layout = layouts.storage(index);
+        result.push(Layout { bytes: layout.bytes, alignment: layout.alignment,
+            fields: layout.fields.clone(), variants: layout.variants.clone(), cleanup: layout.cleanup });
+    }
+    Ok(result)
+}

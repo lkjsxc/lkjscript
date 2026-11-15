@@ -1,0 +1,205 @@
+//! Bounded direct facts from source claims and independently checked IR.
+use crate::{authority, ir, native, semantic};
+use std::collections::{BTreeMap, BTreeSet};
+
+pub struct Facts { pub records: BTreeMap<String, Vec<String>> }
+pub fn key(kind: &str, identity: &str) -> String { format!("{kind}\t{identity}") }
+impl Facts {
+    fn new() -> Self { Self { records: BTreeMap::new() } }
+    fn add(&mut self, kind: &str, identity: &str, line: String) {
+        let key = key(kind, identity);
+        if !self.records.contains_key(&key) { self.records.insert(key.clone(), Vec::new()); }
+        self.records.get_mut(&key).unwrap().push(line);
+    }
+    fn empty(&mut self, kind: &str, identity: &str) {
+        let key = key(kind, identity);
+        if !self.records.contains_key(&key) { self.records.insert(key, Vec::new()); }
+    }
+}
+pub fn fact(identity: &str, level: &str, kind: &str, value: &str) -> String {
+    format!("{}\tlevel={level}\tfact={kind}\t{value}", semantic::quote(identity))
+}
+fn chunks(value: &str) -> Vec<String> {
+    let bytes = value.as_bytes();
+    let mut result = Vec::new(); let mut start = 0usize;
+    while start < bytes.len() {
+        let mut end = (start + 1024usize).min(bytes.len());
+        while end > start && end < bytes.len() && bytes[end] & 192u8 == 128u8 { end -= 1usize; }
+        result.push(value[start..end].to_string()); start = end;
+    }
+    if result.is_empty() { result.push(String::new()); }
+    result
+}
+fn source_signature(item: &semantic::Item) -> String {
+    let signature = std::str::trim_ascii(item.signature.as_str());
+    let mut end = 1024usize.min(signature.len());
+    while end > 0usize && end < signature.len() && signature.as_bytes()[end] & 192u8 == 128u8 { end -= 1usize; }
+    fact(&item.identity, "source-claim", "signature",
+        &format!("kind={} text={} bytes={} complete={}", item.kind, semantic::quote(&signature[..end]), signature.len(), end == signature.len()))
+}
+fn join(values: &BTreeSet<String>) -> String {
+    let mut result = String::new();
+    for value in values {
+        if !result.is_empty() { result.push(','); }
+        result.push_str(value);
+    }
+    result
+}
+fn numbers(values: &[u64]) -> String {
+    let mut result = "[".to_string();
+    for (index, value) in values.iter().enumerate() {
+        if index != 0usize { result.push(','); }
+        result.push_str(&format!("{value}"));
+    }
+    result.push(']'); result
+}
+fn edge(result: &mut Facts, kind: &str, from: &str, to: &str, level: &str, detail: &str) {
+    result.add(kind, from, fact(to, level, kind, detail));
+    result.add(&format!("@{kind}"), from, to.to_string());
+}
+pub fn build(catalog: &semantic::Catalog, checked: &ir::CheckedProgram) -> Result<Facts, String> {
+    let mut result = Facts::new();
+    result.add("meta", "crate", fact("crate", "source-claim", "snapshot",
+        &format!("source={} items={} unresolved={} freshness=not-asserted", catalog.input_digest, catalog.items.len(), catalog.unresolved.len())));
+    result.empty("outline", "crate"); result.empty("@outline", "crate");
+    for item in &catalog.items {
+        result.add("meta", &item.identity, fact(&item.identity, "source-claim", "item",
+            &format!("kind={} parent={} file={} start={} end={} file-sha256={} item-sha256={} references-complete={}",
+                item.kind, semantic::quote(&item.parent), semantic::quote(&item.file), item.start, item.end,
+                item.file_digest, item.text_digest, item.references_complete)));
+        result.add("meta", &item.identity, fact(&item.identity, "source-claim", "identity",
+            &format!("signature={} body={} scope=semantic-path body-locals=token-body-epoch",
+                item.signature_digest, item.body_digest)));
+        result.add("signature", &item.identity, source_signature(item));
+        result.add("outline", &item.parent, source_signature(item));
+        result.add("@outline", &item.parent, item.identity.clone());
+        for (index, chunk) in chunks(&item.text).iter().enumerate() {
+            result.add("text", &item.identity, fact(&item.identity, "source-claim", "text",
+                &format!("chunk={index:016x} value={}", semantic::quote(chunk))));
+        }
+        let type_fact = if matches!(item.kind.as_str(), "binding" | "call-site") { "type-unavailable" }
+            else if matches!(item.kind.as_str(), "module" | "trait" | "implementation") { "source-kind" } else { "declared-type" };
+        result.add("type", &item.identity, fact(&item.identity, "source-claim", type_fact,
+            &format!("value={}", semantic::quote(&item.type_name))));
+
+    }
+    for (identity, target, trait_name) in &catalog.implementations {
+        for which in 0usize..2usize {
+            let name = if which == 0usize { target } else { trait_name };
+            if name.is_empty() { continue; }
+            edge(&mut result, "impls", name, identity, "source-claim", &format!("target={} trait={}", semantic::quote(target), semantic::quote(trait_name)));
+            if let Some(at) = name.find('<') {
+                edge(&mut result, "impls", &name[..at], identity, "source-claim", &format!("target={} trait={}", semantic::quote(target), semantic::quote(trait_name)));
+            }
+        }
+    }
+    for reference in &catalog.references {
+        edge(&mut result, "references", &reference.owner, &reference.target, "source-claim",
+            &format!("from={} file={} start={} end={} kind={}", semantic::quote(&reference.owner),
+                semantic::quote(&reference.file), reference.start, reference.end, reference.kind));
+        edge(&mut result, "uses", &reference.target, &reference.owner, "source-claim",
+            &format!("target={} file={} start={} end={} kind={}", semantic::quote(&reference.target),
+                semantic::quote(&reference.file), reference.start, reference.end, reference.kind));
+        edge(&mut result, "dependents", &reference.target, &reference.owner, "source-claim", "change=signature conservative=true");
+    }
+    for reference in &catalog.unresolved {
+        result.add("references", &reference.owner, fact(&reference.owner, "source-claim", "unresolved-reference",
+            &format!("file={} start={} end={} kind={} claim=partial",
+                semantic::quote(&reference.file), reference.start, reference.end, reference.kind)));
+    }
+    let program = checked.program();
+    let relations = authority::relations(checked);
+    let mut effects: Vec<BTreeSet<String>> = Vec::new();
+    let mut parents: Vec<Vec<usize>> = vec![Vec::new(); program.functions.len()];
+    for (index, relation) in relations.iter().enumerate() {
+        let mut names = BTreeSet::new();
+        for operation in &relation.operations { names.insert(operation.name.clone()); }
+        effects.push(names);
+        for (callee, _) in &relation.calls { parents[*callee].push(index); }
+    }
+    // Effects form a finite set; propagate changed summaries to immediate users.
+    // This stores no transitive all-pairs function relation.
+    let mut pending: Vec<usize> = Vec::new();
+    for index in 0usize..program.functions.len() { pending.push(index); }
+    let mut queued = vec![true; program.functions.len()];
+    while let Some(index) = pending.pop() {
+        queued[index] = false;
+        let mut inherited: Vec<String> = Vec::new();
+        for effect in &effects[index] { inherited.push(effect.clone()); }
+        for parent in &parents[index] {
+            let mut changed = false;
+            for effect in &inherited { if effects[*parent].insert(effect.clone()) { changed = true; } }
+            if changed && !queued[*parent] { queued[*parent] = true; pending.push(*parent); }
+        }
+    }
+    for (index, function) in program.functions.iter().enumerate() {
+        let identity = &catalog.instance_ids[index];
+        let source = &catalog.instance_sources[index];
+        let source_mapping = if source.is_empty() { "unavailable" } else { source.as_str() };
+        let instance = fact(identity, "checked-ir", "instance",
+            &format!("source-claim={} arguments={} ir-operations={} native-bytes=unavailable",
+                semantic::quote(source_mapping), semantic::quote(&catalog.instance_arguments[index]), function.body.len()));
+        result.add("instances", identity, instance.clone());
+        if !source.is_empty() { result.add("instances", source, instance); }
+        result.add("meta", identity, fact(identity, "checked-ir", "function", &format!("source-claim={}", semantic::quote(source_mapping))));
+        result.add("type", identity, fact(identity, "checked-ir", "result", &format!("type={}", semantic::quote(&semantic::ir_type_name(program, function.result)))));
+        for (local_index, local) in function.locals.iter().enumerate() {
+            result.add("type", identity, fact(&format!("{}::local:{}", identity, local_index), "checked-ir", "local",
+                &format!("name={} type={} mutable={} parameter={}", semantic::quote(&local.name),
+                    semantic::quote(&semantic::ir_type_name(program, local.ty)), local.mutable, local_index < function.params)));
+        }
+        let summary = fact(identity, "checked-ir", "authority", &format!("reachable-effects={} ownership-cleanup=included", semantic::quote(&join(&effects[index]))));
+        result.add("authority", identity, summary.clone());
+        if !source.is_empty() { result.add("authority", source, summary); }
+        for (callee, cleanup) in &relations[index].calls {
+            let target = &catalog.instance_ids[*callee];
+            let detail = format!("caller={} cleanup={}", semantic::quote(identity), cleanup);
+            edge(&mut result, "callees", identity, target, "checked-ir", &detail);
+            edge(&mut result, "callers", target, identity, "checked-ir", &format!("callee={} cleanup={}", semantic::quote(target), cleanup));
+            let target_source = &catalog.instance_sources[*callee];
+            if !source.is_empty() && !target_source.is_empty() {
+                edge(&mut result, "callees", source, target_source, "checked-ir",
+                    &format!("caller-instance={} callee-instance={} mapping=source-claim cleanup={}", semantic::quote(identity), semantic::quote(target), cleanup));
+                edge(&mut result, "callers", target_source, source, "checked-ir",
+                    &format!("caller-instance={} callee-instance={} mapping=source-claim cleanup={}", semantic::quote(identity), semantic::quote(target), cleanup));
+                edge(&mut result, "dependents", target_source, source, "source-claim", "change=signature checked-instance-call=true conservative=true");
+            }
+        }
+    }
+    let layouts = native::semantic::layouts(checked).map_err(|problem| problem.message)?;
+    for (index, ty) in program.types.iter().enumerate() {
+        let name = semantic::ir_type_name(program, index);
+        let identity = format!("ir:type:{}", name);
+        let layout = &layouts[index];
+        let line = fact(&identity, "checked-ir", "layout",
+            &format!("target=linux-x86_64 bytes={} alignment={} fields={} cleanup={}",
+                layout.bytes, layout.alignment, numbers(&layout.fields), layout.cleanup));
+        result.add("layout", &identity, line.clone());
+        result.add("layout", &name, line);
+        result.add("type", &identity, fact(&identity, "checked-ir", "type", &format!("name={}", semantic::quote(&ty.name))));
+        for (variant, offsets) in layout.variants.iter().enumerate() {
+            result.add("layout", &identity, fact(&identity, "checked-ir", "variant-layout",
+                &format!("variant={variant} fields={}", numbers(offsets))));
+        }
+        result.add("meta", &identity, fact(&identity, "checked-ir", "type", &format!("name={}", semantic::quote(&name))));
+        let base = match name.find('<') { Some(at) => &name[..at], None => &name };
+        if base != name.as_str() && catalog.by_identity.contains_key(&base.to_string()) {
+            result.add("layout", base, fact(&identity, "checked-ir", "layout",
+                &format!("target=linux-x86_64 bytes={} alignment={} source-claim={}", layout.bytes, layout.alignment, semantic::quote(base))));
+        }
+    }
+    let records = std::mem::replace(&mut result.records, BTreeMap::new());
+    for (key, mut lines) in records {
+        lines.sort();
+        let old = std::mem::replace(&mut lines, Vec::new());
+        let mut previous: Option<String> = None;
+        for line in old {
+            let different = match &previous { Some(old) => old != &line, None => true };
+            if different {
+                previous = Some(line.clone()); lines.push(line);
+            }
+        }
+        result.records.insert(key, lines);
+    }
+    Ok(result)
+}

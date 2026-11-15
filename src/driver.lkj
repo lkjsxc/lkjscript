@@ -19,6 +19,8 @@ struct Options {
     engines: Vec<String>,
     stats: bool,
     profile: bool,
+    index: bool,
+    query: crate::semantic_query::Options,
     roundtrip: bool,
     inline_limit: Option<usize>,
     jobs: usize,
@@ -39,7 +41,13 @@ struct Options {
 }
 
 fn usage() -> &'static str {
+<<<<<<< HEAD
     "lkjscript check|build|build-entries|run|test|ir|authority <source.lkj|program.lkjir|directory> [options]\n\n  check  Check all source or input IR\n  build  Write a static Linux x86-64 executable\n  build-entries  Write multiple entry images and matched authority reports\n  build-child  Write a transfer-only ELF and authenticated .admission\n  image-authority  Authenticate exact child bytes and canonical checked slots\n  run    Execute main (or probe); bytes after -- are program arguments\n  test   Run #[test] functions through native and interpreter routes\n  ir     Write checked lkjscript IR\n  authority  Report entry grants and reachable checked-IR effects\n  delta  Print frequent accepted forms that differ from Rust\n\n  --entry NAME                 Select an entry\n  --artifact NAME=ENTRY       Select an image for build-entries; -o names its directory\n  --grant NAME[=VALUE]          Grant an owned entry capability (repeatable)\n  --engine native|interpreter  Select the execution route\n  -o PATH                     Write an artifact or IR\n  --stats                     Report phase times, counts and peak RSS\n  --profile                   Sample CPU to OUTPUT.samples.PID in built programs\n  --inline-limit N            Recheck inlining of bodies with at most N IR operations\n  --no-opt                    Keep original checked IR for native emission\n  profile SAMPLES             Report top self and inclusive functions\n  --jobs N                    Native test workers (1..8)\n  --witness RUSTC             Compare marked cases with optional rustc\n  --source-dir DIR            Grant a root for source reads\n  --library-dir DIR           Use explicit library sources\n  --no-library                Compile without the source library\n  --runtime-source PATH       Use an explicit source runtime\n  --store DIR                 Reuse authenticated work beneath this Directory\n  --store-key PATH            Grant a private 32-byte key outside source roots\n  --image-key PATH            Private child-admission key outside all source grants\n  --admission PATH            Child admission record (default IMAGE.admission)\n  --store-bytes N             Bound disposable bytes (default 268435456)\n  --no-store                  Disable stored reuse\n  --unchecked-ir              Interpret raw IR for checker testing\n  runtime-ir                  Write the checked source runtime as IR\n  check-library               Check every source library body\n\nScalar runs print the value; f64 prints exact bits as f64:0x0123456789abcdef.\n"
+||||||| parent of 40494fff (Add bounded authenticated structural queries and source identities)
+    "lkjscript check|build|build-entries|run|test|ir|authority <source.lkj|program.lkjir|directory> [options]\n\n  check  Check all source or input IR\n  build  Write a static Linux x86-64 executable\n  build-entries  Write multiple entry images and matched authority reports\n  run    Execute main (or probe); bytes after -- are program arguments\n  test   Run #[test] functions through native and interpreter routes\n  ir     Write checked lkjscript IR\n  authority  Report entry grants and reachable checked-IR effects\n  delta  Print frequent accepted forms that differ from Rust\n\n  --entry NAME                 Select an entry\n  --artifact NAME=ENTRY       Select an image for build-entries; -o names its directory\n  --grant NAME[=VALUE]          Grant an owned entry capability (repeatable)\n  --engine native|interpreter  Select the execution route\n  -o PATH                     Write an artifact or IR\n  --stats                     Report phase times, counts and peak RSS\n  --profile                   Sample CPU to OUTPUT.samples.PID in built programs\n  --inline-limit N            Recheck inlining of bodies with at most N IR operations\n  --no-opt                    Keep original checked IR for native emission\n  profile SAMPLES             Report top self and inclusive functions\n  --jobs N                    Native test workers (1..8)\n  --witness RUSTC             Compare marked cases with optional rustc\n  --source-dir DIR            Grant a root for source reads\n  --library-dir DIR           Use explicit library sources\n  --no-library                Compile without the source library\n  --runtime-source PATH       Use an explicit source runtime\n  --store DIR                 Reuse authenticated work beneath this Directory\n  --store-key PATH            Grant a private 32-byte key outside source roots\n  --store-bytes N             Bound disposable bytes (default 268435456)\n  --no-store                  Disable stored reuse\n  --unchecked-ir              Interpret raw IR for checker testing\n  runtime-ir                  Write the checked source runtime as IR\n  check-library               Check every source library body\n\nScalar runs print the value; f64 prints exact bits as f64:0x0123456789abcdef.\n"
+=======
+    "lkjscript check|build|build-entries|run|test|ir|authority|query <source.lkj|program.lkjir|directory> [options]\n\n  check  Check all source or input IR\n  build  Write a static Linux x86-64 executable\n  build-entries  Write multiple entry images and matched authority reports\n  run    Execute main (or probe); bytes after -- are program arguments\n  test   Run #[test] functions through native and interpreter routes\n  ir     Write checked lkjscript IR\n  authority  Report entry grants and reachable checked-IR effects\n  query  Ask a bounded question about an authenticated build snapshot\n  delta  Print frequent accepted forms that differ from Rust\n\n  --entry NAME                 Select an entry\n  --artifact NAME=ENTRY       Select an image for build-entries; -o names its directory\n  --grant NAME[=VALUE]          Grant an owned entry capability (repeatable)\n  --engine native|interpreter  Select the execution route\n  -o PATH                     Write an artifact or IR\n  --stats                     Report phase times, counts and peak RSS\n  --profile                   Sample CPU to OUTPUT.samples.PID in built programs\n  --index                     Publish a structural snapshot during a stored build\n  --kind QUESTION             Select a structural query (default outline)\n  --id ID                     Select an identity (default crate)\n  --snapshot HEX              Pin an immutable source snapshot\n  --cursor HEX                Continue the same authenticated question\n  --depth N --limit N --bytes N  Bound traversal, fact count and answer bytes\n  --inline-limit N            Recheck inlining of bodies with at most N IR operations\n  --no-opt                    Keep original checked IR for native emission\n  profile SAMPLES             Report top self and inclusive functions\n  --jobs N                    Native test workers (1..8)\n  --witness RUSTC             Compare marked cases with optional rustc\n  --source-dir DIR            Grant a root for source reads\n  --library-dir DIR           Use explicit library sources\n  --no-library                Compile without the source library\n  --runtime-source PATH       Use an explicit source runtime\n  --store DIR                 Reuse authenticated work beneath this Directory\n  --store-key PATH            Grant a private 32-byte key outside source roots\n  --store-bytes N             Bound disposable bytes (default 268435456)\n  --no-store                  Disable stored reuse\n  --unchecked-ir              Interpret raw IR for checker testing\n  runtime-ir                  Write the checked source runtime as IR\n  check-library               Check every source library body\n\nScalar runs print the value; f64 prints exact bits as f64:0x0123456789abcdef.\n"
+>>>>>>> 40494fff (Add bounded authenticated structural queries and source identities)
 }
 
 fn delta() -> &'static str {
@@ -84,6 +92,8 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
         engines: vec!["native".to_string(), "interpreter".to_string()],
         stats: false,
         profile: false,
+        index: false,
+        query: crate::semantic_query::Options::new(),
         roundtrip: false,
         inline_limit: None,
         jobs: 1,
@@ -110,6 +120,7 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
         match option.as_str() {
             "--stats" => out.stats = true,
             "--profile" => out.profile = true,
+            "--index" => out.index = true,
             "--roundtrip" => out.roundtrip = true,
             "--no-opt" => out.inline_limit = Some(0),
             "--unchecked-ir" => out.unchecked = true,
@@ -117,13 +128,27 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
             "--no-library" => out.no_library = true,
             "--no-store" => { out.store_directory = None; out.store_key = None; },
             "--entry" | "--artifact" | "-o" | "--engine" | "--engines" | "--source-dir" | "--library-dir"
+<<<<<<< HEAD
             | "--runtime-source" | "--jobs" | "--witness" | "--grant" | "--store" | "--store-key" | "--store-bytes" | "--inline-limit" | "--image-key" | "--admission" => {
+||||||| parent of 40494fff (Add bounded authenticated structural queries and source identities)
+            | "--runtime-source" | "--jobs" | "--witness" | "--grant" | "--store" | "--store-key" | "--store-bytes" | "--inline-limit" => {
+=======
+            | "--runtime-source" | "--jobs" | "--witness" | "--grant" | "--store" | "--store-key" | "--store-bytes" | "--inline-limit"
+            | "--kind" | "--id" | "--depth" | "--limit" | "--bytes" | "--snapshot" | "--cursor" => {
+>>>>>>> 40494fff (Add bounded authenticated structural queries and source identities)
                 at += 1;
                 if at == values.len() {
                     return Err(format!("E_USAGE {option} needs a value"));
                 }
                 let value = values[at].clone();
                 match option.as_str() {
+                    "--kind" => out.query.kind = value,
+                    "--id" => out.query.identity = value,
+                    "--depth" => out.query.depth = inline_limit(&value)?,
+                    "--limit" => out.query.limit = inline_limit(&value)?,
+                    "--bytes" => out.query.bytes = inline_limit(&value)?,
+                    "--snapshot" => out.query.snapshot = Some(value),
+                    "--cursor" => out.query.cursor = Some(value),
                     "--entry" => out.entry = Some(value),
                     "--artifact" => out.artifacts.push(value),
                     "--grant" => out.grants.push(value),
@@ -183,8 +208,9 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
         && out.command != "batch"
         && out.command != "profile"
         && out.command != "authority"
+        && out.command != "query"
     {
-        return Err("E_USAGE expected check|build|build-entries|run|test|ir|authority".to_string());
+        return Err("E_USAGE expected check|build|build-entries|run|test|ir|authority|query".to_string());
     }
     if matches!(out.command.as_str(), "build-child" | "image-authority") {
         if out.image_key.is_none() { return Err("E_USAGE child image commands require --image-key outside source grants".to_string()); }
@@ -202,6 +228,9 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
             return Err("E_USAGE build-entries requires -o DIRECTORY and --artifact NAME=ENTRY; do not use --entry".to_string());
         }
     } else if !out.artifacts.is_empty() { return Err("E_USAGE --artifact requires build-entries".to_string()); }
+    if out.index && (out.command != "build" || out.store_directory.is_none() || out.store_key.is_none() || out.path.ends_with(".lkjir")) {
+        return Err("E_USAGE --index requires a source build with --store and --store-key".to_string());
+    }
     if out.profile && out.command != "build" { return Err("E_USAGE --profile requires build".to_string()); }
     if out.command != "runtime-ir" && out.command != "check-library" && out.path.is_empty() {
         return Err("E_USAGE a source or IR path is required".to_string());
@@ -562,9 +591,17 @@ fn compile(
         } else {
             memo.read_source(&mut directory, &directory_path, path, stats)
         };
+<<<<<<< HEAD
         if let Ok(Some(bytes)) = &result {
             memo.protect_source(bytes)?;
             if memo.store.is_some() { memo.source_inputs.push((path.to_string(), bytes.clone())); }
+||||||| parent of 40494fff (Add bounded authenticated structural queries and source identities)
+        if memo.store.is_some() {
+            if let Ok(Some(bytes)) = &result { memo.source_inputs.push((path.to_string(), bytes.clone())); }
+=======
+        if memo.store.is_some() || memo.capture_catalog {
+            if let Ok(Some(bytes)) = &result { memo.source_inputs.push((path.to_string(), bytes.clone())); }
+>>>>>>> 40494fff (Add bounded authenticated structural queries and source identities)
         }
         result
     });
@@ -624,6 +661,10 @@ fn compile(
                 let mut instructions = 0usize;
                 for function in &checked.program().functions { instructions += function.body.len(); }
                 stats.count("ir_instructions", instructions);
+                if memo.capture_catalog {
+                    memo.catalog = Some(crate::semantic::catalog(&resolved, &memo.source_inputs, checked.checked())?);
+                    stats.mark("semantic_catalog")?;
+                }
                 return select_checked(checked, options, stats, memo);
             }
         }
@@ -685,6 +726,10 @@ fn compile(
         instructions += function.body.len();
     }
     stats.count("ir_instructions", instructions);
+    if memo.capture_catalog {
+        memo.catalog = Some(crate::semantic::catalog(&resolved, &memo.source_inputs, checked.checked())?);
+        stats.mark("semantic_catalog")?;
+    }
     select_checked(checked, options, stats, memo)
 }
 
@@ -1689,6 +1734,14 @@ fn execute_source(world: &mut World, options: &Options, stats: &mut Stats, memo:
     if !options.tool_arguments.is_empty() {
         return crate::test_generators::run(world, &options.tool_arguments);
     }
+    if options.command == "query" {
+        let selector = crate::semantic_store::selector(&options.path, &options.source_directory, &options.library_directory, options.no_library);
+        let store = memo.store.as_mut().ok_or("E_QUERY_STORE query needs an authenticated --store and --store-key")?;
+        let output = crate::semantic_query::run(store, &selector, &options.query)?;
+        world.stdout().write(output.as_bytes());
+        stats.mark("semantic_query")?;
+        return Ok(0);
+    }
     if options.command == "profile" {
         let bytes = read_path(world, &options.path)?;
         let report = crate::native::profiling::report(&bytes)?;
@@ -1730,12 +1783,28 @@ fn execute_source(world: &mut World, options: &Options, stats: &mut Stats, memo:
     if options.command == "build" {
         if let Some(bytes) = memo.lookup(world, options, "image", stats) {
             let path: String = match &options.output { Some(path) => path.clone(), None => format!("{}.elf", options.path) };
+            let mut ready = !options.index;
+            if options.index {
+                if let Some(stored) = memo.lookup(world, options, "semantic", stats) {
+                    if let Ok(identity) = String::from_utf8(stored) {
+                        let selector = crate::semantic_store::selector(&options.path, &options.source_directory, &options.library_directory, options.no_library);
+                        if let Some(store) = memo.store.as_mut() {
+                            if let Ok(snapshot) = crate::semantic_store::open(store, &selector, &Some(identity)) {
+                                world.stdout().write(format!("LKJSCRIPT_SNAPSHOT {} source={} checked-ir={}\n", snapshot.identity, snapshot.source, snapshot.checked_ir).as_bytes());
+                                ready = true;
+                            }
+                        }
+                    }
+                }
+            }
+            if ready {
             publish(world, &path, &bytes, true)?;
             stats.mark("write")?;
             memo.build_reused += 1;
             stats.count("emitted_bytes", bytes.len());
             stats.mark("stored_build")?;
             return Ok(0);
+            }
         }
     }
     let checked = compile(world, options, stats, memo)?;
@@ -1785,6 +1854,18 @@ fn execute_source(world: &mut World, options: &Options, stats: &mut Stats, memo:
         publish(world, &path, &bytes, true)?;
         stats.mark("write")?;
         memo.remember(options, "image", &bytes);
+        if options.index {
+            let catalog = memo.catalog.take().ok_or("E_QUERY_INDEX checked source catalog was not captured")?;
+            let selector = crate::semantic_store::selector(&options.path, &options.source_directory, &options.library_directory, options.no_library);
+            let snapshot = {
+                let store = memo.store.as_mut().ok_or("E_QUERY_STORE index needs an authenticated store")?;
+                crate::semantic_store::publish(store, &selector, &catalog, checked.original().checked())?
+            };
+            memo.catalog = Some(catalog);
+            memo.remember(options, "semantic", snapshot.identity.as_bytes());
+            world.stdout().write(format!("LKJSCRIPT_SNAPSHOT {} source={} checked-ir={}\n", snapshot.identity, snapshot.source, snapshot.checked_ir).as_bytes());
+            stats.mark("semantic_index")?;
+        }
         stats.mark("store_io")?;
         return Ok(0);
     }
@@ -1897,7 +1978,13 @@ pub fn main(mut world: World) {
 
 struct Memo {
     store: Option<store::Store>,
+<<<<<<< HEAD
     private_source_digest: Option<[u8; 32]>,
+||||||| parent of 40494fff (Add bounded authenticated structural queries and source identities)
+=======
+    capture_catalog: bool,
+    catalog: Option<crate::semantic::Catalog>,
+>>>>>>> 40494fff (Add bounded authenticated structural queries and source identities)
     inputs: Vec<store::Input>,
     source_inputs: Vec<(String, Vec<u8>)>,
     input_snapshot: BTreeMap<(String, String), (Option<Vec<u8>>, Option<String>)>,
@@ -1930,7 +2017,12 @@ impl Memo {
     fn new(world: &mut World, options: &Options) -> Self {
         Self {
             store: store::Store::open_bounded(world, &options.store_directory, &options.store_key, options.store_bytes),
+<<<<<<< HEAD
             private_source_digest: None,
+||||||| parent of 40494fff (Add bounded authenticated structural queries and source identities)
+=======
+            capture_catalog: options.index, catalog: None,
+>>>>>>> 40494fff (Add bounded authenticated structural queries and source identities)
             inputs: Vec::new(), source_inputs: Vec::new(), input_snapshot: BTreeMap::new(), front_reused: 0, front_definitions: 0, front_functions: 0, valid_inputs: true, runtime_input: None,
             checked_reused: 0, checked_local_reused: 0, emitted_reused: 0, test_reused: 0, test_rerun: 0, build_reused: 0,
             inline_calls: 0, inline_functions: 0, inline_attempts: 0, inline_accepted: 0, inline_rejected: 0,

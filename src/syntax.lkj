@@ -478,6 +478,30 @@ pub struct ParseReport {
     pub blocked: Vec<BlockedRegion>,
 }
 
+/// Producer-only token identities and exact source byte ranges for semantic tools.
+/// The lexer is shared with parsing; no token identity grants checker authority.
+#[derive(Clone)]
+pub struct SemanticToken {
+    pub kind: u8,
+    pub text: String,
+    pub span: Span,
+}
+pub fn semantic_tokens(source: &str) -> Result<Vec<SemanticToken>, Diagnostic> {
+    let mut lexer = Lexer { source, at: 0, line: 1, column: 1 };
+    let tokens = lexer.lex()?;
+    let mut result = Vec::new();
+    for token in tokens {
+        let kind = match token.kind {
+            TokenKind::Ident => 0u8, TokenKind::Number => 1u8,
+            TokenKind::String => 2u8, TokenKind::Char => 3u8,
+            TokenKind::Bytes => 4u8, TokenKind::Lifetime => 5u8,
+            TokenKind::Symbol => 6u8, TokenKind::End => continue,
+        };
+        result.push(SemanticToken { kind, text: token.text, span: token.span });
+    }
+    Ok(result)
+}
+
 /// Append one source file to shared arenas, refusing every recovered error.
 pub fn parse_file(
     program: &mut Program,

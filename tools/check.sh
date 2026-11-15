@@ -136,6 +136,7 @@ parallel_step 1 closed-semantics timeout --kill-after=10s 600s bash tools/closed
 parallel_step 1 closed-proof-attacks timeout --kill-after=10s 600s bash tools/gate-reuse-test.sh "$check_binary"
 parallel_step 1 toolchain toolchain
 parallel_step 1 world world_cases
+parallel_step 1 semantic-query timeout --kill-after=10s 600s bash tools/semantic-query-test.sh "$check_binary"
 parallel_step 1 profiler timeout --kill-after=10s 600s sh tools/profile-test.sh "$check_binary"
 parallel_step 1 optimizer timeout --kill-after=10s 600s bash tools/optimizer-test.sh "$check_binary"
 parallel_step 1 resources timeout --kill-after=10s 600s bash tools/resource-test.sh "$check_binary"

@@ -1,0 +1,654 @@
+//! Source identities are producer claims. Only checked IR supplies verified facts.
+//! Text remains the repository projection; this catalog never authorizes code.
+use crate::{ast as a, ir, json, names, resolve, sha256, syntax};
+use std::collections::{BTreeMap, BTreeSet};
+
+#[derive(Clone)]
+pub struct Item {
+    pub identity: String,
+    pub parent: String,
+    pub kind: String,
+    pub name: String,
+    pub file: String,
+    pub start: usize,
+    pub end: usize,
+    pub name_start: usize,
+    pub name_end: usize,
+    pub body: Option<(usize, usize)>,
+    pub signature: String,
+    pub text: String,
+    pub type_name: String,
+    pub file_digest: String,
+    pub text_digest: String,
+    pub signature_digest: String,
+    pub body_digest: String,
+    pub references_complete: bool,
+}
+#[derive(Clone)]
+pub struct Reference {
+    pub owner: String,
+    pub target: String,
+    pub file: String,
+    pub kind: String,
+    pub start: usize,
+    pub end: usize,
+}
+pub struct Catalog {
+    pub root: String,
+    pub items: Vec<Item>,
+    pub by_identity: BTreeMap<String, usize>,
+    pub references: Vec<Reference>,
+    pub unresolved: Vec<Reference>,
+    pub function_ids: Vec<String>,
+    pub instance_ids: Vec<String>,
+    pub instance_sources: Vec<String>,
+    pub instance_arguments: Vec<String>,
+    pub input_digest: String,
+    pub implementations: Vec<(String, String, String)>,
+}
+struct SourceText {
+    path: String,
+    text: String,
+    digest: String,
+    tokens: Vec<syntax::SemanticToken>,
+}
+fn word(out: &mut Vec<u8>, value: usize) {
+    for shift in 0usize..8usize { out.push((value >> (shift * 8usize)) as u8); }
+}
+fn bytes(out: &mut Vec<u8>, value: &[u8]) {
+    word(out, value.len()); out.extend_from_slice(value);
+}
+pub fn quote(value: &str) -> String {
+    let mut out = Vec::new(); json::write_string(&mut out, value);
+    String::from_utf8(out).unwrap()
+}
+pub fn module_name(value: &str) -> String {
+    if value == "$std" { "std".to_string() }
+    else if value.starts_with("$std::") { format!("std::{}", &value[6usize..]) }
+    else { value.to_string() }
+}
+fn root_parent(value: &str) -> String {
+    if value.is_empty() { "crate".to_string() } else { module_name(value) }
+}
+fn qualified(module: &str, name: &str) -> String {
+    module_name(&names::qualified(module, name))
+}
+pub fn type_name(program: &a::Program, ty: usize) -> String {
+    match &program.types[ty].kind {
+        a::Type::Infer => "_".to_string(),
+        a::Type::Never => "!".to_string(),
+        a::Type::Path(path) => {
+            let mut out = module_name(&path.name);
+            if !path.args.is_empty() {
+                out.push('<');
+                for (index, argument) in path.args.iter().enumerate() {
+                    if index != 0 { out.push_str(", "); }
+                    out.push_str(&type_name(program, *argument));
+                }
+                out.push('>');
+            }
+            out
+        }
+        a::Type::Ref { mutable, lifetime, inner } => {
+            let mut out = "&".to_string();
+            if !lifetime.is_empty() { out.push_str(lifetime); out.push(' '); }
+            if *mutable { out.push_str("mut "); }
+            out.push_str(&type_name(program, *inner)); out
+        }
+        a::Type::Slice(inner) => format!("[{}]", type_name(program, *inner)),
+        a::Type::Array { inner, len } => format!("[{}; {}]", type_name(program, *inner), len),
+        a::Type::Tuple(values) => {
+            let mut out = "(".to_string();
+            for (index, value) in values.iter().enumerate() {
+                if index != 0 { out.push_str(", "); }
+                out.push_str(&type_name(program, *value));
+            }
+            if values.len() == 1usize { out.push(','); }
+            out.push(')'); out
+        }
+        a::Type::Function { params, result } => {
+            let mut out = "fn(".to_string();
+            for (index, parameter) in params.iter().enumerate() {
+                if index != 0 { out.push_str(", "); }
+                out.push_str(&type_name(program, *parameter));
+            }
+            out.push_str(") -> "); out.push_str(&type_name(program, *result)); out
+        }
+    }
+}
+fn token_at(tokens: &[syntax::SemanticToken], position: usize) -> usize {
+    let mut low = 0usize; let mut high = tokens.len();
+    while low < high {
+        let mid = low + (high - low) / 2usize;
+        if tokens[mid].span.start < position { low = mid + 1usize; } else { high = mid; }
+    }
+    low
+}
+fn token_digest(tokens: &[syntax::SemanticToken], start: usize, end: usize) -> String {
+    let mut out = b"lkjscript-semantic-tokens-1"[..].to_vec();
+    let mut at = token_at(tokens, start);
+    while at < tokens.len() && tokens[at].span.start < end {
+        let token = &tokens[at];
+        if token.span.end <= end {
+            out.push(token.kind); bytes(&mut out, token.text.as_bytes());
+        }
+        at += 1usize;
+    }
+    sha256::hex_digest(&out)
+}
+pub fn normalized_digest(text: &str) -> Result<String, String> {
+    let tokens = syntax::semantic_tokens(text).map_err(|problem| problem.message)?;
+    Ok(token_digest(&tokens, 0usize, text.len()))
+}
+fn preceding(tokens: &[syntax::SemanticToken], start: usize) -> usize {
+    let mut at = token_at(tokens, start);
+    let original = at;
+    if at > 0usize && tokens[at - 1usize].text == "pub" { at -= 1usize; }
+    else if at > 0usize && tokens[at - 1usize].text == ")" {
+        let mut scan = at - 1usize; let mut depth = 1usize;
+        while scan > 0usize && depth != 0usize {
+            scan -= 1usize;
+            if tokens[scan].text == ")" { depth += 1usize; }
+            else if tokens[scan].text == "(" { depth -= 1usize; }
+        }
+        if depth == 0usize && scan > 0usize && tokens[scan - 1usize].text == "pub" {
+            at = scan - 1usize;
+        }
+    }
+    loop {
+        if at == 0usize || tokens[at - 1usize].text != "]" { break; }
+        let mut scan = at - 1usize; let mut depth = 1usize;
+        while scan > 0usize && depth != 0usize {
+            scan -= 1usize;
+            if tokens[scan].text == "]" { depth += 1usize; }
+            else if tokens[scan].text == "[" { depth -= 1usize; }
+        }
+        if depth != 0usize || scan == 0usize || tokens[scan - 1usize].text != "#" { break; }
+        at = scan - 1usize;
+    }
+    if at < original { tokens[at].span.start } else { start }
+}
+fn name_span(file: &SourceText, start: usize, end: usize, name: &str) -> (usize, usize) {
+    let mut at = token_at(&file.tokens, start);
+    while at < file.tokens.len() && file.tokens[at].span.end <= end {
+        if file.tokens[at].text == name {
+            return (file.tokens[at].span.start, file.tokens[at].span.end);
+        }
+        at += 1usize;
+    }
+    (start, start)
+}
+fn append(
+    result: &mut Catalog, files: &[SourceText], identity: String, parent: String,
+    kind: &str, name: &str, span: a::Span, body: Option<(usize, usize)>,
+    ty: String, attributes: bool,
+) -> Result<(), String> {
+    if result.by_identity.contains_key(&identity) {
+        return Err(format!("E_IDENTITY duplicate source identity {}", quote(&identity)));
+    }
+    let file = &files[span.file];
+    if span.start > span.end || span.end > file.text.len() {
+        return Err(format!("E_IDENTITY invalid source span for {}", quote(&identity)));
+    }
+    let start = if attributes { preceding(&file.tokens, span.start) } else { span.start };
+    let mut signature_end = match body { Some((begin, _)) => begin, None => span.end };
+    if matches!(kind, "module" | "trait" | "implementation") {
+        let mut at = token_at(&file.tokens, span.start);
+        while at < file.tokens.len() && file.tokens[at].span.start < span.end {
+            if file.tokens[at].text == "{" { signature_end = file.tokens[at].span.start; break; }
+            at += 1usize;
+        }
+    }
+    let (name_start, name_end) = name_span(file, span.start, signature_end, name);
+    let text = file.text[start..span.end].to_string();
+    let signature = file.text[start..signature_end].to_string();
+    let body_digest = match body {
+        Some((begin, end)) => token_digest(&file.tokens, begin, end),
+        None => String::new(),
+    };
+    let item = Item {
+        identity: identity.clone(), parent, kind: kind.to_string(), name: name.to_string(),
+        file: file.path.clone(), start, end: span.end, name_start, name_end, body,
+        signature_digest: token_digest(&file.tokens, start, signature_end),
+        text_digest: sha256::hex_digest(text.as_bytes()), body_digest,
+        signature, text, type_name: ty, file_digest: file.digest.clone(),
+        references_complete: true,
+    };
+    result.by_identity.insert(identity, result.items.len());
+    result.items.push(item);
+    Ok(())
+}
+fn append_generics(result: &mut Catalog, files: &[SourceText], owner: &str, values: &[a::GenericParam]) -> Result<(), String> {
+    for parameter in values {
+        append(result, files, format!("{}::generic:{}", owner, parameter.name), owner.to_string(),
+            "generic-parameter", &parameter.name, parameter.span, None, parameter.name.clone(), false)?;
+    }
+    Ok(())
+}
+fn function_identity(program: &a::Program, index: usize) -> String {
+    let function = &program.functions[index];
+    match program.function_owner(a::FunctionId { index }) {
+        a::FunctionOwner::Free => qualified(&function.module, &function.name),
+        a::FunctionOwner::Trait(owner) => {
+            let owner = &program.traits[owner.index];
+            format!("{}::{}", qualified(&owner.module, &owner.name), function.name)
+        }
+        a::FunctionOwner::Implementation(owner) => {
+            let owner = &program.impls[owner.index];
+            let target = type_name(program, owner.target);
+            match owner.trait_ty {
+                Some(trait_ty) => format!("<{} as {}>::{}", target, type_name(program, trait_ty), function.name),
+                None => format!("{}::{}", target, function.name),
+            }
+        }
+    }
+}
+fn implementation_identity(program: &a::Program, index: usize) -> String {
+    let value = &program.impls[index];
+    let target = type_name(program, value.target);
+    let mut members: Vec<String> = Vec::new();
+    for index in &value.methods { members.push(program.functions[*index].name.clone()); }
+    for associated in &value.associated { members.push(format!("type:{}", associated.name)); }
+    members.sort();
+    let mut identity = Vec::new();
+    for member in members { bytes(&mut identity, member.as_bytes()); }
+    let digest = sha256::hex_digest(&identity);
+    match value.trait_ty {
+        Some(trait_ty) => format!("impl:<{} as {}>#{}", target, type_name(program, trait_ty), &digest[..16usize]),
+        None => format!("impl:{}#{}", target, &digest[..16usize]),
+    }
+}
+fn item_identity(program: &a::Program, item: a::Item, function_ids: &[String]) -> String {
+    match item {
+        a::Item::Function(index) => function_ids[index].clone(),
+        a::Item::Struct(index) => qualified(&program.structs[index].module, &program.structs[index].name),
+        a::Item::Enum(index) => qualified(&program.enums[index].module, &program.enums[index].name),
+        a::Item::Trait(index) => qualified(&program.traits[index].module, &program.traits[index].name),
+        a::Item::Impl(index) => implementation_identity(program, index),
+        a::Item::Use(index) => format!("{}::use:{}", root_parent(&program.uses[index].module), program.uses[index].alias),
+        a::Item::Module(index) => qualified(&program.modules[index].parent, &program.modules[index].name),
+        a::Item::Alias(index) => qualified(&program.aliases[index].module, &program.aliases[index].name),
+        a::Item::Constant(index) => qualified(&program.constants[index].module, &program.constants[index].name),
+    }
+}
+fn declaration_identity(program: &a::Program, index: usize, function_ids: &[String]) -> Option<String> {
+    let declaration = program.declarations.get(index)?;
+    Some(item_identity(program, declaration.item, function_ids))
+}
+fn function_signature(program: &a::Program, function: &a::Function) -> String {
+    let mut out = "fn(".to_string();
+    for (index, parameter) in function.params.iter().enumerate() {
+        if index != 0usize { out.push_str(", "); }
+        out.push_str(&type_name(program, parameter.ty));
+    }
+    out.push_str(") -> "); out.push_str(&type_name(program, function.result)); out
+}
+fn leaf_name(path: &str) -> &str {
+    match path.rfind("::") { Some(at) => &path[at + 2usize..], None => path }
+}
+struct Owner {
+    start: usize,
+    end: usize,
+    identity: String,
+    parent: Option<usize>,
+}
+struct Owners { files: BTreeMap<String, Vec<Owner>> }
+impl Owners {
+    fn new(catalog: &Catalog) -> Self {
+        let mut order: BTreeMap<String, Vec<(usize, usize, String)>> = BTreeMap::new();
+        for item in &catalog.items {
+            if matches!(item.kind.as_str(), "parameter" | "field" | "variant" | "generic-parameter" | "associated-type")
+                || item.start == item.end { continue; }
+            if !order.contains_key(&item.file) { order.insert(item.file.clone(), Vec::new()); }
+            order.get_mut(&item.file).unwrap().push((item.start, (!0usize) - item.end, item.identity.clone()));
+        }
+        let mut files = BTreeMap::new();
+        for (file, mut intervals) in order {
+            intervals.sort();
+            let mut nodes: Vec<Owner> = Vec::new();
+            let mut stack: Vec<usize> = Vec::new();
+            for (start, inverse_end, identity) in intervals {
+                let end = (!0usize) - inverse_end;
+                loop {
+                    let Some(last) = ({ stack.last().copied() }) else { break; };
+                    if nodes[last].start <= start && end <= nodes[last].end { break; }
+                    stack.pop();
+                }
+                let parent = stack.last().copied();
+                stack.push(nodes.len());
+                nodes.push(Owner { start, end, identity, parent });
+            }
+            files.insert(file, nodes);
+        }
+        Self { files }
+    }
+    fn get(&self, file: &str, start: usize, end: usize) -> Option<String> {
+        let nodes = self.files.get(&file.to_string())?;
+        let mut low = 0usize; let mut high = nodes.len();
+        while low < high {
+            let mid = low + (high - low) / 2usize;
+            if nodes[mid].start <= start { low = mid + 1usize; } else { high = mid; }
+        }
+        if low == 0usize { return None; }
+        let mut at = low - 1usize;
+        loop {
+            if nodes[at].start <= start && end <= nodes[at].end { return Some(nodes[at].identity.clone()); }
+            at = nodes[at].parent?;
+        }
+    }
+}
+fn add_reference(result: &mut Catalog, files: &[SourceText], owner: String, target: String,
+    span: a::Span, name: &str, kind: &str, proven: bool) {
+    let file = &files[span.file];
+    let (start, end) = name_span(file, span.start, span.end, name);
+    let reference = Reference { owner: owner.clone(), target, file: file.path.clone(), kind: kind.to_string(), start, end };
+    if proven && start < end { result.references.push(reference); }
+    else {
+        if let Some(index) = result.by_identity.get(&owner) { result.items[*index].references_complete = false; }
+        result.unresolved.push(reference);
+    }
+}
+fn numeric(text: &str) -> Option<usize> {
+    if text.is_empty() { return None; }
+    let mut result = 0usize;
+    for byte in text.bytes() {
+        if !byte.is_ascii_digit() { return None; }
+        result = result.checked_mul(10usize)?.checked_add((byte - b'0') as usize)?;
+    }
+    Some(result)
+}
+fn ir_source(program: &a::Program, catalog: &Catalog, name: &str) -> Option<(String, String)> {
+    let end = name.find('<').unwrap_or(name.len());
+    let base = &name[..end];
+    let source = match base.rfind("$f") {
+        Some(at) => {
+            let index = numeric(&base[at + 2usize..])?;
+            let function = program.functions.get(index)?;
+            if names::qualified(&function.module, &function.name).as_str() != &base[..at] { return None; }
+            catalog.function_ids[index].clone()
+        }
+        None => {
+            let identity = module_name(base);
+            if !catalog.by_identity.contains_key(&identity) { return None; }
+            identity
+        }
+    };
+    Some((source, name[end..].to_string()))
+}
+fn nominal_ir_name(program: &ir::Program, name: &str) -> String {
+    let Some(start) = name.find('<') else { return module_name(name); };
+    if !name.ends_with('>') { return module_name(name); }
+    let mut out = module_name(&name[..start]); out.push('<');
+    let mut first = true;
+    for argument in name[start + 1usize..name.len() - 1usize].split(',') {
+        if !argument.starts_with('t') { return module_name(name); }
+        let Some(ty) = numeric(&argument[1usize..]) else { return module_name(name); };
+        if ty >= program.types.len() { return module_name(name); }
+        if !first { out.push(','); } first = false;
+        out.push_str(&ir_type_name(program, ty));
+    }
+    out.push('>'); out
+}
+pub fn ir_type_name(program: &ir::Program, ty: usize) -> String {
+    let value = &program.types[ty];
+    match &value.kind {
+        ir::TypeKind::Ref { inner, mutable } => format!("&{}{}", if *mutable { "mut " } else { "" }, ir_type_name(program, *inner)),
+        ir::TypeKind::Slice { inner, mutable } => format!("[{}{}]", if *mutable { "mut " } else { "" }, ir_type_name(program, *inner)),
+        ir::TypeKind::Vec { inner } => format!("Vec<{}>", ir_type_name(program, *inner)),
+        ir::TypeKind::Box { inner } => format!("Box<{}>", ir_type_name(program, *inner)),
+        ir::TypeKind::Array { inner, len } => format!("[{};{}]", ir_type_name(program, *inner), len),
+        ir::TypeKind::Struct { fields, .. } if value.name.starts_with('(') => {
+            let mut out = "(".to_string();
+            for (index, field) in fields.iter().enumerate() {
+                if index != 0usize { out.push(','); }
+                out.push_str(&ir_type_name(program, field.ty));
+            }
+            if fields.len() == 1usize { out.push(','); }
+            out.push(')'); out
+        }
+        _ => nominal_ir_name(program, &value.name),
+    }
+}
+fn instance_arguments(program: &ir::Program, raw: &str) -> String {
+    if raw.is_empty() { return String::new(); }
+    if !raw.starts_with('<') || !raw.ends_with('>') { return raw.to_string(); }
+    let mut result = "<".to_string();
+    let mut first = true;
+    for pair in raw[1usize..raw.len() - 1usize].split(';') {
+        if pair.is_empty() { continue; }
+        let Some(at) = pair.find("=t") else { return raw.to_string(); };
+        let Some(ty) = numeric(&pair[at + 2usize..]) else { return raw.to_string(); };
+        if ty >= program.types.len() { return raw.to_string(); }
+        if !first { result.push_str(","); } first = false;
+        result.push_str(&pair[..at]); result.push('=');
+        result.push_str(&ir_type_name(program, ty));
+    }
+    result.push('>'); result
+}
+
+/// The caller provides the resolved source and the checked product of that exact
+/// elaboration. Source-only answers remain explicitly frontend claims.
+pub fn catalog(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir::CheckedProgram) -> Result<Catalog, String> {
+    if !program.resolved { return Err("E_IDENTITY source is not resolved".to_string()); }
+    let mut by_path: BTreeMap<String, usize> = BTreeMap::new();
+    let mut input_identity = b"lkjscript-source-snapshot-1"[..].to_vec();
+    for (index, (path, raw)) in inputs.iter().enumerate() { by_path.insert(path.clone(), index); }
+    for (path, index) in &by_path {
+        bytes(&mut input_identity, path.as_bytes());
+        bytes(&mut input_identity, sha256::hex_digest(&inputs[*index].1).as_bytes());
+    }
+    let mut files = Vec::new();
+    for file in &program.files {
+        let index = by_path.get(&file.path).ok_or_else(|| -> String { format!("E_IDENTITY missing source {}", quote(&file.path)) })?;
+        let raw = &inputs[*index].1;
+        let text = String::from_utf8(raw.clone()).map_err(|_| -> String { "E_IDENTITY source is not UTF-8".to_string() })?;
+        let tokens = syntax::semantic_tokens(&text).map_err(|problem| problem.message)?;
+        files.push(SourceText { path: file.path.clone(), digest: sha256::hex_digest(raw), text, tokens });
+    }
+    let mut result = Catalog {
+        root: program.files[0usize].path.clone(),
+        items: Vec::new(), by_identity: BTreeMap::new(), references: Vec::new(), unresolved: Vec::new(),
+        function_ids: Vec::new(), instance_ids: Vec::new(), instance_sources: Vec::new(),
+        implementations: Vec::new(), instance_arguments: Vec::new(), input_digest: sha256::hex_digest(&input_identity),
+    };
+    for index in 0usize..program.functions.len() { result.function_ids.push(function_identity(program, index)); }
+    for (index, value) in program.functions.iter().enumerate() {
+        let identity = result.function_ids[index].clone();
+        let parent = match program.function_owner(a::FunctionId { index }) {
+            a::FunctionOwner::Free => root_parent(&value.module),
+            a::FunctionOwner::Implementation(owner) => implementation_identity(program, owner.index),
+            a::FunctionOwner::Trait(owner) => qualified(&program.traits[owner.index].module, &program.traits[owner.index].name),
+        };
+        let body = value.body.map(|body| (program.blocks[body].span.start, program.blocks[body].span.end));
+        append(&mut result, &files, identity.clone(), parent, "function", &value.name,
+            value.span, body, function_signature(program, value), true)?;
+        for parameter in &value.params {
+            append(&mut result, &files, format!("{}::param:{}", identity, parameter.name), identity.clone(),
+                "parameter", &parameter.name, parameter.span, None, type_name(program, parameter.ty), false)?;
+        }
+        for parameter in &value.generics {
+            append(&mut result, &files, format!("{}::generic:{}", identity, parameter.name), identity.clone(),
+                "generic-parameter", &parameter.name, parameter.span, None, parameter.name.clone(), false)?;
+        }
+    }
+    for value in &program.structs {
+        let identity = qualified(&value.module, &value.name);
+        append(&mut result, &files, identity.clone(), root_parent(&value.module), "struct",
+            &value.name, value.span, None, identity.clone(), true)?;
+        append_generics(&mut result, &files, &identity, &value.generics)?;
+        for field in &value.fields {
+            append(&mut result, &files, format!("{}::field:{}", identity, field.name), identity.clone(), "field",
+                &field.name, field.span, None, type_name(program, field.ty), false)?;
+        }
+    }
+    for value in &program.enums {
+        let identity = qualified(&value.module, &value.name);
+        append(&mut result, &files, identity.clone(), root_parent(&value.module), "enum",
+            &value.name, value.span, None, identity.clone(), true)?;
+        append_generics(&mut result, &files, &identity, &value.generics)?;
+        for variant in &value.variants {
+            let variant_identity = format!("{}::variant:{}", identity, variant.name);
+            append(&mut result, &files, variant_identity.clone(), identity.clone(), "variant",
+                &variant.name, variant.span, None, identity.clone(), false)?;
+            for field in &variant.fields {
+                append(&mut result, &files, format!("{}::field:{}", variant_identity, field.name), variant_identity.clone(),
+                    "field", &field.name, field.span, None, type_name(program, field.ty), false)?;
+            }
+        }
+    }
+    for value in &program.traits {
+        let identity = qualified(&value.module, &value.name);
+        append(&mut result, &files, identity.clone(), root_parent(&value.module), "trait", &value.name,
+            value.span, None, identity.clone(), true)?;
+        append_generics(&mut result, &files, &identity, &value.generics)?;
+        for associated in &value.associated {
+            append(&mut result, &files, format!("{}::type:{}", identity, associated.name), identity.clone(),
+                "associated-type", &associated.name, associated.span, None,
+                associated.value.map_or("_".to_string(), |ty| type_name(program, ty)), false)?;
+        }
+    }
+    for (index, value) in program.impls.iter().enumerate() {
+        let identity = implementation_identity(program, index);
+        append(&mut result, &files, identity.clone(), root_parent(&value.module), "implementation", "impl",
+            value.span, None, type_name(program, value.target), true)?;
+        append_generics(&mut result, &files, &identity, &value.generics)?;
+        result.implementations.push((identity.clone(), type_name(program, value.target),
+            value.trait_ty.map_or(String::new(), |ty| type_name(program, ty))));
+        for associated in &value.associated {
+            append(&mut result, &files, format!("{}::type:{}", identity, associated.name), identity.clone(),
+                "associated-type", &associated.name, associated.span, None,
+                associated.value.map_or("_".to_string(), |ty| type_name(program, ty)), false)?;
+        }
+    }
+    for value in &program.modules {
+        let identity = qualified(&value.parent, &value.name);
+        append(&mut result, &files, identity.clone(), root_parent(&value.parent), "module", &value.name,
+            value.span, None, identity, true)?;
+    }
+    for value in &program.aliases {
+        append(&mut result, &files, qualified(&value.module, &value.name), root_parent(&value.module), "alias",
+            &value.name, value.span, None, type_name(program, value.ty), true)?;
+        append_generics(&mut result, &files, &qualified(&value.module, &value.name), &value.generics)?;
+    }
+    for value in &program.constants {
+        append(&mut result, &files, qualified(&value.module, &value.name), root_parent(&value.module), "constant",
+            &value.name, value.span, None, type_name(program, value.ty), true)?;
+    }
+    let owners = Owners::new(&result);
+    // Every declaration-backed type path is a resolved reference, including aliases.
+    for node in &program.types {
+        if let a::Type::Path(path) = &node.kind {
+            if let Some(declaration) = path.declaration {
+                if let Some(target) = declaration_identity(program, declaration, &result.function_ids) {
+                    let file = &files[node.span.file];
+                    if let Some(owner) = owners.get(&file.path, node.span.start, node.span.end) {
+                        let label = leaf_name(&path.name);
+                        let kind = if label == leaf_name(&target) { "type" } else { "alias-type" };
+                        add_reference(&mut result, &files, owner, target, node.span, label, kind, true);
+                    }
+                }
+            }
+        }
+    }
+    let resolver = resolve::Resolver::new(program).map_err(|problem| problem.message)?;
+    for imported in &program.uses {
+        if imported.glob { continue; }
+        let scope = resolve::module(program, &imported.module);
+        let path = a::Path { declaration: None, name: imported.path.clone(), args: Vec::new() };
+        let mut target: Option<String> = None;
+        if let Ok(resolved) = resolver.value_path(scope, &path, imported.span) {
+            if let Some(declaration) = resolved.declaration { target = declaration_identity(program, declaration, &result.function_ids); }
+        }
+        if target.is_none() {
+            if let Ok(name) = resolver.type_name(scope, &imported.path, imported.span) {
+                let identity = module_name(&name);
+                if result.by_identity.contains_key(&identity) { target = Some(identity); }
+            }
+        }
+        if let Some(target) = target {
+            let owner = root_parent(&imported.module);
+            add_reference(&mut result, &files, owner, target, imported.span, leaf_name(&imported.path), "import", true);
+        }
+    }
+    let mut local_names: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for (index, function) in program.functions.iter().enumerate() {
+        let mut locals = BTreeSet::new();
+        for parameter in &function.params { locals.insert(parameter.name.clone()); }
+        local_names.insert(result.function_ids[index].clone(), locals);
+    }
+    let mut binding_counts: BTreeMap<(String, String), usize> = BTreeMap::new();
+    for node in &program.patterns {
+        if let a::Pattern::Bind { name, .. } = &node.kind {
+            let file = &files[node.span.file];
+            if let Some(owner) = owners.get(&file.path, node.span.start, node.span.end) {
+                if let Some(locals) = local_names.get_mut(&owner) { locals.insert(name.clone()); }
+                let key = (owner.clone(), name.clone());
+                let ordinal = binding_counts.get(&key).copied().unwrap_or(0usize);
+                binding_counts.insert(key, ordinal + 1usize);
+                let digest = match result.by_identity.get(&owner) { Some(index) => result.items[*index].body_digest.clone(), None => String::new() };
+                let identity = format!("{}::body:{}::binding:{}:{}", owner, digest, name, ordinal);
+                if !result.by_identity.contains_key(&identity) {
+                    append(&mut result, &files, identity, owner, "binding", name, node.span, None,
+                        "inferred type is instance-dependent".to_string(), false)?;
+                }
+            }
+        }
+    }
+    let mut calls: BTreeMap<String, usize> = BTreeMap::new();
+    for node in &program.exprs {
+        let file = &files[node.span.file];
+        let Some(owner) = owners.get(&file.path, node.span.start, node.span.end) else { continue; };
+        match &node.kind {
+            a::Expr::Path(path) | a::Expr::Struct { path, .. } => {
+                let local = local_names.get(&owner).is_some_and(|locals| locals.contains(&path.name));
+                if local {
+                    add_reference(&mut result, &files, owner, path.name.clone(), node.span, leaf_name(&path.name), "lexical-name", false);
+                    continue;
+                }
+                let resolved = resolver.value_path(node.scope, path, node.span).ok();
+                let declaration = resolved.as_ref().and_then(|path| path.declaration).or(path.declaration);
+                if let Some(declaration) = declaration {
+                    if let Some(target) = declaration_identity(program, declaration, &result.function_ids) {
+                        let label = leaf_name(&path.name);
+                        let kind = if label == leaf_name(&target) { "value" } else { "alias-value" };
+                        add_reference(&mut result, &files, owner.clone(), target, node.span, label, kind, true);
+                    }
+                }
+            }
+            a::Expr::Method { name, .. } => {
+                add_reference(&mut result, &files, owner.clone(), name.clone(), node.span, name, "typed-method", false);
+            }
+            a::Expr::Field { name, .. } => {
+                add_reference(&mut result, &files, owner.clone(), name.clone(), node.span, name, "typed-field", false);
+            }
+            _ => {}
+        }
+        if matches!(node.kind, a::Expr::Call { .. } | a::Expr::Method { .. }) {
+            let ordinal = calls.get(&owner).copied().unwrap_or(0usize);
+            calls.insert(owner.clone(), ordinal + 1usize);
+            let digest = match result.by_identity.get(&owner) { Some(index) => result.items[*index].body_digest.clone(), None => String::new() };
+            let identity = format!("{}::body:{}::call:{}", owner, digest, ordinal);
+            append(&mut result, &files, identity, owner, "call-site", "", node.span, None,
+                "dispatch is represented by checked instances".to_string(), false)?;
+        }
+    }
+    for function in &checked.program().functions {
+        let (source, raw) = match ir_source(program, &result, &function.name) {
+            Some(value) => value,
+            None => (String::new(), String::new()),
+        };
+        let arguments = instance_arguments(checked.program(), &raw);
+        let identity = if source.is_empty() { format!("ir:{}", module_name(&function.name)) }
+            else { format!("ir:{}{}", source, arguments) };
+        result.instance_ids.push(identity);
+        result.instance_sources.push(source);
+        result.instance_arguments.push(arguments);
+    }
+    let mut ordered: BTreeMap<(String, String, usize, usize, String), Reference> = BTreeMap::new();
+    let references = std::mem::replace(&mut result.references, Vec::new());
+    for reference in references {
+        ordered.insert((reference.owner.clone(), reference.file.clone(), reference.start, reference.end, reference.target.clone()), reference);
+    }
+    for (_, reference) in ordered { result.references.push(reference); }
+    Ok(result)
+}

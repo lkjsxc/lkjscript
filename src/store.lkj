@@ -139,6 +139,16 @@ fn cache_file(directory: &mut Directory, name: &str) -> Option<File> {
 }
 
 impl Store {
+    pub fn invalidate_query_snapshot(&mut self, identity: &str, selector: &str) {
+        self.discard("semantic-root", identity);
+        self.discard("semantic-latest", selector);
+    }
+    pub fn query_cursor(&self, query: &str, payload: &[u8]) -> Vec<u8> {
+        reuse::seal(&self.producer, &self.secret, "semantic-cursor", query, payload)
+    }
+    pub fn open_query_cursor(&self, query: &str, bytes: &[u8]) -> Option<Vec<u8>> {
+        reuse::authenticate(&self.producer, &self.secret, "semantic-cursor", query, bytes)
+    }
     pub fn open(world: &mut World, path: &Option<String>, key: &Option<String>) -> Option<Self> {
         Self::open_bounded(world, path, key, 256usize * 1024usize * 1024usize)
     }

@@ -443,6 +443,47 @@ logic; it is a differential oracle. Optimization output is rechecked and rejecte
 output discarded, then native behavior is compared with interpretation of the
 original IR.
 
+## Structural questions and snapshot identity
+
+`build SOURCE --index --store DIRECTORY --store-key KEY` publishes an immutable
+source/checked-IR snapshot and prints `LKJSCRIPT_SNAPSHOT ID`. `query SOURCE`
+uses the same source/library selection and store, with `--kind`, `--id`,
+`--snapshot ID`, `--depth`, `--limit`, `--bytes` and `--cursor`.
+Kinds are outline, item/text, slice, uses, callers, callees, impls, instances,
+type, layout, authority and dependents; meta/signature/references expose detail.
+Every fact starts with its quoted identity and declares source-claim, checked-ir
+or protocol. Layout uses the native target's actual checked-IR layout; reachable
+effects include destruction and work for ordinary functions with scalar inputs.
+
+Source identities use semantic paths, independent of physical files and whitespace.
+Fields, variants, parameters, generic parameters and implementations have named
+identities. A semantic rename/move changes that path; physical reorganization does
+not. Bindings and calls are scoped by the token-normalized body digest and a local
+ordinal; only an unchanged token body preserves that epoch. Comments/formatting do
+not change it. Source byte ranges and file/item hashes are exact stale-edit inputs.
+These producer identities never replace the checker's exact proof identities.
+
+Source declaration/signature facts are resolved frontend claims. Typed member and
+lexical-name ambiguities are explicitly unresolved; alias uses and import targets
+are distinct references. An inferred source binding type is not fabricated from
+syntax. Checked instances name their source mapping and expanded type arguments;
+source mappings remain claims. Native byte sizes are currently unavailable and are
+reported as such beside IR operation counts. Generic queries cover current
+instances, not all future substitutions. Dependents are conservative recorded
+signature dependencies; missing member evidence prevents exhaustive rename proofs.
+
+An authenticated snapshot root binds selector, source digest, exact checked IR and
+a radix-tree root. Every bounded page has an authenticated content identity and an
+ordered key range. Lookups follow only the requested path, without source reads.
+Cursor state is authenticated for the exact snapshot/question/depth and carries a
+bounded depth-first traversal stack; cycles on that path are skipped. A malformed
+or missing page refuses before any answer is written and invalidates the snapshot
+selection so the next indexed build repairs it. Corruption is never checker proof.
+A mutable stored pointer cannot prove freshness against valid old-record replay.
+Without an explicit snapshot the answer states freshness=not-asserted; an explicit
+snapshot rejects substitution. Editing source files does not silently retarget an
+existing snapshot. Text remains the stored repository projection.
+
 ## Rechecked optimization and prior proofs
 
 The inliner consumes admitted original IR and produces an untrusted candidate.

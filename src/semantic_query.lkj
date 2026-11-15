@@ -1,0 +1,181 @@
+//! One-shot, bounded queries over an authenticated immutable snapshot.
+use crate::{semantic, semantic_facts, semantic_store, sha256, store};
+
+#[derive(Clone)]
+pub struct Options {
+    pub kind: String,
+    pub identity: String,
+    pub depth: usize,
+    pub limit: usize,
+    pub bytes: usize,
+    pub snapshot: Option<String>,
+    pub cursor: Option<String>,
+}
+impl Options {
+    pub fn new() -> Self {
+        Self { kind: "outline".to_string(), identity: "crate".to_string(), depth: 1usize,
+            limit: 30usize, bytes: 16384usize, snapshot: None, cursor: None }
+    }
+}
+#[derive(Clone)]
+struct Work {
+    kind: String,
+    identity: String,
+    depth: usize,
+    page: usize,
+    offset: usize,
+}
+fn work(kind: &str, identity: &str, depth: usize) -> Work {
+    Work { kind: kind.to_string(), identity: identity.to_string(), depth, page: 0usize, offset: 0usize }
+}
+fn expanded(kind: &str) -> bool {
+    matches!(kind, "outline" | "callees" | "callers" | "uses" | "dependents")
+}
+fn schedule(state: &mut Vec<Work>, kind: &str, identity: &str, depth: usize) {
+    if depth > 1usize && expanded(kind) { state.push(work(&format!("@{kind}"), identity, depth - 1usize)); }
+    state.push(work(kind, identity, depth));
+}
+fn start(options: &Options) -> Vec<Work> {
+    let mut state = Vec::new();
+    if options.kind == "slice" {
+        state.push(work("@slice", &options.identity, options.depth));
+        state.push(work("text", &options.identity, 1usize));
+        state.push(work("meta", &options.identity, 1usize));
+    } else if options.kind == "item" {
+        state.push(work("text", &options.identity, 1usize));
+        state.push(work("meta", &options.identity, 1usize));
+    } else { schedule(&mut state, &options.kind, &options.identity, options.depth); }
+    state
+}
+fn identity(snapshot: &str, options: &Options) -> String {
+    let mut bytes = Vec::new();
+    store::push_bytes(&mut bytes, snapshot.as_bytes());
+    store::push_bytes(&mut bytes, options.kind.as_bytes()); store::push_bytes(&mut bytes, options.identity.as_bytes());
+    store::push_word(&mut bytes, options.depth);
+    sha256::hex_digest(&bytes)
+}
+fn encode(state: &[Work]) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    store::push_word(&mut bytes, 1usize); store::push_word(&mut bytes, state.len());
+    for item in state {
+        store::push_bytes(&mut bytes, item.kind.as_bytes()); store::push_bytes(&mut bytes, item.identity.as_bytes());
+        store::push_word(&mut bytes, item.depth); store::push_word(&mut bytes, item.page); store::push_word(&mut bytes, item.offset);
+    }
+    bytes
+}
+fn decode(bytes: &[u8]) -> Option<Vec<Work>> {
+    let mut reader = store::Reader::new(bytes);
+    if reader.word()? != 1usize { return None; }
+    let count = reader.word()?;
+    if count > bytes.len() / 40usize { return None; }
+    let mut result = Vec::new();
+    for _ in 0usize..count {
+        let kind = reader.text()?; let identity = reader.text()?;
+        let depth = reader.word()?; let page = reader.word()?; let offset = reader.word()?;
+        if offset > 16usize { return None; }
+        result.push(Work { kind, identity, depth, page, offset });
+    }
+    if reader.done() { Some(result) } else { None }
+}
+fn hex(bytes: &[u8]) -> String {
+    let alphabet = b"0123456789abcdef"; let mut out = String::new();
+    for byte in bytes {
+        out.push(alphabet[(*byte >> 4u8) as usize] as char);
+        out.push(alphabet[(*byte & 15u8) as usize] as char);
+    }
+    out
+}
+fn digit(value: u8) -> Option<u8> {
+    if b'0' <= value && value <= b'9' { Some(value - b'0') }
+    else if b'a' <= value && value <= b'f' { Some(value - b'a' + 10u8) } else { None }
+}
+fn unhex(text: &str) -> Option<Vec<u8>> {
+    if text.len() % 2usize != 0usize { return None; }
+    let mut out = Vec::new(); let mut at = 0usize;
+    while at < text.len() {
+        out.push(digit(text.as_bytes()[at])? * 16u8 + digit(text.as_bytes()[at + 1usize])?);
+        at += 2usize;
+    }
+    Some(out)
+}
+pub fn run(store: &mut store::Store, selector: &str, options: &Options) -> Result<String, String> {
+    if !matches!(options.kind.as_str(), "outline" | "item" | "text" | "slice" | "signature" | "meta" | "references" |
+        "uses" | "callers" | "callees" | "impls" | "instances" | "type" | "layout" | "authority" | "dependents") {
+        return Err("E_QUERY_KIND expected outline|item|text|slice|uses|callers|callees|impls|instances|type|layout|authority|dependents".to_string());
+    }
+    if options.limit == 0usize || options.bytes == 0usize || options.depth == 0usize {
+        return Err("E_QUERY_BOUND --limit, --bytes and --depth must be positive".to_string());
+    }
+    let snapshot = semantic_store::open(store, selector, &options.snapshot)?;
+    let request = identity(&snapshot.identity, options);
+    let mut state = match &options.cursor {
+        Some(cursor) => {
+            let raw = unhex(cursor).ok_or("E_QUERY_CURSOR malformed cursor")?;
+            let bytes = store.open_query_cursor(&request, &raw).ok_or("E_QUERY_CURSOR cursor does not authenticate for this snapshot and question")?;
+            decode(&bytes).ok_or("E_QUERY_CURSOR malformed authenticated state")?
+        }
+        None => start(options),
+    };
+    let mut output = semantic_facts::fact(&options.identity, "protocol", "query",
+        &format!("snapshot={} source={} checked-ir={} kind={} depth={} freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection={}",
+            snapshot.identity, snapshot.source, snapshot.checked_ir, options.kind, options.depth,
+            if options.snapshot.is_some() { "explicit" } else { "stored-pointer" }));
+    output.push('\n');
+    let mut reader = semantic_store::Reader::new(snapshot);
+    let mut emitted = 0usize; let mut steps = 0usize;
+    let budget = options.limit.checked_mul(8usize).unwrap_or(!0usize - 32usize).checked_add(32usize).unwrap_or(!0usize);
+    while let Some(mut current) = state.pop() {
+        if emitted >= options.limit || steps >= budget { state.push(current); break; }
+        steps += 1usize;
+        let hidden = current.kind.starts_with('@');
+        let query_kind = if current.kind == "@slice" { "@references" } else { current.kind.as_str() };
+        let value = reader.page(store, query_kind, &current.identity, current.page)?;
+        let page = match value {
+            Some(page) => page,
+            None => {
+                if hidden { continue; }
+                if reader.page(store, "meta", &current.identity, 0usize)?.is_none() {
+                    return Err(format!("E_QUERY_ID no {} fact for {}", current.kind, semantic::quote(&current.identity)));
+                }
+                semantic_store::Page { lines: vec![semantic_facts::fact(&current.identity, "protocol", "empty-indexed-result",
+                    &format!("kind={} claim=recorded-facts-only", current.kind))], next: None }
+            }
+        };
+        if current.offset >= page.lines.len() {
+            if current.offset > page.lines.len() { return Err("E_QUERY_CURSOR cursor exceeds its fact page".to_string()); }
+            if let Some(next) = page.next { current.page = next; current.offset = 0usize; state.push(current); }
+            continue;
+        }
+        let line = page.lines[current.offset].clone();
+        current.offset += 1usize;
+        if hidden {
+            let depth = current.depth;
+            let is_slice = current.kind == "@slice";
+            let child_kind = if is_slice { "signature".to_string() } else { current.kind[1usize..].to_string() };
+            state.push(current);
+            let mut cyclic = false;
+            for ancestor in &state { if ancestor.identity == line { cyclic = true; } }
+            if !cyclic {
+                if is_slice && depth > 1usize { state.push(work("@slice", &line, depth - 1usize)); }
+                schedule(&mut state, &child_kind, &line, depth);
+            }
+        } else {
+            let mut continuation_state = state.clone();
+            continuation_state.push(current.clone());
+            let continuation_reserve = semantic::quote(&options.identity).len() + 200usize
+                + (crate::reuse::header_size() + encode(&continuation_state).len()) * 2usize;
+            if output.len() + line.len() + 1usize + continuation_reserve > options.bytes {
+                current.offset -= 1usize; state.push(current);
+                if emitted == 0usize { return Err(format!("E_QUERY_BOUND one fact requires at least {} bytes", output.len() + line.len() + 1usize + continuation_reserve)); }
+                break;
+            }
+            output.push_str(&line); output.push('\n'); emitted += 1usize; state.push(current);
+        }
+    }
+    let continuation = if state.is_empty() { "none".to_string() }
+        else { hex(&store.query_cursor(&request, &encode(&state))) };
+    output.push_str(&semantic_facts::fact(&options.identity, "protocol", "continuation",
+        &format!("cursor={} facts={} pages-read={} traversal-steps={}", continuation, emitted, reader.reads, steps)));
+    output.push('\n');
+    Ok(output)
+}

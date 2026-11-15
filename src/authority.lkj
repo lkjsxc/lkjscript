@@ -325,6 +325,40 @@ fn reachable(function: &Function) -> Vec<bool> {
     }
     seen
 }
+
+/** Direct checked relations. Shared marker tables avoid an all-pairs closure. */
+pub struct Relations {
+    pub calls: Vec<(usize, bool)>,
+    pub operations: Vec<Operation>,
+}
+pub fn relations(checked: &CheckedProgram) -> Vec<Relations> {
+    let program = checked.program();
+    let mut seen = vec![false; program.functions.len()];
+    let mut visited_types = vec![0usize; program.types.len()];
+    let mut result = Vec::new();
+    for (index, function) in program.functions.iter().enumerate() {
+        let live = reachable(function);
+        let mut calls: Vec<(usize, bool)> = Vec::new();
+        let mut operations = Vec::new();
+        for (position, instruction) in function.body.iter().enumerate() {
+            if !live[position] { continue; }
+            match &instruction.op {
+                Op::Call { function, .. } => enqueue(*function, false, &mut seen, &mut calls),
+                Op::Intrinsic { name, .. } if effect(*name) =>
+                    operation(&mut operations, name.as_str(), instruction.line, instruction.column, false),
+                Op::Drop { place } | Op::DropIf { place } => cleanup(
+                    program, place_type(program, function, place), index + 1usize,
+                    &mut visited_types, &mut seen, &mut calls, &mut operations,
+                    instruction.line, instruction.column,
+                ),
+                _ => {}
+            }
+        }
+        for (function, _) in &calls { seen[*function] = false; }
+        result.push(Relations { calls, operations });
+    }
+    result
+}
 pub fn analyze(checked: &CheckedProgram, entry: usize) -> Result<Report, String> {
     let manifest = manifest(checked, entry)?;
     let program = checked.program();

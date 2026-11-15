@@ -18,6 +18,7 @@ mod diagnostics;
 mod environment;
 mod intrinsics;
 mod layout;
+pub mod semantic;
 mod ownership;
 pub(crate) mod platform;
 mod process;

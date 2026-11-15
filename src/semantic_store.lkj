@@ -1,0 +1,246 @@
+//! Authenticated bounded radix pages. Queries name immutable build snapshots.
+//! A stored pointer is a selection hint, never a proof that files stayed unchanged.
+use crate::{ir, ir_binary, semantic, semantic_facts, sha256, store};
+use std::collections::BTreeMap;
+
+pub struct Snapshot {
+    pub identity: String,
+    pub source: String,
+    pub checked_ir: String,
+    pub root: String,
+    pub selector: String,
+    pub facts: usize,
+}
+struct Entry { name: String, hash: String, value: Vec<u8> }
+pub struct Page { pub lines: Vec<String>, pub next: Option<usize> }
+
+pub fn selector(path: &str, source: &Option<String>, library: &Option<String>, no_library: bool) -> String {
+    let mut bytes = b"lkjscript-semantic-selector-1"[..].to_vec();
+    store::push_bytes(&mut bytes, path.as_bytes());
+    for index in 0usize..2usize {
+        let option = if index == 0usize { source } else { library };
+        match option {
+            Some(value) => { store::push_word(&mut bytes, 1usize); store::push_bytes(&mut bytes, value.as_bytes()); }
+            None => store::push_word(&mut bytes, 0usize),
+        }
+    }
+    store::push_word(&mut bytes, no_library as usize);
+    sha256::hex_digest(&bytes)
+}
+fn hexadecimal(value: &str) -> bool {
+    if value.len() != 64usize { return false; }
+    for byte in value.bytes() {
+        if !byte.is_ascii_digit() && !(b'a' <= byte && byte <= b'f') { return false; }
+    }
+    true
+}
+fn leaf_key(kind: &str, identity: &str, page: usize) -> String {
+    format!("{}\t{page}", semantic_facts::key(kind, identity))
+}
+fn page(lines: &[String], next: Option<usize>) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    store::push_word(&mut bytes, 1usize);
+    store::push_word(&mut bytes, next.unwrap_or(!0usize));
+    store::push_word(&mut bytes, lines.len());
+    for line in lines { store::push_bytes(&mut bytes, line.as_bytes()); }
+    bytes
+}
+fn node(store: &mut store::Store, entries: Vec<Entry>, depth: usize) -> Result<String, String> {
+    let mut size = 32usize;
+    for entry in &entries { size += entry.name.len() + entry.value.len() + 88usize; }
+    let mut bytes = Vec::new();
+    store::push_word(&mut bytes, 1usize);
+    if entries.len() <= 64usize && size <= 32768usize {
+        store::push_word(&mut bytes, 0usize);
+        store::push_word(&mut bytes, depth);
+        store::push_word(&mut bytes, entries.len());
+        let mut ordered: BTreeMap<String, Entry> = BTreeMap::new();
+        for entry in entries { ordered.insert(entry.hash.clone(), entry); }
+        for (_, entry) in ordered {
+            store::push_bytes(&mut bytes, entry.name.as_bytes());
+            store::push_bytes(&mut bytes, entry.hash.as_bytes());
+            store::push_bytes(&mut bytes, &entry.value);
+        }
+    } else {
+        if depth >= 64usize { return Err("E_QUERY_INDEX a fact exceeds its page representation".to_string()); }
+        store::push_word(&mut bytes, 1usize);
+        store::push_word(&mut bytes, depth);
+        let mut groups: BTreeMap<u8, Vec<Entry>> = BTreeMap::new();
+        for entry in entries {
+            let digit = entry.hash.as_bytes()[depth];
+            if !groups.contains_key(&digit) { groups.insert(digit, Vec::new()); }
+            groups.get_mut(&digit).unwrap().push(entry);
+        }
+        store::push_word(&mut bytes, groups.len());
+        for (digit, group) in groups {
+            store::push_word(&mut bytes, digit as usize);
+            let identity = node(store, group, depth + 1usize)?;
+            store::push_bytes(&mut bytes, identity.as_bytes());
+        }
+    }
+    let identity = sha256::hex_digest(&bytes);
+    if store.get("semantic-page", &identity).is_none() { store.put("semantic-page", &identity, &bytes); }
+    Ok(identity)
+}
+fn snapshot_bytes(source: &str, checked_ir: &str, root: &str, selector: &str, facts: usize) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    store::push_word(&mut bytes, 1usize);
+    store::push_bytes(&mut bytes, source.as_bytes()); store::push_bytes(&mut bytes, checked_ir.as_bytes());
+    store::push_bytes(&mut bytes, root.as_bytes()); store::push_bytes(&mut bytes, selector.as_bytes());
+    store::push_word(&mut bytes, facts);
+    bytes
+}
+fn decode_snapshot(bytes: &[u8]) -> Option<Snapshot> {
+    let mut reader = store::Reader::new(bytes);
+    if reader.word()? != 1usize { return None; }
+    let source = reader.text()?;
+    let checked_ir = reader.text()?;
+    let root = reader.text()?;
+    let selector = reader.text()?;
+    let facts = reader.word()?;
+    if !reader.done() || !hexadecimal(&source) || !hexadecimal(&checked_ir)
+        || !hexadecimal(&root) || !hexadecimal(&selector) { return None; }
+    Some(Snapshot { identity: sha256::hex_digest(bytes), source, checked_ir, root, selector, facts })
+}
+pub fn publish(store: &mut store::Store, selector: &str, catalog: &semantic::Catalog, checked: &ir::CheckedProgram) -> Result<Snapshot, String> {
+    let facts = semantic_facts::build(catalog, checked)?;
+    let mut entries = Vec::new();
+    let mut count = 0usize;
+    for (name, lines) in facts.records {
+        count += lines.len();
+        let mut at = 0usize; let mut number = 0usize;
+        loop {
+            let mut end = at; let mut size = 24usize;
+            while end < lines.len() && end - at < 16usize {
+                let addition = lines[end].len().checked_add(8usize).ok_or("E_QUERY_INDEX fact length overflow")?;
+                if end != at && size + addition > 16384usize { break; }
+                if addition > 16000usize { return Err("E_QUERY_INDEX one fact is too large; source text uses chunks".to_string()); }
+                size += addition; end += 1usize;
+            }
+            let next = if end < lines.len() { Some(number + 1usize) } else { None };
+            let key = format!("{name}\t{number}");
+            entries.push(Entry { hash: sha256::hex_digest(key.as_bytes()), name: key, value: page(&lines[at..end], next) });
+            at = end; number += 1usize;
+            if next.is_none() { break; }
+        }
+    }
+    let root = node(store, entries, 0usize)?;
+    let checked_ir = sha256::hex_digest(&ir_binary::write(checked.program()));
+    let bytes = snapshot_bytes(&catalog.input_digest, &checked_ir, &root, selector, count);
+    let snapshot = decode_snapshot(&bytes).ok_or("E_QUERY_INDEX could not form snapshot")?;
+    store.put("semantic-root", &snapshot.identity, &bytes);
+    store.put("semantic-latest", selector, &bytes);
+    // Publishing can be refused by the disposable store's budget or lock. Never
+    // print a usable snapshot identity until its fixed root was actually retained.
+    if store.get("semantic-root", &snapshot.identity).is_none() {
+        return Err("E_QUERY_INDEX store refused snapshot publication; increase --store-bytes or retry".to_string());
+    }
+    Ok(snapshot)
+}
+pub fn open(store: &mut store::Store, selector: &str, requested: &Option<String>) -> Result<Snapshot, String> {
+    let bytes = match requested {
+        Some(identity) => {
+            if !hexadecimal(identity) { return Err("E_QUERY_SNAPSHOT expected a 64-digit snapshot identity".to_string()); }
+            store.get("semantic-root", identity)
+        }
+        None => store.get("semantic-latest", selector),
+    }.ok_or("E_QUERY_SNAPSHOT no authenticated snapshot; build with --index and this store first")?;
+    let snapshot = decode_snapshot(&bytes).ok_or("E_QUERY_SNAPSHOT invalid authenticated snapshot record")?;
+    if snapshot.selector != selector { return Err("E_QUERY_SNAPSHOT snapshot belongs to another source selection".to_string()); }
+    if requested.as_ref().is_some_and(|identity| identity != &snapshot.identity) {
+        return Err("E_QUERY_SNAPSHOT requested snapshot identity does not match".to_string());
+    }
+    Ok(snapshot)
+}
+
+pub struct Reader {
+    pub snapshot: Snapshot,
+    pages: BTreeMap<String, Vec<u8>>,
+    pub reads: usize,
+}
+impl Reader {
+    pub fn new(snapshot: Snapshot) -> Self { Self { snapshot, pages: BTreeMap::new(), reads: 0usize } }
+    fn node(&mut self, store: &mut store::Store, identity: &str) -> Result<Vec<u8>, String> {
+        if let Some(bytes) = self.pages.get(&identity.to_string()) { return Ok(bytes.clone()); }
+        let bytes = match store.get("semantic-page", identity) {
+            Some(bytes) => bytes,
+            None => {
+                store.invalidate_query_snapshot(&self.snapshot.identity, &self.snapshot.selector);
+                return Err("E_QUERY_INDEX page is missing or unauthenticated; rebuild the index".to_string());
+            }
+        };
+        if bytes.len() > 32768usize || sha256::hex_digest(&bytes) != identity {
+            store.invalidate_query_snapshot(&self.snapshot.identity, &self.snapshot.selector);
+            return Err("E_QUERY_INDEX page does not match its rooted content identity".to_string());
+        }
+        self.reads += 1usize;
+        self.pages.insert(identity.to_string(), bytes.clone());
+        Ok(bytes)
+    }
+    fn value(&mut self, store: &mut store::Store, key: &str) -> Result<Option<Vec<u8>>, String> {
+        let hash = sha256::hex_digest(key.as_bytes());
+        let mut identity = self.snapshot.root.clone(); let mut depth = 0usize;
+        loop {
+            let bytes = self.node(store, &identity)?;
+            let mut input = store::Reader::new(&bytes);
+            let version = input.word().ok_or("E_QUERY_INDEX malformed page")?;
+            let kind = input.word().ok_or("E_QUERY_INDEX malformed page")?;
+            let level = input.word().ok_or("E_QUERY_INDEX malformed page")?;
+            let count = input.word().ok_or("E_QUERY_INDEX malformed page")?;
+            if version != 1usize || level != depth || depth > 64usize || count > 64usize {
+                return Err("E_QUERY_INDEX invalid page shape".to_string());
+            }
+            if kind == 0usize {
+                let mut found = None;
+                let mut previous = String::new();
+                for _ in 0usize..count {
+                    let name = input.text().ok_or("E_QUERY_INDEX malformed leaf")?;
+                    let claimed = input.text().ok_or("E_QUERY_INDEX malformed leaf")?;
+                    let value = input.bytes().ok_or("E_QUERY_INDEX malformed leaf")?;
+                    if !hexadecimal(&claimed) || sha256::hex_digest(name.as_bytes()) != claimed
+                        || (!previous.is_empty() && claimed <= previous)
+                        || claimed[..depth] != hash[..depth] {
+                        return Err("E_QUERY_INDEX leaf is outside its rooted range".to_string());
+                    }
+                    previous = claimed;
+                    if name == key { found = Some(value); }
+                }
+                if !input.done() { return Err("E_QUERY_INDEX trailing leaf bytes".to_string()); }
+                return Ok(found);
+            }
+            if kind != 1usize || depth >= 64usize || count > 16usize { return Err("E_QUERY_INDEX invalid branch".to_string()); }
+            let mut selected = None; let mut previous = 0usize;
+            for index in 0usize..count {
+                let digit = input.word().ok_or("E_QUERY_INDEX malformed branch")?;
+                let child = input.text().ok_or("E_QUERY_INDEX malformed branch")?;
+                if digit > 255usize || !hexadecimal(&child) || (index != 0usize && digit <= previous) {
+                    return Err("E_QUERY_INDEX invalid ordered branch".to_string());
+                }
+                previous = digit;
+                if digit as u8 == hash.as_bytes()[depth] { selected = Some(child); }
+            }
+            if !input.done() { return Err("E_QUERY_INDEX trailing branch bytes".to_string()); }
+            let Some(child) = selected else { return Ok(None); };
+            identity = child; depth += 1usize;
+        }
+    }
+    pub fn page(&mut self, store: &mut store::Store, kind: &str, identity: &str, number: usize) -> Result<Option<Page>, String> {
+        let result = self.page_checked(store, kind, identity, number);
+        if result.is_err() { store.invalidate_query_snapshot(&self.snapshot.identity, &self.snapshot.selector); }
+        result
+    }
+    fn page_checked(&mut self, store: &mut store::Store, kind: &str, identity: &str, number: usize) -> Result<Option<Page>, String> {
+        let Some(bytes) = self.value(store, &leaf_key(kind, identity, number))? else { return Ok(None); };
+        let mut reader = store::Reader::new(&bytes);
+        if reader.word() != Some(1usize) { return Err("E_QUERY_INDEX invalid fact page".to_string()); }
+        let next = reader.word().ok_or("E_QUERY_INDEX malformed fact page")?;
+        let count = reader.word().ok_or("E_QUERY_INDEX malformed fact page")?;
+        if count > 16usize || (next != !0usize && next != number + 1usize) {
+            return Err("E_QUERY_INDEX invalid fact continuation".to_string());
+        }
+        let mut lines = Vec::new();
+        for _ in 0usize..count { lines.push(reader.text().ok_or("E_QUERY_INDEX malformed fact line")?); }
+        if !reader.done() { return Err("E_QUERY_INDEX trailing fact bytes".to_string()); }
+        Ok(Some(Page { lines, next: if next == !0usize { None } else { Some(next) } }))
+    }
+}
