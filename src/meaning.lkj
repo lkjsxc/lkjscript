@@ -60,7 +60,6 @@ pub fn item_delta(before: &semantic::Item, after: &semantic::Item) -> String {
     if before.signature_digest != after.signature_digest { field(&mut out, "signature"); }
     if before.body_digest != after.body_digest { field(&mut out, "body"); }
     if before.text_digest != after.text_digest && out.is_empty() { field(&mut out, "text-only"); }
-    if before.file != after.file { field(&mut out, "projection-file"); }
     out
 }
 
@@ -370,7 +369,7 @@ pub(crate) mod verified {
 }
 
 pub fn compare(before: &semantic::Catalog, old: &ir::CheckedProgram,
-    after: &semantic::Catalog, new: &ir::CheckedProgram, limit: usize, detail: &str) -> Result<String, String> {
+    after: &semantic::Catalog, new: &ir::CheckedProgram, text_identical: bool, limit: usize, detail: &str) -> Result<String, String> {
     let old_meaning = identity(old);
     let new_meaning = identity(new);
     let old_exact = exact_identity(old);
@@ -378,7 +377,7 @@ pub fn compare(before: &semantic::Catalog, old: &ir::CheckedProgram,
     let mut out = format!("program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before={} after={} exact-before={} exact-after={}\n",
         old_meaning, new_meaning, old_exact, new_exact);
     let verdict = if old_meaning == new_meaning {
-        if before.input_digest == after.input_digest { "text identical, checked IR identical" }
+        if text_identical { "text identical, checked IR identical" }
         else { "text differs, checked IR identical" }
     } else { "checked IR differs" };
     out.push_str(&format!("program level=checked-ir verdict={} diagnostic-metadata={}\n",

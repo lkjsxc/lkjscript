@@ -16,6 +16,10 @@ struct Message { tag: u8, value: i32 }
 fn compute(value: i32) -> i32 { value + 1 }
 pub fn probe() -> i32 { let message = Message { tag: 1u8, value: 40 }; compute(message.value) }
 SOURCE
+cp "$fixture/old/main.lkj" "$fixture/new/main.lkj"
+compare --no-library
+grep -q 'text identical, checked IR identical' "$fixture/report"
+grep -q 'changed-facts=0 ' "$fixture/report"
 sed 's/i32/i64/g' "$fixture/old/main.lkj" > "$fixture/new/main.lkj"
 compare --no-library
 grep -q 'level=checked-ir changed=layout' "$fixture/report"

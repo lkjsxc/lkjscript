@@ -137,6 +137,8 @@ pub(crate) fn rename(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)], 
     let free_function = target.kind == "function" && (target.parent == "crate"
         || catalog.by_identity.get(&target.parent).is_some_and(|index| catalog.items[*index].kind == "module"));
     for site in &catalog.unresolved {
+        if free_function && matches!(site.kind.as_str(), "intrinsic-qualification" | "associated-qualification"
+            | "associated-type" | "associated-function" | "visibility-qualification" | "local-origin") { continue; }
         if site.kind == "lexical-name" && site.target != target.name { continue; }
         let typed = site.kind == "typed-method" || site.kind == "typed-field" || site.kind == "typed-member";
         if typed && (free_function || matches!(target.kind.as_str(), "struct" | "enum" | "trait" | "alias" | "module" | "variant")) { continue; }
@@ -287,6 +289,7 @@ pub fn plan(catalog: &semantic::Catalog,
         }
         let target = item(catalog, &operation.identity)?;
         validate_item(target, inputs, &operation.expected)?;
+        if crate::structure_refactor::plan(catalog, inputs, operation, &mut patches)? { continue; }
         match operation.kind.as_str() {
             "replace-body" => {
                 let (start, end) = target.body.ok_or_else(|| error(&operation.identity, "BODY", "identity has no source body"))?;
@@ -326,7 +329,7 @@ pub fn plan(catalog: &semantic::Catalog,
 pub fn report(draft: &Draft) -> String {
     let mut out = String::new();
     for identity in &draft.identities {
-        out.push_str(&format!("{} level=source-claim changed\n", semantic::quote(identity)));
+        out.push_str(&format!("{} level=source-claim operation-target\n", semantic::quote(identity)));
     }
     for change in &draft.changes {
         out.push_str(&format!("{} level=source-claim file before={} after={}\n", semantic::quote(&change.file),

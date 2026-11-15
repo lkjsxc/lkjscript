@@ -50,7 +50,7 @@ step() {
         }
         END {
             printf "ok %s (%.3f s, load %s -> %s; gate+%.3f..%.3f s)", label, elapsed_ns / 1000000000, before, after, offset_ns / 1000000000, (offset_ns + elapsed_ns) / 1000000000
-            if (closed) printf "; cases reused=%d rerun=%d (authenticated exact stable runner, sealed ELF and closed input contract)", reused, rerun
+            if (closed) printf "; cases reused=%d rerun=%d (authenticated exact stable runner, sealed ELF, checked closure and closed input contract)", reused, rerun
             else if (counted && reused + rerun > 0) printf "; cases reused=%d rerun=%d (authenticated producer and input closure; misses/open effects rerun)", reused, rerun
             else printf "; rerun suite (live host observations or fresh admission)"
             printf "\n"
@@ -137,6 +137,11 @@ parallel_step 1 closed-proof-attacks timeout --kill-after=10s 600s bash tools/ga
 parallel_step 1 toolchain toolchain
 parallel_step 1 world world_cases
 parallel_step 1 semantic-query timeout --kill-after=10s 600s bash tools/semantic-query-test.sh "$check_binary"
+parallel_step 1 structure-edit timeout --kill-after=10s 600s bash tools/structure-test.sh "$check_binary"
+parallel_step 1 structure-refactor timeout --kill-after=10s 600s bash tools/structure-refactor-test.sh "$check_binary"
+parallel_step 1 checked-meaning timeout --kill-after=10s 600s bash tools/meaning-test.sh "$check_binary"
+parallel_step 1 type-identity timeout --kill-after=10s 600s bash tools/type-identity-test.sh "$check_binary"
+parallel_step 1 history-replay timeout --kill-after=10s 600s bash tools/replay-test.sh "$check_binary"
 parallel_step 1 profiler timeout --kill-after=10s 600s sh tools/profile-test.sh "$check_binary"
 parallel_step 1 optimizer timeout --kill-after=10s 600s bash tools/optimizer-test.sh "$check_binary"
 parallel_step 1 resources timeout --kill-after=10s 600s bash tools/resource-test.sh "$check_binary"
@@ -169,7 +174,7 @@ awk '
             if ($i ~ /^rerun=/) { value=$i; sub(/^rerun=/, "", value); rerun += value }
         }
     }
-    END { printf "ok gate selection: skipped %d case requests on authenticated exact compiler/input closure or stable runner/sealed ELF/closed contract equality; reran %d misses/open effects; host suites rerun\n", reused, rerun }
+    END { printf "ok gate selection: skipped %d case requests on authenticated exact compiler/input closure or stable runner/sealed ELF/checked closure/closed contract equality; reran %d misses/open effects; host suites rerun\n", reused, rerun }
 ' "${check_logs[@]}"
 if ((check_failed)); then exit 1; fi
 step ir-mutation timeout --kill-after=10s 600s "$check_binary" mutate 1701 128 --jobs "$check_jobs" "${check_reuse[@]}"

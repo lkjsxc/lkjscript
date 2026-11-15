@@ -1,12 +1,15 @@
 //! Rust witness entry over exactly the owned command-line implementation.
 #![allow(dead_code, unused_imports)]
-#[path = "output.rs"]
-mod host;
+pub use lkjscript::host;
 pub use lkjscript::{
     ast, authority, child_image, entry_grants, backend, check, diagnostic, diagnostics, elaborate, frontend, generics, interpreter, ir,
     ir_text, ir_binary, json, names, native, optimizer, resolve, reuse, runtime, runtime_memory, runtime_diagnostics, sha256, source, syntax, x86,
+    semantic, semantic_facts, structure_edit, structure_write, structure_replay, structure_refactor, source_json, trim_source_ascii,
 };
 include!(concat!(env!("OUT_DIR"), "/embedded-module.rs"));
+include!(concat!(env!("OUT_DIR"), "/meaning-module.rs"));
+include!(concat!(env!("OUT_DIR"), "/semantic_store-module.rs"));
+include!(concat!(env!("OUT_DIR"), "/semantic_query-module.rs"));
 mod host_network {
     use super::host::{Child, File, World};
     include!(concat!(env!("OUT_DIR"), "/source/src/host_network.rs"));

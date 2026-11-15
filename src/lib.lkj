@@ -24,9 +24,11 @@ pub mod reuse;
 pub mod runtime;
 pub mod runtime_memory;
 pub mod runtime_diagnostics;
-#[path = "../library/sha256.lkj"]
-pub mod sha256;
+pub use std::sha256;
 pub mod meaning;
+
+pub mod structure_replay;
+pub mod structure_refactor;
 pub mod structure_edit;
 pub mod structure_write;
 pub mod semantic;

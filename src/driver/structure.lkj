@@ -137,12 +137,45 @@ fn compare(world: &mut World, request: &Request, stats: &mut Stats) -> Result<u8
     let new = super::compile(world, &request.options, stats, &mut after)?;
     finish(&mut after);
     let new_catalog = after.catalog.take().ok_or("E_EDIT_SOURCE comparison requires source, not raw IR")?;
+    let text_identical = crate::structure_replay::same_text(&old_catalog, &before.source_inputs,
+        &new_catalog, &after.source_inputs);
     let out = meaning::compare(&old_catalog, old.original().checked(), &new_catalog,
-        new.original().checked(), request.limit, &request.detail)?;
+        new.original().checked(), text_identical, request.limit, &request.detail)?;
     world.stdout().write(out.as_bytes());
     Ok(0u8)
 }
+
+fn source_delta(before: &semantic::Catalog, after: &semantic::Catalog) -> String {
+    let mut names: BTreeSet<String> = BTreeSet::new();
+    for item in &before.items {
+        if !matches!(item.kind.as_str(), "binding" | "call-site") { names.insert(item.identity.clone()); }
+    }
+    for item in &after.items {
+        if !matches!(item.kind.as_str(), "binding" | "call-site") { names.insert(item.identity.clone()); }
+    }
+    let mut out = String::new();
+    for name in names {
+        let left = before.by_identity.get(&name).map(|index| &before.items[*index]);
+        let right = after.by_identity.get(&name).map(|index| &after.items[*index]);
+        let delta = match (left, right) {
+            (Some(old), Some(new)) => meaning::item_delta(old, new),
+            (Some(_), None) => "removed".to_string(),
+            (None, Some(_)) => "added".to_string(),
+            _ => String::new(),
+        };
+        if !delta.is_empty() {
+            out.push_str(&format!("{} level=source-claim changed={}\n", semantic::quote(&name), delta));
+        }
+    }
+    out
+}
 fn edit(world: &mut World, request: &Request, stats: &mut Stats) -> Result<u8, String> {
+    if !request.request.is_empty() && !request.against.is_empty() {
+        return Err("E_USAGE edit accepts either --request or --against, not both".to_string());
+    }
+    if request.recover && (!request.request.is_empty() || !request.against.is_empty()) {
+        return Err("E_USAGE --recover does not accept a new transaction".to_string());
+    }
     if request.options.path.starts_with('/') {
         return Err("E_EDIT_ROOT use a relative source path with --source-dir PROJECT_ROOT".to_string());
     }
@@ -161,8 +194,14 @@ fn edit(world: &mut World, request: &Request, stats: &mut Stats) -> Result<u8, S
             return Ok(0u8);
         }
     }
-    if request.request.is_empty() { return Err("E_USAGE edit requires --request JSON_FILE".to_string()); }
-    let operations = structure_edit::parse(&super::read_path(world, &request.request)?)?;
+    if request.request.is_empty() && request.against.is_empty() {
+        return Err("E_USAGE edit requires --request JSON_FILE or --against DESIRED_SOURCE".to_string());
+    }
+    let mut operations = if request.against.is_empty() {
+        structure_edit::parse(&super::read_path(world, &request.request)?)?
+    } else { structure_edit::Request { snapshot: String::new(), operations: Vec::new() } };
+    let mut desired_identity = String::new();
+    let mut desired_read: Option<Memo> = None;
     let mut items_only = true;
     let mut renames: Vec<structure_edit::Operation> = Vec::new();
     for operation in &operations.operations {
@@ -175,6 +214,25 @@ fn edit(world: &mut World, request: &Request, stats: &mut Stats) -> Result<u8, S
     if let Some(writer) = writer.as_ref() { before.private_source_digest = Some(writer.private_source_digest()); }
     let old = super::compile(world, &request.options, stats, &mut before)?;
     let old_catalog = before.catalog.take().ok_or("E_EDIT_SOURCE transactions require source, not raw IR")?;
+    let original_identity = meaning::identity(old.original().checked());
+    if !request.against.is_empty() {
+        let mut desired_options = request.options.clone();
+        desired_options.path = request.against.clone();
+        desired_options.source_directory = None;
+        if !request.against_library.is_empty() {
+            desired_options.library_directory = Some(request.against_library.clone());
+        }
+        let mut desired_memo = Memo::new(world, &desired_options);
+        desired_memo.capture_catalog = true; desired_memo.catalog_items_only = true;
+        desired_memo.private_source_digest = before.private_source_digest;
+        let desired = super::compile(world, &desired_options, stats, &mut desired_memo)?;
+        let desired_catalog = desired_memo.catalog.take().ok_or("E_REPLAY_SOURCE desired tree requires source, not raw IR")?;
+        operations = crate::structure_replay::request(&old_catalog, &before.source_inputs,
+            &desired_catalog, &desired_memo.source_inputs)?;
+        desired_identity = meaning::identity(desired.original().checked());
+        finish(&mut desired_memo);
+        desired_read = Some(desired_memo);
+    }
     let draft = structure_edit::plan(&old_catalog, &before.source_inputs, &operations)?;
     if !renames.is_empty() && renames.len() != operations.operations.len() {
         let rename_request = structure_edit::Request { snapshot: operations.snapshot.clone(), operations: renames.clone() };
@@ -185,7 +243,7 @@ fn edit(world: &mut World, request: &Request, stats: &mut Stats) -> Result<u8, S
         proof.private_source_digest = before.private_source_digest;
         replace_snapshot(&before, &mut proof, &rename_draft)?;
         let renamed = super::compile(world, &proof_options, stats, &mut proof)?;
-        if meaning::identity(old.original().checked()) != meaning::identity(renamed.original().checked()) {
+        if original_identity != meaning::identity(renamed.original().checked()) {
             return Err("transaction E_EDIT_MEANING rename subset changed checked IR; no source was published".to_string());
         }
     }
@@ -193,27 +251,40 @@ fn edit(world: &mut World, request: &Request, stats: &mut Stats) -> Result<u8, S
     uncached.store_directory = None;
     let mut after = Memo::new(world, &uncached);
     after.capture_catalog = true;
-    after.catalog_items_only = items_only;
+    after.catalog_items_only = true;
     after.private_source_digest = before.private_source_digest;
     after.store = before.store.take();
     replace_snapshot(&before, &mut after, &draft)?;
-    let new = super::compile(world, &request.options, stats, &mut after)?;
+    let new = super::compile(world, &request.options, stats, &mut after)
+        .map_err(|problem| -> String { format!("transaction E_EDIT_CHECK identities={} {problem}",
+            semantic::quote(&joined(&draft.identities))) })?;
     let new_catalog = after.catalog.take().ok_or("E_EDIT_SOURCE candidate source catalog is missing")?;
+    let candidate_identity = meaning::identity(new.original().checked());
     if !renames.is_empty() && renames.len() == operations.operations.len()
-        && meaning::identity(old.original().checked()) != meaning::identity(new.original().checked()) {
+        && original_identity != candidate_identity {
         return Err("transaction E_EDIT_MEANING rename changed checked IR; no source was published".to_string());
     }
+    if !desired_identity.is_empty() && desired_identity != candidate_identity {
+        return Err(format!("transaction E_REPLAY_MEANING desired={} candidate={}; no source was published",
+            desired_identity, candidate_identity));
+    }
     unchanged_inputs(world, &before, &after)?;
+    if let Some(desired_memo) = &desired_read { unchanged_inputs(world, desired_memo, desired_memo)?; }
     let mut report = structure_edit::report(&draft);
+    report.push_str(&source_delta(&old_catalog, &new_catalog));
     report.push_str(&authority_delta(old.original().checked(), &old_catalog, new.original().checked(), &new_catalog));
     let total = new.original().program().functions.len();
     let counted = after.checked_reused + after.checked_local_reused;
     let reused = if counted > total { total } else { counted };
     report.push_str(&format!("program level=checked-ir before={} after={} checked-instances={} fresh-checked={} proof-reused={} frontend-resumed={}\n",
-        meaning::identity(old.original().checked()), meaning::identity(new.original().checked()),
+        original_identity, candidate_identity,
         total, total - reused, reused, after.front_reused));
     report.push_str(&format!("transaction source-before={} source-after={} mode={}\n",
         old_catalog.input_digest, new_catalog.input_digest, if request.dry { "dry-run" } else { "apply" }));
+    if !desired_identity.is_empty() {
+        report.push_str(&format!("replay desired={} candidate={} verified=true operations={}\n",
+            desired_identity, candidate_identity, operations.operations.len()));
+    }
     if let Some(writer) = writer.as_mut() {
         // The independent checker has admitted this entire candidate. The journal
         // carries only its text projection and grants no reusable checker proof.

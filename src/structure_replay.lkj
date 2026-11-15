@@ -37,13 +37,31 @@ fn items(catalog: &semantic::Catalog) -> Result<Items, String> {
     Ok(result)
 }
 fn input_index(inputs: &[(String, Vec<u8>)]) -> Result<BTreeMap<String, usize>, String> {
-    let mut result = BTreeMap::new();
-    for (index, (path, _)) in inputs.iter().enumerate() {
-        if result.insert(path.clone(), index).is_some() {
-            return Err(failure(path, "SOURCE", "duplicate source path in snapshot"));
+    let mut result: BTreeMap<String, usize> = BTreeMap::new();
+    for (index, (path, bytes)) in inputs.iter().enumerate() {
+        let previous = result.get(path).map(|index| *index);
+        if let Some(previous) = previous {
+            if inputs[previous].1 != *bytes {
+                return Err(failure(path, "SOURCE", "conflicting source bytes for one path"));
+            }
+            continue;
         }
+        result.insert(path.clone(), index);
     }
     Ok(result)
+}
+
+pub fn same_text(before: &semantic::Catalog, before_inputs: &[(String, Vec<u8>)],
+    after: &semantic::Catalog, after_inputs: &[(String, Vec<u8>)]) -> bool {
+    let Ok(pairs) = file_pairs(before, before_inputs, after, after_inputs) else { return false; };
+    let Ok(left) = input_index(before_inputs) else { return false; };
+    let Ok(right) = input_index(after_inputs) else { return false; };
+    for (before_file, after_file) in pairs {
+        let (Ok(old), Ok(new)) = (input(before_inputs, &left, &before_file), input(after_inputs, &right, &after_file))
+            else { return false; };
+        if old != new { return false; }
+    }
+    true
 }
 fn input<'a>(inputs: &'a [(String, Vec<u8>)], index: &BTreeMap<String, usize>, path: &str) -> Result<&'a [u8], String> {
     let at = index.get(&path.to_string()).ok_or_else(|| failure(path, "SOURCE", "catalog file is absent from snapshot"))?;
@@ -77,23 +95,48 @@ fn file_pairs(before: &semantic::Catalog, before_inputs: &[(String, Vec<u8>)],
             pair(&mut files, &mut reverse, &item.file, &after.items[*index].file)?;
         }
     }
+    // Infer directory correspondence only from the root and stable source
+    // identities. Include-only inputs have no item identity of their own.
+    let mut directories: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for (old_file, new_file) in &files {
+        let old_directory = directory(old_file);
+        let new_directory = directory(new_file);
+        if !directories.contains_key(&old_directory) {
+            directories.insert(old_directory.clone(), Vec::new());
+        }
+        let targets = directories.get_mut(&old_directory).unwrap();
+        if !targets.contains(&new_directory) { targets.push(new_directory); }
+    }
     let after_index = input_index(after_inputs)?;
-    let before_directory = directory(&before.root);
-    let after_directory = directory(&after.root);
     for (path, _) in before_inputs {
         if files.contains_key(path) { continue; }
         if after_index.contains_key(path) {
             pair(&mut files, &mut reverse, path, path)?;
             continue;
         }
-        if path.starts_with(&before_directory) {
-            let candidate = format!("{}{}", after_directory, &path[before_directory.len()..]);
+        let mut selected = false;
+        let mut prefix_length = 0usize;
+        let mut target_directory = String::new();
+        let mut ambiguous = false;
+        for (old_directory, targets) in &directories {
+            if path.starts_with(old_directory) && (!selected || old_directory.len() > prefix_length) {
+                selected = true;
+                prefix_length = old_directory.len();
+                ambiguous = targets.len() != 1usize;
+                target_directory = if ambiguous { String::new() } else { targets[0].clone() };
+            }
+        }
+        if selected {
+            if ambiguous {
+                return Err(failure(path, "FILE_AMBIGUOUS", "stable identities imply several counterpart directories for this include-only input"));
+            }
+            let candidate = format!("{}{}", target_directory, &path[prefix_length..]);
             if after_index.contains_key(&candidate) {
                 pair(&mut files, &mut reverse, path, &candidate)?;
                 continue;
             }
         }
-        return Err(failure(path, "FILES", "source file has no stable identity or relative-path counterpart"));
+        return Err(failure(path, "FILES", "source file has no stable identity or unambiguous relative-path counterpart"));
     }
     for (path, _) in after_inputs {
         if !reverse.contains_key(path) {
@@ -165,6 +208,12 @@ pub fn request(before: &semantic::Catalog, before_inputs: &[(String, Vec<u8>)],
     let before_index = input_index(before_inputs)?; let after_index = input_index(after_inputs)?;
     let pairs = file_pairs(before, before_inputs, after, after_inputs)?;
     for (before_file, after_file) in &pairs {
+        let old_bytes = input(before_inputs, &before_index, before_file)?;
+        let new_bytes = input(after_inputs, &after_index, after_file)?;
+        if old_bytes == new_bytes { continue; }
+        if !old.by_file.contains_key(before_file) && !new.by_file.contains_key(after_file) {
+            return Err(failure(before_file, "DATA", "changed include-only data needs an explicit data-file operation"));
+        }
         if frame(before, &old, before_inputs, &before_index, before_file)?
             != frame(after, &new, after_inputs, &after_index, after_file)? {
             return Err(failure(before_file, "FRAME", "tokens outside selected declarations changed; imports/module framing need an explicit operation"));

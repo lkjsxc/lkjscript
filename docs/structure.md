@@ -110,6 +110,30 @@ Recorded signature dependents are conservative source relations, not yet a
 complete per-definition interface reuse boundary. Scale costs and the first
 resource refusal are in [the ladder](../bench/scale.md).
 
+## Replaying a checked target
+
+`edit SOURCE --source-dir ROOT --against DESIRED_SOURCE` derives one request
+from two independently checked source catalogs. `--against-library-dir`
+selects the target's library; `--dry-run` prints the same plan without publication.
+A request file and `--against` are mutually exclusive. Existing declarations are
+paired by stable source identity and source files by an unambiguous bijection.
+Include-only inputs inherit the longest directory correspondence proved by
+those item pairs; ambiguous mappings refuse.
+
+The planner chooses body/item replacement, addition or removal. It preserves
+untouched source bytes. Changed imports or module framing, existing declaration
+reordering, new files, splits/joins and changed include-only data require
+explicit operations. Repeated reads of one path must contain identical bytes.
+Unchanged binary data is compared as bytes, never tokenized as source.
+
+Before publication the candidate's checked-meaning digest must equal the
+desired program's digest. The report prints both and `verified=true`; both
+input read sets are validated again. This proves equality under the same
+current checker and selected libraries. It does not claim to reproduce the
+output of a historical compiler producer. The history harness freezes its
+revision population and compiler bytes, records compatibility environments
+and refusals, and applies explicit external memory/time limits.
+
 ## Publication and recovery
 
 Apply/recovery requires a private 32-byte authentication key outside every
@@ -154,7 +178,10 @@ metadata is outside the tracked projection.
 two summary lines, at most 27 fact lines, and one continuation/detail line.
 `--id ID` selects detail; a larger explicit `--limit` can request more facts.
 
-Source signature/body/text/file changes are labelled claims. Checked facts
+Source signature/body/text changes are labelled claims. Absolute checkout paths
+are excluded from that summary. Text equality compares exact bytes under the
+same unambiguous loaded-file correspondence used by replay; transaction snapshot
+digests still bind paths for stale-input protection. Checked facts
 compare entry authority, physical layout, nominal type representation,
 destructor binding and each monomorphic instance body. Whole-program identities
 and the explicit verdict `text differs, checked IR identical` are separate
