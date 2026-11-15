@@ -1,0 +1,154 @@
+//! Owning storage for long-lived graphs. Handles contain values, never views.
+//! Kind gives a nominal graph class. owner is an application-assigned namespace;
+//! distinct arenas of one Kind must receive different owner values while any
+//! handle from either arena can still exist. The arena itself is not Clone.
+//! A removed slot changes generation before reuse. Generation exhaustion retires
+//! the slot permanently, so a previously issued handle never becomes valid again.
+use crate::Option;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct Handle<Kind> {
+    owner: u64,
+    index: usize,
+    generation: u64,
+    kind: [Kind; 0],
+}
+impl<Kind> Handle<Kind> {
+    pub fn owner(&self) -> u64 { self.owner }
+    pub fn index(&self) -> usize { self.index }
+    pub fn generation(&self) -> u64 { self.generation }
+}
+
+struct Slot<T> {
+    value: Option<T>,
+    generation: u64,
+    next: usize,
+}
+
+pub struct Arena<T, Kind> {
+    slots: Vec<Slot<T>>,
+    owner: u64,
+    free: usize,
+    count: usize,
+    retired: usize,
+    kind: [Kind; 0],
+}
+
+impl<T, Kind> Arena<T, Kind> {
+    pub fn new(owner: u64) -> Arena<T, Kind> {
+        Arena {
+            slots: Vec::new(), owner, free: 0usize,
+            count: 0usize, retired: 0usize, kind: [],
+        }
+    }
+    pub fn len(&self) -> usize { self.count }
+    pub fn is_empty(&self) -> bool { self.count == 0usize }
+    pub fn slot_count(&self) -> usize { self.slots.len() }
+    pub fn retired_count(&self) -> usize { self.retired }
+    pub fn owner(&self) -> u64 { self.owner }
+
+    pub fn insert(&mut self, value: T) -> Handle<Kind> {
+        let index: usize;
+        if self.free != 0usize {
+            index = self.free - 1usize;
+            self.free = self.slots[index].next;
+            self.slots[index].next = 0usize;
+            self.slots[index].value = Option::Some(value);
+        } else {
+            index = self.slots.len();
+            self.slots.push(Slot {
+                value: Option::Some(value), generation: 1u64, next: 0usize,
+            });
+        }
+        self.count += 1usize;
+        Handle { owner: self.owner, index, generation: self.slots[index].generation, kind: [] }
+    }
+    pub fn contains(&self, handle: &Handle<Kind>) -> bool {
+        handle.owner == self.owner && handle.index < self.slots.len()
+            && self.slots[handle.index].generation == handle.generation
+            && self.slots[handle.index].value.is_some()
+    }
+    pub fn get(&self, handle: &Handle<Kind>) -> Option<&T> {
+        if !self.contains(handle) { return Option::None; }
+        self.slots[handle.index].value.as_ref()
+    }
+    pub fn get_mut(&mut self, handle: &Handle<Kind>) -> Option<&mut T> {
+        if !self.contains(handle) { return Option::None; }
+        self.slots[handle.index].value.as_mut()
+    }
+    pub fn remove(&mut self, handle: &Handle<Kind>) -> Option<T> {
+        if !self.contains(handle) { return Option::None; }
+        let index = handle.index;
+        let value = self.slots[index].value.take();
+        self.count -= 1usize;
+        if self.slots[index].generation == 18_446_744_073_709_551_615u64 {
+            // Never wrap: wrapping could authenticate an ancient observer.
+            self.retired += 1usize;
+        } else {
+            self.slots[index].generation += 1u64;
+            self.slots[index].next = self.free;
+            self.free = index + 1usize;
+        }
+        value
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TestKind { Node }
+
+#[test]
+fn reuse_rejects_stale_handle() {
+    let mut arena: Arena<usize, TestKind> = Arena::new(17u64);
+    let first = arena.insert(9usize);
+    assert_eq!(arena.get(&first).copied(), Option::Some(9usize));
+    assert_eq!(arena.remove(&first), Option::Some(9usize));
+    assert!(arena.get(&first).is_none());
+    assert!(arena.get_mut(&first).is_none());
+    assert!(arena.remove(&first).is_none());
+    let second = arena.insert(12usize);
+    assert_eq!(first.index(), second.index());
+    assert_eq!(second.generation(), first.generation() + 1u64);
+    assert!(!arena.contains(&first));
+    *arena.get_mut(&second).unwrap() = 13usize;
+    assert_eq!(arena.remove(&second), Option::Some(13usize));
+    assert!(arena.is_empty());
+}
+
+#[test]
+fn different_namespaces_reject_handle() {
+    let mut left: Arena<usize, TestKind> = Arena::new(10u64);
+    let mut right: Arena<usize, TestKind> = Arena::new(11u64);
+    let handle = left.insert(40usize);
+    right.insert(41usize);
+    assert!(!right.contains(&handle));
+    assert!(right.get_mut(&handle).is_none());
+    assert!(right.remove(&handle).is_none());
+    assert_eq!(left.len(), 1usize);
+    assert_eq!(right.len(), 1usize);
+}
+
+#[test]
+fn generation_exhaustion_retires_slot() {
+    let mut arena: Arena<usize, TestKind> = Arena::new(12u64);
+    let mut last = arena.insert(42usize);
+    // Module-private witness reaches the representation's last generation.
+    arena.slots[last.index].generation = 18_446_744_073_709_551_615u64;
+    last.generation = 18_446_744_073_709_551_615u64;
+    assert_eq!(arena.remove(&last), Option::Some(42usize));
+    let next = arena.insert(43usize);
+    assert_ne!(next.index(), last.index());
+    assert!(!arena.contains(&last));
+    assert_eq!(arena.retired_count(), 1usize);
+    assert_eq!(arena.slot_count(), 2usize);
+}
+
+#[test]
+fn affine_values_move_out_once() {
+    let mut arena: Arena<Vec<usize>, TestKind> = Arena::new(13u64);
+    let value = vec![1usize, 2usize, 3usize];
+    let handle = arena.insert(value);
+    let value = arena.remove(&handle).unwrap();
+    assert_eq!(value.len(), 3usize);
+    assert!(arena.remove(&handle).is_none());
+    assert_eq!(arena.len(), 0usize);
+}

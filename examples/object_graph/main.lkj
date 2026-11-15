@@ -1,0 +1,25 @@
+//! Specimen: parent/child/sibling links, attributes and arbitrary observers.
+mod arena { pub use std::arena::{Arena, Handle}; }
+mod graph;
+
+fn main(mut arguments: Arguments, mut output: Stdout) {
+    let args = arguments.args();
+    let count = if args.len() > 0usize {
+        String::from_utf8(args[0usize].clone()).unwrap().as_str().parse::<usize>().unwrap()
+    } else { 1_000_000usize };
+    let mutations = if args.len() > 1usize {
+        String::from_utf8(args[1usize].clone()).unwrap().as_str().parse::<usize>().unwrap()
+    } else { 2_000usize };
+    let seed = if args.len() > 2usize {
+        String::from_utf8(args[2usize].clone()).unwrap().as_str().parse::<u64>().unwrap()
+    } else { 6840227782638526189u64 };
+    let report = graph::exercise(count, mutations, seed);
+    let initial = report.initial;
+    let removed = report.removed;
+    let added = report.added;
+    let live = report.live;
+    let stale = report.stale;
+    let slots = report.slots;
+    let checksum = report.checksum;
+    output.write(format!("graph initial={initial} removed={removed} added={added} live={live} stale={stale} slots={slots} checksum={checksum}\n").as_bytes());
+}

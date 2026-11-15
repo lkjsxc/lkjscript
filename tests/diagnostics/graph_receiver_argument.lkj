@@ -1,0 +1,13 @@
+// expect: reject E_BORROW
+// cause: expected a Rust form.
+// pending: A nested immutable receiver argument conflicts with receiver-first exclusive borrowing; name the receiver and suggest a prior local instead of the temporary $.
+struct Owner { value: i64 }
+impl Owner {
+    fn read(&self) -> i64 { self.value }
+    fn write(&mut self, value: i64) { self.value = value; }
+}
+pub fn probe() -> i64 {
+    let mut owner = Owner { value: 42i64 };
+    owner.write(owner.read());
+    owner.read()
+}

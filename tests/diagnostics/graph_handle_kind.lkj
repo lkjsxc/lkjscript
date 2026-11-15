@@ -1,0 +1,13 @@
+// expect: reject E_TYPE
+// A handle of another nominal graph class cannot name a slot.
+use std::arena::{Arena, Handle};
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct Left;
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct Right;
+pub fn probe() -> bool {
+    let mut left: Arena<i64, Left> = Arena::new(1u64);
+    let right: Arena<i64, Right> = Arena::new(2u64);
+    let handle = left.insert(42i64);
+    right.contains(&handle)
+}
