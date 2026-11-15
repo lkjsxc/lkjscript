@@ -1,35 +1,35 @@
 # Status — 2026-11-15
 
-## Compiler: reuse and diagnostic rewrites landed; optimizer baseline measured
+## Compiler: checked reuse, rechecked inlining and executable diagnostic rewrites
 
-Reuse gate cold/warm: 212.913/110.015 s, load 10.04→11.42 / 11.42→7.14; both CI jobs pass.
-Reuse self-build cold/edit/unchanged: 21.09/16.21/1.44 s, load 7.43→7.69 / 7.56→7.62 / 7.69→7.56.
-Cold overhead +37.93%; two versions 64,564,271 bytes. Warm 32,768 mutations: zero findings.
-Three consumer diagnostics now carry tested JSON byte edits; receiver evaluation and closure scope survive.
+Reuse cold/edit/unchanged: 23.27/17.20/1.42 s (load 3.76→3.72 / 3.72→4.92 / 3.72→3.72); edit reuses 9,639/9,640 checks.
+No-store/edit control: 17.13/17.63 s (load 3.76→3.76 / 4.92→5.49); cold overhead +35.84%; store 54,320,913 B, two versions 70,300,130 B.
+Seed 3,077,565 B; gate cold/warm 394.211/200.040 s (load 0.84→4.56 / 4.56→4.45); warm 32,768 inline64 mutants: zero findings, 64.435 s (load 1.42→6.26).
+Scalar Clone→Read; inline16 removes 17,622 calls in 3,701 bodies, retaining 5,939 original proofs. Default zero: candidate admission exceeds code gains.
+All 23 diagnostic inputs and 618 Rust checks pass alongside applied edits; literal panic payloads were previously discarded. Automatic unwrap caller/errno remains pending; explicit match works.
 
-| Compiler self-build before Readiness, store disabled | Seconds | Load 1/5/15 before |
-| --- | ---: | --- |
-| Self-built | 15.93 | 2.09/4.44/4.80 |
-| Rust opt=0, one codegen unit | 8.41 | 1.91/4.29/4.74 |
-| Rust -O, one codegen unit | 2.23 | 2.00/4.23/4.71 |
-Outputs agree byte for byte: native is 1.89x opt=0 and 7.14x -O; the gap is not only optimization.
-
-| Before Readiness: exclusive emitted-code samples | Self-build % | HTTP server % |
+| Compiler self-build, store disabled | No inline: seconds (load before) | Inline16: seconds (load before) |
 | --- | ---: | ---: |
-| Inline copy | 19.7 | 3.2 |
-| Checks | 1.1 | 0.5 |
-| Call setup / prologue / return | 15.0 | 2.6 |
-| Frame load/store | 4.3 | 17.4 |
-| Other memory | 10.5 | 3.7 |
-| Arithmetic / registers | 34.6 | 36.9 |
-| Branch | 2.6 | 6.8 |
-| Allocator | 9.5 | 1.1 |
-| Runtime | 2.2 | 27.4 |
-| Unknown | 0.0 | 0.0 |
-Self: 15,486 samples, 15.86 s, load 3.43→2.89; HTTP: 14,719, 11,746/s over 30.002 s, load 4.17→3.38.
-Copies/calls/runtime own their internal frame accesses; arithmetic includes register moves and addresses.
-Combined Readiness/profiling gate: 253.475 s, load 1.53→4.90; seed bootstrap and every suite pass.
-Next: scalar Clone→Read, then measured rechecked inlining; retain the original interpreter oracle.
+| Self-built | 17.21 (3.76) | 21.31 (3.72) |
+| Rust opt=0, one codegen unit | 10.01 (3.76) | 12.81 (4.92) |
+| Rust -O, one codegen unit | 2.61 (3.57) | 3.29 (5.49) |
+Outputs agree byte for byte for each policy. Native0 is 1.72x opt=0 and 6.59x -O; inline16 is 6.48x -O. The 3x target remains unmet.
+
+| Exclusive emitted-code samples | Self-build %, 0 / 16 | HTTP server %, 0 / 16 |
+| --- | ---: | ---: |
+| Inline copy | 19.3 / 18.7 | 5.2 / 4.8 |
+| Checks | 1.1 / 1.2 | 0.8 / 1.0 |
+| Call setup / prologue / return | 14.0 / 11.2 | 2.7 / 2.2 |
+| Frame load/store | 4.4 / 4.6 | 15.3 / 15.0 |
+| Other memory | 11.4 / 11.4 | 5.5 / 6.4 |
+| Arithmetic / registers | 35.4 / 37.1 | 36.7 / 35.5 |
+| Branch | 2.4 / 2.8 | 5.7 / 6.0 |
+| Allocator | 9.3 / 10.5 | 2.1 / 2.2 |
+| Runtime | 2.2 / 2.0 | 25.5 / 26.5 |
+| Unknown | 0.0 / 0.0 | 0.0 / 0.0 |
+Self0/16: 16,826/20,034 samples, 17.30/20.50 s (load 3.03→3.20 / 2.50→2.21).
+HTTP0/16: 27,025/26,971 samples, 35,354/36,701 requests/s over 30.001/30.000 s (load 3.76→4.47 / 4.92→5.45); same 8,195-byte body and client.
+Copies/calls/runtime own internal frame accesses; arithmetic includes register moves/addresses. Next: source graph/copy and reuse-authentication costs.
 
 ## Programs
 
