@@ -1777,6 +1777,7 @@ struct Memo {
     store: Option<store::Store>,
     private_source_digest: Option<[u8; 32]>,
     capture_catalog: bool,
+    catalog_items_only: bool,
     catalog: Option<crate::semantic::Catalog>,
     native_sizes: BTreeMap<String, usize>,
     inputs: Vec<store::Input>,
@@ -1812,7 +1813,7 @@ impl Memo {
         Self {
             store: store::Store::open_bounded(world, &options.store_directory, &options.store_key, options.store_bytes),
             private_source_digest: None,
-            capture_catalog: options.index, catalog: None, native_sizes: BTreeMap::new(),
+            capture_catalog: options.index, catalog_items_only: false, catalog: None, native_sizes: BTreeMap::new(),
             inputs: Vec::new(), source_inputs: Vec::new(), input_snapshot: BTreeMap::new(), front_reused: 0, front_definitions: 0, front_functions: 0, valid_inputs: true, runtime_input: None,
             checked_reused: 0, checked_local_reused: 0, emitted_reused: 0, test_reused: 0, test_rerun: 0, build_reused: 0,
             inline_calls: 0, inline_functions: 0, inline_attempts: 0, inline_accepted: 0, inline_rejected: 0,
@@ -2248,8 +2249,9 @@ fn compile_snapshot(
     };
     stats.mark("resolve")?;
     // The current frontend checkpoint omits definition/source-site evidence.
-    // A requested catalog must not depend on whether that checkpoint was warm.
-    let front = if memo.store.is_some() && !memo.capture_catalog && options.command != "check-library" {
+    // Full reference evidence cannot depend on whether that checkpoint was warm.
+    // Declaration-only catalogs need no recorded body inference and may resume.
+    let front = if memo.store.is_some() && (!memo.capture_catalog || memo.catalog_items_only) && options.command != "check-library" {
         elaborate::incremental::fingerprint(&resolved, &memo.source_inputs)
     } else { None };
     stats.mark("key_hash")?;
@@ -2281,7 +2283,7 @@ fn compile_snapshot(
                 for function in &checked.program().functions { instructions += function.body.len(); }
                 stats.count("ir_instructions", instructions);
                 if memo.capture_catalog {
-                    memo.catalog = Some(crate::semantic::catalog(&resolved, &memo.source_inputs, checked.checked())?);
+                    memo.catalog = Some(crate::semantic::catalog_items(&resolved, &memo.source_inputs, checked.checked())?);
                     stats.mark("semantic_catalog")?;
                 }
                 return select_checked(checked, options, stats, memo);
@@ -2307,7 +2309,7 @@ fn compile_snapshot(
     };
     stats.mark("type")?;
     let mut front_catalog = front.as_ref().map(|_| Vec::new());
-    let mut structural = if memo.capture_catalog { Some(elaborate::semantic::Evidence::default()) } else { None };
+    let mut structural = if memo.capture_catalog && !memo.catalog_items_only { Some(elaborate::semantic::Evidence::default()) } else { None };
     let meaning = match elaborate::lower_definitions_recorded_semantic(definitions, &mut front_catalog, &mut structural) {
         Ok(meaning) => meaning,
         Err(problems) => {
@@ -2347,7 +2349,11 @@ fn compile_snapshot(
     }
     stats.count("ir_instructions", instructions);
     if memo.capture_catalog {
-        memo.catalog = Some(crate::semantic::catalog_typed(&resolved, &memo.source_inputs, checked.checked(), &structural)?);
+        memo.catalog = Some(if memo.catalog_items_only {
+            crate::semantic::catalog_items(&resolved, &memo.source_inputs, checked.checked())?
+        } else {
+            crate::semantic::catalog_typed(&resolved, &memo.source_inputs, checked.checked(), &structural)?
+        });
         stats.mark("semantic_catalog")?;
     }
     select_checked(checked, options, stats, memo)

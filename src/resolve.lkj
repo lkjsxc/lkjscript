@@ -1189,3 +1189,10 @@ impl Resolver<'_> {
         visible(self.program, item.scope, item.public, scope)
     }
 }
+
+/// Resolve one written type/module prefix with its declaration identity.
+pub fn semantic_type_path(resolver: &Resolver<'_>, scope: ModuleId, name: &str, span: Span) -> Result<Path> {
+    let mut path = Path { declaration: None, name: name.to_string(), args: Vec::new() };
+    resolver.resolve_path(scope, &mut path, Namespace::Type, span)?;
+    Ok(path)
+}

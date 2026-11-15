@@ -38,6 +38,8 @@ pub struct Reference {
 }
 pub struct Catalog {
     pub root: String,
+    /// Whether reference discovery was requested; false is declarations-only.
+    pub references_recorded: bool,
     pub items: Vec<Item>,
     pub by_identity: BTreeMap<String, usize>,
     pub references: Vec<Reference>,
@@ -163,8 +165,12 @@ fn append(
         }
     }
     let (name_start, name_end) = name_span(file, span.start, signature_end, name);
-    let text = file.text[start..span.end].to_string();
-    let signature = file.text[start..signature_end].to_string();
+    // String slicing validates its entire backing file through as_str().
+    // Validate only the selected ranges; source/token spans remain checked.
+    let text = String::from_utf8(file.text.as_bytes()[start..span.end].to_vec())
+        .map_err(|_| -> String { "E_IDENTITY item span splits UTF-8".to_string() })?;
+    let signature = String::from_utf8(file.text.as_bytes()[start..signature_end].to_vec())
+        .map_err(|_| -> String { "E_IDENTITY signature span splits UTF-8".to_string() })?;
     let body_digest = match body {
         Some((begin, end)) => token_digest(&file.tokens, begin, end),
         None => String::new(),
@@ -396,6 +402,11 @@ pub fn catalog(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir:
 }
 pub fn catalog_typed(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir::CheckedProgram,
     evidence: &Option<crate::elaborate::semantic::Evidence>) -> Result<Catalog, String> {
+    catalog_mode(program, inputs, checked, evidence, true)
+}
+
+fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir::CheckedProgram,
+    evidence: &Option<crate::elaborate::semantic::Evidence>, include_references: bool) -> Result<Catalog, String> {
     if !program.resolved { return Err("E_IDENTITY source is not resolved".to_string()); }
     let mut by_path: BTreeMap<String, usize> = BTreeMap::new();
     let mut input_identity = b"lkjscript-source-snapshot-1"[..].to_vec();
@@ -413,7 +424,7 @@ pub fn catalog_typed(program: &a::Program, inputs: &[(String, Vec<u8>)], checked
         files.push(SourceText { path: file.path.clone(), digest: sha256::hex_digest(raw), text, tokens });
     }
     let mut result = Catalog {
-        root: program.files[0usize].path.clone(),
+        root: program.files[0usize].path.clone(), references_recorded: include_references,
         items: Vec::new(), by_identity: BTreeMap::new(), references: Vec::new(), unresolved: Vec::new(),
         function_ids: Vec::new(), instance_ids: Vec::new(), instance_sources: Vec::new(),
         implementations: Vec::new(), instance_arguments: Vec::new(), input_digest: sha256::hex_digest(&input_identity),
@@ -501,128 +512,133 @@ pub fn catalog_typed(program: &a::Program, inputs: &[(String, Vec<u8>)], checked
         append(&mut result, &files, qualified(&value.module, &value.name), root_parent(&value.module), "constant",
             &value.name, value.span, None, type_name(program, value.ty), true)?;
     }
-    let owners = Owners::new(&result);
-    // Every declaration-backed type path is a resolved reference, including aliases.
-    for node in &program.types {
-        if let a::Type::Path(path) = &node.kind {
-            if let Some(declaration) = path.declaration {
-                if let Some(target) = declaration_identity(program, declaration, &result.function_ids) {
-                    let file = &files[node.span.file];
-                    if let Some(owner) = owners.get(&file.path, node.span.start, node.span.end) {
-                        path_reference(&mut result, &files, owner, target, node.span, "type");
+    if include_references {
+        let owners = Owners::new(&result);
+        // Every declaration-backed type path is a resolved reference, including aliases.
+        for node in &program.types {
+            if let a::Type::Path(path) = &node.kind {
+                if let Some(declaration) = path.declaration {
+                    if let Some(target) = declaration_identity(program, declaration, &result.function_ids) {
+                        let file = &files[node.span.file];
+                        if let Some(owner) = owners.get(&file.path, node.span.start, node.span.end) {
+                            path_reference(&mut result, &files, owner, target, node.span, "type");
+                        }
                     }
                 }
             }
         }
-    }
-    let resolver = resolve::Resolver::new(program).map_err(|problem| problem.message)?;
-    for imported in &program.uses {
-        if imported.glob { continue; }
-        let scope = resolve::module(program, &imported.module);
-        let path = a::Path { declaration: None, name: imported.path.clone(), args: Vec::new() };
-        let mut target: Option<String> = None;
-        if let Ok(resolved) = resolver.value_path(scope, &path, imported.span) {
-            target = value_identity(program, &resolved, &result.function_ids);
-        }
-        if target.is_none() {
-            if let Ok(name) = resolver.type_name(scope, &imported.path, imported.span) {
-                let identity = module_name(&name);
-                if result.by_identity.contains_key(&identity) { target = Some(identity); }
+        let resolver = resolve::Resolver::new(program).map_err(|problem| problem.message)?;
+        for imported in &program.uses {
+            if imported.glob { continue; }
+            let scope = resolve::module(program, &imported.module);
+            let path = a::Path { declaration: None, name: imported.path.clone(), args: Vec::new() };
+            let mut target: Option<String> = None;
+            if let Ok(resolved) = resolver.value_path(scope, &path, imported.span) {
+                target = value_identity(program, &resolved, &result.function_ids);
+            }
+            if target.is_none() {
+                if let Ok(name) = resolver.type_name(scope, &imported.path, imported.span) {
+                    let identity = module_name(&name);
+                    if result.by_identity.contains_key(&identity) { target = Some(identity); }
+                }
+            }
+            if let Some(target) = target {
+                let owner = root_parent(&imported.module);
+                import_reference(&mut result, &files, owner, target, imported);
             }
         }
-        if let Some(target) = target {
-            let owner = root_parent(&imported.module);
-            import_reference(&mut result, &files, owner, target, imported);
+        pattern_references(&mut result, &files, program, &owners);
+        let mut local_names: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+        let mut source_functions: BTreeMap<String, usize> = BTreeMap::new();
+        for (index, function) in program.functions.iter().enumerate() {
+            let mut locals = BTreeSet::new();
+            for parameter in &function.params { locals.insert(parameter.name.clone()); }
+            local_names.insert(result.function_ids[index].clone(), locals);
+            source_functions.insert(result.function_ids[index].clone(), index);
         }
-    }
-    pattern_references(&mut result, &files, program, &owners);
-    let mut local_names: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    let mut source_functions: BTreeMap<String, usize> = BTreeMap::new();
-    for (index, function) in program.functions.iter().enumerate() {
-        let mut locals = BTreeSet::new();
-        for parameter in &function.params { locals.insert(parameter.name.clone()); }
-        local_names.insert(result.function_ids[index].clone(), locals);
-        source_functions.insert(result.function_ids[index].clone(), index);
-    }
-    let mut binding_counts: BTreeMap<(String, String), usize> = BTreeMap::new();
-    let mut binding_ids: BTreeMap<usize, String> = BTreeMap::new();
-    for (pattern, node) in program.patterns.iter().enumerate() {
-        if let a::Pattern::Bind { name, .. } = &node.kind {
+        let mut binding_counts: BTreeMap<(String, String), usize> = BTreeMap::new();
+        let mut binding_ids: BTreeMap<usize, String> = BTreeMap::new();
+        for (pattern, node) in program.patterns.iter().enumerate() {
+            if let a::Pattern::Bind { name, .. } = &node.kind {
+                let file = &files[node.span.file];
+                if let Some(owner) = owners.get(&file.path, node.span.start, node.span.end) {
+                    if let Some(locals) = local_names.get_mut(&owner) { locals.insert(name.clone()); }
+                    let key = (owner.clone(), name.clone());
+                    let ordinal = binding_counts.get(&key).copied().unwrap_or(0usize);
+                    binding_counts.insert(key, ordinal + 1usize);
+                    let digest = match result.by_identity.get(&owner) { Some(index) => result.items[*index].body_digest.clone(), None => String::new() };
+                    let identity = format!("{}::body:{}::binding:{}:{}", owner, digest, name, ordinal);
+                    if !result.by_identity.contains_key(&identity) {
+                        binding_ids.insert(pattern, identity.clone());
+                        append(&mut result, &files, identity.clone(), owner, "binding", name, node.span, None,
+                            "inferred type is unavailable".to_string(), false)?;
+                        if let Some(ty) = evidence.as_ref().and_then(|evidence| evidence.bindings.get(&pattern)) {
+                            let index = *result.by_identity.get(&identity).unwrap();
+                            result.items[index].type_name = ty.clone(); result.items[index].type_resolved = true;
+                        }
+                    }
+                }
+            }
+        }
+        let mut calls: BTreeMap<String, usize> = BTreeMap::new();
+        for (expression, node) in program.exprs.iter().enumerate() {
             let file = &files[node.span.file];
-            if let Some(owner) = owners.get(&file.path, node.span.start, node.span.end) {
-                if let Some(locals) = local_names.get_mut(&owner) { locals.insert(name.clone()); }
-                let key = (owner.clone(), name.clone());
-                let ordinal = binding_counts.get(&key).copied().unwrap_or(0usize);
-                binding_counts.insert(key, ordinal + 1usize);
-                let digest = match result.by_identity.get(&owner) { Some(index) => result.items[*index].body_digest.clone(), None => String::new() };
-                let identity = format!("{}::body:{}::binding:{}:{}", owner, digest, name, ordinal);
-                if !result.by_identity.contains_key(&identity) {
-                    binding_ids.insert(pattern, identity.clone());
-                    append(&mut result, &files, identity.clone(), owner, "binding", name, node.span, None,
-                        "inferred type is unavailable".to_string(), false)?;
-                    if let Some(ty) = evidence.as_ref().and_then(|evidence| evidence.bindings.get(&pattern)) {
-                        let index = *result.by_identity.get(&identity).unwrap();
-                        result.items[index].type_name = ty.clone(); result.items[index].type_resolved = true;
+            let Some(owner) = owners.get(&file.path, node.span.start, node.span.end) else { continue; };
+            match &node.kind {
+                a::Expr::Path(path) | a::Expr::Struct { path, .. } => {
+                    let local_target = evidence.as_ref().and_then(|evidence| evidence.locals.get(&expression)).copied();
+                    if let Some(target) = local_target {
+                        local_reference(&mut result, &files, program, &binding_ids, &source_functions, &owner, node, &path.name, target);
+                        continue;
+                    }
+                    let typed_owner = evidence.as_ref().is_some_and(|evidence| source_functions.get(&owner).is_some_and(|function| evidence.definitions.contains(function)));
+                    let local = !typed_owner && local_names.get(&owner).is_some_and(|locals| locals.contains(&path.name));
+                    if local {
+                        add_reference(&mut result, &files, owner, path.name.clone(), node.span, leaf_name(&path.name), "lexical-name", false);
+                        continue;
+                    }
+                    let resolved = resolver.value_path(node.scope, path, node.span).ok();
+                    let target = resolved.as_ref().and_then(|path| value_identity(program, path, &result.function_ids));
+                    if let Some(target) = &target {
+                        path_reference(&mut result, &files, owner.clone(), target.clone(), node.span,
+                            if matches!(node.kind, a::Expr::Struct { .. }) { "constructor" } else { "value" });
+                    } else if resolved.as_ref().is_some_and(|path| path.declaration.is_some()) {
+                        add_reference(&mut result, &files, owner.clone(), path.name.clone(), node.span, leaf_name(&path.name), "associated-function", false);
+                    }
+                    constructor_fields(&mut result, &files, program, &owner, node, &target);
+                }
+                a::Expr::Method { receiver, name, .. } => {
+                    let resolved = evidence.as_ref().is_some_and(|evidence| typed_member(&mut result, &files, program, evidence, expression, &owner));
+                    if !resolved {
+                        let span = a::Span { start: program.exprs[*receiver].span.end, ..node.span };
+                        add_reference(&mut result, &files, owner.clone(), name.clone(), span, name, "typed-method", false);
                     }
                 }
+                a::Expr::Field { value, name } => {
+                    let resolved = evidence.as_ref().is_some_and(|evidence| typed_member(&mut result, &files, program, evidence, expression, &owner));
+                    if !resolved {
+                        let span = a::Span { start: program.exprs[*value].span.end, ..node.span };
+                        add_reference(&mut result, &files, owner.clone(), name.clone(), span, name, "typed-field", false);
+                    }
+                }
+                _ => {}
+            }
+            if matches!(node.kind, a::Expr::Call { .. } | a::Expr::Method { .. }) {
+                let ordinal = calls.get(&owner).copied().unwrap_or(0usize);
+                calls.insert(owner.clone(), ordinal + 1usize);
+                let digest = match result.by_identity.get(&owner) { Some(index) => result.items[*index].body_digest.clone(), None => String::new() };
+                let identity = format!("{}::body:{}::call:{}", owner, digest, ordinal);
+                append(&mut result, &files, identity.clone(), owner, "call-site", "", node.span, None,
+                    "inferred result type is unavailable".to_string(), false)?;
+                if let Some(ty) = evidence.as_ref().and_then(|evidence| evidence.expressions.get(&expression)) {
+                    let index = *result.by_identity.get(&identity).unwrap();
+                    result.items[index].type_name = ty.clone(); result.items[index].type_resolved = true;
+                }
             }
         }
-    }
-    let mut calls: BTreeMap<String, usize> = BTreeMap::new();
-    for (expression, node) in program.exprs.iter().enumerate() {
-        let file = &files[node.span.file];
-        let Some(owner) = owners.get(&file.path, node.span.start, node.span.end) else { continue; };
-        match &node.kind {
-            a::Expr::Path(path) | a::Expr::Struct { path, .. } => {
-                let local_target = evidence.as_ref().and_then(|evidence| evidence.locals.get(&expression)).copied();
-                if let Some(target) = local_target {
-                    local_reference(&mut result, &files, program, &binding_ids, &source_functions, &owner, node, &path.name, target);
-                    continue;
-                }
-                let typed_owner = evidence.as_ref().is_some_and(|evidence| source_functions.get(&owner).is_some_and(|function| evidence.definitions.contains(function)));
-                let local = !typed_owner && local_names.get(&owner).is_some_and(|locals| locals.contains(&path.name));
-                if local {
-                    add_reference(&mut result, &files, owner, path.name.clone(), node.span, leaf_name(&path.name), "lexical-name", false);
-                    continue;
-                }
-                let resolved = resolver.value_path(node.scope, path, node.span).ok();
-                let target = resolved.as_ref().and_then(|path| value_identity(program, path, &result.function_ids));
-                if let Some(target) = &target {
-                    path_reference(&mut result, &files, owner.clone(), target.clone(), node.span,
-                        if matches!(node.kind, a::Expr::Struct { .. }) { "constructor" } else { "value" });
-                } else if resolved.as_ref().is_some_and(|path| path.declaration.is_some()) {
-                    add_reference(&mut result, &files, owner.clone(), path.name.clone(), node.span, leaf_name(&path.name), "associated-function", false);
-                }
-                constructor_fields(&mut result, &files, program, &owner, node, &target);
-            }
-            a::Expr::Method { receiver, name, .. } => {
-                let resolved = evidence.as_ref().is_some_and(|evidence| typed_member(&mut result, &files, program, evidence, expression, &owner));
-                if !resolved {
-                    let span = a::Span { start: program.exprs[*receiver].span.end, ..node.span };
-                    add_reference(&mut result, &files, owner.clone(), name.clone(), span, name, "typed-method", false);
-                }
-            }
-            a::Expr::Field { value, name } => {
-                let resolved = evidence.as_ref().is_some_and(|evidence| typed_member(&mut result, &files, program, evidence, expression, &owner));
-                if !resolved {
-                    let span = a::Span { start: program.exprs[*value].span.end, ..node.span };
-                    add_reference(&mut result, &files, owner.clone(), name.clone(), span, name, "typed-field", false);
-                }
-            }
-            _ => {}
-        }
-        if matches!(node.kind, a::Expr::Call { .. } | a::Expr::Method { .. }) {
-            let ordinal = calls.get(&owner).copied().unwrap_or(0usize);
-            calls.insert(owner.clone(), ordinal + 1usize);
-            let digest = match result.by_identity.get(&owner) { Some(index) => result.items[*index].body_digest.clone(), None => String::new() };
-            let identity = format!("{}::body:{}::call:{}", owner, digest, ordinal);
-            append(&mut result, &files, identity.clone(), owner, "call-site", "", node.span, None,
-                "inferred result type is unavailable".to_string(), false)?;
-            if let Some(ty) = evidence.as_ref().and_then(|evidence| evidence.expressions.get(&expression)) {
-                let index = *result.by_identity.get(&identity).unwrap();
-                result.items[index].type_name = ty.clone(); result.items[index].type_resolved = true;
-            }
-        }
+    } else {
+        // Absence of rows in this mode is never evidence of absence of uses.
+        for index in 0usize..result.items.len() { result.items[index].references_complete = false; }
     }
     for function in &checked.program().functions {
         let (source, raw) = match ir_source(program, &result, &function.name) {
@@ -643,4 +659,10 @@ pub fn catalog_typed(program: &a::Program, inputs: &[(String, Vec<u8>)], checked
     }
     for (_, reference) in ordered { result.references.push(reference); }
     Ok(result)
+}
+
+/// Capture declarations and byte identities without body reference/type discovery.
+/// This view cannot authorize rename/refactoring or any claim of absent uses.
+pub fn catalog_items(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir::CheckedProgram) -> Result<Catalog, String> {
+    catalog_mode(program, inputs, checked, &None, false)
 }
