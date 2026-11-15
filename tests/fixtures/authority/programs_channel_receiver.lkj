@@ -1,0 +1,65 @@
+//! Optional C/Linux peer supplies valid and malformed ancillary messages.
+pub fn main(mut channel: Channel) -> i64 {
+    let deadline = 18_446_744_073_709_551_615usize;
+    let mut empty: [u8; 0] = [];
+    match channel.receive(&mut empty[..], deadline) {
+        Err(errno) => assert_eq!(errno, 22i64),
+        Ok(_) => panic!("empty receive accepted"),
+    }
+    match channel.send(b"", deadline) {
+        Err(errno) => assert_eq!(errno, 22i64),
+        Ok(_) => panic!("empty send accepted"),
+    }
+    assert_eq!(channel.send(b"R", deadline).unwrap(), 1usize);
+    loop {
+        let mut finish = false;
+        let code: u8 = match channel.receive_file(deadline) {
+            Ok(mut file) => {
+                let mut byte = [0u8; 1];
+                let count = file.read(&mut byte).unwrap();
+                if count != 1usize { 201u8 }
+                else if byte[0usize] == 255u8 { finish = true; 0u8 }
+                else if byte[0usize] == 42u8 { 0u8 }
+                else { 202u8 }
+            }
+            Err(errno) => errno as u8,
+        };
+        let response = [code];
+        assert_eq!(channel.send(&response, deadline).unwrap(), 1usize);
+        if finish { break; }
+    }
+    assert_eq!(channel.send(b"B", deadline).unwrap(), 1usize);
+    loop {
+        let mut bytes = [165u8; 4];
+        let mut finish = false;
+        let code: u8 = match channel.receive(&mut bytes, deadline) {
+            Err(errno) => {
+                let mut index = 0usize;
+                while index < bytes.len() {
+                    assert_eq!(bytes[index], 165u8);
+                    index += 1usize;
+                }
+                errno as u8
+            }
+            Ok(count) => {
+                if count == 1usize {
+                    assert_eq!(bytes[0usize], b'x');
+                    assert_eq!(bytes[1usize], 165u8);
+                    assert_eq!(bytes[2usize], 165u8);
+                    assert_eq!(bytes[3usize], 165u8);
+                } else {
+                    assert_eq!(count, 4usize);
+                    assert_eq!(bytes[0usize], b'd');
+                    assert_eq!(bytes[1usize], b'o');
+                    assert_eq!(bytes[2usize], b'n');
+                    assert_eq!(bytes[3usize], b'e');
+                    finish = true;
+                }
+                0u8
+            }
+        };
+        let response = [code];
+        assert_eq!(channel.send(&response, deadline).unwrap(), 1usize);
+        if finish { return 42i64; }
+    }
+}

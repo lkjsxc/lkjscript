@@ -31,9 +31,9 @@ shared-mutable handle rule is implied. The source library offers
 
 `start` receives argument byte vectors excluding argv[0], rejects embedded NUL,
 and supplies the fixed argv[0] `foreign`. The lower intrinsic receives that
-NUL-terminated argument encoding. A nonzero duration is in nanoseconds. Success
-means confinement and exec completed; setup errors return positive errno in Err
-only after resource cleanup and child reap. Command, root and sink remain parent
+NUL-terminated argument encoding. A nonzero duration is in nanoseconds. Start waits for the exec/setup-error
+handshake and returns an attached session; the child may already have exited.
+Setup errors return positive errno in Err after resource cleanup and child reap. Command, root and sink remain parent
 values; their exclusive borrows end when start returns. The child retains a
 read-only root descriptor for the whole session, independently of that borrow.
 

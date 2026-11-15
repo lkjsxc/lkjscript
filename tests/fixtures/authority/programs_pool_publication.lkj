@@ -1,0 +1,45 @@
+//! Only the parent owns durable storage. The worker's partial work cannot publish.
+mod programs_publication_common;
+
+fn barrier(input: &mut Stdin, output: &mut Stdout, phase: &[u8]) {
+    output.write(phase);
+    let mut byte = [0u8; 1];
+    assert_eq!(input.read(&mut byte).unwrap(), 1usize);
+}
+
+pub fn main(mut image: Image, mut root: Directory, mut clock: Clock, mut input: Stdin, mut output: Stdout) {
+    let mut values = Vec::new();
+    let mut value = 1u64;
+    while value <= 16u64 { values.push(value); value += 1u64; }
+    let mut events = Vec::new();
+    barrier(&mut input, &mut output, b"pool\n");
+    let deadline = clock.nanoseconds().unwrap() + 30_000_000_000usize;
+    let results = std::workers::ordered_map(&mut image, 4usize, &values, deadline, &mut events).unwrap();
+    let mut expected = Vec::new();
+    for value in &values { expected.push(programs_publication_common::work(*value)); }
+    assert_eq!(results, expected);
+    let trace = std::process_model::verify_trace(4usize, 4usize, &expected, &events).unwrap();
+    assert!(trace.committed && !trace.failed);
+    assert_eq!(trace.results, results);
+    let mut bytes = Vec::new();
+    for value in &results {
+        let mut shift = 0u32;
+        while shift < 64u32 {
+            bytes.push((*value >> shift) as u8);
+            shift += 8u32;
+        }
+    }
+    assert_eq!(bytes.len(), 128usize);
+    barrier(&mut input, &mut output, b"collected\n");
+    let mut pending = root.create_private("next").unwrap();
+    let half = bytes.len() / 2usize;
+    pending.write_all(&bytes[..half]).unwrap();
+    barrier(&mut input, &mut output, b"partial\n");
+    pending.write_all(&bytes[half..]).unwrap();
+    pending.sync().unwrap();
+    barrier(&mut input, &mut output, b"synced\n");
+    root.rename("next", "published").unwrap();
+    barrier(&mut input, &mut output, b"renamed\n");
+    root.sync().unwrap();
+    barrier(&mut input, &mut output, b"committed\n");
+}

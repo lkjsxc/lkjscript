@@ -49,7 +49,7 @@ The first seven types must match this primitive prefix exactly, including names.
 | `array TYPE LENGTH` | Fixed-length owned elements. |
 | `vec TYPE`, `box TYPE` | Owned growable sequence or owned indirection. |
 | `str` | Unsized immutable UTF-8 text; values require a shared reference. |
-| `world`, `arguments`, `environment`, `exit_status`, `stdout`, `stdin`, `stderr`, `directory`, `read_directory`, `file`, `read_file`, `foreign_command`, `null_device`, `process`, `clock`, `child`, `listener`, `connector`, `readiness`, `entropy`, `stop` | Affine authority-bearing values. |
+| `world`, `arguments`, `environment`, `exit_status`, `stdout`, `stdin`, `stderr`, `directory`, `read_directory`, `file`, `read_file`, `foreign_command`, `foreign_session`, `image`, `channel`, `worker`, `read_region`, `null_device`, `process`, `clock`, `child`, `listener`, `connector`, `readiness`, `entropy`, `stop` | Affine authority-bearing values. |
 
 All type indices must exist. Recursive by-value layouts reject; introduce Box or
 another indirection. Unsized text cannot be stored by value or as a container
@@ -163,6 +163,8 @@ The intrinsic signatures are checked in `src/check.lkj` and `src/check/io.lkj`:
 | `file_modified_nanoseconds` | `(&mut file/read_file) -> Result<usize,i64>`: fstat of that held regular inode; Unix mtime nanoseconds, EINVAL for nonregular, EOVERFLOW for pre-epoch or unrepresentable time. |
 | `foreign_run` | `(&mut foreign_command, &mut read_directory, &mut null_device, &[u8] argv, usize duration_ns) -> Result<read_file,i64>`: exact typed loans, immutable initial image, fixed kernel profile below, synchronous deadline plus kill/reap. |
 | `foreign_image` | `(&mut foreign_command) -> Result<read_file,i64>`: fresh read view of immutable transformed initial ELF; checked code can hash these exact bytes. |
+| `foreign_start` | `(&mut foreign_command, &mut read_directory, &mut null_device, &[u8], usize duration_ns) -> Result<foreign_session,i64>`: attached confined session; explicit argv encoding and retained read-only root. |
+| `foreign_exchange foreign_finish` | `(&mut foreign_session, &[u8], &mut [u8], usize duration_ns) -> i64` exchanges exact framed bytes transactionally; `(&mut foreign_session, usize duration_ns) -> i64` sends input EOF and returns cached raw wait status. Negative results are errno; [full lifecycle](programs-foreign-session-contract.md). |
 | `world_file` | World plus u8 selector: 0 anonymous file, 1/2/3 owned stdin/stdout/stderr, 4 running executable. Return Result<File, i64>; closed standard streams produce closed Files. |
 | `world_listen` | `(&mut world, &[u8]) -> Result<listener, i64>`: bind and listen on an exact IPv4 socket address. |
 | `listener_accept listener_accept_nodelay` | `(&mut listener) -> Result<file, i64>`: accept an owned TCP byte stream; the second disables Nagle before returning it, closing on configuration failure. |
@@ -453,3 +455,96 @@ Copied instructions retain their original file, line and column, including traps
 
 A recheck ma
 Authenticated transfer-only child entry, stable capability slots and the sealed executable identity contract are specified in [child images](child-image.md). Their manifest is derived from CheckedProgram, never from producer annotations.
+
+## Isolated workers and immutable regions
+
+`image`, `channel`, `worker` and `read_region` are opaque affine IR kinds,
+not integer/aggregate aliases, Copy or Data. Their owners can inhabit owned
+containers; views of them obey the ordinary checker loan rules. There is no
+cross-thread Send/Sync rule or shared mutable address space. Parallel execution
+uses separate processes and heaps; the only shared mapping is immutable.
+
+An ordinary Image grant is `--grant name=CHILD_ELF --image-key KEY`. The driver
+authenticates the exact compiler producer, ELF bytes and canonical child
+manifest, snapshots/seals the admitted descriptor, then embeds those exact bytes
+and identities in the parent. Only a manifest with one owned Channel slot is
+accepted by this runtime form. No World, root, listener, clock or ambient stream
+is silently granted to the worker. Normal entry acquisition cannot construct
+Channel, Worker or ReadRegion, and arbitrary File bytes cannot become Image.
+The producer key must remain outside every read grant, including hardlink aliases;
+runtime-grant overlap exclusion is a documented pending provisioning check.
+
+The parent's report names each image digest and manifest identity, its exact
+entry slot and attached lifetime. Entry authority is distinct from later moved
+File messages. A Channel permits byte messages and explicitly received File
+values; it does not prove that the worker forever holds only its initial slot.
+Both IR bodies and implicit drops contribute reachable operations to the report.
+
+All deadlines below are unsigned 64-bit absolute monotonic nanoseconds. The
+caller supplies them; progress never extends them. These are separate from
+ForeignSession's duration arguments. In this table `R<T>` means structural
+`Result<T,i64>`; errors are positive Linux errno.
+
+| Intrinsic | Checked signature |
+| --- | --- |
+| `image_spawn` | `(&mut image, usize deadline) -> R<worker>` |
+| `image_buffer` | `(&mut image, &[u8]) -> R<file>` |
+| `channel_send worker_send` | `(&mut channel/worker, &[u8], usize deadline) -> R<usize>` |
+| `channel_receive worker_receive` | `(&mut channel/worker, &mut [u8], usize deadline) -> R<usize>` |
+| `channel_send_file worker_send_file` | `(&mut channel/worker, file, usize deadline) -> R<()>` |
+| `channel_receive_file worker_receive_file` | `(&mut channel/worker, usize deadline) -> R<file>` |
+| `worker_wait` | `(&mut worker, usize deadline) -> R<i64>` |
+| `worker_terminate` | `(&mut worker) -> R<()>` |
+| `worker_result` | `(&mut worker) -> R<read_file>` |
+| `file_map_readonly` | `(&mut file) -> R<read_region>` |
+| `read_region_bytes read_region_len` | `(&read_region) -> &[u8]` or `usize` |
+
+Spawn creates a private message endpoint and result channel and executes the
+same sealed image descriptor. Its deadline covers the pre-exec handshake.
+Parent-death SIGKILL plus a post-install parent identity check close the startup
+race; unrelated descriptors are closed at exec. Worker drop kills, reaps and
+closes its resources. There is no detached operation. Wait retains the actual
+exit code or 128+signal for repeat queries; a wait timeout kills/reaps and returns
+ETIMEDOUT while retaining that status. Terminate kills/reaps and retains the
+actual status. Result returns a fresh readonly result-file view after wait or
+terminate has reaped the child (EBUSY until then, even if the OS child exited). A trap ends that worker; interpretation/location of its
+private result record is a caller/library decision bound to its admitted image.
+
+Messages are nonempty kernel packets. Send preserves a packet boundary; receive
+returns the packet length and changes only that prefix on success. An empty
+buffer is EINVAL, oversized packets or unexpected ancillary data reject, and any error leaves
+the caller's buffer unchanged. EOF is zero. Descriptor messages accept exactly
+one File and reject malformed, extra or truncated ancillary data while closing
+received descriptors. A sent File is consumed even when the operation fails;
+the sender cannot reuse that value. Explicit duplicates made beforehand remain
+separate owners of the same kernel object. No Directory, Listener, Image or
+other capability kind can currently travel in a message.
+
+Image.buffer copies bytes once into anonymous storage and permanently seals
+write/grow/shrink/seal changes. File.map_readonly requires all four seals, retains
+its own descriptor and maps PROT_READ; an unsealed file returns EINVAL without
+consuming it. Empty regions are valid. Mapping lifetime does not depend on the
+original File or another map. ReadRegion.bytes derives a shared view tied to
+that region owner, including the exact interpreter extent; mutable conversion,
+owner drop/move while viewed and false static-return metadata reject from IR
+alone. Region drop unmaps/closes once. Existing writable File aliases cannot
+write or resize sealed storage. The typed view here is a byte slice, not an
+unchecked cast to a foreign object layout.
+
+Byte framing is still a library convention. A common std::workers codec avoids
+duplicated encoding in its specimens, but does not supply semantic message
+identity or generated arbitrary typed codecs. The pending compiler handoff is
+`tests/diagnostics/programs_semantic_message_identity.lkj`. General capability
+messages, structured typed shared views and in-process mutable threads remain
+unsupported. The process pool handoff is
+`tests/diagnostics/programs_compiler_pool_adoption.lkj`; checked-unit serialization
+and separate heaps are real adoption costs.
+
+std::workers::ordered_map uses one in-flight job per owned worker, returns input
+order only after all replies and successful joins, and drops workers on error.
+Its explicit event history is checked by std::process_model; deterministic
+seeded histories explore protocol interleavings, not native scheduling or
+thread races. Durable publication belongs to the sole parent storage owner:
+write a private file, sync it, rename, then sync the directory. The retained
+pool publication specimen checks complete old/new results under parent kills;
+that is process-kill atomicity, not a sudden-power-loss experiment.

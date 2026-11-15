@@ -1,33 +1,19 @@
 // expect: reject E_CAPABILITY
 // cause: rule with no Rust counterpart.
-// pending: E_CHILD_IMAGE must explain that a path does not prove child authority.
-// Compiler: authenticate immutable exact ELF bytes, selected entry, transfer ABI,
-// and canonical comparable entry-authority manifest. Startup imports only declared
-// typed descriptor/value slots: no baked paths, new binds, ambient env, or World.
-// Programs: consume transferred affine values; reject missing/excess/mismatched
-// slots before exec; report the image identity and every transferred slot.
-// Return exit/output under an absolute deadline; parent death kills non-detached
-// children. Consumer: command/service images under one failure-restarting supervisor.
-// Current diagnostic boundary remains below until that image contract lands.
-// pending: Checked-image child execution requires an immutable authenticated
-// admitted image, checked entry grants and transferred handles.
-// ForeignCommand is the separate explicit kernel-confinement form; it does not
-// establish the authenticated entry-authority subset requested by this case.
-// An exact path alone is insufficient; the diagnostic names this proof and
-// World.process() as explicitly broader host authority.
-// A future executable test must deny reading an outside fixture and observing
-// an unrelated inherited descriptor even when the host user could access them.
-// Compiler agreement for the programs transfer contract (2026-11-15): one
-// versioned authenticated admission record binds exact ELF length/hash, target,
-// transfer ABI, selected entry/result and parameter-ordered capability slots
-// derived from checked IR. Stable kinds, not IR IDs or report text, are compared.
-// The admission key stays outside program grants; World has no transfer profile.
-// Immutable means a private memfd sealed against write/grow/shrink, retained as
-// the same descriptor through verification and exec; a path/readonly alias is not proof.
-// Transfer startup imports only those typed slots, closes undeclared descriptors,
-// and performs no CLI pathname opens, new binds or ambient environment lookup.
-// Programs owns affine transfer, deadline/parent-death and supervisor behavior;
-// this rejection remains until the single pending executable contract is implemented.
+// pending: E_CHILD_IMAGE must explain why a path does not prove child authority.
+// Implemented by the fourth note: Image binds authenticated exact ELF and
+// canonical manifest identity; its attached Worker imports one owned Channel.
+// File messages consume their affine value; deadlines include startup and
+// parent death kills the child. The parent report names image/manifest identity,
+// the entry Channel, possible later moved Files and detached=no.
+// Executable proof: tools/programs-process-test.sh, plus the independent
+// tools/programs-process-witness.sh for pre-exec deadline, ancestor death and
+// inherited-descriptor closure. The parent listener/root never enter parser workers.
+// This path-only Command API remains intentionally rejected; broad World.process
+// is distinct. More entry slots, arbitrary capability messages and generated typed
+// codecs are not implied; programs_semantic_message_identity carries that handoff.
+// Image-key exclusion from runtime read grants remains a provisioning precondition,
+// with containing-directory and hardlink counterexamples retained separately.
 use std::process::Command;
 pub fn probe() {
     Command::new("/usr/bin/cat").arg("outside-parent-directory").output();
