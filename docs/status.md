@@ -1,32 +1,36 @@
-# Status — 2026-11-15
+# Status — 2026-11-15 UTC
 
-**Source decision: .lkj, landed as 1,072 language sources.** a3c2f046 plus separate seed26bf2c3c; child.lkj/child/mod.lkj/program.lkj, tools/docs/witness agree without alias/fallback. Rename gate461.920s (load3.92→8.04), current generations equal. Seed-only CI43718048863 passed572.075s (load0.69→3.39); witness119s (load not recorded). Programs rebased at9d145128.
+**Source decision: .lkj.** Landed 1,072 language-source renames in a3c2f046 and separate seed 26bf2c3c; child.lkj/child/mod.lkj/program.lkj have no alias/fallback. Rename gate 461.920 s (load 3.92→8.04), seed-only CI43718048863 572.075 s (0.69→3.39), both jobs passed. Programs 9d145128 is integrated.
 
-**Compiler integration in progress.** Before programs9d145128, bounded path/line/operation/errno traps and complete private identities passed43 isolated transient-unit cases and32,768 original-IR mutants (92.391s, load11.40→11.08), zero findings. Earlier source had a separate grant/errno line plus misleading generic R0007 text; the live missing-line cause was not reproduced. Native terminal formatting allocates nothing; supervisor interpretation/private decoding still allocate. No production service was touched.
+**Failure interface.** Source4048e172 passes 63 isolated transient-unit cases, 15.048 s (load 6.14→7.85); original-IR oracle plus 32,768 inline64 mutants, 91.790 s (5.99→8.88), zero findings. Path/line, capability/grant, operation and symbolic errno share one bounded line; native terminal formatting allocates nothing, supervisor interpretation/private decoding still allocate. Earlier code had a separate grant/errno line; why the live journal omitted it was not reproduced. Fixed point 17,039,220 B; reproducible seed 3,312,682 B. No production service was touched.
 
-| Paired fixed-source store experiment | Before s (load) | Fixed-root s (load) |
+| Current self-build | Seconds | Load before→after |
+| --- | ---: | --- |
+| Unchanged | 0.55 | 3.98→3.98 |
+| Checker one-body edit | 6.35 | 3.98→3.82 |
+
+Cached/control images match. Fixed roots authenticate exact domains before allocation, then hash one owned payload; stale-root/substitution/truncation/length/accounting attacks pass. Edit store I/O is 2.677 s; eliminating it still leaves an observed 3.667 s (both load 3.98→3.82), not a lower bound on future designs. Parse/read 0.833, resolve 0.182, key/producer hash 1.044, codecs 0.667, elaborate/check 0.288, emit/runtime 0.623 s share that load window; unchanged syntax/arena and lazy-pack work remain. The 3 s target is unmet.
+
+| Full four-worker gate | Seconds (load) | Reported reused /fresh |
 | --- | ---: | ---: |
-| Cold | 23.458 (11.38→9.44) | 23.601 (11.60→10.38) |
-| Unchanged | 0.851 (9.44→9.44) | 0.573 (10.38→9.79) |
-| Checker one-body edit | 8.387 (9.44→9.48) | 6.456 (9.79→9.48) |
-| Edit store I/O/authentication | 4.086 (9.44→9.48) | 2.827 (9.79→9.48) |
+| Final cold | 575.444 (1.89→9.84) | 0 /5,356 |
+| Final unchanged warm | 126.013 (9.84→7.90) | 5,331 /25 |
+| Actual checker edit, before shorter entropy scan | 544.788 (4.89→5.83) | 28 /5,328 |
 
-All six cached/control images agree; exact producers/source hashes are in bench/README.md. Fixed root binds producer/target/domain/length/digest before allocation; one owned payload/EOF/digest check replaces repeated authentication/copies. Nine pure contracts and on-disk stale-root/substitution/truncation/length/accounting attacks pass.
-Edit remainder: parse0.819, resolve0.180, key/hash1.024, codec0.616, elaborate/check0.264, emit0.591, write0.072, other0.063s (load9.79→9.48). Non-store floor3.630s already exceeds3s; AST checkpoints/stable file arena identities and lazy body/fragment storage are absent. No metadata claim substitutes for reading mutable bytes.
+The actual checker edit changes all 721 compiler-dependent structural images; only 28 independent contracts retain identity. Same-input cross-producer images separately reuse all 749 contracts, not a whole-tree edit claim. The 60 s target is unmet; bench/README.md accounts every phase, the reported warm requests, unconverted closed CLI work and the named consumer_gate_closure pending case for programs (HTTP/program-directory first). The full entropy fill remains; its completed existential scan now exits early.
 
-**Gate.** Before integration, corrected cold gate513.548s (load4.84→12.93) passed5319fresh requests; fragment sharing retained194,643,677B under256MiB and proof runners release locks before execution. Programs9d adds two closed contracts and two live suites: merged split749 closed (28 independent,721 compiler-dependent),25 live structural observations. Final cold/warm/checker-edit measurements restart on the combined source.
+**Generated code stopped at step1.** Whole-function allocation across blocks/loops and conditional callee saves already exist. Additional coalescing/operand use gained 1.00% wall/0.70% CPU, below10%, and was discarded. Fixed-source wall ratios remain 1.826x opt0 and 6.053x -O; no speculative ABI/region change or cold-gate gain is claimed. Paired timings and loads are in bench/.
 
-**Generated code stopped at step1.** Whole-function linear scan across blocks/loops and saves-only-when-used already exist. Additional operand/coalescing trial gave1.00% wall/0.70% CPU gain, below10%; discarded. Paired mean20.580s vs opt0 witness11.27s (loads6.42→7.80 /7.79→7.35),1.826x; -O3.40s (7.28→7.18),6.053x. No speculative ABI/region rewrite or cold-gate speedup is claimed.
+**Diagnostic causes: 16 tagged programs specimens, not attempt totals.**
 
-**Diagnostic causes (16 tagged programs fixtures at9d; specimens, not attempt totals):**
-| Cause | Count | Most frequent accepted rewrite |
+| Cause | Count | Accepted rewrite |
 | --- | ---: | --- |
 | Expected Rust form/support gap | 8 | Typed inference3, collection views/iteration3, explicit trait impl1, text fold1 |
 | Bad/incomplete message | 5 | Located caller/errno, named type/storage operation, value-less no-store |
 | Rule with no Rust counterpart | 3 | Owned text/stable owner index and authenticated child image |
-`lkjscript delta` prints accepted forms; these16 tags supersede the earlier34-fixture proxy. Mandatory formatting/fragment markers have no supporting cause evidence and were declined.
+The binary's delta command prints frequent accepted forms. Mandatory formatting/fragment markers were declined without cause evidence.
 
-**Next:** validate merged capability diagnostics, full gates/edit measurements, separate seed refresh and CI. The existing external_child_authority pending case now records compiler agreement with programs: authenticated exact ELF/entry/ABI/canonical slots, sealed descriptor through exec, typed transfer startup; programs owns lifecycle/consumer APIs.
+**Next:** land the source and separate seed refresh, then inspect both CI jobs. One existing external_child_authority case records the agreed exact ELF/entry/ABI/canonical slots and sealed descriptor through exec; authenticated-child implementation remains pending, with programs owning transfer/lifecycle/consumer APIs.
 
 ## Programs
 

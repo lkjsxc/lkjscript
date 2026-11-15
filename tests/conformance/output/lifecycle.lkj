@@ -19,8 +19,9 @@ pub fn main(mut world: World) {
     entropy.fill(&mut bytes[1..65538]).unwrap();
     assert_eq!(bytes[0], 17u8);
     assert_eq!(bytes[65538], 29u8);
+    // Keep the 65,537-byte boundary fill; this scan only proves some byte changed.
     let mut changed = false;
-    for byte in &bytes[1..65538] { if *byte != 0 { changed = true; } }
+    for byte in &bytes[1..65538] { if *byte != 0 { changed = true; break; } }
     assert!(changed);
     let mut clock = world.clock();
     assert!(clock.unix_seconds().unwrap() > 0i64);

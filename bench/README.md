@@ -583,18 +583,19 @@ bytes it actually uses. Reusing compilation does not reuse a host observation.
 The trusted build script admits one exact IR snapshot for each root. The closed
 runner matches its authority report with its emitted image, authenticates the full
 image, runner and contract, and executes the bytes it hashed. No timestamp or unchecked successful-suite claim is
-an input proof. The following inventory covers the fifteen formerly fresh suites and the two
-additional programs suites landed at 9d145128.
+an input proof. The following inventory covers the fifteen formerly fresh suites, the new
+closed-proof attack suite and the two programs suites landed at 9d145128.
 
 | Suite | Inputs that can change the result; retained observation |
 | --- | --- |
 | Closed-proof attacks | Authenticator/identity code and forged bytes; actual damaged-file reads, key rotation and failed publication stay live. |
-| Toolchain | Source/IR/diagnostic fixtures and executable bytes; fixed value captures use the existing authenticated batch protocol, while compiler CLI and descriptor observations stay live. |
+| Toolchain | Source/IR/diagnostic fixtures and executable bytes; fixed value captures use authenticated batches; direct check/IR/authority assertions remain unconverted closed work, while descriptor observations stay live. |
 | World | Fixture/image bytes, streams, filesystem, permissions, inherited masks and process cleanup; every distinct host boundary remains live. |
 | Profiler | Image/report-parser bytes and real CPU-timer/signal samples; fresh sampled executions and malformed-report checks stay live. |
 | Optimizer | Original/candidate IR, policies, emitted bytes and store envelopes; the cache-file invalidation and native/original comparisons stay live. |
 | Resources | Runtime/image bytes and actual mapping/stack refusal under imposed limits; startup, pressure and one heap/stack exhaustion pair stay live. |
 | Runner | Five fixed record/expectation comparison contracts; now part of the authenticated zero-authority closed image. |
+| Diagnostic-cases | Exact compiler and 43 fixture contracts reuse authenticated requests; the explicit-library temporary marker deliberately uses --no-store, and mutation no-store forwarding remains a fresh filesystem observation. |
 | Store | HMAC/codec/request bytes and actual corruption, refusal, locks and concurrent publication; filesystem attacks stay live, pure model contracts use the closed image. |
 | Program directory | Manifest/grant/source bytes plus environment and root acquisition; manifest context and the real directory/environment observations stay live. |
 | HTTP | Request/response fixtures plus ports, readiness and deadlines; programs owns the shortest live server/client boundary probes. |
@@ -646,7 +647,8 @@ request. Check/rewrite assertions stay in order; each batch reads only final
 fixtures whose paths are not rewritten or removed later. The harness checks the
 exact record index, engine, status,
 stdout/stderr bytes, diagnostic and record count; it forwards actual reuse counts.
-Only these requests receive store options. The stable source directory is claimed
+The shared command helper forwards store options only to batches; the HTTP
+authority helper also forwards its explicit options. The stable source directory is claimed
 by an exclusive mkdir, required empty, and removed by its owning shell's cleanup.
 An occupied path fails instead of deleting another run's files. Exact source bytes
 are still read and authenticated by the compiler; stable paths supply no trust.
@@ -828,3 +830,308 @@ The lock regression observes a deliberately nonterminating zero-authority child,
 stops it before probing the lock, then kills and reaps it. Its failure assertion
 was checked against the previous runner; it is independent of execution speed.
 The final full gate includes the helper in the closed-proof attack suite.
+
+## Programs integration and current proof (2026-11-15 UTC)
+
+Programs 9d145128 landed read-only roots/files, ForeignCommand, NullDevice,
+program-directory consumers, desk events and two further closed entry-grant
+contracts. The compiler changes were rebased onto that handoff as 4048e172.
+The combined source preserves both capability semantics and complete runtime
+failure identity. Its immutable verification candidate is:
+`944d5e663bc6f7f703b8a399656f774a785966af4029ac56294e4b4c0fc2d2e7`.
+It is 17,039,220 bytes; its reproducible gzip seed is 3,312,682 bytes.
+
+| Combined-source verification | Seconds | Load before→after | Result |
+| --- | ---: | --- | --- |
+| Bootstrap from the committed seed | 74.124 | 5.58→11.86 | Consecutive current generations equal |
+| Included stale-emitter bridge | 26.228 | 6.19→12.02 | Not an extra gate or a seed refresh |
+| Rust witness all-target source check, one worker | 6.45 | 5.96→5.88 | No type/merge errors; warnings only |
+| Isolated journal matrix, one worker | 15.048 | 6.14→7.85 | All 63 cases passed |
+| Generator/reducer contracts +32,768 inline64 mutants, two workers, no store | 91.790 | 5.99→8.88 | Zero findings; all 2,527 accepted rewrites executed against the original IR |
+| Foreign child, three execution routes | 2.835 | 8.20→8.10 | Real Git execution, outside-root refusal and FIFO acquisition diagnostics |
+| Read roots, three execution routes | 2.131 | 8.10→8.10 | Containment, inode replacement, mtime, append/seek and no-follow |
+| Mutation no-store regression | 0.08 | 8.10→8.10 | Value-less flag, both option orders, no cache publication |
+
+The 63 journal cases comprise 38 automatic acquisition/write failures, 13 explicit
+Result-call failures, 4 output-authority combinations and 8 real source-root
+bindings. ReadDirectory preserves named environment selectors. ForeignCommand
+and NullDevice retain the failing syscall through cleanup; synthetic image or
+device checks say validate-image/ENOEXEC or validate-device/ENODEV instead of
+misnaming a successful syscall. Substituted /dev/null tests use only the fresh
+unit's private mount namespace. All owned units and fixture trees were removed.
+
+The merged campaign again rejected 25,940 mutants and observed 5,833 values,
+917 traps, 78 watchdog expirations and no resource failures. Its mutation-only
+report is 91.762 s (the table's load window includes the immediately preceding
+oracle), 21,425 mutants/minute, 3,406 copied calls in 2,787 bodies and 3,168 local
+body proofs. The temporary checker edit below is restored exactly after its gate.
+
+Programs also supplied 16 explicitly tagged diagnostic specimens: 8 expected
+Rust forms, 5 bad messages and 3 rules without a Rust counterpart. The Rust-form
+subset is 3 inference, 3 collection, 1 trait-default and 1 text case. These overlap
+the previous broader 34-fixture inventory and must not be added to it. The binary
+now prints typed empty Vec locals, collection views, explicit trait impl methods
+and the other accepted rewrites in its small delta command. The reported
+mutation --no-store flag bug is fixed rather than preserved as a pending failure.
+
+### Controlled gate series and actual checker edit
+
+The following four-worker series used the combined compiler above and an empty
+store for its first run. These rows precede the final, semantics-preserving
+entropy-scan shortening described below; they remain the controlled measurement
+of a real checker edit. The warm column keeps both producer and source unchanged.
+The edit changes only the first diagnostic column in check::error from 1 to 2
+in the actual worktree, runs the entire gate, then restores the exact source.
+
+| Gate phase | Cold seconds (load) | Unchanged warm seconds (load) | Actual checker edit seconds (load) |
+| --- | ---: | ---: | ---: |
+| Initial bootstrap/tool/closed-image prelude | 68.129 (6.49→7.59) | 22.207 (6.20→5.03) | 70.865 (4.89→4.34) |
+| Host/proof overlap | 101.438 (7.59→7.54) | 81.339 (5.03→6.00) | 96.106 (4.34→5.55) |
+| Conformance | 102.257 (7.54→7.07) | 18.989 (6.00→5.44) | 96.216 (5.55→5.95) |
+| Generated | 67.606 (7.07→9.10) | 0.745 (5.44→5.44) | 67.114 (5.95→7.60) |
+| Optimized conformance | 104.278 (9.10→7.84) | 19.054 (5.44→5.14) | 99.517 (7.60→6.71) |
+| Optimized generated | 71.037 (7.84→8.87) | 0.642 (5.14→5.14) | 71.656 (6.71→8.26) |
+| Structural execution | 18.989 (8.87→7.10) | 0.905 (5.14→5.14) | 20.337 (8.26→7.20) |
+| Live structural observations | 0.507 (7.10→7.10) | 0.520 (5.14→5.14) | 0.513 (7.20→7.20) |
+| Semantic cases | 16.062 (7.10→6.39) | 0.622 (5.14→5.14) | 16.740 (7.20→6.17) |
+| References | 3.399 (6.39→6.20) | 0.470 (5.14→5.14) | 3.261 (6.17→6.17) |
+| Mutation | 2.448 (6.20→6.20) | 2.420 (5.14→4.89) | 2.433 (6.17→5.83) |
+| Scheduling/rounding gaps | 0.031 (6.49→6.20) | 0.030 (6.20→4.89) | 0.030 (4.89→5.83) |
+| **Total** | **556.181 (6.49→6.20)** | **147.943 (6.20→4.89)** | **544.788 (4.89→5.83)** |
+
+The first two rows are nonoverlapping wall-clock windows, not sums of concurrent
+suite durations. All remaining phase rows are sequential. The gaps use each
+whole-run load window. This accounts for the full total, including every
+observed second above 60; it is not a theoretical minimum or a claim that all
+remaining work is irreducible.
+
+| Request selection | Cold | Unchanged warm | Actual checker edit |
+| --- | ---: | ---: | ---: |
+| Reused requests | 0 | 5,331 | 28 |
+| Fresh requests | 5,356 | 25 | 5,328 |
+| Independent closed contracts reused | 0/28 | 28/28 | 28/28 |
+| Compiler-dependent structural contracts reused | 0/721 | 721/721 | 0/721 |
+
+The original checker source hashes to
+a8275852f6067ed0a3d085580aa4badb264612d8f13211f239a3f6bfb9c04d3b;
+the edited source hashes to
+42e21b2deb39648b8bfab4e4e6e5e1f447a8e55c6efc24f051ea26f434936550.
+The actual edited compiler is
+a1677e51575f9fe6a3238859a5fb8c488ccd155644a7c187e1b123895e13532b.
+The edit changes the compiler-dependent semantic images, so their 721 contracts
+rerun; all compiler-verdict caches also bind the exact producer and miss.
+Only the 28 independent contracts retain identical images. Restoring the source
+and rebuilding took 23.413 s (load 5.83→5.30), reproducing the original
+944d5e66… image and the prepared seed byte for byte. The 60-second
+checker-edit target is not met.
+
+Within the unchanged warm host/proof window, the last finishing chain was
+closed-semantics → profiler → optimizer → store → program-directory → journal
+→ stop → stop-interpreter → desk. Its gate offsets were 22.207…103.545 s,
+with 0.016 s of launch gaps. The competing toolchain → HTTP → site →
+desk-events → foreign-child chain finished at gate+103.140 s.
+These chains explain the observed 81.339 s overlap (load 5.03→6.00); adding all
+suite durations would double count concurrent work.
+
+| Warm host/proof component | Seconds | Load before→after | Remaining input |
+| --- | ---: | --- | --- |
+| Toolchain | 54.301 | 5.03→6.23 | Direct CLI/build/check assertions plus two live self-spawn requests; 94 closed requests reused |
+| World | 31.012 | 5.03→5.60 | Files, streams, permissions, process and signal behavior |
+| Closed-proof attacks | 1.615 | 5.03→5.03 | Damaged roots/images, publication and actual lock behavior |
+| Profiler | 1.177 | 5.03→5.03 | CPU timer, sampled execution and output refusal |
+| Optimizer | 8.916 | 5.03→5.09 | Original-IR/native observation and damaged-cache reads |
+| Resources | 0.734 | 5.03→5.03 | Real mapping/stack refusal |
+| Diagnostics | 0.940 | 5.03→5.03 | 43 cached requests, one intentional no-store library-forwarding case |
+| Store | 42.484 | 5.09→6.23 | Corruption, locks, concurrent writers, budget and refusal |
+| Program directory | 10.008 | 6.23→6.19 | Source/manifest admission and actual environment/root acquisition |
+| HTTP | 18.657 | 6.23→5.85 | Live sockets, framing, readiness and deadlines |
+| Journal | 1.855 | 6.19→6.02 | Durability/replay and HTTP |
+| Stop native | 2.890 | 6.02→6.02 | Signal, drain deadline and sync |
+| Stop interpreted | 6.469 | 6.02→5.85 | Independent broker, signal, drain deadline and sync |
+| Site | 2.194 | 5.85→6.35 | HTTP and same-port restart |
+| Desk | 7.455 | 5.85→6.00 | Lock/append, inode replacement, roots, wake and HTTP |
+| Desk events | 2.943 | 6.35→6.35 | Cursor replay, delivery and slow-reader deadline |
+| Foreign child | 2.831 | 6.35→6.00 | Kernel confinement and actual process/descriptor behavior |
+
+The 25 reported fresh warm case requests are precisely: two toolchain self-spawn
+source/IR variants; one explicit --no-store library-directory forwarding case;
+and eleven conformance cases in each of the default and inline64 policies.
+Nine of those eleven exercise live host state: connector, lifecycle, listener,
+process_capture, readiness, socket_process, socket_process_witness, storage and
+storage_process. capability_raw_method_priority and stderr_status_marker are
+conservative capture-whitelist exclusions, not demonstrated host necessities.
+The two self-spawn batches account for 1.079 s inside the toolchain's 54.301 s
+(load 5.03→6.23), not its whole duration. The longest conformance worker combines
+connector, lifecycle and socket_process_witness. Individual case timings were
+not recorded in that series; the phase table must not attribute its full
+18.989/19.054 s (load 6.00→5.44 /5.44→5.14) to sockets.
+
+### Current self-build edit cost
+
+The same 944d5e66… compiler ran bench/reuse.sh against a private source/library
+snapshot. Its image paths therefore differ from the worktree fixed point.
+Every cached image matches its corresponding no-store control; the edited
+image is required to differ from the original.
+
+| Build | External seconds | Peak RSS KiB | Load before→after | Store bytes, including directories |
+| --- | ---: | ---: | --- | ---: |
+| No store | 18.68 | 527,332 | 5.30→4.78 | 0 |
+| Cold | 21.88 | 565,092 | 4.78→3.98 | 74,071,509 |
+| Unchanged | 0.55 | 29,580 | 3.98→3.98 | 74,071,509 |
+| Checker one-body edit | 6.35 | 477,952 | 3.98→3.82 | 91,120,785 |
+| Edited no-store control | 18.73 | 519,496 | 3.82→3.66 | 91,120,785 |
+
+The compiler-reported edit total is 6.344252 s; the external process row rounds
+to 6.35 s. It reuses 2,924 frontend definitions, 10,310 checked bodies and
+10,158 native fragments, with one changed definition/function. Both edit
+controls emit 17,049,035 bytes. Cold-store overhead is 17.13% over no store.
+
+| Edit component | Seconds | Load before→after |
+| --- | ---: | --- |
+| Store I/O and authentication | 2.677166 | 3.98→3.82 |
+| Parse and source reads | 0.833240 | 3.98→3.82 |
+| Resolve | 0.181751 | 3.98→3.82 |
+| Key and producer hashing | 1.044416 | 3.98→3.82 |
+| Front/native codecs | 0.666575 | 3.98→3.82 |
+| Elaborate and check | 0.288393 | 3.98→3.82 |
+| Emit, assemble and runtime | 0.622847 | 3.98→3.82 |
+| Output write | 0.001998 | 3.98→3.82 |
+| Other | 0.027841 | 3.98→3.82 |
+
+Rounding the component counters leaves 25 microseconds unassigned. Removing all
+measured store I/O would still leave 3.667086 s (load 3.98→3.82) in the current
+representation. The three-second target is not met. This is an observed
+residual, not a lower bound on a future parser or storage design: unchanged
+source syntax still lacks an AST checkpoint with stable file/arena identity,
+and body/fragment packs are materialized rather than lazily selected.
+No stored metadata or pathname claim is treated as proof that mutable source
+bytes stayed unchanged.
+
+The separate cross-producer experiment takes 134.927 s (load 3.66→2.94),
+including both no-store builds of the same live semantic input. The original
+and edited producers emit identical six closed images and authority reports,
+then the second pass reuses all 749 contracts. This proves exact artifact reuse
+across a producer change; it does not replace the real 28/749 reuse result
+after editing the compiler-dependent semantic inputs themselves.
+
+### Shortened live lifecycle observation
+
+The live lifecycle fixture still fills exactly 65,537 bytes, checks its sentinels,
+performs an empty fill and retains the signal/readiness/process assertions.
+Its existence check now stops at the first nonzero byte. The all-zero case still
+scans the full slice and fails. No host coverage depends on scanning the remaining
+bytes after the predicate is already true.
+
+| Isolated original-interpreter/native check | Before seconds (load) | After seconds (load) |
+| --- | ---: | ---: |
+| Default policy | 18.090 (2.07→2.27) | 3.099 (2.27→2.25) |
+| Inline limit 64 | 17.627 (2.25→3.31) | 3.035 (3.31→3.20) |
+
+Both routes pass in every row, sequentially with one worker and no store.
+Compiler and seed bytes are unchanged. Final full gates below cover this
+fixture refinement; earlier controlled edit timings above retain their
+original fixture and are not relabeled as measurements of this shortened case.
+
+
+### Pending programs case: consumer gate closure
+
+The compiler gate still includes programs-owned suites program-directory, HTTP,
+journal, stop, stop-interpreter, site, desk, desk-events and foreign-child.
+The merged measurements above identify their actual windows; HTTP and
+program-directory are the first targets, followed by desk and events. Do not
+add overlapping suite durations to claim a wall-clock floor.
+
+Reproduce with the same compiler and retained store through tools/check.sh,
+then split comparisons determined entirely by source, fixture, runner and image
+bytes into closed contracts using the existing authenticated reuse. Retain the
+shortest distinct kernel observations: directory/environment acquisition;
+HTTP readiness and deadlines; fsync/replay; signal/drain in both routes;
+same-port restart; desk lock and inode publication; event delivery/slow readers;
+and foreign-child confinement, descriptors and lifecycle. No completed host
+observation is authenticated as a claim about the next host execution.
+
+Programs owns these consumer splits; compiler supplies admission/reuse support.
+Completion prints the number and proof of reused contracts, names every retained
+live probe and accounts for its wall time and contribution to the gate schedule.
+This is an operational pending case, not a fabricated language rejection or a
+performance threshold in the correctness gate.
+
+### Remaining closed CLI coverage
+
+The gate's request counts are the subset reported by authenticated batch/closed
+runners, not an inventory of every CLI invocation. In particular, four long-trap
+batch invocations currently omit --stats, and direct check/IR/authority calls
+are not included in the reported 25 fresh warm requests.
+
+| Warm toolchain accounting | Seconds | Load before→after |
+| --- | ---: | --- |
+| 26 printed batch children, 96 counted requests | 6.853058 | 5.03→6.23 |
+| Remaining harness, unprinted children and direct CLI work | 47.447942 | 5.03→6.23 |
+| Complete toolchain suite | 54.301000 | 5.03→6.23 |
+
+The residual includes closed work that has not been converted, not just host
+observations: eighteen check/IR/check calls over six fixed fixtures; twenty-one
+authority cases emitting IR and comparing source/IR reports, plus three HTTP
+program authority queries that do not start a server; thirty-two deterministic
+runtime-diagnostic calls; and original/rewrite rejection assertions in five
+edit modules. Existing logs do not time these components individually, so the
+residual cannot be subdivided honestly or described as irreducible host cost.
+
+The bounded next implementation is grouped check requests in the existing batch
+protocol, which already authenticates complete rejection/edit-JSON strings under
+the exact producer and input closure, excluding E_IO. A harness adapter must
+validate every record index, status and capture before applying the corresponding
+edit; dependent read/edit/check steps remain ordered. Single-case batches would
+repeat producer hashing and are not the intended change. IR bytes and authority
+reports lack a typed cached-request result today; argv-dependent runtime probes
+also exceed the present run-record shape. These unconverted contracts and the
+programs pending case above explain why this note stops at the measured table,
+without claiming the 60-second target or completion of all possible closed reuse.
+
+### Final gate with the shortened observation (2026-11-15 UTC)
+
+The final compiler and seed hashes remain 944d5e66… and 524d0bcb… respectively.
+A newly empty store and then the same retained store passed the complete
+four-worker gate. All 5,356 reported requests ran cold; the warm run reused
+5,331 and ran 25, including all 749 closed structural/independent contracts
+reused. The unchanged compiler/source inputs and proof rules are identical to
+the earlier controlled series. Only the lifecycle fixture's completed scan
+was shortened.
+
+| Final phase | Cold seconds (load) | Unchanged warm seconds (load) |
+| --- | ---: | ---: |
+| Initial bootstrap/tool/closed-image prelude | 66.472 (1.89→1.67) | 23.327 (9.84→8.46) |
+| Host/proof overlap | 92.897 (1.67→4.77) | 85.976 (8.46→7.27) |
+| Conformance | 100.753 (4.77→14.41) | 4.877 (7.27→7.49) |
+| Generated | 69.180 (14.41→10.30) | 0.788 (7.49→7.77) |
+| Optimized conformance | 114.685 (10.30→11.04) | 4.889 (7.77→7.71) |
+| Optimized generated | 82.570 (11.04→12.03) | 0.822 (7.71→7.71) |
+| Structural execution | 23.116 (12.03→11.43) | 1.038 (7.71→7.71) |
+| Live structural observations | 0.597 (11.43→11.24) | 0.538 (7.71→7.71) |
+| Semantic cases | 18.831 (11.24→10.47) | 0.678 (7.71→7.71) |
+| References | 3.733 (10.47→10.35) | 0.504 (7.71→7.71) |
+| Mutation | 2.575 (10.35→9.84) | 2.546 (7.71→7.90) |
+| Scheduling/rounding gaps | 0.035 (1.89→9.84) | 0.030 (9.84→7.90) |
+| **Total** | **575.444 (1.89→9.84)** | **126.013 (9.84→7.90)** |
+
+The final warm prelude comprises bootstrap 2.162 s (load 9.84→9.84), tool build
+0.535 s (9.84→9.84), closed-image admission/emission 20.510 s (9.84→8.46),
+and the remaining generation/independence/launch work. The host/proof window
+is 85.976 s (8.46→7.27), ending at gate+109.303 s. Its finishing chain is
+toolchain → HTTP → site → desk. The other chain is closed-semantics → profiler
+→ optimizer → store → program-directory → journal → stop → stop-interpreter
+→ desk-events → foreign-child, ending at gate+107.862 s. Concurrent World and proof-attack work is
+inside these windows.
+
+Warm conformance now takes 4.877 s (load 7.27→7.49) and inline64 conformance
+4.889 s (7.77→7.71), versus the pre-shortening 18.989/19.054 s
+(6.00→5.44 /5.44→5.14). Those shared-host whole-gate runs are not a controlled
+speed ratio; the isolated paired fixture measurements above establish the
+removed scan cost. In particular, final cold time increased under a different
+load history, reaching load 14.41 during conformance. No cold speedup is claimed.
+
+The final warm total is 66.013 s above 60, fully accounted by the table. Both
+closed CLI coverage and the consumer split remain opportunities; neither is
+misclassified as mandatory host cost. The earlier actual whole-tree checker-edit
+gate remains the measured 544.788 s (load 4.89→5.83) with 28 reused requests,
+not the unchanged-warm or same-input cross-producer result.
