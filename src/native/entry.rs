@@ -9,13 +9,18 @@ pub struct Plan {
     paths: Vec<Label>,
     grants: Vec<EntryGrant>,
     site: Span,
+    failure_buffer: Label,
 }
 impl Plan {
+    pub(super) fn fallible(grant: &EntryGrant) -> bool {
+        !matches!(grant, EntryGrant::World | EntryGrant::Stdout | EntryGrant::Stdin
+            | EntryGrant::Stderr | EntryGrant::Clock | EntryGrant::Process | EntryGrant::Entropy)
+    }
     pub fn new(a: &mut Assembler, grants: &[EntryGrant], site: Span) -> Self {
         let values = a.label();
         let mut paths = Vec::new();
         for _ in grants { paths.push(a.label()); }
-        Self { values, paths, grants: grants.to_vec(), site }
+        Self { values, paths, grants: grants.to_vec(), site, failure_buffer: a.label() }
     }
     fn offset(&self, index: usize) -> i64 {
         let mut offset = 0i64;
@@ -47,6 +52,31 @@ impl Plan {
             let ready = a.label();
             a.test(A, true);
             a.condition(9, ready);
+            if Self::fallible(grant) {
+                // Preserve the host errno and name the failed grant before the
+                // generic host trap; a bind failure is not a stdout failure.
+                let name = match grant {
+                    EntryGrant::Directory(_) => "Directory",
+                    EntryGrant::Listener(_) => "Listener",
+                    EntryGrant::Connector(_) => "Connector",
+                    EntryGrant::Readiness => "Readiness",
+                    EntryGrant::Stop => "Stop",
+                    _ => "capability",
+                };
+                a.push(A);
+                a.address(R8, self.failure_buffer);
+                a.lea(R8, R8, 128);
+                super::platform::diagnostic_text(a, "\n");
+                a.pop(A);
+                a.negate(A);
+                super::platform::diagnostic_decimal(a, 1);
+                super::platform::diagnostic_text(a, &format!("entry grant {name} failed: errno "));
+                a.mov(SI, R8);
+                a.address(D, self.failure_buffer);
+                a.lea(D, D, 128);
+                a.rr(0x29, D, SI, true);
+                super::platform::diagnostic_write(a, 2);
+            }
             a.immediate(LINE, self.site.line as u64);
             a.immediate(FILE, self.site.file as u64);
             a.immediate(A, 7);
@@ -68,6 +98,8 @@ impl Plan {
             bytes.extend_from_slice(&[0u8; 8]);
             if matches!(grant, EntryGrant::Stop) { bytes.extend_from_slice(&[0u8; 8]); }
         }
+        a.data_label(self.failure_buffer, offset + bytes.len());
+        if self.grants.iter().any(|grant| Self::fallible(grant)) { bytes.extend_from_slice(&[0u8; 128]); }
         for (index, grant) in self.grants.iter().enumerate() {
             a.data_label(self.paths[index], offset + bytes.len());
             match grant {

@@ -429,7 +429,7 @@ Entries take owned Stdout/Stdin/Stderr, Directory, Listener, Connector, Readines
 no parameters, or a sole World declaring implicit full authority.
 build/run require --grant NAME for each parameter: Directory takes NAME=PATH, Listener/Connector NAME=IPv4:PORT; other grants have no payload.
 Only Listener permits port zero. build embeds descriptors; handles are acquired at startup.
-Duplicate, missing, unknown or malformed grants reject before publication/execution; acquisition failure traps R0007 at entry.
+Duplicate, missing, unknown or malformed grants reject before publication/execution; acquisition failure traps R0007 at entry with the grant kind and errno. Listener can rebind after TIME_WAIT; an active listener still excludes it.
 File/Child/borrowed/aggregate entry parameters reject; accept Directory and open a File inside the entry instead.
 All capability types, including World, File and Child, are affine, without constructors or Copy/Clone/Data/Send/Sync implementations.
 Names, integers or casts cannot forge authority. IR checks each operation independently; methods below exclusively borrow receivers, and derived owners can outlive those borrows.

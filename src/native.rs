@@ -1570,6 +1570,9 @@ fn encode_program(
             ));
         }
     }
+    let listener_reuse = program.functions.iter().any(|function| function.body.iter().any(|instruction|
+        matches!(instruction.op, Op::Intrinsic { name: IntrinsicOp::WorldListen, .. })))
+        || grants.map_or(false, |provided| provided.iter().any(|grant| matches!(grant, ir::EntryGrant::Listener(_))));
     let connector = program.types.iter().any(|ty| matches!(ty.kind, TypeKind::Connector));
     let readiness = program.types.iter().any(|ty| matches!(ty.kind, TypeKind::Readiness));
     let stop_signals = program.types.iter().any(|ty| matches!(ty.kind, TypeKind::Stop));
@@ -1602,6 +1605,8 @@ fn encode_program(
     if profile_path.is_some() { a.enable_profile(); }
     let mut p = platform::Platform::new(&mut a);
     p.stop_signals = stop_signals;
+    p.listener_reuse = listener_reuse;
+    p.entry_diagnostics = grants.map_or(false, |provided| provided.iter().any(|grant| entry::Plan::fallible(grant)));
     let grant_plan = match grants {
         Some(grants) => Some(entry::Plan::new(&mut a, grants, first_site(selected))),
         None => None,

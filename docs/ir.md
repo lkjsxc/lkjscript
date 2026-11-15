@@ -330,7 +330,7 @@ before acquiring handles.
 Raw scalar arguments cannot manufacture an address or derived capability.
 Missing, duplicate, unknown or malformed CLI grants reject before publication or
 execution. Build embeds validated descriptors; acquisition occurs at startup.
-Acquisition failure reports R0007 at entry and releases acquired resources.
+Acquisition failure reports R0007 at entry, names the failed grant kind and errno, and releases acquired resources. Listener enables SO_REUSEADDR for restart after TIME_WAIT; another active listener still refuses the grant.
 
 The authority query starts from a checked entry. It lists all declared grants,
 then conservatively follows reachable structured branches, calls and owning

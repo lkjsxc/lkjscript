@@ -1011,6 +1011,8 @@ pub(crate) mod files {
             return Err(22);
         }
         let handle = owned(retry(|| unsafe { syscall(41, 2_i64, 0x80001_i64, 0_i64) })?)?;
+        let enabled = 1u32;
+        retry(|| unsafe { syscall(54, i64::from(handle.as_raw_fd()), 1_i64, 2_i64, &enabled as *const u32, 4_i64) })?;
         retry(|| unsafe { syscall(49, i64::from(handle.as_raw_fd()), address.as_ptr(), 16_i64) })?;
         retry(|| unsafe { syscall(50, i64::from(handle.as_raw_fd()), i64::from(i32::MAX)) })?;
         Ok(handle)

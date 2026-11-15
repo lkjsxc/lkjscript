@@ -20,7 +20,7 @@ pub(super) fn emit(a: &mut Assembler, p: Platform) {
     let listen_failed = a.label();
     let listen_done = a.label();
     a.bind(p.world_listen);
-    prologue(a, p, 16, Span::default());
+    prologue(a, p, if p.listener_reuse { 32 } else { 16 }, Span::default());
     a.immediate(A, 16);
     a.compare(SI, A);
     a.condition(5, listen_invalid);
@@ -37,7 +37,21 @@ pub(super) fn emit(a: &mut Assembler, p: Platform) {
     a.test(A, true);
     a.condition(8, listen_done);
     a.store(BP, -16, A);
-    a.mov(DI, A);
+    if p.listener_reuse {
+        // Rebinding a stopped service must tolerate its own accepted TIME_WAIT
+        // sockets. SO_REUSEADDR does not permit two active listeners on the port.
+        a.immediate(A, 1);
+        a.store_width(BP, -24, A, 4);
+        a.load(DI, BP, -16);
+        a.immediate(SI, 1); // SOL_SOCKET
+        a.immediate(D, 2); // SO_REUSEADDR
+        a.lea(R10, BP, -24);
+        a.immediate(R8, 4);
+        syscall(a, 54);
+        a.test(A, true);
+        a.condition(8, listen_failed);
+        a.load(DI, BP, -16);
+    } else { a.mov(DI, A); }
     a.load(SI, BP, -8);
     a.immediate(D, 16);
     syscall(a, 49); // bind

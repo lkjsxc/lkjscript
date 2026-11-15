@@ -1,0 +1,21 @@
+// Focused cold-gate proof; the full consumer import tests are an opt-in campaign.
+mod http_site_queries;
+pub fn main() {
+    let mut paths: Vec<String> = Vec::new();
+    for line in include_str!("../examples/site-content/paths.txt").lines() {
+        let line = std::str::trim_ascii(line);
+        if !line.is_empty() && !line.starts_with("#") { paths.push(line.to_string()); }
+    }
+    assert!(http_site_queries::validate(&paths).is_ok());
+    let last = paths.len() - 1usize;
+    let original = paths[last].clone();
+    paths[last] = paths[0usize].clone();
+    assert!(http_site_queries::validate(&paths).is_err());
+    paths[last] = "/docs/start?parity=1".to_string();
+    assert!(http_site_queries::validate(&paths).is_err());
+    paths[last] = original;
+    paths.pop();
+    assert!(http_site_queries::validate(&paths).is_err());
+    let empty: Vec<String> = Vec::new();
+    assert!(http_site_queries::validate(&empty).is_err());
+}

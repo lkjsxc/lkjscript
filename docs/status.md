@@ -33,28 +33,17 @@ Copies/calls/runtime own internal frame accesses; arithmetic includes register m
 
 ## Programs
 
-2.5 complete: 12 published paths, 51 computed search queries and 13 HTTP probes match the live origin; HEAD/range/conditional/traversal cases included.
-Hardened parity: 0.730 s, load 5.40/5.35/4.80 -> 5.21/5.31/4.79; process RSS 1,376 KiB, cgroup peak 2,097,152 B under the original 128 MiB limit.
-Sealed executable 863,424 B, 383 IR functions, 38,257 instructions; build 744.114 ms, load 5.40/5.35/4.80 unchanged.
-RestrictSUIDSGID blocks openat2; embedding the public archive removed the runtime Directory grant while retaining the original unit settings.
-Review repair: buffered pipelines retain receive-time deadlines; old server fails, header/body/later-read/idle regression passes in 7.215 s, load 6.48/5.11/4.71 -> 5.94/5.04/4.69.
-Handoff requires all 51 unique query probes and supports interrupted rollback within 25 lines; 16 cases pass in 36.241 s, load 4.35/4.71/4.60 -> 3.81/4.52/4.54.
-2.4: Stop drains admitted requests to a fixed deadline, syncs and exits 0; signal native program PID or interpreted broker PID.
-Kernel Entropy and wall time support private durable keys and signed expiring write tokens; final default/inline64 native MAC comparison has no content-dependent branch.
-Issuer/restart/authentication passed both routes in 62.150 s, load 2.41/3.73/4.49 -> 3.63/3.77/4.45; lifecycle/socket CI repair is green.
-2.3: 1,000 write kills + 1,000 confirmed recovery kills preserved 1,129 acknowledgements; 2,124 complete records, 1,127,051 checked frames.
-Campaign 143.375 s, load 14.19/9.46/6.20 -> 8.66/10.14/7.02; seed 6840227782638526189; deterministic torn-tail/corruption cases also pass.
-2.2: 990 silent plus ten active peers gave 22,032/s, 100.22% of bracketing unloaded mean; load 2.92/4.16/5.41 -> 3.19/4.08/5.33.
-Idle process RSS cost 2,205.2 bytes/peer; slow header closed at 2.003 s, hostile traffic 20,854/s; load 3.12/4.09/5.34 -> 3.19/4.08/5.33.
-
-| 2.1 server function (self samples) | Before | After, full |
-| --- | ---: | ---: |
-| bytes::append_bytes | 78.7% | 0.9% |
-| io::file_read_to_end | 3.6% | removed |
-| buffer::ReadBuffer::read | absent | 48.8% |
-| platform::file_write | 3.4% | 20.8% |
-
-2.1 full-body 6,161 -> 11,506/s; 17,513/15,001 samples; baseline load 8.67/6.26/4.40 -> 6.01/5.87/4.33, after 3.89/4.54/4.31 -> 3.67/4.44/4.29.
-2.1 framing 21,975/s, load 3.67/4.44/4.29 -> 2.83/4.16/4.20; Connector/lkjscript clients replaced curl. Relay queues, three thread cases and unused local Child are removed.
-Four-worker gate passes: 262.690 s, one-minute load 2.93 -> 7.22; a sixth site diagnostic case records the excluded cfg(test) helper's misleading error.
-All test processes, ports, units and proof files are gone; live PID 256 unchanged. Candidate/unit/25-line switch and rollback are ready for Claude; no switch performed.
+2.0 complete: the failed deployment was Listener EADDRINUSE after TIME_WAIT, not a journal Output failure.
+Fresh journal output already worked. Native, independent interpreter and witness now reuse closed TCP addresses; active listeners remain exclusive.
+Fallible entry errors identify the grant kind and errno; endpoint detail has a pending case.
+Hardened proof matches installed output, DynamicUser, working directory and effective unit settings, then restarts on the same port with 76 TIME_WAIT sockets.
+Both complete live-parity rounds pass: 63 paths, 12 archived bodies and 13 protocol probes, including all 51 search queries.
+Build 763.847 ms, load 5.14/6.68/5.99 unchanged; candidate 867,645 B, RSS 1,376 KiB, cgroup peak 1,646,592 B.
+Hardened parity/restart 2.171 s, same load; cold offline 1.937 s, load 5.14/6.68/5.99 -> 5.13/6.65/5.99.
+Offline native/interpreter cases refuse occupied ports with errno 98 and restart after TIME_WAIT.
+Switch/rollback uses a fresh attempt directory; failed-release collisions, interrupted activation and repeated rollback pass without touching /opt.
+The 16 imported site tests passed once (38.668 s, load 5.44/5.32/5.03 -> 6.35/5.55/5.12); --campaign retains them outside the gate.
+Stored-seed A differs after runtime changes; B=C exactly, 16,018,836 B. Bootstrap verifies a bridge only when needed; seed unchanged.
+C build 17.640 s, load 7.62/7.48/6.13 -> 7.25/7.40/6.13; four-worker cold gate passes in 482.715 s, load 4.34 -> 7.37.
+All owned proof processes, units, ports and stages are removed; live PID 1624182 unchanged. No deployment performed.
+Next: desk commands and its isolated service; external-child authority must be proved before board/listen/wake.

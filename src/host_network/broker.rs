@@ -404,7 +404,20 @@ fn emit_network(a: &mut Assembler, ops: &[Label], reply: Label, invalid: Label, 
         empty(a, reply);
         a.bind(opened);
         a.store(BP, AUXILIARY, A);
-        a.mov(DI, A);
+        if !connect {
+            // Match native Listener restart behavior without sharing its emitter.
+            a.immediate(A, 1);
+            a.store_width(BP, SCRATCH, A, 4);
+            a.load(DI, BP, AUXILIARY);
+            a.immediate(SI, 1); // SOL_SOCKET
+            a.immediate(D, 2); // SO_REUSEADDR
+            a.lea(R10, BP, SCRATCH);
+            a.immediate(R8, 4);
+            syscall(a, 54);
+            a.test(A, true);
+            a.condition(8, failed);
+        }
+        a.load(DI, BP, AUXILIARY);
         a.mov(SI, R14);
         a.immediate(D, 16);
         syscall(a, if connect { 42 } else { 49 });

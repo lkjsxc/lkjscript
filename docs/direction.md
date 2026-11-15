@@ -63,8 +63,8 @@ self-execution may emit checked native code, never unchecked mutation input.
 The private result descriptor preserves stderr; standalone traps report on stderr.
 Raw negation preserves NaN payload/sign; binary arithmetic canonicalizes NaNs.
 Check all user bodies and demanded library bodies; check-library verifies every body.
-The stored compressed seed builds two native generations byte for byte without Rust
-or Node; optional Rust witness output must agree. Refresh after emitter/source changes.
+The stored seed starts native bootstrap without Rust/Node; two consecutive current-emitter
+generations must agree byte for byte, using a bridge when the seed's emitter differs.
 
 ## Gate and optional witness
 
@@ -104,7 +104,7 @@ Write tokens bind expiry and a random nonce through shared HMAC; a separate key-
 JSON rejects ambiguous keys; authentication precedes body retention and is checked again before mutation.
 The documentation candidate embeds published bodies and search Markdown because DynamicUser blocks openat2; text stays source library code.
 Keep live walking parity and a frozen offline oracle; preserve observed route spellings and headers, including unusual HEAD behavior.
-Prove the candidate in an isolated hardened unit; never modify the live origin or /opt. Claude owns the documented switch and rollback.
+Prove journal output, exact unit settings and same-port restart in isolation; never modify the live origin or /opt. Claude owns switch/rollback.
 
 ## Authenticated reuse
 

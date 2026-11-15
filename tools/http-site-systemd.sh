@@ -171,55 +171,113 @@ printf 'Candidate build load before: %s\n' "$(cut -d ' ' -f 1-3 /proc/loadavg)"
     --grant listener=127.0.0.1:0 \
     --grant clock --grant ready --grant stop -o "$work/server"
 printf 'Candidate build load after: %s\n' "$(cut -d ' ' -f 1-3 /proc/loadavg)"
-sudo -n install -m 0755 "$work/server" "$stage/server"
+sudo -n install -m 0755 "$work/server" "$stage/lkjscript-site"
 before=$(cut -d ' ' -f 1-3 /proc/loadavg)
 begin=$(date +%s%N)
-sudo -n systemd-run --collect --wait --pipe --unit="$unit" --service-type=simple \
-    --property=Description=lkjscript-candidate-parity \
-    --property=DynamicUser=yes --property=WorkingDirectory=/ --property=Restart=no \
-    --property=TimeoutStopSec=10 --property=UMask=0077 --property=NoNewPrivileges=yes \
-    --property=PrivateTmp=yes --property=PrivateDevices=yes --property=ProtectSystem=strict \
-    --property=ProtectHome=yes --property=ProtectKernelTunables=yes --property=ProtectKernelModules=yes \
-    --property=ProtectControlGroups=yes --property=RestrictSUIDSGID=yes --property=RestrictNamespaces=yes \
-    --property=LockPersonality=yes --property=MemoryDenyWriteExecute=yes \
-    --property=CapabilityBoundingSet= --property=AmbientCapabilities= \
-    --property='RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX' \
-    --property=MemoryMax=128M --property=TasksMax=32 --property=LimitNOFILE=512 \
-    "$stage/server" >"$work/run.out" 2>"$work/run.err" &
-runner=$!
-started=$runner
-active=1
-attempts=0
-while [ "$attempts" -lt 6000 ]; do
-    port=$(awk '$1 == "port" {print $2}' "$work/run.out")
-    if [ -n "$port" ]; then break; fi
-    if ! kill -0 "$runner" 2>/dev/null; then wait "$runner" || true; runner=; exit 1; fi
-    attempts=$((attempts + 1))
-    sleep 0.01
-done
-test -n "$port"
-main_pid=$(systemctl show "$unit.service" -p MainPID --value)
-test "$main_pid" -gt 0
-test "$(awk '$1 == "stop-target" {print $2}' "$work/run.out")" = "$main_pid"
-printf 'Candidate effective hardening:\n'
-systemctl show "$unit.service" -p MainPID -p DynamicUser -p ProtectSystem -p ProtectHome \
-    -p NoNewPrivileges -p MemoryDenyWriteExecute -p MemoryMax -p TasksMax -p LimitNOFILE \
-    -p PrivateTmp -p PrivateDevices -p ProtectKernelTunables -p ProtectKernelModules \
-    -p ProtectControlGroups -p RestrictSUIDSGID -p RestrictNamespaces -p LockPersonality \
-    -p CapabilityBoundingSet -p AmbientCapabilities -p RestrictAddressFamilies \
-    -p ProcSubset -p ProtectProc -p PrivateNetwork
+invocation=
+capture_journal() {
+    if [ -n "$invocation" ]; then
+        sudo -n journalctl -b "_SYSTEMD_INVOCATION_ID=$invocation" -o cat --no-pager >"$work/run.out"
+    fi
+}
+settings() {
+    systemctl show "$1.service" -p DynamicUser -p WorkingDirectory -p Restart -p RestartUSec \
+        -p StandardInput -p StandardOutput -p StandardError -p UMask -p TimeoutStopUSec \
+        -p ProtectSystem -p ProtectHome -p NoNewPrivileges -p MemoryDenyWriteExecute \
+        -p MemoryMax -p TasksMax -p LimitNOFILE -p PrivateTmp -p PrivateDevices \
+        -p ProtectKernelTunables -p ProtectKernelModules -p ProtectControlGroups \
+        -p RestrictSUIDSGID -p RestrictNamespaces -p LockPersonality \
+        -p CapabilityBoundingSet -p AmbientCapabilities -p RestrictAddressFamilies \
+        -p ProcSubset -p ProtectProc -p PrivateNetwork
+}
+start_candidate() {
+    invocation=
+    port=
+    : >"$work/run.out"
+    sudo -n systemd-run --collect --wait --unit="$unit" --service-type=simple \
+        --property='Description=lkjscript documentation origin' --property=After=network.target \
+        --property=DynamicUser=yes --property=WorkingDirectory=/ \
+        --property=Restart=on-failure --property=RestartSec=3 \
+        --property=StandardInput=null --property=StandardOutput=journal --property=StandardError=inherit \
+        --property=TimeoutStopSec=10 --property=UMask=0077 --property=NoNewPrivileges=yes \
+        --property=PrivateTmp=yes --property=PrivateDevices=yes --property=ProtectSystem=strict \
+        --property=ProtectHome=yes --property=ProtectKernelTunables=yes --property=ProtectKernelModules=yes \
+        --property=ProtectControlGroups=yes --property=RestrictSUIDSGID=yes --property=RestrictNamespaces=yes \
+        --property=LockPersonality=yes --property=MemoryDenyWriteExecute=yes \
+        --property=CapabilityBoundingSet= --property=AmbientCapabilities= \
+        --property='RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX' \
+        --property=MemoryMax=128M --property=TasksMax=32 --property=LimitNOFILE=512 \
+        "$stage/lkjscript-site" >"$work/launcher.out" 2>"$work/run.err" &
+    runner=$!
+    started=$runner
+    active=1
+    attempts=0
+    while [ "$attempts" -lt 600 ]; do
+        invocation=$(systemctl show "$unit.service" -p InvocationID --value)
+        capture_journal
+        port=$(awk '$1 == "port" {print $2}' "$work/run.out")
+        if [ -n "$port" ]; then break; fi
+        if ! kill -0 "$runner" 2>/dev/null; then wait "$runner" || true; runner=; return 1; fi
+        restarts=$(systemctl show "$unit.service" -p NRestarts --value)
+        if [ -n "$restarts" ] && [ "$restarts" -gt 0 ]; then
+            printf 'Candidate failed its first startup; a restart cannot hide it\n' >&2
+            return 1
+        fi
+        attempts=$((attempts + 1))
+        sleep 0.1
+    done
+    test -n "$port"
+    main_pid=$(systemctl show "$unit.service" -p MainPID --value)
+    test "$main_pid" -gt 0
+    test "$(awk '$1 == "stop-target" {print $2}' "$work/run.out")" = "$main_pid"
+    case "$(sudo -n readlink "/proc/$main_pid/fd/1")" in
+        socket:*) : ;;
+        *) printf 'Candidate stdout is not the journal stream socket\n' >&2; return 1 ;;
+    esac
+    settings "$unit" >"$work/candidate.settings"
+    diff -u "$work/live.settings" "$work/candidate.settings"
+}
+stop_candidate() {
+    timeout --kill-after=2s 15s sudo -n systemctl stop "$unit.service"
+    active=0
+    reap_launcher
+    capture_journal
+    grep -Fx stopped "$work/run.out"
+    ! kill -0 "$main_pid" 2>/dev/null
+    attempts=0
+    until candidate_collected; do
+        attempts=$((attempts + 1))
+        [ "$attempts" -lt 100 ] || return 1
+        sleep 0.05
+    done
+}
+settings lkjscript-site >"$work/live.settings"
+: >"$work/run.out"
+start_candidate
+fixed_port=$port
+printf 'Candidate effective settings match the live unit; stdout is a journal stream socket\n'
+cat "$work/candidate.settings"
 "$compiler" build tools/http-site-parity.rs --library-dir library --grant output \
     --grant origin=127.0.0.1:8798 --grant "candidate=127.0.0.1:$port" \
     --grant root=examples/site-content -o "$work/parity"
-timeout --kill-after=5s 120s "$work/parity" >"$work/parity.out"
-tail -1 "$work/parity.out"
-printf 'Candidate memory after parity:\n'
-systemctl show "$unit.service" -p MemoryCurrent -p MemoryPeak
-awk '/^VmRSS:|^VmHWM:/ {print}' "/proc/$main_pid/status"
-timeout --kill-after=2s 15s sudo -n systemctl stop "$unit.service"
-active=0
-reap_launcher
-grep -Fx stopped "$work/run.out"
+"$compiler" build examples/site.rs --library-dir library --grant output \
+    --grant "listener=127.0.0.1:$port" --grant clock --grant ready --grant stop -o "$work/rebound"
+for round in first restarted; do
+    timeout --kill-after=5s 120s "$work/parity" >"$work/parity.out"
+    tail -1 "$work/parity.out"
+    printf 'Candidate memory after %s parity:\n' "$round"
+    systemctl show "$unit.service" -p MemoryCurrent -p MemoryPeak
+    awk '/^VmRSS:|^VmHWM:/ {print}' "/proc/$main_pid/status"
+    stop_candidate
+    if [ "$round" = first ]; then
+        hex=$(printf '%04X' "$fixed_port")
+        awk -v wanted="$hex" '$4 == "06" {split($2, address, ":"); if(address[2] == wanted) found++}
+            END {printf "Closed candidate TIME_WAIT sockets before restart: %d\n", found; exit found ? 0 : 1}' /proc/net/tcp
+        sudo -n install -m 0755 "$work/rebound" "$stage/lkjscript-site"
+        start_candidate
+        test "$port" = "$fixed_port"
+    fi
+done
 elapsed=$(($(date +%s%N) - begin))
 after=$(cut -d ' ' -f 1-3 /proc/loadavg)
-awk -v elapsed="$elapsed" -v before="$before" -v after="$after" 'BEGIN {printf "ok site systemd parity (%.3f s, load %s -> %s)\n", elapsed / 1000000000, before, after}'
+awk -v elapsed="$elapsed" -v before="$before" -v after="$after" 'BEGIN {printf "ok site systemd parity and same-port restart (%.3f s, load %s -> %s)\n", elapsed / 1000000000, before, after}'

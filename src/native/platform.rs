@@ -73,6 +73,8 @@ pub struct Platform {
     pub stop_state: Label,
     pub child_request_stop: Label,
     pub stop_signals: bool,
+    pub listener_reuse: bool,
+    pub entry_diagnostics: bool,
 
     pub clock_read: Label,
     pub process_spawn: Label,
@@ -146,6 +148,8 @@ impl Platform {
             stop_state: a.label(),
             child_request_stop: a.label(),
             stop_signals: false,
+            listener_reuse: false,
+            entry_diagnostics: false,
 
             clock_read: a.label(),
             process_spawn: a.label(),
@@ -760,7 +764,7 @@ fn io(a: &mut Assembler, p: Platform) {
     a.ret();
 }
 
-fn diagnostic_text(a: &mut Assembler, text: &str) {
+pub(super) fn diagnostic_text(a: &mut Assembler, text: &str) {
     let bytes = text.as_bytes();
     let mut index = bytes.len();
     while index > 0 {
@@ -771,7 +775,7 @@ fn diagnostic_text(a: &mut Assembler, text: &str) {
     }
 }
 
-fn diagnostic_decimal(a: &mut Assembler, minimum: u64) {
+pub(super) fn diagnostic_decimal(a: &mut Assembler, minimum: u64) {
     a.immediate(C, 10);
     a.immediate(R9, 0);
     a.immediate(R10, 1);
@@ -791,7 +795,7 @@ fn diagnostic_decimal(a: &mut Assembler, minimum: u64) {
     a.condition(2, digit);
 }
 
-fn diagnostic_write(a: &mut Assembler, fd: u32) {
+pub(super) fn diagnostic_write(a: &mut Assembler, fd: u32) {
     let writing = a.label();
     let complete = a.label();
     a.bind(writing);
@@ -877,6 +881,7 @@ pub fn data(
         "host output failure".to_string(),
         "stack exhausted".to_string(),
     ];
+    if p.entry_diagnostics { text[7usize] = "host I/O failure".to_string(); }
     while text.len() < 16 {
         text.push("trap".to_string());
     }

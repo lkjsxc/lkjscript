@@ -2481,7 +2481,7 @@ fn run_inner<'a, H: Host>(
             };
             match value {
                 Ok(value) => values.push((function.locals[index].ty, value)),
-                Err(_) => {
+                Err(errno) => {
                     for (_, previous) in &values {
                         match previous {
                             Value::Directory(handle) | Value::Listener(handle) => interpreter.host.close_handle(*handle),
@@ -2490,7 +2490,7 @@ fn run_inner<'a, H: Host>(
                             _ => {}
                         }
                     }
-                    return Err(interpreter.trap(7, "I/O failed while provisioning entry grants"));
+                    return Err(interpreter.trap(7, &format!("entry grant {} failed: errno {errno}", program.types[function.locals[index].ty].name)));
                 }
             }
         }

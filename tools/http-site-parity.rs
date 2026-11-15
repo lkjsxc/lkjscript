@@ -5,6 +5,7 @@ mod http_client;
 mod http_site_links;
 mod http_site;
 mod http_site_probes;
+mod http_site_queries;
 use http_client::require;
 use http_site::{Crawl, Page};
 
@@ -32,13 +33,7 @@ fn probe(output: &mut Stdout, origin: &mut Connector, candidate: &mut Connector,
 // A successful live/hardened handoff must include the same complete search
 // coverage as the frozen oracle. Validate before either Connector is used.
 fn query_coverage(paths: &[String]) -> Result<(), String> {
-    require(paths.len() == 51usize, &format!("live site parity requires 51 search query paths in paths.txt, found {}", paths.len()))?;
-    let mut seen = std::collections::BTreeSet::<String>::new();
-    for path in paths {
-        require(path.starts_with("/search?"), &format!("paths.txt contains a non-search query target: {path}"))?;
-        require(seen.insert(path.clone()), &format!("paths.txt repeats search query target: {path}"))?;
-    }
-    Ok(())
+    http_site_queries::validate(paths)
 }
 fn parity(output: &mut Stdout, origin: &mut Connector, candidate: &mut Connector, root: &mut Directory) -> Result<(), String> {
     let archived = http_site::manifest_paths(root)?;
