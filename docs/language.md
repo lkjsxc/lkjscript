@@ -327,7 +327,7 @@ Collection for holds iterable temporaries in an outer match, loops over next and
 binds each item with an irrefutable let. Non-unit bodies/refutable patterns reject;
 break/continue/return/exhaustion preserve item/iterator cleanup. Numeric ranges
 share binding machinery. No iteration IR operation or nominal-name shortcut exists.
-Shared Vec/slice/map/set and owned Vec/Option/map/set iteration are supported. Returning an element view can retain the loop iterator temporary; index the owner directly when preserving the selected iterator's order. IntoIterator for &mut Vec<T> is absent: evaluate the collection once, then use an index loop that advances before borrowing each element, so continue still progresses. Owned arrays need an IntoIterator implementation; index them, or use vec![elements] for owned literal iteration.
+Shared Vec/slice/map/set and owned Vec/Option/map/set iteration are supported. Returning an element view can retain the loop iterator temporary; for an immutable self field of canonical Vec type, index self.FIELD directly and advance before the original body, preserving continue and order. Custom iteration/index/deref or iterator cleanup needs its own proof. IntoIterator for &mut Vec<T> is absent: evaluate the collection once, then use an index loop that advances before borrowing each element, so continue still progresses. Owned arrays need an IntoIterator implementation; index them, or use vec![elements] for owned literal iteration.
 
 enumerate/skip/take/zip are source adapters; chain currently needs identical
 iterator types to prove Item equality. map/filter/filter_map/inspect store the

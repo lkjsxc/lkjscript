@@ -1,5 +1,5 @@
 // expect: reject E_BORROW
-// pending: Explain that the returned view is tied to the loop iterator temporary here; suggest indexing the owning input directly when returning an element view.
+// rewrite: This returned view retains the iterator temporary; index the canonical Vec field of immutable self directly and advance before the original body, preserving continue, order and cleanup.
 struct Table { fields: Vec<(String, String)> }
 impl Table {
     fn get(&self, key: &str) -> Option<&String> {

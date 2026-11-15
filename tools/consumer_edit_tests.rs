@@ -119,8 +119,6 @@ pub fn probe() -> Message {
             format!("unsafe consumer rewrite for {name}: {}", display_bytes(&rejected.errors)));
     }
     let explained: Vec<(String, String, String)> = vec![
-        ("iterator-return-view.rs".to_string(), include_str!("../tests/diagnostics/iterator_return_view.rs").to_string(),
-            "returned element view is tied to the loop iterator temporary".to_string()),
         ("static-owned-label.rs".to_string(), include_str!("../tests/diagnostics/static_view_owned_aggregate.rs").to_string(),
             "struct field Reply.kind declares an explicit static view".to_string()),
     ];

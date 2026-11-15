@@ -1,6 +1,7 @@
 //! Reporting data does not carry checked IR and cannot authorize emission.
 mod borrow_edits;
 mod consumer_edits;
+mod iterator_edits;
 use crate::ast::{Span, Type};
 use crate::source::SourceReport;
 use std::collections::BTreeSet;
@@ -16,6 +17,7 @@ pub struct BlockedRegion {
 /// Report every recognized unsupported site, including those after the first
 /// failed body. Existing diagnostics retain their more specific explanation.
 pub fn complete_unsupported(report: &mut SourceReport) {
+    iterator_edits::complete(&report.program, &mut report.diagnostics);
     consumer_edits::complete(&report.program, &mut report.diagnostics);
     borrow_edits::complete(&report.program, &mut report.diagnostics);
     let mut seen: BTreeSet<(usize, usize, usize)> = BTreeSet::new();

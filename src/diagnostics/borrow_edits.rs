@@ -67,7 +67,7 @@ fn unused(program: &a::Program, candidate: &str) -> bool {
     true
 }
 
-fn fresh(program: &a::Program, stem: &str) -> String {
+pub(super) fn fresh(program: &a::Program, stem: &str) -> String {
     let mut index = 0usize;
     loop {
         let name = format!("__lkjscript_{stem}_{index}");
