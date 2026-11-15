@@ -1,13 +1,10 @@
 # Status — 2026-11-15 UTC
 
-**Source decision: .lkj.** Landed 1,072 language-source renames in a3c2f046 and separate seed 26bf2c3c; child.lkj/child/mod.lkj/program.lkj have no alias/fallback. Rename gate 461.920 s (load 3.92→8.04), seed-only CI43718048863 572.075 s (0.69→3.39), both jobs passed. Programs 9d145128 is integrated.
+**Source and landing.** .lkj renamed 1,072 language sources at a3c2f046; child.lkj/child/mod.lkj/program.lkj have no alias/fallback. Integrated source 4048e172/70680680 and separate seed 695d0fca are pushed, including Programs 9d145128. [CI43734314339](https://github.com/lkjsxc/lkjscript/actions/runs/43734314339) passed the empty-store seed gate in 786.671 s (load 0.46→2.96) and witness in 103 s (load not recorded; 274 value/output cases, 344 verdicts and byte identity).
 
-**Failure interface.** Source4048e172 passes 63 isolated transient-unit cases, 15.048 s (load 6.14→7.85); original-IR oracle plus 32,768 inline64 mutants, 91.790 s (5.99→8.88), zero findings. Path/line, capability/grant, operation and symbolic errno share one bounded line; native terminal formatting allocates nothing, supervisor interpretation/private decoding still allocate. Earlier code had a separate grant/errno line; why the live journal omitted it was not reproduced. Fixed point 17,039,220 B; reproducible seed 3,312,682 B. No production service was touched.
+**Failure interface.** Source 4048e172 passes 63 isolated transient-unit cases, 15.048 s (load 6.14→7.85); original-IR oracle plus 32,768 inline64 mutants, 91.790 s (5.99→8.88), zero findings. Path/line, capability/grant, operation and symbolic errno share one bounded line; native terminal formatting allocates nothing, supervisor interpretation/private decoding still allocate. Earlier code had a separate grant/errno line; why the live journal omitted it was not reproduced. Fixed point 17,039,220 B; reproducible seed 3,312,682 B. No production service was touched.
 
-| Current self-build | Seconds | Load before→after |
-| --- | ---: | --- |
-| Unchanged | 0.55 | 3.98→3.98 |
-| Checker one-body edit | 6.35 | 3.98→3.82 |
+**Edit loop.** Unchanged build 0.55 s (load 3.98→3.98); checker one-body edit 6.35 s (3.98→3.82).
 
 Cached/control images match. Fixed roots authenticate exact domains before allocation, then hash one owned payload; stale-root/substitution/truncation/length/accounting attacks pass. Edit store I/O is 2.677 s; eliminating it still leaves an observed 3.667 s (both load 3.98→3.82), not a lower bound on future designs. Parse/read 0.833, resolve 0.182, key/producer hash 1.044, codecs 0.667, elaborate/check 0.288, emit/runtime 0.623 s share that load window; unchanged syntax/arena and lazy-pack work remain. The 3 s target is unmet.
 
@@ -19,18 +16,19 @@ Cached/control images match. Fixed roots authenticate exact domains before alloc
 
 The actual checker edit changes all 721 compiler-dependent structural images; only 28 independent contracts retain identity. Same-input cross-producer images separately reuse all 749 contracts, not a whole-tree edit claim. The 60 s target is unmet; bench/README.md accounts every phase, the reported warm requests, unconverted closed CLI work and the named consumer_gate_closure pending case for programs (HTTP/program-directory first). The full entropy fill remains; its completed existential scan now exits early.
 
-**Generated code stopped at step1.** Whole-function allocation across blocks/loops and conditional callee saves already exist. Additional coalescing/operand use gained 1.00% wall/0.70% CPU, below10%, and was discarded. Fixed-source wall ratios remain 1.826x opt0 and 6.053x -O; no speculative ABI/region change or cold-gate gain is claimed. Paired timings and loads are in bench/.
+**Generated code stopped at step 1.** Whole-function allocation across blocks/loops and conditional callee saves already exist. Additional coalescing/operand use gained 1.00% wall/0.70% CPU, below 10%, and was discarded. Fixed-source wall ratios remain 1.826x opt0 and 6.053x -O; no speculative ABI/region change or cold-gate gain is claimed. Paired timings and loads are in bench/.
 
 **Diagnostic causes: 16 tagged programs specimens, not attempt totals.**
 
 | Cause | Count | Accepted rewrite |
 | --- | ---: | --- |
-| Expected Rust form/support gap | 8 | Typed inference3, collection views/iteration3, explicit trait impl1, text fold1 |
+| Expected Rust form/support gap | 8 | Typed inference 3, collection views/iteration 3, explicit trait impl 1, text fold 1 |
 | Bad/incomplete message | 5 | Located caller/errno, named type/storage operation, value-less no-store |
 | Rule with no Rust counterpart | 3 | Owned text/stable owner index and authenticated child image |
+
 The binary's delta command prints frequent accepted forms. Mandatory formatting/fragment markers were declined without cause evidence.
 
-**Next:** land the source and separate seed refresh, then inspect both CI jobs. One existing external_child_authority case records the agreed exact ELF/entry/ABI/canonical slots and sealed descriptor through exec; authenticated-child implementation remains pending, with programs owning transfer/lifecycle/consumer APIs.
+**Next:** grouped check batches, typed IR/authority request proofs and the programs consumer split are the measured remaining work. One existing external_child_authority case records the agreed exact ELF/entry/ABI/canonical slots and sealed descriptor through exec; authenticated-child implementation remains pending, with programs owning transfer/lifecycle/consumer APIs.
 
 ## Programs
 

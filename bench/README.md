@@ -1135,3 +1135,44 @@ closed CLI coverage and the consumer split remain opportunities; neither is
 misclassified as mandatory host cost. The earlier actual whole-tree checker-edit
 gate remains the measured 544.788 s (load 4.89→5.83) with 28 reused requests,
 not the unchanged-warm or same-input cross-producer result.
+
+### Landed source, seed and CI
+
+Source 4048e172 and the observation/results follow-up 70680680 landed with the
+separate seed commit 695d0fca. [CI43734314339](https://github.com/lkjsxc/lkjscript/actions/runs/43734314339)
+ran exactly 695d0fcaed2a83b30d26ea081d7ced1611c20b5c and passed both jobs.
+The seed-only job starts with an empty store and no cargo, rustc or node
+executable. It ran all 5,356 reported requests freshly, plus the live suites.
+The optional witness passed 274 value/output cases, 344 verdicts and compiler
+byte identity.
+
+| CI measurement | Seconds | Load before→after |
+| --- | ---: | --- |
+| Seed-only complete gate | 786.671 | 0.46→2.96 |
+| Gate job, including setup/cleanup | 801 | Not recorded for the full job window |
+| Optional witness job | 103 | Not recorded |
+| Workflow start to final update | 804 | Not recorded; jobs use separate hosts |
+
+The workflow timestamps are 16:14:02…16:27:26 UTC on 2026-11-15; its gate job is
+16:14:04…16:27:25 and witness job 16:14:04…16:15:47. The native gate's own
+load window is recorded above and must not be substituted for another job's
+load. The cold/CI 150-second target remains unmet.
+
+| CI gate phase, without double counting overlap | Seconds | Load before→after |
+| --- | ---: | --- |
+| Initial bootstrap/tool/closed-image prelude | 78.174 | 0.46→1.03 |
+| Host/proof overlap | 128.635 | 1.03→2.43 |
+| Conformance | 138.932 | 2.43→2.77 |
+| Generated | 113.768 | 2.77→4.26 |
+| Optimized conformance | 142.850 | 4.26→2.77 |
+| Optimized generated | 124.021 | 2.77→3.68 |
+| Structural execution | 31.767 | 3.68→3.54 |
+| Live structural observations | 0.655 | 3.54→3.54 |
+| Semantic cases | 20.765 | 3.54→3.23 |
+| References | 4.060 | 3.23→3.05 |
+| Mutation | 3.003 | 3.05→2.96 |
+| Scheduling/rounding gaps | 0.041 | 0.46→2.96 |
+| **Total** | **786.671** | **0.46→2.96** |
+
+Only this result record and status change after the passing source/seed revision;
+no compiler, fixture, tool or seed bytes change in the result-only follow-up.
