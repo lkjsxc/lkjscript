@@ -70,9 +70,9 @@ its worker first; the subreaper then records ECHILD after observing the owned
 pidfd readable, rather than claiming it personally reaped that worker. Unsupported
 Landlock fails before any foreign code executes.
 
-On the shared x86-64 host, the focused suite took 7.907 s (load 6.51→5.74).
-In the native-run sample, starting Git took 0.349 ms and 64 persistent requests
-averaged 25.716 µs; 16 requests with a fresh spawn averaged 740.159 µs, or 28.78×
-more per request (both measured within load 6.51→6.51). These are a small shared-host
+On the shared x86-64 host, the focused suite took 9.205 s (load 5.67→5.94).
+In the native-run sample, starting Git took 0.324 ms and 64 persistent requests
+averaged 28.775 µs; 16 requests with a fresh spawn averaged 771.479 µs, or 26.81×
+more per request (both measured within load 5.67→5.67). These are a small shared-host
 sample, not a guaranteed latency or an interpreter speed claim. The scripts print
 current timing and load windows on every run.

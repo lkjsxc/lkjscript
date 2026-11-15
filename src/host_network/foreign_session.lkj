@@ -167,17 +167,18 @@ fn exchange(a: &mut Assembler, p: ForeignCode, timer: Label, ready: Label, kill:
     a.mov(SI,A); a.immediate(DI,0); a.immediate(D,3); a.immediate(R10,0x22); a.immediate(R8,!0); a.immediate(R9,0); checked(a,9,failed); a.store(BP,-64,A);
     a.bind(allocated); a.load(A,BP,-64); a.store(BP,-72,A);
     a.load(DI,BP,-8); a.load(DI,DI,24); a.load(SI,BP,-80); a.call(timer); a.test(A,true); a.condition(8,failed);
-    let sending=a.label(); let reading=a.label(); let write_wait=a.label(); let read_wait=a.label(); let complete=a.label();
+    // Poll the same absolute timer between chunks even when I/O stays ready.
+    let sending=a.label(); let reading=a.label(); let complete=a.label();
     a.bind(sending); a.load(D,BP,-24); a.test(D,true); a.condition(4,reading);
+    a.load(DI,BP,-8); a.immediate(SI,4); a.load(D,DI,16); a.call(ready); a.test(A,true); a.condition(8,poison); a.load(D,BP,-24);
     a.load(DI,BP,-8); a.load(DI,DI,16); a.load(SI,BP,-16); a.immediate(R10,0x4040); a.immediate(R8,0); a.immediate(R9,0); call(a,44);
-    a.immediate(C,(-11i64) as u64); a.compare(A,C); a.condition(4,write_wait); a.test(A,true); a.condition(8,poison); a.condition(4,broken);
+    a.immediate(C,(-11i64) as u64); a.compare(A,C); a.condition(4,sending); a.test(A,true); a.condition(8,poison); a.condition(4,broken);
     a.load(C,BP,-16); a.rr(0x01,C,A,true); a.store(BP,-16,C); a.load(C,BP,-24); a.rr(0x29,C,A,true); a.store(BP,-24,C); a.jump(sending);
-    a.bind(write_wait); a.load(DI,BP,-8); a.immediate(SI,4); a.load(D,DI,16); a.call(ready); a.test(A,true); a.condition(8,poison); a.jump(sending);
     a.bind(reading); a.load(D,BP,-40); a.test(D,true); a.condition(4,complete);
+    a.load(DI,BP,-8); a.immediate(SI,1); a.load(D,DI,16); a.call(ready); a.test(A,true); a.condition(8,poison); a.load(D,BP,-40);
     a.load(DI,BP,-8); a.load(DI,DI,16); a.load(SI,BP,-72); a.immediate(R10,0x40); a.immediate(R8,0); a.immediate(R9,0); call(a,45);
-    a.immediate(C,(-11i64) as u64); a.compare(A,C); a.condition(4,read_wait); a.test(A,true); a.condition(8,poison); a.condition(4,broken);
+    a.immediate(C,(-11i64) as u64); a.compare(A,C); a.condition(4,reading); a.test(A,true); a.condition(8,poison); a.condition(4,broken);
     a.load(C,BP,-72); a.rr(0x01,C,A,true); a.store(BP,-72,C); a.load(C,BP,-40); a.rr(0x29,C,A,true); a.store(BP,-40,C); a.jump(reading);
-    a.bind(read_wait); a.load(DI,BP,-8); a.immediate(SI,1); a.load(D,DI,16); a.call(ready); a.test(A,true); a.condition(8,poison); a.jump(reading);
     a.bind(complete); a.load(DI,BP,-8); a.load(DI,DI,24); a.lea(SI,BP,-96); a.immediate(D,8); call(a,0);
     a.immediate(C,(-11i64) as u64); a.compare(A,C); let commit=a.label(); a.condition(4,commit); a.test(A,true); a.condition(8,poison); a.jump(timeout);
     a.bind(commit); a.load(DI,BP,-32); a.load(SI,BP,-64); a.load(C,BP,-48); a.raw(&[0xf3,0xa4]); a.load(A,BP,-48); a.jump(failed);
