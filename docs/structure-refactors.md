@@ -215,10 +215,106 @@ candidate's visibility check. Cross-module inline refuses method expressions:
 an imported trait can change dispatch even when the candidate still checks.
 Relative include macros also need an explicit source-file relocation rule.
 
+### Rename a declaration or binding
+
+~~~json
+{"op":"rename","id":"Point","name":"Position"}
+{"op":"rename","id":"Point::field:x","name":"horizontal"}
+{"op":"rename","id":"Read::read","name":"read_value"}
+{"op":"rename","id":"compute::param:value","name":"input"}
+{"op":"rename","id":"main::body:BODY_DIGEST::binding:value:0","name":"total"}
+~~~
+
+The extended planner covers structs, enums, source traits, type aliases,
+constants, function parameters, body bindings, fields,
+variants, free functions, inherent methods and inline modules. All these renames
+use the same planner and checked-meaning postcondition. Implementation and call-site identities do not each have
+an independently renameable source declaration token. External modules require
+a separate source-file plan. Generic-parameter declarations currently lack complete
+resolver-backed use-site rows and report `E_EDIT_GENERIC_REFERENCES`; their names
+are never guessed from matching tokens.
+
+Every changed declaration token and reference has exact catalog evidence.
+Rewritten bare global paths receive their canonical qualified parent, so a
+local binding or generic parameter cannot capture the new name in an
+uninstantiated body or signature. An existing unqualified reference that the
+new declaration could capture is an explicit refusal. Explicit import aliases retain their local spelling, including an alias whose
+spelling happens to equal the old declaration name. The import target changes
+when its own reference names that declaration. Record shorthand is expanded:
+renaming a field writes `new_field: old_binding`; renaming a value writes
+`old_field: new_binding`. Pattern shorthand retains its parsed `ref` and
+`mut` prefixes. A binding's truncated parser span is extended only by the
+exact parsed prefix and declaration token, matched to that binding identity;
+the planner never searches another occurrence by name.
+
+A source trait method rename changes the trait declaration and every proved
+implementation member together. Standard protocol names, unresolved trait
+origins and missing cohort evidence require explicit decisions. A new method
+spelling already used by another source dispatch cohort is conservatively
+refused, including when no current IR instance would expose the change.
+The existing frontend intrinsic-method inventory and builtin-trait method
+parser also reject implicit protocol spellings; their receiver traversal is
+exhaustive. A custom Vec method renamed to `len` demonstrates why this matters:
+an unused generic body can keep identical checked IR while a future call
+changes from the custom method to the intrinsic. Default method
+declarations are included, but this does not add dispatch support to language
+forms that the frontend already rejects.
+
+Local renames need complete binding evidence in the containing function.
+Renaming a receiver or to a wildcard is refused. A conflicting declaration or
+a new spelling that could capture an existing resolved value is refused.
+Body binding identities remain tied to their original body epoch: another
+operation against a changed body must obtain its new identity. Relevant
+unresolved global/member references, missing spans and ambiguous associated
+calls also refuse the operation. For a free-function rename, a spelling-less
+`implicit-source` or `alias-origin` row with a different nonempty canonical
+target proves an unrelated reference; an equal or empty target still refuses.
+A separately tagged `unresolved-namespace-qualification` also excludes a free
+function: the producer proves a nonterminal namespace role, with grouped-self,
+glob and turbofish forms excluded. Neither exception applies to outgoing scope
+evidence during a move.
+The resolver's intrinsic type/trait inventory, including `Copy`, `Clone` and
+callable bounds, and standard namespace spellings require an explicit scope
+decision because their implicit references are not completely cataloged. The final checked-meaning postcondition
+below remains mandatory even when every source site was proved.
+
+### Move a function or inline module
+
+~~~json
+{"op":"move","id":"old_module::helper","parent":"new_module"}
+{"op":"move","id":"old_module","parent":"container"}
+~~~
+
+The extended planner moves a free function or a complete inline module across
+semantic module boundaries. The destination may be `crate`. It qualifies all
+resolved outgoing global paths and rewrites proved incoming paths, including
+recursive calls and paths to declarations inside a moved module. Local binding
+and type-parameter identities remain local. Relative `self`/`super` paths
+become explicit resolved paths before relocation, while untouched source bytes
+retain their spelling and spacing. The old item span is removed and its edited
+text is inserted at the destination.
+
+A destination collision or capture, an intrinsic/standard namespace spelling,
+a move into a descendant, an external source-file module, an incoming
+import/alias, or an import inside the moved item requires
+an explicit plan. Cross-module method expressions are refused because a
+different imported trait could otherwise change dispatch. Source-file/context
+macros, nested block items, unresolved references and path prefixes without a
+proved terminal rewrite also require decisions. The independent candidate
+check rejects newly inaccessible private dependencies. The planner does not
+make them public to make the move pass.
+
+A relocation needs a full catalog even though ordinary replace/add/remove
+operations can use a declarations-only catalog. The transaction driver must
+include `move` with `rename` in its meaning-preserving subset check. A valid
+source relocation whose canonical checked representation differs is a
+conservative refusal; neither the planner nor the driver treats interpreter
+agreement on one execution as a substitute for that proof.
+
 ## Evidence and verification
 
-All seven operations need the full typed catalog, including exact expression
-types. An items-only catalog is insufficient. Canonical inferred nominal types
+The seven structural refactors and extended rename/move operations need the full
+typed catalog, including exact expression types. An items-only catalog is insufficient. Canonical inferred nominal types
 are emitted with their resolved source paths, including reference prefixes;
 missing type evidence and ambiguous intrinsic spellings are explicit refusals.
 
@@ -235,7 +331,10 @@ nested calls, record shorthand, nested match alternatives, scope capture,
 mutable extraction, generic extraction, terminal returns, selected inline
 sites, declared result widths and traps, wildcard-parameter destruction order,
 reference-type relocation, deliberate generated-name collisions,
-stale/invalid requests and candidate refusal. Publication recovery and
+stale/invalid requests and candidate refusal. Rename and move cases additionally
+compare the production canonical checked-IR identity, with alias, shorthand,
+trait-cohort, capture, collision, import, visibility and relocation refusals.
+Publication recovery and
 whole-tree atomicity are the transaction driver's separate contract.
 
 Run `bash tools/structure-refactor-test.sh PATH_TO_COMPILER` from the repository

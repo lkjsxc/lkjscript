@@ -276,13 +276,17 @@ mod cases {
             Err(error) => { world.stdout().write(format!("{error}\n").as_bytes()); panic!("structural refactor case failed"); }
         }
     }
-    pub fn run(world: &mut World) {
+            pub fn run(world: &mut World) {
         let mut count = 0usize;
         world.stdout().write(b"refactor signature cases\n"); count += report(world, signatures());
         world.stdout().write(b"refactor field cases\n"); count += report(world, fields());
         world.stdout().write(b"refactor variant cases\n"); count += report(world, variants());
         world.stdout().write(b"refactor extraction cases\n"); count += report(world, extractions());
         world.stdout().write(b"refactor inline cases\n"); count += report(world, inlines());
+        world.stdout().write(b"refactor rename cases\n"); count += report(world, renames());
+        world.stdout().write(b"refactor general rename cases\n"); count += report(world, general_renames());
+        world.stdout().write(b"refactor rename scope cases\n"); count += report(world, rename_scope());
+        world.stdout().write(b"refactor move cases\n"); count += report(world, moves());
         world.stdout().write(format!("ok structural refactor {count} cases\n").as_bytes());
     }
 
@@ -300,4 +304,175 @@ fn output(snapshot: &Snapshot) -> Result<Vec<u8>, String> {
         interpreter::run(program, entry.unwrap(), &args, &mut host).map_err(|error| error.code())?;
         Ok(host)
     }
+
+fn same_meaning(source: &str, operation: &str) -> Result<(), String> {
+        let before = snapshot(source).map_err(|error| -> String { format!("fixture {operation}: {error}\n{source}") })?; let after = apply(&before, operation)?;
+        let candidate = snapshot(&after).map_err(|error| -> String { format!("candidate {operation}: {error}\n{after}") })?;
+        if meaning::identity(&before.checked) != meaning::identity(&candidate.checked) {
+            return Err(format!("checked meaning differs after {operation}\n{after}"));
+        }
+        assert_eq!(value(&before), value(&candidate)); Ok(())
+    }
+
+fn renames() -> Result<usize, String> {
+        let field = "struct Point { x: i64 } fn main() -> i64 { let x = 3i64; let point = Point { x }; let Point { x } = point; x }";
+        same_meaning(field, r#"{"op":"rename","id":"Point::field:x","name":"value"}"#)?;
+        let borrowed = "struct Point { x: i64 } fn main() -> i64 { let mut point = Point { x: 3i64 }; let Point { ref mut x } = point; *x += 2i64; *x }";
+        same_meaning(borrowed, r#"{"op":"rename","id":"Point::field:x","name":"value"}"#)?;
+        let collision = "struct Point { x: i64, y: i64 } fn main() -> i64 { Point { x: 1i64, y: 2i64 }.x }";
+        refuses(collision, r#"{"op":"rename","id":"Point::field:x","name":"y"}"#, "E_EDIT_NAME")?;
+        let variant = "enum Choice { Some { value: i64 }, None } use crate::Choice::Some as Some; fn main() -> i64 { match (Some { value: 4i64 }) { Choice::Some { value } => value, Choice::None => 0i64 } }";
+        same_meaning(variant, r#"{"op":"rename","id":"Choice::variant:Some","name":"Ready"}"#)?;
+        refuses(variant, r#"{"op":"rename","id":"Choice::variant:Some","name":"None"}"#, "E_EDIT_NAME")?;
+        let inherent = "struct Value {} impl Value { fn read(&self) -> i64 { 7i64 } } fn main() -> i64 { let value = Value {}; value.read() }";
+        same_meaning(inherent, r#"{"op":"rename","id":"Value::read","name":"read_value"}"#)?;
+        let traits = "trait Read { fn read(&self) -> i64; } struct First {} struct Second {} impl Read for First { fn read(&self) -> i64 { 2i64 } } impl Read for Second { fn read(&self) -> i64 { 3i64 } } fn main() -> i64 { let first = First {}; let second = Second {}; first.read() + second.read() }";
+        same_meaning(traits, r#"{"op":"rename","id":"Read::read","name":"read_value"}"#)?;
+        let default = "trait Read { fn read(&self) -> i64 { 9i64 } } struct Value {} impl Read for Value {} fn main() -> i64 { 9i64 }";
+        same_meaning(default, r#"{"op":"rename","id":"Read::read","name":"read_value"}"#)?;
+        let mut missing = snapshot(inherent)?;
+        let site = missing.catalog.references.iter().find(|site: &&semantic::Reference| site.target == "Value::read").unwrap().clone();
+        missing.catalog.unresolved.push(site);
+        match plan(&missing, r#"{"op":"rename","id":"Value::read","name":"read_value"}"#) {
+            Err(error) => if !error.contains("E_EDIT_REFERENCES") { return Err(error); },
+            Ok(_) => return Err("missing method evidence admitted rename".to_string()),
+        }
+        let module = "pub mod old { pub fn value() -> i64 { 5i64 } pub mod inner { pub fn run() -> i64 { super::value() } } } fn main() -> i64 { old::inner::run() }";
+        same_meaning(module, r#"{"op":"rename","id":"old","name":"new"}"#)?;
+        let module_alias = "mod container { pub mod old { pub fn value() -> i64 { 6i64 } } } use crate::container::old as old; fn main() -> i64 { old::value() }";
+        same_meaning(module_alias, r#"{"op":"rename","id":"container::old","name":"new"}"#)?;
+        let modules = "mod old {} mod new {} fn main() -> i64 { 0i64 }";
+        refuses(modules, r#"{"op":"rename","id":"old","name":"new"}"#, "E_EDIT_NAME")?;
+        Ok(12usize)
+    }
+
+fn moves() -> Result<usize, String> {
+        let function = "fn offset() -> i64 { 7i64 } mod old { pub fn helper(n: i64) -> i64 { if n == 0i64 { crate::offset() } else { helper(n - 1i64) } } } mod fresh {} fn main() -> i64 { old::helper(2i64) }";
+        same_meaning(function, r#"{"op":"move","id":"old::helper","parent":"fresh"}"#)?;
+        let module = "fn offset() -> i64 { 4i64 } pub mod old { pub fn value() -> i64 { super::offset() } } mod fresh {} fn main() -> i64 { old::value() }";
+        same_meaning(module, r#"{"op":"move","id":"old","parent":"fresh"}"#)?;
+        let collision = "mod old { pub fn helper() -> i64 { 1i64 } } mod fresh { pub fn helper() -> i64 { 2i64 } } fn main() -> i64 { old::helper() + fresh::helper() }";
+        refuses(collision, r#"{"op":"move","id":"old::helper","parent":"fresh"}"#, "E_EDIT_NAME")?;
+        let imported = "mod old { pub fn helper() -> i64 { 1i64 } } mod fresh {} use crate::old::helper; fn main() -> i64 { helper() }";
+        refuses(imported, r#"{"op":"move","id":"old::helper","parent":"fresh"}"#, "E_EDIT_MOVE_IMPORT")?;
+        let method = "struct Value {} impl Value { fn read(&self) -> i64 { 1i64 } } mod old { pub fn helper(value: &crate::Value) -> i64 { value.read() } } mod fresh {} fn main() -> i64 { let value = Value {}; old::helper(&value) }";
+        refuses(method, r#"{"op":"move","id":"old::helper","parent":"fresh"}"#, "E_EDIT_METHOD_SCOPE")?;
+        let private = "mod old { const VALUE: i64 = 8i64; pub fn helper() -> i64 { VALUE } } mod fresh {} fn main() -> i64 { old::helper() }";
+        refuses(private, r#"{"op":"move","id":"old::helper","parent":"fresh"}"#, "CHECK")?;
+        let cycle = "mod old { pub mod inner {} } fn main() -> i64 { 0i64 }";
+        refuses(cycle, r#"{"op":"move","id":"old","parent":"old::inner"}"#, "E_EDIT_MOVE_CYCLE")?;
+        let imports = "fn offset() -> i64 { 3i64 } mod old { use crate::offset; pub fn helper() -> i64 { offset() } } mod fresh {} fn main() -> i64 { old::helper() }";
+        refuses(imports, r#"{"op":"move","id":"old","parent":"fresh"}"#, "E_EDIT_MOVE_IMPORT")?;
+        let standard = "mod host { pub mod std { pub fn value() -> i64 { 1i64 } } } mod fresh {} fn main() -> i64 { host::std::value() }";
+        refuses(standard, r#"{"op":"move","id":"host::std","parent":"fresh"}"#, "E_EDIT_INTRINSIC_CAPTURE")?;
+        let outgoing = "fn other() -> i64 { 1i64 } mod old { pub fn helper() -> i64 { crate::other() } } mod fresh {} fn main() -> i64 { old::helper() }";
+        for category in 0usize..2usize {
+        let mut missing = snapshot(outgoing)?;
+        let item = &missing.catalog.items[*missing.catalog.by_identity.get(&"old::helper".to_string()).unwrap()];
+        missing.catalog.unresolved.push(semantic::Reference { owner: item.identity.clone(), target: "other".to_string(),
+            file: item.file.clone(), kind: if category == 0usize { "implicit-source".to_string() } else { "unresolved-namespace-qualification".to_string() }, start: item.start, end: item.start });
+        let request = structure_edit::parse(r#"{"version":1,"operations":[{"op":"move","id":"old::helper","parent":"fresh"}]}"#.as_bytes())?;
+        let mut patches = Vec::new();
+        match structure_refactor::plan(&missing.catalog, &missing.inputs, &request.operations[0usize], &mut patches) {
+            Err(error) => if !error.contains("E_EDIT_SCOPE") { return Err(error); },
+            Ok(_) => return Err("outgoing unresolved source admitted relocation".to_string()),
+        }
+        assert!(patches.is_empty());
+        }
+        Ok(11usize)
+    }
+
+fn general_renames() -> Result<usize, String> {
+        let nominal = "struct Point { x: i64 } fn value(point: &Point) -> i64 { point.x } fn main() -> i64 { value(&Point { x: 3i64 }) }";
+        same_meaning(nominal, r#"{"op":"rename","id":"Point","name":"Position"}"#)?;
+        let variants = "enum Choice { A(i64), B } fn main() -> i64 { match Choice::A(4i64) { Choice::A(value) => value, Choice::B => 0i64 } }";
+        same_meaning(variants, r#"{"op":"rename","id":"Choice","name":"Selection"}"#)?;
+        let traits = "trait Read { fn read(&self) -> i64; } struct Value {} impl Read for Value { fn read(&self) -> i64 { 6i64 } } fn main() -> i64 { Value {}.read() }";
+        same_meaning(traits, r#"{"op":"rename","id":"Read","name":"Readable"}"#)?;
+        let aliases = "mod types { pub type Number = i64; } use crate::types::Number as Number; fn main() -> Number { 8i64 }";
+        same_meaning(aliases, r#"{"op":"rename","id":"types::Number","name":"Count"}"#)?;
+        let constants = "const offset: i64 = 5i64; struct Point { offset: i64 } fn main() -> i64 { Point { offset }.offset }";
+        same_meaning(constants, r#"{"op":"rename","id":"offset","name":"bias"}"#)?;
+        let parameters = "struct Point { x: i64 } fn value(x: i64) -> i64 { Point { x }.x } fn main() -> i64 { value(7i64) }";
+        same_meaning(parameters, r#"{"op":"rename","id":"value::param:x","name":"input"}"#)?;
+        let ordinary = "fn main() -> i64 { let mut value = 3i64; value += 2i64; value }";
+        let parsed = snapshot(ordinary)?; let binding = identity(&parsed, "binding", "main", "value");
+        same_meaning(ordinary, &format!("{{\"op\":\"rename\",\"id\":{},\"name\":\"total\"}}", semantic::quote(&binding)))?;
+        let shorthand = "struct Point { x: i64 } fn main() -> i64 { let point = Point { x: 4i64 }; let Point { x } = point; Point { x }.x }";
+        let parsed = snapshot(shorthand)?; let binding = identity(&parsed, "binding", "main", "x");
+        same_meaning(shorthand, &format!("{{\"op\":\"rename\",\"id\":{},\"name\":\"value\"}}", semantic::quote(&binding)))?;
+        let borrowed = "struct Point { x: i64 } fn main() -> i64 { let mut point = Point { x: 3i64 }; let Point { ref mut x } = point; *x += 2i64; *x }";
+        let parsed = snapshot(borrowed)?; let binding = identity(&parsed, "binding", "main", "x");
+        same_meaning(borrowed, &format!("{{\"op\":\"rename\",\"id\":{},\"name\":\"value\"}}", semantic::quote(&binding)))?;
+        let generic = "struct Value<T> { value: T } fn main() -> i64 { Value { value: 7i64 }.value }";
+        refuses(generic, r#"{"op":"rename","id":"Value::generic:T","name":"Element"}"#, "E_EDIT_GENERIC_REFERENCES")?;
+        let collision = "fn value(x: i64, y: i64) -> i64 { x + y } fn main() -> i64 { value(2i64, 3i64) }";
+        refuses(collision, r#"{"op":"rename","id":"value::param:x","name":"y"}"#, "E_EDIT_CAPTURE")?;
+        let capture = "const total: i64 = 4i64; fn main() -> i64 { let value = 3i64; value + total }";
+        let parsed = snapshot(capture)?; let binding = identity(&parsed, "binding", "main", "value");
+        refuses(capture, &format!("{{\"op\":\"rename\",\"id\":{},\"name\":\"total\"}}", semantic::quote(&binding)), "E_EDIT_CAPTURE")?;
+        let named = "struct Point {} struct Position {} fn main() -> i64 { 0i64 }";
+        refuses(named, r#"{"op":"rename","id":"Point","name":"Position"}"#, "E_EDIT_NAME")?;
+        let receiver = "struct Value {} impl Value { fn read(&self) -> i64 { 1i64 } } fn main() -> i64 { Value {}.read() }";
+        refuses(receiver, r#"{"op":"rename","id":"Value::read::param:self","name":"value"}"#, "E_EDIT_LOCAL_NAME")?;
+        Ok(14usize)
+    }
+
+fn rename_scope() -> Result<usize, String> {
+        let generic = "struct Old { value: u8 } fn idle<New: Copy>(x: Old) -> u8 { 42u8 } fn main() -> i64 { 42i64 }";
+        let operation = r#"{"op":"rename","id":"Old","name":"New"}"#;
+        same_meaning(generic, operation)?;
+        let before = snapshot(generic)?; let after = apply(&before, operation)?;
+        assert!(after.contains("x: crate::New"));
+        let hidden = "fn old() -> i64 { 1i64 } fn idle<T>() -> i64 { let renamed = || -> i64 { 2i64 }; old() } fn main() -> i64 { 42i64 }";
+        let operation = r#"{"op":"rename","id":"old","name":"renamed"}"#;
+        same_meaning(hidden, operation)?;
+        let before = snapshot(hidden)?; let after = apply(&before, operation)?;
+        assert!(after.contains("crate::renamed()"));
+        let collision = "struct Value {} trait First { fn old(&self) -> i64; } trait Second { fn renamed(&self) -> i64; } impl First for Value { fn old(&self) -> i64 { 1i64 } } impl Second for Value { fn renamed(&self) -> i64 { 2i64 } } fn main() -> i64 { 42i64 }";
+        refuses(collision, r#"{"op":"rename","id":"First::old","name":"renamed"}"#, "E_EDIT_METHOD_CAPTURE")?;
+        let source = "fn chosen() -> i64 { 3i64 } fn other() -> i64 { 4i64 } fn main() -> i64 { chosen() }";
+        let operation = r#"{"op":"rename","id":"chosen","name":"selected"}"#;
+        for category in 0usize..2usize {
+            let kind = if category == 0usize { "implicit-source" } else { "alias-origin" };
+            let mut unrelated = snapshot(source)?;
+            unrelated.catalog.unresolved.push(semantic::Reference { owner: "main".to_string(), target: "other".to_string(),
+                file: "fixture.lkj".to_string(), kind: kind.to_string(), start: 0usize, end: 0usize });
+            let after = apply(&unrelated, operation)?;
+            assert_eq!(meaning::identity(&unrelated.checked), meaning::identity(&snapshot(&after)?.checked));
+            for relevance in 0usize..2usize {
+                let target = if relevance == 0usize { "chosen" } else { "" };
+                let mut relevant = snapshot(source)?;
+                relevant.catalog.unresolved.push(semantic::Reference { owner: "main".to_string(), target: target.to_string(),
+                    file: "fixture.lkj".to_string(), kind: kind.to_string(), start: 0usize, end: 0usize });
+                let request = structure_edit::parse(format!("{{\"version\":1,\"operations\":[{operation}]}}").as_bytes())?;
+                let mut patches = Vec::new();
+                match structure_refactor::plan(&relevant.catalog, &relevant.inputs, &request.operations[0usize], &mut patches) {
+                    Err(error) => if !error.contains("E_EDIT_REFERENCES") { return Err(error); },
+                    Ok(_) => return Err("relevant unresolved source admitted free-function rename".to_string()),
+                }
+                assert!(patches.is_empty());
+            }
+        }
+        let intrinsic = "struct Old { value: u8 } fn main() -> i64 { 42i64 }";
+        refuses(intrinsic, r#"{"op":"rename","id":"Old","name":"Vec"}"#, "E_EDIT_INTRINSIC_CAPTURE")?;
+        let method = "trait Read { fn old(&self) -> usize; } impl Read for Vec<i64> { fn old(&self) -> usize { 7usize } } fn idle<T>(value: &Vec<i64>) -> usize { value.old() } fn main() -> i64 { 42i64 }";
+        let misleading = method.replace("old", "len");
+        assert_eq!(meaning::identity(&snapshot(method)?.checked), meaning::identity(&snapshot(&misleading)?.checked));
+        let live = method.replace("fn main() -> i64 { 42i64 }", "fn main() -> usize { idle::<bool>(&Vec::new()) }");
+        assert_eq!(value(&snapshot(&live)?), 7i64); assert_eq!(value(&snapshot(&live.replace("old", "len"))?), 0i64);
+        refuses(method, r#"{"op":"rename","id":"Read::old","name":"len"}"#, "E_EDIT_METHOD_INTRINSIC")?;
+        let protocol = "trait Old {} fn idle<T: Copy>(value: T) -> T { value } fn main() -> i64 { 42i64 }";
+        refuses(protocol, r#"{"op":"rename","id":"Old","name":"Copy"}"#, "E_EDIT_INTRINSIC_CAPTURE")?;
+        let mut namespace = snapshot(source)?;
+        namespace.catalog.unresolved.push(semantic::Reference { owner: "main".to_string(), target: String::new(),
+            file: "fixture.lkj".to_string(), kind: "unresolved-namespace-qualification".to_string(), start: 0usize, end: 0usize });
+        let after = apply(&namespace, operation)?;
+        assert_eq!(meaning::identity(&namespace.checked), meaning::identity(&snapshot(&after)?.checked));
+        Ok(13usize)
+    }
 }
+
+mod authority;
+
+mod meaning;
