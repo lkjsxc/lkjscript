@@ -43,7 +43,7 @@ fn wrapper_is_the_only_eligible_opportunity(world: &mut World, runtime: &runtime
     }
     body.push(instruction(ir::Op::Return { src: 0 }));
     let program = ir::Program {
-        types: ir::primitives(), destructors: Vec::new(), functions: vec![
+        sources: Vec::new(), types: ir::primitives(), destructors: Vec::new(), functions: vec![
             function("large", 1, ir::I64, vec![local("value", ir::I64, false), local("one", ir::I64, false)], body),
             function("wrapper", 1, ir::I64, vec![local("value", ir::I64, false), local("result", ir::I64, false)], vec![
                 instruction(ir::Op::Call { dst: 1, function: 0, args: vec![0usize] }),
@@ -119,7 +119,7 @@ fn retained_large_calls_keep_observable_effects(world: &mut World, runtime: &run
     body.push(instruction(ir::Op::Drop { place: ir::Place::local(0) }));
     body.push(instruction(ir::Op::Return { src: 1 }));
     let program = ir::Program {
-        types, destructors: Vec::new(), functions: vec![
+        sources: Vec::new(), types, destructors: Vec::new(), functions: vec![
             function("large_effect", 2, ir::I64, vec![local("counter", reference, false), local("value", ir::I64, false),
                 local("one", ir::I64, false), local("loaded", ir::I64, false), local("sum", ir::I64, false)], body),
             function("wrapper", 2, ir::I64, vec![local("counter", reference, false), local("value", ir::I64, false),

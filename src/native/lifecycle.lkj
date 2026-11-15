@@ -7,6 +7,7 @@ use crate::x86::*;
 fn syscall(a: &mut Assembler, number: u64) {
     let again = a.label();
     a.bind(again);
+    super::diagnostics::operation(a, number);
     a.immediate(A, number);
     a.syscall();
     a.immediate(C, (-4i64) as u64);
@@ -155,11 +156,13 @@ pub(super) fn stop(a: &mut Assembler, p: Platform) {
     epilogue(a);
     a.bind(restore);
     a.store(BP, -24, A);
+    a.load(R11, CONTEXT, super::platform::HOST_OPERATION); a.store(BP, -32, R11);
     a.immediate(DI, 2); // A failed acquisition has no mask effect or claim.
     a.lea(SI, BP, -16);
     a.immediate(D, 0);
     a.immediate(R10, 8);
     syscall(a, 14);
+    a.load(R11, BP, -32); a.store(CONTEXT, super::platform::HOST_OPERATION, R11);
     a.load(A, BP, -24);
     a.bind(failed);
     epilogue(a);

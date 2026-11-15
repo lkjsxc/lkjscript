@@ -34,8 +34,8 @@ endfn
     write(directory, "runtime-file.lkjir", raw.as_bytes())?;
     let cases: Vec<(String, String)> = vec![
         ("runtime-root.lkj".to_string(), format!("{}:3: R0002 division by zero\n", path(config, "runtime-root.lkj"))),
-        ("runtime-module.lkj".to_string(), "file 1:3: R0002 division by zero\n".to_string()),
-        ("runtime-file.lkjir".to_string(), "file 7:37: R0016 raw location\n".to_string()),
+        ("runtime-module.lkj".to_string(), format!("{}:3: R0002 division by zero\n", path(config, "runtime_child.lkj"))),
+        ("runtime-file.lkjir".to_string(), format!("{}:10: R0016 raw location\n", path(config, "runtime-file.lkjir"))),
     ];
     let extra: Vec<Vec<u8>> = Vec::new();
     for (name, expected) in cases {
@@ -61,7 +61,7 @@ fn unwrap_help(world: &mut World, executable: &File, directory: &mut Directory,
         let observed = execute(world, executable, config, name, &engine, &limit, &extra)?;
         let text = String::from_utf8(observed.errors.clone()).unwrap();
         report.require(observed.status == 1 && observed.output.is_empty() && observed.result.is_empty()
-            && text.starts_with("file ") && !text.contains(&path(config, name))
+            && text.starts_with("library/prelude.lkj:") && !text.contains(&path(config, name))
             && contains(&observed.errors, b"called Result::unwrap on Err; static trap text omits the error payload")
             && contains(&observed.errors, b"help: replace unwrap() with an explicit match")
             && contains(&observed.errors, b"already granted output capability")
@@ -126,9 +126,48 @@ fn main(mut world: World) {
     Ok(())
 }
 
+fn long_observations(world: &mut World, executable: &File, directory: &mut Directory,
+    config: &Config, report: &mut Report) -> Result<(), String> {
+    let name = "long-runtime.lkj";
+    let mut prefix = String::new(); for _ in 0..1200 { prefix.push('x'); }
+    let mut human: Vec<u8> = Vec::new();
+    let extra: Vec<Vec<u8>> = Vec::new();
+    for suffix in pair("A", "B") {
+        let message = format!("{prefix}{suffix}");
+        write(directory, name, format!("pub fn probe() {{ panic!(\"{message}\"); }}\n").as_bytes())?;
+        for engine in pair("native", "interpreter") {
+            let observed = execute(world, executable, config, name, &engine, "0", &extra)?;
+            report.require(observed.status == 1 && observed.errors.len() < 2048
+                && contains(&observed.errors, b"...\n"), format!("bounded long message/{suffix}/{engine}"));
+            if human.is_empty() { human = observed.errors.clone(); }
+            else { report.equal("long trap prefix", "bounded human line", &observed.errors, &human); }
+        }
+        write(directory, "long-runtime.batch", format!("run\tprobe\t{}\n", path(config, name)).as_bytes())?;
+        let mut arguments = command(config, "batch", "long-runtime.batch");
+        option(&mut arguments, "--engines", "native,interpreter");
+        arguments.push(b"--roundtrip"[..].to_vec());
+        let expected = format!("{}:1: R0016 {message}", path(config, name));
+        for _ in 0..2 {
+            let observed = invoke(world, executable, &arguments, b"")?;
+            report.require(observed.status == 0 && observed.result.is_empty(), format!("long observation batch/{suffix}"));
+            let text = String::from_utf8(observed.output).unwrap();
+            let mut records = 0usize;
+            for line in text.as_str().lines() {
+                let fields = std::json::parse(line.as_bytes()).map_err(|_| -> String { "invalid long observation JSON".to_string() })?;
+                report.require(fields.get("stderr").and_then(|value: &std::json::Value| value.as_str()) == Some(expected.as_str()),
+                    format!("complete long diagnostic suffix/{suffix}/{records}"));
+                records += 1;
+            }
+            report.require(records == 2, "long observation lost a route".to_string());
+        }
+    }
+    Ok(())
+}
+
 pub fn run(world: &mut World, executable: &File, directory: &mut Directory,
     config: &Config, report: &mut Report) -> Result<(), String> {
     locations(world, executable, directory, config, report)?;
     unwrap_help(world, executable, directory, config, report)?;
-    explicit_match(world, executable, directory, config, report)
+    explicit_match(world, executable, directory, config, report)?;
+    long_observations(world, executable, directory, config, report)
 }

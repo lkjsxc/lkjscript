@@ -22,7 +22,7 @@ pub fn emit(
 }
 
 /// The driver holds fd3. A normal return writes only the raw eight-byte scalar;
-/// traps report their location/message on stderr and leave that channel empty.
+/// traps write a private LKJTRAP2 static identity and complete bounded line there.
 pub fn emit_for_run(
     checked: &CheckedProgram,
     runtime: &runtime::Runtime,

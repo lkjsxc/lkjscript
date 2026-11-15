@@ -1432,7 +1432,7 @@ impl Parser {
     }
     fn capability_path(&self, name: &str) -> Result<(), Diagnostic> {
         if name == "std::thread::scope" || name == "std::time" || name == "std::time::http_date"
-            || name == "std::time::local_minute" || name == "std::time::timezone_offset" {
+            || name == "std::time::local_minute" || name == "std::time::timezone_offset" || name == "std::io::errno_name" {
             return Ok(());
         }
         let mut i = 0;

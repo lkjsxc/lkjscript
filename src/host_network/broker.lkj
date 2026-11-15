@@ -1,13 +1,14 @@
 // Syscall-only RPC endpoint. Acknowledgment follows the actual descriptor operation.
 use crate::x86::*;
-use super::{elf, syscall};
+use super::elf;
 use super::process::{self, ProcessCode};
 use super::directories;
 use super::lifecycle;
 use super::foreign::{self, ForeignCode};
 
 pub(super) const REQUEST: i64 = -128;
-const RESPONSE: i64 = -144;
+const RESPONSE: i64 = -224;
+pub(super) const LAST_OPERATION: i64 = -232;
 const POLL: i64 = -160;
 const AUXILIARY: i64 = -176;
 const IMPORTED: i64 = -184;
@@ -16,6 +17,11 @@ pub(super) const SCRATCH: i64 = -8192;
 const EVENTS: i64 = -9216;
 const EVENT_OUTPUT: i64 = -11264;
 const DRAIN: i64 = -76800;
+
+fn syscall(a: &mut Assembler, number: u64) {
+    a.immediate(R11, number); a.store(BP, LAST_OPERATION, R11);
+    super::syscall(a, number);
+}
 
 pub(super) fn empty(a: &mut Assembler, reply: Label) {
     a.immediate(R8, 0);
@@ -311,6 +317,7 @@ pub(super) fn image(local: &[u8], address: &[u8], nonce: &[u8]) -> Result<Vec<u8
     a.mov(D, R15);
     a.call(read_all);
     a.bind(ready);
+    a.immediate(A, 1000); a.store(BP, LAST_OPERATION, A);
     a.load(A, BP, REQUEST);
     for index in 0usize..operations.len() {
         a.immediate(C, (index + 1) as u64);
@@ -375,11 +382,12 @@ pub(super) fn image(local: &[u8], address: &[u8], nonce: &[u8]) -> Result<Vec<u8
     a.bind(reply);
     a.store(BP, RESPONSE, A);
     a.store(BP, RESPONSE + 8, R9);
+    a.load(R11, BP, LAST_OPERATION); a.store(BP, RESPONSE + 16, R11);
     a.store(BP, -48, R8);
     a.store(BP, -40, R9);
     a.mov(DI, R12);
     a.lea(SI, BP, RESPONSE);
-    a.immediate(D, 16);
+    a.immediate(D, 24);
     a.call(write_all);
     let no_body = a.label();
     a.load(D, BP, -40);

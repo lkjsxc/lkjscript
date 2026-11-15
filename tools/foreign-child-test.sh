@@ -65,15 +65,17 @@ for engine in standalone native interpreter; do
 done
 # A reviewed executable pathname is still required to resolve to a regular file.
 mkfifo "$work/image-fifo"
-"$compiler" build "$fixture" --entry acquire --library-dir library --no-store --grant "tool=$work/image-fifo" -o "$work/acquire" 2>>"$work/build.err"
+"$compiler" build "$fixture" --entry acquire --library-dir library --no-store --grant "tool=$work/image-fifo" --grant _errors -o "$work/acquire" 2>>"$work/build.err"
 for engine in standalone native interpreter; do
     if [[ "$engine" = standalone ]]; then command=("$work/acquire")
-    else command=("$compiler" run "$fixture" --entry acquire --library-dir library --no-store --grant "tool=$work/image-fifo" --engine "$engine")
+    else command=("$compiler" run "$fixture" --entry acquire --library-dir library --no-store --grant "tool=$work/image-fifo" --grant _errors --engine "$engine")
     fi
     if timeout --kill-after=1s 5s "${command[@]}" >"$work/output" 2>"$work/error"; then
         printf 'FIFO executable grant was admitted\n' >&2; exit 1
     fi
-    grep -Fq 'entry grant ForeignCommand failed: errno 8' "$work/error"
+    test "$(wc -l < "$work/error")" == 1
+    acquire_line=$(awk '/^pub fn acquire\(/ {print NR}' "$fixture")
+    grep -Fxq "$fixture:$acquire_line: R0007 ForeignCommand $work/image-fifo validate-image: ENOEXEC (8)" "$work/error"
 done
 printf 'outside secret\n' >"$work/expected"
 cmp "$work/expected" "$work/outside/secret.txt"

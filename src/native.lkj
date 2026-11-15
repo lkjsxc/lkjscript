@@ -13,6 +13,7 @@ mod cache;
 
 pub(crate) fn cache_contracts() { cache::contracts(); }
 mod entry;
+mod diagnostics;
 mod environment;
 mod intrinsics;
 mod layout;
@@ -81,7 +82,7 @@ fn parameter_register(index: usize) -> u8 {
 }
 fn first_site(function: &Function) -> Span {
     Span {
-        file: function.file,
+        file: function.body.first().map_or(function.file, |instruction| instruction.file.unwrap_or(function.file)),
         start: 0,
         end: 0,
         line: function
@@ -301,7 +302,7 @@ struct Body<'a> {
     controls: Vec<Control>,
     result_slot: Option<i64>,
     return_label: Label,
-    source_lines: bool,
+    source_base: usize,
 }
 impl<'a> Body<'a> {
     fn problem(&self, message: &str) -> Diagnostic {
@@ -357,22 +358,8 @@ impl<'a> Body<'a> {
     }
     fn trap(&mut self, code: u64) {
         let kind = self.a.scope_kind(KIND_CHECK);
-        self.a.immediate(
-            LINE,
-            if self.source_lines {
-                self.site.line as u64
-            } else {
-                1
-            },
-        );
-        self.a.immediate(
-            FILE,
-            if self.source_lines {
-                self.site.file as u64
-            } else {
-                0
-            },
-        );
+        self.a.immediate(LINE, self.site.line as u64);
+        self.a.immediate(FILE, self.site.file as u64);
         self.a.immediate(A, code);
         self.a.jump(self.platform.trap);
         self.a.scope_kind(kind);
@@ -810,7 +797,7 @@ impl<'a> Body<'a> {
     }
     fn emit(&mut self, instruction: &ir::Instruction) -> Result<(), Diagnostic> {
         self.site = Span {
-            file: instruction.file.unwrap_or(self.function.file),
+            file: instruction.file.unwrap_or(self.function.file) + self.source_base,
             start: 0,
             end: 0,
             line: instruction.line,
@@ -1103,7 +1090,7 @@ struct Selection<'a> {
     drops: &'a [Label],
     runtime: RuntimeLabels,
     messages: &'a [String],
-    source_lines: bool,
+    source_base: usize,
 }
 fn emit_function(
     a: &mut Assembler,
@@ -1120,9 +1107,9 @@ fn emit_function(
     let drops = selection.drops;
     let runtime = selection.runtime;
     let messages = selection.messages;
-    let source_lines = selection.source_lines;
+    let source_base = selection.source_base;
     let function = &program.functions[function_index];
-    let site = first_site(function);
+    let mut site = first_site(function); site.file += source_base;
     let registers = registers::Registers::new(program, function, layout);
     let mut frame = 0;
     let mut slots = Vec::new();
@@ -1174,7 +1161,7 @@ fn emit_function(
         a,
         p,
         frame,
-        if source_lines { site } else { Span::default() },
+        site,
     );
     for (register, slot) in &saved {
         a.store(BP, *slot, *register);
@@ -1242,7 +1229,7 @@ fn emit_function(
         controls: Vec::new(),
         result_slot,
         return_label,
-        source_lines,
+        source_base,
     };
     for instruction in &function.body {
         body.emit(instruction)?;
@@ -1256,7 +1243,7 @@ fn emit_function(
     body.a.scope_kind(return_kind);
     Ok(())
 }
-fn emit_primitive(a: &mut Assembler, p: platform::Platform, label: Label, primitive: Primitive) {
+fn emit_primitive(a: &mut Assembler, p: platform::Platform, label: Label, primitive: Primitive, site: Span) {
     a.bind(label);
     match primitive {
         Primitive::Load8 => {
@@ -1290,7 +1277,10 @@ fn emit_primitive(a: &mut Assembler, p: platform::Platform, label: Label, primit
             a.address(A, p.allocator_state);
             a.ret();
         }
-        Primitive::Fail => a.jump(p.heap_exhausted),
+        Primitive::Fail => {
+            a.immediate(LINE, site.line as u64); a.immediate(FILE, site.file as u64);
+            a.immediate(A, 6); a.jump(p.trap);
+        },
     }
 }
 fn drop_child(
@@ -1429,7 +1419,7 @@ fn labels(a: &mut Assembler, count: usize) -> Vec<Label> {
     }
     result
 }
-fn messages(program: &Program) -> Vec<String> {
+pub(crate) fn messages(program: &Program) -> Vec<String> {
     let mut messages = Vec::new();
     for function in &program.functions {
         for instruction in &function.body {
@@ -1531,7 +1521,11 @@ fn grant_matches(kind: &TypeKind, grant: &ir::EntryGrant, parameters: usize) -> 
         ir::EntryGrant::Directory(_) => matches!(kind, TypeKind::Directory),
         ir::EntryGrant::ReadDirectory(_) => matches!(kind, TypeKind::ReadDirectory),
         ir::EntryGrant::ReadDirectoryEnvironment(name) => matches!(kind, TypeKind::ReadDirectory) && valid_environment(name),
+        ir::EntryGrant::ReadDirectoryEnvironmentValue(name, value) => matches!(kind, TypeKind::ReadDirectory) && valid_environment(name)
+            && value.as_ref().map_or(true, |bytes| !bytes.contains(&0u8)),
         ir::EntryGrant::DirectoryEnvironment(name) => matches!(kind, TypeKind::Directory) && valid_environment(name),
+                ir::EntryGrant::DirectoryEnvironmentValue(name, value) => matches!(kind, TypeKind::Directory) && valid_environment(name)
+                    && value.as_ref().map_or(true, |bytes| !bytes.contains(&0u8)),
         ir::EntryGrant::Listener(_) => matches!(kind, TypeKind::Listener),
         ir::EntryGrant::Connector(_) => matches!(kind, TypeKind::Connector),
         ir::EntryGrant::Readiness => matches!(kind, TypeKind::Readiness),
@@ -1674,9 +1668,11 @@ fn prepare_program(
     let mut a = Assembler::new();
     if profile_path.is_some() { a.enable_profile(); }
     let mut p = platform::Platform::new(&mut a);
+    if !runtime_model { p.source_base = program.sources.len().max(1); }
     p.stop_signals = stop_signals;
     p.listener_reuse = listener_reuse;
-    p.entry_diagnostics = grants.map_or(false, |provided| provided.iter().any(|grant| entry::Plan::fallible(grant)));
+    p.diagnostic_stdout = grants.map_or(selected.params == 1 && matches!(program.types[selected.locals[0].ty].kind, TypeKind::World), |provided| provided.iter().any(|grant| matches!(grant, ir::EntryGrant::World | ir::EntryGrant::Stdout)));
+    p.diagnostic_stderr = grants.map_or(selected.params == 1 && matches!(program.types[selected.locals[0].ty].kind, TypeKind::World), |provided| provided.iter().any(|grant| matches!(grant, ir::EntryGrant::World | ir::EntryGrant::Stderr)));
     p.command_environment = command_environment;
     p.blocking_lock = blocking_lock;
     let grant_plan = match grants {
@@ -1822,7 +1818,7 @@ fn prepare_program(
             drops: &drops,
             runtime: runtime_labels,
             messages: &trap_messages,
-            source_lines: !runtime_model,
+            source_base: 0,
         };
         loop {
             let mut progress = false;
@@ -1836,7 +1832,7 @@ fn prepare_program(
                         None
                     };
                     if let Some(primitive) = primitive {
-                        emit_primitive(&mut a, p, functions[index], primitive);
+                        emit_primitive(&mut a, p, functions[index], primitive, first_site(&program.functions[index]));
                     } else if let Some(cache) = &mut cache {
                         cache::emit(
                             &mut a, p, &selection, index,
@@ -1881,13 +1877,14 @@ fn prepare_program(
             drops: &runtime_drops,
             runtime: runtime_labels,
             messages: &runtime_messages,
-            source_lines: false,
+            source_base: program.sources.len().max(1),
         };
         let allocator = if profile.is_some() { profiling::allocator_functions(runtime) } else { Vec::new() };
         for index in 0..meaning.functions.len() {
             let region = a.region_kind(if profile.is_some() && allocator[index] { KIND_ALLOCATOR } else { KIND_RUNTIME });
             if let Some(primitive) = runtime.primitive(index) {
-                emit_primitive(&mut a, p, runtime_functions[index], primitive);
+                let mut site = first_site(&meaning.functions[index]); site.file += program.sources.len().max(1);
+                emit_primitive(&mut a, p, runtime_functions[index], primitive, site);
             } else {
                 emit_function(
                     &mut a,
@@ -1919,6 +1916,11 @@ fn prepare_program(
     let data_offset = (code_end + 4095) & !4095;
     let mut data = Vec::new();
     platform::data(&mut a, p, &mut data, data_offset, &trap_messages);
+    platform::message_data(&mut a, p.runtime_messages, &mut data, data_offset, &messages(runtime.checked_program()));
+    let mut source_paths = program.sources.clone();
+    if source_paths.is_empty() { source_paths.push("<ir>".to_string()); }
+    if !runtime_model { for path in &runtime.checked_program().sources { source_paths.push(path.clone()); } }
+    diagnostics::data(&mut a, p, &mut data, data_offset, &source_paths);
     if stop_signals { lifecycle::data(&mut a, p, &mut data, data_offset); }
     if let Some(plan) = grant_plan { plan.data(&mut a, &mut data, data_offset); }
     if let Some(profile) = profile {

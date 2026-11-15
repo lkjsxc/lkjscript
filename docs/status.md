@@ -1,36 +1,32 @@
 # Status — 2026-11-15
 
-**Source decision: .lkj, landed as 1,072 language sources.** Loader, program.lkj, cases/tools/docs and witness agree; only actual Rust stays .rs, with no alias/fallback. Gate 461.920 s (load 3.92→8.04), current generations byte-identical. Rename and required seed are separate commits pushed together because the old seed only discovers .rs; Programs can rebase now.
+**Source decision: .lkj, landed as 1,072 language sources.** a3c2f046 plus separate seed26bf2c3c; child.lkj/child/mod.lkj/program.lkj, tools/docs/witness agree without alias/fallback. Rename gate461.920s (load3.92→8.04), current generations equal. Seed-only CI43718048863 passed572.075s (load0.69→3.39); witness119s (load not recorded). Programs rebased at9d145128.
 
-**Compiler.** Cold/edit/unchanged builds 33.840/10.539/1.244 s (load 21.25→19.68 /19.68→18.58 /19.68→19.68). Edit rebuilds 1/2,714 definitions and 1/10,072 functions; reuses 10,071 checks and 9,922 fragments; runnable images equal no-store bytes. Initial dominant inference/construction now 0.242/0.015 s; 3 s unmet, whole-graph authentication/identity remain. Cold store +10.51% versus 30.64 s no-store (load 19.83→21.25); cap 256 MiB/Directory, 512 MiB with four workers; costs/overfill proofs in bench/README.md.
+**Compiler integration in progress.** Before programs9d145128, bounded path/line/operation/errno traps and complete private identities passed43 isolated transient-unit cases and32,768 original-IR mutants (92.391s, load11.40→11.08), zero findings. Earlier source had a separate grant/errno line plus misleading generic R0007 text; the live missing-line cause was not reproduced. Native terminal formatting allocates nothing; supervisor interpretation/private decoding still allocate. No production service was touched.
 
-| Phase seconds | Cold | One-body edit | Unchanged |
-| --- | ---: | ---: | ---: |
-| Read and parse | 1.455 | 1.132 | 0.020 |
-| Resolve | 0.285 | 0.251 | 0.000 |
-| Elaborate / monomorphize | 16.971 | 0.257 | 0.000 |
-| Key / hash | 1.629 | 1.606 | 0.473 |
-| Check | 8.853 | 0.158 | 0.000 |
-| Emit | 1.926 | 0.752 | 0.000 |
-| Assemble / write | 0.122 | 0.079 | 0.006 |
-| Store I/O + authentication | 2.199 | 5.313 | 0.744 |
-| Other (checkpoint codec included) | 0.399 | 0.992 | 0.001 |
+| Paired fixed-source store experiment | Before s (load) | Fixed-root s (load) |
+| --- | ---: | ---: |
+| Cold | 23.458 (11.38→9.44) | 23.601 (11.60→10.38) |
+| Unchanged | 0.851 (9.44→9.44) | 0.573 (10.38→9.79) |
+| Checker one-body edit | 8.387 (9.44→9.48) | 6.456 (9.79→9.48) |
+| Edit store I/O/authentication | 4.086 (9.44→9.48) | 2.827 (9.79→9.48) |
 
-| Warm gate 147.070 s (load 16.30→9.43) | Group seconds (load) | Reused / rerun | Why rerun |
-| --- | --- | --- | --- |
-| Prelude + host/proof overlap | 87.188 (16.30→12.23) | 39/1 requests; 15 fresh suites | Host/proof observations; explicit-library fixture |
-| Conformance 0 /64 | 32.629 (12.23→11.41 /11.41→9.73) | 1,536/22 requests | Effects/outcomes outside fixed-capture proof |
-| Generated 0 /64 | 1.337 (11.41→11.41 /9.73→9.73) | 2,430/0 requests | Exact authenticated captures |
-| Semantic structure | 23.512 (9.73→7.81) | 0/762 contracts | Fresh structural comparisons |
-| Semantic/reference + mutation | 2.404 (7.81→9.43) | 449/0 requests; 128 fresh mutants | Case proofs reused; mutation comparisons fresh |
+All six cached/control images agree; exact producers/source hashes are in bench/README.md. Fixed root binds producer/target/domain/length/digest before allocation; one owned payload/EOF/digest check replaces repeated authentication/copies. Nine pure contracts and on-disk stale-root/substitution/truncation/length/accounting attacks pass.
+Edit remainder: parse0.819, resolve0.180, key/hash1.024, codec0.616, elaborate/check0.264, emit0.591, write0.072, other0.063s (load9.79→9.48). Non-store floor3.630s already exceeds3s; AST checkpoints/stable file arena identities and lazy body/fragment storage are absent. No metadata claim substitutes for reading mutable bytes.
 
-| Exclusive kinds: 25,029 samples, 26.23 s (load 19.07→16.24) | Kind / % | Kind / % | Kind / % | Kind / % |
-| --- | --- | --- | --- | --- |
-| Arithmetic split | Arithmetic/compare/convert 11.31 | Register moves 14.64 | LEA 5.95 | Constants 6.01 |
-| Call split | Argument/result 2.25 | Prologue/epilogue 10.04 | Return 2.76 | Machine call 0.81 |
-| Storage | Inline copy 13.44 | Frame load/store 4.63 | Other memory 10.40 | Allocator 11.01 |
-| Other | Checks 1.39 | Branch 2.63 | Runtime 2.74 | Unknown 0.00 |
-Native/opt0/-O self-build 27.24/15.35/4.55 s (load 13.21/19.14/17.88), byte-identical outputs; 1.775x opt0 (CPU 1.746x), 1.0x unmet: broader storage/register or library work deferred; bench/README.md includes every workload and regression. Cold gate 513.135 s (load 10.98→16.30), 150 s unmet; exact partition there. Warm skips 4,454 requests; actual checker edit reuses 5 closed ELF contracts across producers. Seed 3,145,023 B; 32,768 inline64 mutants, 0 findings, 67.973 s (load 9.43→15.71). First seed e9b8c940 CI passed 874.494 s (load 0.98→2.80), optional witness passed. Directory adoption cases remain pending; test-library forwarding is fixed; automatic unwrap caller/errno closed because generic E lacks formatting/output authority, explicit match preserves both.
+**Gate.** Before integration, corrected cold gate513.548s (load4.84→12.93) passed5319fresh requests; fragment sharing retained194,643,677B under256MiB and proof runners release locks before execution. Programs9d adds two closed contracts and two live suites: merged split749 closed (28 independent,721 compiler-dependent),25 live structural observations. Final cold/warm/checker-edit measurements restart on the combined source.
+
+**Generated code stopped at step1.** Whole-function linear scan across blocks/loops and saves-only-when-used already exist. Additional operand/coalescing trial gave1.00% wall/0.70% CPU gain, below10%; discarded. Paired mean20.580s vs opt0 witness11.27s (loads6.42→7.80 /7.79→7.35),1.826x; -O3.40s (7.28→7.18),6.053x. No speculative ABI/region rewrite or cold-gate speedup is claimed.
+
+**Diagnostic causes (16 tagged programs fixtures at9d; specimens, not attempt totals):**
+| Cause | Count | Most frequent accepted rewrite |
+| --- | ---: | --- |
+| Expected Rust form/support gap | 8 | Typed inference3, collection views/iteration3, explicit trait impl1, text fold1 |
+| Bad/incomplete message | 5 | Located caller/errno, named type/storage operation, value-less no-store |
+| Rule with no Rust counterpart | 3 | Owned text/stable owner index and authenticated child image |
+`lkjscript delta` prints accepted forms; these16 tags supersede the earlier34-fixture proxy. Mandatory formatting/fragment markers have no supporting cause evidence and were declined.
+
+**Next:** validate merged capability diagnostics, full gates/edit measurements, separate seed refresh and CI. The existing external_child_authority pending case now records compiler agreement with programs: authenticated exact ELF/entry/ABI/canonical slots, sealed descriptor through exec, typed transfer startup; programs owns lifecycle/consumer APIs.
 
 ## Programs
 

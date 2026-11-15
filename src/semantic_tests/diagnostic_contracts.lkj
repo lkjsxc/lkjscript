@@ -240,7 +240,7 @@ fn uninitialized_function(name: &str, file: usize, line: usize) -> crate::ir::Fu
 fn independent_ir_body_errors_never_construct_checked_program_authority() {
     use crate::{check, ir};
     let program = ir::Program {
-        types: ir::primitives(),
+        sources: Vec::new(), types: ir::primitives(),
         functions: vec![
             uninitialized_function("first", 0, 7),
             uninitialized_function("second", 1, 9),
@@ -267,7 +267,7 @@ fn malformed_ir_structure_blocks_all_body_checks() {
     let mut first = uninitialized_function("bad_signature", 0, 7);
     first.locals[0].ty = !0usize;
     let program = ir::Program {
-        types: ir::primitives(),
+        sources: Vec::new(), types: ir::primitives(),
         functions: vec![first, uninitialized_function("blocked", 1, 9)],
         destructors: Vec::new(),
     };
@@ -355,84 +355,19 @@ fn blocked_count(regions: &[diagnostics::BlockedRegion], kind: &str) -> usize {
     count
 }
 
-pub fn run(world: &mut World, trace: bool) -> usize {
-    if trace {
-        world
-            .stdout()
-            .write(b"recovery_reaches_independent_statements_items_and_nested_methods\n");
-    }
+pub fn run() -> usize {
     recovery_reaches_independent_statements_items_and_nested_methods();
-    if trace {
-        world
-            .stdout()
-            .write(b"loading_continues_independent_modules_after_missing_and_invalid_sources\n");
-    }
     loading_continues_independent_modules_after_missing_and_invalid_sources();
-    if trace {
-        world
-            .stdout()
-            .write(b"poisoning_reports_blocked_semantics_instead_of_invented_name_errors\n");
-    }
     poisoning_reports_blocked_semantics_instead_of_invented_name_errors();
-    if trace {
-        world
-            .stdout()
-            .write(b"unsupported_diagnostics_use_parsed_constructs_and_ignore_literal_text\n");
-    }
     unsupported_diagnostics_use_parsed_constructs_and_ignore_literal_text();
-    if trace {
-        world
-            .stdout()
-            .write(b"unknown_lexical_boundaries_and_unbalanced_input_are_blocked\n");
-    }
     unknown_lexical_boundaries_and_unbalanced_input_are_blocked();
-    if trace {
-        world
-            .stdout()
-            .write(b"the_same_recovering_parser_preserves_valid_compilation\n");
-    }
     the_same_recovering_parser_preserves_valid_compilation();
-    if trace {
-        world
-            .stdout()
-            .write(b"missing_semicolon_does_not_hide_later_independent_statements\n");
-    }
     missing_semicolon_does_not_hide_later_independent_statements();
-    if trace {
-        world
-            .stdout()
-            .write(b"semantic_definition_errors_accumulate_without_poisoning_call_signatures\n");
-    }
     semantic_definition_errors_accumulate_without_poisoning_call_signatures();
-    if trace {
-        world
-            .stdout()
-            .write(b"invalid_shared_signatures_block_semantic_recovery_before_body_checks\n");
-    }
     invalid_shared_signatures_block_semantic_recovery_before_body_checks();
-    if trace {
-        world
-            .stdout()
-            .write(b"independent_ir_body_errors_never_construct_checked_program_authority\n");
-    }
     independent_ir_body_errors_never_construct_checked_program_authority();
-    if trace {
-        world
-            .stdout()
-            .write(b"malformed_ir_structure_blocks_all_body_checks\n");
-    }
     malformed_ir_structure_blocks_all_body_checks();
-    if trace {
-        world
-            .stdout()
-            .write(b"unsupported_diagnostics_preserve_specific_existing_errors\n");
-    }
     unsupported_diagnostics_preserve_specific_existing_errors();
-    if trace {
-        world
-            .stdout()
-            .write(b"unsized_source_locals_keep_their_module_and_construction_location\n");
-    }
     unsized_source_locals_keep_their_module_and_construction_location();
     13usize
 }

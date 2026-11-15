@@ -310,7 +310,7 @@ fn validate_selected(
         problems.push(problem);
     }
     let mut program = ir::Program {
-        types: std::mem::replace(&mut compiler.types, Vec::new()),
+        sources: super::source_paths(compiler.source), types: std::mem::replace(&mut compiler.types, Vec::new()),
         functions: std::mem::replace(&mut compiler.functions, Vec::new()),
         destructors: std::mem::replace(&mut compiler.destructors, Vec::new()),
     };

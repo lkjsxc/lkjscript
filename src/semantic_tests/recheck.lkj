@@ -26,13 +26,13 @@ fn literal(name: &str, value: i64) -> ir::Function {
 }
 fn small() -> ir::Program {
     ir::Program {
-        types: ir::primitives(), functions: vec![literal("first", 41), literal("second", 42)],
+        sources: Vec::new(), types: ir::primitives(), functions: vec![literal("first", 41), literal("second", 42)],
         destructors: Vec::new(),
     }
 }
 fn calls() -> ir::Program {
     ir::Program {
-        types: ir::primitives(), destructors: Vec::new(),
+        sources: Vec::new(), types: ir::primitives(), destructors: Vec::new(),
         functions: vec![
             function("identity", 1, ir::I64, vec![local("input", ir::I64)], vec![
                 ir::Op::Return { src: 0 },
@@ -123,7 +123,7 @@ fn exact_bodies_reuse_proof_and_keep_candidate_values() {
     // Float instructions compare their stored bits, including NaNs and signed zero.
     for bits in vec![9221120237041090560u64, 0u64] {
         let raw = ir::Program {
-            types: ir::primitives(), destructors: Vec::new(),
+            sources: Vec::new(), types: ir::primitives(), destructors: Vec::new(),
             functions: vec![function("float", 0, ir::F64, vec![local("value", ir::F64)], vec![
                 ir::Op::Float { dst: 0, bits }, ir::Op::Return { src: 0 },
             ])],
@@ -201,7 +201,7 @@ fn callee_signatures_and_numeric_identity_invalidate_callers() {
 }
 
 fn shared_types_destructors_and_return_contracts_invalidate_bodies() {
-    let mut copying = ir::Program { types: ir::primitives(), functions: Vec::new(), destructors: Vec::new() };
+    let mut copying = ir::Program { sources: Vec::new(), types: ir::primitives(), functions: Vec::new(), destructors: Vec::new() };
     let owner = copying.types.len();
     copying.types.push(ir::Type {
         name: "CopyOwner".to_string(), kind: ir::TypeKind::Struct {
@@ -217,7 +217,7 @@ fn shared_types_destructors_and_return_contracts_invalidate_bodies() {
     if let ir::TypeKind::Struct { copy, .. } = &mut changed.types[owner].kind { *copy = false; }
     rejects_same(&original, changed, false);
 
-    let mut dropping = ir::Program { types: ir::primitives(), functions: Vec::new(), destructors: Vec::new() };
+    let mut dropping = ir::Program { sources: Vec::new(), types: ir::primitives(), functions: Vec::new(), destructors: Vec::new() };
     let owner = dropping.types.len();
     dropping.types.push(ir::Type {
         name: "Owner".to_string(), kind: ir::TypeKind::Struct { fields: Vec::new(), copy: false },
@@ -244,7 +244,7 @@ fn shared_types_destructors_and_return_contracts_invalidate_bodies() {
     let problems = rejects_same(&original, changed, false);
     assert!(problems[0].message.contains("destructor functions"));
 
-    let mut returning = ir::Program { types: ir::primitives(), functions: Vec::new(), destructors: Vec::new() };
+    let mut returning = ir::Program { sources: Vec::new(), types: ir::primitives(), functions: Vec::new(), destructors: Vec::new() };
     let reference = returning.types.len();
     returning.types.push(ir::Type {
         name: "View".to_string(), kind: ir::TypeKind::Ref { inner: ir::I64, mutable: false },
@@ -308,18 +308,12 @@ fn optimizer_recheck_and_fallback_match_the_independent_gate() {
     assert!(selected.native().program() == &raw);
 }
 
-pub fn run(world: &mut World, trace: bool) -> usize {
-    if trace { world.stdout().write(b"recheck_exact_bodies_and_candidate_values\n"); }
+pub fn run() -> usize {
     exact_bodies_reuse_proof_and_keep_candidate_values();
-    if trace { world.stdout().write(b"recheck_changed_unreachable_diagnostics\n"); }
     changed_unreachable_bodies_keep_all_diagnostics();
-    if trace { world.stdout().write(b"recheck_shared_structure_first\n"); }
     shared_structure_is_always_validated_first();
-    if trace { world.stdout().write(b"recheck_callee_signatures_and_indices\n"); }
     callee_signatures_and_numeric_identity_invalidate_callers();
-    if trace { world.stdout().write(b"recheck_types_destructors_and_return_contracts\n"); }
     shared_types_destructors_and_return_contracts_invalidate_bodies();
-    if trace { world.stdout().write(b"recheck_optimizer_admission_and_fallback\n"); }
     optimizer_recheck_and_fallback_match_the_independent_gate();
     6usize
 }

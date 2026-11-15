@@ -262,9 +262,8 @@ fn copied_traps_keep_exact_file_and_line(world: &mut World, runtime: &runtime::R
     assert!(selected.optimized());
     let (status, raw) = native_result(world, selected.native(), runtime);
     assert_eq!(status, 1u8);
-    let diagnostic = String::from_utf8(raw).unwrap();
-    assert!(diagnostic.starts_with("R0003 "));
-    assert!(diagnostic.contains(&format!(" at line {} file {}:", error.line, error.file)));
+    let diagnostic = crate::runtime_diagnostics::decode("optimizer.lkj", selected.native().program(), runtime, &raw).unwrap().1;
+    assert!(diagnostic.starts_with(&format!("{}:{}: R0003 ", selected.original().program().sources[error.file], error.line)));
 }
 fn copied_trap_messages_keep_exact_codes(world: &mut World, runtime: &runtime::Runtime) {
     let mut raw = compiled(r#"
@@ -278,6 +277,7 @@ fn copied_trap_messages_keep_exact_codes(world: &mut World, runtime: &runtime::R
     assert!(entry < elsewhere && elsewhere < late);
     raw.functions[elsewhere].body[0].op = ir::Op::Trap { message: "zeta".to_string() };
     raw.functions[late].body[0].op = ir::Op::Trap { message: "alpha".to_string() };
+    while raw.sources.len() <= 7 { raw.sources.push("copied.lkj".to_string()); }
     raw.functions[late].body[0].file = Some(7);
     raw.functions[late].body[0].line = 37;
     let original = admitted(raw).unwrap();
@@ -287,10 +287,10 @@ fn copied_trap_messages_keep_exact_codes(world: &mut World, runtime: &runtime::R
     assert_eq!(error.message, "alpha");
     let interpreter::ErrorKind::Trap(code) = error.kind else { panic!("expected trap"); };
     assert_eq!(code, 16u64);
-    let expected = format!("{} at line {} file {}: {}\n", error.code(), error.line, error.file, error.message);
+    let expected = format!("{}\n", crate::runtime_diagnostics::located(&original.program().sources[error.file], error.line, &error.code(), &error.message));
     let (status, raw) = native_result(world, &original, runtime);
     assert_eq!(status, 1u8);
-    assert_eq!(raw, expected.as_bytes().to_vec());
+    assert_eq!(format!("{}\n", crate::runtime_diagnostics::decode("optimizer.lkj", original.program(), runtime, &raw).unwrap().1), expected);
     let rewrite = optimizer::inline(original.program(), 64);
     assert!(rewrite.calls > 0);
     let selected = reuse::Selection::after_check(original, admitted(rewrite.program.unwrap()));
@@ -301,13 +301,17 @@ fn copied_trap_messages_keep_exact_codes(world: &mut World, runtime: &runtime::R
     ));
     let (status, raw) = native_result(world, selected.native(), runtime);
     assert_eq!(status, 1u8);
-    assert_eq!(raw, expected.as_bytes().to_vec());
+    assert_eq!(format!("{}\n", crate::runtime_diagnostics::decode("optimizer.lkj", selected.native().program(), runtime, &raw).unwrap().1), expected);
 }
 fn instruction_file_identity_and_rejection_location() {
     let original = compiled("pub fn probe() -> i64 { 42 }");
     let mut changed = original.program().clone();
     let entry = index(&changed, "probe");
     let before = reuse::Keys::new(&changed).function(entry).to_string();
+    let mut invalid = changed.clone();
+    invalid.functions[entry].body[0].file = Some(!0usize);
+    assert!(check::check_all(invalid).is_err());
+    while changed.sources.len() <= 7 { changed.sources.push("copied.lkj".to_string()); }
     changed.functions[entry].body[0].file = Some(7);
     let after = reuse::Keys::new(&changed).function(entry).to_string();
     assert!(before != after);

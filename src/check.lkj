@@ -2548,6 +2548,9 @@ fn check_function_body(
     while pc < function.body.len() {
         let instruction_index = pc;
         let instruction = &function.body[pc];
+        if !program.sources.is_empty() && instruction.file.map_or(false, |file| file >= program.sources.len()) {
+            return Err(error(instruction.line, "E_IR", "instruction source identity has no path"));
+        }
         pc += 1;
         let line = instruction.line;
         *site = Some((line, instruction.column, instruction.file.unwrap_or(function.file)));
@@ -3643,9 +3646,15 @@ fn check_types(types: &[Type]) -> Result<(), Diagnostic> {
 }
 
 fn check_structure(program: &Program) -> Result<(), Diagnostic> {
+    for path in &program.sources {
+        if path.is_empty() { return Err(error(1, "E_IR", "source path is empty")); }
+    }
     check_types(&program.types)?;
     let mut function_names: BTreeSet<String> = BTreeSet::new();
     for function in &program.functions {
+        if !program.sources.is_empty() {
+            if function.file >= program.sources.len() { return Err(error(1, "E_IR", "function source identity has no path")); }
+        }
         if !function_names.insert(function.name.clone()) {
             return Err(error(1, "E_IR", "duplicate function name"));
         }

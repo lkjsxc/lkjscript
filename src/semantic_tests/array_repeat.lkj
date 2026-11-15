@@ -177,30 +177,10 @@ fn atomic(program: &ir::Program) {
     assert_eq!(count, 1usize);
     assert!(*program == ir_text::read(&ir_text::write(program)).unwrap());
 }
-pub fn run(world: &mut World, trace: bool) -> usize {
-    if trace {
-        world
-            .stdout()
-            .write(b"repeated_copy_aggregates_have_independent_storage_on_both_routes\n");
-    }
+pub fn run() -> usize {
     repeated_copy_aggregates_have_independent_storage_on_both_routes();
-    if trace {
-        world
-            .stdout()
-            .write(b"repeat_extent_does_not_expand_ir_locals_or_instructions\n");
-    }
     repeat_extent_does_not_expand_ir_locals_or_instructions();
-    if trace {
-        world
-            .stdout()
-            .write(b"array_type_is_the_only_repeat_extent\n");
-    }
     array_type_is_the_only_repeat_extent();
-    if trace {
-        world
-            .stdout()
-            .write(b"repeat_rejects_malformed_ir_signatures_and_uninitialized_seeds\n");
-    }
     repeat_rejects_malformed_ir_signatures_and_uninitialized_seeds();
     4usize
 }

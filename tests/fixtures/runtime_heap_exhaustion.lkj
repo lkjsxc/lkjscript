@@ -1,4 +1,4 @@
-pub fn probe() {
+pub fn probe(_errors: Stderr) {
     let values = vec![0u8; 4611686018427387904usize];
     drop(values);
 }

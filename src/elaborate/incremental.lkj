@@ -300,7 +300,7 @@ pub fn resume<F: FnMut(&str)>(source: &a::Program, fingerprint: &Fingerprint, da
     for id in c.scoped_bodies.keys() { roots.insert(*id); }
     let (scopes, problems) = c.scoped_definitions(&roots);
     if !problems.is_empty() { return None; }
-    let program = ir::Program { types: c.types, functions: c.functions, destructors: c.destructors };
+    let program = ir::Program { sources: super::source_paths(source), types: c.types, functions: c.functions, destructors: c.destructors };
     if !crate::check::scoped::check_definitions(&program, &scopes).is_empty() { return None; }
     mark("build_ir");
     Some(Resumed { program, catalog: saved, definitions: changed.len(), functions: count })

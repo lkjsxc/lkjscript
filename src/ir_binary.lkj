@@ -158,7 +158,9 @@ pub fn write_function(value: &ir::Function) -> Vec<u8> {
     function(&mut out, value); out
 }
 pub fn write(program: &ir::Program) -> Vec<u8> {
-    let mut out = b"LKJIRB01"[..].to_vec();
+    let mut out = b"LKJIRB02"[..].to_vec();
+    word(&mut out, program.sources.len());
+    for source in &program.sources { text(&mut out, source); }
     word(&mut out, program.types.len());
     for value in &program.types { ty(&mut out, value); }
     word(&mut out, program.functions.len());
@@ -372,13 +374,15 @@ pub fn read_function(data: &[u8]) -> Option<ir::Function> {
     if input.done() { Some(function) } else { None }
 }
 pub fn read(data: &[u8]) -> Option<ir::Program> {
-    if !data.starts_with(b"LKJIRB01") { return None; }
+    if !data.starts_with(b"LKJIRB02") { return None; }
     let mut input = Reader::new(&data[8..]);
+    let count = input.count(1)?; let mut sources = Vec::new();
+    for _ in 0..count { sources.push(input.text()?); }
     let count = input.count(2)?; let mut types = Vec::new();
     for _ in 0..count { types.push(input.ty()?); }
     let count = input.count(8)?; let mut functions = Vec::new();
     for _ in 0..count { functions.push(input.function()?); }
     let count = input.count(2)?; let mut destructors = Vec::new();
     for _ in 0..count { destructors.push((input.word()?, input.word()?)); }
-    if input.done() { Some(ir::Program { types, functions, destructors }) } else { None }
+    if input.done() { Some(ir::Program { sources, types, functions, destructors }) } else { None }
 }

@@ -338,11 +338,6 @@ pub fn probe() -> i64 {
     foreign_grants_are_exact_affine_and_unforgeable();
     10
 }
-pub fn run(world: &mut World, trace: bool) -> usize {
-    if trace {
-        world
-            .stdout()
-            .write(b"entry_grants_validate_acquire_rollback_and_reject_raw_authority\n");
-    }
+pub fn run() -> usize {
     probe() as usize
 }

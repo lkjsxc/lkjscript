@@ -26,7 +26,12 @@ fn probe(program: &ir::Program) -> usize {
     panic!("missing panic test entry")
 }
 fn exact(world: &mut World, runtime: &runtime::Runtime, text: &str, expected: &str) {
-    let checked = compiled(world, text);
+    exact_path(world, runtime, text, expected, "panic.lkj");
+}
+fn exact_path(world: &mut World, runtime: &runtime::Runtime, text: &str, expected: &str, path: &str) {
+    let original = compiled(world, text);
+    let mut program = original.program().clone(); program.sources[0] = path.to_string();
+    let checked = crate::check::check(program).unwrap();
     let entry = probe(checked.program());
     let arguments: Vec<u64> = Vec::new();
     let mut observed: Vec<u8> = Vec::new();
@@ -34,7 +39,7 @@ fn exact(world: &mut World, runtime: &runtime::Runtime, text: &str, expected: &s
     assert!(matches!(failure.kind, interpreter::ErrorKind::Trap(_)));
     assert_eq!(failure.message, expected);
     assert!(observed.is_empty());
-    let wire = format!("{} at line {} file {}: {expected}\n", failure.code(), failure.line, failure.file);
+    let wire = format!("{}\n", crate::runtime_diagnostics::located(path, failure.line, &failure.code(), expected));
     let grants: Vec<ir::EntryGrant> = Vec::new();
     let image = native::encode_granted(&checked, runtime, entry, &grants, Some(3), None).unwrap();
     let mut executable = world.temporary_file().unwrap();
@@ -49,7 +54,15 @@ fn exact(world: &mut World, runtime: &runtime::Runtime, text: &str, expected: &s
     let mut child = process.spawn_file(&executable, &arguments, &input, &output, &errors, &result).unwrap();
     assert_eq!(child.wait().unwrap(), 1);
     result.rewind().unwrap();
-    assert_eq!(result.read_to_end().unwrap(), wire.as_bytes().to_vec());
+    let raw = result.read_to_end().unwrap();
+    assert!(raw.len() >= 32 && raw.len() <= 2080);
+    assert_eq!(raw[32..], wire.as_bytes()[..]);
+    let decoded = crate::runtime_diagnostics::decode(path, checked.program(), runtime, &raw).unwrap();
+    assert_eq!(decoded.2, expected);
+    let mut malformed = raw.clone(); for index in 16..24 { malformed[index] = 255u8; }
+    assert!(crate::runtime_diagnostics::decode(path, checked.program(), runtime, &malformed).is_none());
+
+    assert!(crate::runtime_diagnostics::decode(path, checked.program(), runtime, &raw[..raw.len() - 1]).is_none());
     output.rewind().unwrap();
     errors.rewind().unwrap();
     assert!(output.read_to_end().unwrap().is_empty());
@@ -69,6 +82,14 @@ fn literal_payloads_and_escapes(world: &mut World, runtime: &runtime::Runtime) {
     exact(world, runtime,
         r#"pub fn probe() { panic!("a closed semantic trap\nR0006 is message text"); }"#,
         "a closed semantic trap\nR0006 is message text");
+    let mut prefix = String::new(); for _ in 0..1200 { prefix.push('x'); }
+    for suffix in vec!["A".to_string(), "B".to_string()] {
+        let message = format!("{prefix}{suffix}");
+        exact(world, runtime, &format!("pub fn probe() {{ panic!(\"{message}\"); }}"), &message);
+    }
+    exact_path(world, runtime, "pub fn probe() { panic!(\"visible\\nmessage\"); }", "visible\nmessage", "R0006 path\n:雪.lkj");
+    let mut long_path = String::new(); for _ in 0..300 { long_path.push_str("雪/"); }
+    exact_path(world, runtime, "pub fn probe() { panic!(\"long path\"); }", "long path", &long_path);
     // Application names do not receive the explicit runtime input's seal.
     exact(world, runtime,
         r#"fn raw_load64(_address: u64) -> u64 { panic!("unsealed runtime primitive") } pub fn probe() { raw_load64(0u64); }"#,

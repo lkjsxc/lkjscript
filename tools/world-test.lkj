@@ -303,7 +303,7 @@ fn exercise(
     config: &Config,
     report: &mut Report,
 ) -> Result<(), String> {
-    let launcher = "mode=$1\nmarker=$2\nshift 2\ncase \"$mode\" in\nclose0) exec 0<&-; exec \"$@\";;\nclose1) exec 1>&-; exec \"$@\";;\nclose2) exec 2>&-; exec \"$@\";;\nlimit64) ulimit -n 64; exec \"$@\";;\nblocked) exec /usr/bin/env --block-signal=TERM,USR1 \"$@\";;\nprivate0) umask 000; exec \"$@\";;\nprivate777) umask 777; exec \"$@\";;\npipe1) rm -f \"$marker\" \"$marker.status\"; { while test ! -f \"$marker\"; do :; done; \"$@\"; code=$?; printf \"%s\\n\" \"$code\" > \"$marker.status\"; } | { exec 0<&-; : > \"$marker\"; }; read code < \"$marker.status\"; exit \"$code\";;\npipe2) rm -f \"$marker\" \"$marker.status\"; { while test ! -f \"$marker\"; do :; done; \"$@\" 2>&1 1>&3; code=$?; printf \"%s\\n\" \"$code\" > \"$marker.status\"; } 3>&1 | { exec 0<&-; : > \"$marker\"; }; read code < \"$marker.status\"; exit \"$code\";;\nesac\n";
+    let launcher = "mode=$1\nmarker=$2\nshift 2\ncase \"$mode\" in\nclose0) exec 0<&-; exec \"$@\";;\nclose1) exec 1>&-; exec \"$@\";;\nclose2) exec 2>&-; exec \"$@\";;\nlimit64) ulimit -n 64; exec \"$@\";;\nblocked) exec /usr/bin/env --block-signal=TERM,USR1 \"$@\";;\nprivate0) umask 000; exec \"$@\";;\nprivate777) umask 777; exec \"$@\";;\npipe1) rm -f \"$marker\" \"$marker.status\"; { while test ! -f \"$marker\"; do :; done; \"$@\"; code=$?; printf \"%s\\n\" \"$code\" > \"$marker.status\"; } | { exec 0<&-; : > \"$marker\"; }; read code < \"$marker.status\"; exit \"$code\";;\npipe2) exec 4>&1; rm -f \"$marker\" \"$marker.status\"; { while test ! -f \"$marker\"; do :; done; \"$@\" 2>&1 1>&4 4>&-; code=$?; printf \"%s\\n\" \"$code\" > \"$marker.status\"; } | { exec 0<&-; : > \"$marker\"; }; read code < \"$marker.status\"; exit \"$code\";;\nesac\n";
     write(directory, "launch.sh", launcher.as_bytes())?;
     let names: Vec<String> = vec!["main".to_string(), "paths".to_string(), "closed_stdin".to_string(),
         "handle_cleanup".to_string(), "output_failure".to_string(), "arguments".to_string(),
@@ -358,15 +358,15 @@ fn exercise(
                 let arguments = vec![root.as_bytes().to_vec(), format!("{fd}").into_bytes()];
                 let close = if mode == 0 { format!("close{fd}") } else { format!("pipe{fd}") };
                 let outcome = execute(world, compiler, config, "output_failure", route, &arguments, b"", &close)?;
-                let located = if route == 0 {
-                    contains(&outcome.errors, b"R0007 at line 10 file 0:")
-                } else {
-                    contains(&outcome.errors, b":10: R0007 ")
-                };
+                let diagnostic = if fd == 1 { &outcome.errors } else { &outcome.output };
+                let capability = if fd == 1 { "Stdout" } else { "Stderr" };
+                let errno = if mode == 0 { "EBADF (9)" } else { "EPIPE (32)" };
+                let line = if fd == 1 { 10 } else { 14 };
+                let expected = format!(":{line}: R0007 {capability} {fd} write: {errno}");
                 report.require(outcome.status == 1
-                    && outcome.output.is_empty()
-                    && (if fd == 1 { located } else { outcome.errors.is_empty() }),
-                    format!("output failure/{close}/{route}: {} {}", outcome.status, display_bytes(&outcome.errors)));
+                    && contains(diagnostic, expected.as_bytes())
+                    && (if fd == 1 { outcome.output.is_empty() } else { outcome.errors.is_empty() }),
+                    format!("output failure/{close}/{route}: {} {}", outcome.status, display_bytes(diagnostic)));
                 let mut child = io_result(world.directory(&root), "failure data")?;
                 report.equal("owned descriptor", "file", &read(&mut child, "owned-file")?, b"owned\n");
             }

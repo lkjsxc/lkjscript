@@ -1,7 +1,7 @@
 //! Independent descriptor-broker implementation of the foreign command contract.
 //! This module has no checker, IR, native-emitter or runtime-platform dependency.
 use crate::x86::*;
-use super::broker::{empty as reply_empty, check_fd, REQUEST, SCRATCH};
+use super::broker::{empty as reply_empty, check_fd, REQUEST, SCRATCH, LAST_OPERATION};
 
 #[derive(Clone, Copy)]
 pub(super) struct ForeignCode { pub foreign_open: Label, pub null_open: Label, pub foreign_run: Label }
@@ -12,7 +12,13 @@ impl ForeignCode {
 }
 fn epilogue(a: &mut Assembler) { a.mov(SP,BP); a.pop(BP); a.ret(); }
 
+// Dispatch keeps a pointer to the broker's operation slot in saved R13.
+// Helpers have their own BP frames; they must not address the broker slot via BP.
+fn operation(a: &mut Assembler, number: u64) {
+    a.immediate(R11, number); a.store(R13, 0, R11);
+}
 fn call(a: &mut Assembler, number: u64) {
+    if number != 3 { operation(a, number); }
     // Linux consumes the descriptor on close even when interruption is reported.
     if number == 3 { a.immediate(A, number); a.syscall(); return; }
     let again = a.label();
@@ -118,8 +124,8 @@ fn image(a: &mut Assembler, p: ForeignCode, write: Label, copy: Label, name: Lab
     a.load(DI, BP, -16); seal(a, failed);
     rewind(a, -16, failed); close_slot(a, -8);
     a.load(A, BP, -16); epilogue(a);
-    a.bind(bad); a.immediate(A, (-22i64) as u64); a.jump(failed);
-    a.bind(invalid_image); a.immediate(A, (-8i64) as u64);
+    a.bind(bad); operation(a, 1000); a.immediate(A, (-22i64) as u64); a.jump(failed);
+    a.bind(invalid_image); operation(a, 1002); a.immediate(A, (-8i64) as u64);
     a.bind(failed); a.store(BP, -56, A); a.jump(cleanup);
     a.bind(cleanup); close_slot(a, -8); close_slot(a, -16); a.load(A, BP, -56); epilogue(a);
 }
@@ -136,7 +142,7 @@ fn null_device(a: &mut Assembler, p: ForeignCode, path: Label, readable: Label) 
     a.load(DI,BP,-8); a.immediate(SI,0x80002); a.call(readable); a.test(A,true); a.condition(8,failed);
     a.mov(R9,A); close_slot(a,-8); a.store(BP,-8,R9);
     a.load(R10,BP,-8); constant(a,-8,!0); a.mov(A,R10); promote(a,failed); epilogue(a);
-    a.bind(invalid); a.immediate(A,(-19i64) as u64);
+    a.bind(invalid); operation(a, 1003); a.immediate(A,(-19i64) as u64);
     a.bind(failed); a.store(BP,-16,A); close_slot(a,-8); a.load(A,BP,-16); epilogue(a);
 }
 fn policy_instruction(bytes: &mut Vec<u8>, code: u16, yes: u8, no: u8, value: u32) {
@@ -311,14 +317,18 @@ pub(super) fn emit(a: &mut Assembler, p: ForeignCode) {
     for (index,text) in texts.iter().enumerate() { a.bind(environment[index]); a.raw(text.as_bytes()); a.raw(&[0]); }
 }
 
+fn dispatch_call(a: &mut Assembler, function: Label) {
+    a.push(R13); a.lea(R13, BP, LAST_OPERATION);
+    a.call(function); a.pop(R13);
+}
 pub(super) fn dispatch(a: &mut Assembler, p: ForeignCode, labels: &[Label], reply: Label, bad: Label) {
-    a.bind(labels[0]); a.mov(DI,R14); a.mov(SI,R15); a.call(p.foreign_open); reply_empty(a,reply);
-    a.bind(labels[1]); a.call(p.null_open); reply_empty(a,reply);
+    a.bind(labels[0]); a.mov(DI,R14); a.mov(SI,R15); dispatch_call(a,p.foreign_open); reply_empty(a,reply);
+    a.bind(labels[1]); dispatch_call(a,p.null_open); reply_empty(a,reply);
     a.bind(labels[2]);
     for index in 0usize..3usize {
         a.load(A,BP,REQUEST+8+index as i64*8); check_fd(a,A,bad); a.store(BP,SCRATCH-index as i64*8,A);
     }
     a.store(BP,SCRATCH-24,R14); a.store(BP,SCRATCH-32,R15);
     a.load(A,BP,REQUEST+32); a.store(BP,SCRATCH-40,A);
-    a.lea(DI,BP,SCRATCH); a.call(p.foreign_run); reply_empty(a,reply);
+    a.lea(DI,BP,SCRATCH); dispatch_call(a,p.foreign_run); reply_empty(a,reply);
 }

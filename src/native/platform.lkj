@@ -7,10 +7,10 @@ pub const IMAGE_BASE: u64 = 0x400000;
 pub const CODE_OFFSET: usize = 4096;
 const INITIAL_STACK: i64 = 0;
 const EXIT_STATUS: i64 = 8;
-const TRAP_CODE: i64 = 16;
+pub(super) const TRAP_CODE: i64 = 16;
 const RESULT: i64 = 24;
-const TRAP_LINE: i64 = 32;
-const TRAP_FILE: i64 = 40;
+pub(super) const TRAP_LINE: i64 = 32;
+pub(super) const TRAP_FILE: i64 = 40;
 const STACK_TOP: i64 = 48;
 const GROW_RETURN: i64 = 56;
 const GROW_NEEDED: i64 = 64;
@@ -18,6 +18,11 @@ const GROW_REQUEST: i64 = 72;
 const GROW_ARGUMENTS: i64 = 80;
 const MEMORY_ARGUMENTS: i64 = 128;
 const TRIM_RETURN: i64 = 152;
+pub(super) const HOST_OPERATION: i64 = 160;
+pub(super) const HOST_ERRNO: i64 = 168;
+pub(super) const HOST_NAME: i64 = 176;
+pub(super) const HOST_NAME_LEN: i64 = 184;
+pub(super) const DIAGNOSTIC_LENGTH: i64 = 192;
 const STACK_RESERVATION: u64 = 1u64 << 46;
 const PAGE_BYTES: u64 = 4096;
 
@@ -83,7 +88,8 @@ pub struct Platform {
     pub child_request_stop: Label,
     pub stop_signals: bool,
     pub listener_reuse: bool,
-    pub entry_diagnostics: bool,
+    pub diagnostic_stdout: bool,
+    pub diagnostic_stderr: bool,
     pub command_environment: bool,
     pub blocking_lock: bool,
 
@@ -104,9 +110,18 @@ pub struct Platform {
     pub foreign_open: Label,
     pub null_open: Label,
     pub foreign_run: Label,
-    messages: Label,
+    pub(super) sources: Label,
+    pub(super) errnos: Label,
+    pub(super) operations: Label,
+    pub(super) stdout_identity: Label,
+    pub(super) stderr_identity: Label,
+    pub(super) runtime_identity: Label,
+    pub(super) messages: Label,
+    pub(super) runtime_messages: Label,
+    pub(super) source_base: usize,
     signal_action: Label,
-    diagnostic_buffer: Label,
+    pub(super) diagnostic_buffer: Label,
+    pub(super) line_buffer: Label,
     open_how: Label,
 }
 impl Platform {
@@ -172,7 +187,8 @@ impl Platform {
             child_request_stop: a.label(),
             stop_signals: false,
             listener_reuse: false,
-            entry_diagnostics: false,
+            diagnostic_stdout: false,
+            diagnostic_stderr: false,
             command_environment: false,
             blocking_lock: false,
 
@@ -193,9 +209,16 @@ impl Platform {
             foreign_open: a.label(),
             null_open: a.label(),
             foreign_run: a.label(),
-            messages: a.label(),
+            sources: a.label(),
+            errnos: a.label(),
+            operations: a.label(),
+            stdout_identity: a.label(),
+            stderr_identity: a.label(),
+            runtime_identity: a.label(),
+            messages: a.label(), runtime_messages: a.label(), source_base: !0usize,
             signal_action: a.label(),
             diagnostic_buffer: a.label(),
+            line_buffer: a.label(),
             open_how: a.label(),
         }
     }
@@ -215,6 +238,8 @@ pub fn emit(a: &mut Assembler, p: Platform, entry_label: Label, entry: &Entry, p
     let signals_ready = a.label();
     a.test(A, true);
     a.condition(9, signals_ready);
+    super::diagnostics::failure(a, p.runtime_identity, 15);
+    super::diagnostics::operation(a, 13);
     a.immediate(LINE, 1);
     a.immediate(FILE, 0);
     a.immediate(A, 7);
@@ -369,7 +394,20 @@ pub fn emit(a: &mut Assembler, p: Platform, entry_label: Label, entry: &Entry, p
         a.bind(exit);
         a.bind(trapped);
     }
-    diagnostic(a, p, entry.result_fd.unwrap_or(2));
+    if let Some(fd) = entry.result_fd {
+        super::diagnostics::private_header(a, p, fd);
+        super::diagnostics::emit(a, p, fd);
+    }
+    else if p.diagnostic_stderr && p.diagnostic_stdout {
+        let standard = a.label(); let complete = a.label();
+        a.load(A, CONTEXT, HOST_NAME); a.address(C, p.stderr_identity); a.compare(A, C);
+        a.condition(5, standard);
+        super::diagnostics::emit(a, p, 1); a.jump(complete);
+        a.bind(standard); super::diagnostics::emit(a, p, 2);
+        a.test(A, true); a.condition(15, complete);
+        super::diagnostics::emit(a, p, 1); a.bind(complete);
+    } else if p.diagnostic_stderr { super::diagnostics::emit(a, p, 2); }
+    else if p.diagnostic_stdout { super::diagnostics::emit(a, p, 1); }
     a.load(A, CONTEXT, TRAP_CODE);
     a.test(A, true);
     a.immediate(DI, 1);
@@ -665,7 +703,8 @@ fn stream_write(a: &mut Assembler, label: Label, fd: u64) {
     a.rr(0x29, R9, A, true);
     a.jump(writing);
     a.bind(failed);
-    a.immediate(A, !0u64);
+    let negative = a.label(); a.test(A, true); a.condition(8, negative);
+    a.immediate(A, (-5i64) as u64); a.bind(negative);
     a.ret();
     a.bind(done);
     a.immediate(A, 0);
@@ -726,12 +765,14 @@ fn io(a: &mut Assembler, p: Platform) {
     a.ret();
 
     a.bind(p.directory_open);
+    super::diagnostics::operation(a, 1000);
     a.mov(D, SI);
     a.mov(SI, DI);
     path(a, invalid);
     a.immediate(DI, (-100i64) as u64);
     a.immediate(D, 0x290000);
     a.immediate(R10, 0);
+    super::diagnostics::operation(a, 257);
     syscall_retry(a, 257);
     a.jump(open_result);
 
@@ -771,6 +812,7 @@ fn io(a: &mut Assembler, p: Platform) {
     a.mov(DI, A);
     a.immediate(SI, 1030); // F_DUPFD_CLOEXEC
     a.immediate(D, 3);
+    super::diagnostics::operation(a, 72);
     syscall_retry(a, 72);
     a.mov(R9, A);
     a.mov(DI, R8);
@@ -831,44 +873,6 @@ pub(super) fn diagnostic_write(a: &mut Assembler, fd: u32) {
     a.bind(complete);
 }
 
-fn diagnostic(a: &mut Assembler, p: Platform, fd: u32) {
-    let complete = a.label();
-    a.load(A, CONTEXT, TRAP_CODE);
-    a.test(A, true);
-    a.condition(4, complete);
-    a.address(R8, p.diagnostic_buffer);
-    a.lea(R8, R8, 128);
-    diagnostic_text(a, ": ");
-    a.load(A, CONTEXT, TRAP_FILE);
-    diagnostic_decimal(a, 1);
-    diagnostic_text(a, " file ");
-    a.load(A, CONTEXT, TRAP_LINE);
-    diagnostic_decimal(a, 1);
-    diagnostic_text(a, " at line ");
-    a.load(A, CONTEXT, TRAP_CODE);
-    diagnostic_decimal(a, 4);
-    diagnostic_text(a, "R");
-    a.mov(SI, R8);
-    a.address(D, p.diagnostic_buffer);
-    a.lea(D, D, 128);
-    a.rr(0x29, D, SI, true);
-    diagnostic_write(a, fd);
-    a.address(R8, p.messages);
-    a.load(A, CONTEXT, TRAP_CODE);
-    a.load(C, R8, 0);
-    a.compare(A, C);
-    let known = a.label();
-    a.condition(2, known);
-    a.immediate(A, 4);
-    a.bind(known);
-    a.shift(A, 4, 4);
-    a.rr(0x01, R8, A, true);
-    a.load(SI, R8, 8);
-    a.load(D, R8, 16);
-    diagnostic_write(a, fd);
-    a.bind(complete);
-}
-
 /// Bind RW data labels. offset and all labels are relative to the code start.
 pub fn data(
     a: &mut Assembler,
@@ -878,19 +882,24 @@ pub fn data(
     messages: &[String],
 ) {
     a.data_label(p.context, offset + bytes.len());
-    bytes.extend_from_slice(&[0u8; 160]);
+    bytes.extend_from_slice(&[0u8; 200]);
     a.data_label(p.signal_action, offset + bytes.len());
     bytes.extend_from_slice(&[1u8, 0, 0, 0, 0, 0, 0, 0]);
     bytes.extend_from_slice(&[0u8; 24]);
     a.data_label(p.diagnostic_buffer, offset + bytes.len());
     bytes.extend_from_slice(&[0u8; 128]);
+    a.data_label(p.line_buffer, offset + bytes.len());
+    bytes.extend_from_slice(&[0u8; 2048]);
     a.data_label(p.open_how, offset + bytes.len());
     bytes.extend_from_slice(&[0u8; 24]);
     a.data_label(p.allocator_state, offset + bytes.len());
     for _ in 0..crate::runtime::ALLOCATOR_STATE_BYTES {
         bytes.push(0);
     }
-    a.data_label(p.messages, offset + bytes.len());
+    message_data(a, p.messages, bytes, offset, messages);
+}
+pub(super) fn message_data(a: &mut Assembler, label: Label, bytes: &mut Vec<u8>, offset: usize, messages: &[String]) {
+    a.data_label(label, offset + bytes.len());
     let mut text = vec![
         "completed".to_string(),
         "integer overflow".to_string(),
@@ -899,16 +908,16 @@ pub fn data(
         "explicit trap".to_string(),
         "assertion failed".to_string(),
         "heap allocation failed".to_string(),
-        "host output failure".to_string(),
+        "host operation failed".to_string(),
         "stack exhausted".to_string(),
     ];
-    if p.entry_diagnostics { text[7usize] = "host I/O failure".to_string(); }
     while text.len() < 16 {
         text.push("trap".to_string());
     }
     for message in messages {
         text.push(message.clone());
     }
+    for index in 0..text.len() { text[index] = crate::runtime_diagnostics::escaped(&text[index], 1024, false); }
     let table = bytes.len();
     let table_bytes = 8 + text.len() * 16;
     for _ in 0..table_bytes {
@@ -929,7 +938,7 @@ pub fn data(
     }
 }
 
-fn put(bytes: &mut [u8], at: usize, value: u64, count: usize) {
+pub(super) fn put(bytes: &mut [u8], at: usize, value: u64, count: usize) {
     let mut index = 0usize;
     while index < count {
         bytes[at + index] = (value >> (index * 8usize)) as u8;

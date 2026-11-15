@@ -4,7 +4,7 @@
 mod host;
 pub use lkjscript::{
     ast, authority, entry_grants, backend, check, diagnostic, diagnostics, elaborate, frontend, generics, interpreter, ir,
-    ir_text, ir_binary, json, names, native, optimizer, resolve, reuse, runtime, runtime_memory, sha256, source, syntax, x86,
+    ir_text, ir_binary, json, names, native, optimizer, resolve, reuse, runtime, runtime_memory, runtime_diagnostics, sha256, source, syntax, x86,
 };
 include!(concat!(env!("OUT_DIR"), "/embedded-module.rs"));
 mod host_network {

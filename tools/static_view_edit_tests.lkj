@@ -1,8 +1,8 @@
 //! Apply the private static-label ownership edit, then observe both routes.
-use super::{command, contains, diagnostic_edits, display_bytes, invoke, path, run_value, write, Config, Report};
+use super::{command, contains, diagnostic_edits, display_bytes, invoke, path, run_values, write, Config, Report, ValueRequest};
 
 fn applied(world: &mut World, executable: &File, directory: &mut Directory,
-    config: &Config, report: &mut Report, name: &str, source: &str, expected: &str) -> Result<(), String> {
+    config: &Config, report: &mut Report, values: &mut Vec<ValueRequest>, name: &str, source: &str, expected: &str) -> Result<(), String> {
     write(directory, name, source.as_bytes())?;
     let rejected = invoke(world, executable, &command(config, "check", name), b"")?;
     report.require(rejected.status == 1 && contains(&rejected.errors, b"private static label")
@@ -17,23 +17,24 @@ fn applied(world: &mut World, executable: &File, directory: &mut Directory,
         "assert!(value.kind.as_str() == \"text/plain\"); assert!(value.text == \"hello\");");
     report.require(observed != rewritten, format!("static label content oracle missing for {name}"));
     write(directory, name, observed.as_bytes())?;
-    run_value(world, executable, config, report, name, "main", expected)?;
+    values.push(ValueRequest { name: name.to_string(), entry: "main".to_string(), expected: expected.to_string() });
     Ok(())
 }
 
 pub fn run(world: &mut World, executable: &File, directory: &mut Directory,
     config: &Config, report: &mut Report) -> Result<(), String> {
+    let mut values: Vec<ValueRequest> = Vec::new();
     let original = include_str!("../tests/diagnostics/static_view_owned_aggregate.lkj");
-    applied(world, executable, directory, config, report, "static-private-label.lkj", original, "")?;
+    applied(world, executable, directory, config, report, &mut values, "static-private-label.lkj", original, "")?;
     let explicit = original.replace("Reply { kind, text }", "Reply { kind: kind, text: text }");
-    applied(world, executable, directory, config, report, "static-explicit-label.lkj", &explicit, "")?;
+    applied(world, executable, directory, config, report, &mut values, "static-explicit-label.lkj", &explicit, "")?;
     let utf8 = format!("// π before every edit\n{original}").as_str().replace("\n", "\r\n");
-    applied(world, executable, directory, config, report, "static-utf8-label.lkj", &utf8, "")?;
+    applied(world, executable, directory, config, report, &mut values, "static-utf8-label.lkj", &utf8, "")?;
     let literal = r#"struct Reply { kind: &'static str, text: String }
 fn reply(text: String) -> Reply { Reply { kind: "text/plain", text } }
 fn main() { let value = reply("hello".to_string()); assert!(value.text == "hello"); }
 "#;
-    applied(world, executable, directory, config, report, "static-literal-label.lkj", literal, "")?;
+    applied(world, executable, directory, config, report, &mut values, "static-literal-label.lkj", literal, "")?;
     let order = r#"struct Reply { kind: &'static str, text: String }
 fn reply(kind: &'static str, text: String) -> Reply { Reply { kind, text } }
 struct Guard { output: Stdout }
@@ -51,7 +52,7 @@ pub fn main(mut world: World) {
     output.write(b"\n");
 }
 "#;
-    applied(world, executable, directory, config, report, "static-label-order.lkj", order, "ABCD\n")?;
+    applied(world, executable, directory, config, report, &mut values, "static-label-order.lkj", order, "ABCD\n")?;
 
     let negatives: Vec<(String, String)> = vec![
         ("static-public-type.lkj".to_string(), original.replace("struct Reply", "pub struct Reply")),
@@ -80,5 +81,5 @@ fn main() { let Reply { kind: _, text } = reply("text/plain", "hello".to_string(
         report.require(rejected.status == 1 && !contains(&rejected.errors, b"LKJSCRIPT_EDITS "),
             format!("unsafe static label rewrite for {name}: {}", display_bytes(&rejected.errors)));
     }
-    Ok(())
+    run_values(world, executable, config, report, &values)
 }

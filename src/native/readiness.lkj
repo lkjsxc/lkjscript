@@ -7,6 +7,7 @@ use crate::x86::*;
 fn syscall(a: &mut Assembler, number: u64) {
     let retry = a.label();
     a.bind(retry);
+    super::diagnostics::operation(a, number);
     a.immediate(A, number);
     a.syscall();
     a.immediate(C, (-4i64) as u64);

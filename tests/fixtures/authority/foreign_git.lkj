@@ -44,4 +44,4 @@ pub fn main(
 }
 
 // Acquiring an image must classify its pinned inode before any data-open.
-pub fn acquire(tool: ForeignCommand) { drop(tool); }
+pub fn acquire(tool: ForeignCommand, _errors: Stderr) { drop(tool); }

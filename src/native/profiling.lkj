@@ -1,6 +1,6 @@
 //! Opt-in Linux CPU sampling. The shared samples file owns its address map.
 //! No DWARF, external profiler, allocator calls or bounded stack traces.
-use super::platform::{Platform, CODE_OFFSET, IMAGE_BASE};
+use super::platform::{Platform, CODE_OFFSET, IMAGE_BASE, HOST_ERRNO, HOST_NAME, HOST_NAME_LEN};
 use crate::x86::*;
 use std::collections::BTreeMap;
 
@@ -20,6 +20,7 @@ pub struct Labels {
     table: Label,
     end: Label,
     path: Label,
+    identity: Label,
     action: Label,
     timer: Label,
     altstack: Label,
@@ -30,7 +31,7 @@ impl Labels {
         Self {
             start: a.label(), handler: a.label(), restore: a.label(),
             lookup: a.label(), include: a.label(), classify: a.label(), state: a.label(),
-            table: a.label(), end: a.label(), path: a.label(),
+            table: a.label(), end: a.label(), path: a.label(), identity: a.label(),
             action: a.label(), timer: a.label(), altstack: a.label(), stack: a.label(),
         }
     }
@@ -39,14 +40,26 @@ fn add(a: &mut Assembler, register: u8, value: u64) {
     a.immediate(C, value);
     a.rr(0x01, register, C, true);
 }
-fn failure(a: &mut Assembler, p: Platform) {
-    let ready = a.label();
-    a.test(A, true);
-    a.condition(9, ready);
+fn trap_failure(a: &mut Assembler, p: Platform, l: Labels, operation: u64) {
+    // Only terminal failure changes the application's host-operation context.
+    // The identity and its escaped length were prepared in immutable image data.
+    a.store(CONTEXT, HOST_ERRNO, A);
+    a.address(R11, l.identity);
+    a.load(C, R11, 0);
+    a.store(CONTEXT, HOST_NAME_LEN, C);
+    a.lea(R11, R11, 8);
+    a.store(CONTEXT, HOST_NAME, R11);
+    super::diagnostics::operation(a, operation);
     a.immediate(LINE, 1);
     a.immediate(FILE, 0);
     a.immediate(A, 7);
     a.jump(p.trap);
+}
+fn failure(a: &mut Assembler, p: Platform, l: Labels, operation: u64) {
+    let ready = a.label();
+    a.test(A, true);
+    a.condition(9, ready);
+    trap_failure(a, p, l, operation);
     a.bind(ready);
 }
 pub fn emit(a: &mut Assembler, p: Platform, l: Labels, path_len: usize) {
@@ -77,7 +90,7 @@ pub fn emit(a: &mut Assembler, p: Platform, l: Labels, path_len: usize) {
     a.immediate(D, 0xa0242); // RDWR | CREAT | TRUNC | NOFOLLOW | CLOEXEC
     a.immediate(R10, 0o600);
     a.syscall();
-    failure(a, p);
+    failure(a, p, l, 257);
     a.mov(B, A);
     a.address(SI, l.table);
     a.address(D, l.end);
@@ -88,12 +101,12 @@ pub fn emit(a: &mut Assembler, p: Platform, l: Labels, path_len: usize) {
     a.mov(DI, B);
     a.immediate(A, 1);
     a.syscall();
-    failure(a, p);
+    failure(a, p, l, 1);
     let progress = a.label();
     a.test(A, true);
     a.condition(5, progress);
-    a.immediate(A, 7);
-    a.jump(p.trap);
+    a.immediate(A, (-5i64) as u64); // A zero-progress write is EIO.
+    trap_failure(a, p, l, 1);
     a.bind(progress);
     a.rr(0x01, SI, A, true);
     a.rr(0x29, D, A, true);
@@ -107,7 +120,7 @@ pub fn emit(a: &mut Assembler, p: Platform, l: Labels, path_len: usize) {
     a.mov(R8, B);
     a.immediate(R9, 0);
     a.syscall();
-    failure(a, p);
+    failure(a, p, l, 9);
     a.address(R11, l.state);
     a.store(R11, 0, A);
     a.mov(DI, B);
@@ -119,7 +132,7 @@ pub fn emit(a: &mut Assembler, p: Platform, l: Labels, path_len: usize) {
     a.immediate(A, 131);
     a.immediate(SI, 0);
     a.syscall();
-    failure(a, p);
+    failure(a, p, l, 131);
     a.address(SI, l.action);
     a.address(A, l.handler);
     a.store(SI, 0, A);
@@ -130,13 +143,13 @@ pub fn emit(a: &mut Assembler, p: Platform, l: Labels, path_len: usize) {
     a.immediate(D, 0);
     a.immediate(R10, 8);
     a.syscall();
-    failure(a, p);
+    failure(a, p, l, 13);
     a.immediate(A, 38);
     a.immediate(DI, 2); // ITIMER_PROF: process user + kernel CPU, not wall time.
     a.address(SI, l.timer);
     a.immediate(D, 0);
     a.syscall();
-    failure(a, p);
+    failure(a, p, l, 38);
     a.ret();
 
     a.bind(l.handler);
@@ -403,6 +416,10 @@ pub fn data(
     word(bytes, 0); word(bytes, 0); word(bytes, 65536);
     a.data_label(l.stack, offset + bytes.len());
     bytes.extend_from_slice(&[0u8; 65536]);
+    let identity = crate::runtime_diagnostics::escaped(&format!("Profile {path}"), 512, false);
+    a.data_label(l.identity, offset + bytes.len());
+    word(bytes, identity.len() as u64);
+    bytes.extend_from_slice(identity.as_bytes());
     a.data_label(l.path, offset + bytes.len());
     bytes.extend_from_slice(path.as_bytes());
     bytes.push(b'.');

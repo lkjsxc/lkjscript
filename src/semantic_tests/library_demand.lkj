@@ -188,46 +188,13 @@ fn optional_command_library_is_closed_and_fully_checked() {
     }
 }
 
-pub fn run(world: &mut World, trace: bool) -> usize {
-    if trace {
-        world.stdout().write(b"every_unused_user_body_is_checked\n");
-    }
+pub fn run() -> usize {
     every_unused_user_body_is_checked();
-    if trace {
-        world
-            .stdout()
-            .write(b"unused_library_bodies_are_checked_by_the_full_library_mode\n");
-    }
     unused_library_bodies_are_checked_by_the_full_library_mode();
-    if trace {
-        world
-            .stdout()
-            .write(b"demanded_library_bodies_and_their_dependencies_are_checked\n");
-    }
     demanded_library_bodies_and_their_dependencies_are_checked();
-    if trace {
-        world
-            .stdout()
-            .write(b"user_and_demanded_library_errors_are_both_reported\n");
-    }
     user_and_demanded_library_errors_are_both_reported();
-    if trace {
-        world
-            .stdout()
-            .write(b"demanded_generic_methods_keep_definition_site_trait_selection\n");
-    }
     demanded_generic_methods_keep_definition_site_trait_selection();
-    if trace {
-        world
-            .stdout()
-            .write(b"unused_library_destructors_are_deferred_with_other_bodies\n");
-    }
     unused_library_destructors_are_deferred_with_other_bodies();
-    if trace {
-        world
-            .stdout()
-            .write(b"unused_library_layouts_still_obey_the_header_rules\n");
-    }
     unused_library_layouts_still_obey_the_header_rules();
     optional_command_library_is_closed_and_fully_checked();
     8usize

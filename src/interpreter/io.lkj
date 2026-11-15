@@ -130,7 +130,7 @@ impl<H: Host> Interpreter<'_, H> {
                 },
             ),
             Err(errno) if errno > 0 => (1, types.1, Value::Bits(errno as u64)),
-            _ => return Err(self.trap(7, "host returned an invalid open result")),
+            _ => return Err(self.error(super::InterpreterError::InvalidHost, "host returned an invalid open result")),
         };
         let child = self.allocate(ty, Some(value), false)?;
         Ok(Value::Aggregate {
@@ -156,7 +156,7 @@ impl<H: Host> Interpreter<'_, H> {
     fn io_write_buffer(&mut self, access: &Access, bytes: &[u8]) -> Result<(), RunError> {
         let cells = self.sequence_cells(access)?;
         if bytes.len() > cells.len() {
-            return Err(self.trap(7, "host read exceeded its buffer"));
+            return Err(self.error(super::InterpreterError::InvalidHost, "host read exceeded its buffer"));
         }
         for index in 0..bytes.len() {
             self.cells[cells[index].index].value = Some(Value::Bits(bytes[index] as u64));
@@ -169,14 +169,14 @@ impl<H: Host> Interpreter<'_, H> {
                 Ok(count as u64)
             }
             Err(errno) if errno > 0 => Ok((-errno) as u64),
-            _ => Err(self.trap(7, "host returned an invalid I/O count")),
+            _ => Err(self.error(super::InterpreterError::InvalidHost, "host returned an invalid I/O count")),
         }
     }
     fn io_status(&self, result: Result<(), i64>) -> Result<Value, RunError> {
         match result {
             Ok(()) => Ok(Value::Bits(0)),
             Err(errno) if errno > 0 => Ok(Value::Bits((-errno) as u64)),
-            _ => Err(self.trap(7, "host returned an invalid I/O status")),
+            _ => Err(self.error(super::InterpreterError::InvalidHost, "host returned an invalid I/O status")),
         }
     }
     fn io_sum_types(&self, result: usize) -> Result<(usize, usize), RunError> {
@@ -195,7 +195,7 @@ impl<H: Host> Interpreter<'_, H> {
         let (tag, ty, value) = match result {
             Ok(()) => (0usize, types.0, Value::Unit),
             Err(errno) if errno > 0 => (1usize, types.1, Value::Bits(errno as u64)),
-            _ => return Err(self.trap(7, "host returned an invalid I/O status")),
+            _ => return Err(self.error(super::InterpreterError::InvalidHost, "host returned an invalid I/O status")),
         };
         let child = self.allocate(ty, Some(value), false)?;
         Ok(Value::Aggregate { variant: Some(tag), fields: vec![child] })
@@ -209,10 +209,10 @@ impl<H: Host> Interpreter<'_, H> {
         let (tag, ty, bits) = match result {
             Ok(bits) => (0usize, types.0, bits),
             Err(errno) if errno > 0 => (1usize, types.1, errno as u64),
-            _ => return Err(self.trap(7, "host returned an invalid scalar result")),
+            _ => return Err(self.error(super::InterpreterError::InvalidHost, "host returned an invalid scalar result")),
         };
         let value = Value::Bits(bits);
-        if self.validate_value(ty, &value).is_err() { return Err(self.trap(7, "host scalar is outside its result representation")); }
+        if self.validate_value(ty, &value).is_err() { return Err(self.error(super::InterpreterError::InvalidHost, "host scalar is outside its result representation")); }
         let child = self.allocate(ty, Some(value), false)?;
         Ok(Value::Aggregate { variant: Some(tag), fields: vec![child] })
     }
@@ -231,7 +231,7 @@ impl<H: Host> Interpreter<'_, H> {
             Ok(events) => {
                 let mut fields = Vec::new();
                 for (token, flags) in events {
-                    if flags == 0 || flags > 15 { return Err(self.trap(7, "host returned invalid readiness event flags")); }
+                    if flags == 0 || flags > 15 { return Err(self.error(super::InterpreterError::InvalidHost, "host returned invalid readiness event flags")); }
                     let token = self.allocate(ir::U64, Some(Value::Bits(token as u64)), false)?;
                     let flags = self.allocate(ir::U8, Some(Value::Bits(flags as u64)), false)?;
                     let pair = self.allocate(types.1, Some(Value::Aggregate { variant: None, fields: vec![token, flags] }), false)?;
@@ -240,7 +240,7 @@ impl<H: Host> Interpreter<'_, H> {
                 (0usize, self.allocate(types.0, Some(Value::Sequence(fields)), false)?)
             }
             Err(errno) if errno > 0 => (1usize, self.allocate(types.2, Some(Value::Bits(errno as u64)), false)?),
-            _ => return Err(self.trap(7, "host returned an invalid readiness result")),
+            _ => return Err(self.error(super::InterpreterError::InvalidHost, "host returned an invalid readiness result")),
         };
         Ok(Value::Aggregate { variant: Some(tag), fields: vec![child] })
     }
@@ -391,7 +391,7 @@ impl<H: Host> Interpreter<'_, H> {
                 let value = if name == ir::IntrinsicOp::StopRequested {
                     match self.host.stop_requested(handle) { Ok(flag) => Ok(if flag { 1u64 } else { 0u64 }), Err(errno) => Err(errno) }
                 } else {
-                    match self.host.stop_target(handle) { Ok(pid) if pid != 0 => Ok(pid as u64), Ok(_) => return Err(self.trap(7, "host returned a zero signal target")), Err(errno) => Err(errno) }
+                    match self.host.stop_target(handle) { Ok(pid) if pid != 0 => Ok(pid as u64), Ok(_) => return Err(self.error(super::InterpreterError::InvalidHost, "host returned a zero signal target")), Err(errno) => Err(errno) }
                 };
                 self.io_scalar_result(types, value)?
             }
@@ -664,7 +664,7 @@ impl<H: Host> Interpreter<'_, H> {
                         Value::Bits((status + 1) as u64)
                     }
                     Err(errno) if errno > 0 => Value::Bits((-errno) as u64),
-                    _ => return Err(self.trap(7, "host returned an invalid child status")),
+                    _ => return Err(self.error(super::InterpreterError::InvalidHost, "host returned an invalid child status")),
                 }
             }
             ir::IntrinsicOp::ChildTerminate if values.len() == 1 => {
@@ -826,8 +826,9 @@ impl<H: Host> Interpreter<'_, H> {
                 self.io_result_type(result, ir::UNIT)?;
                 let buffer = self.io_buffer(values, 1, false)?;
                 let bytes = self.bytes(&buffer)?;
-                if let Err(message) = self.host.write_stderr(&bytes) {
-                    return Err(self.trap(7, &message));
+                let failure = HostFailure::new("Stderr 2");
+                if let Err(errno) = self.host.write_stderr(&bytes) {
+                    return Err(self.host_trap(failure, errno, self.host.failure_operation()));
                 }
                 Value::Unit
             }

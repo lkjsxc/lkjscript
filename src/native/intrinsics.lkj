@@ -76,7 +76,11 @@ impl Body<'_> {
                 } else {
                     self.platform.stderr_write
                 });
-                self.check_test(A, true, 8, 7);
+                let ready = self.a.label();
+                self.a.test(A, true); self.a.condition(9, ready);
+                diagnostics::failure(self.a, if name == IntrinsicOp::StdoutWrite { self.platform.stdout_identity } else { self.platform.stderr_identity }, 8);
+                diagnostics::operation(self.a, 1); self.trap(7);
+                self.a.bind(ready);
             }
             IntrinsicOp::WorldArgCount => self.a.call(self.platform.argument_count),
             IntrinsicOp::WorldArgLen => {

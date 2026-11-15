@@ -9,7 +9,7 @@ fn call(a: &mut Assembler, number: u64) {
     // Linux consumes the descriptor on close even when interruption is reported.
     if number == 3 { a.immediate(A, number); a.syscall(); return; }
     let again = a.label();
-    a.bind(again); a.immediate(A, number); a.syscall();
+    a.bind(again); super::diagnostics::operation(a, number); a.immediate(A, number); a.syscall();
     a.immediate(C, (-4i64) as u64); a.compare(A, C); a.condition(4, again);
 }
 fn checked(a: &mut Assembler, number: u64, failure: Label) {
@@ -111,8 +111,8 @@ fn image(a: &mut Assembler, p: Platform, write: Label, copy: Label, name: Label,
     a.load(DI, BP, -16); seal(a, failed);
     rewind(a, -16, failed); close_slot(a, -8);
     a.load(A, BP, -16); epilogue(a);
-    a.bind(bad); a.immediate(A, (-22i64) as u64); a.jump(failed);
-    a.bind(invalid_image); a.immediate(A, (-8i64) as u64);
+    a.bind(bad); super::diagnostics::operation(a, 1000); a.immediate(A, (-22i64) as u64); a.jump(failed);
+    a.bind(invalid_image); super::diagnostics::operation(a, 1002); a.immediate(A, (-8i64) as u64);
     a.bind(failed); a.store(BP, -56, A); a.jump(cleanup);
     a.bind(cleanup); close_slot(a, -8); close_slot(a, -16); a.load(A, BP, -56); epilogue(a);
 }
@@ -129,7 +129,7 @@ fn null_device(a: &mut Assembler, p: Platform, path: Label, readable: Label) {
     a.load(DI,BP,-8); a.immediate(SI,0x80002); a.call(readable); a.test(A,true); a.condition(8,failed);
     a.mov(R9,A); close_slot(a,-8); a.store(BP,-8,R9);
     a.load(R10,BP,-8); constant(a,-8,!0); a.mov(A,R10); promote(a,failed); epilogue(a);
-    a.bind(invalid); a.immediate(A,(-19i64) as u64);
+    a.bind(invalid); super::diagnostics::operation(a, 1003); a.immediate(A,(-19i64) as u64);
     a.bind(failed); a.store(BP,-16,A); close_slot(a,-8); a.load(A,BP,-16); epilogue(a);
 }
 fn policy_instruction(bytes: &mut Vec<u8>, code: u16, yes: u8, no: u8, value: u32) {

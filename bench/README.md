@@ -176,8 +176,13 @@ admission limit. Compact binary IR retains exact representation tags; it never
 constructs a checked program by itself.
 
 A graph pack stores the current requested body proofs or relocatable fragments
-under one HMAC instead of one filesystem object per function. Old body versions
-are disposable misses. The default store policy permits 256 MiB of compiler-owned
+under one authenticated root instead of one filesystem object per function. The
+fixed root binds producer, target, namespace, key, payload length and SHA-256 digest.
+Authenticate that root before trusting its allocation length, then read one owned
+payload snapshot, require EOF and verify its digest once. A private VerifiedPayload
+retains the signing authority and domain; loading a foreign authenticated root
+cannot confer a checker proof. No reread or second whole-payload hash is needed.
+Old body versions are disposable misses. The default store policy permits 256 MiB of compiler-owned
 published envelope and accounting bytes per explicit Directory; `--store-bytes`
 changes that disposable bound. Eviction removes oldest producer generations first.
 Valid reads need no writer lock; a writer holds a nonblocking lock and commits its
@@ -209,35 +214,75 @@ entries, swapped reports and failures have permanent attack cases.
 
 ### Remaining reuse cost
 
-The initial edit probe spent 20.241 s at load 3.85→4.45, with inference
-6.391 s and IR construction 6.778 s its two largest raw phases. The current
-coalesced compiler's stable-span checker edit measured 10.539 s against a
-33.840 s cold build and 1.244 s unchanged build (one-minute load 19.68→18.58,
-21.25→19.68 and 19.68→19.68). It reconstructed one of 2,714 definitions and
-one of 10,072 concrete functions; 10,071 checks and 9,922 native fragments
-were reused. All cached images matched the corresponding no-store images,
-and the edited compiler built and ran the closed gate root with the same bytes.
+The fixed-root experiment freezes both `src/` and `library/` at
+`26bf2c3c021dd79810a81fa1d9054d59f3768b06`. Both producers compile that same
+snapshot, first unchanged and then with the first `error()` diagnostic column in
+`check.lkj` changed from 1 to 2 without changing spans. This measures the store
+change before the complete new runtime-diagnostic generation; it is not a timing
+claim for later compiler or backend changes.
 
-The initial dominant inference/construction phases are now 0.242/0.015 s
-within that edit interval. The 3 s target remains unmet: the present largest
-costs are whole-graph authenticated rereads and identity work, 5.313/1.606 s.
-Checkpoint restore/encode costs 0.690/0.195 s. These remaining phases have not
-become proportional to the edit. The construction counters establish what
-changed; heavily loaded wall observations are not an isolated speedup estimate.
+| Producer | Executable SHA-256 |
+| --- | --- |
+| Baseline, seed-generation compiler | `8ca3225bebb5738376479d7556cd6d88b666805391fd2477331523ee6c666132` |
+| Fixed root plus source-map codec | `8163f7697613e3cf6d776b961ac35ea0f9f1854c1bb46a0b530658c446bf5120` |
 
-Cold storage overhead was 10.51% against the 30.64 s no-store control
-(load 21.25→19.68 versus 19.83→21.25). The 3.216 s phase-accounted extra wall time is:
+One compiler worker ran each observation. Times below are `--stats` totals;
+the parenthesized load is the one-minute average before and after that command.
+Filesystem caches were not reset. Both original and edited outputs are
+**16,228,028 B**, byte-identical across producers as well as between all six
+cached builds and their no-store controls.
 
-- Dependency and producer identities: 1.629 s; these bind real bytes rather than paths or mtimes.
-- Authentication and store I/O: 2.199 s; large reads authenticate before sized allocation, then authenticate the reread.
-- Fragment reuse bookkeeping and materialization: 0.641 s over ordinary instruction emission.
-- Checkpoint encoding and other publication preparation: 0.273 s extra, including 0.286 s encoding.
-- Other ordinary-phase variation: −1.527 s in this pair of observations; changing host load affects the comparison, and timing is not a gate threshold.
+| Build | Baseline seconds (load) | Fixed-root seconds (load) | Peak RSS KiB, baseline / fixed root |
+| --- | ---: | ---: | ---: |
+| No store | 20.199 (12.29→11.38) | 20.375 (9.54→11.60) | 497,324 / 496,980 |
+| Cold store | 23.458 (11.38→9.44) | 23.601 (11.60→10.38) | 524,636 / 530,184 |
+| Unchanged | 0.851 (9.44→9.44) | 0.573 (10.38→9.79) | 38,960 / 25,324 |
+| One-body checker edit | 8.387 (9.44→9.48) | 6.456 (9.79→9.48) | 450,284 / 452,072 |
+| Edited, no store | 20.800 (9.48→9.54) | 19.420 (9.48→9.06) | 502,812 / 490,036 |
 
-Five published records replace the former per-function files. Measured store
-bytes were 70,532,103 B after cold and 86,760,238 B after the edit, below the
-explicit per-directory policy. The bound is on authenticated contents and its
-index; filesystem metadata and transient atomic-publication files are not counted.
+Both edit rows reconstruct **1/2,714 definitions and 1/10,072 functions**;
+10,071 checker verdicts and 9,922 native fragments are reused. The smaller
+unchanged RSS follows removal of the second whole-image allocation. Changing
+host load also affects these paired observations; the timing difference is not
+a gate threshold or an isolated estimate for every phase.
+
+| Edit phase | Baseline seconds (load 9.44→9.48) | Fixed-root seconds (load 9.79→9.48) |
+| --- | ---: | ---: |
+| Read and parse | 0.955 | 0.819 |
+| Resolve | 0.191 | 0.180 |
+| Elaborate / monomorphize | 0.317 | 0.184 |
+| Key / hash, including executable identity | 1.187 | 1.024 |
+| Check | 0.087 | 0.080 |
+| Emit / fragment materialization | 0.650 | 0.591 |
+| Assemble / write | 0.067 | 0.072 |
+| Store I/O / authentication | 4.086 | 2.827 |
+| Front checkpoint decode / encode | 0.781 | 0.616 |
+| Other / runtime preparation | 0.066 | 0.063 |
+
+The **3 s edit target remains unmet**. Even removing the entire store phase from
+the fixed-root observation leaves **3.630 s at load 9.79→9.48**. Parsing and
+resolution still visit the complete source, checkpoint decoding reconstructs
+the complete IR, and key construction and fragment materialization still visit
+all functions. These costs have not become proportional to the edit.
+
+There is no authenticated AST baseline to restore: the current checkpoint holds
+source/body fingerprints, the interning catalog and binary IR. The loader appends
+global syntax-arena indices while parsing, and the checkpoint fingerprint is
+computed only after full resolution. Skipping unchanged files before parsing
+therefore needs an AST codec with stable file-local identities or correct arena
+relocation, not another file-metadata check. A stored Merkle root also cannot
+authenticate unread mutable payload bytes. A smaller future continuation would
+need authenticated body/signature/effect summaries and fragment linking without
+materializing peer IR; cached frontend keys alone cannot substitute for checker
+evidence.
+
+Cold-store overhead in this pair is 15.83% against the fixed-root no-store control
+(load 11.60→10.38 versus 9.54→11.60). Five published records and their index retain
+70,542,973 B after cold and 86,771,242 B after the edit, within the explicit
+disposable bound; filesystem metadata and transient publication files are excluded.
+Permanent attacks retain a valid root while changing or truncating its payload,
+forge unsigned lengths, swap authenticated domains and damage framing. All are
+misses; snapshots, private keys, stores and generated comparison images are removed.
 
 ### Gate cost
 
@@ -530,3 +575,256 @@ of storage/register traffic or library/container work; this table does not prove
 that a new register allocator is the only route. The scoped aggregate change
 stops here, with the regressions, opt0 gap and opt3 horizon recorded rather than
 opening another optimizer project.
+
+## Gate closure inventory
+
+Each row depends on the exact harness/script/fixture bytes and the compiler/runtime
+bytes it actually uses. Reusing compilation does not reuse a host observation.
+The trusted build script admits one exact IR snapshot for each root. The closed
+runner matches its authority report with its emitted image, authenticates the full
+image, runner and contract, and executes the bytes it hashed. No timestamp or unchecked successful-suite claim is
+an input proof. The following inventory covers the fifteen formerly fresh suites and the two
+additional programs suites landed at 9d145128.
+
+| Suite | Inputs that can change the result; retained observation |
+| --- | --- |
+| Closed-proof attacks | Authenticator/identity code and forged bytes; actual damaged-file reads, key rotation and failed publication stay live. |
+| Toolchain | Source/IR/diagnostic fixtures and executable bytes; fixed value captures use the existing authenticated batch protocol, while compiler CLI and descriptor observations stay live. |
+| World | Fixture/image bytes, streams, filesystem, permissions, inherited masks and process cleanup; every distinct host boundary remains live. |
+| Profiler | Image/report-parser bytes and real CPU-timer/signal samples; fresh sampled executions and malformed-report checks stay live. |
+| Optimizer | Original/candidate IR, policies, emitted bytes and store envelopes; the cache-file invalidation and native/original comparisons stay live. |
+| Resources | Runtime/image bytes and actual mapping/stack refusal under imposed limits; startup, pressure and one heap/stack exhaustion pair stay live. |
+| Runner | Five fixed record/expectation comparison contracts; now part of the authenticated zero-authority closed image. |
+| Store | HMAC/codec/request bytes and actual corruption, refusal, locks and concurrent publication; filesystem attacks stay live, pure model contracts use the closed image. |
+| Program directory | Manifest/grant/source bytes plus environment and root acquisition; manifest context and the real directory/environment observations stay live. |
+| HTTP | Request/response fixtures plus ports, readiness and deadlines; programs owns the shortest live server/client boundary probes. |
+| Journal | Journal bytes/model plus actual fsync/replay and HTTP; programs owns the live durability observation. |
+| Stop | Image bytes plus native signals, deadline and sync; programs owns the live bounded-drain observation. |
+| Stop interpreter | Interpreter/broker bytes plus signals, deadline and sync; the independent broker observation remains live. |
+| Site | Frozen response fixtures plus live HTTP and same-port behavior; programs owns the remaining host observation. |
+| Desk | Command/page fixtures plus real lock/publication, read-root/inode behavior, environment and status; programs owns the live command/service observations. |
+| Desk events | Event/cursor fixtures plus sockets, replay/reset and fixed slow-reader deadlines; actual delivery and timeout observations remain live. |
+| Foreign child | Exact transformed image/runtime-root bytes plus kernel confinement, descriptors, deadline and process lifecycle; three-route Git/outside-root/fail-closed probes remain live. |
+
+The original 762 structural contracts had 737 closed and 25 live native-child
+observations: one allocator, twenty optimizer and four panic contracts. Programs
+9d145128 adds two closed entry-grant contracts. The combined closed groups contain
+721 compiler-dependent structural contracts and 28
+checker-independent contracts (the prior five facts/codec contracts, eighteen
+parser/memory/x86 contracts, and the five runner contracts). The larger group uses
+one checked IR snapshot with five explicitly named no-authority entry images:
+four source shards of 134 contracts and 185 core contracts, scheduled within the
+gate's four-worker allowance. The live child/reporter image is built from that
+same checked snapshot, so its source is admitted only once. The
+`build-entries` command checks the shared IR and source runtime once, preflights
+every entry and grant, then emits each exact image/report pair. Its digest footer
+is computed from the bytes published. Multi-entry builds share one authenticated
+native-fragment snapshot per exact backend namespace and fixed checked graph,
+then count and flush each once. They do not persist redundant whole images;
+ordinary build/bootstrap image reuse remains intact. Raw IR and explicit-runtime
+bytes are pinned in the invocation's input snapshot. This adds no host-observation
+proof. The runner matches the caller's exact entry name
+as well as the report/image digest. Each image prints its actual skipped/rerun
+count. Changed compiler-dependent image bytes rerun that image; a new compiler
+producer never makes an old compiler verdict current.
+The twenty-five child observations remain a separate live gate step.
+
+The cross-producer check in `bench/reuse.sh` compiles the same live-worktree
+semantic sources with the original and checker-edited producers, then compares
+all six images and authority reports. Its expected 749 reused contracts prove
+that a producer change can preserve exact artifacts. A whole-tree checker edit
+also changes the structural test inputs; changed structural images rerun their
+721 contracts in the separate edit-gate measurement. The benchmark populates
+its first proof set sequentially, then checks reuse with four workers: exact
+749-hit assertions must not assume that every nonblocking concurrent writer wins.
+The real gate keeps four workers and reports actual hits and misses.
+
+Toolchain value requests now use the existing batch protocol: the twenty-five
+scalar entries share one compiler process, and 51 final rewrite observations use
+five module-level batches. Other value observations run both engines in one
+request. Check/rewrite assertions stay in order; each batch reads only final
+fixtures whose paths are not rewritten or removed later. The harness checks the
+exact record index, engine, status,
+stdout/stderr bytes, diagnostic and record count; it forwards actual reuse counts.
+Only these requests receive store options. The stable source directory is claimed
+by an exclusive mkdir, required empty, and removed by its owning shell's cleanup.
+An occupied path fails instead of deleting another run's files. Exact source bytes
+are still read and authenticated by the compiler; stable paths supply no trust.
+
+A preliminary World probe with the base compiler showed no useful gain from
+passing store options to every child. That attempt was removed; live World cases
+retain an isolated temporary directory and no new store dependency.
+
+| World forwarding probe | Elapsed s | Load before→after |
+| --- | ---: | --- |
+| First pass | 28.338 | 9.83→9.68 |
+| Second pass | 28.276 | 9.68→10.99 |
+
+Each new compiler process paid its producer hash while ordinary run requests
+still performed frontend work. Store forwarding alone therefore did not remove
+the host harness's repeated-process cost. These rows describe the discarded
+attempt, not the final combined compiler or complete gate.
+
+### Focused gate measurements
+
+These are focused step measurements with one active worker from this stream
+agent; they are not complete-gate totals. Other authorized workers and the shared
+host account for the recorded load. The structural execution proof ran its five
+images serially; the full gate grants that step four workers.
+
+| Focused observation | Elapsed s | Load before→after | Result |
+| --- | ---: | --- | --- |
+| Separate command prototype: closed-image build, cold | 96.299 | 2.67→8.10 | Repeated IR admission; removed |
+| One-admission entry build, cold | 54.101 | 11.40→8.96 | One checked IR/runtime per root; all images/reports emitted |
+| One-admission entry build, warm | 19.267 | 8.96→10.99 | Existing authenticated image requests retained |
+| Closed proof and artifact attacks | 1.176 | 8.96→8.96 | Byte parity, warm images, preflight failure, World exclusion and prior corruption attacks passed |
+| Structural contracts, serial cold execution | 48.394 | 8.10→9.39 | 719 rerun |
+| Structural contracts, serial warm execution | 2.496 | 9.39→9.12 | 719 reused |
+| Batched toolchain, cold | 57.108 | 7.01→5.47 | 26 batch processes; 96 requests rerun |
+| Batched toolchain, warm | 48.574 | 5.47→7.95 | 26 batch processes; 94 requests reused, 2 rerun |
+
+The toolchain rows include the full harness and its CLI observations. The closed
+build rows include runner compilation, both source-to-IR snapshots, their entry
+images and exact authority reports; their cost is admission/emission work, not
+reused case execution. Complete cold, warm and actual checker-edit gate rows must
+retain those costs. Gate step rows now include offsets from gate start so that
+overlapping live-suite durations are not added as if they were sequential.
+
+## Register allocation stopping table (2026-11-15)
+
+The requested plain allocation already exists at source/seed `26bf2c3c`:
+`native/registers.lkj` uses whole-function live intervals extended through loops,
+retains values across blocks, and saves only selected callee-saved registers.
+The first experiment therefore preferred the consumed operand's register when
+allocating a destination and used an already allocated right operand directly
+(except variable shifts, which require CL). It stayed outside main.
+
+All four paired runs compiled the same frozen `26bf2c3c` source/library without
+a store. The candidate reproduced itself byte for byte; that fixed point alone
+is not a substitute for native/original-interpreter conformance.
+
+| Self-build producer | Wall s | User CPU s | Load before→after | Output B |
+| --- | ---: | ---: | --- | ---: |
+| Current, pair 1 | 20.30 | 19.60 | 6.42→6.76 | 16,228,028 |
+| Extra register preference/operand use, pair 1 | 21.16 | 20.36 | 6.76→7.80 | 16,137,916 |
+| Current, pair 2 | 20.86 | 20.12 | 7.80→7.66 | 16,228,028 |
+| Extra register preference/operand use, pair 2 | 19.59 | 19.08 | 7.66→7.14 | 16,137,916 |
+| Same-source Rust witness opt=0 | 11.27 | 10.85 | 7.79→7.35 | 16,228,028 |
+| Same-source Rust witness -O | 3.40 | 3.13 | 7.28→7.18 | 16,228,028 |
+
+The current pair mean is 20.580 s / 19.860 CPU s; the candidate is
+20.375 s / 19.720 CPU s: 1.00% wall and 0.70% CPU improvement, within shared-host
+variation and below the requested 10% continuation threshold. Both witness
+outputs exactly equal the current native output. The current wall ratio is
+1.826x opt=0 and 6.053x -O; neither 1.3x nor 1.0x was reached.
+
+Keep the existing allocator and discard this extra complexity. The instruction
+to stop if step 1 barely changes the ratio applies: no speculative leaf-frame,
+aggregate-ABI or phase-region rewrite follows this table. There is no claimed
+cold-gate gain for the discarded candidate. The corresponding committed baseline
+cold gate was 461.920 s (load 3.92→8.04); seed-only CI was 572.075 s
+(load 0.69→3.39), with the gate job 584 s including setup and the optional witness
+job 119 s. CI run 43718048863 passed both jobs. Later gate measurements below or
+in status belong to the diagnostic/store/gate changes, not this trial.
+
+## Runtime failure interface and oracle (2026-11-15)
+
+IR source metadata now records paths, and every CLI execution route binds source,
+program-directory, explicit library and explicit runtime roots before admission.
+Source-less text IR names its actual input path and physical line. A failed
+program emits one escaped, bounded path/line/R-code line: at most 2048 bytes,
+with path and message budgets of 512 and 1024 bytes. Native line formatting uses
+preallocated buffers and static tables, without allocation or function calls.
+This terminal-formatting guarantee does not cover compiler-supervisor decoding:
+interpretation and reconstruction of complete private identities still allocate.
+Standalone delivery uses only granted Stderr/World, then granted Stdout on write
+failure; an entry without either output grant exits silently.
+
+R0007 identifies host-operation failure, with the capability/grant value, actual
+operation and symbolic/numeric errno. Directory environment grants retain their
+reviewed env:NAME selector. Ordinary fallible calls still return Result; explicit
+matches can print their known operation/grant and std::io::errno_name without
+inventing formatting authority for a generic error.
+
+The private supervisor wire carries a fixed LKJTRAP2 identity and bounded line.
+Decoding validates the selected checked program/runtime source and message tables
+and reconstructs complete static text. Full machine observations, batch results,
+cache payloads and original-IR mutation comparisons retain complete messages;
+only human delivery is bounded. Two messages with identical 1200-byte prefixes
+and different suffixes therefore remain distinct. A focused generator contract
+also caught and closes the raw-mutant physical-location mismatch, independently
+of whether a random slice happens to trap.
+
+| Isolated transient-unit proof | Cases | Journal-only evidence |
+| --- | ---: | --- |
+| Automatic failures in artifact/native-run/interpreter routes | 21 | Missing Directory/root selector, occupied Listener, denied Readiness/Stop acquisition, closed Stdout/Stderr; exact operation and errno |
+| Explicit Result-returning capability calls | 10 | Directory open, File write, refused Connector, Listener accept, Readiness wait, Stop read, Stdin read, Clock, Entropy and Process exec |
+| Output authority | 4 | Silent pure entry, stdout-only, stderr-only, and fallback from closed granted stderr |
+| Actual source roots | 8 | Explicit source directory, program directory, alternate library and custom runtime paths |
+| **Total** | **43** | Exact single bounded records; only test-owned units and trees were created and removed |
+
+The separate profiler test removes its sampling directory and requires one
+located Profile OUTPUT.samples openat: ENOENT (2) record. All six profiling
+failure sites retain the original errno and syscall; zero-progress writes use
+EIO. Successful sampling does not overwrite an application's host-failure state.
+
+Candidate SHA-256:
+`ef6dac2f0d8414a9a4300d7b6540267b853aaa90f94657685c2df078964e96dc`.
+
+| Candidate verification | Result | Seconds | Load before→after |
+| --- | --- | ---: | --- |
+| Full profiler suite | Includes refused sampling grant | 1.087 | 11.40→11.40 |
+| Generator/reducer contracts | Full trapped raw-IR oracle, inline 0/64 | 0.021 | 11.40→11.40 |
+| Mutation seed1701, inline64, two workers, no store | 32,768 mutants, zero findings | 92.391 | 11.40→11.08 |
+
+The campaign rejected 25,940 mutants and observed 5,833 values, 917 traps,
+78 watchdog expirations and no resource failures. All 2,527 accepted rewrites
+executed against interpretation of the original IR; there were no rejected
+optimizer candidates. Throughput was 21,280 mutants/minute, with 3,406 copied
+calls in 2,787 bodies and 3,168 local body proofs. These results bind the candidate
+above; final four-worker gate, fixed point and CI are recorded separately.
+
+## Closed-image cache retention and publication (2026-11-15)
+
+The first format-2 warm gate passed in 237.389 s (load 12.72→12.35), but it
+exposed two independent losses. Redundant whole images for seven multi-entry
+artifacts duplicated 89,652,519 bytes and caused the bounded store to evict the
+compiler generation during the closed build. Only the final four source images
+survived; the six closed execution proofs themselves occupied 702 bytes.
+Separately, a rejected/missing proof acquired a writer lock for disposal and kept
+it throughout child execution. Concurrent runners then legitimately missed
+nonblocking publication: exactly 451 structural proofs were absent, leaving
+268 structural hits on the next run.
+
+Multi-entry builds now share one authenticated native-fragment snapshot per
+exact namespace and fixed checked graph and flush it once; they publish no
+whole-image cache copies. Ordinary bootstrap/tool images retain their previous
+cache path. The closed runner drops its lookup store before executing a child
+and opens fresh accounting only after success. Genuine short writer contention
+still causes a miss. No budget increase, blocking lock or unchecked success
+claim was introduced.
+
+The retained-image experiment used compiler SHA-256
+`bc023fb92438090576f2c7e321cf138aaad4bf18fedef03b09e6777ee2c9644c`.
+After both cold and warm preludes, store regular-file bytes were exactly
+194,643,677, including the 4,753-byte budget index and zero-byte lock, excluding
+directory metadata. That is below the unchanged 268,435,456-byte capacity.
+All four ordinary image entries remained, and all eighteen artifact/report
+hashes matched. This is a retention check, separate from the complete gate below.
+
+| Focused retention/publication check | Seconds | Load before→after | Result |
+| --- | ---: | --- | --- |
+| Multi-entry cold closed build | 47.831 | 6.78→7.94 | Shared fragment packs, no redundant whole images |
+| Multi-entry warm closed build | 22.468 | 8.02→8.92 | All artifact/report hashes unchanged |
+| Warm bootstrap image lookup | 0.662 | 7.94→8.02 | One whole-image hit, zero evictions |
+| Bootstrap lookup after all warm closed builds | 0.594 | 8.92→8.92 | One whole-image hit, zero evictions |
+| Artifact parity/admission/proof attacks | 1.225 | 7.39→7.60 | Passed before adding the lock helper |
+| Old runner lock regression control | 0.163 | 7.36→7.36 | Failed at the intended held-lock assertion |
+| Corrected runner lock regression | 0.276 | 7.36→7.36 | Releases before child; killed child publishes nothing; busy writer misses; serial retry reuses |
+| Current compiler fixed point | 51.669 | 7.36→8.39 | Consecutive current generations match |
+| Optional Rust source check | 3.860 | 5.09→5.09 | Passed; non-gating warnings retained |
+
+The lock regression observes a deliberately nonterminating zero-authority child,
+stops it before probing the lock, then kills and reaps it. Its failure assertion
+was checked against the previous runner; it is independent of execution speed.
+The final full gate includes the helper in the closed-proof attack suite.

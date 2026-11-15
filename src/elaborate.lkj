@@ -221,6 +221,19 @@ pub struct TypedDefinitions<'source> {
     all_library: bool,
 }
 
+fn source_paths(source: &a::Program) -> Vec<String> {
+    let mut paths = Vec::new();
+    for file in &source.files {
+        let path = if file.path.starts_with("$std/") {
+            format!("library/{}", &file.path[5..])
+        } else if file.path == "$runtime/runtime.lkj" {
+            "library/runtime.lkj".to_string()
+        } else { file.path.clone() };
+        paths.push(path);
+    }
+    paths
+}
+
 fn library_file(source: &a::Program, file: a::FileId) -> bool {
     let file = match source.files.get(file) {
         Some(file) => file,
@@ -563,7 +576,7 @@ fn elaborate_definitions(
     }
     if catalog.is_some() { *catalog = Some(incremental::catalog(&c)); }
     let mut program = ir::Program {
-        types: c.types,
+        sources: source_paths(source), types: c.types,
         functions: c.functions,
         destructors: c.destructors,
     };

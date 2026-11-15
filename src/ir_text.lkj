@@ -495,7 +495,7 @@ pub fn read(text: &str) -> Result<Program> {
         return Err(error(1, "expected lkjscript-ir 1 header"));
     }
     let mut program = Program {
-        destructors: Vec::new(),
+        sources: Vec::new(), destructors: Vec::new(),
         types: Vec::new(),
         functions: Vec::new(),
     };
@@ -600,6 +600,10 @@ pub fn read(text: &str) -> Result<Program> {
             continue;
         }
         match words[0].as_str() {
+            "source" => {
+                exact(&words, 2, line)?;
+                program.sources.push(words[1].clone());
+            }
             "type" => {
                 let name = word(&words, 1, line)?.to_string();
                 let kind = match word(&words, 2, line)? {
@@ -964,8 +968,40 @@ fn write_instruction(text: &mut String, instruction: &Instruction) {
     text.push('\n');
 }
 
+/// Source-less IR is its own source: annotate actual input lines before admission.
+/// Explicit source maps retain the producer's recorded locations unchanged.
+pub fn read_located(text: &str, path: &str) -> Result<Program> {
+    let mut program = read(text)?;
+    if !program.sources.is_empty() { return Ok(program); }
+    program.sources.push(path.to_string());
+    let mut function = 0usize;
+    let mut instruction_index = 0usize;
+    let mut inside = false;
+    for (offset, line_text) in text.lines().enumerate() {
+        let line = offset + 1;
+        let fields = words(line_text, line)?;
+        if fields.is_empty() { continue; }
+        if fields[0] == "fn" {
+            inside = true;
+            instruction_index = 0;
+            program.functions[function].file = 0;
+        } else if fields[0] == "endfn" {
+            inside = false;
+            function += 1;
+        } else if inside && fields[0] != "local" && fields[0] != "return-leaf" {
+            let instruction = &mut program.functions[function].body[instruction_index];
+            instruction.file = None;
+            instruction.line = line;
+            instruction.column = 1;
+            instruction_index += 1;
+        }
+    }
+    Ok(program)
+}
+
 pub fn write(program: &Program) -> String {
     let mut text = "lkjscript-ir 1\n".to_string();
+    for source in &program.sources { text.push_str(&format!("source {}\n", quoted(source))); }
     for ty in &program.types {
         text.push_str(&format!("type {} ", quoted(&ty.name)));
         match &ty.kind {

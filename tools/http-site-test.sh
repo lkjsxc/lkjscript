@@ -140,18 +140,18 @@ cat "$site_work/client.out"
 # The startup diagnostic must identify a refused Listener, and the same address
 # must remain usable after this service actively closes its accepted streams.
 "$compiler" build tests/diagnostics/entry_listener_grant.lkj --library-dir library \
-    --grant "incoming=127.0.0.1:$port" -o "$site_work/rebind"
+    --grant "incoming=127.0.0.1:$port" --grant _errors -o "$site_work/rebind"
 for route in native interpreter; do
     refused=0
     if [ "$route" = native ]; then
         timeout --kill-after=2s 30s "$site_work/rebind" >"$site_work/refused.out" 2>"$site_work/refused.err" || refused=$?
     else
         timeout --kill-after=2s 30s "$compiler" run tests/diagnostics/entry_listener_grant.lkj --library-dir library \
-            --engine interpreter --grant "incoming=127.0.0.1:$port" >"$site_work/refused.out" 2>"$site_work/refused.err" || refused=$?
+            --engine interpreter --grant "incoming=127.0.0.1:$port" --grant _errors >"$site_work/refused.out" 2>"$site_work/refused.err" || refused=$?
     fi
     [ "$refused" -eq 1 ]
-    grep -Fq "entry grant Listener failed: errno 98 (127.0.0.1:$port)" "$site_work/refused.err"
-    grep -Eq 'R0007 at line 4 file 0:|entry_listener_grant.lkj:4: R0007 ' "$site_work/refused.err"
+    grep -Fxq "tests/diagnostics/entry_listener_grant.lkj:4: R0007 Listener 127.0.0.1:$port bind: EADDRINUSE (98)" "$site_work/refused.err"
+    [ "$(wc -l < "$site_work/refused.err")" -eq 1 ]
 done
 kill -TERM "$stop_target"
 attempt=0
@@ -168,7 +168,7 @@ awk -v wanted="$hex" '$4 == "06" {split($2, address, ":"); if(address[2] == want
     END {exit found ? 0 : 1}' /proc/net/tcp
 timeout --kill-after=2s 30s "$site_work/rebind"
 timeout --kill-after=2s 30s "$compiler" run tests/diagnostics/entry_listener_grant.lkj --library-dir library \
-    --engine interpreter --grant "incoming=127.0.0.1:$port"
+    --engine interpreter --grant "incoming=127.0.0.1:$port" --grant _errors
 printf 'ok Listener: occupied address refused with errno; TIME_WAIT rebind passed in native and interpreter\n'
 site_elapsed_ms=$((($(date +%s%N) - site_started_ns) / 1000000))
 printf 'Site %s check %s ms; load %s -> %s\n' "$mode" "$site_elapsed_ms" "$site_load_before" "$(cat /proc/loadavg)"

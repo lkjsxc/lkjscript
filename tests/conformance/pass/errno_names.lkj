@@ -1,0 +1,8 @@
+// expect: value 42
+use std::io::errno_name;
+pub fn probe() -> i64 {
+    if errno_name(98i64) == "EADDRINUSE" && errno_name(9i64) == "EBADF"
+        && errno_name(111i64) == "ECONNREFUSED" && errno_name(999i64) == "EUNKNOWN" {
+        42
+    } else { 0 }
+}

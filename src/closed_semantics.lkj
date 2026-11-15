@@ -1,14 +1,28 @@
-//! Closed gate roots: their complete emitted image excludes checker/frontend code.
+//! Closed gate roots: no checker or elaborator code is reachable.
+pub mod ast;
 pub mod diagnostic;
+pub mod diagnostics;
 pub(crate) mod facts;
 pub mod ir;
+pub mod json;
+pub mod source;
+pub mod resolve;
+pub mod names;
 pub mod ir_text;
 pub mod ir_binary;
+pub mod runtime_memory;
+pub mod syntax;
+pub mod test_runner;
+pub mod x86;
 mod semantic_tests {
     pub mod facts;
     pub mod ir_binary;
+    pub mod parser_contracts;
+    pub mod closed_units;
 }
 
 pub fn main() {
-    assert_eq!(semantic_tests::facts::run() + semantic_tests::ir_binary::run(), 5usize);
+    assert_eq!(semantic_tests::facts::run() + semantic_tests::ir_binary::run()
+        + semantic_tests::parser_contracts::run() + semantic_tests::closed_units::run()
+        + test_runner::closed_contracts(), 28usize);
 }

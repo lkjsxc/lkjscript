@@ -7,7 +7,7 @@ pub fn run() -> usize {
         return_source: None, locals: Vec::new(), test: false,
         body: vec![ir::Instruction { op: ir::Op::Return { src: 19 }, file: None, line: 1, column: 2 }],
     };
-    let program = ir::Program { types: ir::primitives(), functions: vec![function], destructors: Vec::new() };
+    let program = ir::Program { sources: Vec::new(), types: ir::primitives(), functions: vec![function], destructors: Vec::new() };
     let decoded = ir_binary::read(&ir_binary::write(&program)).unwrap();
     assert_eq!(decoded, program);
     assert!(check::check_all(decoded).is_err());

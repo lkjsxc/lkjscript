@@ -1,5 +1,5 @@
 //! Apply emitted consumer rewrites before executing either admitted route.
-use super::{command, contains, diagnostic_edits, display_bytes, invoke, path, run_value, write, Config, Report};
+use super::{command, contains, diagnostic_edits, display_bytes, invoke, path, run_values, write, Config, Report, ValueRequest};
 
 struct Case { name: String, source: String, entry: String, expected: String, rule: String }
 fn case(name: &str, source: &str, entry: &str, expected: &str, rule: &str) -> Case {
@@ -9,6 +9,7 @@ fn case(name: &str, source: &str, entry: &str, expected: &str, rule: &str) -> Ca
 
 pub fn run(world: &mut World, executable: &File, directory: &mut Directory,
     config: &Config, report: &mut Report) -> Result<(), String> {
+    let mut values: Vec<ValueRequest> = Vec::new();
     let owner = format!("{}\npub fn observed() -> usize {{ probe().length }}\n",
         include_str!("../tests/diagnostics/subslice_owner_return.lkj"));
     let cases = vec![
@@ -56,7 +57,7 @@ pub fn main(mut world: World) {
         let rewritten = diagnostic_edits::apply(&item.source, &rejected.errors, &path(config, &item.name))
             .map_err(|error: String| -> String { format!("{}: {error}; diagnostic {}", item.name, display_bytes(&rejected.errors)) })?;
         write(directory, &item.name, rewritten.as_bytes())?;
-        run_value(world, executable, config, report, &item.name, &item.entry, &item.expected)?;
+        values.push(ValueRequest { name: item.name.clone(), entry: item.entry.clone(), expected: item.expected.clone() });
     }
     let unchanged: Vec<(String, String)> = vec![
         ("byte-method-name.lkj".to_string(), r#"fn length(bytes: &[u8; 4]) -> usize { bytes.len() }
@@ -118,14 +119,14 @@ pub fn probe() -> Message {
         report.require(rejected.status == 1 && !contains(&rejected.errors, b"LKJSCRIPT_EDITS "),
             format!("unsafe consumer rewrite for {name}: {}", display_bytes(&rejected.errors)));
     }
-    site_advice(world, executable, directory, config, report)?;
-    desk_advice(world, executable, directory, config, report)?;
-    ir_flags(world, executable, directory, config, report)?;
-    Ok(())
+    site_advice(world, executable, directory, config, report, &mut values)?;
+    desk_advice(world, executable, directory, config, report, &mut values)?;
+    ir_flags(world, executable, directory, config, report, &mut values)?;
+    run_values(world, executable, config, report, &values)
 }
 
 fn ir_flags(world: &mut World, executable: &File, directory: &mut Directory,
-    config: &Config, report: &mut Report) -> Result<(), String> {
+    config: &Config, report: &mut Report, values: &mut Vec<ValueRequest>) -> Result<(), String> {
     let fixture = include_str!("../tests/diagnostics/ir_enum_flag.lkjir");
     let declaration = fixture.strip_prefix("lkjscript-ir 1\n").unwrap();
     let source = format!("lkjscript-ir 1\ntype \"()\" unit\ntype \"bool\" bool\ntype \"i32\" int 32 signed\ntype \"i64\" int 64 signed\ntype \"usize\" int 64 unsigned\ntype \"u8\" int 8 unsigned\ntype \"f64\" f64\n{declaration}fn \"probe\" 0 3\nlocal \"answer\" 3 let\n@1:1 int 0 42\n@1:1 return 0\nendfn\n");
@@ -152,7 +153,7 @@ fn ir_flags(world: &mut World, executable: &File, directory: &mut Directory,
                 "enum rewrite changed the name or comment".to_string());
         }
         write(directory, &name, rewritten.as_bytes())?;
-        run_value(world, executable, config, report, &name, "probe", "42\n")?;
+        values.push(ValueRequest { name: name.clone(), entry: "probe".to_string(), expected: "42\n".to_string() });
     }
     for flag in vec!["affines".to_string(), "AFFINE".to_string(), "borrow".to_string()] {
         let name = format!("enum-{flag}.lkjir");
@@ -173,7 +174,7 @@ fn ir_flags(world: &mut World, executable: &File, directory: &mut Directory,
         let name = format!("enum-{flag}.lkjir");
         let valid = source.as_str().replace("enum affine", &format!("enum {flag}"));
         write(directory, &name, valid.as_bytes())?;
-        run_value(world, executable, config, report, &name, "probe", "42\n")?;
+        values.push(ValueRequest { name: name.clone(), entry: "probe".to_string(), expected: "42\n".to_string() });
     }
     Ok(())
 }
@@ -186,7 +187,7 @@ fn advice_case(name: &str, source: &str, needle: &str, replacement: &str,
 }
 
 fn site_advice(world: &mut World, executable: &File, directory: &mut Directory,
-    config: &Config, report: &mut Report) -> Result<(), String> {
+    config: &Config, report: &mut Report, values: &mut Vec<ValueRequest>) -> Result<(), String> {
     let option = format!("{}\npub fn observed() -> usize {{ probe(); 1usize }}\n",
         include_str!("../tests/diagnostics/option_constructor_inference.lkj"));
     let raw = format!("{}\npub fn observed() -> usize {{ probe(); 1usize }}\n",
@@ -224,7 +225,7 @@ fn site_advice(world: &mut World, executable: &File, directory: &mut Directory,
             && contains(&rejected.errors, b"docs/language.md"),
             format!("site diagnostic {} omitted its explanation: {}", item.name, display_bytes(&rejected.errors)));
         write(directory, &item.name, rewritten.as_bytes())?;
-        run_value(world, executable, config, report, &item.name, &item.entry, &item.expected)?;
+        values.push(ValueRequest { name: item.name.clone(), entry: item.entry.clone(), expected: item.expected.clone() });
     }
     let unrelated = "mod hidden { #[cfg(test)] fn fixture() {} }\npub fn probe() { fixture(); }\n";
     write(directory, "site-cfg-unrelated.lkj", unrelated.as_bytes())?;
@@ -235,13 +236,13 @@ fn site_advice(world: &mut World, executable: &File, directory: &mut Directory,
         format!("cfg advice attributed another module's declaration: {}", display_bytes(&rejected.errors)));
     write(directory, "site-cfg-enabled.lkj",
         b"#[cfg(not(test))] fn fixture() -> usize { 7usize }\n#[cfg(test)] fn unused() { unavailable(); }\npub fn probe() -> usize { fixture() }\n")?;
-    run_value(world, executable, config, report, "site-cfg-enabled.lkj", "probe", "7\n")?;
+    values.push(ValueRequest { name: "site-cfg-enabled.lkj".to_string(), entry: "probe".to_string(), expected: "7\n".to_string() });
     Ok(())
 }
 
 
 fn desk_advice(world: &mut World, executable: &File, directory: &mut Directory,
-    config: &Config, report: &mut Report) -> Result<(), String> {
+    config: &Config, report: &mut Report, values: &mut Vec<ValueRequest>) -> Result<(), String> {
     let name = "desk-enum-advice.lkj";
     let source = include_str!("../tests/diagnostics/nonexhaustive_variants.lkj");
     write(directory, name, source.as_bytes())?;
@@ -252,7 +253,7 @@ fn desk_advice(world: &mut World, executable: &File, directory: &mut Directory,
     let rewritten = source.replace("Authority::Arguments => 1usize",
         "Authority::Arguments => 1usize, Authority::Environment => 2usize, Authority::ExitStatus => 3usize");
     write(directory, name, rewritten.as_bytes())?;
-    run_value(world, executable, config, report, name, "probe", "2\n")?;
+    values.push(ValueRequest { name: name.to_string(), entry: "probe".to_string(), expected: "2\n".to_string() });
     let cases: Vec<(String, String, String)> = vec![
         ("desk-enum-guard.lkj".to_string(),
             "enum Choice { First, Second, Third }\npub fn probe() -> usize { let value = Choice::Second; match value { Choice::First | Choice::Second if false => 1usize, Choice::Third => 3usize } }\n".to_string(),
@@ -284,7 +285,7 @@ fn desk_advice(world: &mut World, executable: &File, directory: &mut Directory,
         format!("generic capability helper omitted its concrete receiver: {}", display_bytes(&rejected.errors)));
     let rewritten = source.replace("command_args<T>(arguments: &mut T)", "command_args(arguments: &mut Arguments)");
     write(directory, name, format!("{rewritten}\npub fn probe() -> usize {{ 42usize }}\n").as_bytes())?;
-    run_value(world, executable, config, report, name, "probe", "42\n")?;
+    values.push(ValueRequest { name: name.to_string(), entry: "probe".to_string(), expected: "42\n".to_string() });
     let name = "desk-child-authority.lkj";
     write(directory, name, include_str!("../tests/diagnostics/external_child_authority.lkj").as_bytes())?;
     let rejected = invoke(world, executable, &command(config, "check", name), b"")?;
@@ -295,6 +296,6 @@ fn desk_advice(world: &mut World, executable: &File, directory: &mut Directory,
         format!("external child boundary omitted its missing proof: {}", display_bytes(&rejected.errors)));
     let name = "desk-capability-intern.lkj";
     write(directory, name, include_str!("../tests/diagnostics/command_capability_intern.lkj").as_bytes())?;
-    run_value(world, executable, config, report, name, "main", "ok\n")?;
+    values.push(ValueRequest { name: name.to_string(), entry: "main".to_string(), expected: "ok\n".to_string() });
     Ok(())
 }

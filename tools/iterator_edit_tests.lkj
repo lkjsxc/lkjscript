@@ -1,5 +1,5 @@
 //! Apply a narrow shared-Vec iterator rewrite, then compare both execution routes.
-use super::{command, contains, diagnostic_edits, display_bytes, invoke, path, run_value, write, Config, Report};
+use super::{command, contains, diagnostic_edits, display_bytes, invoke, path, run_values, write, Config, Report, ValueRequest};
 
 struct Case { name: String, source: String, entry: String, expected: String }
 fn case(name: &str, source: &str, entry: &str, expected: &str) -> Case {
@@ -8,6 +8,7 @@ fn case(name: &str, source: &str, entry: &str, expected: &str) -> Case {
 
 pub fn run(world: &mut World, executable: &File, directory: &mut Directory,
     config: &Config, report: &mut Report) -> Result<(), String> {
+    let mut values: Vec<ValueRequest> = Vec::new();
     let fixture = include_str!("../tests/diagnostics/iterator_return_view.lkj");
     let cases = vec![
         case("iterator-view-edit.lkj", fixture, "probe", "5\n"),
@@ -85,7 +86,7 @@ pub fn main(mut world: World) {
                 "iterator rewrite captured a local name or changed the original body".to_string());
         }
         write(directory, &item.name, rewritten.as_bytes())?;
-        run_value(world, executable, config, report, &item.name, &item.entry, &item.expected)?;
+        values.push(ValueRequest { name: item.name.clone(), entry: item.entry.clone(), expected: item.expected.clone() });
     }
     let custom_iterator = format!("{fixture}\nstruct Other;\nimpl Iterator for Other {{ type Item = u8; fn next(&mut self) -> Option<u8> {{ None }} }}\nimpl IntoIterator for Other {{ type IntoIter = Other; fn into_iter(self) -> Other {{ self }} }}\n");
     let iterator_drop = format!("{fixture}\nimpl<'a, T> Drop for std::iter::Iter<'a, T> {{ fn drop(&mut self) {{ panic!(\"iterator cleanup\"); }} }}\n");
@@ -117,5 +118,5 @@ pub fn main(mut world: World) {
             && contains(&rejected.errors, b":iterator conflicts") && !contains(&rejected.errors, b"LKJSCRIPT_EDITS "),
             format!("unsafe iterator rewrite or unrelated rejection for {name}: {}", display_bytes(&rejected.errors)));
     }
-    Ok(())
+    run_values(world, executable, config, report, &values)
 }

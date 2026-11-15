@@ -189,6 +189,7 @@ fn seed_paths() -> Vec<String> {
     let mut paths = vec![
         "tools/generators/ir-seeds/calls.lkjir".to_string(),
         "tools/generators/ir-seeds/array-repeat.lkjir".to_string(),
+        "tools/generators/ir-seeds/trap-messages.lkjir".to_string(),
     ];
     for name in vec![
         "drop_if_owned".to_string(),
@@ -217,6 +218,7 @@ fn seed_paths() -> Vec<String> {
 }
 fn seeds(
     world: &mut World,
+    source_path: &str,
     store: &mut Option<crate::store::Store>,
     counts: &mut Counts,
     runtime: &runtime::Runtime,
@@ -226,7 +228,7 @@ fn seeds(
     for path in seed_paths() {
         let source = read(world, &path)?;
         let prepared = mutation::prepare(&path, source)?;
-        let program = ir_text::read(&prepared.text).map_err(
+        let program = ir_text::read_located(&prepared.text, source_path).map_err(
             |diagnostic: crate::diagnostic::Diagnostic| -> String {
                 format!("{path}: {}", diagnostic.message)
             },
@@ -512,14 +514,14 @@ fn execute_ir(
         "probe".to_string(),
         "--engine".to_string(),
         "interpreter".to_string(),
-        "--unchecked-ir".to_string(),
+        "--unchecked-ir".to_string(), "--observe".to_string(),
     ]);
-    let left = observe(test_runner::invoke(
+    let left = observe(test_runner::observed_capture(test_runner::invoke(
         world,
         executable,
         &args,
         2_000_000_000,
-    )?);
+    )?)?);
     if left.kind == "did-not-terminate" || left.kind == "safety-error" || left.kind == "model-error"
     {
         return Ok((left.kind.clone(), left.clone(), left));
@@ -554,10 +556,8 @@ fn execute_ir(
         if capture.result.len() == 8 {
             let result = driver::raw_scalar(selection.original().program(), selected, &capture.result)?;
             capture.stdout.extend_from_slice(result.as_bytes());
-        } else if let Some((code, diagnostic, message)) = driver::native_trap(path, &capture.result) {
-            let complete = code >= 6 && code <= 8
-                || driver::complete_semantic_trap(selection.native().program(), code, &message);
-            if capture.status == 1 && complete {
+        } else if let Some((code, diagnostic, message)) = driver::native_trap(path, selection.native().program(), runtime, &capture.result) {
+            if capture.status == 1 {
                 capture.stderr.extend_from_slice(diagnostic.as_bytes());
                 capture.stderr.push(b'\n');
             } else {
@@ -715,21 +715,21 @@ fn mutation_worker(
         .map_err(|errno: i64| problem("compiler executable", errno))?;
     let runtime = driver::load_runtime(world, &None)?;
     let mut warm = Counts::new();
-    let seeds = seeds(world, &mut store, &mut warm, &runtime, inline_limit)?;
+    let path = format!("{output}/worker-{worker}.lkjir");
+    let seeds = seeds(world, &path, &mut store, &mut warm, &runtime, inline_limit)?;
     // Inline counts describe mutants, not canonical-seed warming. Otherwise
     // accepted seed rewrites could hide universal fallback during the campaign.
     let mut counts = Counts::new();
     counts.checked_reused = warm.checked_reused;
     counts.emitted_reused = warm.emitted_reused;
     let mut random = Random::new(seed as u64);
-    let path = format!("{output}/worker-{worker}.lkjir");
     for index in 0..count {
         let (base, mutation) = mutation::choose(&seeds, &mut random);
         if index % jobs != worker {
             continue;
         }
         let source = mutation::apply(&seeds[base].text, mutation)?;
-        let checked = match ir_text::read(&source) {
+        let checked = match ir_text::read_located(&source, &path) {
             Ok(program) => match check_mutation(program, &mut store, &mut counts) {
                 Ok(checked) => Some(checked),
                 Err(_) => None,
@@ -883,6 +883,24 @@ fn mutation_campaign(
 
 fn self_test(world: &mut World) -> Result<(), String> {
     reduction::self_test()?;
+    // Source-less raw IR must use the same physical path/lines for admission
+    // and the independent subprocess. Long equal display prefixes stay distinct.
+    let diagnostic_path = "tools/generators/ir-seeds/trap-messages.lkjir";
+    let raw = read(world, diagnostic_path)?;
+    let program = ir_text::read_located(&raw, diagnostic_path).map_err(|problem| -> String { format!("E_MUTATION diagnostic seed: {}", problem.message) })?;
+    let checked = check::check_all(program).map_err(|problems: Vec<crate::diagnostic::Diagnostic>| -> String { format!("E_MUTATION diagnostic seed: {}", problems[0].message) })?;
+    let runtime = driver::load_runtime(world, &None)?;
+    let executable = world.executable().map_err(|errno: i64| problem("diagnostic compiler", errno))?;
+    let mut store: Option<crate::store::Store> = None;
+    let mut counts = Counts::new();
+    for limit in vec![Some(0usize), Some(64usize)] {
+        let selected = select_mutation(reuse::Checked::uncached(check::check_all(checked.program().clone()).unwrap()), &mut store, &mut counts, limit);
+        let (kind, left, right) = execute_ir(world, &executable, diagnostic_path, &selected, &runtime, &mut store, &mut counts)?;
+        if kind != "trap-equal" || left.stderr.len() <= 1200 || left.stderr != right.stderr || left.line >= 777 {
+            return Err(format!("E_MUTATION original trapped IR identity lost: {kind} {} {}", display(&left.stderr), display(&right.stderr)));
+        }
+    }
+
     let source = read(world, "tools/generators/ir-seeds/calls.lkjir")?;
     let prepared = mutation::prepare("calls", source.clone())?;
     let entries = vec![prepared];
@@ -1000,6 +1018,13 @@ fn self_test(world: &mut World) -> Result<(), String> {
         if compare(&custom, &changed, true) != "trap-differs"
             || compare(&custom, &changed, false) != "trap-equal"
         { return Err("E_MUTATION custom trap identity/reference classification conflated".to_string()); }
+    }
+    let mut prefix = String::new(); for _ in 0..1200 { prefix.push('x'); }
+    let mut first = custom.clone(); let mut second = custom.clone();
+    first.stderr = format!("case.lkj:19: R0016 {prefix}A\n").into_bytes();
+    second.stderr = format!("case.lkj:19: R0016 {prefix}B\n").into_bytes();
+    if compare(&first, &second, true) != "trap-differs" {
+        return Err("E_MUTATION long custom trap suffix was lost".to_string());
     }
     let normal = checked_observation(test_runner::Observation {
         checked: true,
@@ -1342,7 +1367,7 @@ pub fn run(world: &mut World, args: &[String]) -> Result<u8, String> {
         return reduce(world, &args[1..]);
     }
     if args[0] != "mutate" || args.len() < 3 {
-        return Err("E_USAGE mutate SEED COUNT [--jobs N] [-o DIRECTORY] [--store DIR --store-key FILE] [--inline-limit N|--no-opt]".to_string());
+        return Err("E_USAGE mutate SEED COUNT [--jobs N] [-o DIRECTORY] [--store DIR --store-key FILE|--no-store] [--inline-limit N|--no-opt]".to_string());
     }
     let seed = integer(&args[1], "seed")?;
     let count = integer(&args[2], "count")?;
@@ -1350,6 +1375,7 @@ pub fn run(world: &mut World, args: &[String]) -> Result<u8, String> {
     let mut worker = None;
     let mut store_path = None;
     let mut store_key = None;
+    let mut no_store = false;
     let mut inline_limit = None;
     let mut output = format!("target/mutation-{seed}-{count}");
     let mut at = 3usize;
@@ -1358,6 +1384,10 @@ pub fn run(world: &mut World, args: &[String]) -> Result<u8, String> {
         at += 1;
         if option == "--no-opt" {
             inline_limit = Some(0);
+            continue;
+        }
+        if option == "--no-store" {
+            no_store = true;
             continue;
         }
         if at == args.len() {
@@ -1374,6 +1404,7 @@ pub fn run(world: &mut World, args: &[String]) -> Result<u8, String> {
         }
         at += 1;
     }
+    if no_store { store_path = None; store_key = None; }
     if jobs == 0 || jobs > 8 || count == 0 {
         return Err("E_USAGE positive count and one to eight workers required".to_string());
     }

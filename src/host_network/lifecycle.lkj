@@ -1,7 +1,12 @@
 // Kernel entropy, wall time and SIGTERM state in the independent host process.
 use crate::x86::*;
-use super::syscall;
+
 use super::broker::{allocate, check_fd, empty, REQUEST, SCRATCH};
+
+fn syscall(a: &mut Assembler, number: u64) {
+    a.immediate(R11, number); a.store(BP, super::broker::LAST_OPERATION, R11);
+    super::syscall(a, number);
+}
 
 const CLAIMED: i64 = -24;
 const ORIGINAL: i64 = -32;
@@ -139,11 +144,13 @@ pub(super) fn emit(a: &mut Assembler, labels: &[Label], reply: Label, invalid: L
     empty(a, reply);
     a.bind(restore);
     a.store(BP, SCRATCH + 8, A);
+    a.load(R11, BP, super::broker::LAST_OPERATION); a.store(BP, SCRATCH + 16, R11);
     a.immediate(DI, 2);
     a.lea(SI, BP, SCRATCH);
     a.immediate(D, 0);
     a.immediate(R10, 8);
     syscall(a, 14);
+    a.load(R11, BP, SCRATCH + 16); a.store(BP, super::broker::LAST_OPERATION, R11);
     a.load(A, BP, SCRATCH + 8);
     empty(a, reply);
 

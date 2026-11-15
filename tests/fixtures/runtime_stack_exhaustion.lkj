@@ -3,6 +3,6 @@ fn recurse(n: usize) -> i64 {
     if n == 0 { return frame[0]; }
     recurse(n - 1) + frame[n % 1024]
 }
-pub fn probe() -> i64 {
+pub fn probe(_errors: Stderr) -> i64 {
     recurse(100000)
 }

@@ -92,13 +92,25 @@ cmp "$test_directory/expected" "$test_directory/result"
 rejected image-forged
 (( $(field "$test_directory/image-forged.log" build_reused) == 0 )) || fail "forged image was reused"
 
-for attack in truncated corrupted forged; do
+for attack in truncated corrupted forged stale-root truncated-payload hostile-length; do
     restore
     while IFS= read -r entry; do
         case "$attack" in
             truncated) truncate -s 1 "$entry" ;;
             corrupted) printf '\377untrusted suffix\000' >> "$entry" ;;
             forged) printf 'checked\n42\nvalid\n' > "$entry" ;;
+            # These preserve the signed root while changing the promised bytes.
+            stale-root)
+                attack_byte=$(od -An -tu1 -N1 -j90 "$entry")
+                [[ -n "$attack_byte" ]] || fail "retained-root fixture has no payload"
+                printf -v attack_escape '\\%03o' "$((attack_byte ^ 1))"
+                printf '%b' "$attack_escape" | dd of="$entry" bs=1 seek=90 conv=notrunc status=none
+                ;;
+            truncated-payload) truncate -s 90 "$entry" ;;
+            # Unsigned lengths are rejected before they can drive allocation.
+            hostile-length)
+                printf '\377\377\377\377\377\377\377\377' | dd of="$entry" bs=1 seek=18 conv=notrunc status=none
+                ;;
         esac
     done < <(entries)
     same_build "$attack"

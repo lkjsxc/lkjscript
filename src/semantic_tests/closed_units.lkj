@@ -1,0 +1,298 @@
+//! Parser, memory-model and instruction-encoding contracts with no checker dependency.
+mod syntax_tests {
+    use crate::ast::*;
+    use crate::syntax::parse;
+    pub fn precedence_and_arena() {
+        let p = parse("fn answer() -> i64 { 1 + 2 * 3 } fn main() { assert_eq!(answer(), 7); }")
+            .unwrap();
+        assert_eq!(p.functions.len(), 2);
+        let body = p.functions[0].body.unwrap();
+        let tail = p.blocks[body].tail.unwrap();
+        match &p.exprs[tail].kind {
+            Expr::Binary { op, right, .. } => {
+                assert_eq!(op, "+");
+                match &p.exprs[*right].kind {
+                    Expr::Binary { op, .. } => assert_eq!(op, "*"),
+                    _ => panic!("multiplication missing"),
+                }
+            }
+            _ => panic!("addition missing"),
+        }
+    }
+    pub fn numeric_suffixes_preserve_operators_and_decimal_exponents() {
+        for literal in vec![
+            "6usize".to_string(),
+            "6isize".to_string(),
+            "0x1e".to_string(),
+            "0x1eu8".to_string(),
+            "1_000u64".to_string(),
+        ] {
+            let source = format!("fn f(){{{literal}}}");
+            let program = parse(&source).unwrap();
+            assert!(matches!(program.exprs[0].kind, Expr::Int(_)), "{literal}");
+        }
+        for expression in vec![
+            "6usize+2usize".to_string(),
+            "6isize-2isize".to_string(),
+            "0x1e+2".to_string(),
+            "0x1E-2".to_string(),
+        ] {
+            let source = format!("fn f(){{{expression}}}");
+            let program = parse(&source).unwrap();
+            let tail = program.blocks[program.functions[0].body.unwrap()]
+                .tail
+                .unwrap();
+            assert!(
+                matches!(program.exprs[tail].kind, Expr::Binary { .. }),
+                "{expression}"
+            );
+        }
+        for literal in vec![
+            "1e+2".to_string(),
+            "1E-2".to_string(),
+            "1.25e+2f64".to_string(),
+            "1_0e-2".to_string(),
+        ] {
+            let source = format!("fn f(){{{literal}}}");
+            let program = parse(&source).unwrap();
+            assert!(matches!(program.exprs[0].kind, Expr::Float(_)), "{literal}");
+        }
+    }
+    pub fn declarations_and_borrows() {
+        let source = "use std::collections::BTreeMap; #[derive(Clone, Copy)] struct Pair<T> { a: T, b: T } enum Maybe<T> { No, Yes(T) } trait Get { type Item; fn get(&self) -> Self::Item; } impl<T: Copy> Get for Pair<T> { type Item = T; fn get(&self) -> T { self.a } } fn view<'a>(x: &'a [u8]) -> &'a [u8] { x }";
+        let p = parse(source).unwrap();
+        assert_eq!(p.structs.len(), 1);
+        assert_eq!(p.enums.len(), 1);
+        assert_eq!(p.traits.len(), 1);
+        assert_eq!(p.impls.len(), 1);
+        assert_eq!(p.functions.len(), 3);
+    }
+    pub fn control_and_patterns() {
+        let p = parse("fn f(mut x: i64) -> i64 { let mut v: Vec<i64> = vec![1, 2]; for i in 0..3 { v.push(i); } while x > 0 { x -= 1; } match Some(x) { Some(v) if v == 0 => v, _ => 1, } }").unwrap();
+        assert_eq!(p.functions.len(), 1);
+        assert!(!p.patterns.is_empty());
+    }
+    pub fn nested_generics_and_parentheses() {
+        let p = parse("fn f(x: Vec<Vec<i64>>) -> i64 { (((1) + 2) * 3) }").unwrap();
+        assert_eq!(p.functions.len(), 1);
+    }
+    pub fn deep_grouping_is_iterative() {
+        let mut source = String::from("fn f() -> i64 { ");
+        let mut i = 0;
+        while i < 20_000 {
+            source.push('(');
+            i += 1;
+        }
+        source.push('1');
+        i = 0;
+        while i < 20_000 {
+            source.push(')');
+            i += 1;
+        }
+        source.push_str(" }");
+        let p = parse(&source).unwrap();
+        assert_eq!(p.exprs.len(), 1);
+    }
+    pub fn diagnostics_name_rejected_constructs() {
+        let bytes = parse("fn f() { let b = b\"\\xFF\\0\"; let c = b'\\x80'; }").unwrap();
+        assert!(
+            bytes
+                .exprs
+                .iter()
+                .any(|e| matches!(&e.kind, Expr::Bytes(v) if *v == vec![255, 0]))
+        );
+        assert_eq!(
+            parse("fn f() { let b = b\"é\"; }").unwrap_err().code,
+            "E_LEX"
+        );
+        parse("fn f() { let strings = [\"&&\", \"||\", \"}\", \"!\", \"if\"]; }").unwrap();
+        assert_eq!(
+            parse("fn f() { println!(\"ambient\"); }").unwrap_err().code,
+            "E_CAPABILITY"
+        );
+        assert_eq!(
+            parse("fn f() { unsafe {} }").unwrap_err().code,
+            "E_UNSUPPORTED"
+        );
+        assert_eq!(
+            parse("fn f() { mystery!(); }").unwrap_err().code,
+            "E_UNSUPPORTED_MACRO"
+        );
+        assert_eq!(parse("fn f() { /* missing }").unwrap_err().code, "E_LEX");
+    }
+    pub fn views_and_closure_syntax() {
+        parse("fn f() { let mut x = 1; let r = &&mut x; }").unwrap();
+        let p = parse("struct View<'a> { bytes: &'a [u8] } fn f(v: &mut Vec<i64>) { v.push(v.len() as i64); let cb = move |x: i64| -> i64 { x + 1 }; let y = cb(2); }").unwrap();
+        assert_eq!(p.structs.len(), 1);
+        assert_eq!(p.functions.len(), 1);
+    }
+}
+mod runtime_memory_tests {
+    use crate::runtime_memory::*;
+
+    pub fn mappings_are_disjoint_and_release_invalidates_raw_addresses() {
+        let mut memory = Memory::new();
+        let left = memory.invoke(Primitive::Map, &[4096]).unwrap();
+        let right = memory.invoke(Primitive::Map, &[4096]).unwrap();
+        assert!(right > left + 4096);
+        memory.write(left, &[1, 2, 3, 4, 5, 6]).unwrap();
+        memory
+            .invoke(Primitive::MemoryCopy, &[left + 2, left, 4])
+            .unwrap();
+        assert_eq!(
+            memory.read(left, 6).unwrap().to_vec(),
+            vec![1, 2, 1, 2, 3, 4]
+        );
+        memory
+            .invoke(Primitive::MemoryCopy, &[right, left + 2, 4])
+            .unwrap();
+        assert_eq!(memory.read(right, 4).unwrap().to_vec(), vec![1, 2, 3, 4]);
+        assert!(matches!(
+            memory.read(left + 4095, 2),
+            Err(MemoryFault::Bounds)
+        ));
+        memory.invoke(Primitive::Unmap, &[left, 4096]).unwrap();
+        assert!(matches!(memory.read(left, 1), Err(MemoryFault::Bounds)));
+        assert_eq!(memory.read(right, 4).unwrap().to_vec(), vec![1, 2, 3, 4]);
+    }
+
+    pub fn remapping_preserves_contents_and_refusal_keeps_the_old_mapping_live() {
+        let mut memory = Memory::new();
+        let original = memory.invoke(Primitive::Map, &[17]).unwrap();
+        memory.write(original, &[1, 2, 3, 4]).unwrap();
+        memory.write(original + 4095, &[173]).unwrap();
+        memory.refuse_next_mapping();
+        assert_eq!(
+            memory.invoke(Primitive::Remap, &[original, 17, 8192]),
+            Ok(0u64)
+        );
+        assert_eq!(memory.read(original, 4).unwrap().to_vec(), vec![1, 2, 3, 4]);
+        let grown = memory
+            .invoke(Primitive::Remap, &[original, 4096, 8192])
+            .unwrap();
+        assert_ne!(grown, 0);
+        assert!(matches!(memory.read(original, 1), Err(MemoryFault::Bounds)));
+        assert_eq!(memory.read(grown, 4).unwrap().to_vec(), vec![1, 2, 3, 4]);
+        assert_eq!(memory.read(grown + 4095, 2).unwrap().to_vec(), vec![173, 0]);
+        assert_eq!(memory.read(grown + 8191, 1).unwrap().to_vec(), vec![0]);
+        assert_eq!(memory.mapping_count(), 2);
+        assert_eq!(
+            memory.invoke(Primitive::Remap, &[grown + 1, 4096, 8192]),
+            Err(MemoryFault::Bounds)
+        );
+    }
+}
+mod x86_tests {
+    use crate::x86::*;
+    fn finish(a: Assembler) -> Vec<u8> {
+        match a.finish() {
+            Ok(bytes) => bytes,
+            Err(problem) => panic!("{}", problem.message),
+        }
+    }
+    pub fn immediates_preserve_flags_and_choose_the_smallest_mov_form() {
+        let mut a = Assembler::new();
+        a.immediate(A, 0);
+        a.immediate(R8, 0xffff_ffff);
+        a.immediate(C, (-1i64) as u64);
+        a.immediate(D, 0x0123_4567_89ab_cdef);
+        assert_eq!(
+            finish(a),
+            vec![
+                0xb8, 0, 0, 0, 0, 0x41, 0xb8, 0xff, 0xff, 0xff, 0xff, 0x48, 0xc7, 0xc1, 0xff, 0xff,
+                0xff, 0xff, 0x48, 0xba, 0xef, 0xcd, 0xab, 0x89, 0x67, 0x45, 0x23, 0x01
+            ]
+        );
+    }
+    pub fn relative_calls_branches_and_rip_addresses_are_patched() {
+        let mut a = Assembler::new();
+        let start = a.label();
+        let end = a.label();
+        a.bind(start);
+        a.call(end);
+        a.condition(4, start);
+        a.address(R8, end);
+        a.bind(end);
+        a.ret();
+        assert_eq!(
+            finish(a),
+            vec![
+                0xe8, 13, 0, 0, 0, 0x0f, 0x84, 0xf5, 0xff, 0xff, 0xff, 0x4c, 0x8d, 0x05, 0, 0, 0,
+                0, 0xc3
+            ]
+        );
+
+        let mut a = Assembler::new();
+        a.enable_profile();
+        let callee = a.label();
+        a.immediate(A, 0);
+        a.mov(R8, A);
+        a.lea(DI, BP, -8);
+        a.rr(0x01, A, C, true);
+        a.load(A, BP, -8);
+        a.store(DI, 0, A);
+        a.scope_kind(KIND_ARGUMENT);
+        a.mov(DI, A);
+        a.call(callee);
+        a.mov(SI, A);
+        a.scope_kind(KIND_PROLOGUE);
+        a.push(BP);
+        a.ret();
+        a.region_kind(KIND_RUNTIME);
+        a.mov(A, DI);
+        a.bind(callee);
+        a.ret();
+        assert_eq!(a.take_kinds(), vec![
+            (0, KIND_CONSTANT), (5, KIND_MOVE), (8, KIND_ADDRESS),
+            (12, KIND_ARITHMETIC), (15, KIND_FRAME), (19, KIND_MEMORY),
+            (22, KIND_ARGUMENT), (25, KIND_CALL), (30, KIND_ARGUMENT),
+            (33, KIND_PROLOGUE), (34, KIND_RETURN), (35, KIND_RUNTIME),
+        ]);
+        finish(a);
+    }
+    pub fn memory_widths_handle_low_byte_registers_and_stack_bases() {
+        let mut a = Assembler::new();
+        a.store_width(SP, 0, SI, 1);
+        a.load_width(R9, R13, 0, 1, true);
+        a.store_width(R12, -8, R10, 2);
+        a.load(A, BP, -256);
+        assert_eq!(
+            finish(a),
+            vec![
+                0x40, 0x88, 0x34, 0x24, 0x4d, 0x0f, 0xbe, 0x4d, 0, 0x66, 0x45, 0x89, 0x54, 0x24,
+                0xf8, 0x48, 0x8b, 0x85, 0, 0xff, 0xff, 0xff
+            ]
+        );
+    }
+    pub fn encoding_errors_retain_the_ir_location() {
+        let mut a = Assembler::new();
+        let far = a.label();
+        a.location(7, 42, 9);
+        a.jump(far);
+        a.data_label(far, 2147483653usize);
+        let problem = match a.finish() {
+            Ok(_) => panic!("far branch accepted"),
+            Err(problem) => problem,
+        };
+        assert_eq!((problem.file, problem.line, problem.column), (7, 42, 9));
+        assert_eq!(problem.code, "E_EMIT");
+    }
+}
+
+pub fn run() -> usize {
+    syntax_tests::precedence_and_arena();
+    syntax_tests::numeric_suffixes_preserve_operators_and_decimal_exponents();
+    syntax_tests::declarations_and_borrows();
+    syntax_tests::control_and_patterns();
+    syntax_tests::nested_generics_and_parentheses();
+    syntax_tests::deep_grouping_is_iterative();
+    syntax_tests::diagnostics_name_rejected_constructs();
+    syntax_tests::views_and_closure_syntax();
+    runtime_memory_tests::mappings_are_disjoint_and_release_invalidates_raw_addresses();
+    runtime_memory_tests::remapping_preserves_contents_and_refusal_keeps_the_old_mapping_live();
+    x86_tests::immediates_preserve_flags_and_choose_the_smallest_mov_form();
+    x86_tests::relative_calls_branches_and_rip_addresses_are_patched();
+    x86_tests::memory_widths_handle_low_byte_registers_and_stack_bases();
+    x86_tests::encoding_errors_retain_the_ir_location();
+    14usize
+}

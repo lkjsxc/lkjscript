@@ -92,8 +92,12 @@ pub enum EntryGrant {
     Directory(Vec<u8>),
     /// Directory selected at invocation by exactly one named environment value.
     DirectoryEnvironment(Vec<u8>),
+    /// Native launcher snapshot retains the original named grant for diagnostics.
+    DirectoryEnvironmentValue(Vec<u8>, Option<Vec<u8>>),
     ReadDirectory(Vec<u8>),
     ReadDirectoryEnvironment(Vec<u8>),
+    /// Read-only launcher snapshot retains the original named grant too.
+    ReadDirectoryEnvironmentValue(Vec<u8>, Option<Vec<u8>>),
     /// Exactly one absolute NUL-terminated executable path, snapshotted at entry.
     ForeignCommand(Vec<u8>),
     NullDevice,
@@ -703,6 +707,8 @@ pub struct Function {
 }
 #[derive(Clone, PartialEq)]
 pub struct Program {
+    // Diagnostic source identities; no path grants authority or performs a read.
+    pub sources: Vec<String>,
     pub types: Vec<Type>,
     pub functions: Vec<Function>,
     pub destructors: Vec<(usize, usize)>,

@@ -1,0 +1,69 @@
+//! Host failures retain bounded data prepared before an operation can fail.
+//! The interpreter returns facts; its supervisor chooses an authorized output.
+use super::*;
+
+impl HostFailure {
+    pub(super) fn new(identity: &str) -> Self {
+        let mut value = Self { identity: [0u8; 512], length: 0, operation: 1999, errno: 0 };
+        let mut length = 0usize;
+        let mut escaped = 0usize;
+        for scalar in identity.chars() {
+            let bytes = scalar.len_utf8();
+            let cost = if scalar == '\\' || scalar == '\n' || scalar == '\r' || scalar == '\t' { 2 }
+                else if scalar.is_control() { bytes * 4 } else { bytes };
+            if escaped + cost > 509 { break; }
+            escaped += cost; length += bytes;
+        }
+        value.identity[..length].copy_from_slice(&identity.as_bytes()[..length]);
+        value.length = length;
+        if length < identity.len() {
+            value.identity[length] = b'.'; value.identity[length + 1] = b'.'; value.identity[length + 2] = b'.';
+            value.length += 3;
+        }
+        value
+    }
+}
+fn path_text(bytes: &[u8]) -> String {
+    let bytes = if bytes.last() == Some(&0u8) { &bytes[..bytes.len() - 1] } else { bytes };
+    match String::from_utf8(bytes.to_vec()) {
+        Ok(text) => text,
+        Err(_) => { let mut text = String::new(); for byte in bytes { text.push_str(&format!("\\x{:02x}", *byte)); } text }
+    }
+}
+fn endpoint(address: &[u8]) -> String {
+    if address.len() != 16 || address[0] != 2 || address[1] != 0 { return "<invalid endpoint>".to_string(); }
+    let port = (address[2] as usize) * 256 + address[3] as usize;
+    format!("{}.{}.{}.{}:{port}", address[4], address[5], address[6], address[7])
+}
+pub(super) fn grant_failure(grant: &ir::EntryGrant) -> HostFailure {
+    let identity: String = match grant {
+        ir::EntryGrant::Directory(path) => format!("Directory {}", path_text(path)),
+        ir::EntryGrant::ReadDirectory(path) => format!("ReadDirectory {}", path_text(path)),
+        ir::EntryGrant::ReadDirectoryEnvironment(name) | ir::EntryGrant::ReadDirectoryEnvironmentValue(name, _) => format!("ReadDirectory env:{}", path_text(name)),
+        ir::EntryGrant::ForeignCommand(path) => format!("ForeignCommand {}", path_text(path)),
+        ir::EntryGrant::NullDevice => "NullDevice /dev/null".to_string(),
+        ir::EntryGrant::DirectoryEnvironment(name) | ir::EntryGrant::DirectoryEnvironmentValue(name, _) => format!("Directory env:{}", path_text(name)),
+        ir::EntryGrant::Listener(address) => format!("Listener {}", endpoint(address)),
+        ir::EntryGrant::Connector(address) => format!("Connector {}", endpoint(address)),
+        ir::EntryGrant::Readiness => "Readiness epoll".to_string(),
+        ir::EntryGrant::Stop => "Stop SIGTERM".to_string(),
+        ir::EntryGrant::Environment(name) => format!("Environment {}", path_text(name)),
+        ir::EntryGrant::EnvironmentValue(_) => "Environment supplied value".to_string(),
+        ir::EntryGrant::Stdout => "Stdout 1".to_string(), ir::EntryGrant::Stderr => "Stderr 2".to_string(),
+        ir::EntryGrant::Stdin => "Stdin 0".to_string(), ir::EntryGrant::Arguments => "Arguments argv".to_string(),
+        ir::EntryGrant::ExitStatus => "ExitStatus status".to_string(), ir::EntryGrant::Clock => "Clock kernel".to_string(),
+        ir::EntryGrant::Entropy => "Entropy getrandom".to_string(), ir::EntryGrant::Process => "Process children".to_string(),
+        ir::EntryGrant::World => "World host".to_string(),
+    };
+    HostFailure::new(&identity)
+}
+impl<H: Host> Interpreter<'_, H> {
+    pub(super) fn host_trap(&self, mut failure: HostFailure, errno: i64, operation: u64) -> RunError {
+        failure.errno = errno; failure.operation = operation;
+        RunError {
+            kind: ErrorKind::Trap(7), function: self.site.function,
+            file: self.site.file, line: self.site.line,
+            message: String::new(), host: Some(failure),
+        }
+    }
+}

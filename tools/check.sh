@@ -18,9 +18,10 @@ mkdir -p target/gate
 step() {
     local label=$1
     shift
-    local started_ns elapsed_ns load_start load_end result=0
+    local started_ns elapsed_ns offset_ns load_start load_end result=0
     read -r load_start _ < /proc/loadavg
     started_ns=$(date +%s%N)
+    offset_ns=$((started_ns - check_started_ns))
     local details="target/gate/details-$label.log"
     "$@" >"$details" 2>&1 || result=$?
     if ((result)); then
@@ -29,7 +30,7 @@ step() {
     fi
     elapsed_ns=$(($(date +%s%N)-started_ns))
     read -r load_end _ < /proc/loadavg
-    awk -v label="$label" -v elapsed_ns="$elapsed_ns" -v before="$load_start" -v after="$load_end" '
+    awk -v label="$label" -v elapsed_ns="$elapsed_ns" -v before="$load_start" -v after="$load_end" -v offset_ns="$offset_ns" '
         /^LKJSCRIPT_STATS / {
             if (match($0, /"test_reused":[0-9]+/)) {
                 value=substr($0, RSTART, RLENGTH); sub(/^[^:]*:/, "", value)
@@ -48,10 +49,10 @@ step() {
             counted=1; closed=1
         }
         END {
-            printf "ok %s (%.3f s, load %s -> %s)", label, elapsed_ns / 1000000000, before, after
+            printf "ok %s (%.3f s, load %s -> %s; gate+%.3f..%.3f s)", label, elapsed_ns / 1000000000, before, after, offset_ns / 1000000000, (offset_ns + elapsed_ns) / 1000000000
             if (closed) printf "; cases reused=%d rerun=%d (authenticated exact stable runner, sealed ELF and closed input contract)", reused, rerun
             else if (counted && reused + rerun > 0) printf "; cases reused=%d rerun=%d (authenticated producer and input closure; misses/open effects rerun)", reused, rerun
-            else printf "; rerun suite (host observations or structural proof)"
+            else printf "; rerun suite (live host observations or fresh admission)"
             printf "\n"
         }
     ' "$details"
@@ -65,13 +66,13 @@ step tool-build timeout --kill-after=10s 600s bash -c '
     if [[ -n "$LKJSCRIPT_STORE_KEY" ]]; then reuse=(--store "$LKJSCRIPT_STORE" --store-key "$LKJSCRIPT_STORE_KEY"); fi
     target/lkjscript build tools/toolchain-test.lkj -o target/gate/toolchain-test "${reuse[@]}"
     target/lkjscript build tools/world-test.lkj -o target/gate/world-test "${reuse[@]}"
-    target/lkjscript build src/semantic_main.lkj -o target/gate/semantic-test "${reuse[@]}"
 '
 step closed-build timeout --kill-after=10s 600s bash tools/closed-semantics.sh "$check_binary" build
 toolchain() (
-    toolchain_directory=$(mktemp -d target/gate/toolchain.XXXXXX)
+    toolchain_directory=target/gate/toolchain-work
+    mkdir "$toolchain_directory" || { echo "toolchain fixture directory is already claimed" >&2; exit 1; }
     trap 'rm -rf "$toolchain_directory"' EXIT HUP INT TERM
-    timeout --kill-after=10s 600s target/gate/toolchain-test "$check_binary" "$toolchain_directory"
+    timeout --kill-after=10s 600s target/gate/toolchain-test "$check_binary" "$toolchain_directory" "${check_reuse[@]}"
 )
 world_cases() (
     world_directory=$(mktemp -d target/gate/world.XXXXXX)
@@ -84,17 +85,9 @@ diagnostic_cases() {
     sh tests/diagnostics/mutation_no_store.sh "$check_binary"
 }
 semantics() {
-    local pids=() shard result=0
-    for ((shard=0; shard<check_suite_jobs; shard++)); do
-        timeout --kill-after=10s 600s target/gate/semantic-test "$shard" "$check_suite_jobs" >"target/gate/semantic-$shard.log" 2>&1 &
-        pids+=("$!")
-    done
-    for shard in "${!pids[@]}"; do
-        if ! wait "${pids[$shard]}"; then result=1; fi
-        cat "target/gate/semantic-$shard.log"
-    done
-    return "$result"
+    timeout --kill-after=10s 600s target/gate/closed/live
 }
+
 generate() {
     rm -rf target/gate/generated
     mkdir -p target/gate/generated
@@ -146,7 +139,6 @@ parallel_step 1 world world_cases
 parallel_step 1 profiler timeout --kill-after=10s 600s sh tools/profile-test.sh "$check_binary"
 parallel_step 1 optimizer timeout --kill-after=10s 600s bash tools/optimizer-test.sh "$check_binary"
 parallel_step 1 resources timeout --kill-after=10s 600s bash tools/resource-test.sh "$check_binary"
-parallel_step 1 runner timeout --kill-after=10s 600s "$check_binary" test src/test_runner.lkj --stats "${check_reuse[@]}"
 parallel_step 1 diagnostic-cases diagnostic_cases
 parallel_step 2 store timeout --kill-after=10s 600s bash tools/store-test.sh "$check_binary"
 parallel_step 2 program-directory timeout --kill-after=10s 600s bash tools/program-directory-test.sh "$check_binary"
@@ -162,7 +154,8 @@ parallel_step "$check_suite_jobs" conformance timeout --kill-after=10s 600s "$ch
 parallel_step "$check_suite_jobs" generated timeout --kill-after=10s 600s "$check_binary" test target/gate/generated --stats --jobs "$check_suite_jobs" "${check_reuse[@]}"
 parallel_step "$check_suite_jobs" optimized-conformance timeout --kill-after=10s 600s "$check_binary" test tests/conformance --stats --jobs "$check_suite_jobs" --inline-limit 64 "${check_reuse[@]}"
 parallel_step "$check_suite_jobs" optimized-generated timeout --kill-after=10s 600s "$check_binary" test target/gate/generated --stats --jobs "$check_suite_jobs" --inline-limit 64 "${check_reuse[@]}"
-parallel_step "$check_suite_jobs" semantic-structure semantics
+parallel_step "$check_suite_jobs" semantic-structure timeout --kill-after=10s 600s bash tools/closed-semantics.sh "$check_binary" structure
+parallel_step 1 semantic-host semantics
 parallel_step "$check_suite_jobs" semantic-cases timeout --kill-after=10s 600s "$check_binary" test tests/semantics --stats --jobs "$check_suite_jobs" "${check_reuse[@]}"
 parallel_step 1 references timeout --kill-after=10s 600s "$check_binary" test tests/reference --stats "${check_reuse[@]}"
 while ((check_active)); do wait_finished; done

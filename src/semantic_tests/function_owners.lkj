@@ -85,36 +85,11 @@ fn builtin_method_is_not_a_same_spelled_generic_free_call() {
     crate::check::check(checked).unwrap();
 }
 
-pub fn run(world: &mut World, trace: bool) -> usize {
-    if trace {
-        world
-            .stdout()
-            .write(b"resolved_owners_distinguish_free_inherent_and_trait_functions\n");
-    }
+pub fn run() -> usize {
     resolved_owners_distinguish_free_inherent_and_trait_functions();
-    if trace {
-        world
-            .stdout()
-            .write(b"ownership_indices_are_local_to_each_resolved_program\n");
-    }
     ownership_indices_are_local_to_each_resolved_program();
-    if trace {
-        world
-            .stdout()
-            .write(b"conflicting_or_missing_function_owners_are_diagnosed\n");
-    }
     conflicting_or_missing_function_owners_are_diagnosed();
-    if trace {
-        world
-            .stdout()
-            .write(b"free_recursive_calls_keep_identity_when_a_method_has_the_same_name\n");
-    }
     free_recursive_calls_keep_identity_when_a_method_has_the_same_name();
-    if trace {
-        world
-            .stdout()
-            .write(b"builtin_method_is_not_a_same_spelled_generic_free_call\n");
-    }
     builtin_method_is_not_a_same_spelled_generic_free_call();
     5usize
 }

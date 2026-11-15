@@ -1,0 +1,268 @@
+//! Bounded, single-line external diagnostics. These helpers grant no output authority.
+pub const PATH_LIMIT: usize = 512;
+pub const MESSAGE_LIMIT: usize = 1024;
+
+pub fn escaped(text: &str, limit: usize, path: bool) -> String {
+    let mut out = String::new();
+    let mut truncated = false;
+    for value in text.chars() {
+        let mut piece = String::new();
+        match value {
+            '\\' => piece.push_str("\\\\"),
+            '\n' => piece.push_str("\\n"),
+            '\r' => piece.push_str("\\r"),
+            '\t' => piece.push_str("\\t"),
+            ':' if path => piece.push_str("\\x3a"),
+            _ if value.is_control() => {
+                let mut encoded = String::new(); encoded.push(value);
+                for byte in encoded.as_bytes() { piece.push_str(&format!("\\x{:02x}", *byte)); }
+            }
+            _ => piece.push(value),
+        }
+        if out.len() + piece.len() > limit - 3 { truncated = true; break; }
+        out.push_str(&piece);
+    }
+    if truncated { out.push_str("..."); }
+    out
+}
+pub fn decoded(text: &str) -> Option<String> {
+    let mut bytes = Vec::new();
+    let raw = text.as_bytes();
+    let mut at = 0usize;
+    while at < raw.len() {
+        let byte = raw[at]; at += 1;
+        if byte != b'\\' { bytes.push(byte); continue; }
+        if at == raw.len() { return None; }
+        let code = raw[at]; at += 1;
+        match code {
+            b'\\' => bytes.push(b'\\'), b'n' => bytes.push(b'\n'),
+            b'r' => bytes.push(b'\r'), b't' => bytes.push(b'\t'),
+            b'x' => {
+                if raw.len() - at < 2 { return None; }
+                let mut value = 0u8;
+                for _ in 0..2 {
+                    let digit = raw[at]; at += 1;
+                    let part = if digit >= b'0' && digit <= b'9' { digit - b'0' }
+                        else if digit >= b'a' && digit <= b'f' { digit - b'a' + 10 }
+                        else { return None; };
+                    value = value * 16 + part;
+                }
+                bytes.push(value);
+            }
+            _ => return None,
+        }
+    }
+    String::from_utf8(bytes).ok()
+}
+pub fn located(path: &str, line: usize, code: &str, message: &str) -> String {
+    format!("{}:{line}: {code} {}", escaped(path, PATH_LIMIT, true), escaped(message, MESSAGE_LIMIT, false))
+}
+pub fn full_located(path: &str, line: usize, code: &str, message: &str) -> String {
+    format!("{}:{line}: {code} {}", escaped(path, !0usize, true), escaped(message, !0usize, false))
+}
+// Machine observations keep complete identities. Only user delivery is bounded.
+pub fn bounded(text: &str) -> String {
+    let marker = match text.find(": ") { Some(marker) => marker, None => return escaped(text, 2047, false) };
+    let location = &text[..marker];
+    let at = match location.rfind(':') { Some(at) => at, None => return escaped(text, 2047, false) };
+    let path = match decoded(&location[..at]) { Some(path) => path, None => return escaped(text, 2047, false) };
+    let line = match location[at + 1..].parse::<usize>() { Ok(line) => line, Err(_) => return escaped(text, 2047, false) };
+    let rest = &text[marker + 2..];
+    let space = match rest.find(' ') { Some(space) => space, None => return escaped(text, 2047, false) };
+    let message = match decoded(&rest[space + 1..]) { Some(message) => message, None => return escaped(text, 2047, false) };
+    located(&path, line, &rest[..space], &message)
+}
+pub fn syscall_name(number: u64) -> &'static str {
+    match number {
+        0 => "read", 1 => "write", 3 => "close", 5 => "fstat", 8 => "lseek", 9 => "mmap", 13 => "rt_sigaction",
+        14 => "rt_sigprocmask", 17 => "pread64", 18 => "pwrite64", 38 => "setitimer", 41 => "socket", 42 => "connect", 49 => "bind",
+        50 => "listen", 54 => "setsockopt", 72 => "fcntl", 91 => "fchmod", 131 => "sigaltstack", 257 => "openat",
+        289 => "signalfd4", 291 => "epoll_create1", 319 => "memfd_create", 437 => "openat2",
+        1000 => "validate", 1001 => "lookup", 1002 => "validate-image", 1003 => "validate-device", _ => "acquire",
+    }
+}
+
+/// Linux x86-64 errno names; unknown positive values retain their decimal code.
+pub fn errno_name(errno: i64) -> &'static str {
+    match errno {
+        1 => "EPERM",
+        2 => "ENOENT",
+        3 => "ESRCH",
+        4 => "EINTR",
+        5 => "EIO",
+        6 => "ENXIO",
+        7 => "E2BIG",
+        8 => "ENOEXEC",
+        9 => "EBADF",
+        10 => "ECHILD",
+        11 => "EAGAIN",
+        12 => "ENOMEM",
+        13 => "EACCES",
+        14 => "EFAULT",
+        15 => "ENOTBLK",
+        16 => "EBUSY",
+        17 => "EEXIST",
+        18 => "EXDEV",
+        19 => "ENODEV",
+        20 => "ENOTDIR",
+        21 => "EISDIR",
+        22 => "EINVAL",
+        23 => "ENFILE",
+        24 => "EMFILE",
+        25 => "ENOTTY",
+        26 => "ETXTBSY",
+        27 => "EFBIG",
+        28 => "ENOSPC",
+        29 => "ESPIPE",
+        30 => "EROFS",
+        31 => "EMLINK",
+        32 => "EPIPE",
+        33 => "EDOM",
+        34 => "ERANGE",
+        35 => "EDEADLK",
+        36 => "ENAMETOOLONG",
+        37 => "ENOLCK",
+        38 => "ENOSYS",
+        39 => "ENOTEMPTY",
+        40 => "ELOOP",
+        42 => "ENOMSG",
+        43 => "EIDRM",
+        44 => "ECHRNG",
+        45 => "EL2NSYNC",
+        46 => "EL3HLT",
+        47 => "EL3RST",
+        48 => "ELNRNG",
+        49 => "EUNATCH",
+        50 => "ENOCSI",
+        51 => "EL2HLT",
+        52 => "EBADE",
+        53 => "EBADR",
+        54 => "EXFULL",
+        55 => "ENOANO",
+        56 => "EBADRQC",
+        57 => "EBADSLT",
+        59 => "EBFONT",
+        60 => "ENOSTR",
+        61 => "ENODATA",
+        62 => "ETIME",
+        63 => "ENOSR",
+        64 => "ENONET",
+        65 => "ENOPKG",
+        66 => "EREMOTE",
+        67 => "ENOLINK",
+        68 => "EADV",
+        69 => "ESRMNT",
+        70 => "ECOMM",
+        71 => "EPROTO",
+        72 => "EMULTIHOP",
+        73 => "EDOTDOT",
+        74 => "EBADMSG",
+        75 => "EOVERFLOW",
+        76 => "ENOTUNIQ",
+        77 => "EBADFD",
+        78 => "EREMCHG",
+        79 => "ELIBACC",
+        80 => "ELIBBAD",
+        81 => "ELIBSCN",
+        82 => "ELIBMAX",
+        83 => "ELIBEXEC",
+        84 => "EILSEQ",
+        85 => "ERESTART",
+        86 => "ESTRPIPE",
+        87 => "EUSERS",
+        88 => "ENOTSOCK",
+        89 => "EDESTADDRREQ",
+        90 => "EMSGSIZE",
+        91 => "EPROTOTYPE",
+        92 => "ENOPROTOOPT",
+        93 => "EPROTONOSUPPORT",
+        94 => "ESOCKTNOSUPPORT",
+        95 => "EOPNOTSUPP",
+        96 => "EPFNOSUPPORT",
+        97 => "EAFNOSUPPORT",
+        98 => "EADDRINUSE",
+        99 => "EADDRNOTAVAIL",
+        100 => "ENETDOWN",
+        101 => "ENETUNREACH",
+        102 => "ENETRESET",
+        103 => "ECONNABORTED",
+        104 => "ECONNRESET",
+        105 => "ENOBUFS",
+        106 => "EISCONN",
+        107 => "ENOTCONN",
+        108 => "ESHUTDOWN",
+        109 => "ETOOMANYREFS",
+        110 => "ETIMEDOUT",
+        111 => "ECONNREFUSED",
+        112 => "EHOSTDOWN",
+        113 => "EHOSTUNREACH",
+        114 => "EALREADY",
+        115 => "EINPROGRESS",
+        116 => "ESTALE",
+        117 => "EUCLEAN",
+        118 => "ENOTNAM",
+        119 => "ENAVAIL",
+        120 => "EISNAM",
+        121 => "EREMOTEIO",
+        122 => "EDQUOT",
+        123 => "ENOMEDIUM",
+        124 => "EMEDIUMTYPE",
+        125 => "ECANCELED",
+        126 => "ENOKEY",
+        127 => "EKEYEXPIRED",
+        128 => "EKEYREVOKED",
+        129 => "EKEYREJECTED",
+        130 => "EOWNERDEAD",
+        131 => "ENOTRECOVERABLE",
+        132 => "ERFKILL",
+        133 => "EHWPOISON",
+        _ => "EUNKNOWN",
+    }
+}
+
+fn trap_word(raw: &[u8], at: usize) -> u64 {
+    let mut word = 0u64;
+    for index in 0..8 { word |= (raw[at + index] as u64) << (index * 8); }
+    word
+}
+fn static_trap_message(program: &crate::ir::Program, code: u64) -> Option<String> {
+    let fixed: &str = match code {
+        1 => "integer overflow", 2 => "division by zero", 3 => "index out of bounds",
+        4 => "explicit trap", 5 => "assertion failed", 6 => "heap allocation failed",
+        8 => "stack exhausted", 9..=15 => "trap", _ => "",
+    };
+    if !fixed.is_empty() { return Some(fixed.to_string()); }
+    if code < 16 { return None; }
+    let messages = crate::native::messages(program);
+    messages.get((code - 16) as usize).cloned()
+}
+pub fn main_site(program: &crate::ir::Program, raw: &[u8]) -> bool {
+    raw.len() >= 32 && trap_word(raw, 16) < program.sources.len().max(1) as u64
+}
+pub fn decode(path: &str, program: &crate::ir::Program, runtime: &crate::runtime::Runtime, raw: &[u8]) -> Option<(u64, String, String)> {
+    if raw.len() < 32 || &raw[..8] != b"LKJTRAP2" { return None; }
+    let code = trap_word(raw, 8);
+    let file = trap_word(raw, 16) as usize;
+    let line = trap_word(raw, 24) as usize;
+    let base = program.sources.len().max(1);
+    let meaning = if file < base { program } else { runtime.checked_program() };
+    let local = if file < base { file } else { file - base };
+    let source = if meaning.sources.is_empty() && local == 0 {
+        if file < base { path } else { "library/runtime.lkj" }
+    } else { meaning.sources.get(local)?.as_str() };
+    let text = String::from_utf8(raw[32..].to_vec()).ok()?;
+    if !text.ends_with("\n") || text.len() > 2048 { return None; }
+    let text = &text[..text.len() - 1];
+    if text.as_bytes().contains(&b'\n') || text.as_bytes().contains(&b'\r') { return None; }
+    let marker = text.find(": R")?;
+    let rest = &text[marker + 3..];
+    let space = rest.find(' ')?;
+    if space < 4 || rest[..space].parse::<u64>().ok()? != code { return None; }
+    let message: String = if code == 7 { crate::runtime_diagnostics::decoded(&rest[space + 1..])? }
+        else { static_trap_message(meaning, code)? };
+    let label = format!("R{code:04}");
+    // The full bounded record must agree with the same checked message table,
+    // source namespace and location; partial writes and forged headers reject.
+    if text != crate::runtime_diagnostics::located(source, line, &label, &message) { return None; }
+    Some((code, crate::runtime_diagnostics::full_located(source, line, &label, &message), message))
+}

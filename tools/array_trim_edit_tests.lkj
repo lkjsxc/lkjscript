@@ -1,5 +1,5 @@
 //! Apply array-view and proved-ASCII trim edits before either execution route.
-use super::{command, contains, diagnostic_edits, display_bytes, invoke, path, run_value, write, Config, Report};
+use super::{command, contains, diagnostic_edits, display_bytes, invoke, path, run_values, write, Config, Report, ValueRequest};
 
 struct Case { name: String, source: String, entry: String, expected: String, rule: String }
 fn case(name: &str, source: &str, entry: &str, expected: &str, rule: &str) -> Case {
@@ -9,6 +9,7 @@ fn case(name: &str, source: &str, entry: &str, expected: &str, rule: &str) -> Ca
 
 pub fn run(world: &mut World, executable: &File, directory: &mut Directory,
     config: &Config, report: &mut Report) -> Result<(), String> {
+    let mut values: Vec<ValueRequest> = Vec::new();
     let array = include_str!("../tests/diagnostics/borrowed_array_iteration.lkj");
     let trim = include_str!("../tests/diagnostics/str_trim.lkj");
     let cases = vec![
@@ -69,7 +70,7 @@ pub fn main(mut world: World) {
         let rewritten = diagnostic_edits::apply(&item.source, &rejected.errors, &path(config, &item.name))
             .map_err(|error: String| -> String { format!("{}: {error}; diagnostic {}", item.name, display_bytes(&rejected.errors)) })?;
         write(directory, &item.name, rewritten.as_bytes())?;
-        run_value(world, executable, config, report, &item.name, &item.entry, &item.expected)?;
+        values.push(ValueRequest { name: item.name.clone(), entry: item.entry.clone(), expected: item.expected.clone() });
     }
     let negatives: Vec<(String, String, String)> = vec![
         ("array-custom-protocol.lkj".to_string(),
@@ -109,6 +110,6 @@ pub fn probe() -> usize { " x ".trim().len() }
 }
 "#;
     write(directory, "trim-explicit-ascii.lkj", explicit.as_bytes())?;
-    run_value(world, executable, config, report, "trim-explicit-ascii.lkj", "probe", "1\n")?;
-    Ok(())
+    values.push(ValueRequest { name: "trim-explicit-ascii.lkj".to_string(), entry: "probe".to_string(), expected: "1\n".to_string() });
+    run_values(world, executable, config, report, &values)
 }

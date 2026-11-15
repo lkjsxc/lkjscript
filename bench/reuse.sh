@@ -74,8 +74,10 @@ if cmp -s "$bench_directory/no-store.image" "$bench_directory/checker-edit.image
     echo "checker body edit did not change emitted bytes" >&2
     exit 1
 fi
-# The two actual compiler images must also run and agree on a closed gate root.
-# Build afresh with each producer; only execution proofs share the private store.
+# The two actual compiler images must also run and agree on every closed gate
+# root. Both producers compile the same live-worktree semantic inputs here;
+# this is a producer-change proof, not reuse after editing the semantic inputs.
+# Build afresh with each producer; only execution proofs share the store.
 closed_before="$bench_directory/closed-before"
 closed_after="$bench_directory/closed-after"
 closed_store="$bench_directory/closed-store"
@@ -84,31 +86,56 @@ proof_load_before=$(load)
 proof_started_ns=$(date +%s%N)
 LKJSCRIPT_STORE_KEY= bash tools/closed-semantics.sh "$bench_directory/no-store.image" build "$closed_before"
 LKJSCRIPT_STORE_KEY= bash tools/closed-semantics.sh "$bench_directory/checker-edit.image" build "$closed_after"
-for artifact in runner cases authority; do
+for artifact in runner cases cases.authority structure-main structure-main.authority \
+    structure-source_0 structure-source_0.authority structure-source_1 structure-source_1.authority \
+    structure-source_2 structure-source_2.authority structure-source_3 structure-source_3.authority; do
     cmp "$closed_before/$artifact" "$closed_after/$artifact"
 done
-if ! LKJSCRIPT_STORE="$closed_store" LKJSCRIPT_STORE_KEY="$key" \
-    bash tools/closed-semantics.sh "$bench_directory/no-store.image" run "$closed_before" \
-    > "$bench_directory/closed-before.log" 2>&1; then
-    cat "$bench_directory/closed-before.log" >&2
-    exit 1
-fi
-if ! LKJSCRIPT_STORE="$closed_store" LKJSCRIPT_STORE_KEY="$key" \
-    bash tools/closed-semantics.sh "$bench_directory/checker-edit.image" run "$closed_after" \
-    > "$bench_directory/closed-after.log" 2>&1; then
-    cat "$bench_directory/closed-after.log" >&2
-    exit 1
-fi
-if ! grep -q '^LKJSCRIPT_CLOSED_GATE reused=0 rerun=5 ' "$bench_directory/closed-before.log" \
-    || ! grep -q '^LKJSCRIPT_CLOSED_GATE reused=5 rerun=0 ' "$bench_directory/closed-after.log"; then
+for generation in before after; do
+    if [ "$generation" = before ]; then
+        proof_compiler="$bench_directory/no-store.image"
+        proof_directory="$closed_before"
+    else
+        proof_compiler="$bench_directory/checker-edit.image"
+        proof_directory="$closed_after"
+    fi
+    # Populate sequentially so this exact reuse assertion does not assume that
+    # every nonblocking concurrent writer wins. The second pass is read-only
+    # and uses the ordinary four-worker structural schedule.
+    proof_jobs=4
+    if [ "$generation" = before ]; then proof_jobs=1; fi
+    for action in run structure; do
+        if ! LKJSCRIPT_GATE_JOBS="$proof_jobs" LKJSCRIPT_STORE="$closed_store" LKJSCRIPT_STORE_KEY="$key" \
+            bash tools/closed-semantics.sh "$proof_compiler" "$action" "$proof_directory" \
+            >> "$bench_directory/closed-$generation.log" 2>&1; then
+            cat "$bench_directory/closed-$generation.log" >&2
+            exit 1
+        fi
+    done
+done
+# Six exact images cover 28 independent + 185 core + four 134-source shards.
+proof_counts() {
+    awk -v expected_reused="$1" -v expected_rerun="$2" '
+        /^LKJSCRIPT_CLOSED_GATE / {
+            records++
+            for (i=1; i<=NF; i++) {
+                if ($i ~ /^reused=/) { value=$i; sub(/^reused=/, "", value); reused += value }
+                if ($i ~ /^rerun=/) { value=$i; sub(/^rerun=/, "", value); rerun += value }
+            }
+        }
+        END { exit !(records == 6 && reused == expected_reused && rerun == expected_rerun) }
+    ' "$3"
+}
+if ! proof_counts 0 749 "$bench_directory/closed-before.log" \
+    || ! proof_counts 749 0 "$bench_directory/closed-after.log"; then
     cat "$bench_directory/closed-before.log" "$bench_directory/closed-after.log" >&2
-    echo "checker body edit did not reuse the identical closed gate artifact" >&2
+    echo "checker body edit did not reuse the identical closed gate artifacts" >&2
     exit 1
 fi
 proof_elapsed_ns=$(($(date +%s%N)-proof_started_ns))
 proof_load_after=$(load)
 awk -v elapsed_ns="$proof_elapsed_ns" -v before="$proof_load_before" -v after="$proof_load_after" 'BEGIN {
-    printf "checker-edit-closed-proof elapsed_s=%.3f load_before=%s load_after=%s reused_before=0 reused_after=5\n", elapsed_ns / 1000000000, before, after
+    printf "checker-producer-edit-closed-proof elapsed_s=%.3f load_before=%s load_after=%s reused_before=0 reused_after=749 independent=28 structure=721\n", elapsed_ns / 1000000000, before, after
 }'
 cat "$bench_directory/closed-before.log" "$bench_directory/closed-after.log"
 awk -v baseline="$baseline_elapsed" -v cold="$cold_elapsed" 'BEGIN {

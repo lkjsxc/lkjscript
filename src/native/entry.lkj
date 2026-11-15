@@ -4,12 +4,42 @@ use crate::diagnostic::Span;
 use crate::ir::EntryGrant;
 use crate::x86::*;
 
+fn path_value(bytes: &[u8]) -> String {
+    let raw = if bytes.last() == Some(&0u8) { &bytes[..bytes.len() - 1] } else { bytes };
+    match String::from_utf8(raw.to_vec()) {
+        Ok(value) => value,
+        Err(_) => { let mut text = String::new(); for byte in raw { text.push_str(&format!("\\x{:02x}", *byte)); } text }
+    }
+}
+fn description(grant: &EntryGrant) -> String {
+    match grant {
+        EntryGrant::Directory(path) => format!("Directory {}", path_value(path)),
+        EntryGrant::ReadDirectory(path) => format!("ReadDirectory {}", path_value(path)),
+        EntryGrant::ReadDirectoryEnvironment(name) | EntryGrant::ReadDirectoryEnvironmentValue(name, _) => format!("ReadDirectory env:{}", path_value(name)),
+        EntryGrant::ForeignCommand(path) => format!("ForeignCommand {}", path_value(path)),
+        EntryGrant::NullDevice => "NullDevice /dev/null".to_string(),
+        EntryGrant::DirectoryEnvironment(name) | EntryGrant::DirectoryEnvironmentValue(name, _) => format!("Directory env:{}", path_value(name)),
+        EntryGrant::Listener(_) => format!("Listener {}", crate::entry_grants::endpoint(grant).unwrap_or("<invalid endpoint>".to_string())),
+        EntryGrant::Connector(_) => format!("Connector {}", crate::entry_grants::endpoint(grant).unwrap_or("<invalid endpoint>".to_string())),
+        EntryGrant::Readiness => "Readiness epoll".to_string(),
+        EntryGrant::Stop => "Stop SIGTERM".to_string(),
+        EntryGrant::Environment(name) => format!("Environment {}", path_value(name)),
+        EntryGrant::EnvironmentValue(_) => "Environment supplied value".to_string(),
+        EntryGrant::Stdout => "Stdout 1".to_string(), EntryGrant::Stderr => "Stderr 2".to_string(),
+        EntryGrant::Stdin => "Stdin 0".to_string(), EntryGrant::Arguments => "Arguments argv".to_string(),
+        EntryGrant::ExitStatus => "ExitStatus status".to_string(), EntryGrant::Clock => "Clock kernel".to_string(),
+        EntryGrant::Entropy => "Entropy getrandom".to_string(), EntryGrant::Process => "Process children".to_string(),
+        EntryGrant::World => "World host".to_string(),
+    }
+}
+
 pub struct Plan {
     values: Label,
     paths: Vec<Label>,
     grants: Vec<EntryGrant>,
     site: Span,
-    failure_buffer: Label,
+    identities: Vec<Label>,
+    descriptions: Vec<String>,
 }
 impl Plan {
     pub(super) fn fallible(grant: &EntryGrant) -> bool {
@@ -20,7 +50,12 @@ impl Plan {
         let values = a.label();
         let mut paths = Vec::new();
         for _ in grants { paths.push(a.label()); }
-        Self { values, paths, grants: grants.to_vec(), site, failure_buffer: a.label() }
+        let mut identities = Vec::new(); let mut descriptions = Vec::new();
+        for grant in grants {
+            identities.push(a.label());
+            descriptions.push(crate::runtime_diagnostics::escaped(&description(grant), 512, false));
+        }
+        Self { values, paths, grants: grants.to_vec(), site, identities, descriptions }
     }
     fn offset(&self, index: usize) -> i64 {
         let mut offset = 0i64;
@@ -29,6 +64,7 @@ impl Plan {
     }
     pub fn prepare(&self, a: &mut Assembler, p: Platform) {
         for (index, grant) in self.grants.iter().enumerate() {
+            super::diagnostics::operation(a, if matches!(grant, EntryGrant::DirectoryEnvironment(_) | EntryGrant::DirectoryEnvironmentValue(_, _) | EntryGrant::ReadDirectoryEnvironment(_) | EntryGrant::ReadDirectoryEnvironmentValue(_, _)) { 1001 } else { 1000 });
             match grant {
                 EntryGrant::Environment(_) => {
                     a.address(DI, self.paths[index]);
@@ -67,6 +103,14 @@ impl Plan {
                     a.immediate(A, (-2i64) as u64);
                     a.bind(done);
                 }
+                EntryGrant::DirectoryEnvironmentValue(_, value) | EntryGrant::ReadDirectoryEnvironmentValue(_, value) => {
+                    if let Some(path) = value {
+                        if !path.is_empty() {
+                            a.address(DI, self.paths[index]); a.immediate(SI, path.len() as u64 + 1);
+                            a.call(p.directory_open);
+                        } else { a.immediate(A, (-2i64) as u64); }
+                    } else { a.immediate(A, (-2i64) as u64); }
+                }
                 EntryGrant::Directory(path) | EntryGrant::ReadDirectory(path) => {
                     a.address(DI, self.paths[index]);
                     a.immediate(SI, path.len() as u64);
@@ -95,39 +139,7 @@ impl Plan {
             let ready = a.label();
             a.test(A, true);
             a.condition(9, ready);
-            if Self::fallible(grant) {
-                // Preserve the host errno and name the failed grant before the
-                // generic host trap; a bind failure is not a stdout failure.
-                let name = match grant {
-                    EntryGrant::Directory(_) => "Directory",
-                    EntryGrant::ReadDirectory(_) => "ReadDirectory",
-                    EntryGrant::ForeignCommand(_) => "ForeignCommand",
-                    EntryGrant::NullDevice => "NullDevice",
-                    EntryGrant::ReadDirectoryEnvironment(_) => "ReadDirectory (named environment)",
-                    EntryGrant::DirectoryEnvironment(_) => "Directory (named environment)",
-                    EntryGrant::Listener(_) => "Listener",
-                    EntryGrant::Connector(_) => "Connector",
-                    EntryGrant::Readiness => "Readiness",
-                    EntryGrant::Stop => "Stop",
-                    _ => "capability",
-                };
-                a.push(A);
-                a.address(R8, self.failure_buffer);
-                a.lea(R8, R8, 128);
-                super::platform::diagnostic_text(a, "\n");
-                if let Some(endpoint) = crate::entry_grants::endpoint(grant) {
-                    super::platform::diagnostic_text(a, &format!(" ({endpoint})"));
-                }
-                a.pop(A);
-                a.negate(A);
-                super::platform::diagnostic_decimal(a, 1);
-                super::platform::diagnostic_text(a, &format!("entry grant {name} failed: errno "));
-                a.mov(SI, R8);
-                a.address(D, self.failure_buffer);
-                a.lea(D, D, 128);
-                a.rr(0x29, D, SI, true);
-                super::platform::diagnostic_write(a, 2);
-            }
+            super::diagnostics::failure(a, self.identities[index], self.descriptions[index].len());
             a.immediate(LINE, self.site.line as u64);
             a.immediate(FILE, self.site.file as u64);
             a.immediate(A, 7);
@@ -149,13 +161,13 @@ impl Plan {
             bytes.extend_from_slice(&[0u8; 8]);
             if matches!(grant, EntryGrant::Stop) { bytes.extend_from_slice(&[0u8; 8]); }
         }
-        a.data_label(self.failure_buffer, offset + bytes.len());
-        if self.grants.iter().any(|grant| Self::fallible(grant)) { bytes.extend_from_slice(&[0u8; 128]); }
         for (index, grant) in self.grants.iter().enumerate() {
+            a.data_label(self.identities[index], offset + bytes.len());
+            bytes.extend_from_slice(self.descriptions[index].as_bytes());
             a.data_label(self.paths[index], offset + bytes.len());
             match grant {
                 EntryGrant::ForeignCommand(path) | EntryGrant::Directory(path) | EntryGrant::DirectoryEnvironment(path) | EntryGrant::ReadDirectory(path) | EntryGrant::ReadDirectoryEnvironment(path) | EntryGrant::Environment(path) => bytes.extend_from_slice(path),
-                EntryGrant::EnvironmentValue(Some(value)) => { bytes.extend_from_slice(value); bytes.push(0); },
+                EntryGrant::EnvironmentValue(Some(value)) | EntryGrant::DirectoryEnvironmentValue(_, Some(value)) | EntryGrant::ReadDirectoryEnvironmentValue(_, Some(value)) => { bytes.extend_from_slice(value); bytes.push(0); },
                 EntryGrant::Listener(address) | EntryGrant::Connector(address) => bytes.extend_from_slice(address),
                 _ => {}
             }

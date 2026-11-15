@@ -65,7 +65,7 @@ fn cyclic_reference_program(depth: usize) -> crate::ir::Program {
         test: false,
     };
     ir::Program {
-        types,
+        sources: Vec::new(), types,
         functions: vec![function],
         destructors: Vec::new(),
     }
@@ -141,10 +141,7 @@ fn occurrences(text: &str, needle: &str) -> usize {
     }
     count
 }
-pub fn run(world: &mut World, trace: bool) -> usize {
-    if trace {
-        world.stdout().write(b"IR return contracts\n");
-    }
+pub fn run() -> usize {
     explicit_return_paths_check_and_round_trip_on_cyclic_reference_types();
     return_path_text_rejects_encoded_numeric_repetition();
     return_contract_rejects_unsupported_projection_kinds_in_the_ir_checker();

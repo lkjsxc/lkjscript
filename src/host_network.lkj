@@ -21,6 +21,7 @@ struct Connection {
 pub struct Network {
     broker: Option<Connection>,
     sleeper: Option<File>,
+    last_operation: u64,
 }
 fn read_exact(file: &mut File, bytes: &mut [u8]) -> Result<(), i64> {
     let mut offset = 0usize;
@@ -39,8 +40,9 @@ fn word(bytes: &[u8]) -> u64 {
     result
 }
 impl Network {
+    pub fn failure_operation(&self) -> u64 { self.last_operation }
     pub fn new() -> Self {
-        Self { broker: None, sleeper: None }
+        Self { broker: None, sleeper: None, last_operation: 1999 }
     }
     pub fn finish(&mut self) {
         if let Some(mut connection) = self.broker.take() {
@@ -80,6 +82,7 @@ impl Network {
         }
     }
     fn ensure(&mut self, world: &mut World) -> Result<(), i64> {
+        self.last_operation = 1999;
         if self.broker.is_some() { return Ok(()); }
         let mut random_root = world.directory("/dev")?;
         let mut random = random_root.open("urandom")?;
@@ -110,6 +113,7 @@ impl Network {
         Ok(())
     }
     fn request(&mut self, operation: u64, arguments: &[u64], payload: &[u8]) -> Result<(i64, Vec<u8>), i64> {
+        self.last_operation = 1999;
         assert!(arguments.len() <= 6);
         let connection = self.broker.as_mut().ok_or(9i64)?;
         let control = connection.control.as_mut().ok_or(9i64)?;
@@ -120,10 +124,11 @@ impl Network {
         append_word(&mut header, payload.len() as u64, 8);
         control.write_all(&header)?;
         control.write_all(payload)?;
-        let mut response = [0u8; 16];
+        let mut response = [0u8; 24];
         read_exact(control, &mut response)?;
         let result = word(&response[..8]) as i64;
-        let length = word(&response[8..]) as usize;
+        let length = word(&response[8..16]) as usize;
+        self.last_operation = word(&response[16..24]);
         let mut body = vec![0u8; length];
         read_exact(control, &mut body)?;
         if result < 0 { return Err(-result); }

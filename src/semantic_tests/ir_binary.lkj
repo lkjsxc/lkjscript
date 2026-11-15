@@ -106,7 +106,7 @@ fn rich() -> ir::Program {
             body: if index == 0 { body.clone() } else { Vec::new() },
         });
     }
-    ir::Program { types, functions, destructors: vec![(0usize, 1usize), (128, 16384)] }
+    ir::Program { sources: vec!["root.lkj".to_string(), "control\n:雪.lkj".to_string()], types, functions, destructors: vec![(0usize, 1usize), (128, 16384)] }
 }
 fn exact_representation_and_text_oracle() {
     let original = rich();
@@ -150,7 +150,7 @@ fn malformed_data_and_canonical_encoding() {
         vec![255u8, 255, 255, 255, 255, 255, 255, 255, 255, 129, 0],
         vec![255u8, 255, 255, 255, 255, 255, 255, 255, 255, 1],
     ] {
-        let mut hostile = b"LKJIRB01"[..].to_vec(); hostile.extend_from_slice(&tail);
+        let mut hostile = b"LKJIRB02"[..].to_vec(); hostile.extend_from_slice(&tail);
         assert!(ir_binary::read(&hostile).is_none());
     }
     let function = empty_function();

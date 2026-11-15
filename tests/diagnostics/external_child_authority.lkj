@@ -17,6 +17,17 @@
 // World.process() as explicitly broader host authority.
 // A future executable test must deny reading an outside fixture and observing
 // an unrelated inherited descriptor even when the host user could access them.
+// Compiler agreement for the programs transfer contract (2026-11-15): one
+// versioned authenticated admission record binds exact ELF length/hash, target,
+// transfer ABI, selected entry/result and parameter-ordered capability slots
+// derived from checked IR. Stable kinds, not IR IDs or report text, are compared.
+// The admission key stays outside program grants; World has no transfer profile.
+// Immutable means a private memfd sealed against write/grow/shrink, retained as
+// the same descriptor through verification and exec; a path/readonly alias is not proof.
+// Transfer startup imports only those typed slots, closes undeclared descriptors,
+// and performs no CLI pathname opens, new binds or ambient environment lookup.
+// Programs owns affine transfer, deadline/parent-death and supervisor behavior;
+// this rejection remains until the single pending executable contract is implemented.
 use std::process::Command;
 pub fn probe() {
     Command::new("/usr/bin/cat").arg("outside-parent-directory").output();

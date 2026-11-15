@@ -392,6 +392,24 @@ fn record(text: &str) -> Result<Record, String> {
     })
 }
 
+/// Decode the machine-only observation used by raw-IR differential execution.
+/// The record retains complete static diagnostic identity before user bounding.
+pub fn observed_capture(mut capture: Capture) -> Result<Capture, String> {
+    if capture.timed_out || !capture.stderr.is_empty() { return Ok(capture); }
+    let text = String::from_utf8(capture.stdout.clone()).map_err(|_| -> String { "E_TEST observation is not UTF-8".to_string() })?;
+    let actual = record(trim(&text))?;
+    if actual.index != 0 || actual.engine != "interpreter" || !actual.checked
+        || actual.status as i64 != capture.status || !capture.result.is_empty() {
+        return Err("E_TEST incomplete observation status or descriptor".to_string());
+    }
+    capture.stdout = actual.stdout;
+    capture.stderr = actual.stderr;
+    if !actual.diagnostic.is_empty() {
+        capture.stderr.extend_from_slice(actual.diagnostic.as_bytes()); capture.stderr.push(b'\n');
+    }
+    Ok(capture)
+}
+
 fn diagnostic_code(text: &str) -> String {
     let bytes = text.as_bytes();
     let mut at = 0usize;
@@ -413,14 +431,14 @@ fn raw_trap_code(text: &str) -> String {
     let bytes = text.as_bytes();
     let mut at = 0usize;
     while at + 4 < bytes.len() {
-        if bytes[at] == b'R' {
+        if bytes[at] == b'R' && ((at == 0 && !text.contains(": R")) || (at >= 2 && bytes[at - 2] == b':' && bytes[at - 1] == b' ')) {
             let mut valid = true;
             for offset in 1..5 {
                 if bytes[at + offset] < b'0' || bytes[at + offset] > b'9' {
                     valid = false;
                 }
             }
-            if valid {
+            if valid && (at + 5 == bytes.len() || bytes[at + 5] == b' ') {
                 let value = &text[at..at + 5];
                 return value.to_string();
             }
@@ -527,8 +545,9 @@ fn same_source(left: &Record, right: &Record) -> bool {
         return left.diagnostic == right.diagnostic;
     }
     if trap_code(&left.diagnostic).is_empty() { return true; }
-    match (trap_line(&left.diagnostic), trap_line(&right.diagnostic)) {
-        (Some(left), Some(right)) => left == right,
+    if trap_line(&left.diagnostic).is_none() || trap_line(&right.diagnostic).is_none() { return false; }
+    match (left.diagnostic.find(": R"), right.diagnostic.find(": R")) {
+        (Some(first), Some(second)) => left.diagnostic[..first] == right.diagnostic[..second],
         _ => false,
     }
 }
@@ -730,7 +749,6 @@ pub fn run_stored(
 }
 
 
-#[test]
 fn worker_records_preserve_bytes_and_require_completion() {
     let text = "{\"index\":0,\"engine\":\"native\",\"checkStatus\":0,\"status\":7,\"stdoutHex\":\"00ff80\",\"stderrHex\":\"fe00\",\"stderr\":\"line\\u000anext\"}";
     let actual = record(text).unwrap();
@@ -745,7 +763,6 @@ fn worker_records_preserve_bytes_and_require_completion() {
     assert!(empty.kind == "output" && empty.stdout.is_empty() && empty.stderr.is_empty());
 }
 
-#[test]
 fn expectations_detect_outputs_rejections_and_trap_locations() {
     let mut actual = record("{\"index\":0,\"engine\":\"native\",\"checkStatus\":0,\"status\":0,\"stdoutHex\":\"34320a\",\"stderrHex\":\"\",\"stderr\":\"\"}").unwrap();
     let scalar = case("case.lkj", "// expect: value 42\n").unwrap().unwrap();
@@ -768,7 +785,6 @@ fn expectations_detect_outputs_rejections_and_trap_locations() {
     assert!(case("case.lkj", "// expect: check\n// expect: value 42\n").is_err());
 }
 
-#[test]
 fn pending_specs_do_not_hide_unexpected_failures() {
     let expectation = case("case.lkj", "// expect: value 42\n// pending: missing scoped tasks\n").unwrap().unwrap();
     let mut actual = record("{\"index\":0,\"engine\":\"native\",\"checkStatus\":1,\"status\":1,\"stdoutHex\":\"\",\"stderrHex\":\"\",\"stderr\":\"case.lkj:1:1: E_UNSUPPORTED task\"}").unwrap();
@@ -777,7 +793,6 @@ fn pending_specs_do_not_hide_unexpected_failures() {
     assert!(verify(&expectation, &actual).is_err());
 }
 
-#[test]
 fn comparisons_preserve_same_source_locations_and_reference_bytes() {
     let actual = record("{\"index\":0,\"engine\":\"native\",\"checkStatus\":0,\"status\":1,\"stdoutHex\":\"00\",\"stderrHex\":\"ff\",\"stderr\":\"a.lkj:12: R0003 bounds\"}").unwrap();
     let mut reference = actual.clone();
@@ -785,6 +800,9 @@ fn comparisons_preserve_same_source_locations_and_reference_bytes() {
     reference.diagnostic = "b.lkj:27: R0003 bounds".to_string();
     assert!(same(&actual, &reference));
     assert!(!same_source(&actual, &reference));
+    reference.diagnostic = "b.lkj:12: R0003 bounds".to_string();
+    assert!(!same_source(&actual, &reference));
+    assert_eq!(trap_code("R0006-in-path.lkj:12: R0003 bounds"), "R0003");
     reference.diagnostic = "a.lkj:12: R0003 different explanation".to_string();
     assert!(same_source(&actual, &reference));
     reference.diagnostic = "R0003 missing location".to_string();
@@ -803,12 +821,16 @@ fn comparisons_preserve_same_source_locations_and_reference_bytes() {
 
 
 
-#[test]
 fn same_source_custom_traps_preserve_message_code_and_file() {
     let actual = record("{\"index\":0,\"engine\":\"native\",\"checkStatus\":0,\"status\":1,\"stdoutHex\":\"\",\"stderrHex\":\"\",\"stderr\":\"file 1:12: R0016 alpha\\nR0006 is text\"}").unwrap();
     let mut reference = actual.clone();
     reference.engine = "interpreter".to_string();
     assert!(same_source(&actual, &reference));
+    let mut prefix = String::new(); for _ in 0..1200 { prefix.push('x'); }
+    let mut long_first = actual.clone(); let mut long_second = actual.clone();
+    long_first.diagnostic = format!("child.lkj:12: R0016 {prefix}A");
+    long_second.diagnostic = format!("child.lkj:12: R0016 {prefix}B");
+    assert!(!same_source(&long_first, &long_second));
     for diagnostic in vec![
         "file 1:12: R0017 alpha\nR0006 is text".to_string(),
         "file 1:12: R0016 beta\nR0006 is text".to_string(),
@@ -1070,4 +1092,14 @@ pub fn evaluate(
         checked: actual.checked, status: actual.status, stdout: actual.stdout,
         stderr: actual.stderr, diagnostic: actual.diagnostic, timed_out: false,
     })
+}
+
+/// Pure observation-decoder contracts, executed by the closed gate root.
+pub fn closed_contracts() -> usize {
+    worker_records_preserve_bytes_and_require_completion();
+    expectations_detect_outputs_rejections_and_trap_locations();
+    pending_specs_do_not_hide_unexpected_failures();
+    comparisons_preserve_same_source_locations_and_reference_bytes();
+    same_source_custom_traps_preserve_message_code_and_file();
+    5usize
 }

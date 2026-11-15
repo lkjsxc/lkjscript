@@ -1,8 +1,13 @@
 // The broker owns directory descriptors from their initial World acquisition.
 // Path effects keep the same inode and never reopen an authority by ambient path.
 use crate::x86::*;
-use super::syscall;
+
 use super::broker::{allocate, check_fd, empty, REQUEST, SCRATCH};
+
+fn syscall(a: &mut Assembler, number: u64) {
+    a.immediate(R11, number); a.store(BP, super::broker::LAST_OPERATION, R11);
+    super::syscall(a, number);
+}
 
 fn path(a: &mut Assembler, invalid: Label, name: bool) {
     // SI/D is an exact NUL-terminated byte slice. Mutation names are basenames.

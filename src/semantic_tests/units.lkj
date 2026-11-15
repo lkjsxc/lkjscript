@@ -11,134 +11,6 @@ fn instructions(ops: Vec<crate::ir::Op>, line: usize) -> Vec<crate::ir::Instruct
     result
 }
 // Internal representation, checker, generic, parser and encoder contracts.
-mod syntax_tests {
-    use crate::ast::*;
-    use crate::syntax::parse;
-    pub fn precedence_and_arena() {
-        let p = parse("fn answer() -> i64 { 1 + 2 * 3 } fn main() { assert_eq!(answer(), 7); }")
-            .unwrap();
-        assert_eq!(p.functions.len(), 2);
-        let body = p.functions[0].body.unwrap();
-        let tail = p.blocks[body].tail.unwrap();
-        match &p.exprs[tail].kind {
-            Expr::Binary { op, right, .. } => {
-                assert_eq!(op, "+");
-                match &p.exprs[*right].kind {
-                    Expr::Binary { op, .. } => assert_eq!(op, "*"),
-                    _ => panic!("multiplication missing"),
-                }
-            }
-            _ => panic!("addition missing"),
-        }
-    }
-    pub fn numeric_suffixes_preserve_operators_and_decimal_exponents() {
-        for literal in vec![
-            "6usize".to_string(),
-            "6isize".to_string(),
-            "0x1e".to_string(),
-            "0x1eu8".to_string(),
-            "1_000u64".to_string(),
-        ] {
-            let source = format!("fn f(){{{literal}}}");
-            let program = parse(&source).unwrap();
-            assert!(matches!(program.exprs[0].kind, Expr::Int(_)), "{literal}");
-        }
-        for expression in vec![
-            "6usize+2usize".to_string(),
-            "6isize-2isize".to_string(),
-            "0x1e+2".to_string(),
-            "0x1E-2".to_string(),
-        ] {
-            let source = format!("fn f(){{{expression}}}");
-            let program = parse(&source).unwrap();
-            let tail = program.blocks[program.functions[0].body.unwrap()]
-                .tail
-                .unwrap();
-            assert!(
-                matches!(program.exprs[tail].kind, Expr::Binary { .. }),
-                "{expression}"
-            );
-        }
-        for literal in vec![
-            "1e+2".to_string(),
-            "1E-2".to_string(),
-            "1.25e+2f64".to_string(),
-            "1_0e-2".to_string(),
-        ] {
-            let source = format!("fn f(){{{literal}}}");
-            let program = parse(&source).unwrap();
-            assert!(matches!(program.exprs[0].kind, Expr::Float(_)), "{literal}");
-        }
-    }
-    pub fn declarations_and_borrows() {
-        let source = "use std::collections::BTreeMap; #[derive(Clone, Copy)] struct Pair<T> { a: T, b: T } enum Maybe<T> { No, Yes(T) } trait Get { type Item; fn get(&self) -> Self::Item; } impl<T: Copy> Get for Pair<T> { type Item = T; fn get(&self) -> T { self.a } } fn view<'a>(x: &'a [u8]) -> &'a [u8] { x }";
-        let p = parse(source).unwrap();
-        assert_eq!(p.structs.len(), 1);
-        assert_eq!(p.enums.len(), 1);
-        assert_eq!(p.traits.len(), 1);
-        assert_eq!(p.impls.len(), 1);
-        assert_eq!(p.functions.len(), 3);
-    }
-    pub fn control_and_patterns() {
-        let p = parse("fn f(mut x: i64) -> i64 { let mut v: Vec<i64> = vec![1, 2]; for i in 0..3 { v.push(i); } while x > 0 { x -= 1; } match Some(x) { Some(v) if v == 0 => v, _ => 1, } }").unwrap();
-        assert_eq!(p.functions.len(), 1);
-        assert!(!p.patterns.is_empty());
-    }
-    pub fn nested_generics_and_parentheses() {
-        let p = parse("fn f(x: Vec<Vec<i64>>) -> i64 { (((1) + 2) * 3) }").unwrap();
-        assert_eq!(p.functions.len(), 1);
-    }
-    pub fn deep_grouping_is_iterative() {
-        let mut source = String::from("fn f() -> i64 { ");
-        let mut i = 0;
-        while i < 20_000 {
-            source.push('(');
-            i += 1;
-        }
-        source.push('1');
-        i = 0;
-        while i < 20_000 {
-            source.push(')');
-            i += 1;
-        }
-        source.push_str(" }");
-        let p = parse(&source).unwrap();
-        assert_eq!(p.exprs.len(), 1);
-    }
-    pub fn diagnostics_name_rejected_constructs() {
-        let bytes = parse("fn f() { let b = b\"\\xFF\\0\"; let c = b'\\x80'; }").unwrap();
-        assert!(
-            bytes
-                .exprs
-                .iter()
-                .any(|e| matches!(&e.kind, Expr::Bytes(v) if *v == vec![255, 0]))
-        );
-        assert_eq!(
-            parse("fn f() { let b = b\"é\"; }").unwrap_err().code,
-            "E_LEX"
-        );
-        parse("fn f() { let strings = [\"&&\", \"||\", \"}\", \"!\", \"if\"]; }").unwrap();
-        assert_eq!(
-            parse("fn f() { println!(\"ambient\"); }").unwrap_err().code,
-            "E_CAPABILITY"
-        );
-        assert_eq!(
-            parse("fn f() { unsafe {} }").unwrap_err().code,
-            "E_UNSUPPORTED"
-        );
-        assert_eq!(
-            parse("fn f() { mystery!(); }").unwrap_err().code,
-            "E_UNSUPPORTED_MACRO"
-        );
-        assert_eq!(parse("fn f() { /* missing }").unwrap_err().code, "E_LEX");
-    }
-    pub fn views_and_closure_syntax() {
-        parse("fn f() { let mut x = 1; let r = &&mut x; }").unwrap();
-        let p = parse("struct View<'a> { bytes: &'a [u8] } fn f(v: &mut Vec<i64>) { v.push(v.len() as i64); let cb = move |x: i64| -> i64 { x + 1 }; let y = cb(2); }").unwrap();
-        assert_eq!(p.structs.len(), 1);
-        assert_eq!(p.functions.len(), 1);
-    }
-}
 mod check_tests {
     use crate::check::*;
     use crate::ir::*;
@@ -174,7 +46,7 @@ mod check_tests {
             None
         };
         Program {
-            destructors: Vec::new(),
+            sources: Vec::new(), destructors: Vec::new(),
             types,
             functions: vec![Function {
                 file: 0,
@@ -2005,157 +1877,6 @@ mod generics_declaration_tests {
         check("enum List<T>{Nil,Cons(T,Box<List<T>>)}").unwrap();
     }
 }
-mod runtime_memory_tests {
-    use crate::runtime_memory::*;
-
-    pub fn mappings_are_disjoint_and_release_invalidates_raw_addresses() {
-        let mut memory = Memory::new();
-        let left = memory.invoke(Primitive::Map, &[4096]).unwrap();
-        let right = memory.invoke(Primitive::Map, &[4096]).unwrap();
-        assert!(right > left + 4096);
-        memory.write(left, &[1, 2, 3, 4, 5, 6]).unwrap();
-        memory
-            .invoke(Primitive::MemoryCopy, &[left + 2, left, 4])
-            .unwrap();
-        assert_eq!(
-            memory.read(left, 6).unwrap().to_vec(),
-            vec![1, 2, 1, 2, 3, 4]
-        );
-        memory
-            .invoke(Primitive::MemoryCopy, &[right, left + 2, 4])
-            .unwrap();
-        assert_eq!(memory.read(right, 4).unwrap().to_vec(), vec![1, 2, 3, 4]);
-        assert!(matches!(
-            memory.read(left + 4095, 2),
-            Err(MemoryFault::Bounds)
-        ));
-        memory.invoke(Primitive::Unmap, &[left, 4096]).unwrap();
-        assert!(matches!(memory.read(left, 1), Err(MemoryFault::Bounds)));
-        assert_eq!(memory.read(right, 4).unwrap().to_vec(), vec![1, 2, 3, 4]);
-    }
-
-    pub fn remapping_preserves_contents_and_refusal_keeps_the_old_mapping_live() {
-        let mut memory = Memory::new();
-        let original = memory.invoke(Primitive::Map, &[17]).unwrap();
-        memory.write(original, &[1, 2, 3, 4]).unwrap();
-        memory.write(original + 4095, &[173]).unwrap();
-        memory.refuse_next_mapping();
-        assert_eq!(
-            memory.invoke(Primitive::Remap, &[original, 17, 8192]),
-            Ok(0u64)
-        );
-        assert_eq!(memory.read(original, 4).unwrap().to_vec(), vec![1, 2, 3, 4]);
-        let grown = memory
-            .invoke(Primitive::Remap, &[original, 4096, 8192])
-            .unwrap();
-        assert_ne!(grown, 0);
-        assert!(matches!(memory.read(original, 1), Err(MemoryFault::Bounds)));
-        assert_eq!(memory.read(grown, 4).unwrap().to_vec(), vec![1, 2, 3, 4]);
-        assert_eq!(memory.read(grown + 4095, 2).unwrap().to_vec(), vec![173, 0]);
-        assert_eq!(memory.read(grown + 8191, 1).unwrap().to_vec(), vec![0]);
-        assert_eq!(memory.mapping_count(), 2);
-        assert_eq!(
-            memory.invoke(Primitive::Remap, &[grown + 1, 4096, 8192]),
-            Err(MemoryFault::Bounds)
-        );
-    }
-}
-mod x86_tests {
-    use crate::x86::*;
-    fn finish(a: Assembler) -> Vec<u8> {
-        match a.finish() {
-            Ok(bytes) => bytes,
-            Err(problem) => panic!("{}", problem.message),
-        }
-    }
-    pub fn immediates_preserve_flags_and_choose_the_smallest_mov_form() {
-        let mut a = Assembler::new();
-        a.immediate(A, 0);
-        a.immediate(R8, 0xffff_ffff);
-        a.immediate(C, (-1i64) as u64);
-        a.immediate(D, 0x0123_4567_89ab_cdef);
-        assert_eq!(
-            finish(a),
-            vec![
-                0xb8, 0, 0, 0, 0, 0x41, 0xb8, 0xff, 0xff, 0xff, 0xff, 0x48, 0xc7, 0xc1, 0xff, 0xff,
-                0xff, 0xff, 0x48, 0xba, 0xef, 0xcd, 0xab, 0x89, 0x67, 0x45, 0x23, 0x01
-            ]
-        );
-    }
-    pub fn relative_calls_branches_and_rip_addresses_are_patched() {
-        let mut a = Assembler::new();
-        let start = a.label();
-        let end = a.label();
-        a.bind(start);
-        a.call(end);
-        a.condition(4, start);
-        a.address(R8, end);
-        a.bind(end);
-        a.ret();
-        assert_eq!(
-            finish(a),
-            vec![
-                0xe8, 13, 0, 0, 0, 0x0f, 0x84, 0xf5, 0xff, 0xff, 0xff, 0x4c, 0x8d, 0x05, 0, 0, 0,
-                0, 0xc3
-            ]
-        );
-
-        let mut a = Assembler::new();
-        a.enable_profile();
-        let callee = a.label();
-        a.immediate(A, 0);
-        a.mov(R8, A);
-        a.lea(DI, BP, -8);
-        a.rr(0x01, A, C, true);
-        a.load(A, BP, -8);
-        a.store(DI, 0, A);
-        a.scope_kind(KIND_ARGUMENT);
-        a.mov(DI, A);
-        a.call(callee);
-        a.mov(SI, A);
-        a.scope_kind(KIND_PROLOGUE);
-        a.push(BP);
-        a.ret();
-        a.region_kind(KIND_RUNTIME);
-        a.mov(A, DI);
-        a.bind(callee);
-        a.ret();
-        assert_eq!(a.take_kinds(), vec![
-            (0, KIND_CONSTANT), (5, KIND_MOVE), (8, KIND_ADDRESS),
-            (12, KIND_ARITHMETIC), (15, KIND_FRAME), (19, KIND_MEMORY),
-            (22, KIND_ARGUMENT), (25, KIND_CALL), (30, KIND_ARGUMENT),
-            (33, KIND_PROLOGUE), (34, KIND_RETURN), (35, KIND_RUNTIME),
-        ]);
-        finish(a);
-    }
-    pub fn memory_widths_handle_low_byte_registers_and_stack_bases() {
-        let mut a = Assembler::new();
-        a.store_width(SP, 0, SI, 1);
-        a.load_width(R9, R13, 0, 1, true);
-        a.store_width(R12, -8, R10, 2);
-        a.load(A, BP, -256);
-        assert_eq!(
-            finish(a),
-            vec![
-                0x40, 0x88, 0x34, 0x24, 0x4d, 0x0f, 0xbe, 0x4d, 0, 0x66, 0x45, 0x89, 0x54, 0x24,
-                0xf8, 0x48, 0x8b, 0x85, 0, 0xff, 0xff, 0xff
-            ]
-        );
-    }
-    pub fn encoding_errors_retain_the_ir_location() {
-        let mut a = Assembler::new();
-        let far = a.label();
-        a.location(7, 42, 9);
-        a.jump(far);
-        a.data_label(far, 2147483653usize);
-        let problem = match a.finish() {
-            Ok(_) => panic!("far branch accepted"),
-            Err(problem) => problem,
-        };
-        assert_eq!((problem.file, problem.line, problem.column), (7, 42, 9));
-        assert_eq!(problem.code, "E_EMIT");
-    }
-}
 mod ir_text_tests {
     use crate::diagnostic::Diagnostic;
     use crate::ir::*;
@@ -2237,7 +1958,7 @@ mod ir_text_tests {
 
     pub fn text_can_supply_ir_the_elaborator_never_emits() {
         let mut text = write(&Program {
-            destructors: Vec::new(),
+            sources: Vec::new(), destructors: Vec::new(),
             types: primitives(),
             functions: Vec::new(),
         });
@@ -2288,7 +2009,7 @@ mod ir_text_tests {
     pub fn names_and_messages_use_json_string_escapes() {
         let name = "quote\" slash\\ newline\n and 雪";
         let p = Program {
-            destructors: Vec::new(),
+            sources: Vec::new(), destructors: Vec::new(),
             types: vec![Type {
                 name: name.to_string(),
                 kind: TypeKind::World,
@@ -2389,7 +2110,7 @@ mod ir_text_tests {
             },
         ];
         let p = Program {
-            destructors: Vec::new(),
+            sources: Vec::new(), destructors: Vec::new(),
             types: primitives(),
             functions: vec![Function {
                 file: 7,
@@ -2424,504 +2145,89 @@ mod ir_text_tests {
         assert!(crate::check::check(decoded).is_ok());
     }
 }
-pub fn run(world: &mut World, trace: bool) -> usize {
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"syntax_tests::precedence_and_arena\n");
-    }
-    syntax_tests::precedence_and_arena();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"syntax_tests::numeric_suffixes_preserve_operators_and_decimal_exponents\n");
-    }
-    syntax_tests::numeric_suffixes_preserve_operators_and_decimal_exponents();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"syntax_tests::declarations_and_borrows\n");
-    }
-    syntax_tests::declarations_and_borrows();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"syntax_tests::control_and_patterns\n");
-    }
-    syntax_tests::control_and_patterns();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"syntax_tests::nested_generics_and_parentheses\n");
-    }
-    syntax_tests::nested_generics_and_parentheses();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"syntax_tests::deep_grouping_is_iterative\n");
-    }
-    syntax_tests::deep_grouping_is_iterative();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"syntax_tests::diagnostics_name_rejected_constructs\n");
-    }
-    syntax_tests::diagnostics_name_rejected_constructs();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"syntax_tests::views_and_closure_syntax\n");
-    }
-    syntax_tests::views_and_closure_syntax();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"check_tests::accepts_scalar\n");
-    }
+pub fn run() -> usize {
     check_tests::accepts_scalar();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"check_tests::rejects_forged_scalar\n");
-    }
     check_tests::rejects_forged_scalar();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"check_tests::rejects_bad_operand_in_dead_code\n");
-    }
     check_tests::rejects_bad_operand_in_dead_code();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"check_tests::rejects_bad_later_signature_without_panicking\n");
-    }
     check_tests::rejects_bad_later_signature_without_panicking();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"check_tests::consuming_a_borrowed_owner_is_rejected\n");
-    }
     check_tests::consuming_a_borrowed_owner_is_rejected();
-    if trace {
-        let mut output = world.stderr();
-        output.write(
-            b"check_tests::immutable_reference_cannot_become_mutable_through_a_mut_binding\n",
-        );
-    }
     check_tests::immutable_reference_cannot_become_mutable_through_a_mut_binding();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"check_tests::returned_parameter_view_preserves_external_origin\n");
-    }
     check_tests::returned_parameter_view_preserves_external_origin();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"check_tests::returning_address_of_parameter_slot_is_rejected\n");
-    }
     check_tests::returning_address_of_parameter_slot_is_rejected();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"check_tests::recursive_containers_preserve_the_reference_storage_rule\n");
-    }
     check_tests::recursive_containers_preserve_the_reference_storage_rule();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"check_tests::heap_storage_rejects_views\n");
-    }
     check_tests::heap_storage_rejects_views();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"check_tests::inactive_variant_cannot_forge_a_capability\n");
-    }
     check_tests::inactive_variant_cannot_forge_a_capability();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"check_tests::unknown_variant_field_needs_tag_branch\n");
-    }
     check_tests::unknown_variant_field_needs_tag_branch();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"check_tests::missing_explicit_cleanup_is_rejected\n");
-    }
     check_tests::missing_explicit_cleanup_is_rejected();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"check_tests::by_value_recursive_types_are_rejected\n");
-    }
     check_tests::by_value_recursive_types_are_rejected();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"check_tests::bool_cannot_cast_directly_to_float\n");
-    }
     check_tests::bool_cannot_cast_directly_to_float();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"check_tests::partially_moved_aggregate_cannot_be_consumed_whole\n");
-    }
     check_tests::partially_moved_aggregate_cannot_be_consumed_whole();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"check_tests::field_assignment_cannot_resurrect_a_moved_owner\n");
-    }
     check_tests::field_assignment_cannot_resurrect_a_moved_owner();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"check_tests::indexing_requires_an_initialized_index\n");
-    }
     check_tests::indexing_requires_an_initialized_index();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"check_tests::checked_tag_branch_allows_a_variant_field\n");
-    }
     check_tests::checked_tag_branch_allows_a_variant_field();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"check_tests::shared_reborrow_of_mutable_parameter_is_usable\n");
-    }
     check_tests::shared_reborrow_of_mutable_parameter_is_usable();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"check_tests::mutable_parent_cannot_be_called_while_reborrow_is_live\n");
-    }
     check_tests::mutable_parent_cannot_be_called_while_reborrow_is_live();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"check_tests::moved_local_cannot_be_dropped_twice\n");
-    }
     check_tests::moved_local_cannot_be_dropped_twice();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"check_tests::view_field_keeps_its_owner_borrowed\n");
-    }
     check_tests::view_field_keeps_its_owner_borrowed();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"check_tests::by_value_view_can_return_its_stored_reference\n");
-    }
     check_tests::by_value_view_can_return_its_stored_reference();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"check_tests::by_value_view_cannot_return_its_owned_cache\n");
-    }
     check_tests::by_value_view_cannot_return_its_owned_cache();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"check_tests::by_value_view_cannot_return_address_of_its_reference_slot\n");
-    }
     check_tests::by_value_view_cannot_return_address_of_its_reference_slot();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"check_tests::reborrow_freezes_the_view_that_holds_its_mutable_parent\n");
-    }
     check_tests::reborrow_freezes_the_view_that_holds_its_mutable_parent();
-    if trace {
-        let mut output = world.stderr();
-        output.write(
-            b"check_tests::exclusive_view_borrow_also_blocks_direct_use_of_reference_fields\n",
-        );
-    }
     check_tests::exclusive_view_borrow_also_blocks_direct_use_of_reference_fields();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"check_tests::declared_return_source_is_verified_against_the_body\n");
-    }
     check_tests::declared_return_source_is_verified_against_the_body();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"check_tests::broad_return_contract_cannot_hide_a_second_parameter_root\n");
-    }
     check_tests::broad_return_contract_cannot_hide_a_second_parameter_root();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"check_tests::custom_drop_forbids_partial_moves\n");
-    }
     check_tests::custom_drop_forbids_partial_moves();
-    if trace {
-        let mut output = world.stderr();
-        output.write(
-            b"check_tests::payload_moves_and_field_writes_preserve_the_enclosing_enum_tag\n",
-        );
-    }
     check_tests::payload_moves_and_field_writes_preserve_the_enclosing_enum_tag();
-    if trace {
-        let mut output = world.stderr();
-        output.write(
-            b"check_tests::whole_enum_mutation_invalidates_both_saved_predicates_and_proven_tags\n",
-        );
-    }
     check_tests::whole_enum_mutation_invalidates_both_saved_predicates_and_proven_tags();
-    if trace {
-        let mut output = world.stderr();
-        output
-            .write(b"check_tests::tag_proof_cannot_follow_a_reused_index_into_another_reference\n");
-    }
     check_tests::tag_proof_cannot_follow_a_reused_index_into_another_reference();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_tests::unused_expanding_recursion\n");
-    }
     generics_tests::unused_expanding_recursion();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_tests::mutual_expansion\n");
-    }
     generics_tests::mutual_expansion();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_tests::inferred_expansion\n");
-    }
     generics_tests::inferred_expansion();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_tests::nonexpanding_recursion\n");
-    }
     generics_tests::nonexpanding_recursion();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_tests::expansion_outside_component\n");
-    }
     generics_tests::expansion_outside_component();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_tests::reset_breaks_type_cycle\n");
-    }
     generics_tests::reset_breaks_type_cycle();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_tests::generic_local_flow\n");
-    }
     generics_tests::generic_local_flow();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_tests::blanket_overlap\n");
-    }
     generics_tests::blanket_overlap();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_tests::disjoint_impls\n");
-    }
     generics_tests::disjoint_impls();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_tests::occurs_check_excludes_infinite_overlap\n");
-    }
     generics_tests::occurs_check_excludes_infinite_overlap();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_tests::required_method_and_type\n");
-    }
     generics_tests::required_method_and_type();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_bound_tests::missing_unused_bound_is_false\n");
-    }
     generics_bound_tests::missing_unused_bound_is_false();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_bound_tests::prerequisite_is_checked\n");
-    }
     generics_bound_tests::prerequisite_is_checked();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_bound_tests::user_prerequisite_cycle_is_false\n");
-    }
     generics_bound_tests::user_prerequisite_cycle_is_false();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_bound_tests::recursive_structural_traits_have_no_depth_limit\n");
-    }
     generics_bound_tests::recursive_structural_traits_have_no_depth_limit();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_bound_tests::derive_lookup_unions_matching_names\n");
-    }
     generics_bound_tests::derive_lookup_unions_matching_names();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_bound_tests::derive_lookup_preserves_qualified_names_and_application_bases\n");
-    }
     generics_bound_tests::derive_lookup_preserves_qualified_names_and_application_bases();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_bound_tests::indexed_derive_still_requires_the_fields_trait\n");
-    }
     generics_bound_tests::indexed_derive_still_requires_the_fields_trait();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_bound_tests::ord_and_clone_on_collections\n");
-    }
     generics_bound_tests::ord_and_clone_on_collections();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_signature_tests::mismatched_unused_result\n");
-    }
     generics_signature_tests::mismatched_unused_result();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_signature_tests::receiver_convention_matters\n");
-    }
     generics_signature_tests::receiver_convention_matters();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_signature_tests::associated_substitution_and_alias\n");
-    }
     generics_signature_tests::associated_substitution_and_alias();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_signature_tests::renamed_method_generics\n");
-    }
     generics_signature_tests::renamed_method_generics();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_signature_tests::stronger_method_bound_rejected\n");
-    }
     generics_signature_tests::stronger_method_bound_rejected();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_signature_tests::omitted_inherited_bound_accepted\n");
-    }
     generics_signature_tests::omitted_inherited_bound_accepted();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_signature_tests::implied_method_bound\n");
-    }
     generics_signature_tests::implied_method_bound();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_signature_tests::trait_argument_substitution\n");
-    }
     generics_signature_tests::trait_argument_substitution();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_signature_tests::missing_trait_argument_bound\n");
-    }
     generics_signature_tests::missing_trait_argument_bound();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_signature_tests::associated_bound_checked\n");
-    }
     generics_signature_tests::associated_bound_checked();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_signature_tests::alias_cycle_rejected\n");
-    }
     generics_signature_tests::alias_cycle_rejected();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_declaration_tests::duplicate_functions\n");
-    }
     generics_declaration_tests::duplicate_functions();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_declaration_tests::type_and_value_namespaces\n");
-    }
     generics_declaration_tests::type_and_value_namespaces();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_declaration_tests::duplicate_fields_and_parameters\n");
-    }
     generics_declaration_tests::duplicate_fields_and_parameters();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_declaration_tests::direct_and_mutual_constant_cycles\n");
-    }
     generics_declaration_tests::direct_and_mutual_constant_cycles();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_declaration_tests::external_module_loading_is_explicit\n");
-    }
     generics_declaration_tests::external_module_loading_is_explicit();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_declaration_tests::expanding_data_recursion\n");
-    }
     generics_declaration_tests::expanding_data_recursion();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_declaration_tests::mutual_data_expansion\n");
-    }
     generics_declaration_tests::mutual_data_expansion();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_declaration_tests::alias_data_expansion\n");
-    }
     generics_declaration_tests::alias_data_expansion();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"generics_declaration_tests::regular_data_recursion\n");
-    }
     generics_declaration_tests::regular_data_recursion();
-    if trace {
-        let mut output = world.stderr();
-        output.write(
-            b"runtime_memory_tests::mappings_are_disjoint_and_release_invalidates_raw_addresses\n",
-        );
-    }
-    runtime_memory_tests::mappings_are_disjoint_and_release_invalidates_raw_addresses();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"runtime_memory_tests::remapping_preserves_contents_and_refusal_keeps_the_old_mapping_live\n");
-    }
-    runtime_memory_tests::remapping_preserves_contents_and_refusal_keeps_the_old_mapping_live();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"x86_tests::immediates_preserve_flags_and_choose_the_smallest_mov_form\n");
-    }
-    x86_tests::immediates_preserve_flags_and_choose_the_smallest_mov_form();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"x86_tests::relative_calls_branches_and_rip_addresses_are_patched\n");
-    }
-    x86_tests::relative_calls_branches_and_rip_addresses_are_patched();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"x86_tests::memory_widths_handle_low_byte_registers_and_stack_bases\n");
-    }
-    x86_tests::memory_widths_handle_low_byte_registers_and_stack_bases();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"x86_tests::encoding_errors_retain_the_ir_location\n");
-    }
-    x86_tests::encoding_errors_retain_the_ir_location();
-    if trace {
-        let mut output = world.stderr();
-        output.write(
-            b"ir_text_tests::text_hexadecimal_payloads_preserve_bytes_and_reject_malformed_input\n",
-        );
-    }
     ir_text_tests::text_hexadecimal_payloads_preserve_bytes_and_reject_malformed_input();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"ir_text_tests::format_header_is_required_and_versioned\n");
-    }
     ir_text_tests::format_header_is_required_and_versioned();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"ir_text_tests::source_round_trip_preserves_meaning_and_locations\n");
-    }
     ir_text_tests::source_round_trip_preserves_meaning_and_locations();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"ir_text_tests::text_can_supply_ir_the_elaborator_never_emits\n");
-    }
     ir_text_tests::text_can_supply_ir_the_elaborator_never_emits();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"ir_text_tests::no_allocation_uses_declared_parameter_count\n");
-    }
     ir_text_tests::no_allocation_uses_declared_parameter_count();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"ir_text_tests::malformed_text_gets_a_diagnostic\n");
-    }
     ir_text_tests::malformed_text_gets_a_diagnostic();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"ir_text_tests::unknown_operation_spellings_are_rejected_before_ir_exists\n");
-    }
     ir_text_tests::unknown_operation_spellings_are_rejected_before_ir_exists();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"ir_text_tests::names_and_messages_use_json_string_escapes\n");
-    }
     ir_text_tests::names_and_messages_use_json_string_escapes();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"ir_text_tests::all_instruction_shapes_round_trip\n");
-    }
     ir_text_tests::all_instruction_shapes_round_trip();
-    if trace {
-        let mut output = world.stderr();
-        output.write(b"ir_text_tests::arrays_slices_views_and_destructors_round_trip\n");
-    }
     ir_text_tests::arrays_slices_views_and_destructors_round_trip();
-    97usize
+    83usize
 }

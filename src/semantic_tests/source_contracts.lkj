@@ -196,10 +196,7 @@ fn module_locations() {
         );
     }
 }
-pub fn run(world: &mut World, trace: bool) -> usize {
-    if trace {
-        world.stdout().write(b"source loading contracts\n");
-    }
+pub fn run() -> usize {
     embedded_bytes();
     call_site_diagnostics();
     confined_reads();

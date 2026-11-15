@@ -9,6 +9,21 @@ trap 'rm -rf "$profile_test"' EXIT HUP INT TERM
 "$profile_test/plain" > "$profile_test/plain.out"
 "$profile_test/sampled" > "$profile_test/sampled.out"
 cmp "$profile_test/plain.out" "$profile_test/sampled.out"
+# The explicit sampling prefix is a grant. If its directory disappears, the
+# authorized entry's one diagnostic names that prefix and the refused syscall.
+cat > "$profile_test/refusal.lkj" <<'SOURCE'
+pub fn main(mut world: World) { world.stdout().write(b"unreached\n"); }
+SOURCE
+mkdir "$profile_test/removed"
+"$compiler" build "$profile_test/refusal.lkj" --profile -o "$profile_test/removed/sampled"
+mv "$profile_test/removed/sampled" "$profile_test/refused"
+rmdir "$profile_test/removed"
+profile_refusal_status=0
+"$profile_test/refused" > "$profile_test/refused.out" 2> "$profile_test/refused.err" || profile_refusal_status=$?
+test "$profile_refusal_status" -eq 1
+test ! -s "$profile_test/refused.out"
+test "$(wc -l < "$profile_test/refused.err")" -eq 1
+grep -qxF "$profile_test/refusal.lkj:1: R0007 Profile $profile_test/removed/sampled.samples openat: ENOENT (2)" "$profile_test/refused.err"
 "$compiler" profile "$profile_test"/sampled.samples.* > "$profile_test/report"
 awk '
   /^CPU samples:/ { total=$3+0; if (total < 10) exit 1 }
@@ -80,4 +95,4 @@ if "$compiler" profile "$profile_test/invalid" > "$profile_test/out" 2> "$profil
     exit 1
 fi
 grep -q E_PROFILE "$profile_test/error"
-printf 'ok profiler (native value, sampled functions and operation kinds, unbounded recursive inclusion, escaped names, interrupted sample, invalid input)\n'
+printf 'ok profiler (native value, sampled functions and operation kinds, unbounded recursive inclusion, escaped names, refused sampling grant, interrupted sample, invalid input)\n'

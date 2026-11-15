@@ -1,6 +1,7 @@
 //! Independent execution of raw IR over an independently owned heap and explicit work
 //! stack. This model neither invokes the checker nor uses native lowering.
 mod io;
+mod diagnostics;
 mod scalar;
 use crate::ir::{self, Op, Place, Program, Projection, TypeKind};
 use std::collections::{BTreeMap, BTreeSet};
@@ -24,13 +25,14 @@ fn valid_connector(address: &[u8]) -> bool {
 }
 
 pub trait Host {
+    fn failure_operation(&self) -> u64;
     /// Consume bytes before returning. The borrowed buffer cannot be retained.
-    fn write_stdout(&mut self, bytes: &[u8]) -> Result<(), String>;
+    fn write_stdout(&mut self, bytes: &[u8]) -> Result<(), i64>;
     fn argument_count(&self) -> usize;
     fn argument(&self, index: usize) -> Option<Vec<u8>>;
     fn environment(&mut self, name: &[u8]) -> Result<Option<Vec<u8>>, i64>;
     fn read_stdin(&mut self, bytes: &mut [u8]) -> Result<usize, i64>;
-    fn write_stderr(&mut self, bytes: &[u8]) -> Result<(), String>;
+    fn write_stderr(&mut self, bytes: &[u8]) -> Result<(), i64>;
     fn open_directory(&mut self, path: &[u8]) -> Result<u64, i64>;
     fn open_foreign_command(&mut self, _path: &[u8]) -> Result<u64, i64> { Err(38) }
     fn open_null_device(&mut self) -> Result<u64, i64> { Err(38) }
@@ -113,7 +115,8 @@ impl Host for Vec<u8> {
     fn open_null_device(&mut self) -> Result<u64, i64> { Err(95) }
     fn foreign_image(&mut self, _handle: u64) -> Result<u64, i64> { Err(95) }
     fn run_foreign(&mut self, _command: u64, _root: u64, _sink: u64, _arguments: &[u8], _duration: usize) -> Result<u64, i64> { Err(95) }
-    fn write_stdout(&mut self, bytes: &[u8]) -> Result<(), String> {
+    fn failure_operation(&self) -> u64 { 1999 }
+    fn write_stdout(&mut self, bytes: &[u8]) -> Result<(), i64> {
         self.extend_from_slice(bytes);
         Ok(())
     }
@@ -127,8 +130,8 @@ impl Host for Vec<u8> {
     fn read_stdin(&mut self, _bytes: &mut [u8]) -> Result<usize, i64> {
         Err(38)
     }
-    fn write_stderr(&mut self, _bytes: &[u8]) -> Result<(), String> {
-        Err("stderr is unavailable".to_string())
+    fn write_stderr(&mut self, _bytes: &[u8]) -> Result<(), i64> {
+        Err(38)
     }
     fn open_directory(&mut self, _path: &[u8]) -> Result<u64, i64> {
         Err(38)
@@ -256,6 +259,7 @@ impl Host for Vec<u8> {
 #[derive(Clone, PartialEq, Eq)]
 pub enum InterpreterError {
     InvalidIr,
+    InvalidHost,
     Unsupported,
     UseAfterMove,
     DoubleDrop,
@@ -270,12 +274,17 @@ pub enum ErrorKind {
     Interpreter(InterpreterError),
 }
 #[derive(Clone, PartialEq, Eq)]
+pub struct HostFailure {
+    pub identity: [u8; 512], pub length: usize, pub operation: u64, pub errno: i64,
+}
+#[derive(Clone, PartialEq, Eq)]
 pub struct RunError {
     pub kind: ErrorKind,
     pub function: usize,
     pub file: usize,
     pub line: usize,
     pub message: String,
+    pub host: Option<HostFailure>,
 }
 impl RunError {
     pub fn code(&self) -> String {
@@ -283,6 +292,7 @@ impl RunError {
             ErrorKind::Trap(code) => format!("R{code:04}"),
             ErrorKind::Interpreter(kind) => match kind {
                 InterpreterError::InvalidIr => "M_INVALID_IR",
+                InterpreterError::InvalidHost => "M_INVALID_HOST",
                 InterpreterError::Unsupported => "M_UNSUPPORTED",
                 InterpreterError::UseAfterMove => "M_USE_AFTER_MOVE",
                 InterpreterError::DoubleDrop => "M_DOUBLE_DROP",
@@ -461,6 +471,7 @@ impl<H: Host> Interpreter<'_, H> {
             file: self.site.file,
             line: self.site.line,
             message: message.to_string(),
+            host: None,
         }
     }
     fn invalid(&self, message: &str) -> RunError {
@@ -473,6 +484,7 @@ impl<H: Host> Interpreter<'_, H> {
             file: self.site.file,
             line: self.site.line,
             message: message.to_string(),
+            host: None,
         }
     }
     fn number(&self, result: Result<u64, scalar::NumberError>) -> Result<u64, RunError> {
@@ -1950,8 +1962,9 @@ impl<H: Host> Interpreter<'_, H> {
                     return Err(self.invalid("stdout write requires bytes"));
                 }
                 let bytes = self.bytes(&data)?;
-                if let Err(message) = self.host.write_stdout(&bytes) {
-                    return Err(self.trap(7, &message));
+                let failure = HostFailure::new("Stdout 1");
+                if let Err(errno) = self.host.write_stdout(&bytes) {
+                    return Err(self.host_trap(failure, errno, self.host.failure_operation()));
                 }
                 Value::Unit
             }
@@ -2496,7 +2509,11 @@ fn run_inner<'a, H: Host>(
                 ir::EntryGrant::ForeignCommand(path) => matches!(kind, TypeKind::ForeignCommand) && valid_foreign_path(path),
                 ir::EntryGrant::NullDevice => matches!(kind, TypeKind::NullDevice),
                 ir::EntryGrant::ReadDirectoryEnvironment(name) => matches!(kind, TypeKind::ReadDirectory) && valid_environment(name),
+                ir::EntryGrant::ReadDirectoryEnvironmentValue(name, value) => matches!(kind, TypeKind::ReadDirectory) && valid_environment(name)
+                    && value.as_ref().map_or(true, |bytes| !bytes.contains(&0u8)),
                 ir::EntryGrant::DirectoryEnvironment(name) => matches!(kind, TypeKind::Directory) && valid_environment(name),
+                ir::EntryGrant::DirectoryEnvironmentValue(name, value) => matches!(kind, TypeKind::Directory) && valid_environment(name)
+                    && value.as_ref().map_or(true, |bytes| !bytes.contains(&0u8)),
                 ir::EntryGrant::Listener(_) => matches!(kind, TypeKind::Listener),
                 ir::EntryGrant::Connector(_) => matches!(kind, TypeKind::Connector),
                 ir::EntryGrant::Readiness => matches!(kind, TypeKind::Readiness),
@@ -2506,7 +2523,12 @@ fn run_inner<'a, H: Host>(
             if !valid { return Err(interpreter.invalid("entry grant does not match its owned capability parameter")); }
         }
         interpreter.site.line = function.body.first().map_or(1, |instruction| instruction.line);
+        interpreter.site.file = function.body.first().map_or(function.file, |instruction| instruction.file.unwrap_or(function.file));
         for index in 0..function.params {
+            let failure = diagnostics::grant_failure(&grants[index]);
+            let mut observed_host = matches!(grants[index], ir::EntryGrant::Directory(_) | ir::EntryGrant::ReadDirectory(_)
+                | ir::EntryGrant::ForeignCommand(_) | ir::EntryGrant::NullDevice | ir::EntryGrant::Listener(_)
+                | ir::EntryGrant::Readiness | ir::EntryGrant::Stop);
             let value: Result<Value, i64> = match &grants[index] {
                 ir::EntryGrant::World => Ok(Value::World),
                 ir::EntryGrant::Arguments => Ok(Value::Arguments),
@@ -2536,6 +2558,7 @@ fn run_inner<'a, H: Host>(
                 ir::EntryGrant::DirectoryEnvironment(name) => match interpreter.host.environment(&name[..name.len() - 1]) {
                     Ok(Some(mut path)) => {
                         if path.is_empty() { Err(2) } else {
+                            observed_host = true;
                             path.push(0u8);
                             match interpreter.host.open_directory(&path) {
                                 Ok(handle) if handle != 0 => Ok(Value::Directory(handle)),
@@ -2557,6 +2580,16 @@ fn run_inner<'a, H: Host>(
                     Ok(_) => Err(0),
                     Err(errno) => Err(errno),
                 },
+                ir::EntryGrant::DirectoryEnvironmentValue(_, value) => match value {
+                    Some(path) if !path.is_empty() => {
+                        let mut path = path.clone(); path.push(0u8); observed_host = true;
+                        match interpreter.host.open_directory(&path) {
+                            Ok(handle) if handle != 0 => Ok(Value::Directory(handle)),
+                            Ok(_) => Err(0), Err(errno) => Err(errno),
+                        }
+                    }
+                    _ => Err(2),
+                },
                 ir::EntryGrant::Directory(path) => match interpreter.host.open_directory(path) {
                     Ok(handle) if handle != 0 => Ok(Value::Directory(handle)),
                     Ok(_) => Err(0),
@@ -2565,6 +2598,7 @@ fn run_inner<'a, H: Host>(
                 ir::EntryGrant::ReadDirectoryEnvironment(name) => match interpreter.host.environment(&name[..name.len() - 1]) {
                     Ok(Some(mut path)) => {
                         if path.is_empty() { Err(2) } else {
+                            observed_host = true;
                             path.push(0u8);
                             match interpreter.host.open_directory(&path) {
                                 Ok(handle) if handle != 0 => Ok(Value::ReadDirectory(handle)),
@@ -2575,6 +2609,16 @@ fn run_inner<'a, H: Host>(
                     }
                     Ok(None) => Err(2),
                     Err(errno) => Err(errno),
+                },
+                ir::EntryGrant::ReadDirectoryEnvironmentValue(_, value) => match value {
+                    Some(path) if !path.is_empty() => {
+                        let mut path = path.clone(); path.push(0u8); observed_host = true;
+                        match interpreter.host.open_directory(&path) {
+                            Ok(handle) if handle != 0 => Ok(Value::ReadDirectory(handle)),
+                            Ok(_) => Err(0), Err(errno) => Err(errno),
+                        }
+                    }
+                    _ => Err(2),
                 },
                 ir::EntryGrant::ReadDirectory(path) => match interpreter.host.open_directory(path) {
                     Ok(handle) if handle != 0 => Ok(Value::ReadDirectory(handle)),
@@ -2593,6 +2637,9 @@ fn run_inner<'a, H: Host>(
             match value {
                 Ok(value) => values.push((function.locals[index].ty, value)),
                 Err(errno) => {
+                    let operation = if observed_host { interpreter.host.failure_operation() }
+                        else if matches!(grants[index], ir::EntryGrant::DirectoryEnvironment(_) | ir::EntryGrant::DirectoryEnvironmentValue(_, _)
+                            | ir::EntryGrant::ReadDirectoryEnvironment(_) | ir::EntryGrant::ReadDirectoryEnvironmentValue(_, _) | ir::EntryGrant::Environment(_)) { 1001 } else { 1000 };
                     for (_, previous) in &values {
                         match previous {
                             Value::Directory(handle) | Value::ReadDirectory(handle) | Value::ForeignCommand(handle) | Value::NullDevice(handle) | Value::Listener(handle) => interpreter.host.close_handle(*handle),
@@ -2601,15 +2648,8 @@ fn run_inner<'a, H: Host>(
                             _ => {}
                         }
                     }
-                    let endpoint = match &grants[index] {
-                        ir::EntryGrant::Listener(address) | ir::EntryGrant::Connector(address)
-                            if address.len() == 16 && address[0] == 2 && address[1] == 0 => {
-                            let port = ((address[2] as usize) << 8usize) | address[3] as usize;
-                            format!(" ({}.{}.{}.{}:{port})", address[4], address[5], address[6], address[7])
-                        }
-                        _ => String::new(),
-                    };
-                    return Err(interpreter.trap(7, &format!("entry grant {} failed: errno {errno}{endpoint}", program.types[function.locals[index].ty].name)));
+                    if errno <= 0 { return Err(interpreter.error(InterpreterError::InvalidHost, "host entry acquisition returned an invalid success or errno")); }
+                    return Err(interpreter.host_trap(failure, errno, operation));
                 }
             }
         }
@@ -2658,7 +2698,7 @@ fn reference_probe_checked<T>(value: Result<T, RunError>) -> T {
 
 pub(crate) fn assert_reference_reuse() {
     let program = Program {
-        types: ir::primitives(),
+        sources: Vec::new(), types: ir::primitives(),
         functions: Vec::new(),
         destructors: Vec::new(),
     };

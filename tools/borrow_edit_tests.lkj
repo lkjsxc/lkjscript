@@ -1,5 +1,5 @@
 //! Exercise actual CLI edits, then admit and execute the rewritten source again.
-use super::{command, contains, diagnostic_edits, display_bytes, invoke, path, run_value, write, Config, Report};
+use super::{command, contains, diagnostic_edits, display_bytes, invoke, path, run_values, write, Config, Report, ValueRequest};
 
 struct Case {
     name: String,
@@ -20,6 +20,7 @@ pub fn run(
     config: &Config,
     report: &mut Report,
 ) -> Result<(), String> {
+    let mut values: Vec<ValueRequest> = Vec::new();
     let cases = vec![
         case("mutable-vec-edit.lkj", include_str!("../tests/diagnostics/mutable_vec_iteration.lkj"), "probe", "2\n", "mutable Vec iteration requires IntoIterator"),
         case("mutable-receiver-edit.lkj", include_str!("../tests/diagnostics/mutable_receiver_argument.lkj"), "probe", "", "mutable method receiver is borrowed before its arguments"),
@@ -126,7 +127,7 @@ pub fn main(mut world: World) {
         let rewritten = diagnostic_edits::apply(&item.source, &checked.errors, &path(config, &item.name))
             .map_err(|error: String| -> String { format!("{}: {error}; diagnostic {}", item.name, display_bytes(&checked.errors)) })?;
         write(directory, &item.name, rewritten.as_bytes())?;
-        run_value(world, executable, config, report, &item.name, &item.entry, &item.expected)?;
+        values.push(ValueRequest { name: item.name.clone(), entry: item.entry.clone(), expected: item.expected.clone() });
     }
     let unchanged: Vec<(String, String)> = vec![
         ("match-returned-view.lkj".to_string(), r#"fn parsed<'a>(bytes: &'a [u8]) -> Option<&'a [u8]> { Some(bytes) }
@@ -221,5 +222,5 @@ pub fn probe() { let mut state = State { bytes: Vec::new() }; state.update(); }
             format!("unsafe or context-dependent borrow rewrite for {name}: {}", display_bytes(&rejected.errors)),
         );
     }
-    Ok(())
+    run_values(world, executable, config, report, &values)
 }

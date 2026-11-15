@@ -57,7 +57,7 @@ fn record_program() -> ir::Program {
     body.push(instruction(ir::Op::Drop { place: ir::Place::local(9) }));
     body.push(instruction(ir::Op::Return { src: 10 }));
     ir::Program {
-        types, destructors: Vec::new(), functions: vec![callee, ir::Function {
+        sources: Vec::new(), types, destructors: Vec::new(), functions: vec![callee, ir::Function {
             file: 0, name: "probe".to_string(), params: 0, result: ir::I64,
             return_source: None, test: false, locals, body,
         }],
@@ -181,7 +181,7 @@ fn fresh_definitions_do_not_cross_control_or_intervening_writes(world: &mut Worl
     assert_eq!(record_moves(selected.native().program()), 2usize);
     // A complete destination that reads its old contents is not a fresh temp.
     let selected = raw(world, ir::Program {
-        types: ir::primitives(), destructors: Vec::new(), functions: vec![
+        sources: Vec::new(), types: ir::primitives(), destructors: Vec::new(), functions: vec![
             ir::Function {
                 file: 1, name: "bump".to_string(), params: 1, result: ir::I64, return_source: None, test: false,
                 locals: vec![local("value", ir::I64, true), local("one", ir::I64, false),
@@ -236,7 +236,7 @@ fn projection_indices_follow_the_explicit_map(world: &mut World, runtime: &runti
     let reference = types.len();
     types.push(ir::Type { name: "View".to_string(), kind: ir::TypeKind::Ref { inner: array, mutable: false } });
     let original = ir::Program {
-        types, destructors: Vec::new(), functions: vec![
+        sources: Vec::new(), types, destructors: Vec::new(), functions: vec![
             ir::Function {
                 file: 1, name: "get".to_string(), params: 2, result: ir::I64, return_source: None, test: false,
                 locals: vec![local("values", reference, false), local("index", ir::U64, false), local("value", ir::I64, false)],

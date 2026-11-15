@@ -153,8 +153,14 @@ fn command(config: &Config, verb: &str, name: &str) -> Vec<Vec<u8>> {
         verb.as_bytes().to_vec(),
         path(config, name).as_bytes().to_vec(),
     ];
-    for option in &config.options {
-        arguments.push(option.clone());
+    let mut index = 0usize;
+    while index < config.options.len() {
+        let name = String::from_utf8(config.options[index].clone()).unwrap();
+        if verb == "batch" || (name != "--store" && name != "--store-key") {
+            arguments.push(config.options[index].clone());
+            arguments.push(config.options[index + 1usize].clone());
+        }
+        index += 2usize;
     }
     arguments
 }
@@ -204,29 +210,78 @@ fn compile_ir(
     Ok(())
 }
 
-fn run_value(
-    world: &mut World,
-    executable: &File,
-    config: &Config,
-    report: &mut Report,
-    name: &str,
-    entry: &str,
-    expected: &str,
-) -> Result<(), String> {
-    for engine in pair("native", "interpreter") {
-        let mut arguments = command(config, "run", name);
-        option(&mut arguments, "--entry", entry);
-        option(&mut arguments, "--engine", &engine);
-        let result = invoke(world, executable, &arguments, b"")?;
-        report.outcome(
-            &format!("run {name} {entry} {engine}"),
-            &result,
-            0,
-            expected.as_bytes(),
-            b"",
-        );
+struct ValueRequest {
+    name: String,
+    entry: String,
+    expected: String,
+}
+fn bytes_hex(bytes: &[u8]) -> String {
+    let digits = b"0123456789abcdef";
+    let mut result = String::new();
+    for byte in bytes {
+        result.push(digits[(*byte >> 4u8) as usize] as char);
+        result.push(digits[(*byte & 15u8) as usize] as char);
     }
+    result
+}
+fn run_values(
+    world: &mut World, executable: &File, config: &Config, report: &mut Report,
+    cases: &[ValueRequest],
+) -> Result<(), String> {
+    let mut requests = String::new();
+    for case in cases {
+        requests.push_str(&format!("run\t{}\t{}\n", case.entry, path(config, &case.name)));
+    }
+    let mut directory = io_result(world.directory(&config.directory), "value batch directory")?;
+    write(&mut directory, "values.batch", requests.as_bytes())?;
+    let mut arguments = command(config, "batch", "values.batch");
+    option(&mut arguments, "--engines", "native,interpreter");
+    arguments.push(b"--stats"[..].to_vec());
+    let actual = invoke(world, executable, &arguments, b"")?;
+    report.require(actual.status == 0 && actual.result.is_empty(),
+        format!("value batch failed: {} {}", actual.status, display_bytes(&actual.errors)));
+    let output = text(actual.output, "value batch output")?;
+    let mut records = 0usize;
+    for line in output.as_str().lines() {
+        if line.is_empty() { continue; }
+        let fields = std::json::parse(line.as_bytes())
+            .map_err(|_| -> String { "malformed value batch JSON".to_string() })?;
+        let index = records / 2usize;
+        if index >= cases.len() { return Err("extra value batch record".to_string()); }
+        let engine = if records % 2usize == 0usize { "native" } else { "interpreter" };
+        let expected = bytes_hex(cases[index].expected.as_bytes());
+        report.require(fields.get("index").and_then(|v: &std::json::Value| v.as_usize()) == Some(index)
+            && fields.get("engine").and_then(|v: &std::json::Value| v.as_str()) == Some(engine)
+            && fields.get("checkStatus").and_then(|v: &std::json::Value| v.as_usize()) == Some(0usize)
+            && fields.get("status").and_then(|v: &std::json::Value| v.as_usize()) == Some(0usize)
+            && fields.get("stdoutHex").and_then(|v: &std::json::Value| v.as_str()) == Some(expected.as_str())
+            && fields.get("stderrHex").and_then(|v: &std::json::Value| v.as_str()) == Some("")
+            && fields.get("stderr").and_then(|v: &std::json::Value| v.as_str()) == Some(""),
+            format!("run {} {} {engine}: {line}", cases[index].name, cases[index].entry));
+        records += 1usize;
+    }
+    report.require(records == cases.len() * 2usize, "missing value batch records".to_string());
+    let details = text(actual.errors, "value batch diagnostics")?;
+    let mut statistics = 0usize;
+    for line in details.as_str().lines() {
+        if line.starts_with("LKJSCRIPT_STATS ") {
+            world.stdout().write(format!("{line}\n").as_bytes());
+            statistics += 1usize;
+        } else if !line.is_empty() {
+            report.failures.push(format!("unexpected value batch diagnostic: {line}"));
+        }
+    }
+    report.require(statistics == 1usize, "missing value batch statistics".to_string());
     Ok(())
+}
+fn run_value(
+    world: &mut World, executable: &File, config: &Config, report: &mut Report,
+    name: &str, entry: &str, expected: &str,
+) -> Result<(), String> {
+    let cases = vec![ValueRequest {
+        name: name.to_string(), entry: entry.to_string(), expected: expected.to_string(),
+    }];
+    run_values(world, executable, config, report, &cases)
 }
 
 fn pair(first: &str, second: &str) -> Vec<String> {
@@ -617,17 +672,13 @@ fn exercise(
         "probe",
         "42\n",
     )?;
+    let mut values = Vec::new();
     for case in &cases {
-        run_value(
-            world,
-            executable,
-            config,
-            report,
-            "scalars.lkjir",
-            &case.name,
-            &case.expected,
-        )?;
+        values.push(ValueRequest {
+            name: "scalars.lkjir".to_string(), entry: case.name.clone(), expected: case.expected.clone(),
+        });
     }
+    run_values(world, executable, config, report, &values)?;
     let original = read(directory, "scalars.lkjir")?;
     let arguments = command(config, "ir", "scalars.lkjir");
     let result = invoke(world, executable, &arguments, b"")?;
@@ -956,7 +1007,7 @@ fn open_executable(world: &mut World, path: &str) -> Result<File, String> {
 fn run(world: &mut World, report: &mut Report) -> Result<(), String> {
     let arguments = world.args();
     if arguments.len() < 2 {
-        return Err("usage: toolchain-test COMPILER EMPTY-DIRECTORY [--library-dir DIR] [--runtime-source PATH]".to_string());
+        return Err("usage: toolchain-test COMPILER EMPTY-DIRECTORY [--library-dir DIR] [--runtime-source PATH] [--store DIR --store-key PATH]".to_string());
     }
     let compiler = text(arguments[0].clone(), "compiler path")?;
     let directory_path = text(arguments[1].clone(), "work directory")?;
@@ -964,7 +1015,7 @@ fn run(world: &mut World, report: &mut Report) -> Result<(), String> {
     let mut index = 2usize;
     while index < arguments.len() {
         let name = text(arguments[index].clone(), "option")?;
-        if (name != "--library-dir" && name != "--runtime-source") || index + 1 == arguments.len() {
+        if (name != "--library-dir" && name != "--runtime-source" && name != "--store" && name != "--store-key") || index + 1 == arguments.len() {
             return Err(format!("unsupported or incomplete harness option {name}"));
         }
         options.push(arguments[index].clone());

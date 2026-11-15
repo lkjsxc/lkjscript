@@ -11,6 +11,7 @@ struct Options {
     command: String,
     path: String,
     entry: Option<String>,
+    artifacts: Vec<String>,
     program: Option<crate::program_directory::Plan>,
     grants: Vec<String>,
     output: Option<String>,
@@ -24,6 +25,7 @@ struct Options {
     witness: Option<String>,
     tool_arguments: Vec<String>,
     unchecked: bool,
+    observe: bool,
     source_directory: Option<String>,
     library_directory: Option<String>,
     runtime_source: Option<String>,
@@ -35,7 +37,11 @@ struct Options {
 }
 
 fn usage() -> &'static str {
-    "lkjscript check|build|run|test|ir|authority <source.lkj|program.lkjir|directory> [options]\n\n  check  Check all source or input IR\n  build  Write a static Linux x86-64 executable\n  run    Execute main (or probe); bytes after -- are program arguments\n  test   Run #[test] functions through native and interpreter routes\n  ir     Write checked lkjscript IR\n  authority  Report entry grants and reachable checked-IR effects\n\n  --entry NAME                 Select an entry\n  --grant NAME[=VALUE]          Grant an owned entry capability (repeatable)\n  --engine native|interpreter  Select the execution route\n  -o PATH                     Write an artifact or IR\n  --stats                     Report phase times, counts and peak RSS\n  --profile                   Sample CPU to OUTPUT.samples.PID in built programs\n  --inline-limit N            Recheck inlining of bodies with at most N IR operations\n  --no-opt                    Keep original checked IR for native emission\n  profile SAMPLES             Report top self and inclusive functions\n  --jobs N                    Native test workers (1..8)\n  --witness RUSTC             Compare marked cases with optional rustc\n  --source-dir DIR            Grant a root for source reads\n  --library-dir DIR           Use explicit library sources\n  --no-library                Compile without the source library\n  --runtime-source PATH       Use an explicit source runtime\n  --store DIR                 Reuse authenticated work beneath this Directory\n  --store-key PATH            Grant a private 32-byte key outside source roots\n  --store-bytes N             Bound disposable bytes (default 268435456)\n  --no-store                  Disable stored reuse\n  --unchecked-ir              Interpret raw IR for checker testing\n  runtime-ir                  Write the checked source runtime as IR\n  check-library               Check every source library body\n\nScalar runs print the value; f64 prints exact bits as f64:0x0123456789abcdef.\n"
+    "lkjscript check|build|build-entries|run|test|ir|authority <source.lkj|program.lkjir|directory> [options]\n\n  check  Check all source or input IR\n  build  Write a static Linux x86-64 executable\n  build-entries  Write multiple entry images and matched authority reports\n  run    Execute main (or probe); bytes after -- are program arguments\n  test   Run #[test] functions through native and interpreter routes\n  ir     Write checked lkjscript IR\n  authority  Report entry grants and reachable checked-IR effects\n  delta  Print frequent accepted forms that differ from Rust\n\n  --entry NAME                 Select an entry\n  --artifact NAME=ENTRY       Select an image for build-entries; -o names its directory\n  --grant NAME[=VALUE]          Grant an owned entry capability (repeatable)\n  --engine native|interpreter  Select the execution route\n  -o PATH                     Write an artifact or IR\n  --stats                     Report phase times, counts and peak RSS\n  --profile                   Sample CPU to OUTPUT.samples.PID in built programs\n  --inline-limit N            Recheck inlining of bodies with at most N IR operations\n  --no-opt                    Keep original checked IR for native emission\n  profile SAMPLES             Report top self and inclusive functions\n  --jobs N                    Native test workers (1..8)\n  --witness RUSTC             Compare marked cases with optional rustc\n  --source-dir DIR            Grant a root for source reads\n  --library-dir DIR           Use explicit library sources\n  --no-library                Compile without the source library\n  --runtime-source PATH       Use an explicit source runtime\n  --store DIR                 Reuse authenticated work beneath this Directory\n  --store-key PATH            Grant a private 32-byte key outside source roots\n  --store-bytes N             Bound disposable bytes (default 268435456)\n  --no-store                  Disable stored reuse\n  --unchecked-ir              Interpret raw IR for checker testing\n  runtime-ir                  Write the checked source runtime as IR\n  check-library               Check every source library body\n\nScalar runs print the value; f64 prints exact bits as f64:0x0123456789abcdef.\n"
+}
+
+fn delta() -> &'static str {
+    "lkjscript: .lkj source, .lkjir checked IR; Rust-shaped syntax with its own library and authority.\n\nFrequent accepted forms, ordered by the retained diagnostic cases:\n1. Inference: annotate Option<T>, BTreeSet<T>, closure inputs/results and Vec elements; for empty ForeignCommand arguments, first bind a typed Vec<Vec<u8>> local, then borrow it. Use a typed empty array and explicit slices for unequal byte-array branches.\n2. Iteration and collections: borrow arrays as &values[..]; use vec![...] for owned iteration and an index loop with a fresh borrow for &mut Vec<T>. Array methods use values[..] or &mut values[..].\n3. Borrows: end a view in a lexical block before replacing or returning its owner; read receiver fields before a mutable call; use &mut *value for a repeated generic reborrow.\n4. Text: call String methods through value.as_str(); compare Vec<u8> with byte strings through value.as_slice(). Use split(...).fold(...) and std::str::trim_ascii(value) for ASCII whitespace only.\n5. Source forms: keep literal const declarations at module scope, escape byte strings instead of br literals, and keep shared test helpers unconditional (cfg(test) is excluded). Implement a selected trait default explicitly in the impl.\n6. Views: keep views in locals, parameters, results or view aggregates; use owned Strings/indices instead of views in owned heap containers.\n7. Effects: name affine entry capabilities and grant each one; a path cannot authorize a foreign child. A sole World entry declares full host authority.\n8. Failures: match Result errors explicitly when errno and the caller site matter; generic unwrap has no error-formatting authority. Use char::from_u32 and handle invalid scalars.\n\ncheck prints the accepted rewrite at its rejection. LKJSCRIPT_EDITS uses byte ranges in that exact input; apply one nonoverlapping set, then check again.\n"
 }
 
 fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
@@ -68,6 +74,7 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
         command,
         path: String::new(),
         entry: None,
+        artifacts: Vec::new(),
         program: None,
         grants: Vec::new(),
         output: None,
@@ -80,7 +87,7 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
         jobs: 1,
         witness: None,
         tool_arguments: Vec::new(),
-        unchecked: false,
+        unchecked: false, observe: false,
         source_directory: None,
         library_directory: None,
         runtime_source: None,
@@ -103,9 +110,10 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
             "--roundtrip" => out.roundtrip = true,
             "--no-opt" => out.inline_limit = Some(0),
             "--unchecked-ir" => out.unchecked = true,
+            "--observe" => out.observe = true,
             "--no-library" => out.no_library = true,
             "--no-store" => { out.store_directory = None; out.store_key = None; },
-            "--entry" | "-o" | "--engine" | "--engines" | "--source-dir" | "--library-dir"
+            "--entry" | "--artifact" | "-o" | "--engine" | "--engines" | "--source-dir" | "--library-dir"
             | "--runtime-source" | "--jobs" | "--witness" | "--grant" | "--store" | "--store-key" | "--store-bytes" | "--inline-limit" => {
                 at += 1;
                 if at == values.len() {
@@ -114,6 +122,7 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
                 let value = values[at].clone();
                 match option.as_str() {
                     "--entry" => out.entry = Some(value),
+                    "--artifact" => out.artifacts.push(value),
                     "--grant" => out.grants.push(value),
                     "-o" => out.output = Some(value),
                     "--engine" => {
@@ -153,13 +162,14 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
         }
         at += 1;
     }
-    if out.command == "--help" || out.command == "-h" {
+    if out.command == "--help" || out.command == "-h" || out.command == "delta" {
         return Ok(out);
     }
     if out.command != "runtime-ir"
         && out.command != "check-library"
         && out.command != "check"
         && out.command != "build"
+        && out.command != "build-entries"
         && out.command != "run"
         && out.command != "test"
         && out.command != "ir"
@@ -167,11 +177,16 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
         && out.command != "profile"
         && out.command != "authority"
     {
-        return Err("E_USAGE expected check|build|run|test|ir|authority".to_string());
+        return Err("E_USAGE expected check|build|build-entries|run|test|ir|authority".to_string());
     }
     if out.command == "test" && out.path.is_empty() { out.path = "tests/conformance".to_string(); }
     if out.witness.is_some() && out.command != "test" { return Err("E_USAGE --witness requires test".to_string()); }
-    if !out.grants.is_empty() && out.command != "build" && out.command != "run" { return Err("E_USAGE --grant requires build or run".to_string()); }
+    if !out.grants.is_empty() && out.command != "build" && out.command != "build-entries" && out.command != "run" { return Err("E_USAGE --grant requires build, build-entries or run".to_string()); }
+    if out.command == "build-entries" {
+        if out.artifacts.is_empty() || out.output.is_none() || out.entry.is_some() {
+            return Err("E_USAGE build-entries requires -o DIRECTORY and --artifact NAME=ENTRY; do not use --entry".to_string());
+        }
+    } else if !out.artifacts.is_empty() { return Err("E_USAGE --artifact requires build-entries".to_string()); }
     if out.profile && out.command != "build" { return Err("E_USAGE --profile requires build".to_string()); }
     if out.command != "runtime-ir" && out.command != "check-library" && out.path.is_empty() {
         return Err("E_USAGE a source or IR path is required".to_string());
@@ -192,6 +207,7 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
     if out.engines.is_empty() {
         return Err("E_USAGE at least one engine is required".to_string());
     }
+    if out.observe && !out.unchecked { return Err("E_USAGE --observe requires unchecked interpreter observation".to_string()); }
     if out.unchecked
         && (out.engine != "interpreter"
             || !out.path.ends_with(".lkjir")
@@ -454,6 +470,15 @@ impl Stats {
     }
 }
 
+fn diagnostic_source_path(path: &str, options: &Options) -> String {
+    if path.starts_with("$std/") {
+        let directory = options.library_directory.as_ref().map_or("library", |value| value.as_str());
+        format!("{directory}/{}", &path[5..])
+    } else if path.starts_with('/') { path.to_string() }
+    else if let Some(directory) = &options.source_directory { format!("{directory}/{path}") }
+    else { path.to_string() }
+}
+
 fn compile(
     world: &mut World,
     options: &Options,
@@ -464,13 +489,13 @@ fn compile(
     memo.source_inputs.clear();
     memo.valid_inputs = true;
     if options.path.ends_with(".lkjir") {
-        let bytes = read_path(world, &options.path)?;
+        let bytes = memo.read_path(world, &options.path)?;
         if memo.store.is_some() {
             let (parent, name) = location(&options.path);
             memo.inputs.push(store::input(&parent, &name, &Some(bytes.clone())));
         }
         let input = text(bytes, &options.path)?;
-        let meaning = ir_text::read(&input).map_err(|problem| report(&options.path, problem))?;
+        let meaning = ir_text::read_located(&input, &options.path).map_err(|problem| report(&options.path, problem))?;
         stats.mark("parse_ir")?;
         let checked = check_reusing(meaning, memo, options.roundtrip, stats)
             .map_err(|problems: Vec<ast::Diagnostic>| ir_failure(&options.path, problems))?;
@@ -526,6 +551,15 @@ fn compile(
         }
         result
     });
+    // Discovery uses capability-relative names; diagnostic identities name the
+    // same source files as the operating agent opens. Bind both fingerprint
+    // sides before resolution so resumed IR carries this exact identity too.
+    for index in 0..loaded.program.files.len() {
+        loaded.program.files[index].path = diagnostic_source_path(&loaded.program.files[index].path, options);
+    }
+    for index in 0..memo.source_inputs.len() {
+        memo.source_inputs[index].0 = diagnostic_source_path(&memo.source_inputs[index].0, options);
+    }
     stats.mark("load_parse")?;
     if !loaded.diagnostics.is_empty() {
         return Err(analysis_failure(&options.path, &mut loaded, Vec::new(), ""));
@@ -646,10 +680,11 @@ pub(crate) fn load_runtime(
         None => embedded::runtime()
             .ok_or("E_RUNTIME this seed needs --runtime-source library/runtime.lkj")?,
     };
-    prepare_runtime(code)
+    let path = runtime_source.as_ref().map_or("library/runtime.lkj", |path| path.as_str());
+    prepare_runtime(code, path)
 }
-fn prepare_runtime(code: String) -> Result<runtime::Runtime, String> {
-    let parsed = source::load("$runtime/runtime.lkj", None, &mut |path: &str| {
+fn prepare_runtime(code: String, actual_path: &str) -> Result<runtime::Runtime, String> {
+    let mut parsed = source::load("$runtime/runtime.lkj", None, &mut |path: &str| {
         if path == "$runtime/runtime.lkj" {
             Ok(Some(code.as_bytes().to_vec()))
         } else {
@@ -657,8 +692,9 @@ fn prepare_runtime(code: String) -> Result<runtime::Runtime, String> {
         }
     })
     .map_err(|problem| report("$runtime/runtime.lkj", problem))?;
+    if !parsed.files.is_empty() { parsed.files[0].path = actual_path.to_string(); }
     let meaning = elaborate::elaborate(&parsed)
-        .map_err(|problem| located("$runtime/runtime.lkj", &parsed, problem))?;
+        .map_err(|problem| located(actual_path, &parsed, problem))?;
     let checked =
         check::check(meaning).map_err(|problem| report("$runtime/runtime.lkj", problem))?;
     runtime::seal(checked).map_err(|problem| report("$runtime/runtime.lkj", problem))
@@ -673,12 +709,12 @@ fn ensure_runtime(
     if cache.is_none() {
         let runtime = match &options.runtime_source {
             Some(path) => {
-                let bytes = read_path(world, path)?;
+                let bytes = memo.read_path(world, path)?;
                 if memo.store.is_some() {
                     let (parent, name) = location(path);
                     memo.runtime_input = Some(store::input(&parent, &name, &Some(bytes.clone())));
                 }
-                prepare_runtime(text(bytes, path)?)?
+                prepare_runtime(text(bytes, path)?, path)?
             }
             None => load_runtime(world, &None)?,
         };
@@ -865,12 +901,15 @@ fn interpret(
             if let interpreter::ErrorKind::Trap(code) = &problem.kind {
                 if semantic_trap(*code) { completion = Completion::SemanticTrap; }
             }
-            format!(
-                "{}: {} {}",
-                runtime_site(&options.path, problem.file as u64, problem.line as u64),
-                problem.code(),
-                problem.message
-            )
+            let path = program.sources.get(problem.file).map_or(options.path.as_str(), |path| path.as_str());
+            let message: String = match &problem.host {
+                Some(failure) => {
+                    let identity = String::from_utf8(failure.identity[..failure.length].to_vec()).unwrap();
+                    format!("{} {}: {} ({})", identity, crate::runtime_diagnostics::syscall_name(failure.operation), crate::runtime_diagnostics::errno_name(failure.errno), failure.errno)
+                }
+                None => problem.message.clone(),
+            };
+            crate::runtime_diagnostics::full_located(path, problem.line, &problem.code(), &message)
         }
     };
     Outcome {
@@ -888,34 +927,8 @@ fn trap_number(text: &str) -> Option<u64> {
     }
     text.parse::<u64>().ok()
 }
-// Source loading assigns the root file index zero. IR retains other numeric
-// identities without a filename map; never label their lines as the root path.
-fn runtime_site(path: &str, file: u64, line: u64) -> String {
-    if file == 0 { format!("{path}:{line}") } else { format!("file {file}:{line}") }
-}
-pub(crate) fn native_trap(path: &str, raw: &[u8]) -> Option<(u64, String, String)> {
-    let text = String::from_utf8(raw.to_vec()).ok()?;
-    if !text.ends_with("\n") { return None; }
-    let parts = split(&text, b' ', 7);
-    if parts.len() != 7 || parts[1] != "at" || parts[2] != "line" || parts[4] != "file" {
-        return None;
-    }
-    if parts[0].len() < 5 || !parts[0].starts_with("R") || !parts[5].ends_with(":") {
-        return None;
-    }
-    let code = trap_number(&parts[0][1..])?;
-    let line = trap_number(&parts[3])?;
-    let file = trap_number(&parts[5][..parts[5].len() - 1])?;
-    let message = &parts[6];
-    let message = if message.ends_with("\n") {
-        &message[..message.len() - 1]
-    } else {
-        message.as_str()
-    };
-    Some((code, format!("{}: {} {message}", runtime_site(path, file, line), parts[0]), message.to_string()))
-}
-pub(crate) fn normalize_trap(path: &str, raw: &[u8]) -> Option<String> {
-    native_trap(path, raw).map(|trap: (u64, String, String)| trap.1)
+pub(crate) fn native_trap(path: &str, program: &ir::Program, runtime: &runtime::Runtime, raw: &[u8]) -> Option<(u64, String, String)> {
+    crate::runtime_diagnostics::decode(path, program, runtime, raw)
 }
 pub(crate) fn complete_semantic_trap(program: &ir::Program, code: u64, message: &str) -> bool {
     // A refused diagnostic write can leave a syntactically valid prefix. Match
@@ -957,25 +970,15 @@ fn invocation_grants(world: &mut World, grants: Vec<ir::EntryGrant>) -> Result<V
             }
             ir::EntryGrant::DirectoryEnvironment(name) => {
                 let key = &name[..name.len() - 1];
-                let mut value = driver_host::environment_value(world, key)
-                    .map_err(|errno: i64| -> String { format!("E_ENTRY directory environment failed: errno {errno}") })?
-                    .unwrap_or(Vec::new());
-                if value.is_empty() {
-                    return Err(format!("E_ENTRY directory environment {} is absent or empty: errno 2", String::from_utf8(key.to_vec()).unwrap()));
-                }
-                value.push(0);
-                ir::EntryGrant::Directory(value)
+                let value = driver_host::environment_value(world, key)
+                    .map_err(|errno: i64| -> String { format!("E_ENTRY directory environment failed: errno {errno}") })?;
+                ir::EntryGrant::DirectoryEnvironmentValue(name.clone(), value)
             }
             ir::EntryGrant::ReadDirectoryEnvironment(name) => {
                 let key = &name[..name.len() - 1];
-                let mut value = driver_host::environment_value(world, key)
-                    .map_err(|errno: i64| -> String { format!("E_ENTRY directory environment failed: errno {errno}") })?
-                    .unwrap_or(Vec::new());
-                if value.is_empty() {
-                    return Err(format!("E_ENTRY directory environment {} is absent or empty: errno 2", String::from_utf8(key.to_vec()).unwrap()));
-                }
-                value.push(0);
-                ir::EntryGrant::ReadDirectory(value)
+                let value = driver_host::environment_value(world, key)
+                    .map_err(|errno: i64| -> String { format!("E_ENTRY directory environment failed: errno {errno}") })?;
+                ir::EntryGrant::ReadDirectoryEnvironmentValue(name.clone(), value)
             }
             value => value,
         };
@@ -1080,9 +1083,10 @@ fn native_run(
         diagnostic: String::new(),
     };
     if raw.len() != 8 && status != 0 {
-        outcome.diagnostic = match native_trap(&options.path, &raw) {
+        outcome.diagnostic = match native_trap(&options.path, checked.native().program(), runtime, &raw) {
             Some((code, diagnostic, message)) => {
-                if status == 1 && complete_semantic_trap(checked.native().program(), code, &message) {
+                if status == 1 && crate::runtime_diagnostics::main_site(checked.native().program(), &raw)
+                    && complete_semantic_trap(checked.native().program(), code, &message) {
                     outcome.completion = Completion::SemanticTrap;
                 }
                 diagnostic
@@ -1139,15 +1143,22 @@ fn publish(world: &mut World, path: &str, bytes: &[u8], executable: bool) -> Res
     Ok(())
 }
 
+// The driver is a World supervisor. Preserve the child's complete diagnostic
+// when its inherited stderr cannot accept output; no user entry gains authority.
+fn deliver_error(world: &mut World, bytes: &[u8]) {
+    if let Ok(mut output) = world.stderr_file() {
+        if output.write_all(bytes).is_ok() { return; }
+    }
+    if let Ok(mut output) = world.stdout_file() { let _ = output.write_all(bytes); }
+}
+
 fn deliver(world: &mut World, outcome: Outcome, show_value: bool) -> u8 {
     if show_value {
         world.stdout().write(&outcome.stdout);
     }
-    world.stderr().write(&outcome.stderr);
+    if !outcome.stderr.is_empty() { deliver_error(world, &outcome.stderr); }
     if !outcome.diagnostic.is_empty() {
-        world
-            .stderr()
-            .write(format!("{}\n", outcome.diagnostic).as_bytes());
+        deliver_error(world, format!("{}\n", crate::runtime_diagnostics::bounded(&outcome.diagnostic)).as_bytes());
     }
     outcome.status
 }
@@ -1409,6 +1420,103 @@ fn batch(world: &mut World, options: &Options, stats: &mut Stats, memo: &mut Mem
     Ok(0)
 }
 
+struct EntryArtifact {
+    path: String,
+    entry: usize,
+    grants: Vec<ir::EntryGrant>,
+    authority: String,
+}
+struct EntryFragments {
+    namespace: String,
+    records: reuse::Records,
+}
+
+fn build_entries(world: &mut World, options: &Options, stats: &mut Stats, memo: &mut Memo) -> Result<u8, String> {
+    let checked = compile(world, options, stats, memo)?;
+    let directory = options.output.as_ref().unwrap();
+    let mut artifacts: Vec<EntryArtifact> = Vec::new();
+    // Admit every entry before publishing any artifact. The reports all refer
+    // to this exact original checked program, not separately reread inputs.
+    for specification in &options.artifacts {
+        let columns = split(specification, b'=', 2usize);
+        if columns.len() != 2usize || columns[0].is_empty() || columns[1].is_empty() {
+            return Err("E_USAGE --artifact requires NAME=ENTRY".to_string());
+        }
+        for byte in columns[0].as_bytes() {
+            if !((*byte >= b'a' && *byte <= b'z') || (*byte >= b'A' && *byte <= b'Z')
+                || (*byte >= b'0' && *byte <= b'9') || *byte == b'_' || *byte == b'-') {
+                return Err("E_USAGE artifact NAME uses letters, digits, underscore or hyphen".to_string());
+            }
+        }
+        let path = format!("{directory}/{}", columns[0]);
+        for earlier in &artifacts {
+            if earlier.path == path { return Err("E_USAGE duplicate artifact NAME".to_string()); }
+        }
+        let selected = checked_entry(checked.original().program(), &Some(columns[1].clone()))?;
+        let grants = prepare_grants(checked.original().program(), selected, options)?;
+        let analysis = crate::authority::analyze(checked.original().checked(), selected)?;
+        let authority = crate::authority::render(checked.original().checked(), &analysis);
+        artifacts.push(EntryArtifact { path, entry: selected, grants, authority });
+    }
+    let mut runtime = None;
+    ensure_runtime(world, options, &mut runtime, memo)?;
+    stats.mark("runtime")?;
+    let mut emitted_bytes = 0usize;
+    let mut fragments: Vec<EntryFragments> = Vec::new();
+    for artifact in &artifacts {
+        let name = &checked.original().program().functions[artifact.entry].name;
+        // Entry images mostly contain the same functions. Retain only their
+        // authenticated shared fragments, not another whole image per entry.
+        // This checked graph and sealed runtime stay fixed for the invocation.
+        let prepared = if checked.native().keys().is_some() && memo.store.is_some() {
+            let keys = checked.native().keys().unwrap();
+            let namespace = backend::cache_namespace(checked.native(), runtime.as_ref().unwrap(),
+                &artifact.grants, None);
+            stats.mark("key_hash")?;
+            let mut selected = fragments.len();
+            for (index, earlier) in fragments.iter().enumerate() {
+                if earlier.namespace == namespace { selected = index; break; }
+            }
+            if selected == fragments.len() {
+                let records = memo.store.as_mut().unwrap().records(&namespace, keys.graph(), keys.all());
+                fragments.push(EntryFragments { namespace: namespace.clone(), records });
+                stats.mark("store_io")?;
+            }
+            backend::prepare_granted_reusing(checked.native(), runtime.as_ref().unwrap(), name,
+                &artifact.grants, None, None, &namespace, &mut fragments[selected].records)
+        } else {
+            backend::prepare_granted(checked.native().checked(), runtime.as_ref().unwrap(), name,
+                &artifact.grants, None, None)
+        };
+        stats.mark("emit")?;
+        let bytes = prepared.and_then(|image: crate::native::PreparedImage| image.finish())
+            .map(|image: crate::native::Image| image.bytes)
+            .map_err(|problem| report(&options.path, problem))?;
+        stats.mark("assemble")?;
+        emitted_bytes += bytes.len();
+        let mut authority = artifact.authority.clone();
+        // This footer binds bytes to their report. It asserts no closedness:
+        // callers must still inspect the declared grants and reachable effects.
+        authority.push_str(&format!("closed-image-sha256 {}\n", sha256::hex_digest(&bytes)));
+        stats.mark("key_hash")?;
+        publish(world, &artifact.path, &bytes, true)?;
+        publish(world, &format!("{}.authority", artifact.path), authority.as_bytes(), false)?;
+        stats.mark("write")?;
+    }
+    // Each owned verified snapshot is flushed once. Repeated flushes would
+    // reseal the entire pack and count its cumulative hits more than once.
+    if let Some(store) = memo.store.as_mut() {
+        for group in &fragments {
+            memo.emitted_reused += group.records.hits;
+            store.flush(&group.records);
+        }
+        stats.mark("store_io")?;
+    }
+    stats.count("built_entries", artifacts.len());
+    stats.count("emitted_bytes", emitted_bytes);
+    Ok(0)
+}
+
 fn prepare_grants(program: &ir::Program, entry: usize, options: &Options) -> Result<Vec<ir::EntryGrant>, String> {
     match &options.program {
         Some(plan) => crate::program_directory::prepare(plan, program, entry),
@@ -1462,6 +1570,10 @@ fn execute(world: &mut World, options: &Options, stats: &mut Stats, memo: &mut M
 }
 
 fn execute_source(world: &mut World, options: &Options, stats: &mut Stats, memo: &mut Memo) -> Result<u8, String> {
+    if options.command == "delta" {
+        world.stdout().write(delta().as_bytes());
+        return Ok(0);
+    }
     if options.command == "--help" || options.command == "-h" {
         world.stdout().write(usage().as_bytes());
         return Ok(0);
@@ -1487,6 +1599,9 @@ fn execute_source(world: &mut World, options: &Options, stats: &mut Stats, memo:
     if options.command == "batch" {
         return batch(world, options, stats, memo);
     }
+    if options.command == "build-entries" {
+        return build_entries(world, options, stats, memo);
+    }
     let mut runtime = None;
     if options.command == "runtime-ir" {
         ensure_runtime(world, options, &mut runtime, memo)?;
@@ -1496,9 +1611,10 @@ fn execute_source(world: &mut World, options: &Options, stats: &mut Stats, memo:
     }
     if options.unchecked {
         let input = text(read_path(world, &options.path)?, &options.path)?;
-        let program = ir_text::read(&input).map_err(|problem| report(&options.path, problem))?;
+        let program = ir_text::read_located(&input, &options.path).map_err(|problem| report(&options.path, problem))?;
         let selected = entry(&program, &options.entry)?;
-        let outcome = interpret(world, &program, selected, options, false, None);
+        let outcome = interpret(world, &program, selected, options, options.observe, None);
+        if options.observe { record(world, 0, "interpreter", true, &outcome); return Ok(outcome.status); }
         return Ok(deliver(world, outcome, true));
     }
     if options.command == "build" {
@@ -1747,6 +1863,23 @@ impl Memo {
         }
         result
     }
+    // Pin raw IR and explicit runtime bytes just like source-loader reads.
+    // Later artifact-cache validation must not reopen a different generation.
+    fn read_path(&mut self, world: &mut World, path: &str) -> Result<Vec<u8>, String> {
+        if self.store.is_none() { return read_path(world, path); }
+        let (parent, name) = location(path);
+        let key = (parent.clone(), name.clone());
+        if let Some((bytes, _)) = self.input_snapshot.get(&key) {
+            return match bytes {
+                Some(bytes) => Ok(bytes.clone()),
+                None => Err(io(path, "read", 2)),
+            };
+        }
+        let bytes = read_path(world, path)?;
+        let input = store::input(&parent, &name, &Some(bytes.clone()));
+        self.input_snapshot.insert(key, (Some(bytes.clone()), input.digest));
+        Ok(bytes)
+    }
     fn inputs_match(&mut self, world: &mut World, bytes: &[u8], stats: &mut Stats) -> bool {
         let mut reader = store::Reader::new(bytes);
         let count = match reader.word() { Some(count) => count, None => return false };
@@ -1818,6 +1951,8 @@ fn request_key(options: &Options) -> String {
     store::push_bytes(&mut out, options.command.as_bytes());
     store::push_bytes(&mut out, options.path.as_bytes());
     optional_key(&mut out, &options.entry);
+    store::push_word(&mut out, options.artifacts.len());
+    for artifact in &options.artifacts { store::push_bytes(&mut out, artifact.as_bytes()); }
     optional_key(&mut out, &options.source_directory);
     optional_key(&mut out, &options.library_directory);
     optional_key(&mut out, &options.runtime_source);

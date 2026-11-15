@@ -63,8 +63,8 @@ fn execute(world: &mut World, bytes: &[u8]) -> Result<(), String> {
 }
 fn run(world: &mut World) -> Result<(), String> {
     let raw = world.args();
-    if raw.len() != 6usize {
-        return Err("E_GATE_REUSE expected ELF AUTHORITY GATE_SCRIPT CASE_COUNT STORE KEY".to_string());
+    if raw.len() != 7usize {
+        return Err("E_GATE_REUSE expected ELF AUTHORITY GATE_SCRIPT CASE_COUNT STORE KEY ENTRY".to_string());
     }
     let mut args = Vec::new();
     for argument in raw {
@@ -72,10 +72,19 @@ fn run(world: &mut World) -> Result<(), String> {
     }
     let count = args[3].as_str().parse::<usize>().map_err(|_| -> String { "E_GATE_REUSE invalid case count".to_string() })?;
     if count == 0 { return Err("E_GATE_REUSE empty case group".to_string()); }
+    if args[6].is_empty() {
+        return Err("E_GATE_REUSE empty entry".to_string());
+    }
+    for byte in args[6].as_bytes() {
+        if !((*byte >= b'a' && *byte <= b'z') || (*byte >= b'A' && *byte <= b'Z')
+            || (*byte >= b'0' && *byte <= b'9') || *byte == b'_' || *byte == b':') {
+            return Err("E_GATE_REUSE invalid entry".to_string());
+        }
+    }
     let bytes = read(world, &args[0])?;
     let authority = read(world, &args[1])?;
-    let closed = b"entry main\ndeclared authority:\n  none\nreachable operations (conservative checked-IR branches and owned cleanup):\n  none\n";
-    if !authority.starts_with(closed) {
+    let closed = format!("entry {}\ndeclared authority:\n  none\nreachable operations (conservative checked-IR branches and owned cleanup):\n  none\n", args[6]);
+    if !authority.starts_with(closed.as_bytes()) {
         return Err("E_GATE_REUSE authority report must have no grants or reachable effects".to_string());
     }
     let footer = format!("closed-image-sha256 {}\n", sha256::hex_digest(&bytes));
@@ -90,11 +99,12 @@ fn run(world: &mut World) -> Result<(), String> {
         return Err("E_GATE_REUSE authority report does not end with the exact image digest".to_string());
     }
     let script = read(world, &args[2])?;
-    let mut identity = b"lkjscript-closed-gate-1\0"[..].to_vec();
+    let mut identity = b"lkjscript-closed-gate-2\0"[..].to_vec();
     store::push_bytes(&mut identity, &bytes);
     store::push_bytes(&mut identity, &authority);
     store::push_bytes(&mut identity, &script);
     store::push_word(&mut identity, count);
+    store::push_bytes(&mut identity, args[6].as_bytes());
     // The runner fixes argv/stdin, normal exit, and all three capture expectations.
     store::push_bytes(&mut identity, b"argv=[];stdin=[];status=0;stdout=[];stderr=[];result=[]");
     let key = sha256::hex_digest(&identity);
@@ -104,9 +114,14 @@ fn run(world: &mut World) -> Result<(), String> {
     if let Some(cache) = &mut cache {
         if let Some(payload) = cache.get("gate-closed", &key) { reused = payload == success; }
     }
+    // A rejected/missing entry may acquire the writer lock for disposal. The
+    // closed child can run much longer than publication, so release that state
+    // before executing it. Each successful observer reopens current accounting;
+    // a concurrent short writer still makes publication an ordinary cache miss.
+    drop(cache);
     if !reused {
         execute(world, &bytes)?;
-        if let Some(cache) = &mut cache {
+        if let Some(mut cache) = store::Store::open(world, &Some(args[4].clone()), &Some(args[5].clone())) {
             cache.put("gate-closed", &key, &success);
             cache.finish();
         }

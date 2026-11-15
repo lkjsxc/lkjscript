@@ -93,30 +93,10 @@ fn postfix_question_mark_continues_block_expression_syntax() {
     assert!(matches!(parsed.exprs[value].kind, Expr::Try(_)));
 }
 
-pub fn run(world: &mut World, trace: bool) -> usize {
-    if trace {
-        world
-            .stdout()
-            .write(b"block_statements_stop_before_ambiguous_prefix_expressions\n");
-    }
+pub fn run() -> usize {
     block_statements_stop_before_ambiguous_prefix_expressions();
-    if trace {
-        world
-            .stdout()
-            .write(b"written_semicolons_are_preserved_without_changing_tail_values\n");
-    }
     written_semicolons_are_preserved_without_changing_tail_values();
-    if trace {
-        world
-            .stdout()
-            .write(b"parenthesized_blocks_keep_call_and_index_expression_syntax\n");
-    }
     parenthesized_blocks_keep_call_and_index_expression_syntax();
-    if trace {
-        world
-            .stdout()
-            .write(b"postfix_question_mark_continues_block_expression_syntax\n");
-    }
     postfix_question_mark_continues_block_expression_syntax();
     4usize
 }

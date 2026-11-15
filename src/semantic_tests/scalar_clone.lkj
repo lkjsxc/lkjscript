@@ -73,18 +73,12 @@ fn method_validation_precedes_the_read_shortcut() {
         assert_eq!(problem.code, "E_TYPE");
     }
 }
-pub fn run(world: &mut World, trace: bool) -> usize {
-    if trace { world.stdout().write(b"builtin_scalar_functions_are_reads_without_calls\n"); }
+pub fn run() -> usize {
     builtin_scalar_functions_are_reads_without_calls();
-    if trace { world.stdout().write(b"scalar_clone_preserves_all_integer_widths_and_float_bits\n"); }
     observed(include_str!("../../tests/conformance/pass/scalar_clone_bits.lkj"));
-    if trace { world.stdout().write(b"derived_and_generic_clones_preserve_thin_and_fat_views\n"); }
     observed(include_str!("../../tests/conformance/pass/scalar_clone_views.lkj"));
-    if trace { world.stdout().write(b"copy_nominal_clone_and_clone_from_remain_observable\n"); }
     observed(include_str!("../../tests/conformance/pass/scalar_clone_custom_copy.lkj"));
-    if trace { world.stdout().write(b"scalar_clone_keeps_temporary_owner_cleanup_and_evaluation_order\n"); }
     observed(include_str!("../../tests/conformance/pass/scalar_clone_temporary_drop.lkj"));
-    if trace { world.stdout().write(b"method_validation_precedes_the_read_shortcut\n"); }
     method_validation_precedes_the_read_shortcut();
     6usize
 }

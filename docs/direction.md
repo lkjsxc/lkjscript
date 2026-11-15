@@ -22,11 +22,11 @@ rewrite consumers when a rare form would enlarge trusted semantics.
 
 ## Direct native execution (6.1, complete)
 
-Keep direct x86-64 instruction selection plain. Materialize source locations on
+Keep direct x86-64 instruction selection plain. Materialize source paths/lines on
 cold failure paths; allocation/stack failures may use a static function location.
-Allocate scalar locals/temporaries to registers; aggregates and address-taken
-locals occupy frames. Forward straight-line values. No register-allocation
-project, cross-block propagation or peephole collection in this milestone.
+Whole-function scalar linear scan extends live intervals across blocks and loops;
+aggregates/address-taken locals occupy frames. Volatile registers cross only modeled
+non-clobbering instructions; save callee-saved registers only when selected.
 Emit nothing for scalar drops, unit values or copies onto themselves. Share aggregate slots only for same-block, unborrowed-source final-use transfers into new identical-type locals; retain separate drop flags and original IR.
 Aggregates/vector elements are inline; views are addresses or address/count pairs.
 Frames use the machine stack. Retain bounds, arithmetic, division, UTF-8, tag
@@ -45,7 +45,7 @@ A Linux CPU timer samples instruction pointers and real frame chains without a d
 Reports survive exit/signals and show self/inclusive functions and exclusive kinds
 in at most 37 lines, without DWARF or perf; the explicit option grants instrumentation.
 Measure self-built / witness opt=0 / witness -O and split emitted kinds; 1.0x opt=0 is the next stopping point, 3x -O the horizon.
-Stop at evidence if larger register work is required; prioritize edit/gate latency. Keep compiler, call/vector, HTTP and map rows in bench/.
+Stop when a step offers less than 10%: the extra operand/coalescing trial gave under 1% CPU gain and was discarded. Prioritize edit/gate latency; retain compiler, call/vector, HTTP and map rows in bench/.
 Scalar Clone lowers to Read. --inline-limit N copies small acyclic bodies and forwards dead temporaries.
 Recheck changed bodies; exact original bodies under unchanged shared graphs retain their proof.
 Keep the original interpreter/authority oracle and copied source locations; compare complete custom traps and reject the whole bad candidate.
@@ -60,7 +60,7 @@ include_str!/include_bytes! read beneath the source Directory capability.
 World derives process, clock and directory operations; arguments/streams are explicit.
 Owned Files carry streams/executable authority. Interpreter values use cells/indices;
 self-execution may emit checked native code, never unchecked mutation input.
-The private result descriptor preserves stderr; standalone traps report on stderr.
+Private result descriptors preserve full trap identities; bounded standalone lines use only granted Stderr/World, then granted Stdout.
 Raw negation preserves NaN payload/sign; binary arithmetic canonicalizes NaNs.
 Check all user bodies and demanded library bodies; check-library verifies every body.
 The seed bootstraps without Rust/Node; require two consecutive current-emitter generations byte for byte, bridging stale emitters. Refresh after source/emitter changes.
@@ -97,7 +97,7 @@ Separate command/service entries avoid eager listeners. Named environment grants
 Desk append holds .lock, repairs only an incomplete suffix and issues one O_APPEND write, never copies the log. Sync is default; buffered durability is an explicit argument shown in phase reports.
 Desk push uses durable byte cursors and idempotent row IDs; one service metadata tick does no per-idle-peer work. Queued writes have fixed deadlines; polling is the fallback.
 Wake is a durable high-water request/ack consumed idempotently by the host: launch plus acknowledgement cannot be exactly once. Prove units in fresh transient instances; no live switches.
-Authenticated children await compiler-owned immutable image identity, canonical entry authority and descriptor-only startup; tests/diagnostics/external_child_authority.lkj is the single pending contract.
+Authenticated children bind exact ELF length/hash, target/entry/result/transfer ABI and canonical checked capability slots in one admission record; keep its sealed memfd through verification and exec. tests/diagnostics/external_child_authority.lkj is the single pending contract; programs owns affine transfer/lifecycle APIs.
 A child imports transferred affine slots, never reopens baked roots or reacquires World. Reports name every image/slot; deadline exit/output values and parent-death cleanup are required.
 Foreign-child design: a separate affine command grant snapshots the initial executable; a read root and NullDevice are explicit. Broad Process is never a narrow grant.
 Stage every dynamic runtime file beneath R; report transformed PT_INTERP bytes honestly. Kernel setup between fork/exec uses Landlock, seccomp and no_new_privs, without a helper.
@@ -111,16 +111,16 @@ cxloop network/home/process-tree authority remains work in examples/foreign-chil
 Keep the key outside every source/library/program read grant, including include_bytes!.
 Key readers and compiler replacers are equally trusted; HMAC binds exact compiler bytes, target, dependency identity and result bytes.
 Only admitted originals or authenticated prior proofs skip body checks; revalidate shared structure.
-Graph packs bind types, destructors, signatures, contracts and exact bodies; native fragments retain relocations.
+Graph packs bind types, destructors, signatures, contracts and exact bodies; native fragments retain relocations. Multi-entry builds share exact-namespace fragment snapshots and flush once; only ordinary builds retain whole images.
 Front checkpoints reuse only stable source/arena spans, declarations, expanded string/byte literals, type spellings, catalogs and IR storage/call skeletons.
 Freshly infer/construct changed free nongeneric bodies; other edits miss. Advance successful checkpoints and independently check all resulting IR.
 Compact binary IR preserves exact tags and raw bits; decoding gives no checker authority.
 One invocation shares actual source reads, including absent candidates; runtime dependencies are the bytes actually sealed.
 Closed tests include fixed stdout/stderr captures only when both checked original/native effect closures permit those four operations; other host/resource/model outcomes rerun.
 Fresh checked zero-authority ELF execution may reuse an exact stable-runner/image/input proof; compiler verdicts stay generation-bound.
-Authenticate large entries in bounded buffers before allocation, require EOF and reauthenticate rereads.
+Authenticate a fixed root binding producer/target/domain, length and digest before allocation; read one owned payload, require EOF and hash it once. VerifiedPayload preserves the exact authentication domain.
 Default cap: 256 MiB of published compiler-owned bytes per Directory; evict oldest producer generations. Each worker-N gets one quarter of the base budget: 512 MiB for four workers, 768 MiB for eight.
-Valid reads do not lock; nonblocking writers enforce the cap and commit accounting at invocation end. Corruption/refusal/concurrency/orphans are misses.
+Valid reads do not lock; nonblocking writers enforce the cap and commit accounting at invocation end. Closed runners release miss-cleanup locks before execution and reopen only after success. Corruption/refusal/concurrency/orphans are misses.
 Program directories use literal SOURCE/ENTRY/GRANTS/CASES constants in program.lkj; signature authority is unchanged and missing/extra grants reject.
 No entries are committed; deleting the store or rotating its key is always safe.
 
@@ -138,7 +138,7 @@ sizes in status and commits. Measurements do not gate. Measure remaining gaps.
 
 ## Horizon and working policy
 
-Range facts, IR queries, formatting, a checked-IR seed and a second target follow measured use.
+Range facts, IR queries, a checked-IR seed and a second target follow measured use. No mandatory formatter or fragment marker: retained diagnostic cases show no need for their frontend cost; delta prints accepted rewrites.
 Programs decides concurrency; do not build on pending scoped-concurrency cases.
 Compiler owns main, seed, emission, driver/store, bench, CI and hash; programs owns
 its separate worktree, consumers and new capabilities. Preserve its additions.

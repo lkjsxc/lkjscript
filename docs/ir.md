@@ -11,6 +11,14 @@ Files use `.lkjir` and begin with the exact first line `lkjscript-ir 1`.
 The revision describes the text format. Unsupported or absent headers are errors.
 `lkjscript ir SOURCE` writes it; `check`, `build`, `run`, `test` and `authority` accept it.
 
+Optional `source "path"` records assign diagnostic file indices in order. They
+carry no read authority. Nonempty maps require every function/instruction file
+index to exist; empty paths reject. Source emission binds actual source/library
+roots before authentication, so program directories and explicit library paths
+remain openable. Paths and metadata survive text/binary round trips and inlining.
+CLI input without source records uses the `.lkjir` path and actual instruction
+line in that file; raw in-memory IR interpretation retains producer metadata.
+
 Types and functions are indexed from zero in declaration order. A function's
 locals are indexed from zero; its first `params` locals are parameters.
 Names identify diagnostics and selection of entry functions and grant parameters.
@@ -348,7 +356,7 @@ use a Directory entry and acquire files through ordinary checked operations.
 
 Grants are invocation data outside the IR. Directory/ReadDirectory descriptors contain the
 NUL-terminated root path; Listener and Connector descriptors contain the sixteen-byte address
-above. Environment descriptors contain one exact NUL-terminated variable name; names are nonempty and exclude ASCII whitespace/control bytes and equals signs. Other capabilities, including Arguments and ExitStatus, need no payload.
+above. Environment descriptors contain one exact NUL-terminated variable name; names are nonempty and exclude ASCII whitespace/control bytes and equals signs. ForeignCommand supplies an absolute executable path for immutable snapshot acquisition. Other capabilities, including NullDevice, Arguments and ExitStatus, need no payload.
 CLI Environment grants use NAME=VARIABLE. The bound value preserves arbitrary non-NUL bytes; absence is valid and differs from an empty value.
 Directory/ReadDirectory also accept NAME=env:VARIABLE, resolving only that variable to its root at invocation/startup. Absence or an empty value fails with errno 2; there is no default or implicit creation. This selector supplies the declared directory kind, not an Environment value. Program-directory relative paths resolve against that program directory for both kinds.
 Build retains names for startup resolution. Native run binds only the named environment values and directory selectors before its empty-environment launch; authority queries retain the named grant specification.
@@ -357,7 +365,28 @@ before acquiring handles.
 Raw scalar arguments cannot manufacture an address or derived capability.
 Missing, duplicate, unknown or malformed CLI grants reject before publication or
 execution. Build embeds validated descriptors; acquisition occurs at startup.
-Acquisition failure reports R0007 at entry, names the failed grant kind and errno, and releases acquired resources. Listener enables SO_REUSEADDR for restart after TIME_WAIT; another active listener still refuses the grant.
+Acquisition failure reports R0007 at entry with the grant kind/value, actual failed operation and symbolic/numeric errno, then releases acquired resources. Listener enables SO_REUSEADDR for restart after TIME_WAIT; another active listener still refuses the grant.
+
+
+Runtime diagnostics use source paths and lines in every execution route. Native
+standalone output is bounded to one 2048-byte line built without allocation after
+failure, through an already granted output. An entry without World/Stdout/Stderr
+exits unsuccessfully without printing. If both output streams are granted and
+stderr refuses the diagnostic, stdout receives it. Path/message controls are
+escaped; long fields end in `...`. Missing roots, occupied listeners, denied
+readiness/signal descriptors and stream failures preserve the original syscall
+and errno even when cleanup issues more syscalls. Token-only grants have no
+fallible kernel acquisition; ordinary Result-returning calls keep their errors.
+Malformed interpreter-host replies are M_INVALID_HOST, not a program R0007.
+
+A private supervisor trap record begins with 32 bytes: `LKJTRAP2`, then little-
+endian u64 code, file index and line, followed by the complete bounded line.
+The decoder validates the same selected main/runtime source and message table,
+rejects incomplete/invalid records, and reconstructs the full static identity.
+Batch, mutation and authenticated test records preserve that full identity;
+only user delivery truncates. Equal visible prefixes cannot merge different
+long static messages. The compiler's tooling-only unchecked `--observe` route
+emits the existing JSON observation record for independent IR subprocesses.
 
 The authority query starts from a checked entry. It lists all declared grants,
 then conservatively follows reachable structured branches, calls and owning
@@ -421,11 +450,4 @@ the whole candidate. Interpretation, authority reports and IR output retain the
 original. Differential cases compare optimized native behavior with that original.
 Copied instructions retain their original file, line and column, including traps.
 
-A recheck may reuse an immutable original function proof only after validating
-shared structure and independently comparing the exact type/destructor graph,
-ordered signatures, parameter locals and return contracts. It then compares the
-whole function, including locals, body, literal bits and source provenance.
-A changed graph disables this local reuse; changed bodies receive ordinary checks.
-Authenticated persistent proofs use the same dependencies and remain separately
-counted. Native fragments never supply checker authority. Observation-only commands
-skip optimization unless the corpus roundtrip explicitly exercises both forms.
+A recheck ma

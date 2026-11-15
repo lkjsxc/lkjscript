@@ -22,6 +22,7 @@ pub mod resolve;
 pub mod reuse;
 pub mod runtime;
 pub mod runtime_memory;
+pub mod runtime_diagnostics;
 #[path = "../library/sha256.lkj"]
 pub mod sha256;
 pub mod source;

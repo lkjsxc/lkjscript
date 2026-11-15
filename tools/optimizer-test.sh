@@ -171,7 +171,7 @@ done
 # native trap record. Compare raw records, before the driver renders a path.
 cat > "$source_directory/main.lkj" <<'SOURCE'
 mod helper;
-pub fn probe() -> i64 { helper::fail(1) }
+pub fn probe(_errors: Stderr) -> i64 { helper::fail(1) }
 SOURCE
 cat > "$source_directory/helper.lkj" <<'SOURCE'
 pub fn fail(index: usize) -> i64 {
@@ -180,11 +180,11 @@ pub fn fail(index: usize) -> i64 {
 }
 SOURCE
 for limit in 0 64; do
-    build "trap-$limit" --inline-limit "$limit"
+    build "trap-$limit" --inline-limit "$limit" --grant _errors
     if "$test_directory/result" > "$test_directory/trap-$limit.out" 2> "$test_directory/trap-$limit.raw"; then
         fail "bounds trap returned success"
     fi
-    grep -q 'R0003 at line 3 file 1:' "$test_directory/trap-$limit.raw" ||
+    grep -q "$source_directory/helper.lkj:3: R0003 " "$test_directory/trap-$limit.raw" ||
         fail "raw cross-file trap lost its source"
 done
 (( $(field "$test_directory/trap-64.log" inline_accepted) > 0 )) ||

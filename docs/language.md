@@ -309,7 +309,7 @@ concurrency cases specify intended ownership rules, with their missing features.
 | Text methods | Prefix/suffix, contains/find/rfind, ASCII case/comparison, repeat/replace, bytes/chars, LF/CRLF lines, strip_prefix, split_once and split (including empty patterns). Pattern shares text/char needles; integer decimal parse covers ten types with validity/range checks. | General Unicode case conversion and str.trim are unsupported; std::str::trim_ascii(value) strips only bytes 9..13 and 32, preserving Unicode spaces. Only proved ASCII literals receive an automatic trim edit. Borrowed iterators retain owners. |
 | Character helpers | UTF-8/UTF-16 lengths, ASCII predicates/case, Unicode whitespace/control, to_digit and to_string. | Operate on Unicode scalars, never arbitrary code points. |
 | Formatting | Arguments evaluate once in order; macros call source String/Formatter traits. Display, x/X/b/o, positional/named/captured arguments, escaped braces, fixed width, Unicode fill, alignment, sign/prefix/zero padding. Explicit zero width remains distinguishable. | write!/writeln! target String (Write in scope) or Formatter; arbitrary Write sinks, Debug, float formatting, dynamic width/precision are unsupported. Errors stop later formatting; format! traps on failure. |
-| Option/Result | Canonical source declarations and re-exports; conditional derives, views, owned and/or/transpose and selected map/default combinators. Eager arguments evaluate before call, lazy callbacks only on selected variants; unused captures/payloads still clean up normally. | Some nested receiver expressions need annotations. Option::expect evaluates its message but retains fixed trap text. Result::unwrap omits its dynamic error payload and reports the callee site; unmapped non-root sites use file N:line. To retain errno and the operation site, use an already granted output writer: `match operation() { Ok(value) => value, Err(errno) => { output.write(format!("operation: errno {errno}\n").as_bytes()); panic!("operation failed") } }`. |
+| Option/Result | Canonical source declarations and re-exports; conditional derives, views, owned and/or/transpose and selected map/default combinators. Eager arguments evaluate before call, lazy callbacks only on selected variants; unused captures/payloads still clean up normally. | Some nested receiver expressions need annotations. Option::expect evaluates its message but retains fixed trap text. Result::unwrap omits its dynamic error payload and reports the callee site; all sites retain their source path and line. To retain errno and the operation site, use an already granted output writer: `match operation() { Ok(value) => value, Err(errno) => { output.write(format!("operation: errno {errno}\n").as_bytes()); panic!("operation failed") } }`. |
 | Option extras | xor, zip/unzip, flatten, replace/insert/get_or_insert, is_some_and/is_none_or, ok_or/ok_or_else. None predicates yield false/true respectively. filter borrows the payload then keeps/drops the owner. | Returned views preserve selected input/factory origins. |
 | Option<&T>/Option<&mut T> | copied uses Copy without Clone; cloned invokes Clone once for Some, never None. | Owned clones may be independent, but nested views retain external origins. |
 | Vec/slice access | is_empty/get/first/last and mutable slice counterparts; invalid get returns None, including usize::MAX. contains borrows query/elements and uses eq in order without copying/consuming. | Returned references retain collection footprints. |
@@ -395,18 +395,19 @@ reproduction without Rust or Node. The optional witness lives under witness/.
 | --- | --- |
 | lkjscript check PATH | Source/.lkjir check; silent success or located diagnostics. |
 | lkjscript ir PATH [-o FILE] | Checked textual IR, to stdout unless an output file is supplied. |
-| lkjscript build PATH [-o FILE] | Static executable, default PATH.elf; temporary publication plus rename preserves an existing destination on rejection. |
+| lkjscript build PATH [-o FILE]; lkjscript build-entries SOURCE -o DIR --artifact NAME=ENTRY ... | Static executable(s); build defaults to PATH.elf and preserves an existing destination on rejection. Multi-entry checks one source/runtime snapshot and every entry/grant before publishing each NAME and its matched NAME.authority report. |
 | lkjscript run PATH [--entry NAME] | Execute main, else probe, with native default or --engine interpreter. |
 | lkjscript test PATH | Discover expectation cases or execute #[test]/IR test functions across native/interpreter routes; details on failure. |
 | lkjscript authority PATH | Entry grants and conservatively reachable operations/calls/owned cleanup, from checked IR alone. |
+| lkjscript delta | Frequent accepted rewrites for a writer who knows Rust; ordered from retained diagnostic cases. |
 | lkjscript build PATH --profile; lkjscript profile FILE | Sample CPU instruction/frame addresses to OUTPUT.samples.PID; report self/inclusive source functions in at most 40 lines. |
 
 Program arguments after -- remain exact bytes; compiler arguments require UTF-8.
 Scalar runs print integer decimal, bool text, UTF-8 char (including NUL), or
 f64:0x plus 16 lowercase hex digits and newline; unit adds nothing.
-Native scalar results use a driver-owned raw eight-byte descriptor. Trap diagnostics
-use that channel separately from program stderr; standalone artifacts report traps
-on stderr and exit 1, preserving prior output. Both routes format scalars identically.
+Native scalar results use a driver-owned raw eight-byte descriptor. Private traps carry exact source/message identities; machine observations retain complete text for comparison and authenticated reuse.
+User trap records are one bounded `PATH:LINE: RCODE message` line (at most 2048 bytes), with controls/backslashes escaped and overlong paths/messages marked `...`; native failure reporting uses preallocated storage and one complete write, retrying EINTR/short writes.
+Standalone failures exit 1 and use only granted Stderr (or World), then granted Stdout if stderr fails; without either grant they are silent. Run/test supervisors keep a private result channel and their own output authority. Both routes format scalars identically.
 
 --stats reports phase milliseconds, IR/code counts and peak RSS. --source-dir grants
 the source root; --library-dir/--runtime-source replace embedded components explicitly.
@@ -428,7 +429,7 @@ Single-error APIs select the first diagnostic from these same production paths. 
 Entries take owned Arguments, Environment, ExitStatus, Stdout/Stdin/Stderr, Directory/ReadDirectory, ForeignCommand, NullDevice, Listener, Connector, Readiness, Process, Clock, Entropy or Stop; no parameters; or a sole World declaring implicit full authority.
 build/run require --grant NAME for each parameter: Directory/ReadDirectory take NAME=PATH or NAME=env:VARIABLE, ForeignCommand NAME=/absolute/executable, Environment NAME=VARIABLE, Listener/Connector NAME=IPv4:PORT; others have no payload. Only Listener permits port zero. build embeds descriptors; handles are acquired at startup.
 Directory/ReadDirectory's env:VARIABLE selector resolves only that named variable at invocation/startup; absent or empty fails with errno 2, without a default or directory creation. Reading its path bytes separately requires an Environment grant.
-Duplicate, missing, unknown or malformed grants reject before publication/execution; acquisition failure traps R0007 at entry with the grant kind and errno. Listener can rebind after TIME_WAIT; an active listener still excludes it.
+Duplicate, missing, unknown or malformed grants reject before publication/execution; acquisition failure traps R0007 at entry with the capability kind, granted value, actual operation and symbolic/numeric errno, e.g. `Listener 127.0.0.1:8798 bind: EADDRINUSE (98)`. Listener can rebind after TIME_WAIT; an active listener still excludes it.
 File/ReadFile/Child/borrowed/aggregate entry parameters reject; acquire files through a granted Directory/ReadDirectory.
 All capability types, including World, File and Child, are affine, without constructors or Copy/Clone/Data/Send/Sync implementations. Names, integers or casts cannot forge authority. IR checks each operation independently; methods below exclusively borrow receivers, and derived owners can outlive those borrows.
 
@@ -468,7 +469,7 @@ All capability types, including World, File and Child, are affine, without const
 | File.write/write_all(&[u8]) | One-write count or complete-write Result. |
 | File.duplicate()/readonly() | Duplicate sharing offset/state; or read-only reopen with independent zero offset. Closed remains closed. |
 | File.rewind()/set_executable() | Seek zero or set mode 0755. |
-| Stdout/Stderr.write(&[u8]) | Complete write or R0007 at the call. |
+| Stdout/Stderr.write(&[u8]) | Complete write or R0007 at the call with stream kind, inherited descriptor, write operation and symbolic/numeric errno. |
 | Clock.nanoseconds()/unix_seconds()/unix_nanoseconds() | Result<usize,i64> monotonic nanoseconds for deadlines; Result<i64,i64> CLOCK_REALTIME seconds; Result<usize,i64> CLOCK_REALTIME nanoseconds. Realtime may jump; unix_nanoseconds returns errno 75 for negative or unrepresentable time. |
 | ForeignCommand.run(&mut ReadDirectory,&mut NullDevice,&[Vec<u8>],duration_ns:usize) | Result<ReadFile,i64> framed exit/deadline/stdout/stderr; std::foreign::decode consumes it. Synchronous, nonzero duration; absolute deadline begins before setup; every child is killed/reaped before return. |
 | ForeignCommand.image() | Result<ReadFile,i64> fresh read view of immutable transformed initial ELF for checked SHA256; no execution or raw writable image access. |
@@ -476,7 +477,7 @@ All capability types, including World, File and Child, are affine, without const
 | Child.wait()/try_wait() | Exit code or 128+signal, with Option for polling; reaped children later fail ECHILD. |
 | Child.terminate()/request_stop() | Result<(),i64>; send SIGKILL/SIGTERM only to the owned child, without waiting. Dropping a live Child kills and reaps it. |
 
-Convenience methods live in library/io.lkj, command.lkj, read_io.lkj and foreign.lkj. The loader mounts new typed helper modules beside canonical $std/lib.lkj so stored seeds can still build the compiler. Result errors carry positive Linux errno; raw read/write leaves return negative errno. EINTR retries except close, which consumes once.
+Convenience methods live in library/io.lkj, command.lkj, read_io.lkj and foreign.lkj. The loader mounts new typed helper modules beside canonical $std/lib.lkj so stored seeds can still build the compiler. Result errors carry positive Linux errno; `std::io::errno_name(errno)` returns its static Linux name (EUNKNOWN otherwise). Explicit matches retain operation/grant context; Result::unwrap never formats generic E. Raw read/write leaves return negative errno. EINTR retries except close, which consumes once.
 Paths reject NUL; raw paths need exactly one trailing NUL. Descendants use openat2 RESOLVE_BENEATH|RESOLVE_NO_MAGICLINKS. Only ENOSYS selects anchored openat component traversal: absolute paths, parent/empty components and every symlink reject; held directories retain their inode across rename. The fallback allocates the actual path length, with no guessed path/component limit.
 Removal, rename and directory creation derive a parent then validate the basename. Ordinary new files/directories use 0666/0777 subject to umask; create_private uses 0600 subject to umask atomically, without an initially broader permission window. set_private sets exactly 0600 regardless of umask, permitting owner read/write after restrictive creation and restricting future opens; it cannot revoke already-open descriptors.
 

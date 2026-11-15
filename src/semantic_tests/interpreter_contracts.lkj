@@ -224,7 +224,7 @@ fn raw(types: Vec<ir::Type>, locals: &[usize], result: usize, ops: Vec<ir::Op>) 
         line += 1;
     }
     ir::Program {
-        types: primitives,
+        sources: Vec::new(), types: primitives,
         functions: vec![ir::Function {
             file: 0,
             name: "probe".to_string(),
@@ -477,6 +477,7 @@ impl interpreter::Host for FailingHost {
     fn open_null_device(&mut self) -> Result<u64, i64> { Err(95) }
     fn foreign_image(&mut self, _handle: u64) -> Result<u64, i64> { Err(95) }
     fn run_foreign(&mut self, _command: u64, _root: u64, _sink: u64, _arguments: &[u8], _duration: usize) -> Result<u64, i64> { Err(95) }
+    fn failure_operation(&self) -> u64 { 1 }
     fn argument_count(&self) -> usize {
         0
     }
@@ -487,8 +488,8 @@ impl interpreter::Host for FailingHost {
     fn read_stdin(&mut self, _bytes: &mut [u8]) -> Result<usize, i64> {
         Err(38)
     }
-    fn write_stderr(&mut self, _bytes: &[u8]) -> Result<(), String> {
-        Err("stderr is unavailable".to_string())
+    fn write_stderr(&mut self, _bytes: &[u8]) -> Result<(), i64> {
+        Err(38)
     }
     fn open_directory(&mut self, _path: &[u8]) -> Result<u64, i64> {
         self.0.push(b'D');
@@ -619,9 +620,9 @@ impl interpreter::Host for FailingHost {
     }
     fn drop_process(&mut self, child: u64) { assert_eq!(child, 4u64); self.0.push(b'b'); }
 
-    fn write_stdout(&mut self, bytes: &[u8]) -> Result<(), String> {
+    fn write_stdout(&mut self, bytes: &[u8]) -> Result<(), i64> {
         if !self.0.is_empty() {
-            return Err("injected write failure".to_string());
+            return Err(5);
         }
         self.0.extend_from_slice(bytes);
         Ok(())
@@ -633,6 +634,10 @@ fn model_host_failure_keeps_previous_output_and_has_its_own_trap_kind() {
     let error = run_output("pub fn main(mut world:World){let mut out=world.stdout();out.write(\"a\".as_bytes());out.write(\"b\".as_bytes());}", &mut host).err().expect("expected a interpreter failure");
     assert!(error.kind == ErrorKind::Trap(7), "{}", error.message);
     assert_eq!(host.0, "a".as_bytes().to_vec());
+    let failure = error.host.unwrap();
+    assert_eq!(failure.identity[..failure.length], b"Stdout 1"[..]);
+    assert_eq!(failure.errno, 5i64);
+    assert_eq!(failure.operation, 1u64);
 }
 
 fn conditional_projected_drop_clears_moves_while_strict_drop_rejects_repeated_destruction() {
@@ -1149,86 +1154,22 @@ fn listener_intrinsics_reject_wrong_signatures_without_host_effects() {
     }
 }
 
-pub fn run(world: &mut World, trace: bool) -> usize {
-    if trace {
-        let mut output = world.stdout();
-        output.write(b"model_runs_values_moves_borrows_collections_and_source_library\n");
-    }
+pub fn run() -> usize {
     model_runs_values_moves_borrows_collections_and_source_library();
-    if trace {
-        let mut output = world.stdout();
-        output.write(b"model_float_negation_preserves_payload_bits\n");
-    }
     model_float_negation_preserves_payload_bits();
-    if trace {
-        let mut output = world.stdout();
-        output.write(b"model_runs_custom_drop_in_source_order\n");
-    }
     model_runs_custom_drop_in_source_order();
-    if trace {
-        let mut output = world.stdout();
-        output.write(b"model_uses_an_explicit_stack_for_non_tail_calls_and_deep_cleanup\n");
-    }
     model_uses_an_explicit_stack_for_non_tail_calls_and_deep_cleanup();
-    if trace {
-        let mut output = world.stdout();
-        output.write(b"model_reports_program_traps_separately_from_machine_errors\n");
-    }
     model_reports_program_traps_separately_from_machine_errors();
-    if trace {
-        let mut output = world.stdout();
-        output.write(b"raw_ir_detects_moves_double_drop_and_conflicting_access_without_checker\n");
-    }
     raw_ir_detects_moves_double_drop_and_conflicting_access_without_checker();
-    if trace {
-        let mut output = world.stdout();
-        output.write(b"raw_ir_detects_frame_escape_and_inactive_variant_without_checker\n");
-    }
     raw_ir_detects_frame_escape_and_inactive_variant_without_checker();
-    if trace {
-        let mut output = world.stdout();
-        output.write(b"raw_ir_cannot_fabricate_host_authority_or_supply_it_as_integer_argument\n");
-    }
     raw_ir_cannot_fabricate_host_authority_or_supply_it_as_integer_argument();
-    if trace {
-        let mut output = world.stdout();
-        output.write(b"model_output_preserves_bytes_drop_order_and_trap_prefix\n");
-    }
     model_output_preserves_bytes_drop_order_and_trap_prefix();
-    if trace {
-        let mut output = world.stdout();
-        output.write(b"model_host_failure_keeps_previous_output_and_has_its_own_trap_kind\n");
-    }
     model_host_failure_keeps_previous_output_and_has_its_own_trap_kind();
-    if trace {
-        let mut output = world.stdout();
-        output.write(b"conditional_projected_drop_clears_moves_while_strict_drop_rejects_repeated_destruction\n");
-    }
     conditional_projected_drop_clears_moves_while_strict_drop_rejects_repeated_destruction();
-    if trace {
-        let mut output = world.stdout();
-        output.write(b"model_checks_signed_minimum_overflow_and_invalid_raw_integer_widths\n");
-    }
     model_checks_signed_minimum_overflow_and_invalid_raw_integer_widths();
-    if trace {
-        let mut output = world.stdout();
-        output.write(b"strict_and_conditional_drops_have_independent_static_and_dynamic_checks\n");
-    }
     strict_and_conditional_drops_have_independent_static_and_dynamic_checks();
-    if trace {
-        let mut output = world.stdout();
-        output.write(b"shared_reference_copy_keeps_real_carrier_and_exclusive_parent_conflicts\n");
-    }
     shared_reference_copy_keeps_real_carrier_and_exclusive_parent_conflicts();
-    if trace {
-        let mut output = world.stdout();
-        output.write(b"range_views_validate_types_loans_and_utf8_without_the_checker\n");
-    }
     range_views_validate_types_loans_and_utf8_without_the_checker();
-    if trace {
-        let mut output = world.stdout();
-        output.write(b"listener_intrinsics_reject_wrong_signatures_without_host_effects\n");
-    }
     listener_intrinsics_reject_wrong_signatures_without_host_effects();
     readiness_wait_rejects_forged_event_shapes_before_waiting();
     storage_intrinsics_validate_before_host_effects();

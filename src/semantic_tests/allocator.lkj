@@ -201,8 +201,11 @@ fn replace_first(text: &str, from: &str, to: &str) -> String {
     out.push_str(&text[at + from.len()..]);
     out
 }
-pub fn run(world: &mut World) -> usize {
+pub fn observe(world: &mut World) -> usize {
     native_allocator_model(world);
+    1usize
+}
+pub fn run() -> usize {
     entry_guards();
     json_escapes();
     source_allocator_reuses_regions_and_releases_dedicated_mappings();
@@ -211,7 +214,7 @@ pub fn run(world: &mut World) -> usize {
     source_utf8_validation_matches_independent_decoding();
     kernel_refusal_and_unrepresentable_allocation_report_heap_failure();
     raw_names_require_an_explicit_checked_runtime_seal();
-    9usize
+    8usize
 }
 fn entry_guards() {
     let runtime = prepared();
@@ -266,7 +269,7 @@ fn json_escapes() {
     assert!(bytes == expected.as_bytes().to_vec());
 }
 
-fn native_result(world: &mut World, bytes: Vec<u8>) -> Result<u64, String> {
+fn native_result(world: &mut World, bytes: Vec<u8>) -> Result<u64, Vec<u8>> {
     let mut storage = world.temporary_file().unwrap();
     storage.write_all(&bytes).unwrap();
     storage.set_executable().unwrap();
@@ -289,7 +292,7 @@ fn native_result(world: &mut World, bytes: Vec<u8>) -> Result<u64, String> {
     assert!(result.read_to_end().unwrap().is_empty());
     let bytes = errors.read_to_end().unwrap();
     if status != 0 {
-        return Err(String::from_utf8(bytes).unwrap());
+        return Err(bytes);
     }
     assert_eq!(bytes.len(), 8usize);
     let mut value = 0u64;
@@ -333,10 +336,7 @@ fn native_allocator_model(world: &mut World) {
         },
     )
     .unwrap();
-    assert!(
-        native_result(world, image.bytes)
-            .err()
-            .unwrap()
-            .starts_with("R0016 at line ")
-    );
+    let raw = native_result(world, image.bytes).err().unwrap();
+    let failure = crate::runtime_diagnostics::decode("runtime.lkj", ordinary.program(), &runtime, &raw).unwrap();
+    assert_eq!(failure.0, 16u64);
 }

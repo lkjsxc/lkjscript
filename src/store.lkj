@@ -36,7 +36,7 @@ impl Budget {
     fn new() -> Self {
         Self { generations: Vec::new(), entries: BTreeMap::new(), bytes: 0, metadata: 24 }
     }
-    fn size(&self) -> usize { self.bytes + self.metadata + reuse::header_size() + 32usize }
+    fn size(&self) -> usize { self.bytes + self.metadata + reuse::header_size() }
     fn forget(&mut self, name: &str) {
         if let Some(entry) = self.entries.remove(&name.to_string()) {
             self.bytes -= entry.bytes;
@@ -56,7 +56,7 @@ impl Budget {
     fn growth(&self, name: &str, producer: &str, bytes: usize, current_index: usize) -> Option<usize> {
         let generation = if self.generations.contains(&producer.to_string()) { 0usize } else { 8usize + producer.len() };
         let index = self.metadata.checked_add(generation)?.checked_add(16usize)?.checked_add(name.len())?
-            .checked_add(reuse::header_size() + 32usize)?;
+            .checked_add(reuse::header_size())?;
         self.bytes.checked_add(bytes)?.checked_add(index.max(current_index))
     }
     fn encode(&self) -> Vec<u8> {
@@ -90,12 +90,12 @@ impl Budget {
             let producer = entry_producer(&name)?;
             let length = reader.word()?;
             if !result.generations.contains(&producer) || result.entries.contains_key(&name)
-                || length < reuse::header_size() + 32usize { return None; }
+                || length < reuse::header_size() { return None; }
             result.bytes = result.bytes.checked_add(length)?;
             result.metadata = result.metadata.checked_add(16usize + name.len())?;
             result.entries.insert(name, StoredEntry { producer, bytes: length });
         }
-        result.bytes.checked_add(result.metadata)?.checked_add(reuse::header_size() + 32usize)?;
+        result.bytes.checked_add(result.metadata)?.checked_add(reuse::header_size())?;
         if !reader.done() { return None; }
         Some(result)
     }
@@ -177,12 +177,12 @@ impl Store {
         })
     }
 
-    fn raw(&mut self, namespace: &str, key: &str) -> Option<Vec<u8>> {
+    fn raw(&mut self, namespace: &str, key: &str) -> Option<reuse::VerifiedPayload> {
         // Generations coexist until the disposable store reaches its size cap.
         // Authentication always binds the original executable digest.
         let name = format!("{namespace}-{}-{key}", self.producer_slot);
         let mut file = cache_file(&mut self.directory, &name)?;
-        let result = read_envelope(&mut file, &self.producer, &self.secret, namespace, key);
+        let result = read_envelope(&mut file, &self.producer, &self.secret, namespace, key, self.capacity);
         if result.is_none() { self.rejected += 1; self.discard(namespace, key); }
         result
     }
@@ -192,16 +192,14 @@ impl Store {
             Some(raw) => raw,
             None => { self.misses += 1; return None; }
         };
-        match reuse::authenticate(&self.producer, &self.secret, namespace, key, &raw) {
-            Some(payload) => { self.hits += 1; Some(payload) }
-            None => { self.rejected += 1; self.misses += 1; self.discard(namespace, key); None }
-        }
+        self.hits += 1;
+        Some(raw.into_bytes())
     }
 
     pub fn records(&mut self, namespace: &str, group: &str, keys: &[String]) -> reuse::Records {
         let mut records = reuse::Records::packed(&self.producer, &self.secret, namespace, group);
         if let Some(raw) = self.raw(namespace, group) {
-            if !records.load_pack(&raw) { self.discard(namespace, group); }
+            if !records.load_verified_pack(raw) { self.discard(namespace, group); }
         }
         records.retain(namespace, keys);
         records
@@ -249,13 +247,11 @@ impl Store {
         let identity = sha256::digest(b"lkjscript-store-size-index-1");
         let mut valid_index = false;
         if let Some(mut file) = cache_file(&mut self.directory, ".budget-index") {
-            if let Some(raw) = read_envelope(&mut file, &identity[..], &self.secret, "size-index", "1") {
-                if let Some(payload) = reuse::authenticate(&identity[..], &self.secret, "size-index", "1", &raw) {
-                    if let Some(budget) = Budget::decode(&payload) {
-                        self.budget = budget;
-                        self.index_bytes = raw.len();
-                        valid_index = true;
-                    }
+            if let Some(raw) = read_envelope(&mut file, &identity[..], &self.secret, "size-index", "1", self.capacity) {
+                if let Some(budget) = Budget::decode(raw.bytes()) {
+                    self.budget = budget;
+                    self.index_bytes = raw.bytes().len() + reuse::header_size();
+                    valid_index = true;
                 }
             }
         }
@@ -277,7 +273,7 @@ impl Store {
                         let mut header = vec![0u8; reuse::header_size()];
                         if read_exact(&mut file, &mut header) {
                             if let Some(payload) = reuse::payload_length(&header) {
-                                valid = payload.checked_add(header.len() + 32usize) == Some(expected);
+                                valid = payload.checked_add(header.len()) == Some(expected);
                             }
                         }
                     }
@@ -494,38 +490,18 @@ fn at_end(file: &mut File) -> bool {
     match file.read(&mut byte) { Ok(0) => true, _ => false }
 }
 fn read_envelope(
-    file: &mut File, producer: &[u8], secret: &[u8], namespace: &str, key: &str,
-) -> Option<Vec<u8>> {
+    file: &mut File, producer: &[u8], secret: &[u8], namespace: &str, key: &str, capacity: usize,
+) -> Option<reuse::VerifiedPayload> {
     let mut header = vec![0u8; reuse::header_size()];
     if !read_exact(file, &mut header) { return None; }
-    let payload = reuse::payload_length(&header)?;
-    let length = header.len().checked_add(payload)?.checked_add(32)?;
-    // A small bounded buffer is an I/O optimization, never an admission limit.
-    // Large attacker-controlled lengths are streamed before any sized allocation.
-    if length > 8192 {
-        let mut verifier = reuse::Verifier::new(producer, secret, namespace, key, payload)?;
-        let mut buffer = [0u8; 8192];
-        let mut remaining = payload;
-        while remaining != 0 {
-            let count = remaining.min(buffer.len());
-            if !read_exact(file, &mut buffer[..count]) { return None; }
-            if !verifier.update(&buffer[..count]) { return None; }
-            remaining -= count;
-        }
-        let mut tag = [0u8; 32];
-        if !read_exact(file, &mut tag) || !at_end(file) || !verifier.finish(&tag) {
-            return None;
-        }
-        file.rewind().ok()?;
-        let mut bytes = vec![0u8; length];
-        if !read_exact(file, &mut bytes) || !at_end(file) { return None; }
-        // get()/Records::load authenticate this second snapshot again: changing
-        // the file between passes cannot substitute a different payload.
-        Some(bytes)
-    } else {
-        let mut tail = vec![0u8; length - header.len()];
-        if !read_exact(file, &mut tail) || !at_end(file) { return None; }
-        header.extend_from_slice(&tail);
-        Some(header)
-    }
+    // Authenticate the root before its length may drive allocation. The cap is
+    // disposable-store policy, not a source or IR acceptance limit.
+    let root = reuse::AuthenticatedRoot::new(producer, secret, namespace, key, &header)?;
+    let length = root.length();
+    if length.checked_add(header.len())? > capacity { return None; }
+    let mut bytes = vec![0u8; length];
+    if !read_exact(file, &mut bytes) || !at_end(file) { return None; }
+    // Verify exactly these owned bytes once. Concurrent writers, stale roots,
+    // swapped entries, truncation and trailing bytes cannot alter this snapshot.
+    root.verify(bytes)
 }

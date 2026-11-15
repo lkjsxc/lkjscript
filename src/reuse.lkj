@@ -41,6 +41,7 @@ impl Keys {
             });
         }
         let shape = ir::Program {
+            sources: program.sources.clone(),
             types: program.types.clone(),
             functions: signatures,
             destructors: program.destructors.clone(),
@@ -87,7 +88,7 @@ impl Keys {
 /// have passed structure validation. Ordinary body checking reads these shared
 /// inputs and explicit callee contracts, never another function's body.
 pub(crate) fn same_check_graph(left: &ir::Program, right: &ir::Program) -> bool {
-    if left.types != right.types || left.destructors != right.destructors
+    if left.sources != right.sources || left.types != right.types || left.destructors != right.destructors
         || left.functions.len() != right.functions.len() {
         return false;
     }
@@ -207,24 +208,28 @@ pub fn hmac(secret: &[u8], bytes: &[u8]) -> [u8; 32] {
     hash.finish()
 }
 
-fn start_tag(producer: &[u8], secret: &[u8], namespace: &str, key: &str, length: usize) -> Hmac {
+fn root_tag(producer: &[u8], secret: &[u8], namespace: &str, key: &str, length: usize, digest: &[u8]) -> [u8; 32] {
     let mut mac = Hmac::new(secret);
-    mac.field(b"lkjscript-authenticated-store-1");
+    mac.field(b"lkjscript-authenticated-store-root-2");
     mac.field(producer);
     mac.field(b"linux-x86_64");
     mac.field(namespace.as_bytes());
     mac.field(key.as_bytes());
     mac.length(length);
-    mac
-}
-fn tag(producer: &[u8], secret: &[u8], namespace: &str, key: &str, payload: &[u8]) -> [u8; 32] {
-    let mut mac = start_tag(producer, secret, namespace, key, payload.len());
-    mac.update(payload);
+    mac.field(digest);
     mac.finish()
 }
-fn magic() -> &'static [u8] { b"lkjscript-store-1\n" }
+fn equal_digest(expected: &[u8], supplied: &[u8]) -> bool {
+    if expected.len() != 32usize || supplied.len() != 32usize { return false; }
+    let mut different = 0u8;
+    for index in 0usize..32usize { different |= expected[index] ^ supplied[index]; }
+    different == 0u8
+}
+fn magic() -> &'static [u8] { b"lkjscript-store-2\n" }
 
-pub fn header_size() -> usize { magic().len() + 8 }
+/// Fixed framing, length, payload digest and root MAC. There is no trailing tag.
+pub fn header_size() -> usize { magic().len() + 8usize + 64usize }
+/// Framing only: this length grants no allocation or proof authority.
 pub fn payload_length(header: &[u8]) -> Option<usize> {
     if header.len() != header_size() || &header[..magic().len()] != magic() { return None; }
     let mut length = 0u64;
@@ -236,35 +241,61 @@ pub fn payload_length(header: &[u8]) -> Option<usize> {
     Some(size)
 }
 
-/// Authenticate a large disposable entry using constant-size I/O buffers before
-/// allocating its payload. A host must also require EOF and authenticate again
-/// after a bounded reread if another writer can change the same file.
-pub struct Verifier {
-    mac: Hmac,
-    remaining: usize,
-    valid: bool,
+/// Only a valid root authorizes its length. Its content digest still has to
+/// match the single payload snapshot; a stale root proves no mutable file bytes.
+pub struct AuthenticatedRoot {
+    producer: Vec<u8>,
+    authority: [u8; 32],
+    namespace: String,
+    key: String,
+    length: usize,
+    digest: [u8; 32],
 }
-impl Verifier {
-    pub fn new(producer: &[u8], secret: &[u8], namespace: &str, key: &str, length: usize) -> Option<Self> {
-        if producer.len() != 32 || secret.len() != 32 { return None; }
-        Some(Self { mac: start_tag(producer, secret, namespace, key, length), remaining: length, valid: true })
+impl AuthenticatedRoot {
+    pub fn new(producer: &[u8], secret: &[u8], namespace: &str, key: &str, header: &[u8]) -> Option<Self> {
+        if producer.len() != 32usize || secret.len() != 32usize { return None; }
+        let length = payload_length(header)?;
+        let at = magic().len() + 8usize;
+        let digest = &header[at..at + 32usize];
+        let expected = root_tag(producer, secret, namespace, key, length, digest);
+        if !equal_digest(&expected, &header[at + 32usize..]) { return None; }
+        let mut owned = [0u8; 32];
+        for index in 0usize..32usize { owned[index] = digest[index]; }
+        Some(Self {
+            producer: producer.to_vec(), authority: sha256::digest(secret),
+            namespace: namespace.to_string(), key: key.to_string(), length, digest: owned,
+        })
     }
-    pub fn update(&mut self, bytes: &[u8]) -> bool {
-        if !self.valid || bytes.len() > self.remaining {
-            self.valid = false;
-            return false;
-        }
-        self.mac.update(bytes);
-        self.remaining -= bytes.len();
-        true
+    pub fn length(&self) -> usize { self.length }
+    fn matches_payload(&self, bytes: &[u8]) -> bool {
+        bytes.len() == self.length && equal_digest(&self.digest, &sha256::digest(bytes))
     }
-    pub fn finish(self, supplied: &[u8]) -> bool {
-        if !self.valid || self.remaining != 0 || supplied.len() != 32 { return false; }
-        let expected = self.mac.finish();
-        let mut different = 0u8;
-        for index in 0..32 { different |= expected[index] ^ supplied[index]; }
-        different == 0
+    pub fn verify(self, bytes: Vec<u8>) -> Option<VerifiedPayload> {
+        if !self.matches_payload(&bytes) { return None; }
+        Some(VerifiedPayload {
+            producer: self.producer, authority: self.authority, namespace: self.namespace,
+            key: self.key, bytes,
+        })
     }
+}
+
+/// Construction is private to authenticated roots. The domain includes the key
+/// authority as well as producer/namespace/key; a valid foreign root cannot enter
+/// another collection. Consumers may move the verified snapshot, never rehash it.
+pub struct VerifiedPayload {
+    producer: Vec<u8>,
+    authority: [u8; 32],
+    namespace: String,
+    key: String,
+    bytes: Vec<u8>,
+}
+impl VerifiedPayload {
+    fn matches(&self, producer: &[u8], secret: &[u8], namespace: &str, key: &str) -> bool {
+        self.producer.as_slice() == producer && self.authority == sha256::digest(secret)
+            && self.namespace == namespace && self.key == key
+    }
+    pub fn bytes(&self) -> &[u8] { &self.bytes }
+    pub fn into_bytes(self) -> Vec<u8> { self.bytes }
 }
 
 /// A key is separate trusted authority; it must never reside in the store or a
@@ -273,36 +304,28 @@ pub fn seal(
     producer: &[u8], secret: &[u8], namespace: &str, key: &str, payload: &[u8],
 ) -> Vec<u8> {
     if producer.len() != 32 || secret.len() != 32 { return Vec::new(); }
+    let digest = sha256::digest(payload);
+    let tag = root_tag(producer, secret, namespace, key, payload.len(), &digest);
     let mut bytes = magic().to_vec();
     for index in 0..8 {
         bytes.push(((payload.len() as u64) >> (index * 8)) as u8);
     }
+    bytes.extend_from_slice(&digest);
+    bytes.extend_from_slice(&tag);
     bytes.extend_from_slice(payload);
-    bytes.extend_from_slice(&tag(producer, secret, namespace, key, payload));
     bytes
 }
 
-/// Verify exact framing and the MAC before allocating or interpreting payload
-/// fields. A replay for identical inputs is harmless; another identity rejects.
+/// Verify framing, root authority and exact payload before copying or decoding.
+/// Owned I/O snapshots use AuthenticatedRoot::verify to avoid this copy.
 pub fn authenticate(
     producer: &[u8], secret: &[u8], namespace: &str, key: &str, bytes: &[u8],
 ) -> Option<Vec<u8>> {
-    if producer.len() != 32 || secret.len() != 32 { return None; }
-    let header = magic().len() + 8;
-    if bytes.len() < header + 32 || &bytes[..magic().len()] != magic() { return None; }
-    let mut length = 0u64;
-    for index in 0..8 {
-        length |= (bytes[magic().len() + index] as u64) << (index * 8);
-    }
-    let actual = bytes.len() - header - 32;
-    if length != actual as u64 { return None; }
-    let payload = &bytes[header..header + actual];
-    let expected = tag(producer, secret, namespace, key, payload);
-    let mut different = 0u8;
-    for index in 0..32 {
-        different |= expected[index] ^ bytes[header + actual + index];
-    }
-    if different != 0 { return None; }
+    let header = header_size();
+    if bytes.len() < header { return None; }
+    let root = AuthenticatedRoot::new(producer, secret, namespace, key, &bytes[..header])?;
+    let payload = &bytes[header..];
+    if !root.matches_payload(payload) { return None; }
     Some(payload.to_vec())
 }
 
@@ -350,6 +373,19 @@ impl Records {
             self.rejected += 1; return false;
         };
         let Some(entries) = decode_pack(namespace, &payload) else {
+            self.rejected += 1; return false;
+        };
+        self.entries = entries;
+        true
+    }
+    /// The host has already authenticated one exact snapshot. Retain its domain
+    /// proof while decoding; do not hash or copy the whole envelope again.
+    pub fn load_verified_pack(&mut self, payload: VerifiedPayload) -> bool {
+        let Some((namespace, group)) = &self.packed else { return false; };
+        if !payload.matches(&self.producer, &self.secret, namespace, group) {
+            self.rejected += 1; return false;
+        }
+        let Some(entries) = decode_pack(namespace, payload.bytes()) else {
             self.rejected += 1; return false;
         };
         self.entries = entries;

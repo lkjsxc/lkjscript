@@ -23,7 +23,7 @@ fn small() -> ir::Program {
             ],
         });
     }
-    ir::Program { types: ir::primitives(), functions, destructors: Vec::new() }
+    ir::Program { sources: vec!["reuse-fixture.lkj".to_string()], types: ir::primitives(), functions, destructors: Vec::new() }
 }
 fn records() -> reuse::Records { reuse::Records::new(&[0x11u8; 32], &[0x22u8; 32]) }
 fn replay(previous: &reuse::Records) -> reuse::Records {
@@ -79,38 +79,55 @@ fn authentication_binds_every_input_and_rejects_damage() {
     assert!(reuse::seal(&producer, &[1u8; 31], "check", "input", b"ok").is_empty());
     assert!(reuse::authenticate(&producer, &[1u8; 31], "check", "input", &encoded).is_none());
 }
-fn streaming_authentication_matches_materialized_records() {
+fn authenticated_roots_bind_the_owned_snapshot() {
     let producer = [0x11u8; 32];
     let secret = [0x22u8; 32];
-    let payload: &[u8] = b"the whole payload, divided at every possible boundary";
+    let payload: &[u8] = b"the exact owned snapshot authenticated by this root";
     let encoded = reuse::seal(&producer, &secret, "test", "key", payload);
     let header = reuse::header_size();
     assert_eq!(reuse::payload_length(&encoded[..header]), Some(payload.len()));
     assert!(reuse::payload_length(&encoded[..header - 1]).is_none());
     assert!(reuse::payload_length(&encoded[..header + 1]).is_none());
-    let supplied = &encoded[header + payload.len()..];
-    for split in 0..payload.len() + 1 {
-        let mut verifier = reuse::Verifier::new(&producer, &secret, "test", "key", payload.len()).unwrap();
-        assert!(verifier.update(&payload[..split]));
-        assert!(verifier.update(&payload[split..]));
-        assert!(verifier.finish(supplied));
+    let root = reuse::AuthenticatedRoot::new(&producer, &secret, "test", "key", &encoded[..header]).unwrap();
+    assert_eq!(root.length(), payload.len());
+    assert_eq!(root.verify(payload.to_vec()).unwrap().into_bytes(), payload.to_vec());
+    for end in 0usize..header {
+        assert!(reuse::AuthenticatedRoot::new(&producer, &secret, "test", "key", &encoded[..end]).is_none());
     }
-    let mut incomplete = reuse::Verifier::new(&producer, &secret, "test", "key", payload.len()).unwrap();
-    assert!(incomplete.update(&payload[..payload.len() - 1]));
-    assert!(!incomplete.finish(supplied));
-    let mut excess = reuse::Verifier::new(&producer, &secret, "test", "key", payload.len() - 1).unwrap();
-    assert!(!excess.update(payload));
-    assert!(!excess.finish(supplied));
-    let mut wrong = reuse::Verifier::new(&producer, &secret, "test", "another key", payload.len()).unwrap();
-    assert!(wrong.update(payload));
-    assert!(!wrong.finish(supplied));
+    for index in 0usize..header {
+        let mut changed = encoded[..header].to_vec();
+        changed[index] ^= 1u8;
+        assert!(reuse::AuthenticatedRoot::new(&producer, &secret, "test", "key", &changed).is_none());
+    }
+    for count in 0usize..payload.len() {
+        let root = reuse::AuthenticatedRoot::new(&producer, &secret, "test", "key", &encoded[..header]).unwrap();
+        assert!(root.verify(payload[..count].to_vec()).is_none());
+    }
+    let mut swapped = payload.to_vec();
+    swapped[0] ^= 1u8;
+    let root = reuse::AuthenticatedRoot::new(&producer, &secret, "test", "key", &encoded[..header]).unwrap();
+    assert!(root.verify(swapped).is_none());
+    let mut appended = payload.to_vec();
+    appended.push(0u8);
+    let root = reuse::AuthenticatedRoot::new(&producer, &secret, "test", "key", &encoded[..header]).unwrap();
+    assert!(root.verify(appended).is_none());
+    assert!(reuse::AuthenticatedRoot::new(&producer, &secret, "test", "different", &encoded[..header]).is_none());
+    assert!(reuse::AuthenticatedRoot::new(&producer, &[0x23u8; 32], "test", "key", &encoded[..header]).is_none());
     let empty = reuse::seal(&producer, &secret, "test", "empty", b"");
-    let verifier = reuse::Verifier::new(&producer, &secret, "test", "empty", 0usize).unwrap();
-    assert!(verifier.finish(&empty[header..]));
+    let root = reuse::AuthenticatedRoot::new(&producer, &secret, "test", "empty", &empty).unwrap();
+    assert!(root.verify(Vec::new()).unwrap().bytes().is_empty());
+}
+fn snapshot(producer: &[u8], secret: &[u8], namespace: &str, key: &str, encoded: &[u8]) -> reuse::VerifiedPayload {
+    let header = reuse::header_size();
+    reuse::AuthenticatedRoot::new(producer, secret, namespace, key, &encoded[..header])
+        .unwrap().verify(encoded[header..].to_vec()).unwrap()
 }
 fn identities_track_body_and_shared_contracts() {
     let original = small();
     let keys = reuse::Keys::new(&original);
+    let mut relocated = original.clone();
+    relocated.sources[0] = "relocated.lkj".to_string();
+    assert_ne!(keys.graph(), reuse::Keys::new(&relocated).graph());
     let text = ir_text::write(&original);
     assert_eq!(text, ir_text::write(&ir_text::read(&text).unwrap()));
     let mut changed = original.clone();
@@ -235,6 +252,18 @@ fn authenticated_packs_bind_the_graph_and_reuse_changed_bodies() {
     assert!(!wrong.load_pack(&pack.bytes));
     let mut wrong = reuse::Records::packed(&producer, &secret, "native", &group);
     assert!(!wrong.load_pack(&pack.bytes));
+    let mut verified = reuse::Records::packed(&producer, &secret, "check", &group);
+    assert!(verified.load_verified_pack(snapshot(&producer, &secret, "check", &group, &pack.bytes)));
+    assert!(check::check_all_cached(reuse::Prepared::new(small()), &mut verified).is_ok());
+    assert_eq!(verified.hits, 2usize);
+    let mut wrong = reuse::Records::packed(&producer, &secret, "check", "other graph");
+    assert!(!wrong.load_verified_pack(snapshot(&producer, &secret, "check", &group, &pack.bytes)));
+    let mut wrong = reuse::Records::packed(&producer, &secret, "native", &group);
+    assert!(!wrong.load_verified_pack(snapshot(&producer, &secret, "check", &group, &pack.bytes)));
+    let mut wrong = reuse::Records::packed(&[0x12u8; 32], &secret, "check", &group);
+    assert!(!wrong.load_verified_pack(snapshot(&producer, &secret, "check", &group, &pack.bytes)));
+    let mut wrong = reuse::Records::packed(&producer, &[0x23u8; 32], "check", &group);
+    assert!(!wrong.load_verified_pack(snapshot(&producer, &secret, "check", &group, &pack.bytes)));
     for end in 0..pack.bytes.len() {
         let mut reader = reuse::Records::packed(&producer, &secret, "check", &group);
         assert!(!reader.load_pack(&pack.bytes[..end]));
@@ -247,24 +276,15 @@ fn authenticated_packs_bind_the_graph_and_reuse_changed_bodies() {
     let forged_count = reuse::seal(&producer, &secret, "check", &group, &payload);
     assert!(!warm.load_pack(&forged_count));
 }
-pub fn run(world: &mut World, trace: bool) -> usize {
-    if trace { world.stdout().write(b"reuse_hmac_standard_vectors\n"); }
+pub fn run() -> usize {
     hmac_standard_vectors();
-    if trace { world.stdout().write(b"reuse_authenticated_domains_and_damage\n"); }
     authentication_binds_every_input_and_rejects_damage();
-    if trace { world.stdout().write(b"reuse_streamed_authentication\n"); }
-    streaming_authentication_matches_materialized_records();
-    if trace { world.stdout().write(b"reuse_body_and_shared_contract_identity\n"); }
+    authenticated_roots_bind_the_owned_snapshot();
     identities_track_body_and_shared_contracts();
-    if trace { world.stdout().write(b"reuse_cached_verdicts_and_changed_body\n"); }
     cached_verdicts_reuse_only_unchanged_bodies();
-    if trace { world.stdout().write(b"reuse_shared_shape_always_checked\n"); }
     shared_shape_is_checked_before_any_body_reuse();
-    if trace { world.stdout().write(b"reuse_malformed_payload_and_domain\n"); }
     malformed_payloads_and_other_domains_do_not_admit_bodies();
-    if trace { world.stdout().write(b"reuse_native_fragment_validation\n"); }
     crate::native::cache_contracts();
-    if trace { world.stdout().write(b"reuse_authenticated_packs\n"); }
     authenticated_packs_bind_the_graph_and_reuse_changed_bodies();
     9usize
 }
