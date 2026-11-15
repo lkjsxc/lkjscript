@@ -47,29 +47,38 @@ pub(super) fn record_site(result: &mut Catalog, files: &[SourceText], owner: Str
     }
 }
 pub(super) fn path_reference(result: &mut Catalog, files: &[SourceText], owner: String,
-    target: String, span: a::Span, kind: &str) {
+    target: String, span: a::Span, kind: &str, resolver: &resolve::Resolver<'_>, scope: a::ModuleId, type_namespace: bool) {
     let file = &files[span.file];
-    if let Some(token) = path_token(file, span) {
-        let token = &file.tokens[token];
-        let canonical = result.by_identity.get(&target).map(|index| result.items[*index].name.clone());
-        let actual_kind = if canonical.as_ref().is_some_and(|name| *name != token.text) {
+    if let Some(index) = path_token(file, span) {
+        let token = &file.tokens[index];
+        let written = written_path(file, span, index);
+        let alias = match resolve::semantic_path_alias(resolver, scope, &written, !type_namespace, span) {
+            Ok(value) => value,
+            Err(_) => {
+                record_site(result, files, owner, target, a::Span { file: span.file, ..token.span }, "alias-origin", false);
+                return;
+            }
+        };
+        let canonical: Option<String> = result.by_identity.get(&target).map(|index: &usize| -> String { result.items[*index].name.clone() });
+        let actual_kind = if alias || canonical.as_ref().is_some_and(|name| *name != token.text) {
             format!("alias-{kind}")
         } else { kind.to_string() };
-        record_site(result, files, owner, target, a::Span { file: span.file, ..token.span }, &actual_kind, true);
+        record_site(result, files, owner, target, a::Span { file: span.file, ..token.span }, &actual_kind, canonical.is_some());
     } else {
         record_site(result, files, owner, target, a::Span { end: span.start, ..span }, "implicit-source", false);
     }
 }
 pub(super) fn import_reference(result: &mut Catalog, files: &[SourceText], owner: String,
-    target: String, imported: &a::Use) {
+    target: String, imported: &a::Use, alias: bool) {
     let file = &files[imported.span.file];
     let end = token_at(&file.tokens, imported.span.end);
     if end == 0usize { return; }
     let mut index = end - 1usize;
     if index > 1usize && file.tokens[index - 1usize].text == "as" { index -= 2usize; }
     let token = &file.tokens[index];
-    let proven = token.text == leaf_name(&imported.path) && token.text != "self";
-    record_site(result, files, owner, target, a::Span { file: imported.span.file, ..token.span }, "import", proven);
+    if token.text == "self" { return; } // The inherited qualification names its target.
+    let proven = token.text == leaf_name(&imported.path);
+    record_site(result, files, owner, target, a::Span { file: imported.span.file, ..token.span }, if alias { "alias-import" } else { "import" }, proven);
 }
 fn field_label(file: &SourceText, outer: a::Span, value: a::Span, name: &str) -> Option<(a::Span, bool)> {
     let at = token_at(&file.tokens, value.start);
@@ -101,16 +110,17 @@ fn field_reference(result: &mut Catalog, files: &[SourceText], owner: &str, targ
             a::Span { end: outer.start, ..outer }, if pattern { "pattern-field" } else { "constructor-field" }, false),
     }
 }
-pub(super) fn pattern_references(result: &mut Catalog, files: &[SourceText], program: &a::Program, owners: &Owners) {
+pub(super) fn pattern_references(result: &mut Catalog, files: &[SourceText], program: &a::Program, owners: &Owners, resolver: &resolve::Resolver<'_>) {
     for node in &program.patterns {
         let path = match &node.kind {
             a::Pattern::Path(path) | a::Pattern::Variant { path, .. } | a::Pattern::Struct { path, .. } => path,
             _ => continue,
         };
         let Some(owner) = owners.get(&files[node.span.file].path, node.span.start, node.span.end) else { continue; };
+        path_qualifications(result, files, program, resolver, &owner, node.scope, node.span);
         let target = value_identity(program, path, &result.function_ids);
         match &target {
-            Some(target) => path_reference(result, files, owner.clone(), target.clone(), node.span, "pattern"),
+            Some(target) => path_reference(result, files, owner.clone(), target.clone(), node.span, "pattern", resolver, node.scope, matches!(node.kind, a::Pattern::Struct { .. })),
             None => record_site(result, files, owner.clone(), path.name.clone(),
                 a::Span { end: node.span.start, ..node.span }, "pattern-constructor", false),
         }
@@ -172,5 +182,133 @@ pub(super) fn local_reference(result: &mut Catalog, files: &[SourceText], progra
     match identity {
         Some(identity) => add_reference(result, files, owner.to_string(), identity, node.span, name, "local-value", true),
         None => add_reference(result, files, owner.to_string(), name.to_string(), node.span, name, "local-origin", false),
+    }
+}
+
+fn written_path(file: &SourceText, span: a::Span, last: usize) -> String {
+    let mut at = token_at(&file.tokens, span.start);
+    if at < file.tokens.len() && file.tokens[at].text == "::" { at += 1usize; }
+    let mut result = String::new();
+    while at <= last && at < file.tokens.len() { result.push_str(&file.tokens[at].text); at += 1usize; }
+    result
+}
+
+fn qualification_site(result: &mut Catalog, files: &[SourceText], program: &a::Program,
+    resolver: &resolve::Resolver<'_>, owner: &str, scope: a::ModuleId, prefix: &str, span: a::Span, spelling: &str) {
+    if matches!(spelling, "crate" | "self" | "super" | "Self") { return; }
+    match resolve::semantic_type_path(resolver, scope, prefix, span) {
+        Ok(path) => {
+            let Some(declaration) = path.declaration else {
+                // Builtin and generic qualifiers have no global declaration edge.
+                record_site(result, files, owner.to_string(), prefix.to_string(), span, "intrinsic-qualification", false);
+                return;
+            };
+            let Some(target) = declaration_identity(program, declaration, &result.function_ids) else {
+                record_site(result, files, owner.to_string(), prefix.to_string(), span, "unresolved-qualification", false);
+                return;
+            };
+            if module_name(&path.name) != target {
+                record_site(result, files, owner.to_string(), prefix.to_string(), span, "associated-qualification", false);
+                return;
+            }
+            let canonical: Option<String> = result.by_identity.get(&target).map(|index: &usize| -> String { result.items[*index].name.clone() });
+            let alias = match resolve::semantic_path_alias(resolver, scope, prefix, false, span) {
+                Ok(value) => value,
+                Err(_) => { record_site(result, files, owner.to_string(), target, span, "alias-origin", false); return; }
+            };
+            let kind = if alias || canonical.as_ref().is_some_and(|name| *name != spelling) { "alias-qualification" } else { "qualification" };
+            record_site(result, files, owner.to_string(), target, span, kind, canonical.is_some());
+        }
+        Err(_) => {
+            // The standard-library root has no source item. A local declaration
+            // called std would have resolved above and remains a real reference.
+            if prefix != "std" {
+                record_site(result, files, owner.to_string(), prefix.to_string(), span, "unresolved-qualification", false);
+            }
+        }
+    }
+}
+
+pub(super) fn path_qualifications(result: &mut Catalog, files: &[SourceText], program: &a::Program,
+    resolver: &resolve::Resolver<'_>, owner: &str, scope: a::ModuleId, span: a::Span) {
+    let file = &files[span.file];
+    let mut at = token_at(&file.tokens, span.start);
+    if at < file.tokens.len() && file.tokens[at].text == "::" { at += 1usize; }
+    let mut prefix = String::new();
+    while at < file.tokens.len() {
+        let token = &file.tokens[at];
+        if token.span.end > span.end || token.kind != 0u8 { break; }
+        if !prefix.is_empty() { prefix.push_str("::"); }
+        prefix.push_str(&token.text);
+        if at + 2usize >= file.tokens.len() || file.tokens[at + 1usize].text != "::" ||
+            file.tokens[at + 2usize].kind != 0u8 || file.tokens[at + 2usize].span.end > span.end { break; }
+        qualification_site(result, files, program, resolver, owner, scope, &prefix,
+            a::Span { file: span.file, ..token.span }, &token.text);
+        at += 2usize;
+    }
+}
+
+pub(super) fn import_qualifications(result: &mut Catalog, files: &[SourceText], program: &a::Program,
+    resolver: &resolve::Resolver<'_>) {
+    // One scan per use tree, retaining inherited group prefixes. Each Use span
+    // starts at the same use keyword and ends at its particular leaf or alias.
+    let mut trees: BTreeMap<(usize, usize), (usize, a::ModuleId, String)> = BTreeMap::new();
+    for imported in &program.uses {
+        let key = (imported.span.file, imported.span.start);
+        if trees.contains_key(&key) {
+            let tree = trees.get_mut(&key).unwrap(); tree.0 = tree.0.max(imported.span.end);
+        } else { trees.insert(key, (imported.span.end, resolve::module(program, &imported.module), root_parent(&imported.module))); }
+    }
+    for ((file_id, start), (end, scope, owner)) in trees {
+        let file = &files[file_id];
+        let mut at = token_at(&file.tokens, start);
+        if at < file.tokens.len() && file.tokens[at].text == "use" { at += 1usize; }
+        let mut prefix = String::new();
+        let mut groups: Vec<String> = Vec::new();
+        while at < file.tokens.len() && file.tokens[at].span.start < end {
+            let token = &file.tokens[at];
+            match token.text.as_str() {
+                "{" => { groups.push(prefix.clone()); at += 1usize; continue; }
+                "}" => { groups.pop(); prefix = groups.last().cloned().unwrap_or(String::new()); at += 1usize; continue; }
+                "," => { prefix = groups.last().cloned().unwrap_or(String::new()); at += 1usize; continue; }
+                "as" => { at += 2usize; continue; }
+                "::" | "*" => { at += 1usize; continue; }
+                _ => {}
+            }
+            if token.kind != 0u8 { at += 1usize; continue; }
+            if !(token.text == "self" && !prefix.is_empty()) {
+                if !prefix.is_empty() { prefix.push_str("::"); }
+                prefix.push_str(&token.text);
+            }
+            if at + 1usize < file.tokens.len() && file.tokens[at + 1usize].text == "::" {
+                qualification_site(result, files, program, resolver, &owner, scope, &prefix,
+                    a::Span { file: file_id, ..token.span }, &token.text);
+            }
+            at += 1usize;
+        }
+    }
+}
+
+pub(super) fn visibility_qualifications(result: &mut Catalog, files: &[SourceText], owners: &Owners) {
+    // Visibility paths resolve by ancestor scope rather than use aliases.
+    // Until that relation is retained, expose the exact missing sites.
+    for (file_id, file) in files.iter().enumerate() {
+        let mut at = 0usize;
+        while at + 3usize < file.tokens.len() {
+            if file.tokens[at].text != "pub" || file.tokens[at + 1usize].text != "(" ||
+                file.tokens[at + 2usize].text != "in" { at += 1usize; continue; }
+            let owner = owners.get(&file.path, file.tokens[at].span.start, file.tokens[at].span.end);
+            at += 3usize;
+            while at < file.tokens.len() && file.tokens[at].text != ")" {
+                let token = &file.tokens[at];
+                if token.kind == 0u8 && !matches!(token.text.as_str(), "crate" | "self" | "super") {
+                    if let Some(owner) = &owner {
+                        record_site(result, files, owner.clone(), token.text.clone(),
+                            a::Span { file: file_id, ..token.span }, "visibility-qualification", false);
+                    }
+                }
+                at += 1usize;
+            }
+        }
     }
 }

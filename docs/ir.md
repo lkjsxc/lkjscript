@@ -468,11 +468,29 @@ definition constraints supply binding and expression types, exact lexical bindin
 targets and nominal field targets. Method selections come from elaboration.
 Constructor/pattern paths and member labels carry resolved identities and exact
 spans; shorthand labels are distinct from the coincident lexical binding use.
-Aliases and import targets remain distinct references. Unresolved projected/closure
-types, or-pattern binding joins and unsampled member choices remain explicit gaps.
-The current frontend checkpoint omits this evidence, so a requested catalog
-re-infers definitions; unchanged indexed image/snapshot reuse still applies.
-This capture cost is why indexing remains an explicit build option.
+Resolved module/type qualifications are separate sites, including grouped/glob
+imports and constructor patterns. Alias provenance is retained through lexical
+imports, reexports and globs, even when an explicit `as` repeats the original
+spelling; alias-value/type/constructor/pattern/qualification/import rows do not
+rename the underlying declaration's spelling. Associated suffixes are not guessed
+to be references to their owner. Generic/intrinsic qualifications, ancestor-only
+visibility paths, unresolved projected/closure types, or-pattern binding joins
+and unsampled member choices remain explicit gaps.
+
+The full in-memory catalog also retains solved expression types keyed by exact
+file/start/end; an absent value or conflicting same-span expansion is unavailable,
+never an inferred default. Refactoring uses this source claim to retain original
+numeric/type context before independently checking the candidate. Nominal type
+labels use the resolver's already qualified declaration name exactly once.
+
+The current frontend checkpoint omits this evidence, so full reference/type
+capture re-infers definitions; unchanged indexed image/snapshot reuse still
+applies. Declaration-only capture retains item/body/file byte identities and
+digests, omits body binding/call-site/reference discovery, and explicitly marks
+`references_recorded=false` and every item's reference completeness false.
+It may resume the frontend checkpoint and serves whole-item/body operations;
+it cannot authorize rename, refactoring, absence-of-uses claims or a full index.
+Indexing remains explicit while its measured construction cost is high.
 
 Checked instances name their source mapping and expanded type arguments; source
 mappings remain claims. Native sizes are producer measurements of emitted function

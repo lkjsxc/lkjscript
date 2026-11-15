@@ -44,6 +44,8 @@ pub struct Catalog {
     pub by_identity: BTreeMap<String, usize>,
     pub references: Vec<Reference>,
     pub unresolved: Vec<Reference>,
+    /// Resolved frontend expression types; None is unavailable or ambiguous.
+    pub expression_types: BTreeMap<(String, usize, usize), Option<String>>,
     pub function_ids: Vec<String>,
     pub instance_ids: Vec<String>,
     pub instance_sources: Vec<String>,
@@ -426,6 +428,7 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
     let mut result = Catalog {
         root: program.files[0usize].path.clone(), references_recorded: include_references,
         items: Vec::new(), by_identity: BTreeMap::new(), references: Vec::new(), unresolved: Vec::new(),
+        expression_types: BTreeMap::new(),
         function_ids: Vec::new(), instance_ids: Vec::new(), instance_sources: Vec::new(),
         implementations: Vec::new(), instance_arguments: Vec::new(), input_digest: sha256::hex_digest(&input_identity),
     };
@@ -514,40 +517,52 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
     }
     if include_references {
         let owners = Owners::new(&result);
+        let resolver = resolve::Resolver::new(program).map_err(|problem| problem.message)?;
+        import_qualifications(&mut result, &files, program, &resolver);
+        visibility_qualifications(&mut result, &files, &owners);
         // Every declaration-backed type path is a resolved reference, including aliases.
         for node in &program.types {
             if let a::Type::Path(path) = &node.kind {
+                let file = &files[node.span.file];
+                let Some(owner) = owners.get(&file.path, node.span.start, node.span.end) else { continue; };
+                path_qualifications(&mut result, &files, program, &resolver, &owner, node.scope, node.span);
                 if let Some(declaration) = path.declaration {
                     if let Some(target) = declaration_identity(program, declaration, &result.function_ids) {
-                        let file = &files[node.span.file];
-                        if let Some(owner) = owners.get(&file.path, node.span.start, node.span.end) {
-                            path_reference(&mut result, &files, owner, target, node.span, "type");
+                        if module_name(&path.name) == target {
+                            path_reference(&mut result, &files, owner, target, node.span, "type", &resolver, node.scope, true);
+                        } else {
+                            add_reference(&mut result, &files, owner, path.name.clone(), node.span,
+                                leaf_name(&path.name), "associated-type", false);
                         }
                     }
                 }
             }
         }
-        let resolver = resolve::Resolver::new(program).map_err(|problem| problem.message)?;
         for imported in &program.uses {
             if imported.glob { continue; }
             let scope = resolve::module(program, &imported.module);
             let path = a::Path { declaration: None, name: imported.path.clone(), args: Vec::new() };
             let mut target: Option<String> = None;
+            let mut alias = false;
             if let Ok(resolved) = resolver.value_path(scope, &path, imported.span) {
                 target = value_identity(program, &resolved, &result.function_ids);
+                alias = resolve::semantic_path_alias(&resolver, scope, &imported.path, true, imported.span).map_err(|problem| problem.message)?;
             }
             if target.is_none() {
                 if let Ok(name) = resolver.type_name(scope, &imported.path, imported.span) {
                     let identity = module_name(&name);
-                    if result.by_identity.contains_key(&identity) { target = Some(identity); }
+                    if result.by_identity.contains_key(&identity) {
+                        target = Some(identity);
+                        alias = resolve::semantic_path_alias(&resolver, scope, &imported.path, false, imported.span).map_err(|problem| problem.message)?;
+                    }
                 }
             }
             if let Some(target) = target {
                 let owner = root_parent(&imported.module);
-                import_reference(&mut result, &files, owner, target, imported);
+                import_reference(&mut result, &files, owner, target, imported, alias);
             }
         }
-        pattern_references(&mut result, &files, program, &owners);
+        pattern_references(&mut result, &files, program, &owners, &resolver);
         let mut local_names: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
         let mut source_functions: BTreeMap<String, usize> = BTreeMap::new();
         for (index, function) in program.functions.iter().enumerate() {
@@ -584,8 +599,19 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         for (expression, node) in program.exprs.iter().enumerate() {
             let file = &files[node.span.file];
             let Some(owner) = owners.get(&file.path, node.span.start, node.span.end) else { continue; };
+            let key = (file.path.clone(), node.span.start, node.span.end);
+            let ty = evidence.as_ref().and_then(|evidence| evidence.expressions.get(&expression)).cloned();
+            if result.expression_types.contains_key(&key) {
+                let previous = result.expression_types.get_mut(&key).unwrap();
+                let agrees = match (&*previous, &ty) {
+                    (Some(left), Some(right)) => left == right,
+                    _ => false,
+                };
+                if !agrees { *previous = None; }
+            } else { result.expression_types.insert(key, ty); }
             match &node.kind {
                 a::Expr::Path(path) | a::Expr::Struct { path, .. } => {
+                    path_qualifications(&mut result, &files, program, &resolver, &owner, node.scope, node.span);
                     let local_target = evidence.as_ref().and_then(|evidence| evidence.locals.get(&expression)).copied();
                     if let Some(target) = local_target {
                         local_reference(&mut result, &files, program, &binding_ids, &source_functions, &owner, node, &path.name, target);
@@ -601,7 +627,8 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
                     let target = resolved.as_ref().and_then(|path| value_identity(program, path, &result.function_ids));
                     if let Some(target) = &target {
                         path_reference(&mut result, &files, owner.clone(), target.clone(), node.span,
-                            if matches!(node.kind, a::Expr::Struct { .. }) { "constructor" } else { "value" });
+                            if matches!(node.kind, a::Expr::Struct { .. }) { "constructor" } else { "value" },
+                            &resolver, node.scope, matches!(node.kind, a::Expr::Struct { .. }));
                     } else if resolved.as_ref().is_some_and(|path| path.declaration.is_some()) {
                         add_reference(&mut result, &files, owner.clone(), path.name.clone(), node.span, leaf_name(&path.name), "associated-function", false);
                     }

@@ -186,6 +186,8 @@ pub struct Use {
     pub module: String,
     pub path: String,
     pub alias: String,
+    /// True even when `as` repeats the original spelling.
+    pub explicit_alias: bool,
     pub glob: bool,
     pub public: Visibility,
     pub span: Span,

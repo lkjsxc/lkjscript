@@ -28,8 +28,7 @@ impl SourceBindings {
     }
 }
 fn declaration_name(source: &a::Program, declaration: usize) -> String {
-    let declaration = &source.declarations[declaration];
-    super::super::semantic::source_module_name(&crate::names::qualified(&source.scopes[declaration.scope].path, &declaration.name))
+    super::super::semantic::source_module_name(&source.declarations[declaration].name)
 }
 impl DefinitionTypes {
     fn semantic_type(&self, source: &a::Program, variable: usize,

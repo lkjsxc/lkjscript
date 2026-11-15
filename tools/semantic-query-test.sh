@@ -19,6 +19,34 @@ pub fn shadowed() -> i64 { let before = scalar(1); { let scalar = before; let _ 
 pub fn alias_type(value: CounterAlias) -> i64 { value.value }
 
 pub fn writes(value: i64, mut output: Stdout) -> i64 { output.write(b"x"); value }
+mod same_alias {
+    use crate::helpers::square as square;
+    pub fn run() -> i64 { square(3) }
+}
+mod direct_import {
+    use crate::helpers::square;
+    pub fn run() -> i64 { square(3) }
+}
+mod exports { pub use crate::helpers::square as square; }
+mod wildcard {
+    use crate::exports::*;
+    pub fn run() -> i64 { square(3) }
+}
+mod same_type {
+    use crate::helpers::Counter as Counter;
+    pub fn run(value: Counter) -> i64 { value.value }
+}
+mod module_alias {
+    use crate::helpers as helpers;
+    pub fn run() -> i64 { helpers::square(3) }
+}
+mod grouped {
+    use crate::{helpers::{self as helpers, Color as Color}, exports::square};
+    pub fn run(value: Color) -> i64 { helpers::square(square(3)) }
+}
+mod visibility {
+    pub(in crate::visibility) fn hidden() -> i64 { 1 }
+}
 SOURCE
 cat > "$fixture/source/helpers.lkj" <<'SOURCE'
 pub struct Counter { pub value: i64 }
@@ -83,6 +111,35 @@ held=$(sed -n 's/^"\([^"]*::binding:held:0\)".*/\1/p' "$fixture/local-outline" |
 [[ -n "$held" ]] || fail 'generic binding identity'
 query type "$held" > "$fixture/generic-binding"
 rg -q 'fact=inferred-type.*value="T"' "$fixture/generic-binding" || fail 'generic definition type'
+
+query references probe > "$fixture/qualified"
+rg -q '"helpers".*kind=qualification' "$fixture/qualified" || fail 'module qualification omitted'
+query references helpers::patterned > "$fixture/qualified-pattern"
+rg -q '"helpers::Color".*kind=qualification' "$fixture/qualified-pattern" || fail 'pattern type qualification omitted'
+query references same_alias::run > "$fixture/same-alias"
+rg -q '"helpers::square".*kind=alias-value' "$fixture/same-alias" || fail 'same-spelling explicit alias lost'
+query references direct_import::run > "$fixture/direct-import"
+rg -q '"helpers::square".*kind=value' "$fixture/direct-import" || fail 'ordinary import became an alias'
+query references wildcard::run > "$fixture/wildcard"
+rg -q '"helpers::square".*kind=alias-value' "$fixture/wildcard" || fail 'reexport/glob alias provenance lost'
+query references same_type::run > "$fixture/same-type"
+rg -q '"helpers::Counter".*kind=alias-type' "$fixture/same-type" || fail 'same-spelling type alias lost'
+query references module_alias::run > "$fixture/module-alias"
+rg -q '"helpers".*kind=alias-qualification' "$fixture/module-alias" || fail 'module alias provenance lost'
+rg -q '"helpers::square".*kind=value' "$fixture/module-alias" || fail 'owner alias changed member spelling'
+query references grouped::run > "$fixture/grouped"
+rg -q '"helpers".*kind=alias-qualification' "$fixture/grouped" || fail 'grouped self alias lost'
+rg -q '"helpers::square".*kind=alias-value' "$fixture/grouped" || fail 'grouped reexport alias lost'
+query uses helpers::square --limit 120 > "$fixture/reexport-uses"
+rg -q 'kind=alias-import' "$fixture/reexport-uses" || fail 'reexport import treated as original declaration spelling'
+query references visibility::hidden > "$fixture/visibility"
+rg -q 'kind=visibility-qualification.*claim=partial' "$fixture/visibility" || fail 'visibility qualification gap omitted'
+
+query outline helpers::record --limit 80 > "$fixture/nominal-outline"
+record_value=$(sed -n 's/^"\([^"]*::binding:value:0\)".*/\1/p' "$fixture/nominal-outline" | head -n 1)
+[[ -n "$record_value" ]] || fail 'nominal binding identity'
+query type "$record_value" > "$fixture/nominal-binding"
+rg -q 'fact=inferred-type.*value="helpers::Counter"' "$fixture/nominal-binding" || fail 'nominal type was not canonically qualified'
 
 query callees probe > "$fixture/callees"
 rg -q 'helpers::square' "$fixture/callees" || fail callees

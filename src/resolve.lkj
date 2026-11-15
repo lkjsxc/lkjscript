@@ -15,6 +15,8 @@ struct Binding {
     public: Visibility,
     glob: bool,
     ambiguous: bool,
+    // Whether this final spelling is fixed by an explicit import alias.
+    semantic_alias: bool,
 }
 struct Resolved {
     name: String,
@@ -413,6 +415,7 @@ impl<'a> Resolver<'a> {
                             public,
                             glob: false,
                             ambiguous: false,
+                            semantic_alias: false,
                         },
                     )
                     .is_some()
@@ -652,6 +655,9 @@ impl<'a> Resolver<'a> {
                 }
                 Item::Struct(_) | Item::Enum(_) | Item::Alias(_) | Item::Trait(_) => {
                     binding.target = format!("{}::{}", binding.target, join_parts(&parts[at..]));
+                    // The suffix has its own spelling; an alias of its owner
+                    // does not make a variant or associated member an alias.
+                    binding.semantic_alias = false;
                     return Ok(Some(Resolved::item(binding)));
                 }
                 _ => return Ok(None),
@@ -732,7 +738,7 @@ impl<'a> Resolver<'a> {
                 .unwrap()
                 .insert(name.to_string());
         }
-        let incoming = Binding {
+        let mut incoming = Binding {
             declaration,
             target: source.target.clone(),
             scope: if export_allowed { scope } else { source.scope },
@@ -743,6 +749,7 @@ impl<'a> Resolver<'a> {
             },
             glob: use_item.glob,
             ambiguous: false,
+            semantic_alias: source.semantic_alias || use_item.explicit_alias,
         };
         let previous: Option<Binding> = match self.names.get(&key) {
             Some(binding) => Some((*binding).clone()),
@@ -750,8 +757,13 @@ impl<'a> Resolver<'a> {
         };
         if let Some(previous) = previous {
             let same = previous.declaration == declaration && previous.target == source.target;
+            if same { incoming.semantic_alias |= previous.semantic_alias; }
             if !previous.glob {
                 if same {
+                    if incoming.semantic_alias != previous.semantic_alias {
+                        self.names.get_mut(&key).unwrap().semantic_alias = incoming.semantic_alias;
+                        return Ok(true);
+                    }
                     return Ok(false);
                 }
                 return Err(Diagnostic::new(
@@ -766,7 +778,7 @@ impl<'a> Resolver<'a> {
                 return Ok(true);
             }
             if same {
-                if self.wider_binding(&incoming, &previous) {
+                if self.wider_binding(&incoming, &previous) || incoming.semantic_alias != previous.semantic_alias {
                     self.names.insert(
                         key,
                         Binding {
@@ -786,7 +798,9 @@ impl<'a> Resolver<'a> {
             if let Some(position) = position {
                 let wider = {
                     let previous = &self.alternatives.get(&key).unwrap()[position];
-                    self.wider_binding(&incoming, previous)
+                    let changed = incoming.semantic_alias && !previous.semantic_alias;
+                    incoming.semantic_alias |= previous.semantic_alias;
+                    self.wider_binding(&incoming, previous) || changed
                 };
                 if wider {
                     self.alternatives.get_mut(&key).unwrap()[position] = incoming;
@@ -1195,4 +1209,13 @@ pub fn semantic_type_path(resolver: &Resolver<'_>, scope: ModuleId, name: &str, 
     let mut path = Path { declaration: None, name: name.to_string(), args: Vec::new() };
     resolver.resolve_path(scope, &mut path, Namespace::Type, span)?;
     Ok(path)
+}
+
+/// Alias provenance of the final written path component, after lexical resolution.
+pub fn semantic_path_alias(resolver: &Resolver<'_>, scope: ModuleId, name: &str, value_namespace: bool,
+    span: Span) -> Result<bool> {
+    let namespace = if value_namespace { Namespace::Value } else { Namespace::Type };
+    let resolved = resolver.path(scope, name, namespace, span, true)?
+        .ok_or_else(|| Diagnostic::new(span, "E_NAME", &format!("unresolved semantic path {name}")))?;
+    Ok(resolved.binding.is_some_and(|binding| binding.semantic_alias))
 }

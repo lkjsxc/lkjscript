@@ -2196,6 +2196,7 @@ impl Parser {
                 module: self.module.clone(),
                 path,
                 alias: String::new(),
+                explicit_alias: false,
                 glob: true,
                 public,
                 span: self.finish_span(span),
@@ -2211,7 +2212,8 @@ impl Parser {
         if self.take("::") {
             return self.use_tree(format!("{path}::"), public, span);
         }
-        let alias = if self.take("as") {
+        let explicit_alias = self.take("as");
+        let alias = if explicit_alias {
             self.ident()?
         } else if name == "self" && !prefix.is_empty() {
             {
@@ -2227,6 +2229,7 @@ impl Parser {
             module: self.module.clone(),
             path,
             alias,
+            explicit_alias,
             glob: false,
             public,
             span: self.finish_span(span),
