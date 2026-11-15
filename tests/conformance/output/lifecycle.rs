@@ -1,8 +1,9 @@
 // expect: output 6c6966656379636c65206f6b0a
 // witness: {}
-fn send_stop(process: &mut Process, kill: &File, empty: &File, target: u32) {
-    let arguments = vec!["-TERM".as_bytes().to_vec(), format!("{target}").into_bytes()];
-    let mut child = process.spawn_file(kill, &arguments, empty, empty, empty, empty).unwrap();
+fn send_stop(process: &mut Process, shell: &File, empty: &File, target: u32) {
+    // Minimal images provide kill as a shell builtin without a /bin/kill file.
+    let arguments = vec!["-c".as_bytes().to_vec(), format!("kill -TERM {target}").into_bytes()];
+    let mut child = process.spawn_file(shell, &arguments, empty, empty, empty, empty).unwrap();
     assert_eq!(child.wait().unwrap(), 0i64);
 }
 fn errno<T>(result: Result<T, i64>, expected: i64) {
@@ -37,11 +38,10 @@ pub fn main(mut world: World) {
     ready.watch_stop(&mut second, 3usize).unwrap();
     assert!(ready.wait(&mut clock, 0usize).unwrap().is_empty());
     let mut bin = world.directory("/bin").unwrap();
-    let kill = bin.open("kill").unwrap();
-    let sleep = bin.open("sleep").unwrap();
+    let shell = bin.open("sh").unwrap();
     let empty = world.temporary_file().unwrap();
     let mut process = world.process();
-    send_stop(&mut process, &kill, &empty, target);
+    send_stop(&mut process, &shell, &empty, target);
     let deadline = clock.nanoseconds().unwrap() + 1000000000usize;
     let events = ready.wait(&mut clock, deadline).unwrap();
     assert!(!events.is_empty());
@@ -53,20 +53,22 @@ pub fn main(mut world: World) {
     ready.unwatch_stop(&mut first).unwrap();
     errno(ready.unwatch_stop(&mut first), 2);
     drop(first);
-    send_stop(&mut process, &kill, &empty, target);
+    send_stop(&mut process, &shell, &empty, target);
     assert!(second.requested().unwrap());
     drop(second);
     assert!(ready.wait(&mut clock, 0usize).unwrap().is_empty());
 
     // Dropping the last Stop does not release the execution's SIGTERM claim.
-    send_stop(&mut process, &kill, &empty, target);
+    send_stop(&mut process, &shell, &empty, target);
     let mut final_stop = world.stop().unwrap();
     assert!(final_stop.requested().unwrap());
     drop(ready);
     assert!(final_stop.requested().unwrap());
     // A child without Stop recovers the pre-claim unblocked SIGTERM bit.
-    let arguments = vec!["30".as_bytes().to_vec()];
-    let mut child = process.spawn_file(&sleep, &arguments, &empty, &empty, &empty, &empty).unwrap();
+    // Some distributions put sleep outside /bin through a multicall symlink.
+    // Execute its ordinary name, as process_capture does for cat, through owned sh.
+    let arguments = vec!["-c".as_bytes().to_vec(), "exec sleep 30".as_bytes().to_vec()];
+    let mut child = process.spawn_file(&shell, &arguments, &empty, &empty, &empty, &empty).unwrap();
     child.request_stop().unwrap();
     assert_eq!(child.wait().unwrap(), 143i64);
     errno(child.request_stop(), 10);

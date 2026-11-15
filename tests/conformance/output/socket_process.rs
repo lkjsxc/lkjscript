@@ -1,5 +1,7 @@
 // expect: output 736f636b65742070726f63657373206f6b0a
-// witness: {}
+// The Rust witness harness selects a case through an environment variable;
+// spawn_file clears environment, so self-execution cannot select its witness case.
+// socket_process_witness.rs retains three-route socket-to-child coverage.
 fn read_exact(file: &mut File, bytes: &mut [u8]) {
     let mut at = 0usize;
     while at < bytes.len() {

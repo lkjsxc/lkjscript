@@ -55,6 +55,6 @@ Idle process RSS cost 2,205.2 bytes/peer; slow header closed at 2.003 s, hostile
 2.1 full-body 6,161 -> 11,506/s; 17,513/15,001 samples; baseline load 8.67/6.26/4.40 -> 6.01/5.87/4.33, after 3.89/4.54/4.31 -> 3.67/4.44/4.29.
 2.1 framing 21,975/s, load 3.67/4.44/4.29 -> 2.83/4.16/4.20; numeric Connector grants and lkjscript clients replaced curl.
 Interpreter children now consistently belong to the broker; the unused local Child path is removed; three diagnostic cases record consumer friction.
-CI portability fixes cover witness module paths, privileged permissions, directory-record comparison and absent test utilities; witness builds.
+CI fixtures pass Debian/Ubuntu; isolated repair gate 133.960 s, load 2.04/2.07/2.40 -> 3.83/2.70/2.58; capability semantics unchanged.
 All consumer proof children, broker helpers, fresh ports, credentials, fixture directories and ignored proof outputs are removed.
 Next: documentation-origin candidate and parity; live service and /opt remain untouched.
