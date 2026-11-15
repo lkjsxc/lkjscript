@@ -1,36 +1,35 @@
 # Status — 2026-11-15 UTC
 
-**Direction.** Fourth note: AI-native general-purpose semantic operations at any program size; applications are specimens. Text remains the stored projection. Programs should rebase this direction before its runtime-demand table; compiler starts with authenticated child images, then structural questions/transactions and the size ladder.
+**Direction.** AI-native general-purpose semantic operations at any program size; applications are specimens. Text remains the stored projection. The compiler is the first consumer; the global checked graph/pack is a migration wall, not the chosen ten-million-line checking unit.
 
-**Source and landing.** Direction b579beb7 is pushed; [CI43747015139](https://github.com/lkjsxc/lkjscript/actions/runs/43747015139) passed. Authenticated-child source 72544e88 passes the full four-worker gate: 575.275 s (load 1.81→4.88), 5,356 fresh requests. Fixed point 17,259,129 B; seed refresh follows in its own commit. Source .lkj naming and Programs 9d145128 remain; child.lkj/child/mod.lkj/program.lkj have no alias/fallback.
+**Landing.** Authenticated child source72544e88 and fixed-point seed6632d1ca are pushed; [CI43751124428](https://github.com/lkjsxc/lkjscript/actions/runs/43751124428) passed. Full gate575.275 s (load1.81→4.88), 5,356 fresh requests; image admission679 attacks in6.639 s (5.07→5.30). Programs owns transfer/lifecycle/consumer. Structural source through ef604590 is locally committed; its full gate, new fixed point and CI are pending.
+**Asking.** The twenty real compiler questions below use a pinned historical snapshot. “Old minimum” is selected source-span bytes, not invented historic response totals; actual shared IR retrieval was9,238 B once. Totals41,687/47,370 B give no aggregate saving. Whole queries248–282 ms (load7.88→7.48 and7.53→7.53), index traversal0.89–9.39 ms in those windows:100 ms is unmet. Exact producer hashing remains. [Baseline, shared-read provenance and index costs](../bench/compiler-query-baseline.md); final-producer measurements are running.
+**Changing/comparing.** [Transactions, identities and trust](structure.md) and [seven refactors](structure-refactors.md) are implemented.65 native planner cases and seven CLI kinds pass; refusal preserves source.32/32 journal kills recovered committed text,39.029 s (load6.94→5.36). Review excludes checkout-prefix noise and stays≤30 lines; current historical replay/comparison campaigns are unfinished. Recorded retained language-line adoption: root172/176, refactor helper≥1,005/1,823, native postactivation298/304 (scopes differ; no aggregate percentage). Basic replacement/rename edits, scope guards and checked-closure gate proofs also pass focused suites.
+**Size/code.** [Ladder](../bench/scale.md):10k/100k cold1.70/13.43 s (load6.15→6.15 /6.35→5.76), RSS108,552/698,008 KiB; time/memory/body-edit exponents0.898/0.808/0.848.1M refused under8 GiB;10M is not run. [Fixed-source attribution](../bench/compiler_attribution.md):18.515 s native mean versus2.740 s Rust-O (6.757x; paired loads in the table), no4x milestone or backend floor. Retained rotation/canonical-result steps improve the separately measured SHA workload; final queries/renames at10k/100k are pending.
+**Next.** Finish bounded original-last300 replay and last50 review, member rename/move, final hash/query and ladder measurements; then pause workers, run the full four-worker gate, prove the fixed point, refresh the seed separately, push and inspect CI. No service deployment.
 
-**Failure interface.** Source 4048e172 passes 63 isolated transient-unit cases, 15.048 s (load 6.14→7.85); original-IR oracle plus 32,768 inline64 mutants, 91.790 s (5.99→8.88), zero findings. Path/line, capability/grant, operation and symbolic errno share one bounded line; native terminal formatting allocates nothing, supervisor interpretation/private decoding still allocate. Earlier code had a separate grant/errno line; why the live journal omitted it was not reproduced. Fixed point 17,039,220 B; reproducible seed 3,312,682 B. No production service was touched.
-
-**Edit loop.** Unchanged build 0.55 s (load 3.98→3.98); checker one-body edit 6.35 s (3.98→3.82).
-
-Cached/control images match. Fixed roots authenticate exact domains before allocation, then hash one owned payload; stale-root/substitution/truncation/length/accounting attacks pass. Edit store I/O is 2.677 s; eliminating it still leaves an observed 3.667 s (both load 3.98→3.82), not a lower bound on future designs. Parse/read 0.833, resolve 0.182, key/producer hash 1.044, codecs 0.667, elaborate/check 0.288, emit/runtime 0.623 s share that load window; unchanged syntax/arena and lazy-pack work remain. The 3 s target is unmet.
-
-| Full four-worker gate | Seconds (load) | Reported reused /fresh |
+| Question | Old minimum B | Reply B |
 | --- | ---: | ---: |
-| Final cold | 575.444 (1.89→9.84) | 0 /5,356 |
-| Final unchanged warm | 126.013 (9.84→7.90) | 5,331 /25 |
-| Actual checker edit, before shorter entropy scan | 544.788 (4.89→5.83) | 28 /5,328 |
-
-The actual checker edit changes all 721 compiler-dependent structural images; only 28 independent contracts retain identity. Same-input cross-producer images separately reuse all 749 contracts, not a whole-tree edit claim. The 60 s target is unmet; bench/README.md accounts every phase, the reported warm requests, unconverted closed CLI work and the named consumer_gate_closure pending case for programs (HTTP/program-directory first). The full entropy fill remains; its completed existential scan now exits early.
-
-**Generated code stopped at step 1.** Whole-function allocation across blocks/loops and conditional callee saves already exist. Additional coalescing/operand use gained 1.00% wall/0.70% CPU, below 10%, and was discarded. Fixed-source wall ratios remain 1.826x opt0 and 6.053x -O; no speculative ABI/region change or cold-gate gain is claimed. Paired timings and loads are in bench/.
-
-**Diagnostic causes: 16 tagged programs specimens, not attempt totals.**
-
-| Cause | Count | Accepted rewrite |
-| --- | ---: | --- |
-| Expected Rust form/support gap | 8 | Typed inference 3, collection views/iteration 3, explicit trait impl 1, text fold 1 |
-| Bad/incomplete message | 5 | Located caller/errno, named type/storage operation, value-less no-store |
-| Rule with no Rust counterpart | 3 | Owned text/stable owner index and authenticated child image |
-
-The binary's delta command prints frequent accepted forms. Mandatory formatting/fragment markers were declined without cause evidence.
-
-**Authenticated child images.** build-child binds exact ELF/entry/ABI and canonical checked capability slots; image-authority verifies it. SealedImage retains the authenticated sealed file through Process.spawn_file, without a pathname reopen. The gate's 679 admission attacks and production descriptor-exec witness passed in 6.639 s (load 5.07→5.30); 25 optional native startup attacks also pass. No pre-admission descriptor writes. Programs now owns transfer/lifecycle/consumer completion of external_child_authority; compiler next integrates source/IR queries and checked text transactions, then the size ladder.
+| `outline driver::Options` | 874 | 4,486 |
+| `outline driver::Memo` | 769 | 3,692 |
+| `item driver::compile` | 9,045 | 11,888 |
+| `signature driver::execute_source` | 10,348 | 733 |
+| `signature driver::read_path` | 311 | 674 |
+| `signature driver::diagnostic_source_path` | 434 | 709 |
+| `outline ir::TypeKind` | 1,797 | 4,895 |
+| `outline ir::Op` | 2,356 | 5,582 |
+| `outline ir::Function` | 265 | 1,498 |
+| `outline ir::Program` | 264 | 1,023 |
+| `outline ir::Local` | 112 | 834 |
+| `outline ir::ReturnSource` | 470 | 963 |
+| `outline semantic::Catalog` | 424 | 2,110 |
+| `outline semantic::Item` | 516 | 2,835 |
+| `outline semantic::Reference` | 174 | 1,267 |
+| `outline reuse::AuthenticatedRoot` | 161 | 1,317 |
+| `signature test_runner::closed_contracts` | 360 | 674 |
+| `signature source::load_report` | 10,949 | 794 |
+| `outline native::PreparedImage` | 78 | 785 |
+| `authority authority::analyze` | 1,980 | 611 |
 
 ## Programs
 
