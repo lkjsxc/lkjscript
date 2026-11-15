@@ -1,0 +1,216 @@
+//! Derive a reviewable transaction between two already checked source catalogs.
+//! The driver must still check the candidate and compare its checked meaning
+//! with the desired program. Text gaps and unsupported relocations fail closed.
+use crate::{semantic, structure_edit};
+use std::collections::BTreeMap;
+
+struct Items {
+    by_file: BTreeMap<String, Vec<usize>>,
+    by_identity: BTreeMap<String, usize>,
+}
+fn failure(identity: &str, rule: &str, detail: &str) -> String {
+    format!("{} E_REPLAY_{} {}", semantic::quote(identity), rule, detail)
+}
+fn selectable(kind: &str) -> bool {
+    matches!(kind, "function" | "struct" | "enum" | "trait" | "implementation" | "alias" | "constant" | "module")
+}
+fn items(catalog: &semantic::Catalog) -> Result<Items, String> {
+    let mut ordered: BTreeMap<(String, usize, usize, String), usize> = BTreeMap::new();
+    for (index, item) in catalog.items.iter().enumerate() {
+        if selectable(&item.kind) {
+            ordered.insert((item.file.clone(), item.start, !item.end, item.identity.clone()), index);
+        }
+    }
+    let mut result = Items { by_file: BTreeMap::new(), by_identity: BTreeMap::new() };
+    let mut file = String::new(); let mut end = 0usize;
+    for (_, index) in ordered {
+        let item = &catalog.items[index];
+        if item.file == file && item.start < end {
+            if item.end <= end { continue; }
+            return Err(failure(&item.identity, "OVERLAP", "declaration spans overlap without containment"));
+        }
+        file = item.file.clone(); end = item.end;
+        result.by_identity.insert(item.identity.clone(), index);
+        if !result.by_file.contains_key(&file) { result.by_file.insert(file.clone(), Vec::new()); }
+        result.by_file.get_mut(&file).unwrap().push(index);
+    }
+    Ok(result)
+}
+fn input_index(inputs: &[(String, Vec<u8>)]) -> Result<BTreeMap<String, usize>, String> {
+    let mut result = BTreeMap::new();
+    for (index, (path, _)) in inputs.iter().enumerate() {
+        if result.insert(path.clone(), index).is_some() {
+            return Err(failure(path, "SOURCE", "duplicate source path in snapshot"));
+        }
+    }
+    Ok(result)
+}
+fn input<'a>(inputs: &'a [(String, Vec<u8>)], index: &BTreeMap<String, usize>, path: &str) -> Result<&'a [u8], String> {
+    let at = index.get(&path.to_string()).ok_or_else(|| failure(path, "SOURCE", "catalog file is absent from snapshot"))?;
+    Ok(inputs[*at].1.as_slice())
+}
+fn pair(files: &mut BTreeMap<String, String>, reverse: &mut BTreeMap<String, String>,
+    before: &str, after: &str) -> Result<(), String> {
+    if let Some(previous) = files.get(&before.to_string()) {
+        if *previous != after {
+            return Err(failure(before, "FILE_SPLIT", "stable identities moved from one file into several files"));
+        }
+        return Ok(());
+    }
+    if reverse.contains_key(&after.to_string()) {
+        return Err(failure(after, "FILE_JOIN", "stable identities moved from several files into one file"));
+    }
+    files.insert(before.to_string(), after.to_string());
+    reverse.insert(after.to_string(), before.to_string());
+    Ok(())
+}
+fn directory(path: &str) -> String {
+    match path.rfind('/') { Some(at) => path[..at + 1usize].to_string(), None => String::new() }
+}
+fn file_pairs(before: &semantic::Catalog, before_inputs: &[(String, Vec<u8>)],
+    after: &semantic::Catalog, after_inputs: &[(String, Vec<u8>)]) -> Result<BTreeMap<String, String>, String> {
+    let mut files = BTreeMap::new(); let mut reverse = BTreeMap::new();
+    pair(&mut files, &mut reverse, &before.root, &after.root)?;
+    for item in &before.items {
+        if !selectable(&item.kind) { continue; }
+        if let Some(index) = after.by_identity.get(&item.identity) {
+            pair(&mut files, &mut reverse, &item.file, &after.items[*index].file)?;
+        }
+    }
+    let after_index = input_index(after_inputs)?;
+    let before_directory = directory(&before.root);
+    let after_directory = directory(&after.root);
+    for (path, _) in before_inputs {
+        if files.contains_key(path) { continue; }
+        if after_index.contains_key(path) {
+            pair(&mut files, &mut reverse, path, path)?;
+            continue;
+        }
+        if path.starts_with(&before_directory) {
+            let candidate = format!("{}{}", after_directory, &path[before_directory.len()..]);
+            if after_index.contains_key(&candidate) {
+                pair(&mut files, &mut reverse, path, &candidate)?;
+                continue;
+            }
+        }
+        return Err(failure(path, "FILES", "source file has no stable identity or relative-path counterpart"));
+    }
+    for (path, _) in after_inputs {
+        if !reverse.contains_key(path) {
+            return Err(failure(path, "FILES", "a newly loaded file needs an explicit file-creation operation"));
+        }
+    }
+    Ok(files)
+}
+fn frame(catalog: &semantic::Catalog, selected: &Items, inputs: &[(String, Vec<u8>)],
+    index: &BTreeMap<String, usize>, file: &str) -> Result<String, String> {
+    let source = input(inputs, index, file)?;
+    let mut gaps = Vec::new(); let mut at = 0usize;
+    if let Some(items) = selected.by_file.get(&file.to_string()) {
+        for index in items {
+            let item = &catalog.items[*index];
+            if item.start < at || item.end < item.start || item.end > source.len()
+                || source[item.start..item.end] != *item.text.as_bytes() {
+                return Err(failure(&item.identity, "SPAN", "catalog item does not match source bytes"));
+            }
+            gaps.extend_from_slice(&source[at..item.start]); gaps.push(b'\n');
+            at = item.end;
+        }
+    }
+    gaps.extend_from_slice(&source[at..]);
+    let text = String::from_utf8(gaps).map_err(|_| -> String { failure(file, "SOURCE", "source is not UTF-8") })?;
+    semantic::normalized_digest(&text)
+}
+fn common_order(catalog: &semantic::Catalog, selected: &Items, other: &Items, file: &str) -> Vec<String> {
+    let mut result = Vec::new();
+    if let Some(items) = selected.by_file.get(&file.to_string()) {
+        for index in items {
+            let identity = &catalog.items[*index].identity;
+            if other.by_identity.contains_key(identity) { result.push(identity.clone()); }
+        }
+    }
+    result
+}
+fn same_order(left: &[String], right: &[String]) -> bool {
+    if left.len() != right.len() { return false; }
+    for index in 0usize..left.len() { if left[index] != right[index] { return false; } }
+    true
+}
+fn body(item: &semantic::Item) -> Result<String, String> {
+    let (start, end) = item.body.ok_or_else(|| failure(&item.identity, "BODY", "item has no body"))?;
+    if start < item.start || end < start || end > item.end {
+        return Err(failure(&item.identity, "SPAN", "body is outside its item"));
+    }
+    String::from_utf8(item.text.as_bytes()[start - item.start..end - item.start].to_vec())
+        .map_err(|_| -> String { failure(&item.identity, "SOURCE", "body splits UTF-8") })
+}
+fn same_frame(before: &semantic::Item, after: &semantic::Item) -> bool {
+    let (Some((_, before_end)), Some((_, after_end))) = (before.body, after.body) else { return false; };
+    if before.signature != after.signature || before_end < before.start || before_end > before.end
+        || after_end < after.start || after_end > after.end { return false; }
+    before.text.as_bytes()[before_end - before.start..] == after.text.as_bytes()[after_end - after.start..]
+}
+fn operation(out: &mut String, count: &mut usize, kind: &str, identity: &str,
+    source: &str, expected: &str, anchor: &str) {
+    if *count != 0usize { out.push(','); }
+    out.push_str(&format!("{{\"op\":{},\"id\":{}", semantic::quote(kind), semantic::quote(identity)));
+    if !source.is_empty() { out.push_str(&format!(",\"source\":{}", semantic::quote(source))); }
+    if !expected.is_empty() { out.push_str(&format!(",\"expect\":{}", semantic::quote(expected))); }
+    if !anchor.is_empty() { out.push_str(&format!(",\"before\":{}", semantic::quote(anchor))); }
+    out.push('}'); *count += 1usize;
+}
+pub fn request(before: &semantic::Catalog, before_inputs: &[(String, Vec<u8>)],
+    after: &semantic::Catalog, after_inputs: &[(String, Vec<u8>)]) -> Result<structure_edit::Request, String> {
+    let old = items(before)?; let new = items(after)?;
+    let before_index = input_index(before_inputs)?; let after_index = input_index(after_inputs)?;
+    let pairs = file_pairs(before, before_inputs, after, after_inputs)?;
+    for (before_file, after_file) in &pairs {
+        if frame(before, &old, before_inputs, &before_index, before_file)?
+            != frame(after, &new, after_inputs, &after_index, after_file)? {
+            return Err(failure(before_file, "FRAME", "tokens outside selected declarations changed; imports/module framing need an explicit operation"));
+        }
+        let left = common_order(before, &old, &new, before_file);
+        let right = common_order(after, &new, &old, after_file);
+        if !same_order(&left, &right) {
+            return Err(failure(before_file, "ORDER", "existing declarations were reordered; replay needs an ordered move operation"));
+        }
+    }
+    let mut encoded = format!("{{\"version\":1,\"snapshot\":{},\"operations\":[", semantic::quote(&before.input_digest));
+    let mut count = 0usize;
+    for (identity, index) in &old.by_identity {
+        let item = &before.items[*index];
+        if let Some(next) = new.by_identity.get(identity) {
+            let desired = &after.items[*next];
+            if item.text == desired.text { continue; }
+            if same_frame(item, desired) {
+                operation(&mut encoded, &mut count, "replace-body", identity, &body(desired)?, &item.text_digest, "");
+            } else {
+                operation(&mut encoded, &mut count, "replace-item", identity, &desired.text, &item.text_digest, "");
+            }
+        } else {
+            operation(&mut encoded, &mut count, "remove-item", identity, "", &item.text_digest, "");
+        }
+    }
+    for (_, indices) in &new.by_file {
+        for (position, index) in indices.iter().enumerate() {
+            let item = &after.items[*index];
+            if old.by_identity.contains_key(&item.identity) { continue; }
+            if item.parent != "crate" && !before.by_identity.contains_key(&item.parent) {
+                return Err(failure(&item.identity, "PARENT", "added item has no existing source module parent"));
+            }
+            let mut anchor = String::new();
+            for next in position + 1usize..indices.len() {
+                let following = &after.items[indices[next]];
+                if following.parent == item.parent && old.by_identity.contains_key(&following.identity) {
+                    anchor = following.identity.clone(); break;
+                }
+            }
+            operation(&mut encoded, &mut count, "add-item", &item.parent, &item.text, "", &anchor);
+        }
+    }
+    if count == 0usize {
+        return Err(failure("program", "NO_OPERATIONS", "no selected item changes; text-only gaps are compared separately"));
+    }
+    encoded.push_str("]}");
+    structure_edit::parse(encoded.as_bytes())
+}
