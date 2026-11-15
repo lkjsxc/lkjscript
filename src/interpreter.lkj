@@ -95,6 +95,7 @@ pub trait Host {
         new_name: &[u8],
     ) -> Result<(), i64>;
     fn file_executable(&mut self, file: u64) -> Result<(), i64>;
+    fn file_seal(&mut self, file: u64) -> Result<(), i64>;
     fn monotonic_time(&mut self, bytes: &mut [u8]) -> Result<(), i64>;
     fn spawn_process(
         &mut self,
@@ -230,6 +231,7 @@ impl Host for Vec<u8> {
     ) -> Result<(), i64> {
         Err(38)
     }
+    fn file_seal(&mut self, _file: u64) -> Result<(), i64> { Err(38) }
     fn file_executable(&mut self, _file: u64) -> Result<(), i64> {
         Err(38)
     }

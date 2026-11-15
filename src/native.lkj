@@ -13,6 +13,7 @@ mod cache;
 
 pub(crate) fn cache_contracts() { cache::contracts(); }
 mod entry;
+mod child_entry;
 mod diagnostics;
 mod environment;
 mod intrinsics;
@@ -1463,9 +1464,22 @@ pub(crate) fn prepare_granted(
     grants: &[ir::EntryGrant], result_fd: Option<u32>, profile_path: Option<&str>,
 ) -> Result<PreparedImage, Diagnostic> {
     let entry = Entry { function, arguments: vec![0i64; grants.len()], result_fd };
-    prepare_program(checked.program(), runtime, entry, false, profile_path, Some(grants), None)
+    prepare_program(checked.program(), runtime, entry, false, profile_path, Some(grants), None, None)
 }
 
+
+pub(crate) fn prepare_child(
+    checked: &CheckedProgram, runtime: &Runtime, function: usize,
+    manifest: &crate::child_image::Manifest,
+) -> Result<PreparedImage, Diagnostic> {
+    let expected = crate::child_image::manifest(checked, function)
+        .map_err(|message| Diagnostic::new(Span::default(), "E_CHILD_IMAGE", &message))?;
+    if expected != *manifest {
+        return Err(Diagnostic::new(Span::default(), "E_CHILD_IMAGE", "manifest differs from checked entry"));
+    }
+    let entry = Entry { function, arguments: vec![0i64; manifest.slots.len()], result_fd: Some(3) };
+    prepare_program(checked.program(), runtime, entry, false, None, None, None, Some(manifest))
+}
 
 pub(crate) fn cache_namespace(
     checked: &crate::reuse::Checked,
@@ -1490,7 +1504,7 @@ pub(crate) fn prepare_granted_reusing(
     };
     let entry = Entry { function, arguments: vec![0i64; grants.len()], result_fd };
     let mut cache = cache::Context { namespace, keys, records, prefix: 0 };
-    prepare_program(checked.program(), runtime, entry, false, profile_path, Some(grants), Some(&mut cache))
+    prepare_program(checked.program(), runtime, entry, false, profile_path, Some(grants), Some(&mut cache), None)
 }
 fn valid_foreign_path(path: &[u8]) -> bool {
     path.len() >= 2 && path[0] == b'/' && path[path.len() - 1] == 0
@@ -1563,7 +1577,7 @@ fn encode_program(
     profile_path: Option<&str>, grants: Option<&[ir::EntryGrant]>,
     cache: Option<&mut cache::Context<'_>>,
 ) -> Result<Image, Diagnostic> {
-    prepare_program(program, runtime, entry, runtime_model, profile_path, grants, cache)?.finish()
+    prepare_program(program, runtime, entry, runtime_model, profile_path, grants, cache, None)?.finish()
 }
 fn prepare_program(
     program: &Program,
@@ -1573,6 +1587,7 @@ fn prepare_program(
     profile_path: Option<&str>,
     grants: Option<&[ir::EntryGrant]>,
     mut cache: Option<&mut cache::Context<'_>>,
+    child: Option<&crate::child_image::Manifest>,
 ) -> Result<PreparedImage, Diagnostic> {
     let selected = match program.functions.get(entry.function) {
         Some(function) => function,
@@ -1606,6 +1621,12 @@ fn prepare_program(
     }
     for index in 0..selected.params {
         let kind = &program.types[selected.locals[index].ty].kind;
+        if let Some(manifest) = child {
+            if manifest.slots.len() != selected.params || crate::child_image::Kind::from_type(kind) != Some(manifest.slots[index].kind) {
+                return Err(Diagnostic::new(first_site(selected), "E_CHILD_IMAGE", "transfer slot does not match checked entry type"));
+            }
+            continue;
+        }
         if let Some(grants) = grants {
             if !grant_matches(kind, &grants[index], selected.params) {
                 return Err(Diagnostic::new(first_site(selected), "E_ENTRY", "native entry grant does not match its owned capability parameter"));
@@ -1675,9 +1696,17 @@ fn prepare_program(
     p.diagnostic_stderr = grants.map_or(selected.params == 1 && matches!(program.types[selected.locals[0].ty].kind, TypeKind::World), |provided| provided.iter().any(|grant| matches!(grant, ir::EntryGrant::World | ir::EntryGrant::Stderr)));
     p.command_environment = command_environment;
     p.blocking_lock = blocking_lock;
-    let grant_plan = match grants {
-        Some(grants) => Some(entry::Plan::new(&mut a, grants, first_site(selected))),
-        None => None,
+    if let Some(manifest) = child {
+        p.diagnostic_stdout = manifest.slots.iter().any(|slot| slot.kind == crate::child_image::Kind::Stdout);
+        p.diagnostic_stderr = manifest.slots.iter().any(|slot| slot.kind == crate::child_image::Kind::Stderr);
+    }
+    let grant_plan = if let Some(manifest) = child {
+        Some(entry::Plan::child(&mut a, manifest, first_site(selected)))
+    } else {
+        match grants {
+            Some(grants) => Some(entry::Plan::new(&mut a, grants, first_site(selected))),
+            None => None,
+        }
     };
 
     let profile = if profile_path.is_some() { Some(profiling::Labels::new(&mut a)) } else { None };

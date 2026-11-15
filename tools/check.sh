@@ -149,6 +149,7 @@ parallel_step 2 stop-interpreter timeout --kill-after=10s 600s sh tools/http-sto
 parallel_step 2 site timeout --kill-after=10s 600s sh tools/http-site-test.sh --compiler "$check_binary" --offline
 parallel_step 2 desk timeout --kill-after=10s 600s bash tools/http-desk-test.sh --compiler "$check_binary"
 parallel_step 2 desk-events timeout --kill-after=10s 600s bash tools/http-desk-events.sh --compiler "$check_binary"
+parallel_step 1 child-image timeout --kill-after=10s 600s bash tools/child-image-test.sh "$check_binary"
 parallel_step 1 foreign-child timeout --kill-after=10s 600s bash tools/foreign-child-test.sh --compiler "$check_binary"
 parallel_step "$check_suite_jobs" conformance timeout --kill-after=10s 600s "$check_binary" test tests/conformance --stats --jobs "$check_suite_jobs" "${check_reuse[@]}"
 parallel_step "$check_suite_jobs" generated timeout --kill-after=10s 600s "$check_binary" test target/gate/generated --stats --jobs "$check_suite_jobs" "${check_reuse[@]}"

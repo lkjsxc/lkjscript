@@ -355,7 +355,7 @@ pub(super) fn signature(
                 && authority(types, args[0], &TypeKind::File)
                 && opened(types, result, &TypeKind::File)
         }
-        IntrinsicOp::FileRewind | IntrinsicOp::FileExecutable => {
+        IntrinsicOp::FileRewind | IntrinsicOp::FileExecutable | IntrinsicOp::FileSeal => {
             args.len() == 1 && authority(types, args[0], &TypeKind::File) && result == I64
         }
         _ => return None,

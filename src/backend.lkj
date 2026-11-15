@@ -160,3 +160,11 @@ fn emit_artifact(
     };
     Ok(image.bytes)
 }
+
+/// Transfer-only startup derives every slot from the checked entry.
+pub fn prepare_child(
+    checked: &CheckedProgram, runtime: &runtime::Runtime, entry: usize,
+    manifest: &crate::child_image::Manifest,
+) -> Result<native::PreparedImage, Diagnostic> {
+    native::prepare_child(checked, runtime, entry, manifest)
+}

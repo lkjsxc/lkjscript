@@ -273,16 +273,23 @@ fn read_roots_reject_mutation_and_writable_grants() {
         assert!(native::encode_granted(&checked, &runtime, 0usize, &[wrong], None, None).is_err());
         assert!(host.0.is_empty());
     }
+    let manifest = crate::child_image::manifest(&checked, 0usize).unwrap();
+    assert!(manifest.slots[0usize].kind == crate::child_image::Kind::ReadDirectory);
+    native::prepare_child(&checked, &runtime, 0usize, &manifest).unwrap().finish().unwrap();
+    let mut forged = manifest.clone(); forged.slots[0usize].kind = crate::child_image::Kind::Directory;
+    assert!(native::prepare_child(&checked, &runtime, 0usize, &forged).is_err());
     // A producer cannot erase the read-only kind by naming a mutating intrinsic.
-    let mut broken = program;
-    broken.functions[1usize].body[1usize].op = ir::Op::Intrinsic {
-        dst: 2usize, name: ir::IntrinsicOp::FileExecutable, args: vec![1usize],
-    };
-    assert!(check::check(broken.clone()).is_err());
-    let mut host = FailingHost(Vec::new());
-    let error = interpreter::run_granted(&broken, 1usize, &granted, &mut host).err().unwrap();
-    assert!(error.kind == ErrorKind::Interpreter(InterpreterError::InvalidIr));
-    assert_eq!(host.0.as_slice(), b"D");
+    for operation in vec![ir::IntrinsicOp::FileExecutable, ir::IntrinsicOp::FileSeal] {
+        let mut broken = program.clone();
+        broken.functions[1usize].body[1usize].op = ir::Op::Intrinsic {
+            dst: 2usize, name: operation, args: vec![1usize],
+        };
+        assert!(check::check(broken.clone()).is_err());
+        let mut host = FailingHost(Vec::new());
+        let error = interpreter::run_granted(&broken, 1usize, &granted, &mut host).err().unwrap();
+        assert!(error.kind == ErrorKind::Interpreter(InterpreterError::InvalidIr));
+        assert_eq!(host.0.as_slice(), b"D");
+    }
 }
 
 

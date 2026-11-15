@@ -145,6 +145,10 @@ pub fn __lkjscript_file_readonly(file: &mut File) -> Result<File, i64> {
 pub fn __lkjscript_file_rewind(file: &mut File) -> Result<(), i64> {
     unit_result(file.__lkjscript_rewind())
 }
+/// Permanently prevent writes, growth and shrinking on this same sealable file.
+pub fn __lkjscript_file_seal(file: &mut File) -> Result<(), i64> {
+    unit_result(file.__lkjscript_seal())
+}
 pub fn __lkjscript_file_executable(file: &mut File) -> Result<(), i64> {
     unit_result(file.__lkjscript_executable())
 }

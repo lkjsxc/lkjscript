@@ -1,6 +1,8 @@
 //! The complete lkjscript toolchain, written in lkjscript.
 pub mod ast;
 pub mod authority;
+pub mod child_image;
+mod admitted_image;
 pub mod entry_grants;
 pub mod program_directory;
 pub mod backend;

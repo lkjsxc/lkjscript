@@ -1,6 +1,7 @@
 //! Native semantic gate over the compiler's actual source modules.
 pub mod ast;
 pub mod backend;
+pub mod child_image;
 pub mod check;
 pub mod diagnostic;
 pub mod diagnostics;

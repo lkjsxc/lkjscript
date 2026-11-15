@@ -1,0 +1,262 @@
+//! Canonical checked entry identities and authenticated child-image admission.
+//! This is compiler authority. Runtime parents receive only an admitted digest.
+use crate::{ir, reuse, sha256};
+
+pub fn target() -> &'static str { "linux-x86_64" }
+pub fn abi() -> &'static [u8] {
+    b"lkjscript-child-transfer-1\0linux-x86_64\0fd3=result;zero-slots=no-packet-close-fd4-plus;fd4=sealed-packet-for-nonzero;fd8+i=slot;packet=LKJCHD1,manifest32,count64,kind64-offset64-length64;value-payloads=consecutive;env=tag-bytes-nul;argv=explicit;close-undeclared;no-path-open"
+}
+pub fn abi_digest() -> [u8; 32] { sha256::digest(abi()) }
+pub fn packet_magic() -> &'static [u8] { b"LKJCHD1\0" }
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum Kind {
+    Arguments, Environment, ExitStatus, Stdout, Stdin, Stderr, Clock,
+    Directory, ReadDirectory, File, ReadFile, NullDevice, Listener,
+    Connector, Readiness, Entropy,
+}
+impl Kind {
+    pub fn code(self) -> u64 {
+        match self {
+            Kind::Arguments => 1, Kind::Environment => 2, Kind::ExitStatus => 3,
+            Kind::Stdout => 4, Kind::Stdin => 5, Kind::Stderr => 6, Kind::Clock => 7,
+            Kind::Directory => 8, Kind::ReadDirectory => 9, Kind::File => 10,
+            Kind::ReadFile => 11, Kind::NullDevice => 12, Kind::Listener => 13,
+            Kind::Connector => 14, Kind::Readiness => 15, Kind::Entropy => 16,
+        }
+    }
+    pub fn decode(code: u64) -> Option<Self> {
+        match code {
+            1 => Some(Kind::Arguments), 2 => Some(Kind::Environment), 3 => Some(Kind::ExitStatus),
+            4 => Some(Kind::Stdout), 5 => Some(Kind::Stdin), 6 => Some(Kind::Stderr),
+            7 => Some(Kind::Clock), 8 => Some(Kind::Directory), 9 => Some(Kind::ReadDirectory),
+            10 => Some(Kind::File), 11 => Some(Kind::ReadFile), 12 => Some(Kind::NullDevice),
+            13 => Some(Kind::Listener), 14 => Some(Kind::Connector), 15 => Some(Kind::Readiness),
+            16 => Some(Kind::Entropy), _ => None,
+        }
+    }
+    pub fn name(self) -> &'static str {
+        match self {
+            Kind::Arguments => "Arguments", Kind::Environment => "Environment",
+            Kind::ExitStatus => "ExitStatus", Kind::Stdout => "Stdout", Kind::Stdin => "Stdin",
+            Kind::Stderr => "Stderr", Kind::Clock => "Clock", Kind::Directory => "Directory",
+            Kind::ReadDirectory => "ReadDirectory", Kind::File => "File", Kind::ReadFile => "ReadFile",
+            Kind::NullDevice => "NullDevice", Kind::Listener => "Listener",
+            Kind::Connector => "Connector", Kind::Readiness => "Readiness", Kind::Entropy => "Entropy",
+        }
+    }
+    pub fn descriptor(self) -> bool {
+        matches!(self, Kind::Stdout | Kind::Stdin | Kind::Stderr | Kind::Directory |
+            Kind::ReadDirectory | Kind::File | Kind::ReadFile | Kind::NullDevice |
+            Kind::Listener | Kind::Readiness)
+    }
+    pub fn value(self) -> bool { matches!(self, Kind::Environment | Kind::Connector) }
+    pub fn from_type(kind: &ir::TypeKind) -> Option<Self> {
+        match kind {
+            ir::TypeKind::Arguments => Some(Kind::Arguments),
+            ir::TypeKind::Environment => Some(Kind::Environment),
+            ir::TypeKind::ExitStatus => Some(Kind::ExitStatus),
+            ir::TypeKind::Stdout => Some(Kind::Stdout),
+            ir::TypeKind::Stdin => Some(Kind::Stdin),
+            ir::TypeKind::Stderr => Some(Kind::Stderr),
+            ir::TypeKind::Clock => Some(Kind::Clock),
+            ir::TypeKind::Directory => Some(Kind::Directory),
+            ir::TypeKind::ReadDirectory => Some(Kind::ReadDirectory),
+            ir::TypeKind::File => Some(Kind::File),
+            ir::TypeKind::ReadFile => Some(Kind::ReadFile),
+            ir::TypeKind::NullDevice => Some(Kind::NullDevice),
+            ir::TypeKind::Listener => Some(Kind::Listener),
+            ir::TypeKind::Connector => Some(Kind::Connector),
+            ir::TypeKind::Readiness => Some(Kind::Readiness),
+            ir::TypeKind::Entropy => Some(Kind::Entropy),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, PartialEq)]
+pub struct Slot { pub name: String, pub kind: Kind }
+#[derive(Clone, PartialEq)]
+pub struct Manifest { pub entry: String, pub result: String, pub slots: Vec<Slot> }
+
+fn problem(message: &str) -> String { format!("E_CHILD_IMAGE {message}") }
+fn result_kind(kind: &ir::TypeKind) -> Option<String> {
+    match kind {
+        ir::TypeKind::Unit => Some("unit".to_string()),
+        ir::TypeKind::Bool => Some("bool".to_string()),
+        ir::TypeKind::Char => Some("char".to_string()),
+        ir::TypeKind::F64 => Some("f64".to_string()),
+        ir::TypeKind::Int { bits, signed } => Some(format!("{}{}", if *signed { "i" } else { "u" }, *bits)),
+        _ => None,
+    }
+}
+fn valid_result(kind: &str) -> bool {
+    matches!(kind, "unit" | "bool" | "char" | "f64" | "i8" | "i16" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64")
+}
+pub fn manifest(checked: &ir::CheckedProgram, entry: usize) -> Result<Manifest, String> {
+    let program = checked.program();
+    let function = program.functions.get(entry).ok_or_else(|| problem("entry identity is missing"))?;
+    let result = result_kind(&program.types[function.result].kind)
+        .ok_or_else(|| problem("child result must be unit or a scalar"))?;
+    let mut slots: Vec<Slot> = Vec::new();
+    for index in 0usize..function.params {
+        let local = &function.locals[index];
+        let ty = &program.types[local.ty];
+        let kind = Kind::from_type(&ty.kind).ok_or_else(|| problem(&format!(
+            "entry {} parameter {} has no transfer profile for {}", function.name, local.name, ty.name)))?;
+        if local.name.is_empty() || slots.iter().any(|slot| slot.name == local.name) {
+            return Err(problem("transfer slot names must be nonempty and distinct"));
+        }
+        // Standard streams have fixed runtime identities; two distinct affine
+        // slots must never silently overwrite one another's stream descriptor.
+        if matches!(kind, Kind::Stdout | Kind::Stdin | Kind::Stderr)
+            && slots.iter().any(|slot| slot.kind == kind) {
+            return Err(problem("each standard stream may occupy only one transfer slot"));
+        }
+        slots.push(Slot { name: local.name.clone(), kind });
+    }
+    if slots.len() > (2147483647usize - 8usize) {
+        return Err(problem("transfer descriptor index exceeds the kernel representation"));
+    }
+    Ok(Manifest { entry: function.name.clone(), result, slots })
+}
+fn word(out: &mut Vec<u8>, value: u64) {
+    for index in 0usize..8usize { out.push((value >> (index * 8usize)) as u8); }
+}
+fn bytes(out: &mut Vec<u8>, value: &[u8]) { word(out, value.len() as u64); out.extend_from_slice(value); }
+pub fn encode(manifest: &Manifest) -> Vec<u8> {
+    let mut out = b"lkjscript-child-manifest-1\0"[..].to_vec();
+    bytes(&mut out, target().as_bytes());
+    bytes(&mut out, &abi_digest());
+    bytes(&mut out, manifest.entry.as_bytes());
+    bytes(&mut out, manifest.result.as_bytes());
+    word(&mut out, manifest.slots.len() as u64);
+    for slot in &manifest.slots { bytes(&mut out, slot.name.as_bytes()); word(&mut out, slot.kind.code()); }
+    out
+}
+pub fn identity(manifest: &Manifest) -> [u8; 32] { sha256::digest(&encode(manifest)) }
+
+struct Reader<'a> { bytes: &'a [u8], at: usize }
+impl<'a> Reader<'a> {
+    fn take(&mut self, length: usize) -> Option<&'a [u8]> {
+        if length > self.bytes.len() - self.at { return None; }
+        let begin = self.at; self.at += length; Some(&self.bytes[begin..self.at])
+    }
+    fn word(&mut self) -> Option<u64> {
+        let bytes = self.take(8usize)?; let mut result = 0u64;
+        for index in 0usize..8usize { result |= (bytes[index] as u64) << (index * 8usize); }
+        Some(result)
+    }
+    fn field(&mut self) -> Option<&'a [u8]> {
+        let length = self.word()?;
+        if length > self.bytes.len() as u64 { return None; }
+        self.take(length as usize)
+    }
+    fn text(&mut self) -> Option<String> { String::from_utf8(self.field()?.to_vec()).ok() }
+}
+pub fn decode(encoded: &[u8]) -> Option<Manifest> {
+    let mut reader = Reader { bytes: encoded, at: 0 };
+    if reader.take(27usize)? != b"lkjscript-child-manifest-1\0" { return None; }
+    if reader.field()? != target().as_bytes() || reader.field()? != abi_digest().as_slice() { return None; }
+    let entry = reader.text()?; let result = reader.text()?;
+    if entry.is_empty() || !valid_result(&result) { return None; }
+    let count = reader.word()?;
+    if count > (reader.bytes.len() - reader.at) as u64 / 16u64 { return None; }
+    let mut slots: Vec<Slot> = Vec::new();
+    for _ in 0u64..count {
+        let name = reader.text()?; let kind = Kind::decode(reader.word()?)?;
+        let mut duplicate = name.is_empty();
+        for slot in &slots { if slot.name == name { duplicate = true; } }
+        if duplicate { return None; }
+        if matches!(kind, Kind::Stdout | Kind::Stdin | Kind::Stderr)
+            && slots.iter().any(|slot| slot.kind == kind) { return None; }
+        slots.push(Slot { name, kind });
+    }
+    if reader.at != encoded.len() { return None; }
+    let result = Manifest { entry, result, slots };
+    if encode(&result).as_slice() != encoded { return None; }
+    Some(result)
+}
+pub fn hex(bytes: &[u8]) -> String {
+    let alphabet = b"0123456789abcdef"; let mut out = String::new();
+    for byte in bytes { out.push(alphabet[(*byte >> 4u8) as usize] as char); out.push(alphabet[(*byte & 15u8) as usize] as char); }
+    out
+}
+fn quote(value: &str) -> String {
+    let mut out = Vec::new(); crate::json::write_string(&mut out, value);
+    String::from_utf8(out).unwrap()
+}
+pub fn render(manifest: &Manifest, length: usize, digest: &[u8]) -> String {
+    let entry = quote(&manifest.entry);
+    let mut out = format!("{entry} level=checked-ir target={} abi={} result={} manifest={} image-bytes={length} image-sha256={}\n",
+        target(), hex(&abi_digest()), manifest.result, hex(&identity(manifest)), hex(digest));
+    for (index, slot) in manifest.slots.iter().enumerate() {
+        out.push_str(&format!("{entry} slot={index} name={} kind={} code={} transport={}\n",
+            quote(&slot.name), slot.kind.name(), slot.kind.code(),
+            if slot.kind.descriptor() { format!("fd:{}", 8usize + index) }
+            else if slot.kind.value() { "packet-value".to_string() } else { "explicit-token".to_string() }));
+    }
+    out
+}
+pub struct Admitted { manifest: Manifest, length: usize, digest: [u8; 32] }
+impl Admitted {
+    pub fn manifest(&self) -> &Manifest { &self.manifest }
+    pub fn length(&self) -> usize { self.length }
+    pub fn digest(&self) -> &[u8] { &self.digest }
+    pub fn matches(&self, image: &[u8]) -> bool {
+        image.len() == self.length && sha256::digest(image) == self.digest
+    }
+}
+pub fn admission(manifest: &Manifest, image: &[u8], producer: &[u8], secret: &[u8]) -> Vec<u8> {
+    let mut payload = Vec::new();
+    bytes(&mut payload, &encode(manifest));
+    word(&mut payload, image.len() as u64);
+    payload.extend_from_slice(&sha256::digest(image));
+    reuse::seal(producer, secret, "child-image", target(), &payload)
+}
+/// The expected producer is compiler authority, never read from this record.
+pub fn authenticate(record: &[u8], producer: &[u8], secret: &[u8]) -> Option<Admitted> {
+    let payload = reuse::authenticate(producer, secret, "child-image", target(), record)?;
+    let mut reader = Reader { bytes: &payload, at: 0 };
+    let manifest = decode(reader.field()?)?;
+    let length = reader.word()?;
+    if length > (!0usize) as u64 { return None; }
+    let supplied = reader.take(32usize)?;
+    let mut digest = [0u8; 32];
+    for index in 0usize..32usize { digest[index] = supplied[index]; }
+    if reader.at != payload.len() { return None; }
+    Some(Admitted { manifest, length: length as usize, digest })
+}
+/// Packet bytes are untrusted until native startup validates their immutable
+/// mapping. This producer is shared with Programs but grants no runtime values.
+pub fn packet(manifest: &Manifest, values: &[Vec<u8>]) -> Result<Vec<u8>, String> {
+    if values.len() != manifest.slots.len() { return Err(problem("packet slot count differs")); }
+    let table = manifest.slots.len().checked_mul(24usize).and_then(|size| size.checked_add(48usize))
+        .ok_or_else(|| problem("packet table exceeds usize"))?;
+    let mut out = packet_magic().to_vec(); out.extend_from_slice(&identity(manifest));
+    word(&mut out, manifest.slots.len() as u64);
+    let mut payload = Vec::new();
+    for (index, slot) in manifest.slots.iter().enumerate() {
+        word(&mut out, slot.kind.code());
+        if slot.kind.value() {
+            let value = &values[index];
+            if slot.kind == Kind::Connector && (value.len() != 16usize || value[0] != 2u8
+                || value[1] != 0u8 || value[8..].iter().any(|byte| *byte != 0u8)) {
+                return Err(problem("Connector value must be a canonical IPv4 sockaddr"));
+            }
+            if slot.kind == Kind::Environment && (value.is_empty()
+                || (value[0] == 0u8 && value.len() != 1usize)
+                || (value[0] != 0u8 && value[0] != 1u8)
+                || (value[0] == 1u8 && (value.len() < 2usize
+                    || value[value.len() - 1usize] != 0u8
+                    || value[1usize..value.len() - 1usize].contains(&0u8)))) {
+                return Err(problem("Environment value needs option tag and one trailing NUL"));
+            }
+            word(&mut out, (table + payload.len()) as u64); word(&mut out, value.len() as u64);
+            payload.extend_from_slice(value);
+        } else {
+            if !values[index].is_empty() { return Err(problem("descriptor/token slot cannot contain bytes")); }
+            word(&mut out, 0u64); word(&mut out, 0u64);
+        }
+    }
+    out.extend_from_slice(&payload); Ok(out)
+}

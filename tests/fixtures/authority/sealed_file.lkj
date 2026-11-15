@@ -1,0 +1,12 @@
+// expect: stdout "ok sealed file aliases\n"
+pub fn main(mut world: World) {
+    let mut file = world.temporary_file().unwrap();
+    file.write_all(b"immutable").unwrap();
+    let mut alias = file.__lkjscript_duplicate().unwrap();
+    file.seal().unwrap();
+    assert!(alias.write_all(b"changed").is_err());
+    assert!(alias.truncate(1usize).is_err());
+    file.rewind().unwrap();
+    assert_eq!(file.read_to_end().unwrap().as_slice(), b"immutable");
+    world.stdout().write(b"ok sealed file aliases\n");
+}

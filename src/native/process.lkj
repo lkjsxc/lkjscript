@@ -93,7 +93,7 @@ fn files(a: &mut Assembler, p: Platform) {
     a.ret();
     a.bind(temporary);
     a.address(DI, name);
-    a.immediate(SI, 1); // MFD_CLOEXEC
+    a.immediate(SI, 3); // MFD_CLOEXEC | MFD_ALLOW_SEALING
     syscall(a, 319);
     a.jump(promote);
     a.bind(executable);
@@ -171,6 +171,11 @@ fn files(a: &mut Assembler, p: Platform) {
     a.mov(SP, BP);
     a.pop(BP);
     a.jump(promote);
+    a.bind(p.file_seal);
+    a.immediate(SI, 1033); // F_ADD_SEALS; fixes this file and every writable alias.
+    a.immediate(D, 15); // SEAL_SEAL | SHRINK | GROW | WRITE.
+    syscall(a, 72);
+    a.ret();
     a.bind(p.file_executable);
     a.immediate(SI, 0o755);
     syscall(a, 91);

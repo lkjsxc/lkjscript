@@ -187,6 +187,7 @@ The intrinsic signatures are checked in `src/check.lkj` and `src/check/io.lkj`:
 | `file_set_private` | `(&mut file) -> Result<(), i64>`: fchmod to exactly 0600. |
 | `file_duplicate` | Duplicate an exclusively borrowed File, sharing its offset and preserving closed state. Return Result<File, i64>. |
 | `file_readonly` | Reopen an exclusively borrowed File read-only with a fresh offset at zero, preserving closed state. Return Result<File, i64>; no path authority is granted. |
+| `file_seal` | `(&mut file) -> i64`: F_ADD_SEALS with SEAL/SHRINK/GROW/WRITE, zero or negative errno; never accepts ReadFile or manufactures image authority. |
 | `file_rewind file_executable directory_rewind` | Seek to byte zero or make a File executable; return zero or negative errno. |
 | `directory_read` | Exclusively borrow Directory/ReadDirectory and read Linux directory records into mutable bytes; return count or negative errno. |
 | `directory_create directory_remove directory_rename` | Mutate NUL-terminated basenames through exclusive Directory references. Reject slash, empty name, dot and dot-dot. Return zero or negative errno. |
@@ -451,3 +452,4 @@ original. Differential cases compare optimized native behavior with that origina
 Copied instructions retain their original file, line and column, including traps.
 
 A recheck ma
+Authenticated transfer-only child entry, stable capability slots and the sealed executable identity contract are specified in [child images](child-image.md). Their manifest is derived from CheckedProgram, never from producer annotations.

@@ -564,6 +564,7 @@ impl<H: Host> Interpreter<'_, H> {
             ir::IntrinsicOp::DirectoryRewind
             | ir::IntrinsicOp::FileRewind
             | ir::IntrinsicOp::FileExecutable
+            | ir::IntrinsicOp::FileSeal
                 if values.len() == 1 =>
             {
                 let kind = if name == ir::IntrinsicOp::DirectoryRewind {
@@ -578,6 +579,8 @@ impl<H: Host> Interpreter<'_, H> {
                 let handle = self.io_handle(&authority)?;
                 let outcome = if name == ir::IntrinsicOp::FileExecutable {
                     self.host.file_executable(handle)
+                } else if name == ir::IntrinsicOp::FileSeal {
+                    self.host.file_seal(handle)
                 } else {
                     self.host.rewind_handle(handle)
                 };

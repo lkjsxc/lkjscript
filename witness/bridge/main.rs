@@ -3,13 +3,17 @@
 #[path = "output.rs"]
 mod host;
 pub use lkjscript::{
-    ast, authority, entry_grants, backend, check, diagnostic, diagnostics, elaborate, frontend, generics, interpreter, ir,
+    ast, authority, child_image, entry_grants, backend, check, diagnostic, diagnostics, elaborate, frontend, generics, interpreter, ir,
     ir_text, ir_binary, json, names, native, optimizer, resolve, reuse, runtime, runtime_memory, runtime_diagnostics, sha256, source, syntax, x86,
 };
 include!(concat!(env!("OUT_DIR"), "/embedded-module.rs"));
 mod host_network {
     use super::host::{Child, File, World};
     include!(concat!(env!("OUT_DIR"), "/source/src/host_network.rs"));
+}
+mod admitted_image {
+    use super::host::{File, World};
+    include!(concat!(env!("OUT_DIR"), "/source/src/admitted_image.rs"));
 }
 mod driver_host {
     use super::host::{Child, Clock, Directory, File, Listener, Process, World};

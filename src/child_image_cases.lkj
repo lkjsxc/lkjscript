@@ -1,0 +1,141 @@
+//! Pure admission attacks and packet production for the startup witness.
+mod diagnostic;
+mod ir;
+mod ir_binary;
+mod reuse;
+mod json;
+mod child_image;
+mod admitted_image;
+mod host_network;
+mod x86;
+pub use std::sha256;
+use child_image::{Manifest, Slot, Kind};
+
+fn cases() -> usize {
+    let manifest = Manifest { entry: "mod::child".to_string(), result: "i64".to_string(),
+        slots: vec![Slot { name: "root".to_string(), kind: Kind::ReadDirectory },
+            Slot { name: "output".to_string(), kind: Kind::Stdout },
+            Slot { name: "environment".to_string(), kind: Kind::Environment }] };
+    let encoded = child_image::encode(&manifest);
+    assert!(child_image::decode(&encoded).unwrap() == manifest);
+    let key = [7u8; 32]; let producer = [9u8; 32];
+    let image = b"exact image bytes";
+    let record = child_image::admission(&manifest, &image[..], &producer, &key);
+    let admitted = child_image::authenticate(&record, &producer, &key).unwrap();
+    assert!(admitted.matches(&image[..]));
+    assert!(!admitted.matches(b"exact image bytes!"));
+    assert!(admitted.manifest() == &manifest);
+    assert!(child_image::authenticate(&record, &[8u8; 32], &key).is_none());
+    assert!(child_image::authenticate(&record, &producer, &[6u8; 32]).is_none());
+    let mut count = 6usize;
+    for index in 0usize..record.len() {
+        let mut changed = record.clone(); changed[index] ^= 1u8;
+        assert!(child_image::authenticate(&changed, &producer, &key).is_none()); count += 1;
+    }
+    for length in 0usize..record.len() {
+        assert!(child_image::authenticate(&record[..length], &producer, &key).is_none()); count += 1;
+    }
+    let mut extra = record.clone(); extra.push(0u8);
+    assert!(child_image::authenticate(&extra, &producer, &key).is_none()); count += 1;
+    let alien = reuse::seal(&producer, &key, "front", child_image::target(), b"anything");
+    assert!(child_image::authenticate(&alien, &producer, &key).is_none()); count += 1;
+    let mut reordered = manifest.clone();
+    let first = reordered.slots[0].clone(); let second = reordered.slots[1].clone();
+    reordered.slots[0] = second; reordered.slots[1] = first;
+    assert!(child_image::identity(&reordered) != child_image::identity(&manifest)); count += 1;
+    let mut duplicate = manifest.clone(); duplicate.slots[1].name = "root".to_string();
+    assert!(child_image::decode(&child_image::encode(&duplicate)).is_none()); count += 1;
+    let mut invalid_result = manifest.clone(); invalid_result.result = "World".to_string();
+    assert!(child_image::decode(&child_image::encode(&invalid_result)).is_none()); count += 1;
+    let mut invalid_target = encoded.clone(); invalid_target[35usize] ^= 1u8;
+    assert!(child_image::decode(&invalid_target).is_none()); count += 1;
+    let mut longer = encoded.clone(); longer.push(0);
+    assert!(child_image::decode(&longer).is_none()); count += 1;
+    let values = vec![Vec::<u8>::new(), Vec::<u8>::new(), b"\x01value\0"[..].to_vec()];
+    let packet = child_image::packet(&manifest, &values).unwrap();
+    assert_eq!(packet.len(), 48usize + 3usize * 24usize + 7usize); count += 1;
+    let missing: Vec<Vec<u8>> = Vec::new();
+    assert!(child_image::packet(&manifest, &missing).is_err()); count += 1;
+    let wrong = vec![vec![0u8], Vec::<u8>::new(), b"\x01value\0"[..].to_vec()];
+    assert!(child_image::packet(&manifest, &wrong).is_err()); count += 1;
+    let wrong_env = vec![Vec::<u8>::new(), Vec::<u8>::new(), b"\x01value"[..].to_vec()];
+    assert!(child_image::packet(&manifest, &wrong_env).is_err()); count += 1;
+    count
+}
+fn word(bytes: &[u8], at: usize) -> usize {
+    let mut value = 0usize;
+    for index in 0usize..8usize { value |= (bytes[at + index] as usize) << (index * 8usize); }
+    value
+}
+fn read_path(world: &mut World, path: &str) -> Vec<u8> {
+    let mut directory = world.directory(".").unwrap();
+    directory.open(path).unwrap().read_to_end().unwrap()
+}
+fn sealed_exec(world: &mut World, arguments: &[Vec<u8>]) {
+    assert_eq!(arguments.len(), 5usize);
+    let image_path = String::from_utf8(arguments[1].clone()).unwrap();
+    let record_path = String::from_utf8(arguments[2].clone()).unwrap();
+    let key_path = String::from_utf8(arguments[3].clone()).unwrap();
+    let compiler_path = String::from_utf8(arguments[4].clone()).unwrap();
+    let producer = sha256::digest(&read_path(world, &compiler_path));
+    let key = read_path(world, &key_path);
+    let record = read_path(world, &record_path);
+    let admission = child_image::authenticate(&record, &producer, &key).unwrap();
+    let expected = admission.manifest().clone();
+    assert!(expected.slots.is_empty()); // no Arguments, input or stream grants
+    let mut directory = world.directory(".").unwrap();
+    let mut source = directory.open(&image_path).unwrap();
+    let mut sealed = admitted_image::snapshot(world, &mut source, admission).unwrap();
+    assert!(sealed.has_manifest(&expected));
+    let mut alias = sealed.executable_alias().unwrap();
+    assert!(alias.write_all(b"overwrite admitted bytes").is_err());
+    assert!(alias.truncate(0usize).is_err());
+    // A pathname replacement after verification cannot influence execution.
+    let mut replacement = directory.create(&image_path).unwrap();
+    replacement.write_all(b"not the admitted image").unwrap();
+    let mut input = world.temporary_file().unwrap();
+    input.write_all(b"ambient input sentinel").unwrap(); input.rewind().unwrap();
+    let mut output = world.temporary_file().unwrap(); output.write_all(b"output sentinel").unwrap();
+    let mut errors = world.temporary_file().unwrap(); errors.write_all(b"error sentinel").unwrap();
+    let mut result = world.temporary_file().unwrap();
+    let mut process = world.process();
+    let ignored = vec![b"ambient argument"[..].to_vec()];
+    // Production constructor -> same owned File -> existing execveat path.
+    let mut child = process.spawn_file(sealed.executable(), &ignored, &input, &output, &errors, &result).unwrap();
+    assert_eq!(child.wait().unwrap(), 0i64);
+    result.rewind().unwrap(); let bytes = result.read_to_end().unwrap();
+    assert_eq!(bytes.len(), 8usize); assert_eq!(word(&bytes, 0usize), 37usize);
+    output.rewind().unwrap(); errors.rewind().unwrap();
+    assert_eq!(output.read_to_end().unwrap().as_slice(), b"output sentinel");
+    assert_eq!(errors.read_to_end().unwrap().as_slice(), b"error sentinel");
+    assert_eq!(input.read_to_end().unwrap().as_slice(), b"ambient input sentinel");
+    world.stdout().write(b"ok sealed production File through exec, aliases and path substitution\n");
+}
+
+pub fn main(mut world: World) {
+    let arguments = world.args();
+    if arguments.is_empty() {
+        let count = cases();
+        world.stdout().write(format!("ok child admission {count} attacks\n").as_bytes()); return;
+    }
+    if arguments[0].as_slice() == b"--sealed-exec" { sealed_exec(&mut world, &arguments); return; }
+    assert_eq!(arguments.len(), 2usize);
+    let input = String::from_utf8(arguments[0].clone()).unwrap();
+    let output = String::from_utf8(arguments[1].clone()).unwrap();
+    let mut directory = world.directory(".").unwrap();
+    let mut file = directory.open(&input).unwrap(); let record = file.read_to_end().unwrap();
+    // A test packet producer only. CLI authentication is tested separately;
+    // parsing a manifest here does not authorize any execution.
+    let begin = reuse::header_size();
+    let length = word(&record, begin);
+    let manifest = child_image::decode(&record[begin + 8usize..begin + 8usize + length]).unwrap();
+    let mut values: Vec<Vec<u8>> = Vec::new();
+    for slot in &manifest.slots {
+        let value = if slot.kind == Kind::Environment { b"\x01packet-value\0"[..].to_vec() }
+            else if slot.kind == Kind::Connector { vec![2u8,0,0,9,127,0,0,1,0,0,0,0,0,0,0,0] }
+            else { Vec::new() };
+        values.push(value);
+    }
+    let bytes = child_image::packet(&manifest, &values).unwrap();
+    let mut file = directory.create(&output).unwrap(); file.write_all(&bytes).unwrap();
+}

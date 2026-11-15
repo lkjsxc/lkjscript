@@ -395,6 +395,7 @@ reproduction without Rust or Node. The optional witness lives under witness/.
 | --- | --- |
 | lkjscript check PATH | Source/.lkjir check; silent success or located diagnostics. |
 | lkjscript ir PATH [-o FILE] | Checked textual IR, to stdout unless an output file is supplied. |
+| lkjscript build-child SOURCE --entry NAME --image-key KEY -o IMAGE; lkjscript image-authority IMAGE --image-key KEY | Checked transfer-only image and authenticated canonical authority; verification retains a sealed executable File. See [child image ABI](child-image.md). |
 | lkjscript build PATH [-o FILE]; lkjscript build-entries SOURCE -o DIR --artifact NAME=ENTRY ... | Static executable(s); build defaults to PATH.elf and preserves an existing destination on rejection. Multi-entry checks one source/runtime snapshot and every entry/grant before publishing each NAME and its matched NAME.authority report. |
 | lkjscript run PATH [--entry NAME] | Execute main, else probe, with native default or --engine interpreter. |
 | lkjscript test PATH | Discover expectation cases or execute #[test]/IR test functions across native/interpreter routes; details on failure. |
@@ -430,7 +431,7 @@ Entries take owned Arguments, Environment, ExitStatus, Stdout/Stdin/Stderr, Dire
 build/run require --grant NAME for each parameter: Directory/ReadDirectory take NAME=PATH or NAME=env:VARIABLE, ForeignCommand NAME=/absolute/executable, Environment NAME=VARIABLE, Listener/Connector NAME=IPv4:PORT; others have no payload. Only Listener permits port zero. build embeds descriptors; handles are acquired at startup.
 Directory/ReadDirectory's env:VARIABLE selector resolves only that named variable at invocation/startup; absent or empty fails with errno 2, without a default or directory creation. Reading its path bytes separately requires an Environment grant.
 Duplicate, missing, unknown or malformed grants reject before publication/execution; acquisition failure traps R0007 at entry with the capability kind, granted value, actual operation and symbolic/numeric errno, e.g. `Listener 127.0.0.1:8798 bind: EADDRINUSE (98)`. Listener can rebind after TIME_WAIT; an active listener still excludes it.
-File/ReadFile/Child/borrowed/aggregate entry parameters reject; acquire files through a granted Directory/ReadDirectory.
+Ordinary build/run rejects File/ReadFile/Child/borrowed/aggregate entry parameters; acquire files through a granted Directory/ReadDirectory. Transfer-only child images can import File/ReadFile as documented in the child image ABI.
 All capability types, including World, File and Child, are affine, without constructors or Copy/Clone/Data/Send/Sync implementations. Names, integers or casts cannot forge authority. IR checks each operation independently; methods below exclusively borrow receivers, and derived owners can outlive those borrows.
 
 | Form | Result and authority |
@@ -469,6 +470,7 @@ All capability types, including World, File and Child, are affine, without const
 | File.write/write_all(&[u8]) | One-write count or complete-write Result. |
 | File.duplicate()/readonly() | Duplicate sharing offset/state; or read-only reopen with independent zero offset. Closed remains closed. |
 | File.rewind()/set_executable() | Seek zero or set mode 0755. |
+| File.seal() | Result<(),i64>; permanently seal writes, growth, shrink and seal changes on a sealable anonymous File, including every alias; regular files reject. This restricts File and grants no executable admission. |
 | Stdout/Stderr.write(&[u8]) | Complete write or R0007 at the call with stream kind, inherited descriptor, write operation and symbolic/numeric errno. |
 | Clock.nanoseconds()/unix_seconds()/unix_nanoseconds() | Result<usize,i64> monotonic nanoseconds for deadlines; Result<i64,i64> CLOCK_REALTIME seconds; Result<usize,i64> CLOCK_REALTIME nanoseconds. Realtime may jump; unix_nanoseconds returns errno 75 for negative or unrepresentable time. |
 | ForeignCommand.run(&mut ReadDirectory,&mut NullDevice,&[Vec<u8>],duration_ns:usize) | Result<ReadFile,i64> framed exit/deadline/stdout/stderr; std::foreign::decode consumes it. Synchronous, nonzero duration; absolute deadline begins before setup; every child is killed/reaped before return. |

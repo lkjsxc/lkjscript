@@ -1,0 +1,202 @@
+//! Descriptor-only child entry. No pathname open, bind or environment lookup.
+use crate::child_image::{self, Kind, Manifest};
+use crate::diagnostic::Span;
+use crate::x86::*;
+use super::platform::Platform;
+
+pub struct Plan { manifest: Manifest, values: Label }
+fn call(a: &mut Assembler, number: u64) {
+    let again = a.label(); a.bind(again); a.immediate(A, number); a.syscall();
+    if number != 3 { a.immediate(C, (-4i64) as u64); a.compare(A, C); a.condition(4, again); }
+}
+fn checked(a: &mut Assembler, number: u64, bad: Label) {
+    call(a, number); a.test(A, true); a.condition(8, bad);
+}
+fn equal(a: &mut Assembler, register: u8, expected: u64, bad: Label) {
+    a.immediate(C, expected); a.compare(register, C); a.condition(5, bad);
+}
+fn expect(a: &mut Assembler, base: u8, offset: i64, expected: u64, bad: Label) {
+    a.load(A, base, offset); equal(a, A, expected, bad);
+}
+fn close(a: &mut Assembler, fd: u64) { a.immediate(DI, fd); call(a, 3); }
+fn close_range(a: &mut Assembler, first: u64, last: u64, bad: Label) {
+    if first > last { return; }
+    a.immediate(DI, first); a.immediate(SI, last); a.immediate(D, 0); checked(a, 436, bad);
+}
+fn finish(a: &mut Assembler, bad: Label, done: Label) {
+    a.mov(SP, BP); a.pop(BP); a.jump(done);
+    a.bind(bad); a.immediate(DI, 126); a.immediate(A, 231); a.syscall(); a.jump(bad);
+    a.bind(done);
+}
+fn stat(a: &mut Assembler, fd: u64, bad: Label) {
+    a.immediate(DI, fd); a.lea(SI, BP, -256); checked(a, 5, bad);
+}
+fn flags(a: &mut Assembler, fd: u64, bad: Label) {
+    a.immediate(DI, fd); a.immediate(SI, 3); a.immediate(D, 0); checked(a, 72, bad);
+}
+fn file_kind(a: &mut Assembler, expected: u64, bad: Label) {
+    a.load_width(A, BP, -232, 4, false); a.immediate(C, 0xf000); a.rr(0x21, A, C, true);
+    equal(a, A, expected, bad);
+}
+fn socket_option(a: &mut Assembler, fd: u64, option: u64, expected: u64, bad: Label) {
+    a.immediate(A, 4); a.store(BP, -64, A);
+    a.immediate(DI, fd); a.immediate(SI, 1); a.immediate(D, option);
+    a.lea(R10, BP, -56); a.lea(R8, BP, -64); checked(a, 55, bad);
+    a.load_width(A, BP, -56, 4, false); equal(a, A, expected, bad);
+    a.load_width(A, BP, -64, 4, false); equal(a, A, 4, bad);
+}
+fn descriptor(a: &mut Assembler, fd: u64, kind: Kind, bad: Label) {
+    flags(a, fd, bad);
+    // O_PATH is not an operational file/stream; directory operations accept it.
+    if kind != Kind::Directory && kind != Kind::ReadDirectory {
+        a.mov(D, A); a.immediate(C, 0x200000); a.rr(0x21, D, C, true);
+        a.test(D, true); a.condition(5, bad);
+    }
+    if matches!(kind, Kind::ReadFile | Kind::Stdin | Kind::Stdout | Kind::Stderr) {
+        a.immediate(C, 3); a.rr(0x21, A, C, true);
+        if matches!(kind, Kind::ReadFile | Kind::Stdin) {
+            a.immediate(C, 1); a.compare(A, C); a.condition(4, bad);
+        } else { a.test(A, true); a.condition(4, bad); }
+    }
+    match kind {
+        Kind::Directory | Kind::ReadDirectory => { stat(a, fd, bad); file_kind(a, 0x4000, bad); }
+        Kind::ReadFile => { stat(a, fd, bad); file_kind(a, 0x8000, bad); }
+        Kind::NullDevice => { stat(a, fd, bad); file_kind(a, 0x2000, bad); expect(a, BP, -216, 0x103, bad); }
+        Kind::Listener => {
+            socket_option(a, fd, 3, 1, bad); // SO_TYPE == SOCK_STREAM.
+            socket_option(a, fd, 30, 1, bad); // SO_ACCEPTCONN.
+            a.immediate(A, 32); a.store(BP, -64, A);
+            a.immediate(DI, fd); a.lea(SI, BP, -112); a.lea(D, BP, -64); checked(a, 51, bad);
+            a.load_width(A, BP, -112, 2, false); equal(a, A, 2, bad);
+        }
+        Kind::Readiness => {
+            // epoll_ctl tests target pollability before epfd identity. Use a
+            // fresh private eventfd, never a regular-file EPERM probe. This
+            // new object cannot be registered: MOD must return ENOENT, without
+            // consuming an event or changing any transferred registration.
+            a.immediate(DI, 0); a.immediate(SI, 0x80000); checked(a, 290, bad);
+            a.store(BP, -160, A);
+            a.immediate(A, 0); a.store(BP, -80, A); a.store(BP, -72, A);
+            a.immediate(DI, fd); a.immediate(SI, 3); a.load(D, BP, -160); a.lea(R10, BP, -80);
+            call(a, 233); a.store(BP, -168, A);
+            a.load(DI, BP, -160); call(a, 3);
+            a.load(A, BP, -168); equal(a, A, (-2i64) as u64, bad);
+        }
+        _ => {}
+    }
+}
+impl Plan {
+    pub fn new(a: &mut Assembler, manifest: &Manifest) -> Self {
+        Self { manifest: manifest.clone(), values: a.label() }
+    }
+    pub fn prepare(&self, a: &mut Assembler, p: Platform) {
+        let bad = a.label(); let done = a.label();
+        super::prologue(a, p, 256, Span::default());
+        // Result and packet are distinct fixed descriptors; packet is immutable
+        // before its size or content is trusted or mapped.
+        flags(a, 3, bad); a.immediate(C, 3); a.rr(0x21, A, C, true);
+        a.test(A, true); a.condition(4, bad);
+        // O_RDWR alone does not make a sealed alias writable. In particular,
+        // fd3 must not alias the immutable packet or executable object.
+        a.immediate(DI, 3); a.immediate(SI, 1034); a.immediate(D, 0); call(a, 72);
+        let ordinary_result = a.label();
+        a.test(A, true); a.condition(8, ordinary_result);
+        a.immediate(C, 8); a.rr(0x21, A, C, true); a.test(A, true); a.condition(5, bad);
+        a.bind(ordinary_result);
+        if self.manifest.slots.is_empty() {
+            // No input or stream authority: the existing Process.spawn_file
+            // path can execute the retained sealed File with only fd3.
+            close(a, 0); close(a, 1); close(a, 2); close_range(a, 4, 0xffffffff, bad);
+            finish(a, bad, done); return;
+        }
+        a.immediate(DI, 4); a.immediate(SI, 1034); a.immediate(D, 0); checked(a, 72, bad);
+        a.immediate(C, 15); a.rr(0x21, A, C, true); equal(a, A, 15, bad);
+        stat(a, 4, bad); file_kind(a, 0x8000, bad);
+        a.load(A, BP, -208); // struct stat.st_size
+        a.test(A, true); a.condition(8, bad);
+        let table = 48usize + self.manifest.slots.len() * 24usize;
+        a.immediate(C, table as u64); a.compare(A, C); a.condition(2, bad);
+        a.store(BP, -16, A);
+        a.immediate(DI, 0); a.mov(SI, A); a.immediate(D, 1); a.immediate(R10, 2);
+        a.immediate(R8, 4); a.immediate(R9, 0); call(a, 9);
+        a.immediate(C, (-4095i64) as u64); a.compare(A, C); a.condition(3, bad);
+        a.mov(B, A); a.store(BP, -8, A);
+        let magic = child_image::packet_magic();
+        let mut expected = 0u64;
+        for index in 0usize..8usize { expected |= (magic[index] as u64) << (index * 8usize); }
+        expect(a, B, 0, expected, bad);
+        let identity = child_image::identity(&self.manifest);
+        for group in 0usize..4usize {
+            let mut expected = 0u64;
+            for byte in 0usize..8usize { expected |= (identity[group * 8usize + byte] as u64) << (byte * 8usize); }
+            expect(a, B, 8i64 + group as i64 * 8i64, expected, bad);
+        }
+        expect(a, B, 40, self.manifest.slots.len() as u64, bad);
+        a.immediate(A, table as u64); a.store(BP, -24, A);
+        for (index, slot) in self.manifest.slots.iter().enumerate() {
+            let at = 48i64 + index as i64 * 24i64;
+            expect(a, B, at, slot.kind.code(), bad);
+            if slot.kind.value() {
+                a.load(A, B, at + 8); a.load(C, BP, -24); a.compare(A, C); a.condition(5, bad);
+                a.load(D, B, at + 16);
+                a.load(C, BP, -16); a.rr(0x29, C, A, true); a.compare(D, C); a.condition(7, bad);
+                a.mov(R8, B); a.rr(0x01, R8, A, true); // validated payload pointer
+                a.rr(0x01, A, D, true); a.store(BP, -24, A);
+                if slot.kind == Kind::Connector {
+                    equal(a, D, 16, bad);
+                    a.load_width(A, R8, 0, 2, false); equal(a, A, 2, bad);
+                    expect(a, R8, 8, 0, bad);
+                    a.load(A, R8, 0); a.shift(A, 5, 16);
+                } else {
+                    a.test(D, true); a.condition(4, bad);
+                    a.load_width(A, R8, 0, 1, false);
+                    let absent = a.label(); let ready = a.label(); let scan = a.label(); let final_byte = a.label();
+                    a.test(A, true); a.condition(4, absent);
+                    equal(a, A, 1, bad); a.immediate(C, 2); a.compare(D, C); a.condition(2, bad);
+                    a.lea(A, R8, 1); a.mov(R9, A); a.lea(D, D, -2);
+                    a.bind(scan); a.test(D, true); a.condition(4, final_byte);
+                    a.load_width(C, R9, 0, 1, false); a.test(C, true); a.condition(4, bad);
+                    a.lea(R9, R9, 1); a.lea(D, D, -1); a.jump(scan);
+                    a.bind(final_byte); a.load_width(C, R9, 0, 1, false); a.test(C, true); a.condition(5, bad);
+                    a.jump(ready);
+                    a.bind(absent); equal(a, D, 1, bad); a.immediate(A, 0);
+                    a.bind(ready);
+                }
+            } else {
+                expect(a, B, at + 8, 0, bad); expect(a, B, at + 16, 0, bad);
+                if slot.kind.descriptor() {
+                    descriptor(a, 8u64 + index as u64, slot.kind, bad);
+                    a.immediate(A, 8u64 + index as u64);
+                } else { a.immediate(A, 1); }
+            }
+            a.address(R11, self.values); a.store(R11, index as i64 * 8i64, A);
+        }
+        a.load(A, BP, -24); a.load(C, BP, -16); a.compare(A, C); a.condition(5, bad);
+        // Validate every slot before remapping streams or exposing a capability.
+        for (index, slot) in self.manifest.slots.iter().enumerate() {
+            let destination = match slot.kind { Kind::Stdin => Some(0u64), Kind::Stdout => Some(1u64), Kind::Stderr => Some(2u64), _ => None };
+            if let Some(fd) = destination {
+                a.immediate(DI, 8u64 + index as u64); a.immediate(SI, fd); a.immediate(D, 0);
+                checked(a, 292, bad); close(a, 8u64 + index as u64);
+                a.immediate(A, 1); a.address(R11, self.values); a.store(R11, index as i64 * 8i64, A);
+            }
+        }
+        for fd in 0u64..3u64 {
+            let kind = if fd == 0u64 { Kind::Stdin } else if fd == 1u64 { Kind::Stdout } else { Kind::Stderr };
+            if !self.manifest.slots.iter().any(|slot| slot.kind == kind) { close(a, fd); }
+        }
+        close(a, 4); close_range(a, 5, 7, bad);
+        for (index, slot) in self.manifest.slots.iter().enumerate() {
+            if !slot.kind.descriptor() { close(a, 8u64 + index as u64); }
+        }
+        close_range(a, 8u64 + self.manifest.slots.len() as u64, 0xffffffff, bad);
+        finish(a, bad, done);
+    }
+    pub fn load(&self, a: &mut Assembler, index: usize, register: u8) {
+        a.address(R11, self.values); a.load(register, R11, index as i64 * 8i64);
+    }
+    pub fn data(&self, a: &mut Assembler, bytes: &mut Vec<u8>, offset: usize) {
+        a.data_label(self.values, offset + bytes.len());
+        for _ in &self.manifest.slots { bytes.extend_from_slice(&[0u8; 8]); }
+    }
+}

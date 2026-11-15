@@ -595,6 +595,7 @@ impl interpreter::Host for FailingHost {
     ) -> Result<(), i64> {
         Err(38)
     }
+    fn file_seal(&mut self, _file: u64) -> Result<(), i64> { Err(38) }
     fn file_executable(&mut self, _file: u64) -> Result<(), i64> {
         Err(38)
     }

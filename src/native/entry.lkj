@@ -40,6 +40,7 @@ pub struct Plan {
     site: Span,
     identities: Vec<Label>,
     descriptions: Vec<String>,
+    child: Option<super::child_entry::Plan>,
 }
 impl Plan {
     pub(super) fn fallible(grant: &EntryGrant) -> bool {
@@ -55,14 +56,22 @@ impl Plan {
             identities.push(a.label());
             descriptions.push(crate::runtime_diagnostics::escaped(&description(grant), 512, false));
         }
-        Self { values, paths, grants: grants.to_vec(), site, identities, descriptions }
+        Self { values, paths, grants: grants.to_vec(), site, identities, descriptions, child: None }
     }
+    pub fn child(a: &mut Assembler, manifest: &crate::child_image::Manifest, site: Span) -> Self {
+        let empty: Vec<EntryGrant> = Vec::new();
+        let mut plan = Self::new(a, &empty, site);
+        plan.child = Some(super::child_entry::Plan::new(a, manifest));
+        plan
+    }
+    pub fn is_child(&self) -> bool { self.child.is_some() }
     fn offset(&self, index: usize) -> i64 {
         let mut offset = 0i64;
         for at in 0..index { offset += if matches!(self.grants[at], EntryGrant::Stop) { 16i64 } else { 8i64 }; }
         offset
     }
     pub fn prepare(&self, a: &mut Assembler, p: Platform) {
+        if let Some(child) = &self.child { child.prepare(a, p); return; }
         for (index, grant) in self.grants.iter().enumerate() {
             super::diagnostics::operation(a, if matches!(grant, EntryGrant::DirectoryEnvironment(_) | EntryGrant::DirectoryEnvironmentValue(_, _) | EntryGrant::ReadDirectoryEnvironment(_) | EntryGrant::ReadDirectoryEnvironmentValue(_, _)) { 1001 } else { 1000 });
             match grant {
@@ -151,11 +160,13 @@ impl Plan {
         }
     }
     pub fn load(&self, a: &mut Assembler, index: usize, register: u8) {
+        if let Some(child) = &self.child { child.load(a, index, register); return; }
         a.address(R11, self.values);
         if matches!(self.grants[index], EntryGrant::Stop) { a.lea(register, R11, self.offset(index)); }
         else { a.load(register, R11, self.offset(index)); }
     }
     pub fn data(&self, a: &mut Assembler, bytes: &mut Vec<u8>, offset: usize) {
+        if let Some(child) = &self.child { child.data(a, bytes, offset); return; }
         a.data_label(self.values, offset + bytes.len());
         for grant in &self.grants {
             bytes.extend_from_slice(&[0u8; 8]);

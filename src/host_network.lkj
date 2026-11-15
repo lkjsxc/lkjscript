@@ -198,6 +198,10 @@ impl Network {
     pub fn rewind_remote(&mut self, file: u64) -> Result<(), i64> {
         self.unit_request(10, &[file])
     }
+    pub fn seal_remote(&mut self, file: u64) -> Result<(), i64> { self.unit_request(55, &[file]) }
+    pub fn seals_remote(&mut self, file: u64) -> Result<u64, i64> {
+        let (seals, _) = self.request(56, &[file], b"")?; Ok(seals as u64)
+    }
     pub fn executable_remote(&mut self, file: u64) -> Result<(), i64> {
         self.unit_request(11, &[file])
     }

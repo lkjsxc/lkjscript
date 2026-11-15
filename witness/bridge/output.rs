@@ -533,6 +533,10 @@ impl File {
     pub fn __lkjscript_rewind(&mut self) -> i64 {
         files::rewind(self.descriptor()).map_or_else(|e| -e, |()| 0)
     }
+    pub fn __lkjscript_seal(&mut self) -> i64 {
+        files::seal(self.descriptor()).map_or_else(|e| -e, |()| 0)
+    }
+    pub fn seal(&mut self) -> Result<(), i64> { files::seal(self.descriptor()) }
     pub fn __lkjscript_executable(&mut self) -> i64 {
         files::executable(self.descriptor()).map_or_else(|e| -e, |()| 0)
     }
@@ -1029,7 +1033,7 @@ pub(crate) mod files {
     }
     pub fn world_file(kind: u8) -> Result<Option<std::fs::File>, i64> {
         let descriptor = match kind {
-            0 => retry(|| unsafe { syscall(319, c"lkjscript".as_ptr(), 1_i64) }),
+            0 => retry(|| unsafe { syscall(319, c"lkjscript".as_ptr(), 3_i64) }),
             1..=3 => retry(|| unsafe { syscall(72, i64::from(kind) - 1, 1030_i64, 3_i64) }),
             4 => retry(|| unsafe {
                 syscall(
@@ -1049,6 +1053,9 @@ pub(crate) mod files {
     }
     pub fn rewind(descriptor: i32) -> Result<(), i64> {
         retry(|| unsafe { syscall(8, i64::from(descriptor), 0_i64, 0_i64) }).map(|_| ())
+    }
+    pub fn seal(descriptor: i32) -> Result<(), i64> {
+        retry(|| unsafe { syscall(72, i64::from(descriptor), 1033_i64, 15_i64) }).map(|_| ())
     }
     pub fn executable(descriptor: i32) -> Result<(), i64> {
         retry(|| unsafe { syscall(91, i64::from(descriptor), 0o755_i64) }).map(|_| ())

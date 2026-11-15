@@ -394,7 +394,8 @@ impl Body<'_> {
             }
             IntrinsicOp::FileRewind
             | IntrinsicOp::DirectoryRewind
-            | IntrinsicOp::FileExecutable => {
+            | IntrinsicOp::FileExecutable
+            | IntrinsicOp::FileSeal => {
                 self.read(args[0], DI);
                 self.a.load(DI, DI, 0);
                 self.a.test(DI, true);
@@ -402,6 +403,8 @@ impl Body<'_> {
                 self.a.cmov(DI, A, 4);
                 self.a.call(if name == IntrinsicOp::FileExecutable {
                     self.platform.file_executable
+                } else if name == IntrinsicOp::FileSeal {
+                    self.platform.file_seal
                 } else {
                     self.platform.handle_rewind
                 });

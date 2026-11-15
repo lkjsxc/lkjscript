@@ -1,0 +1,71 @@
+// A compiler-owned authenticated image and the immutable object it names.
+// The ordinary File type cannot manufacture this proof. Source paths and
+// writable snapshots are discarded before any executable borrow is exposed.
+use crate::child_image::{Admitted, Manifest};
+use crate::host_network::Network;
+use crate::sha256;
+
+pub struct SealedImage { admission: Admitted, file: File }
+impl SealedImage {
+    pub fn manifest(&self) -> &Manifest { self.admission.manifest() }
+    pub fn length(&self) -> usize { self.admission.length() }
+    pub fn digest(&self) -> &[u8] { self.admission.digest() }
+    pub fn has_manifest(&self, expected: &Manifest) -> bool { self.manifest() == expected }
+    /// This exact kernel object, or a descriptor alias of it, must reach exec.
+    /// Its seal forbids write, truncate, growth and shared writable mappings.
+    pub fn executable(&self) -> &File { &self.file }
+    /// Descriptor transfer may retain an owned alias of the identical object.
+    pub fn executable_alias(&mut self) -> Result<File, i64> { self.file.__lkjscript_duplicate() }
+}
+fn host(operation: &str, errno: i64) -> String {
+    format!("E_CHILD_IMAGE {operation} failed errno={errno}")
+}
+fn imported_seal(network: &mut Network, world: &mut World, file: &File) -> Result<(), i64> {
+    // SCM_RIGHTS imports the same open-file description. The broker never
+    // restores a writable copy. Keep this path expressible by the prior seed.
+    let descriptor = network.import_owned(world, file)?;
+    let result = network.seal_remote(descriptor);
+    let observed = network.seals_remote(descriptor);
+    network.close_remote(descriptor);
+    result?;
+    if observed? & 15u64 != 15u64 { return Err(1); }
+    Ok(())
+}
+fn seal(world: &mut World, file: &File) -> Result<(), String> {
+    let mut network = Network::new();
+    let result = imported_seal(&mut network, world, file);
+    network.finish();
+    result.map_err(|errno: i64| host("seal immutable executable", errno))
+}
+/// The admission must have been authenticated against compiler-owned producer
+/// and key authority. Authentication is deliberately separate from OS effects.
+pub fn snapshot(world: &mut World, source: &mut File, admission: Admitted) -> Result<SealedImage, String> {
+    let mut file = world.temporary_file().map_err(|errno: i64| host("create image snapshot", errno))?;
+    let mut buffer = [0u8; 65536];
+    let mut remaining = admission.length();
+    while remaining != 0usize {
+        let limit = remaining.min(buffer.len());
+        let count = source.read(&mut buffer[..limit]).map_err(|errno: i64| host("read image snapshot", errno))?;
+        if count == 0usize { return Err("E_CHILD_IMAGE truncated executable image".to_string()); }
+        file.write_all(&buffer[..count]).map_err(|errno: i64| host("write image snapshot", errno))?;
+        remaining -= count;
+    }
+    if source.read(&mut buffer[..1usize]).map_err(|errno: i64| host("read image end", errno))? != 0usize {
+        return Err("E_CHILD_IMAGE executable image has trailing bytes".to_string());
+    }
+    file.set_executable().map_err(|errno: i64| host("mark image executable", errno))?;
+    seal(world, &file)?;
+    // Only sealed bytes can be compared. A writer racing the source path is
+    // either captured exactly as admitted or refused by this final digest.
+    file.rewind().map_err(|errno: i64| host("rewind sealed image", errno))?;
+    let mut hash = sha256::Sha256::new(); let mut length = 0usize;
+    loop {
+        let count = file.read(&mut buffer).map_err(|errno: i64| host("read sealed image", errno))?;
+        if count == 0usize { break; }
+        length += count; hash.update(&buffer[..count]);
+    }
+    if length != admission.length() || hash.finish().as_slice() != admission.digest() {
+        return Err("E_CHILD_IMAGE sealed ELF length or SHA-256 differs from admission".to_string());
+    }
+    Ok(SealedImage { admission, file })
+}

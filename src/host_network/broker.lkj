@@ -176,6 +176,8 @@ pub(super) fn image(local: &[u8], address: &[u8], nonce: &[u8]) -> Result<Vec<u8
     let ready = a.label();
     let file_seek = a.label();
     let file_modified = a.label();
+    let file_seal = a.label();
+    let file_seals = a.label();
     let beneath = a.label();
     let mut operations = Vec::new();
     for _index in 0usize..16usize { operations.push(a.label()); }
@@ -324,6 +326,8 @@ pub(super) fn image(local: &[u8], address: &[u8], nonce: &[u8]) -> Result<Vec<u8
         a.compare(A, C);
         a.condition(4, operations[index]);
     }
+    a.immediate(C, 55); a.compare(A, C); a.condition(4, file_seal);
+    a.immediate(C, 56); a.compare(A, C); a.condition(4, file_seals);
     a.immediate(C, 50);
     a.compare(A, C);
     a.condition(4, file_seek);
@@ -360,6 +364,14 @@ pub(super) fn image(local: &[u8], address: &[u8], nonce: &[u8]) -> Result<Vec<u8
     }
     a.jump(invalid);
 
+    a.bind(file_seal);
+    a.load(DI, BP, REQUEST + 8); check_fd(&mut a, DI, bad);
+    a.immediate(SI, 1033); a.immediate(D, 15); syscall(&mut a, 72);
+    empty(&mut a, reply);
+    a.bind(file_seals);
+    a.load(DI, BP, REQUEST + 8); check_fd(&mut a, DI, bad);
+    a.immediate(SI, 1034); a.immediate(D, 0); syscall(&mut a, 72);
+    empty(&mut a, reply);
     emit_file_observation(&mut a, file_seek, file_modified, reply, invalid, bad);
     directories::beneath(&mut a, beneath);
     emit_storage(&mut a, &storage, reply, invalid, bad, beneath);

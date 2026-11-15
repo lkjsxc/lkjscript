@@ -665,6 +665,12 @@ impl interpreter::Host for Host<'_, '_> {
         self.network.move_entry(from, old, to, new)
     }
 
+    fn file_seal(&mut self, file: u64) -> Result<(), i64> {
+        let descriptor = self.remote_file(file)?;
+        let result = self.network.seal_remote(descriptor);
+        self.last_operation = self.network.failure_operation();
+        result
+    }
     fn file_executable(&mut self, file: u64) -> Result<(), i64> {
         match self.handles.get_mut(&file) {
             Some(Handle::File(file)) | Some(Handle::ImportedFile(file, _)) => status(file.__lkjscript_executable()),

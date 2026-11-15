@@ -31,13 +31,15 @@ struct Options {
     runtime_source: Option<String>,
     store_directory: Option<String>,
     store_key: Option<String>,
+    image_key: Option<String>,
+    image_admission: Option<String>,
     store_bytes: usize,
     no_library: bool,
     arguments: Vec<Vec<u8>>,
 }
 
 fn usage() -> &'static str {
-    "lkjscript check|build|build-entries|run|test|ir|authority <source.lkj|program.lkjir|directory> [options]\n\n  check  Check all source or input IR\n  build  Write a static Linux x86-64 executable\n  build-entries  Write multiple entry images and matched authority reports\n  run    Execute main (or probe); bytes after -- are program arguments\n  test   Run #[test] functions through native and interpreter routes\n  ir     Write checked lkjscript IR\n  authority  Report entry grants and reachable checked-IR effects\n  delta  Print frequent accepted forms that differ from Rust\n\n  --entry NAME                 Select an entry\n  --artifact NAME=ENTRY       Select an image for build-entries; -o names its directory\n  --grant NAME[=VALUE]          Grant an owned entry capability (repeatable)\n  --engine native|interpreter  Select the execution route\n  -o PATH                     Write an artifact or IR\n  --stats                     Report phase times, counts and peak RSS\n  --profile                   Sample CPU to OUTPUT.samples.PID in built programs\n  --inline-limit N            Recheck inlining of bodies with at most N IR operations\n  --no-opt                    Keep original checked IR for native emission\n  profile SAMPLES             Report top self and inclusive functions\n  --jobs N                    Native test workers (1..8)\n  --witness RUSTC             Compare marked cases with optional rustc\n  --source-dir DIR            Grant a root for source reads\n  --library-dir DIR           Use explicit library sources\n  --no-library                Compile without the source library\n  --runtime-source PATH       Use an explicit source runtime\n  --store DIR                 Reuse authenticated work beneath this Directory\n  --store-key PATH            Grant a private 32-byte key outside source roots\n  --store-bytes N             Bound disposable bytes (default 268435456)\n  --no-store                  Disable stored reuse\n  --unchecked-ir              Interpret raw IR for checker testing\n  runtime-ir                  Write the checked source runtime as IR\n  check-library               Check every source library body\n\nScalar runs print the value; f64 prints exact bits as f64:0x0123456789abcdef.\n"
+    "lkjscript check|build|build-entries|run|test|ir|authority <source.lkj|program.lkjir|directory> [options]\n\n  check  Check all source or input IR\n  build  Write a static Linux x86-64 executable\n  build-entries  Write multiple entry images and matched authority reports\n  build-child  Write a transfer-only ELF and authenticated .admission\n  image-authority  Authenticate exact child bytes and canonical checked slots\n  run    Execute main (or probe); bytes after -- are program arguments\n  test   Run #[test] functions through native and interpreter routes\n  ir     Write checked lkjscript IR\n  authority  Report entry grants and reachable checked-IR effects\n  delta  Print frequent accepted forms that differ from Rust\n\n  --entry NAME                 Select an entry\n  --artifact NAME=ENTRY       Select an image for build-entries; -o names its directory\n  --grant NAME[=VALUE]          Grant an owned entry capability (repeatable)\n  --engine native|interpreter  Select the execution route\n  -o PATH                     Write an artifact or IR\n  --stats                     Report phase times, counts and peak RSS\n  --profile                   Sample CPU to OUTPUT.samples.PID in built programs\n  --inline-limit N            Recheck inlining of bodies with at most N IR operations\n  --no-opt                    Keep original checked IR for native emission\n  profile SAMPLES             Report top self and inclusive functions\n  --jobs N                    Native test workers (1..8)\n  --witness RUSTC             Compare marked cases with optional rustc\n  --source-dir DIR            Grant a root for source reads\n  --library-dir DIR           Use explicit library sources\n  --no-library                Compile without the source library\n  --runtime-source PATH       Use an explicit source runtime\n  --store DIR                 Reuse authenticated work beneath this Directory\n  --store-key PATH            Grant a private 32-byte key outside source roots\n  --image-key PATH            Private child-admission key outside all source grants\n  --admission PATH            Child admission record (default IMAGE.admission)\n  --store-bytes N             Bound disposable bytes (default 268435456)\n  --no-store                  Disable stored reuse\n  --unchecked-ir              Interpret raw IR for checker testing\n  runtime-ir                  Write the checked source runtime as IR\n  check-library               Check every source library body\n\nScalar runs print the value; f64 prints exact bits as f64:0x0123456789abcdef.\n"
 }
 
 fn delta() -> &'static str {
@@ -93,6 +95,7 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
         runtime_source: None,
         store_directory: None,
         store_key: None,
+        image_key: None, image_admission: None,
         store_bytes: 256usize * 1024usize * 1024usize,
         no_library: false,
         arguments,
@@ -114,7 +117,7 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
             "--no-library" => out.no_library = true,
             "--no-store" => { out.store_directory = None; out.store_key = None; },
             "--entry" | "--artifact" | "-o" | "--engine" | "--engines" | "--source-dir" | "--library-dir"
-            | "--runtime-source" | "--jobs" | "--witness" | "--grant" | "--store" | "--store-key" | "--store-bytes" | "--inline-limit" => {
+            | "--runtime-source" | "--jobs" | "--witness" | "--grant" | "--store" | "--store-key" | "--store-bytes" | "--inline-limit" | "--image-key" | "--admission" => {
                 at += 1;
                 if at == values.len() {
                     return Err(format!("E_USAGE {option} needs a value"));
@@ -149,6 +152,8 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
                     "--library-dir" => out.library_directory = Some(value),
                     "--store" => out.store_directory = Some(value),
                     "--store-key" => out.store_key = Some(value),
+                    "--image-key" => out.image_key = Some(value),
+                    "--admission" => out.image_admission = Some(value),
                     "--store-bytes" => out.store_bytes = inline_limit(&value).map_err(|_: String| -> String { "E_USAGE --store-bytes requires a nonnegative decimal byte count".to_string() })?,
                     _ => out.runtime_source = Some(value),
                 }
@@ -170,6 +175,8 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
         && out.command != "check"
         && out.command != "build"
         && out.command != "build-entries"
+        && out.command != "build-child"
+        && out.command != "image-authority"
         && out.command != "run"
         && out.command != "test"
         && out.command != "ir"
@@ -178,6 +185,14 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
         && out.command != "authority"
     {
         return Err("E_USAGE expected check|build|build-entries|run|test|ir|authority".to_string());
+    }
+    if matches!(out.command.as_str(), "build-child" | "image-authority") {
+        if out.image_key.is_none() { return Err("E_USAGE child image commands require --image-key outside source grants".to_string()); }
+        if out.command == "build-child" && (out.output.is_none() || out.image_admission.is_some()) {
+            return Err("E_USAGE build-child requires -o IMAGE; it writes IMAGE.admission".to_string());
+        }
+    } else if out.image_key.is_some() || out.image_admission.is_some() {
+        return Err("E_USAGE --image-key/--admission require a child image command".to_string());
     }
     if out.command == "test" && out.path.is_empty() { out.path = "tests/conformance".to_string(); }
     if out.witness.is_some() && out.command != "test" { return Err("E_USAGE --witness requires test".to_string()); }
@@ -490,6 +505,7 @@ fn compile(
     memo.valid_inputs = true;
     if options.path.ends_with(".lkjir") {
         let bytes = memo.read_path(world, &options.path)?;
+        memo.protect_source(&bytes)?;
         if memo.store.is_some() {
             let (parent, name) = location(&options.path);
             memo.inputs.push(store::input(&parent, &name, &Some(bytes.clone())));
@@ -546,8 +562,9 @@ fn compile(
         } else {
             memo.read_source(&mut directory, &directory_path, path, stats)
         };
-        if memo.store.is_some() {
-            if let Ok(Some(bytes)) = &result { memo.source_inputs.push((path.to_string(), bytes.clone())); }
+        if let Ok(Some(bytes)) = &result {
+            memo.protect_source(bytes)?;
+            if memo.store.is_some() { memo.source_inputs.push((path.to_string(), bytes.clone())); }
         }
         result
     });
@@ -710,6 +727,7 @@ fn ensure_runtime(
         let runtime = match &options.runtime_source {
             Some(path) => {
                 let bytes = memo.read_path(world, path)?;
+                memo.protect_source(&bytes)?;
                 if memo.store.is_some() {
                     let (parent, name) = location(path);
                     memo.runtime_input = Some(store::input(&parent, &name, &Some(bytes.clone())));
@@ -1420,6 +1438,96 @@ fn batch(world: &mut World, options: &Options, stats: &mut Stats, memo: &mut Mem
     Ok(0)
 }
 
+
+fn child_key(world: &mut World, options: &Options) -> Result<Vec<u8>, String> {
+    let path = options.image_key.as_ref().ok_or("E_CHILD_IMAGE missing admission key")?;
+    let (parent, name) = location(path);
+    let mut directory = world.directory(&parent).map_err(|errno: i64| io(&parent, "open key directory", errno))?;
+    let mut file = directory.open(&name).map_err(|errno: i64| io(path, "open key", errno))?;
+    let mut bytes = vec![0u8; 33];
+    let mut used = 0usize;
+    while used < bytes.len() {
+        let count = file.read(&mut bytes[used..]).map_err(|errno: i64| io(path, "read key", errno))?;
+        if count == 0 { break; }
+        used += count;
+    }
+    if used != 32usize { return Err("E_CHILD_IMAGE admission key must contain exactly 32 bytes".to_string()); }
+    bytes.pop(); Ok(bytes)
+}
+fn child_producer(world: &mut World) -> Result<[u8; 32], String> {
+    let mut executable = world.executable().map_err(|errno: i64| io("compiler", "open executable", errno))?;
+    let mut hash = sha256::Sha256::new(); let mut buffer = [0u8; 65536];
+    loop {
+        let count = executable.read(&mut buffer).map_err(|errno: i64| io("compiler", "read executable", errno))?;
+        if count == 0 { break; } hash.update(&buffer[..count]);
+    }
+    Ok(hash.finish())
+}
+fn child_read_exact(file: &mut File, bytes: &mut [u8], path: &str) -> Result<(), String> {
+    let mut used = 0usize;
+    while used < bytes.len() {
+        let count = file.read(&mut bytes[used..]).map_err(|errno: i64| io(path, "read", errno))?;
+        if count == 0 { return Err("E_CHILD_IMAGE truncated authenticated image input".to_string()); }
+        used += count;
+    }
+    Ok(())
+}
+fn child_record(world: &mut World, path: &str, producer: &[u8], key: &[u8]) -> Result<crate::child_image::Admitted, String> {
+    let (parent, name) = location(path);
+    let mut directory = world.directory(&parent).map_err(|errno: i64| io(&parent, "open record directory", errno))?;
+    let mut file = directory.open(&name).map_err(|errno: i64| io(path, "open record", errno))?;
+    let mut header = vec![0u8; reuse::header_size()];
+    child_read_exact(&mut file, &mut header, path)?;
+    let root = reuse::AuthenticatedRoot::new(producer, key, "child-image", crate::child_image::target(), &header)
+        .ok_or("E_CHILD_IMAGE admission root, producer or key does not authenticate")?;
+    let mut payload = vec![0u8; root.length()];
+    child_read_exact(&mut file, &mut payload, path)?;
+    let mut extra = [0u8; 1];
+    if file.read(&mut extra).map_err(|errno: i64| io(path, "read record end", errno))? != 0usize {
+        return Err("E_CHILD_IMAGE admission has trailing bytes".to_string());
+    }
+    root.verify(payload.clone()).ok_or("E_CHILD_IMAGE admission payload digest differs")?;
+    header.extend_from_slice(&payload);
+    crate::child_image::authenticate(&header, producer, key).ok_or("E_CHILD_IMAGE malformed canonical admission".to_string())
+}
+fn build_child(world: &mut World, options: &Options, stats: &mut Stats, memo: &mut Memo) -> Result<u8, String> {
+    let key = child_key(world, options)?;
+    memo.private_source_digest = Some(sha256::digest(&key));
+    let checked = compile(world, options, stats, memo)?;
+    let selected = entry(checked.original().program(), &options.entry)?;
+    let manifest = crate::child_image::manifest(checked.original().checked(), selected)?;
+    let mut runtime = None; ensure_runtime(world, options, &mut runtime, memo)?;
+    let native_manifest = crate::child_image::manifest(checked.native().checked(), selected)?;
+    if manifest != native_manifest { return Err("E_CHILD_IMAGE optimization changed entry transfer authority".to_string()); }
+    let image = backend::prepare_child(checked.native().checked(), runtime.as_ref().unwrap(), selected, &manifest)
+        .and_then(|image: crate::native::PreparedImage| image.finish())
+        .map_err(|problem| report(&options.path, problem))?;
+    let producer = child_producer(world)?;
+    let admission = crate::child_image::admission(&manifest, &image.bytes, &producer, &key);
+    if admission.is_empty() { return Err("E_CHILD_IMAGE admission could not be authenticated".to_string()); }
+    let path = options.output.as_ref().unwrap();
+    publish(world, path, &image.bytes, true)?;
+    publish(world, &format!("{path}.admission"), &admission, false)?;
+    stats.mark("child_image")?;
+    stats.count("emitted_bytes", image.bytes.len());
+    world.stdout().write(crate::child_image::render(&manifest, image.bytes.len(), &sha256::digest(&image.bytes)).as_bytes());
+    Ok(0)
+}
+fn image_authority(world: &mut World, options: &Options) -> Result<u8, String> {
+    let key = child_key(world, options)?; let producer = child_producer(world)?;
+    let record = options.image_admission.clone().unwrap_or_else(|| -> String { format!("{}.admission", options.path) });
+    let admitted = child_record(world, &record, &producer, &key)?;
+    if let Some(entry) = &options.entry {
+        if admitted.manifest().entry != *entry { return Err("E_CHILD_IMAGE selected entry differs from admission".to_string()); }
+    }
+    let (parent, name) = location(&options.path);
+    let mut directory = world.directory(&parent).map_err(|errno: i64| io(&parent, "open image directory", errno))?;
+    let mut file = directory.open(&name).map_err(|errno: i64| io(&options.path, "open image", errno))?;
+    let sealed = crate::admitted_image::snapshot(world, &mut file, admitted)?;
+    world.stdout().write(crate::child_image::render(sealed.manifest(), sealed.length(), sealed.digest()).as_bytes());
+    Ok(0)
+}
+
 struct EntryArtifact {
     path: String,
     entry: usize,
@@ -1602,6 +1710,8 @@ fn execute_source(world: &mut World, options: &Options, stats: &mut Stats, memo:
     if options.command == "build-entries" {
         return build_entries(world, options, stats, memo);
     }
+    if options.command == "build-child" { return build_child(world, options, stats, memo); }
+    if options.command == "image-authority" { return image_authority(world, options); }
     let mut runtime = None;
     if options.command == "runtime-ir" {
         ensure_runtime(world, options, &mut runtime, memo)?;
@@ -1787,6 +1897,7 @@ pub fn main(mut world: World) {
 
 struct Memo {
     store: Option<store::Store>,
+    private_source_digest: Option<[u8; 32]>,
     inputs: Vec<store::Input>,
     source_inputs: Vec<(String, Vec<u8>)>,
     input_snapshot: BTreeMap<(String, String), (Option<Vec<u8>>, Option<String>)>,
@@ -1808,9 +1919,18 @@ struct Memo {
     inline_rejected: usize,
 }
 impl Memo {
+    fn protect_source(&self, bytes: &[u8]) -> Result<(), String> {
+        if let Some(digest) = &self.private_source_digest {
+            if bytes.len() == 32usize && sha256::digest(bytes) == *digest {
+                return Err("E_CHILD_IMAGE source or include attempted to read the private admission key".to_string());
+            }
+        }
+        Ok(())
+    }
     fn new(world: &mut World, options: &Options) -> Self {
         Self {
             store: store::Store::open_bounded(world, &options.store_directory, &options.store_key, options.store_bytes),
+            private_source_digest: None,
             inputs: Vec::new(), source_inputs: Vec::new(), input_snapshot: BTreeMap::new(), front_reused: 0, front_definitions: 0, front_functions: 0, valid_inputs: true, runtime_input: None,
             checked_reused: 0, checked_local_reused: 0, emitted_reused: 0, test_reused: 0, test_rerun: 0, build_reused: 0,
             inline_calls: 0, inline_functions: 0, inline_attempts: 0, inline_accepted: 0, inline_rejected: 0,
