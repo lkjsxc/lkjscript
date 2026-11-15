@@ -237,9 +237,14 @@ are never guessed from matching tokens.
 Every changed declaration token and reference has exact catalog evidence.
 Rewritten bare global paths receive their canonical qualified parent, so a
 local binding or generic parameter cannot capture the new name in an
-uninstantiated body or signature. An existing unqualified reference that the
-new declaration could capture is an explicit refusal. Explicit import aliases retain their local spelling, including an alias whose
-spelling happens to equal the old declaration name. The import target changes
+uninstantiated body or signature. An existing reference that the new
+declaration could capture is an explicit refusal, including aliases
+introduced through glob imports or used through qualified reexports. Only a
+known local binding or a token-proved canonical `crate::...` path establishes
+that a matching nonlocal spelling is unaffected; other lookup provenance is
+an explicit decision site. This can conservatively refuse unrelated aliases
+with the same spelling. Explicit import aliases retain their local spelling,
+including an alias whose spelling happens to equal the old declaration name. The import target changes
 when its own reference names that declaration. Record shorthand is expanded:
 renaming a field writes `new_field: old_binding`; renaming a value writes
 `old_field: new_binding`. Pattern shorthand retains its parsed `ref` and

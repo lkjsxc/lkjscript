@@ -469,7 +469,24 @@ fn rename_scope() -> Result<usize, String> {
             file: "fixture.lkj".to_string(), kind: "unresolved-namespace-qualification".to_string(), start: 0usize, end: 0usize });
         let after = apply(&namespace, operation)?;
         assert_eq!(meaning::identity(&namespace.checked), meaning::identity(&snapshot(&after)?.checked));
-        Ok(13usize)
+        let imported_alias = "mod exports { pub fn source() -> i64 { 2i64 } pub use crate::exports::source as renamed; } mod inner { use crate::exports::*; pub fn old() -> i64 { 1i64 } pub fn idle<T>() -> i64 { renamed() } } fn main() -> i64 { 42i64 }";
+        let captured_alias = imported_alias.replace("pub fn old()", "pub fn renamed()");
+        assert_eq!(meaning::identity(&snapshot(imported_alias)?.checked), meaning::identity(&snapshot(&captured_alias)?.checked));
+        let live_alias = imported_alias.replace("fn main() -> i64 { 42i64 }", "fn main() -> i64 { inner::idle::<bool>() }");
+        assert_eq!(value(&snapshot(&live_alias)?), 2i64);
+        assert_eq!(value(&snapshot(&live_alias.replace("pub fn old()", "pub fn renamed()"))?), 1i64);
+        refuses(imported_alias, r#"{"op":"rename","id":"inner::old","name":"renamed"}"#, "E_EDIT_CAPTURE")?;
+        let qualified_alias = "mod exports { pub fn source() -> i64 { 2i64 } pub use crate::exports::source as renamed; } mod inner { pub use crate::exports::*; pub fn old() -> i64 { 1i64 } } fn idle<T>() -> i64 { inner::renamed() } fn main() -> i64 { 42i64 }";
+        refuses(qualified_alias, r#"{"op":"rename","id":"inner::old","name":"renamed"}"#, "E_EDIT_CAPTURE")?;
+        let qualified_glob = "mod exports { pub fn renamed() -> i64 { 2i64 } } mod inner { pub use crate::exports::*; pub fn old() -> i64 { 1i64 } } fn idle<T>() -> i64 { inner::renamed() } fn main() -> i64 { 42i64 }";
+        refuses(qualified_glob, r#"{"op":"rename","id":"inner::old","name":"renamed"}"#, "E_EDIT_CAPTURE")?;
+        let direct = "mod other { pub fn renamed() -> i64 { 2i64 } } mod inner { pub fn old() -> i64 { 1i64 } } fn main() -> i64 { crate::other::renamed() + inner::old() }";
+        same_meaning(direct, r#"{"op":"rename","id":"inner::old","name":"renamed"}"#)?;
+        let grouped_function = "mod helpers { pub fn square(value: i64) -> i64 { value * value } } mod calls { use crate::helpers::square::{self}; pub fn run() -> i64 { square(3i64) } } fn main() -> i64 { calls::run() }";
+        same_meaning(grouped_function, r#"{"op":"rename","id":"helpers::square","name":"squared"}"#)?;
+        let grouped_module = "mod helpers { pub fn value() -> i64 { 3i64 } } use helpers::{self as visible, value}; fn main() -> i64 { visible::value() + value() }";
+        same_meaning(grouped_module, r#"{"op":"rename","id":"helpers","name":"fresh"}"#)?;
+        Ok(19usize)
     }
 }
 

@@ -1563,7 +1563,6 @@ pub mod relocation {
         let global = matches!(target.kind.as_str(), "module" | "struct" | "enum" | "trait" | "alias" | "constant" | "variant")
             || free(catalog, target);
         let mut cache: BTreeMap<String, Vec<syntax::SemanticToken>> = BTreeMap::new();
-        capture(catalog, inputs, target, &targets, name, &mut cache)?;
         let mut new_path = String::new();
         if global {
             let old = qualified(catalog, &target.identity)?;
@@ -1592,6 +1591,7 @@ pub mod relocation {
             }
             edit::patch(patches, identity, &item.file, item.name_start, item.name_end, name);
         }
+        capture(catalog, inputs, target, &targets, name, &mut cache)?;
         for site in &catalog.references {
             if !targets.contains(&site.target) || site.kind.starts_with("alias-") { continue; }
             let item = edit::item(catalog, &site.target)?;
@@ -1869,17 +1869,35 @@ fn capture(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)],
         }
         if matches!(target.kind.as_str(), "field" | "parameter" | "binding" | "generic-parameter") { return Ok(()); }
         for site in &catalog.references {
-            if targets.contains(&site.target) || !descendant(catalog, &site.owner, &target.parent)
-                || !matches!(site.kind.as_str(), "value" | "type" | "constructor" | "pattern" | "qualification") { continue; }
+            if targets.contains(&site.target)
+                || !matches!(site.kind.as_str(), "value" | "alias-value" | "type" | "alias-type" | "constructor" | "alias-constructor"
+                    | "pattern" | "alias-pattern" | "qualification" | "alias-qualification" | "import" | "alias-import") { continue; }
             let bytes = edit::input(inputs, &site.file)?;
             if site.start > site.end || site.end > bytes.len() { return Err(fail(&site.owner, "SPAN", "reference is outside its source")); }
-            if bytes[site.start..site.end] != *name.as_bytes() || !bare_site(inputs, site, cache)? { continue; }
+            if bytes[site.start..site.end] != *name.as_bytes() { continue; }
             let existing = edit::item(catalog, &site.target)?;
-            if existing.parent != target.parent && descendant(catalog, &existing.parent, &target.parent)
-                && descendant(catalog, &site.owner, &existing.parent) { continue; }
-            return Err(at_site(&target.identity, "CAPTURE", site, "new declaration could capture an existing unqualified source reference"));
+            if matches!(existing.kind.as_str(), "binding" | "parameter" | "generic-parameter") { continue; }
+            if canonical_source_site(catalog, inputs, site, cache)? { continue; }
+            return Err(at_site(&target.identity, "CAPTURE", site, "new declaration spelling may capture an existing nonlocal binding; exact lookup provenance is required"));
         }
         Ok(())
+    }
+
+fn canonical_source_site(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)],
+        site: &semantic::Reference, cache: &mut BTreeMap<String, Vec<syntax::SemanticToken>>) -> Result<bool, String> {
+        let expected = match qualified(catalog, &site.target) { Ok(path) => path, Err(_) => return Ok(false) };
+        if !expected.starts_with("crate::") { return Ok(false); }
+        let _ = bare_site(inputs, site, cache)?;
+        let tokens = cache.get(&site.file).unwrap(); let mut low = 0usize; let mut high = tokens.len();
+        while low < high { let middle = low + (high - low) / 2usize;
+            if tokens[middle].span.start < site.start { low = middle + 1usize; } else { high = middle; }
+        }
+        let mut start = low;
+        while start >= 2usize && tokens[start - 1usize].text == "::" && tokens[start - 2usize].kind == 0u8 { start -= 2usize; }
+        if tokens[start].text != "crate" { return Ok(false); }
+        let mut written = String::new();
+        for index in start..low + 1usize { written.push_str(&tokens[index].text); }
+        Ok(written == expected)
     }
 }
 }
