@@ -17,6 +17,9 @@ pub fn probe() -> i64 { helpers::identity(times(7)) }
 pub fn scalar(value: i64) -> i64 { value + 1 }
 pub fn shadowed() -> i64 { let before = scalar(1); { let scalar = before; let _ = scalar; } scalar(before) }
 pub fn alias_type(value: CounterAlias) -> i64 { value.value }
+pub fn borrowed_type<'a>(value: &'a mut helpers::Counter) -> i64 { value.value }
+pub fn double_borrowed(value: &&helpers::Counter) -> i64 { value.value }
+pub fn borrowed_alias(value: &CounterAlias) -> i64 { value.value }
 
 pub fn writes(value: i64, mut output: Stdout) -> i64 { output.write(b"x"); value }
 mod same_alias {
@@ -97,6 +100,14 @@ rg -q 'binding:scalar:0.*kind=local-value' "$fixture/shadowed" || fail 'local bi
 if rg -q 'kind=lexical-name' "$fixture/shadowed"; then fail 'typed local kept lexical ambiguity'; fi
 query references alias_type > "$fixture/alias-type"
 rg -q 'helpers::Counter.*kind=alias-type' "$fixture/alias-type" || fail 'resolved type alias use'
+for identity in borrowed_type double_borrowed; do
+    query references "$identity" > "$fixture/borrowed-type"
+    rg -q '"helpers::Counter".*kind=type' "$fixture/borrowed-type" || fail 'borrowed nominal type site omitted'
+    rg -q '"helpers".*kind=qualification' "$fixture/borrowed-type" || fail 'borrowed qualification omitted'
+    if rg -q 'kind=implicit-source' "$fixture/borrowed-type"; then fail 'reference prefix confused a type path'; fi
+done
+query references borrowed_alias > "$fixture/borrowed-alias"
+rg -q '"helpers::Counter".*kind=alias-type' "$fixture/borrowed-alias" || fail 'borrowed alias site omitted'
 query uses 'helpers::Counter::field:value' --limit 80 > "$fixture/field-uses"
 for kind in field constructor-field field-shorthand pattern-field pattern-field-shorthand; do
     rg -q "kind=$kind( |$)" "$fixture/field-uses" || fail "missing $kind reference"

@@ -20,8 +20,7 @@ pub(super) fn value_identity(program: &a::Program, path: &a::Path, functions: &[
     }
 }
 fn path_token(file: &SourceText, span: a::Span) -> Option<usize> {
-    let mut at = token_at(&file.tokens, span.start);
-    if at < file.tokens.len() && file.tokens[at].text == "::" { at += 1usize; }
+    let mut at = path_start(file, span);
     let token = file.tokens.get(at)?;
     if token.kind != 0u8 || token.span.end > span.end ||
         matches!(token.text.as_str(), "for" | "if" | "match" | "let" | "while" | "loop" | "return" | "break" | "fn" | "use") { return None; }
@@ -186,8 +185,7 @@ pub(super) fn local_reference(result: &mut Catalog, files: &[SourceText], progra
 }
 
 fn written_path(file: &SourceText, span: a::Span, last: usize) -> String {
-    let mut at = token_at(&file.tokens, span.start);
-    if at < file.tokens.len() && file.tokens[at].text == "::" { at += 1usize; }
+    let mut at = path_start(file, span);
     let mut result = String::new();
     while at <= last && at < file.tokens.len() { result.push_str(&file.tokens[at].text); at += 1usize; }
     result
@@ -232,8 +230,7 @@ fn qualification_site(result: &mut Catalog, files: &[SourceText], program: &a::P
 pub(super) fn path_qualifications(result: &mut Catalog, files: &[SourceText], program: &a::Program,
     resolver: &resolve::Resolver<'_>, owner: &str, scope: a::ModuleId, span: a::Span) {
     let file = &files[span.file];
-    let mut at = token_at(&file.tokens, span.start);
-    if at < file.tokens.len() && file.tokens[at].text == "::" { at += 1usize; }
+    let mut at = path_start(file, span);
     let mut prefix = String::new();
     while at < file.tokens.len() {
         let token = &file.tokens[at];
@@ -311,4 +308,18 @@ pub(super) fn visibility_qualifications(result: &mut Catalog, files: &[SourceTex
             }
         }
     }
+}
+
+fn path_start(file: &SourceText, span: a::Span) -> usize {
+    let mut at = token_at(&file.tokens, span.start);
+    // The iterative type parser retains the outer reference's diagnostic span
+    // on its inner Path. Recover only the exact parsed reference prefix.
+    while at < file.tokens.len() && file.tokens[at].span.start < span.end
+        && matches!(file.tokens[at].text.as_str(), "&" | "&&") {
+        at += 1usize;
+        if at < file.tokens.len() && file.tokens[at].kind == 5u8 { at += 1usize; }
+        if at < file.tokens.len() && file.tokens[at].text == "mut" { at += 1usize; }
+    }
+    if at < file.tokens.len() && file.tokens[at].text == "::" { at += 1usize; }
+    at
 }
