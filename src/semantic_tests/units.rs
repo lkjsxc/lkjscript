@@ -2,6 +2,7 @@ fn instructions(ops: Vec<crate::ir::Op>, line: usize) -> Vec<crate::ir::Instruct
     let mut result = Vec::new();
     for op in ops {
         result.push(crate::ir::Instruction {
+            file: None,
             op,
             line,
             column: 1,
@@ -151,6 +152,7 @@ mod check_tests {
     }
     fn op(op: Op) -> Instruction {
         Instruction {
+            file: None,
             op,
             line: 1,
             column: 1,

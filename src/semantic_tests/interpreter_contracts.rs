@@ -207,6 +207,7 @@ fn raw(types: Vec<ir::Type>, locals: &[usize], result: usize, ops: Vec<ir::Op>) 
     let mut line = 1usize;
     for op in ops {
         body.push(ir::Instruction {
+            file: None,
             column: 1,
             line,
             op,

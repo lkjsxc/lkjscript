@@ -18,8 +18,8 @@ fn small() -> ir::Program {
             params: 0, result: ir::I64, return_source: None, test: false,
             locals: vec![ir::Local { name: "value".to_string(), ty: ir::I64, mutable: false }],
             body: vec![
-                ir::Instruction { line: 2 + index * 3, column: 3, op: ir::Op::Int { dst: 0, value: index as i64 } },
-                ir::Instruction { line: 3 + index * 3, column: 3, op: ir::Op::Return { src: 0 } },
+                ir::Instruction { file: None, line: 2 + index * 3, column: 3, op: ir::Op::Int { dst: 0, value: index as i64 } },
+                ir::Instruction { file: None, line: 3 + index * 3, column: 3, op: ir::Op::Return { src: 0 } },
             ],
         });
     }

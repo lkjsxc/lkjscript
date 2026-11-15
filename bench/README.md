@@ -26,8 +26,10 @@ status zero. Timing is sequential and observational; no time is an acceptance li
 | string_map.rs | 4,096 owned qualified String keys; 500,000 lookups with replacement/removal/reinsertion | Lookup and final ordered traversal checksum |
 
 Counts and seeds are runtime arguments. Call-chain functions use inline(never),
-which rustc honors and the plain native backend already implements. Vector timings
-include construction. Buffer reuse and large vector remapping remain separate
+which rustc honors. lkjscript IR has no source inline hints: use --inline-limit 0
+for retained-call ABI comparisons; an enabled pass may remove those calls. Choose
+thresholds using the compiler and the HTTP/String-map rows, which carry no hints.
+Vector timings include construction. Buffer reuse and large vector remapping remain separate
 workloads. Reports include elapsed/user/kernel time, peak RSS and executable size;
 transient results and images stay beneath target/bench/. Each timing includes the
 1/5/15-minute load averages read immediately before that run on the shared host.
@@ -53,6 +55,12 @@ Optional comparisons:
 sh bench/run.sh --witness0 target/witness0/release/lkjscript --witness target/witness/release/lkjscript --rust
 sh bench/run.sh --compiler target/lkjscript --previous target/previous-lkjscript
 ```
+
+--inline-limit N selects the rechecked inliner threshold for the native compiler
+and same-source compiler witnesses; zero disables it. Previous compiler routes
+retain their own policy. Use a compiler artifact built at each candidate threshold
+when measuring that threshold's self-build, so the producer code and output policy
+are both represented. The runtime workload outputs still agree across every route.
 
 --witness names the optimized Rust-built compiler of the same sources.
 --witness0 adds an unoptimized Rust-built compiler. All self-build routes explicitly

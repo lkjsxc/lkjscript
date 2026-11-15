@@ -29,6 +29,8 @@ pub fn probe() -> i64 {
     let bytes_copy = duplicate(&copied.bytes);
     assert!(*thin == number && text_copy == "λ🦀");
     assert!(bytes_copy.len() == 3usize && bytes_copy[2usize] == 7u8);
+    let sliced = bytes[..].to_vec();
+    assert!(sliced.len() == 3usize && sliced[0usize] == 3u8 && sliced[2usize] == 7u8);
     let array = [3u8, 5u8, 7u8].clone();
     let boxed = Box::new(11u8).clone();
     let vector = vec![13u8, 17u8].clone();

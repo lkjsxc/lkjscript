@@ -362,6 +362,7 @@ impl Generated<'_, '_> {
             _ => {}
         }
         self.function.body.push(ir::Instruction {
+            file: None,
             op,
             line: self.span.line,
             column: self.span.column.max(1),

@@ -104,6 +104,7 @@ parallel_step() {
 parallel_step 1 toolchain toolchain
 parallel_step 1 world world_cases
 parallel_step 1 profiler timeout --kill-after=10s 600s sh tools/profile-test.sh "$check_binary"
+parallel_step 1 optimizer timeout --kill-after=10s 600s bash tools/optimizer-test.sh "$check_binary"
 parallel_step 1 resources timeout --kill-after=10s 600s bash tools/resource-test.sh "$check_binary"
 parallel_step 1 runner timeout --kill-after=10s 600s "$check_binary" test src/test_runner.rs "${check_reuse[@]}"
 parallel_step 2 store timeout --kill-after=10s 600s bash tools/store-test.sh "$check_binary"

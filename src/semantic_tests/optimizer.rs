@@ -1,0 +1,308 @@
+//! Independent admission, fallback and original-IR/native optimization contracts.
+use crate::{check, frontend, interpreter, ir, ir_text, native, optimizer, reuse, runtime, source};
+
+fn compiled_files(root: &str, files: Vec<source::SourceInput>) -> reuse::Checked {
+    let checked = frontend::check_bundle(&source::SourceBundle {
+        root: root.to_string(), library: None, files,
+    }).unwrap();
+    reuse::Checked::uncached(checked)
+}
+fn compiled(text: &str) -> reuse::Checked {
+    compiled_files("inline.rs", vec![source::SourceInput {
+        path: "inline.rs".to_string(), text: text.to_string(),
+    }])
+}
+fn prepared_runtime() -> runtime::Runtime {
+    runtime::seal(frontend::check_bundle(&source::SourceBundle {
+        root: "runtime.rs".to_string(), library: None,
+        files: vec![source::SourceInput {
+            path: "runtime.rs".to_string(), text: include_str!("../../library/runtime.rs").to_string(),
+        }],
+    }).unwrap()).unwrap()
+}
+fn index(program: &ir::Program, name: &str) -> usize {
+    for (index, function) in program.functions.iter().enumerate() {
+        if function.name == name { return index; }
+    }
+    panic!("missing test entry")
+}
+fn admitted(program: ir::Program) -> Result<reuse::Checked, Vec<crate::diagnostic::Diagnostic>> {
+    check::check_all(program).map(|checked: ir::CheckedProgram| reuse::Checked::uncached(checked))
+}
+fn value(program: &ir::Program) -> i64 {
+    let arguments: Vec<u64> = Vec::new();
+    let mut output: Vec<u8> = Vec::new();
+    let result = interpreter::run(
+        program, index(program, "probe"), &arguments, &mut output,
+    ).unwrap();
+    match result.value {
+        interpreter::Scalar::Int { value, .. } => value as i64,
+        _ => panic!("expected integer test result"),
+    }
+}
+fn native_result(
+    world: &mut World, checked: &reuse::Checked, runtime: &runtime::Runtime,
+) -> (u8, Vec<u8>) {
+    let grants: Vec<ir::EntryGrant> = Vec::new();
+    let image = native::encode_granted(
+        checked.checked(), runtime, index(checked.program(), "probe"),
+        &grants, Some(3), None,
+    ).unwrap();
+    let mut executable = world.temporary_file().unwrap();
+    executable.write_all(&image.bytes).unwrap();
+    executable.set_executable().unwrap();
+    let input = world.temporary_file().unwrap();
+    let output = world.temporary_file().unwrap();
+    let errors = world.temporary_file().unwrap();
+    let mut result = world.temporary_file().unwrap();
+    let mut process = world.process();
+    let arguments: Vec<Vec<u8>> = Vec::new();
+    let mut child = process.spawn_file(
+        &executable, &arguments, &input, &output, &errors, &result,
+    ).unwrap();
+    let status = child.wait().unwrap() as u8;
+    result.rewind().unwrap();
+    (status, result.read_to_end().unwrap())
+}
+fn native_value(world: &mut World, checked: &reuse::Checked, runtime: &runtime::Runtime) -> i64 {
+    let (status, bytes) = native_result(world, checked, runtime);
+    assert_eq!(status, 0u8);
+    assert_eq!(bytes.len(), 8usize);
+    let mut value = 0u64;
+    for index in 0..8usize { value |= (bytes[index] as u64) << (index * 8); }
+    value as i64
+}
+fn equivalent(world: &mut World, selected: &reuse::Selection, runtime: &runtime::Runtime) -> bool {
+    value(selected.original().program()) == native_value(world, selected.native(), runtime)
+}
+fn transformed(text: &str, limit: usize) -> reuse::Selection {
+    let original = compiled(text);
+    let before = ir_text::write(original.program());
+    let rewrite = optimizer::inline(original.program(), limit);
+    assert!(rewrite.calls > 0);
+    assert_eq!(ir_text::write(original.program()), before);
+    reuse::Selection::after_check(original, admitted(rewrite.program.unwrap()))
+}
+
+fn scalar_branches_and_helper_chains(world: &mut World, runtime: &runtime::Runtime) {
+    let selected = transformed(r#"
+        fn leaf(value: i64) -> i64 { value + 1 }
+        fn middle(value: i64) -> i64 { leaf(value) }
+        fn choose(value: i64, yes: bool) -> i64 {
+            if yes { return middle(value); }
+            0
+        }
+        pub fn probe() -> i64 { choose(41, true) }
+    "#, 64);
+    assert!(selected.optimized());
+    assert!(!selected.rejected());
+    assert!(equivalent(world, &selected, runtime));
+    assert_eq!(value(selected.original().program()), 42i64);
+}
+fn nested_loop_returns_keep_internal_transfers(world: &mut World, runtime: &runtime::Runtime) {
+    let selected = transformed(r#"
+        fn find(mut value: i64) -> i64 {
+            loop {
+                loop {
+                    if value == 42 { return value; }
+                    value += 1;
+                    break;
+                }
+                if value < 42 { continue; }
+            }
+        }
+        pub fn probe() -> i64 { find(40) }
+    "#, 64);
+    assert!(selected.optimized());
+    assert!(equivalent(world, &selected, runtime));
+}
+fn indexed_places_and_returned_mutable_views(world: &mut World, runtime: &runtime::Runtime) {
+    let indexed = transformed(r#"
+        fn get(values: &[i64; 2], index: usize) -> i64 { values[index] }
+        pub fn probe() -> i64 {
+            let values = [1i64, 42i64];
+            get(&values, 1)
+        }
+    "#, 64);
+    assert!(indexed.optimized());
+    assert!(equivalent(world, &indexed, runtime));
+    let returned = transformed(r#"
+        fn choose<'a>(value: &'a mut i64, first: bool) -> &'a mut i64 {
+            if first { return value; }
+            value
+        }
+        pub fn probe() -> i64 {
+            let mut value = 41i64;
+            {
+                let view = choose(&mut value, true);
+                *view += 1;
+            }
+            value
+        }
+    "#, 64);
+    // Conservative provenance rejection is permitted; the selected executable
+    // must still agree with the original model and retain the original oracle.
+    assert!(equivalent(world, &returned, runtime));
+    assert_eq!(value(returned.original().program()), 42i64);
+}
+fn owning_cleanup_remains_observable(world: &mut World, runtime: &runtime::Runtime) {
+    let selected = transformed(r#"
+        struct Owner<'a> { value: &'a mut i64 }
+        impl<'a> Drop for Owner<'a> {
+            fn drop(&mut self) { *self.value += 1; }
+        }
+        fn finish<'a>(owner: Owner<'a>) { drop(owner); }
+        pub fn probe() -> i64 {
+            let mut value = 41i64;
+            {
+                let owner = Owner { value: &mut value };
+                finish(owner);
+            }
+            value
+        }
+    "#, 64);
+    // Omitting cleanup would return 41, even if the omitted destructor was safe.
+    assert_eq!(value(selected.original().program()), 42i64);
+    assert!(equivalent(world, &selected, runtime));
+}
+fn rejected_candidate_preserves_entire_original(world: &mut World, runtime: &runtime::Runtime) {
+    let original = compiled(r#"
+        fn first(value: i64) -> i64 { value + 1 }
+        fn second(value: i64) -> i64 { value + 1 }
+        pub fn probe() -> i64 { second(first(40)) }
+    "#);
+    let before = ir_text::write(original.program());
+    let mut candidate = optimizer::inline(original.program(), 64).program.unwrap();
+    let first = index(&candidate, "first");
+    candidate.functions[first].body[0].op = ir::Op::Return { src: !0usize };
+    let selected = reuse::Selection::after_check(original, admitted(candidate));
+    assert!(selected.rejected());
+    assert!(!selected.optimized());
+    assert_eq!(ir_text::write(selected.native().program()), before);
+    assert_eq!(ir_text::write(selected.original().program()), before);
+    assert!(equivalent(world, &selected, runtime));
+}
+fn records() -> reuse::Records {
+    reuse::Records::new(&[0x31u8; 32], &[0x42u8; 32])
+}
+fn warm_invalid_candidate_cannot_replay_an_old_proof() {
+    let raw = compiled(r#"
+        fn increment(value: i64) -> i64 { value + 1 }
+        pub fn probe() -> i64 { increment(41) }
+    "#).program().clone();
+    let mut known = records();
+    let original = check::check_all_cached(reuse::Prepared::new(raw), &mut known).unwrap();
+    let valid = optimizer::inline(original.program(), 64).program.unwrap();
+    let optimized = check::check_all_cached(reuse::Prepared::new(valid.clone()), &mut known).unwrap();
+    let valid_identity = optimized.keys().unwrap().program().to_string();
+    let original_identity = original.keys().unwrap().program().to_string();
+    let mut candidate = valid;
+    let entry = index(&candidate, "probe");
+    candidate.functions[entry].body[0].op = ir::Op::Return { src: !0usize };
+    let prepared = reuse::Prepared::new(candidate);
+    assert!(prepared.keys().program() != valid_identity);
+    let mut loaded = records();
+    for pending in known.pending() {
+        assert!(loaded.load(&pending.namespace, &pending.key, &pending.bytes));
+    }
+    let result = check::check_all_cached(prepared, &mut loaded);
+    assert!(result.is_err());
+    assert!(loaded.misses > 0);
+    let selected = reuse::Selection::after_check(original, result);
+    assert!(selected.rejected());
+    assert_eq!(selected.native().keys().unwrap().program(), original_identity);
+}
+fn original_validation_precedes_optimization_authority() {
+    let mut original = compiled("pub fn probe() -> i64 { 42 }").program().clone();
+    original.functions[0].body[0].op = ir::Op::Return { src: !0usize };
+    // Selection requires Checked authority for the retained original. A valid
+    // replacement cannot turn this failed original check into that authority.
+    assert!(check::check_all(original).is_err());
+}
+fn model_is_the_original_even_when_a_candidate_is_safe_but_wrong(
+    world: &mut World, runtime: &runtime::Runtime,
+) {
+    let original = compiled("pub fn probe() -> i64 { 42 }");
+    let mut changed = original.program().clone();
+    let entry = index(&changed, "probe");
+    for offset in 0..changed.functions[entry].body.len() {
+        let instruction = &mut changed.functions[entry].body[offset];
+        if let ir::Op::Int { value, .. } = &mut instruction.op { *value = 43; }
+    }
+    let selected = reuse::Selection::after_check(original, admitted(changed));
+    assert!(selected.optimized());
+    assert_eq!(value(selected.original().program()), 42i64);
+    assert_eq!(native_value(world, selected.native(), runtime), 43i64);
+    assert!(!equivalent(world, &selected, runtime));
+}
+fn copied_traps_keep_exact_file_and_line(world: &mut World, runtime: &runtime::Runtime) {
+    let original = compiled_files("main.rs", vec![
+        source::SourceInput {
+            path: "main.rs".to_string(),
+            text: "mod helper;\npub fn probe() -> i64 { helper::fail(1) }\n".to_string(),
+        },
+        source::SourceInput {
+            path: "helper.rs".to_string(),
+            text: "pub fn fail(index: usize) -> i64 {\n    let values = [42i64];\n    values[index]\n}\n".to_string(),
+        },
+    ]);
+    let arguments: Vec<u64> = Vec::new();
+    let mut output: Vec<u8> = Vec::new();
+    let error = interpreter::run(
+        original.program(), index(original.program(), "probe"),
+        &arguments, &mut output,
+    ).err().unwrap();
+    assert!(matches!(error.kind, interpreter::ErrorKind::Trap(3)));
+    let rewritten = optimizer::inline(original.program(), 64).program.unwrap();
+    let text = ir_text::write(&rewritten);
+    assert_eq!(ir_text::read(&text).unwrap(), rewritten);
+    let selected = reuse::Selection::after_check(original, admitted(rewritten));
+    assert!(selected.optimized());
+    let (status, raw) = native_result(world, selected.native(), runtime);
+    assert_eq!(status, 1u8);
+    let diagnostic = String::from_utf8(raw).unwrap();
+    assert!(diagnostic.starts_with("R0003 "));
+    assert!(diagnostic.contains(&format!(" at line {} file {}:", error.line, error.file)));
+}
+fn instruction_file_identity_and_rejection_location() {
+    let original = compiled("pub fn probe() -> i64 { 42 }");
+    let mut changed = original.program().clone();
+    let entry = index(&changed, "probe");
+    let before = reuse::Keys::new(&changed).function(entry).to_string();
+    changed.functions[entry].body[0].file = Some(7);
+    let after = reuse::Keys::new(&changed).function(entry).to_string();
+    assert!(before != after);
+    changed.functions[entry].body[0].line = 77;
+    changed.functions[entry].body[0].column = 9;
+    changed.functions[entry].body[0].op = ir::Op::Return { src: !0usize };
+    let text = ir_text::write(&changed);
+    assert!(text.contains("@7/77:9 "));
+    let decoded = ir_text::read(&text).unwrap();
+    assert_eq!(decoded, changed);
+    let problems = check::check_all(decoded).err().unwrap();
+    assert_eq!((problems[0].file, problems[0].line, problems[0].column), (7usize, 77usize, 9usize));
+}
+pub fn run(world: &mut World, trace: bool) -> usize {
+    let runtime = prepared_runtime();
+    if trace { world.stdout().write(b"inline_scalar_branches_and_helper_chains\n"); }
+    scalar_branches_and_helper_chains(world, &runtime);
+    if trace { world.stdout().write(b"inline_nested_loop_returns\n"); }
+    nested_loop_returns_keep_internal_transfers(world, &runtime);
+    if trace { world.stdout().write(b"inline_indexed_places_and_returned_views\n"); }
+    indexed_places_and_returned_mutable_views(world, &runtime);
+    if trace { world.stdout().write(b"inline_owning_cleanup\n"); }
+    owning_cleanup_remains_observable(world, &runtime);
+    if trace { world.stdout().write(b"inline_whole_program_rejection_fallback\n"); }
+    rejected_candidate_preserves_entire_original(world, &runtime);
+    if trace { world.stdout().write(b"inline_warm_invalid_candidate\n"); }
+    warm_invalid_candidate_cannot_replay_an_old_proof();
+    if trace { world.stdout().write(b"inline_original_check_required\n"); }
+    original_validation_precedes_optimization_authority();
+    if trace { world.stdout().write(b"inline_original_model_oracle\n"); }
+    model_is_the_original_even_when_a_candidate_is_safe_but_wrong(world, &runtime);
+    if trace { world.stdout().write(b"inline_cross_file_trap_provenance\n"); }
+    copied_traps_keep_exact_file_and_line(world, &runtime);
+    if trace { world.stdout().write(b"inline_instruction_file_identity\n"); }
+    instruction_file_identity_and_rejection_location();
+    10usize
+}

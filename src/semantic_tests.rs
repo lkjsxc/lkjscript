@@ -7,9 +7,11 @@ mod facts;
 mod function_owners;
 mod interpreter_contracts;
 mod library_demand;
+mod optimizer;
 mod parser_contracts;
 mod resolver;
 mod reuse;
+mod recheck;
 mod scalar_clone;
 mod return_contracts;
 mod source_cases;
@@ -109,6 +111,8 @@ pub fn run(world: &mut World, shard: usize, workers: usize, trace: bool) -> (usi
         count += facts::run();
         count += resolver::run();
         count += reuse::run(world, trace);
+        count += recheck::run(world, trace);
+        count += optimizer::run(world, trace);
         crate::interpreter::assert_reference_reuse();
         count += 1;
     }

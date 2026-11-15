@@ -1937,7 +1937,8 @@ impl<H: Host> Interpreter<'_, H> {
             .get(pc)
             .ok_or_else(|| self.invalid("function reaches its end without returning"))?
             .clone();
-        Ok((declaration.file, instruction))
+        let file = instruction.file.unwrap_or(declaration.file);
+        Ok((file, instruction))
     }
     fn step(&mut self, mut frame: Frame) -> Result<(), RunError> {
         let (file, instruction) = self.instruction_at(frame.function, frame.pc)?;

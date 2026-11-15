@@ -6,12 +6,13 @@ root=$(pwd)
 compiler=target/lkjscript
 witness=
 witness0=
+inline_limit=
 previous=
 output=target/bench
 rust=no
 while [ "$#" -gt 0 ]; do
     case "$1" in
-        --compiler|--witness|--witness0|--previous|--out)
+        --compiler|--witness|--witness0|--previous|--out|--inline-limit)
             [ "$#" -ge 2 ] || { echo "missing value for $1" >&2; exit 2; }
             case "$1" in
                 --compiler) compiler=$2 ;;
@@ -19,10 +20,11 @@ while [ "$#" -gt 0 ]; do
                 --witness0) witness0=$2; rust=yes ;;
                 --previous) previous=$2 ;;
                 --out) output=$2 ;;
+                --inline-limit) inline_limit=$2 ;;
             esac
             shift 2 ;;
         --rust) rust=yes; shift ;;
-        *) echo "usage: sh bench/run.sh [--compiler PATH] [--witness PATH] [--witness0 PATH] [--previous PATH] [--rust] [--out PATH]" >&2; exit 2 ;;
+        *) echo "usage: sh bench/run.sh [--compiler PATH] [--witness PATH] [--witness0 PATH] [--previous PATH] [--inline-limit N] [--rust] [--out PATH]" >&2; exit 2 ;;
     esac
 done
 mkdir -p "$output"
@@ -48,17 +50,20 @@ measure() {
         "$measured_program" "$measured_route" "$real" "$user" "$kernel" "$rss" "$bytes" "$measured_load" >> "$rows"
 }
 
+# The same explicit pass setting reaches native and same-source witnesses.
+set --
+if [ -n "$inline_limit" ]; then set -- --inline-limit "$inline_limit"; fi
 # This row measures the compiler code which the microbenchmarks cannot represent.
 measure self_build native "$compiler" "$compiler" build src/main.rs \
-    --library-dir library --runtime-source library/runtime.rs --no-store -o "$output/compiler-native"
+    --library-dir library --runtime-source library/runtime.rs --no-store "$@" -o "$output/compiler-native"
 if [ -n "$witness0" ]; then
     measure self_build witness0 "$witness0" "$witness0" build src/main.rs \
-        --library-dir library --runtime-source library/runtime.rs --no-store -o "$output/compiler-witness0"
+        --library-dir library --runtime-source library/runtime.rs --no-store "$@" -o "$output/compiler-witness0"
     cmp "$output/compiler-native" "$output/compiler-witness0"
 fi
 if [ -n "$witness" ]; then
     measure self_build witness3 "$witness" "$witness" build src/main.rs \
-        --library-dir library --runtime-source library/runtime.rs --no-store -o "$output/compiler-witness"
+        --library-dir library --runtime-source library/runtime.rs --no-store "$@" -o "$output/compiler-witness"
     cmp "$output/compiler-native" "$output/compiler-witness"
 fi
 if [ -n "$previous" ]; then
@@ -77,7 +82,11 @@ while read -r program count length seed small_count small_length; do
         source="$output/http_parse-source/main.rs"
     fi
     routes=native
-    "$compiler" build "$source" -o "$output/$program-native"
+    if [ -n "$inline_limit" ]; then
+        "$compiler" build "$source" --inline-limit "$inline_limit" -o "$output/$program-native"
+    else
+        "$compiler" build "$source" -o "$output/$program-native"
+    fi
     if [ -n "$previous" ]; then
         "$previous" build "$source" -o "$output/$program-previous"
         routes="$routes previous"

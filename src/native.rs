@@ -791,7 +791,7 @@ impl<'a> Body<'a> {
     }
     fn emit(&mut self, instruction: &ir::Instruction) -> Result<(), Diagnostic> {
         self.site = Span {
-            file: self.function.file,
+            file: instruction.file.unwrap_or(self.function.file),
             start: 0,
             end: 0,
             line: instruction.line,

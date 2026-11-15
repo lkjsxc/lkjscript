@@ -228,6 +228,7 @@ fn uninitialized_function(name: &str, file: usize, line: usize) -> crate::ir::Fu
             mutable: false,
         }],
         body: vec![ir::Instruction {
+            file: None,
             column: 1,
             op: ir::Op::Return { src: 0 },
             line,

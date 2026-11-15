@@ -20,6 +20,7 @@ pub mod ir_text;
 pub mod json;
 pub mod names;
 pub mod native;
+pub mod optimizer;
 pub mod resolve;
 pub mod reuse;
 pub mod runtime;

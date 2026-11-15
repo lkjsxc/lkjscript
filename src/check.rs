@@ -2422,9 +2422,11 @@ fn check_function_scoped(
     let mut site = None;
     check_function_body(program, function, facts, &mut site, None, scope, None).map_err(
         |mut problem| {
-            if let Some((line, column)) = site {
+            problem.file = function.file;
+            if let Some((line, column, file)) = site {
                 if problem.line == line {
                     problem.column = column;
+                    problem.file = file;
                 }
             }
             problem
@@ -2435,7 +2437,7 @@ fn check_function_body(
     program: &Program,
     function: &Function,
     facts: &TypeFacts,
-    site: &mut Option<(usize, usize)>,
+    site: &mut Option<(usize, usize, usize)>,
     mut observation: Option<&mut ReturnObservation>,
     scope: Option<&scoped::Scope>,
     mut locals: Option<&mut scoped::LocalPass<'_>>,
@@ -2541,8 +2543,8 @@ fn check_function_body(
         let instruction = &function.body[pc];
         pc += 1;
         let line = instruction.line;
-        *site = Some((line, instruction.column));
-        state.site = *site;
+        *site = Some((line, instruction.column, instruction.file.unwrap_or(function.file)));
+        state.site = Some((line, instruction.column));
         check_shape(program, facts, function, instruction)?;
         if state.reachable {
             if let Some(pass) = locals.as_mut() {
@@ -3759,9 +3761,10 @@ fn observed_return_contract(
     )
     .map_err(|mut problem| {
         problem.file = function.file;
-        if let Some((line, column)) = site {
+        if let Some((line, column, file)) = site {
             if problem.line == line {
                 problem.column = column;
+                problem.file = file;
             }
         }
         problem
@@ -3940,8 +3943,7 @@ pub fn check_all(program: Program) -> Result<CheckedProgram, Vec<Diagnostic>> {
     let mut problems = Vec::new();
     let facts = TypeFacts::new(&program);
     for function in &program.functions {
-        if let Err(mut problem) = check_function(&program, function, &facts) {
-            problem.file = function.file;
+        if let Err(problem) = check_function(&program, function, &facts) {
             problems.push(problem);
         }
     }
@@ -3952,6 +3954,16 @@ pub fn check_all(program: Program) -> Result<CheckedProgram, Vec<Diagnostic>> {
     }
 }
 
+/// Recheck transformed IR against an immutable, already admitted original.
+/// The returned count covers only independently compared whole-function proofs.
+pub fn recheck_all(
+    original: &CheckedProgram,
+    program: Program,
+) -> Result<(CheckedProgram, usize), Vec<Diagnostic>> {
+    let mut records = crate::reuse::Records::disabled();
+    check_reusing_proof(Some(original), program, None, &mut records)
+}
+
 /// Reuse only authenticated successes for the exact owned input. Shared shape
 /// validation is never cached; missing and invalid records check normally.
 pub fn check_all_cached(
@@ -3959,25 +3971,67 @@ pub fn check_all_cached(
     records: &mut crate::reuse::Records,
 ) -> Result<crate::reuse::Checked, Vec<Diagnostic>> {
     let (program, keys) = prepared.into_parts();
+    let (checked, _) = check_reusing_proof(None, program, Some(&keys), records)?;
+    Ok(crate::reuse::Checked::cached(checked, keys))
+}
+
+/// Local equality proof precedes persistent lookup. Its count never includes
+/// authenticated record hits, and it performs no record lookup or write.
+pub fn recheck_all_cached(
+    original: &CheckedProgram,
+    prepared: crate::reuse::Prepared,
+    records: &mut crate::reuse::Records,
+) -> Result<(crate::reuse::Checked, usize), Vec<Diagnostic>> {
+    let (program, keys) = prepared.into_parts();
+    let (checked, reused) = check_reusing_proof(Some(original), program, Some(&keys), records)?;
+    Ok((crate::reuse::Checked::cached(checked, keys), reused))
+}
+
+fn check_reusing_proof(
+    original: Option<&CheckedProgram>,
+    program: Program,
+    keys: Option<&crate::reuse::Keys>,
+    records: &mut crate::reuse::Records,
+) -> Result<(CheckedProgram, usize), Vec<Diagnostic>> {
+    // Validate before comparing parameter slices or trusting numeric graph IDs.
     check_structure(&program).map_err(|problem| vec![problem])?;
+    let prior = match original {
+        Some(checked) => {
+            if crate::reuse::same_check_graph(checked.program(), &program) {
+                Some(checked.program())
+            } else { None }
+        }
+        None => None,
+    };
     let facts = TypeFacts::new(&program);
     let mut problems = Vec::new();
+    let mut reused = 0usize;
     for (index, function) in program.functions.iter().enumerate() {
-        let cached = match records.get("check", keys.function(index)) {
-            Some(payload) => payload.as_slice() == b"ok",
+        let unchanged = match &prior {
+            Some(prior) => prior.functions[index] == *function,
+            None => false,
+        };
+        if unchanged {
+            reused += 1;
+            continue;
+        }
+        let cached = match &keys {
+            Some(keys) => match records.get("check", keys.function(index)) {
+                Some(payload) => payload.as_slice() == b"ok",
+                None => false,
+            },
             None => false,
         };
         if cached { continue; }
         match check_function(&program, function, &facts) {
-            Ok(()) => records.put("check", keys.function(index), b"ok"),
-            Err(mut problem) => {
-                problem.file = function.file;
-                problems.push(problem);
+            Ok(()) => {
+                if let Some(keys) = &keys { records.put("check", keys.function(index), b"ok"); }
             }
+            Err(problem) => { problems.push(problem); }
         }
     }
     if problems.is_empty() {
-        Ok(crate::reuse::Checked::cached(CheckedProgram { program }, keys))
+        Ok((CheckedProgram { program }, reused))
     } else {
         Err(problems)
     }

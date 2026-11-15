@@ -324,6 +324,7 @@ fn model() -> ir::Program {
     let mut index: usize = 0;
     while index < 30 {
         body.push(ir::Instruction {
+            file: None,
             column: 1,
             op: operation(index, false),
             line: 100 + index,

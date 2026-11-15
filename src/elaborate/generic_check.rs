@@ -293,6 +293,7 @@ fn validate_selected(
             ));
         }
         function.body = vec![ir::Instruction {
+            file: None,
             column: 1,
             op: ir::Op::Trap {
                 message: "abstract declared contract".to_string(),

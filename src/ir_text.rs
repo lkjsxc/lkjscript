@@ -206,7 +206,14 @@ fn place(words: &[String], start: usize, line: usize) -> Result<Place> {
 fn instruction(words: &[String], line: usize) -> Result<Instruction> {
     let location = word(words, 0, line)?
         .strip_prefix('@')
-        .ok_or_else(|| error(line, "instruction needs @source-line[:column]"))?;
+        .ok_or_else(|| error(line, "instruction needs @[file/]source-line[:column]"))?;
+    let (file, location) = match location.split_once('/') {
+        Some((file, location)) => (
+            Some(file.parse::<usize>().map_err(|_| error(line, "invalid source file"))?),
+            location,
+        ),
+        None => (None, location),
+    };
     let (source_line, column) = location.split_once(':').unwrap_or((location, "1"));
     let source_line = source_line
         .parse::<usize>()
@@ -410,6 +417,7 @@ fn instruction(words: &[String], line: usize) -> Result<Instruction> {
     };
     Ok(Instruction {
         op,
+        file,
         line: source_line,
         column,
     })
@@ -749,7 +757,9 @@ fn write_projections(text: &mut String, projections: &[Projection]) {
 }
 
 fn write_instruction(text: &mut String, instruction: &Instruction) {
-    text.push_str(&format!("@{}:{} ", instruction.line, instruction.column));
+    text.push('@');
+    if let Some(file) = instruction.file { text.push_str(&format!("{file}/")); }
+    text.push_str(&format!("{}:{} ", instruction.line, instruction.column));
     match &instruction.op {
         Op::Text { dst, bytes } => {
             let mut encoded = String::new();

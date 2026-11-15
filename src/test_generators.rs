@@ -16,7 +16,7 @@ mod source_cases;
 #[path = "test_generators/values.rs"]
 mod values;
 
-use crate::{backend, check, driver, ir, ir_text, runtime, test_runner};
+use crate::{backend, check, driver, ir, ir_text, optimizer, reuse, runtime, test_runner};
 
 pub struct Random {
     state: u64,
@@ -220,6 +220,7 @@ fn seeds(
     store: &mut Option<crate::store::Store>,
     counts: &mut Counts,
     runtime: &runtime::Runtime,
+    inline_limit: Option<usize>,
 ) -> Result<Vec<mutation::Seed>, String> {
     let mut out: Vec<mutation::Seed> = Vec::new();
     for path in seed_paths() {
@@ -236,7 +237,8 @@ fn seeds(
             },
         )?;
         if store.is_some() {
-            emit_mutation(&checked, runtime, store, counts).map_err(
+            let selected = select_mutation(checked, store, counts, inline_limit);
+            emit_mutation(selected.native(), runtime, store, counts).map_err(
                 |diagnostic: crate::diagnostic::Diagnostic| -> String {
                     format!("{path}: canonical seed emission failed: {} {}", diagnostic.code, diagnostic.message)
                 },
@@ -402,6 +404,71 @@ fn check_mutation(
     }
 }
 
+// Retained original authority can discharge only exact, unchanged bodies. The
+// checker validates the shared graph before making that comparison.
+fn recheck_mutation(
+    original: &ir::CheckedProgram,
+    program: ir::Program,
+    store: &mut Option<crate::store::Store>,
+    counts: &mut Counts,
+) -> Result<reuse::Checked, Vec<crate::diagnostic::Diagnostic>> {
+    if let Some(store) = store {
+        let prepared = reuse::Prepared::new(program);
+        let mut records = store.records("check", prepared.keys().all());
+        let result = check::recheck_all_cached(original, prepared, &mut records);
+        counts.checked_reused += records.hits;
+        store.flush(&records);
+        match result {
+            Ok((checked, reused)) => {
+                counts.checked_local_reused += reused;
+                Ok(checked)
+            }
+            Err(problems) => Err(problems),
+        }
+    } else {
+        match check::recheck_all(original, program) {
+            Ok((checked, reused)) => {
+                counts.checked_local_reused += reused;
+                Ok(reuse::Checked::uncached(checked))
+            }
+            Err(problems) => Err(problems),
+        }
+    }
+}
+
+// Original checking has already granted authority. The candidate must earn its
+// own verdict before it can replace any native body; failed admission falls back.
+fn select_mutation(
+    original: reuse::Checked,
+    store: &mut Option<crate::store::Store>,
+    counts: &mut Counts,
+    inline_limit: Option<usize>,
+) -> reuse::Selection {
+    let limit = inline_limit.unwrap_or(optimizer::default_limit());
+    let rewrite = optimizer::inline(original.program(), limit);
+    let Some(candidate) = rewrite.program else {
+        return reuse::Selection::unchanged(original);
+    };
+    counts.inline_attempts += 1;
+    counts.inline_calls += rewrite.calls;
+    counts.inline_functions += rewrite.functions;
+    let result = recheck_mutation(original.checked(), candidate, store, counts);
+    let selected = reuse::Selection::after_check(original, result);
+    if selected.rejected() {
+        counts.inline_rejected += 1;
+    } else {
+        counts.inline_accepted += 1;
+    }
+    selected
+}
+
+fn inline_setting(limit: Option<usize>) -> String {
+    match limit {
+        Some(limit) => format!("{limit}"),
+        None => format!("default({})", optimizer::default_limit()),
+    }
+}
+
 fn emit_mutation(
     checked: &crate::reuse::Checked,
     runtime: &runtime::Runtime,
@@ -428,7 +495,7 @@ fn execute_ir(
     world: &mut World,
     executable: &File,
     path: &str,
-    checked: &crate::reuse::Checked,
+    selection: &reuse::Selection,
     runtime: &runtime::Runtime,
     store: &mut Option<crate::store::Store>,
     counts: &mut Counts,
@@ -453,14 +520,14 @@ fn execute_ir(
         return Ok((left.kind.clone(), left.clone(), left));
     }
     let mut index = None;
-    for (candidate, function) in checked.program().functions.iter().enumerate() {
+    for (candidate, function) in selection.original().program().functions.iter().enumerate() {
         if function.name == "probe" {
             index = Some(candidate);
             break;
         }
     }
     let selected = index.ok_or("E_ENTRY mutation seed has no probe")?;
-    let image = emit_mutation(checked, runtime, store, counts).map_err(
+    let image = emit_mutation(selection.native(), runtime, store, counts).map_err(
         |diagnostic: crate::diagnostic::Diagnostic| -> String {
             format!(
                 "E_MUTATION_NATIVE {} {}",
@@ -477,12 +544,20 @@ fn execute_ir(
         .map_err(|errno: i64| problem("native mutant executable", errno))?;
     let arguments: Vec<Vec<u8>> = Vec::new();
     let mut capture = test_runner::invoke(world, &file, &arguments, 2_000_000_000)?;
+    if selection.optimized() { counts.inline_executed += 1; }
     if !capture.timed_out {
         if capture.result.len() == 8 {
-            let result = driver::raw_scalar(checked.program(), selected, &capture.result)?;
+            let result = driver::raw_scalar(selection.original().program(), selected, &capture.result)?;
             capture.stdout.extend_from_slice(result.as_bytes());
-        } else if let Some(diagnostic) = driver::normalize_trap(path, &capture.result) {
-            capture.stderr.extend_from_slice(diagnostic.as_bytes());
+        } else if let Some((code, diagnostic, message)) = driver::native_trap(path, &capture.result) {
+            let complete = code >= 6 && code <= 8
+                || driver::complete_semantic_trap(selection.native().program(), code, &message);
+            if capture.status == 1 && complete {
+                capture.stderr.extend_from_slice(diagnostic.as_bytes());
+            } else {
+                capture.stderr.extend_from_slice(b"E_HOST native mutant trap identity mismatch");
+                capture.status = 1;
+            }
         } else if capture.status == 0 {
             capture
                 .stderr
@@ -506,6 +581,13 @@ struct Counts {
     checked_reused: usize,
     emitted_reused: usize,
     store_rejected: usize,
+    inline_attempts: usize,
+    inline_accepted: usize,
+    inline_executed: usize,
+    inline_rejected: usize,
+    inline_calls: usize,
+    inline_functions: usize,
+    checked_local_reused: usize,
 }
 impl Counts {
     fn new() -> Self {
@@ -520,6 +602,13 @@ impl Counts {
             checked_reused: 0,
             emitted_reused: 0,
             store_rejected: 0,
+            inline_attempts: 0,
+            inline_accepted: 0,
+            inline_executed: 0,
+            inline_rejected: 0,
+            inline_calls: 0,
+            inline_functions: 0,
+            checked_local_reused: 0,
         }
     }
     fn add(&mut self, category: &str) {
@@ -544,10 +633,17 @@ impl Counts {
         self.checked_reused += other.checked_reused;
         self.emitted_reused += other.emitted_reused;
         self.store_rejected += other.store_rejected;
+        self.inline_attempts += other.inline_attempts;
+        self.inline_accepted += other.inline_accepted;
+        self.inline_executed += other.inline_executed;
+        self.inline_rejected += other.inline_rejected;
+        self.inline_calls += other.inline_calls;
+        self.inline_functions += other.inline_functions;
+        self.checked_local_reused += other.checked_local_reused;
     }
     fn encode(&self) -> String {
         format!(
-            "{} {} {} {} {} {} {} {} {} {}",
+            "{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
             self.total,
             self.rejected,
             self.values,
@@ -557,7 +653,14 @@ impl Counts {
             self.findings,
             self.checked_reused,
             self.emitted_reused,
-            self.store_rejected
+            self.store_rejected,
+            self.inline_attempts,
+            self.inline_accepted,
+            self.inline_executed,
+            self.inline_rejected,
+            self.inline_calls,
+            self.inline_functions,
+            self.checked_local_reused
         )
     }
 }
@@ -566,7 +669,7 @@ fn decode_counts(text: &str) -> Result<Counts, String> {
     for field in whitespace(text) {
         fields.push(integer(&field, "worker count")?);
     }
-    if fields.len() != 10 {
+    if fields.len() != 17 {
         return Err("E_HOST invalid mutation worker summary".to_string());
     }
     Ok(Counts {
@@ -580,6 +683,13 @@ fn decode_counts(text: &str) -> Result<Counts, String> {
         checked_reused: fields[7],
         emitted_reused: fields[8],
         store_rejected: fields[9],
+        inline_attempts: fields[10],
+        inline_accepted: fields[11],
+        inline_executed: fields[12],
+        inline_rejected: fields[13],
+        inline_calls: fields[14],
+        inline_functions: fields[15],
+        checked_local_reused: fields[16],
     })
 }
 fn mutation_worker(
@@ -591,14 +701,20 @@ fn mutation_worker(
     output: &str,
     store_path: &Option<String>,
     store_key: &Option<String>,
+    inline_limit: Option<usize>,
 ) -> Result<Counts, String> {
     let mut store = crate::store::Store::open(world, store_path, store_key);
     let executable = world
         .executable()
         .map_err(|errno: i64| problem("compiler executable", errno))?;
     let runtime = driver::load_runtime(world, &None)?;
+    let mut warm = Counts::new();
+    let seeds = seeds(world, &mut store, &mut warm, &runtime, inline_limit)?;
+    // Inline counts describe mutants, not canonical-seed warming. Otherwise
+    // accepted seed rewrites could hide universal fallback during the campaign.
     let mut counts = Counts::new();
-    let seeds = seeds(world, &mut store, &mut counts, &runtime)?;
+    counts.checked_reused = warm.checked_reused;
+    counts.emitted_reused = warm.emitted_reused;
     let mut random = Random::new(seed as u64);
     let path = format!("{output}/worker-{worker}.lkjir");
     for index in 0..count {
@@ -615,16 +731,19 @@ fn mutation_worker(
             Err(_) => None,
         };
         let category = if let Some(checked) = checked {
+            let selection = select_mutation(checked, &mut store, &mut counts, inline_limit);
+            // The raw model child always receives the original mutant text.
             write(world, &path, source.as_bytes())?;
             let (category, left, right) =
-                execute_ir(world, &executable, &path, &checked, &runtime, &mut store, &mut counts)?;
+                execute_ir(world, &executable, &path, &selection, &runtime, &mut store, &mut counts)?;
             if finding(&category) {
                 let case_path = format!("{output}/finding-{index}.lkjir");
                 write(world, &case_path, source.as_bytes())?;
                 let details = format!(
-                    "seed {seed}, index {index}, base {}, mutation {}, category {category}\ninterpreter {} {} line {}\n{}\nnative {} {} line {}\n{}\n",
+                    "seed {seed}, index {index}, base {}, mutation {}, category {category}, inline {}\ninterpreter {} {} line {}\n{}\nnative {} {} line {}\n{}\n",
                     seeds[base].path,
                     mutation.kind,
+                    inline_setting(inline_limit),
                     left.kind,
                     left.code,
                     left.line,
@@ -673,9 +792,10 @@ fn mutation_campaign(
     output: &str,
     store_path: &Option<String>,
     store_key: &Option<String>,
+    inline_limit: Option<usize>,
 ) -> Result<Counts, String> {
     if jobs == 1 {
-        return mutation_worker(world, seed, count, 1, 0, output, store_path, store_key);
+        return mutation_worker(world, seed, count, 1, 0, output, store_path, store_key, inline_limit);
     }
     let executable = world
         .executable()
@@ -700,6 +820,10 @@ fn mutation_campaign(
         if let Some(key) = store_key {
             values.push("--store-key".to_string());
             values.push(key.clone());
+        }
+        if let Some(limit) = inline_limit {
+            values.push("--inline-limit".to_string());
+            values.push(format!("{limit}"));
         }
         let args = arguments(&values);
         let input = world
@@ -1006,6 +1130,7 @@ fn source_observations(
     executable: &File,
     path: &str,
     entry: &str,
+    inline_limit: Option<usize>,
 ) -> Result<(String, Observation, Observation), String> {
     let mut routes: Vec<Observation> = Vec::new();
     let engines: Vec<String> = vec!["interpreter".to_string(), "native".to_string()];
@@ -1017,6 +1142,7 @@ fn source_observations(
             entry,
             &engine,
             60_000_000_000,
+            inline_limit,
         )?));
     }
     // Compilation is candidate validity, not an execution finding. In contrast,
@@ -1036,8 +1162,9 @@ fn reduction_observations(
     path: &str,
     entry: &str,
     reference: &Option<Observation>,
+    inline_limit: Option<usize>,
 ) -> Result<(String, Observation, Observation), String> {
-    let observed = source_observations(world, executable, path, entry)?;
+    let observed = source_observations(world, executable, path, entry, inline_limit)?;
     if observed.0 == "value-equal" || observed.0 == "trap-equal" {
         if let Some(reference) = reference {
             return Ok((
@@ -1067,7 +1194,7 @@ fn preserved(
 fn reduce(world: &mut World, args: &[String]) -> Result<u8, String> {
     if args.is_empty() {
         return Err(
-            "E_USAGE reduce SOURCE [-o OUTPUT] [--entry NAME] [--reference SOURCE]".to_string(),
+            "E_USAGE reduce SOURCE [-o OUTPUT] [--entry NAME] [--reference SOURCE] [--inline-limit N|--no-opt]".to_string(),
         );
     }
     let source_path = args[0].clone();
@@ -1080,10 +1207,15 @@ fn reduce(world: &mut World, args: &[String]) -> Result<u8, String> {
     };
     let mut entry = String::new();
     let mut reference_path = String::new();
+    let mut inline_limit = None;
     let mut at = 1usize;
     while at < args.len() {
         let option = args[at].as_str();
         at += 1;
+        if option == "--no-opt" {
+            inline_limit = Some(0);
+            continue;
+        }
         if at == args.len() {
             return Err(format!("E_USAGE {option} needs a value"));
         }
@@ -1091,6 +1223,7 @@ fn reduce(world: &mut World, args: &[String]) -> Result<u8, String> {
             "-o" => output = args[at].clone(),
             "--entry" => entry = args[at].clone(),
             "--reference" => reference_path = args[at].clone(),
+            "--inline-limit" => inline_limit = Some(integer(&args[at], "inline limit")?),
             _ => return Err(format!("E_USAGE invalid reduce option {option}")),
         }
         at += 1;
@@ -1101,7 +1234,7 @@ fn reduce(world: &mut World, args: &[String]) -> Result<u8, String> {
     let reference = if reference_path.is_empty() {
         None
     } else {
-        let oracle = source_observations(world, &executable, &reference_path, &entry)?;
+        let oracle = source_observations(world, &executable, &reference_path, &entry, inline_limit)?;
         if oracle.0 != "value-equal" && oracle.0 != "trap-equal" {
             return Err(format!(
                 "E_REDUCER reference must agree on both routes: {}",
@@ -1116,7 +1249,7 @@ fn reduce(world: &mut World, args: &[String]) -> Result<u8, String> {
         format!("{output}.candidate.rs")
     };
     write(world, &stage, source.as_bytes())?;
-    let baseline = reduction_observations(world, &executable, &stage, &entry, &reference)?;
+    let baseline = reduction_observations(world, &executable, &stage, &entry, &reference, inline_limit)?;
     if !finding(&baseline.0) || baseline.0 == "rejected" {
         remove(world, &stage)?;
         return Err(format!(
@@ -1137,7 +1270,7 @@ fn reduce(world: &mut World, args: &[String]) -> Result<u8, String> {
         for span in candidates {
             let candidate = format!("{}{}", &current[..span.start], &current[span.end..]);
             write(world, &stage, candidate.as_bytes())?;
-            let observed = reduction_observations(world, &executable, &stage, &entry, &reference)?;
+            let observed = reduction_observations(world, &executable, &stage, &entry, &reference, inline_limit)?;
             attempts += 1;
             if preserved(
                 &baseline.0,
@@ -1160,7 +1293,7 @@ fn reduce(world: &mut World, args: &[String]) -> Result<u8, String> {
     }
     write(world, &output, current.as_bytes())?;
     remove(world, &stage)?;
-    world.stdout().write(format!("ok reduce: {} preserved, {attempts} candidates, {accepted} deletions, {} bytes in {output}\n",baseline.0,current.len()).as_bytes());
+    world.stdout().write(format!("ok reduce: {} preserved, {attempts} candidates, {accepted} deletions, {} bytes in {output}; inline {}\n",baseline.0,current.len(),inline_setting(inline_limit)).as_bytes());
     Ok(0)
 }
 
@@ -1175,7 +1308,7 @@ pub fn run(world: &mut World, args: &[String]) -> Result<u8, String> {
         return reduce(world, &args[1..]);
     }
     if args[0] != "mutate" || args.len() < 3 {
-        return Err("E_USAGE mutate SEED COUNT [--jobs N] [-o DIRECTORY] [--store DIR --store-key FILE]".to_string());
+        return Err("E_USAGE mutate SEED COUNT [--jobs N] [-o DIRECTORY] [--store DIR --store-key FILE] [--inline-limit N|--no-opt]".to_string());
     }
     let seed = integer(&args[1], "seed")?;
     let count = integer(&args[2], "count")?;
@@ -1183,11 +1316,16 @@ pub fn run(world: &mut World, args: &[String]) -> Result<u8, String> {
     let mut worker = None;
     let mut store_path = None;
     let mut store_key = None;
+    let mut inline_limit = None;
     let mut output = format!("target/mutation-{seed}-{count}");
     let mut at = 3usize;
     while at < args.len() {
         let option = args[at].as_str();
         at += 1;
+        if option == "--no-opt" {
+            inline_limit = Some(0);
+            continue;
+        }
         if at == args.len() {
             return Err(format!("E_USAGE {option} needs a value"));
         }
@@ -1196,6 +1334,7 @@ pub fn run(world: &mut World, args: &[String]) -> Result<u8, String> {
             "--worker" => worker = Some(integer(&args[at], "worker index")?),
             "--store" => store_path = Some(args[at].clone()),
             "--store-key" => store_key = Some(args[at].clone()),
+            "--inline-limit" => inline_limit = Some(integer(&args[at], "inline limit")?),
             "-o" => output = args[at].clone(),
             _ => return Err(format!("E_USAGE unknown mutation option {option}")),
         }
@@ -1209,7 +1348,7 @@ pub fn run(world: &mut World, args: &[String]) -> Result<u8, String> {
         if index >= jobs {
             return Err("E_USAGE worker index exceeds worker count".to_string());
         }
-        let counts = mutation_worker(world, seed, count, jobs, index, &output, &store_path, &store_key)?;
+        let counts = mutation_worker(world, seed, count, jobs, index, &output, &store_path, &store_key, inline_limit)?;
         world
             .stdout()
             .write(format!("{}\n", counts.encode()).as_bytes());
@@ -1219,7 +1358,7 @@ pub fn run(world: &mut World, args: &[String]) -> Result<u8, String> {
     let start = clock
         .nanoseconds()
         .map_err(|errno: i64| problem("clock", errno))?;
-    let counts = mutation_campaign(world, seed, count, jobs, &output, &store_path, &store_key)?;
+    let counts = mutation_campaign(world, seed, count, jobs, &output, &store_path, &store_key, inline_limit)?;
     let elapsed = clock
         .nanoseconds()
         .map_err(|errno: i64| problem("clock", errno))?
@@ -1234,6 +1373,10 @@ pub fn run(world: &mut World, args: &[String]) -> Result<u8, String> {
     } else {
         String::new()
     };
-    world.stdout().write(format!("{} mutation: {} mutants, {} rejected, {} values, {} traps, {} did not terminate, {} resources, {} findings; {} mutants/minute ({}.{:03} s, {} workers){reuse}\n", if counts.findings == 0 { "ok" } else { "FAIL" }, counts.total, counts.rejected, counts.values, counts.traps, counts.timeout, counts.resources, counts.findings, per_minute, elapsed / 1_000_000_000, elapsed / 1_000_000 % 1000, jobs).as_bytes());
+    let inlining = format!("; inline {}, {} attempts, {} accepted, {} executed, {} rejected, {} candidate calls in {} bodies, {} local body proofs",
+        inline_setting(inline_limit), counts.inline_attempts, counts.inline_accepted,
+        counts.inline_executed, counts.inline_rejected, counts.inline_calls, counts.inline_functions,
+        counts.checked_local_reused);
+    world.stdout().write(format!("{} mutation: {} mutants, {} rejected, {} values, {} traps, {} did not terminate, {} resources, {} findings; {} mutants/minute ({}.{:03} s, {} workers){reuse}{inlining}\n", if counts.findings == 0 { "ok" } else { "FAIL" }, counts.total, counts.rejected, counts.values, counts.traps, counts.timeout, counts.resources, counts.findings, per_minute, elapsed / 1_000_000_000, elapsed / 1_000_000 % 1000, jobs).as_bytes());
     Ok(if counts.findings == 0 { 0 } else { 1 })
 }

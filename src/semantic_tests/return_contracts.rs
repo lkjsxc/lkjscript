@@ -35,6 +35,7 @@ fn cyclic_reference_program(depth: usize) -> crate::ir::Program {
         ],
         body: vec![
             ir::Instruction {
+                file: None,
                 column: 1,
                 line: 1,
                 op: ir::Op::Read {
@@ -47,6 +48,7 @@ fn cyclic_reference_program(depth: usize) -> crate::ir::Program {
                 },
             },
             ir::Instruction {
+                file: None,
                 column: 1,
                 line: 2,
                 op: ir::Op::Drop {
@@ -54,6 +56,7 @@ fn cyclic_reference_program(depth: usize) -> crate::ir::Program {
                 },
             },
             ir::Instruction {
+                file: None,
                 column: 1,
                 line: 3,
                 op: ir::Op::Return { src: 1 },

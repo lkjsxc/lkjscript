@@ -667,9 +667,11 @@ pub(crate) fn check_definitions(
             };
             match result {
                 Err(mut problem) => {
-                    if let Some((line, column)) = site {
+                    problem.file = function.file;
+                    if let Some((line, column, file)) = site {
                         if problem.line == line {
                             problem.column = column;
+                            problem.file = file;
                         }
                     }
                     Err(problem)
@@ -677,8 +679,7 @@ pub(crate) fn check_definitions(
                 Ok(()) => Ok(()),
             }
         };
-        if let Err(mut problem) = result {
-            problem.file = function.file;
+        if let Err(problem) = result {
             problems.push(problem);
         }
         checked.insert(index);

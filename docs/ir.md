@@ -2,8 +2,8 @@
 
 The lkjscript IR is an explicit, monomorphic program of types, functions, local
 slots, places and structured instructions. Producers may construct arbitrary IR.
-Only `check::check` or `check::check_all` can produce the `CheckedProgram`
-accepted by a backend. Parsing text does not grant that authority.
+Only the checker can produce the `CheckedProgram` accepted by a backend.
+Parsing text, producing transformed IR and loading store bytes grant no authority.
 
 ## Text and identity
 
@@ -19,6 +19,8 @@ Type names do not grant authority or change a type's shape. Function names must 
 Outside quoted words, whitespace separates tokens and `#` starts a comment.
 Quoted words use JSON-style string escapes. Instructions begin with
 `@line:column`; `@line` means column 1. A function may specify its file index.
+An instruction may override that file with `@file/line:column`, preserving the
+original location when an IR transformation copies code between functions.
 Text-format errors use E_IR_TEXT; checker errors retain instruction locations.
 
 The complete [scalar program](../tests/reference/scalar.lkjir) is an executable
@@ -355,3 +357,20 @@ The independent interpreter checks behavior without sharing checker or lowering
 logic; it is a differential oracle. Optimization output is rechecked and rejected
 output discarded, then native behavior is compared with interpretation of the
 original IR.
+
+## Rechecked optimization and prior proofs
+
+The inliner consumes admitted original IR and produces an untrusted candidate.
+The checker validates that candidate before native emission; rejection discards
+the whole candidate. Interpretation, authority reports and IR output retain the
+original. Differential cases compare optimized native behavior with that original.
+Copied instructions retain their original file, line and column, including traps.
+
+A recheck may reuse an immutable original function proof only after validating
+shared structure and independently comparing the exact type/destructor graph,
+ordered signatures, parameter locals and return contracts. It then compares the
+whole function, including locals, body, literal bits and source provenance.
+A changed graph disables this local reuse; changed bodies receive ordinary checks.
+Authenticated persistent proofs use the same dependencies and remain separately
+counted. Native fragments never supply checker authority. Observation-only commands
+skip optimization unless the corpus roundtrip explicitly exercises both forms.

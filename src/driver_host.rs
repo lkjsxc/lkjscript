@@ -28,6 +28,7 @@ pub struct Host<'world, 'program> {
     next_handle: u64,
     arguments: Vec<Vec<u8>>,
     capture: Option<Streams>,
+    // Native self-image authority; interpretation separately retains the original IR.
     checked: Option<&'program ir::CheckedProgram>,
     entry: usize,
     runtime_source: Option<String>,

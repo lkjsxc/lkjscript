@@ -522,6 +522,7 @@ fn elaborate_definitions(
                         ));
                     }
                     c.functions[index].body = vec![ir::Instruction {
+                        file: None,
                         column: 1,
                         op: ir::Op::Trap {
                             message: "body blocked by a source diagnostic".to_string(),
@@ -1716,6 +1717,7 @@ impl Builder<'_, '_> {
             _ => {}
         }
         self.function.body.push(ir::Instruction {
+            file: None,
             op,
             line,
             column: if self.active_span.line == line {

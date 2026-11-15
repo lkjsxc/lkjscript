@@ -537,6 +537,7 @@ fn workers(
     store_directory: &Option<String>,
     store_key: &Option<String>,
     stats: bool,
+    inline_limit: Option<usize>,
 ) -> Result<Vec<Worker>, String> {
     let executable = world.executable().map_err(|e: i64| io("compiler executable", e))?;
     let mut result = Vec::new();
@@ -576,6 +577,9 @@ fn workers(
             args.push("--store-key".as_bytes().to_vec()); args.push(path.as_bytes().to_vec());
         }
         if stats { args.push("--stats".as_bytes().to_vec()); }
+        if let Some(limit) = inline_limit {
+            args.push("--inline-limit".as_bytes().to_vec()); args.push(format!("{limit}").into_bytes());
+        }
         result.push(Worker { process: start(world, &executable, &args)?, indices });
     }
     Ok(result)
@@ -591,8 +595,9 @@ fn run_inner(
     store_directory: &Option<String>,
     store_key: &Option<String>,
     stats: bool,
+    inline_limit: Option<usize>,
 ) -> Result<(usize, usize, usize), String> {
-    let active = workers(world, directory, temporary, cases, jobs, engines, store_directory, store_key, stats)?;
+    let active = workers(world, directory, temporary, cases, jobs, engines, store_directory, store_key, stats, inline_limit)?;
     let mut passed = 0usize;
     let mut pending = 0usize;
     let mut failed = 0usize;
@@ -662,6 +667,7 @@ pub fn run_stored(
     store_directory: &Option<String>,
     store_key: &Option<String>,
     stats: bool,
+    inline_limit: Option<usize>,
 ) -> Result<u8, String> {
     if jobs == 0 || jobs > 8 {
         return Err("E_USAGE --jobs must be between one and eight".to_string());
@@ -679,7 +685,7 @@ pub fn run_stored(
     let result = match parent.open_directory(&temporary) {
         Err(errno) => Err(io("worker directory", errno)),
         Ok(mut directory) => {
-            let result = run_inner(world, &mut directory, &temporary, &cases, jobs, engines, store_directory, store_key, stats);
+            let result = run_inner(world, &mut directory, &temporary, &cases, jobs, engines, store_directory, store_key, stats, inline_limit);
             for worker in 0..jobs {
                 let _ = directory.remove(&format!("worker-{worker}"));
             }
@@ -975,6 +981,7 @@ pub fn evaluate(
     entry: &str,
     engine: &str,
     timeout_ns: usize,
+    inline_limit: Option<usize>,
 ) -> Result<Observation, String> {
     if path.contains('\n') || path.contains('\t') || entry.contains('\n') || entry.contains('\t') {
         return Err("E_TEST batch paths and entries cannot contain tab or newline".to_string());
@@ -983,10 +990,13 @@ pub fn evaluate(
     let name = format!(".lkjscript-observe-{stamp}");
     let mut directory = world.directory(".").map_err(|e: i64| io("current directory", e))?;
     write(&mut directory, &name, &format!("run\t{entry}\t{path}\n"))?;
-    let arguments = vec![
+    let mut arguments = vec![
         "batch".as_bytes().to_vec(), name.as_bytes().to_vec(),
         "--engine".as_bytes().to_vec(), engine.as_bytes().to_vec(),
     ];
+    if let Some(limit) = inline_limit {
+        arguments.push("--inline-limit".as_bytes().to_vec()); arguments.push(format!("{limit}").into_bytes());
+    }
     let outcome = invoke(world, executable, &arguments, timeout_ns);
     directory.remove(&name).map_err(|e: i64| io("observation cleanup", e))?;
     let capture = outcome?;

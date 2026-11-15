@@ -1356,6 +1356,7 @@ fn instructions(operations: Vec<ir::Op>, span: a::Span) -> Vec<ir::Instruction> 
     let mut body = Vec::new();
     for op in operations {
         body.push(ir::Instruction {
+            file: None,
             op,
             line: span.line,
             column: span.column,

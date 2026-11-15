@@ -4,7 +4,7 @@
 mod host;
 pub use lkjscript::{
     ast, authority, entry_grants, backend, check, diagnostic, diagnostics, elaborate, frontend, generics, interpreter, ir,
-    ir_text, json, names, native, resolve, reuse, runtime, runtime_memory, sha256, source, syntax, x86,
+    ir_text, json, names, native, optimizer, resolve, reuse, runtime, runtime_memory, sha256, source, syntax, x86,
 };
 #[path = "../../src/embedded.rs"]
 mod embedded;

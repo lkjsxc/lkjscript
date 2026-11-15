@@ -598,6 +598,8 @@ pub enum Op {
 #[derive(Clone, PartialEq)]
 pub struct Instruction {
     pub op: Op,
+    /// None inherits the enclosing function's source file.
+    pub file: Option<usize>,
     pub line: usize,
     pub column: usize,
 }

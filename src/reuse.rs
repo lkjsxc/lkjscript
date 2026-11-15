@@ -84,6 +84,25 @@ impl Keys {
     pub fn program(&self) -> &str { &self.program }
 }
 
+/// Exact, allocation-free counterpart of Keys' signature graph. Both inputs
+/// have passed structure validation. Ordinary body checking reads these shared
+/// inputs and explicit callee contracts, never another function's body.
+pub(crate) fn same_check_graph(left: &ir::Program, right: &ir::Program) -> bool {
+    if left.types != right.types || left.destructors != right.destructors
+        || left.functions.len() != right.functions.len() {
+        return false;
+    }
+    for (left, right) in left.functions.iter().zip(right.functions.iter()) {
+        if left.file != right.file || left.name != right.name || left.test != right.test
+            || left.params != right.params || left.result != right.result
+            || left.return_source != right.return_source
+            || left.locals[..left.params] != right.locals[..right.params] {
+            return false;
+        }
+    }
+    true
+}
+
 /// The exact program is inseparable from the identities computed for it.
 /// A producer cannot substitute keys from a different, already checked body.
 pub struct Prepared {
@@ -114,6 +133,33 @@ impl Checked {
     pub fn program(&self) -> &ir::Program { self.checked.program() }
     pub fn checked(&self) -> &ir::CheckedProgram { &self.checked }
     pub fn keys(&self) -> Option<&Keys> { self.keys.as_ref() }
+}
+
+/// Retain the original oracle while selecting only separately checked output.
+/// Rejected optimization never changes the original program or its cache keys.
+pub struct Selection {
+    original: Checked,
+    optimized: Option<Checked>,
+    rejected: bool,
+}
+impl Selection {
+    pub fn unchanged(original: Checked) -> Self {
+        Self { original, optimized: None, rejected: false }
+    }
+    pub fn after_check(
+        original: Checked, candidate: Result<Checked, Vec<crate::diagnostic::Diagnostic>>,
+    ) -> Self {
+        match candidate {
+            Ok(checked) => Self { original, optimized: Some(checked), rejected: false },
+            Err(_) => Self { original, optimized: None, rejected: true },
+        }
+    }
+    pub fn original(&self) -> &Checked { &self.original }
+    pub fn native(&self) -> &Checked {
+        match &self.optimized { Some(checked) => checked, None => &self.original }
+    }
+    pub fn optimized(&self) -> bool { self.optimized.is_some() }
+    pub fn rejected(&self) -> bool { self.rejected }
 }
 
 struct Hmac {
