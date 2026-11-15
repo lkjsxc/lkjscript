@@ -1,0 +1,16 @@
+// expect: check
+// cause: rule with no Rust counterpart.
+// pending: Compiler driver adopts the admitted process pool for independent
+// function checking/emission, preserving original function order and discarding
+// all partial outputs on worker death or deadline. The driver remains compiler
+// owned; this checked call is the handoff contract, not an adoption claim.
+// Worker entry receives only Channel. The parent sends bounded function jobs;
+// checked IR and immutable source ranges can use sealed File -> ReadRegion.
+// Semantic message identity is requested in programs_semantic_message_identity.
+// Compare exact IR/image bytes and peak memory on 1/4 workers; report load beside
+// timing. Source snapshots and result commits remain private until every join.
+use std::process_model::Event;
+pub fn probe(image: &mut Image, jobs: &[u64], deadline: usize) -> Result<Vec<u64>, i64> {
+    let mut trace: Vec<Event> = Vec::new();
+    std::workers::ordered_map(image,4usize,jobs,deadline,&mut trace)
+}

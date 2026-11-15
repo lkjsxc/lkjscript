@@ -1,0 +1,41 @@
+mod common;
+use std::workers::{ordered_map,packet,decode};
+use std::process_model::{MapEvent,verify_trace,verify_map_trace};
+pub fn main(mut image:Image,mut clock:Clock)->i64 {
+    let deadline=clock.nanoseconds().unwrap()+10_000_000_000usize;
+    let mut input=Vec::new();let mut expected=Vec::new();
+    for index in 0usize..19usize {input.push((index*13usize+1usize) as u64);}
+    for value in &input {expected.push(common::work(*value));}
+    for width in 1usize..5usize {
+        let mut events=Vec::new();
+        let result=ordered_map(&mut image,width,&input,deadline,&mut events).unwrap();
+        assert_eq!(result,expected);
+        let model=verify_trace(width,width,&expected,&events).unwrap();
+        assert!(model.committed && !model.failed);assert_eq!(model.results,result);
+    }
+    // Four producers contend on eight keys; one parent owns and mutates the map.
+    let mut workers=Vec::new();let mut counters=[0u64;8];let mut history=Vec::new();
+    for worker in 0usize..4usize {
+        let mut process=image.spawn(deadline).unwrap();
+        process.send(&packet(3u8,worker,32u64),deadline).unwrap();workers.push(process);
+    }
+    for sequence in 0usize..32usize {
+        for worker in 0usize..4usize {
+            let mut bytes=[0u8;17];let length=workers[worker].receive(&mut bytes,deadline).unwrap();
+            let (tag,id,key)=decode(&bytes[..length]).unwrap();
+            assert_eq!(tag,2u8);assert_eq!(id,sequence);assert!(key<8u64);
+            counters[key as usize]+=1u64;let reply=counters[key as usize];
+            history.push(MapEvent {worker,sequence,key:key as usize,delta:1u64,reply});
+            workers[worker].send(&packet(2u8,sequence,reply),deadline).unwrap();
+        }
+    }
+    for worker in 0usize..4usize {
+        let mut bytes=[0u8;17];let length=workers[worker].receive(&mut bytes,deadline).unwrap();
+        assert_eq!(decode(&bytes[..length]),Some((3u8,worker,32u64)));
+        workers[worker].send(&packet(0u8,0usize,0u64),deadline).unwrap();
+        assert_eq!(workers[worker].wait(deadline).unwrap(),0i64);
+    }
+    assert!(verify_map_trace(4usize,8usize,&history));
+    for counter in &counters[..] {assert_eq!(*counter,16u64);}
+    42
+}

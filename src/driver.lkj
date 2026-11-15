@@ -1558,7 +1558,7 @@ fn image_grant_report(grants: &[ir::EntryGrant]) -> String {
             for byte in &bytes[40usize..72usize] { text.push_str(&format!("{:02x}", *byte)); }
             text.push_str(" manifest=");
             for byte in &bytes[8usize..40usize] { text.push_str(&format!("{:02x}", *byte)); }
-            text.push_str(" receives=Channel(slot0,owned) detached=no\n");
+            text.push_str(" entry-receives=Channel(slot0,owned) channel-may-receive=moved-File(from-parent) detached=no\n");
         }
     }
     text

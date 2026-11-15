@@ -29,6 +29,7 @@ pub fn library(path: &str) -> Option<Vec<u8>> {
         "$std/read_io.lkj" => include_str!("../library/read_io.lkj"),
         "$std/foreign.lkj" => include_str!("../library/foreign.lkj"),
         "$std/foreign_session.lkj" => include_str!("../library/foreign_session.lkj"),
+        "$std/workers.lkj" => include_str!("../library/workers.lkj"),
         "$std/ordered_map.lkj" => include_str!("../library/ordered_map.lkj"),
         "$std/ordered_set.lkj" => include_str!("../library/ordered_set.lkj"),
         _ => return None,

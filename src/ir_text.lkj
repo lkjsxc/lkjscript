@@ -635,7 +635,7 @@ pub fn read(text: &str) -> Result<Program> {
                         exact(&words, 3, line)?;
                         TypeKind::Stdout
                     }
-                    "stdin" | "stderr" | "directory" | "read_directory" | "read_file" | "foreign_command" | "foreign_session" | "null_device" | "file" | "process" | "clock" | "child"
+                    "stdin" | "stderr" | "directory" | "read_directory" | "read_file" | "image" | "channel" | "worker" | "read_region" | "foreign_command" | "foreign_session" | "null_device" | "file" | "process" | "clock" | "child"
                     | "listener" | "connector" | "readiness" | "entropy" | "stop"
                     | "arguments" | "environment" | "exit_status" => {
                         exact(&words, 3, line)?;

@@ -306,7 +306,7 @@ impl interpreter::Host for Host<'_, '_> {
     }
     fn map_readonly_file(&mut self, file:u64)->Result<(u64,Vec<u8>),i64> {
         let descriptor=self.remote_file(file)?;
-        if self.network.seals_remote(descriptor)? & 15u64 != 15u64 {return Err(1);}
+        if self.network.seals_remote(descriptor)? & 15u64 != 15u64 {return Err(22);}
         let opened=self.network.readonly_remote(descriptor)?;
         if let Err(errno)=self.network.seek_remote(opened,0,0u8) {self.network.close_remote(opened);return Err(errno);}
         let mut bytes=Vec::new(); let mut chunk=[0u8;16384];

@@ -1,3 +1,4 @@
+// programs specimen: workers optional-module mounting and process-pool counters repeated this exact array/iteration diagnostic; use vec![owned Strings] and &counters[..].
 // expect: reject E_BORROW
 // cause: rule with no Rust counterpart.
 // pending: Iterating text literals should suggest a typed Vec<String> with owned strings in one step.

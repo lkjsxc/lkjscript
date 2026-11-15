@@ -2030,11 +2030,13 @@ impl<H: Host> Interpreter<'_, H> {
             },
         };
         for (index, (_, value)) in values.into_iter().enumerate() {
-            if index == 1 && matches!(name, ir::IntrinsicOp::ChannelSendFile | ir::IntrinsicOp::WorkerSendFile) && matches!(value, Value::File(_)) {
-                // The host consumes this affine descriptor even on refusal.
-                continue;
+            if index == 1 && matches!(name, ir::IntrinsicOp::ChannelSendFile | ir::IntrinsicOp::WorkerSendFile) {
+                let Value::File(handle)=value else {return Err(self.invalid("capability transfer requires an owned File"));};
+                // Close any remaining registry owner even in refusal-only hosts.
+                self.host.close_handle(handle);
+            } else {
+                self.discard_scalar(value)?;
             }
-            self.discard_scalar(value)?;
         }
         self.put_local(frame, dst, result)
     }

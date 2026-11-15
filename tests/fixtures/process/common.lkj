@@ -1,0 +1,5 @@
+pub fn work(rounds:u64)->u64 {
+    let mut value=0x9e3779b97f4a7c15u64;let mut i=0u64;
+    while i<rounds {value^=value<<13usize;value^=value>>7usize;value^=value<<17usize;i+=1u64;}
+    value
+}
