@@ -1,5 +1,5 @@
 // expect: reject E_BORROW
-// pending: Name the slice temporary and explain that its lexical scope prevents returning the owner; suggest computing the scalar result in a nested block.
+// rewrite: Compute the slice length in a nested block before assigning the scalar and returning its owner.
 struct Message { bytes: Vec<u8>, length: usize }
 pub fn probe() -> Message {
     let mut message = Message { bytes: vec![1u8, 2u8], length: 0usize };

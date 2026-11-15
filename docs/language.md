@@ -27,7 +27,7 @@ Cases: [scalar bits](../tests/reference/scalar_bits.rs), [evaluation order](../t
 
 Functions, structs, enums, module constants, aliases, generics, trait implementations,
 match, if, while, loop and for are implemented. Assertions, panic and vec forms
-are fixed syntax. Local const declarations reject; move the declaration to its containing module.
+are fixed syntax. Panic payloads are not printed: write format!(...) bytes through an already granted output capability before panic!(). Local const declarations reject; move the declaration to its containing module.
 
 Unparenthesized block forms in statement position end before a binary operator,
 call or index that can start another expression; dot and ? continue the expression.
@@ -151,7 +151,7 @@ coercion; inferred type equality alone never converts a move to a reborrow.
 | Reference-bearing replacement | Returns old provenance and installs new provenance; initialized borrowed/indexed storage stays initialized while the separate old owner is destroyed. | Reference-field writes must preserve enclosing source/exclusivity contracts. |
 | External parameter writes | May preserve each leaf's exact symbolic origin, including projections, or clear it. | Changing origins is E_BORROW until cross-parameter mutation contracts exist. Use explicit local views/owned values. |
 | Writes through opaque results | Reference-free writes preserve sibling leaves/tag facts. Reference-bearing writes require an exact destination identity. | A conservative alias footprint cannot authorize clearing sibling reference evidence; mutate through the original exact place. |
-| Holder lifetime | A reference stored in a live view aggregate may retain its loan despite its last apparent source use. Temporary source views also last through match arms or a self-slice assignment. | End the carrier's lexical scope before exclusive access. Evaluate an owned match scrutinee or to_vec copy as { let saved = expression; saved } to end its temporary source view first. Mutable method receivers borrow before arguments: read a scalar self.field argument into a local before calling the method. |
+| Holder lifetime | A reference stored in a live view aggregate may retain its loan despite its last apparent source use. Temporary source views also last through match arms or a self-slice assignment. | End the carrier's lexical scope before exclusive access. Evaluate an owned match scrutinee or to_vec copy as { let saved = expression; saved } to end its temporary source view first. Mutable method receivers borrow before arguments: read a scalar self.field argument into a local before calling the method. Before returning a sliced owner, compute a scalar result inside { let view = &owner.bytes[range]; view.len() }, then assign it outside that scope. |
 
 Cases: [ranges](../tests/reference/range_views.rs), [UTF-8 trap](../tests/reference/text_boundary.rs),
 [holder rejection](../tests/reference/holder_liveness.rs), [scope rewrite](../tests/reference/holder_scope.rs).
@@ -161,22 +161,21 @@ checked on each live leaf. A named shared output lifetime without a source input
 is universal and also requires static origin. Inactive leaves satisfy that contract;
 absence of active input leaves does not prove output absence. Ordinary dynamic
 outputs may shorten static literals. Explicit static input/local/field/alias/bound
-constraints or mixed static/dynamic source output annotations remain unsupported;
-direct IR can express mixed per-leaf maps. [Static view](../tests/reference/static_view.rs).
+constraints or mixed static/dynamic source output annotations remain unsupported; own a text label as String instead of a &'static str field.
+Direct IR can express mixed per-leaf maps. [Static view](../tests/reference/static_view.rs).
 
 ## Inference, generics and traits
 
 Definition checking solves structural constraints over lexical bindings/expression
 identities using rigid generic parameters and declared assumptions. Constraints
 cover assignment/return, signatures, composite literals, fields, aliases, projections
-and scalar patterns; expected types flow inward. Unsuffixed integers default only
-after known constraints propagate. Concrete specialization uses that checked plan.
-Insufficient generic/receiver context may still require annotations; there is no
-promise of complete Rust inference. [Inference case](../tests/reference/inference.rs).
+and scalar patterns; expected types flow inward. Byte-string branches of unequal lengths need slice views when passed to &[u8]: write &b"..."[..] in each branch.
+Unsuffixed integers default only after known constraints propagate. Concrete specialization uses that checked plan.
+Insufficient generic/receiver context may require annotations: BTreeSet::new needs its element type before later insert calls, so write BTreeSet::<String>::new() for owned text. Complete Rust inference is not promised. [Inference case](../tests/reference/inference.rs).
 
 A solved type is not a coercion site. Some(r), an inferred generic field and
 identity(r) move an unconstrained mutable r; later use is E_MOVE. Explicit
-Option<&mut T>, view-field or result expectations can authorize a reborrow.
+Option<&mut T>, view-field or result expectations can authorize a reborrow; for repeated generic mutable arguments, pass &mut *argument explicitly.
 Aliases and nesting preserve this distinction.
 
 Traits specify methods/associated types; implementations must be unique.
@@ -315,7 +314,7 @@ concurrency cases specify intended ownership rules, with their missing features.
 | Option<&T>/Option<&mut T> | copied uses Copy without Clone; cloned invokes Clone once for Some, never None. | Owned clones may be independent, but nested views retain external origins. |
 | Vec/slice access | is_empty/get/first/last and mutable slice counterparts; invalid get returns None, including usize::MAX. contains borrows query/elements and uses eq in order without copying/consuming. | Returned references retain collection footprints. |
 | Collection copying/equality | extend_from_slice/to_vec clone in order; empty input does no clones. Vec Clone requires Clone; equality requires only PartialEq, checks length then element ==, and Vec ne negates the whole result. Nested types/floats/custom implementations follow selected traits. | Inherent clone/ne cannot replace generic contracts. Arrays use array[..].to_vec(); helper signatures and element constraints check independently. |
-| Slice/Vec helpers | starts_with borrows; copy_from_slice needs Copy and equal lengths; predicate split retains empty groups at delimiters. clear/truncate destroy removed elements forward; stable sort/retain are source operations. | General From/Into, Sum/FromIterator and exclusive iter_mut need their own contracts. |
+| Slice/Vec helpers | starts_with borrows; copy_from_slice needs Copy and equal lengths, with array receivers written as array[..].copy_from_slice(source); predicate split retains empty groups at delimiters. clear/truncate destroy removed elements forward; stable sort/retain are source operations. | General From/Into, Sum/FromIterator and exclusive iter_mut need their own contracts. |
 | Ordered maps/sets | BTreeMap uses an indexed AVL arena/free slots with logarithmic lookup/insertion/removal; BTreeSet reuses it. Sorted shared/owned iteration, map keys/values/first_key_value/pop_first/retain and set first/pop_first. Clear/drop and partially consumed iterators destroy in key order; Clone/Default/equality ignore arena shape. | Entirely source algorithms over existing storage, not new trusted primitives. |
 
 Option/Result also provide map, map_or/map_or_else, and_then/or_else/unwrap_or_else;
@@ -328,7 +327,7 @@ Collection for holds iterable temporaries in an outer match, loops over next and
 binds each item with an irrefutable let. Non-unit bodies/refutable patterns reject;
 break/continue/return/exhaustion preserve item/iterator cleanup. Numeric ranges
 share binding machinery. No iteration IR operation or nominal-name shortcut exists.
-Shared Vec/slice/map/set and owned Vec/Option/map/set iteration are supported. IntoIterator for &mut Vec<T> is absent: evaluate the collection once, then use an index loop that advances before borrowing each element, so continue still progresses. Owned arrays need an IntoIterator implementation; index them, or use vec![elements] for owned literal iteration.
+Shared Vec/slice/map/set and owned Vec/Option/map/set iteration are supported. Returning an element view can retain the loop iterator temporary; index the owner directly when preserving the selected iterator's order. IntoIterator for &mut Vec<T> is absent: evaluate the collection once, then use an index loop that advances before borrowing each element, so continue still progresses. Owned arrays need an IntoIterator implementation; index them, or use vec![elements] for owned literal iteration.
 
 enumerate/skip/take/zip are source adapters; chain currently needs identical
 iterator types to prove Item equality. map/filter/filter_map/inspect store the

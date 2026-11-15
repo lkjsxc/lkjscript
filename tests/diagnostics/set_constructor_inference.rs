@@ -1,5 +1,5 @@
 // expect: reject E_TYPE
-// pending: Name the uninferred BTreeSet element type instead of an unknown constructor; suggest annotating BTreeSet<String> or spelling the generic argument.
+// rewrite: Name the missing BTreeSet element type and supply std::String when unambiguous later literal.to_string inserts establish it.
 use std::collections::BTreeSet;
 pub fn probe() -> usize {
     let mut names = BTreeSet::new();

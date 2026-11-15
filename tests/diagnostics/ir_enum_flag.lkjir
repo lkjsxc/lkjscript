@@ -1,5 +1,5 @@
 lkjscript-ir 1
 # expect: reject E_IR_TEXT
-# pending: Name the invalid enum flag and list the accepted spellings copy and move.
+# rewrite: Name the enum flag and accepted spellings; replace exact affine with move without accepting an alias.
 type "Record" enum affine
 endtype

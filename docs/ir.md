@@ -35,7 +35,7 @@ The first seven types must match this primitive prefix exactly, including names.
 | `unit`, `bool`, `char`, `f64` | Unit, booleans, Unicode scalar values, binary64. |
 | `int BITS signed\|unsigned` | BITS is 8, 16, 32 or 64. |
 | `struct copy\|move NAME TYPE ...` | Ordered named fields. A copy declaration requires every field to be Copy. |
-| `enum copy\|move` ... `endtype` | Ordered alternatives written `variant NAME FIELD TYPE ...`; Copy requires Copy payloads. |
+| `enum copy\|move` ... `endtype` | Ordered alternatives written `variant NAME FIELD TYPE ...`; Copy requires Copy payloads. Non-Copy affine enums use move; affine is rejected with a token edit to move. |
 | `ref shared\|mut TYPE` | Shared or exclusive reference to a sized value, slice or text. |
 | `slice shared\|mut TYPE` | Unsized sequence shape; values require a reference type. |
 | `array TYPE LENGTH` | Fixed-length owned elements. |

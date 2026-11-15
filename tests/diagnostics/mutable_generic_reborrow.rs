@@ -1,5 +1,5 @@
 // expect: reject E_MOVE
-// pending: Explain that this generic mutable argument needs an explicit reborrow `&mut *action` when passed repeatedly, or infer that reborrow.
+// rewrite: Pass the mutable parameter as &mut *action on each generic call so the loop does not move its original reference.
 trait Action { fn apply(&mut self); }
 struct Counter { value: usize }
 impl Action for Counter { fn apply(&mut self) { self.value += 1usize; } }

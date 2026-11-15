@@ -1,5 +1,5 @@
 //! Text IR is a flat instruction listing for inspection and adversarial checks.
-use crate::diagnostic::{Diagnostic, Span};
+use crate::diagnostic::{Diagnostic, Edit, Span};
 use crate::ir::*;
 
 type Result<T> = std::result::Result<T, Diagnostic>;
@@ -143,7 +143,73 @@ fn flag(words: &[String], at: usize, yes: &str, no: &str, line: usize) -> Result
     } else if value == no {
         Ok(false)
     } else {
-        Err(error(line, "invalid flag"))
+        Err(error(line, &format!("invalid flag {}; expected `{yes}` or `{no}` (docs/ir.md)", quoted(value))))
+    }
+}
+
+// Error-path spelling help does not change which IR the parser accepts.
+// Recover the fourth token's UTF-8 byte extent after normal lexing succeeded;
+// search neither quoted names nor comments for the spelling being corrected.
+fn affine_enum_edit(text: &str, row: &str, line: usize) -> Option<Edit> {
+    let mut line_start = 0usize;
+    let mut current = 1usize;
+    for (at, byte) in text.as_bytes().iter().enumerate() {
+        if current == line { break; }
+        if *byte == b'\n' { current += 1usize; line_start = at + 1usize; }
+    }
+    if current != line { return None; }
+    let mut chars: Vec<char> = Vec::new();
+    let mut offsets: Vec<usize> = Vec::new();
+    let mut offset = 0usize;
+    for ch in row.chars() {
+        offsets.push(offset);
+        chars.push(ch);
+        offset += ch.len_utf8();
+    }
+    offsets.push(offset);
+    let mut at = 0usize;
+    let mut token = 0usize;
+    while at < chars.len() {
+        if chars[at].is_whitespace() { at += 1usize; continue; }
+        if chars[at] == '#' { return None; }
+        let start = at;
+        if chars[at] == '"' {
+            at += 1usize;
+            while at < chars.len() {
+                let ch = chars[at];
+                at += 1usize;
+                if ch == '"' { break; }
+                if ch == '\\' && at < chars.len() { at += 1usize; }
+            }
+        } else {
+            while at < chars.len() && !chars[at].is_whitespace() && chars[at] != '#' {
+                at += 1usize;
+            }
+        }
+        if token == 3usize {
+            return Some(Edit {
+                start: line_start + offsets[start],
+                end: line_start + offsets[at],
+                replacement: "move".to_string(),
+            });
+        }
+        token += 1usize;
+    }
+    None
+}
+
+fn enum_flag(text: &str, row: &str, words: &[String], line: usize) -> Result<bool> {
+    match flag(words, 3usize, "copy", "move", line) {
+        Ok(copy) => Ok(copy),
+        Err(mut problem) => {
+            let value = word(words, 3usize, line)?;
+            problem.message = format!("invalid enum flag {}; expected `copy` or `move` (docs/ir.md, Types)", quoted(value));
+            if value == "affine" {
+                problem.message.push_str("; help: use `move` for a non-Copy affine enum");
+                if let Some(edit) = affine_enum_edit(text, row, line) { problem.edits.push(edit); }
+            }
+            Err(problem)
+        }
     }
 }
 
@@ -626,7 +692,7 @@ pub fn read(text: &str) -> Result<Program> {
                     "enum" => {
                         exact(&words, 4, line)?;
                         TypeKind::Enum {
-                            copy: flag(&words, 3, "copy", "move", line)?,
+                            copy: enum_flag(text, line_text, &words, line)?,
                             variants: Vec::new(),
                         }
                     }

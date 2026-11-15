@@ -3,21 +3,21 @@
 use crate::ast::{self as a, Expr, Pattern, Span, Stmt, Type};
 use crate::diagnostic::{Diagnostic, Edit};
 
-fn encloses(outer: Span, inner: Span) -> bool {
+pub(super) fn encloses(outer: Span, inner: Span) -> bool {
     outer.file == inner.file && outer.start <= inner.start && inner.end <= outer.end
 }
 
-fn primary(problem: &Diagnostic, span: Span) -> bool {
+pub(super) fn primary(problem: &Diagnostic, span: Span) -> bool {
     problem.file == span.file && problem.line == span.line && problem.column == span.column
 }
 
 // Correlate the checker's reported loan origin; this is only reporting data.
-fn origin(problem: &Diagnostic, span: Span) -> bool {
+pub(super) fn origin(problem: &Diagnostic, span: Span) -> bool {
     problem.file == span.file
         && problem.message.ends_with(&format!("(created at {}:{})", span.line, span.column))
 }
 
-fn function_at(program: &a::Program, span: Span) -> Option<usize> {
+pub(super) fn function_at(program: &a::Program, span: Span) -> Option<usize> {
     let mut found: Option<usize> = None;
     let mut size = !0usize;
     for (index, function) in program.functions.iter().enumerate() {
@@ -144,7 +144,7 @@ fn pure_place(program: &a::Program, expression: usize) -> bool {
 // Transparent parentheses are absent from some AST spans. Only replace a call
 // or wrap a postfix chain when its byte extents prove the delimiters are intact.
 // Less regular spacing still receives the explanation, without an unsafe edit.
-fn tight_place(program: &a::Program, expression: usize) -> bool {
+pub(super) fn tight_place(program: &a::Program, expression: usize) -> bool {
     let mut at = expression;
     loop {
         let node = &program.exprs[at];
@@ -160,7 +160,7 @@ fn tight_place(program: &a::Program, expression: usize) -> bool {
     }
 }
 
-fn same_place(program: &a::Program, first: usize, second: usize) -> bool {
+pub(super) fn same_place(program: &a::Program, first: usize, second: usize) -> bool {
     let mut left = first;
     let mut right = second;
     loop {
@@ -177,7 +177,7 @@ fn same_place(program: &a::Program, first: usize, second: usize) -> bool {
     }
 }
 
-fn pure_range(program: &a::Program, expression: usize) -> bool {
+pub(super) fn pure_range(program: &a::Program, expression: usize) -> bool {
     let Expr::Range { start, end, .. } = &program.exprs[expression].kind else { return false; };
     simple_bound(program, *start) && simple_bound(program, *end)
 }
@@ -196,7 +196,7 @@ fn simple_view(program: &a::Program, expression: usize) -> bool {
     pure_place(program, *base) && pure_range(program, *index)
 }
 
-fn qualified(module: &str, name: &str) -> String {
+pub(super) fn qualified(module: &str, name: &str) -> String {
     if module.is_empty() { name.to_string() } else { format!("{module}::{name}") }
 }
 

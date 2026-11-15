@@ -36,6 +36,16 @@ impl Builder<'_, '_> {
             self.split_count_diagnostic(expression, span, &mut problem);
             return Some(problem);
         }
+        if name == "copy_from_slice" && no_types && argument_count == 1usize {
+            if let ir::TypeKind::Array { inner, .. } = self.compiler.types[base].kind {
+                if self.compiler.satisfies_identity(inner, &TraitIdentity::Builtin("Copy".to_string())) {
+                    let mut problem = err(span, "E_UNSUPPORTED",
+                        "array.copy_from_slice requires a mutable slice receiver and Copy elements; help: write bytes[..].copy_from_slice(source) (docs/language.md, Source library)");
+                    problem.edits = receiver_edits(receiver_span, "[..]");
+                    return Some(problem);
+                }
+            }
+        }
         if argument_count != 0usize { return None; }
         if name == "to_vec" && no_types {
             if let ir::TypeKind::Array { inner, .. } = self.compiler.types[base].kind {
