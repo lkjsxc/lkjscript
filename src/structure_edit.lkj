@@ -1,0 +1,322 @@
+//! Checked structural transactions plan exact byte patches against one source snapshot.
+//! Planning is pure. The driver checks the complete candidate before publication.
+use crate::{semantic, sha256, syntax};
+use std::collections::{BTreeMap, BTreeSet};
+use std::json::{self, Value};
+
+#[derive(Clone)]
+pub struct Operation {
+    pub data: String,
+    pub kind: String,
+    pub identity: String,
+    pub source: String,
+    pub name: String,
+    pub parent: String,
+    pub expected: String,
+}
+pub struct Request {
+    pub snapshot: String,
+    pub operations: Vec<Operation>,
+}
+#[derive(Clone)]
+pub struct Patch {
+    pub identity: String,
+    pub file: String,
+    pub start: usize,
+    pub end: usize,
+    pub replacement: String,
+}
+#[derive(Clone)]
+pub struct Change {
+    pub file: String,
+    pub before: Vec<u8>,
+    pub after: Vec<u8>,
+}
+pub struct Draft {
+    pub changes: Vec<Change>,
+    pub identities: Vec<String>,
+    pub patches: Vec<Patch>,
+}
+pub(crate) fn error(identity: &str, rule: &str, detail: &str) -> String {
+    format!("{} E_EDIT_{} {}", semantic::quote(identity), rule, detail)
+}
+fn string(value: &Value, key: &str, required: bool) -> Result<String, String> {
+    match value.get(key) {
+        Some(value) => match value.as_str() {
+            Some(text) => Ok(text.to_string()),
+            None => Err(error("transaction", "REQUEST", &format!("{key} must be a string"))),
+        },
+        None if !required => Ok(String::new()),
+        None => Err(error("transaction", "REQUEST", &format!("missing {key}"))),
+    }
+}
+pub fn parse(bytes: &[u8]) -> Result<Request, String> {
+    let value = json::parse(bytes).map_err(|problem| error("transaction", "REQUEST", &problem.message))?;
+    let fields = value.as_object().ok_or_else(|| error("transaction", "REQUEST", "expected an object"))?;
+    for (key, _) in fields {
+        if key != "version" && key != "snapshot" && key != "operations" {
+            return Err(error("transaction", "REQUEST", &format!("unknown field {key}")));
+        }
+    }
+    if value.get("version").and_then(|value| value.as_usize()) != Some(1usize) {
+        return Err(error("transaction", "VERSION", "expected version 1"));
+    }
+    let snapshot = string(&value, "snapshot", false)?;
+    let operations = value.get("operations").and_then(|value| value.as_array())
+        .ok_or_else(|| error("transaction", "REQUEST", "operations must be an array"))?;
+    if operations.is_empty() { return Err(error("transaction", "REQUEST", "no operations")); }
+    let mut parsed = Vec::new();
+    for operation in operations {
+        let fields = operation.as_object().ok_or_else(|| error("transaction", "REQUEST", "operation must be an object"))?;
+        let kind = string(operation, "op", true)?;
+        for (key, _) in fields {
+            if key != "op" && key != "id" && key != "source" && key != "name"
+                && key != "parent" && key != "expect"
+                && matches!(kind.as_str(), "replace-body" | "replace-item" | "add-item" | "remove-item" | "rename" | "move") {
+                return Err(error("transaction", "REQUEST", &format!("unknown operation field {key}")));
+            }
+        }
+        let identity = string(operation, "id", true)?;
+        let source = string(operation, "source", false)?;
+        let name = string(operation, "name", false)?;
+        let parent = string(operation, "parent", false)?;
+        let expected = string(operation, "expect", false)?;
+        let data = json::stringify(operation).map_err(|problem| error(&identity, "REQUEST", &problem.message))?;
+        parsed.push(Operation { data, kind, identity, source, name, parent, expected });
+    }
+    Ok(Request { snapshot, operations: parsed })
+}
+pub(crate) fn input<'a>(inputs: &'a [(String, Vec<u8>)], path: &str) -> Result<&'a [u8], String> {
+    for (name, bytes) in inputs {
+        if name == path { return Ok(bytes.as_slice()); }
+    }
+    Err(error(path, "SOURCE", "source bytes are absent from the compilation snapshot"))
+}
+pub(crate) fn item<'a>(catalog: &'a semantic::Catalog, identity: &str) -> Result<&'a semantic::Item, String> {
+    let index = catalog.by_identity.get(&identity.to_string())
+        .ok_or_else(|| error(identity, "IDENTITY", "identity is absent from this source snapshot"))?;
+    Ok(&catalog.items[*index])
+}
+pub(crate) fn patch(patches: &mut Vec<Patch>, identity: &str, file: &str, start: usize, end: usize, replacement: &str) {
+    patches.push(Patch { identity: identity.to_string(), file: file.to_string(), start, end,
+        replacement: replacement.to_string() });
+}
+pub(crate) fn identifier(name: &str) -> bool {
+    if name.is_empty() { return false; }
+    for (index, byte) in name.bytes().enumerate() {
+        if !(byte == b'_' || byte.is_ascii_alphabetic() || (index != 0usize && byte.is_ascii_digit())) {
+            return false;
+        }
+    }
+    true
+}
+pub(crate) fn validate_item(target: &semantic::Item, inputs: &[(String, Vec<u8>)], expected: &str) -> Result<(), String> {
+    let bytes = input(inputs, &target.file)?;
+    if target.start > target.end || target.end > bytes.len() {
+        return Err(error(&target.identity, "SPAN", "catalog span is outside its input"));
+    }
+    if sha256::hex_digest(bytes) != target.file_digest
+        || bytes[target.start..target.end] != *target.text.as_bytes() {
+        return Err(error(&target.identity, "STALE", "catalog and source snapshot disagree"));
+    }
+    if !expected.is_empty() && expected != target.text_digest {
+        return Err(error(&target.identity, "STALE", "expected item digest differs"));
+    }
+    Ok(())
+}
+pub(crate) fn rename(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)], target: &semantic::Item,
+    name: &str, patches: &mut Vec<Patch>) -> Result<(), String> {
+    if !identifier(name) { return Err(error(&target.identity, "NAME", "new name must be one identifier")); }
+    if matches!(target.kind.as_str(), "field" | "variant" | "parameter" | "binding" | "implementation" | "method" | "generic-parameter") {
+        return Err(error(&target.identity, "REFERENCES", "this identity needs complete typed constructor, pattern or lexical reference evidence before rename"));
+    }
+    let free_function = target.kind == "function" && (target.parent == "crate"
+        || catalog.by_identity.get(&target.parent).is_some_and(|index| catalog.items[*index].kind == "module"));
+    for site in &catalog.unresolved {
+        if site.kind == "lexical-name" && site.target != target.name { continue; }
+        let typed = site.kind == "typed-method" || site.kind == "typed-field" || site.kind == "typed-member";
+        if typed && (free_function || matches!(target.kind.as_str(), "struct" | "enum" | "trait" | "alias" | "module" | "variant")) { continue; }
+        if typed {
+            let bytes = input(inputs, &site.file)?;
+            if site.start <= site.end && site.end <= bytes.len()
+                && bytes[site.start..site.end] != *target.name.as_bytes() { continue; }
+        }
+        return Err(error(&target.identity, "REFERENCES", &format!(
+            "incoming references are incomplete; decision site {} {}:{}..{} ({})",
+            semantic::quote(&site.owner), semantic::quote(&site.file), site.start, site.end, site.kind)));
+    }
+    let bytes = input(inputs, &target.file)?;
+    if target.name_start >= target.name_end || target.name_end > bytes.len()
+        || bytes[target.name_start..target.name_end] != *target.name.as_bytes() {
+        return Err(error(&target.identity, "NAME", "definition has no exact editable name span"));
+    }
+    patch(patches, &target.identity, &target.file, target.name_start, target.name_end, name);
+    for reference in &catalog.references {
+        if reference.target != target.identity || reference.kind == "alias-value" || reference.kind == "alias-type" { continue; }
+        let bytes = input(inputs, &reference.file)?;
+        if reference.start > reference.end || reference.end > bytes.len() {
+            return Err(error(&reference.owner, "SPAN", "reference span is outside source"));
+        }
+        if bytes[reference.start..reference.end] != *target.name.as_bytes() {
+            return Err(error(&reference.owner, "REFERENCE", "resolved alias or path needs an explicit rewrite"));
+        }
+        patch(patches, &reference.owner, &reference.file, reference.start, reference.end, name);
+    }
+    Ok(())
+}
+pub(crate) fn insertion(catalog: &semantic::Catalog,
+    inputs: &[(String, Vec<u8>)], identity: &str) -> Result<(String, usize), String> {
+    if identity == "crate" {
+        let bytes = input(inputs, &catalog.root)?;
+        return Ok((catalog.root.clone(), bytes.len()));
+    }
+    let target = item(catalog, identity)?;
+    if target.kind != "module" {
+        return Err(error(identity, "PARENT", "items can be inserted only in a module"));
+    }
+    let bytes = input(inputs, &target.file)?;
+    let text = String::from_utf8(bytes.to_vec()).map_err(|_| error(identity, "SOURCE", "source is not UTF-8"))?;
+    let tokens = syntax::semantic_tokens(&text).map_err(|problem| error(identity, "SYNTAX", &problem.message))?;
+    let mut last = None;
+    for token in &tokens {
+        if target.start <= token.span.start && token.span.end <= target.end && token.text == "}" {
+            last = Some(token.span.start);
+        }
+    }
+    match last {
+        Some(at) => Ok((target.file.clone(), at)),
+        None => {
+            // External modules have no brace in the declaring file. The loaded
+            // children, rather than a guessed file-system path, identify their file.
+            let mut path = String::new();
+            for child in &catalog.items {
+                if child.parent == identity && child.file != target.file {
+                    if path.is_empty() { path = child.file.clone(); }
+                    else if path != child.file { return Err(error(identity, "PARENT", "module spans multiple files; choose a child module")); }
+                }
+            }
+            if path.is_empty() {
+                return Err(error(identity, "PARENT", "empty external module needs a source-file identity"));
+            }
+            let bytes = input(inputs, &path)?;
+            Ok((path, bytes.len()))
+        }
+    }
+}
+fn finish(inputs: &[(String, Vec<u8>)], patches: Vec<Patch>) -> Result<Draft, String> {
+    let mut ordered: BTreeMap<(String, usize, usize), Patch> = BTreeMap::new();
+    for value in patches {
+        let key = (value.file.clone(), value.start, value.end);
+        if let Some(prior) = ordered.get_mut(&key) {
+            if value.start == value.end {
+                prior.replacement.push_str(&value.replacement);
+                continue;
+            }
+            if prior.replacement == value.replacement { continue; }
+            return Err(error(&value.identity, "OVERLAP", "operations write different values at one site"));
+        }
+        ordered.insert(key, value);
+    }
+    let mut changes: Vec<Change> = Vec::new();
+    let mut all: Vec<Patch> = Vec::new();
+    let mut identities: BTreeSet<String> = BTreeSet::new();
+    let mut current = String::new();
+    let mut cursor = 0usize;
+    let mut output: Vec<u8> = Vec::new();
+    for (_, value) in ordered {
+        if value.file != current {
+            if !current.is_empty() {
+                let original = input(inputs, &current)?;
+                output.extend_from_slice(&original[cursor..]);
+                changes.push(Change { file: current.clone(), before: original.to_vec(), after: output });
+                output = Vec::new();
+            }
+            current = value.file.clone();
+            cursor = 0usize;
+        }
+        let original = input(inputs, &current)?;
+        if value.start < cursor || value.start > value.end || value.end > original.len() {
+            return Err(error(&value.identity, "OVERLAP", "operations overlap or escape the source snapshot"));
+        }
+        output.extend_from_slice(&original[cursor..value.start]);
+        output.extend_from_slice(value.replacement.as_bytes());
+        cursor = value.end;
+        identities.insert(value.identity.clone());
+        all.push(value);
+    }
+    if !current.is_empty() {
+        let original = input(inputs, &current)?;
+        output.extend_from_slice(&original[cursor..]);
+        changes.push(Change { file: current, before: original.to_vec(), after: output });
+    }
+    let mut names = Vec::new();
+    for identity in identities { names.push(identity); }
+    Ok(Draft { changes, identities: names, patches: all })
+}
+pub(crate) fn one_item(identity: &str, source: &str, body: bool) -> Result<(), String> {
+    let wrapped = if body { format!("fn __lkjscript_transaction_body() {source}") } else { source.to_string() };
+    let parsed = syntax::parse(&wrapped).map_err(|problem| error(identity, "SYNTAX", &problem.message))?;
+    if parsed.items.len() != 1usize {
+        return Err(error(identity, "ITEM", "replacement must contain exactly one item or one body"));
+    }
+    Ok(())
+}
+pub fn plan(catalog: &semantic::Catalog,
+    inputs: &[(String, Vec<u8>)], request: &Request) -> Result<Draft, String> {
+    if !request.snapshot.is_empty() && request.snapshot != catalog.input_digest {
+        return Err(error("transaction", "STALE", "expected source snapshot differs"));
+    }
+    let mut patches = Vec::new();
+    for operation in &request.operations {
+        if operation.kind == "add-item" {
+            one_item(&operation.identity, &operation.source, false)?;
+            let (file, at) = insertion(catalog, inputs, &operation.identity)?;
+            patch(&mut patches, &operation.identity, &file, at, at, &format!("\n{}\n", operation.source));
+            continue;
+        }
+        let target = item(catalog, &operation.identity)?;
+        validate_item(target, inputs, &operation.expected)?;
+        match operation.kind.as_str() {
+            "replace-body" => {
+                let (start, end) = target.body.ok_or_else(|| error(&operation.identity, "BODY", "identity has no source body"))?;
+                if operation.source.is_empty() { return Err(error(&operation.identity, "BODY", "replacement body is empty")); }
+                one_item(&operation.identity, &operation.source, true)?;
+                patch(&mut patches, &operation.identity, &target.file, start, end, &operation.source);
+            }
+            "replace-item" => {
+                if operation.source.is_empty() { return Err(error(&operation.identity, "ITEM", "replacement item is empty")); }
+                one_item(&operation.identity, &operation.source, false)?;
+                patch(&mut patches, &operation.identity, &target.file, target.start, target.end, &operation.source);
+            }
+            "remove-item" => patch(&mut patches, &operation.identity, &target.file, target.start, target.end, ""),
+            "rename" => rename(catalog, inputs, target, &operation.name, &mut patches)?,
+            "move" => {
+                // Relocation within one semantic module preserves the source
+                // identity. Cross-module relocation also needs resolved path edits.
+                if operation.parent != target.parent {
+                    return Err(error(&operation.identity, "REFERENCES", "cross-module move requires complete resolved path rewrites"));
+                }
+                let (file, at) = insertion(catalog, inputs, &operation.parent)?;
+                if file == target.file && target.start <= at && at < target.end {
+                    return Err(error(&operation.identity, "OVERLAP", "cannot move an item into itself"));
+                }
+                patch(&mut patches, &operation.identity, &target.file, target.start, target.end, "");
+                patch(&mut patches, &operation.identity, &file, at, at, &format!("\n{}\n", target.text));
+            }
+            _ => return Err(error(&operation.identity, "OPERATION", &format!("unsupported structural operation {}", operation.kind))),
+        }
+    }
+    finish(inputs, patches)
+}
+pub fn report(draft: &Draft) -> String {
+    let mut out = String::new();
+    for identity in &draft.identities {
+        out.push_str(&format!("{} level=source-claim changed\n", semantic::quote(identity)));
+    }
+    for change in &draft.changes {
+        out.push_str(&format!("{} level=source-claim file before={} after={}\n", semantic::quote(&change.file),
+            sha256::hex_digest(&change.before), sha256::hex_digest(&change.after)));
+    }
+    out.push_str(&format!("transaction sites={} files={} identities={}\n", draft.patches.len(), draft.changes.len(), draft.identities.len()));
+    out
+}

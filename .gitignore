@@ -2,3 +2,8 @@
 /.generation-one/
 /.artifacts/
 *.wasm
+# Structural transaction coordination; sources remain the stored projection.
+.lkjscript-edit.lock
+.lkjscript-edit.pending
+.lkjscript-edit.generation
+.*.lkjscript-next

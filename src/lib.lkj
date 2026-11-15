@@ -26,6 +26,9 @@ pub mod runtime_memory;
 pub mod runtime_diagnostics;
 #[path = "../library/sha256.lkj"]
 pub mod sha256;
+pub mod meaning;
+pub mod structure_edit;
+pub mod structure_write;
 pub mod semantic;
 pub mod semantic_facts;
 pub mod source;

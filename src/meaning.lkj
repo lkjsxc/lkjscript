@@ -1,0 +1,247 @@
+//! Review identities over admitted IR. Admission/reuse still binds exact bytes.
+//! This projection drops diagnostic labels/positions, never operations, literal
+//! trap text, authority kinds, ownership contracts, type graphs or call edges.
+use crate::{ir, ir_binary, semantic, sha256};
+use std::collections::BTreeSet;
+
+pub fn projection(program: &ir::Program) -> ir::Program {
+    let mut value = program.clone();
+    let mut sources: Vec<String> = Vec::new();
+    sources.push(String::new());
+    value.sources = sources;
+    for index in 0usize..value.types.len() {
+        let ty = &mut value.types[index];
+        ty.name = String::new();
+        match &mut ty.kind {
+            ir::TypeKind::Struct { fields, .. } => {
+                for index in 0usize..fields.len() { fields[index].name = String::new(); }
+            }
+            ir::TypeKind::Enum { variants, .. } => {
+                for index in 0usize..variants.len() {
+                    let variant = &mut variants[index];
+                    variant.name = String::new();
+                    for field in 0usize..variant.fields.len() { variant.fields[field].name = String::new(); }
+                }
+            }
+            _ => {}
+        }
+    }
+    for index in 0usize..value.functions.len() {
+        let function = &mut value.functions[index];
+        function.file = 0usize;
+        function.name = String::new();
+        for local in 0usize..function.locals.len() { function.locals[local].name = String::new(); }
+        for at in 0usize..function.body.len() {
+            let instruction = &mut function.body[at];
+            instruction.file = None;
+            instruction.line = 0usize;
+            instruction.column = 0usize;
+        }
+    }
+    value
+}
+pub fn identity(checked: &ir::CheckedProgram) -> String {
+    let projected = projection(checked.program());
+    let mut bytes = b"lkjscript-checked-meaning-1\0"[..].to_vec();
+    bytes.extend_from_slice(&ir_binary::write(&projected));
+    sha256::hex_digest(&bytes)
+}
+pub fn exact_identity(checked: &ir::CheckedProgram) -> String {
+    let mut bytes = b"lkjscript-checked-exact-1\0"[..].to_vec();
+    bytes.extend_from_slice(&ir_binary::write(checked.program()));
+    sha256::hex_digest(&bytes)
+}
+fn field(out: &mut String, name: &str) {
+    if !out.is_empty() { out.push(','); }
+    out.push_str(name);
+}
+pub fn item_delta(before: &semantic::Item, after: &semantic::Item) -> String {
+    let mut out = String::new();
+    if before.signature_digest != after.signature_digest { field(&mut out, "signature"); }
+    if before.body_digest != after.body_digest { field(&mut out, "body"); }
+    if before.text_digest != after.text_digest && out.is_empty() { field(&mut out, "text-only"); }
+    if before.file != after.file { field(&mut out, "projection-file"); }
+    out
+}
+pub fn compare(before: &semantic::Catalog, old: &ir::CheckedProgram,
+    after: &semantic::Catalog, new: &ir::CheckedProgram, limit: usize, detail: &str) -> String {
+    let old_meaning = identity(old);
+    let new_meaning = identity(new);
+    let old_exact = exact_identity(old);
+    let new_exact = exact_identity(new);
+    let mut out = format!("program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before={} after={} exact-before={} exact-after={}\n",
+        old_meaning, new_meaning, old_exact, new_exact);
+    let verdict = if old_meaning == new_meaning {
+        if before.input_digest == after.input_digest { "text identical, checked IR identical" }
+        else { "text differs, checked IR identical" }
+    } else { "checked IR differs" };
+    out.push_str(&format!("program level=checked-ir verdict={} diagnostic-metadata={}\n",
+        semantic::quote(verdict), if old_exact == new_exact { "identical" } else { "differs" }));
+    let mut names: BTreeSet<String> = BTreeSet::new();
+    for value in &before.items { names.insert(value.identity.clone()); }
+    for value in &after.items { names.insert(value.identity.clone()); }
+    let mut emitted = 0usize;
+    let mut omitted = 0usize;
+    let mut changed = 0usize;
+    for name in names {
+        if !detail.is_empty() && detail != name { continue; }
+        let old_item = before.by_identity.get(&name).map(|index| &before.items[*index]);
+        let new_item = after.by_identity.get(&name).map(|index| &after.items[*index]);
+        let delta = match (old_item, new_item) {
+            (Some(left), Some(right)) => item_delta(left, right),
+            (Some(_), None) => "removed".to_string(),
+            (None, Some(_)) => "added".to_string(),
+            _ => String::new(),
+        };
+        if delta.is_empty() { continue; }
+        changed += 1usize;
+        if emitted < limit {
+            out.push_str(&format!("{} level=source-claim changed={}\n", semantic::quote(&name), delta));
+            emitted += 1usize;
+        } else { omitted += 1usize; }
+    }
+    out.push_str(&format!("program changed-identities={} shown={} omitted={} detail=--id identity\n",
+        changed, emitted, omitted));
+    out
+}
+
+
+// Canonical numbering is discovered from one checked root in instruction/local
+// order. Unrelated functions/types cannot renumber this closure. Every owning
+// type's destructor is included conservatively, even if a path is unreachable.
+fn include(map: &mut Vec<Option<usize>>, order: &mut Vec<usize>, index: usize) {
+    if map[index].is_none() {
+        map[index] = Some(order.len());
+        order.push(index);
+    }
+}
+fn children(kind: &ir::TypeKind) -> Vec<usize> {
+    let mut out = Vec::new();
+    match kind {
+        ir::TypeKind::Struct { fields, .. } => {
+            for field in fields { out.push(field.ty); }
+        }
+        ir::TypeKind::Enum { variants, .. } => {
+            for variant in variants { for field in &variant.fields { out.push(field.ty); } }
+        }
+        ir::TypeKind::Ref { inner, .. } | ir::TypeKind::Slice { inner, .. }
+        | ir::TypeKind::Array { inner, .. } | ir::TypeKind::Vec { inner }
+        | ir::TypeKind::Box { inner } => out.push(*inner),
+        _ => {}
+    }
+    out
+}
+fn remap_type(value: &mut ir::Type, types: &[Option<usize>]) {
+    value.name = String::new();
+    match &mut value.kind {
+        ir::TypeKind::Struct { fields, .. } => {
+            for index in 0usize..fields.len() {
+                fields[index].name = String::new();
+                fields[index].ty = types[fields[index].ty].unwrap();
+            }
+        }
+        ir::TypeKind::Enum { variants, .. } => {
+            for index in 0usize..variants.len() {
+                let variant = &mut variants[index];
+                variant.name = String::new();
+                for field in 0usize..variant.fields.len() {
+                    variant.fields[field].name = String::new();
+                    variant.fields[field].ty = types[variant.fields[field].ty].unwrap();
+                }
+            }
+        }
+        ir::TypeKind::Ref { inner, .. } | ir::TypeKind::Slice { inner, .. }
+        | ir::TypeKind::Array { inner, .. } | ir::TypeKind::Vec { inner }
+        | ir::TypeKind::Box { inner } => *inner = types[*inner].unwrap(),
+        _ => {}
+    }
+}
+pub struct ClosureIdentity {
+    pub digest: String,
+    pub functions: Vec<usize>,
+    pub types: Vec<usize>,
+}
+pub fn closure_identity(checked: &ir::CheckedProgram, entry: usize, diagnostic_metadata: bool) -> Result<ClosureIdentity, String> {
+    let program = checked.program();
+    if entry >= program.functions.len() { return Err("E_ENTRY unknown checked function".to_string()); }
+    let mut functions: Vec<Option<usize>> = vec![None; program.functions.len()];
+    let mut types: Vec<Option<usize>> = vec![None; program.types.len()];
+    let mut function_order: Vec<usize> = Vec::new();
+    let mut type_order: Vec<usize> = Vec::new();
+    let mut destructors: std::collections::BTreeMap<usize, usize> = std::collections::BTreeMap::new();
+    for (ty, function) in &program.destructors { destructors.insert(*ty, *function); }
+    include(&mut functions, &mut function_order, entry);
+    let mut function_at = 0usize;
+    let mut type_at = 0usize;
+    while function_at < function_order.len() || type_at < type_order.len() {
+        while function_at < function_order.len() {
+            let function = &program.functions[function_order[function_at]];
+            include(&mut types, &mut type_order, function.result);
+            for local in &function.locals { include(&mut types, &mut type_order, local.ty); }
+            for instruction in &function.body {
+                if let ir::Op::Call { function, .. } = instruction.op {
+                    include(&mut functions, &mut function_order, function);
+                }
+            }
+            function_at += 1usize;
+        }
+        while type_at < type_order.len() {
+            let ty = type_order[type_at];
+            for child in children(&program.types[ty].kind) { include(&mut types, &mut type_order, child); }
+            if let Some(function) = destructors.get(&ty) { include(&mut functions, &mut function_order, *function); }
+            type_at += 1usize;
+        }
+    }
+    let mut projected = ir::Program { sources: Vec::new(), types: Vec::new(), functions: Vec::new(), destructors: Vec::new() };
+    let mut source_ids: std::collections::BTreeMap<usize, usize> = std::collections::BTreeMap::new();
+    for original in &type_order {
+        let mut value = program.types[*original].clone();
+        remap_type(&mut value, &types);
+        projected.types.push(value);
+        if let Some(function) = destructors.get(original) {
+            projected.destructors.push((types[*original].unwrap(), functions[*function].unwrap()));
+        }
+    }
+    for original in &function_order {
+        let mut function = program.functions[*original].clone();
+        if diagnostic_metadata {
+            if !source_ids.contains_key(&function.file) {
+                source_ids.insert(function.file, projected.sources.len());
+                projected.sources.push(program.sources[function.file].clone());
+            }
+            function.file = *source_ids.get(&function.file).unwrap();
+        } else {
+            function.file = 0usize;
+            function.name = String::new();
+        }
+        function.result = types[function.result].unwrap();
+        for index in 0usize..function.locals.len() {
+            function.locals[index].ty = types[function.locals[index].ty].unwrap();
+            if !diagnostic_metadata { function.locals[index].name = String::new(); }
+        }
+        for at in 0usize..function.body.len() {
+            let instruction = &mut function.body[at];
+            if let ir::Op::Call { function, .. } = &mut instruction.op {
+                *function = functions[*function].unwrap();
+            }
+            if diagnostic_metadata {
+                if let Some(file) = instruction.file {
+                    if !source_ids.contains_key(&file) {
+                        source_ids.insert(file, projected.sources.len());
+                        projected.sources.push(program.sources[file].clone());
+                    }
+                    instruction.file = Some(*source_ids.get(&file).unwrap());
+                }
+            } else {
+                instruction.file = None;
+                instruction.line = 0usize;
+                instruction.column = 0usize;
+            }
+        }
+        projected.functions.push(function);
+    }
+    let mut bytes = if diagnostic_metadata { b"lkjscript-checked-closure-diagnostics-1\0"[..].to_vec() }
+        else { b"lkjscript-checked-closure-1\0"[..].to_vec() };
+    bytes.extend_from_slice(&ir_binary::write(&projected));
+    Ok(ClosureIdentity { digest: sha256::hex_digest(&bytes), functions: function_order, types: type_order })
+}

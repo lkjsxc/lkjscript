@@ -1,0 +1,199 @@
+//! Durable publication of already-checked text projections.
+//! A signed intent is the commit point; interrupted publication is completed by
+//! recover before another structural operation. Files outside the change are untouched.
+//! This journal is source text, never an IR-admission proof.
+use crate::{reuse, sha256, structure_edit};
+use std::collections::BTreeSet;
+use std::json::{self, Value};
+
+fn io<T>(value: Result<T, i64>, action: &str) -> Result<T, String> {
+    value.map_err(|errno| format!("transaction E_EDIT_IO {action}: errno {errno}"))
+}
+fn failure(detail: &str) -> String { format!("transaction E_EDIT_JOURNAL {detail}") }
+fn signer() -> [u8; 32] { sha256::digest(b"lkjscript-source-transaction-writer-1") }
+fn valid_path(path: &str) -> bool {
+    if path.is_empty() || path.starts_with('/') || !path.ends_with(".lkj") { return false; }
+    for part in path.split('/') {
+        if part.is_empty() || part == "." || part == ".." || part == ".git" || part == ".generation-one" { return false; }
+    }
+    !path.as_bytes().contains(&0u8)
+}
+fn location(path: &str) -> (String, String) {
+    match path.rfind('/') {
+        Some(0usize) => ("/".to_string(), path[1usize..].to_string()),
+        Some(at) => (path[..at].to_string(), path[at + 1usize..].to_string()),
+        None => (".".to_string(), path.to_string()),
+    }
+}
+fn relative(scope: &str, path: &str) -> Result<String, String> {
+    let value = if scope == "." {
+        if path.starts_with("./") { path[2usize..].to_string() } else { path.to_string() }
+    } else {
+        let prefix = format!("{scope}/");
+        if !path.starts_with(&prefix) { return Err(failure("changed source is outside the transaction root")); }
+        path[prefix.len()..].to_string()
+    };
+    if !valid_path(&value) { return Err(failure("only .lkj sources beneath the root may be published")); }
+    Ok(value)
+}
+fn read(root: &mut Directory, path: &str) -> Result<Vec<u8>, String> {
+    let mut file = io(root.open(path), "open source snapshot")?;
+    io(file.read_to_end(), "read source snapshot")
+}
+fn contains(root: &mut Directory, name: &[u8]) -> Result<bool, String> {
+    for entry in io(root.list(), "list transaction root")? {
+        if entry.as_slice() == name { return Ok(true); }
+    }
+    Ok(false)
+}
+fn remove(root: &mut Directory, name: &str) -> Result<(), String> {
+    match root.remove(name) {
+        Ok(()) | Err(2i64) => Ok(()),
+        Err(errno) => Err(format!("transaction E_EDIT_IO remove {name}: errno {errno}")),
+    }
+}
+fn atomic(root: &mut Directory, path: &str, bytes: &[u8]) -> Result<(), String> {
+    let (parent, name) = location(path);
+    let temporary = if parent == "." { format!(".{name}.lkjscript-next") }
+        else { format!("{parent}/.{name}.lkjscript-next") };
+    remove(root, &temporary)?;
+    let mut file = io(root.create_new(&temporary), "create projection replacement")?;
+    io(file.write_all(bytes), "write projection replacement")?;
+    io(file.sync(), "sync projection replacement")?;
+    drop(file);
+    io(root.rename(&temporary, path), "publish projection replacement")?;
+    let mut owner = io(root.open_directory(&parent), "open projection parent")?;
+    io(owner.sync(), "sync projection parent")
+}
+pub struct Writer {
+    root: Directory,
+    scope: String,
+    secret: Vec<u8>,
+    // Keeping this affine File alive holds the interprocess writer lock.
+    lock: File,
+}
+impl Writer {
+    pub fn open(world: &mut World, scope: &str, key: &str) -> Result<Self, String> {
+        let (parent, name) = location(key);
+        let mut owner = io(world.directory(&parent), "open transaction key root")?;
+        let mut file = io(owner.open(&name), "open transaction key")?;
+        let mut secret = vec![0u8; 33usize];
+        let mut at = 0usize;
+        while at < secret.len() {
+            let count = io(file.read(&mut secret[at..]), "read transaction key")?;
+            if count == 0usize { break; }
+            at += count;
+        }
+        if at != 32usize { return Err(failure("private key must contain exactly 32 bytes")); }
+        secret.pop();
+        let mut root = io(world.directory(scope), "open transaction root")?;
+        let mut lock = io(root.open_append(".lkjscript-edit.lock"), "open transaction lock")?;
+        io(lock.lock_wait(), "lock source transaction")?;
+        Ok(Self { root, scope: scope.to_string(), secret, lock })
+    }
+    pub fn private_source_digest(&self) -> [u8; 32] { sha256::digest(&self.secret) }
+    pub fn key_digest(&self) -> String { sha256::hex_digest(&self.secret) }
+    fn key(&self) -> String { sha256::hex_digest(self.scope.as_bytes()) }
+    pub fn verify_inputs(&mut self, inputs: &[(String, Vec<u8>)]) -> Result<(), String> {
+        for (path, bytes) in inputs {
+            if bytes.len() == 32usize && sha256::hex_digest(bytes) == self.key_digest() {
+                return Err(failure("a source input contains the transaction signing key"));
+            }
+            let name = match relative(&self.scope, path) { Ok(name) => name, Err(_) => continue };
+            let current = read(&mut self.root, &name)?;
+            if current != *bytes { return Err(format!("{} E_EDIT_STALE source changed while the candidate was checked", path)); }
+        }
+        Ok(())
+    }
+    fn pending(&mut self) -> Result<Option<Vec<structure_edit::Change>>, String> {
+        if !contains(&mut self.root, b".lkjscript-edit.pending")? { return Ok(None); }
+        // O_RDWR plus nonblocking read cannot hang on a planted FIFO. Opening
+        // the final path uses the existing no-final-symlink storage operation.
+        let mut file = io(self.root.open_append(".lkjscript-edit.pending"), "open transaction intent")?;
+        io(file.set_nonblocking(true), "make journal read nonblocking")?;
+        let mut header = vec![0u8; reuse::header_size()];
+        let mut at = 0usize;
+        while at < header.len() {
+            let count = io(file.read(&mut header[at..]), "read transaction header")?;
+            if count == 0usize { return Err(failure("truncated intent header")); }
+            at += count;
+        }
+        let producer = signer();
+        let key = self.key();
+        let authenticated = reuse::AuthenticatedRoot::new(&producer, &self.secret, "source-transaction", &key, &header)
+            .ok_or_else(|| failure("intent authentication failed; sources were not changed"))?;
+        // An authenticated fixed root authorizes this exact allocation, as in the store.
+        let mut payload = vec![0u8; authenticated.length()];
+        at = 0usize;
+        while at < payload.len() {
+            let count = io(file.read(&mut payload[at..]), "read transaction payload")?;
+            if count == 0usize { return Err(failure("truncated intent payload")); }
+            at += count;
+        }
+        let mut extra = [0u8; 1];
+        if io(file.read(&mut extra), "read transaction EOF")? != 0usize { return Err(failure("trailing intent bytes")); }
+        let verified = authenticated.verify(payload).ok_or_else(|| failure("intent payload digest differs"))?;
+        let value = json::parse(verified.bytes()).map_err(|problem| failure(&problem.message))?;
+        if value.get("version").and_then(|value| value.as_usize()) != Some(1usize)
+            || value.get("root").and_then(|value| value.as_str()) != Some(self.scope.as_str()) {
+            return Err(failure("intent version or root differs"));
+        }
+        let entries = value.get("changes").and_then(|value| value.as_array()).ok_or_else(|| failure("missing changes"))?;
+        let mut seen: BTreeSet<String> = BTreeSet::new();
+        let mut changes = Vec::new();
+        for entry in entries {
+            let path = entry.get("path").and_then(|value| value.as_str()).ok_or_else(|| failure("missing source path"))?;
+            if !valid_path(path) || !seen.insert(path.to_string()) { return Err(failure("invalid or repeated source path")); }
+            let before = entry.get("before").and_then(|value| value.as_str()).ok_or_else(|| failure("missing old source"))?;
+            let after = entry.get("after").and_then(|value| value.as_str()).ok_or_else(|| failure("missing new source"))?;
+            changes.push(structure_edit::Change { file: path.to_string(), before: before.as_bytes().to_vec(), after: after.as_bytes().to_vec() });
+        }
+        if changes.is_empty() { return Err(failure("empty intent")); }
+        Ok(Some(changes))
+    }
+    pub fn recover(&mut self) -> Result<usize, String> {
+        let changes = match self.pending()? { Some(changes) => changes, None => return Ok(0usize) };
+        // Validate all preconditions before writing even the first file.
+        for change in &changes {
+            let current = read(&mut self.root, &change.file)?;
+            if current != change.before && current != change.after {
+                return Err(format!("{} E_EDIT_STALE source is neither the old nor new transaction value; intent retained", change.file));
+            }
+        }
+        for change in &changes {
+            let current = read(&mut self.root, &change.file)?;
+            if current != change.after { atomic(&mut self.root, &change.file, &change.after)?; }
+        }
+        remove(&mut self.root, ".lkjscript-edit.pending")?;
+        io(self.root.sync(), "sync completed transaction")?;
+        Ok(changes.len())
+    }
+    pub fn publish(&mut self, draft: &structure_edit::Draft) -> Result<(), String> {
+        if self.pending()?.is_some() { return Err(failure("an interrupted intent must be recovered before a new transaction")); }
+        if draft.changes.is_empty() { return Ok(()); }
+        let mut entries = Vec::new();
+        for change in &draft.changes {
+            let path = relative(&self.scope, &change.file)?;
+            if read(&mut self.root, &path)? != change.before {
+                return Err(format!("{} E_EDIT_STALE source changed before publication", change.file));
+            }
+            let before = String::from_utf8(change.before.clone()).map_err(|_| failure("old source is not UTF-8"))?;
+            let after = String::from_utf8(change.after.clone()).map_err(|_| failure("new source is not UTF-8"))?;
+            entries.push(Value::Object(vec![
+                ("path".to_string(), Value::String(path)),
+                ("before".to_string(), Value::String(before)),
+                ("after".to_string(), Value::String(after)),
+            ]));
+        }
+        let payload = json::stringify(&Value::Object(vec![
+            ("version".to_string(), Value::from_usize(1usize)),
+            ("root".to_string(), Value::String(self.scope.clone())),
+            ("changes".to_string(), Value::Array(entries)),
+        ])).map_err(|problem| failure(&problem.message))?;
+        let producer = signer();
+        let envelope = reuse::seal(&producer, &self.secret, "source-transaction", &self.key(), payload.as_bytes());
+        atomic(&mut self.root, ".lkjscript-edit.pending", &envelope)?;
+        self.recover()?;
+        Ok(())
+    }
+}

@@ -1,4 +1,5 @@
 // Command line and orchestration for the complete owned toolchain.
+mod structure;
 use crate::{
     ast, backend, check, driver_host, elaborate, embedded, interpreter, ir, ir_text, json, runtime,
     source, reuse, store, sha256, optimizer,
@@ -41,7 +42,7 @@ struct Options {
 }
 
 fn usage() -> &'static str {
-    "lkjscript check|build|build-entries|run|test|ir|authority|query <source.lkj|program.lkjir|directory> [options]\n\n  check  Check all source or input IR\n  build  Write a static Linux x86-64 executable\n  build-entries  Write multiple entry images and matched authority reports\n  build-child  Write a transfer-only ELF and authenticated .admission\n  image-authority  Authenticate exact child bytes and canonical checked slots\n  run    Execute main (or probe); bytes after -- are program arguments\n  test   Run #[test] functions through native and interpreter routes\n  ir     Write checked lkjscript IR\n  authority  Report entry grants and reachable checked-IR effects\n  query  Ask a bounded question about an authenticated build snapshot\n  delta  Print frequent accepted forms that differ from Rust\n\n  --entry NAME                 Select an entry\n  --artifact NAME=ENTRY       Select an image for build-entries; -o names its directory\n  --grant NAME[=VALUE]          Grant an owned entry capability (repeatable)\n  --engine native|interpreter  Select the execution route\n  -o PATH                     Write an artifact or IR\n  --stats                     Report phase times, counts and peak RSS\n  --profile                   Sample CPU to OUTPUT.samples.PID in built programs\n  --index                     Publish a structural snapshot during a stored build\n  --kind QUESTION             Select a structural query (default outline)\n  --id ID                     Select an identity (default crate)\n  --snapshot HEX              Pin an immutable source snapshot\n  --cursor HEX                Continue the same authenticated question\n  --depth N --limit N --bytes N  Bound traversal, fact count and answer bytes\n  --inline-limit N            Recheck inlining of bodies with at most N IR operations\n  --no-opt                    Keep original checked IR for native emission\n  profile SAMPLES             Report top self and inclusive functions\n  --jobs N                    Native test workers (1..8)\n  --witness RUSTC             Compare marked cases with optional rustc\n  --source-dir DIR            Grant a root for source reads\n  --library-dir DIR           Use explicit library sources\n  --no-library                Compile without the source library\n  --runtime-source PATH       Use an explicit source runtime\n  --store DIR                 Reuse authenticated work beneath this Directory\n  --store-key PATH            Grant a private 32-byte key outside source roots\n  --image-key PATH            Private child-admission key outside all source grants\n  --admission PATH            Child admission record (default IMAGE.admission)\n  --store-bytes N             Bound disposable bytes (default 268435456)\n  --no-store                  Disable stored reuse\n  --unchecked-ir              Interpret raw IR for checker testing\n  runtime-ir                  Write the checked source runtime as IR\n  check-library               Check every source library body\n\nScalar runs print the value; f64 prints exact bits as f64:0x0123456789abcdef.\n"
+    "lkjscript check|build|build-entries|run|test|ir|authority|query|edit|compare <source.lkj|program.lkjir|directory> [options]\n\n  check  Check all source or input IR\n  build  Write a static Linux x86-64 executable\n  build-entries  Write multiple entry images and matched authority reports\n  build-child  Write a transfer-only ELF and authenticated .admission\n  image-authority  Authenticate exact child bytes and canonical checked slots\n  run    Execute main (or probe); bytes after -- are program arguments\n  test   Run #[test] functions through native and interpreter routes\n  ir     Write checked lkjscript IR\n  authority  Report entry grants and reachable checked-IR effects\n  query  Ask a bounded question about an authenticated build snapshot\n  edit   Check and publish an identity-addressed transaction (--request JSON)\n  compare  Compare checked meaning with --against SOURCE\n  delta  Print frequent accepted forms that differ from Rust\n\n  --entry NAME                 Select an entry\n  --artifact NAME=ENTRY       Select an image for build-entries; -o names its directory\n  --grant NAME[=VALUE]          Grant an owned entry capability (repeatable)\n  --engine native|interpreter  Select the execution route\n  -o PATH                     Write an artifact or IR\n  --stats                     Report phase times, counts and peak RSS\n  --profile                   Sample CPU to OUTPUT.samples.PID in built programs\n  --index                     Publish a structural snapshot during a stored build\n  --kind QUESTION             Select a structural query (default outline)\n  --id ID                     Select an identity (default crate)\n  --snapshot HEX              Pin an immutable source snapshot\n  --cursor HEX                Continue the same authenticated question\n  --depth N --limit N --bytes N  Bound traversal, fact count and answer bytes\n  --inline-limit N            Recheck inlining of bodies with at most N IR operations\n  --no-opt                    Keep original checked IR for native emission\n  profile SAMPLES             Report top self and inclusive functions\n  --jobs N                    Native test workers (1..8)\n  --witness RUSTC             Compare marked cases with optional rustc\n  --source-dir DIR            Grant a root for source reads\n  --library-dir DIR           Use explicit library sources\n  --no-library                Compile without the source library\n  --runtime-source PATH       Use an explicit source runtime\n  --store DIR                 Reuse authenticated work beneath this Directory\n  --store-key PATH            Grant a private 32-byte key outside source roots\n  --image-key PATH            Private child-admission key outside all source grants\n  --admission PATH            Child admission record (default IMAGE.admission)\n  --store-bytes N             Bound disposable bytes (default 268435456)\n  --no-store                  Disable stored reuse\n  --unchecked-ir              Interpret raw IR for checker testing\n  runtime-ir                  Write the checked source runtime as IR\n  check-library               Check every source library body\n\nScalar runs print the value; f64 prints exact bits as f64:0x0123456789abcdef.\n"
 }
 
 fn delta() -> &'static str {
@@ -104,7 +105,7 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
         no_library: false,
         arguments,
     };
-    if out.command == "generate" || out.command == "mutate" || out.command == "reduce" || out.command == "mutate-run" {
+    if out.command == "generate" || out.command == "mutate" || out.command == "reduce" || out.command == "mutate-run" || out.command == "edit" || out.command == "compare" {
         out.tool_arguments = values;
         return Ok(out);
     }
@@ -1703,6 +1704,7 @@ fn execute(world: &mut World, options: &Options, stats: &mut Stats, memo: &mut M
 }
 
 fn execute_source(world: &mut World, options: &Options, stats: &mut Stats, memo: &mut Memo) -> Result<u8, String> {
+    if options.command == "edit" || options.command == "compare" { return structure::run(world, &options.tool_arguments); }
     if options.command == "delta" {
         world.stdout().write(delta().as_bytes());
         return Ok(0);
@@ -2028,7 +2030,7 @@ impl Memo {
     // normal loading use the same snapshot, including absent module candidates.
     fn read_source(&mut self, directory: &mut Directory, root: &str, path: &str, stats: &mut Stats) -> Result<Option<Vec<u8>>, String> {
         stats.mark("load_parse")?;
-        if self.store.is_none() { return read(directory, path); }
+        if self.store.is_none() && !self.capture_catalog { return read(directory, path); }
         let key = (root.to_string(), path.to_string());
         if let Some((bytes, digest)) = self.input_snapshot.get(&key) {
             self.inputs.push(store::Input { directory: root.to_string(), path: path.to_string(), digest: digest.clone() });
@@ -2050,7 +2052,7 @@ impl Memo {
     // Pin raw IR and explicit runtime bytes just like source-loader reads.
     // Later artifact-cache validation must not reopen a different generation.
     fn read_path(&mut self, world: &mut World, path: &str) -> Result<Vec<u8>, String> {
-        if self.store.is_none() { return read_path(world, path); }
+        if self.store.is_none() && !self.capture_catalog { return read_path(world, path); }
         let (parent, name) = location(path);
         let key = (parent.clone(), name.clone());
         if let Some((bytes, _)) = self.input_snapshot.get(&key) {

@@ -1,0 +1,219 @@
+//! Driver integration for checked source transactions and bounded semantic review.
+use super::{Options, Stats, Memo};
+use crate::{authority, entry_grants, ir, meaning, semantic, sha256, structure_edit, structure_write};
+use std::collections::{BTreeMap, BTreeSet};
+
+struct Request {
+    options: Options,
+    request: String,
+    dry: bool,
+    recover: bool,
+    against: String,
+    against_library: String,
+    limit: usize,
+    detail: String,
+}
+fn parse(values: &[String]) -> Result<Request, String> {
+    let mut arguments: Vec<Vec<u8>> = Vec::new();
+    arguments.push(b"check"[..].to_vec());
+    let mut request = String::new();
+    let mut dry = false;
+    let mut recover = false;
+    let mut against = String::new();
+    let mut against_library = String::new();
+    let mut limit = 27usize;
+    let mut detail = String::new();
+    let mut at = 1usize;
+    while at < values.len() {
+        let name = values[at].as_str();
+        if name == "--dry-run" { dry = true; }
+        else if name == "--recover" { recover = true; }
+        else if matches!(name, "--request" | "--against" | "--against-library-dir" | "--limit" | "--id") {
+            at += 1usize;
+            if at == values.len() { return Err(format!("E_USAGE {name} needs a value")); }
+            match name {
+                "--request" => request = values[at].clone(),
+                "--against" => against = values[at].clone(),
+                "--against-library-dir" => against_library = values[at].clone(),
+                "--id" => detail = values[at].clone(),
+                _ => limit = super::inline_limit(&values[at])?,
+            }
+        } else { arguments.push(values[at].as_bytes().to_vec()); }
+        at += 1usize;
+    }
+    let mut options = super::options(arguments)?;
+    options.command = "check".to_string();
+    options.index = false;
+    options.inline_limit = Some(0usize);
+    Ok(Request { options, request, dry, recover, against, against_library, limit, detail })
+}
+fn normal(path: &str) -> String {
+    if path.starts_with("./") { path[2usize..].to_string() } else { path.to_string() }
+}
+fn physical(root: &str, path: &str) -> String {
+    if root == "." { normal(path) }
+    else if root == "/" { format!("/{path}") }
+    else { normal(&format!("{root}/{path}")) }
+}
+fn replace_snapshot(before: &Memo, after: &mut Memo, draft: &structure_edit::Draft) -> Result<(), String> {
+    after.input_snapshot = before.input_snapshot.clone();
+    for change in &draft.changes {
+        let mut keys = Vec::new();
+        for ((root, path), _) in &before.input_snapshot {
+            if physical(root, path) == normal(&change.file) { keys.push((root.clone(), path.clone())); }
+        }
+        if keys.is_empty() {
+            return Err(format!("{} E_EDIT_EMBEDDED source is embedded; supply an explicit editable --library-dir",
+                semantic::quote(&change.file)));
+        }
+        for key in keys {
+            after.input_snapshot.insert(key, (Some(change.after.clone()), Some(sha256::hex_digest(&change.after))));
+        }
+    }
+    Ok(())
+}
+fn unchanged_inputs(world: &mut World, before: &Memo, after: &Memo) -> Result<(), String> {
+    for (key, value) in &after.input_snapshot {
+        let expected = before.input_snapshot.get(key).unwrap_or(value);
+        let mut root = world.directory(&key.0).map_err(|errno: i64| -> String { format!("E_EDIT_IO open {}: errno {errno}", key.0) })?;
+        let actual = super::read(&mut root, &key.1)?;
+        if actual != expected.0 {
+            return Err(format!("{} E_EDIT_STALE source dependency changed during checking", semantic::quote(&physical(&key.0, &key.1))));
+        }
+    }
+    Ok(())
+}
+fn entries(checked: &ir::CheckedProgram) -> BTreeMap<String, BTreeSet<String>> {
+    let program = checked.program();
+    let mut entries: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for index in 0usize..program.functions.len() {
+        if entry_grants::validate(program, index).is_err() { continue; }
+        let report = match authority::analyze(checked, index) { Ok(report) => report, Err(_) => continue };
+        let mut facts: BTreeSet<String> = BTreeSet::new();
+        if report.manifest.full_world { facts.insert("grant:World".to_string()); }
+        for requirement in &report.manifest.requirements {
+            facts.insert(format!("grant:{}:{}", requirement.parameter, requirement.capability));
+        }
+        for function in &report.functions {
+            for operation in &function.operations { facts.insert(format!("effect:{}", operation.name)); }
+        }
+        entries.insert(program.functions[index].name.clone(), facts);
+    }
+    entries
+}
+fn joined(values: &[String]) -> String {
+    let mut out = String::new();
+    for value in values {
+        if !out.is_empty() { out.push(','); }
+        out.push_str(value);
+    }
+    out
+}
+fn authority_delta(old: &ir::CheckedProgram, new: &ir::CheckedProgram) -> String {
+    let before = entries(old);
+    let after = entries(new);
+    let mut names: BTreeSet<String> = BTreeSet::new();
+    for (name, _) in &before { names.insert(name.clone()); }
+    for (name, _) in &after { names.insert(name.clone()); }
+    let mut out = String::new();
+    let empty: BTreeSet<String> = BTreeSet::new();
+    for name in names {
+        let left = before.get(&name).unwrap_or(&empty);
+        let right = after.get(&name).unwrap_or(&empty);
+        let mut gains: Vec<String> = Vec::new();
+        let mut losses: Vec<String> = Vec::new();
+        for fact in right { if !left.contains(fact) { gains.push(fact.clone()); } }
+        for fact in left { if !right.contains(fact) { losses.push(fact.clone()); } }
+        if !gains.is_empty() || !losses.is_empty() || before.contains_key(&name) != after.contains_key(&name) {
+            out.push_str(&format!("{} level=checked-ir authority-gained={} authority-lost={} entry-before={} entry-after={}\n",
+                semantic::quote(&name), semantic::quote(&joined(&gains)), semantic::quote(&joined(&losses)),
+                before.contains_key(&name), after.contains_key(&name)));
+        }
+    }
+    if out.is_empty() { out.push_str("program level=checked-ir authority-delta=none\n"); }
+    out
+}
+fn finish(memo: &mut Memo) {
+    if let Some(store) = memo.store.as_mut() { store.finish(); }
+}
+fn compare(world: &mut World, request: &Request, stats: &mut Stats) -> Result<u8, String> {
+    if request.against.is_empty() { return Err("E_USAGE compare requires --against SOURCE".to_string()); }
+    let mut before_options = request.options.clone();
+    before_options.path = request.against.clone();
+    before_options.source_directory = None;
+    if !request.against_library.is_empty() { before_options.library_directory = Some(request.against_library.clone()); }
+    let mut before = Memo::new(world, &before_options);
+    before.capture_catalog = true;
+    let old = super::compile(world, &before_options, stats, &mut before)?;
+    finish(&mut before);
+    let old_catalog = before.catalog.take().ok_or("E_EDIT_SOURCE comparison requires source, not raw IR")?;
+    let mut after = Memo::new(world, &request.options);
+    after.capture_catalog = true;
+    let new = super::compile(world, &request.options, stats, &mut after)?;
+    finish(&mut after);
+    let new_catalog = after.catalog.take().ok_or("E_EDIT_SOURCE comparison requires source, not raw IR")?;
+    let out = meaning::compare(&old_catalog, old.original().checked(), &new_catalog,
+        new.original().checked(), request.limit, &request.detail);
+    world.stdout().write(out.as_bytes());
+    Ok(0u8)
+}
+fn edit(world: &mut World, request: &Request, stats: &mut Stats) -> Result<u8, String> {
+    if request.options.path.starts_with('/') {
+        return Err("E_EDIT_ROOT use a relative source path with --source-dir PROJECT_ROOT".to_string());
+    }
+    let scope = request.options.source_directory.as_ref().map_or(".", |value| value.as_str());
+    let mut writer = if request.dry {
+        if request.recover { return Err("E_USAGE --recover cannot be combined with --dry-run".to_string()); }
+        None
+    } else {
+        let key = request.options.store_key.as_ref().ok_or("E_EDIT_KEY apply/recovery requires --store-key PRIVATE_KEY outside source roots")?;
+        Some(structure_write::Writer::open(world, scope, key)?)
+    };
+    if let Some(writer) = writer.as_mut() {
+        let count = writer.recover()?;
+        if request.recover {
+            world.stdout().write(format!("transaction recovered-files={count}\n").as_bytes());
+            return Ok(0u8);
+        }
+    }
+    if request.request.is_empty() { return Err("E_USAGE edit requires --request JSON_FILE".to_string()); }
+    let operations = structure_edit::parse(&super::read_path(world, &request.request)?)?;
+    let mut before = Memo::new(world, &request.options);
+    before.capture_catalog = true;
+    if let Some(writer) = writer.as_ref() { before.private_source_digest = Some(writer.private_source_digest()); }
+    let old = super::compile(world, &request.options, stats, &mut before)?;
+    let old_catalog = before.catalog.take().ok_or("E_EDIT_SOURCE transactions require source, not raw IR")?;
+    let draft = structure_edit::plan(&old_catalog, &before.source_inputs, &operations)?;
+    let mut uncached = request.options.clone();
+    uncached.store_directory = None;
+    let mut after = Memo::new(world, &uncached);
+    after.capture_catalog = true;
+    after.private_source_digest = before.private_source_digest;
+    after.store = before.store.take();
+    replace_snapshot(&before, &mut after, &draft)?;
+    let new = super::compile(world, &request.options, stats, &mut after)?;
+    let new_catalog = after.catalog.take().ok_or("E_EDIT_SOURCE candidate source catalog is missing")?;
+    unchanged_inputs(world, &before, &after)?;
+    let mut report = structure_edit::report(&draft);
+    report.push_str(&authority_delta(old.original().checked(), new.original().checked()));
+    report.push_str(&format!("program level=checked-ir before={} after={} rebuild=changed-source-and-dependent-instances\n",
+        meaning::identity(old.original().checked()), meaning::identity(new.original().checked())));
+    report.push_str(&format!("transaction source-before={} source-after={} mode={}\n",
+        old_catalog.input_digest, new_catalog.input_digest, if request.dry { "dry-run" } else { "apply" }));
+    if let Some(writer) = writer.as_mut() {
+        // The independent checker has admitted this entire candidate. The journal
+        // carries only its text projection and grants no reusable checker proof.
+        writer.publish(&draft)?;
+    }
+    finish(&mut after);
+    world.stdout().write(report.as_bytes());
+    Ok(0u8)
+}
+pub(super) fn run(world: &mut World, values: &[String]) -> Result<u8, String> {
+    let request = parse(values)?;
+    let mut stats = Stats::new(world, request.options.stats)?;
+    let result = if values[0usize] == "compare" { compare(world, &request, &mut stats) }
+        else { edit(world, &request, &mut stats) };
+    stats.finish(world, if result.is_ok() { "done" } else { "failed" })?;
+    result
+}
