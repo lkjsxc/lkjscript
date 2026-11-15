@@ -1,0 +1,303 @@
+//! Focused refactoring contract cases over the production planner and checker.
+mod ast; mod check; mod diagnostic; mod diagnostics; mod elaborate; mod facts;
+mod frontend; mod generics; mod interpreter; mod ir; mod ir_binary; mod ir_text;
+mod json; mod names; mod optimizer; mod resolve; mod reuse; mod runtime_memory;
+mod native; mod x86; mod child_image; mod entry_grants; mod runtime; mod runtime_diagnostics; mod semantic; mod source; mod syntax;
+mod structure_edit; mod structure_refactor;
+pub use std::sha256;
+pub fn main(mut world: World) { cases::run(&mut world); }
+
+mod cases {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    struct Snapshot { catalog: semantic::Catalog, inputs: Vec<(String, Vec<u8>)>, checked: ir::CheckedProgram }
+    fn snapshot(text: &str) -> Result<Snapshot, String> {
+        let mut parsed = syntax::parse(text).map_err(|problem| problem.message)?;
+        parsed.files[0usize].path = "fixture.lkj".to_string();
+        let resolved = resolve::resolve(&parsed).map_err(|problem| problem.message)?;
+        let definitions = elaborate::infer_resolved_all(&resolved).map_err(|problems| -> String { problems[0usize].message.clone() })?;
+        let mut evidence = Some(elaborate::semantic::Evidence::default());
+        let raw = elaborate::lower_definitions_recorded_semantic(definitions, &mut None, &mut evidence)
+            .map_err(|problems| -> String { problems[0usize].message.clone() })?;
+        let checked = check::check(raw).map_err(|problem| problem.message)?;
+        let inputs = vec![("fixture.lkj".to_string(), text.as_bytes().to_vec())];
+        let catalog = semantic::catalog_typed(&resolved, &inputs, &checked, &evidence)?;
+        Ok(Snapshot { catalog, inputs, checked })
+    }
+    fn value(snapshot: &Snapshot) -> i64 {
+        let program = snapshot.checked.program(); let mut entry: Option<usize> = None;
+        for (index, function) in program.functions.iter().enumerate() { if function.name == "main" { entry = Some(index); } }
+        let args: Vec<u64> = Vec::new(); let mut host: Vec<u8> = Vec::new();
+        let result = interpreter::run(program, entry.unwrap(), &args, &mut host).unwrap();
+        assert!(host.is_empty());
+        match result.value { interpreter::Scalar::Int { value, .. } => value as i64, _ => panic!("fixture main must return an integer") }
+    }
+    fn plan(snapshot: &Snapshot, operation: &str) -> Result<Vec<structure_edit::Patch>, String> {
+        let request = structure_edit::parse(format!("{{\"version\":1,\"operations\":[{operation}]}}").as_bytes())?;
+        let mut patches = Vec::new();
+        for operation in &request.operations {
+            if !structure_refactor::plan(&snapshot.catalog, &snapshot.inputs, operation, &mut patches)? {
+                return Err("unhandled operation".to_string());
+            }
+        }
+        Ok(patches)
+    }
+    fn apply(snapshot: &Snapshot, operation: &str) -> Result<String, String> {
+        let patches = plan(snapshot, operation)?; let original = &snapshot.inputs[0usize].1;
+        let mut ordered: BTreeMap<(usize, usize), String> = BTreeMap::new();
+        for patch in patches {
+            assert_eq!(patch.file, "fixture.lkj");
+            let key = (patch.start, patch.end);
+            if let Some(old) = ordered.get(&key) { if *old != patch.replacement { return Err("different patches overlap".to_string()); } }
+            ordered.insert(key, patch.replacement);
+        }
+        let mut cursor = 0usize; let mut bytes = Vec::new();
+        for ((start, end), replacement) in ordered {
+            if start < cursor || start > end || end > original.len() { return Err("patch ranges overlap".to_string()); }
+            bytes.extend_from_slice(&original[cursor..start]); bytes.extend_from_slice(replacement.as_bytes()); cursor = end;
+        }
+        bytes.extend_from_slice(&original[cursor..]); Ok(String::from_utf8(bytes).unwrap())
+    }
+    fn accepts(source: &str, operation: &str, expected: i64) -> Result<(), String> {
+        let before = snapshot(source).map_err(|error| -> String { format!("fixture {operation}: {error}\n{source}") })?; let original = before.inputs[0usize].1.clone();
+        let after = apply(&before, operation)?; let checked = snapshot(&after).map_err(|error| -> String { format!("candidate {operation}: {error}\n{after}") })?;
+        assert_eq!(value(&checked), expected); assert_eq!(before.inputs[0usize].1, original);
+        if source.contains("// untouched:  spacing stays") { assert!(after.contains("// untouched:  spacing stays")); }
+        Ok(())
+    }
+    fn same(source: &str, operation: &str) -> Result<(), String> {
+        let before = snapshot(source).map_err(|error| -> String { format!("fixture {operation}: {error}\n{source}") })?; let expected = value(&before);
+        accepts(source, operation, expected)
+    }
+    fn refuses(source: &str, operation: &str, rule: &str) -> Result<(), String> {
+        let before = snapshot(source)?; let original = before.inputs[0usize].1.clone();
+        if rule == "CHECK" {
+            match apply(&before, operation) { Ok(after) => if snapshot(&after).is_ok() { return Err(format!("expected checker refusal: {operation}\n{after}")); }, Err(error) => return Err(format!("expected candidate checker refusal, got {error}")) }
+        } else {
+            match plan(&before, operation) { Err(error) => if !error.contains(rule) { return Err(format!("expected {rule}: {error}")); }, Ok(_) => return Err(format!("expected planner refusal {rule}: {operation}")) }
+        }
+        assert_eq!(before.inputs[0usize].1, original);
+        let request = structure_edit::parse(format!("{{\"version\":1,\"operations\":[{operation}]}}").as_bytes()).unwrap();
+        let mut patches = Vec::new();
+        if structure_refactor::plan(&before.catalog, &before.inputs, &request.operations[0usize], &mut patches).is_err() { assert!(patches.is_empty()); }
+        Ok(())
+    }
+    fn identity(snapshot: &Snapshot, kind: &str, parent: &str, name: &str) -> String {
+        for item in &snapshot.catalog.items {
+            if item.kind == kind && item.parent == parent && item.name == name { return item.identity.clone(); }
+        }
+        panic!("missing test identity {kind} {parent} {name}")
+    }
+    fn extract(source: &str, owner: &str, expression: &str, parameters: &str, result: &str) -> String {
+        let parsed = snapshot(source).unwrap(); let item = &parsed.catalog.items[*parsed.catalog.by_identity.get(&owner.to_string()).unwrap()];
+        let start = item.text.find(expression).unwrap(); let end = start + expression.len();
+        format!("{{\"op\":\"extract-function\",\"id\":{},\"expect\":{},\"name\":\"extracted\",\"start\":{start},\"end\":{end},\"parameters\":{parameters},\"result\":{}}}",
+            semantic::quote(owner), semantic::quote(&item.text_digest), semantic::quote(result))
+    }
+    fn tick() -> String { "fn tick(n: &mut i64) -> i64 { *n += 1i64; *n }\n".to_string() }
+    fn signatures() -> Result<usize, String> {
+        let source = format!("{}fn pair(a: i64, b: i64) -> i64 {{ a * 10i64 + b }}\n// untouched:  spacing stays\nfn main() -> i64 {{ let mut n = 0i64; let p = pair(tick(&mut n), tick(&mut n)); p * 10i64 + n }}", tick());
+        same(&source, r#"{"op":"change-signature","id":"pair","parameters":["pair::param:b","pair::param:a"]}"#)?;
+        accepts(&source, r#"{"op":"change-signature","id":"pair","parameters":["pair::param:a","pair::param:b",{"name":"added","type":"i64","argument":"tick(&mut n)"}]}"#, 123i64)?;
+        refuses(&source, r#"{"op":"change-signature","id":"pair","parameters":["pair::param:a","pair::param:b",{"name":"added","type":"i64","argument":"true"}]}"#, "CHECK")?;
+        refuses(&source, r#"{"op":"change-signature","id":"pair","parameters":["pair::param:b"]}"#, "CHECK")?;
+        refuses(&source, r#"{"op":"change-signature","id":"pair","parameters":[{"name":"added","type":"i64","argument":"1i64","op":"ignored"}]}"#, "E_EDIT_REQUEST")?;
+        let unused = format!("{}fn choose(a: i64, b: i64) -> i64 {{ a }} fn main() -> i64 {{ let mut n = 0i64; let p = choose(tick(&mut n), tick(&mut n)); p * 10i64 + n }}", tick());
+        same(&unused, r#"{"op":"change-signature","id":"choose","parameters":["choose::param:a"]}"#)?;
+        let nested = "fn pair(a: i64, b: i64) -> i64 { a * 10i64 + b } fn main() -> i64 { pair(pair(1i64, 2i64), 3i64) }";
+        same(nested, r#"{"op":"change-signature","id":"pair","parameters":["pair::param:b","pair::param:a"]}"#)?;
+        let operand = "fn pair(a: i64, b: i64) -> i64 { a * 10i64 + b } fn main() -> i64 { pair(1i64, 2i64) + pair(3i64, 4i64) }";
+        same(operand, r#"{"op":"change-signature","id":"pair","parameters":["pair::param:b","pair::param:a"]}"#)?;
+        let capture = "const offset: i64 = 3i64; fn helper() -> i64 { offset } fn main() -> i64 { helper() }";
+        refuses(capture, r#"{"op":"change-signature","id":"helper","parameters":[{"name":"offset","type":"i64","argument":"9i64"}]}"#, "E_EDIT_PARAMETER_CAPTURE")?;
+        let width = "fn helper(value: u8) -> i64 { 0i64 } fn main() -> i64 { helper(255 + 1) }";
+        let before = snapshot(width)?; let expected = outcome(&before); assert!(expected.is_err());
+        let after = apply(&before, r#"{"op":"change-signature","id":"helper","parameters":[]}"#)?;
+        assert!(outcome(&snapshot(&after)?) == expected);
+        let borrowed = "struct Data { n: i64 } fn combine(value: &Data, add: i64) -> i64 { value.n + add } fn main() -> i64 { let data = Data { n: 3i64 }; combine(&data, 4i64) }";
+        same(borrowed, r#"{"op":"change-signature","id":"combine","parameters":["combine::param:add","combine::param:value"]}"#)?;
+        Ok(11usize)
+    }
+    fn fields() -> Result<usize, String> {
+        let added = format!("{}struct Point {{ x: i64 }} fn main() -> i64 {{ let mut n = 0i64; let p = Point {{ x: tick(&mut n) }}; let Point {{ x }} = p; x * 10i64 + n }}", tick());
+        accepts(&added, r#"{"op":"add-field","id":"Point","source":"y: i64","value":"tick(&mut n)"}"#, 12i64)?;
+        refuses(&added, r#"{"op":"add-field","id":"Point","source":"y: i64","value":"true"}"#, "CHECK")?;
+        let removed = format!("{}struct Point {{ x: i64, y: i64 }} fn main() -> i64 {{ let mut n = 0i64; let p = Point {{ x: tick(&mut n), y: tick(&mut n) }}; let Point {{ x, .. }} = p; x * 10i64 + n }}", tick());
+        same(&removed, r#"{"op":"remove-field","id":"Point::field:y"}"#)?;
+        let used = "struct Point { x: i64, y: i64 } fn main() -> i64 { let p = Point { x: 1i64, y: 2i64 }; let Point { x, y } = p; x + y }";
+        refuses(used, r#"{"op":"remove-field","id":"Point::field:y"}"#, "E_EDIT_REMOVED_BINDING")?;
+        let access = "struct Point { x: i64, y: i64 } fn main() -> i64 { let p = Point { x: 1i64, y: 2i64 }; p.y }";
+        accepts(access, r#"{"op":"remove-field","id":"Point::field:y","replacement":"7i64"}"#, 7i64)?;
+        refuses(access, r#"{"op":"remove-field","id":"Point::field:y"}"#, "E_EDIT_FIELD_VALUE")?;
+        let nested = "struct Inner { value: i64, kept: i64 } struct Outer { value: i64 } fn main() -> i64 { let inner = Inner { value: 2i64, kept: 3i64 }; let outer = Outer { value: inner.value }; outer.value }";
+        accepts(nested, r#"{"op":"remove-field","id":"Inner::field:value","replacement":"7i64"}"#, 7i64)?;
+        let write = "struct Point { x: i64, y: i64 } fn main() -> i64 { let mut p = Point { x: 1i64, y: 2i64 }; p.y = 3i64; p.x }";
+        refuses(write, r#"{"op":"remove-field","id":"Point::field:y","replacement":"7i64"}"#, "E_EDIT_FIELD_WRITE")?;
+        let width = "struct Point { x: i64, y: u8 } fn main() -> i64 { Point { x: 0i64, y: 255 + 1 }.x }";
+        let before = snapshot(width)?; let expected = outcome(&before); assert!(expected.is_err());
+        let after = apply(&before, r#"{"op":"remove-field","id":"Point::field:y"}"#)?;
+        assert!(outcome(&snapshot(&after)?) == expected);
+        let joined = "enum Choice { A { x: i64 }, B { x: i64 } } fn main() -> i64 { match (Choice::A { x: 1i64 }) { Choice::A { x: value } | Choice::B { x: value } => value } }";
+        refuses(joined, r#"{"op":"remove-field","id":"Choice::variant:A::field:x"}"#, "E_EDIT_REMOVED_BINDING")?;
+        let generic = "struct Value<T> { old: T } fn main() -> u64 { Value { old: 2147483647 + 1 }.old as u64 }";
+        refuses(generic, r#"{"op":"add-field","id":"Value","source":"new: T","value":"0u64"}"#, "CHECK")?;
+        Ok(11usize)
+    }
+    fn variants() -> Result<usize, String> {
+        let added = "enum Choice { A } fn main() -> i64 { match Choice::A { Choice::A => 1i64 } }";
+        same(added, r#"{"op":"add-variant","id":"Choice","source":"B","arm":"Choice::B => 2i64"}"#)?;
+        refuses(added, r#"{"op":"add-variant","id":"Choice","source":"B","arm":"Choice::B => true"}"#, "CHECK")?;
+        let removed = "enum Choice { A, B } fn main() -> i64 { match Choice::B { Choice::A => 1i64, Choice::B => 2i64 } }";
+        accepts(removed, r#"{"op":"remove-variant","id":"Choice::variant:B","replacement":"Choice::A"}"#, 1i64)?;
+        refuses(removed, r#"{"op":"remove-variant","id":"Choice::variant:B"}"#, "E_EDIT_VARIANT_VALUE")?;
+        let alternatives = "enum Choice { A, B, C } fn main() -> i64 { match Choice::A { Choice::A | Choice::B => 1i64, Choice::C => 2i64 } }";
+        same(alternatives, r#"{"op":"remove-variant","id":"Choice::variant:B"}"#)?;
+        let nested = "enum Choice { A, B, C } enum Wrap { Some(Choice), None } fn main() -> i64 { match Wrap::Some(Choice::A) { Wrap::Some(Choice::A | Choice::B) => 1i64, Wrap::Some(Choice::C) => 2i64, Wrap::None => 0i64 } }";
+        same(nested, r#"{"op":"remove-variant","id":"Choice::variant:B"}"#)?;
+        let width = "enum Choice { A, B(u8) } fn main() -> i64 { match Choice::B(255 + 1) { Choice::A => 0i64, Choice::B(_) => 1i64 } }";
+        let before = snapshot(width)?; let expected = outcome(&before); assert!(expected.is_err());
+        let after = apply(&before, r#"{"op":"remove-variant","id":"Choice::variant:B","replacement":"Choice::A"}"#)?;
+        assert!(outcome(&snapshot(&after)?) == expected);
+        let add_context = "enum Choice { A } fn main() -> u64 { (match Choice::A { Choice::A => 2147483647 + 1 }) as u64 }";
+        refuses(add_context, r#"{"op":"add-variant","id":"Choice","source":"B","arm":"Choice::B => 0u64"}"#, "CHECK")?;
+        let remove_context = "enum Choice { A, B } fn main() -> u64 { (match Choice::A { Choice::A => 255 + 1, Choice::B => 0u8 }) as u64 }";
+        let before = snapshot(remove_context)?; let expected = outcome(&before); assert!(expected.is_err());
+        let after = apply(&before, r#"{"op":"remove-variant","id":"Choice::variant:B"}"#)?;
+        assert!(outcome(&snapshot(&after)?) == expected);
+        let generated = "enum Choice { A, B } fn make(n: &mut i64) -> Choice { *n += 1i64; Choice::A } fn main() -> i64 { let mut n = 0i64; let _ = matches!(make(&mut n), Choice::B); n }";
+        refuses(generated, r#"{"op":"remove-variant","id":"Choice::variant:B"}"#, "E_EDIT_MATCH_SOURCE")?;
+        let wildcard = "enum Choice { A } type Identity<T> = T; type Alias = Identity<Choice>; fn make() -> Alias { Choice::A } fn main() -> i64 { match make() { _ => 1i64 } }";
+        let operation = r#"{"op":"add-variant","id":"Choice","source":"B","arm":"Choice::B => 2i64"}"#;
+        let before = snapshot(wildcard)?; let after = apply(&before, operation)?;
+        assert!(after.contains("Choice::B => 2i64")); assert_eq!(value(&snapshot(&after)?), 1i64);
+        let new_value = after.replace("fn make() -> Alias { Choice::A }", "fn make() -> Alias { Choice::B }");
+        assert_eq!(value(&snapshot(&new_value)?), 2i64);
+        let mut absent = snapshot(added)?; absent.catalog.references_recorded = false;
+        match plan(&absent, operation) {
+            Err(error) => assert!(error.contains("E_EDIT_REFERENCES")),
+            Ok(_) => return Err("items-only catalog admitted a refactor".to_string()),
+        }
+        let add_scrutinee = "enum Choice<T> { A(T) } fn main() -> u64 { match Choice::A(2147483647 + 1) { Choice::A(_) => 0u64 } }";
+        refuses(add_scrutinee, r#"{"op":"add-variant","id":"Choice","source":"B(T)","arm":"Choice::B(value) => value"}"#, "CHECK")?;
+        let remove_scrutinee = "enum Choice<T> { A(T), B(T) } fn main() -> u64 { match Choice::A(255 + 1) { Choice::A(value) => value as u64, Choice::B(value) => { let _: u8 = value; 0u64 } } }";
+        let before = snapshot(remove_scrutinee)?; let expected = outcome(&before); assert!(expected.is_err());
+        let after = apply(&before, r#"{"op":"remove-variant","id":"Choice::variant:B"}"#)?;
+        assert!(outcome(&snapshot(&after)?) == expected);
+        Ok(14usize)
+    }
+    fn extractions() -> Result<usize, String> {
+        let source = "fn compute(x: i64) -> i64 { x + 1i64 } fn main() -> i64 { compute(5i64) }";
+        let operation = extract(source, "compute", "x + 1i64", r#"[{"id":"compute::param:x","name":"value","type":"i64","argument":"x"}]"#, "i64");
+        same(source, &operation)?;
+        let missing = extract(source, "compute", "x + 1i64", "[]", "i64");
+        refuses(source, &missing, "E_EDIT_CAPTURE")?;
+        refuses(source, r#"{"op":"extract-function","id":"compute","expect":"wrong","name":"extracted","start":0,"end":1,"parameters":[],"result":"i64"}"#, "E_EDIT_STALE")?;
+        let invalid = extract(source, "compute", "x + 1i64", r#"[{"id":"compute::param:x","name":"value","type":"i64","argument":"x"}]"#, "bool");
+        refuses(source, &invalid, "E_EDIT_RESULT_TYPE")?;
+        let mutable = "fn main() -> i64 { let mut x = 1i64; let answer = { x += 2i64; x }; answer + x }";
+        let parsed = snapshot(mutable).unwrap(); let binding = identity(&parsed, "binding", "main", "x");
+        let params = format!("[{{\"id\":{},\"name\":\"value\",\"type\":\"&mut i64\",\"argument\":\"&mut x\"}}]", semantic::quote(&binding));
+        same(mutable, &extract(mutable, "main", "{ x += 2i64; x }", &params, "i64"))?;
+        let params = format!("[{{\"id\":{},\"name\":\"value\",\"type\":\"i64\",\"argument\":\"x\"}}]", semantic::quote(&binding));
+        refuses(mutable, &extract(mutable, "main", "{ x += 2i64; x }", &params, "i64"), "E_EDIT_CAPTURE_WRITE")?;
+        let generic = "fn compute<T>(x: i64) -> i64 { x + 1i64 } fn main() -> i64 { compute::<bool>(5i64) }";
+        same(generic, &extract(generic, "compute", "x + 1i64", r#"[{"id":"compute::param:x","name":"value","type":"i64","argument":"x"}]"#, "i64"))?;
+        let shorthand = "struct Point { x: i64 } fn make(x: i64) -> Point { Point { x } } fn main() -> i64 { make(4i64).x }";
+        same(shorthand, &extract(shorthand, "make", "Point { x }", r#"[{"id":"make::param:x","name":"value","type":"i64","argument":"x"}]"#, "Point"))?;
+        let call = "fn add(x: i64) -> i64 { x + 1i64 } fn main() -> i64 { add(3i64) }";
+        let parsed = snapshot(call).unwrap(); let id = identity(&parsed, "call-site", "main", "");
+        let op = format!("{{\"op\":\"extract-function\",\"id\":{},\"name\":\"extracted\",\"parameters\":[],\"result\":\"i64\"}}", semantic::quote(&id));
+        same(call, &op)?;
+        let returns = "fn compute(x: i64) -> i64 { if x > 0i64 { return x; } 0i64 } fn main() -> i64 { compute(1i64) }";
+        refuses(returns, &extract(returns, "compute", "return x", r#"[{"id":"compute::param:x","name":"value","type":"i64","argument":"x"}]"#, "i64"), "E_EDIT_CONTROL")?;
+        let context = "fn main() -> u64 { (2147483647 + 1) as u64 }";
+        refuses(context, &extract(context, "main", "2147483647 + 1", "[]", "u64"), "E_EDIT_RESULT_TYPE")?;
+        let wrong_capture = extract(source, "compute", "x + 1i64", r#"[{"id":"compute::param:x","name":"value","type":"u64","argument":"x"}]"#, "i64");
+        refuses(source, &wrong_capture, "E_EDIT_CAPTURE_TYPE")?;
+        Ok(12usize)
+    }
+    fn inlines() -> Result<usize, String> {
+        let source = format!("{}fn pair(a: i64, b: i64) -> i64 {{ a * 10i64 + b }} fn main() -> i64 {{ let mut n = 0i64; let p = pair(tick(&mut n), tick(&mut n)); p * 10i64 + n }}", tick());
+        same(&source, r#"{"op":"inline-function","id":"pair","remove":true}"#)?;
+        let scope = "fn offset() -> i64 { 7i64 } fn helper(x: i64) -> i64 { x + offset() } fn main() -> i64 { let offset = 100i64; helper(3i64) }";
+        same(scope, r#"{"op":"inline-function","id":"helper","remove":true}"#)?;
+        let terminal = "fn helper(x: i64) -> i64 { let value = x + 2i64; return value; } fn main() -> i64 { helper(3i64) }";
+        same(terminal, r#"{"op":"inline-function","id":"helper","remove":true}"#)?;
+        let early = "fn helper(x: i64) -> i64 { if x > 0i64 { return x; } 0i64 } fn main() -> i64 { helper(3i64) }";
+        refuses(early, r#"{"op":"inline-function","id":"helper"}"#, "E_EDIT_CONTROL")?;
+        let generic = "fn helper<T>(x: i64) -> i64 { x + 1i64 } fn main() -> i64 { helper::<bool>(3i64) }";
+        refuses(generic, r#"{"op":"inline-function","id":"helper"}"#, "E_EDIT_GENERIC_INLINE")?;
+        let nested = "fn helper(x: i64) -> i64 { x + 1i64 } fn main() -> i64 { helper(helper(3i64)) }";
+        same(nested, r#"{"op":"inline-function","id":"helper","remove":true}"#)?;
+        let selective = "fn helper(x: i64) -> i64 { x + 1i64 } fn main() -> i64 { helper(1i64) + helper(3i64) }";
+        let parsed = snapshot(selective).unwrap(); let mut id = String::new();
+        for item in &parsed.catalog.items { if item.kind == "call-site" && item.parent == "main" && item.text == "helper(1i64)" { id = item.identity.clone(); } }
+        assert!(!id.is_empty());
+        let operation = format!("{{\"op\":\"inline-function\",\"id\":\"helper\",\"sites\":[{}]}}", semantic::quote(&id));
+        same(selective, &operation)?;
+        let removal = format!("{{\"op\":\"inline-function\",\"id\":\"helper\",\"sites\":[{}],\"remove\":true}}", semantic::quote(&id));
+        refuses(selective, &removal, "E_EDIT_CALL_SITE")?;
+        let private = "mod inner { const OFFSET: i64 = 7i64; pub fn helper(x: i64) -> i64 { x + OFFSET } } fn main() -> i64 { inner::helper(3i64) }";
+        refuses(private, r#"{"op":"inline-function","id":"inner::helper"}"#, "CHECK")?;
+        let narrow = "fn narrow() -> u8 { 255 + 1 } fn main() -> u64 { narrow() as u64 }";
+        let before = snapshot(narrow)?; let expected = outcome(&before); assert!(expected.is_err());
+        let widened = snapshot("fn main() -> u64 { ({ { 255 + 1 } }) as u64 }")?;
+        assert!(outcome(&widened) != expected);
+        let after = apply(&before, r#"{"op":"inline-function","id":"narrow","remove":true}"#)?;
+        assert!(outcome(&snapshot(&after)?) == expected);
+        let result_alias = "mod inner { pub type Byte = u8; pub fn small() -> Byte { 3 + 4 } } fn main() -> u64 { inner::small() as u64 }";
+        same(result_alias, r#"{"op":"inline-function","id":"inner::small","remove":true}"#)?;
+        let dispatch = "mod types { pub struct Value {} pub trait A { fn read(&self) -> i64; } pub trait B { fn read(&self) -> i64; } impl A for Value { fn read(&self) -> i64 { 1i64 } } impl B for Value { fn read(&self) -> i64 { 2i64 } } } mod left { use crate::types::{Value, A}; pub fn helper(value: &Value) -> i64 { value.read() } } mod right { use crate::types::{Value, B}; pub fn run() -> i64 { let value = Value {}; crate::left::helper(&value) } } fn main() -> i64 { right::run() }";
+        refuses(dispatch, r#"{"op":"inline-function","id":"left::helper"}"#, "E_EDIT_METHOD_SCOPE")?;
+        let operation = r#"{"op":"inline-function","id":"helper","remove":true}"#;
+        let template = "fn helper(__lkjscript_edit_0000000000000000_0_1: i64, second: i64) -> i64 { second } fn main() -> i64 { helper(1i64, 2i64) }";
+        let parsed = snapshot(template)?; let mut position = 0usize;
+        for item in &parsed.catalog.items { if item.kind == "call-site" && item.parent == "main" { position = item.start; } }
+        let request = structure_edit::parse(format!("{{\"version\":1,\"operations\":[{operation}]}}").as_bytes())?;
+        let digest = sha256::hex_digest(format!("{}:{position}", request.operations[0usize].data).as_bytes());
+        let collision = format!("fn helper(__lkjscript_edit_{}_0_1: i64, second: i64) -> i64 {{ second }} fn main() -> i64 {{ helper(1i64, 2i64) }}", &digest[..16usize]);
+        assert_eq!(template.len(), collision.len()); same(&collision, operation)?;
+        let parent_visibility = "mod inner { pub(super) fn helper(x: i64) -> i64 { x + 1i64 } } fn main() -> i64 { inner::helper(3i64) }";
+        same(parent_visibility, r#"{"op":"inline-function","id":"inner::helper","remove":true}"#)?;
+        let restricted = "mod outer { mod inner { pub(in crate::outer) fn helper(x: i64) -> i64 { x + 1i64 } } pub fn run() -> i64 { inner::helper(3i64) } } fn main() -> i64 { outer::run() }";
+        same(restricted, r#"{"op":"inline-function","id":"outer::inner::helper","remove":true}"#)?;
+        let borrowed = "mod inner { pub struct Data { pub n: i64 } pub fn helper(value: &Data) -> i64 { value.n } } fn main() -> i64 { let value = inner::Data { n: 9i64 }; inner::helper(&value) }";
+        same(borrowed, r#"{"op":"inline-function","id":"inner::helper","remove":true}"#)?;
+        let wildcard = "struct Mark { out: Stdout } impl Drop for Mark { fn drop(&mut self) { self.out.write(b\"a\"); } } fn say(mut out: Stdout) { out.write(b\"b\"); } fn helper(_: Mark, out: Stdout) { say(out); } fn main(mut world: World) { helper(Mark { out: world.stdout() }, world.stdout()); }";
+        let before = snapshot(wildcard)?; assert_eq!(output(&before)?, b"ba".as_slice().to_vec());
+        let after = apply(&before, r#"{"op":"inline-function","id":"helper","remove":true}"#)?;
+        assert_eq!(output(&snapshot(&after)?)?, b"ba".as_slice().to_vec());
+        Ok(17usize)
+    }
+    fn report(world: &mut World, result: Result<usize, String>) -> usize {
+        match result {
+            Ok(count) => count,
+            Err(error) => { world.stdout().write(format!("{error}\n").as_bytes()); panic!("structural refactor case failed"); }
+        }
+    }
+    pub fn run(world: &mut World) {
+        let mut count = 0usize;
+        world.stdout().write(b"refactor signature cases\n"); count += report(world, signatures());
+        world.stdout().write(b"refactor field cases\n"); count += report(world, fields());
+        world.stdout().write(b"refactor variant cases\n"); count += report(world, variants());
+        world.stdout().write(b"refactor extraction cases\n"); count += report(world, extractions());
+        world.stdout().write(b"refactor inline cases\n"); count += report(world, inlines());
+        world.stdout().write(format!("ok structural refactor {count} cases\n").as_bytes());
+    }
+
+fn outcome(snapshot: &Snapshot) -> Result<interpreter::Scalar, String> {
+    let program = snapshot.checked.program(); let mut entry: Option<usize> = None;
+    for (index, function) in program.functions.iter().enumerate() { if function.name == "main" { entry = Some(index); } }
+    let args: Vec<u64> = Vec::new(); let mut host: Vec<u8> = Vec::new();
+    interpreter::run(program, entry.unwrap(), &args, &mut host).map(|result| result.value).map_err(|error| error.code())
+}
+
+fn output(snapshot: &Snapshot) -> Result<Vec<u8>, String> {
+        let program = snapshot.checked.program(); let mut entry: Option<usize> = None;
+        for (index, function) in program.functions.iter().enumerate() { if function.name == "main" { entry = Some(index); } }
+        let args: Vec<u64> = Vec::new(); let mut host: Vec<u8> = Vec::new();
+        interpreter::run(program, entry.unwrap(), &args, &mut host).map_err(|error| error.code())?;
+        Ok(host)
+    }
+}

@@ -1,0 +1,1520 @@
+//! Pure refactoring plans over resolved identities and exact syntax spans.
+//! Source is a projection. Every candidate still passes independent checking.
+use crate::{ast as a, semantic, sha256, structure_edit as edit, syntax};
+use std::collections::{BTreeMap, BTreeSet};
+use std::json::{self, Value};
+
+struct Unit { owner: semantic::Item, tree: a::Program, tokens: Vec<syntax::SemanticToken> }
+fn fail(id: &str, rule: &str, text: &str) -> String { edit::error(id, rule, text) }
+fn fields(value: &Value, id: &str, allowed: &str) -> Result<(), String> {
+    let object = value.as_object().ok_or_else(|| fail(id, "REQUEST", "operation must be an object"))?;
+    for (key, _) in object {
+        let mut accepted = key == "op" || key == "id" || key == "expect";
+        let mut start = 0usize;
+        for at in 0usize..allowed.len() + 1usize {
+            if at == allowed.len() || allowed.as_bytes()[at] == b'|' {
+                if &allowed[start..at] == key.as_str() { accepted = true; }
+                start = at + 1usize;
+            }
+        }
+        if !accepted { return Err(fail(id, "REQUEST", &format!("unknown field {key}"))); }
+    }
+    Ok(())
+}
+fn text(value: &Value, id: &str, key: &str, required: bool) -> Result<String, String> {
+    match value.get(key) {
+        Some(value) => value.as_str().map(|value| value.to_string())
+            .ok_or_else(|| fail(id, "REQUEST", &format!("{key} must be a string"))),
+        None if !required => Ok(String::new()),
+        None => Err(fail(id, "REQUEST", &format!("missing {key}"))),
+    }
+}
+fn flag(value: &Value, id: &str, key: &str) -> Result<bool, String> {
+    match value.get(key) {
+        Some(value) => value.as_bool().ok_or_else(|| fail(id, "REQUEST", &format!("{key} must be a boolean"))),
+        None => Ok(false),
+    }
+}
+fn array<'a>(value: &'a Value, id: &str, key: &str) -> Result<&'a [Value], String> {
+    value.get(key).and_then(|value| value.as_array()).ok_or_else(|| fail(id, "REQUEST", &format!("{key} must be an array")))
+}
+fn parse_unit(catalog: &semantic::Catalog, target: &semantic::Item, inputs: &[(String, Vec<u8>)]) -> Result<Unit, String> {
+    edit::validate_item(target, inputs, "")?;
+    let mut parents: Vec<String> = Vec::new(); let mut seen: BTreeSet<String> = BTreeSet::new();
+    let mut parent = target.parent.clone();
+    while parent != "crate" && parent != "std" {
+        if !seen.insert(parent.clone()) { return Err(fail(&target.identity, "PARENT", "source parent identities form a cycle")); }
+        let owner = edit::item(catalog, &parent)?;
+        if owner.kind == "module" { parents.push(owner.identity.clone()); }
+        parent = owner.parent.clone();
+    }
+    let mut tree = a::Program::default();
+    tree.scopes.push(a::ModuleScope { path: if parent == "std" { "std".to_string() } else { String::new() }, parent: None, crate_root: 0usize });
+    let mut scope = 0usize;
+    while let Some(path) = parents.pop() {
+        tree.scopes.push(a::ModuleScope { path, parent: Some(scope), crate_root: 0usize }); scope = tree.scopes.len() - 1usize;
+    }
+    tree.files.push(a::SourceFile { path: target.file.clone(), crate_root: 0usize });
+    tree.items = syntax::parse_file(&mut tree, &target.text, 0usize, scope)
+        .map_err(|problem| fail(&target.identity, "SYNTAX", &problem.message))?;
+    let tokens = syntax::semantic_tokens(&target.text).map_err(|problem| fail(&target.identity, "SYNTAX", &problem.message))?;
+    Ok(Unit { owner: target.clone(), tree, tokens })
+}
+fn function(unit: &Unit) -> Result<&a::Function, String> {
+    if unit.tree.items.len() == 1usize {
+        if let a::Item::Function(index) = unit.tree.items[0usize] { return Ok(&unit.tree.functions[index]); }
+    }
+    Err(fail(&unit.owner.identity, "FUNCTION", "identity must contain one function"))
+}
+fn raw(unit: &Unit, span: a::Span) -> Result<String, String> {
+    if span.start > span.end || span.end > unit.owner.text.len() { return Err(fail(&unit.owner.identity, "SPAN", "syntax span escapes its item")); }
+    Ok(unit.owner.text[span.start..span.end].to_string())
+}
+fn absolute(unit: &Unit, span: a::Span) -> (usize, usize) { (unit.owner.start + span.start, unit.owner.start + span.end) }
+fn contains(start: usize, end: usize, begin: usize, finish: usize) -> bool { start <= begin && finish <= end }
+fn at_site(id: &str, rule: &str, site: &semantic::Reference, reason: &str) -> String {
+    fail(id, rule, &format!("{reason}; decision site {} {}:{}..{} ({})",
+        semantic::quote(&site.owner), semantic::quote(&site.file), site.start, site.end, site.kind))
+}
+fn expression(id: &str, value: &str) -> Result<(), String> {
+    let wrapped = format!("fn __lkjscript_expression() {{ {value} }}");
+    let tree = syntax::parse(&wrapped).map_err(|problem| fail(id, "EXPRESSION", &problem.message))?;
+    if tree.items.len() != 1usize { return Err(fail(id, "EXPRESSION", "expected exactly one expression")); }
+    let index = match tree.items[0usize] { a::Item::Function(index) => index, _ => return Err(fail(id, "EXPRESSION", "expected an expression")) };
+    let body = &tree.blocks[tree.functions[index].body.unwrap()];
+    if !body.statements.is_empty() || body.tail.is_none() { return Err(fail(id, "EXPRESSION", "expected one expression without an outer statement")); }
+    Ok(())
+}
+fn type_source(id: &str, value: &str) -> Result<(), String> {
+    let wrapped = format!("fn __lkjscript_type(__value: {value}) {{}}");
+    let tree = syntax::parse(&wrapped).map_err(|problem| fail(id, "TYPE", &problem.message))?;
+    if tree.items.len() != 1usize || tree.functions.len() != 1usize || tree.functions[0usize].params.len() != 1usize {
+        return Err(fail(id, "TYPE", "expected one type"));
+    }
+    let ty = tree.functions[0usize].params[0usize].ty;
+    let supplied = std::str::trim_ascii(value);
+    if std::str::trim_ascii(&wrapped[tree.types[ty].span.start..tree.types[ty].span.end]) != supplied {
+        return Err(fail(id, "TYPE", "type fragment contains declaration syntax"));
+    }
+    Ok(())
+}
+fn replace_range(unit: &Unit, start: usize, end: usize, patches: &[edit::Patch]) -> Result<String, String> {
+    let mut ordered: BTreeMap<(usize, usize), usize> = BTreeMap::new();
+    for (index, patch) in patches.iter().enumerate() {
+        if patch.file == unit.owner.file && contains(start, end, patch.start, patch.end) {
+            ordered.insert((patch.start, patch.end), index);
+        }
+    }
+    let mut out = String::new(); let mut at = start;
+    for (_, index) in ordered {
+        let patch = &patches[index];
+        if patch.start < at { return Err(fail(&unit.owner.identity, "OVERLAP", "nested refactor plans overlap")); }
+        out.push_str(&unit.owner.text[at - unit.owner.start..patch.start - unit.owner.start]);
+        out.push_str(&patch.replacement); at = patch.end;
+    }
+    out.push_str(&unit.owner.text[at - unit.owner.start..end - unit.owner.start]); Ok(out)
+}
+fn absorb(patches: &mut Vec<edit::Patch>, unit: &Unit, start: usize, end: usize, replacement: &str) {
+    let old = std::mem::replace(patches, Vec::new());
+    for patch in old {
+        if patch.file != unit.owner.file || !contains(start, end, patch.start, patch.end) { patches.push(patch); }
+    }
+    edit::patch(patches, &unit.owner.identity, &unit.owner.file, start, end, replacement);
+}
+fn fresh(unit: &Unit, operation: &edit::Operation, site: usize, extra: &str) -> Result<String, String> {
+    let added = syntax::semantic_tokens(extra).map_err(|problem| fail(&operation.identity, "EXPRESSION", &problem.message))?;
+    let digest = sha256::hex_digest(format!("{}:{site}", operation.data).as_bytes());
+    let mut number = 0usize;
+    loop {
+        let prefix = format!("__lkjscript_edit_{}_{}_", &digest[..16usize], number);
+        let mut collision = false;
+        for token in &unit.tokens { if token.kind == 0u8 && token.text.starts_with(&prefix) { collision = true; } }
+        for token in &added { if token.kind == 0u8 && token.text.starts_with(&prefix) { collision = true; } }
+        if !collision { return Ok(prefix); }
+        number += 1usize;
+    }
+}
+fn delimited(unit: &Unit, start: usize, end: usize, open: &str, close: &str) -> Result<(usize, usize), String> {
+    let mut last: Option<usize> = None; let mut depth = 0usize;
+    let mut index = unit.tokens.len();
+    while index != 0usize {
+        index -= 1usize; let token = &unit.tokens[index];
+        if token.span.start < start || token.span.end > end { continue; }
+        if token.text == close { if depth == 0usize { last = Some(token.span.start); } depth += 1usize; }
+        else if token.text == open && depth != 0usize {
+            depth -= 1usize;
+            if depth == 0usize { return Ok((token.span.end, last.unwrap())); }
+        }
+    }
+    Err(fail(&unit.owner.identity, "SYNTAX", "expected a delimited syntax node"))
+}
+fn parameter_range(unit: &Unit, function: &a::Function) -> Result<(usize, usize), String> {
+    let limit = function.body.map_or(function.span.end, |body| unit.tree.blocks[body].span.start);
+    let name_end = unit.owner.name_end - unit.owner.start;
+    let mut angle = 0usize;
+    for token in &unit.tokens {
+        if token.span.start < name_end || token.span.end > limit { continue; }
+        if token.text == "<" { angle += 1usize; }
+        else if token.text == ">" { if angle != 0usize { angle -= 1usize; } }
+        else if token.text == ">>" { angle = if angle >= 2usize { angle - 2usize } else { 0usize }; }
+        else if token.text == "(" && angle == 0usize {
+            let mut depth = 0usize;
+            for following in &unit.tokens {
+                if following.span.start < token.span.start || following.span.end > limit { continue; }
+                if following.text == "(" { depth += 1usize; }
+                else if following.text == ")" {
+                    depth -= 1usize;
+                    if depth == 0usize { return Ok((token.span.end, following.span.start)); }
+                }
+            }
+        }
+    }
+    Err(fail(&unit.owner.identity, "SIGNATURE", "parameter list is absent"))
+}
+fn unresolved(catalog: &semantic::Catalog, target: &semantic::Item) -> Result<(), String> {
+    let method = target.parent != "crate" && catalog.by_identity.get(&target.parent)
+        .is_some_and(|index| catalog.items[*index].kind != "module");
+    for site in &catalog.unresolved {
+        if site.kind == "lexical-name" { continue; }
+        if site.target != target.name && !site.target.is_empty() { continue; }
+        if !method && matches!(site.kind.as_str(), "typed-method" | "typed-field" | "typed-member") { continue; }
+        return Err(at_site(&target.identity, "REFERENCES", site, "incoming references are unresolved"));
+    }
+    Ok(())
+}
+#[derive(Clone)]
+struct Call { expression: usize, method: bool }
+fn call_for(unit: &Unit, site: &semantic::Reference) -> Option<Call> {
+    if site.file != unit.owner.file { return None; }
+    for (index, node) in unit.tree.exprs.iter().enumerate() {
+        match &node.kind {
+            a::Expr::Call { callee, .. } => {
+                let head = &unit.tree.exprs[*callee];
+                let (start, end) = absolute(unit, head.span);
+                if matches!(head.kind, a::Expr::Path(_)) && contains(start, end, site.start, site.end) {
+                    return Some(Call { expression: index, method: false });
+                }
+            }
+            a::Expr::Method { receiver, name, .. } => {
+                let receiver_end = unit.owner.start + unit.tree.exprs[*receiver].span.end;
+                let (_, end) = absolute(unit, node.span);
+                if receiver_end <= site.start && site.end <= end
+                    && site.end - site.start == name.len()
+                    && &unit.owner.text[site.start - unit.owner.start..site.end - unit.owner.start] == name.as_str() {
+                    let (open, _) = delimited(unit, node.span.start, node.span.end, "(", ")").ok()?;
+                    if site.end <= unit.owner.start + open { return Some(Call { expression: index, method: true }); }
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+fn callers(catalog: &semantic::Catalog, target: &semantic::Item) -> Result<BTreeMap<String, Vec<semantic::Reference>>, String> {
+    unresolved(catalog, target)?;
+    let mut result: BTreeMap<String, Vec<semantic::Reference>> = BTreeMap::new();
+    for site in &catalog.references {
+        if site.target != target.identity || site.kind == "import" { continue; }
+        let owner = edit::item(catalog, &site.owner)?;
+        if owner.kind != "function" && owner.kind != "constant" {
+            return Err(at_site(&target.identity, "CALL_REFERENCE", site, "reference is not a directly editable call"));
+        }
+        if !result.contains_key(&site.owner) { result.insert(site.owner.clone(), Vec::new()); }
+        result.get_mut(&site.owner).unwrap().push(site.clone());
+    }
+    Ok(result)
+}
+struct Parameter { old: Option<usize>, declaration: String, argument: String, name: String }
+fn signature(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)], operation: &edit::Operation,
+    request: &Value, patches: &mut Vec<edit::Patch>) -> Result<(), String> {
+    fields(request, &operation.identity, "parameters")?;
+    let target = edit::item(catalog, &operation.identity)?;
+    if target.kind != "function" { return Err(fail(&target.identity, "FUNCTION", "change-signature needs a function identity")); }
+    let unit = parse_unit(catalog, target, inputs)?; let old = function(&unit)?;
+    if old.body.is_none() { return Err(fail(&target.identity, "DISPATCH", "trait declarations require explicit coordinated implementation changes")); }
+    let mut parameters: Vec<Parameter> = Vec::new();
+    let mut seen: BTreeSet<String> = BTreeSet::new(); let mut names: BTreeSet<String> = BTreeSet::new();
+    let mut added = String::new();
+    for value in array(request, &target.identity, "parameters")? {
+        let parameter = if let Some(identity) = value.as_str() {
+            if !seen.insert(identity.to_string()) { return Err(fail(identity, "PARAMETER", "parameter appears twice")); }
+            let source = edit::item(catalog, identity)?;
+            if source.kind != "parameter" || source.parent != target.identity { return Err(fail(identity, "PARAMETER", "parameter belongs to another function")); }
+            let mut found: Option<usize> = None;
+            for (index, parameter) in old.params.iter().enumerate() { if parameter.name == source.name { found = Some(index); } }
+            let index = found.ok_or_else(|| fail(identity, "PARAMETER", "parameter is absent from parsed signature"))?;
+            Parameter { old: Some(index), declaration: raw(&unit, old.params[index].span)?, argument: String::new(), name: source.name.clone() }
+        } else {
+            functions::descriptor_fields(value, &target.identity, "name|type|argument")?;
+            let name = text(value, &target.identity, "name", true)?;
+            if !edit::identifier(&name) || name == "self" { return Err(fail(&target.identity, "NAME", "new parameter needs an ordinary identifier")); }
+            functions::annotations::parameter_name(catalog, &unit, &name)?;
+            let ty = text(value, &target.identity, "type", true)?; type_source(&target.identity, &ty)?;
+            let argument = text(value, &target.identity, "argument", true)?; expression(&target.identity, &argument)?;
+            added.push_str(&argument); added.push('\n');
+            Parameter { old: None, declaration: format!("{name}: {ty}"), argument, name }
+        };
+        if !names.insert(parameter.name.clone()) { return Err(fail(&target.identity, "PARAMETER", "parameter names must be distinct")); }
+        parameters.push(parameter);
+    }
+    let receiver = old.params.first().is_some_and(|parameter| parameter.name == "self");
+    if receiver && parameters.first().and_then(|parameter| parameter.old) != Some(0usize) {
+        return Err(fail(&target.identity, "RECEIVER", "self must remain the first existing parameter"));
+    }
+    let mut declaration = String::new();
+    for (index, parameter) in parameters.iter().enumerate() {
+        if index != 0usize { declaration.push_str(", "); } declaration.push_str(&parameter.declaration);
+    }
+    let (start, end) = parameter_range(&unit, old)?;
+    edit::patch(patches, &target.identity, &target.file, target.start + start, target.start + end, &declaration);
+    let owners = callers(catalog, target)?;
+    for (owner, sites) in owners {
+        let caller = parse_unit(catalog, edit::item(catalog, &owner)?, inputs)?;
+        let mut calls: BTreeMap<(usize, usize), Call> = BTreeMap::new();
+        for site in &sites {
+            let call = call_for(&caller, site).ok_or_else(|| at_site(&target.identity, "CALL_REFERENCE", site, "function values and indirect dispatch need a decision"))?;
+            let span = caller.tree.exprs[call.expression].span;
+            calls.insert((span.end - span.start, span.start), call);
+        }
+        let mut local: Vec<edit::Patch> = Vec::new();
+        for (_, call) in calls {
+            let node = &caller.tree.exprs[call.expression];
+            let (begin, finish) = absolute(&caller, node.span);
+            let prefix = fresh(&caller, operation, begin, &added)?;
+            let mut out = "{ ".to_string();
+            let mut arguments: Vec<usize> = Vec::new(); let mut head = String::new();
+            let offset = if call.method { 1usize } else { 0usize };
+            match &node.kind {
+                a::Expr::Call { callee, args } => { head = raw(&caller, caller.tree.exprs[*callee].span)?; arguments = args.clone(); }
+                a::Expr::Method { receiver: value, args, .. } => {
+                    if !receiver { return Err(fail(&target.identity, "RECEIVER", "method dispatch does not match a self parameter")); }
+                    let span = caller.tree.exprs[*value].span; let (from, to) = absolute(&caller, span);
+                    let value = replace_range(&caller, from, to, &local)?;
+                    let borrow = match &unit.tree.types[old.params[0usize].ty].kind {
+                        a::Type::Ref { mutable, .. } => if *mutable { "&mut " } else { "&" },
+                        _ => "",
+                    };
+                    let receiver_type = functions::annotations::expression_type(catalog, &caller, span)?;
+                    out.push_str(&format!("let mut {prefix}0: {borrow}{receiver_type} = {borrow}({value}); "));
+                    let (open, _) = delimited(&caller, node.span.start, node.span.end, "(", ")")?;
+                    head = format!("{prefix}0{}", &caller.owner.text[span.end..open - 1usize]); arguments = args.clone();
+                }
+                _ => return Err(fail(&target.identity, "CALL", "resolved call changed shape")),
+            }
+            if arguments.len() + offset != old.params.len() { return Err(fail(&owner, "CALL_ARITY", "call arity differs from the selected signature")); }
+            for (index, argument) in arguments.iter().enumerate() {
+                let span = caller.tree.exprs[*argument].span; let (from, to) = absolute(&caller, span);
+                let ty = functions::annotations::expression_type(catalog, &caller, span)?;
+                out.push_str(&format!("let {prefix}{}: {ty} = {}; ", index + offset, replace_range(&caller, from, to, &local)?));
+            }
+            out.push_str(&head); out.push('('); let mut supplied = 0usize;
+            for (index, parameter) in parameters.iter().enumerate() {
+                if call.method && parameter.old == Some(0usize) { continue; }
+                if supplied != 0usize { out.push_str(", "); } supplied += 1usize;
+                match parameter.old {
+                    Some(old) => out.push_str(&format!("{prefix}{old}")),
+                    None => out.push_str(&format!("({})", parameter.argument)),
+                }
+            }
+            out.push_str(") }");
+            let value = functions::annotations::value(catalog, &caller, operation, node.span, &out)?;
+            absorb(&mut local, &caller, begin, finish, &value);
+        }
+        for patch in local { patches.push(patch); }
+    }
+    Ok(())
+}
+
+fn new_member(unit: &Unit, start: usize, end: usize, source: &str) -> Result<(usize, String), String> {
+    let (_, close) = delimited(unit, start, end, "{", "}")?;
+    let mut previous = "{".to_string();
+    for token in &unit.tokens {
+        if start <= token.span.start && token.span.end <= close { previous = token.text.clone(); }
+    }
+    Ok((close, format!("{}\n{source}\n", if previous == "{" || previous == "," { "" } else { "," })))
+}
+fn erase_member(unit: &Unit, span: a::Span, limit: usize) -> (usize, usize) {
+    let mut end = span.end;
+    for token in &unit.tokens {
+        if token.span.start < end { continue; }
+        if token.span.end <= limit && token.text == "," { end = token.span.end; }
+        break;
+    }
+    (unit.owner.start + span.start, unit.owner.start + end)
+}
+fn path_site(unit: &Unit, span: a::Span, site: &semantic::Reference, delimiter: &str) -> bool {
+    let end = if delimiter.is_empty() { span.end } else {
+        match delimited(unit, span.start, span.end, delimiter, if delimiter == "{" { "}" } else { ")" }) {
+            Ok((open, _)) => open - 1usize,
+            Err(_) => return false,
+        }
+    };
+    contains(unit.owner.start + span.start, unit.owner.start + end, site.start, site.end)
+}
+fn owners_for(catalog: &semantic::Catalog, targets: &BTreeSet<String>) -> BTreeMap<String, Vec<semantic::Reference>> {
+    let mut owners: BTreeMap<String, Vec<semantic::Reference>> = BTreeMap::new();
+    for site in &catalog.references {
+        if !targets.contains(&site.target) || site.kind == "import" { continue; }
+        if let Some(index) = catalog.by_identity.get(&site.owner) {
+            if !matches!(catalog.items[*index].kind.as_str(), "function" | "constant") { continue; }
+            if !owners.contains_key(&site.owner) { owners.insert(site.owner.clone(), Vec::new()); }
+            owners.get_mut(&site.owner).unwrap().push(site.clone());
+        }
+    }
+    owners
+}
+fn partial_members(catalog: &semantic::Catalog, target: &semantic::Item) -> Result<(), String> {
+    for site in &catalog.unresolved {
+        if site.target == target.identity || site.target == target.name {
+            return Err(at_site(&target.identity, "MEMBER_EVIDENCE", site, "member/constructor evidence is incomplete"));
+        }
+    }
+    Ok(())
+}
+fn label(unit: &Unit, outer: a::Span, value: a::Span, name: &str) -> Option<(usize, usize)> {
+    let mut at = 0usize;
+    while at < unit.tokens.len() && unit.tokens[at].span.start < value.start { at += 1usize; }
+    if at >= 2usize && unit.tokens[at - 1usize].text == ":" && unit.tokens[at - 2usize].text == name
+        && unit.tokens[at - 2usize].span.start >= outer.start {
+        return Some((unit.tokens[at - 2usize].span.start, value.end));
+    }
+    while at < unit.tokens.len() && unit.tokens[at].span.end <= value.end {
+        let token = &unit.tokens[at];
+        if token.text == name { return Some((value.start, value.end)); }
+        if token.text != "ref" && token.text != "mut" { return None; }
+        at += 1usize;
+    }
+    None
+}
+fn member_site(unit: &Unit, outer: a::Span, value: a::Span, name: &str, site: &semantic::Reference) -> bool {
+    let mut at = 0usize;
+    while at < unit.tokens.len() && unit.tokens[at].span.start < value.start { at += 1usize; }
+    if at >= 2usize && unit.tokens[at - 1usize].text == ":" && unit.tokens[at - 2usize].text == name
+        && unit.tokens[at - 2usize].span.start >= outer.start {
+        let token = &unit.tokens[at - 2usize];
+        return site.start == unit.owner.start + token.span.start && site.end == unit.owner.start + token.span.end;
+    }
+    while at < unit.tokens.len() && unit.tokens[at].span.end <= value.end {
+        let token = &unit.tokens[at];
+        if token.text == name { return site.start == unit.owner.start + token.span.start && site.end == unit.owner.start + token.span.end; }
+        if token.text != "ref" && token.text != "mut" { return false; }
+        at += 1usize;
+    }
+    false
+}
+fn declaration_container(catalog: &semantic::Catalog, target: &semantic::Item,
+    inputs: &[(String, Vec<u8>)]) -> Result<(Unit, a::Span, Vec<a::Field>), String> {
+    if target.kind == "struct" {
+        let unit = parse_unit(catalog, target, inputs)?;
+        let index = match unit.tree.items.first() { Some(a::Item::Struct(index)) => *index,
+            _ => return Err(fail(&target.identity, "FIELD", "expected a struct declaration")) };
+        let value = &unit.tree.structs[index];
+        if value.tuple || value.unit { return Err(fail(&target.identity, "FIELD_STYLE", "this operation needs named fields; tuple/unit forms need a constructor decision")); }
+        let span = value.span; let fields = value.fields.clone(); Ok((unit, span, fields))
+    } else if target.kind == "variant" {
+        let unit = parse_unit(catalog, edit::item(catalog, &target.parent)?, inputs)?;
+        let index = match unit.tree.items.first() { Some(a::Item::Enum(index)) => *index,
+            _ => return Err(fail(&target.identity, "FIELD", "expected an enum declaration")) };
+        let mut selected: Option<a::Variant> = None;
+        for variant in &unit.tree.enums[index].variants {
+            if variant.name == target.name { selected = Some(variant.clone()); }
+        }
+        let variant = selected.ok_or_else(|| fail(&target.identity, "VARIANT", "variant is absent from parsed enum"))?;
+        if variant.style != a::VariantStyle::Named { return Err(fail(&target.identity, "FIELD_STYLE", "this operation needs a named variant")); }
+        Ok((unit, variant.span, variant.fields))
+    } else { Err(fail(&target.identity, "FIELD", "expected a struct or named-variant identity")) }
+}
+fn field_fragment(id: &str, source: &str) -> Result<String, String> {
+    let wrapped = format!("struct __lkjscript_field {{ {source} }}");
+    let tree = syntax::parse(&wrapped).map_err(|problem| fail(id, "FIELD", &problem.message))?;
+    if tree.items.len() != 1usize || tree.structs.len() != 1usize || tree.structs[0usize].fields.len() != 1usize {
+        return Err(fail(id, "FIELD", "source must contain exactly one named field"));
+    }
+    Ok(tree.structs[0usize].fields[0usize].name.clone())
+}
+fn add_field(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)], operation: &edit::Operation,
+    request: &Value, patches: &mut Vec<edit::Patch>) -> Result<(), String> {
+    fields(request, &operation.identity, "source|value")?;
+    let target = edit::item(catalog, &operation.identity)?;
+    partial_members(catalog, target)?;
+    let source = text(request, &target.identity, "source", true)?;
+    let value = text(request, &target.identity, "value", true)?; expression(&target.identity, &value)?;
+    let name = field_fragment(&target.identity, &source)?;
+    let (definition, span, existing) = declaration_container(catalog, target, inputs)?;
+    for field in &existing { if field.name == name { return Err(fail(&target.identity, "FIELD", "field already exists")); } }
+    let (at, addition) = new_member(&definition, span.start, span.end, &source)?;
+    edit::patch(patches, &target.identity, &definition.owner.file, definition.owner.start + at, definition.owner.start + at, &addition);
+    let mut targets = BTreeSet::new(); targets.insert(target.identity.clone());
+    for (owner, sites) in owners_for(catalog, &targets) {
+        let unit = parse_unit(catalog, edit::item(catalog, &owner)?, inputs)?;
+        let mut handled: BTreeSet<(usize, usize)> = BTreeSet::new();
+        let mut constructors: BTreeMap<(usize, usize), a::Span> = BTreeMap::new();
+        for site in &sites {
+            if matches!(site.kind.as_str(), "type" | "alias-type") { continue; }
+            let mut found = false;
+            for node in &unit.tree.exprs {
+                if let a::Expr::Struct { base, .. } = &node.kind {
+                    if path_site(&unit, node.span, site, "{") {
+                        found = true;
+                        constructors.insert((node.span.end - node.span.start, node.span.start), node.span);
+                        if base.is_none() && handled.insert((node.span.start, node.span.end)) {
+                            let (at, addition) = new_member(&unit, node.span.start, node.span.end, &format!("{name}: {value}"))?;
+                            edit::patch(patches, &owner, &unit.owner.file, unit.owner.start + at, unit.owner.start + at, &addition);
+                        }
+                    }
+                }
+            }
+            for node in &unit.tree.patterns {
+                if let a::Pattern::Struct { rest, .. } = &node.kind {
+                    if path_site(&unit, node.span, site, "{") {
+                        found = true;
+                        if !*rest && handled.insert((node.span.start, node.span.end)) {
+                            let (at, addition) = new_member(&unit, node.span.start, node.span.end, &format!("{name}: _"))?;
+                            edit::patch(patches, &owner, &unit.owner.file, unit.owner.start + at, unit.owner.start + at, &addition);
+                        }
+                    }
+                }
+            }
+            if !found { return Err(at_site(&target.identity, "CONSTRUCTOR", site, "non-record constructor or pattern needs a field decision")); }
+        }
+        for (_, span) in constructors {
+            let (start, end) = absolute(&unit, span);
+            let original = replace_range(&unit, start, end, patches)?;
+            let retained = functions::annotations::value(catalog, &unit, operation, span, &original)?;
+            absorb(patches, &unit, start, end, &retained);
+        }
+    }
+    Ok(())
+}
+fn pattern_binding_used(catalog: &semantic::Catalog, unit: &Unit, span: a::Span) -> Result<(), String> {
+    let (start, end) = absolute(unit, span);
+    for binding in &catalog.items {
+        if binding.kind != "binding" || binding.file != unit.owner.file || !contains(start, end, binding.start, binding.end) { continue; }
+        for site in &catalog.unresolved {
+            if site.owner == unit.owner.identity && site.file == unit.owner.file
+                && (site.target.is_empty() || site.target == binding.name) {
+                return Err(at_site(&binding.identity, "REMOVED_BINDING", site, "unresolved uses prevent proving this pattern binding unused"));
+            }
+        }
+        for site in &catalog.references {
+            if site.target == binding.identity { return Err(at_site(&binding.identity, "REMOVED_BINDING", site, "removed pattern field supplies a used binding")); }
+        }
+    }
+    Ok(())
+}
+fn remove_field(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)], operation: &edit::Operation,
+    request: &Value, patches: &mut Vec<edit::Patch>) -> Result<(), String> {
+    fields(request, &operation.identity, "replacement")?;
+    let target = edit::item(catalog, &operation.identity)?;
+    if target.kind != "field" { return Err(fail(&target.identity, "FIELD", "remove-field needs a field identity")); }
+    partial_members(catalog, target)?;
+    let parent = edit::item(catalog, &target.parent)?;
+    let (definition, container, existing) = declaration_container(catalog, parent, inputs)?;
+    let mut selected: Option<a::Span> = None;
+    for field in &existing { if field.name == target.name { selected = Some(field.span); } }
+    let span = selected.ok_or_else(|| fail(&target.identity, "FIELD", "field is absent from parsed declaration"))?;
+    let (start, end) = erase_member(&definition, span, container.end);
+    edit::patch(patches, &target.identity, &definition.owner.file, start, end, "");
+    let replacement = text(request, &target.identity, "replacement", false)?;
+    if !replacement.is_empty() { expression(&target.identity, &replacement)?; }
+    let mut targets = BTreeSet::new(); targets.insert(target.identity.clone());
+    for (owner, sites) in owners_for(catalog, &targets) {
+        let unit = parse_unit(catalog, edit::item(catalog, &owner)?, inputs)?;
+        let mut changes: BTreeMap<(usize, usize), (usize, usize)> = BTreeMap::new();
+        let mut local: Vec<edit::Patch> = Vec::new();
+        for site in &sites {
+            let mut found = false;
+            for (index, node) in unit.tree.exprs.iter().enumerate() {
+                if let a::Expr::Struct { fields, .. } = &node.kind {
+                    for (field, value) in fields {
+                        if field != &target.name { continue; }
+                        if let Some((begin, end)) = label(&unit, node.span, unit.tree.exprs[*value].span, field) {
+                            if member_site(&unit, node.span, unit.tree.exprs[*value].span, field, site) {
+                                changes.insert((node.span.end - node.span.start, node.span.start), (0usize, index)); found = true;
+                            }
+                        }
+                    }
+                } else if let a::Expr::Field { value, name } = &node.kind {
+                    if name == &target.name && unit.owner.start + unit.tree.exprs[*value].span.end <= site.start
+                        && site.end == unit.owner.start + node.span.end {
+                        if replacement.is_empty() { return Err(at_site(&target.identity, "FIELD_VALUE", site, "field access needs a replacement expression")); }
+                        for outer in &unit.tree.exprs {
+                            if let a::Expr::Assign { place, .. } = outer.kind {
+                                let selected = unit.tree.exprs[place].span;
+                                if contains(selected.start, selected.end, node.span.start, node.span.end) {
+                                    return Err(at_site(&target.identity, "FIELD_WRITE", site, "field assignment needs an explicit body decision"));
+                                }
+                            }
+                        }
+                        changes.insert((node.span.end - node.span.start, node.span.start), (1usize, index)); found = true;
+                    }
+                }
+            }
+            for node in &unit.tree.patterns {
+                if let a::Pattern::Struct { fields, .. } = &node.kind {
+                    for (field, value) in fields {
+                        if field != &target.name { continue; }
+                        if let Some((begin, end)) = label(&unit, node.span, unit.tree.patterns[*value].span, field) {
+                            if member_site(&unit, node.span, unit.tree.patterns[*value].span, field, site) {
+                                pattern_binding_used(catalog, &unit, unit.tree.patterns[*value].span)?;
+                                let span = a::Span { start: begin, end, ..node.span };
+                                let (from, to) = erase_member(&unit, span, node.span.end);
+                                edit::patch(&mut local, &owner, &unit.owner.file, from, to, ""); found = true;
+                            }
+                        }
+                    }
+                }
+            }
+            if !found { return Err(at_site(&target.identity, "FIELD_SITE", site, "field reference needs an explicit rewrite")); }
+        }
+        for (_, (kind, index)) in changes {
+            let node = &unit.tree.exprs[index]; let (start, end) = absolute(&unit, node.span);
+            let prefix = fresh(&unit, operation, start, &replacement)?;
+            let mut out = "{ ".to_string();
+            if kind == 0usize {
+                if let a::Expr::Struct { fields, base, .. } = &node.kind {
+                    for (index, (_, value)) in fields.iter().enumerate() {
+                        let (from, to) = absolute(&unit, unit.tree.exprs[*value].span);
+                        let ty = functions::annotations::expression_type(catalog, &unit, unit.tree.exprs[*value].span)?;
+                        out.push_str(&format!("let {prefix}{index}: {ty} = {}; ", replace_range(&unit, from, to, &local)?));
+                    }
+                    if let Some(value) = base {
+                        let (from, to) = absolute(&unit, unit.tree.exprs[*value].span);
+                        let ty = functions::annotations::expression_type(catalog, &unit, unit.tree.exprs[*value].span)?;
+                        out.push_str(&format!("let {prefix}base: {ty} = {}; ", replace_range(&unit, from, to, &local)?));
+                    }
+                    let (open, _) = delimited(&unit, node.span.start, node.span.end, "{", "}")?;
+                    out.push_str(&unit.owner.text[node.span.start..open]); let mut supplied = 0usize;
+                    for (index, (name, _)) in fields.iter().enumerate() {
+                        if name == &target.name { continue; }
+                        if supplied != 0usize { out.push_str(", "); } supplied += 1usize;
+                        out.push_str(&format!("{name}: {prefix}{index}"));
+                    }
+                    if base.is_some() { if supplied != 0usize { out.push_str(", "); } out.push_str(&format!("..{prefix}base")); }
+                    out.push('}');
+                }
+            } else if let a::Expr::Field { value, .. } = node.kind {
+                let (from, to) = absolute(&unit, unit.tree.exprs[value].span);
+                let ty = functions::annotations::expression_type(catalog, &unit, unit.tree.exprs[value].span)?;
+                out.push_str(&format!("let {prefix}base: &{ty} = &({}); {replacement}", replace_range(&unit, from, to, &local)?));
+            }
+            out.push_str(" }");
+            let value = functions::annotations::value(catalog, &unit, operation, node.span, &out)?;
+            absorb(&mut local, &unit, start, end, &value);
+        }
+        for patch in local { patches.push(patch); }
+    }
+    Ok(())
+}
+
+fn pattern_target(catalog: &semantic::Catalog, unit: &Unit, index: usize, wanted: &str) -> bool {
+    let node = &unit.tree.patterns[index];
+    let delimiter = match node.kind { a::Pattern::Path(_) => "", a::Pattern::Variant { .. } => "(",
+        a::Pattern::Struct { .. } => "{", _ => return false };
+    for site in &catalog.references {
+        if site.owner == unit.owner.identity && site.target == wanted && path_site(unit, node.span, site, delimiter) { return true; }
+    }
+    false
+}
+fn pattern_children(program: &a::Program, index: usize) -> Vec<usize> {
+    match &program.patterns[index].kind {
+        a::Pattern::Tuple(values) | a::Pattern::Or(values) | a::Pattern::Variant { fields: values, .. } => values.clone(),
+        a::Pattern::Struct { fields, .. } => { let mut result = Vec::new(); for (_, child) in fields { result.push(*child); } result }
+        a::Pattern::Ref { inner, .. } => vec![*inner],
+        _ => Vec::new(),
+    }
+}
+fn pattern_has(catalog: &semantic::Catalog, unit: &Unit, index: usize, targets: &BTreeSet<String>) -> bool {
+    let mut work = vec![index];
+    while let Some(index) = work.pop() {
+        for target in targets { if pattern_target(catalog, unit, index, target) { return true; } }
+        for child in pattern_children(&unit.tree, index) { work.push(child); }
+    }
+    false
+}
+fn pattern_direct(catalog: &semantic::Catalog, unit: &Unit, index: usize, targets: &BTreeSet<String>) -> bool {
+    for target in targets { if pattern_target(catalog, unit, index, target) { return true; } }
+    match &unit.tree.patterns[index].kind {
+        a::Pattern::Or(values) => values.iter().any(|value| pattern_direct(catalog, unit, *value, targets)),
+        a::Pattern::Ref { inner, .. } => pattern_direct(catalog, unit, *inner, targets),
+        _ => false,
+    }
+}
+fn catch_all(program: &a::Program, index: usize) -> bool {
+    match &program.patterns[index].kind {
+        a::Pattern::Wild | a::Pattern::Bind { .. } => true,
+        a::Pattern::Or(values) => values.iter().any(|value| catch_all(program, *value)),
+        _ => false,
+    }
+}
+fn variant_fragment(id: &str, source: &str) -> Result<String, String> {
+    let wrapped = format!("enum __lkjscript_variant {{ {source} }}");
+    let tree = syntax::parse(&wrapped).map_err(|problem| fail(id, "VARIANT", &problem.message))?;
+    if tree.items.len() != 1usize || tree.enums.len() != 1usize || tree.enums[0usize].variants.len() != 1usize {
+        return Err(fail(id, "VARIANT", "source must contain exactly one variant"));
+    }
+    Ok(tree.enums[0usize].variants[0usize].name.clone())
+}
+fn arm_fragment(id: &str, source: &str, name: &str) -> Result<String, String> {
+    let wrapped = format!("fn __lkjscript_arm() {{ match () {{ {source} }} }}");
+    let tree = syntax::parse(&wrapped).map_err(|problem| fail(id, "MATCH_ARM", &problem.message))?;
+    if tree.items.len() != 1usize || tree.functions.len() != 1usize { return Err(fail(id, "MATCH_ARM", "expected one match arm")); }
+    let body = &tree.blocks[tree.functions[0usize].body.unwrap()];
+    if !body.statements.is_empty() { return Err(fail(id, "MATCH_ARM", "expected one match arm")); }
+    let expression = body.tail.ok_or_else(|| fail(id, "MATCH_ARM", "expected one match arm"))?;
+    let arms = match &tree.exprs[expression].kind { a::Expr::Match { arms, .. } => arms,
+        _ => return Err(fail(id, "MATCH_ARM", "expected one match arm")) };
+    if arms.len() != 1usize || arms[0usize].guard.is_some() { return Err(fail(id, "MATCH_ARM", "new variant needs one unguarded arm")); }
+    let path = match &tree.patterns[arms[0usize].pattern].kind {
+        a::Pattern::Path(path) | a::Pattern::Variant { path, .. } | a::Pattern::Struct { path, .. } => path,
+        _ => return Err(fail(id, "MATCH_ARM", "arm must name the added variant directly")),
+    };
+    let leaf = match path.name.rfind("::") { Some(at) => &path.name[at + 2usize..], None => path.name.as_str() };
+    if leaf != name { return Err(fail(id, "MATCH_ARM", "arm must name the added variant")); }
+    let span = arms[0usize].span; Ok(wrapped[span.start..span.end].to_string())
+}
+fn add_variant(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)], operation: &edit::Operation,
+    request: &Value, patches: &mut Vec<edit::Patch>) -> Result<(), String> {
+    fields(request, &operation.identity, "source|arm")?;
+    let target = edit::item(catalog, &operation.identity)?;
+    if target.kind != "enum" { return Err(fail(&target.identity, "ENUM", "add-variant needs an enum identity")); }
+    partial_members(catalog, target)?;
+    let source = text(request, &target.identity, "source", true)?;
+    let name = variant_fragment(&target.identity, &source)?;
+    let arm = arm_fragment(&target.identity, &text(request, &target.identity, "arm", true)?, &name)?;
+    let definition = parse_unit(catalog, target, inputs)?;
+    let index = match definition.tree.items[0usize] { a::Item::Enum(index) => index,
+        _ => return Err(fail(&target.identity, "ENUM", "expected an enum declaration")) };
+    let value = &definition.tree.enums[index];
+    for variant in &value.variants { if variant.name == name { return Err(fail(&target.identity, "VARIANT", "variant already exists")); } }
+    let (at, addition) = new_member(&definition, value.span.start, value.span.end, &source)?;
+    edit::patch(patches, &target.identity, &target.file, target.start + at, target.start + at, &addition);
+    let mut targets = BTreeSet::new();
+    for item in &catalog.items { if item.kind == "variant" && item.parent == target.identity { targets.insert(item.identity.clone()); } }
+    for (owner, _) in variant_owners(catalog, target, &targets)? {
+        let unit = parse_unit(catalog, edit::item(catalog, &owner)?, inputs)?;
+        for node in &unit.tree.exprs {
+            if let a::Expr::Match { value, arms } = &node.kind {
+                let (start, end) = absolute(&unit, unit.tree.exprs[*value].span);
+                let inferred = catalog.expression_types.get(&(unit.owner.file.clone(), start, end)).and_then(|value| value.as_ref());
+                let mut direct = match inferred {
+                    Some(name) => nominal_head(catalog, name.as_str())?.is_some_and(|head| head == target.identity),
+                    None => false,
+                };
+                let mut nested = false;
+                for old in arms {
+                    if pattern_direct(catalog, &unit, old.pattern, &targets) { direct = true; }
+                    else if pattern_has(catalog, &unit, old.pattern, &targets) { nested = true; }
+                }
+                if !direct {
+                    if nested { return Err(fail(&owner, "NESTED_MATCH", &format!("added variant needs a nested-pattern rule at {}:{}", semantic::quote(&unit.owner.file), unit.owner.start + node.span.start))); }
+                    continue;
+                }
+                functions::annotations::match_source(&unit, node.span)?;
+                let scrutinee = unit.tree.exprs[*value].span;
+                let (from, to) = absolute(&unit, scrutinee);
+                let original = replace_range(&unit, from, to, patches)?;
+                let retained = functions::annotations::value(catalog, &unit, operation, scrutinee, &original)?;
+                absorb(patches, &unit, from, to, &retained);
+                let mut before: Option<usize> = None;
+                for old in arms {
+                    if old.guard.is_none() && catch_all(&unit.tree, old.pattern) { before = Some(old.span.start); break; }
+                }
+                match before {
+                    Some(at) => edit::patch(patches, &owner, &unit.owner.file, unit.owner.start + at, unit.owner.start + at, &format!("{arm},\n")),
+                    None => {
+                        let (at, addition) = new_member(&unit, node.span.start, node.span.end, &arm)?;
+                        edit::patch(patches, &owner, &unit.owner.file, unit.owner.start + at, unit.owner.start + at, &addition);
+                    }
+                }
+                let (start, end) = absolute(&unit, node.span);
+                let value = replace_range(&unit, start, end, patches)?;
+                let value = functions::annotations::value(catalog, &unit, operation, node.span, &value)?;
+                absorb(patches, &unit, start, end, &value);
+            }
+        }
+    }
+    Ok(())
+}
+fn prune_pattern(catalog: &semantic::Catalog, unit: &Unit, index: usize, target: &str) -> Result<Option<String>, String> {
+    if pattern_target(catalog, unit, index, target) { return Ok(None); }
+    let node = &unit.tree.patterns[index];
+    if let a::Pattern::Or(children) = &node.kind {
+        let mut out = String::new();
+        for child in children {
+            if let Some(text) = prune_pattern(catalog, unit, *child, target)? {
+                if !out.is_empty() { out.push_str(" | "); } out.push_str(&text);
+            }
+        }
+        return Ok(if out.is_empty() { None } else { Some(out) });
+    }
+    let mut patches = Vec::new();
+    for child in pattern_children(&unit.tree, index) {
+        let Some(text) = prune_pattern(catalog, unit, child, target)? else { return Ok(None); };
+        let span = unit.tree.patterns[child].span;
+        edit::patch(&mut patches, &unit.owner.identity, &unit.owner.file, unit.owner.start + span.start, unit.owner.start + span.end, &text);
+    }
+    let (start, end) = absolute(unit, node.span);
+    Ok(Some(replace_range(unit, start, end, &patches)?))
+}
+fn remove_variant(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)], operation: &edit::Operation,
+    request: &Value, patches: &mut Vec<edit::Patch>) -> Result<(), String> {
+    fields(request, &operation.identity, "replacement")?;
+    let target = edit::item(catalog, &operation.identity)?;
+    if target.kind != "variant" { return Err(fail(&target.identity, "VARIANT", "remove-variant needs a variant identity")); }
+    partial_members(catalog, target)?;
+    let definition = parse_unit(catalog, edit::item(catalog, &target.parent)?, inputs)?;
+    let index = match definition.tree.items[0usize] { a::Item::Enum(index) => index, _ => return Err(fail(&target.identity, "ENUM", "expected an enum")) };
+    let mut selected: Option<a::Span> = None;
+    for variant in &definition.tree.enums[index].variants { if variant.name == target.name { selected = Some(variant.span); } }
+    let span = selected.ok_or_else(|| fail(&target.identity, "VARIANT", "variant is absent from enum"))?;
+    let (start, end) = erase_member(&definition, span, definition.tree.enums[index].span.end);
+    edit::patch(patches, &target.identity, &definition.owner.file, start, end, "");
+    let replacement = text(request, &target.identity, "replacement", false)?;
+    if !replacement.is_empty() { expression(&target.identity, &replacement)?; }
+    for site in &catalog.references {
+        if site.target == target.identity && site.kind == "import" { return Err(at_site(&target.identity, "IMPORT", site, "remove the variant import explicitly")); }
+    }
+    let mut targets = BTreeSet::new(); targets.insert(target.identity.clone());
+    for (owner, sites) in owners_for(catalog, &targets) {
+        let unit = parse_unit(catalog, edit::item(catalog, &owner)?, inputs)?;
+        let mut local = Vec::new(); let mut covered: Vec<(usize, usize)> = Vec::new();
+        let mut matches: BTreeMap<(usize, usize), usize> = BTreeMap::new();
+        for (expression, node) in unit.tree.exprs.iter().enumerate() {
+            if let a::Expr::Match { arms, .. } = &node.kind {
+                for arm in arms {
+                    if !pattern_has(catalog, &unit, arm.pattern, &targets) { continue; }
+                    functions::annotations::match_source(&unit, node.span)?;
+                    matches.insert((node.span.end - node.span.start, node.span.start), expression);
+                    let pattern = unit.tree.patterns[arm.pattern].span;
+                    let (start, end) = absolute(&unit, pattern); covered.push((start, end));
+                    match prune_pattern(catalog, &unit, arm.pattern, &target.identity)? {
+                        Some(text) => edit::patch(&mut local, &owner, &unit.owner.file, start, end, &text),
+                        None => {
+                            let (start, end) = erase_member(&unit, arm.span, node.span.end);
+                            absorb(&mut local, &unit, start, end, "");
+                            covered.push((start, end));
+                        }
+                    }
+                }
+            }
+        }
+        let mut constructors: BTreeMap<(usize, usize), usize> = BTreeMap::new();
+        for site in &sites {
+            let mut found = false;
+            for (start, end) in &covered { if contains(*start, *end, site.start, site.end) { found = true; } }
+            if found { continue; }
+            for (index, node) in unit.tree.exprs.iter().enumerate() {
+                let matches = match &node.kind {
+                    a::Expr::Path(_) => path_site(&unit, node.span, site, ""),
+                    a::Expr::Struct { .. } => path_site(&unit, node.span, site, "{"),
+                    a::Expr::Call { callee, .. } => path_site(&unit, unit.tree.exprs[*callee].span, site, ""),
+                    _ => false,
+                };
+                if matches {
+                    constructors.insert((node.span.end - node.span.start, node.span.start), index); found = true;
+                }
+            }
+            if !found { return Err(at_site(&target.identity, "VARIANT_SITE", site, "non-match pattern or indirect constructor needs a decision")); }
+        }
+        let mut changes: BTreeMap<(usize, usize), (bool, usize)> = BTreeMap::new();
+        for (key, index) in constructors { changes.insert(key, (false, index)); }
+        for (key, index) in matches { changes.insert(key, (true, index)); }
+        for (_, (is_match, index)) in changes {
+            let node = &unit.tree.exprs[index]; let (start, end) = absolute(&unit, node.span);
+            let mut deleted = false;
+            for patch in &local {
+                if patch.file == unit.owner.file && patch.replacement.is_empty() && contains(patch.start, patch.end, start, end) { deleted = true; }
+            }
+            if deleted { continue; }
+            if is_match {
+                let a::Expr::Match { value, .. } = node.kind else { return Err(fail(&owner, "MATCH_SOURCE", "selected match changed shape")); };
+                let scrutinee = unit.tree.exprs[value].span;
+                let (from, to) = absolute(&unit, scrutinee);
+                let original = replace_range(&unit, from, to, &local)?;
+                let retained = functions::annotations::value(catalog, &unit, operation, scrutinee, &original)?;
+                absorb(&mut local, &unit, from, to, &retained);
+                let value = replace_range(&unit, start, end, &local)?;
+                let value = functions::annotations::value(catalog, &unit, operation, node.span, &value)?;
+                absorb(&mut local, &unit, start, end, &value); continue;
+            }
+            let mut nested_head = false;
+            for other in &unit.tree.exprs {
+                if let a::Expr::Call { callee, .. } = other.kind {
+                    if unit.tree.exprs[callee].span.start == node.span.start && unit.tree.exprs[callee].span.end == node.span.end { nested_head = true; }
+                }
+            }
+            if nested_head { continue; }
+            if replacement.is_empty() { return Err(fail(&target.identity, "VARIANT_VALUE", &format!("constructor needs a replacement at {}:{start}", semantic::quote(&unit.owner.file)))); }
+            let prefix = fresh(&unit, operation, start, &replacement)?;
+            let mut out = "{ ".to_string(); let mut values = Vec::new();
+            match &node.kind {
+                a::Expr::Call { args, .. } => values = args.clone(),
+                a::Expr::Struct { fields, base, .. } => {
+                    for (_, value) in fields { values.push(*value); } if let Some(value) = base { values.push(*value); }
+                }
+                _ => {}
+            }
+            for (index, value) in values.iter().enumerate() {
+                let (from, to) = absolute(&unit, unit.tree.exprs[*value].span);
+                let ty = functions::annotations::expression_type(catalog, &unit, unit.tree.exprs[*value].span)?;
+                out.push_str(&format!("let {prefix}{index}: {ty} = {}; ", replace_range(&unit, from, to, &local)?));
+            }
+            out.push_str(&replacement); out.push_str(" }");
+            let value = functions::annotations::value(catalog, &unit, operation, node.span, &out)?;
+            absorb(&mut local, &unit, start, end, &value);
+        }
+        for patch in local { patches.push(patch); }
+    }
+    Ok(())
+}
+
+pub fn plan(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)], operation: &edit::Operation,
+    patches: &mut Vec<edit::Patch>) -> Result<bool, String> {
+    if !matches!(operation.kind.as_str(), "change-signature" | "add-field" | "remove-field" | "add-variant" | "remove-variant" | "extract-function" | "inline-function") { return Ok(false); }
+    if !catalog.references_recorded {
+        return Err(fail(&operation.identity, "REFERENCES", "this operation requires a full resolved typed catalog"));
+    }
+    let target = edit::item(catalog, &operation.identity)?;
+    edit::validate_item(target, inputs, &operation.expected)?;
+    let request = json::parse(operation.data.as_bytes()).map_err(|problem| fail(&operation.identity, "REQUEST", &problem.message))?;
+    let mut local = Vec::new();
+    match operation.kind.as_str() {
+        "change-signature" => signature(catalog, inputs, operation, &request, &mut local)?,
+        "add-field" => add_field(catalog, inputs, operation, &request, &mut local)?,
+        "remove-field" => remove_field(catalog, inputs, operation, &request, &mut local)?,
+        "add-variant" => add_variant(catalog, inputs, operation, &request, &mut local)?,
+        "remove-variant" => remove_variant(catalog, inputs, operation, &request, &mut local)?,
+        "extract-function" => functions::extract(catalog, inputs, operation, &request, &mut local)?,
+        "inline-function" => functions::inline(catalog, inputs, operation, &request, &mut local)?,
+        _ => return Ok(false),
+    }
+    for patch in local { patches.push(patch); } Ok(true)
+}
+
+mod functions {
+    use super::*;
+
+    pub fn descriptor_fields(value: &Value, id: &str, allowed: &str) -> Result<(), String> {
+        let object = value.as_object().ok_or_else(|| fail(id, "REQUEST", "descriptor must be an object"))?;
+        for (key, _) in object {
+            let mut accepted = false; let mut start = 0usize;
+            for at in 0usize..allowed.len() + 1usize {
+                if at == allowed.len() || allowed.as_bytes()[at] == b'|' {
+                    if &allowed[start..at] == key.as_str() { accepted = true; }
+                    start = at + 1usize;
+                }
+            }
+            if !accepted { return Err(fail(id, "REQUEST", &format!("unknown descriptor field {key}"))); }
+        }
+        Ok(())
+    }
+    fn free(catalog: &semantic::Catalog, target: &semantic::Item) -> bool {
+        target.kind == "function" && (target.parent == "crate"
+            || catalog.by_identity.get(&target.parent).is_some_and(|index| catalog.items[*index].kind == "module"))
+    }
+    fn qualified(catalog: &semantic::Catalog, identity: &str) -> Result<String, String> {
+        let target = edit::item(catalog, identity)?;
+        let name = if target.kind == "variant" {
+            format!("{}::{}", target.parent, target.name)
+        } else { target.identity.clone() };
+        if name.contains("::body:") || name.contains("::param:") || name.contains("::field:")
+            || name.contains('<') || name.contains("impl:") {
+            return Err(fail(identity, "SCOPE", "identity has no context-independent source path"));
+        }
+        if name.starts_with("std::") { Ok(name) } else { Ok(format!("crate::{name}")) }
+    }
+    fn path_prefix(unit: &Unit, span: a::Span, site: &semantic::Reference) -> Option<(usize, usize)> {
+        let mut index = path_start(&unit.tokens, span);
+        if index == unit.tokens.len() || unit.tokens[index].span.end > span.end { return None; }
+        let start = unit.tokens[index].span.start; let mut last: Option<a::Span> = None; let mut identifier = true;
+        if unit.tokens[index].text == "::" { index += 1usize; }
+        while index < unit.tokens.len() {
+            let token = &unit.tokens[index]; if token.span.end > span.end { break; }
+            if identifier {
+                if token.kind != 0u8 { break; }
+                last = Some(token.span); identifier = false;
+            } else {
+                if token.text != "::" { break; }
+                identifier = true;
+            }
+            index += 1usize;
+        }
+        let last = last?;
+        if unit.owner.start + last.start != site.start || unit.owner.start + last.end != site.end { return None; }
+        Some((unit.owner.start + start, site.end))
+    }
+    fn path_range(unit: &Unit, site: &semantic::Reference) -> Option<(usize, usize)> {
+        let mut result: Option<(usize, usize)> = None;
+        for node in &unit.tree.exprs {
+            if !matches!(node.kind, a::Expr::Path(_) | a::Expr::Struct { .. }) { continue; }
+            if let Some(range) = path_prefix(unit, node.span, site) {
+                if result.map_or(true, |old| range.0 > old.0) { result = Some(range); }
+            }
+        }
+        for node in &unit.tree.types {
+            if !matches!(node.kind, a::Type::Path(_)) { continue; }
+            if let Some(range) = path_prefix(unit, node.span, site) {
+                if result.map_or(true, |old| range.0 > old.0) { result = Some(range); }
+            }
+        }
+        for node in &unit.tree.patterns {
+            if !matches!(node.kind, a::Pattern::Path(_) | a::Pattern::Variant { .. } | a::Pattern::Struct { .. }) { continue; }
+            if let Some(range) = path_prefix(unit, node.span, site) {
+                if result.map_or(true, |old| range.0 > old.0) { result = Some(range); }
+            }
+        }
+        result
+    }
+    fn value_patch(catalog: &semantic::Catalog, unit: &Unit, site: &semantic::Reference,
+        start: usize, end: usize, replacement: &str, patches: &mut Vec<edit::Patch>) -> Result<(), String> {
+        let mut out = replacement.to_string();
+        for label in &catalog.references {
+            if label.owner == site.owner && label.file == site.file && label.kind == "field-shorthand"
+                && label.start == site.start && label.end == site.end {
+                if start != site.start || end != site.end { return Err(at_site(&unit.owner.identity, "SHORTHAND", site, "qualified shorthand needs an explicit field rule")); }
+                let old = &unit.owner.text[start - unit.owner.start..end - unit.owner.start];
+                out = format!("{old}: {replacement}");
+            }
+        }
+        edit::patch(patches, &unit.owner.identity, &unit.owner.file, start, end, &out); Ok(())
+    }
+    fn scope_patches(catalog: &semantic::Catalog, unit: &Unit, start: usize, end: usize,
+        patches: &mut Vec<edit::Patch>) -> Result<(), String> {
+        for site in &catalog.unresolved {
+            if site.owner == unit.owner.identity && site.file == unit.owner.file && contains(start, end, site.start, site.end) {
+                return Err(at_site(&unit.owner.identity, "SCOPE", site, "moving this expression needs complete resolved scope evidence"));
+            }
+        }
+        let initial = patches.len();
+        for site in &catalog.references {
+            if site.owner != unit.owner.identity || site.file != unit.owner.file || !contains(start, end, site.start, site.end) { continue; }
+            if matches!(site.kind.as_str(), "qualification" | "alias-qualification") { continue; }
+            if matches!(site.kind.as_str(), "local-value" | "field" | "method" | "constructor-field"
+                | "field-shorthand" | "pattern-field" | "pattern-field-shorthand") { continue; }
+            let target = edit::item(catalog, &site.target)?;
+            if target.kind == "generic-parameter" && target.parent == unit.owner.identity { continue; }
+            if !matches!(site.kind.as_str(), "value" | "alias-value" | "type" | "alias-type"
+                | "constructor" | "alias-constructor" | "pattern" | "alias-pattern") {
+                return Err(at_site(&unit.owner.identity, "SCOPE", site, "reference kind needs an explicit relocation rule"));
+            }
+            let (from, to) = path_range(unit, site).ok_or_else(|| at_site(&unit.owner.identity, "SCOPE_SITE", site, "path has no exact relocatable prefix"))?;
+            if !contains(start, end, from, to) { return Err(at_site(&unit.owner.identity, "SCOPE_SITE", site, "selected expression cuts a resolved path")); }
+            let path = qualified(catalog, &site.target)?;
+            value_patch(catalog, unit, site, from, to, &path, patches)?;
+        }
+        for site in &catalog.references {
+            if site.owner != unit.owner.identity || site.file != unit.owner.file || !contains(start, end, site.start, site.end)
+                || !matches!(site.kind.as_str(), "qualification" | "alias-qualification") { continue; }
+            let mut covered = false;
+            for patch in &patches[initial..] {
+                if patch.file == site.file && contains(patch.start, patch.end, site.start, site.end) { covered = true; }
+            }
+            if !covered { return Err(at_site(&unit.owner.identity, "SCOPE_PREFIX", site, "qualification is not covered by a proved terminal path rewrite")); }
+        }
+        Ok(())
+    }
+    fn control(unit: &Unit, start: usize, end: usize, terminal: Option<usize>) -> Result<(), String> {
+        for (index, node) in unit.tree.exprs.iter().enumerate() {
+            let (from, to) = absolute(unit, node.span);
+            if !contains(start, end, from, to) { continue; }
+            if let a::Expr::Macro { name, .. } = &node.kind {
+                if matches!(name.as_str(), "include_bytes" | "include_str") {
+                    return Err(fail(&unit.owner.identity, "SOURCE_CONTEXT", "relative include paths need an explicit source-file relocation rule"));
+                }
+            }
+            if matches!(node.kind, a::Expr::Return(_) | a::Expr::Try(_) | a::Expr::Diverge(_)
+                | a::Expr::Break(_) | a::Expr::Continue | a::Expr::Closure { .. }) && terminal != Some(index) {
+                return Err(fail(&unit.owner.identity, "CONTROL", &format!("escaping control or closure needs a decision at {}:{from}..{to}", semantic::quote(&unit.owner.file))));
+            }
+        }
+        for block in &unit.tree.blocks {
+            let (from, to) = absolute(unit, block.span);
+            if !contains(start, end, from, to) { continue; }
+            for statement in &block.statements {
+                if matches!(statement, a::Stmt::Item(_)) { return Err(fail(&unit.owner.identity, "SCOPE", "nested items require a separate relocation plan")); }
+            }
+        }
+        Ok(())
+    }
+    fn capture_argument(id: &str, argument: &str, name: &str) -> Result<bool, String> {
+        let tokens = syntax::semantic_tokens(argument).map_err(|problem| fail(id, "CAPTURE", &problem.message))?;
+        if tokens.len() == 1usize && tokens[0usize].text == name { return Ok(false); }
+        if tokens.len() == 2usize && tokens[0usize].text == "&" && tokens[1usize].text == name { return Ok(true); }
+        if tokens.len() == 3usize && tokens[0usize].text == "&" && tokens[1usize].text == "mut" && tokens[2usize].text == name { return Ok(true); }
+        Err(fail(id, "CAPTURE", "argument must be this binding, &binding, or &mut binding; arbitrary effects need a separate operation"))
+    }
+    fn scalar_capture(target: &semantic::Item) -> bool {
+        let name = std::str::trim_ascii(&target.type_name);
+        name.starts_with('&') || matches!(name, "bool" | "char" | "u8" | "u16" | "u32" | "u64" | "usize"
+            | "i8" | "i16" | "i32" | "i64" | "isize" | "f64" | "()")
+    }
+    fn mutated(unit: &Unit, reference: &semantic::Reference, start: usize, end: usize) -> bool {
+        for node in &unit.tree.exprs {
+            let (from, to) = absolute(unit, node.span);
+            if !contains(start, end, from, to) { continue; }
+            let place = match node.kind {
+                a::Expr::Assign { place, .. } | a::Expr::Borrow { mutable: true, value: place } => Some(place),
+                a::Expr::Method { receiver, .. } => Some(receiver),
+                _ => None,
+            };
+            if let Some(place) = place {
+                let (from, to) = absolute(unit, unit.tree.exprs[place].span);
+                if contains(from, to, reference.start, reference.end) { return true; }
+            }
+        }
+        false
+    }
+    struct Capture { identity: String, name: String, ty: String, argument: String, borrowed: bool }
+    fn selected(unit: &Unit, target: &semantic::Item, operation: &edit::Operation, request: &Value) -> Result<usize, String> {
+        let (start, end) = if target.kind == "call-site" { (target.start, target.end) } else {
+            if operation.expected.is_empty() { return Err(fail(&target.identity, "STALE", "relative expression offsets require the item's expect digest")); }
+            let begin = request.get("start").and_then(|value| value.as_usize()).ok_or_else(|| fail(&target.identity, "REQUEST", "start must be a relative byte offset"))?;
+            let finish = request.get("end").and_then(|value| value.as_usize()).ok_or_else(|| fail(&target.identity, "REQUEST", "end must be a relative byte offset"))?;
+            if begin > finish || finish > unit.owner.text.len() { return Err(fail(&target.identity, "SPAN", "selected expression is outside its function")); }
+            (unit.owner.start + begin, unit.owner.start + finish)
+        };
+        for (index, node) in unit.tree.exprs.iter().enumerate() {
+            if absolute(unit, node.span) == (start, end) { return Ok(index); }
+        }
+        Err(fail(&target.identity, "EXPRESSION", "selection must be one exact syntax expression"))
+    }
+    fn generic_source(unit: &Unit, function: &a::Function) -> Result<(String, String, String), String> {
+        if function.generics.is_empty() { return Ok((String::new(), String::new(), String::new())); }
+        let (open, close) = parameter_range(unit, function)?;
+        let name_end = unit.owner.name_end - unit.owner.start;
+        let header = unit.owner.text[name_end..open - 1usize].to_string();
+        let mut arguments = String::new();
+        for parameter in &function.generics {
+            if parameter.lifetime { continue; }
+            if !arguments.is_empty() { arguments.push_str(", "); } arguments.push_str(&parameter.name);
+        }
+        if !arguments.is_empty() { arguments = format!("::<{arguments}>"); }
+        let body = unit.tree.blocks[function.body.unwrap()].span.start; let mut bounds = String::new();
+        for token in &unit.tokens {
+            if token.span.start > close && token.span.end <= body && token.text == "where" {
+                bounds = unit.owner.text[token.span.start..body].to_string(); break;
+            }
+        }
+        Ok((header, arguments, bounds))
+    }
+    pub fn extract(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)], operation: &edit::Operation,
+        request: &Value, patches: &mut Vec<edit::Patch>) -> Result<(), String> {
+        fields(request, &operation.identity, "name|parameters|result|start|end")?;
+        let target = edit::item(catalog, &operation.identity)?;
+        let owner = if target.kind == "call-site" { edit::item(catalog, &target.parent)? } else { target };
+        if !free(catalog, owner) { return Err(fail(&target.identity, "FUNCTION", "extraction currently needs a free function or its call-site identity")); }
+        let unit = parse_unit(catalog, owner, inputs)?; let source = function(&unit)?;
+        if source.body.is_none() { return Err(fail(&target.identity, "BODY", "function has no body")); }
+        let index = selected(&unit, target, operation, request)?; let span = unit.tree.exprs[index].span;
+        let (start, end) = absolute(&unit, span); control(&unit, start, end, None)?;
+        let name = text(request, &target.identity, "name", true)?;
+        if !edit::identifier(&name) { return Err(fail(&target.identity, "NAME", "extracted function needs one identifier")); }
+        for item in &catalog.items {
+            if item.parent == owner.parent && item.name == name { return Err(fail(&item.identity, "NAME", "extracted name already exists in the module")); }
+        }
+        let result = text(request, &target.identity, "result", true)?; type_source(&target.identity, &result)?;
+        let original_type: &String = catalog.expression_types.get(&(owner.file.clone(), start, end)).and_then(|ty| ty.as_ref())
+            .ok_or_else(|| fail(&target.identity, "EXPRESSION_TYPE", "selected expression has no unambiguous inferred type; use a body-level operation"))?;
+        if type_key(&target.identity, &result)? != type_key(&target.identity, original_type.as_str())? {
+            return Err(fail(&target.identity, "RESULT_TYPE", &format!("extraction must retain the inferred result type {original_type}")));
+        }
+        let result = annotations::render(catalog, &unit, original_type.as_str())?;
+        let mut captures: Vec<Capture> = Vec::new(); let mut identities: BTreeSet<String> = BTreeSet::new(); let mut names: BTreeSet<String> = BTreeSet::new();
+        for value in array(request, &target.identity, "parameters")? {
+            descriptor_fields(value, &target.identity, "id|name|type|argument")?;
+            let id = text(value, &target.identity, "id", true)?; let binding = edit::item(catalog, &id)?;
+            if !matches!(binding.kind.as_str(), "binding" | "parameter") || binding.parent != owner.identity
+                || contains(start, end, binding.start, binding.end) {
+                return Err(fail(&id, "CAPTURE", "capture must be an outer binding or parameter of the selected function"));
+            }
+            if !identities.insert(id.clone()) { return Err(fail(&id, "CAPTURE", "capture appears twice")); }
+            let parameter = text(value, &id, "name", true)?;
+            if !edit::identifier(&parameter) || !names.insert(parameter.clone()) { return Err(fail(&id, "NAME", "capture names must be distinct identifiers")); }
+            let ty = text(value, &id, "type", true)?; type_source(&id, &ty)?;
+            let argument = text(value, &id, "argument", true)?; let borrowed = capture_argument(&id, &argument, &binding.name)?;
+            if !binding.type_resolved { return Err(fail(&id, "CAPTURE_TYPE", "capture has no resolved source type")); }
+            let expected_type = if borrowed {
+                let tokens = syntax::semantic_tokens(&argument).map_err(|problem| fail(&id, "CAPTURE", &problem.message))?;
+                format!("{}{}", if tokens.len() == 3usize { "&mut " } else { "&" }, binding.type_name)
+            } else { binding.type_name.clone() };
+            if type_key(&id, &ty)? != type_key(&id, &expected_type)? {
+                return Err(fail(&id, "CAPTURE_TYPE", &format!("capture must retain the inferred type {expected_type}")));
+            }
+            let ty = annotations::render(catalog, &unit, &expected_type)?;
+            if !borrowed && !scalar_capture(binding) { return Err(fail(&id, "CAPTURE_VALUE", "owned or unresolved capture needs an explicit borrow so extraction preserves drop timing")); }
+            for inner in &catalog.items {
+                if inner.kind == "binding" && inner.parent == owner.identity && contains(start, end, inner.start, inner.end) && inner.name == parameter {
+                    return Err(fail(&id, "CAPTURE_SHADOW", "capture name collides with a binding inside the selected expression"));
+                }
+            }
+            captures.push(Capture { identity: id, name: parameter, ty, argument, borrowed });
+        }
+        let mut local: Vec<edit::Patch> = Vec::new(); scope_patches(catalog, &unit, start, end, &mut local)?;
+        let mut used: BTreeSet<String> = BTreeSet::new();
+        for reference in &catalog.references {
+            if reference.owner != owner.identity || reference.kind != "local-value" || reference.file != owner.file
+                || !contains(start, end, reference.start, reference.end) { continue; }
+            let binding = edit::item(catalog, &reference.target)?;
+            if binding.kind == "binding" && contains(start, end, binding.start, binding.end) { continue; }
+            let mut position: Option<usize> = None;
+            for (index, capture) in captures.iter().enumerate() { if capture.identity == binding.identity { position = Some(index); } }
+            let capture = &captures[position.ok_or_else(|| at_site(&binding.identity, "CAPTURE", reference, "free binding is absent from parameters"))?];
+            if !capture.borrowed && !binding.type_name.starts_with('&') && mutated(&unit, reference, start, end) {
+                return Err(at_site(&binding.identity, "CAPTURE_WRITE", reference, "write or method receiver needs an explicit reference capture"));
+            }
+            used.insert(capture.identity.clone());
+            let replacement = if capture.borrowed { format!("(*{})", capture.name) } else { capture.name.clone() };
+            value_patch(catalog, &unit, reference, reference.start, reference.end, &replacement, &mut local)?;
+        }
+        for capture in &captures {
+            if !used.contains(&capture.identity) { return Err(fail(&capture.identity, "CAPTURE", "capture is not a free binding of the selected expression")); }
+        }
+        let body = replace_range(&unit, start, end, &local)?; let mut parameters = String::new(); let mut arguments = String::new();
+        for (index, capture) in captures.iter().enumerate() {
+            if index != 0usize { parameters.push_str(", "); arguments.push_str(", "); }
+            parameters.push_str(&format!("{}: {}", capture.name, capture.ty)); arguments.push_str(&capture.argument);
+        }
+        let (generic, type_arguments, bounds) = generic_source(&unit, source)?;
+        let declaration = format!("fn {name}{generic}({parameters}) -> {result} {bounds} {{ {body} }}");
+        edit::one_item(&target.identity, &declaration, false)?;
+        let path = if owner.parent == "crate" { format!("crate::{name}") } else { format!("crate::{}::{name}", owner.parent) };
+        edit::patch(patches, &owner.identity, &owner.file, start, end, &format!("{path}{type_arguments}({arguments})"));
+        let (file, at) = edit::insertion(catalog, inputs, &owner.parent)?;
+        edit::patch(patches, &owner.parent, &file, at, at, &format!("\n{declaration}\n"));
+        Ok(())
+    }
+    fn terminal_return(unit: &Unit, body: &a::Block) -> Option<usize> {
+        if let Some(value) = body.tail {
+            if matches!(unit.tree.exprs[value].kind, a::Expr::Return(_)) { return Some(value); }
+        }
+        if body.tail.is_none() {
+            if let Some(a::Stmt::Expr { value, .. }) = body.statements.last() {
+                if matches!(unit.tree.exprs[*value].kind, a::Expr::Return(_)) { return Some(*value); }
+            }
+        }
+        None
+    }
+    fn inline_body(catalog: &semantic::Catalog, unit: &Unit, function: &a::Function) -> Result<(String, Vec<String>), String> {
+        let body = &unit.tree.blocks[function.body.ok_or_else(|| fail(&unit.owner.identity, "BODY", "function has no body"))?];
+        let (start, end) = absolute(unit, body.span); let terminal = terminal_return(unit, body);
+        control(unit, start, end, terminal)?;
+        let mut local: Vec<edit::Patch> = Vec::new(); scope_patches(catalog, unit, start, end, &mut local)?;
+        if let Some(index) = terminal {
+            let node = &unit.tree.exprs[index];
+            let value = match node.kind { a::Expr::Return(Some(value)) => {
+                let (from, to) = absolute(unit, unit.tree.exprs[value].span); replace_range(unit, from, to, &local)?
+            }, _ => "()".to_string() };
+            absorb(&mut local, unit, unit.owner.start + node.span.start, end - 1usize, &value);
+        }
+        let text = replace_range(unit, start + 1usize, end - 1usize, &local)?;
+        let mut types = Vec::new();
+        for parameter in &function.params {
+            let (from, to) = absolute(unit, unit.tree.types[parameter.ty].span);
+            let mut local: Vec<edit::Patch> = Vec::new(); scope_patches(catalog, unit, from, to, &mut local)?;
+            types.push(replace_range(unit, from, to, &local)?);
+        }
+        Ok((text, types))
+    }
+    fn call_identity<'a>(catalog: &'a semantic::Catalog, owner: &semantic::Item, start: usize, end: usize) -> Option<&'a semantic::Item> {
+        for target in &catalog.items {
+            if target.kind == "call-site" && target.parent == owner.identity && target.file == owner.file
+                && target.start == start && target.end == end { return Some(target); }
+        }
+        None
+    }
+    pub fn inline(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)], operation: &edit::Operation,
+        request: &Value, patches: &mut Vec<edit::Patch>) -> Result<(), String> {
+        fields(request, &operation.identity, "sites|remove")?;
+        let target = edit::item(catalog, &operation.identity)?;
+        if !free(catalog, target) { return Err(fail(&target.identity, "FUNCTION", "inlining currently needs a free function identity")); }
+        let source = parse_unit(catalog, target, inputs)?; let function = function(&source)?;
+        if !function.generics.is_empty() { return Err(fail(&target.identity, "GENERIC_INLINE", "generic inlining needs instance substitutions; choose a concrete wrapper")); }
+        if function.params.iter().any(|parameter| parameter.name == "_") {
+            let wildcard = format!("{}::param:_", target.identity);
+            for site in &catalog.references {
+                if site.owner == target.identity && site.target == wildcard {
+                    return Err(at_site(&target.identity, "WILDCARD_PARAMETER", site, "a referenced wildcard parameter needs an explicit named-parameter decision"));
+                }
+            }
+        }
+        let remove = flag(request, &target.identity, "remove")?;
+        let mut selected: BTreeSet<String> = BTreeSet::new();
+        if request.get("sites").is_some() {
+            for value in array(request, &target.identity, "sites")? {
+                let id = value.as_str().ok_or_else(|| fail(&target.identity, "REQUEST", "sites must contain call-site identities"))?;
+                let site = edit::item(catalog, id)?;
+                if site.kind != "call-site" || !selected.insert(id.to_string()) { return Err(fail(id, "CALL_SITE", "expected distinct call-site identities")); }
+            }
+            if selected.is_empty() { return Err(fail(&target.identity, "CALL_SITE", "sites cannot be empty")); }
+        }
+        let owners = callers(catalog, target)?; let mut touched: BTreeSet<String> = BTreeSet::new();
+        if remove {
+            for site in &catalog.references {
+                if site.target == target.identity && site.kind == "import" { return Err(at_site(&target.identity, "IMPORT", site, "removing the definition requires removing its import")); }
+            }
+        }
+        for (identity, sites) in owners {
+            let owner = edit::item(catalog, &identity)?; let unit = parse_unit(catalog, owner, inputs)?;
+            let mut calls: BTreeMap<(usize, usize), usize> = BTreeMap::new();
+            for site in &sites {
+                let call = match call_for(&unit, site) {
+                    Some(call) if !call.method => call,
+                    _ if !remove => continue,
+                    _ => return Err(at_site(&target.identity, "CALL_REFERENCE", site, "indirect function use prevents removal")),
+                };
+                let span = unit.tree.exprs[call.expression].span; let (start, end) = absolute(&unit, span);
+                let call_site = call_identity(catalog, owner, start, end).ok_or_else(|| at_site(&target.identity, "CALL_SITE", site, "call has no exact identity"))?;
+                if !selected.is_empty() && !selected.contains(&call_site.identity) {
+                    if remove { return Err(fail(&call_site.identity, "CALL_SITE", "unselected call prevents removal")); } continue;
+                }
+                if owner.identity == target.identity { return Err(fail(&call_site.identity, "RECURSION", "recursive call needs an explicit recursion-preserving expansion")); }
+                touched.insert(call_site.identity.clone()); calls.insert((span.end - span.start, span.start), call.expression);
+            }
+            if !calls.is_empty() && owner.parent != target.parent {
+                for node in &source.tree.exprs {
+                    if matches!(node.kind, a::Expr::Method { .. }) {
+                        let (start, end) = absolute(&source, node.span);
+                        return Err(fail(&target.identity, "METHOD_SCOPE", &format!("cross-module method dispatch needs a qualified-call proof at {}:{start}..{end}", semantic::quote(&target.file))));
+                    }
+                }
+            }
+            if calls.is_empty() { continue; }
+            let (body, types) = inline_body(catalog, &source, function)?;
+            let result_type = if matches!(&source.tree.types[function.result].kind, a::Type::Tuple(values) if values.is_empty()) {
+                "()".to_string()
+            } else {
+                let (start, end) = absolute(&source, source.tree.types[function.result].span);
+                let mut local = Vec::new(); scope_patches(catalog, &source, start, end, &mut local)?;
+                replace_range(&source, start, end, &local)?
+            };
+            let mut local: Vec<edit::Patch> = Vec::new();
+            for (_, index) in calls {
+                let node = &unit.tree.exprs[index]; let (start, end) = absolute(&unit, node.span);
+                let args = match &node.kind { a::Expr::Call { args, .. } => args, _ => return Err(fail(&owner.identity, "CALL_SITE", "call shape changed")) };
+                if args.len() != function.params.len() { return Err(fail(&owner.identity, "CALL_ARITY", "call arguments differ from the selected signature")); }
+                let prefix = fresh(&unit, operation, start, &format!("{}\n{body}", source.owner.text))?; let mut text = "{ ".to_string();
+                for (index, arg) in args.iter().enumerate() {
+                    let (from, to) = absolute(&unit, unit.tree.exprs[*arg].span);
+                    text.push_str(&format!("let {prefix}{index}: {} = {}; ", types[index], replace_range(&unit, from, to, &local)?));
+                }
+                text.push_str(&format!("let {prefix}result: {result_type} = {{ "));
+                for (index, parameter) in function.params.iter().enumerate() {
+                    let name = if parameter.name == "_" { format!("{prefix}unused{index}") } else { parameter.name.clone() };
+                    text.push_str(&format!("let {}{name}: {} = {prefix}{index}; ", if parameter.mutable { "mut " } else { "" }, types[index]));
+                }
+                text.push_str(&body); text.push_str(&format!(" }}; {prefix}result }}")); absorb(&mut local, &unit, start, end, &format!("({text})"));
+            }
+            for patch in local { patches.push(patch); }
+        }
+        if touched.is_empty() { return Err(fail(&target.identity, "CALL_SITE", "no resolved direct call was selected")); }
+        for id in &selected {
+            if !touched.contains(id) { return Err(fail(id, "CALL_SITE", "selected call does not call this function")); }
+        }
+        if remove { edit::patch(patches, &target.identity, &target.file, target.start, target.end, ""); }
+        Ok(())
+    }
+
+fn type_key(id: &str, value: &str) -> Result<String, String> {
+    let tokens = syntax::semantic_tokens(value).map_err(|problem| fail(id, "TYPE", &problem.message))?;
+    let mut result = String::new(); let mut index = 0usize;
+    while index < tokens.len() {
+        if tokens[index].text == "crate" && index + 1usize < tokens.len() && tokens[index + 1usize].text == "::" {
+            index += 2usize; continue;
+        }
+        result.push_str(&tokens[index].text); index += 1usize;
+    }
+    Ok(result)
+}
+
+pub mod annotations {
+    use super::*;
+    fn generic(catalog: &semantic::Catalog, owner: &semantic::Item, name: &str) -> bool {
+        let mut parent = owner.identity.clone(); let mut seen: BTreeSet<String> = BTreeSet::new();
+        while seen.insert(parent.clone()) {
+            for item in &catalog.items {
+                if item.kind == "generic-parameter" && item.parent == parent && item.name == name { return true; }
+            }
+            let Some(index) = catalog.by_identity.get(&parent) else { break; };
+            if catalog.items[*index].kind == "module" { break; }
+            parent = catalog.items[*index].parent.clone();
+        }
+        name == "Self" && catalog.by_identity.get(&owner.parent)
+            .is_some_and(|index| matches!(catalog.items[*index].kind.as_str(), "implementation" | "trait"))
+    }
+    fn intrinsic(name: &str) -> bool {
+        matches!(name, "bool" | "char" | "u8" | "u16" | "u32" | "u64" | "usize" | "i8" | "i16" | "i32"
+            | "i64" | "isize" | "f64" | "str" | "Vec" | "Box" | "World" | "Arguments" | "Environment"
+            | "ExitStatus" | "Stdout" | "Stdin" | "Stderr" | "Directory" | "ReadDirectory" | "ReadFile"
+            | "ForeignCommand" | "NullDevice" | "File" | "Process" | "Clock" | "Child" | "Listener"
+            | "Connector" | "Readiness" | "Entropy" | "Stop")
+    }
+    pub fn render(catalog: &semantic::Catalog, unit: &Unit, name: &str) -> Result<String, String> {
+        let wrapped = format!("fn __lkjscript_annotation(value: {name}) {{}}");
+        let parsed = syntax::parse(&wrapped).map_err(|problem| fail(&unit.owner.identity, "TYPE_IDENTITY", &problem.message))?;
+        let parameter = &parsed.functions[0usize].params[0usize]; let span = parsed.types[parameter.ty].span;
+        let tokens = syntax::semantic_tokens(&wrapped).map_err(|problem| fail(&unit.owner.identity, "TYPE_IDENTITY", &problem.message))?;
+        let mut patches: BTreeMap<usize, (usize, String)> = BTreeMap::new();
+        for node in &parsed.types {
+            if !contains(span.start, span.end, node.span.start, node.span.end) { continue; }
+            if matches!(node.kind, a::Type::Infer) { return Err(fail(&unit.owner.identity, "TYPE_IDENTITY", "inferred type contains an unresolved placeholder")); }
+            let a::Type::Path(path) = &node.kind else { continue; };
+            if path.name.starts_with('\'') || generic(catalog, &unit.owner, &path.name) { continue; }
+            if intrinsic(&path.name) {
+                for item in &catalog.items {
+                    if item.name == path.name && matches!(item.kind.as_str(), "struct" | "enum" | "alias" | "trait") {
+                        return Err(fail(&unit.owner.identity, "TYPE_IDENTITY", "an intrinsic spelling is shadowed by a source type; an explicit body decision is required"));
+                    }
+                }
+                continue;
+            }
+            if path.name.starts_with("std::") {
+                for item in &catalog.items {
+                    if item.kind == "module" && item.name == "std" && item.identity != "std" {
+                        return Err(fail(&unit.owner.identity, "TYPE_IDENTITY", "a source std module makes the external type path ambiguous"));
+                    }
+                }
+            }
+            let identity = if path.name.starts_with("crate::") { &path.name[7usize..] } else { path.name.as_str() };
+            let source = edit::item(catalog, identity)?;
+            if !matches!(source.kind.as_str(), "struct" | "enum" | "alias" | "trait") {
+                return Err(fail(&unit.owner.identity, "TYPE_IDENTITY", "inferred type path does not name a source type"));
+            }
+            let index = path_start(&tokens, node.span);
+            if index == tokens.len() { return Err(fail(&unit.owner.identity, "TYPE_IDENTITY", "inferred type path has no source token")); }
+            let start = tokens[index].span.start; let end = start + path.name.len();
+            if end > node.span.end || &wrapped[start..end] != path.name.as_str() {
+                return Err(fail(&unit.owner.identity, "TYPE_IDENTITY", "inferred type has no exact canonical path spelling"));
+            }
+            patches.insert(start, (end, qualified(catalog, identity)?));
+        }
+        let mut out = String::new(); let mut at = span.start;
+        for (start, (end, value)) in patches {
+            if start < at { return Err(fail(&unit.owner.identity, "TYPE_IDENTITY", "inferred type prefixes overlap")); }
+            out.push_str(&wrapped[at..start]); out.push_str(&value); at = end;
+        }
+        out.push_str(&wrapped[at..span.end]); Ok(out)
+    }
+    pub fn expression_type(catalog: &semantic::Catalog, unit: &Unit, span: a::Span) -> Result<String, String> {
+        let (start, end) = absolute(unit, span);
+        let ty: &String = catalog.expression_types.get(&(unit.owner.file.clone(), start, end)).and_then(|ty| ty.as_ref())
+            .ok_or_else(|| fail(&unit.owner.identity, "EXPRESSION_TYPE", &format!("argument or initializer has no unambiguous inferred type at {start}..{end}")))?;
+        render(catalog, unit, ty.as_str())
+    }
+    pub fn parameter_name(catalog: &semantic::Catalog, unit: &Unit, name: &str) -> Result<(), String> {
+        for node in &unit.tree.exprs {
+            let a::Expr::Path(path) = &node.kind else { continue; };
+            if path.name != name { continue; }
+            let (start, end) = absolute(unit, node.span);
+            for reference in &catalog.references {
+                if reference.owner == unit.owner.identity && reference.file == unit.owner.file
+                    && reference.start == start && reference.end == end && reference.kind != "local-value" {
+                    return Err(at_site(&unit.owner.identity, "PARAMETER_CAPTURE", reference, "new parameter would capture an existing resolved value"));
+                }
+            }
+        }
+        Ok(())
+    }
+    pub fn value(catalog: &semantic::Catalog, unit: &Unit, operation: &edit::Operation,
+        span: a::Span, value: &str) -> Result<String, String> {
+        let ty = expression_type(catalog, unit, span)?;
+        let prefix = fresh(unit, operation, unit.owner.start + span.start, value)?;
+        Ok(format!("({{ let {prefix}result: {ty} = ({value}); {prefix}result }})"))
+    }
+    pub fn match_source(unit: &Unit, span: a::Span) -> Result<(), String> {
+        for token in &unit.tokens {
+            if token.span.start == span.start && token.text == "match" { return Ok(()); }
+        }
+        Err(fail(&unit.owner.identity, "MATCH_SOURCE", "a macro-generated match needs an explicit body-level decision"))
+    }
+}
+
+fn path_start(tokens: &[syntax::SemanticToken], span: a::Span) -> usize {
+        let mut low = 0usize; let mut high = tokens.len();
+        while low < high {
+            let middle = low + (high - low) / 2usize;
+            if tokens[middle].span.start < span.start { low = middle + 1usize; } else { high = middle; }
+        }
+        while low < tokens.len() && tokens[low].span.start < span.end
+            && matches!(tokens[low].text.as_str(), "&" | "&&") {
+            low += 1usize;
+            if low < tokens.len() && tokens[low].span.start < span.end && tokens[low].kind == 5u8 { low += 1usize; }
+            if low < tokens.len() && tokens[low].span.start < span.end && tokens[low].text == "mut" { low += 1usize; }
+        }
+        low
+    }
+}
+
+fn nominal_head(catalog: &semantic::Catalog, name: &str) -> Result<Option<String>, String> {
+    let mut current = name.to_string(); let mut environment: Option<usize> = None;
+    let mut frames: Vec<(Vec<String>, Vec<(String, Option<usize>)>)> = Vec::new();
+    let mut aliases: BTreeSet<String> = BTreeSet::new();
+    loop {
+        let wrapped = format!("fn __lkjscript_type(value: {current}) {{}}");
+        let parsed = syntax::parse(&wrapped).map_err(|problem| fail(name, "ALIAS_HEAD", &problem.message))?;
+        let mut index = parsed.functions[0usize].params[0usize].ty;
+        while let a::Type::Ref { inner, .. } = parsed.types[index].kind { index = inner; }
+        let a::Type::Path(path) = &parsed.types[index].kind else { return Ok(None); };
+        let head = if path.name.starts_with("crate::") { path.name[7usize..].to_string() } else { path.name.clone() };
+        let mut substituted = false;
+        if let Some(current_environment) = environment {
+            for (index, parameter) in frames[current_environment].0.iter().enumerate() {
+                if parameter != &head { continue; }
+                let argument = frames[current_environment].1.get(index)
+                    .ok_or_else(|| fail(&head, "ALIAS_HEAD", "an omitted alias argument is needed to determine the match type"))?;
+                current = argument.0.clone(); environment = argument.1; substituted = true; break;
+            }
+        }
+        if substituted { continue; }
+        let Some(index) = catalog.by_identity.get(&head) else { return Ok(Some(head)); };
+        let alias = &catalog.items[*index];
+        if alias.kind != "alias" { return Ok(Some(head)); }
+        if !aliases.insert(head.clone()) {
+            return Err(fail(&head, "ALIAS_HEAD", "a repeated alias expansion needs an explicit match-type decision"));
+        }
+        let mut parameters = Vec::new();
+        for item in &catalog.items {
+            if item.kind == "generic-parameter" && item.parent == head { parameters.push(item.name.clone()); }
+        }
+        let mut arguments = Vec::new();
+        for argument in &path.args {
+            let span = parsed.types[*argument].span;
+            arguments.push((wrapped[span.start..span.end].to_string(), environment));
+        }
+        environment = Some(frames.len()); frames.push((parameters, arguments)); current = alias.type_name.clone();
+    }
+}
+
+fn variant_owners(catalog: &semantic::Catalog, target: &semantic::Item,
+    variants: &BTreeSet<String>) -> Result<BTreeMap<String, Vec<semantic::Reference>>, String> {
+    let mut targets = variants.clone(); targets.insert(target.identity.clone());
+    let mut owners = owners_for(catalog, &targets);
+    let mut heads: BTreeMap<String, bool> = BTreeMap::new();
+    let mut typed: BTreeMap<String, Vec<(usize, usize)>> = BTreeMap::new();
+    for ((file, start, end), name) in &catalog.expression_types {
+        let Some(name) = name else { continue; };
+        let relevant = match heads.get(name) {
+            Some(value) => *value,
+            None => {
+                let value = nominal_head(catalog, name.as_str())?.is_some_and(|head| head == target.identity);
+                heads.insert(name.clone(), value); value
+            }
+        };
+        if !relevant { continue; }
+        if !typed.contains_key(file) { typed.insert(file.clone(), Vec::new()); }
+        typed.get_mut(file).unwrap().push((*start, *end));
+    }
+    for item in &catalog.items {
+        if !matches!(item.kind.as_str(), "function" | "constant") || owners.contains_key(&item.identity) { continue; }
+        let Some(spans) = typed.get(&item.file) else { continue; };
+        let mut low = 0usize; let mut high = spans.len();
+        while low < high {
+            let middle = low + (high - low) / 2usize;
+            if spans[middle].0 < item.start { low = middle + 1usize; } else { high = middle; }
+        }
+        if low < spans.len() && contains(item.start, item.end, spans[low].0, spans[low].1) {
+            owners.insert(item.identity.clone(), Vec::new());
+        }
+    }
+    Ok(owners)
+}
