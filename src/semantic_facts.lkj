@@ -175,16 +175,19 @@ pub fn build_emitted(catalog: &semantic::Catalog, checked: &ir::CheckedProgram, 
         }
     }
     let layouts = native::semantic::layouts(checked).map_err(|problem| problem.message)?;
+    let type_ids = crate::meaning::verified::type_identities(checked)?;
     for (index, ty) in program.types.iter().enumerate() {
         let name = semantic::ir_type_name(program, index);
         let identity = format!("ir:type:{}", name);
         let layout = &layouts[index];
         let line = fact(&identity, "checked-ir", "layout",
-            &format!("target=linux-x86_64 bytes={} alignment={} fields={} cleanup={}",
-                layout.bytes, layout.alignment, numbers(&layout.fields), layout.cleanup));
+            &format!("target=linux-x86_64 bytes={} alignment={} fields={} cleanup={} representation-id={} representation-domain=lkjscript-ir-type-identity-linux-x86_64-1",
+                layout.bytes, layout.alignment, numbers(&layout.fields), layout.cleanup, type_ids[index]));
         result.add("layout", &identity, line.clone());
         result.add("layout", &name, line);
-        result.add("type", &identity, fact(&identity, "checked-ir", "type", &format!("name={}", semantic::quote(&ty.name))));
+        let type_fact = fact(&identity, "checked-ir", "type", &format!("name={} representation-id={} representation-domain=lkjscript-ir-type-identity-linux-x86_64-1", semantic::quote(&name), type_ids[index]));
+        result.add("type", &identity, type_fact.clone());
+        result.add("type", &name, type_fact);
         for (variant, offsets) in layout.variants.iter().enumerate() {
             result.add("layout", &identity, fact(&identity, "checked-ir", "variant-layout",
                 &format!("variant={variant} fields={}", numbers(offsets))));
@@ -193,7 +196,7 @@ pub fn build_emitted(catalog: &semantic::Catalog, checked: &ir::CheckedProgram, 
         let base = match name.find('<') { Some(at) => &name[..at], None => &name };
         if base != name.as_str() && catalog.by_identity.contains_key(&base.to_string()) {
             result.add("layout", base, fact(&identity, "checked-ir", "layout",
-                &format!("target=linux-x86_64 bytes={} alignment={} source-claim={}", layout.bytes, layout.alignment, semantic::quote(base))));
+                &format!("target=linux-x86_64 bytes={} alignment={} source-claim={} representation-id={} representation-domain=lkjscript-ir-type-identity-linux-x86_64-1", layout.bytes, layout.alignment, semantic::quote(base), type_ids[index])));
         }
     }
     let records = std::mem::replace(&mut result.records, BTreeMap::new());

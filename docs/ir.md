@@ -503,5 +503,15 @@ the whole candidate. Interpretation, authority reports and IR output retain the
 original. Differential cases compare optimized native behavior with that original.
 Copied instructions retain their original file, line and column, including traps.
 
-A recheck ma
+A recheck may retain an original body's admission only when its exact body and
+shared type/destructor/signature/ownership-contract graph retain their proof
+identity. Changed bodies are checked. Stored prior proofs additionally bind
+the exact producer and authenticated input/output domain; a decoded payload
+or a structural-review digest is not admission authority.
+
+Identity-addressed source transactions, bounded checked comparisons, type
+representation identities and diagnostic-preserving gate closures are specified
+in [structural operations](structure.md). They preserve the single checked-IR
+boundary. Whole-program review equality erases diagnostic labels/positions;
+execution reuse still binds exact image, runner and closed input/output contract.
 Authenticated transfer-only child entry, stable capability slots and the sealed executable identity contract are specified in [child images](child-image.md). Their manifest is derived from CheckedProgram, never from producer annotations.

@@ -98,8 +98,31 @@ fn run(world: &mut World) -> Result<(), String> {
     if !matching {
         return Err("E_GATE_REUSE authority report does not end with the exact image digest".to_string());
     }
+    let report_text = String::from_utf8(authority.clone())
+        .map_err(|_| -> String { "E_GATE_REUSE authority report is not UTF-8".to_string() })?;
+    let prefix = "checked-closure-sha256 ";
+    let mut closure_digest = String::new();
+    for line in report_text.as_str().split('\n') {
+        if !line.starts_with(prefix) { continue; }
+        if !closure_digest.is_empty() {
+            return Err("E_GATE_REUSE duplicate checked closure identity".to_string());
+        }
+        let digest = &line[prefix.len()..];
+        if digest.len() != 64usize {
+            return Err("E_GATE_REUSE invalid checked closure identity".to_string());
+        }
+        for byte in digest.as_bytes() {
+            if !((*byte >= b'0' && *byte <= b'9') || (*byte >= b'a' && *byte <= b'f')) {
+                return Err("E_GATE_REUSE invalid checked closure identity".to_string());
+            }
+        }
+        closure_digest = digest.to_string();
+    }
+    if closure_digest.is_empty() {
+        return Err("E_GATE_REUSE missing checked closure identity".to_string());
+    }
     let script = read(world, &args[2])?;
-    let mut identity = b"lkjscript-closed-gate-2\0"[..].to_vec();
+    let mut identity = b"lkjscript-closed-gate-3\0"[..].to_vec();
     store::push_bytes(&mut identity, &bytes);
     store::push_bytes(&mut identity, &authority);
     store::push_bytes(&mut identity, &script);
@@ -128,7 +151,7 @@ fn run(world: &mut World) -> Result<(), String> {
     }
     let skipped = if reused { count } else { 0usize };
     let rerun = if reused { 0usize } else { count };
-    world.stdout().write(format!("LKJSCRIPT_CLOSED_GATE reused={skipped} rerun={rerun} proof=authenticated-exact-runner-sealed-ELF-and-input-contract\n").as_bytes());
+    world.stdout().write(format!("LKJSCRIPT_CLOSED_GATE reused={skipped} rerun={rerun} proof=authenticated-checked-closure-exact-runner-sealed-ELF-and-input-contract closure={closure_digest}\n").as_bytes());
     Ok(())
 }
 pub fn main(mut world: World) {

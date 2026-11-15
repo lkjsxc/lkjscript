@@ -53,6 +53,30 @@ seal_report "$test_directory/pass.authority" "$test_directory/pass"
 invoke=("$runner" "$test_directory/pass" "$test_directory/pass.authority" "$contract")
 expect cold 'reused=0 rerun=1' "${invoke[@]}" 1 "$store" "$key" main
 expect warm 'reused=1 rerun=0' "${invoke[@]}" 1 "$store" "$key" main
+
+# Fresh checking proves that an unreachable body leaves this closed case intact.
+cp "$test_directory/source/pass.lkj" "$test_directory/source/pass.before"
+sed -i 's/6usize \* 7usize/21usize * 2usize/' "$test_directory/source/pass.lkj"
+"$compiler" ir pass.lkj --source-dir "$test_directory/source" --no-store -o "$test_directory/unrelated.lkjir"
+mkdir "$test_directory/unrelated"
+"$compiler" build-entries "$test_directory/unrelated.lkjir" --no-store -o "$test_directory/unrelated" --artifact pass=main
+cmp "$test_directory/pass" "$test_directory/unrelated/pass"
+cmp "$test_directory/pass.authority" "$test_directory/unrelated/pass.authority"
+grep -Eq '^checked-closure-sha256 [0-9a-f]{64}$' "$test_directory/unrelated/pass.authority" || fail 'missing checked closure'
+expect unrelated 'reused=1 rerun=0' "$runner" "$test_directory/unrelated/pass" "$test_directory/unrelated/pass.authority" "$contract" 1 "$store" "$key" main
+mv "$test_directory/source/pass.before" "$test_directory/source/pass.lkj"
+# Require exactly one checked identity as well as exact image and contract.
+for attack in missing duplicate malformed; do
+    case "$attack" in
+        missing) sed '/^checked-closure-sha256 /d' "$test_directory/pass.authority" > "$test_directory/closure.authority" ;;
+        duplicate) sed '/^checked-closure-sha256 /p' "$test_directory/pass.authority" > "$test_directory/closure.authority" ;;
+        malformed) sed 's/^checked-closure-sha256 .*/checked-closure-sha256 bad/' "$test_directory/pass.authority" > "$test_directory/closure.authority" ;;
+    esac
+    if "$runner" "$test_directory/pass" "$test_directory/closure.authority" "$contract" 1 "$store" "$key" main > "$test_directory/closure-$attack.log" 2>&1; then
+        fail "accepted $attack checked closure identity"
+    fi
+    grep -Fq 'checked closure identity' "$test_directory/closure-$attack.log" || fail 'checked identity diagnostic'
+done
 expect count 'reused=0 rerun=2' "${invoke[@]}" 2 "$store" "$key" main
 
 # The trusted caller supplies the exact entry, never a report-controlled header.

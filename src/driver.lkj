@@ -1375,6 +1375,13 @@ struct EntryFragments {
     records: reuse::Records,
 }
 
+
+fn checked_authority(checked: &ir::CheckedProgram, report: &crate::authority::Report) -> Result<String, String> {
+    let mut output = crate::authority::render(checked, report);
+    let closure = crate::meaning::closure_identity(checked, report.entry, true)?;
+    output.push_str(&format!("checked-closure-sha256 {}\n", closure.digest));
+    Ok(output)
+}
 fn build_entries(world: &mut World, options: &Options, stats: &mut Stats, memo: &mut Memo) -> Result<u8, String> {
     let checked = compile(world, options, stats, memo)?;
     let directory = options.output.as_ref().unwrap();
@@ -1399,7 +1406,7 @@ fn build_entries(world: &mut World, options: &Options, stats: &mut Stats, memo: 
         let selected = checked_entry(checked.original().program(), &Some(columns[1].clone()))?;
         let grants = prepare_grants(checked.original().program(), selected, options)?;
         let analysis = crate::authority::analyze(checked.original().checked(), selected)?;
-        let authority = crate::authority::render(checked.original().checked(), &analysis);
+        let authority = checked_authority(checked.original().checked(), &analysis)?;
         artifacts.push(EntryArtifact { path, entry: selected, grants, authority });
     }
     let mut runtime = None;
@@ -1626,7 +1633,7 @@ fn execute_source(world: &mut World, options: &Options, stats: &mut Stats, memo:
             for grant in &plan.grants { world.stdout().write(format!("  {}\n", quoted(grant)).as_bytes()); }
         }
         let analysis = crate::authority::analyze(checked.original().checked(), selected)?;
-        let output = crate::authority::render(checked.original().checked(), &analysis);
+        let output = checked_authority(checked.original().checked(), &analysis)?;
         world.stdout().write(output.as_bytes());
         return Ok(0);
     }
