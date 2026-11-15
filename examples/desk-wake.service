@@ -1,0 +1,38 @@
+[Unit]
+Description=Consume a desk relay request
+After=network.target
+StartLimitIntervalSec=60
+StartLimitBurst=20
+
+[Service]
+Type=oneshot
+User=coder
+Group=coder
+WorkingDirectory=/home/coder/workspace
+Environment=DESK_STATE=/home/coder/.local/state/desk
+Environment=DESK_HANDOFF=/home/coder/.claude/projects/-home-coder-workspace/memory
+Environment=DESK_RELAY=/home/coder/workspace/agent-toolkit/bin/cxloop
+Environment=PATH=/home/coder/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/coder/.local/libexec/lkjscript/desk-wake
+StandardInput=null
+StandardOutput=journal
+StandardError=inherit
+Restart=on-failure
+RestartSec=3
+TimeoutStartSec=120
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/coder/workspace /home/coder/.local/state /home/coder/.claude /home/coder/.codex
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX

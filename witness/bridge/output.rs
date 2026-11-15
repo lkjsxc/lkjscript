@@ -51,6 +51,48 @@ pub struct Stderr {
 pub struct Directory {
     handle: std::fs::File,
 }
+pub struct ReadDirectory { handle: std::fs::File }
+pub struct ReadFile { handle: std::fs::File }
+// Foreign authority is supplied only by the native or descriptor-broker entry.
+// The optional Rust witness has no grant constructor and fails closed if used.
+pub struct ForeignCommand { _seal: () }
+pub struct NullDevice { _seal: () }
+impl ForeignCommand {
+    pub fn run(&mut self, _root: &mut ReadDirectory, _sink: &mut NullDevice, _arguments: &[Vec<u8>], _duration: usize) -> Result<ReadFile, i64> { Err(38) }
+    pub fn __lkjscript_run(&mut self, _root: &mut ReadDirectory, _sink: &mut NullDevice, _arguments: &[u8], _duration: usize) -> Result<ReadFile, i64> { Err(38) }
+    pub fn __lkjscript_image(&mut self) -> Result<ReadFile, i64> { Err(38) }
+    pub fn image(&mut self) -> Result<ReadFile, i64> { Err(38) }
+}
+impl ReadDirectory {
+    pub fn open(&mut self, path: &str) -> Result<ReadFile, i64> {
+        self.__lkjscript_open(&files::path_bytes(path)?)
+    }
+    pub fn __lkjscript_open(&mut self, path: &[u8]) -> Result<ReadFile, i64> {
+        Ok(ReadFile { handle: files::open_regular(&self.handle, path)? })
+    }
+    pub fn open_directory(&mut self, path: &str) -> Result<ReadDirectory, i64> {
+        self.__lkjscript_open_directory(&files::path_bytes(path)?)
+    }
+    pub fn __lkjscript_open_directory(&mut self, path: &[u8]) -> Result<ReadDirectory, i64> {
+        Ok(ReadDirectory { handle: files::open_subdirectory(&self.handle, path)? })
+    }
+    pub fn list(&mut self) -> Result<Vec<Vec<u8>>, i64> {
+        let mut readable = Directory { handle: self.handle.try_clone().map_err(files::error)? };
+        readable.list()
+    }
+    pub fn __lkjscript_read(&mut self, bytes: &mut [u8]) -> i64 {
+        count(files::read_directory(self.handle.as_raw_fd(), bytes))
+    }
+    pub fn __lkjscript_rewind(&mut self) -> i64 {
+        files::rewind(self.handle.as_raw_fd()).map_or_else(|e| -e, |()| 0)
+    }
+}
+impl ReadFile {
+    pub fn __lkjscript_read(&mut self, bytes: &mut [u8]) -> i64 { count(self.read(bytes)) }
+    pub fn read(&mut self, bytes: &mut [u8]) -> Result<usize, i64> { files::read(self.handle.as_raw_fd(), bytes) }
+    pub fn read_to_end(&mut self) -> Result<Vec<u8>, i64> { files::read_to_end(self.handle.as_raw_fd()) }
+    pub fn modified_nanoseconds(&mut self) -> Result<usize, i64> { files::modified(&self.handle) }
+}
 pub struct File {
     handle: Option<std::fs::File>,
 }
@@ -297,6 +339,8 @@ impl Directory {
     }
 }
 impl File {
+    pub fn seek(&mut self, offset: i64, whence: u8) -> Result<usize, i64> { files::seek(self.descriptor(), offset, whence) }
+    pub fn modified_nanoseconds(&mut self) -> Result<usize, i64> { files::modified(self.handle.as_ref().ok_or(9i64)?) }
     pub fn set_private(&mut self) -> Result<(), i64> { files::private_file(self.descriptor()) }
     pub fn sync(&mut self) -> Result<(), i64> {
         files::sync_file(self.descriptor())
@@ -821,10 +865,34 @@ pub(crate) mod files {
         owned(descriptor)
     }
 
+    pub fn open_regular(directory: &std::fs::File, bytes: &[u8]) -> Result<std::fs::File, i64> {
+        let path = path(bytes)?;
+        let how = OpenHow { flags: 0x280000, mode: 0, resolve: 0x0a };
+        let identity = owned(retry(|| unsafe {
+            syscall(437, i64::from(directory.as_raw_fd()), path.as_ptr(),
+                &how as *const OpenHow, std::mem::size_of::<OpenHow>() as i64)
+        })?)?;
+        if !identity.metadata().map_err(error)?.is_file() { return Err(22); }
+        readonly(&identity)
+    }
+    pub fn seek(descriptor: i32, offset: i64, whence: u8) -> Result<usize, i64> {
+        if whence > 2 { return Err(22); }
+        retry(|| unsafe { syscall(8, i64::from(descriptor), offset, i64::from(whence)) }).map(|n| n as usize)
+    }
+    pub fn modified(file: &std::fs::File) -> Result<usize, i64> {
+        use std::os::unix::fs::MetadataExt;
+        let stat = file.metadata().map_err(error)?;
+        if !stat.is_file() { return Err(22); }
+        let seconds = stat.mtime();
+        let nanos = stat.mtime_nsec();
+        if seconds < 0 || !(0..1_000_000_000).contains(&nanos) { return Err(75); }
+        (seconds as usize).checked_mul(1_000_000_000)
+            .and_then(|n| n.checked_add(nanos as usize)).ok_or(75)
+    }
     pub fn open_storage(directory: &std::fs::File, bytes: &[u8], append: bool) -> Result<std::fs::File, i64> {
         let path = path(bytes)?;
         let how = OpenHow {
-            flags: if append { 0x80442 } else { 0x800c2 },
+            flags: if append { 0xa0442 } else { 0x800c2 },
             mode: 0o666,
             resolve: 0x0a,
         };

@@ -1,0 +1,5 @@
+// The read root includes the repository and its reviewed .runtime assets.
+const SOURCE: &str = "main.lkj";
+const ENTRY: &str = "main";
+const GRANTS: &[&str] = &["tool=/usr/bin/git", "root=env:LKJSCRIPT_FOREIGN_ROOT", "sink", "output", "errors", "status"];
+const CASES: &[&str] = &["main.lkj"];

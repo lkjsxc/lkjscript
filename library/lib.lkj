@@ -7,6 +7,9 @@ pub use prelude::{
 };
 pub mod buffer;
 pub mod timers;
+pub mod http_protocol;
+pub mod http_policy;
+pub mod http_server;
 pub mod json;
 pub mod hmac;
 pub mod time;

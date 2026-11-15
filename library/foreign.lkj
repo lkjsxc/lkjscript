@@ -1,0 +1,75 @@
+//! Attached foreign commands under an explicit Linux kernel confinement profile.
+//! Mounted optionally, so an older stored seed can still build the compiler.
+use crate::{Option, Result};
+use crate::bytes::append_bytes;
+
+/// Captured bytes and the actual reaped status, even when the deadline fired.
+pub struct Outcome {
+    pub exit_code: Option<u8>,
+    pub signal: Option<u8>,
+    pub timed_out: bool,
+    pub output: Vec<u8>,
+    pub errors: Vec<u8>,
+}
+
+/// Arguments exclude argv[0]. Their bytes are never decoded or shell-expanded.
+pub fn __lkjscript_run(
+    tool: &mut ForeignCommand,
+    root: &mut ReadDirectory,
+    sink: &mut NullDevice,
+    arguments: &[Vec<u8>],
+    duration_ns: usize,
+) -> Result<ReadFile, i64> {
+    let mut encoded = b"foreign\0"[..].to_vec();
+    for argument in arguments {
+        if argument.contains(&0u8) { return Err(22); }
+        append_bytes(&mut encoded, argument);
+        encoded.push(0u8);
+    }
+    tool.__lkjscript_run(root, sink, &encoded, duration_ns)
+}
+fn word(bytes: &[u8], at: usize) -> u64 {
+    let mut value = 0u64;
+    for index in 0usize..8usize {
+        value |= (bytes[at + index] as u64) << ((index * 8usize) as u64);
+    }
+    value
+}
+pub fn decode(mut captured: ReadFile) -> Result<Outcome, i64> {
+    let bytes = captured.read_to_end()?;
+    if bytes.len() < 32usize { return Err(5); }
+    let status = word(&bytes, 0usize);
+    let timeout = word(&bytes, 8usize);
+    let output = word(&bytes, 16usize) as usize;
+    let errors = word(&bytes, 24usize) as usize;
+    if status > 65535u64 || timeout > 1u64 || output > bytes.len() - 32usize {
+        return Err(5);
+    }
+    if errors != bytes.len() - 32usize - output { return Err(5); }
+    let number = (status & 127u64) as u8;
+    if number == 127u8 { return Err(5); }
+    let exit_code = if number == 0u8 { Option::Some(((status >> 8u64) & 255u64) as u8) } else { Option::None };
+    let signal = if number == 0u8 { Option::None } else { Option::Some(number) };
+    Ok(Outcome {
+        exit_code,
+        signal,
+        timed_out: timeout != 0u64,
+        output: bytes[32usize..32usize + output].to_vec(),
+        errors: bytes[32usize + output..].to_vec(),
+    })
+}
+pub fn run(
+    tool: &mut ForeignCommand,
+    root: &mut ReadDirectory,
+    sink: &mut NullDevice,
+    arguments: &[Vec<u8>],
+    duration_ns: usize,
+) -> Result<Outcome, i64> {
+    decode(__lkjscript_run(tool, root, sink, arguments, duration_ns)?)
+}
+/// Identity of the sealed, interpreter-rebased bytes that will be executed.
+/// Runtime libraries beneath the read root are separate, untrusted inputs.
+pub fn identity(tool: &mut ForeignCommand) -> Result<[u8; 32], i64> {
+    let mut image = tool.image()?;
+    Ok(crate::sha256::digest(&image.read_to_end()?))
+}

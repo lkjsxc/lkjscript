@@ -90,12 +90,16 @@ if [ "$offline" = yes ]; then
     timeout --kill-after=2s 30s "$site_work/query-check"
     printf 'ok site query guard: complete list accepted; missing, duplicate and non-search lists refused\n'
     if [ "$campaign" = yes ]; then
+        # The directory CASES file selects routing; retain all archive/source tests here.
+        "$compiler" test examples/site/main.lkj --library-dir library --jobs 1
         "$compiler" test tools/http-site-parity.lkj --library-dir library --jobs 1
     fi
 fi
-"$compiler" build examples/site.lkj --library-dir library \
+"$compiler" build examples/site/main.lkj --library-dir library \
     --grant output --grant listener=127.0.0.1:0 \
     --grant clock --grant ready --grant stop -o "$site_work/server"
+: >"$site_work/server.out"
+: >"$site_work/server.err"
 "$site_work/server" >"$site_work/server.out" 2>"$site_work/server.err" &
 server_pid=$!
 started="$started $server_pid"
@@ -122,7 +126,7 @@ if [ "$offline" = yes ]; then
     mode=offline
 else
     "$compiler" build tools/http-site-parity.lkj --library-dir library \
-        --grant output --grant root=examples/site-content --grant origin=127.0.0.1:8798 \
+        --grant output --grant root=examples/site/content --grant origin=127.0.0.1:8798 \
         --grant candidate=127.0.0.1:"$port" -o "$site_work/client"
     mode=live
 fi

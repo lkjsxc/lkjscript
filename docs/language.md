@@ -425,14 +425,12 @@ Single-error APIs select the first diagnostic from these same production paths. 
 
 ## World and capabilities
 
-Entries take owned Arguments, Environment, ExitStatus, Stdout/Stdin/Stderr, Directory, Listener, Connector, Readiness, Process, Clock, Entropy or Stop; no parameters; or a sole World declaring implicit full authority.
-build/run require --grant NAME for each parameter: Directory takes NAME=PATH or NAME=env:VARIABLE, Environment NAME=VARIABLE, Listener/Connector NAME=IPv4:PORT; other grants have no payload.
-Only Listener permits port zero. build embeds descriptors; handles are acquired at startup.
-Directory's env:VARIABLE selector resolves only that named variable at invocation/startup; absent or empty fails with errno 2, without a default or directory creation. Reading its path bytes separately requires an Environment grant.
+Entries take owned Arguments, Environment, ExitStatus, Stdout/Stdin/Stderr, Directory/ReadDirectory, ForeignCommand, NullDevice, Listener, Connector, Readiness, Process, Clock, Entropy or Stop; no parameters; or a sole World declaring implicit full authority.
+build/run require --grant NAME for each parameter: Directory/ReadDirectory take NAME=PATH or NAME=env:VARIABLE, ForeignCommand NAME=/absolute/executable, Environment NAME=VARIABLE, Listener/Connector NAME=IPv4:PORT; others have no payload. Only Listener permits port zero. build embeds descriptors; handles are acquired at startup.
+Directory/ReadDirectory's env:VARIABLE selector resolves only that named variable at invocation/startup; absent or empty fails with errno 2, without a default or directory creation. Reading its path bytes separately requires an Environment grant.
 Duplicate, missing, unknown or malformed grants reject before publication/execution; acquisition failure traps R0007 at entry with the grant kind and errno. Listener can rebind after TIME_WAIT; an active listener still excludes it.
-File/Child/borrowed/aggregate entry parameters reject; accept Directory and open a File inside the entry instead.
-All capability types, including World, File and Child, are affine, without constructors or Copy/Clone/Data/Send/Sync implementations.
-Names, integers or casts cannot forge authority. IR checks each operation independently; methods below exclusively borrow receivers, and derived owners can outlive those borrows.
+File/ReadFile/Child/borrowed/aggregate entry parameters reject; acquire files through a granted Directory/ReadDirectory.
+All capability types, including World, File and Child, are affine, without constructors or Copy/Clone/Data/Send/Sync implementations. Names, integers or casts cannot forge authority. IR checks each operation independently; methods below exclusively borrow receivers, and derived owners can outlive those borrows.
 
 | Form | Result and authority |
 | --- | --- |
@@ -458,42 +456,41 @@ Names, integers or casts cannot forge authority. IR checks each operation indepe
 | World.executable() | Read-only running executable at fresh offset; checked interpretation prepares a native image lazily, unchecked IR returns ENOSYS. |
 | World.set_exit_status(u8), ExitStatus.set_status(u8) | Set normal status and continue cleanup/execution; last value wins. |
 | Directory.open/create(path) | Read or create/truncate a writable descendant File. |
-| Directory.create_new/open_append(path), sync() | Result<File,i64> for exclusive create or create/atomic append; Result<(),i64> for directory fsync. |
+| Directory.create_new/open_append(path), sync() | Result<File,i64> for exclusive create or create/atomic append (final symlink rejected); Result<(),i64> for directory fsync. |
 | Directory.create_private(path), File.set_private() | Result<File,i64> for exclusive creation with initial mode 0600; Result<(),i64> for fchmod to exactly 0600. |
 | File.sync()/truncate(length)/lock_exclusive()/lock_wait() | Result<(),i64>: fsync, set byte length, or advisory exclusive flock (nonblocking lock_exclusive; blocking lock_wait). Locks last until the final duplicate closes; lock_wait retries EINTR. |
-| Directory.open_directory(path), list() | Descendant Directory; Vec<Vec<u8>> names excluding dot/dot-dot, unspecified order. |
+| Directory/ReadDirectory.open_directory(path), list() | Corresponding descendant directory capability; Result<Vec<Vec<u8>>,i64> names excluding dot/dot-dot, unspecified order. |
+| ReadDirectory.open(path) | Result<ReadFile,i64> for a regular file only, without first data-opening a FIFO/device. ReadFile has read/read_to_end/modified_nanoseconds and no write, mode, lock or writable-conversion operation. |
+| File.seek(offset:i64,origin:u8) | Result<usize,i64> position; origin 0 start, 1 current, 2 end; other values fail errno 22. O_APPEND still places every write at the then-current end. |
+| File/ReadFile.modified_nanoseconds() | Result<usize,i64> Unix mtime from the same held inode; nonregular descriptors fail 22, pre-epoch/overflow timestamps fail 75. Atomic pathname replacement does not retarget the handle. |
 | Directory.create_directory/remove/remove_directory(path), rename(old,new) | Create directory, unlink entry, remove empty directory, or rename within root, replacing as Linux allows. |
-| Stdin/File.read(&mut [u8]), read_to_end() | Result with short-read count or collected bytes; zero is EOF for nonempty buffers. |
+| Stdin/File/ReadFile.read(&mut [u8]), read_to_end() | Result with short-read count or collected bytes; zero is EOF for nonempty buffers. |
 | File.write/write_all(&[u8]) | One-write count or complete-write Result. |
 | File.duplicate()/readonly() | Duplicate sharing offset/state; or read-only reopen with independent zero offset. Closed remains closed. |
 | File.rewind()/set_executable() | Seek zero or set mode 0755. |
 | Stdout/Stderr.write(&[u8]) | Complete write or R0007 at the call. |
 | Clock.nanoseconds()/unix_seconds()/unix_nanoseconds() | Result<usize,i64> monotonic nanoseconds for deadlines; Result<i64,i64> CLOCK_REALTIME seconds; Result<usize,i64> CLOCK_REALTIME nanoseconds. Realtime may jump; unix_nanoseconds returns errno 75 for negative or unrepresentable time. |
+| ForeignCommand.run(&mut ReadDirectory,&mut NullDevice,&[Vec<u8>],duration_ns:usize) | Result<ReadFile,i64> framed exit/deadline/stdout/stderr; std::foreign::decode consumes it. Synchronous, nonzero duration; absolute deadline begins before setup; every child is killed/reaped before return. |
+| ForeignCommand.image() | Result<ReadFile,i64> fresh read view of immutable transformed initial ELF for checked SHA256; no execution or raw writable image access. |
 | Process.spawn_file(executable,&args,stdin,stdout,stderr,result) | Result<Child,i64>, explicit executable File, argument byte vectors and four File streams; result maps to descriptor 3. |
 | Child.wait()/try_wait() | Exit code or 128+signal, with Option for polling; reaped children later fail ECHILD. |
 | Child.terminate()/request_stop() | Result<(),i64>; send SIGKILL/SIGTERM only to the owned child, without waiting. Dropping a live Child kills and reaps it. |
 
-Convenience methods are source in library/io.lkj and library/command.lkj. The latter supplies concrete Arguments/Environment helpers: the current loader optionally mounts it beside canonical $std/lib.lkj and check-library checks it; keeping it outside lib.lkj preserves stored-seed bootstrap. Result errors carry positive Linux errno; raw read/write leaves return negative errno. EINTR retries except close, which consumes once.
-Paths reject NUL; raw paths need exactly one trailing NUL. Descendants use openat2 RESOLVE_BENEATH|RESOLVE_NO_MAGICLINKS without weaker fallback; absolute/escaping paths fail.
-Removal, rename and directory creation derive a parent then validate the basename.
-Ordinary new files/directories use 0666/0777 subject to umask; create_private uses 0600 subject to umask atomically, without an initially broader permission window.
-set_private sets exactly 0600 regardless of umask, permitting owner read/write after restrictive creation and restricting future opens; it cannot revoke already-open descriptors.
+Convenience methods live in library/io.lkj, command.lkj, read_io.lkj and foreign.lkj. The loader mounts new typed helper modules beside canonical $std/lib.lkj so stored seeds can still build the compiler. Result errors carry positive Linux errno; raw read/write leaves return negative errno. EINTR retries except close, which consumes once.
+Paths reject NUL; raw paths need exactly one trailing NUL. Descendants use openat2 RESOLVE_BENEATH|RESOLVE_NO_MAGICLINKS. Only ENOSYS selects anchored openat component traversal: absolute paths, parent/empty components and every symlink reject; held directories retain their inode across rename. The fallback allocates the actual path length, with no guessed path/component limit.
+Removal, rename and directory creation derive a parent then validate the basename. Ordinary new files/directories use 0666/0777 subject to umask; create_private uses 0600 subject to umask atomically, without an initially broader permission window. set_private sets exactly 0600 regardless of umask, permitting owner read/write after restrictive creation and restricting future opens; it cannot revoke already-open descriptors.
 
 Entropy.fill blocks until kernel randomness is ready; empty slices succeed. A later error preserves the already-filled prefix and untouched tail; no fallback generator is used.
-A successful Stop acquisition blocks SIGTERM for the execution lifetime; failure restores the previous mask and does not claim it.
-Dropping Stop closes its descriptor without restoring the mask, even after the last Stop drops. Multiple Stops share the pending signal queue; delivery is not broadcast and standard signals may coalesce.
-Until its first true, requested() consumes one pending SIGTERM or returns false without blocking; later calls return cached true for that Stop.
-Its readiness watch reports unread SIGTERM and need not remain readable after consumption.
-Native Stop.target is the program PID; interpreted Stop.target is the owned syscall broker PID.
-The interpreter CLI driver/wrapper PID is not this endpoint: graceful requests must use the published target.
+A successful Stop acquisition blocks SIGTERM for the execution lifetime; failure restores the previous mask and does not claim it. Dropping Stop closes its descriptor without restoring the mask, even after the last Stop drops. Multiple Stops share the pending signal queue; delivery is not broadcast and standard signals may coalesce.
+Until its first true, requested() consumes one pending SIGTERM or returns false without blocking; later calls return cached true for that Stop. Its readiness watch reports unread SIGTERM and need not remain readable after consumption.
+Native Stop.target is the program PID; interpreted Stop.target is the owned syscall broker PID. The interpreter CLI driver/wrapper PID is not this endpoint: graceful requests must use the published target.
 After a successful Stop claim, spawned children restore only the SIGTERM mask bit saved before the first successful acquisition, preserving every other bit. Without a claim the mask stays unchanged; an originally blocked SIGTERM remains blocked.
 
-Captured process files share offsets; rewind before reading. Closed File returns EBADF, drops harmlessly and closes the assigned child stream.
-Spawn validates NUL-free arguments, chooses argv0 lkjscript, clears environment and executes the File with execveat, without PATH/shell fallback; exec failure returns errno.
-Direct children receive parent-death SIGKILL. No caller slice pointer survives I/O.
-File/Directory/Listener/Readiness/Stop drops close once; standard-stream capability drops leave inherited streams open. Acquiring capabilities preserves inherited closed streams.
+Captured process files share offsets; rewind before reading. Closed File returns EBADF, drops harmlessly and closes the assigned child stream. Spawn validates NUL-free arguments, chooses argv0 lkjscript, clears environment and executes the File with execveat, without PATH/shell fallback; exec failure returns errno. Direct children receive parent-death SIGKILL. No caller slice pointer survives I/O.
+File/ReadFile/Directory/ReadDirectory/ForeignCommand/NullDevice/Listener/Readiness/Stop drops close once; standard-stream capability drops leave inherited streams open. Acquiring capabilities preserves inherited closed streams.
 Readiness drops only its wait set. Unwatch before closing a watched descriptor if aliases remain. Wait batches at most 64 events without limiting registrations; expired deadlines poll once.
 Read interest reports half-close; drain readable final bytes. Write-only interest does not report peer write-half closure repeatedly.
 
+ForeignCommand admits one immutable initial image, then borrows a read/execute subtree and explicit null device under kernel confinement: no sockets/descendants, credential changes or filesystem metadata mutation syscalls; parent death and deadline kill the child; reexec keeps confinement. Private read/write/seekable output memfds can supply reexecuted anonymous code under the same confinement. Preexisting special files and mutable runtime code inside the root remain available, and outside metadata/clock/entropy remain observable. This is not an authenticated lkjscript child. The exact fixed environment and limits are in docs/ir.md.
 Generated programs have no ambient filesystem/environment/process imports or source-declared host imports. std::time::http_date formats supplied time; it grants no ambient clock. std::text supplies source-only utf8_lossy (maximal ill-formed subparts), form_decode, escape_html, Unicode whitespace trim and Unicode 17 scalar lowercase_chars (expansions, no contextual final sigma); it grants no effects.
-Normal destructor order matches the supported Rust intersection; outputs/statuses stay distinct from traps. witness/bridge/output.lkj observes bytes/status/trap kind separately.
+Normal destructor order matches the supported Rust intersection; outputs/statuses stay distinct from traps. witness/bridge/output.rs observes bytes/status/trap kind separately.

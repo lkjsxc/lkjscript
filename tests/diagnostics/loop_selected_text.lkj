@@ -1,0 +1,17 @@
+// expect: reject E_BORROW
+// cause: rule with no Rust counterpart.
+// pending: A loop that replaces a borrowed choice with another origin must name
+// the held reference and suggest an owned String or a stable owner index.
+fn selected(values: &[String]) -> String {
+    let mut choice = "sync";
+    let mut index = 0usize;
+    while index < values.len() {
+        choice = values[index].as_str();
+        index += 1usize;
+    }
+    choice.to_string()
+}
+pub fn probe() -> String {
+    let values: Vec<String> = vec!["buffered".to_string()];
+    selected(&values)
+}

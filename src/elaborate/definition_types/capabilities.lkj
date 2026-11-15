@@ -14,6 +14,10 @@ impl Infer<'_, '_> {
             Value::Stdin => self.atom("Stdin"),
             Value::Stderr => self.atom("Stderr"),
             Value::Directory => self.atom("Directory"),
+            Value::ReadDirectory => self.atom("ReadDirectory"),
+            Value::ReadFile => self.atom("ReadFile"),
+            Value::ForeignCommand => self.atom("ForeignCommand"),
+            Value::NullDevice => self.atom("NullDevice"),
             Value::File => self.atom("File"),
             Value::Process => self.atom("Process"),
             Value::Clock => self.atom("Clock"),
@@ -25,12 +29,14 @@ impl Infer<'_, '_> {
             Value::Stop => self.atom("Stop"),
             Value::Pid => self.atom("u32"),
             Value::Port => self.atom("u16"),
-            Value::FileRef | Value::DirectoryRef | Value::MutableFileRef | Value::ListenerRef | Value::ClockRef | Value::StopRef => {
+            Value::FileRef | Value::DirectoryRef | Value::ReadDirectoryRef | Value::NullDeviceRef | Value::MutableFileRef | Value::ListenerRef | Value::ClockRef | Value::StopRef => {
                 let inner = self.atom(match value {
                     Value::FileRef | Value::MutableFileRef => "File",
                     Value::ListenerRef => "Listener",
                     Value::ClockRef => "Clock",
                     Value::StopRef => "Stop",
+                    Value::ReadDirectoryRef => "ReadDirectory",
+                    Value::NullDeviceRef => "NullDevice",
                     _ => "Directory",
                 });
                 self.shaped(Shape::Ref(!matches!(value, Value::FileRef), inner))
@@ -63,6 +69,8 @@ impl Infer<'_, '_> {
                 self.shaped(Shape::Vec(bytes))
             }
             Value::ResultDirectory
+            | Value::ResultReadDirectory
+            | Value::ResultReadFile
             | Value::ResultFile
             | Value::ResultCount
             | Value::ResultBytes
@@ -81,6 +89,8 @@ impl Infer<'_, '_> {
             | Value::ResultMaybeStatus => {
                 let success = match value {
                     Value::ResultDirectory => self.capability_type(Value::Directory, span)?,
+                    Value::ResultReadDirectory => self.capability_type(Value::ReadDirectory, span)?,
+                    Value::ResultReadFile => self.capability_type(Value::ReadFile, span)?,
                     Value::ResultFile => self.capability_type(Value::File, span)?,
                     Value::ResultChild => self.capability_type(Value::Child, span)?,
                     Value::ResultListener => self.capability_type(Value::Listener, span)?,

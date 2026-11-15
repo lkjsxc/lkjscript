@@ -1,0 +1,35 @@
+// Read-only authority preserves the acquired inode across atomic replacement.
+pub fn main(mut root: ReadDirectory, mut input: Stdin, mut output: Stdout) {
+    let names = root.list().unwrap();
+    let mut found = false;
+    for name in &names { if name.as_slice() == b"snapshot" { found = true; } }
+    assert!(found);
+    assert!(root.open("missing").is_err());
+    assert!(root.open("../outside.txt").is_err());
+    assert!(root.open("escape").is_err());
+    assert!(root.open("pipe").is_err());
+    assert!(root.open("sub").is_err());
+    assert!(root.open("bad\0path").is_err());
+    let mut nested = root.open_directory("sub").unwrap();
+    assert!(nested.open("../snapshot").is_err());
+    assert!(nested.open("nested").unwrap().read_to_end().unwrap().as_slice() == b"inside\n");
+    assert!(root.open("inside-link").unwrap().read_to_end().unwrap().as_slice() == b"inside\n");
+    let mut old = root.open("old-time").unwrap();
+    assert!(old.modified_nanoseconds() == Err(75i64));
+    assert!(old.read_to_end().unwrap().as_slice() == b"old\n");
+    let mut snapshot = root.open("snapshot").unwrap();
+    let stamp = snapshot.modified_nanoseconds().unwrap();
+    assert!(stamp == 1_000_000_000usize);
+    let mut prefix = [0u8; 3];
+    assert!(snapshot.read(&mut prefix).unwrap() == 3usize);
+    assert!(prefix == *b"bef");
+    output.write(b"opened\n");
+    let mut signal = [0u8; 1];
+    assert!(input.read(&mut signal).unwrap() == 1usize);
+    assert!(snapshot.read_to_end().unwrap().as_slice() == b"ore\n");
+    assert!(snapshot.modified_nanoseconds().unwrap() == stamp);
+    let mut replacement = root.open("snapshot").unwrap();
+    assert!(replacement.modified_nanoseconds().unwrap() == 2_000_000_000usize);
+    assert!(replacement.read_to_end().unwrap().as_slice() == b"after\n");
+    output.write(b"ok read roots\n");
+}

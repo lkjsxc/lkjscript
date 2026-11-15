@@ -1,0 +1,9 @@
+// expect: reject E_UNSUPPORTED
+// cause: expected a Rust form.
+// pending: A selected trait default must resolve to its declared body, or explain that an explicit impl method is currently required.
+// Also reached by inert interpreter Host implementations when ForeignCommand methods used default refusal bodies.
+trait Poll { fn interval(&self) -> usize { 0usize } }
+struct Page {}
+impl Poll for Page {}
+fn interval<T: Poll>(value: &T) -> usize { value.interval() }
+pub fn probe() -> usize { interval(&Page {}) }

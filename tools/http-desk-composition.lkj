@@ -1,0 +1,101 @@
+//! Private fixtures only: the service owns no publisher or relay process.
+mod http_client;
+use http_client::{Connection, io, require};
+use std::json::{self, Value};
+
+fn request(target: &mut Connector, method: &str, path: &str, body: &str) -> Result<Value, String> {
+    let stream = io(target.connect(), "connect desk composition")?;
+    let mut connection = Connection::new(stream);
+    let headers = if method == "POST" { "X-Desk: 1\r\n" } else { "" };
+    connection.send(format!("{method} {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nContent-Length: {}\r\n{headers}\r\n{body}", body.len()).as_bytes())?;
+    let response = connection.header(false)?;
+    require(response.status == 200u16, "desk composition response status")?;
+    let bytes = connection.body(response.length)?;
+    connection.eof()?;
+    match json::parse(&bytes) { Ok(value) => Ok(value), Err(_) => Err("desk composition JSON".to_string()) }
+}
+fn text<'a>(value: &'a Value, name: &str) -> &'a str {
+    value.get(name).and_then(|value| value.as_str()).unwrap()
+}
+fn replace(root: &mut Directory, path: &str, bytes: &[u8]) -> Result<(), String> {
+    let temporary = format!(".{path}-test");
+    let mut file = io(root.create(&temporary), "create publisher file")?;
+    io(file.write_all(bytes), "write publisher file")?;
+    drop(file);
+    io(root.rename(&temporary, path), "replace publisher file")
+}
+fn read(root: &mut Directory, path: &str) -> Result<String, String> {
+    let mut file = io(root.open(path), "open fixture")?;
+    let bytes = io(file.read_to_end(), "read fixture")?;
+    String::from_utf8(bytes).map_err(|_| "fixture UTF-8".to_string())
+}
+fn check(target: &mut Connector, fixture: &mut Directory, clock: &mut Clock) -> Result<(), String> {
+    let mut board = io(fixture.open_directory("board"), "board fixture")?;
+    let mut handoff = io(fixture.open_directory("handoff"), "handoff fixture")?;
+    let mut state = io(fixture.open_directory("native"), "state fixture")?;
+    let missing = request(target, "GET", "/state", "")?;
+    require(text(&missing, "board_status") == "missing", "missing board must be explicit")?;
+    let now = io(clock.unix_seconds(), "fixture wall clock")?;
+    replace(&mut board, "board.txt", format!("desk-board 1 {now}\ncompiler running\nprograms done\nhandoff: hidden\n").as_bytes())?;
+    replace(&mut handoff, "handoff-a.md", b"first handoff")?;
+    let first = request(target, "GET", "/proxy/123/state/", "")?;
+    require(first.get("jobs").and_then(|value| value.as_array()).unwrap().len() == 2usize, "board lines/filter")?;
+    require(text(&first, "detail") == "first handoff", "handoff content")?;
+    require(!first.get("board_stale").and_then(|value| value.as_bool()).unwrap(), "fresh board age")?;
+    replace(&mut board, "board.txt", format!("desk-board 1 {}\nstale board\n", now - 60i64).as_bytes())?;
+    replace(&mut handoff, "handoff-z.md", "newest handoff 日本語".as_bytes())?;
+    let stale = request(target, "GET", "/state", "")?;
+    require(stale.get("board_stale").and_then(|value| value.as_bool()).unwrap(), "stale board flag")?;
+    require(text(&stale, "detail") == "newest handoff 日本語", "newest handoff selection")?;
+    replace(&mut board, "board.txt", b"unversioned board\n")?;
+    require(text(&request(target, "GET", "/state", "")?, "board_status") == "invalid", "invalid board must be explicit")?;
+    // A listener is one held advisory lock, not a timestamp or a process name.
+    let _ = state.remove("wake");
+    let mut listener = io(state.open_append("listening"), "listener marker")?;
+    io(listener.lock_exclusive(), "hold listener marker")?;
+    request(target, "POST", "/say", "{\"text\":\"while listened\",\"request\":\"composition-listened\"}")?;
+    require(state.open("wake").is_err(), "listener must suppress wake")?;
+    require(!read(&mut state, "ping")?.is_empty(), "listener still needs ping")?;
+    drop(listener);
+    let body = "{\"text\":\"without listener\",\"request\":\"composition-unheard\"}";
+    let accepted = request(target, "POST", "/say", body)?;
+    let wake = read(&mut state, "wake")?;
+    require(wake.starts_with("desk-wake 1 ") && wake.contains(text(&accepted, "id")), "wake must name accepted inbox row")?;
+    let retried = request(target, "POST", "/say", body)?;
+    require(text(&accepted, "id") == text(&retried, "id"), "wake retry row identity")?;
+    require(wake == read(&mut state, "wake")?, "wake retry publication contents")?;
+    let mut words = wake.as_str().split(' ');
+    words.next();
+    words.next();
+    let count = words.next().unwrap().parse::<usize>().unwrap();
+    let mut lock = io(state.open_append(".lock"), "host acknowledgement lock")?;
+    io(lock.lock_wait(), "hold host acknowledgement lock")?;
+    replace(&mut state, "wake-ack", format!("{count}\n").as_bytes())?;
+    io(state.remove("wake"), "host accepts wake")?;
+    drop(lock);
+    request(target, "POST", "/say", body)?;
+    require(state.open("wake").is_err(), "acknowledged wake must not reappear on retry")?;
+    Ok(())
+}
+fn replacement(target: &mut Connector) -> Result<(), String> {
+    for _ in 0usize..32usize {
+        let value = request(target, "GET", "/state", "")?;
+        let jobs = value.get("jobs").and_then(|value| value.as_array()).unwrap();
+        require(jobs.len() == 1usize, "atomic board snapshot has one line")?;
+        let line = jobs[0usize].as_str().unwrap();
+        require(line.len() == 65_536usize, "atomic board snapshot has complete length")?;
+        let first = line.as_bytes()[0usize];
+        require(first == b'a' || first == b'b', "atomic board version")?;
+        for byte in line.as_bytes() { require(*byte == first, "board snapshot mixed replaced inodes")?; }
+    }
+    Ok(())
+}
+pub fn main(mut output: Stdout, mut input: Stdin, mut target: Connector, mut fixture: Directory, mut clock: Clock) {
+    let mode = String::from_utf8(input.read_to_end().unwrap()).unwrap();
+    let result = if std::text::trim(&mode) == "replace" { replacement(&mut target) }
+        else { check(&mut target, &mut fixture, &mut clock) };
+    match result {
+        Ok(()) => output.write(b"ok desk composition: board missing/current/stale/invalid, newest handoff, held listener, idempotent wake/ack, atomic replacement\n"),
+        Err(problem) => { output.write(format!("desk composition: {problem}\n").as_bytes()); panic!("desk composition failed"); }
+    }
+}

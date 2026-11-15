@@ -230,7 +230,7 @@ impl Body<'_> {
                 self.a.load(DI, DI, 0);
                 self.read_word(args[1], 0, SI);
                 self.read_word(args[1], 1, D);
-                self.a.immediate(C, if name == IntrinsicOp::DirectoryOpenAppend { 0x80442 } else { 0x800c2 });
+                self.a.immediate(C, if name == IntrinsicOp::DirectoryOpenAppend { 0xa0442 } else { 0x800c2 });
                 self.a.immediate(R8, if name == IntrinsicOp::DirectoryCreatePrivate { 0o600 } else { 0o666 });
                 self.a.call(self.platform.file_storage_open);
                 self.intrinsic_open_result(dst);
@@ -247,6 +247,26 @@ impl Body<'_> {
                     IntrinsicOp::FileLockWait => self.platform.file_lock_wait,
                     _ => self.platform.file_lock_exclusive,
                 });
+                self.intrinsic_open_result(dst);
+                return Ok(true);
+            }
+            IntrinsicOp::FileSeek | IntrinsicOp::FileModifiedNanoseconds => {
+                self.read(args[0], DI);
+                self.a.load(DI, DI, 0);
+                if name == IntrinsicOp::FileSeek {
+                    self.read(args[1], SI);
+                    self.read(args[2], D);
+                    self.a.call(self.platform.file_seek);
+                } else { self.a.call(self.platform.file_modified_nanoseconds); }
+                self.intrinsic_scalar_result(dst, D);
+                return Ok(true);
+            }
+            IntrinsicOp::ReadDirectoryOpen => {
+                self.read(args[0], DI);
+                self.a.load(DI, DI, 0);
+                self.read_word(args[1], 0, SI);
+                self.read_word(args[1], 1, D);
+                self.a.call(self.platform.file_open_regular);
                 self.intrinsic_open_result(dst);
                 return Ok(true);
             }
@@ -301,6 +321,30 @@ impl Body<'_> {
                 self.read_word(args[1], 1, SI);
                 self.a.call(self.platform.clock_read);
             }
+            IntrinsicOp::ForeignImage => {
+                self.read(args[0], DI);
+                self.a.load(DI, DI, 0);
+                self.a.call(self.platform.file_readonly);
+                self.intrinsic_open_result(dst);
+                return Ok(true);
+            }
+            IntrinsicOp::ForeignRun => {
+                for index in 0usize..3usize {
+                    self.read(args[index], A);
+                    self.a.load(A, A, 0);
+                    self.a.store(BP, self.scratch[index], A);
+                }
+                self.read_word(args[3], 0, A);
+                self.a.store(BP, self.scratch[3], A);
+                self.read_word(args[3], 1, A);
+                self.a.store(BP, self.scratch[4], A);
+                self.read(args[4], A);
+                self.a.store(BP, self.scratch[5], A);
+                self.a.lea(DI, BP, self.scratch[0]);
+                self.a.call(self.platform.foreign_run);
+                self.intrinsic_open_result(dst);
+                return Ok(true);
+            }
             IntrinsicOp::ProcessSpawn => {
                 self.read(args[1], A);
                 self.a.load(A, A, 0);
@@ -328,7 +372,7 @@ impl Body<'_> {
                 self.read(args[0], DI);
                 self.a.call(self.platform.child_terminate);
             }
-            IntrinsicOp::DirectoryOpenDirectory => {
+            IntrinsicOp::DirectoryOpenDirectory | IntrinsicOp::ReadDirectoryOpenDirectory => {
                 self.read(args[0], DI);
                 self.a.load(DI, DI, 0);
                 self.read_word(args[1], 0, SI);

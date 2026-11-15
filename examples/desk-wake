@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Host composition, deliberately outside desk's checked image. Never run by desk.
+set -euo pipefail
+: "${DESK_STATE:?}" "${DESK_HANDOFF:?}" "${DESK_RELAY:?}"
+exec {relay_lock}>"$DESK_STATE/.wake-relay.lock"
+flock "$relay_lock"
+exec {writer}>"$DESK_STATE/.lock"
+flock "$writer"
+[[ -f "$DESK_STATE/wake" && ! -L "$DESK_STATE/wake" ]] || exit 0
+read -r magic version count row_id extra <"$DESK_STATE/wake"
+[[ "$magic" == desk-wake && "$version" == 1 && "$count" =~ ^[0-9]+$ &&
+   "$row_id" =~ ^[0-9a-f]{32}$ && -z "${extra:-}" ]] || exit 65
+seen=0
+[[ ! -f "$DESK_STATE/seen" ]] || seen=$(<"$DESK_STATE/seen")
+[[ "$seen" =~ ^[0-9]+$ ]] || exit 65
+flock -u "$writer"
+if ((seen < count)); then
+    exec {listening}>"$DESK_STATE/listening"
+    flock -n "$listening" || exit 75
+    # cxloop uses this key for durable idempotence. It must be implemented before
+    # installing the path unit; launch and acknowledgement can be interrupted.
+    handoff=
+    while IFS= read -r -d '' candidate; do
+        candidate=${candidate#* }
+        [[ ! -L "$candidate" ]] && handoff=$candidate
+    done < <(find "$DESK_HANDOFF" -maxdepth 1 -type f -name 'handoff-*.md' -printf '%T@ %p\0' | sort -zn)
+    [[ -n "$handoff" ]] || exit 66
+    ( exec {relay_lock}>&-; exec {writer}>&-; exec {listening}>&-
+      export CXLOOP_WAKE_ID="$row_id" CXLOOP_WAKE_COUNT="$count"
+      exec "$DESK_RELAY" relay "$handoff" --force )
+    flock -u "$listening"
+fi
+flock "$writer"
+ack=0
+[[ ! -f "$DESK_STATE/wake-ack" ]] || ack=$(<"$DESK_STATE/wake-ack")
+[[ "$ack" =~ ^[0-9]+$ ]] || exit 65
+if ((ack < count)); then
+    temporary=$(mktemp "$DESK_STATE/.wake-ack.XXXXXX")
+    trap 'rm -f "$temporary"' EXIT
+    printf '%s\n' "$count" >"$temporary"
+    sync -- "$temporary"
+    mv -- "$temporary" "$DESK_STATE/wake-ack"
+    sync -- "$DESK_STATE"
+fi
+if [[ -f "$DESK_STATE/wake" && ! -L "$DESK_STATE/wake" ]]; then
+    read -r magic version pending pending_id extra <"$DESK_STATE/wake"
+    [[ "$magic" == desk-wake && "$version" == 1 && "$pending" =~ ^[0-9]+$ && -z "${extra:-}" ]] || exit 65
+    if ((pending <= count)); then rm -- "$DESK_STATE/wake"; sync -- "$DESK_STATE"; fi
+fi

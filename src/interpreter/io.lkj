@@ -29,6 +29,13 @@ impl<H: Host> Interpreter<'_, H> {
         }
         Ok(access)
     }
+    fn io_either(&self, values: &[(usize, Value)], first: TypeKind, second: TypeKind) -> Result<Access, RunError> {
+        let access = self.io_reference(values, 0, true)?;
+        if *self.kind(access.ty)? != first && *self.kind(access.ty)? != second {
+            return Err(self.invalid("I/O requires one of its declared capability types"));
+        }
+        Ok(access)
+    }
     fn io_world_or(&self, values: &[(usize, Value)], narrow: TypeKind) -> Result<Access, RunError> {
         let access = self.io_reference(values, 0, true)?;
         if *self.kind(access.ty)? != TypeKind::World && *self.kind(access.ty)? != narrow {
@@ -112,6 +119,8 @@ impl<H: Host> Interpreter<'_, H> {
                 types.0,
                 match kind {
                     TypeKind::Directory => Value::Directory(handle),
+                    TypeKind::ReadDirectory => Value::ReadDirectory(handle),
+                    TypeKind::ReadFile => Value::ReadFile(handle),
                     TypeKind::File => Value::File(handle),
                     TypeKind::Child => Value::Child(handle),
                     TypeKind::Listener => Value::Listener(handle),
@@ -132,6 +141,10 @@ impl<H: Host> Interpreter<'_, H> {
     fn io_handle(&self, access: &Access) -> Result<u64, RunError> {
         match self.value(access.cell)? {
             Value::Directory(handle)
+            | Value::ReadDirectory(handle)
+            | Value::ReadFile(handle)
+            | Value::ForeignCommand(handle)
+            | Value::NullDevice(handle)
             | Value::File(handle)
             | Value::Child(handle)
             | Value::Listener(handle)
@@ -246,19 +259,47 @@ impl<H: Host> Interpreter<'_, H> {
         values: &[(usize, Value)],
     ) -> Result<Option<Value>, RunError> {
         let storage_arity = match name {
-            ir::IntrinsicOp::DirectoryCreateNew | ir::IntrinsicOp::DirectoryCreatePrivate | ir::IntrinsicOp::DirectoryOpenAppend | ir::IntrinsicOp::FileTruncate => 2usize,
+            ir::IntrinsicOp::ForeignRun => 5usize,
+            ir::IntrinsicOp::ForeignImage => 1usize,
+            ir::IntrinsicOp::DirectoryCreateNew | ir::IntrinsicOp::DirectoryCreatePrivate | ir::IntrinsicOp::DirectoryOpenAppend | ir::IntrinsicOp::FileTruncate | ir::IntrinsicOp::ReadDirectoryOpen | ir::IntrinsicOp::ReadDirectoryOpenDirectory => 2usize,
             ir::IntrinsicOp::DirectorySync | ir::IntrinsicOp::FileSync | ir::IntrinsicOp::FileLockExclusive | ir::IntrinsicOp::FileLockWait => 1usize,
             ir::IntrinsicOp::WorldEntropy | ir::IntrinsicOp::ClockUnixSeconds | ir::IntrinsicOp::ClockUnixNanoseconds | ir::IntrinsicOp::FileSetPrivate
                 | ir::IntrinsicOp::WorldStop | ir::IntrinsicOp::StopRequested | ir::IntrinsicOp::StopTarget
                 | ir::IntrinsicOp::ChildRequestStop => 1usize,
             ir::IntrinsicOp::EntropyFill | ir::IntrinsicOp::ReadinessUnwatchStop => 2usize,
             ir::IntrinsicOp::ReadinessWatchStop => 3usize,
+            ir::IntrinsicOp::FileSeek => 3usize,
+            ir::IntrinsicOp::FileModifiedNanoseconds => 1usize,
             _ => 0usize,
         };
         if storage_arity != 0 && values.len() != storage_arity {
             return Err(self.invalid("capability intrinsic argument count differs"));
         }
         let value = match name {
+            ir::IntrinsicOp::ForeignImage => {
+                let authority = self.io_authority(values, TypeKind::ForeignCommand)?;
+                let types = self.io_open_types(result, TypeKind::ReadFile)?;
+                let handle = self.io_handle(&authority)?;
+                let opened = self.host.foreign_image(handle);
+                self.io_open_result(types, opened, TypeKind::ReadFile)?
+            }
+            ir::IntrinsicOp::ForeignRun => {
+                let authority = self.io_authority(values, TypeKind::ForeignCommand)?;
+                let root = self.io_reference(values, 1, true)?;
+                let sink = self.io_reference(values, 2, true)?;
+                if *self.kind(root.ty)? != TypeKind::ReadDirectory || *self.kind(sink.ty)? != TypeKind::NullDevice {
+                    return Err(self.invalid("foreign execution requires its borrowed read root and null device"));
+                }
+                let types = self.io_open_types(result, TypeKind::ReadFile)?;
+                let command = self.io_handle(&authority)?;
+                let root = self.io_handle(&root)?;
+                let sink = self.io_handle(&sink)?;
+                let arguments = self.io_buffer(values, 3, false)?;
+                let arguments = self.bytes(&arguments)?;
+                let duration = self.io_number(values, 4, ir::U64)? as usize;
+                let opened = self.host.run_foreign(command, root, sink, &arguments, duration);
+                self.io_open_result(types, opened, TypeKind::ReadFile)?
+            }
             ir::IntrinsicOp::FileDuplicate | ir::IntrinsicOp::FileReadOnly if values.len() == 1 => {
                 let authority = self.io_authority(values, TypeKind::File)?;
                 let types = self.io_open_types(result, TypeKind::File)?;
@@ -470,6 +511,34 @@ impl<H: Host> Interpreter<'_, H> {
                     self.io_status(outcome)?
                 }
             }
+            ir::IntrinsicOp::ReadDirectoryOpen | ir::IntrinsicOp::ReadDirectoryOpenDirectory => {
+                let authority = self.io_authority(values, TypeKind::ReadDirectory)?;
+                let kind = if name == ir::IntrinsicOp::ReadDirectoryOpen { TypeKind::ReadFile } else { TypeKind::ReadDirectory };
+                let types = self.io_open_types(result, kind.clone())?;
+                let path = self.io_buffer(values, 1, false)?;
+                let path = self.bytes(&path)?;
+                let handle = self.io_handle(&authority)?;
+                let opened = if name == ir::IntrinsicOp::ReadDirectoryOpen { self.host.open_read_file(handle, &path) }
+                    else { self.host.open_subdirectory(handle, &path) };
+                self.io_open_result(types, opened, kind)?
+            }
+            ir::IntrinsicOp::FileSeek => {
+                let authority = self.io_authority(values, TypeKind::File)?;
+                let types = self.io_scalar_types(result, TypeKind::Int { bits: 64, signed: false })?;
+                let handle = self.io_handle(&authority)?;
+                let offset = self.io_number(values, 1, ir::I64)? as i64;
+                let whence = self.io_number(values, 2, ir::U8)? as u8;
+                let position: Result<usize, i64> = if whence > 2u8 { Err(22i64) } else { self.host.seek_file(handle, offset, whence) };
+                let position = match position { Ok(value) => Ok(value as u64), Err(errno) => Err(errno) };
+                self.io_scalar_result(types, position)?
+            }
+            ir::IntrinsicOp::FileModifiedNanoseconds => {
+                let authority = self.io_either(values, TypeKind::File, TypeKind::ReadFile)?;
+                let types = self.io_scalar_types(result, TypeKind::Int { bits: 64, signed: false })?;
+                let handle = self.io_handle(&authority)?;
+                let modified = match self.host.modified_file(handle) { Ok(value) => Ok(value as u64), Err(errno) => Err(errno) };
+                self.io_scalar_result(types, modified)?
+            }
             ir::IntrinsicOp::DirectoryOpenDirectory if values.len() == 2 => {
                 let authority = self.io_authority(values, TypeKind::Directory)?;
                 let types = self.io_open_types(result, TypeKind::Directory)?;
@@ -480,7 +549,7 @@ impl<H: Host> Interpreter<'_, H> {
                 self.io_open_result(types, opened, TypeKind::Directory)?
             }
             ir::IntrinsicOp::DirectoryRead if values.len() == 2 => {
-                let authority = self.io_authority(values, TypeKind::Directory)?;
+                let authority = self.io_either(values, TypeKind::Directory, TypeKind::ReadDirectory)?;
                 self.io_result_type(result, ir::I64)?;
                 let buffer = self.io_buffer(values, 1, true)?;
                 let mut bytes = self.bytes(&buffer)?;
@@ -502,7 +571,9 @@ impl<H: Host> Interpreter<'_, H> {
                 } else {
                     TypeKind::File
                 };
-                let authority = self.io_authority(values, kind)?;
+                let authority = if name == ir::IntrinsicOp::DirectoryRewind {
+                    self.io_either(values, TypeKind::Directory, TypeKind::ReadDirectory)?
+                } else { self.io_authority(values, kind)? };
                 self.io_result_type(result, ir::I64)?;
                 let handle = self.io_handle(&authority)?;
                 let outcome = if name == ir::IntrinsicOp::FileExecutable {
@@ -723,14 +794,9 @@ impl<H: Host> Interpreter<'_, H> {
                 self.io_open_result(types, opened, TypeKind::File)?
             }
             ir::IntrinsicOp::StdinRead | ir::IntrinsicOp::FileRead if values.len() == 2 => {
-                let authority = self.io_authority(
-                    values,
-                    if name == ir::IntrinsicOp::StdinRead {
-                        TypeKind::Stdin
-                    } else {
-                        TypeKind::File
-                    },
-                )?;
+                let authority = if name == ir::IntrinsicOp::StdinRead {
+                    self.io_authority(values, TypeKind::Stdin)?
+                } else { self.io_either(values, TypeKind::File, TypeKind::ReadFile)? };
                 self.io_result_type(result, ir::I64)?;
                 let buffer = self.io_buffer(values, 1, true)?;
                 let mut bytes = self.bytes(&buffer)?;

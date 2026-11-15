@@ -1,0 +1,95 @@
+use std::foreign;
+
+fn image_header(tool: &mut ForeignCommand) -> [u8; 64] {
+    let mut image = tool.image().unwrap();
+    let mut bytes = [0u8; 64];
+    assert!(image.read(&mut bytes).unwrap() == 64usize);
+    assert!(&bytes[..4usize] == b"\x7fELF");
+    bytes
+}
+
+pub fn main(
+    mut tool: ForeignCommand, mut root: ReadDirectory, mut sink: NullDevice,
+    mut arguments: Arguments, mut output: Stdout, mut clock: Clock,
+) {
+    let empty: Vec<Vec<u8>> = Vec::new();
+    let args = arguments.args();
+    assert!(args.len() == 2usize);
+    let identity = image_header(&mut tool);
+    let result = foreign::run(&mut tool, &mut root, &mut sink,
+        &vec![b"--probe"[..].to_vec(), args[0].clone(), args[1].clone()], 3_000_000_000usize).unwrap();
+    assert!(!result.timed_out && result.exit_code == Some(0u8) && result.signal == None);
+    assert!(result.errors.is_empty());
+    output.write(&result.output);
+    let capture = foreign::run(&mut tool, &mut root, &mut sink,
+        &vec![b"--capture-exit"[..].to_vec()], 3_000_000_000usize).unwrap();
+    assert!(capture.exit_code == Some(37u8) && capture.signal == None && !capture.timed_out);
+    assert!(capture.output.as_slice() == b"out\0bytes");
+    assert!(capture.errors.as_slice() == b"err\0bytes");
+    let rewritten = foreign::run(&mut tool, &mut root, &mut sink,
+        &vec![b"--capture-rewrite"[..].to_vec()], 3_000_000_000usize).unwrap();
+    assert!(rewritten.exit_code == Some(0u8) && rewritten.output.as_slice() == b"rewritten");
+    assert!(rewritten.errors.is_empty());
+    let anonymous = foreign::run(&mut tool, &mut root, &mut sink,
+        &vec![b"--memfd-reexec"[..].to_vec(), args[0].clone(), args[1].clone()], 3_000_000_000usize).unwrap();
+    assert!(anonymous.exit_code == Some(0u8) && anonymous.signal == None && !anonymous.timed_out);
+    assert!(anonymous.errors.is_empty());
+    let suffix: &[u8] = b"read-root, symlink, inherited-fd, filesystem-mutation, socket, fork, privilege and reexec cases pass\n";
+    assert!(anonymous.output.len() >= suffix.len());
+    assert!(&anonymous.output[anonymous.output.len() - suffix.len()..] == suffix);
+    let signal = foreign::run(&mut tool, &mut root, &mut sink,
+        &vec![b"--signal"[..].to_vec()], 3_000_000_000usize).unwrap();
+    assert!(signal.exit_code == None && signal.signal == Some(4u8) && !signal.timed_out);
+    for mode in vec![b"--spin"[..].to_vec(), b"--spin-reexec"[..].to_vec()] {
+        let before = clock.nanoseconds().unwrap();
+        let timed = foreign::run(&mut tool, &mut root, &mut sink, &vec![mode], 100_000_000usize).unwrap();
+        let elapsed = clock.nanoseconds().unwrap() - before;
+        assert!(timed.timed_out && timed.exit_code == None && timed.signal == Some(9u8));
+        assert!(elapsed >= 95_000_000usize && elapsed < 1_000_000_000usize);
+    }
+    assert!(tool.run(&mut root, &mut sink, &vec![b"bad\0arg"[..].to_vec()], 1_000_000usize).is_err());
+    assert!(tool.run(&mut root, &mut sink, &empty, 0usize).is_err());
+    assert!(image_header(&mut tool) == identity);
+    output.write(b"ok foreign capture, exit, signal, deadline, confined reexec, identity\n");
+}
+
+pub fn missing_runtime(mut tool: ForeignCommand, mut root: ReadDirectory, mut sink: NullDevice, mut output: Stdout) {
+    let empty: Vec<Vec<u8>> = Vec::new();
+    for _attempt in 0usize..8usize {
+        let outcome = foreign::run(&mut tool, &mut root, &mut sink, &empty, 1_000_000_000usize);
+        match outcome { Err(errno) => assert!(errno == 2i64), Ok(_) => panic!("missing loader was admitted") }
+    }
+    output.write(b"ok launch errno and reap\n");
+}
+pub fn unsupported(mut tool: ForeignCommand, mut root: ReadDirectory, mut sink: NullDevice, mut output: Stdout) {
+    let empty: Vec<Vec<u8>> = Vec::new();
+    let outcome = foreign::run(&mut tool, &mut root, &mut sink, &empty, 1_000_000_000usize);
+    match outcome { Err(errno) => assert!(errno == 38i64), Ok(_) => panic!("unavailable Landlock was admitted") }
+    output.write(b"ok unavailable kernel fails closed\n");
+}
+pub fn snapshot(
+    mut tool: ForeignCommand, mut root: ReadDirectory, mut sink: NullDevice,
+    mut input: Stdin, mut output: Stdout,
+) {
+    let identity = image_header(&mut tool);
+    output.write(b"snapshot acquired\n");
+    let mut byte = [0u8; 1];
+    assert!(input.read(&mut byte).unwrap() == 1usize);
+    assert!(image_header(&mut tool) == identity);
+    let result = foreign::run(&mut tool, &mut root, &mut sink,
+        &vec![b"--capture-exit"[..].to_vec()], 3_000_000_000usize).unwrap();
+    assert!(result.exit_code == Some(37u8));
+    assert!(result.output.as_slice() == b"out\0bytes" && result.errors.as_slice() == b"err\0bytes");
+    output.write(b"ok immutable initial image\n");
+}
+pub fn owner(mut tool: ForeignCommand, mut root: ReadDirectory, mut sink: NullDevice) {
+    let _outcome = foreign::run(&mut tool, &mut root, &mut sink,
+        &vec![b"--wait-owner"[..].to_vec()], 60_000_000_000usize);
+    panic!("owner death test unexpectedly returned");
+}
+
+pub fn owner_marked(mut tool: ForeignCommand, mut root: ReadDirectory, mut sink: NullDevice) {
+    let _outcome = foreign::run(&mut tool, &mut root, &mut sink,
+        &vec![b"--wait-owner-reexec"[..].to_vec()], 60_000_000_000usize);
+    panic!("setid-marked owner death test unexpectedly returned");
+}

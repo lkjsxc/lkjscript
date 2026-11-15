@@ -167,7 +167,7 @@ sudo -n test ! -e "$stage"
 sudo -n install -d -m 0755 "$stage"
 stage_owned=1
 printf 'Candidate build load before: %s\n' "$(cut -d ' ' -f 1-3 /proc/loadavg)"
-"$compiler" build examples/site.lkj --library-dir library --stats --grant output \
+"$compiler" build examples/site/main.lkj --library-dir library --stats --grant output \
     --grant listener=127.0.0.1:0 \
     --grant clock --grant ready --grant stop -o "$work/server"
 printf 'Candidate build load after: %s\n' "$(cut -d ' ' -f 1-3 /proc/loadavg)"
@@ -259,8 +259,8 @@ printf 'Candidate effective settings match the live unit; stdout is a journal st
 cat "$work/candidate.settings"
 "$compiler" build tools/http-site-parity.lkj --library-dir library --grant output \
     --grant origin=127.0.0.1:8798 --grant "candidate=127.0.0.1:$port" \
-    --grant root=examples/site-content -o "$work/parity"
-"$compiler" build examples/site.lkj --library-dir library --grant output \
+    --grant root=examples/site/content -o "$work/parity"
+"$compiler" build examples/site/main.lkj --library-dir library --grant output \
     --grant "listener=127.0.0.1:$port" --grant clock --grant ready --grant stop -o "$work/rebound"
 for round in first restarted; do
     timeout --kill-after=5s 120s "$work/parity" >"$work/parity.out"

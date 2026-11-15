@@ -16,27 +16,27 @@ pub struct Archive {
 // compiler inputs, never runtime paths or filesystem authority.
 fn embedded_text(name: &str) -> Result<&'static str, String> {
     match name {
-        "0.body" => Ok(include_str!("site-content/0.body")),
-        "1.body" => Ok(include_str!("site-content/1.body")),
-        "2.body" => Ok(include_str!("site-content/2.body")),
-        "3.body" => Ok(include_str!("site-content/3.body")),
-        "4.body" => Ok(include_str!("site-content/4.body")),
-        "5.body" => Ok(include_str!("site-content/5.body")),
-        "6.body" => Ok(include_str!("site-content/6.body")),
-        "7.body" => Ok(include_str!("site-content/7.body")),
-        "8.body" => Ok(include_str!("site-content/8.body")),
-        "9.body" => Ok(include_str!("site-content/9.body")),
-        "10.body" => Ok(include_str!("site-content/10.body")),
-        "11.body" => Ok(include_str!("site-content/11.body")),
-        "12.body" => Ok(include_str!("site-content/12.body")),
-        "search-0.md" => Ok(include_str!("site-content/search-0.md")),
-        "search-1.md" => Ok(include_str!("site-content/search-1.md")),
-        "search-2.md" => Ok(include_str!("site-content/search-2.md")),
-        "search-3.md" => Ok(include_str!("site-content/search-3.md")),
-        "search-4.md" => Ok(include_str!("site-content/search-4.md")),
-        "search-5.md" => Ok(include_str!("site-content/search-5.md")),
-        "search-6.md" => Ok(include_str!("site-content/search-6.md")),
-        "search-7.md" => Ok(include_str!("site-content/search-7.md")),
+        "0.body" => Ok(include_str!("content/0.body")),
+        "1.body" => Ok(include_str!("content/1.body")),
+        "2.body" => Ok(include_str!("content/2.body")),
+        "3.body" => Ok(include_str!("content/3.body")),
+        "4.body" => Ok(include_str!("content/4.body")),
+        "5.body" => Ok(include_str!("content/5.body")),
+        "6.body" => Ok(include_str!("content/6.body")),
+        "7.body" => Ok(include_str!("content/7.body")),
+        "8.body" => Ok(include_str!("content/8.body")),
+        "9.body" => Ok(include_str!("content/9.body")),
+        "10.body" => Ok(include_str!("content/10.body")),
+        "11.body" => Ok(include_str!("content/11.body")),
+        "12.body" => Ok(include_str!("content/12.body")),
+        "search-0.md" => Ok(include_str!("content/search-0.md")),
+        "search-1.md" => Ok(include_str!("content/search-1.md")),
+        "search-2.md" => Ok(include_str!("content/search-2.md")),
+        "search-3.md" => Ok(include_str!("content/search-3.md")),
+        "search-4.md" => Ok(include_str!("content/search-4.md")),
+        "search-5.md" => Ok(include_str!("content/search-5.md")),
+        "search-6.md" => Ok(include_str!("content/search-6.md")),
+        "search-7.md" => Ok(include_str!("content/search-7.md")),
         _ => Err(format!("archive has no embedded text {name}")),
     }
 }
@@ -135,7 +135,7 @@ fn manifest(bytes: &[u8]) -> Result<(Vec<Page>, Page), String> {
 }
 impl Archive {
     pub fn open() -> Result<Archive, String> {
-        let (pages, not_found) = manifest(include_str!("site-content/manifest.json").as_bytes())?;
+        let (pages, not_found) = manifest(include_str!("content/manifest.json").as_bytes())?;
         for page in &pages { let _ = embedded_text(&page.body)?; }
         let _ = embedded_text(&not_found.body)?;
         Ok(Archive { pages, not_found })

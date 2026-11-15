@@ -4,6 +4,7 @@ use super::{elf, syscall};
 use super::process::{self, ProcessCode};
 use super::directories;
 use super::lifecycle;
+use super::foreign::{self, ForeignCode};
 
 pub(super) const REQUEST: i64 = -128;
 const RESPONSE: i64 = -144;
@@ -78,13 +79,13 @@ fn zero(a: &mut Assembler, start: i64, count: usize) {
     }
 }
 
-fn emit_storage(a: &mut Assembler, labels: &[Label], reply: Label, invalid: Label, bad: Label) {
+fn emit_storage(a: &mut Assembler, labels: &[Label], reply: Label, invalid: Label, bad: Label, beneath: Label) {
     let opening = a.label();
     a.bind(labels[0]);
     a.immediate(A, 0x800c2); // O_CLOEXEC | O_CREAT | O_EXCL | O_RDWR.
     a.jump(opening);
     a.bind(labels[1]);
-    a.immediate(A, 0x80442); // O_CLOEXEC | O_CREAT | O_APPEND | O_RDWR.
+    a.immediate(A, 0xa0442); // O_CLOEXEC | O_CREAT | O_APPEND | O_RDWR.
     a.bind(opening);
     a.store(BP, SCRATCH, A);
     a.load(DI, BP, REQUEST + 8);
@@ -122,9 +123,10 @@ fn emit_storage(a: &mut Assembler, labels: &[Label], reply: Label, invalid: Labe
     a.immediate(A, 0x0a);
     a.store(BP, SCRATCH + 16, A);
     a.mov(SI, R14);
-    a.lea(D, BP, SCRATCH);
-    a.immediate(R10, 24);
-    syscall(a, 437);
+    a.mov(D, R15);
+    a.load(C, BP, SCRATCH);
+    a.load(R8, BP, SCRATCH + 8);
+    a.call(beneath);
     empty(a, reply);
 
     for index in 2usize..5usize {
@@ -149,6 +151,9 @@ fn emit_storage(a: &mut Assembler, labels: &[Label], reply: Label, invalid: Labe
 pub(super) fn image(local: &[u8], address: &[u8], nonce: &[u8]) -> Result<Vec<u8>, i64> {
     let mut a = Assembler::new();
     let p = ProcessCode::new(&mut a);
+    let foreign = ForeignCode::new(&mut a);
+    let mut foreign_operations = Vec::new();
+    for _index in 0usize..3usize { foreign_operations.push(a.label()); }
     let next = a.label();
     let rpc = a.label();
     let unix_request = a.label();
@@ -163,6 +168,9 @@ pub(super) fn image(local: &[u8], address: &[u8], nonce: &[u8]) -> Result<Vec<u8
     let unix_data = a.label();
     let secret = a.label();
     let ready = a.label();
+    let file_seek = a.label();
+    let file_modified = a.label();
+    let beneath = a.label();
     let mut operations = Vec::new();
     for _index in 0usize..16usize { operations.push(a.label()); }
     let mut storage = Vec::new();
@@ -309,6 +317,12 @@ pub(super) fn image(local: &[u8], address: &[u8], nonce: &[u8]) -> Result<Vec<u8
         a.compare(A, C);
         a.condition(4, operations[index]);
     }
+    a.immediate(C, 50);
+    a.compare(A, C);
+    a.condition(4, file_seek);
+    a.immediate(C, 51);
+    a.compare(A, C);
+    a.condition(4, file_modified);
     a.immediate(C, 48);
     a.compare(A, C);
     a.condition(4, storage[0]);
@@ -327,6 +341,11 @@ pub(super) fn image(local: &[u8], address: &[u8], nonce: &[u8]) -> Result<Vec<u8
         a.compare(A, C);
         a.condition(4, lifecycle[index]);
     }
+    for index in 0usize..3usize {
+        a.immediate(C, 52 + index as u64);
+        a.compare(A, C);
+        a.condition(4, foreign_operations[index]);
+    }
     for (number, label) in vec![(20u64, p.spawn), (21u64, p.wait), (22u64, p.terminate), (23u64, p.drop_child), (24u64, p.request_stop)] {
         a.immediate(C, number);
         a.compare(A, C);
@@ -334,13 +353,17 @@ pub(super) fn image(local: &[u8], address: &[u8], nonce: &[u8]) -> Result<Vec<u8
     }
     a.jump(invalid);
 
-    emit_storage(&mut a, &storage, reply, invalid, bad);
-    directories::emit(&mut a, &directories, reply, invalid, bad);
+    emit_file_observation(&mut a, file_seek, file_modified, reply, invalid, bad);
+    directories::beneath(&mut a, beneath);
+    emit_storage(&mut a, &storage, reply, invalid, bad, beneath);
+    directories::emit(&mut a, &directories, reply, invalid, bad, beneath);
     lifecycle::emit(&mut a, &lifecycle, reply, invalid, bad);
     emit_network(&mut a, &operations, reply, invalid, bad);
     emit_files(&mut a, &operations, reply, bad);
     emit_readiness(&mut a, &operations, reply, invalid, bad);
     process::emit(&mut a, &p, reply);
+    foreign::dispatch(&mut a, foreign, &foreign_operations, reply, bad);
+    foreign::emit(&mut a, foreign);
 
     a.bind(bad);
     a.immediate(A, (-9i64) as u64);
@@ -987,4 +1010,40 @@ pub(super) fn import_image(address: &[u8], nonce: &[u8]) -> Result<Vec<u8>, i64>
     a.raw(&[1u8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
     a.raw(nonce);
     Ok(elf(a.finish().map_err(|_| 8i64)?))
+}
+
+// This independent path observes the same kernel inode; it shares no native leaf.
+fn emit_file_observation(a: &mut Assembler, seek: Label, modified: Label,
+    reply: Label, invalid: Label, bad: Label) {
+    a.bind(seek);
+    a.load(DI, BP, REQUEST + 8);
+    check_fd(a, DI, bad);
+    a.load(SI, BP, REQUEST + 16);
+    a.load(D, BP, REQUEST + 24);
+    a.immediate(C, 2);
+    a.compare(D, C);
+    a.condition(7, invalid);
+    syscall(a, 8);
+    empty(a, reply);
+
+    a.bind(modified);
+    a.load(DI, BP, REQUEST + 8);
+    check_fd(a, DI, bad);
+    a.lea(SI, BP, SCRATCH);
+    syscall(a, 5);
+    let inspected = a.label();
+    a.test(A, true);
+    a.condition(9, inspected);
+    empty(a, reply);
+    a.bind(inspected);
+    a.load_width(A, BP, SCRATCH + 24, 4, false);
+    a.immediate(C, 0xf000);
+    a.rr(0x21, A, C, true);
+    a.immediate(C, 0x8000);
+    a.compare(A, C);
+    a.condition(5, invalid);
+    a.immediate(A, 0);
+    a.lea(R8, BP, SCRATCH + 88);
+    a.immediate(R9, 16);
+    a.jump(reply);
 }

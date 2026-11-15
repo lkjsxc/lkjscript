@@ -1,0 +1,27 @@
+//! git status with an explicit image, read root and null device grant.
+use std::foreign;
+
+pub fn main(
+    mut tool: ForeignCommand, mut root: ReadDirectory, mut sink: NullDevice,
+    mut output: Stdout, mut errors: Stderr, mut status: ExitStatus,
+) {
+    let arguments = vec![
+        b"--no-optional-locks"[..].to_vec(),
+        b"-c"[..].to_vec(), b"core.fsmonitor=false"[..].to_vec(),
+        b"-c"[..].to_vec(), b"core.hooksPath=/nonexistent"[..].to_vec(),
+        b"status"[..].to_vec(), b"--porcelain=v1"[..].to_vec(),
+    ];
+    match foreign::run(&mut tool, &mut root, &mut sink, &arguments, 3_000_000_000usize) {
+        Ok(outcome) => {
+            output.write(&outcome.output);
+            errors.write(&outcome.errors);
+            if outcome.timed_out { status.set_status(124u8); }
+            else if let Some(code) = outcome.exit_code { status.set_status(code); }
+            else { status.set_status(125u8); }
+        }
+        Err(errno) => {
+            errors.write(format!("foreign git launch failed: errno {errno}\n").as_bytes());
+            status.set_status(125u8);
+        }
+    }
+}

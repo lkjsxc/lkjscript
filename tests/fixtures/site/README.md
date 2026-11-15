@@ -6,7 +6,7 @@ from the archive served by the candidate. The candidate never opens this file.
 
 The recorder is `tools/http-site-record.lkj`. Its only network authority is the
 granted origin connector. It reads the 51 search-query targets in
-`examples/site-content/paths.txt` and the thirteen protocol probes shared with live
+`examples/site/content/paths.txt` and the thirteen protocol probes shared with live
 parity in `tools/http_site_probes.lkj`. Every record stores the request, observed
 status, Content-Length presence/value, all six stable header pairs, and SHA-256
 of the complete response body. Date and Connection are excluded. Header names

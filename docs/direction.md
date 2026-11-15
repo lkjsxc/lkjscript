@@ -83,27 +83,27 @@ needed forms or ceases to find useful differences. Source uses .lkj to identify 
 
 ## Real consumers (programs stream)
 
-Programs work in /home/coder/workspace/lkjscript-programs-20261115 on programs; land through fetch/rebase, bootstrap, four-worker gate and push HEAD:main.
+Programs work in /home/coder/workspace/lkjscript-programs-20261115 on programs; fetch/rebase, bootstrap, four-worker gate, push HEAD:main. Never refresh seed here.
 Connector grants one numeric IPv4:port without DNS or retargeting; both executors validate descriptors and authority follows checked-IR effects and cleanup.
-HTTP/1.1 persistence and pipelining retain exact framing; clients are lkjscript. Profile before removing at most two costs; owned chunks replace per-byte assembly.
-Use readiness for concurrency, processes for parallelism; readiness temporarily borrows owned handles into a kernel wait set without storing language views.
-Keep explicit connection state, indexed deadlines and bounded work per dispatch; tiny progress never extends deadlines, and buffered requests retain their receive time.
-The three scoped-thread cases are deleted; closure escape stays pending, without shared-memory ownership rules.
-Keep compiler source within the stored seed's forms; never refresh seed here. The independent interpreter helper operates actual descriptors without relay queues.
-Journal acknowledges after log fsync, a synced head and atomic rename plus directory fsync; one lock owns writes. Replay validates checksums and the committed boundary before incomplete-tail repair.
-Stop claims SIGTERM; signal the native program or interpreted broker, drain admitted requests to a fixed deadline, sync and exit.
-Entropy supplies kernel bytes; session keys are created private before writing, synced and atomically published.
-Write tokens bind expiry and a random nonce through shared HMAC and a separate key-directory grant; JSON rejects ambiguous keys and authentication precedes retention and mutation.
-The documentation candidate embeds published bodies and search Markdown because DynamicUser blocks openat2; text stays source library code. Preserve live/frozen parity, route spellings, headers and unusual HEAD behavior.
-Prove journal output, exact unit settings and same-port restart in isolation; never modify the live origin or /opt. Claude owns switch/rollback.
-Desk grants argv, exact named environment values, streams, status, clock, entropy and one directory; it never discovers HOME or enumerates environment.
-Desk locks writers and publishes a synced fresh inode by rename plus directory fsync, preserving the Python log prefix; copying that prefix keeps append linear in log size.
-An exact cxloop path cannot prove a child-authority subset: stop at commands plus serve without board/handoff/wake. Arbitrary desk listen stays outside this program.
-A future child must be an immutable authenticated admitted image with checked entry grants and explicit transferred handles; external helpers need broader host trust or confinement.
-Separate command/service entries avoid eager listener acquisition; fixed-offset local time is explicit. No live desk handoff is claimed at this boundary.
-cxloop still needs an admitted long-child lifecycle, cancellation/deadlines and explicit git/job roots; its current Bash children cannot inherit narrow language authority.
-The journal needs reviewed account/session contracts, WebSocket push and a checked worker lifecycle; start it next with Claude's disposable fixture and API contract.
-For outbound HTTPS choose TLS in the checked library: certificate validation and trust roots are missing; a helper would reintroduce the unresolved external-host boundary.
+HTTP/1.1 persistence/pipelining retain exact framing. Keep indexed deadlines, bounded dispatch and receive times; tiny progress never renews a deadline.
+Use readiness for concurrency, processes for parallelism. Wait sets borrow handles without storing language views; closure escape remains pending, without thread rules.
+Keep compiler source within the stored seed's forms. The independent interpreter broker operates actual descriptors, without relay queues.
+Journal acknowledges after log fsync, a synced head and atomic rename plus directory fsync; one writer lock. Replay validates checksums/boundaries before tail repair. Stop claims SIGTERM, drains admitted work to a fixed deadline, syncs and exits.
+Entropy supplies kernel bytes; publish private synced keys atomically. Write tokens bind expiry/nonce through HMAC and a separate key-root grant; authenticate before mutation.
+The documentation origin embeds published bodies/search Markdown under exact hardening. Preserve live/frozen route, header, unusual HEAD and same-port restart parity; Claude owns deployment.
+Desk is composed by the host: one writable state root, named read-only board/handoff roots and one loopback listener; no child authority. File contracts are in examples/desk.md.
+ReadDirectory/ReadFile are affine and cannot produce writable/chmod-capable handles. Inspect and read the same regular-file descriptor; atomic replacement preserves a coherent snapshot.
+Separate command/service entries avoid eager listeners. Named environment grants never discover HOME; fixed-offset local time is explicit; arbitrary listen remains an external flock wrapper.
+Desk append holds .lock, repairs only an incomplete suffix and issues one O_APPEND write, never copies the log. Sync is default; buffered durability is an explicit argument shown in phase reports.
+Desk push uses durable byte cursors and idempotent row IDs; one service metadata tick does no per-idle-peer work. Queued writes have fixed deadlines; polling is the fallback.
+Wake is a durable high-water request/ack consumed idempotently by the host: launch plus acknowledgement cannot be exactly once. Prove units in fresh transient instances; no live switches.
+Authenticated children await compiler-owned immutable image identity, canonical entry authority and descriptor-only startup; tests/diagnostics/external_child_authority.lkj is the single pending contract.
+A child imports transferred affine slots, never reopens baked roots or reacquires World. Reports name every image/slot; deadline exit/output values and parent-death cleanup are required.
+Foreign-child design: a separate affine command grant snapshots the initial executable; a read root and NullDevice are explicit. Broad Process is never a narrow grant.
+Stage every dynamic runtime file beneath R; report transformed PT_INTERP bytes honestly. Kernel setup between fork/exec uses Landlock, seccomp and no_new_privs, without a helper.
+Kernel profile: read/execute R, plus the explicit initial image, writable capture memfds and verified /dev/null (1:3); deny other file writes, sockets, descendants and privilege regain. Reexec keeps confinement, including anonymous capture execution. Close unpassed descriptors, use fixed streams/env, impose an absolute kill deadline then reap, and check parent-death races; fail closed on unsupported hosts.
+Report observable outside-path metadata, clocks/entropy and mutable root contents; no filesystem snapshot or information-flow claim. No language grant ships before checker/executor/report cases agree.
+cxloop network/home/process-tree authority remains work in examples/foreign-child.md. Journal next needs reviewed account/live/worker contracts; outbound TLS needs checked certificate validation and trust roots.
 
 ## Authenticated reuse
 

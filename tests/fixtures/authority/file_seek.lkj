@@ -1,0 +1,21 @@
+// Seeking an O_APPEND descriptor never retargets its next write.
+pub fn main(mut root: Directory, mut output: Stdout) {
+    let mut file = root.open_append("append").unwrap();
+    file.write_all(b"alpha\n").unwrap();
+    assert!(file.seek(0i64, 2u8).unwrap() == 6usize);
+    assert!(file.seek(-1i64, 2u8).unwrap() == 5usize);
+    let mut byte = [0u8; 1];
+    assert!(file.read(&mut byte).unwrap() == 1usize && byte[0usize] == b'\n');
+    assert!(file.seek(0i64, 0u8).unwrap() == 0usize);
+    file.write_all(b"beta\n").unwrap();
+    assert!(file.seek(0i64, 2u8).unwrap() == 11usize);
+    assert!(file.seek(0i64, 1u8).unwrap() == 11usize);
+    assert!(file.seek(0i64, 3u8) == Err(22i64));
+    assert!(file.seek(-1i64, 0u8) == Err(22i64));
+    file.truncate(8usize).unwrap();
+    assert!(file.seek(0i64, 0u8).unwrap() == 0usize);
+    assert!(file.read_to_end().unwrap().as_slice() == b"alpha\nbe");
+    assert!(file.modified_nanoseconds().unwrap() > 0usize);
+    assert!(root.open_append("link").is_err());
+    output.write(b"ok file seek\n");
+}

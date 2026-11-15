@@ -73,8 +73,8 @@ ln -s ../outside.txt "$http_work/docs/link-outside"
 if [ "$engine" = interpreter ]; then
     printf '60\n120\n120\n' > "$http_work/docs/.http-policy"
 fi
-"$compiler" test examples/http_protocol.lkj --jobs 1
-"$compiler" test examples/http_policy.lkj --jobs 1
+"$compiler" test library/http_protocol.lkj --jobs 1
+"$compiler" test library/http_policy.lkj --jobs 1
 "$compiler" test tools/http_client.lkj --jobs 1
 if [ "$engine" = native ]; then
     "$compiler" build examples/http.lkj --profile \

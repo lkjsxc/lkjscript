@@ -1,0 +1,47 @@
+use std::foreign;
+
+fn image_header(tool: &mut ForeignCommand) -> [u8; 64] {
+    let mut image = tool.image().unwrap();
+    let mut bytes = [0u8; 64];
+    assert!(image.read(&mut bytes).unwrap() == 64usize);
+    assert!(&bytes[..4usize] == b"\x7fELF");
+    bytes
+}
+
+pub fn main(
+    mut tool: ForeignCommand, mut root: ReadDirectory, mut sink: NullDevice,
+    mut arguments: Arguments, mut output: Stdout,
+) {
+    let empty: Vec<Vec<u8>> = Vec::new();
+    let args = arguments.args();
+    assert!(args.len() == 1usize);
+    let identity = image_header(&mut tool);
+    let command = vec![
+        b"--no-optional-locks"[..].to_vec(), b"-c"[..].to_vec(), b"core.fsmonitor=false"[..].to_vec(),
+        b"-c"[..].to_vec(), b"core.hooksPath=/nonexistent"[..].to_vec(),
+        b"status"[..].to_vec(), b"--porcelain=v1"[..].to_vec(),
+    ];
+    let result = match foreign::run(&mut tool, &mut root, &mut sink, &command, 3_000_000_000usize) {
+        Ok(result) => result,
+        Err(errno) => {
+            assert!(errno == 38i64 || errno == 95i64 || errno == 1i64);
+            output.write(format!("ok foreign kernel unavailable, execution refused: errno {errno}\n").as_bytes());
+            return;
+        }
+    };
+    assert!(!result.timed_out && result.exit_code == Some(0u8) && result.signal == None);
+    assert!(result.errors.is_empty());
+    assert!(String::from_utf8(result.output).unwrap().contains("?? inside.txt\n"));
+    let outside = foreign::run(&mut tool, &mut root, &mut sink,
+        &vec![b"-C"[..].to_vec(), args[0].clone(), b"status"[..].to_vec(), b"--porcelain=v1"[..].to_vec()],
+        3_000_000_000usize).unwrap();
+    assert!(!outside.timed_out && outside.exit_code != Some(0u8) && outside.signal == None);
+    assert!(!outside.errors.is_empty());
+    assert!(tool.run(&mut root, &mut sink, &vec![b"bad\0arg"[..].to_vec()], 1_000_000usize).is_err());
+    assert!(tool.run(&mut root, &mut sink, &empty, 0usize).is_err());
+    assert!(image_header(&mut tool) == identity);
+    output.write(b"ok foreign git read root, outside refusal, capture, identity, arguments\n");
+}
+
+// Acquiring an image must classify its pinned inode before any data-open.
+pub fn acquire(tool: ForeignCommand) { drop(tool); }

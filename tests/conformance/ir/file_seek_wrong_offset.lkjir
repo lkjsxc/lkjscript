@@ -1,0 +1,23 @@
+lkjscript-ir 1
+# expect: reject E_TYPE
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "File" file
+type "&mut File" ref mut 7
+type "Count" enum copy
+variant "Ok" "value" 4
+variant "Err" "error" 3
+endtype
+fn "probe" 3 9
+local "file" 8 let
+local "unsigned_offset" 4 let
+local "origin" 5 let
+local "result" 9 let
+@1 intrinsic 3 "file_seek" 0 1 2
+@1 return 3
+endfn

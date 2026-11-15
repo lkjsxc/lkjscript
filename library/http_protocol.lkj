@@ -3,6 +3,7 @@ pub struct Request {
     pub method: String,
     pub authorization: Option<String>,
     pub x_desk: Option<String>,
+    pub last_event_id: Option<String>,
     pub path: String,
     pub raw_path: String,
     pub query: String,
@@ -308,6 +309,7 @@ pub fn parse_with_methods(bytes: &[u8], methods: &str) -> Result<Request, u16> {
     let mut expectation = false;
     let mut authorization = None;
     let mut x_desk = None;
+    let mut last_event_id = None;
     let mut close = false;
     let mut keep_alive = false;
     let mut at = line_end + 2;
@@ -365,6 +367,12 @@ pub fn parse_with_methods(bytes: &[u8], methods: &str) -> Result<Request, u16> {
                 Err(_) => return Err(400u16),
             };
             x_desk = Some(text);
+        } else if same(name, b"last-event-id") {
+            if last_event_id.is_some() { return Err(400u16); }
+            let text = match String::from_utf8(value.to_vec()) {
+                Ok(text) => text, Err(_) => return Err(400u16),
+            };
+            last_event_id = Some(text);
         } else if same(name, b"connection") {
             let (found_close, found_keep_alive) = connection_options(value)?;
             close = close || found_close;
@@ -393,6 +401,7 @@ pub fn parse_with_methods(bytes: &[u8], methods: &str) -> Result<Request, u16> {
         method: String::from_utf8(line[..first].to_vec()).unwrap(),
         authorization,
         x_desk,
+        last_event_id,
         path,
         raw_path,
         query,
@@ -616,4 +625,11 @@ fn desk_header_is_explicit_and_unambiguous() {
     let absent = parse_with_methods(b"POST /say HTTP/1.1\r\nHost: local\r\n\r\n", "GET, POST").unwrap();
     assert!(absent.x_desk.is_none());
     assert!(matches!(parse_with_methods(b"POST /say HTTP/1.1\r\nHost: local\r\nX-Desk: 1\r\nX-Desk: 0\r\n\r\n", "POST"), Err(400u16)));
+}
+
+#[test]
+fn event_cursor_header_is_unique() {
+    let request = parse_with_methods(b"GET /events HTTP/1.1\r\nHost: localhost\r\nLast-Event-ID: 123.456\r\n\r\n", "GET").unwrap();
+    assert!(request.last_event_id.as_ref().unwrap() == "123.456");
+    assert!(parse_with_methods(b"GET /events HTTP/1.1\r\nHost: localhost\r\nLast-Event-ID: 1.2\r\nlast-event-id: 1.2\r\n\r\n", "GET").is_err());
 }

@@ -1,0 +1,7 @@
+// expect: reject E_UNSUPPORTED
+// cause: expected a Rust form.
+// pending: Split.nth should name the absent Iterator method and show repeated next calls for a fixed index.
+pub fn probe() -> usize {
+    let value = "desk-wake 1 3 id";
+    value.split(' ').nth(2usize).unwrap().parse::<usize>().unwrap()
+}

@@ -15,6 +15,10 @@ impl Builder<'_, '_> {
             Value::Stdin => self.compiler.intern(String::new(), ir::TypeKind::Stdin),
             Value::Stderr => self.compiler.intern(String::new(), ir::TypeKind::Stderr),
             Value::Directory => self.compiler.intern(String::new(), ir::TypeKind::Directory),
+            Value::ReadDirectory => self.compiler.intern(String::new(), ir::TypeKind::ReadDirectory),
+            Value::ReadFile => self.compiler.intern(String::new(), ir::TypeKind::ReadFile),
+            Value::ForeignCommand => self.compiler.intern(String::new(), ir::TypeKind::ForeignCommand),
+            Value::NullDevice => self.compiler.intern(String::new(), ir::TypeKind::NullDevice),
             Value::File => self.compiler.intern(String::new(), ir::TypeKind::File),
             Value::Process => self.compiler.intern(String::new(), ir::TypeKind::Process),
             Value::Clock => self.compiler.intern(String::new(), ir::TypeKind::Clock),
@@ -26,12 +30,14 @@ impl Builder<'_, '_> {
             Value::Stop => self.compiler.intern(String::new(), ir::TypeKind::Stop),
             Value::Pid => *self.compiler.type_names.get(&"u32".to_string()).unwrap(),
             Value::Port => *self.compiler.type_names.get(&"u16".to_string()).unwrap(),
-            Value::FileRef | Value::DirectoryRef | Value::MutableFileRef | Value::ListenerRef | Value::ClockRef | Value::StopRef => {
+            Value::FileRef | Value::DirectoryRef | Value::ReadDirectoryRef | Value::NullDeviceRef | Value::MutableFileRef | Value::ListenerRef | Value::ClockRef | Value::StopRef => {
                 let kind = match value {
                     Value::FileRef | Value::MutableFileRef => ir::TypeKind::File,
                     Value::ListenerRef => ir::TypeKind::Listener,
                     Value::ClockRef => ir::TypeKind::Clock,
                     Value::StopRef => ir::TypeKind::Stop,
+                    Value::ReadDirectoryRef => ir::TypeKind::ReadDirectory,
+                    Value::NullDeviceRef => ir::TypeKind::NullDevice,
                     _ => ir::TypeKind::Directory,
                 };
                 let inner = self.compiler.intern(String::new(), kind);
@@ -80,6 +86,8 @@ impl Builder<'_, '_> {
                     .intern(String::new(), ir::TypeKind::Vec { inner: bytes })
             }
             Value::ResultDirectory
+            | Value::ResultReadDirectory
+            | Value::ResultReadFile
             | Value::ResultFile
             | Value::ResultCount
             | Value::ResultBytes
@@ -98,6 +106,8 @@ impl Builder<'_, '_> {
             | Value::ResultMaybeStatus => {
                 let success = match value {
                     Value::ResultDirectory => self.capability_type(Value::Directory, span)?,
+                    Value::ResultReadDirectory => self.capability_type(Value::ReadDirectory, span)?,
+                    Value::ResultReadFile => self.capability_type(Value::ReadFile, span)?,
                     Value::ResultFile => self.capability_type(Value::File, span)?,
                     Value::ResultChild => self.capability_type(Value::Child, span)?,
                     Value::ResultListener => self.capability_type(Value::Listener, span)?,
@@ -247,6 +257,10 @@ impl Builder<'_, '_> {
             let helper = method.helper().expect("source capability operation");
             let module = if matches!(method, capabilities::Method::CommandArgs | capabilities::Method::EnvironmentGet) {
                 "command"
+            } else if matches!(method, capabilities::Method::ForeignRun) {
+                "foreign"
+            } else if matches!(method, capabilities::Method::ReadDirectoryOpen | capabilities::Method::ReadOpenDirectory | capabilities::Method::ReadDirectoryList | capabilities::Method::ReadFileRead | capabilities::Method::ReadFileReadToEnd) {
+                "read_io"
             } else { "io" };
             let value = self.source_library_call(module, helper, BTreeMap::new(), values, span)?;
             if value.1 != result {

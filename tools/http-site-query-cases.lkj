@@ -2,7 +2,7 @@
 mod http_site_queries;
 pub fn main() {
     let mut paths: Vec<String> = Vec::new();
-    for line in include_str!("../examples/site-content/paths.txt").lines() {
+    for line in include_str!("../examples/site/content/paths.txt").lines() {
         let line = std::str::trim_ascii(line);
         if !line.is_empty() && !line.starts_with("#") { paths.push(line.to_string()); }
     }

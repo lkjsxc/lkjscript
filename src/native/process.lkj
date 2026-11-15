@@ -194,12 +194,11 @@ fn files(a: &mut Assembler, p: Platform) {
 
 fn directories(a: &mut Assembler, p: Platform) {
     let invalid = a.label();
-    let how = a.label();
     a.bind(p.directory_open_directory);
     path(a, invalid, false);
-    a.address(D, how);
-    a.immediate(R10, 24);
-    syscall(a, 437);
+    a.immediate(C, 0x90000);
+    a.immediate(R8, 0);
+    a.call(p.open_beneath);
     let directory_ready = a.label();
     a.immediate(C, 3);
     a.compare(A, C);
@@ -257,10 +256,6 @@ fn directories(a: &mut Assembler, p: Platform) {
     a.immediate(A, (-22i64) as u64);
     a.bind(finish_rename);
     epilogue(a);
-    a.bind(how);
-    a.raw(&[0, 0, 9, 0, 0, 0, 0, 0]);
-    a.raw(&[0, 0, 0, 0, 0, 0, 0, 0]);
-    a.raw(&[10, 0, 0, 0, 0, 0, 0, 0]);
 }
 
 fn children(a: &mut Assembler, p: Platform) {

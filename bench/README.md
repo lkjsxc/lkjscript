@@ -34,7 +34,7 @@ workloads. Reports include elapsed/user/kernel time, peak RSS and executable siz
 transient results and images stay beneath target/bench/. Each timing includes the
 1/5/15-minute load averages read immediately before that run on the shared host.
 
-The HTTP row stages the current `examples/http_protocol.lkj` beside its native
+The HTTP row stages the current `library/http_protocol.lkj` beside its native
 source; the Rust wrapper imports that same example file. There is no duplicate
 parser implementation. A path digit changes on every iteration, and the row also
 checks HEAD, URL decoding, query stripping, connection close and missing Host

@@ -1,0 +1,242 @@
+//! SSE replay and readiness proof. Stdin chooses total peers (20 normally, 1000 campaign).
+mod http_client;
+use http_client::{Connection, io, require, find};
+use std::json::{self, Value};
+
+struct Peer {
+    stream: File,
+    input: Vec<u8>,
+    headers: bool,
+    frames: usize,
+    cursor: String,
+    rows: std::collections::BTreeSet<String>,
+    duplicates: usize,
+    reset: bool,
+}
+fn connect(target: &mut Connector, ready: &mut Readiness, token: usize, cursor: &str) -> Result<Peer, String> {
+    let mut stream = io(target.connect(), "connect SSE peer")?;
+    let header = if cursor.is_empty() { String::new() } else { format!("Last-Event-ID: {cursor}\r\n") };
+    io(stream.write_all(format!("GET /events HTTP/1.1\r\nHost: localhost\r\n{header}\r\n").as_bytes()), "request SSE")?;
+    io(stream.set_nonblocking(true), "set SSE nonblocking")?;
+    io(ready.watch_file(&mut stream, token, 1u8), "watch SSE peer")?;
+    Ok(Peer { stream, input: Vec::new(), headers: false, frames: 0usize,
+        cursor: String::new(), rows: std::collections::BTreeSet::new(), duplicates: 0usize, reset: false })
+}
+fn text(value: &Value, name: &str) -> Result<String, String> {
+    Ok(value.get(name).ok_or(format!("missing SSE {name}"))?.as_str()
+        .ok_or(format!("SSE {name} is not a string"))?.to_string())
+}
+fn frame(peer: &mut Peer, bytes: &[u8]) -> Result<(), String> {
+    let payload = match String::from_utf8(bytes.to_vec()) {
+        Ok(value) => value, Err(_) => return Err("SSE is not UTF-8".to_string()),
+    };
+    let mut id = String::new();
+    let mut data = String::new();
+    let mut kind = String::new();
+    for line in payload.as_str().split('\n') {
+        if line.starts_with("id: ") { id = line[4usize..].to_string(); }
+        if line.starts_with("data: ") { data = line[6usize..].to_string(); }
+        if line.starts_with("event: ") { kind = line[7usize..].to_string(); }
+    }
+    require(kind == "desk", "SSE event type differs")?;
+    let value = match json::parse(data.as_bytes()) {
+        Ok(value) => value, Err(problem) => return Err(format!("SSE JSON: {}", problem.message)),
+    };
+    let state = value.get("state").ok_or("SSE lacks state".to_string())?;
+    require(text(state, "cursor")? == id, "SSE cursor and snapshot disagree")?;
+    let names: Vec<String> = vec!["notes".to_string(), "inbox".to_string()];
+    for name in names {
+        let rows = value.get(&name).ok_or("SSE lacks rows".to_string())?.as_array()
+            .ok_or("SSE rows are not an array".to_string())?;
+        for row in rows {
+            let id = text(row, "id")?;
+            if !peer.rows.insert(id) { peer.duplicates += 1usize; }
+        }
+    }
+    peer.reset = value.get("reset").and_then(|value| value.as_bool()).unwrap_or(false);
+    peer.cursor = id;
+    peer.frames += 1usize;
+    Ok(())
+}
+fn receive(peer: &mut Peer) -> Result<(), String> {
+    let mut buffer = [0u8; 65536];
+    for _step in 0usize..16usize {
+        let count = match peer.stream.read(&mut buffer) {
+            Ok(0usize) => return Err("SSE peer closed unexpectedly".to_string()),
+            Ok(count) => count, Err(11i64) => break,
+            Err(errno) => return Err(format!("read SSE: errno {errno}")),
+        };
+        peer.input.extend_from_slice(&buffer[..count]);
+        if !peer.headers {
+            let end = match find(&peer.input, b"\r\n\r\n") { Some(end) => end + 4usize, None => continue };
+            let header = match String::from_utf8(peer.input[..end].to_vec()) {
+                Ok(value) => value, Err(_) => return Err("SSE header is not UTF-8".to_string()),
+            };
+            require(header.starts_with("HTTP/1.1 200 "), "SSE status differs")?;
+            require(header.contains("Content-Type: text/event-stream"), "SSE media type differs")?;
+            require(!header.contains("Content-Length:"), "SSE has a finite Content-Length")?;
+            let remaining = peer.input[end..].to_vec();
+            peer.input = remaining;
+            peer.headers = true;
+        }
+        loop {
+            let end = match find(&peer.input, b"\n\n") { Some(end) => end, None => break };
+            let bytes = peer.input[..end].to_vec();
+            let remaining = peer.input[end + 2usize..].to_vec();
+            peer.input = remaining;
+            frame(peer, &bytes)?;
+        }
+    }
+    Ok(())
+}
+fn complete(peers: &[Peer], rows: usize) -> bool {
+    for peer in peers {
+        if peer.frames == 0usize || peer.rows.len() < rows { return false; }
+    }
+    true
+}
+fn wait(peers: &mut [Peer], ready: &mut Readiness, clock: &mut Clock, rows: usize) -> Result<(), String> {
+    let until = io(clock.nanoseconds(), "read SSE deadline")? + 30_000_000_000usize;
+    while !complete(peers, rows) {
+        require(io(clock.nanoseconds(), "read SSE clock")? < until, "SSE replay deadline")?;
+        for (token, _flags) in io(ready.wait(clock, until), "wait SSE peers")? {
+            if token > 0usize && token <= peers.len() { receive(&mut peers[token - 1usize])?; }
+        }
+    }
+    Ok(())
+}
+fn publish(root: &mut Directory, clock: &mut Clock, serial: usize, large: bool) -> Result<(), String> {
+    let mut lock = io(root.open_append(".lock"), "open test writer lock")?;
+    io(lock.lock_wait(), "lock test writer")?;
+    let mut message = format!("SSE note {serial} 日本語");
+    if large {
+        let chunk = String::from_utf8(vec![b'x'; 8192]).unwrap();
+        for _index in 0usize..512usize { message.push_str(&chunk); }
+    }
+    let row = Value::Object(vec![
+        ("id".to_string(), Value::String(format!("sse-{serial}"))),
+        ("t".to_string(), Value::Number(format!("{}", io(clock.unix_seconds(), "read note time")?))),
+        ("kind".to_string(), Value::String("note".to_string())),
+        ("from".to_string(), Value::String("sse-proof".to_string())),
+        ("text".to_string(), Value::String(message)),
+    ]);
+    let line = match json::stringify(&row) {
+        Ok(line) => format!("{line}\n"), Err(problem) => return Err(problem.message),
+    };
+    let mut file = io(root.open_append("notes.jsonl"), "open test log")?;
+    require(io(file.write(line.as_bytes()), "append test note")? == line.len(), "short test append")?;
+    io(file.sync(), "sync test note")?;
+    drop(file);
+    drop(lock);
+    Ok(())
+}
+fn request(connection: &mut Connection, method: &str, body: &str) -> Result<(), String> {
+    let extra = if method == "POST" { "X-Desk: 1\r\nContent-Type: application/json\r\n" } else { "" };
+    let path = if method == "POST" { "say" } else { "state" };
+    connection.send(format!("{method} /{path} HTTP/1.1\r\nHost: localhost\r\nContent-Length: {}\r\n{extra}\r\n{body}", body.len()).as_bytes())?;
+    let response = connection.header(false)?;
+    require(response.status == 200u16 && !response.close, "active HTTP response differs")?;
+    connection.discard_body(response.length)
+}
+fn active_rounds(active: &mut [Connection], clock: &mut Clock) -> Result<usize, String> {
+    let start = io(clock.nanoseconds(), "read active start")?;
+    for _round in 0usize..10usize {
+        for index in 0usize..active.len() { request(&mut active[index], "GET", "")?; }
+    }
+    Ok(io(clock.nanoseconds(), "read active end")? - start)
+}
+fn reconnect(peer: &mut Peer, target: &mut Connector, ready: &mut Readiness, cursor: &str) -> Result<(), String> {
+    io(ready.unwatch_file(&mut peer.stream), "unwatch reconnect")?;
+    let mut fresh = connect(target, ready, 1usize, cursor)?;
+    fresh.rows = std::mem::replace(&mut peer.rows, std::collections::BTreeSet::new());
+    *peer = fresh;
+    Ok(())
+}
+fn run(output: &mut Stdout, input: &mut Stdin, target: &mut Connector, root: &mut Directory,
+    clock: &mut Clock, ready: &mut Readiness) -> Result<(), String> {
+    let config = match String::from_utf8(io(input.read_to_end(), "read SSE configuration")?) {
+        Ok(text) => text, Err(_) => return Err("SSE configuration is not UTF-8".to_string()),
+    };
+    let total = match std::text::trim(&config).parse::<usize>() {
+        Ok(value) => value, Err(_) => return Err("SSE peer count is not a number".to_string()),
+    };
+    require(total > 10usize, "SSE test needs at least eleven peers")?;
+    let mut active = Vec::new();
+    for _index in 0usize..10usize { active.push(Connection::new(io(target.connect(), "connect active peer")?)); }
+    let baseline = active_rounds(&mut active, clock)?;
+    let mut peers = Vec::new();
+    for index in 0usize..total - 10usize { peers.push(connect(target, ready, index + 1usize, "")?); }
+    wait(&mut peers, ready, clock, 0usize)?;
+    let loaded = active_rounds(&mut active, clock)?;
+    output.write(format!("SSE active requests=100 baseline_ns={baseline} with_idle_ns={loaded} peers={total} idle={}\n", peers.len()).as_bytes());
+    let until = io(clock.nanoseconds(), "read idle start")? + 1_000_000_000usize;
+    while io(clock.nanoseconds(), "read idle clock")? < until {
+        let events = io(ready.wait(clock, until), "wait idle")?;
+        for (token, _flags) in events {
+            if token > 0usize && token <= peers.len() { receive(&mut peers[token - 1usize])?; }
+        }
+    }
+    let start = io(clock.nanoseconds(), "read push start")?;
+    publish(root, clock, 1usize, false)?;
+    wait(&mut peers, ready, clock, 1usize)?;
+    let latency = io(clock.nanoseconds(), "read push end")? - start;
+    output.write(format!("SSE note push_ns={latency} peers={total}\n").as_bytes());
+    require(latency < 1_000_000_000usize, "desk note did not reach every page within one second")?;
+    request(&mut active[0usize], "POST", "{\"text\":\"SSE owner\",\"request\":\"sse-owner\"}")?;
+    wait(&mut peers, ready, clock, 2usize)?;
+    let cursor = peers[0usize].cursor.clone();
+    // Keep the original cursor while three more committed rows arrive.
+    for serial in 2usize..5usize { publish(root, clock, serial, false)?; }
+    // Drop the interrupted transport, reopen from its last complete event.
+    reconnect(&mut peers[0usize], target, ready, &cursor)?;
+    wait(&mut peers, ready, clock, 5usize)?;
+    for peer in &peers { require(peer.rows.len() == 5usize && peer.duplicates == 0usize, "valid reconnect skipped or duplicated a row")?; }
+    reconnect(&mut peers[0usize], target, ready, "999999999999999999999.3")?;
+    // Existing rows are deduplicated at the consumer; an invalid cursor explicitly resets.
+    let until = io(clock.nanoseconds(), "read reset start")? + 5_000_000_000usize;
+    while peers[0usize].frames == 0usize {
+        require(io(clock.nanoseconds(), "read reset clock")? < until, "SSE reset deadline")?;
+        for (token, _flags) in io(ready.wait(clock, until), "wait reset")? {
+            if token > 0usize && token <= peers.len() { receive(&mut peers[token - 1usize])?; }
+        }
+    }
+    require(peers[0usize].reset && peers[0usize].rows.len() == 5usize, "invalid SSE cursor did not give explicit full replay")?;
+    output.write(b"ok SSE note/owner delivery, exact cursor replay, duplicate-free valid reconnect and explicit reset\n");
+    for index in 0usize..peers.len() { io(ready.unwatch_file(&mut peers[index].stream), "unwatch completed peer")?; }
+    drop(peers);
+    drop(active);
+    if total >= 1000usize {
+        let mut slow = io(target.connect(), "connect slow SSE")?;
+        io(slow.write_all(b"GET /events HTTP/1.1\r\nHost: localhost\r\n\r\n"), "request slow SSE")?;
+        io(slow.set_nonblocking(true), "set slow SSE nonblocking")?;
+        publish(root, clock, 6usize, true)?;
+        let until = io(clock.nanoseconds(), "read slow-reader start")? + 4_000_000_000usize;
+        while io(clock.nanoseconds(), "read slow-reader wait")? < until { io(ready.wait(clock, until), "wait slow reader")?; }
+        let mut buffer = [0u8; 65536];
+        let until = io(clock.nanoseconds(), "read slow-reader drain start")? + 2_000_000_000usize;
+        let mut eof = false;
+        let mut bytes = 0usize;
+        while io(clock.nanoseconds(), "read slow-reader drain clock")? < until {
+            match slow.read(&mut buffer) {
+                Ok(0usize) => { eof = true; break; }
+                Ok(count) => bytes += count,
+                Err(11i64) => {
+                    let pause = io(clock.nanoseconds(), "read pause clock")? + 10_000_000usize;
+                    io(ready.wait(clock, pause), "wait slow drain")?;
+                }
+                Err(104i64) => { eof = true; break; }
+                Err(errno) => return Err(format!("drain slow SSE: errno {errno}")),
+            }
+        }
+        require(eof, "slow SSE reader survived its fixed write deadline")?;
+        output.write(format!("ok SSE slow reader dropped before drain; buffered_bytes={bytes}\n").as_bytes());
+    }
+    Ok(())
+}
+pub fn main(mut output: Stdout, mut input: Stdin, mut target: Connector, mut state: Directory,
+    mut clock: Clock, mut ready: Readiness) {
+    match run(&mut output, &mut input, &mut target, &mut state, &mut clock, &mut ready) {
+        Ok(()) => {},
+        Err(problem) => { output.write(format!("{problem}\n").as_bytes()); panic!("SSE proof failed"); }
+    }
+}

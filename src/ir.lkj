@@ -49,6 +49,12 @@ pub enum TypeKind {
     Stderr,
     /// Affine directory authority; descendants remain beneath this root.
     Directory,
+    ReadDirectory,
+    ReadFile,
+    /// Affine immutable admitted foreign image; only confined execution can use it.
+    ForeignCommand,
+    /// Explicit descriptor authority for the kernel's null device.
+    NullDevice,
     /// Affine open file; structural destruction closes its handle.
     File,
     Process,
@@ -86,6 +92,11 @@ pub enum EntryGrant {
     Directory(Vec<u8>),
     /// Directory selected at invocation by exactly one named environment value.
     DirectoryEnvironment(Vec<u8>),
+    ReadDirectory(Vec<u8>),
+    ReadDirectoryEnvironment(Vec<u8>),
+    /// Exactly one absolute NUL-terminated executable path, snapshotted at entry.
+    ForeignCommand(Vec<u8>),
+    NullDevice,
     /// Exact sixteen-byte IPv4 sockaddr, matching WorldListen.
     Listener(Vec<u8>),
     Connector(Vec<u8>),
@@ -320,6 +331,12 @@ pub enum IntrinsicOp {
     ReadinessUnwatchStop,
     ChildRequestStop,
     DirectoryCreatePrivate,
+    ReadDirectoryOpen,
+    ReadDirectoryOpenDirectory,
+    FileSeek,
+    FileModifiedNanoseconds,
+    ForeignRun,
+    ForeignImage,
 }
 impl IntrinsicOp {
     pub fn parse(text: &str) -> Option<IntrinsicOp> {
@@ -406,6 +423,12 @@ impl IntrinsicOp {
             "readiness_unwatch_stop" => Some(IntrinsicOp::ReadinessUnwatchStop),
             "child_request_stop" => Some(IntrinsicOp::ChildRequestStop),
             "directory_create_private" => Some(IntrinsicOp::DirectoryCreatePrivate),
+            "read_directory_open" => Some(IntrinsicOp::ReadDirectoryOpen),
+            "read_directory_open_directory" => Some(IntrinsicOp::ReadDirectoryOpenDirectory),
+            "file_seek" => Some(IntrinsicOp::FileSeek),
+            "file_modified_nanoseconds" => Some(IntrinsicOp::FileModifiedNanoseconds),
+            "foreign_run" => Some(IntrinsicOp::ForeignRun),
+            "foreign_image" => Some(IntrinsicOp::ForeignImage),
 
             _ => None,
         }
@@ -494,6 +517,12 @@ impl IntrinsicOp {
             IntrinsicOp::ReadinessUnwatchStop => "readiness_unwatch_stop",
             IntrinsicOp::ChildRequestStop => "child_request_stop",
             IntrinsicOp::DirectoryCreatePrivate => "directory_create_private",
+            IntrinsicOp::ReadDirectoryOpen => "read_directory_open",
+            IntrinsicOp::ReadDirectoryOpenDirectory => "read_directory_open_directory",
+            IntrinsicOp::FileSeek => "file_seek",
+            IntrinsicOp::FileModifiedNanoseconds => "file_modified_nanoseconds",
+            IntrinsicOp::ForeignRun => "foreign_run",
+            IntrinsicOp::ForeignImage => "foreign_image",
 
         }
     }

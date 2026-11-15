@@ -63,9 +63,13 @@ pub struct Platform {
     pub readiness_unwatch: Label,
     pub readiness_wait: Label,
     pub file_storage_open: Label,
+    pub open_beneath: Label,
     pub file_sync: Label,
     pub directory_sync: Label,
     pub file_truncate: Label,
+    pub file_seek: Label,
+    pub file_modified_nanoseconds: Label,
+    pub file_open_regular: Label,
     pub file_lock_exclusive: Label,
     pub file_lock_wait: Label,
     pub entropy_fill: Label,
@@ -97,6 +101,9 @@ pub struct Platform {
     pub file_executable: Label,
     pub file_duplicate: Label,
     pub file_readonly: Label,
+    pub foreign_open: Label,
+    pub null_open: Label,
+    pub foreign_run: Label,
     messages: Label,
     signal_action: Label,
     diagnostic_buffer: Label,
@@ -145,9 +152,13 @@ impl Platform {
             readiness_unwatch: a.label(),
             readiness_wait: a.label(),
             file_storage_open: a.label(),
+            open_beneath: a.label(),
             file_sync: a.label(),
             directory_sync: a.label(),
             file_truncate: a.label(),
+            file_seek: a.label(),
+            file_modified_nanoseconds: a.label(),
+            file_open_regular: a.label(),
             file_lock_exclusive: a.label(),
             file_lock_wait: a.label(),
             entropy_fill: a.label(),
@@ -179,6 +190,9 @@ impl Platform {
             file_executable: a.label(),
             file_duplicate: a.label(),
             file_readonly: a.label(),
+            foreign_open: a.label(),
+            null_open: a.label(),
+            foreign_run: a.label(),
             messages: a.label(),
             signal_action: a.label(),
             diagnostic_buffer: a.label(),
@@ -659,6 +673,7 @@ fn stream_write(a: &mut Assembler, label: Label, fd: u64) {
 }
 
 fn io(a: &mut Assembler, p: Platform) {
+    super::storage::beneath(a, p);
     let invalid = a.label();
     let open_result = a.label();
     a.bind(p.argument_count);
@@ -722,27 +737,18 @@ fn io(a: &mut Assembler, p: Platform) {
 
     a.bind(p.file_open);
     path(a, invalid);
-    a.address(R8, p.open_how);
     let read_only = a.label();
     let opening = a.label();
     a.test(C, true);
     a.condition(4, read_only);
-    a.immediate(A, 0x80241);
-    a.store(R8, 0, A);
-    a.immediate(A, 0o666);
-    a.store(R8, 8, A);
+    a.immediate(C, 0x80241);
+    a.immediate(R8, 0o666);
     a.jump(opening);
     a.bind(read_only);
-    a.immediate(A, 0x80000);
-    a.store(R8, 0, A);
-    a.immediate(A, 0);
-    a.store(R8, 8, A);
+    a.immediate(C, 0x80000);
+    a.immediate(R8, 0);
     a.bind(opening);
-    a.immediate(A, 0x0a); // RESOLVE_BENEATH | RESOLVE_NO_MAGICLINKS
-    a.store(R8, 16, A);
-    a.mov(D, R8);
-    a.immediate(R10, 24);
-    syscall_retry(a, 437);
+    a.call(p.open_beneath);
     a.jump(open_result);
 
     a.bind(p.handle_close);

@@ -1,0 +1,37 @@
+// The harness denies openat2 only in this freshly started execution.
+pub fn main(mut root: Directory, mut read_root: ReadDirectory, mut input: Stdin, mut output: Stdout, mut absolute_path: Environment) {
+    let absolute = String::from_utf8(absolute_path.get().unwrap()).unwrap();
+    let mut created = root.create_new("sub/new").unwrap();
+    created.write_all(b"one").unwrap();
+    created.sync().unwrap();
+    drop(created);
+    let mut changed = root.create("sub/new").unwrap();
+    changed.write_all(b"two").unwrap();
+    drop(changed);
+    root.open_append("sub/new").unwrap().write_all(b"\n").unwrap();
+    root.create_private("sub/private").unwrap().write_all(b"private").unwrap();
+    root.sync().unwrap();
+    assert!(root.open("sub/new").unwrap().read_to_end().unwrap().as_slice() == b"two\n");
+    assert!(read_root.open("sub/new").unwrap().read_to_end().unwrap().as_slice() == b"two\n");
+    assert!(read_root.open("sub/new").unwrap().modified_nanoseconds().unwrap() > 0usize);
+    assert!(root.open_directory("sub").unwrap().list().unwrap().len() == 2usize);
+    assert!(read_root.open_directory("sub").unwrap().list().unwrap().len() == 2usize);
+    assert!(root.list().unwrap().len() > 0usize && read_root.list().unwrap().len() > 0usize);
+    assert!(root.open("inside-link").is_err());
+    assert!(root.create("inside-link").is_err());
+    assert!(root.open_append("inside-link").is_err());
+    assert!(read_root.open("inside-link").is_err());
+    assert!(root.open("escape").is_err() && read_root.open("escape").is_err());
+    assert!(root.open("link-sub/new").is_err() && read_root.open("link-sub/new").is_err());
+    assert!(root.open_directory("link-sub").is_err() && read_root.open_directory("link-sub").is_err());
+    assert!(root.open("sub/../protected").is_err() && read_root.open("sub/../protected").is_err());
+    assert!(root.open(absolute.as_str()).is_err() && read_root.open(absolute.as_str()).is_err());
+    assert!(read_root.open("pipe").is_err());
+    let mut held = read_root.open_directory("anchor").unwrap();
+    output.write(b"anchored\n");
+    let mut signal = [0u8; 1];
+    assert!(input.read(&mut signal).unwrap() == 1usize);
+    assert!(held.open("value").unwrap().read_to_end().unwrap().as_slice() == b"inside\n");
+    assert!(read_root.open("anchor/value").is_err());
+    output.write(b"ok fallback\n");
+}

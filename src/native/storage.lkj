@@ -62,6 +62,7 @@ fn promote(a: &mut Assembler) {
     a.bind(done);
 }
 pub(super) fn emit(a: &mut Assembler, p: Platform) {
+    read_files(a, p);
     let invalid = a.label();
     a.bind(p.file_storage_open);
     prologue(a, p, 32, Span::default());
@@ -71,9 +72,9 @@ pub(super) fn emit(a: &mut Assembler, p: Platform) {
     a.immediate(A, 0x0a); // RESOLVE_BENEATH | RESOLVE_NO_MAGICLINKS.
     a.store(BP, -8, A);
     path(a, invalid);
-    a.lea(D, BP, -24);
-    a.immediate(R10, 24);
-    syscall(a, 437);
+    a.load(C, BP, -24);
+    a.load(R8, BP, -16);
+    a.call(p.open_beneath);
     promote(a);
     epilogue(a);
     a.bind(invalid);
@@ -120,9 +121,10 @@ pub(super) fn emit(a: &mut Assembler, p: Platform) {
     a.immediate(A, 0x0a);
     a.store(BP, -8, A);
     a.address(SI, dot);
-    a.lea(D, BP, -24);
-    a.immediate(R10, 24);
-    syscall(a, 437);
+    a.immediate(D, 2);
+    a.immediate(C, 0x90000);
+    a.immediate(R8, 0);
+    a.call(p.open_beneath);
     a.test(A, true);
     a.condition(8, synced);
     a.store(BP, -32, A);
@@ -137,4 +139,273 @@ pub(super) fn emit(a: &mut Assembler, p: Platform) {
     epilogue(a);
     a.bind(dot);
     a.raw(b".\0");
+}
+
+fn read_files(a: &mut Assembler, p: Platform) {
+    let stat = a.label();
+    let stat_done = a.label();
+    a.bind(stat);
+    prologue(a, p, 144, Span::default());
+    reject_closed(a);
+    a.lea(SI, BP, -144);
+    syscall(a, 5); // fstat: inspect the already acquired inode.
+    a.test(A, true);
+    a.condition(8, stat_done);
+    a.load_width(A, BP, -120, 4, false); // st_mode.
+    a.immediate(C, 0xf000);
+    a.rr(0x21, A, C, true);
+    a.immediate(C, 0x8000); // Only regular data files enter ReadFile.
+    a.compare(A, C);
+    let regular = a.label();
+    a.condition(4, regular);
+    a.immediate(A, (-22i64) as u64);
+    a.jump(stat_done);
+    a.bind(regular);
+    a.load(D, BP, -56); // st_mtim.tv_sec at byte 88.
+    a.load(SI, BP, -48); // st_mtim.tv_nsec at byte 96.
+    a.immediate(A, 0);
+    a.bind(stat_done);
+    epilogue(a);
+
+    a.bind(p.file_open_regular);
+    prologue(a, p, 16, Span::default());
+    // O_PATH identifies even a FIFO/device without opening it for data access.
+    a.immediate(C, 0x280000); // O_PATH | O_CLOEXEC, beneath the acquired root.
+    a.immediate(R8, 0);
+    a.call(p.file_storage_open);
+    let opened = a.label();
+    let closed = a.label();
+    a.test(A, true);
+    a.condition(8, closed);
+    a.store(BP, -8, A);
+    a.mov(DI, A);
+    a.call(stat);
+    a.test(A, true);
+    a.condition(8, opened);
+    a.load(DI, BP, -8);
+    a.call(p.file_readonly); // Reopen only this retained inode, at offset zero.
+    a.bind(opened);
+    a.store(BP, -16, A);
+    a.load(DI, BP, -8);
+    a.call(p.handle_close);
+    a.load(A, BP, -16);
+    a.bind(closed);
+    epilogue(a);
+
+    a.bind(p.file_seek);
+    prologue(a, p, 0, Span::default());
+    reject_closed(a);
+    let bad_origin = a.label();
+    let seek_done = a.label();
+    a.immediate(C, 2);
+    a.compare(D, C);
+    a.condition(7, bad_origin);
+    syscall(a, 8);
+    a.test(A, true);
+    a.condition(8, seek_done);
+    a.mov(D, A);
+    a.immediate(A, 0);
+    a.jump(seek_done);
+    a.bind(bad_origin);
+    a.immediate(A, (-22i64) as u64);
+    a.bind(seek_done);
+    epilogue(a);
+
+    a.bind(p.file_modified_nanoseconds);
+    prologue(a, p, 0, Span::default());
+    a.call(stat);
+    let time_done = a.label();
+    let overflow = a.label();
+    a.test(A, true);
+    a.condition(8, time_done);
+    a.mov(A, D);
+    a.test(A, true);
+    a.condition(8, overflow);
+    a.immediate(C, 1_000_000_000);
+    a.compare(SI, C);
+    a.condition(3, overflow);
+    a.mul(C);
+    a.test(D, true);
+    a.condition(5, overflow);
+    a.rr(0x01, A, SI, true);
+    a.condition(2, overflow);
+    a.mov(D, A);
+    a.immediate(A, 0);
+    a.jump(time_done);
+    a.bind(overflow);
+    a.immediate(A, (-75i64) as u64);
+    a.bind(time_done);
+    epilogue(a);
+}
+
+// openat2 is occasionally denied as ENOSYS by an inherited host seccomp filter.
+// Copy exactly the validated path into anonymous storage, then split components.
+// Each step retains an owned directory fd; no fallback component follows links.
+pub(super) fn beneath(a: &mut Assembler, p: Platform) {
+    a.bind(p.open_beneath);
+    prologue(a, p, 256, Span::default());
+    a.store(BP, -8, DI);
+    a.store(BP, -16, SI);
+    a.store(BP, -88, D);
+    a.store(BP, -32, C);
+    a.store(BP, -40, R8);
+    a.store(BP, -112, C);
+    a.store(BP, -104, R8);
+    a.immediate(A, 0x0a);
+    a.store(BP, -96, A);
+    a.lea(D, BP, -112);
+    a.immediate(R10, 24);
+    syscall(a, 437);
+    let done = a.label();
+    let unavailable = a.label();
+    a.immediate(C, (-38i64) as u64);
+    a.compare(A, C);
+    a.condition(4, unavailable);
+    a.jump(done);
+    a.bind(unavailable);
+    a.load(SI, BP, -16);
+    a.load_width(A, SI, 0, 1, false);
+    a.immediate(C, b'/' as u64);
+    a.compare(A, C);
+    let absolute = a.label();
+    a.condition(4, absolute);
+    a.immediate(DI, 0);
+    a.load(SI, BP, -88);
+    a.immediate(D, 3);
+    a.immediate(R10, 0x22);
+    a.immediate(R8, !0u64);
+    a.immediate(R9, 0);
+    syscall(a, 9); // mmap refuses normally; no guessed component or path budget.
+    a.test(A, true);
+    a.condition(8, done);
+    a.store(BP, -72, A);
+    a.mov(DI, A);
+    a.load(SI, BP, -16);
+    a.load(C, BP, -88);
+    a.raw(&[0xfc, 0xf3, 0xa4]);
+    a.store(BP, -16, A);
+    a.load(DI, BP, -8);
+    a.immediate(SI, 1030);
+    a.immediate(D, 3);
+    syscall(a, 72); // Own the starting anchor without consuming the grant.
+    let unmap = a.label();
+    a.test(A, true);
+    a.condition(8, unmap);
+    a.store(BP, -8, A);
+    let component = a.label();
+    let scan = a.label();
+    let scanned = a.label();
+    let invalid = a.label();
+    let parent = a.label();
+    let close_anchor = a.label();
+    let final_open = a.label();
+    let opened = a.label();
+    let final_stat = a.label();
+    let finish_fd = a.label();
+    let close_result = a.label();
+    a.bind(component);
+    a.load(R8, BP, -16);
+    a.immediate(D, 0);
+    a.bind(scan);
+    a.load_width(A, R8, 0, 1, false);
+    a.test(A, false);
+    a.condition(4, scanned);
+    a.immediate(C, b'/' as u64);
+    a.compare(A, C);
+    a.condition(4, scanned);
+    a.lea(R8, R8, 1);
+    a.lea(D, D, 1);
+    a.jump(scan);
+    a.bind(scanned);
+    a.store(BP, -80, A);
+    a.store(BP, -24, R8);
+    a.test(D, true);
+    a.condition(4, invalid);
+    let ordinary = a.label();
+    a.immediate(C, 2);
+    a.compare(D, C);
+    a.condition(5, ordinary);
+    a.load(SI, BP, -16);
+    a.load_width(A, SI, 0, 2, false);
+    a.immediate(C, 0x2e2e);
+    a.compare(A, C);
+    a.condition(4, parent);
+    a.bind(ordinary);
+    a.load(DI, BP, -8);
+    a.load(SI, BP, -16);
+    a.load(A, BP, -80);
+    a.test(A, true);
+    a.condition(4, final_open);
+    a.immediate(A, 0);
+    a.store_width(R8, 0, A, 1); // Private copy; prior components are no longer used.
+    a.immediate(D, 0x2b0000); // O_PATH | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW.
+    a.immediate(R10, 0);
+    a.jump(opened);
+    a.bind(final_open);
+    a.load(D, BP, -32);
+    a.immediate(C, 0x20000);
+    a.rr(0x09, D, C, true);
+    a.load(R10, BP, -40);
+    a.bind(opened);
+    syscall(a, 257);
+    a.test(A, true);
+    a.condition(8, close_anchor);
+    a.store(BP, -48, A);
+    a.load(DI, BP, -8);
+    a.immediate(A, 3);
+    a.syscall();
+    a.load(A, BP, -80);
+    a.test(A, true);
+    a.condition(4, final_stat);
+    a.load(A, BP, -48);
+    a.store(BP, -8, A);
+    a.load(A, BP, -24);
+    a.lea(A, A, 1);
+    a.store(BP, -16, A);
+    a.jump(component);
+    a.bind(final_stat);
+    a.load(DI, BP, -48);
+    a.lea(SI, BP, -256);
+    syscall(a, 5);
+    a.test(A, true);
+    a.condition(8, close_result);
+    a.load_width(A, BP, -232, 4, false);
+    a.immediate(C, 0xf000);
+    a.rr(0x21, A, C, true);
+    a.immediate(C, 0xa000); // O_PATH itself can open a symlink; never return it.
+    a.compare(A, C);
+    a.condition(5, finish_fd);
+    a.immediate(A, (-40i64) as u64);
+    a.bind(close_result);
+    a.store(BP, -56, A);
+    a.load(DI, BP, -48);
+    a.immediate(A, 3);
+    a.syscall();
+    a.load(A, BP, -56);
+    a.jump(unmap);
+    a.bind(finish_fd);
+    a.load(A, BP, -48);
+    a.jump(unmap);
+    a.bind(invalid);
+    a.immediate(A, (-22i64) as u64);
+    a.jump(close_anchor);
+    a.bind(parent);
+    a.immediate(A, (-18i64) as u64);
+    a.bind(close_anchor);
+    a.store(BP, -48, A);
+    a.load(DI, BP, -8);
+    a.immediate(A, 3);
+    a.syscall();
+    a.load(A, BP, -48);
+    a.bind(unmap);
+    a.store(BP, -56, A);
+    a.load(DI, BP, -72);
+    a.load(SI, BP, -88);
+    syscall(a, 11);
+    a.load(A, BP, -56);
+    a.jump(done);
+    a.bind(absolute);
+    a.immediate(A, (-18i64) as u64);
+    a.bind(done);
+    epilogue(a);
 }

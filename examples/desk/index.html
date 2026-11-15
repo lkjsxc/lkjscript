@@ -69,6 +69,7 @@
     <div class="row"><span id="say-status" role="status"></span><button class="go" id="send" disabled>送る</button></div>
   </form>
   <h2>いま</h2>
+  <p class="empty" id="board-status" hidden></p>
   <ul class="card jobs" id="jobs"></ul>
   <h2>できごと</h2>
   <ul class="card feed" id="feed"></ul>
@@ -86,6 +87,21 @@ const stamp = (t) => { const d = new Date(t * 1000);
   return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
 let last = '', loading = 0;
 const cards = new Map();
+const deliveredRows = new Set();
+let snapshotCursor = '', replayCursor = null, source = null, live = false, reconnectTimer = null;
+let boardAge = { age: 0, observed: Date.now(), status: 'missing' };
+const validCursor = (value) => typeof value === 'string' && /^\d+\.\d+$/.test(value);
+function atLeast(left, right) {
+  if (!validCursor(left) || !validCursor(right)) return false;
+  const a = left.split('.').map(BigInt), b = right.split('.').map(BigInt);
+  return a[0] >= b[0] && a[1] >= b[1];
+}
+function boardStatus() {
+  const age = boardAge.age + Math.floor((Date.now() - boardAge.observed) / 1000);
+  const unavailable = !['current', 'stale'].includes(boardAge.status);
+  $('board-status').hidden = !unavailable && age <= 30;
+  $('board-status').textContent = unavailable ? '状態の更新を待っています' : '状態の最終更新から ' + age + ' 秒';
+}
 
 async function say(text, re, request) {
   const response = await fetch('say', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Desk': '1' },
@@ -93,7 +109,6 @@ async function say(text, re, request) {
   if (!response.ok) throw new Error('送信できませんでした。もう一度お試しください。');
   const row = await response.json();
   ++loading; last = '';
-  $('feed').prepend(feedRow({ ...row, kind: 'owner' }));
   return row;
 }
 
@@ -146,19 +161,69 @@ async function load() {
   const version = ++loading;
   let s; try { const response = await fetch('state'); if (!response.ok) return; s = await response.json(); } catch { return; }
   if (version !== loading) return;
-  $('clock').textContent = stamp(s.now);
-  const key = JSON.stringify([s.asks, s.feed, s.jobs, s.detail]);
-  if (key === last) return; last = key;
-  const open = new Set(s.asks.map((a) => a.id));
-  for (const [id, card] of cards) if (!open.has(id)) { card.remove(); cards.delete(id); }
-  for (const a of s.asks) if (!cards.has(a.id)) {
-    const card = askCard(a); cards.set(a.id, card); $('asks').append(card);
+  try { if (!render(s)) return; } catch { return; }
+  if (replayCursor === null && validCursor(s.cursor)) {
+    for (const row of s.feed) deliveredRows.add(row.id);
+    replayCursor = s.cursor;
   }
-  const jobs = [...s.jobs].sort((x, y) => / running /.test(y) - / running /.test(x));
-  $('jobs').replaceChildren(...(jobs.length ? jobs.map(jobRow) : [el('li', { className: 'empty', textContent: '動いているものはありません' })]));
-  $('feed').replaceChildren(...(s.feed.length ? s.feed.map(feedRow) : [el('li', { className: 'empty', textContent: 'まだありません' })]));
-  $('detail').textContent = s.detail;
-  document.title = s.asks.length ? `(${s.asks.length}) 連絡帳` : '連絡帳';
+}
+function render(s, reset = false) {
+  if (!reset && snapshotCursor && validCursor(s.cursor) && !atLeast(s.cursor, snapshotCursor)) return false;
+  $('clock').textContent = stamp(s.now);
+  boardAge = { age: Number(s.board_age || 0), observed: Date.now(), status: s.board_status || 'missing' };
+  boardStatus();
+  const key = JSON.stringify([s.asks, s.feed, s.jobs, s.detail, s.board_status]);
+  if (key !== last) {
+    const open = new Set(s.asks.map((a) => a.id));
+    for (const [id, card] of cards) if (!open.has(id)) { card.remove(); cards.delete(id); }
+    for (const a of s.asks) if (!cards.has(a.id)) {
+      const card = askCard(a); $('asks').append(card); cards.set(a.id, card);
+    }
+    const jobs = [...s.jobs].sort((x, y) => / running /.test(y) - / running /.test(x));
+    $('jobs').replaceChildren(...(jobs.length ? jobs.map(jobRow) : [el('li', { className: 'empty', textContent: '動いているものはありません' })]));
+    $('feed').replaceChildren(...(s.feed.length ? s.feed.map(feedRow) : [el('li', { className: 'empty', textContent: 'まだありません' })]));
+    $('detail').textContent = s.detail;
+    document.title = s.asks.length ? `(${s.asks.length}) 連絡帳` : '連絡帳';
+    last = key;
+  }
+  if (validCursor(s.cursor)) snapshotCursor = s.cursor;
+  return true;
+}
+
+function reconnect() {
+  live = false;
+  if (source) source.close();
+  source = null;
+  clearTimeout(reconnectTimer);
+  reconnectTimer = setTimeout(connectEvents, 500);
+  load();
+}
+function connectEvents() {
+  if (!window.EventSource || source) return;
+  const cursor = replayCursor || '0.0';
+  source = new EventSource('events?cursor=' + encodeURIComponent(cursor));
+  const current = source;
+  current.onopen = () => { if (source === current) live = true; };
+  current.addEventListener('desk', (event) => {
+    if (source !== current) return;
+    try {
+      const message = JSON.parse(event.data);
+      if (!validCursor(event.lastEventId) || message.state.cursor !== event.lastEventId) throw new Error('cursor');
+      if (replayCursor && !message.reset && !atLeast(event.lastEventId, replayCursor)) return;
+      const rows = [...message.notes, ...message.inbox].sort((a, b) => a.t - b.t || a.id.localeCompare(b.id));
+      const fresh = [];
+      for (const row of rows) if (!deliveredRows.has(row.id)) fresh.push(row);
+      ++loading;
+      render(message.state, message.reset);
+      for (const row of fresh) deliveredRows.add(row.id);
+      // Commit only after a complete frame was parsed and applied. A failed
+      // stream is reopened with this cursor, independent of browser auto-retry.
+      replayCursor = event.lastEventId;
+      live = true;
+      window.dispatchEvent(new CustomEvent('desk-events', { detail: { cursor: replayCursor, rows: fresh, reset: message.reset } }));
+    } catch { reconnect(); }
+  });
+  current.onerror = () => { if (source === current) reconnect(); };
 }
 
 let sending = false, message = null;
@@ -180,7 +245,10 @@ $('say').onsubmit = async (e) => {
     sending = false; $('text').disabled = false; $('send').disabled = !$('text').value.trim();
   }
 };
-load(); setInterval(() => { if (!document.hidden) load(); }, 8000);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
+load().then(connectEvents);
+setInterval(() => { boardStatus(); if (!live && !document.hidden) load(); }, 800);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { load(); connectEvents(); } });
+window.addEventListener('pagehide', () => { if (source) source.close(); source = null; live = false; clearTimeout(reconnectTimer); });
+window.addEventListener('pageshow', (event) => { if (event.persisted) load().then(connectEvents); });
 </script>
 </html>

@@ -6,7 +6,7 @@ use crate::http_site::{self, Page};
 use crate::http_site_probes::{self, Probe};
 
 pub const PATH: &str = "tests/fixtures/site/origin.json";
-pub const MANIFEST: &str = "examples/site-content/manifest.json";
+pub const MANIFEST: &str = "examples/site/content/manifest.json";
 pub fn bytes(root: &mut Directory, path: &str) -> Result<Vec<u8>, String> {
     let mut file = io(root.open(path), &format!("open {path}"))?;
     io(file.read_to_end(), &format!("read {path}"))
@@ -28,7 +28,7 @@ pub fn string(value: &Value, name: &str) -> Result<String, String> {
     }
 }
 pub fn requests(root: &mut Directory) -> Result<Vec<Probe>, String> {
-    let paths = http_site::extra_paths_at(root, "examples/site-content/paths.txt")?;
+    let paths = http_site::extra_paths_at(root, "examples/site/content/paths.txt")?;
     require(paths.len() == 51usize, "site query fixture must contain the 51 recorded paths; refresh the oracle when changing the list")?;
     let mut requests: Vec<Probe> = Vec::new();
     for path in paths {
@@ -103,7 +103,7 @@ pub fn archived(root: &mut Directory, value: &Value) -> Result<Page, String> {
     for byte in filename[..filename.len() - 5usize].as_bytes() {
         require(*byte >= b'0' && *byte <= b'9', "site archive body filename must be decimal.body")?;
     }
-    let body = bytes(root, &format!("examples/site-content/{filename}"))?;
+    let body = bytes(root, &format!("examples/site/content/{filename}"))?;
     let mut expected = metadata(value, &path, Some(body.len()))?;
     expected.body = body;
     Ok(expected)

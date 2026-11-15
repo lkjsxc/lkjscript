@@ -1,0 +1,54 @@
+//! Read roots retain affine read-only types through every derived handle.
+//! Mounted by the current compiler; older stored seeds need not resolve it.
+use crate::Result;
+use crate::bytes::append_bytes;
+fn path_bytes(path: &str) -> Result<Vec<u8>, i64> {
+    let mut bytes = path.as_bytes().to_vec();
+    if bytes.contains(&0u8) { return Err(22); }
+    bytes.push(0u8);
+    Ok(bytes)
+}
+fn count_result(value: i64) -> Result<usize, i64> {
+    if value < 0 { Err(-value) } else { Ok(value as usize) }
+}
+pub fn __lkjscript_read_open(root: &mut ReadDirectory, path: &str) -> Result<ReadFile, i64> {
+    root.__lkjscript_open(&path_bytes(path)?)
+}
+pub fn __lkjscript_read_open_directory(root: &mut ReadDirectory, path: &str) -> Result<ReadDirectory, i64> {
+    root.__lkjscript_open_directory(&path_bytes(path)?)
+}
+pub fn __lkjscript_read_file_read(file: &mut ReadFile, bytes: &mut [u8]) -> Result<usize, i64> {
+    count_result(file.__lkjscript_read(bytes))
+}
+pub fn __lkjscript_read_file_read_to_end(file: &mut ReadFile) -> Result<Vec<u8>, i64> {
+    let mut bytes = Vec::new();
+    let mut buffer = [0u8; 8192];
+    loop {
+        let count = __lkjscript_read_file_read(file, &mut buffer)?;
+        if count == 0usize { break; }
+        append_bytes(&mut bytes, &buffer[..count]);
+    }
+    Ok(bytes)
+}
+pub fn __lkjscript_read_directory_list(root: &mut ReadDirectory) -> Result<Vec<Vec<u8>>, i64> {
+    let mut opened = __lkjscript_read_open_directory(root, ".")?;
+    let mut names = Vec::new();
+    let mut buffer = [0u8; 8192];
+    loop {
+        let count = count_result(opened.__lkjscript_read(&mut buffer))?;
+        if count == 0usize { break; }
+        let mut at = 0usize;
+        while at < count {
+            if count - at < 20usize { return Err(5); }
+            let record = buffer[at + 16usize] as usize | ((buffer[at + 17usize] as usize) << 8u64);
+            if record < 20usize || record > count - at { return Err(5); }
+            let mut end = at + 19usize;
+            while end < at + record && buffer[end] != 0u8 { end += 1usize; }
+            if end == at + record { return Err(5); }
+            let name = &buffer[at + 19usize..end];
+            if name != b"." && name != b".." { names.push(name.to_vec()); }
+            at += record;
+        }
+    }
+    Ok(names)
+}

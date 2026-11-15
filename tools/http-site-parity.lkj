@@ -76,7 +76,7 @@ pub fn main(mut output: Stdout, mut origin: Connector, mut candidate: Connector,
 
 fn published_query_paths() -> Vec<String> {
     let mut paths: Vec<String> = Vec::new();
-    for line in include_str!("../examples/site-content/paths.txt").lines() {
+    for line in include_str!("../examples/site/content/paths.txt").lines() {
         let line = std::str::trim_ascii(line);
         if line.is_empty() || line.starts_with("#") { continue; }
         paths.push(http_site_links::resolve("/", line).unwrap());

@@ -1,27 +1,12 @@
 //! Ordinary command arguments and named environment values, with no World authority.
 use super::store::{self, Row};
-const HELP: &str = "desk: the owner's and the agents' shared notebook.\n\n  desk note TEXT [--from NAME] [--stdin]\n  desk ask TEXT [--options A,B,C] [--from NAME] [--stdin]\n  desk close ID [--from NAME]\n  desk inbox [--peek]\n  desk path\n\nDESK_STATE must name the granted, existing state directory. TZ defaults to UTC.\nThe service is a separate serve entry; child commands and wake are not granted.\n";
-fn option(args: &[String], name: &str, default: &str) -> String {
-    let mut result = default.to_string();
-    let mut index = 1usize;
-    while index + 1usize < args.len() {
-        if args[index] == name { result = args[index + 1usize].clone(); }
-        index += 1usize;
-    }
-    result
-}
-fn present(args: &[String], name: &str) -> bool {
-    for arg in args { if arg == name { return true; } }
-    false
-}
-fn words(args: &[String]) -> Vec<String> {
-    let mut words = Vec::new();
-    for index in 1usize..args.len() {
-        if !args[index].starts_with("--") && !args[index - 1usize].starts_with("--") {
-            words.push(args[index].clone());
-        }
-    }
-    words
+use super::arguments::{option, present, words, durability};
+const HELP: &str = "desk: the owner's and the agents' shared notebook.\n\n  desk note TEXT [--from NAME] [--stdin] [--durability=sync|buffered] [--timings]\n  desk ask TEXT [--options A,B,C] [--from NAME] [--stdin] [--durability=sync|buffered]\n  desk close ID [--from NAME] [--durability=sync|buffered]\n  desk inbox [--peek]\n  desk path\n  desk listen-begin\n  desk listen-end\n\nDESK_STATE must name the granted, existing state directory. TZ defaults to UTC.\nThe default sync mode acknowledges after fsync; buffered matches Python's write+close.\n--timings writes phase nanoseconds and the chosen durability to standard error.\nThe host wrapper holds flock on DESK_STATE/listening around listen-begin, its command,\nand listen-end. These marker commands touch alive; desk does not start the child.\n";
+fn timing_line(errors: &mut Stderr, command: &str, durable: bool, arguments: usize,
+    phases: &store::Timings, elapsed: usize) {
+    let policy = if durable { "sync" } else { "buffered" };
+    errors.write(format!("desk {command} phases_ns arguments={arguments} lock={} row={} open_repair={} append={} sync={} alive={} total={elapsed} durability={policy}\n",
+        phases.lock, phases.row, phases.open, phases.append, phases.sync, phases.alive).as_bytes());
 }
 fn environment(value: &mut Environment) -> Result<String, String> {
     match value.get() {
@@ -32,8 +17,9 @@ fn environment(value: &mut Environment) -> Result<String, String> {
     }
 }
 pub fn run(args: &mut Arguments, state: &mut Directory, state_env: &mut Environment,
-    timezone: &mut Environment, output: &mut Stdout, input: &mut Stdin,
+    timezone: &mut Environment, output: &mut Stdout, errors: &mut Stderr, input: &mut Stdin,
     clock: &mut Clock, entropy: &mut Entropy) -> Result<u8, String> {
+    let began = store::now(clock)?;
     let mut values = Vec::new();
     let raw = args.args();
     // Arguments grants contain user arguments; the executable name is omitted.
@@ -45,6 +31,8 @@ pub fn run(args: &mut Arguments, state: &mut Directory, state_env: &mut Environm
     let command = if values.is_empty() { "help" } else { values[0usize].as_str() };
     let words = words(&values);
     let who = option(&values, "--from", "claude");
+    let durable = durability(&values)?;
+    let measured = present(&values, "--timings");
     if command == "note" || command == "ask" {
         let mut text = String::new();
         for word in &words {
@@ -70,15 +58,23 @@ pub fn run(args: &mut Arguments, state: &mut Directory, state_env: &mut Environm
                     if !option.is_empty() { row.options.push(option.to_string()); }
                 }
             }
-            let row = store::append(state, "notes.jsonl", row, clock, entropy)?;
+            let arguments = store::now(clock)? - began;
+            let mut timings = store::Timings::new();
+            let row = store::append_with_policy(state, "notes.jsonl", row, clock, entropy, durable, true, &mut timings)?;
             output.write(format!("{}\n", row.id).as_bytes());
-            store::touch_alive(state)?;
+            if measured { timing_line(errors, command, durable, arguments, &timings, store::now(clock)? - began); }
             return Ok(0u8);
         }
     } else if command == "close" && !words.is_empty() {
         let mut row = Row::new("close", &who, "");
         row.reference = words[0usize].clone();
-        store::append(state, "notes.jsonl", row, clock, entropy)?;
+        let arguments = store::now(clock)? - began;
+        let mut timings = store::Timings::new();
+        store::append_with_policy(state, "notes.jsonl", row, clock, entropy, durable, false, &mut timings)?;
+        if measured { timing_line(errors, command, durable, arguments, &timings, store::now(clock)? - began); }
+        return Ok(0u8);
+    } else if command == "listen-begin" || command == "listen-end" {
+        store::touch_alive(state)?;
         return Ok(0u8);
     } else if command == "inbox" {
         let name = environment(timezone)?;
@@ -94,13 +90,4 @@ pub fn run(args: &mut Arguments, state: &mut Directory, state_env: &mut Environm
     }
     output.write(HELP.as_bytes());
     Ok(if command == "help" { 0u8 } else { 2u8 })
-}
-
-#[test]
-fn argument_words_and_options() {
-    let args = vec!["ask".to_string(), "日本語".to_string(), "question".to_string(),
-        "--options".to_string(), " A, B ".to_string(), "--from".to_string(), "agent".to_string()];
-    let words = words(&args);
-    assert!(words.len() == 2usize && words[0usize] == "日本語" && words[1usize] == "question");
-    assert!(option(&args, "--from", "claude") == "agent");
 }

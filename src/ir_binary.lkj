@@ -74,6 +74,10 @@ fn ty(out: &mut Vec<u8>, value: &ir::Type) {
         ir::TypeKind::Arguments => out.push(27),
         ir::TypeKind::Environment => out.push(28),
         ir::TypeKind::ExitStatus => out.push(29),
+        ir::TypeKind::ReadDirectory => out.push(30),
+        ir::TypeKind::ReadFile => out.push(31),
+        ir::TypeKind::ForeignCommand => out.push(32),
+        ir::TypeKind::NullDevice => out.push(33),
     }
 }
 fn returns(out: &mut Vec<u8>, value: &Option<ir::ReturnSource>) {
@@ -270,6 +274,10 @@ impl<'a> Reader<'a> {
             27 => ir::TypeKind::Arguments,
             28 => ir::TypeKind::Environment,
             29 => ir::TypeKind::ExitStatus,
+            30 => ir::TypeKind::ReadDirectory,
+            31 => ir::TypeKind::ReadFile,
+            32 => ir::TypeKind::ForeignCommand,
+            33 => ir::TypeKind::NullDevice,
             _ => return None,
         };
         Some(ir::Type { name, kind })

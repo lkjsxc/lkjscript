@@ -41,7 +41,7 @@ The first seven types must match this primitive prefix exactly, including names.
 | `array TYPE LENGTH` | Fixed-length owned elements. |
 | `vec TYPE`, `box TYPE` | Owned growable sequence or owned indirection. |
 | `str` | Unsized immutable UTF-8 text; values require a shared reference. |
-| `world`, `arguments`, `environment`, `exit_status`, `stdout`, `stdin`, `stderr`, `directory`, `file`, `process`, `clock`, `child`, `listener`, `connector`, `readiness`, `entropy`, `stop` | Affine authority-bearing values. |
+| `world`, `arguments`, `environment`, `exit_status`, `stdout`, `stdin`, `stderr`, `directory`, `read_directory`, `file`, `read_file`, `foreign_command`, `null_device`, `process`, `clock`, `child`, `listener`, `connector`, `readiness`, `entropy`, `stop` | Affine authority-bearing values. |
 
 All type indices must exist. Recursive by-value layouts reject; introduce Box or
 another indirection. Unsized text cannot be stored by value or as a container
@@ -150,6 +150,11 @@ The intrinsic signatures are checked in `src/check.lkj` and `src/check/io.lkj`:
 | `environment_copy` | `(&mut environment, &mut [u8]) -> usize`: copy at most the destination length from that same value; return bytes copied, zero when absent. No supplied lookup name or enumeration. |
 | `world_exit_status` | Set the requested u8 process status through an exclusive World or ExitStatus reference; execution and normal cleanup continue, and the last value wins. |
 | `world_directory directory_open directory_open_directory` | Acquire a root Directory from World, or a File/Directory beneath an existing Directory. |
+| `read_directory_open read_directory_open_directory` | `(&mut read_directory, &[u8] path) -> Result<read_file/read_directory, i64>`: exact read-only kinds; only regular files enter ReadFile. No writable File/Directory result substitution is admitted. |
+| `file_seek` | `(&mut file, i64 offset, u8 origin) -> Result<usize,i64>`: origins 0/1/2 are SET/CUR/END; others fail EINVAL. O_APPEND controls writes independently of the seek offset. |
+| `file_modified_nanoseconds` | `(&mut file/read_file) -> Result<usize,i64>`: fstat of that held regular inode; Unix mtime nanoseconds, EINVAL for nonregular, EOVERFLOW for pre-epoch or unrepresentable time. |
+| `foreign_run` | `(&mut foreign_command, &mut read_directory, &mut null_device, &[u8] argv, usize duration_ns) -> Result<read_file,i64>`: exact typed loans, immutable initial image, fixed kernel profile below, synchronous deadline plus kill/reap. |
+| `foreign_image` | `(&mut foreign_command) -> Result<read_file,i64>`: fresh read view of immutable transformed initial ELF; checked code can hash these exact bytes. |
 | `world_file` | World plus u8 selector: 0 anonymous file, 1/2/3 owned stdin/stdout/stderr, 4 running executable. Return Result<File, i64>; closed standard streams produce closed Files. |
 | `world_listen` | `(&mut world, &[u8]) -> Result<listener, i64>`: bind and listen on an exact IPv4 socket address. |
 | `listener_accept listener_accept_nodelay` | `(&mut listener) -> Result<file, i64>`: accept an owned TCP byte stream; the second disables Nagle before returning it, closing on configuration failure. |
@@ -175,7 +180,7 @@ The intrinsic signatures are checked in `src/check.lkj` and `src/check/io.lkj`:
 | `file_duplicate` | Duplicate an exclusively borrowed File, sharing its offset and preserving closed state. Return Result<File, i64>. |
 | `file_readonly` | Reopen an exclusively borrowed File read-only with a fresh offset at zero, preserving closed state. Return Result<File, i64>; no path authority is granted. |
 | `file_rewind file_executable directory_rewind` | Seek to byte zero or make a File executable; return zero or negative errno. |
-| `directory_read` | Read Linux directory records into mutable bytes; return count or negative errno. |
+| `directory_read` | Exclusively borrow Directory/ReadDirectory and read Linux directory records into mutable bytes; return count or negative errno. |
 | `directory_create directory_remove directory_rename` | Mutate NUL-terminated basenames through exclusive Directory references. Reject slash, empty name, dot and dot-dot. Return zero or negative errno. |
 | `clock_read` | Clock plus mutable bytes of length at least 16. Write little-endian i64 seconds/nanoseconds from CLOCK_MONOTONIC; return zero or negative errno. |
 | `clock_unix_seconds` | `(&mut clock) -> Result<i64, i64>`: signed CLOCK_REALTIME seconds since Unix epoch; negative successful timestamps remain distinct from positive errno. |
@@ -183,7 +188,7 @@ The intrinsic signatures are checked in `src/check.lkj` and `src/check/io.lkj`:
 | `process_spawn` | Exclusive Process, shared executable File, NUL-separated argv, and four shared Files for stdin/stdout/stderr/fd3. Execute with empty environment; return Result<Child, i64>. |
 | `child_wait child_terminate` | Exclusive Child. Wait takes a nonblocking bool and returns zero while running, Linux wait status plus one when reaped, or negative errno. Terminate requests SIGKILL; drop terminates and reaps a live direct child. |
 | `child_request_stop` | `(&mut child) -> Result<(), i64>`: send SIGTERM only to the owned child without waiting; a reaped child returns ECHILD. |
-| `stdin_read file_read file_write` | Use an exclusive authority reference and a byte slice; return i64 count or negative errno. |
+| `stdin_read file_read file_write` | Use an exclusive authority reference and a byte slice; return i64 count or negative errno. FileRead accepts File/ReadFile; FileWrite requires File. |
 | `stdout_write stderr_write` | Write an immutable byte slice through the corresponding exclusive authority reference. |
 
 Listener and Connector addresses contain exactly 16 bytes: bytes 0..2 hold AF_INET (2) as a
@@ -222,11 +227,25 @@ Each wait returns at most 64 events, with no bound on registered handles. A past
 deadline polls once without blocking. EINTR recomputes the remaining absolute
 time. An empty result means the deadline elapsed without a ready event.
 
+Only openat2 ENOSYS selects a stricter openat fallback. It acquires every component
+with O_NOFOLLOW, keeps each directory inode owned while opening its child, and
+rejects absolute paths, parent/empty components and every symlink, including an
+O_PATH final symlink. Native execution copies the actual validated path length;
+the independent broker splits/restores its private request payload. Both return
+host allocation/open errors without a guessed path or component limit.
+ReadDirectory and ReadFile are distinct affine, non-Data kinds. Reading and
+directory enumeration accept their exact kinds; mutating, lock, executable,
+duplicate and writable conversion operations do not. Read opens acquire O_PATH,
+check regular-file mode on that inode, and only then reopen the same inode for
+reading, so a named FIFO/device is never data-opened. mtime and contents refer to
+that same acquired inode even after atomic replacement.
+
 Storage creation preserves the Directory's acquired identity and constrains paths
-with openat2 RESOLVE_BENEATH|RESOLVE_NO_MAGICLINKS, without a weaker fallback.
+with openat2 RESOLVE_BENEATH|RESOLVE_NO_MAGICLINKS.
 create_new and create_private use O_CREAT|O_EXCL|O_RDWR; open_append uses
-O_CREAT|O_APPEND|O_RDWR, never truncates, starts at offset zero, and places each
-write at the current end. Ordinary creation requests mode 0666; private creation
+O_CREAT|O_APPEND|O_RDWR|O_NOFOLLOW, never truncates, starts at offset zero, and places each
+write at the current end. A final symlink returns ELOOP (40), even if its target
+would remain beneath the granted directory. Ordinary creation requests mode 0666; private creation
 requests mode 0600 atomically, both subject to umask. Existing paths cause an
 exclusive create to fail. set_private sets exactly 0600 regardless of umask,
 restricting future opens but never revoking already-open descriptors. File sync
@@ -319,18 +338,19 @@ temporary reference carrier cannot become an escaping view's origin.
 
 A host entry returns unit or a scalar. It may take no parameters, a sole World,
 or owned Arguments, Environment, ExitStatus, Stdout/Stdin/Stderr, Directory,
-Listener, Connector, Readiness, Process, Clock, Entropy and Stop parameters.
+ReadDirectory, ForeignCommand, NullDevice, Listener, Connector, Readiness, Process,
+Clock, Entropy and Stop parameters.
 The sole World entry declares implicit full authority. Every other parameter
 requires an explicit invocation grant selected by its distinct, nonempty local
 name. ASCII whitespace, control bytes and equals signs cannot occur in grant names.
-File, Child, reference and aggregate parameters cannot be provisioned as entries;
+File, ReadFile, Child, reference and aggregate parameters cannot be provisioned as entries;
 use a Directory entry and acquire files through ordinary checked operations.
 
-Grants are invocation data outside the IR. Directory descriptors contain the
+Grants are invocation data outside the IR. Directory/ReadDirectory descriptors contain the
 NUL-terminated root path; Listener and Connector descriptors contain the sixteen-byte address
 above. Environment descriptors contain one exact NUL-terminated variable name; names are nonempty and exclude ASCII whitespace/control bytes and equals signs. Other capabilities, including Arguments and ExitStatus, need no payload.
 CLI Environment grants use NAME=VARIABLE. The bound value preserves arbitrary non-NUL bytes; absence is valid and differs from an empty value.
-Directory also accepts NAME=env:VARIABLE, resolving only that variable to its root at invocation/startup. Absence or an empty value fails with errno 2; there is no default or implicit creation. This selector supplies a Directory, not an Environment value.
+Directory/ReadDirectory also accept NAME=env:VARIABLE, resolving only that variable to its root at invocation/startup. Absence or an empty value fails with errno 2; there is no default or implicit creation. This selector supplies the declared directory kind, not an Environment value. Program-directory relative paths resolve against that program directory for both kinds.
 Build retains names for startup resolution. Native run binds only the named environment values and directory selectors before its empty-environment launch; authority queries retain the named grant specification.
 Both executors independently validate the complete parameter/grant correspondence
 before acquiring handles.
@@ -347,6 +367,34 @@ Borrowed values do not cause destruction of their referents. Recursive functions
 are listed once. This query reads checked IR alone and does not infer a smaller
 grant set from source spelling or a particular runtime branch. Stop ownership
 cleanup contributes stop_close; merely borrowing Stop does not close it.
+
+### Foreign execution profile
+
+ForeignCommand provisioning requires one absolute NUL-terminated executable path,
+with no environment selector; NullDevice takes no payload and verifies the opened
+/dev/null device identity. Neither kind derives from World or a raw scalar.
+The initial image is snapshotted immutably; its ELF interpreter path is transformed
+to the fixed retained-root descriptor before sealing. Its readable identity is not
+an authenticated lkjscript entry-authority manifest.
+ForeignRun retains the exclusive root and null-device loans until reap. Its kernel
+profile permits read/execute access beneath that root, including preexisting
+special files and mutable runtime code, and verified null-device read/write without
+ioctl. Private readable/writable/seekable stdout/stderr capture memfds are also
+explicit handles; their anonymous contents can be reexecuted within the same
+confinement. It denies socket syscalls, descendants, filesystem metadata mutation
+syscalls and credential changes; reexec retains confinement. Zero duration returns EINVAL before a child starts. An absolute monotonic deadline begins before
+setup, and parent death kills the attached child. Output/exit/deadline arrive in an
+owned readable result only after kill/reap. Outside metadata, clocks and entropy
+remain observable; this profile does not claim isolation of all IPC or information
+channels or immutability of runtime dependencies.
+The environment is exactly LD_LIBRARY_PATH=/proc/self/fd/5/.runtime,
+HOME=/proc/self/fd/5, GIT_CONFIG_GLOBAL=/proc/self/fd/5/.no-global-config,
+GIT_CONFIG_NOSYSTEM=1, GIT_OPTIONAL_LOCKS=0, GIT_TERMINAL_PROMPT=0 and LC_ALL=C.
+There is no PATH lookup or inherited environment; fd5 retains the granted root.
+The authority report names each capability and this fixed profile. It is an
+invocation template; the checked consumer hashes ForeignImage when it needs an
+exact image identity. Optional Rust witness methods return ENOSYS rather than
+running an unconfined substitute.
 
 ## Backend contract and trust
 

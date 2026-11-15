@@ -250,6 +250,80 @@ fn command_grants_are_named_affine_and_unforgeable() {
     assert!(host.0.is_empty());
 }
 
+fn read_roots_reject_mutation_and_writable_grants() {
+    let program = ir_text::read(include_str!("../../tests/fixtures/authority/read_root_entry.lkjir")).unwrap();
+    let checked = check::check(program.clone()).unwrap();
+    let runtime = prepared();
+    for ty in vec![7usize, 8usize] {
+        assert!(!check::is_copy(&checked.program().types, ty));
+        assert!(!check::is_data(&checked.program().types, ty));
+    }
+    let granted = crate::entry_grants::prepare(checked.program(), 0usize, &["root=docs".to_string()]).unwrap();
+    assert!(matches!(&granted[0usize], ir::EntryGrant::ReadDirectory(path) if path.as_slice() == b"docs\0"));
+    let environment = crate::entry_grants::prepare(checked.program(), 0usize, &["root=env:READ_ROOT".to_string()]).unwrap();
+    assert!(matches!(&environment[0usize], ir::EntryGrant::ReadDirectoryEnvironment(name) if name.as_slice() == b"READ_ROOT\0"));
+    let mut host = FailingHost(Vec::new());
+    interpreter::run_granted(checked.program(), 0usize, &granted, &mut host).unwrap();
+    assert_eq!(host.0.as_slice(), b"DC");
+    native::encode_granted(&checked, &runtime, 0usize, &granted, None, None).unwrap();
+    for wrong in vec![ir::EntryGrant::Directory(b"docs\0"[..].to_vec()), ir::EntryGrant::Clock,
+        ir::EntryGrant::ReadDirectoryEnvironment(b"BAD=NAME\0"[..].to_vec())] {
+        let mut host = FailingHost(Vec::new());
+        assert!(interpreter::run_granted(checked.program(), 0usize, &[wrong.clone()], &mut host).is_err());
+        assert!(native::encode_granted(&checked, &runtime, 0usize, &[wrong], None, None).is_err());
+        assert!(host.0.is_empty());
+    }
+    // A producer cannot erase the read-only kind by naming a mutating intrinsic.
+    let mut broken = program;
+    broken.functions[1usize].body[1usize].op = ir::Op::Intrinsic {
+        dst: 2usize, name: ir::IntrinsicOp::FileExecutable, args: vec![1usize],
+    };
+    assert!(check::check(broken.clone()).is_err());
+    let mut host = FailingHost(Vec::new());
+    let error = interpreter::run_granted(&broken, 1usize, &granted, &mut host).err().unwrap();
+    assert!(error.kind == ErrorKind::Interpreter(InterpreterError::InvalidIr));
+    assert_eq!(host.0.as_slice(), b"D");
+}
+
+
+fn foreign_grants_are_exact_affine_and_unforgeable() {
+    let checked = check::check(ir_text::read(include_str!("../../tests/fixtures/authority/foreign_entry.lkjir")).unwrap()).unwrap();
+    let program = checked.program();
+    for ty in vec![7usize, 8usize, 9usize, 10usize] {
+        assert!(!check::is_copy(&program.types, ty));
+        assert!(!check::is_data(&program.types, ty));
+    }
+    let supplied = vec!["tool=/usr/bin/git".to_string(), "root=fixture".to_string(), "sink".to_string()];
+    let grants = crate::entry_grants::prepare(program, 0usize, &supplied).unwrap();
+    assert!(matches!(&grants[0usize], ir::EntryGrant::ForeignCommand(path) if path.as_slice() == b"/usr/bin/git\0"));
+    assert!(matches!(&grants[1usize], ir::EntryGrant::ReadDirectory(path) if path.as_slice() == b"fixture\0"));
+    assert!(matches!(grants[2usize], ir::EntryGrant::NullDevice));
+    for invalid in vec!["tool".to_string(), "tool=".to_string(), "tool=git".to_string(), "tool=env:TOOL".to_string(), "tool=/bin/git\0other".to_string()] {
+        let mut rejected = supplied.clone();
+        rejected[0usize] = invalid.to_string();
+        assert!(crate::entry_grants::prepare(program, 0usize, &rejected).is_err());
+    }
+    let mut rejected = supplied.clone();
+    rejected[2usize] = "sink=/dev/null".to_string();
+    assert!(crate::entry_grants::prepare(program, 0usize, &rejected).is_err());
+    let runtime = prepared();
+    for wrong in vec![ir::EntryGrant::Directory(b"/usr/bin/git\0"[..].to_vec()),
+        ir::EntryGrant::ForeignCommand(b"relative\0"[..].to_vec()),
+        ir::EntryGrant::ForeignCommand(b"/bin/git\0extra\0"[..].to_vec())] {
+        let mut wrong_grants = grants.clone();
+        wrong_grants[0usize] = wrong;
+        let mut host = FailingHost(Vec::new());
+        assert!(interpreter::run_granted(program, 0usize, &wrong_grants, &mut host).is_err());
+        assert!(native::encode_granted(&checked, &runtime, 0usize, &wrong_grants, None, None).is_err());
+        assert!(host.0.is_empty());
+    }
+    let mut host = FailingHost(Vec::new());
+    assert!(interpreter::run(program, 0usize, &[1u64, 1u64, 1u64], &mut host).is_err());
+    let selected = native::Entry { function: 0usize, arguments: vec![1i64, 1i64, 1i64], result_fd: None };
+    assert!(native::encode(&checked, &runtime, selected).is_err());
+    assert!(host.0.is_empty());
+}
+
 pub fn probe() -> i64 {
 
     mismatched_grants_do_not_acquire_authority();
@@ -260,7 +334,9 @@ pub fn probe() -> i64 {
     readiness_grants_are_owned_and_unforgeable();
     lifecycle_grants_are_explicit_owned_and_unforgeable();
     command_grants_are_named_affine_and_unforgeable();
-    8
+    read_roots_reject_mutation_and_writable_grants();
+    foreign_grants_are_exact_affine_and_unforgeable();
+    10
 }
 pub fn run(world: &mut World, trace: bool) -> usize {
     if trace {

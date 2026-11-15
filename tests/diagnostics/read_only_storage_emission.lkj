@@ -1,0 +1,7 @@
+// expect: check
+// cause: bad message.
+// pending: An unbound native platform label must identify the missing leaf and feature selector, not blame an unrelated final source expression.
+// Regression runs as a standalone, native and interpreted program in tools/read-roots-test.sh.
+pub fn main(mut root: ReadDirectory) {
+    let _ = root.open("board.txt").unwrap().modified_nanoseconds();
+}

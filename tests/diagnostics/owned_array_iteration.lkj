@@ -1,3 +1,5 @@
 // expect: reject E_TRAIT
+// cause: expected a Rust form.
+// pending: For owned string elements, a Vec rewrite also needs its Vec<String> annotation before an element is borrowed as str.
 // diagnostic edits: On failed IntoIterator resolution, turn this owned literal array into a Vec.
 pub fn probe() -> u64 { let mut sum = 0u64; for value in [1u64, 2u64] { sum += value; } sum }

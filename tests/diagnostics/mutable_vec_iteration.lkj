@@ -1,4 +1,6 @@
 // expect: reject E_TRAIT
+// cause: bad message.
+// pending: Name the missing mutable Vec IntoIterator rather than an implementation witness; show an indexed element borrow.
 // rewrite: Name the missing IntoIterator for &mut Vec<T>; use one collection evaluation and an index loop with a fresh element borrow.
 pub fn probe() -> i64 {
     let mut values = vec![1i64];

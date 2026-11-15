@@ -1,0 +1,8 @@
+#!/bin/sh
+# Reviewed literal bindings; the external caller owns listener composition.
+set -eu
+DESK_STATE=${DESK_STATE-/home/coder/.local/state/desk}
+TZ=${TZ-UTC0}
+export DESK_STATE TZ
+image=/home/coder/.local/libexec/lkjscript/desk
+exec "$image" "$@"

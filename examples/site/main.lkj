@@ -1,24 +1,16 @@
 //! Sealed documentation origin with embedded public content and dynamic search.
-mod http_protocol;
-mod http_policy;
-mod http_server;
+use std::http_protocol;
+use std::http_policy;
+use std::http_server;
+mod routes;
 mod site_archive;
 mod site_search;
 use http_protocol::Request;
+use routes::route_path;
 use http_server::{Body, Handler, Reply};
 use site_archive::Archive;
 use site_search::Search;
 
-// The observed origin matches static routes literally, then decodes only the
-// single path parameter beneath /docs/. It does not decode encoded separators.
-fn route_path(request: &Request) -> String {
-    let raw = request.raw_path.as_str();
-    if raw.starts_with("/docs/") {
-        let slug = &raw[6usize..];
-        if !slug.is_empty() && !slug.contains('/') { return format!("/{}", request.path); }
-    }
-    request.raw_path.clone()
-}
 struct Site { archive: Archive, search: Search }
 impl Site {
     fn reply(&self, index: Option<usize>, body: Body, search_status: Option<u16>) -> Reply {
@@ -33,6 +25,12 @@ impl Site {
     }
 }
 impl Handler for Site {
+    fn event_interval(&self) -> usize { 0usize }
+    fn event_revision(&self) -> usize { 0usize }
+    fn event_refresh(&mut self, _now: i64) -> Result<bool, String> { Ok(false) }
+    fn event_after(&mut self, _cursor: &str, _now: i64) -> Result<(String, String), String> {
+        Err("this HTTP application has no event stream".to_string())
+    }
     fn methods(&self) -> &'static str { "GET, HEAD" }
     fn preflight(&mut self, _request: &Request, _now: i64) -> Option<Reply> { None }
     fn retain_body(&self, _request: &Request) -> bool { false }
@@ -77,20 +75,4 @@ pub fn main(mut output: Stdout, listener: Listener, clock: Clock,
         }
     };
     http_server::serve(output, listener, clock, ready, stop, policy, Site { archive, search });
-}
-
-#[test]
-fn raw_route_aliases() {
-    let cases: Vec<(String, String)> = vec![
-        ("/%73earch".to_string(), "/%73earch".to_string()),
-        ("/assets/%73ite.css".to_string(), "/assets/%73ite.css".to_string()),
-        ("/docs%2fstart".to_string(), "/docs%2fstart".to_string()),
-        ("/docs/%73tart".to_string(), "/docs/start".to_string()),
-        ("/docs/%73tart/".to_string(), "/docs/%73tart/".to_string()),
-    ];
-    for (target, expected) in cases {
-        let header = format!("GET {target}?q=cat HTTP/1.1\r\nHost: a\r\n\r\n");
-        let request = http_protocol::parse(header.as_bytes()).unwrap();
-        assert!(route_path(&request) == expected);
-    }
 }

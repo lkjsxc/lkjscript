@@ -171,6 +171,10 @@ impl Layouts {
             TypeKind::Box { .. }
             | TypeKind::File
             | TypeKind::Directory
+            | TypeKind::ReadDirectory
+            | TypeKind::ReadFile
+            | TypeKind::ForeignCommand
+            | TypeKind::NullDevice
             | TypeKind::Child
             | TypeKind::Listener
             | TypeKind::Readiness => {

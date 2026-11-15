@@ -62,6 +62,8 @@ else
     printf '60\n30\n30\n' > "$stop_work/root/.http-policy"
 fi
 "$compiler" build tools/http-stop.lkj --library-dir library -o "$stop_work/client"
+: >"$stop_work/server.out"
+: >"$stop_work/server.err"
 if [ "$engine" = native ]; then
     "$stop_work/server" >"$stop_work/server.out" 2>"$stop_work/server.err" &
 else
@@ -91,6 +93,8 @@ else
 fi
 mkfifo "$stop_work/control"
 exec 9<>"$stop_work/control"
+: >"$stop_work/client.out"
+: >"$stop_work/client.err"
 if [ "$engine" = native ]; then
     "$stop_work/client" "$port" <"$stop_work/control" >"$stop_work/client.out" 2>"$stop_work/client.err" &
 else

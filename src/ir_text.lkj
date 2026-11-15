@@ -631,7 +631,7 @@ pub fn read(text: &str) -> Result<Program> {
                         exact(&words, 3, line)?;
                         TypeKind::Stdout
                     }
-                    "stdin" | "stderr" | "directory" | "file" | "process" | "clock" | "child"
+                    "stdin" | "stderr" | "directory" | "read_directory" | "read_file" | "foreign_command" | "null_device" | "file" | "process" | "clock" | "child"
                     | "listener" | "connector" | "readiness" | "entropy" | "stop"
                     | "arguments" | "environment" | "exit_status" => {
                         exact(&words, 3, line)?;
@@ -642,6 +642,10 @@ pub fn read(text: &str) -> Result<Program> {
                             "stdin" => TypeKind::Stdin,
                             "stderr" => TypeKind::Stderr,
                             "directory" => TypeKind::Directory,
+                            "read_directory" => TypeKind::ReadDirectory,
+                            "read_file" => TypeKind::ReadFile,
+                            "foreign_command" => TypeKind::ForeignCommand,
+                            "null_device" => TypeKind::NullDevice,
                             "process" => TypeKind::Process,
                             "clock" => TypeKind::Clock,
                             "child" => TypeKind::Child,
@@ -978,6 +982,10 @@ pub fn write(program: &Program) -> String {
             TypeKind::Stdin => text.push_str("stdin"),
             TypeKind::Stderr => text.push_str("stderr"),
             TypeKind::Directory => text.push_str("directory"),
+            TypeKind::ReadDirectory => text.push_str("read_directory"),
+            TypeKind::ReadFile => text.push_str("read_file"),
+            TypeKind::ForeignCommand => text.push_str("foreign_command"),
+            TypeKind::NullDevice => text.push_str("null_device"),
             TypeKind::File => text.push_str("file"),
             TypeKind::Process => text.push_str("process"),
             TypeKind::Clock => text.push_str("clock"),

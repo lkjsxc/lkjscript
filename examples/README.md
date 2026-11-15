@@ -110,14 +110,14 @@ backpressure through `ReadBuffer::write_some` and an owned `WriteCursor`.
 response, a later read that starts another request, and a fresh request after idle.
 The native HTTP gate runs these cases after its functional server exits.
 
-`http_server.lkj` shares the connection engine through an ordinary generic handler;
-`http.lkj` supplies the static-file handler and `journal.lkj` supplies the journal.
-`http_protocol.lkj` parses requests with the handler's allowed method list. Its native test functions
+`library/http_server.lkj` shares the connection engine through an ordinary generic handler;
+`http.lkj` supplies the static-file handler and `journal/main.lkj` supplies the journal.
+`library/http_protocol.lkj` parses requests with the handler's allowed method list. Its native test functions
 cover request syntax and incremental header recognition through both execution
 routes:
 
 ```sh
-target/lkjscript test examples/http_protocol.lkj --jobs 1
+target/lkjscript test library/http_protocol.lkj --jobs 1
 ```
 
 ### Graceful stop
@@ -232,7 +232,7 @@ test workload and compiler; they do not alter language resource rules.
 
 ## Durable HTTP journal
 
-`journal.lkj` accepts JSON entries, retains the latest version of each entry in an
+`journal/main.lkj` accepts JSON entries, retains the latest version of each entry in an
 in-memory index, and stores every mutation in an append-only log beneath its granted
 `Directory`. Its entry grants are output, root directory, listener, clock, readiness, Stop and
 Entropy. The latter initializes the durable session-signing key. The granted root is writable
@@ -240,7 +240,7 @@ and should be a private directory used by one journal.
 
 ```sh
 mkdir -p target/journal-data
-target/lkjscript build examples/journal.lkj \
+target/lkjscript build examples/journal/main.lkj \
     --grant output --grant root=target/journal-data \
     --grant listener=127.0.0.1:0 --grant clock --grant ready --grant stop --grant entropy -o target/journal
 target/journal
@@ -251,7 +251,7 @@ and `stop-target PID`. After that first startup, issue a write token from a sepa
 program that receives the signing-key directory:
 
 ```sh
-target/lkjscript build examples/journal-token.lkj \
+target/lkjscript build examples/journal/token.lkj \
     --grant output --grant errors --grant input --grant root=target/journal-data \
     --grant entropy --grant clock -o target/journal-token
 journal_token=$(printf '3600\n' | target/journal-token)
@@ -430,9 +430,21 @@ honor successful sync operations; this campaign does not emulate a host power cu
 
 ## Documentation-origin candidate
 
-`site.lkj` embeds the exact twelve-path public documentation snapshot and computes
+`site/main.lkj` embeds the exact twelve-path public documentation snapshot and computes
 dynamic search, with explicit Listener, Clock, Readiness, Stop and output grants. [site.md](site.md) explains the captured content, text helpers,
 independent live parity, offline regression checks and temporary systemd proof.
 The candidate unit is [lkjscript-site.service](lkjscript-site.service); the
 [24-line switch and rollback procedure](site-switch.md) is for Claude to execute.
 The live origin and /opt are left untouched during preparation.
+
+## Confined foreign command
+
+`foreign-status` is a program directory whose entry receives an immutable
+ForeignCommand snapshot of `/usr/bin/git`, one ReadDirectory root and an explicit
+NullDevice. The kernel profile denies outside-root file content, sockets,
+filesystem mutation, descendants and privilege regain; the caller supplies the
+deadline. It is a separate authority model from checked lkjscript children.
+Runtime staging, exact report limits and the adversarial proof are in
+[foreign-child.md](foreign-child.md). Run `bash tools/foreign-child-test.sh` for
+the compiler-only three-engine Git proof; unsupported kernel profiles refuse
+execution. The C adversarial campaign is optional and explicitly separate.

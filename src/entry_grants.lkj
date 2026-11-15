@@ -22,10 +22,10 @@ pub fn validate(program: &Program, entry: usize) -> Result<(), String> {
         let local = &function.locals[parameter];
         let ty = program.types.get(local.ty).ok_or_else(|| problem("entry parameter type is missing"))?;
         if matches!(ty.kind, TypeKind::World) && function.params == 1 { continue; }
-        if matches!(ty.kind, TypeKind::File) {
+        if matches!(ty.kind, TypeKind::File | TypeKind::ReadFile) {
             return Err(problem(&format!("File parameter {} cannot be granted; accept Directory and open the file inside the entry", local.name)));
         }
-        if !matches!(ty.kind, TypeKind::Arguments | TypeKind::Environment | TypeKind::ExitStatus | TypeKind::Stdout | TypeKind::Stdin | TypeKind::Stderr | TypeKind::Clock | TypeKind::Process | TypeKind::Directory | TypeKind::Listener | TypeKind::Connector | TypeKind::Readiness | TypeKind::Entropy | TypeKind::Stop) {
+        if !matches!(ty.kind, TypeKind::Arguments | TypeKind::Environment | TypeKind::ExitStatus | TypeKind::Stdout | TypeKind::Stdin | TypeKind::Stderr | TypeKind::Clock | TypeKind::Process | TypeKind::Directory | TypeKind::ReadDirectory | TypeKind::ForeignCommand | TypeKind::NullDevice | TypeKind::Listener | TypeKind::Connector | TypeKind::Readiness | TypeKind::Entropy | TypeKind::Stop) {
             return Err(problem(&format!("parameter {} requires an owned grantable capability; World must be the only parameter", local.name)));
         }
         if !valid_name(&local.name) || names.contains(&local.name) {
@@ -123,23 +123,34 @@ pub fn prepare(program: &Program, entry: usize, supplied: &[String]) -> Result<V
                 name.push(0);
                 EntryGrant::Environment(name)
             }
-            TypeKind::Directory | TypeKind::Listener | TypeKind::Connector => {
+            TypeKind::ForeignCommand => {
+                let value = value.as_ref().ok_or_else(|| problem(&format!("--grant {} requires one absolute executable path", local.name)))?;
+                if !value.starts_with('/') || value.as_bytes().contains(&0u8) {
+                    return Err(problem("foreign command grant requires one absolute path without NUL; no environment selector"));
+                }
+                let mut path = value.as_bytes().to_vec();
+                path.push(0);
+                EntryGrant::ForeignCommand(path)
+            }
+            TypeKind::Directory | TypeKind::ReadDirectory | TypeKind::Listener | TypeKind::Connector => {
                 let value = value.as_ref().ok_or_else(|| problem(&format!("--grant {} requires a value", local.name)))?;
                 if value.is_empty() { return Err(problem("grant path or address is empty")); }
                 for byte in value.as_bytes() {
                     if *byte == 0 { return Err(problem("grant path or address contains a zero byte")); }
                 }
-                if matches!(kind, TypeKind::Directory) {
+                if matches!(kind, TypeKind::Directory | TypeKind::ReadDirectory) {
                     if value.starts_with("env:") {
                         let name = &value[4..];
                         if !valid_name(name) { return Err(problem("directory environment grant needs one nonempty variable name")); }
                         let mut key = name.as_bytes().to_vec();
                         key.push(0);
-                        EntryGrant::DirectoryEnvironment(key)
+                        if matches!(kind, TypeKind::ReadDirectory) { EntryGrant::ReadDirectoryEnvironment(key) }
+                        else { EntryGrant::DirectoryEnvironment(key) }
                     } else {
                         let mut path = value.as_bytes().to_vec();
                         path.push(0);
-                        EntryGrant::Directory(path)
+                        if matches!(kind, TypeKind::ReadDirectory) { EntryGrant::ReadDirectory(path) }
+                        else { EntryGrant::Directory(path) }
                     }
                 } else if matches!(kind, TypeKind::Connector) {
                     EntryGrant::Connector(address(value)?)
@@ -160,6 +171,7 @@ pub fn prepare(program: &Program, entry: usize, supplied: &[String]) -> Result<V
                     TypeKind::Readiness => EntryGrant::Readiness,
                     TypeKind::Entropy => EntryGrant::Entropy,
                     TypeKind::Stop => EntryGrant::Stop,
+                    TypeKind::NullDevice => EntryGrant::NullDevice,
                     _ => return Err(problem("ungrantable entry capability")),
                 }
             }

@@ -37,7 +37,7 @@ impl Plan {
                 EntryGrant::EnvironmentValue(value) => {
                     if value.is_some() { a.address(A, self.paths[index]); } else { a.immediate(A, 0); }
                 },
-                EntryGrant::DirectoryEnvironment(_) => {
+                EntryGrant::DirectoryEnvironment(_) | EntryGrant::ReadDirectoryEnvironment(_) => {
                     // Resolve only the invocation-reviewed key, before application code.
                     let missing = a.label();
                     let scan = a.label();
@@ -67,11 +67,17 @@ impl Plan {
                     a.immediate(A, (-2i64) as u64);
                     a.bind(done);
                 }
-                EntryGrant::Directory(path) => {
+                EntryGrant::Directory(path) | EntryGrant::ReadDirectory(path) => {
                     a.address(DI, self.paths[index]);
                     a.immediate(SI, path.len() as u64);
                     a.call(p.directory_open);
                 }
+                EntryGrant::ForeignCommand(path) => {
+                    a.address(DI, self.paths[index]);
+                    a.immediate(SI, path.len() as u64);
+                    a.call(p.foreign_open);
+                }
+                EntryGrant::NullDevice => { a.call(p.null_open); },
                 EntryGrant::Connector(address) => {
                     a.address(DI, self.paths[index]);
                     a.immediate(SI, address.len() as u64);
@@ -94,6 +100,10 @@ impl Plan {
                 // generic host trap; a bind failure is not a stdout failure.
                 let name = match grant {
                     EntryGrant::Directory(_) => "Directory",
+                    EntryGrant::ReadDirectory(_) => "ReadDirectory",
+                    EntryGrant::ForeignCommand(_) => "ForeignCommand",
+                    EntryGrant::NullDevice => "NullDevice",
+                    EntryGrant::ReadDirectoryEnvironment(_) => "ReadDirectory (named environment)",
                     EntryGrant::DirectoryEnvironment(_) => "Directory (named environment)",
                     EntryGrant::Listener(_) => "Listener",
                     EntryGrant::Connector(_) => "Connector",
@@ -144,7 +154,7 @@ impl Plan {
         for (index, grant) in self.grants.iter().enumerate() {
             a.data_label(self.paths[index], offset + bytes.len());
             match grant {
-                EntryGrant::Directory(path) | EntryGrant::DirectoryEnvironment(path) | EntryGrant::Environment(path) => bytes.extend_from_slice(path),
+                EntryGrant::ForeignCommand(path) | EntryGrant::Directory(path) | EntryGrant::DirectoryEnvironment(path) | EntryGrant::ReadDirectory(path) | EntryGrant::ReadDirectoryEnvironment(path) | EntryGrant::Environment(path) => bytes.extend_from_slice(path),
                 EntryGrant::EnvironmentValue(Some(value)) => { bytes.extend_from_slice(value); bytes.push(0); },
                 EntryGrant::Listener(address) | EntryGrant::Connector(address) => bytes.extend_from_slice(address),
                 _ => {}

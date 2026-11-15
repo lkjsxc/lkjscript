@@ -1,5 +1,5 @@
 //! Run the consumer's HTTP parser without socket or filesystem work.
-// bench/run.sh stages examples/http_protocol.lkj beside this source.
+// bench/run.sh stages library/http_protocol.lkj beside this source.
 mod common;
 mod http_protocol;
 

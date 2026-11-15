@@ -34,13 +34,20 @@ fn compiled(text: &str) -> ir::CheckedProgram {
         path: "interpreter.lkj".to_string(),
         text: text.to_string(),
     });
+    super::complete_library(&mut files);
     frontend::check_bundle(&source::SourceBundle {
         root: "interpreter.lkj".to_string(),
         library: Some("$std/lib.lkj".to_string()),
         files,
     })
-    .unwrap()
+    .unwrap_or_else(|error| {
+        panic!(
+            "{}:{}:{}: {}: {}",
+            error.path, error.line, error.column, error.code, error.message
+        )
+    })
 }
+
 fn function_index(program: &ir::Program, name: &str) -> usize {
     let mut index = 0usize;
     while index < program.functions.len() {
@@ -465,6 +472,11 @@ fn model_output_preserves_bytes_drop_order_and_trap_prefix() {
 
 pub(super) struct FailingHost(pub(super) Vec<u8>);
 impl interpreter::Host for FailingHost {
+    // This test host deliberately has no foreign process or device authority.
+    fn open_foreign_command(&mut self, _path: &[u8]) -> Result<u64, i64> { Err(95) }
+    fn open_null_device(&mut self) -> Result<u64, i64> { Err(95) }
+    fn foreign_image(&mut self, _handle: u64) -> Result<u64, i64> { Err(95) }
+    fn run_foreign(&mut self, _command: u64, _root: u64, _sink: u64, _arguments: &[u8], _duration: usize) -> Result<u64, i64> { Err(95) }
     fn argument_count(&self) -> usize {
         0
     }
@@ -486,6 +498,9 @@ impl interpreter::Host for FailingHost {
         Err(38)
     }
     fn open_file_storage(&mut self, _directory: u64, _path: &[u8], _append: bool) -> Result<u64, i64> { self.0.push(b'O'); Err(38) }
+    fn open_read_file(&mut self, _directory: u64, _path: &[u8]) -> Result<u64, i64> { Err(38) }
+    fn seek_file(&mut self, _handle: u64, _offset: i64, _whence: u8) -> Result<usize, i64> { Err(38) }
+    fn modified_file(&mut self, _handle: u64) -> Result<usize, i64> { Err(38) }
     fn sync_file(&mut self, _handle: u64) -> Result<(), i64> { self.0.push(b'S'); Err(38) }
     fn sync_directory(&mut self, _handle: u64) -> Result<(), i64> { self.0.push(b'S'); Err(38) }
     fn truncate_file(&mut self, _handle: u64, _length: usize) -> Result<(), i64> { self.0.push(b'T'); Err(38) }

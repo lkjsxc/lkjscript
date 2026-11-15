@@ -3,7 +3,7 @@
 Claude runs these commands later, from this repository; no switch was performed here. First require sh tools/http-site-test.sh --systemd to pass against the live origin, including its same-port restart with the journal stream socket. Each attempt uses a fresh directory, so a previous failed release can remain in place.
 ~~~sh
 set -eu
-target/lkjscript build examples/site.lkj --library-dir library --grant output --grant listener=127.0.0.1:8798 --grant clock --grant ready --grant stop -o target/lkjscript-site
+target/lkjscript build examples/site/main.lkj --library-dir library --grant output --grant listener=127.0.0.1:8798 --grant clock --grant ready --grant stop -o target/lkjscript-site
 site_release=$(sudo mktemp -d "/opt/lkjscript-site/releases/programs-$(git rev-parse --short HEAD).XXXXXX"); sudo chmod 0755 "$site_release"
 sudo install -m 0755 target/lkjscript-site "$site_release/lkjscript-site"
 sudo cp /etc/systemd/system/lkjscript-site.service "$site_release/previous.service"; sudo ln -s "$(readlink -f /opt/lkjscript-site/current)" "$site_release/previous"

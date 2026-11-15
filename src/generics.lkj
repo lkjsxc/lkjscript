@@ -1574,6 +1574,10 @@ fn trait_requirements(
             | TypeKind::Stdin
             | TypeKind::Stderr
             | TypeKind::Directory
+            | TypeKind::ReadDirectory
+            | TypeKind::ReadFile
+            | TypeKind::ForeignCommand
+            | TypeKind::NullDevice
             | TypeKind::File
             | TypeKind::Process
             | TypeKind::Clock
@@ -1642,6 +1646,10 @@ fn trait_requirements(
             | TypeKind::Stdin
             | TypeKind::Stderr
             | TypeKind::Directory
+            | TypeKind::ReadDirectory
+            | TypeKind::ReadFile
+            | TypeKind::ForeignCommand
+            | TypeKind::NullDevice
             | TypeKind::File
             | TypeKind::Process
             | TypeKind::Clock

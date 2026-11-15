@@ -19,6 +19,7 @@ trap cleanup EXIT
 fail() { printf 'desk capabilities: %s\n' "$*" >&2; exit 1; }
 printf 'desk capabilities load_before '; cat /proc/loadavg
 start=$(date +%s%N)
+bash tools/read-roots-test.sh --compiler "$compiler"
 grants=(--grant args --grant value=DESK_CAPS_TEST --grant input --grant output --grant status)
 "$compiler" build tests/fixtures/authority/command.lkj --library-dir library --no-store \
     "${grants[@]}" -o "$case_dir/command"

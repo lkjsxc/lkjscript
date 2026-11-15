@@ -1,10 +1,115 @@
-//! Desk's three routes. External board, handoff and wake authority are absent.
-use super::store;
+//! Desk routes composed from its state and two read-only host publications.
+use super::{store, composition};
 use crate::http_protocol::Request;
 use crate::http_server::{Body, Handler, Reply};
 use std::json::{self, Value};
 const PAGE: &str = include_str!("index.html");
-pub struct Desk { pub state: Directory, pub clock: Clock, pub entropy: Entropy }
+struct Events {
+    revision: usize,
+    signature: String,
+    external: String,
+    external_at: i64,
+    frames: std::collections::BTreeMap<String, (String, String)>,
+}
+pub struct Desk {
+    pub state: Directory,
+    pub board: ReadDirectory,
+    pub handoff: ReadDirectory,
+    pub clock: Clock,
+    pub entropy: Entropy,
+    events: Events,
+}
+impl Desk {
+    pub fn new(state: Directory, board: ReadDirectory, handoff: ReadDirectory,
+        clock: Clock, entropy: Entropy) -> Desk {
+        Desk { state, board, handoff, clock, entropy,
+            events: Events { revision: 0usize, signature: String::new(), external: String::new(),
+                external_at: -1i64, frames: std::collections::BTreeMap::new() } }
+    }
+    fn frame(&mut self, resume: &str, now: i64) -> Result<(String, String), String> {
+        if let Some(frame) = self.events.frames.get(&resume.to_string()) { return Ok((frame.0.clone(), frame.1.clone())); }
+        // Snapshot and both replay boundaries come from one committed writer view.
+        let lock = store::lock(&mut self.state)?;
+        let value = store::state_locked(&mut self.state, now)?;
+        let next = store::field(&value, "cursor")?;
+        let end = parse_cursor(&next).unwrap();
+        let parsed = parse_cursor(resume);
+        let mut reset = !resume.is_empty() && parsed.is_none();
+        let mut begin = parsed.unwrap_or((0usize, 0usize));
+        if begin.0 > end.0 || begin.1 > end.1
+            || !boundary(&mut self.state, "notes.jsonl", begin.0)?
+            || !boundary(&mut self.state, "inbox.jsonl", begin.1)? {
+            begin = (0usize, 0usize);
+            reset = true;
+        }
+        let notes = replay(&mut self.state, "notes.jsonl", begin.0, end.0)?;
+        let inbox = replay(&mut self.state, "inbox.jsonl", begin.1, end.1)?;
+        drop(lock);
+        let value = composition::enrich(value, &mut self.board, &mut self.handoff, now)?;
+        let payload = Value::Object(vec![
+            ("notes".to_string(), Value::Array(notes)), ("inbox".to_string(), Value::Array(inbox)),
+            ("state".to_string(), value), ("reset".to_string(), Value::Bool(reset)),
+        ]);
+        let text = format!("retry: 500\nid: {next}\nevent: desk\ndata: {}\n\n", store::json_text(&payload)?);
+        self.events.frames.insert(resume.to_string(), (text.clone(), next.clone()));
+        Ok((text, next))
+    }
+}
+fn parse_cursor(text: &str) -> Option<(usize, usize)> {
+    let (notes, inbox) = text.split_once('.')?;
+    if notes.is_empty() || inbox.is_empty() { return None; }
+    // No signs, spaces or alternate representations: IDs remain safe SSE lines.
+    for byte in text.as_bytes() { if *byte != b'.' && (*byte < b'0' || *byte > b'9') { return None; } }
+    Some((notes.parse::<usize>().ok()?, inbox.parse::<usize>().ok()?))
+}
+fn boundary(root: &mut Directory, name: &str, position: usize) -> Result<bool, String> {
+    if position == 0usize { return Ok(true); }
+    let mut file = match root.open(name) {
+        Ok(file) => file, Err(2i64) => return Ok(false),
+        Err(errno) => return Err(format!("open desk replay boundary: errno {errno}")),
+    };
+    store::io(file.seek((position - 1usize) as i64, 0u8), "seek desk replay boundary")?;
+    let mut byte = [0u8; 1];
+    Ok(store::io(file.read(&mut byte), "read desk replay boundary")? == 1usize && byte[0usize] == b'\n')
+}
+fn replay(root: &mut Directory, name: &str, begin: usize, end: usize) -> Result<Vec<Value>, String> {
+    if begin == end { return Ok(Vec::new()); }
+    let mut file = store::io(root.open(name), "open desk replay")?;
+    store::io(file.seek(begin as i64, 0u8), "seek desk replay")?;
+    let mut bytes = Vec::new();
+    let mut buffer = [0u8; 8192];
+    let mut remaining = end - begin;
+    while remaining != 0usize {
+        let wanted = if remaining < buffer.len() { remaining } else { buffer.len() };
+        let count = store::io(file.read(&mut buffer[..wanted]), "read desk replay")?;
+        if count == 0usize { return Err("desk replay changed outside the writer lock".to_string()); }
+        bytes.extend_from_slice(&buffer[..count]);
+        remaining -= count;
+    }
+    let text = match String::from_utf8(bytes) {
+        Ok(text) => text, Err(_) => return Err("desk replay is not UTF-8".to_string()),
+    };
+    let rows = store::parse_rows(&text)?;
+    let mut values = Vec::new();
+    for row in rows { values.push(row.value(None, None)); }
+    Ok(values)
+}
+fn file_revision(root: &mut Directory, name: &str) -> Result<String, String> {
+    let mut file = match root.open(name) {
+        Ok(file) => file, Err(2i64) => return Ok(format!("{name}:missing\n")),
+        Err(errno) => return Err(format!("inspect desk event source: errno {errno}")),
+    };
+    let size = store::io(file.seek(0i64, 2u8), "read desk event size")?;
+    let modified = store::io(file.modified_nanoseconds(), "read desk event modification")?;
+    Ok(format!("{name}:{size}:{modified}\n"))
+}
+fn resume(request: &Request) -> String {
+    if let Some(cursor) = &request.last_event_id { return cursor.clone(); }
+    for option in request.query.as_str().split('&') {
+        if option.starts_with("cursor=") { return option[7usize..].to_string(); }
+    }
+    String::new()
+}
 fn reply(status: u16, kind: &str, body: String) -> Reply {
     Reply::new(status, kind, Body::Message(body)).header("Cache-Control", "no-store")
 }
@@ -58,6 +163,7 @@ fn message(body: &[u8]) -> Result<(String, String, String), String> {
 impl Handler for Desk {
     fn methods(&self) -> &'static str { "GET, HEAD, POST" }
     fn preflight(&mut self, request: &Request, _now: i64) -> Option<Reply> {
+        if last_path(&request.raw_path) == "events" && request.method != "GET" { return Some(empty(405u16)); }
         if request.method == "POST" {
             let header = match &request.x_desk { Some(value) => value.as_str(), None => "" };
             let mut path = request.raw_path.clone();
@@ -71,8 +177,15 @@ impl Handler for Desk {
     fn retain_body(&self, request: &Request) -> bool { request.method == "POST" }
     fn respond(&mut self, request: &Request, body: Vec<u8>, now: i64) -> Result<Reply, String> {
         if request.method != "POST" {
+            if last_path(&request.raw_path) == "events" {
+                let (text, cursor) = self.frame(&resume(request), now)?;
+                return Ok(reply(200u16, "text/event-stream; charset=utf-8", text)
+                    .header("X-Accel-Buffering", "no").events(cursor));
+            }
             if last_path(&request.raw_path) == "state" {
-                return json_reply(&store::state(&mut self.state, now)?);
+                let value = store::state(&mut self.state, now)?;
+                let value = composition::enrich(value, &mut self.board, &mut self.handoff, now)?;
+                return json_reply(&value);
             }
             return Ok(reply(200u16, "text/html; charset=utf-8", PAGE.to_string()));
         }
@@ -89,6 +202,24 @@ impl Handler for Desk {
         json_reply(&row.value(None, None))
     }
     fn finish(&mut self) -> Result<(), String> { store::io(self.state.sync(), "sync desk shutdown") }
+    fn event_interval(&self) -> usize { 250_000_000usize }
+    fn event_revision(&self) -> usize { self.events.revision }
+    fn event_refresh(&mut self, now: i64) -> Result<bool, String> {
+        if self.events.external_at != now {
+            self.events.external = composition::revision(&mut self.board, &mut self.handoff)?;
+            self.events.external_at = now;
+        }
+        let signature = format!("{}{}{}{}", file_revision(&mut self.state, "notes.jsonl")?,
+            file_revision(&mut self.state, "inbox.jsonl")?, file_revision(&mut self.state, "seen")?, self.events.external);
+        if signature == self.events.signature { return Ok(false); }
+        self.events.signature = signature;
+        self.events.revision += 1usize;
+        self.events.frames = std::collections::BTreeMap::new();
+        Ok(true)
+    }
+    fn event_after(&mut self, cursor: &str, now: i64) -> Result<(String, String), String> {
+        self.frame(cursor, now)
+    }
 }
 #[test]
 fn routes_and_unicode_lengths() {
@@ -97,4 +228,14 @@ fn routes_and_unicode_lengths() {
     assert!(limit("a日本😀", 3usize) == "a日本");
     let (text, re, request) = message("{\"text\":\"　日本語 😀　\",\"re\":null,\"request\":\"r\"}".as_bytes()).unwrap();
     assert!(text == "日本語 😀" && re.is_empty() && request == "r");
+}
+
+#[test]
+fn event_cursors_are_exact_log_offsets() {
+    assert!(parse_cursor("123.456") == Some((123usize, 456usize)));
+    assert!(parse_cursor("0.0") == Some((0usize, 0usize)));
+    let values: Vec<String> = vec!["".to_string(), "1".to_string(), "1.".to_string(), ".1".to_string(), "-1.0".to_string(), "1.2.3".to_string(), "1.2\nid:other".to_string()];
+    for invalid in values {
+        assert!(parse_cursor(&invalid).is_none());
+    }
 }

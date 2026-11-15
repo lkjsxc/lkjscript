@@ -1,0 +1,61 @@
+lkjscript-ir 1
+# expect: reject E_TYPE
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "ForeignCommand" foreign_command
+type "ReadDirectory" read_directory
+type "NullDevice" null_device
+type "ReadFile" read_file
+type "&mut ForeignCommand" ref mut 7
+type "&mut ReadDirectory" ref mut 8
+type "&mut NullDevice" ref mut 9
+type "[u8]" slice shared 5
+type "&[u8]" ref shared 14
+type "Opened" enum move
+variant "Ok" "value" 10
+variant "Err" "error" 3
+endtype
+fn "main" 3 0
+local "tool" 7 let
+local "root" 8 let
+local "sink" 9 let
+local "done" 0 let
+@1 drop 0
+@1 drop 1
+@1 drop 2
+@1 unit 3
+@1 return 3
+endfn
+fn "run" 5 16
+local "tool" 7 mut
+local "root" 8 mut
+local "sink" 9 mut
+local "argv" 15 let
+local "duration" 3 let
+local "tool_view" 11 let
+local "root_view" 12 let
+local "sink_view" 13 let
+local "result" 16 let
+@2 borrow 5 mut 0
+@2 borrow 6 mut 1
+@2 borrow 7 mut 2
+@3 intrinsic 8 "foreign_run" 5 6 7 3 4
+@4 drop 0
+@4 drop 1
+@4 drop 2
+@5 return 8
+endfn
+fn "image" 1 16
+local "tool" 7 mut
+local "tool_view" 11 let
+local "result" 16 let
+@6 borrow 1 mut 0
+@7 intrinsic 2 "foreign_image" 1
+@8 drop 0
+@9 return 2
+endfn

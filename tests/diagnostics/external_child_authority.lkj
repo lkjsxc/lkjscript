@@ -9,8 +9,10 @@
 // Return exit/output under an absolute deadline; parent death kills non-detached
 // children. Consumer: command/service images under one failure-restarting supervisor.
 // Current diagnostic boundary remains below until that image contract lands.
-// pending: Narrow external-child execution deliberately requires an immutable
-// authenticated admitted image, checked entry grants and transferred handles.
+// pending: Checked-image child execution requires an immutable authenticated
+// admitted image, checked entry grants and transferred handles.
+// ForeignCommand is the separate explicit kernel-confinement form; it does not
+// establish the authenticated entry-authority subset requested by this case.
 // An exact path alone is insufficient; the diagnostic names this proof and
 // World.process() as explicitly broader host authority.
 // A future executable test must deny reading an outside fixture and observing

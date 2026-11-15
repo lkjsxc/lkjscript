@@ -370,6 +370,44 @@ pub fn load_report<F: FnMut(&str) -> std::result::Result<Option<Vec<u8>>, String
         // New capability helpers are ordinary, checked library source. Mounting
         // this optional module here keeps the library root readable by the
         // stored seed, whose resolver predates Arguments and Environment.
+        // The old seed does not know these authority types. Their ordinary
+        // source helpers join only a current compiler's library namespace.
+        if scope == 1 && path == "$std/lib.lkj" {
+            match read_source(read, "$std/read_io.lkj", Span::default()) {
+                Ok(Some(_)) => {
+                    let mut declared = false;
+                    for module in &program.modules {
+                        if module.name == "read_io" && program.scopes[module.scope].parent == Some(scope) { declared = true; }
+                    }
+                    if !declared {
+                        let extra = syntax::parse_file_report(
+                            &mut program, "pub mod read_io;", file, scope,
+                        );
+                        for item in extra.items { items.push(item); }
+                    }
+                }
+                Ok(None) => {}
+                Err(error) => diagnostics.push(error),
+            }
+        }
+        if scope == 1 && path == "$std/lib.lkj" {
+            match read_source(read, "$std/foreign.lkj", Span::default()) {
+                Ok(Some(_)) => {
+                    let mut declared = false;
+                    for module in &program.modules {
+                        if module.name == "foreign" && program.scopes[module.scope].parent == Some(scope) { declared = true; }
+                    }
+                    if !declared {
+                        let extra = syntax::parse_file_report(
+                            &mut program, "pub mod foreign;", file, scope,
+                        );
+                        for item in extra.items { items.push(item); }
+                    }
+                }
+                Ok(None) => {}
+                Err(error) => diagnostics.push(error),
+            }
+        }
         let mut command_declared = false;
         for module in &program.modules {
             if module.name == "command" && program.scopes[module.scope].parent == Some(scope) {

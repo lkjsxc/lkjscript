@@ -1,7 +1,7 @@
 //! Static documents served by the shared readiness-based HTTP engine.
-mod http_protocol;
-mod http_policy;
-mod http_server;
+use std::http_protocol;
+use std::http_policy;
+use std::http_server;
 use http_protocol::Request;
 use http_server::{Body, Handler, Reply};
 use std::buffer::ReadBuffer;
@@ -29,6 +29,12 @@ fn content_type(path: &str) -> &'static str {
 
 struct Documents { root: Directory }
 impl Handler for Documents {
+    fn event_interval(&self) -> usize { 0usize }
+    fn event_revision(&self) -> usize { 0usize }
+    fn event_refresh(&mut self, _now: i64) -> Result<bool, String> { Ok(false) }
+    fn event_after(&mut self, _cursor: &str, _now: i64) -> Result<(String, String), String> {
+        Err("this HTTP application has no event stream".to_string())
+    }
     fn methods(&self) -> &'static str { "GET, HEAD" }
     fn preflight(&mut self, _request: &Request, _now: i64) -> Option<Reply> { None }
     fn retain_body(&self, _request: &Request) -> bool { false }

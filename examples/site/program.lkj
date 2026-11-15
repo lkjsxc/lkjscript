@@ -1,0 +1,6 @@
+// Reviewed service entry. Ephemeral loopback binding is safe for isolated proofs.
+const SOURCE: &str = "main.lkj";
+const ENTRY: &str = "main";
+const GRANTS: &[&str] = &["output", "listener=127.0.0.1:0", "clock", "ready", "stop"];
+// Focused executable contract; full source tests remain in the optional campaign.
+const CASES: &[&str] = &["routes.lkj"];

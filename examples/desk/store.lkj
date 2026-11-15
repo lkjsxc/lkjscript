@@ -1,4 +1,4 @@
-//! The Python desk's JSON lines, with one shared writer lock and durable replacement.
+//! Shared JSON lines: one writer lock, one append syscall, explicit durability.
 use std::json::{self, Value};
 
 pub fn io<T>(result: Result<T, i64>, action: &str) -> Result<T, String> {
@@ -132,34 +132,112 @@ pub fn parse_rows(text: &str) -> Result<Vec<Row>, String> {
     }
     Ok(rows)
 }
+// Callers hold .lock. A missing final newline identifies only an unacknowledged
+// append suffix; a malformed newline-terminated row remains an error.
 pub fn rows(root: &mut Directory, path: &str) -> Result<Vec<Row>, String> {
-    let text = read(root, path)?;
+    let mut file = match root.open(path) {
+        Ok(file) => file,
+        Err(2i64) => return Ok(Vec::new()),
+        Err(errno) => return Err(format!("open desk {path}: errno {errno}")),
+    };
+    let mut bytes = io(file.read_to_end(), "read desk rows")?;
+    drop(file);
+    if !bytes.is_empty() && bytes[bytes.len() - 1usize] != b'\n' {
+        let mut boundary = bytes.len();
+        while boundary > 0usize && bytes[boundary - 1usize] != b'\n' { boundary -= 1usize; }
+        let mut file = io(root.open_append(path), "open incomplete desk rows")?;
+        io(file.truncate(boundary), "discard incomplete desk row")?;
+        io(file.sync(), "sync repaired desk rows")?;
+        bytes.truncate(boundary);
+    }
+    let text = match String::from_utf8(bytes) {
+        Ok(text) => text, Err(_) => return Err(format!("desk {path} is not UTF-8")),
+    };
     parse_rows(&text)
 }
-// Copying the JSONL prefix costs linear I/O, but a crash cannot expose a torn
-// JSON line to the other implementation. Both implementations hold .lock.
-pub fn replace(root: &mut Directory, path: &str, bytes: &[u8]) -> Result<(), String> {
+fn publish(root: &mut Directory, path: &str, bytes: &[u8], durable: bool) -> Result<(), String> {
     let temporary = format!(".{path}-next");
-    // Remove a crash leftover by name, never through its possible symlink.
+    // Exclusive creation and rename never follow a leftover or target symlink.
     match root.remove(&temporary) {
         Ok(()) | Err(2i64) => {},
         Err(errno) => return Err(format!("remove desk replacement: errno {errno}")),
     }
     let mut file = io(root.create_new(&temporary), "create desk replacement")?;
     io(file.write_all(bytes), "write desk replacement")?;
-    io(file.sync(), "sync desk replacement")?;
+    if durable { io(file.sync(), "sync desk replacement")?; }
     drop(file);
     io(root.rename(&temporary, path), "publish desk replacement")?;
-    io(root.sync(), "sync desk directory")
+    if durable { io(root.sync(), "sync desk directory")?; }
+    Ok(())
+}
+pub fn replace(root: &mut Directory, path: &str, bytes: &[u8]) -> Result<(), String> {
+    publish(root, path, bytes, true)
+}
+fn alive_locked(root: &mut Directory) -> Result<(), String> {
+    // Liveness is a hint, not acknowledged state. Making its fresh inode durable
+    // doubles fsync cost without strengthening the committed JSONL record.
+    publish(root, "alive", b"", false)
 }
 pub fn touch_alive(root: &mut Directory) -> Result<(), String> {
     let lock = lock(root)?;
-    replace(root, "alive", b"")?;
+    alive_locked(root)?;
     drop(lock);
     Ok(())
 }
-pub fn append_locked(root: &mut Directory, name: &str, mut row: Row,
-    clock: &mut Clock, entropy: &mut Entropy) -> Result<Row, String> {
+pub struct Timings {
+    pub lock: usize,
+    pub row: usize,
+    pub open: usize,
+    pub append: usize,
+    pub sync: usize,
+    pub alive: usize,
+}
+impl Timings {
+    pub fn new() -> Timings {
+        Timings { lock: 0usize, row: 0usize, open: 0usize, append: 0usize, sync: 0usize, alive: 0usize }
+    }
+}
+pub fn now(clock: &mut Clock) -> Result<usize, String> {
+    io(clock.nanoseconds(), "read desk phase clock")
+}
+// Healthy logs inspect only their final byte. Crash recovery scans the incomplete
+// suffix backwards in bounded chunks, never copies the committed prefix.
+fn recover_tail(file: &mut File) -> Result<usize, String> {
+    let end = io(file.seek(0i64, 2u8), "find desk append boundary")?;
+    if end == 0usize { return Ok(0usize); }
+    let mut byte = [0u8; 1];
+    io(file.seek((end - 1usize) as i64, 0u8), "inspect desk append boundary")?;
+    if io(file.read(&mut byte), "read desk append boundary")? != 1usize {
+        return Err("desk log changed outside the writer lock".to_string());
+    }
+    if byte[0usize] == b'\n' { return Ok(end); }
+    let mut chunk = [0u8; 8192];
+    let mut position = end;
+    let mut boundary = 0usize;
+    while position > 0usize {
+        let begin = if position > chunk.len() { position - chunk.len() } else { 0usize };
+        let length = position - begin;
+        io(file.seek(begin as i64, 0u8), "seek incomplete desk row")?;
+        let mut count = 0usize;
+        while count < length {
+            let read = io(file.read(&mut chunk[count..length]), "read incomplete desk row")?;
+            if read == 0usize { return Err("desk log changed outside the writer lock".to_string()); }
+            count += read;
+        }
+        let mut index = length;
+        while index > 0usize {
+            index -= 1usize;
+            if chunk[index] == b'\n' { boundary = begin + index + 1usize; break; }
+        }
+        if boundary != 0usize { break; }
+        position = begin;
+    }
+    io(file.truncate(boundary), "discard incomplete desk append")?;
+    Ok(boundary)
+}
+fn append_policy_locked(root: &mut Directory, name: &str, mut row: Row,
+    clock: &mut Clock, entropy: &mut Entropy, durable: bool, timings: &mut Timings) -> Result<Row, String> {
+    let started = now(clock)?;
     let nanos = io(clock.unix_nanoseconds(), "read desk realtime")?;
     row.time = (nanos / 1_000_000_000usize) as i64;
     let mut random = [0u8; 8];
@@ -167,23 +245,62 @@ pub fn append_locked(root: &mut Directory, name: &str, mut row: Row,
     let mut id = format!("{nanos:016x}");
     for byte in &random[..] { id.push_str(&format!("{byte:02x}")); }
     row.id = id;
-    let mut previous = read(root, name)?;
-    // Existing bytes are preserved. Reading the log validates its records;
-    // appending does not parse and reconstruct every historical row.
-    if !previous.is_empty() && !previous.ends_with('\n') {
-        return Err(format!("desk {name} has an incomplete final line; no write performed"));
+    let mut line = json_text(&row.value(None, None))?;
+    line.push('\n');
+    let prepared = now(clock)?;
+    timings.row = prepared - started;
+    // The first creation additionally syncs the directory entry. Existing logs
+    // need only the data fsync; no rename or directory fsync is done per append.
+    let exists = match root.open(name) {
+        Ok(file) => { drop(file); true },
+        Err(2i64) => false,
+        Err(errno) => return Err(format!("inspect desk {name}: errno {errno}")),
+    };
+    let mut file = io(root.open_append(name), "open desk append")?;
+    let boundary = recover_tail(&mut file)?;
+    let opened = now(clock)?;
+    timings.open = opened - prepared;
+    let count = io(file.write(line.as_bytes()), "append desk row")?;
+    let written = now(clock)?;
+    timings.append = written - opened;
+    if count != line.len() {
+        // No acknowledgement escapes after a short write. A kill before this
+        // rollback is repaired from the missing newline by the next native use.
+        io(file.truncate(boundary), "roll back short desk append")?;
+        if durable { io(file.sync(), "sync short desk append rollback")?; }
+        return Err(format!("short desk append: wrote {count} of {} bytes", line.len()));
     }
-    previous.push_str(&json_text(&row.value(None, None))?);
-    previous.push('\n');
-    replace(root, name, previous.as_bytes())?;
+    if durable {
+        io(file.sync(), "sync desk append")?;
+        if !exists { io(root.sync(), "sync new desk log directory")?; }
+    }
+    timings.sync = now(clock)? - written;
+    Ok(row)
+}
+pub fn append_locked(root: &mut Directory, name: &str, row: Row,
+    clock: &mut Clock, entropy: &mut Entropy) -> Result<Row, String> {
+    let mut timings = Timings::new();
+    append_policy_locked(root, name, row, clock, entropy, true, &mut timings)
+}
+pub fn append_with_policy(root: &mut Directory, name: &str, row: Row,
+    clock: &mut Clock, entropy: &mut Entropy, durable: bool, alive: bool,
+    timings: &mut Timings) -> Result<Row, String> {
+    let began = now(clock)?;
+    let lock = lock(root)?;
+    timings.lock = now(clock)? - began;
+    let row = append_policy_locked(root, name, row, clock, entropy, durable, timings)?;
+    if alive {
+        let began = now(clock)?;
+        alive_locked(root)?;
+        timings.alive = now(clock)? - began;
+    }
+    drop(lock);
     Ok(row)
 }
 pub fn append(root: &mut Directory, name: &str, row: Row,
     clock: &mut Clock, entropy: &mut Entropy) -> Result<Row, String> {
-    let lock = lock(root)?;
-    let row = append_locked(root, name, row, clock, entropy)?;
-    drop(lock);
-    Ok(row)
+    let mut timings = Timings::new();
+    append_with_policy(root, name, row, clock, entropy, true, false, &mut timings)
 }
 pub fn seen(root: &mut Directory) -> Result<usize, String> {
     let text = read(root, "seen")?;
@@ -248,6 +365,31 @@ fn ping(root: &mut Directory, notes: &[Row], inbox: &[Row]) -> Result<(), String
     if read(root, "ping")? == text { return Ok(()); }
     replace(root, "ping", text.as_bytes())
 }
+// The host consumes wake under this same writer lock. Its high-water acknowledgement
+// makes retries harmless; process launch itself is intentionally at-least-once.
+fn wake(root: &mut Directory, inbox: &[Row]) -> Result<(), String> {
+    if inbox.is_empty() || seen(root)? >= inbox.len() { return Ok(()); }
+    let acknowledged = read(root, "wake-ack")?;
+    let acknowledged = std::text::trim(&acknowledged);
+    let acknowledged = if acknowledged.is_empty() { 0usize } else {
+        match acknowledged.parse::<usize>() {
+            Ok(count) => count,
+            Err(_) => return Err("desk wake-ack must be an inbox count".to_string()),
+        }
+    };
+    if acknowledged >= inbox.len() { return Ok(()); }
+    let mut listener = io(root.open_append("listening"), "open desk listener marker")?;
+    match listener.lock_exclusive() {
+        Err(11i64) => return Ok(()),
+        Err(errno) => return Err(format!("probe desk listener: errno {errno}")),
+        Ok(()) => {},
+    }
+    let last = &inbox[inbox.len() - 1usize];
+    let message = format!("desk-wake 1 {} {}\n", inbox.len(), last.id);
+    if read(root, "wake")? != message { replace(root, "wake", message.as_bytes())?; }
+    drop(listener);
+    Ok(())
+}
 pub fn record(root: &mut Directory, text: &str, re: &str, request: &str,
     clock: &mut Clock, entropy: &mut Entropy) -> Result<Row, String> {
     let lock = lock(root)?;
@@ -258,6 +400,7 @@ pub fn record(root: &mut Directory, text: &str, re: &str, request: &str,
             if row.re == re {
                 let result = row.clone();
                 ping(root, &notes, &inbox)?;
+                wake(root, &inbox)?;
                 return Ok(result);
             }
         }
@@ -269,6 +412,7 @@ pub fn record(root: &mut Directory, text: &str, re: &str, request: &str,
             if row.request == request {
                 let result = row.clone();
                 ping(root, &notes, &inbox)?;
+                wake(root, &inbox)?;
                 return Ok(result);
             }
         }
@@ -279,18 +423,34 @@ pub fn record(root: &mut Directory, text: &str, re: &str, request: &str,
     let row = append_locked(root, "inbox.jsonl", row, clock, entropy)?;
     inbox.push(row.clone());
     ping(root, &notes, &inbox)?;
+                wake(root, &inbox)?;
     drop(lock);
     Ok(row)
 }
+pub fn position(root: &mut Directory, name: &str) -> Result<usize, String> {
+    let mut file = match root.open(name) {
+        Ok(file) => file, Err(2i64) => return Ok(0usize),
+        Err(errno) => return Err(format!("open desk cursor: errno {errno}")),
+    };
+    io(file.seek(0i64, 2u8), "read desk cursor")
+}
+pub fn cursor(root: &mut Directory) -> Result<String, String> {
+    Ok(format!("{}.{}", position(root, "notes.jsonl")?, position(root, "inbox.jsonl")?))
+}
 pub fn state(root: &mut Directory, now: i64) -> Result<Value, String> {
     let lock = lock(root)?;
+    let value = state_locked(root, now)?;
+    drop(lock);
+    Ok(value)
+}
+// Caller holds the same writer lock while reading replay rows and this snapshot.
+pub fn state_locked(root: &mut Directory, now: i64) -> Result<Value, String> {
     let notes = rows(root, "notes.jsonl")?;
     let inbox = rows(root, "inbox.jsonl")?;
     let count = seen(root)?;
     let mut feed: Vec<(Row, Option<bool>)> = Vec::new();
     for row in &notes { if row.kind != "close" { feed.push((row.clone(), None)); } }
     for index in 0usize..inbox.len() { feed.push((inbox[index].clone(), Some(index < count))); }
-    drop(lock);
     let mut done = std::collections::BTreeSet::new();
     for row in &notes { if row.kind == "close" { done.insert(row.reference.clone()); } }
     for row in &inbox { if !row.re.is_empty() { done.insert(row.re.clone()); } }
@@ -319,7 +479,8 @@ pub fn state(root: &mut Directory, now: i64) -> Result<Value, String> {
         ("feed".to_string(), Value::Array(values)),
         ("jobs".to_string(), Value::Array(Vec::new())),
         ("detail".to_string(), Value::String(String::new())),
-        ("now".to_string(), Value::Number(format!("{now}")))]))
+        ("now".to_string(), Value::Number(format!("{now}"))),
+        ("cursor".to_string(), Value::String(cursor(root)?))]))
 }
 
 #[test]

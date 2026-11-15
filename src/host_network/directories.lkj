@@ -55,7 +55,7 @@ fn path(a: &mut Assembler, invalid: Label, name: bool) {
     }
 }
 
-pub(super) fn emit(a: &mut Assembler, labels: &[Label], reply: Label, invalid: Label, bad: Label) {
+pub(super) fn emit(a: &mut Assembler, labels: &[Label], reply: Label, invalid: Label, bad: Label, beneath: Label) {
     for index in 0usize..3usize {
         a.bind(labels[index]);
         if index != 0 {
@@ -77,23 +77,30 @@ pub(super) fn emit(a: &mut Assembler, labels: &[Label], reply: Label, invalid: L
             a.store(BP, SCRATCH + 8, A);
             if index == 1 {
                 let read_only = a.label();
+                let identity_only = a.label();
                 a.load(C, BP, REQUEST + 16);
-                a.immediate(A, 1);
+                a.immediate(A, 2);
                 a.compare(C, A);
                 a.condition(7, invalid);
+                a.condition(4, identity_only);
                 a.test(C, true);
                 a.condition(4, read_only);
                 a.immediate(A, 0x80241); // Existing create: O_WRONLY | O_CREAT | O_TRUNC.
                 a.store(BP, SCRATCH, A);
                 a.immediate(A, 0o666);
                 a.store(BP, SCRATCH + 8, A);
+                a.jump(read_only);
+                a.bind(identity_only);
+                a.immediate(A, 0x280000); // O_PATH | O_CLOEXEC, no data open.
+                a.store(BP, SCRATCH, A);
                 a.bind(read_only);
             }
             a.immediate(A, 0x0a); // RESOLVE_BENEATH | RESOLVE_NO_MAGICLINKS.
             a.store(BP, SCRATCH + 16, A);
-            a.lea(D, BP, SCRATCH);
-            a.immediate(R10, 24);
-            syscall(a, 437);
+            a.load(C, BP, SCRATCH);
+            a.load(R8, BP, SCRATCH + 8);
+            a.mov(D, R15);
+            a.call(beneath);
         }
         empty(a, reply);
     }
@@ -172,4 +179,165 @@ pub(super) fn emit(a: &mut Assembler, labels: &[Label], reply: Label, invalid: L
     a.load(R10, BP, SCRATCH);
     syscall(a, 264);
     empty(a, reply);
+}
+
+// Independently implement ENOSYS beneath traversal in the syscall broker.
+// Unlike native immutable literals, its request body is private writable memory:
+// temporarily terminate one component, restore the separator before any reply.
+pub(super) fn beneath(a: &mut Assembler, label: Label) {
+    a.bind(label);
+    a.push(BP);
+    a.mov(BP, SP);
+    a.lea(SP, SP, -256);
+    a.store(BP, -8, DI);
+    a.store(BP, -16, SI);
+    a.store(BP, -32, C);
+    a.store(BP, -40, R8);
+    a.store(BP, -72, C);
+    a.store(BP, -64, R8);
+    a.immediate(A, 10);
+    a.store(BP, -56, A);
+    a.lea(D, BP, -72);
+    a.immediate(R10, 24);
+    syscall(a, 437);
+    let done = a.label();
+    let fallback = a.label();
+    a.immediate(C, (-38i64) as u64);
+    a.compare(A, C);
+    a.condition(4, fallback);
+    a.jump(done);
+    a.bind(fallback);
+    a.load(SI, BP, -16);
+    a.load_width(A, SI, 0, 1, false);
+    a.immediate(C, b'/' as u64);
+    a.compare(A, C);
+    let absolute = a.label();
+    a.condition(4, absolute);
+    a.load(DI, BP, -8);
+    a.immediate(SI, 1030);
+    a.immediate(D, 3);
+    syscall(a, 72);
+    a.test(A, true);
+    a.condition(8, done);
+    a.store(BP, -8, A);
+    let next = a.label();
+    let scan = a.label();
+    let end = a.label();
+    let invalid = a.label();
+    let parent = a.label();
+    let ordinary = a.label();
+    let final_flags = a.label();
+    let opening = a.label();
+    let separator_restored = a.label();
+    let close_anchor = a.label();
+    let stat = a.label();
+    let close_result = a.label();
+    let successful = a.label();
+    a.bind(next);
+    a.load(R8, BP, -16);
+    a.immediate(D, 0);
+    a.bind(scan);
+    a.load_width(A, R8, 0, 1, false);
+    a.test(A, false);
+    a.condition(4, end);
+    a.immediate(C, b'/' as u64);
+    a.compare(A, C);
+    a.condition(4, end);
+    a.lea(R8, R8, 1);
+    a.lea(D, D, 1);
+    a.jump(scan);
+    a.bind(end);
+    a.store(BP, -24, R8);
+    a.store(BP, -80, A);
+    a.test(D, true);
+    a.condition(4, invalid);
+    a.immediate(C, 2);
+    a.compare(D, C);
+    a.condition(5, ordinary);
+    a.load(SI, BP, -16);
+    a.load_width(A, SI, 0, 2, false);
+    a.immediate(C, 0x2e2e);
+    a.compare(A, C);
+    a.condition(4, parent);
+    a.bind(ordinary);
+    a.load(DI, BP, -8);
+    a.load(SI, BP, -16);
+    a.load(A, BP, -80);
+    a.test(A, true);
+    a.condition(4, final_flags);
+    a.immediate(A, 0);
+    a.store_width(R8, 0, A, 1);
+    a.immediate(D, 0x2b0000);
+    a.immediate(R10, 0);
+    a.jump(opening);
+    a.bind(final_flags);
+    a.load(D, BP, -32);
+    a.immediate(C, 0x20000);
+    a.rr(0x09, D, C, true);
+    a.load(R10, BP, -40);
+    a.bind(opening);
+    syscall(a, 257);
+    a.store(BP, -48, A);
+    a.load(C, BP, -80);
+    a.test(C, true);
+    a.condition(4, separator_restored);
+    a.load(R8, BP, -24);
+    a.store_width(R8, 0, C, 1); // Restore slash even when openat failed.
+    a.bind(separator_restored);
+    a.test(A, true);
+    a.condition(8, close_anchor);
+    a.load(DI, BP, -8);
+    a.immediate(A, 3);
+    a.syscall();
+    a.load(A, BP, -80);
+    a.test(A, true);
+    a.condition(4, stat);
+    a.load(A, BP, -48);
+    a.store(BP, -8, A);
+    a.load(A, BP, -24);
+    a.lea(A, A, 1);
+    a.store(BP, -16, A);
+    a.jump(next);
+    a.bind(stat);
+    a.load(DI, BP, -48);
+    a.lea(SI, BP, -224);
+    syscall(a, 5);
+    a.test(A, true);
+    a.condition(8, close_result);
+    a.load_width(A, BP, -200, 4, false);
+    a.immediate(C, 0xf000);
+    a.rr(0x21, A, C, true);
+    a.immediate(C, 0xa000);
+    a.compare(A, C);
+    a.condition(5, successful);
+    a.immediate(A, (-40i64) as u64);
+    a.bind(close_result);
+    a.store(BP, -56, A);
+    a.load(DI, BP, -48);
+    a.immediate(A, 3);
+    a.syscall();
+    a.load(A, BP, -56);
+    a.jump(done);
+    a.bind(successful);
+    a.load(A, BP, -48);
+    a.jump(done);
+    a.bind(invalid);
+    a.immediate(A, (-22i64) as u64);
+    a.jump(close_anchor);
+    a.bind(parent);
+    a.immediate(A, (-18i64) as u64);
+    a.jump(close_anchor);
+    a.bind(close_anchor);
+    a.store(BP, -48, A);
+    a.load(DI, BP, -8);
+    a.immediate(A, 3);
+    a.syscall();
+    a.load(A, BP, -48);
+    a.jump(done);
+    a.bind(absolute);
+    a.immediate(A, (-18i64) as u64);
+    a.bind(done);
+    a.mov(SP, BP);
+    a.pop(BP);
+    a.ret();
 }

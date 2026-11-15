@@ -8,6 +8,8 @@ mod process;
 mod directories;
 #[path = "host_network/lifecycle.lkj"]
 mod lifecycle;
+#[path = "host_network/foreign.lkj"]
+mod foreign;
 use crate::x86::*;
 
 struct Connection {
@@ -170,6 +172,20 @@ impl Network {
         let (handle, _) = self.request(8, &[file], b"")?;
         Ok(handle as u64)
     }
+    pub fn open_foreign_command(&mut self, world: &mut World, path: &[u8]) -> Result<u64, i64> {
+        self.ensure(world)?;
+        let (handle, _) = self.request(52, &[0u64; 0], path)?;
+        Ok(handle as u64)
+    }
+    pub fn open_null_device(&mut self, world: &mut World) -> Result<u64, i64> {
+        self.ensure(world)?;
+        let (handle, _) = self.request(53, &[0u64; 0], b"")?;
+        Ok(handle as u64)
+    }
+    pub fn run_foreign(&mut self, command: u64, root: u64, sink: u64, arguments: &[u8], duration: usize) -> Result<u64, i64> {
+        let (handle, _) = self.request(54, &[command, root, sink, duration as u64], arguments)?;
+        Ok(handle as u64)
+    }
     pub fn readonly_remote(&mut self, file: u64) -> Result<u64, i64> {
         let (handle, _) = self.request(9, &[file], b"")?;
         Ok(handle as u64)
@@ -277,6 +293,33 @@ impl Network {
         self.ensure(world)?;
         let (handle, _) = self.request(35, &[0u64; 0], path)?;
         Ok(handle as u64)
+    }
+    pub fn open_regular_file(&mut self, directory: u64, path: &[u8]) -> Result<u64, i64> {
+        let (identity, _) = self.request(36, &[directory, 2u64], path)?;
+        let identity = identity as u64;
+        // The O_PATH descriptor opens no device/FIFO for data access.
+        if let Err(errno) = self.request(51, &[identity], b"") {
+            self.close_remote(identity);
+            return Err(errno);
+        }
+        let readable = self.readonly_remote(identity);
+        self.close_remote(identity);
+        readable
+    }
+    pub fn seek_remote(&mut self, file: u64, offset: i64, whence: u8) -> Result<usize, i64> {
+        if whence > 2u8 { return Err(22); }
+        let (position, _) = self.request(50, &[file, offset as u64, whence as u64], b"")?;
+        Ok(position as usize)
+    }
+    pub fn modified_remote(&mut self, file: u64) -> Result<usize, i64> {
+        let (_, bytes) = self.request(51, &[file], b"")?;
+        if bytes.len() != 16usize { return Err(5); }
+        let seconds = word(&bytes[..8]);
+        let nanos = word(&bytes[8..]);
+        if (seconds as i64) < 0 || nanos >= 1_000_000_000 || seconds > ((!0u64) - nanos) / 1_000_000_000 {
+            return Err(75);
+        }
+        Ok((seconds * 1_000_000_000 + nanos) as usize)
     }
     pub fn open_relative_file(&mut self, directory: u64, path: &[u8], create: bool) -> Result<u64, i64> {
         let (handle, _) = self.request(36, &[directory, create as u64], path)?;

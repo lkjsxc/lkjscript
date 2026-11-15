@@ -19,6 +19,7 @@ mod layout;
 mod ownership;
 pub(crate) mod platform;
 mod process;
+mod foreign;
 mod network;
 mod readiness;
 mod storage;
@@ -1410,7 +1411,7 @@ fn emit_drop(
             a.load(DI, BP, -8);
             a.call(p.child_drop);
         }
-        TypeKind::File | TypeKind::Directory | TypeKind::Listener | TypeKind::Readiness | TypeKind::Stop => {
+        TypeKind::File | TypeKind::Directory | TypeKind::ReadDirectory | TypeKind::ReadFile | TypeKind::ForeignCommand | TypeKind::NullDevice | TypeKind::Listener | TypeKind::Readiness | TypeKind::Stop => {
             a.load(DI, BP, -8);
             a.load(DI, DI, 0);
             a.call(p.handle_close);
@@ -1501,6 +1502,10 @@ pub(crate) fn prepare_granted_reusing(
     let mut cache = cache::Context { namespace, keys, records, prefix: 0 };
     prepare_program(checked.program(), runtime, entry, false, profile_path, Some(grants), Some(&mut cache))
 }
+fn valid_foreign_path(path: &[u8]) -> bool {
+    path.len() >= 2 && path[0] == b'/' && path[path.len() - 1] == 0
+        && !path[..path.len() - 1].contains(&0u8)
+}
 fn valid_environment(name: &[u8]) -> bool {
     if name.len() < 2 || name[name.len() - 1] != 0 { return false; }
     for byte in &name[..name.len() - 1] {
@@ -1521,7 +1526,11 @@ fn grant_matches(kind: &TypeKind, grant: &ir::EntryGrant, parameters: usize) -> 
         ir::EntryGrant::Stderr => matches!(kind, TypeKind::Stderr),
         ir::EntryGrant::Clock => matches!(kind, TypeKind::Clock),
         ir::EntryGrant::Process => matches!(kind, TypeKind::Process),
+        ir::EntryGrant::ForeignCommand(path) => matches!(kind, TypeKind::ForeignCommand) && valid_foreign_path(path),
+        ir::EntryGrant::NullDevice => matches!(kind, TypeKind::NullDevice),
         ir::EntryGrant::Directory(_) => matches!(kind, TypeKind::Directory),
+        ir::EntryGrant::ReadDirectory(_) => matches!(kind, TypeKind::ReadDirectory),
+        ir::EntryGrant::ReadDirectoryEnvironment(name) => matches!(kind, TypeKind::ReadDirectory) && valid_environment(name),
         ir::EntryGrant::DirectoryEnvironment(name) => matches!(kind, TypeKind::Directory) && valid_environment(name),
         ir::EntryGrant::Listener(_) => matches!(kind, TypeKind::Listener),
         ir::EntryGrant::Connector(_) => matches!(kind, TypeKind::Connector),
@@ -1636,7 +1645,10 @@ fn prepare_program(
     let blocking_lock = program.functions.iter().any(|function| function.body.iter().any(|instruction|
         matches!(instruction.op, Op::Intrinsic { name: IntrinsicOp::FileLockWait, .. })));
     let command_environment = program.types.iter().any(|ty| matches!(ty.kind, TypeKind::Environment))
-        || match grants { Some(grants) => grants.iter().any(|grant| matches!(grant, ir::EntryGrant::DirectoryEnvironment(_))), None => false };
+        || match grants { Some(grants) => grants.iter().any(|grant| matches!(grant, ir::EntryGrant::DirectoryEnvironment(_) | ir::EntryGrant::ReadDirectoryEnvironment(_))), None => false };
+    let foreign = program.functions.iter().any(|function| function.body.iter().any(|instruction|
+        matches!(instruction.op, Op::Intrinsic { name: IntrinsicOp::ForeignRun | IntrinsicOp::ForeignImage, .. })))
+        || grants.map_or(false, |provided| provided.iter().any(|grant| matches!(grant, ir::EntryGrant::ForeignCommand(_) | ir::EntryGrant::NullDevice)));
     let private_file = program.functions.iter().any(|function| function.body.iter().any(|instruction|
         matches!(instruction.op, Op::Intrinsic { name: IntrinsicOp::FileSetPrivate, .. })));
     let child_stop = program.functions.iter().any(|function| function.body.iter().any(|instruction|
@@ -1650,7 +1662,8 @@ fn prepare_program(
         function.body.iter().any(|instruction| matches!(instruction.op,
             Op::Intrinsic { name: IntrinsicOp::DirectoryCreateNew | IntrinsicOp::DirectoryCreatePrivate | IntrinsicOp::DirectoryOpenAppend
                 | IntrinsicOp::DirectorySync | IntrinsicOp::FileSync | IntrinsicOp::FileTruncate
-                | IntrinsicOp::FileLockExclusive | IntrinsicOp::FileLockWait, .. }))
+                | IntrinsicOp::FileLockExclusive | IntrinsicOp::FileLockWait
+                | IntrinsicOp::ReadDirectoryOpen | IntrinsicOp::FileSeek | IntrinsicOp::FileModifiedNanoseconds, .. }))
     });
     let accept_nodelay = program.functions.iter().any(|function| {
         function.body.iter().any(|instruction| matches!(
@@ -1747,6 +1760,11 @@ fn prepare_program(
         symbols.push((p.child_terminate, "$platform::child_terminate".to_string()));
         symbols.push((p.child_drop, "$platform::child_drop".to_string()));
         symbols.push((p.directory_open_directory, "$platform::directory_open_directory".to_string()));
+        if storage {
+            symbols.push((p.file_open_regular, "$platform::file_open_regular".to_string()));
+            symbols.push((p.file_seek, "$platform::file_seek".to_string()));
+            symbols.push((p.file_modified_nanoseconds, "$platform::file_modified_nanoseconds".to_string()));
+        }
         symbols.push((p.directory_read, "$platform::directory_read".to_string()));
         symbols.push((p.handle_rewind, "$platform::handle_rewind".to_string()));
         symbols.push((p.directory_create, "$platform::directory_create".to_string()));
@@ -1779,6 +1797,7 @@ fn prepare_program(
     }
     let platform_kind = a.region_kind(KIND_RUNTIME);
     platform::emit(&mut a, p, functions[entry.function], &entry, profile, grant_plan.as_ref());
+    if foreign { foreign::emit(&mut a, p); }
     if connector { network::emit_connector(&mut a, p); }
     if accept_nodelay { network::emit_accept_nodelay(&mut a, p); }
     if readiness { readiness::emit(&mut a, p); }

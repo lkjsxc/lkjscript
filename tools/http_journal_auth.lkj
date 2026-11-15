@@ -1,5 +1,5 @@
 //! Independent token construction for HTTP test programs. Production issuance
-//! uses examples/journal-token.lkj; this checks the service's documented wire form.
+//! uses examples/journal/token.lkj; this checks the service's documented wire form.
 use crate::http_client::{io, require};
 
 fn hex(bytes: &[u8]) -> String {

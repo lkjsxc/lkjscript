@@ -199,6 +199,31 @@ pub(super) fn signature(
             let kind = if name == IntrinsicOp::DirectorySync { TypeKind::Directory } else { TypeKind::File };
             args.len() == 1 && authority(types, args[0], &kind) && status_result(types, result)
         }
+        IntrinsicOp::ForeignRun => {
+            args.len() == 5 && authority(types, args[0], &TypeKind::ForeignCommand)
+                && authority(types, args[1], &TypeKind::ReadDirectory)
+                && authority(types, args[2], &TypeKind::NullDevice)
+                && bytes(types, args[3], false) && args[4] == U64
+                && opened(types, result, &TypeKind::ReadFile)
+        }
+        IntrinsicOp::ForeignImage => {
+            args.len() == 1 && authority(types, args[0], &TypeKind::ForeignCommand)
+                && opened(types, result, &TypeKind::ReadFile)
+        }
+        IntrinsicOp::FileSeek => {
+            args.len() == 3 && authority(types, args[0], &TypeKind::File)
+                && args[1] == I64 && args[2] == U8
+                && scalar_result(types, result, &TypeKind::Int { bits: 64, signed: false })
+        }
+        IntrinsicOp::FileModifiedNanoseconds => {
+            args.len() == 1 && (authority(types, args[0], &TypeKind::File) || authority(types, args[0], &TypeKind::ReadFile))
+                && scalar_result(types, result, &TypeKind::Int { bits: 64, signed: false })
+        }
+        IntrinsicOp::ReadDirectoryOpen | IntrinsicOp::ReadDirectoryOpenDirectory => {
+            let kind = if name == IntrinsicOp::ReadDirectoryOpen { TypeKind::ReadFile } else { TypeKind::ReadDirectory };
+            args.len() == 2 && authority(types, args[0], &TypeKind::ReadDirectory)
+                && bytes(types, args[1], false) && opened(types, result, &kind)
+        }
         IntrinsicOp::FileTruncate => {
             args.len() == 2
                 && authority(types, args[0], &TypeKind::File)
@@ -219,7 +244,7 @@ pub(super) fn signature(
                 TypeKind::File
             };
             args.len() == 2
-                && authority(types, args[0], &kind)
+                && (authority(types, args[0], &kind) || (name == IntrinsicOp::FileRead && authority(types, args[0], &TypeKind::ReadFile)))
                 && bytes(types, args[1], true)
                 && result == I64
         }
@@ -297,12 +322,12 @@ pub(super) fn signature(
         }
         IntrinsicOp::DirectoryRead => {
             args.len() == 2
-                && authority(types, args[0], &TypeKind::Directory)
+                && (authority(types, args[0], &TypeKind::Directory) || authority(types, args[0], &TypeKind::ReadDirectory))
                 && bytes(types, args[1], true)
                 && result == I64
         }
         IntrinsicOp::DirectoryRewind => {
-            args.len() == 1 && authority(types, args[0], &TypeKind::Directory) && result == I64
+            args.len() == 1 && (authority(types, args[0], &TypeKind::Directory) || authority(types, args[0], &TypeKind::ReadDirectory)) && result == I64
         }
         IntrinsicOp::DirectoryCreate => {
             args.len() == 2

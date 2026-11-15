@@ -1,17 +1,34 @@
 Desk checked-source authority
-Compiler SHA-256: fe111dfd160f2a7f5010fc4f69903e070fc2345f1b24ca819b6041ed89373b34
+Compiler SHA-256: 5213dc3ab04b3789dc00d72e2b0396ff023ece6b92d76df4138e1f1e78b5880e
 
-These are complete, unedited outputs from the authority command for the two
-selected entries. They describe declared capability types and reachable effects;
-the authority command does not take invocation --grant values.
+These are complete, unedited outputs for the two selected entries. Named
+capabilities and conservative reachable effects are checked by the language.
+The command binds state=env:DESK_STATE, state_env=DESK_STATE and timezone=TZ.
+The service program.lkj binds state=env:DESK_STATE, board=env:DESK_BOARD,
+handoff=env:DESK_HANDOFF and listener=127.0.0.1:0 for isolated tests.
+The reviewed desk.service supplies these concrete roots:
+  state   /home/coder/.local/state/desk                 writable
+  board   /home/coder/.local/state/cxloop               read-only
+  handoff /home/coder/.claude/projects/-home-coder-workspace/memory read-only
+The switch changes only the listener binding to loopback 127.0.0.1:8911.
+Clock, entropy, readiness, stop and journal output are explicit service mechanisms.
+No World, Process, ForeignCommand, outbound Connector or ambient HOME is granted.
 
-The documented command build binds state to env:DESK_STATE, state_env to
-DESK_STATE, and timezone to TZ. The service build binds state to env:DESK_STATE
-and listener to 127.0.0.1:0 for an isolated, kernel-selected loopback port.
-DESK_STATE must name an existing directory. No World or Process grant is used.
+The command accepts --durability=sync (default) or --durability=buffered.
+Both use the same state capability; the static report cannot select a runtime
+argument branch. --timings names the chosen policy alongside every phase report.
+Sync appends issue one write and one file fsync, with directory fsync on creation;
+buffered appends omit that durability step by the caller's explicit choice.
+
+The host desk-command only supplies literal defaults and execs the checked CLI.
+Listening uses native listen-begin/listen-end inside a caller-owned flock and
+child lifecycle; the checked program does not offer listen CMD or spawn it.
+Host composition, desk-wake and relay units have separately reviewed host authority.
+The service/wake units and file contracts are proved in fresh transient instances
+by tools/http-desk-systemd.sh. This report does not authenticate the unit files.
 
 Command entry: main
-Command: target/lkjscript authority examples/desk.lkj --entry main --library-dir library --no-store
+Command: target/lkjscript authority examples/desk/main.lkj --entry main --library-dir library --no-store
 
 entry main
 declared authority:
@@ -30,270 +47,317 @@ reachable operations (conservative checked-IR branches and owned cleanup):
     world_exit_status
     stderr_write
     directory_close [structural cleanup]
-  desk::cli::run:
+  cli::run:
     stdout_write
   $std::command::__lkjscript_command_args:
     world_arg_count
     world_arg_len
     world_arg_copy
-  desk::store::append:
+  store::append_with_policy:
     file_close [structural cleanup]
-  desk::store::touch_alive:
+  cli::timing_line:
+    stderr_write
+  store::touch_alive:
     file_close [structural cleanup]
-  desk::store::inbox:
+  store::inbox:
     file_close [structural cleanup]
     directory_sync
+  $std::io::__lkjscript_clock_nanoseconds:
+    clock_read
   $std::io::__lkjscript_stdin_read:
     stdin_read
-  desk::store::lock:
+  store::lock:
     directory_open_append
     file_close [structural cleanup]
     file_lock_wait
-  desk::store::append_locked:
+  store::append_policy_locked:
     clock_unix_nanoseconds
     entropy_fill
-  desk::store::replace:
-    directory_create_new
     file_close [structural cleanup]
+    directory_open_append
+    file_truncate
     file_sync
     directory_sync
   $std::command::__lkjscript_environment_get:
     environment_len
     environment_copy
+  store::rows:
+    file_close [structural cleanup]
+    directory_open_append
+    file_truncate
+    file_sync
   $std::io::__lkjscript_directory_remove:
     directory_close [structural cleanup]
     directory_remove
-  desk::store::io<T=t16;>:
+  store::io<T=t16;>:
     file_close [structural cleanup]
-  desk::store::read:
+  $std::io::__lkjscript_open:
+    directory_open
+  store::recover_tail:
+    file_seek
+    file_truncate
+  $std::io::__lkjscript_file_write:
+    file_write
+  store::publish:
+    directory_create_new
     file_close [structural cleanup]
+    file_sync
+    directory_sync
+  store::read:
+    file_close [structural cleanup]
+  $std::io::parent:
+    directory_close [structural cleanup]
+  $std::io::__lkjscript_file_read:
+    file_read
   $std::io::__lkjscript_directory_rename:
     directory_close [structural cleanup]
     directory_rename
-  $std::io::parent:
-    directory_close [structural cleanup]
-  $std::io::__lkjscript_open:
-    directory_open
-  $std::io::__lkjscript_file_write:
-    file_write
   $std::io::__lkjscript_open_directory:
     directory_open_directory
-  $std::io::__lkjscript_file_read:
-    file_read
-reachable functions (205; each listed once):
+reachable functions (221; each listed once):
   main
-  desk::cli::run
+  cli::run
   $std::string::__lkjscript_new
   $std::fmt::__lkjscript_new
   $std::fmt::__lkjscript_success
   $std::fmt::__lkjscript_literal
   $std::fmt::__lkjscript_settings
   $std::fmt::__lkjscript_display<T=t19;>
-  $std::string::as_bytes$f183<Self=t19;>
+  $std::string::as_bytes$f160<Self=t19;>
+  store::now
   $std::command::__lkjscript_command_args
   $std::sequence::__lkjscript_vec_clone<T=t5;>
-  $std::string::from_utf8$f163<Self=t19;>
-  $std::string::from_str$f165<Self=t19;>
-  $std::sequence::is_empty$f121<Self=t45;T=t19;>
-  $std::string::as_str$f180<Self=t19;>
-  desk::cli::words
-  desk::cli::option
+  $std::string::from_utf8$f140<Self=t19;>
+  $std::string::from_str$f142<Self=t19;>
+  $std::sequence::is_empty$f98<Self=t59;T=t19;>
+  $std::string::as_str$f157<Self=t19;>
+  arguments::words
+  arguments::option
+  arguments::durability
+  arguments::present
   $std::str::__lkjscript_eq
-  $std::string::new$f162<Self=t19;>
-  $std::iter::__lkjscript_into_iter<I=t127;I::IntoIter=t119;>
-  $std::iter::__lkjscript_next<I=t119;I::Item=t104;>
-  $std::string::is_empty$f182<Self=t19;>
-  $std::string::push$f167<Self=t19;>
+  $std::string::new$f139<Self=t19;>
+  $std::iter::__lkjscript_into_iter<I=t187;I::IntoIter=t189;>
+  $std::iter::__lkjscript_next<I=t189;I::Item=t120;>
+  $std::string::is_empty$f159<Self=t19;>
+  $std::string::push$f144<Self=t19;>
   $std::string::__lkjscript_as_str
-  $std::string::push_str$f166<Self=t19;>
-  desk::cli::present
+  $std::string::push_str$f143<Self=t19;>
   $std::io::__lkjscript_stdin_read_to_end
-  desk::store::io<T=t17;>
+  store::io<T=t17;>
   $std::text::trim
-  desk::store::new$f25<Self=t44;>
-  $std::str::split$f243<P=t13;Self=t59;>
-  $std::iter::__lkjscript_into_iter<I=t130;I::IntoIter=t130;>
-  $std::iter::__lkjscript_next<I=t130;I::Item=t60;>
-  desk::store::append
-  desk::store::touch_alive
-  $std::string::clone$f186<Self=t19;>
-  desk::cli::environment
+  store::new$f46<Self=t58;>
+  $std::str::split$f220<P=t13;Self=t70;>
+  $std::iter::__lkjscript_into_iter<I=t128;I::IntoIter=t128;>
+  $std::iter::__lkjscript_next<I=t128;I::Item=t71;>
+  store::new$f57<Self=t60;>
+  store::append_with_policy
+  cli::timing_line
+  $std::string::clone$f163<Self=t19;>
+  store::touch_alive
+  cli::environment
   $std::time::timezone_offset
-  desk::store::inbox
-  $std::fmt::write_str$f539<Self=t106;>
-  $std::fmt::fmt$f550<Self=t19;>
+  store::inbox
+  $std::fmt::write_str$f515<Self=t122;>
+  $std::fmt::fmt$f526<Self=t19;>
+  $std::io::__lkjscript_clock_nanoseconds
+  store::io<T=t4;>
   $std::sequence::__lkjscript_vec_repeat<T=t5;>
   $std::bytes::valid_utf8
-  $std::prelude::unwrap$f723<E=t296;Self=t297;T=t60;>
-  $std::string::starts_with$f168<P=t60;Self=t19;>
+  $std::prelude::unwrap$f775<E=t280;Self=t281;T=t71;>
+  $std::string::starts_with$f145<P=t71;Self=t19;>
+  $std::iter::__lkjscript_into_iter<I=t105;I::IntoIter=t189;>
   $std::str::matches_bytes
-  $std::iter::into_iter$f345<Self=t127;Self::IntoIter=t119;T=t19;>
-  $std::iter::next$f342<Self=t119;Self::Item=t104;T=t19;>
+  $std::iter::into_iter$f321<Self=t187;Self::IntoIter=t189;T=t19;>
+  $std::iter::next$f318<Self=t189;Self::Item=t120;T=t19;>
   $std::bytes::append_bytes
-  $std::iter::__lkjscript_into_iter<I=t74;I::IntoIter=t119;>
   $std::io::__lkjscript_stdin_read
-  $std::fmt::__lkjscript_display_str<T=t59;>
+  $std::fmt::__lkjscript_display_str<T=t70;>
   $std::fmt::__lkjscript_display<T=t3;>
-  $std::str::chars$f239<Self=t59;>
-  $std::iter::__lkjscript_into_iter<I=t110;I::IntoIter=t110;>
-  $std::iter::__lkjscript_next<I=t110;I::Item=t13;>
+  $std::str::chars$f216<Self=t70;>
+  $std::iter::__lkjscript_into_iter<I=t174;I::IntoIter=t174;>
+  $std::iter::__lkjscript_next<I=t174;I::Item=t13;>
   $std::char::__lkjscript_len_utf8
   $std::char::__lkjscript_is_whitespace
-  $std::str::into_iter$f226<P=t13;Self=t130;Self::IntoIter=t130;>
-  $std::str::next$f225<P=t13;Self=t130;Self::Item=t60;>
-  desk::store::lock
-  desk::store::append_locked
-  desk::store::replace
-  $std::command::__lkjscript_environment_get
-  desk::store::rows
-  desk::store::seen
-  $std::time::local_minute
-  desk::store::unread_line
+  $std::str::into_iter$f203<P=t13;Self=t128;Self::IntoIter=t128;>
+  $std::str::next$f202<P=t13;Self=t128;Self::Item=t71;>
+  store::lock
+  store::append_policy_locked
+  store::alive_locked
   $std::fmt::__lkjscript_display<T=t4;>
+  $std::command::__lkjscript_environment_get
+  store::rows
+  store::seen
+  $std::time::local_minute
+  store::unread_line
+  store::replace
   $std::io::__lkjscript_directory_remove
-  desk::store::io<T=t0;>
-  $std::fmt::pad$f547<Self=t106;>
-  $std::prelude::is_ok$f721<E=t296;Self=t297;T=t60;>
-  $std::str::__lkjscript_starts_with<P=t60;>
+  store::io<T=t0;>
+  $std::fmt::pad$f523<Self=t122;>
+  $std::io::unit_result
+  $std::io::word
+  $std::prelude::is_ok$f773<E=t280;Self=t281;T=t71;>
+  $std::str::__lkjscript_starts_with<P=t71;>
+  $std::iter::into_iter$f320<Self=t105;Self::IntoIter=t189;T=t19;>
   $std::iter::shared<T=t19;>
-  $std::iter::into_iter$f344<Self=t74;Self::IntoIter=t119;T=t19;>
   $std::io::count_result
-  $std::fmt::fmt$f604<Self=t3;>
-  $std::str::into_iter$f222<Self=t110;Self::IntoIter=t110;>
-  $std::str::next$f221<Self=t110;Self::Item=t13;>
-  $std::str::byte_len$f202<Self=t13;>
-  $std::str::matches_at$f203<Self=t13;>
+  $std::fmt::fmt$f580<Self=t3;>
+  $std::str::into_iter$f199<Self=t174;Self::IntoIter=t174;>
+  $std::str::next$f198<Self=t174;Self::Item=t13;>
+  $std::str::byte_len$f179<Self=t13;>
+  $std::str::matches_at$f180<Self=t13;>
   $std::io::__lkjscript_storage_path
-  desk::store::io<T=t16;>
-  desk::store::io<T=t4;>
+  store::io<T=t16;>
   $std::fmt::__lkjscript_lower_hex<T=t4;>
-  $std::iter::__lkjscript_into_iter<I=t70;I::IntoIter=t149;>
-  $std::iter::__lkjscript_next<I=t149;I::Item=t147;>
+  $std::iter::__lkjscript_into_iter<I=t92;I::IntoIter=t159;>
+  $std::iter::__lkjscript_next<I=t159;I::Item=t157;>
   $std::fmt::__lkjscript_lower_hex<T=t5;>
-  desk::store::read
-  $std::string::ends_with$f169<P=t13;Self=t19;>
-  desk::store::value$f27<Self=t44;>
-  desk::store::json_text
+  store::value$f48<Self=t58;>
+  store::json_text
+  $std::io::__lkjscript_open
+  store::recover_tail
+  $std::io::__lkjscript_file_write
+  $std::string::len$f158<Self=t19;>
+  store::publish
+  $std::fmt::fmt$f560<Self=t4;>
+  $std::io::__lkjscript_file_read_to_end
+  $std::sequence::is_empty$f98<Self=t17;T=t5;>
+  $std::sequence::truncate$f131<Self=t17;T=t5;>
+  store::parse_rows
+  store::read
+  $std::str::parse$f221<Self=t70;T=t4;>
+  $std::time::http_date
+  $std::iter::__lkjscript_into_iter<I=t115;I::IntoIter=t203;>
+  $std::iter::__lkjscript_next<I=t203;I::Item=t116;>
+  $std::string::eq$f165<Self=t19;>
+  $std::io::parent
+  $std::fmt::padding$f522<Self=t122;>
+  $std::str::matches_at$f176<Self=t71;>
+  $std::fmt::number$f524<Self=t122;>
+  $std::prelude::unwrap$f766<Self=t176;T=t13;>
+  $std::io::path_bytes
+  $std::fmt::fmt$f561<Self=t4;>
+  $std::iter::into_iter$f320<Self=t92;Self::IntoIter=t159;T=t5;>
+  $std::iter::next$f318<Self=t159;Self::Item=t157;T=t5;>
+  $std::fmt::fmt$f541<Self=t5;>
+  store::text
+  $std::json::stringify
+  $std::io::__lkjscript_file_read
   $std::io::__lkjscript_file_write_all
   $std::io::__lkjscript_directory_rename
-  desk::store::parse_rows
-  $std::str::parse$f244<Self=t59;T=t4;>
-  $std::time::http_date
-  $std::iter::__lkjscript_into_iter<I=t90;I::IntoIter=t156;>
-  $std::iter::__lkjscript_next<I=t156;I::Item=t91;>
-  $std::string::eq$f188<Self=t19;>
-  $std::fmt::fmt$f584<Self=t4;>
-  $std::io::parent
-  $std::io::unit_result
-  $std::fmt::padding$f546<Self=t106;>
-  $std::str::matches_at$f199<Self=t60;>
-  $std::fmt::number$f548<Self=t106;>
-  $std::prelude::unwrap$f714<Self=t112;T=t13;>
-  $std::io::path_bytes
-  $std::fmt::fmt$f585<Self=t4;>
-  $std::iter::into_iter$f344<Self=t70;Self::IntoIter=t149;T=t5;>
-  $std::iter::next$f342<Self=t149;Self::Item=t147;T=t5;>
-  $std::fmt::fmt$f565<Self=t5;>
-  $std::io::__lkjscript_open
-  $std::io::__lkjscript_file_read_to_end
-  $std::str::__lkjscript_ends_with<P=t13;>
-  desk::store::text
-  $std::json::stringify
-  $std::io::__lkjscript_file_write
+  $std::sequence::retain$f107<F=t292;Self=t17;T=t5;>
   $std::json::parse
-  desk::store::parse$f26<Self=t44;>
-  $std::str::positive_maximum$f257<Self=t4;>
-  $std::str::is_signed$f258<Self=t4;>
+  store::parse$f47<Self=t58;>
+  $std::str::positive_maximum$f234<Self=t4;>
+  $std::str::is_signed$f235<Self=t4;>
   $std::str::decimal_magnitude
-  $std::str::from_magnitude$f259<Self=t4;>
+  $std::str::from_magnitude$f236<Self=t4;>
   $std::time::weekday
   $std::time::month_days
   $std::time::month_name
-  $std::iter::into_iter$f344<Self=t90;Self::IntoIter=t156;T=t44;>
-  $std::iter::next$f342<Self=t156;Self::Item=t91;T=t44;>
+  $std::iter::into_iter$f320<Self=t115;Self::IntoIter=t203;T=t58;>
+  $std::iter::next$f318<Self=t203;Self::Item=t116;T=t58;>
   $std::bytes::starts_with
   $std::io::__lkjscript_open_directory
-  $std::fmt::sign_plus$f542<Self=t106;>
-  $std::fmt::alternate$f543<Self=t106;>
-  $std::string::len$f181<Self=t19;>
-  $std::fmt::sign_aware_zero_pad$f544<Self=t106;>
+  $std::fmt::sign_plus$f518<Self=t122;>
+  $std::fmt::alternate$f519<Self=t122;>
+  $std::fmt::sign_aware_zero_pad$f520<Self=t122;>
   $std::iter::shared<T=t5;>
-  $std::io::__lkjscript_file_read
   $std::json::write_value
-  $std::prelude::unwrap$f723<E=t124;Self=t125;T=t19;>
+  $std::prelude::unwrap$f775<E=t136;Self=t137;T=t19;>
+  $std::iter::owned<T=t5;>
+  $std::iter::__lkjscript_next<I=t347;I::Item=t5;>
+  $closure:5286:292
+  $std::iter::drop$f392<Self=t347;T=t5;> [custom Drop]
   $std::json::invalid_utf8
-  $std::json::new$f650<Self=t113;>
-  $std::json::value$f673<Self=t292;>
-  $std::json::whitespace$f666<Self=t292;>
-  $std::json::get$f652<Self=t61;>
-  $std::json::as_number$f654<Self=t61;>
-  $std::str::parse$f244<Self=t59;T=t3;>
-  desk::store::field
-  $std::json::as_array$f656<Self=t61;>
-  $std::iter::__lkjscript_into_iter<I=t303;I::IntoIter=t305;>
-  $std::iter::__lkjscript_next<I=t305;I::Item=t65;>
-  $std::json::as_str$f653<Self=t61;>
-  $std::iter::shared<T=t44;>
-  $std::sequence::extend_from_slice$f128<Self=t17;T=t5;>
+  $std::json::new$f626<Self=t177;>
+  $std::json::value$f649<Self=t283;>
+  $std::json::whitespace$f642<Self=t283;>
+  $std::json::get$f628<Self=t72;>
+  $std::json::as_number$f630<Self=t72;>
+  $std::str::parse$f221<Self=t70;T=t3;>
+  store::field
+  $std::json::as_array$f632<Self=t72;>
+  $std::iter::__lkjscript_into_iter<I=t288;I::IntoIter=t290;>
+  $std::iter::__lkjscript_next<I=t290;I::Item=t88;>
+  $std::json::as_str$f629<Self=t72;>
+  $std::iter::shared<T=t58;>
+  $std::sequence::extend_from_slice$f105<Self=t17;T=t5;>
   $std::json::number_end
-  $std::integer::checked_add$f482<Self=t4;>
-  $std::prelude::unwrap_or$f716<Self=t101;T=t4;>
+  $std::integer::checked_add$f458<Self=t4;>
+  $std::prelude::unwrap_or$f768<Self=t131;T=t4;>
   $std::json::write_string
-  $std::iter::__lkjscript_into_iter<I=t183;I::IntoIter=t305;>
-  $std::ordered_set::new$f283<Self=t162;T=t19;>
-  $std::iter::__lkjscript_into_iter<I=t294;I::IntoIter=t342;>
-  $std::iter::__lkjscript_next<I=t342;I::Item=t341;>
-  $std::ordered_set::insert$f287<Self=t162;T=t19;>
-  $std::ordered_map::drop$f326<IR=t19;Self=t163;V=t0;> [custom Drop]
-  $std::json::literal$f668<Self=t292;>
-  $std::json::string$f670<Self=t292;>
-  $std::json::array$f671<Self=t292;>
-  $std::json::object$f672<Self=t292;>
+  $std::iter::__lkjscript_into_iter<I=t154;I::IntoIter=t290;>
+  $std::ordered_set::new$f259<Self=t209;T=t19;>
+  $std::iter::__lkjscript_into_iter<I=t279;I::IntoIter=t344;>
+  $std::iter::__lkjscript_next<I=t344;I::Item=t343;>
+  $std::ordered_set::insert$f263<Self=t209;T=t19;>
+  $std::ordered_map::drop$f302<IR=t19;Self=t210;V=t0;> [custom Drop]
+  $std::prelude::unwrap$f766<Self=t349;T=t5;>
+  $std::iter::next$f389<Self=t347;Self::Item=t5;T=t5;>
+  $std::json::literal$f644<Self=t283;>
+  $std::json::string$f646<Self=t283;>
+  $std::json::array$f647<Self=t283;>
+  $std::json::object$f648<Self=t283;>
   $std::json::digit
-  $std::sequence::to_vec$f145<Self=t69;T=t5;>
-  $std::str::positive_maximum$f269<Self=t3;>
-  $std::str::is_signed$f270<Self=t3;>
-  $std::str::from_magnitude$f271<Self=t3;>
-  $std::iter::into_iter$f344<Self=t303;Self::IntoIter=t305;T=t61;>
-  $std::iter::next$f342<Self=t305;Self::Item=t65;T=t61;>
+  $std::sequence::to_vec$f122<Self=t91;T=t5;>
+  $std::str::positive_maximum$f246<Self=t3;>
+  $std::str::is_signed$f247<Self=t3;>
+  $std::str::from_magnitude$f248<Self=t3;>
+  $std::iter::into_iter$f320<Self=t288;Self::IntoIter=t290;T=t72;>
+  $std::iter::next$f318<Self=t290;Self::Item=t88;T=t72;>
   $std::integer::add_unsigned
-  $std::iter::into_iter$f345<Self=t183;Self::IntoIter=t305;T=t61;>
-  $std::ordered_map::new$f299<IR=t19;Self=t163;V=t0;>
-  $std::iter::into_iter$f345<Self=t294;Self::IntoIter=t342;T=t63;>
-  $std::iter::next$f342<Self=t342;Self::Item=t341;T=t63;>
-  $std::ordered_map::insert$f324<IR=t19;Self=t163;V=t0;>
-  $std::prelude::is_none$f709<Self=t311;T=t0;>
-  $std::ordered_map::clear$f312<IR=t19;Self=t163;V=t0;>
-  $std::json::take$f667<Self=t292;>
-  $std::json::hex4$f669<Self=t292;>
+  $std::iter::into_iter$f321<Self=t154;Self::IntoIter=t290;T=t72;>
+  $std::ordered_map::new$f275<IR=t19;Self=t210;V=t0;>
+  $std::iter::into_iter$f321<Self=t279;Self::IntoIter=t344;T=t74;>
+  $std::iter::next$f318<Self=t344;Self::Item=t343;T=t74;>
+  $std::ordered_map::insert$f300<IR=t19;Self=t210;V=t0;>
+  $std::prelude::is_none$f761<Self=t300;T=t0;>
+  $std::ordered_map::clear$f288<IR=t19;Self=t210;V=t0;>
+  $std::json::take$f643<Self=t283;>
+  $std::json::hex4$f645<Self=t283;>
   $std::json::push_scalar
-  $std::iter::shared<T=t61;>
-  $std::iter::shared<T=t63;>
-  $std::ordered_map::compare_key$f319<IR=t19;Self=t163;V=t0;>
-  $std::ordered_map::allocate$f310<IR=t19;Self=t163;V=t0;>
-  $std::ordered_map::balance$f309<IR=t19;Self=t163;V=t0;>
-  $std::prelude::is_some$f708<Self=t311;T=t0;>
-  $std::ordered_map::first_node$f302<IR=t19;Self=t163;V=t0;>
-  $std::ordered_map::successor$f303<IR=t19;Self=t163;V=t0;>
-  $std::prelude::take$f715<Self=t166;T=t165;>
+  $std::iter::shared<T=t72;>
+  $std::iter::shared<T=t74;>
+  $std::ordered_map::compare_key$f295<IR=t19;Self=t210;V=t0;>
+  $std::ordered_map::allocate$f286<IR=t19;Self=t210;V=t0;>
+  $std::ordered_map::balance$f285<IR=t19;Self=t210;V=t0;>
+  $std::prelude::is_some$f760<Self=t300;T=t0;>
+  $std::ordered_map::first_node$f278<IR=t19;Self=t210;V=t0;>
+  $std::ordered_map::successor$f279<IR=t19;Self=t210;V=t0;>
+  $std::prelude::take$f767<Self=t213;T=t212;>
   $builtin:lt:t19
   $builtin:gt:t19
-  $std::ordered_map::update_height$f305<IR=t19;Self=t163;V=t0;>
-  $std::ordered_map::height$f304<IR=t19;Self=t163;V=t0;>
-  $std::ordered_map::rotate_left$f307<IR=t19;Self=t163;V=t0;>
-  $std::ordered_map::rotate_right$f308<IR=t19;Self=t163;V=t0;>
+  $std::ordered_map::update_height$f281<IR=t19;Self=t210;V=t0;>
+  $std::ordered_map::height$f280<IR=t19;Self=t210;V=t0;>
+  $std::ordered_map::rotate_left$f283<IR=t19;Self=t210;V=t0;>
+  $std::ordered_map::rotate_right$f284<IR=t19;Self=t210;V=t0;>
   $builtin:$order:t19
-  $std::ordered_map::replace_parent$f306<IR=t19;Self=t163;V=t0;>
+  $std::ordered_map::replace_parent$f282<IR=t19;Self=t210;V=t0;>
   $std::sequence::__lkjscript_vec_order<T=t5;>
   $std::sequence::__lkjscript_slice_order<T=t5;>
 
-Service entry: serve
-Command: target/lkjscript authority examples/desk.lkj --entry serve --library-dir library --no-store
+Service program directory: examples/desk
+Command: target/lkjscript authority examples/desk --library-dir library --no-store
 
+program "examples/desk/program.lkj"
+configured grants:
+  "output"
+  "state=env:DESK_STATE"
+  "board=env:DESK_BOARD"
+  "handoff=env:DESK_HANDOFF"
+  "clock"
+  "id_clock"
+  "entropy"
+  "listener=127.0.0.1:0"
+  "ready"
+  "stop"
 entry serve
 declared authority:
   output: Stdout (--grant output)
   state: Directory (--grant state=PATH)
+  board: ReadDirectory (--grant board=PATH)
+  handoff: ReadDirectory (--grant handoff=PATH)
   clock: Clock (--grant clock)
   id_clock: Clock (--grant id_clock)
   entropy: Entropy (--grant entropy)
@@ -301,7 +365,7 @@ declared authority:
   ready: Readiness (--grant ready)
   stop: Stop (--grant stop)
 reachable operations (conservative checked-IR branches and owned cleanup):
-  http_server::serve<H=t40;>:
+  $std::http_server::serve<H=t53;>:
     listener_set_nonblocking
     readiness_watch_listener
     readiness_watch_stop
@@ -311,6 +375,7 @@ reachable operations (conservative checked-IR branches and owned cleanup):
     readiness_unwatch_listener
     listener_close [structural cleanup]
     readiness_unwatch_stop
+    clock_unix_seconds
     readiness_wait
     file_close [structural cleanup]
     directory_close [structural cleanup]
@@ -320,76 +385,130 @@ reachable operations (conservative checked-IR branches and owned cleanup):
     listener_address
   $std::io::__lkjscript_clock_nanoseconds:
     clock_read
-  http_server::shutdown$f79<Self=t14;>:
+  $std::http_server::shutdown$f696<Self=t14;>:
     file_close [structural cleanup]
-  http_server::expire$f75<Self=t14;>:
+  $std::http_server::expire$f691<Self=t14;>:
     file_close [structural cleanup]
-  http_server::accept$f76<Self=t14;>:
+  $std::http_server::accept$f692<Self=t14;>:
     listener_accept_nodelay
     file_close [structural cleanup]
     file_set_nonblocking
-  http_server::queue$f77<Self=t14;>:
+  $std::http_server::queue$f693<Self=t14;>:
     file_close [structural cleanup]
-  http_server::run$f78<H=t40;Self=t14;>:
+  $std::http_server::run$f694<H=t53;Self=t14;>:
     file_close [structural cleanup]
-  desk::web::finish$f13<Self=t40;>:
+  web::finish$f26<Self=t53;>:
     directory_sync
-  http_server::close$f74<Self=t14;>:
+  $std::http_server::close$f690<Self=t14;>:
     readiness_unwatch_file
     file_close [structural cleanup]
-  http_server::update_interest$f64<Self=t15;>:
+  composition::revision:
+    file_modified_nanoseconds
+    file_close [structural cleanup]
+  web::file_revision:
+    file_close [structural cleanup]
+    file_seek
+    file_modified_nanoseconds
+  $std::http_server::update_interest$f679<Self=t15;>:
     readiness_watch_file
-  http_server::read_header_step$f68<H=t40;Self=t15;>:
+  $std::read_io::__lkjscript_read_open:
+    read_directory_open
+  $std::read_io::__lkjscript_read_directory_list:
+    directory_close [structural cleanup]
+    directory_read
+  $std::io::__lkjscript_open:
+    directory_open
+  $std::http_server::read_header_step$f683<H=t53;Self=t15;>:
     clock_unix_seconds
-  http_server::bad_request$f66<Self=t15;>:
+  $std::http_server::event_step$f687<H=t53;Self=t15;>:
+    clock_unix_seconds
+  $std::read_io::__lkjscript_read_open_directory:
+    read_directory_open_directory
+  $std::http_server::bad_request$f681<Self=t15;>:
     clock_unix_seconds
   $std::io::__lkjscript_file_read:
     file_read
-  http_server::prepare$f67<H=t40;Self=t15;>:
+  $std::http_server::prepare$f682<H=t53;Self=t15;>:
     clock_unix_seconds
   $std::io::__lkjscript_file_write:
     file_write
-  desk::store::state:
+  web::frame$f9<Self=t53;>:
     file_close [structural cleanup]
-  desk::store::record:
+  store::state:
     file_close [structural cleanup]
-  desk::store::lock:
+  store::record:
+    file_close [structural cleanup]
+  store::lock:
     directory_open_append
     file_close [structural cleanup]
     file_lock_wait
-  desk::store::ping:
-    directory_sync
-  desk::store::append_locked:
-    clock_unix_nanoseconds
-    entropy_fill
-  desk::store::io<T=t16;>:
+  web::boundary:
     file_close [structural cleanup]
-  desk::store::read:
+    file_seek
+  web::replay:
+    file_close [structural cleanup]
+    file_seek
+  composition::board:
+    file_close [structural cleanup]
+  composition::handoff:
+    file_close [structural cleanup]
+    file_modified_nanoseconds
+  store::rows:
+    file_close [structural cleanup]
+    directory_open_append
+    file_truncate
+    file_sync
+  store::ping:
+    directory_sync
+  store::wake:
+    directory_open_append
+    file_close [structural cleanup]
+    file_lock_exclusive
+  store::io<T=t16;>:
     file_close [structural cleanup]
   $std::io::__lkjscript_directory_remove:
     directory_close [structural cleanup]
     directory_remove
-  desk::store::replace:
+  store::read:
+    file_close [structural cleanup]
+  store::append_policy_locked:
+    clock_unix_nanoseconds
+    entropy_fill
+    file_close [structural cleanup]
+    directory_open_append
+    file_truncate
+    file_sync
+    directory_sync
+  store::position:
+    file_close [structural cleanup]
+    file_seek
+  $std::read_io::__lkjscript_read_file_read:
+    file_read
+  $std::io::parent:
+    directory_close [structural cleanup]
+  store::publish:
     directory_create_new
     file_close [structural cleanup]
     file_sync
     directory_sync
-  $std::io::__lkjscript_open:
-    directory_open
-  $std::io::parent:
-    directory_close [structural cleanup]
+  store::recover_tail:
+    file_seek
+    file_truncate
+  $std::io::__lkjscript_open_directory:
+    directory_open_directory
   $std::io::__lkjscript_directory_rename:
     directory_close [structural cleanup]
     directory_rename
-  $std::io::__lkjscript_open_directory:
-    directory_open_directory
-reachable functions (355; each listed once):
+reachable functions (485; each listed once):
   serve
-  http_server::serve<H=t40;>
-  $std::prelude::unwrap$f723<E=t3;Self=t138;T=t0;>
+  web::new$f8<Self=t53;>
+  $std::http_server::serve<H=t53;>
+  $std::string::new$f139<Self=t19;>
+  $std::ordered_map::new$f275<IR=t19;Self=t48;V=t47;>
+  $std::prelude::unwrap$f775<E=t3;Self=t196;T=t0;>
   $std::io::__lkjscript_listener_port
-  $std::prelude::unwrap$f723<E=t3;Self=t263;T=t9;>
-  $std::prelude::unwrap$f723<E=t3;Self=t264;T=t10;>
+  $std::prelude::unwrap$f775<E=t3;Self=t234;T=t9;>
+  $std::prelude::unwrap$f775<E=t3;Self=t235;T=t10;>
   $std::string::__lkjscript_new
   $std::fmt::__lkjscript_new
   $std::fmt::__lkjscript_success
@@ -397,345 +516,472 @@ reachable functions (355; each listed once):
   $std::fmt::__lkjscript_settings
   $std::fmt::__lkjscript_display<T=t9;>
   $std::fmt::__lkjscript_display<T=t10;>
-  $std::string::as_bytes$f183<Self=t19;>
-  http_server::new$f73<Self=t14;>
+  $std::string::as_bytes$f160<Self=t19;>
+  $std::http_server::new$f689<Self=t14;>
+  web::event_interval$f27<Self=t53;>
   $std::io::__lkjscript_clock_nanoseconds
-  $std::prelude::unwrap$f723<E=t3;Self=t144;T=t4;>
-  $std::prelude::unwrap$f723<E=t3;Self=t266;T=t1;>
-  $std::prelude::take$f715<Self=t265;T=t56;>
-  http_server::deadline
-  http_server::shutdown$f79<Self=t14;>
+  $std::prelude::unwrap$f775<E=t3;Self=t142;T=t4;>
+  $std::prelude::unwrap$f775<E=t3;Self=t237;T=t1;>
+  $std::prelude::take$f767<Self=t236;T=t67;>
+  $std::http_server::deadline
+  $std::http_server::shutdown$f696<Self=t14;>
   $std::fmt::__lkjscript_display<T=t4;>
-  http_server::expire$f75<Self=t14;>
-  http_server::is_empty$f80<Self=t14;>
-  $std::prelude::as_mut$f699<Self=t265;T=t56;>
-  $std::timers::next_deadline$f681<Self=t37;>
-  $std::prelude::unwrap_or$f716<Self=t101;T=t4;>
-  $std::sequence::is_empty$f121<Self=t36;T=t4;>
-  $std::prelude::unwrap$f723<E=t3;Self=t271;T=t270;>
-  $std::iter::__lkjscript_into_iter<I=t272;I::IntoIter=t275;>
-  $std::iter::__lkjscript_next<I=t275;I::Item=t273;>
-  $std::iter::__lkjscript_into_iter<I=t270;I::IntoIter=t280;>
-  $std::iter::__lkjscript_next<I=t280;I::Item=t269;>
-  $std::prelude::is_none$f709<Self=t101;T=t4;>
-  http_server::accept$f76<Self=t14;>
-  $std::prelude::is_err$f722<E=t3;Self=t138;T=t0;>
-  http_server::queue$f77<Self=t14;>
-  $std::iter::drop$f416<Self=t280;T=t269;> [custom Drop]
-  http_server::run$f78<H=t40;Self=t14;>
+  $std::prelude::unwrap$f775<E=t3;Self=t239;T=t3;>
+  web::event_refresh$f29<Self=t53;>
   $std::fmt::__lkjscript_display<T=t19;>
-  http_server::release_retired$f81<Self=t14;>
-  desk::web::finish$f13<Self=t40;>
+  $std::http_server::notify_events$f695<Self=t14;>
+  $std::http_server::expire$f691<Self=t14;>
+  $std::http_server::is_empty$f697<Self=t14;>
+  $std::prelude::as_mut$f751<Self=t236;T=t67;>
+  $std::timers::next_deadline$f733<Self=t43;>
+  $std::prelude::unwrap_or$f768<Self=t131;T=t4;>
+  $std::sequence::is_empty$f98<Self=t36;T=t4;>
+  $std::prelude::unwrap$f775<E=t3;Self=t243;T=t242;>
+  $std::iter::__lkjscript_into_iter<I=t244;I::IntoIter=t247;>
+  $std::iter::__lkjscript_next<I=t247;I::Item=t245;>
+  $std::iter::__lkjscript_into_iter<I=t242;I::IntoIter=t252;>
+  $std::iter::__lkjscript_next<I=t252;I::Item=t241;>
+  $std::prelude::is_none$f761<Self=t131;T=t4;>
+  $std::http_server::accept$f692<Self=t14;>
+  $std::prelude::is_err$f774<E=t3;Self=t196;T=t0;>
+  $std::http_server::queue$f693<Self=t14;>
+  $std::iter::drop$f392<Self=t252;T=t241;> [custom Drop]
+  $std::http_server::run$f694<H=t53;Self=t14;>
+  $std::http_server::release_retired$f698<Self=t14;>
+  web::finish$f26<Self=t53;>
+  $std::ordered_map::drop$f302<IR=t4;Self=t38;V=t0;> [custom Drop]
+  $std::ordered_map::drop$f302<IR=t19;Self=t48;V=t47;> [custom Drop]
   $std::io::unit_result
-  $std::string::new$f162<Self=t19;>
-  $std::fmt::write_str$f539<Self=t106;>
-  $std::fmt::fmt$f569<Self=t9;>
-  $std::fmt::fmt$f574<Self=t10;>
-  $std::timers::new$f678<Self=t37;>
+  $std::fmt::write_str$f515<Self=t122;>
+  $std::fmt::fmt$f545<Self=t9;>
+  $std::fmt::fmt$f550<Self=t10;>
+  $std::ordered_set::new$f259<Self=t37;T=t4;>
+  $std::timers::new$f730<Self=t43;>
   $std::io::word
-  $std::integer::checked_add$f482<Self=t4;>
-  http_server::shutdown$f63<Self=t15;>
-  $std::timers::schedule$f686<Self=t37;>
-  http_server::close$f74<Self=t14;>
-  $std::fmt::fmt$f584<Self=t4;>
-  $std::timers::due$f688<Self=t37;>
-  $std::sequence::is_empty$f121<Self=t39;T=t38;>
-  $std::iter::into_iter$f345<Self=t272;Self::IntoIter=t275;T=t269;>
-  $std::iter::next$f342<Self=t275;Self::Item=t273;T=t269;>
-  $std::iter::into_iter$f415<Self=t270;Self::IntoIter=t280;T=t269;>
-  $std::iter::next$f413<Self=t280;Self::Item=t269;T=t269;>
-  $std::prelude::is_some$f708<Self=t101;T=t4;>
-  http_server::new$f60<Self=t15;>
-  http_server::update_interest$f64<Self=t15;>
-  $std::prelude::is_ok$f721<E=t3;Self=t138;T=t0;>
-  $std::iter::__lkjscript_into_iter<I=t36;I::IntoIter=t223;>
-  $std::iter::__lkjscript_next<I=t223;I::Item=t4;>
-  http_server::turn$f72<H=t40;Self=t15;>
-  $std::iter::drop$f416<Self=t223;T=t4;> [custom Drop]
-  $std::fmt::fmt$f550<Self=t19;>
-  desk::store::io<T=t0;>
-  $std::string::push_str$f166<Self=t19;>
-  $std::fmt::number$f548<Self=t106;>
+  $std::integer::checked_add$f458<Self=t4;>
+  $std::http_server::shutdown$f678<Self=t15;>
+  $std::timers::schedule$f738<Self=t43;>
+  $std::http_server::close$f690<Self=t14;>
+  $std::fmt::fmt$f560<Self=t4;>
+  composition::revision
+  web::file_revision
+  $std::string::eq$f165<Self=t19;>
+  $std::fmt::fmt$f526<Self=t19;>
+  $std::iter::__lkjscript_into_iter<I=t323;I::IntoIter=t325;>
+  $std::iter::__lkjscript_next<I=t325;I::Item=t148;>
+  $std::prelude::as_mut$f751<Self=t34;T=t15;>
+  $std::timers::due$f740<Self=t43;>
+  $std::sequence::is_empty$f98<Self=t45;T=t44;>
+  $std::iter::into_iter$f321<Self=t244;Self::IntoIter=t247;T=t241;>
+  $std::iter::next$f318<Self=t247;Self::Item=t245;T=t241;>
+  $std::iter::into_iter$f391<Self=t242;Self::IntoIter=t252;T=t241;>
+  $std::iter::next$f389<Self=t252;Self::Item=t241;T=t241;>
+  $std::prelude::is_some$f760<Self=t131;T=t4;>
+  $std::http_server::new$f675<Self=t15;>
+  $std::http_server::update_interest$f679<Self=t15;>
+  $std::prelude::is_ok$f773<E=t3;Self=t196;T=t0;>
+  $std::iter::__lkjscript_into_iter<I=t36;I::IntoIter=t331;>
+  $std::iter::__lkjscript_next<I=t331;I::Item=t4;>
+  $std::http_server::turn$f688<H=t53;Self=t15;>
+  $std::iter::drop$f392<Self=t331;T=t4;> [custom Drop]
+  $std::prelude::is_some$f760<Self=t20;T=t19;>
+  $std::ordered_set::insert$f263<Self=t37;T=t4;>
+  store::io<T=t0;>
+  $std::ordered_map::clear$f288<IR=t4;Self=t38;V=t0;>
+  $std::ordered_map::clear$f288<IR=t19;Self=t48;V=t47;>
+  $std::string::push_str$f143<Self=t19;>
+  $std::fmt::number$f524<Self=t122;>
+  $std::ordered_map::new$f275<IR=t4;Self=t38;V=t0;>
   $std::integer::add_unsigned
-  $std::sequence::is_empty$f121<Self=t17;T=t5;>
-  http_server::clamp_deadline$f61<Self=t15;>
-  http_server::more_admitted$f62<Self=t15;>
-  $std::prelude::as_mut$f699<Self=t29;T=t22;>
-  http_server::close_after$f58<Self=t22;>
-  $std::timers::up$f684<Self=t37;>
-  $std::timers::down$f685<Self=t37;>
-  $std::timers::cancel$f687<Self=t37;>
-  $std::iter::shared<T=t269;>
-  $std::iter::owned<T=t269;>
-  $std::prelude::unwrap$f714<Self=t282;T=t269;>
-  $std::iter::into_iter$f415<Self=t36;Self::IntoIter=t223;T=t4;>
-  $std::iter::next$f413<Self=t223;Self::Item=t4;T=t4;>
-  http_server::read_header_step$f68<H=t40;Self=t15;>
-  http_server::body_step$f69<H=t40;Self=t15;>
-  http_server::write_step$f71<Self=t15;>
-  $std::string::as_str$f180<Self=t19;>
-  $std::fmt::pad$f547<Self=t106;>
-  $std::fmt::__lkjscript_display_str<T=t59;>
-  $std::fmt::__lkjscript_display<T=t3;>
-  $std::bytes::append_bytes
-  $std::string::push$f167<Self=t19;>
-  $std::fmt::sign_plus$f542<Self=t106;>
-  $std::fmt::alternate$f543<Self=t106;>
-  $std::string::len$f181<Self=t19;>
-  $std::fmt::sign_aware_zero_pad$f544<Self=t106;>
-  $std::fmt::padding$f546<Self=t106;>
-  $std::string::replace$f178<P=t60;Self=t19;>
-  $std::timers::before$f682<Self=t37;>
-  $std::timers::exchange$f683<Self=t37;>
-  $std::prelude::unwrap$f714<Self=t364;T=t38;>
-  $std::iter::owned<T=t4;>
-  $std::prelude::unwrap$f714<Self=t101;T=t4;>
-  http_protocol::header_end
-  desk::web::methods$f9<Self=t40;>
-  http_protocol::parse_with_methods
-  http_server::bad_request$f66<Self=t15;>
-  desk::web::preflight$f10<Self=t40;>
-  $std::time::http_date
+  $std::sequence::is_empty$f98<Self=t17;T=t5;>
+  $std::http_server::clamp_deadline$f676<Self=t15;>
+  $std::http_server::more_admitted$f677<Self=t15;>
+  $std::prelude::as_mut$f751<Self=t29;T=t22;>
+  $std::http_server::close_after$f673<Self=t22;>
+  $std::timers::up$f736<Self=t43;>
+  $std::timers::down$f737<Self=t43;>
+  $std::timers::cancel$f739<Self=t43;>
+  $std::ordered_set::remove$f264<Self=t37;T=t4;>
+  $std::read_io::__lkjscript_read_open
+  store::io<T=t4;>
   $std::string::__lkjscript_as_str
-  http_server::new$f56<Self=t22;>
-  http_server::begin_write$f65<Self=t15;>
-  desk::web::retain_body$f11<Self=t40;>
-  $std::io::__lkjscript_file_read
-  $std::sequence::extend_from_slice$f128<Self=t17;T=t5;>
-  http_server::prepare$f67<H=t40;Self=t15;>
-  $std::prelude::unwrap$f714<Self=t29;T=t22;>
-  http_server::write_step$f59<Self=t22;>
-  http_server::next_request$f70<Self=t15;>
-  $std::prelude::unwrap$f723<E=t296;Self=t297;T=t60;>
-  $std::fmt::fmt$f604<Self=t3;>
-  $std::str::__lkjscript_replace<P=t60;>
+  $std::read_io::__lkjscript_read_directory_list
+  store::io<T=t139;>
+  $std::sequence::sort$f109<Self=t139;T=t17;>
+  $std::iter::__lkjscript_into_iter<I=t139;I::IntoIter=t144;>
+  $std::iter::__lkjscript_next<I=t144;I::Item=t17;>
+  $std::string::from_utf8$f140<Self=t19;>
+  $std::string::starts_with$f145<P=t71;Self=t19;>
+  $std::string::ends_with$f146<P=t71;Self=t19;>
+  $std::string::len$f158<Self=t19;>
+  $std::iter::drop$f392<Self=t144;T=t17;> [custom Drop]
+  $std::fmt::__lkjscript_display<T=t3;>
+  $std::io::__lkjscript_open
+  $std::fmt::__lkjscript_display_str<T=t70;>
+  $std::bytes::starts_with
+  $std::string::as_str$f157<Self=t19;>
+  $std::fmt::pad$f523<Self=t122;>
+  $std::ordered_set::into_iter$f269<Self=t323;Self::IntoIter=t325;T=t4;>
+  $std::ordered_map::next$f306<IR=t4;Self=t325;Self::Item=t148;V=t0;>
+  $std::iter::shared<T=t241;>
+  $std::iter::owned<T=t241;>
+  $std::prelude::unwrap$f766<Self=t254;T=t241;>
+  $std::iter::into_iter$f391<Self=t36;Self::IntoIter=t331;T=t4;>
+  $std::iter::next$f389<Self=t331;Self::Item=t4;T=t4;>
+  $std::http_server::read_header_step$f683<H=t53;Self=t15;>
+  $std::http_server::body_step$f684<H=t53;Self=t15;>
+  $std::http_server::write_step$f686<Self=t15;>
+  $std::http_server::event_step$f687<H=t53;Self=t15;>
+  $std::ordered_map::insert$f300<IR=t4;Self=t38;V=t0;>
+  $std::prelude::is_none$f761<Self=t300;T=t0;>
+  $std::ordered_map::first_node$f278<IR=t4;Self=t38;V=t0;>
+  $std::ordered_map::successor$f279<IR=t4;Self=t38;V=t0;>
+  $std::prelude::take$f767<Self=t41;T=t40;>
+  $std::ordered_map::first_node$f278<IR=t19;Self=t48;V=t47;>
+  $std::ordered_map::successor$f279<IR=t19;Self=t48;V=t47;>
+  $std::prelude::take$f767<Self=t51;T=t50;>
+  $std::bytes::append_bytes
+  $std::string::push$f144<Self=t19;>
+  $std::fmt::sign_plus$f518<Self=t122;>
+  $std::fmt::alternate$f519<Self=t122;>
+  $std::fmt::sign_aware_zero_pad$f520<Self=t122;>
+  $std::fmt::padding$f522<Self=t122;>
+  $std::string::replace$f155<P=t71;Self=t19;>
+  $std::timers::before$f734<Self=t43;>
+  $std::timers::exchange$f735<Self=t43;>
+  $std::prelude::unwrap$f766<Self=t368;T=t44;>
+  $std::ordered_map::remove$f301<IR=t4;Self=t38;V=t0;>
+  $std::prelude::is_some$f760<Self=t300;T=t0;>
+  $std::read_io::path_bytes
+  $std::read_io::__lkjscript_read_open_directory
+  $std::read_io::count_result
   $std::sequence::__lkjscript_slice_equal<T=t5;>
-  http_protocol::crlf
-  http_protocol::token
-  http_protocol::allowed
-  http_protocol::trim
-  $std::iter::__lkjscript_into_iter<I=t70;I::IntoIter=t149;>
-  $std::iter::__lkjscript_next<I=t149;I::Item=t147;>
-  http_protocol::same
-  http_protocol::authority
-  http_protocol::number
-  $std::prelude::is_some$f708<Self=t20;T=t19;>
-  $std::sequence::to_vec$f145<Self=t69;T=t5;>
-  $std::string::from_utf8$f163<Self=t19;>
-  http_protocol::connection_options
-  http_protocol::target_path
-  $std::prelude::unwrap$f723<E=t124;Self=t125;T=t19;>
-  http_server::error$f57<Self=t22;>
+  $std::sequence::to_vec$f122<Self=t91;T=t5;>
+  $std::iter::owned<T=t17;>
+  $std::prelude::as_ref$f750<Self=t146;T=t17;>
+  $std::prelude::unwrap$f766<Self=t274;T=t193;>
+  $builtin:le:t17
+  $std::prelude::take$f767<Self=t146;T=t17;>
+  $std::prelude::unwrap$f766<Self=t146;T=t17;>
+  $std::iter::into_iter$f391<Self=t139;Self::IntoIter=t144;T=t17;>
+  $std::iter::next$f389<Self=t144;Self::Item=t17;T=t17;>
+  $std::bytes::valid_utf8
+  $std::str::__lkjscript_starts_with<P=t71;>
+  $std::str::__lkjscript_ends_with<P=t71;>
+  $std::fmt::fmt$f580<Self=t3;>
+  $std::io::path_bytes
+  $std::prelude::unwrap$f775<E=t280;Self=t281;T=t71;>
+  $std::ordered_set::iter$f268<Self=t37;T=t4;>
+  $std::ordered_map::next$f303<IR=t4;Self=t326;Self::Item=t371;V=t0;>
+  $std::iter::owned<T=t4;>
+  $std::prelude::unwrap$f766<Self=t131;T=t4;>
+  $std::http_protocol::header_end
+  web::methods$f22<Self=t53;>
+  $std::http_protocol::parse_with_methods
+  $std::http_server::bad_request$f681<Self=t15;>
+  web::preflight$f23<Self=t53;>
+  $std::time::http_date
+  $std::http_server::new$f670<Self=t22;>
+  $std::http_server::begin_write$f680<Self=t15;>
+  web::retain_body$f24<Self=t53;>
+  $std::io::__lkjscript_file_read
+  $std::sequence::extend_from_slice$f105<Self=t17;T=t5;>
+  $std::http_server::prepare$f682<H=t53;Self=t15;>
+  $std::prelude::unwrap$f766<Self=t29;T=t22;>
+  $std::http_server::write_step$f674<Self=t22;>
+  $std::prelude::is_some$f760<Self=t32;T=t31;>
+  $std::prelude::take$f767<Self=t20;T=t19;>
+  $std::sequence::clear$f130<Self=t17;T=t5;>
+  $std::http_server::next_request$f685<Self=t15;>
+  web::event_revision$f28<Self=t53;>
+  $std::prelude::as_ref$f750<Self=t20;T=t19;>
+  $std::prelude::unwrap$f766<Self=t191;T=t120;>
+  $std::string::clone$f163<Self=t19;>
+  web::event_after$f30<Self=t53;>
+  $std::http_server::event_frame$f672<Self=t22;>
+  $std::ordered_map::compare_key$f295<IR=t4;Self=t38;V=t0;>
+  $std::ordered_map::allocate$f286<IR=t4;Self=t38;V=t0;>
+  $std::ordered_map::balance$f285<IR=t4;Self=t38;V=t0;>
+  $std::str::__lkjscript_replace<P=t71;>
+  $std::ordered_map::find_node$f296<IR=t4;Self=t38;V=t0;>
+  $std::ordered_map::remove_node$f287<IR=t4;Self=t38;V=t0;>
+  $std::sequence::contains$f103<Self=t17;T=t5;>
+  $std::sequence::__lkjscript_vec_order<T=t5;>
+  $std::prelude::is_ok$f773<E=t280;Self=t281;T=t71;>
+  $std::str::matches_at$f176<Self=t71;>
+  $std::str::byte_len$f175<Self=t71;>
+  $std::ordered_map::keys$f293<IR=t4;Self=t38;V=t0;>
+  $std::http_protocol::crlf
+  $std::http_protocol::token
+  $std::http_protocol::allowed
+  $std::http_protocol::trim
+  $std::iter::__lkjscript_into_iter<I=t92;I::IntoIter=t159;>
+  $std::iter::__lkjscript_next<I=t159;I::Item=t157;>
+  $std::http_protocol::same
+  $std::http_protocol::authority
+  $std::http_protocol::number
+  $std::http_protocol::connection_options
+  $std::http_protocol::target_path
+  $std::prelude::unwrap$f775<E=t136;Self=t137;T=t19;>
+  $std::http_server::error$f671<Self=t22;>
+  web::last_path
   $std::str::__lkjscript_eq
-  $std::string::clone$f186<Self=t19;>
-  $std::string::is_empty$f182<Self=t19;>
-  $std::str::__lkjscript_ends_with<P=t60;>
-  desk::web::empty
-  $std::string::from_str$f165<Self=t19;>
+  web::empty
+  $std::string::is_empty$f159<Self=t19;>
+  $std::string::from_str$f142<Self=t19;>
   $std::time::weekday
   $std::time::month_days
   $std::time::month_name
-  $std::buffer::len$f694<Self=t24;>
-  http_server::reason
-  $std::iter::__lkjscript_into_iter<I=t48;I::IntoIter=t374;>
-  $std::iter::__lkjscript_next<I=t374;I::Item=t47;>
-  $std::iter::drop$f416<Self=t374;T=t47;> [custom Drop]
-  $std::buffer::new$f691<Self=t28;>
+  $std::buffer::len$f746<Self=t24;>
+  $std::http_server::reason
+  $std::iter::__lkjscript_into_iter<I=t87;I::IntoIter=t400;>
+  $std::iter::__lkjscript_next<I=t400;I::Item=t47;>
+  $std::iter::drop$f392<Self=t400;T=t47;> [custom Drop]
+  $std::buffer::new$f743<Self=t28;>
   $std::io::count_result
-  $std::prelude::unwrap$f714<Self=t21;T=t18;>
-  desk::web::respond$f12<Self=t40;>
+  $std::prelude::unwrap$f766<Self=t21;T=t18;>
+  web::respond$f25<Self=t53;>
   $std::io::__lkjscript_file_write
-  $std::buffer::position$f692<Self=t28;>
-  $std::buffer::write_some$f696<Self=t24;>
-  $std::sequence::clear$f153<Self=t17;T=t5;>
-  $std::str::byte_len$f198<Self=t60;>
-  $std::str::matches_at$f199<Self=t60;>
-  $std::iter::into_iter$f344<Self=t70;Self::IntoIter=t149;T=t5;>
-  $std::iter::next$f342<Self=t149;Self::Item=t147;T=t5;>
-  http_protocol::lower
-  $std::sequence::is_empty$f133<Self=t69;T=t5;>
-  $std::bytes::valid_utf8
-  http_protocol::hex
-  $std::prelude::ok_or$f712<E=t9;Self=t98;T=t5;>
+  $std::buffer::position$f744<Self=t28;>
+  $std::buffer::write_some$f748<Self=t24;>
+  $std::sequence::retain$f107<F=t405;Self=t17;T=t5;>
+  web::frame$f9<Self=t53;>
+  $std::ordered_map::update_height$f281<IR=t4;Self=t38;V=t0;>
+  $std::ordered_map::height$f280<IR=t4;Self=t38;V=t0;>
+  $std::ordered_map::rotate_left$f283<IR=t4;Self=t38;V=t0;>
+  $std::ordered_map::rotate_right$f284<IR=t4;Self=t38;V=t0;>
+  $std::prelude::unwrap$f766<Self=t41;T=t40;>
+  $std::ordered_map::replace_parent$f282<IR=t4;Self=t38;V=t0;>
+  $std::sequence::__lkjscript_slice_order<T=t5;>
   $std::str::matches_bytes
-  desk::web::reply
-  $std::iter::into_iter$f415<Self=t48;Self::IntoIter=t374;T=t47;>
-  $std::iter::next$f413<Self=t374;Self::Item=t47;T=t47;>
-  desk::web::last_path
-  desk::store::state
-  desk::web::json_reply
-  desk::web::message
-  desk::store::record
-  desk::store::value$f27<Self=t44;>
-  $std::sequence::retain$f130<F=t382;Self=t17;T=t5;>
-  $std::iter::shared<T=t5;>
-  $std::prelude::is_ok$f721<E=t296;Self=t297;T=t60;>
-  http_server::new$f47<Self=t46;>
-  http_server::header$f49<Self=t46;>
-  $std::iter::owned<T=t47;>
-  $std::prelude::unwrap$f714<Self=t376;T=t47;>
+  $std::ordered_map::iter$f292<IR=t4;Self=t38;V=t0;>
+  $std::iter::into_iter$f320<Self=t92;Self::IntoIter=t159;T=t5;>
+  $std::iter::next$f318<Self=t159;Self::Item=t157;T=t5;>
+  $std::http_protocol::lower
+  $std::sequence::is_empty$f110<Self=t91;T=t5;>
+  $std::http_protocol::hex
+  $std::prelude::ok_or$f764<E=t9;Self=t349;T=t5;>
   $std::str::__lkjscript_rfind<P=t13;>
-  desk::store::lock
-  desk::store::rows
-  desk::store::seen
-  $std::iter::__lkjscript_into_iter<I=t159;I::IntoIter=t156;>
-  $std::iter::__lkjscript_next<I=t156;I::Item=t91;>
-  $builtin:clone:t44
-  $std::ordered_set::new$f283<Self=t162;T=t19;>
-  $std::ordered_set::insert$f287<Self=t162;T=t19;>
-  $std::sequence::sort$f132<Self=t169;T=t168;>
-  $std::iter::__lkjscript_into_iter<I=t170;I::IntoIter=t172;>
-  $std::iter::__lkjscript_next<I=t172;I::Item=t171;>
-  $std::ordered_set::contains$f286<Self=t162;T=t19;>
-  $std::ordered_map::drop$f326<IR=t19;Self=t163;V=t0;> [custom Drop]
-  desk::store::json_text
-  $std::json::parse
-  $std::json::as_object$f657<Self=t61;>
-  $std::prelude::is_none$f709<Self=t117;T=t116;>
-  $std::json::get$f652<Self=t61;>
-  desk::web::scalar
-  $std::text::trim
-  desk::web::limit
-  desk::store::ping
-  desk::store::closed
-  desk::store::new$f25<Self=t44;>
-  desk::store::append_locked
-  desk::store::text
-  $std::iter::__lkjscript_into_iter<I=t127;I::IntoIter=t119;>
-  $std::iter::__lkjscript_next<I=t119;I::Item=t104;>
+  web::reply
+  $std::iter::into_iter$f391<Self=t87;Self::IntoIter=t400;T=t47;>
+  $std::iter::next$f389<Self=t400;Self::Item=t47;T=t47;>
+  web::resume
+  $std::http_server::header$f658<Self=t86;>
+  $std::http_server::events$f659<Self=t86;>
+  store::state
+  composition::enrich
+  web::json_reply
+  web::message
+  store::record
+  store::value$f48<Self=t58;>
   $std::iter::owned<T=t5;>
-  $std::iter::__lkjscript_next<I=t384;I::Item=t5;>
-  $closure:6825:382:FnMut
-  $std::iter::drop$f416<Self=t384;T=t5;> [custom Drop]
-  $std::str::byte_len$f202<Self=t13;>
-  $std::str::matches_at$f203<Self=t13;>
+  $std::iter::__lkjscript_next<I=t347;I::Item=t5;>
+  $closure:5268:405:FnMut
+  $std::iter::drop$f392<Self=t347;T=t5;> [custom Drop]
+  $std::ordered_map::get$f298<IR=t19;Self=t48;V=t47;>
+  store::lock
+  store::state_locked
+  store::field
+  web::parse_cursor
+  $std::prelude::unwrap$f766<Self=t81;T=t80;>
+  $std::prelude::is_none$f761<Self=t81;T=t80;>
+  $std::prelude::unwrap_or$f768<Self=t81;T=t80;>
+  web::boundary
+  web::replay
+  store::json_text
+  $std::ordered_map::insert$f300<IR=t19;Self=t48;V=t47;>
+  $std::iter::shared<T=t5;>
+  $std::str::byte_len$f179<Self=t13;>
+  $std::str::matches_at$f180<Self=t13;>
+  $std::http_server::new$f656<Self=t86;>
+  $std::iter::owned<T=t47;>
+  $std::prelude::unwrap$f766<Self=t402;T=t47;>
+  $std::str::split$f220<P=t13;Self=t70;>
+  $std::iter::__lkjscript_into_iter<I=t128;I::IntoIter=t128;>
+  $std::iter::__lkjscript_next<I=t128;I::Item=t71;>
+  composition::board
+  composition::handoff
+  $std::iter::__lkjscript_into_iter<I=t75;I::IntoIter=t150;>
+  $std::iter::__lkjscript_next<I=t150;I::Item=t74;>
+  $std::iter::drop$f392<Self=t150;T=t74;> [custom Drop]
+  $std::json::parse
+  $std::json::as_object$f633<Self=t72;>
+  $std::prelude::is_none$f761<Self=t181;T=t180;>
+  $std::json::get$f628<Self=t72;>
+  web::scalar
+  $std::text::trim
+  web::limit
+  store::rows
+  $std::iter::__lkjscript_into_iter<I=t206;I::IntoIter=t203;>
+  $std::iter::__lkjscript_next<I=t203;I::Item=t116;>
+  $builtin:clone:t58
+  store::ping
+  store::wake
+  store::closed
+  store::new$f46<Self=t58;>
+  store::append_locked
+  store::text
+  $std::iter::__lkjscript_into_iter<I=t187;I::IntoIter=t189;>
+  $std::iter::__lkjscript_next<I=t189;I::Item=t120;>
+  $std::prelude::unwrap$f766<Self=t349;T=t5;>
+  $std::iter::next$f389<Self=t347;Self::Item=t5;T=t5;>
+  $closure:5268:405
+  $std::ordered_map::find_node$f296<IR=t19;Self=t48;V=t47;>
   $std::io::__lkjscript_storage_path
-  desk::store::io<T=t16;>
-  desk::store::read
-  desk::store::parse_rows
-  $std::str::parse$f244<Self=t59;T=t4;>
-  $std::iter::into_iter$f345<Self=t159;Self::IntoIter=t156;T=t44;>
-  $std::iter::next$f342<Self=t156;Self::Item=t91;T=t44;>
-  $std::sequence::__lkjscript_vec_clone<T=t19;>
-  $std::ordered_map::new$f299<IR=t19;Self=t163;V=t0;>
-  $std::ordered_map::insert$f324<IR=t19;Self=t163;V=t0;>
-  $std::prelude::is_none$f709<Self=t311;T=t0;>
-  $std::iter::owned<T=t168;>
-  $std::iter::__lkjscript_next<I=t313;I::Item=t168;>
-  $std::prelude::as_ref$f698<Self=t314;T=t168;>
-  $std::prelude::unwrap$f714<Self=t176;T=t171;>
-  $builtin:le:t168
-  $std::prelude::take$f715<Self=t314;T=t168;>
-  $std::prelude::unwrap$f714<Self=t314;T=t168;>
-  $std::iter::drop$f416<Self=t313;T=t168;> [custom Drop]
-  $std::iter::into_iter$f345<Self=t170;Self::IntoIter=t172;T=t168;>
-  $std::iter::next$f342<Self=t172;Self::Item=t171;T=t168;>
-  $std::ordered_map::contains_key$f321<IR=t19;Self=t163;V=t0;>
-  $std::ordered_map::clear$f312<IR=t19;Self=t163;V=t0;>
+  store::io<T=t16;>
+  store::seen
+  $std::ordered_set::new$f259<Self=t209;T=t19;>
+  $std::ordered_set::insert$f263<Self=t209;T=t19;>
+  $std::sequence::sort$f109<Self=t216;T=t215;>
+  $std::iter::__lkjscript_into_iter<I=t217;I::IntoIter=t219;>
+  $std::iter::__lkjscript_next<I=t219;I::Item=t218;>
+  $std::ordered_set::contains$f262<Self=t209;T=t19;>
+  store::cursor
+  $std::ordered_map::drop$f302<IR=t19;Self=t210;V=t0;> [custom Drop]
+  $std::json::as_str$f629<Self=t72;>
+  $std::str::split_once$f219<P=t13;Self=t70;>
+  $std::str::parse$f221<Self=t70;T=t4;>
+  $std::prelude::ok$f778<E=t126;Self=t158;T=t4;>
+  $std::prelude::is_some$f760<Self=t81;T=t80;>
+  store::parse_rows
+  $std::iter::__lkjscript_into_iter<I=t107;I::IntoIter=t167;>
+  $std::iter::__lkjscript_next<I=t167;I::Item=t58;>
+  $std::iter::drop$f392<Self=t167;T=t58;> [custom Drop]
   $std::json::stringify
-  $std::json::invalid_utf8
-  $std::json::new$f650<Self=t113;>
-  $std::json::value$f673<Self=t292;>
-  $std::json::whitespace$f666<Self=t292;>
-  $std::prelude::is_some$f708<Self=t117;T=t116;>
-  $std::str::chars$f239<Self=t59;>
-  $std::iter::__lkjscript_into_iter<I=t110;I::IntoIter=t110;>
-  $std::iter::__lkjscript_next<I=t110;I::Item=t13;>
+  $std::ordered_map::compare_key$f295<IR=t19;Self=t48;V=t47;>
+  $std::ordered_map::allocate$f286<IR=t19;Self=t48;V=t47;>
+  $std::ordered_map::balance$f285<IR=t19;Self=t48;V=t47;>
   $std::char::__lkjscript_len_utf8
+  $std::str::into_iter$f203<P=t13;Self=t128;Self::IntoIter=t128;>
+  $std::str::next$f202<P=t13;Self=t128;Self::Item=t71;>
+  $std::read_io::__lkjscript_read_file_read_to_end
+  composition::board_parse
+  $builtin:gt:t19
+  store::io<T=t17;>
+  $std::iter::into_iter$f391<Self=t75;Self::IntoIter=t150;T=t74;>
+  $std::iter::next$f389<Self=t150;Self::Item=t74;T=t74;>
+  $std::json::invalid_utf8
+  $std::json::new$f626<Self=t177;>
+  $std::json::value$f649<Self=t283;>
+  $std::json::whitespace$f642<Self=t283;>
+  $std::prelude::is_some$f760<Self=t181;T=t180;>
+  $std::str::chars$f216<Self=t70;>
+  $std::iter::__lkjscript_into_iter<I=t174;I::IntoIter=t174;>
+  $std::iter::__lkjscript_next<I=t174;I::Item=t13;>
   $std::char::__lkjscript_is_whitespace
-  desk::store::unread_line
-  $std::io::__lkjscript_directory_remove
-  $std::string::eq$f188<Self=t19;>
-  desk::store::replace
-  $std::iter::__lkjscript_into_iter<I=t90;I::IntoIter=t156;>
-  desk::store::io<T=t4;>
-  $std::fmt::__lkjscript_lower_hex<T=t4;>
-  $std::fmt::__lkjscript_lower_hex<T=t5;>
-  $std::string::ends_with$f169<P=t13;Self=t19;>
-  $std::iter::into_iter$f345<Self=t127;Self::IntoIter=t119;T=t19;>
-  $std::iter::next$f342<Self=t119;Self::Item=t104;T=t19;>
-  $std::prelude::unwrap$f714<Self=t98;T=t5;>
-  $std::iter::next$f413<Self=t384;Self::Item=t5;T=t5;>
-  $closure:6825:382
-  $std::io::path_bytes
-  $std::io::__lkjscript_open
   $std::io::__lkjscript_file_read_to_end
-  desk::store::io<T=t17;>
-  $std::str::split$f243<P=t13;Self=t59;>
-  $std::iter::__lkjscript_into_iter<I=t130;I::IntoIter=t130;>
-  $std::iter::__lkjscript_next<I=t130;I::Item=t60;>
-  desk::store::parse$f26<Self=t44;>
-  $std::str::positive_maximum$f257<Self=t4;>
-  $std::str::is_signed$f258<Self=t4;>
+  $std::sequence::truncate$f131<Self=t17;T=t5;>
+  $std::iter::into_iter$f321<Self=t206;Self::IntoIter=t203;T=t58;>
+  $std::iter::next$f318<Self=t203;Self::Item=t116;T=t58;>
+  $std::sequence::__lkjscript_vec_clone<T=t19;>
+  store::unread_line
+  $std::io::__lkjscript_directory_remove
+  store::read
+  store::replace
+  $std::sequence::is_empty$f110<Self=t114;T=t58;>
+  $std::string::ne$f166<Self=t19;>
+  $std::iter::__lkjscript_into_iter<I=t115;I::IntoIter=t203;>
+  store::new$f57<Self=t60;>
+  store::append_policy_locked
+  $std::iter::into_iter$f321<Self=t187;Self::IntoIter=t189;T=t19;>
+  $std::iter::next$f318<Self=t189;Self::Item=t120;T=t19;>
+  $std::ordered_map::new$f275<IR=t19;Self=t210;V=t0;>
+  $std::ordered_map::insert$f300<IR=t19;Self=t210;V=t0;>
+  $std::iter::owned<T=t215;>
+  $std::iter::__lkjscript_next<I=t302;I::Item=t215;>
+  $std::prelude::as_ref$f750<Self=t303;T=t215;>
+  $std::prelude::unwrap$f766<Self=t223;T=t218;>
+  $builtin:le:t215
+  $std::prelude::take$f767<Self=t303;T=t215;>
+  $std::prelude::unwrap$f766<Self=t303;T=t215;>
+  $std::iter::drop$f392<Self=t302;T=t215;> [custom Drop]
+  $std::iter::into_iter$f321<Self=t217;Self::IntoIter=t219;T=t215;>
+  $std::iter::next$f318<Self=t219;Self::Item=t218;T=t215;>
+  $std::ordered_map::contains_key$f297<IR=t19;Self=t210;V=t0;>
+  store::position
+  $std::ordered_map::clear$f288<IR=t19;Self=t210;V=t0;>
+  $std::str::__lkjscript_find<P=t13;>
+  $std::str::positive_maximum$f234<Self=t4;>
+  $std::str::is_signed$f235<Self=t4;>
   $std::str::decimal_magnitude
-  $std::str::from_magnitude$f259<Self=t4;>
-  $std::iter::shared<T=t44;>
-  $std::ordered_map::compare_key$f319<IR=t19;Self=t163;V=t0;>
-  $std::ordered_map::allocate$f310<IR=t19;Self=t163;V=t0;>
-  $std::ordered_map::balance$f309<IR=t19;Self=t163;V=t0;>
-  $std::prelude::is_some$f708<Self=t311;T=t0;>
-  $std::iter::next$f413<Self=t313;Self::Item=t168;T=t168;>
-  $builtin:$order:t168
-  $std::iter::shared<T=t168;>
-  $std::ordered_map::find_node$f320<IR=t19;Self=t163;V=t0;>
-  $std::ordered_map::first_node$f302<IR=t19;Self=t163;V=t0;>
-  $std::ordered_map::successor$f303<IR=t19;Self=t163;V=t0;>
-  $std::prelude::take$f715<Self=t166;T=t165;>
+  $std::str::from_magnitude$f236<Self=t4;>
+  store::parse$f47<Self=t58;>
+  $std::iter::into_iter$f391<Self=t107;Self::IntoIter=t167;T=t58;>
+  $std::iter::next$f389<Self=t167;Self::Item=t58;T=t58;>
   $std::json::write_value
-  $std::json::literal$f668<Self=t292;>
-  $std::json::string$f670<Self=t292;>
-  $std::json::array$f671<Self=t292;>
-  $std::json::object$f672<Self=t292;>
+  $builtin:lt:t19
+  $std::ordered_map::update_height$f281<IR=t19;Self=t48;V=t47;>
+  $std::ordered_map::height$f280<IR=t19;Self=t48;V=t47;>
+  $std::ordered_map::rotate_left$f283<IR=t19;Self=t48;V=t47;>
+  $std::ordered_map::rotate_right$f284<IR=t19;Self=t48;V=t47;>
+  $std::read_io::__lkjscript_read_file_read
+  $std::str::parse$f221<Self=t70;T=t3;>
+  $builtin:$order:t19
+  $std::iter::owned<T=t74;>
+  $std::prelude::unwrap$f766<Self=t152;T=t74;>
+  $std::json::literal$f644<Self=t283;>
+  $std::json::string$f646<Self=t283;>
+  $std::json::array$f647<Self=t283;>
+  $std::json::object$f648<Self=t283;>
   $std::json::digit
   $std::json::number_end
-  $std::str::into_iter$f222<Self=t110;Self::IntoIter=t110;>
-  $std::str::next$f221<Self=t110;Self::Item=t13;>
+  $std::str::into_iter$f199<Self=t174;Self::IntoIter=t174;>
+  $std::str::next$f198<Self=t174;Self::Item=t13;>
+  $std::sequence::retain$f107<F=t292;Self=t17;T=t5;>
+  $std::iter::shared<T=t58;>
   $std::io::parent
-  $std::bytes::starts_with
+  store::publish
+  $std::iter::into_iter$f320<Self=t115;Self::IntoIter=t203;T=t58;>
+  store::now
+  $std::fmt::__lkjscript_lower_hex<T=t4;>
+  $std::fmt::__lkjscript_lower_hex<T=t5;>
+  store::recover_tail
+  $std::iter::shared<T=t19;>
+  $std::ordered_map::compare_key$f295<IR=t19;Self=t210;V=t0;>
+  $std::ordered_map::allocate$f286<IR=t19;Self=t210;V=t0;>
+  $std::ordered_map::balance$f285<IR=t19;Self=t210;V=t0;>
+  $std::iter::next$f389<Self=t302;Self::Item=t215;T=t215;>
+  $builtin:$order:t215
+  $std::iter::shared<T=t215;>
+  $std::ordered_map::find_node$f296<IR=t19;Self=t210;V=t0;>
+  $std::ordered_map::first_node$f278<IR=t19;Self=t210;V=t0;>
+  $std::ordered_map::successor$f279<IR=t19;Self=t210;V=t0;>
+  $std::prelude::take$f767<Self=t213;T=t212;>
+  $std::json::as_number$f630<Self=t72;>
+  $std::json::as_array$f632<Self=t72;>
+  $std::iter::__lkjscript_into_iter<I=t288;I::IntoIter=t290;>
+  $std::iter::__lkjscript_next<I=t290;I::Item=t88;>
+  $std::iter::owned<T=t58;>
+  $std::prelude::unwrap$f766<Self=t169;T=t58;>
+  $std::json::write_string
+  $std::iter::__lkjscript_into_iter<I=t154;I::IntoIter=t290;>
+  $std::iter::__lkjscript_into_iter<I=t279;I::IntoIter=t344;>
+  $std::iter::__lkjscript_next<I=t344;I::Item=t343;>
+  $std::ordered_map::replace_parent$f282<IR=t19;Self=t48;V=t47;>
+  $std::str::positive_maximum$f246<Self=t3;>
+  $std::str::is_signed$f247<Self=t3;>
+  $std::str::from_magnitude$f248<Self=t3;>
+  $std::json::take$f643<Self=t283;>
+  $std::json::hex4$f645<Self=t283;>
+  $std::json::push_scalar
+  $std::prelude::unwrap$f766<Self=t176;T=t13;>
+  $closure:5286:292
+  $std::io::__lkjscript_open_directory
   $std::io::__lkjscript_file_write_all
   $std::io::__lkjscript_directory_rename
-  $std::iter::into_iter$f344<Self=t90;Self::IntoIter=t156;T=t44;>
-  $std::fmt::fmt$f585<Self=t4;>
-  $std::fmt::fmt$f565<Self=t5;>
-  $std::str::__lkjscript_ends_with<P=t13;>
-  $std::iter::shared<T=t19;>
-  $std::str::into_iter$f226<P=t13;Self=t130;Self::IntoIter=t130;>
-  $std::str::next$f225<P=t13;Self=t130;Self::Item=t60;>
-  $std::json::as_number$f654<Self=t61;>
-  $std::str::parse$f244<Self=t59;T=t3;>
-  desk::store::field
-  $std::json::as_array$f656<Self=t61;>
-  $std::iter::__lkjscript_into_iter<I=t303;I::IntoIter=t305;>
-  $std::iter::__lkjscript_next<I=t305;I::Item=t65;>
-  $std::json::as_str$f653<Self=t61;>
-  $builtin:lt:t19
-  $builtin:gt:t19
-  $std::ordered_map::update_height$f305<IR=t19;Self=t163;V=t0;>
-  $std::ordered_map::height$f304<IR=t19;Self=t163;V=t0;>
-  $std::ordered_map::rotate_left$f307<IR=t19;Self=t163;V=t0;>
-  $std::ordered_map::rotate_right$f308<IR=t19;Self=t163;V=t0;>
+  $std::fmt::fmt$f561<Self=t4;>
+  $std::fmt::fmt$f541<Self=t5;>
+  $std::ordered_map::update_height$f281<IR=t19;Self=t210;V=t0;>
+  $std::ordered_map::height$f280<IR=t19;Self=t210;V=t0;>
+  $std::ordered_map::rotate_left$f283<IR=t19;Self=t210;V=t0;>
+  $std::ordered_map::rotate_right$f284<IR=t19;Self=t210;V=t0;>
   $builtin:$order:t3
-  $builtin:$order:t19
   $builtin:$order:t4
-  $std::json::write_string
-  $std::iter::__lkjscript_into_iter<I=t183;I::IntoIter=t305;>
-  $std::iter::__lkjscript_into_iter<I=t294;I::IntoIter=t342;>
-  $std::iter::__lkjscript_next<I=t342;I::Item=t341;>
-  $std::json::take$f667<Self=t292;>
-  $std::json::hex4$f669<Self=t292;>
-  $std::json::push_scalar
-  $std::prelude::unwrap$f714<Self=t112;T=t13;>
-  $std::io::__lkjscript_open_directory
-  $std::str::positive_maximum$f269<Self=t3;>
-  $std::str::is_signed$f270<Self=t3;>
-  $std::str::from_magnitude$f271<Self=t3;>
-  $std::iter::into_iter$f344<Self=t303;Self::IntoIter=t305;T=t61;>
-  $std::iter::next$f342<Self=t305;Self::Item=t65;T=t61;>
-  $std::ordered_map::replace_parent$f306<IR=t19;Self=t163;V=t0;>
-  $std::sequence::__lkjscript_vec_order<T=t5;>
-  $std::iter::into_iter$f345<Self=t183;Self::IntoIter=t305;T=t61;>
-  $std::iter::into_iter$f345<Self=t294;Self::IntoIter=t342;T=t63;>
-  $std::iter::next$f342<Self=t342;Self::Item=t341;T=t63;>
-  $std::iter::shared<T=t61;>
-  $std::sequence::__lkjscript_slice_order<T=t5;>
-  $std::iter::shared<T=t63;>
+  $std::iter::into_iter$f320<Self=t288;Self::IntoIter=t290;T=t72;>
+  $std::iter::next$f318<Self=t290;Self::Item=t88;T=t72;>
+  $std::iter::into_iter$f321<Self=t154;Self::IntoIter=t290;T=t72;>
+  $std::iter::into_iter$f321<Self=t279;Self::IntoIter=t344;T=t74;>
+  $std::iter::next$f318<Self=t344;Self::Item=t343;T=t74;>
+  $std::ordered_map::replace_parent$f282<IR=t19;Self=t210;V=t0;>
+  $std::iter::shared<T=t72;>
+  $std::iter::shared<T=t74;>

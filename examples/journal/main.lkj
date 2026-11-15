@@ -1,10 +1,12 @@
 //! Crash-durable journal service using the shared readiness-based HTTP engine.
-mod http_protocol;
-mod http_policy;
-mod http_server;
+use std::http_protocol;
+use std::http_policy;
+use std::http_server;
+mod contract;
 mod journal_store;
 mod journal_sessions;
 use http_protocol::Request;
+use contract::{Route, route, request_text};
 use http_server::{Body, Handler, Reply};
 use journal_store::{Entry, Store};
 use journal_sessions::Sessions;
@@ -27,49 +29,6 @@ fn response(status: u16, value: Value) -> Reply {
 }
 fn error(status: u16, message: &str) -> Reply {
     response(status, Value::Object(vec![("error".to_string(), Value::String(message.to_string()))]))
-}
-fn request_text(bytes: &[u8]) -> Result<String, String> {
-    let value = match json::parse(bytes) {
-        Ok(value) => value,
-        Err(problem) => return Err(format!("JSON byte {}: {}", problem.offset, problem.message)),
-    };
-    match value {
-        Value::Object(mut fields) => {
-            if fields.len() != 1usize { return Err("expected exactly one text field".to_string()); }
-            let (name, value) = fields.pop().unwrap();
-            if name != "text" { return Err("expected text field".to_string()); }
-            match value {
-                Value::String(text) => Ok(text),
-                _ => Err("text must be a JSON string".to_string()),
-            }
-        }
-        _ => Err("expected a JSON object with one text field".to_string()),
-    }
-}
-enum Route { All, One(usize), Range(usize, usize), Status, Missing }
-fn route(path: &str) -> Result<Route, String> {
-    let mut parts = path.split('/');
-    let first = parts.next().unwrap_or("");
-    if first == "status" && parts.next().is_none() { return Ok(Route::Status); }
-    if first != "entries" { return Ok(Route::Missing); }
-    let first = match parts.next() {
-        Some(text) => match text.parse::<usize>() {
-            Ok(id) => id,
-            Err(_) => return Err("entry id must be decimal".to_string()),
-        },
-        None => return Ok(Route::All),
-    };
-    if first == 0usize { return Err("entry ids start at 1".to_string()); }
-    let end = match parts.next() {
-        Some(text) => match text.parse::<usize>() {
-            Ok(id) => id,
-            Err(_) => return Err("range end must be decimal".to_string()),
-        },
-        None => return Ok(Route::One(first)),
-    };
-    if parts.next().is_some() { return Ok(Route::Missing); }
-    if end < first { return Err("range end precedes its first id".to_string()); }
-    Ok(Route::Range(first, end))
 }
 struct Journal { store: Store, sessions: Sessions }
 impl Journal {
@@ -98,6 +57,12 @@ impl Journal {
     }
 }
 impl Handler for Journal {
+    fn event_interval(&self) -> usize { 0usize }
+    fn event_revision(&self) -> usize { 0usize }
+    fn event_refresh(&mut self, _now: i64) -> Result<bool, String> { Ok(false) }
+    fn event_after(&mut self, _cursor: &str, _now: i64) -> Result<(String, String), String> {
+        Err("this HTTP application has no event stream".to_string())
+    }
     fn methods(&self) -> &'static str { "GET, HEAD, POST, PUT" }
     fn retain_body(&self, request: &Request) -> bool {
         request.method == "POST" || request.method == "PUT"
@@ -176,24 +141,4 @@ pub fn main(mut output: Stdout, mut root: Directory, listener: Listener,
     };
     output.write(format!("ready {} {}\n", store.revision(), store.entries().len()).as_bytes());
     http_server::serve(output, listener, clock, ready, stop, policy, Journal { store, sessions });
-}
-
-#[test]
-fn journal_routes() {
-    assert!(matches!(route("entries"), Ok(Route::All)));
-    assert!(matches!(route("entries/1"), Ok(Route::One(1usize))));
-    assert!(matches!(route("entries/2/5"), Ok(Route::Range(2usize, 5usize))));
-    assert!(matches!(route("status"), Ok(Route::Status)));
-    assert!(matches!(route("../head"), Ok(Route::Missing)));
-    assert!(route("entries/0").is_err());
-    assert!(route("entries/no").is_err());
-    assert!(route("entries/2/1").is_err());
-}
-#[test]
-fn journal_json_contract() {
-    assert!(request_text(b"{\"text\":\"snow \\u2603\\n\"}").unwrap() == "snow ☃\n");
-    assert!(request_text(b"{\"text\":null}").is_err());
-    assert!(request_text(b"{\"text\":\"x\",\"extra\":1}").is_err());
-    assert!(request_text(b"{\"text\":\"x\",\"t\\u0065xt\":\"y\"}").is_err());
-    assert!(request_text(b"[\"x\"]").is_err());
 }

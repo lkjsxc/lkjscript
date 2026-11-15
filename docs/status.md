@@ -34,27 +34,27 @@ Native/opt0/-O self-build 27.24/15.35/4.55 s (load 13.21/19.14/17.88), byte-iden
 
 ## Programs
 
-2.0 landed at d2044ada; local and CI gates/witness pass. Real-unit proof found Listener EADDRINUSE after TIME_WAIT, not journal Output.
-Same-port restart with 76 TIME_WAIT sockets passes both complete parity rounds: 63 paths, 12 archived bodies, 13 protocol probes. Claude owns deployment.
-2.1 commands plus isolated serve pass: note/ask/close/inbox/peek/path, Japanese, concurrent writers, shared files and the page/state/say routes.
-Arguments, exact-name Environment and ExitStatus are affine; named directory roots, blocking locks and realtime nanoseconds work on standalone/native-run/interpreted routes.
-96 SIGKILLs retain all 128 acknowledged IDs and the original 10,000-row byte prefix; Python reads the surviving state. Campaign stays outside the gate.
-Exact-path external execution cannot enforce the required child-authority subset. Stop at 2.1 plus serve without board/handoff/wake; arbitrary listen stays outside.
-No live desk handoff or push-page implementation is claimed. Full contract, metrics and both complete authority reports are in examples/desk.md and examples/desk/authority.txt.
-Direct source: 581 Rust + 186 unchanged HTML lines (Python 249 + 186). Binaries: command 299,635 B; service 498,357 B; service RSS 656–660 KiB.
-Cold command/service builds: 752.396/786.849 ms, measurement interval load 8.12/7.15/5.50→7.87/7.12/5.50.
-100-command mean, empty state: native 29.914 ms (load 2.40→2.37), Python 18.767 ms (2.37→2.37); native is slower with durable publication.
-At 10,000 rows: native 27.613 ms (2.37→2.37), Python 18.695 ms (2.37→2.34); append still copies the old log.
-Four-worker cold gate: 534.967 s, load 8.50→5.92; 778 conformance cases on both policies pass. Current generations agree at 16,171,123 B; seed unchanged.
-Consumer cold seconds below total 34.039; all start without reusable consumer results. Long campaign proofs stay outside the gate.
+Third note 2.1–2.3 and 2.5 are implemented; site/journal/desk are .lkj program directories, closing the compiler's previously pending adoption cases. No deployment. Contracts and complete reports: examples/desk.md, desk/authority.txt and foreign-child.md.
+Desk has one state root, two named read roots and a loopback listener, plus declared service mechanisms; no child authority. Native listen-begin/end require caller-owned flock/lifecycle. Wake uses durable high-water request/ack and idempotent relay; the 24-line switch/rollback requires Claude's board/relay/caller adaptations.
+Delivered desk note at 100,000 rows: buffered 0.741 ms (load 9.88→9.88), sync 10.252 ms (9.52→9.88), Python 28.659 ms (9.88→9.88). One append write, no log copy; explicit durability and per-phase reports expose variable fsync cost.
+SSE replay uses two durable byte cursors and row IDs; 990 idle +10 active peers receive a note in 252.958 ms (load 7.63→7.98), with fixed write deadlines and polling fallback. This measures protocol receipt; browser painting is not separately timed.
+Desk source: 1,051 .lkj +254 HTML lines; command/wake wrappers 8/49 lines and units 87. Command/service 345,791/703,957 B; cold builds 916.833/897.239 ms (both load 7.73→7.73); observed service RSS 1,088 KiB, short SSE 852 KiB.
+2.4 remains unimplemented pending compiler-owned authenticated image identity, canonical entry authority and descriptor-only startup: tests/diagnostics/external_child_authority.lkj. ForeignCommand is a separate kernel-confined form, not that proof; its exact exceptions and eight-line cxloop gap are documented.
+Four-worker empty-store gate passes: 622.262 s (load 11.56→15.38), 4,512 fresh requests, no proof skips; current generations agree at 16,731,835 B, seed unchanged. Long inline64 campaign: 32,768 mutants, 0 findings, 58.851 s (load 14.25→16.98).
 
-| Suite | Cold seconds (load before→after) | Short regression proves |
+| Suite | Cold seconds (load before→after) | Proof |
 | --- | ---: | --- |
-| HTTP | 16.826 (8.67→8.54) | framing, readiness, deadlines |
-| Journal | 1.661 (8.30→8.30) | commit/replay, authentication |
-| Stop native | 2.814 (8.30→8.30) | signal, bounded drain, sync |
-| Stop interpreted | 6.287 (8.30→8.12) | independent broker drain |
-| Site | 2.168 (8.30→8.12) | frozen parity, occupied/TIME_WAIT bind |
-| Desk + capabilities | 4.283 (8.12→7.87) | three routes, CLI, env/status/lock, safe publication |
+| HTTP | 17.552 (10.63→9.80) | framing, readiness, deadlines |
+| Journal | 2.122 (10.50→10.22) | commit/replay, authentication |
+| Stop native / interpreted | 2.993 /6.442 (10.22→10.22 /10.22→9.57) | signal, bounded drain, sync |
+| Site | 2.553 (9.80→9.57) | archive parity, occupied/TIME_WAIT bind |
+| Desk + capabilities/read roots/wrapper/composition | 8.776 (9.57→9.29) | CLI, append/recovery, inode replacement, board/handoff, listener/wake |
+| Desk events | 3.518 (9.57→9.57) | note push, POST, cursor replay/reset, slow reader |
+| Foreign child | 3.318 (9.57→9.29) | three engines, actual Git, outside-root refusal, fail-closed host |
+| Program directory | 18.516 (11.03→10.50) | generic fixtures plus real site/journal/desk builds, authority and focused cases |
+| Read-root ENOSYS campaign (optional) | 3.407 (4.99→5.07) | anchored fallback and containment, three engines |
+| Desk unit/live GET/wake retry (optional) | 7.953 (13.28→13.74) | exact settings, six live read routes, same-port restart, idempotent retry |
+| Foreign kernel / adversarial campaigns (optional) | 0.358 /15.311 (8.39→8.39 /5.47→6.40) | kernel witness; three engines, deadline, reexec, owner death/reap |
+| Desk append kill /1,000-peer SSE campaigns (optional) | 9.126 /7.528 (5.94→5.79 /7.63→7.98) | 96 kills preserve 286 acknowledged IDs and 910,000-byte prefix; 990 idle peers |
 
-Pending compiler diagnostics include test --library-dir child forwarding; program-directory migration awaits the compiler's pending case.
+Consumer group sum 47.274 s, or 65.790 s including program-directory (individual load windows above); optional campaigns stay outside the gate. Sixteen tagged diagnostics: Rust-form 8 /new-rule 3 /bad-message 5. Code wins: append now rejects every final symlink with ELOOP; obsolete world-case expectations were corrected.

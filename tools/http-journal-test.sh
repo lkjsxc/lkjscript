@@ -50,12 +50,20 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' HUP TERM
 mkdir "$journal_work/data"
-"$compiler" build examples/journal.lkj --library-dir library \
+# Keep the complete per-byte token and durable-head tests in this explicit campaign.
+unit_load_before=$(cat /proc/loadavg)
+unit_started_ns=$(date +%s%N)
+"$compiler" test examples/journal/main.lkj --library-dir library --jobs 1
+printf 'Journal full source tests: %s ms; load %s -> %s\n' \
+    "$((($(date +%s%N)-unit_started_ns)/1000000))" "$unit_load_before" "$(cat /proc/loadavg)"
+"$compiler" build examples/journal/main.lkj --library-dir library \
     --grant output --grant "root=$journal_absolute/data" \
     --grant listener=127.0.0.1:0 --grant clock --grant ready --grant stop --grant entropy -o "$journal_work/server"
 "$compiler" build tools/http-journal-test.lkj --library-dir library -o "$journal_work/supervisor"
 printf 'Journal campaign: %s write kills + %s recovery kills; seed %s; UTC %s; loadavg %s\n' \
     "$cycles" "$cycles" "$seed" "$(date -u +%FT%TZ)" "$(cat /proc/loadavg)"
+: >"$journal_work/output"
+: >"$journal_work/errors"
 "$journal_work/supervisor" "$journal_absolute" "$cycles" "$seed" >"$journal_work/output" 2>"$journal_work/errors" &
 supervisor=$!
 started=$supervisor

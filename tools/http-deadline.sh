@@ -121,6 +121,8 @@ printf '60\n1\n10\n' > "$deadline_work/root/.http-policy"
     --grant output --grant "root=$deadline_work/root" \
     --grant listener=127.0.0.1:0 --grant clock --grant ready --grant stop \
     -o "$deadline_work/server"
+: >"$deadline_work/server.out"
+: >"$deadline_work/server.err"
 "$deadline_work/server" >"$deadline_work/server.out" 2>"$deadline_work/server.err" &
 server_pid=$!
 started="$started $server_pid"

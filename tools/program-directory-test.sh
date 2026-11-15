@@ -3,6 +3,12 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 compiler=${1:-target/lkjscript}
 root=$(pwd)
+suite_started_ns=$(date +%s%N)
+suite_load_before=$(cat /proc/loadavg)
+adoption_reuse=()
+if [[ -n "${LKJSCRIPT_STORE:-}" && -n "${LKJSCRIPT_STORE_KEY:-}" ]]; then
+    adoption_reuse=(--store "$LKJSCRIPT_STORE" --store-key "$LKJSCRIPT_STORE_KEY")
+fi
 if [[ "$compiler" != /* ]]; then compiler="$root/$compiler"; fi
 work=$(mktemp -d "$root/target/program-directory.XXXXXX")
 cleanup() {
@@ -133,15 +139,25 @@ reject literal-only 'SOURCE must be a string literal' build "$program"
 sed 's/GRANTS: \&\[\&str\]/GRANTS: bool/' "$work/manifest" > "$program/program.lkj"
 reject manifest-type 'GRANTS must have type &[&str]' build "$program"
 
-# Executable pending adoption cases for the programs stream. Once a program's
-# reviewed directory lands, the same gate automatically builds and tests it.
+# Each reviewed directory builds its real entry and runs a focused contract.
+# Full module suites remain in the consumer campaigns; they are not repeated here.
+printf 'Program directory fixture %s ms; load %s -> %s\n' \
+    "$((($(date +%s%N) - suite_started_ns) / 1000000))" "$suite_load_before" "$(cat /proc/loadavg)"
 for adopted in examples/site examples/journal examples/desk; do
     if [[ ! -f "$adopted/program.lkj" ]]; then
         printf 'pending program-directory %s: supply SOURCE, ENTRY, GRANTS and CASES in program.lkj\n' "$adopted"
         continue
     fi
-    "$compiler" build "$adopted" -o "$work/adopted"
-    "$compiler" authority "$adopted" > "$work/adopted-authority"
-    "$compiler" test "$adopted" --jobs 1
+    adopted_started_ns=$(date +%s%N)
+    adopted_load_before=$(cat /proc/loadavg)
+    "$compiler" build "$adopted" "${adoption_reuse[@]}" -o "$work/adopted"
+    "$compiler" authority "$adopted" "${adoption_reuse[@]}" > "$work/adopted-authority"
+    adopted_built_ns=$(date +%s%N)
+    adopted_load_built=$(cat /proc/loadavg)
+    "$compiler" test "$adopted" --jobs 1 --stats "${adoption_reuse[@]}"
+    printf 'Program directory %s build+authority %s ms; cases %s ms; load %s -> %s -> %s\n' \
+        "$adopted" "$(((adopted_built_ns - adopted_started_ns) / 1000000))" \
+        "$((($(date +%s%N) - adopted_built_ns) / 1000000))" \
+        "$adopted_load_before" "$adopted_load_built" "$(cat /proc/loadavg)"
 done
 printf 'ok program directories (module discovery, cases, authority, exact grants, invocation environment, literal source, isolated cache identity)\n'

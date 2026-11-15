@@ -966,6 +966,17 @@ fn invocation_grants(world: &mut World, grants: Vec<ir::EntryGrant>) -> Result<V
                 value.push(0);
                 ir::EntryGrant::Directory(value)
             }
+            ir::EntryGrant::ReadDirectoryEnvironment(name) => {
+                let key = &name[..name.len() - 1];
+                let mut value = driver_host::environment_value(world, key)
+                    .map_err(|errno: i64| -> String { format!("E_ENTRY directory environment failed: errno {errno}") })?
+                    .unwrap_or(Vec::new());
+                if value.is_empty() {
+                    return Err(format!("E_ENTRY directory environment {} is absent or empty: errno 2", String::from_utf8(key.to_vec()).unwrap()));
+                }
+                value.push(0);
+                ir::EntryGrant::ReadDirectory(value)
+            }
             value => value,
         };
         values.push(value);

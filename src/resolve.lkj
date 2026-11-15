@@ -140,7 +140,7 @@ fn builtin(name: &str) -> bool {
             | "Stdout"
             | "Stdin"
             | "Stderr"
-            | "Directory"
+            | "Directory" | "ReadDirectory" | "ReadFile" | "ForeignCommand" | "NullDevice"
             | "File"
             | "Process"
             | "Clock"

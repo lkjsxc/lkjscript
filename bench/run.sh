@@ -78,7 +78,7 @@ while read -r program count length seed small_count small_length; do
     if [ "$program" = http_parse ]; then
         mkdir -p "$output/http_parse-source"
         cp "$source" "$output/http_parse-source/main.lkj"
-        cp bench/common.lkj examples/http_protocol.lkj "$output/http_parse-source/"
+        cp bench/common.lkj library/http_protocol.lkj "$output/http_parse-source/"
         source="$output/http_parse-source/main.lkj"
     fi
     routes=native
@@ -95,7 +95,7 @@ while read -r program count length seed small_count small_length; do
         {
             printf '#[path="%s/%s"] mod __lkjscript_host;\nmod case {\n' "$root" "$host"
             sed -e "s|^mod common;$|#[path=\"$root/bench/common.lkj\"] mod common;|" \
-                -e "s|^mod http_protocol;$|#[path=\"$root/examples/http_protocol.lkj\"] mod http_protocol;|" "$source"
+                -e "s|^mod http_protocol;$|#[path=\"$root/library/http_protocol.lkj\"] mod http_protocol;|" "$source"
             printf '\nuse crate::__lkjscript_host::World;\n}\nfn main(){__lkjscript_host::enter(case::main);}\n'
         } > "$output/$program-witness.rs"
         for level in 0 3; do

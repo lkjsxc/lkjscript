@@ -1,0 +1,10 @@
+[Unit]
+Description=Desk relay request
+After=desk.service
+
+[Path]
+PathExists=/home/coder/.local/state/desk/wake
+Unit=desk-wake.service
+
+[Install]
+WantedBy=multi-user.target

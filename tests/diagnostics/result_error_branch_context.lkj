@@ -1,0 +1,7 @@
+// expect: check
+// cause: expected a Rust form.
+// pending (resolved): The stored seed reported "wrong number of type arguments" for this Err-first form; the current compiler infers it. A future failure must name the missing Result success type and suggest an explicit binding.
+pub fn probe(mut file: File, origin: u8) {
+    let position = if origin > 2u8 { Err(22i64) } else { file.seek(0i64, origin) };
+    drop(position);
+}

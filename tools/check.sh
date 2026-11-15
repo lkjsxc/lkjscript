@@ -80,7 +80,8 @@ world_cases() (
 )
 diagnostic_cases() {
     timeout --kill-after=10s 600s "$check_binary" test tests/diagnostics --stats "${check_reuse[@]}" || return 1
-    timeout --kill-after=10s 600s sh tests/diagnostics/test_library_directory.sh "$check_binary"
+    timeout --kill-after=10s 600s sh tests/diagnostics/test_library_directory.sh "$check_binary" || return 1
+    sh tests/diagnostics/mutation_no_store.sh "$check_binary"
 }
 semantics() {
     local pids=() shard result=0
@@ -155,6 +156,8 @@ parallel_step 2 stop timeout --kill-after=10s 600s sh tools/http-stop.sh --compi
 parallel_step 2 stop-interpreter timeout --kill-after=10s 600s sh tools/http-stop.sh --compiler "$check_binary" --engine interpreter
 parallel_step 2 site timeout --kill-after=10s 600s sh tools/http-site-test.sh --compiler "$check_binary" --offline
 parallel_step 2 desk timeout --kill-after=10s 600s bash tools/http-desk-test.sh --compiler "$check_binary"
+parallel_step 2 desk-events timeout --kill-after=10s 600s bash tools/http-desk-events.sh --compiler "$check_binary"
+parallel_step 1 foreign-child timeout --kill-after=10s 600s bash tools/foreign-child-test.sh --compiler "$check_binary"
 parallel_step "$check_suite_jobs" conformance timeout --kill-after=10s 600s "$check_binary" test tests/conformance --stats --jobs "$check_suite_jobs" "${check_reuse[@]}"
 parallel_step "$check_suite_jobs" generated timeout --kill-after=10s 600s "$check_binary" test target/gate/generated --stats --jobs "$check_suite_jobs" "${check_reuse[@]}"
 parallel_step "$check_suite_jobs" optimized-conformance timeout --kill-after=10s 600s "$check_binary" test tests/conformance --stats --jobs "$check_suite_jobs" --inline-limit 64 "${check_reuse[@]}"

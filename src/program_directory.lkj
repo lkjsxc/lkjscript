@@ -176,7 +176,7 @@ pub fn prepare(plan: &Plan, program: &ir::Program, entry: usize) -> Result<Vec<i
         if let Some(at) = value.find('=') {
             let mut directory = false;
             for local in function.locals.iter().take(function.params) {
-                if local.name == value[..at] && matches!(program.types[local.ty].kind, ir::TypeKind::Directory) {
+                if local.name == value[..at] && matches!(program.types[local.ty].kind, ir::TypeKind::Directory | ir::TypeKind::ReadDirectory) {
                     directory = true;
                 }
             }

@@ -1,0 +1,64 @@
+//! Command text, value options and explicit durability policy.
+pub fn option(args: &[String], name: &str, default: &str) -> String {
+    let mut result = default.to_string();
+    let mut index = 1usize;
+    while index + 1usize < args.len() {
+        if args[index] == name { result = args[index + 1usize].clone(); }
+        index += 1usize;
+    }
+    result
+}
+pub fn present(args: &[String], name: &str) -> bool {
+    for arg in args { if arg == name { return true; } }
+    false
+}
+pub fn words(args: &[String]) -> Vec<String> {
+    let mut words = Vec::new();
+    let mut index = 1usize;
+    while index < args.len() {
+        if args[index] == "--from" || args[index] == "--options" || args[index] == "--durability" {
+            index += 1usize;
+        } else if !args[index].starts_with("--") {
+            words.push(args[index].clone());
+        }
+        index += 1usize;
+    }
+    words
+}
+pub fn durability(args: &[String]) -> Result<bool, String> {
+    let mut selected = "sync".to_string();
+    let mut index = 1usize;
+    while index < args.len() {
+        if args[index] == "--durability" {
+            index += 1usize;
+            if index == args.len() { return Err("--durability requires sync or buffered".to_string()); }
+            selected = args[index].clone();
+        } else if args[index].starts_with("--durability=") {
+            selected = args[index][13usize..].to_string();
+        }
+        index += 1usize;
+    }
+    match selected.as_str() {
+        "sync" => Ok(true), "buffered" => Ok(false),
+        _ => Err("--durability must be sync or buffered".to_string()),
+    }
+}
+#[test]
+fn argument_words_and_options() {
+    let args = vec!["ask".to_string(), "日本語".to_string(), "question".to_string(),
+        "--options".to_string(), " A, B ".to_string(), "--from".to_string(), "agent".to_string()];
+    let words = words(&args);
+    assert!(words.len() == 2usize && words[0usize] == "日本語" && words[1usize] == "question");
+    assert!(option(&args, "--from", "claude") == "agent");
+}
+
+#[test]
+fn durability_and_flag_words() {
+    let args = vec!["note".to_string(), "--timings".to_string(), "first".to_string(),
+        "--durability=buffered".to_string(), "second".to_string(), "--from".to_string(), "agent".to_string()];
+    assert!(!durability(&args).unwrap());
+    assert!(words(&args) == vec!["first".to_string(), "second".to_string()]);
+    assert!(durability(&vec!["note".to_string(), "--durability".to_string()]).is_err());
+    assert!(durability(&vec!["note".to_string(), "--durability=unknown".to_string()]).is_err());
+    assert!(durability(&vec!["note".to_string()]).unwrap());
+}

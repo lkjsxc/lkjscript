@@ -38,17 +38,23 @@ pub struct Reply {
     body: Body,
     headers: Vec<(String, String)>,
     standard_headers: bool,
+    events: Option<String>,
 }
 impl Reply {
     pub fn new(status: u16, kind: &str, body: Body) -> Reply {
-        Reply { status, kind: kind.to_string(), body, headers: Vec::new(), standard_headers: true }
+        Reply { status, kind: kind.to_string(), body, headers: Vec::new(), standard_headers: true, events: None }
     }
     // Complete application headers, with framing, connection and Date still owned by the engine.
     pub fn from_headers(status: u16, body: Body, headers: Vec<(String, String)>) -> Reply {
-        Reply { status, kind: String::new(), body, headers, standard_headers: false }
+        Reply { status, kind: String::new(), body, headers, standard_headers: false, events: None }
     }
     pub fn header(mut self, name: &str, value: &str) -> Reply {
         self.headers.push((name.to_string(), value.to_string()));
+        self
+    }
+    // A close-delimited stream occupies this connection until it is dropped.
+    pub fn events(mut self, cursor: String) -> Reply {
+        self.events = Some(cursor);
         self
     }
     pub fn error(status: u16) -> Reply {
@@ -62,6 +68,13 @@ pub trait Handler {
     fn retain_body(&self, request: &Request) -> bool;
     fn respond(&mut self, request: &Request, body: Vec<u8>, now: i64) -> Result<Reply, String>;
     fn finish(&mut self) -> Result<(), String>;
+    // Zero disables stream refresh entirely for ordinary HTTP consumers.
+    fn event_interval(&self) -> usize { 0usize }
+    fn event_revision(&self) -> usize { 0usize }
+    fn event_refresh(&mut self, _now: i64) -> Result<bool, String> { Ok(false) }
+    fn event_after(&mut self, _cursor: &str, _now: i64) -> Result<(String, String), String> {
+        Err("this HTTP application has no event stream".to_string())
+    }
 }
 struct Response {
     headers: String,
@@ -71,16 +84,19 @@ struct Response {
     cursor: WriteCursor,
     head: bool,
     close: bool,
+    streaming: bool,
 }
 impl Response {
-    fn new(status: u16, head: bool, keep_alive: bool, elapsed: usize, kind: &str, body: Body, methods: &str, date: &str, extra: Vec<(String, String)>, standard_headers: bool) -> Response {
+    fn new(status: u16, head: bool, keep_alive: bool, elapsed: usize, kind: &str, body: Body, methods: &str, date: &str, extra: Vec<(String, String)>, standard_headers: bool, streaming: bool) -> Response {
         let length = match &body {
             Body::Message(text) => text.len(),
             Body::File(bytes) => bytes.len(),
         };
-        let connection = if keep_alive { "keep-alive" } else { "close" };
+        let connection = if keep_alive && !streaming { "keep-alive" } else { "close" };
         let allow = if status == 405u16 { format!("Allow: {methods}\r\n") } else { String::new() };
-        let mut headers = if standard_headers { format!(
+        let mut headers = if streaming {
+            format!("HTTP/1.1 {status} {}\r\nContent-Type: {kind}\r\nConnection: close\r\nDate: {date}\r\nX-Content-Type-Options: nosniff\r\n", reason(status))
+        } else if standard_headers { format!(
             "HTTP/1.1 {status} {}\r\nContent-Length: {length}\r\nContent-Type: {kind}\r\nConnection: {connection}\r\nDate: {date}\r\nX-Content-Type-Options: nosniff\r\nX-Elapsed-Nanoseconds: {elapsed}\r\n{allow}",
             reason(status)
         ) } else {
@@ -89,11 +105,15 @@ impl Response {
         for (name, value) in extra { headers.push_str(&format!("{name}: {value}\r\n")); }
         headers.push_str("\r\n");
         Response { headers, header_offset: 0usize, body, body_offset: 0usize,
-            cursor: WriteCursor::new(), head, close: !keep_alive }
+            cursor: WriteCursor::new(), head, close: !keep_alive, streaming }
     }
     fn error(status: u16, head: bool, keep_alive: bool, elapsed: usize, methods: &str, date: &str) -> Response {
         Response::new(status, head, keep_alive, elapsed, "text/plain; charset=utf-8",
-            Body::Message(format!("{status} {}\n", reason(status))), methods, date, Vec::new(), true)
+            Body::Message(format!("{status} {}\n", reason(status))), methods, date, Vec::new(), true, false)
+    }
+    fn event_frame(text: String) -> Response {
+        Response { headers: String::new(), header_offset: 0usize, body: Body::Message(text),
+            body_offset: 0usize, cursor: WriteCursor::new(), head: false, close: true, streaming: true }
     }
     fn close_after(&mut self) {
         self.close = true;
@@ -128,7 +148,7 @@ impl Response {
     }
 }
 #[derive(Clone, Copy)]
-enum Phase { Idle, Header, Body, Write }
+enum Phase { Idle, Header, Body, Write, Events }
 enum Step { Again, Wait, Close, Failure(String) }
 #[derive(Clone, Copy)]
 struct Drain { through: usize, until: usize }
@@ -143,6 +163,9 @@ struct Connection {
     retaining: bool,
     body: Vec<u8>,
     response: Option<Response>,
+    event_cursor: Option<String>,
+    event_next: Option<String>,
+    event_revision: usize,
     phase: Phase,
     started: usize,
     received: usize,
@@ -156,7 +179,8 @@ struct Connection {
 impl Connection {
     fn new(stream: File, now: usize, policy: Policy) -> Connection {
         Connection { stream, input: Vec::new(), consumed: 0usize, scan: 0usize,
-            request: None, body_left: 0usize, retaining: false, body: Vec::new(), response: None, phase: Phase::Idle,
+            request: None, body_left: 0usize, retaining: false, body: Vec::new(), response: None,
+            event_cursor: None, event_next: None, event_revision: 0usize, phase: Phase::Idle,
             started: now, received: now, expires: deadline(now, policy.idle), interest: 0u8,
             queued: false, failed: false, drain: None, policy }
     }
@@ -169,6 +193,7 @@ impl Connection {
         match self.drain { Some(drain) => drain.through > self.consumed, None => true }
     }
     fn shutdown(&mut self, until: usize) -> bool {
+        if matches!(self.phase, Phase::Events) { return false; }
         if matches!(self.phase, Phase::Idle) && self.input.is_empty() { return false; }
         self.drain = Some(Drain { through: self.input.len(), until });
         self.clamp_deadline();
@@ -218,8 +243,11 @@ impl Connection {
         let now = clock.nanoseconds()?;
         let elapsed = now - self.started;
         let keep_alive = request.keep_alive && self.more_admitted();
+        let streaming = reply.events.is_some();
+        self.event_next = reply.events;
+        if streaming { self.event_revision = handler.event_revision(); }
         self.begin_write(Response::new(reply.status, request.head, keep_alive, elapsed,
-            &reply.kind, reply.body, handler.methods(), &date, reply.headers, reply.standard_headers), now);
+            &reply.kind, reply.body, handler.methods(), &date, reply.headers, reply.standard_headers, streaming), now);
         Ok(Step::Again)
     }
     fn read_header_step<H: Handler>(&mut self, handler: &mut H, clock: &mut Clock) -> Result<Step, i64> {
@@ -241,7 +269,7 @@ impl Connection {
                 // Reject before retaining or waiting for this request's body.
                 // Its unread framing requires closing after the response.
                 self.begin_write(Response::new(reply.status, request.head, false, elapsed,
-                    &reply.kind, reply.body, handler.methods(), &date, reply.headers, reply.standard_headers), now);
+                    &reply.kind, reply.body, handler.methods(), &date, reply.headers, reply.standard_headers, false), now);
                 return Ok(Step::Again);
             }
             self.retaining = handler.retain_body(&request);
@@ -319,15 +347,45 @@ impl Connection {
         let mut response = std::mem::replace(&mut self.response, None).unwrap();
         let result = response.write_step(&mut self.stream);
         let close = response.close;
+        let streaming = response.streaming;
         self.response = Some(response);
         match result {
             Err(errno) => Err(errno),
             Ok(false) => Ok(Step::Again),
             Ok(true) => {
+                if streaming {
+                    if self.drain.is_some() { return Ok(Step::Close); }
+                    self.event_cursor = self.event_next.take();
+                    self.response = None;
+                    self.input.clear();
+                    self.consumed = 0usize;
+                    self.phase = Phase::Events;
+                    self.expires = !0usize;
+                    return Ok(Step::Again);
+                }
                 if close || !self.more_admitted() { return Ok(Step::Close); }
                 self.next_request(clock.nanoseconds()?);
                 Ok(Step::Again)
             }
+        }
+    }
+    fn event_step<H: Handler>(&mut self, handler: &mut H, clock: &mut Clock) -> Result<Step, i64> {
+        if handler.event_revision() != self.event_revision {
+            let cursor = self.event_cursor.as_ref().unwrap().clone();
+            let wall = clock.unix_seconds()?;
+            let (text, cursor) = match handler.event_after(&cursor, wall) {
+                Ok(frame) => frame, Err(problem) => return Ok(Step::Failure(problem)),
+            };
+            self.event_next = Some(cursor);
+            self.event_revision = handler.event_revision();
+            self.begin_write(Response::event_frame(text), clock.nanoseconds()?);
+            return Ok(Step::Again);
+        }
+        // Idle streams watch only readability/disconnect. No write interest and
+        // no per-peer timer polling remains after a complete event is sent.
+        let mut byte = [0u8; 1];
+        match self.stream.read(&mut byte) {
+            Err(errno) => Err(errno), Ok(_) => Ok(Step::Close),
         }
     }
     fn turn<H: Handler>(&mut self, handler: &mut H, clock: &mut Clock) -> Result<Step, i64> {
@@ -337,6 +395,7 @@ impl Connection {
                 Phase::Idle | Phase::Header => self.read_header_step(&mut *handler, clock),
                 Phase::Body => self.body_step(&mut *handler, clock),
                 Phase::Write => self.write_step(clock),
+                Phase::Events => self.event_step(&mut *handler, clock),
             };
             match result {
                 Err(11i64) => return Ok(Step::Wait),
@@ -355,17 +414,19 @@ struct Connections {
     free: Vec<usize>,
     retired: Vec<usize>,
     runnable: Vec<usize>,
+    subscribers: std::collections::BTreeSet<usize>,
     timers: DeadlineQueue,
     policy: Policy,
 }
 impl Connections {
     fn new(policy: Policy) -> Connections {
         Connections { slots: Vec::new(), free: Vec::new(), retired: Vec::new(),
-            runnable: Vec::new(), timers: DeadlineQueue::new(), policy }
+            runnable: Vec::new(), subscribers: std::collections::BTreeSet::new(), timers: DeadlineQueue::new(), policy }
     }
     fn close(&mut self, mut connection: Connection, index: usize, ready: &mut Readiness) {
         if connection.interest != 0u8 { let _ = ready.unwatch_file(&mut connection.stream); }
         self.timers.cancel(index);
+        self.subscribers.remove(&index);
         self.retired.push(index);
     }
     fn expire(&mut self, now: usize, ready: &mut Readiness) {
@@ -434,6 +495,7 @@ impl Connections {
                     _ => false,
                 };
                 if alive && connection.update_interest(ready, index + 1usize).is_ok() {
+                    if connection.event_cursor.is_some() || connection.event_next.is_some() { self.subscribers.insert(index); }
                     self.timers.schedule(index, connection.expires);
                     if again {
                         connection.queued = true;
@@ -446,6 +508,17 @@ impl Connections {
             }
         }
         None
+    }
+    fn notify_events(&mut self) {
+        // This is called only on one changed global revision, never on idle ticks.
+        for index in &self.subscribers {
+            if let Some(connection) = self.slots[*index].as_mut() {
+                if !connection.queued {
+                    connection.queued = true;
+                    self.runnable.push(*index);
+                }
+            }
+        }
     }
     fn shutdown(&mut self, until: usize, ready: &mut Readiness) {
         for index in 0usize..self.slots.len() {
@@ -483,6 +556,8 @@ pub fn serve<H: Handler>(mut output: Stdout, mut listener: Listener,
     let mut accept_retry = None;
     let mut stopping = false;
     let mut check_stop = true;
+    let interval = handler.event_interval();
+    let mut event_due = 0usize;
     loop {
         let now = clock.nanoseconds().unwrap();
         if check_stop && !stopping {
@@ -499,6 +574,17 @@ pub fn serve<H: Handler>(mut output: Stdout, mut listener: Listener,
                 output.write(format!("stopping {until}\n").as_bytes());
             }
         }
+        if !stopping && interval != 0usize && now >= event_due {
+            let changed = match handler.event_refresh(clock.unix_seconds().unwrap()) {
+                Ok(changed) => changed,
+                Err(problem) => {
+                    output.write(format!("HTTP event error: {problem}\n").as_bytes());
+                    panic!("HTTP event refresh failed");
+                }
+            };
+            if changed { connections.notify_events(); }
+            event_due = deadline(now, interval);
+        }
         connections.expire(now, &mut ready);
         if stopping && connections.is_empty() { break; }
         if let Some(retry) = accept_retry {
@@ -511,6 +597,7 @@ pub fn serve<H: Handler>(mut output: Stdout, mut listener: Listener,
         }
         let mut until = connections.timers.next_deadline().unwrap_or(!0usize);
         if let Some(retry) = accept_retry { if retry < until { until = retry; } }
+        if !stopping && interval != 0usize && event_due < until { until = event_due; }
         if !connections.runnable.is_empty() { until = now; }
         let events = ready.wait(&mut clock, until).unwrap();
         // Observe stop before accepting or advancing any other returned event.

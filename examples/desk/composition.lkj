@@ -1,0 +1,111 @@
+//! The host publishes files; desk has no authority to start the publisher.
+use super::store;
+use std::json::Value;
+
+fn board_parse(text: &str, now: i64) -> (Vec<Value>, i64, bool, String) {
+    let end = match text.find('\n') { Some(end) => end, None => return (Vec::new(), 0i64, false, "invalid".to_string()) };
+    let header = &text[..end];
+    if !header.starts_with("desk-board 1 ") { return (Vec::new(), 0i64, false, "invalid".to_string()); }
+    let written = match header[13usize..].parse::<i64>() {
+        Ok(value) => value,
+        Err(_) => return (Vec::new(), 0i64, false, "invalid".to_string()),
+    };
+    if written < 0i64 { return (Vec::new(), 0i64, false, "invalid".to_string()); }
+    let age = if now >= written { now - written } else { 0i64 };
+    let mut jobs = Vec::new();
+    for line in text[end + 1usize..].split('\n') {
+        if !std::text::trim(line).is_empty() && !line.starts_with("handoff:") {
+            jobs.push(Value::String(line.to_string()));
+        }
+    }
+    (jobs, age, age > 30i64, if age > 30i64 { "stale".to_string() } else { "current".to_string() })
+}
+fn board(root: &mut ReadDirectory, now: i64) -> (Vec<Value>, i64, bool, String) {
+    let mut file = match root.open("board.txt") {
+        Ok(file) => file,
+        Err(2i64) => return (Vec::new(), 0i64, false, "missing".to_string()),
+        Err(_) => return (Vec::new(), 0i64, false, "unavailable".to_string()),
+    };
+    let bytes = match file.read_to_end() {
+        Ok(bytes) => bytes,
+        Err(_) => return (Vec::new(), 0i64, false, "unavailable".to_string()),
+    };
+    match String::from_utf8(bytes) {
+        Ok(text) => board_parse(&text, now),
+        Err(_) => (Vec::new(), 0i64, false, "invalid".to_string()),
+    }
+}
+fn handoff(root: &mut ReadDirectory) -> Result<String, String> {
+    let names = store::io(root.list(), "list desk handoff root")?;
+    let mut latest = 0usize;
+    let mut chosen = String::new();
+    let mut detail = String::new();
+    for name in names {
+        let name = match String::from_utf8(name) { Ok(name) => name, Err(_) => continue };
+        if !name.starts_with("handoff-") || !name.ends_with(".md") { continue; }
+        let mut file = match root.open(&name) {
+            Ok(file) => file,
+            Err(2i64) | Err(18i64) | Err(21i64) | Err(22i64) | Err(40i64) => continue,
+            Err(errno) => return Err(format!("open desk handoff: errno {errno}")),
+        };
+        let modified = store::io(file.modified_nanoseconds(), "inspect desk handoff")?;
+        if chosen.is_empty() || modified > latest || (modified == latest && name > chosen) {
+            let bytes = store::io(file.read_to_end(), "read desk handoff")?;
+            let text = match String::from_utf8(bytes) {
+                Ok(text) => text,
+                Err(_) => return Err("desk handoff is not UTF-8".to_string()),
+            };
+            latest = modified;
+            chosen = name;
+            detail = text;
+        }
+    }
+    Ok(detail)
+}
+// The event loop checks this once per service interval, never once per peer.
+// Ordinary GET state still opens and reads the board afresh.
+pub fn revision(board_root: &mut ReadDirectory, handoff_root: &mut ReadDirectory) -> Result<String, String> {
+    let mut signature = String::new();
+    match board_root.open("board.txt") {
+        Ok(mut file) => signature.push_str(&format!("board:{};", store::io(file.modified_nanoseconds(), "inspect board revision")?)),
+        Err(_) => signature.push_str("board:unavailable;"),
+    }
+    let mut names = store::io(handoff_root.list(), "list handoff revisions")?;
+    names.sort();
+    for bytes in names {
+        let name = match String::from_utf8(bytes) { Ok(name) => name, Err(_) => continue };
+        if !name.starts_with("handoff-") || !name.ends_with(".md") { continue; }
+        match handoff_root.open(&name) {
+            Ok(mut file) => signature.push_str(&format!("{}:{name}:{};", name.len(), store::io(file.modified_nanoseconds(), "inspect handoff revision")?)),
+            Err(2i64) | Err(18i64) | Err(21i64) | Err(22i64) | Err(40i64) => {},
+            Err(errno) => return Err(format!("inspect handoff revision: errno {errno}")),
+        }
+    }
+    Ok(signature)
+}
+pub fn enrich(value: Value, board_root: &mut ReadDirectory, handoff_root: &mut ReadDirectory,
+    now: i64) -> Result<Value, String> {
+    let (jobs, age, stale, status) = board(board_root, now);
+    let detail = handoff(handoff_root)?;
+    let fields = match value { Value::Object(fields) => fields, _ => return Err("desk state is not an object".to_string()) };
+    let mut enriched = Vec::new();
+    for (name, value) in fields {
+        if name != "jobs" && name != "detail" { enriched.push((name, value)); }
+    }
+    let mut fields = enriched;
+    fields.push(("jobs".to_string(), Value::Array(jobs)));
+    fields.push(("detail".to_string(), Value::String(detail)));
+    fields.push(("board_age".to_string(), Value::Number(format!("{age}"))));
+    fields.push(("board_stale".to_string(), Value::Bool(stale)));
+    fields.push(("board_status".to_string(), Value::String(status)));
+    Ok(Value::Object(fields))
+}
+#[test]
+fn board_time_and_filtering() {
+    let (jobs, age, stale, status) = board_parse("desk-board 1 100\ncompiler running\nhandoff: elsewhere\n\n", 130i64);
+    assert!(jobs.len() == 1usize && age == 30i64 && !stale && status == "current");
+    let (_jobs, age, stale, status) = board_parse("desk-board 1 100\nold work\n", 131i64);
+    assert!(age == 31i64 && stale && status == "stale");
+    assert!(board_parse("old unversioned\n", 1i64).3 == "invalid");
+    assert!(board_parse("desk-board 1 nope\n", 1i64).3 == "invalid");
+}

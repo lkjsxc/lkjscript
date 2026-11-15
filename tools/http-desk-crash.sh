@@ -41,6 +41,10 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 load_before=$(cat /proc/loadavg)
 started=$(date +%s%N)
+# The directory cases select command parsing; this campaign retains every module test.
+"$compiler" test examples/desk/main.lkj --library-dir library --jobs 1
+printf 'Desk full source tests: %s ms; load %s -> %s\n' \
+    "$((($(date +%s%N)-started)/1000000))" "$load_before" "$(cat /proc/loadavg)"
 mkdir "$work/state"
 awk 'BEGIN { for(i=0;i<10000;i++) printf "{\"id\":\"prefill-%08d\",\"t\":0,\"kind\":\"note\",\"from\":\"fixture\",\"text\":\"state size witness\"}\n",i }' >"$work/prefix"
 cp "$work/prefix" "$work/state/notes.jsonl"
@@ -48,7 +52,7 @@ prefix_bytes=$(stat -c %s "$work/prefix")
 : >"$work/acknowledged"
 build_load=$(cat /proc/loadavg)
 build_start=$(date +%s%N)
-"$compiler" build examples/desk.lkj --library-dir library --no-store \
+"$compiler" build examples/desk/main.lkj --library-dir library --no-store \
     --grant args --grant state=env:DESK_STATE --grant state_env=DESK_STATE \
     --grant timezone=TZ --grant output --grant errors --grant input --grant clock \
     --grant entropy --grant exit --stats -o "$work/desk" 2>"$work/build.err"
@@ -76,7 +80,7 @@ validate() {
         return 1
     fi
 }
-# Different windows include startup, copying, fsync, rename, acknowledgement,
+# Different windows include startup, tail repair, append, fsync, acknowledgement,
 # and the later alive publication. Count confirmed SIGKILL exits, not attempts.
 delays=(0 0.0005 0.001 0.002 0.004 0.006 0.008 0.012 0.020)
 killed=0

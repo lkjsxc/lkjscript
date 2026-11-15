@@ -30,16 +30,54 @@ fn source_file(path: &str, text: Option<&str>) -> source::SourceInput {
         text,
     }
 }
+// Historical fixture lists predate the shared HTTP modules. Complete only the
+// embedded canonical root; custom library/missing-module fixtures stay exact.
+fn complete_library(files: &mut Vec<source::SourceInput>) {
+    let canonical = source_file("$std/lib.lkj", None);
+    let mut canonical_root = false;
+    let mut index = 0usize;
+    while index < files.len() {
+        if files[index].path == canonical.path
+            && files[index].text.as_str() == canonical.text.as_str()
+        {
+            canonical_root = true;
+        }
+        index += 1;
+    }
+    if !canonical_root {
+        return;
+    }
+    let additions: Vec<String> = vec![
+        "$std/http_protocol.lkj".to_string(),
+        "$std/http_policy.lkj".to_string(),
+        "$std/http_server.lkj".to_string(),
+    ];
+    for path in additions {
+        let mut present = false;
+        let mut index = 0usize;
+        while index < files.len() {
+            if files[index].path == path {
+                present = true;
+            }
+            index += 1;
+        }
+        if !present {
+            files.push(source_file(&path, None));
+        }
+    }
+}
 fn source_case_at(
+
     name: &str,
     root: &str,
     library: Option<&str>,
-    files: Vec<source::SourceInput>,
+    mut files: Vec<source::SourceInput>,
     expected: &str,
     expected_path: &str,
     expected_line: usize,
     expected_column: usize,
 ) -> Result<(), String> {
+    complete_library(&mut files);
     let library = library.map(|path| path.to_string());
     let result = frontend::check_bundle(&source::SourceBundle {
         root: root.to_string(),

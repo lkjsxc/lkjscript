@@ -1,0 +1,9 @@
+// expect: reject E_BORROW
+// cause: rule with no Rust counterpart.
+// pending: Iterating text literals should suggest a typed Vec<String> with owned strings in one step.
+fn text_length(text: &str) -> usize { text.len() }
+pub fn probe() -> usize {
+    let mut total = 0usize;
+    for text in ["a", "b"] { total += text_length(text); }
+    total
+}

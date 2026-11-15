@@ -61,19 +61,22 @@ mkdir "$probe/data"
 printf 'abandoned unpublished key' >"$probe/data/.session-key-next"
 if [ "$engine" = interpreter ]; then printf '60\n120\n120\n' >"$probe/data/.http-policy"; fi
 "$compiler" build tools/http-journal-cases.lkj --library-dir library -o "$client"
-"$compiler" build examples/journal-token.lkj --library-dir library \
+"$compiler" build examples/journal/token.lkj --library-dir library \
     --grant output --grant errors --grant input --grant root="$probe/data" \
     --grant entropy --grant clock -o "$issuer"
 if [ "$engine" = native ]; then
-    "$compiler" build examples/journal.lkj --library-dir library \
+    "$compiler" build examples/journal/main.lkj --library-dir library \
         --grant output --grant root="$probe/data" --grant listener=127.0.0.1:0 \
         --grant clock --grant ready --grant stop --grant entropy -o "$server"
 fi
 start() {
+    # Clear the preceding launch before polling; child redirections run later.
+    : >"$probe/startup"
+    : >"$probe/stderr"
     if [ "$engine" = native ]; then
         "$server" >"$probe/startup" 2>"$probe/stderr" &
     else
-        "$compiler" run examples/journal.lkj --engine interpreter --library-dir library \
+        "$compiler" run examples/journal/main.lkj --engine interpreter --library-dir library \
             --grant output --grant root="$probe/data" --grant listener=127.0.0.1:0 \
             --grant clock --grant ready --grant stop --grant entropy >"$probe/startup" 2>"$probe/stderr" &
     fi
@@ -138,7 +141,7 @@ fail_start() {
     if [ "$engine" = native ]; then
         timeout --kill-after=5s 120s "$server" >"$probe/failure-out" 2>"$probe/failure-err" || failure_status=$?
     else
-        timeout --kill-after=5s 120s "$compiler" run examples/journal.lkj --engine interpreter --library-dir library \
+        timeout --kill-after=5s 120s "$compiler" run examples/journal/main.lkj --engine interpreter --library-dir library \
             --grant output --grant root="$probe/data" --grant listener=127.0.0.1:0 \
             --grant clock --grant ready --grant stop --grant entropy >"$probe/failure-out" 2>"$probe/failure-err" || failure_status=$?
     fi

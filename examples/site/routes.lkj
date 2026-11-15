@@ -1,0 +1,29 @@
+//! Literal static routes and the one decoded documentation slug.
+use std::http_protocol;
+use http_protocol::Request;
+
+// The observed origin matches static routes literally, then decodes only the
+// single path parameter beneath /docs/. It does not decode encoded separators.
+pub fn route_path(request: &Request) -> String {
+    let raw = request.raw_path.as_str();
+    if raw.starts_with("/docs/") {
+        let slug = &raw[6usize..];
+        if !slug.is_empty() && !slug.contains('/') { return format!("/{}", request.path); }
+    }
+    request.raw_path.clone()
+}
+#[test]
+fn raw_route_aliases() {
+    let cases: Vec<(String, String)> = vec![
+        ("/%73earch".to_string(), "/%73earch".to_string()),
+        ("/assets/%73ite.css".to_string(), "/assets/%73ite.css".to_string()),
+        ("/docs%2fstart".to_string(), "/docs%2fstart".to_string()),
+        ("/docs/%73tart".to_string(), "/docs/start".to_string()),
+        ("/docs/%73tart/".to_string(), "/docs/%73tart/".to_string()),
+    ];
+    for (target, expected) in cases {
+        let header = format!("GET {target}?q=cat HTTP/1.1\r\nHost: a\r\n\r\n");
+        let request = http_protocol::parse(header.as_bytes()).unwrap();
+        assert!(route_path(&request) == expected);
+    }
+}
