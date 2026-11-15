@@ -111,4 +111,29 @@ printf '%s\n' '{"version":1,"operations":[{"op":"move","id":"old::helper","paren
 edit --store-key "$fixture/key" || { cat "$fixture/error" >&2; exit 1; }
 test "$("$compiler" run "$fixture/source/main.lkj" --no-library --no-store)" = 8
 grep -q 'mode=apply' "$fixture/plan"
+# An edited, previously undemanded library body must still be elaborated.
+mkdir -p "$fixture/library-edit/library"
+printf '%s\n' 'fn main() -> i64 { 0i64 }' > "$fixture/library-edit/main.lkj"
+printf '%s\n' 'pub fn unused(value: i64) -> i64 { value + 1i64 }' > "$fixture/library-edit/library/lib.lkj"
+cp "$fixture/library-edit/main.lkj" "$fixture/library-main-before"
+library_common=(main.lkj --source-dir "$fixture/library-edit" --library-dir "$fixture/library-edit/library" --no-store --store-key "$fixture/key")
+(cd "$fixture/library-edit"; sha256sum main.lkj library/lib.lkj) > "$fixture/library-before"
+printf '%s\n' '{"version":1,"operations":[{"op":"replace-body","id":"std::unused","source":"{ missing() }"}]}' > "$fixture/library-request"
+if "$compiler" edit "${library_common[@]}" --request "$fixture/library-request" > "$fixture/library-plan" 2> "$fixture/library-error"; then
+    printf 'unexpected accepted invalid undemanded library body\n' >&2; exit 1
+fi
+grep -q 'E_EDIT_CHECK' "$fixture/library-error"
+grep -q 'missing' "$fixture/library-error"
+(cd "$fixture/library-edit"; sha256sum main.lkj library/lib.lkj) > "$fixture/library-after"
+cmp "$fixture/library-before" "$fixture/library-after"
+test ! -e "$fixture/library-edit/.lkjscript-edit.pending"
+printf '%s\n' '{"version":1,"operations":[{"op":"replace-body","id":"std::unused","source":"{ value + 2i64 }"}]}' > "$fixture/library-request"
+"$compiler" edit "${library_common[@]}" --request "$fixture/library-request" > "$fixture/library-plan" 2> "$fixture/library-error" || { cat "$fixture/library-error" >&2; exit 1; }
+grep -q 'library-validation=all' "$fixture/library-plan"
+grep -q 'mode=apply' "$fixture/library-plan"
+grep -Fq '{ value + 2i64 }' "$fixture/library-edit/library/lib.lkj"
+cmp "$fixture/library-main-before" "$fixture/library-edit/main.lkj"
+test ! -e "$fixture/library-edit/.lkjscript-edit.pending"
+printf '%s\n' 'fn main() -> i64 { std::unused(40i64) }' > "$fixture/library-edit/probe.lkj"
+test "$("$compiler" run "$fixture/library-edit/probe.lkj" --library-dir "$fixture/library-edit/library" --no-store)" = 42
 printf 'ok structural transactions: checks, refusals, untouched bytes, rename/comment identity, authenticated recovery\n'

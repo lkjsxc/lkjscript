@@ -98,6 +98,15 @@ would only become valid after other operations; split or restate it explicitly.
 Moves require the full reference catalog, including outgoing references in the
 relocated item; declaration-only capture cannot establish that proof.
 
+A transaction that touches an explicit library file promotes validation to all
+library definitions, including bodies the selected program never calls. The
+original, rename/move subset, candidate and any replay target use that same
+mode. Promotion retains the writer lock, parsed request and pinned source read
+sets; it never rereads a different request or silently changes the original
+source snapshot. The report states `library-validation=all` or `demanded`.
+This conservative whole-library pass can refuse an already-invalid unused body
+and adds checking cost until definition-level validation is available.
+
 The plan names changed identities/files and sites, authority gained/lost per
 entry, original/candidate checked meaning, fresh/reused instance counts and
 frontend resumption. Dry run performs candidate elaboration and checking, but

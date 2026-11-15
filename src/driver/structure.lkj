@@ -169,6 +169,41 @@ fn source_delta(before: &semantic::Catalog, after: &semantic::Catalog) -> String
     }
     out
 }
+
+fn changes_library(options: &Options, before: &Memo, draft: &structure_edit::Draft) -> bool {
+    let Some(library) = &options.library_directory else { return false; };
+    for change in &draft.changes {
+        for ((root, path), _) in &before.input_snapshot {
+            if root == library && physical(root, path) == normal(&change.file) { return true; }
+        }
+    }
+    false
+}
+
+fn replay_target(world: &mut World, request: &Request, options: &Options,
+    stats: &mut Stats, before: &Memo, old_catalog: &semantic::Catalog,
+    desired_read: &mut Option<Memo>) -> Result<(structure_edit::Request, String), String> {
+    let mut desired_options = options.clone();
+    desired_options.path = request.against.clone();
+    desired_options.source_directory = None;
+    if !request.against_library.is_empty() {
+        desired_options.library_directory = Some(request.against_library.clone());
+    }
+    let mut desired_memo = match desired_read.take() {
+        Some(memo) => memo,
+        None => Memo::new(world, &desired_options),
+    };
+    desired_memo.capture_catalog = true; desired_memo.catalog_items_only = true;
+    desired_memo.private_source_digest = before.private_source_digest;
+    let desired = super::compile(world, &desired_options, stats, &mut desired_memo)?;
+    let desired_catalog = desired_memo.catalog.take().ok_or("E_REPLAY_SOURCE desired tree requires source, not raw IR")?;
+    let operations = crate::structure_replay::request(old_catalog, &before.source_inputs,
+        &desired_catalog, &desired_memo.source_inputs)?;
+    let identity = meaning::identity(desired.original().checked());
+    finish(&mut desired_memo);
+    *desired_read = Some(desired_memo);
+    Ok((operations, identity))
+}
 fn edit(world: &mut World, request: &Request, stats: &mut Stats) -> Result<u8, String> {
     if !request.request.is_empty() && !request.against.is_empty() {
         return Err("E_USAGE edit accepts either --request or --against, not both".to_string());
@@ -208,36 +243,38 @@ fn edit(world: &mut World, request: &Request, stats: &mut Stats) -> Result<u8, S
         if !matches!(operation.kind.as_str(), "replace-body" | "replace-item" | "add-item" | "remove-item") { items_only = false; }
         if matches!(operation.kind.as_str(), "rename" | "move") { preserving.push(operation.clone()); }
     }
-    let mut before = Memo::new(world, &request.options);
+    let mut active_options = request.options.clone();
+    let mut before = Memo::new(world, &active_options);
     before.catalog_items_only = items_only;
     before.capture_catalog = true;
     if let Some(writer) = writer.as_ref() { before.private_source_digest = Some(writer.private_source_digest()); }
-    let old = super::compile(world, &request.options, stats, &mut before)?;
-    let old_catalog = before.catalog.take().ok_or("E_EDIT_SOURCE transactions require source, not raw IR")?;
-    let original_identity = meaning::identity(old.original().checked());
+    let mut old = super::compile(world, &active_options, stats, &mut before)?;
+    let mut old_catalog = before.catalog.take().ok_or("E_EDIT_SOURCE transactions require source, not raw IR")?;
     if !request.against.is_empty() {
-        let mut desired_options = request.options.clone();
-        desired_options.path = request.against.clone();
-        desired_options.source_directory = None;
-        if !request.against_library.is_empty() {
-            desired_options.library_directory = Some(request.against_library.clone());
-        }
-        let mut desired_memo = Memo::new(world, &desired_options);
-        desired_memo.capture_catalog = true; desired_memo.catalog_items_only = true;
-        desired_memo.private_source_digest = before.private_source_digest;
-        let desired = super::compile(world, &desired_options, stats, &mut desired_memo)?;
-        let desired_catalog = desired_memo.catalog.take().ok_or("E_REPLAY_SOURCE desired tree requires source, not raw IR")?;
-        operations = crate::structure_replay::request(&old_catalog, &before.source_inputs,
-            &desired_catalog, &desired_memo.source_inputs)?;
-        desired_identity = meaning::identity(desired.original().checked());
-        finish(&mut desired_memo);
-        desired_read = Some(desired_memo);
+        let target = replay_target(world, request, &active_options, stats,
+            &before, &old_catalog, &mut desired_read)?;
+        operations = target.0; desired_identity = target.1;
     }
-    let draft = structure_edit::plan(&old_catalog, &before.source_inputs, &operations)?;
+    let mut draft = structure_edit::plan(&old_catalog, &before.source_inputs, &operations)?;
+    if changes_library(&active_options, &before, &draft) {
+        // Reuse the same pinned positive/negative read sets and writer lock.
+        // All sides of the transaction now admit every library definition.
+        active_options.command = "check-library".to_string();
+        old = super::compile(world, &active_options, stats, &mut before)
+            .map_err(|problem| -> String { format!("transaction E_EDIT_LIBRARY {problem}") })?;
+        old_catalog = before.catalog.take().ok_or("E_EDIT_SOURCE library source catalog is missing")?;
+        if !request.against.is_empty() {
+            let target = replay_target(world, request, &active_options, stats,
+                &before, &old_catalog, &mut desired_read)?;
+            operations = target.0; desired_identity = target.1;
+        }
+        draft = structure_edit::plan(&old_catalog, &before.source_inputs, &operations)?;
+    }
+    let original_identity = meaning::identity(old.original().checked());
     if !preserving.is_empty() && preserving.len() != operations.operations.len() {
         let preserving_request = structure_edit::Request { snapshot: operations.snapshot.clone(), operations: preserving.clone() };
         let preserving_draft = structure_edit::plan(&old_catalog, &before.source_inputs, &preserving_request)?;
-        let mut proof_options = request.options.clone(); proof_options.store_directory = None;
+        let mut proof_options = active_options.clone(); proof_options.store_directory = None;
         let mut proof = Memo::new(world, &proof_options);
         proof.capture_catalog = true; proof.catalog_items_only = true;
         proof.private_source_digest = before.private_source_digest;
@@ -247,7 +284,7 @@ fn edit(world: &mut World, request: &Request, stats: &mut Stats) -> Result<u8, S
             return Err("transaction E_EDIT_MEANING rename/move subset changed checked IR; no source was published".to_string());
         }
     }
-    let mut uncached = request.options.clone();
+    let mut uncached = active_options.clone();
     uncached.store_directory = None;
     let mut after = Memo::new(world, &uncached);
     after.capture_catalog = true;
@@ -255,7 +292,7 @@ fn edit(world: &mut World, request: &Request, stats: &mut Stats) -> Result<u8, S
     after.private_source_digest = before.private_source_digest;
     after.store = before.store.take();
     replace_snapshot(&before, &mut after, &draft)?;
-    let new = super::compile(world, &request.options, stats, &mut after)
+    let new = super::compile(world, &active_options, stats, &mut after)
         .map_err(|problem| -> String { format!("transaction E_EDIT_CHECK identities={} {problem}",
             semantic::quote(&joined(&draft.identities))) })?;
     let new_catalog = after.catalog.take().ok_or("E_EDIT_SOURCE candidate source catalog is missing")?;
@@ -276,9 +313,10 @@ fn edit(world: &mut World, request: &Request, stats: &mut Stats) -> Result<u8, S
     let total = new.original().program().functions.len();
     let counted = after.checked_reused + after.checked_local_reused;
     let reused = if counted > total { total } else { counted };
-    report.push_str(&format!("program level=checked-ir before={} after={} checked-instances={} fresh-checked={} proof-reused={} frontend-resumed={}\n",
+    report.push_str(&format!("program level=checked-ir before={} after={} checked-instances={} fresh-checked={} proof-reused={} frontend-resumed={} library-validation={}\n",
         original_identity, candidate_identity,
-        total, total - reused, reused, after.front_reused));
+        total, total - reused, reused, after.front_reused,
+        if active_options.command == "check-library" { "all" } else { "demanded" }));
     report.push_str(&format!("transaction source-before={} source-after={} mode={}\n",
         old_catalog.input_digest, new_catalog.input_digest, if request.dry { "dry-run" } else { "apply" }));
     if !desired_identity.is_empty() {
