@@ -275,7 +275,8 @@ fn diagnostic(text: &str) -> (String, usize) {
                 }
                 if !parts.is_empty() {
                     let last = parts.len() - 1;
-                    if last > 0 && integer(&parts[last - 1], "diagnostic line").is_ok() {
+                    if code.starts_with("E_") && last > 0
+                        && integer(&parts[last - 1], "diagnostic line").is_ok() {
                         line = integer(&parts[last - 1], "diagnostic line").unwrap();
                     } else {
                         line = integer(&parts[last], "diagnostic line").unwrap_or(0);
@@ -944,6 +945,16 @@ fn self_test(world: &mut World) -> Result<(), String> {
         match mutation::prepare("authority", text) {
             Err(problem) if problem.contains("authority intrinsic") => {}
             _ => return Err("E_MUTATION listener operation admitted as pure seed".to_string()),
+        }
+    }
+    for (text, expected) in vec![
+        ("file 7:37: R0003 bounds".to_string(), 37usize),
+        ("file 7:37: R0016 alpha".to_string(), 37usize),
+        ("file 7:37: M_INVALID_IR body".to_string(), 37usize),
+        ("source.rs:12:3: E_BORROW loan".to_string(), 12usize),
+    ] {
+        if diagnostic(&text).1 != expected {
+            return Err("E_MUTATION runtime file index confused with source line".to_string());
         }
     }
     let left = Observation {
