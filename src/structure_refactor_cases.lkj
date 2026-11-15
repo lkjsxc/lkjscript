@@ -366,11 +366,16 @@ fn moves() -> Result<usize, String> {
         let standard = "mod host { pub mod std { pub fn value() -> i64 { 1i64 } } } mod fresh {} fn main() -> i64 { host::std::value() }";
         refuses(standard, r#"{"op":"move","id":"host::std","parent":"fresh"}"#, "E_EDIT_INTRINSIC_CAPTURE")?;
         let outgoing = "fn other() -> i64 { 1i64 } mod old { pub fn helper() -> i64 { crate::other() } } mod fresh {} fn main() -> i64 { old::helper() }";
-        for category in 0usize..2usize {
+        for category in 0usize..4usize {
         let mut missing = snapshot(outgoing)?;
         let item = &missing.catalog.items[*missing.catalog.by_identity.get(&"old::helper".to_string()).unwrap()];
         missing.catalog.unresolved.push(semantic::Reference { owner: item.identity.clone(), target: "other".to_string(),
-            file: item.file.clone(), kind: if category == 0usize { "implicit-source".to_string() } else { "unresolved-namespace-qualification".to_string() }, start: item.start, end: item.start });
+            file: item.file.clone(), kind: match category {
+                0usize => "implicit-source".to_string(),
+                1usize => "unresolved-namespace-qualification".to_string(),
+                2usize => "typed-method".to_string(),
+                _ => "typed-field".to_string(),
+            }, start: item.start, end: item.start });
         let request = structure_edit::parse(r#"{"version":1,"operations":[{"op":"move","id":"old::helper","parent":"fresh"}]}"#.as_bytes())?;
         let mut patches = Vec::new();
         match structure_refactor::plan(&missing.catalog, &missing.inputs, &request.operations[0usize], &mut patches) {
@@ -379,7 +384,7 @@ fn moves() -> Result<usize, String> {
         }
         assert!(patches.is_empty());
         }
-        Ok(11usize)
+        Ok(13usize)
     }
 
 fn general_renames() -> Result<usize, String> {
@@ -464,11 +469,18 @@ fn rename_scope() -> Result<usize, String> {
         refuses(method, r#"{"op":"rename","id":"Read::old","name":"len"}"#, "E_EDIT_METHOD_INTRINSIC")?;
         let protocol = "trait Old {} fn idle<T: Copy>(value: T) -> T { value } fn main() -> i64 { 42i64 }";
         refuses(protocol, r#"{"op":"rename","id":"Old","name":"Copy"}"#, "E_EDIT_INTRINSIC_CAPTURE")?;
-        let mut namespace = snapshot(source)?;
-        namespace.catalog.unresolved.push(semantic::Reference { owner: "main".to_string(), target: String::new(),
-            file: "fixture.lkj".to_string(), kind: "unresolved-namespace-qualification".to_string(), start: 0usize, end: 0usize });
-        let after = apply(&namespace, operation)?;
-        assert_eq!(meaning::identity(&namespace.checked), meaning::identity(&snapshot(&after)?.checked));
+        for category in 0usize..3usize {
+            let kind = match category {
+                0usize => "unresolved-namespace-qualification".to_string(),
+                1usize => "typed-method".to_string(),
+                _ => "typed-field".to_string(),
+            };
+            let mut namespace = snapshot(source)?;
+            namespace.catalog.unresolved.push(semantic::Reference { owner: "main".to_string(), target: String::new(),
+                file: "fixture.lkj".to_string(), kind: kind.to_string(), start: 0usize, end: 0usize });
+            let after = apply(&namespace, operation)?;
+            assert_eq!(meaning::identity(&namespace.checked), meaning::identity(&snapshot(&after)?.checked));
+        }
         let imported_alias = "mod exports { pub fn source() -> i64 { 2i64 } pub use crate::exports::source as renamed; } mod inner { use crate::exports::*; pub fn old() -> i64 { 1i64 } pub fn idle<T>() -> i64 { renamed() } } fn main() -> i64 { 42i64 }";
         let captured_alias = imported_alias.replace("pub fn old()", "pub fn renamed()");
         assert_eq!(meaning::identity(&snapshot(imported_alias)?.checked), meaning::identity(&snapshot(&captured_alias)?.checked));
@@ -486,7 +498,7 @@ fn rename_scope() -> Result<usize, String> {
         same_meaning(grouped_function, r#"{"op":"rename","id":"helpers::square","name":"squared"}"#)?;
         let grouped_module = "mod helpers { pub fn value() -> i64 { 3i64 } } use helpers::{self as visible, value}; fn main() -> i64 { visible::value() + value() }";
         same_meaning(grouped_module, r#"{"op":"rename","id":"helpers","name":"fresh"}"#)?;
-        Ok(19usize)
+        Ok(21usize)
     }
 }
 

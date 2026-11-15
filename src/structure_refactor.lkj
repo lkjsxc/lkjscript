@@ -1446,7 +1446,10 @@ pub mod relocation {
         let mut only_free = true;
         for identity in targets { if !free(catalog, edit::item(catalog, identity)?) { only_free = false; } }
         for site in &catalog.unresolved {
-            if only_free && site.kind == "unresolved-namespace-qualification" { continue; }
+            // Member syntax cannot denote a free module function. This is only
+            // incoming relevance; relocation still checks every outgoing gap.
+            if only_free && matches!(site.kind.as_str(),
+                "unresolved-namespace-qualification" | "typed-method" | "typed-field") { continue; }
             if only_free && matches!(site.kind.as_str(), "implicit-source" | "alias-origin")
                 && !site.target.is_empty() && !targets.contains(&site.target) { continue; }
             let mut relevant = site.target.is_empty() || targets.contains(&site.target);
