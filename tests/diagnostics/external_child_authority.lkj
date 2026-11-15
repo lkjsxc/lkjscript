@@ -1,4 +1,14 @@
 // expect: reject E_CAPABILITY
+// cause: rule with no Rust counterpart.
+// pending: E_CHILD_IMAGE must explain that a path does not prove child authority.
+// Compiler: authenticate immutable exact ELF bytes, selected entry, transfer ABI,
+// and canonical comparable entry-authority manifest. Startup imports only declared
+// typed descriptor/value slots: no baked paths, new binds, ambient env, or World.
+// Programs: consume transferred affine values; reject missing/excess/mismatched
+// slots before exec; report the image identity and every transferred slot.
+// Return exit/output under an absolute deadline; parent death kills non-detached
+// children. Consumer: command/service images under one failure-restarting supervisor.
+// Current diagnostic boundary remains below until that image contract lands.
 // pending: Narrow external-child execution deliberately requires an immutable
 // authenticated admitted image, checked entry grants and transferred handles.
 // An exact path alone is insufficient; the diagnostic names this proof and
