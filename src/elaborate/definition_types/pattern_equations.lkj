@@ -51,7 +51,8 @@ impl Infer<'_, '_> {
                     if seen.insert(name.clone()) {
                         let value = self.operation_type();
                         names.push((name.clone(), value));
-                        self.bindings.push((name, value));
+                        self.definition.semantic_bindings.push((pattern, value));
+                        self.bindings.push_origin((name, value), super::super::semantic::LocalTarget::Pattern(pattern));
                     }
                 }
                 a::Pattern::Tuple(children) | a::Pattern::Or(children) => {
@@ -99,8 +100,8 @@ impl Infer<'_, '_> {
         let scope = self.bindings.len();
         self.bind_pattern_mode(pattern, subject, mode)?;
         let mut actual = BTreeMap::new();
-        for index in scope..self.bindings.entries.len() {
-            let binding = &self.bindings.entries[index];
+        for index in scope..self.bindings.names.entries.len() {
+            let binding = &self.bindings.names.entries[index];
             actual.insert(binding.0.clone(), binding.1);
         }
         self.bindings.truncate(scope);

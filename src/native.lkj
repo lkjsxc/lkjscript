@@ -47,6 +47,8 @@ pub struct Image {
 pub struct PreparedImage {
     assembler: Assembler,
     data_offset: usize,
+    /// Exact bytes emitted for each checked function; zero means absent from this image.
+    pub function_bytes: Vec<usize>,
 }
 impl PreparedImage {
     pub fn finish(self) -> Result<Image, Diagnostic> {
@@ -1813,6 +1815,7 @@ fn prepare_program(
     let mut literals = BTreeMap::new();
     let mut needed = vec![false; program.functions.len()];
     let mut emitted = vec![false; program.functions.len()];
+    let mut function_bytes = vec![0usize; program.functions.len()];
     let mut needed_drops = vec![false; program.types.len()];
     let mut emitted_drops = vec![false; program.types.len()];
     needed[entry.function] = true;
@@ -1856,6 +1859,7 @@ fn prepare_program(
                 if needed[index] && !emitted[index] {
                     emitted[index] = true;
                     progress = true;
+                    let body_start = a.bytes.len();
                     let primitive = if runtime_model {
                         runtime.primitive(index)
                     } else {
@@ -1879,6 +1883,7 @@ fn prepare_program(
                             &mut literals,
                         )?;
                     }
+                    function_bytes[index] = a.bytes.len() - body_start;
                 }
             }
             for ty in 0..program.types.len() {
@@ -1965,5 +1970,5 @@ fn prepare_program(
         a.bytes.push(0);
     }
     a.bytes.extend_from_slice(&data);
-    Ok(PreparedImage { assembler: a, data_offset })
+    Ok(PreparedImage { assembler: a, data_offset, function_bytes })
 }

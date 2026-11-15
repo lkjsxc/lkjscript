@@ -1,0 +1,122 @@
+//! Views of already solved definition constraints, with exact lexical bindings.
+use super::{a, Bindings, DefinitionTypes, Shape};
+use super::super::semantic::{Evidence, LocalTarget};
+use std::collections::{BTreeMap, BTreeSet};
+
+#[derive(Default)]
+pub(super) struct SourceBindings {
+    pub(super) names: Bindings,
+    origins: Vec<LocalTarget>,
+}
+impl SourceBindings {
+    pub(super) fn push(&mut self, binding: (String, usize)) {
+        self.push_origin(binding, LocalTarget::Unavailable);
+    }
+    pub(super) fn push_origin(&mut self, binding: (String, usize), origin: LocalTarget) {
+        self.names.push(binding); self.origins.push(origin);
+    }
+    pub(super) fn len(&self) -> usize { self.names.len() }
+    pub(super) fn entry(&self, name: &str) -> Option<(usize, usize)> { self.names.entry(name) }
+    pub(super) fn get(&self, name: &str) -> Option<usize> { self.names.get(name) }
+    pub(super) fn origin(&self, name: &str) -> Option<LocalTarget> {
+        let (entry, _) = self.names.entry(name)?;
+        Some(self.origins[entry].clone())
+    }
+    pub(super) fn origin_at(&self, entry: usize) -> LocalTarget { self.origins[entry] }
+    pub(super) fn truncate(&mut self, count: usize) {
+        self.names.truncate(count); self.origins.truncate(count);
+    }
+}
+fn declaration_name(source: &a::Program, declaration: usize) -> String {
+    let declaration = &source.declarations[declaration];
+    super::super::semantic::source_module_name(&crate::names::qualified(&source.scopes[declaration.scope].path, &declaration.name))
+}
+impl DefinitionTypes {
+    fn semantic_type(&self, source: &a::Program, variable: usize,
+        known: &mut BTreeMap<usize, Option<String>>, active: &mut BTreeSet<usize>) -> Option<String> {
+        let root = self.root(variable);
+        if let Some(value) = known.get(&root) { return value.clone(); }
+        if !active.insert(root) { return None; }
+        let result = self.semantic_shape(source, root, known, active);
+        active.remove(&root); known.insert(root, result.clone()); result
+    }
+    fn semantic_shape(&self, source: &a::Program, root: usize,
+        known: &mut BTreeMap<usize, Option<String>>, active: &mut BTreeSet<usize>) -> Option<String> {
+        let shape = self.shape(root)?;
+        let mut values = Vec::new();
+        for child in shape.children() { values.push(self.semantic_type(source, child, known, active)?); }
+        let result = match shape {
+            Shape::Atom(name) | Shape::Rigid(name) => name,
+            Shape::Source(ty) => {
+                if matches!(source.types[ty].kind, a::Type::Infer) { return None; }
+                super::super::semantic::source_type_name(source, ty)
+            }
+            Shape::Projected(_, _) | Shape::Closure(_, _) => return None,
+            Shape::Vec(_) => format!("Vec<{}>", values[0]),
+            Shape::Box(_) => format!("Box<{}>", values[0]),
+            Shape::Ref(mutable, _) => format!("&{}{}", if mutable { "mut " } else { "" }, values[0]),
+            Shape::Slice(_) => format!("[{}]", values[0]),
+            Shape::Array(_, count) => format!("[{}; {}]", values[0], count),
+            Shape::Tuple(_) => {
+                let mut value = "(".to_string();
+                for (index, child) in values.iter().enumerate() {
+                    if index != 0usize { value.push_str(", "); }
+                    value.push_str(child);
+                }
+                if values.len() == 1usize { value.push(','); }
+                value.push(')'); value
+            }
+            Shape::Nominal(declaration, _) => {
+                let mut value = declaration_name(source, declaration);
+                if !values.is_empty() {
+                    value.push('<');
+                    for (index, child) in values.iter().enumerate() {
+                        if index != 0usize { value.push_str(", "); }
+                        value.push_str(child);
+                    }
+                    value.push('>');
+                }
+                value
+            }
+            Shape::Never => "!".to_string(),
+        };
+        Some(result)
+    }
+    pub(crate) fn semantic(&self, source: &a::Program, evidence: &mut Evidence) {
+        let mut known = BTreeMap::new(); let mut active = BTreeSet::new();
+        for (expression, variable) in &self.expressions {
+            if let Some(value) = self.semantic_type(source, *variable, &mut known, &mut active) {
+                evidence.expressions.insert(*expression, value);
+            }
+        }
+        for (pattern, variable) in &self.bindings {
+            if let Some(value) = self.semantic_type(source, *variable, &mut known, &mut active) {
+                evidence.bindings.insert(*pattern, value);
+            }
+        }
+        for (pattern, variable) in &self.semantic_bindings {
+            if let Some(value) = self.semantic_type(source, *variable, &mut known, &mut active) {
+                evidence.bindings.insert(*pattern, value);
+            }
+        }
+        for (expression, target) in &self.local_paths { evidence.locals.insert(*expression, *target); }
+        for (expression, _) in &self.expressions {
+            let a::Expr::Field { value, .. } = source.exprs[*expression].kind else { continue; };
+            let Some(mut variable) = self.expressions.get(&value).copied() else { continue; };
+            let mut visited = BTreeSet::new();
+            while visited.insert(self.root(variable)) {
+                match self.shape(variable) {
+                    Some(Shape::Ref(_, inner)) => variable = inner,
+                    Some(Shape::Nominal(declaration, _)) => {
+                        if matches!(source.declarations[declaration].item, a::Item::Struct(_)) {
+                            evidence.fields.insert(*expression, declaration);
+                        }
+                        break;
+                    }
+                    Some(Shape::Tuple(_)) => { evidence.builtin_fields.insert(*expression); break; }
+                    _ => break,
+                }
+            }
+        }
+    }
+}

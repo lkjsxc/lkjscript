@@ -11,9 +11,13 @@ head -c 32 /dev/urandom > "$fixture/key"
 cat > "$fixture/source/main.lkj" <<'SOURCE'
 mod helpers;
 use helpers::square as times;
+use helpers::{Counter as CounterAlias, Color as ColorAlias};
 pub fn main() {}
 pub fn probe() -> i64 { helpers::identity(times(7)) }
 pub fn scalar(value: i64) -> i64 { value + 1 }
+pub fn shadowed() -> i64 { let before = scalar(1); { let scalar = before; let _ = scalar; } scalar(before) }
+pub fn alias_type(value: CounterAlias) -> i64 { value.value }
+
 pub fn writes(value: i64, mut output: Stdout) -> i64 { output.write(b"x"); value }
 SOURCE
 cat > "$fixture/source/helpers.lkj" <<'SOURCE'
@@ -24,6 +28,14 @@ impl Apply for Counter { fn apply(&self, value: i64) -> i64 { self.value + value
 pub fn identity<T>(value: T) -> T { value }
 pub fn square(value: i64) -> i64 { value * value }
 pub fn record() -> i64 { let value = Counter { value: 9 }; value.value }
+pub fn applied(value: Counter) -> i64 { value.apply(4) }
+pub fn named(value: i64) -> Counter { Counter { value } }
+pub fn destructure(value: Counter) -> i64 { let Counter { value: observed } = value; observed }
+pub fn shorthand(value: Counter) -> i64 { let Counter { value } = value; value }
+pub fn patterned(value: Color) -> i64 { match value { Color::Red => 0, Color::Blue(n) => n } }
+pub fn blue(value: i64) -> Color { Color::Blue(value) }
+pub fn local_generic<T>(value: T) -> T { let held = value; held }
+
 SOURCE
 fail() { printf 'semantic-query: %s\n' "$*" >&2; exit 1; }
 common=(main.lkj --source-dir "$fixture/source" --no-library --store "$fixture/store" --store-key "$fixture/key")
@@ -40,6 +52,9 @@ refuse() {
 }
 build
 first=$snapshot
+mkdir "$fixture/small-store"
+refuse "$compiler" build main.lkj --source-dir "$fixture/source" --no-library --store "$fixture/small-store" --store-key "$fixture/key" --store-bytes 32768 --index -o "$fixture/small-program"
+refuse "$compiler" query main.lkj --source-dir "$fixture/source" --no-library --store "$fixture/small-store" --store-key "$fixture/key" --kind outline
 query outline helpers --depth 2 --limit 80 > "$fixture/outline"
 rg -q '"helpers::square".*level=source-claim.*fact=signature' "$fixture/outline" || fail outline
 query item helpers::square > "$fixture/item"
@@ -48,12 +63,34 @@ query uses helpers::square > "$fixture/uses"
 rg -q 'kind=import' "$fixture/uses" || fail 'resolved import reference'
 query references probe > "$fixture/references"
 rg -q 'kind=alias-value' "$fixture/references" || fail 'alias use is not a rename site'
+query references shadowed --limit 80 > "$fixture/shadowed"
+[[ $(rg -c '"scalar".*kind=value' "$fixture/shadowed") == 2 ]] || fail 'lexical scope lost a free call'
+rg -q 'binding:scalar:0.*kind=local-value' "$fixture/shadowed" || fail 'local binding target'
+if rg -q 'kind=lexical-name' "$fixture/shadowed"; then fail 'typed local kept lexical ambiguity'; fi
+query references alias_type > "$fixture/alias-type"
+rg -q 'helpers::Counter.*kind=alias-type' "$fixture/alias-type" || fail 'resolved type alias use'
+query uses 'helpers::Counter::field:value' --limit 80 > "$fixture/field-uses"
+for kind in field constructor-field field-shorthand pattern-field pattern-field-shorthand; do
+    rg -q "kind=$kind( |$)" "$fixture/field-uses" || fail "missing $kind reference"
+done
+query uses 'helpers::Color::variant:Blue' --limit 80 > "$fixture/variant-uses"
+rg -q 'kind=pattern' "$fixture/variant-uses" || fail 'variant pattern target'
+rg -q 'kind=value' "$fixture/variant-uses" || fail 'variant constructor target'
+query references helpers::applied > "$fixture/method"
+rg -q 'Counter as helpers::Apply>::apply.*kind=method' "$fixture/method" || fail 'resolved source method'
+query outline helpers::local_generic --limit 80 > "$fixture/local-outline"
+held=$(sed -n 's/^"\([^"]*::binding:held:0\)".*/\1/p' "$fixture/local-outline" | head -n 1)
+[[ -n "$held" ]] || fail 'generic binding identity'
+query type "$held" > "$fixture/generic-binding"
+rg -q 'fact=inferred-type.*value="T"' "$fixture/generic-binding" || fail 'generic definition type'
+
 query callees probe > "$fixture/callees"
 rg -q 'helpers::square' "$fixture/callees" || fail callees
 query callers helpers::square > "$fixture/callers"
 rg -q '"probe"' "$fixture/callers" || fail callers
 query instances helpers::identity > "$fixture/instances"
 rg -q 'arguments="<T=i64>"' "$fixture/instances" || fail 'generic instance arguments'
+rg -q 'native-bytes=[0-9].*native-size=producer-measurement' "$fixture/instances" || fail 'native instance bytes'
 query type 'scalar::param:value' > "$fixture/type"
 rg -q 'value="i64"' "$fixture/type" || fail type
 query layout helpers::Counter > "$fixture/layout"
@@ -74,6 +111,12 @@ cursor=$(sed -n 's/.*cursor=\([0-9a-f]*\) facts=.*/\1/p' "$fixture/page")
 query outline helpers --limit 1 --cursor "$cursor" > "$fixture/next"
 [[ $(rg -c 'level=source-claim' "$fixture/next") == 1 ]] || fail 'continuation bound'
 refuse query outline scalar --limit 1 --cursor "$cursor"
+query authority scalar --limit 1 > "$fixture/one-fact"
+end_cursor=$(sed -n 's/.*cursor=\([0-9a-f]*\) facts=.*/\1/p' "$fixture/one-fact")
+[[ -n "$end_cursor" ]] || fail 'missing final-page continuation'
+refuse query authority scalar --limit 1 --bytes 1 --cursor "$end_cursor"
+query authority scalar --limit 1 --bytes 2048 --cursor "$end_cursor" > "$fixture/finished"
+[[ $(wc -c < "$fixture/finished") -le 2048 ]] || fail 'protocol exceeded byte bound'
 refuse query outline helpers --cursor "${cursor%?}z"
 query meta helpers::square > "$fixture/before"
 before_signature=$(sed -n 's/.*signature=\([^ ]*\).*/\1/p' "$fixture/before")

@@ -611,7 +611,9 @@ fn compile(
         }
     };
     stats.mark("resolve")?;
-    let front = if memo.store.is_some() && options.command != "check-library" {
+    // The current frontend checkpoint omits definition/source-site evidence.
+    // A requested catalog must not depend on whether that checkpoint was warm.
+    let front = if memo.store.is_some() && !memo.capture_catalog && options.command != "check-library" {
         elaborate::incremental::fingerprint(&resolved, &memo.source_inputs)
     } else { None };
     stats.mark("key_hash")?;
@@ -669,7 +671,8 @@ fn compile(
     };
     stats.mark("type")?;
     let mut front_catalog = front.as_ref().map(|_| Vec::new());
-    let meaning = match elaborate::lower_definitions_recorded(definitions, &mut front_catalog) {
+    let mut structural = if memo.capture_catalog { Some(elaborate::semantic::Evidence::default()) } else { None };
+    let meaning = match elaborate::lower_definitions_recorded_semantic(definitions, &mut front_catalog, &mut structural) {
         Ok(meaning) => meaning,
         Err(problems) => {
             return Err(analysis_failure(
@@ -708,7 +711,7 @@ fn compile(
     }
     stats.count("ir_instructions", instructions);
     if memo.capture_catalog {
-        memo.catalog = Some(crate::semantic::catalog(&resolved, &memo.source_inputs, checked.checked())?);
+        memo.catalog = Some(crate::semantic::catalog_typed(&resolved, &memo.source_inputs, checked.checked(), &structural)?);
         stats.mark("semantic_catalog")?;
     }
     select_checked(checked, options, stats, memo)
@@ -1724,6 +1727,9 @@ fn execute_source(world: &mut World, options: &Options, stats: &mut Stats, memo:
         stats.mark("semantic_query")?;
         return Ok(0);
     }
+    if options.index && memo.store.is_none() {
+        return Err("E_QUERY_STORE index needs an available authenticated store; create --store DIRECTORY first".to_string());
+    }
     if options.command == "profile" {
         let bytes = read_path(world, &options.path)?;
         let report = crate::native::profiling::report(&bytes)?;
@@ -1841,7 +1847,7 @@ fn execute_source(world: &mut World, options: &Options, stats: &mut Stats, memo:
             let selector = crate::semantic_store::selector(&options.path, &options.source_directory, &options.library_directory, options.no_library);
             let snapshot = {
                 let store = memo.store.as_mut().ok_or("E_QUERY_STORE index needs an authenticated store")?;
-                crate::semantic_store::publish(store, &selector, &catalog, checked.original().checked())?
+                crate::semantic_store::publish_emitted(store, &selector, &catalog, checked.original().checked(), &memo.native_sizes)?
             };
             memo.catalog = Some(catalog);
             memo.remember(options, "semantic", snapshot.identity.as_bytes());
@@ -1963,6 +1969,7 @@ struct Memo {
     private_source_digest: Option<[u8; 32]>,
     capture_catalog: bool,
     catalog: Option<crate::semantic::Catalog>,
+    native_sizes: BTreeMap<String, usize>,
     inputs: Vec<store::Input>,
     source_inputs: Vec<(String, Vec<u8>)>,
     input_snapshot: BTreeMap<(String, String), (Option<Vec<u8>>, Option<String>)>,
@@ -1996,7 +2003,7 @@ impl Memo {
         Self {
             store: store::Store::open_bounded(world, &options.store_directory, &options.store_key, options.store_bytes),
             private_source_digest: None,
-            capture_catalog: options.index, catalog: None,
+            capture_catalog: options.index, catalog: None, native_sizes: BTreeMap::new(),
             inputs: Vec::new(), source_inputs: Vec::new(), input_snapshot: BTreeMap::new(), front_reused: 0, front_definitions: 0, front_functions: 0, valid_inputs: true, runtime_input: None,
             checked_reused: 0, checked_local_reused: 0, emitted_reused: 0, test_reused: 0, test_rerun: 0, build_reused: 0,
             inline_calls: 0, inline_functions: 0, inline_attempts: 0, inline_accepted: 0, inline_rejected: 0,
@@ -2257,7 +2264,15 @@ fn check_reusing_with_prior(
     }
     checked
 }
+fn emitted_sizes(checked: &reuse::Checked, prepared: &crate::native::PreparedImage) -> BTreeMap<String, usize> {
+    let mut sizes = BTreeMap::new();
+    for (index, function) in checked.program().functions.iter().enumerate() {
+        sizes.insert(function.name.clone(), prepared.function_bytes[index]);
+    }
+    sizes
+}
 fn emit_reusing(
+
     checked: &reuse::Checked,
     runtime: &runtime::Runtime,
     entry: &str,
@@ -2276,16 +2291,21 @@ fn emit_reusing(
                 checked, runtime, entry, grants, result_fd, profile_path, &namespace, &mut records,
             );
             let _ = stats.mark("emit");
+            let sizes = if memo.capture_catalog { result.as_ref().ok().map(|image| emitted_sizes(checked, image)) } else { None };
             let result = result.and_then(|image: crate::native::PreparedImage| image.finish()).map(|image: crate::native::Image| image.bytes);
             let _ = stats.mark("assemble");
             memo.emitted_reused += records.hits;
             store.flush(&records);
             let _ = stats.mark("store_io");
+            if let Some(sizes) = sizes { memo.native_sizes = sizes; }
             return result;
         }
     }
     let result = backend::prepare_granted(checked.checked(), runtime, entry, grants, result_fd, profile_path);
     let _ = stats.mark("emit");
+    if memo.capture_catalog {
+        if let Ok(prepared) = &result { memo.native_sizes = emitted_sizes(checked, prepared); }
+    }
     let result = result.and_then(|image: crate::native::PreparedImage| image.finish()).map(|image: crate::native::Image| image.bytes);
     let _ = stats.mark("assemble");
     result

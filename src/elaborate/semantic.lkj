@@ -1,0 +1,106 @@
+//! Exported frontend evidence; these records never grant checked-IR authority.
+use super::{a, Compiler, generic_check};
+use std::collections::{BTreeMap, BTreeSet};
+
+#[derive(Clone, Copy)]
+pub enum LocalTarget {
+    Parameter(usize),
+    Pattern(usize),
+    Unavailable,
+}
+#[derive(Clone)]
+pub enum MethodTarget {
+    Builtin,
+    Source(usize),
+    Trait(usize),
+    BuiltinTrait(String),
+    InstanceDependent,
+}
+#[derive(Default)]
+pub struct Evidence {
+    pub definitions: BTreeSet<usize>,
+    pub expressions: BTreeMap<usize, String>,
+    pub bindings: BTreeMap<usize, String>,
+    pub locals: BTreeMap<usize, LocalTarget>,
+    pub methods: BTreeMap<usize, MethodTarget>,
+    pub fields: BTreeMap<usize, usize>,
+    pub builtin_fields: BTreeSet<usize>,
+}
+impl Evidence {
+    pub(super) fn method(&mut self, expression: usize, source: usize) {
+        let target = match self.methods.get(&expression) {
+            Some(MethodTarget::Source(previous)) if *previous != source => MethodTarget::InstanceDependent,
+            Some(MethodTarget::InstanceDependent) => MethodTarget::InstanceDependent,
+            _ => MethodTarget::Source(source),
+        };
+        self.methods.insert(expression, target);
+    }
+}
+pub(super) fn finish(compiler: &mut Compiler<'_>) -> Option<Evidence> {
+    let mut evidence = compiler.semantic_evidence.take()?;
+    for (function, types) in &compiler.definition_types {
+        evidence.definitions.insert(*function);
+        types.semantic(compiler.source, &mut evidence);
+    }
+    // Definition-site choices are stronger than the sampled concrete instances.
+    for (expression, selection) in &compiler.method_selections {
+        let target = match &selection.target {
+            generic_check::MethodTarget::Builtin => MethodTarget::Builtin,
+            generic_check::MethodTarget::Source(source) => MethodTarget::Source(*source),
+            generic_check::MethodTarget::Trait(crate::generics::TraitIdentity::Declared(declaration)) => MethodTarget::Trait(*declaration),
+            generic_check::MethodTarget::Trait(crate::generics::TraitIdentity::Builtin(name)) => MethodTarget::BuiltinTrait(name.clone()),
+            generic_check::MethodTarget::Trait(crate::generics::TraitIdentity::Unknown(_)) => MethodTarget::InstanceDependent,
+        };
+        evidence.methods.insert(*expression, target);
+    }
+    Some(evidence)
+}
+
+pub fn source_module_name(value: &str) -> String {
+    if value == "$std" { "std".to_string() }
+    else if value.starts_with("$std::") { format!("std::{}", &value[6usize..]) }
+    else { value.to_string() }
+}
+pub fn source_type_name(program: &a::Program, ty: usize) -> String {
+    match &program.types[ty].kind {
+        a::Type::Infer => "_".to_string(),
+        a::Type::Never => "!".to_string(),
+        a::Type::Path(path) => {
+            let mut out = source_module_name(&path.name);
+            if !path.args.is_empty() {
+                out.push('<');
+                for (index, argument) in path.args.iter().enumerate() {
+                    if index != 0 { out.push_str(", "); }
+                    out.push_str(&source_type_name(program, *argument));
+                }
+                out.push('>');
+            }
+            out
+        }
+        a::Type::Ref { mutable, lifetime, inner } => {
+            let mut out = "&".to_string();
+            if !lifetime.is_empty() { out.push_str(lifetime); out.push(' '); }
+            if *mutable { out.push_str("mut "); }
+            out.push_str(&source_type_name(program, *inner)); out
+        }
+        a::Type::Slice(inner) => format!("[{}]", source_type_name(program, *inner)),
+        a::Type::Array { inner, len } => format!("[{}; {}]", source_type_name(program, *inner), len),
+        a::Type::Tuple(values) => {
+            let mut out = "(".to_string();
+            for (index, value) in values.iter().enumerate() {
+                if index != 0 { out.push_str(", "); }
+                out.push_str(&source_type_name(program, *value));
+            }
+            if values.len() == 1usize { out.push(','); }
+            out.push(')'); out
+        }
+        a::Type::Function { params, result } => {
+            let mut out = "fn(".to_string();
+            for (index, parameter) in params.iter().enumerate() {
+                if index != 0 { out.push_str(", "); }
+                out.push_str(&source_type_name(program, *parameter));
+            }
+            out.push_str(") -> "); out.push_str(&source_type_name(program, *result)); out
+        }
+    }
+}

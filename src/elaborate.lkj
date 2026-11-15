@@ -24,6 +24,7 @@ mod ranges;
 mod scoped_calls;
 mod scoped_locals;
 mod sequences;
+pub mod semantic;
 mod static_lifetimes;
 mod sugars;
 mod text_format;
@@ -109,6 +110,7 @@ struct Compiler<'a> {
     contracts: Option<generic_check::Contracts>,
     method_selections: generic_check::MethodSelections,
     definition_types: BTreeMap<usize, definition_types::DefinitionTypes>,
+    semantic_evidence: Option<semantic::Evidence>,
     closures: closures::Catalog,
     scoped_bodies: BTreeMap<usize, scoped_locals::Body>,
     trait_proofs: Option<trait_proofs::Session>,
@@ -343,6 +345,13 @@ pub fn lower_definitions(
 pub fn lower_definitions_recorded(
     definitions: TypedDefinitions<'_>, catalog: &mut Option<Vec<u8>>,
 ) -> std::result::Result<ir::Program, Vec<a::Diagnostic>> {
+    lower_definitions_recorded_semantic(definitions, catalog, &mut None)
+}
+pub fn lower_definitions_recorded_semantic(
+    definitions: TypedDefinitions<'_>, catalog: &mut Option<Vec<u8>>,
+    structural: &mut Option<semantic::Evidence>,
+) -> std::result::Result<ir::Program, Vec<a::Diagnostic>> {
+
     let source = definitions.compiler.source;
     let mut problems = definitions.problems;
     let meaning = match elaborate_definitions(
@@ -351,7 +360,7 @@ pub fn lower_definitions_recorded(
         definitions.verifier,
         definitions.evidence,
         definitions.all_library,
-        &mut problems, catalog,
+        &mut problems, catalog, structural,
     ) {
         std::result::Result::Ok(meaning) => meaning,
         std::result::Result::Err(error) => {
@@ -488,7 +497,9 @@ fn elaborate_definitions(
     all_library: bool,
     problems: &mut Vec<a::Diagnostic>,
     catalog: &mut Option<Vec<u8>>,
+    structural: &mut Option<semantic::Evidence>,
 ) -> Result<ir::Program> {
+    c.semantic_evidence = structural.take();
     c.method_selections = evidence.methods;
     c.definition_types = evidence.types;
     c.closures.evidence = evidence.closures;
@@ -575,6 +586,7 @@ fn elaborate_definitions(
         problems.push(problem);
     }
     if catalog.is_some() { *catalog = Some(incremental::catalog(&c)); }
+    *structural = semantic::finish(&mut c);
     let mut program = ir::Program {
         sources: source_paths(source), types: c.types,
         functions: c.functions,
@@ -643,6 +655,7 @@ impl<'a> Compiler<'a> {
             contracts: None,
             method_selections: BTreeMap::new(),
             definition_types: BTreeMap::new(),
+            semantic_evidence: None,
             closures: closures::Catalog::default(),
             scoped_bodies: BTreeMap::new(),
             trait_proofs: None,
@@ -4530,6 +4543,7 @@ impl Builder<'_, '_> {
                     ));
                 }
                 let (index, sub) = candidates[0].clone();
+                if let Some(evidence) = self.compiler.semantic_evidence.as_mut() { evidence.method(expression, index); }
                 if self.compiler.contracts.is_some() {
                     self.compiler
                         .method_selections

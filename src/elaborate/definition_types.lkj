@@ -10,6 +10,7 @@ mod method_headers;
 mod pattern_equations;
 mod projection_equations;
 mod source_types;
+mod semantic;
 
 type Variable = usize;
 fn context(mut problem: a::Diagnostic, message: &str) -> a::Diagnostic {
@@ -130,6 +131,8 @@ pub(super) struct DefinitionTypes {
     expressions: BTreeMap<a::ExprId, Variable>,
     bindings: BTreeMap<a::PatternId, Variable>,
     closures: BTreeMap<a::ExprId, closures::Closure>,
+    local_paths: Vec<(a::ExprId, super::semantic::LocalTarget)>,
+    semantic_bindings: Vec<(a::PatternId, Variable)>,
 }
 #[derive(Clone, Default)]
 pub(super) struct Types {
@@ -432,7 +435,7 @@ struct Infer<'a, 'b> {
     names: &'b crate::resolve::Resolver<'a>,
     implementations: &'b crate::generics::ImplementationIndex,
     definition: DefinitionTypes,
-    bindings: Bindings,
+    bindings: semantic::SourceBindings,
     environment: BTreeMap<String, Variable>,
     result: Variable,
     waiting: Vec<Vec<usize>>,
@@ -1121,7 +1124,8 @@ impl Infer<'_, '_> {
                 } else {
                     value
                 };
-                self.bindings.push((name, value));
+                self.definition.semantic_bindings.push((pattern, value));
+                self.bindings.push_origin((name, value), super::semantic::LocalTarget::Pattern(pattern));
             }
             a::Pattern::Tuple(fields) => {
                 let mut rest = false;
@@ -1243,8 +1247,8 @@ impl Infer<'_, '_> {
                     self.bindings.truncate(scope);
                     self.bind_pattern_mode(alternative, value, mode)?;
                     let mut bindings = BTreeMap::new();
-                    for index in scope..self.bindings.entries.len() {
-                        let binding = &self.bindings.entries[index];
+                    for index in scope..self.bindings.names.entries.len() {
+                        let binding = &self.bindings.names.entries[index];
                         bindings.insert(binding.0.clone(), binding.1);
                     }
                     if first.is_some() {
@@ -1411,7 +1415,8 @@ impl Infer<'_, '_> {
             }
             a::Expr::Path(path) => {
                 self.capture_path(id, &path.name);
-                if let Some(value) = self.bindings.get(&path.name) {
+                if let Some((entry, value)) = self.bindings.entry(&path.name) {
+                    self.definition.local_paths.push((id, self.bindings.origin_at(entry)));
                     value
                 } else {
                     match self.names.value_path(node.scope, &path, span) {
@@ -2442,9 +2447,9 @@ pub(super) fn infer(
             nodes: Vec::new(),
             expressions: BTreeMap::new(),
             bindings: BTreeMap::new(),
-            closures: BTreeMap::new(),
+            closures: BTreeMap::new(), local_paths: Vec::new(), semantic_bindings: Vec::new(),
         },
-        bindings: Bindings::default(),
+        bindings: semantic::SourceBindings::default(),
         environment: BTreeMap::new(),
         result: 0,
         waiting: Vec::new(),
@@ -2516,9 +2521,9 @@ pub(super) fn infer(
     inference.parameter_equations(&function.generics, &mut environment, true)?;
     inference.environment = environment.clone();
     inference.result = inference.source_type(function.result, &environment)?;
-    for parameter in &function.params {
+    for (position, parameter) in function.params.iter().enumerate() {
         let ty = inference.source_type(parameter.ty, &environment)?;
-        inference.bindings.push((parameter.name.clone(), ty));
+        inference.bindings.push_origin((parameter.name.clone(), ty), super::semantic::LocalTarget::Parameter(position));
     }
     if let Some(body) = function.body {
         let body = inference.block(body)?;

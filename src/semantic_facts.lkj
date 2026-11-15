@@ -58,6 +58,9 @@ fn edge(result: &mut Facts, kind: &str, from: &str, to: &str, level: &str, detai
     result.add(&format!("@{kind}"), from, to.to_string());
 }
 pub fn build(catalog: &semantic::Catalog, checked: &ir::CheckedProgram) -> Result<Facts, String> {
+    build_emitted(catalog, checked, &BTreeMap::new())
+}
+pub fn build_emitted(catalog: &semantic::Catalog, checked: &ir::CheckedProgram, native_sizes: &BTreeMap<String, usize>) -> Result<Facts, String> {
     let mut result = Facts::new();
     result.add("meta", "crate", fact("crate", "source-claim", "snapshot",
         &format!("source={} items={} unresolved={} freshness=not-asserted", catalog.input_digest, catalog.items.len(), catalog.unresolved.len())));
@@ -77,7 +80,7 @@ pub fn build(catalog: &semantic::Catalog, checked: &ir::CheckedProgram) -> Resul
             result.add("text", &item.identity, fact(&item.identity, "source-claim", "text",
                 &format!("chunk={index:016x} value={}", semantic::quote(chunk))));
         }
-        let type_fact = if matches!(item.kind.as_str(), "binding" | "call-site") { "type-unavailable" }
+        let type_fact = if matches!(item.kind.as_str(), "binding" | "call-site") { if item.type_resolved { "inferred-type" } else { "type-unavailable" } }
             else if matches!(item.kind.as_str(), "module" | "trait" | "implementation") { "source-kind" } else { "declared-type" };
         result.add("type", &item.identity, fact(&item.identity, "source-claim", type_fact,
             &format!("value={}", semantic::quote(&item.type_name))));
@@ -136,9 +139,14 @@ pub fn build(catalog: &semantic::Catalog, checked: &ir::CheckedProgram) -> Resul
         let identity = &catalog.instance_ids[index];
         let source = &catalog.instance_sources[index];
         let source_mapping = if source.is_empty() { "unavailable" } else { source.as_str() };
+        let native_size = match native_sizes.get(&function.name) {
+            Some(bytes) => format!("native-bytes={bytes} native-emitted={} native-size=producer-measurement", *bytes != 0usize),
+            None => "native-bytes=unavailable".to_string(),
+        };
         let instance = fact(identity, "checked-ir", "instance",
-            &format!("source-claim={} arguments={} ir-operations={} native-bytes=unavailable",
-                semantic::quote(source_mapping), semantic::quote(&catalog.instance_arguments[index]), function.body.len()));
+            &format!("source-claim={} arguments={} ir-operations={} {}",
+                semantic::quote(source_mapping), semantic::quote(&catalog.instance_arguments[index]), function.body.len(), native_size));
+
         result.add("instances", identity, instance.clone());
         if !source.is_empty() { result.add("instances", source, instance); }
         result.add("meta", identity, fact(identity, "checked-ir", "function", &format!("source-claim={}", semantic::quote(source_mapping))));

@@ -139,7 +139,18 @@ fn cache_file(directory: &mut Directory, name: &str) -> Option<File> {
 }
 
 impl Store {
-    pub fn invalidate_query_snapshot(&mut self, identity: &str, selector: &str) {
+    /// Budget bookkeeping only, never authentication. Queries still verify each
+    /// rooted payload. This detects eviction of pages during index publication.
+    pub fn query_pages_retained(&self, pages: &[String]) -> bool {
+        if self.write_state != 1u8 { return false; }
+        for page in pages {
+            let name = format!("semantic-page-{}-{page}", self.producer_slot);
+            if !self.budget.entries.contains_key(&name) { return false; }
+        }
+        true
+    }
+    pub fn invalidate_query_snapshot
+(&mut self, identity: &str, selector: &str) {
         self.discard("semantic-root", identity);
         self.discard("semantic-latest", selector);
     }

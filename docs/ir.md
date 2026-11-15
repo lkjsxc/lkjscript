@@ -463,14 +463,25 @@ ordinal; only an unchanged token body preserves that epoch. Comments/formatting 
 not change it. Source byte ranges and file/item hashes are exact stale-edit inputs.
 These producer identities never replace the checker's exact proof identities.
 
-Source declaration/signature facts are resolved frontend claims. Typed member and
-lexical-name ambiguities are explicitly unresolved; alias uses and import targets
-are distinct references. An inferred source binding type is not fabricated from
-syntax. Checked instances name their source mapping and expanded type arguments;
-source mappings remain claims. Native byte sizes are currently unavailable and are
-reported as such beside IR operation counts. Generic queries cover current
-instances, not all future substitutions. Dependents are conservative recorded
-signature dependencies; missing member evidence prevents exhaustive rename proofs.
+Source declaration/signature facts are resolved frontend claims. Solved generic
+definition constraints supply binding and expression types, exact lexical binding
+targets and nominal field targets. Method selections come from elaboration.
+Constructor/pattern paths and member labels carry resolved identities and exact
+spans; shorthand labels are distinct from the coincident lexical binding use.
+Aliases and import targets remain distinct references. Unresolved projected/closure
+types, or-pattern binding joins and unsampled member choices remain explicit gaps.
+The current frontend checkpoint omits this evidence, so a requested catalog
+re-infers definitions; unchanged indexed image/snapshot reuse still applies.
+This capture cost is why indexing remains an explicit build option.
+
+Checked instances name their source mapping and expanded type arguments; source
+mappings remain claims. Native sizes are producer measurements of emitted function
+instructions, excluding shared runtime, cleanup and literal data; zero means that
+instance is absent from this image. IR operation counts refer to the original
+checked program; native counts include the selected rechecked optimization.
+Generic queries cover current instances, not all future substitutions. Dependents
+are conservative recorded signature dependencies; remaining evidence gaps prevent
+exhaustive rename proofs.
 
 An authenticated snapshot root binds selector, source digest, exact checked IR and
 a radix-tree root. Every bounded page has an authenticated content identity and an

@@ -1,0 +1,176 @@
+//! Exact spelling sites from resolved AST edges; no textual symbol search.
+use super::*;
+use crate::elaborate::semantic::{Evidence, LocalTarget, MethodTarget};
+
+pub(super) fn value_identity(program: &a::Program, path: &a::Path, functions: &[String]) -> Option<String> {
+    let declaration = path.declaration?;
+    let target = declaration_identity(program, declaration, functions)?;
+    match program.declarations[declaration].item {
+        a::Item::Enum(index) => {
+            let name = leaf_name(&path.name);
+            for variant in &program.enums[index].variants {
+                if variant.name == name { return Some(format!("{}::variant:{}", target, name)); }
+            }
+            if module_name(&path.name) == target { Some(target) } else { None }
+        }
+        a::Item::Struct(_) | a::Item::Alias(_) | a::Item::Trait(_) => {
+            if module_name(&path.name) == target { Some(target) } else { None }
+        }
+        _ => Some(target),
+    }
+}
+fn path_token(file: &SourceText, span: a::Span) -> Option<usize> {
+    let mut at = token_at(&file.tokens, span.start);
+    if at < file.tokens.len() && file.tokens[at].text == "::" { at += 1usize; }
+    let token = file.tokens.get(at)?;
+    if token.kind != 0u8 || token.span.end > span.end ||
+        matches!(token.text.as_str(), "for" | "if" | "match" | "let" | "while" | "loop" | "return" | "break" | "fn" | "use") { return None; }
+    let mut selected = at; at += 1usize;
+    while at < file.tokens.len() && file.tokens[at].span.start < span.end && file.tokens[at].text == "::" {
+        at += 1usize;
+        let token = file.tokens.get(at)?;
+        if token.text == "<" { break; }
+        if token.kind != 0u8 || token.span.end > span.end { return None; }
+        selected = at; at += 1usize;
+    }
+    if at < file.tokens.len() && file.tokens[at].span.start < span.end && file.tokens[at].text == "!" { return None; }
+    Some(selected)
+}
+pub(super) fn record_site(result: &mut Catalog, files: &[SourceText], owner: String,
+    target: String, span: a::Span, kind: &str, proven: bool) {
+    let reference = Reference { owner: owner.clone(), target, file: files[span.file].path.clone(),
+        kind: kind.to_string(), start: span.start, end: span.end };
+    if proven && span.start < span.end { result.references.push(reference); }
+    else {
+        if let Some(index) = result.by_identity.get(&owner) { result.items[*index].references_complete = false; }
+        result.unresolved.push(reference);
+    }
+}
+pub(super) fn path_reference(result: &mut Catalog, files: &[SourceText], owner: String,
+    target: String, span: a::Span, kind: &str) {
+    let file = &files[span.file];
+    if let Some(token) = path_token(file, span) {
+        let token = &file.tokens[token];
+        let canonical = result.by_identity.get(&target).map(|index| result.items[*index].name.clone());
+        let actual_kind = if canonical.as_ref().is_some_and(|name| *name != token.text) {
+            format!("alias-{kind}")
+        } else { kind.to_string() };
+        record_site(result, files, owner, target, a::Span { file: span.file, ..token.span }, &actual_kind, true);
+    } else {
+        record_site(result, files, owner, target, a::Span { end: span.start, ..span }, "implicit-source", false);
+    }
+}
+pub(super) fn import_reference(result: &mut Catalog, files: &[SourceText], owner: String,
+    target: String, imported: &a::Use) {
+    let file = &files[imported.span.file];
+    let end = token_at(&file.tokens, imported.span.end);
+    if end == 0usize { return; }
+    let mut index = end - 1usize;
+    if index > 1usize && file.tokens[index - 1usize].text == "as" { index -= 2usize; }
+    let token = &file.tokens[index];
+    let proven = token.text == leaf_name(&imported.path) && token.text != "self";
+    record_site(result, files, owner, target, a::Span { file: imported.span.file, ..token.span }, "import", proven);
+}
+fn field_label(file: &SourceText, outer: a::Span, value: a::Span, name: &str) -> Option<(a::Span, bool)> {
+    let at = token_at(&file.tokens, value.start);
+    if at >= 2usize && file.tokens[at - 1usize].text == ":" && file.tokens[at - 2usize].text == name
+        && file.tokens[at - 2usize].span.start >= outer.start {
+        return Some((a::Span { file: outer.file, ..file.tokens[at - 2usize].span }, false));
+    }
+    let mut scan = at;
+    while scan < file.tokens.len() && file.tokens[scan].span.end <= value.end {
+        let token = &file.tokens[scan];
+        if token.text == name { return Some((a::Span { file: outer.file, ..token.span }, true)); }
+        if token.text != "ref" && token.text != "mut" { return None; }
+        scan += 1usize;
+    }
+    None
+}
+fn field_reference(result: &mut Catalog, files: &[SourceText], owner: &str, target: &Option<String>,
+    outer: a::Span, value: a::Span, name: &str, pattern: bool) {
+    let identity = target.as_ref().map_or_else(|| name.to_string(), |parent| format!("{parent}::field:{name}"));
+    let known = result.by_identity.contains_key(&identity);
+    match field_label(&files[outer.file], outer, value, name) {
+        Some((span, shorthand)) => {
+            let kind = if pattern {
+                if shorthand { "pattern-field-shorthand" } else { "pattern-field" }
+            } else if shorthand { "field-shorthand" } else { "constructor-field" };
+            record_site(result, files, owner.to_string(), identity, span, kind, known);
+        }
+        None => record_site(result, files, owner.to_string(), identity,
+            a::Span { end: outer.start, ..outer }, if pattern { "pattern-field" } else { "constructor-field" }, false),
+    }
+}
+pub(super) fn pattern_references(result: &mut Catalog, files: &[SourceText], program: &a::Program, owners: &Owners) {
+    for node in &program.patterns {
+        let path = match &node.kind {
+            a::Pattern::Path(path) | a::Pattern::Variant { path, .. } | a::Pattern::Struct { path, .. } => path,
+            _ => continue,
+        };
+        let Some(owner) = owners.get(&files[node.span.file].path, node.span.start, node.span.end) else { continue; };
+        let target = value_identity(program, path, &result.function_ids);
+        match &target {
+            Some(target) => path_reference(result, files, owner.clone(), target.clone(), node.span, "pattern"),
+            None => record_site(result, files, owner.clone(), path.name.clone(),
+                a::Span { end: node.span.start, ..node.span }, "pattern-constructor", false),
+        }
+        if let a::Pattern::Struct { fields, .. } = &node.kind {
+            for (name, pattern) in fields {
+                field_reference(result, files, &owner, &target, node.span, program.patterns[*pattern].span, name, true);
+            }
+        }
+    }
+}
+pub(super) fn constructor_fields(result: &mut Catalog, files: &[SourceText], program: &a::Program,
+    owner: &str, node: &a::ExprNode, target: &Option<String>) {
+    if let a::Expr::Struct { fields, .. } = &node.kind {
+        for (name, expression) in fields {
+            field_reference(result, files, owner, target, node.span, program.exprs[*expression].span, name, false);
+        }
+    }
+}
+pub(super) fn typed_member(result: &mut Catalog, files: &[SourceText], program: &a::Program,
+    evidence: &Evidence, expression: usize, owner: &str) -> bool {
+    let node = &program.exprs[expression];
+    match &node.kind {
+        a::Expr::Method { receiver, name, .. } => {
+            let Some(method) = evidence.methods.get(&expression) else { return false; };
+            let target = match method {
+                MethodTarget::Source(index) => result.function_ids[*index].clone(),
+                MethodTarget::Trait(index) => {
+                    let trait_value = &program.traits[*index];
+                    format!("{}::{}", qualified(&trait_value.module, &trait_value.name), name)
+                }
+                MethodTarget::Builtin | MethodTarget::BuiltinTrait(_) => return true,
+                MethodTarget::InstanceDependent => return false,
+            };
+            let span = a::Span { start: program.exprs[*receiver].span.end, ..node.span };
+            add_reference(result, files, owner.to_string(), target, span, name, "method", true); true
+        }
+        a::Expr::Field { value, name } => {
+            if evidence.builtin_fields.contains(&expression) { return true; }
+            let Some(declaration) = evidence.fields.get(&expression) else { return false; };
+            let Some(parent) = declaration_identity(program, *declaration, &result.function_ids) else { return false; };
+            let target = format!("{parent}::field:{name}");
+            let known = result.by_identity.contains_key(&target);
+            let span = a::Span { start: program.exprs[*value].span.end, ..node.span };
+            add_reference(result, files, owner.to_string(), target, span, name, "field", known); true
+        }
+        _ => false,
+    }
+}
+pub(super) fn local_reference(result: &mut Catalog, files: &[SourceText], program: &a::Program,
+    bindings: &BTreeMap<usize, String>, functions: &BTreeMap<String, usize>, owner: &str,
+    node: &a::ExprNode, name: &str, target: LocalTarget) {
+    let identity = match target {
+        LocalTarget::Pattern(pattern) => bindings.get(&pattern).cloned(),
+        LocalTarget::Parameter(position) => functions.get(&owner.to_string()).and_then(|function| {
+            program.functions[*function].params.get(position).map(|parameter| format!("{}::param:{}", owner, parameter.name))
+        }),
+        LocalTarget::Unavailable => None,
+    };
+    match identity {
+        Some(identity) => add_reference(result, files, owner.to_string(), identity, node.span, name, "local-value", true),
+        None => add_reference(result, files, owner.to_string(), name.to_string(), node.span, name, "local-origin", false),
+    }
+}

@@ -177,5 +177,8 @@ pub fn run(store: &mut store::Store, selector: &str, options: &Options) -> Resul
     output.push_str(&semantic_facts::fact(&options.identity, "protocol", "continuation",
         &format!("cursor={} facts={} pages-read={} traversal-steps={}", continuation, emitted, reader.reads, steps)));
     output.push('\n');
+    if output.len() > options.bytes {
+        return Err(format!("E_QUERY_BOUND protocol and continuation require {} bytes", output.len()));
+    }
     Ok(output)
 }

@@ -45,7 +45,7 @@ fn page(lines: &[String], next: Option<usize>) -> Vec<u8> {
     for line in lines { store::push_bytes(&mut bytes, line.as_bytes()); }
     bytes
 }
-fn node(store: &mut store::Store, entries: Vec<Entry>, depth: usize) -> Result<String, String> {
+fn node(store: &mut store::Store, entries: Vec<Entry>, depth: usize, pages: &mut Vec<String>) -> Result<String, String> {
     let mut size = 32usize;
     for entry in &entries { size += entry.name.len() + entry.value.len() + 88usize; }
     let mut bytes = Vec::new();
@@ -74,12 +74,13 @@ fn node(store: &mut store::Store, entries: Vec<Entry>, depth: usize) -> Result<S
         store::push_word(&mut bytes, groups.len());
         for (digit, group) in groups {
             store::push_word(&mut bytes, digit as usize);
-            let identity = node(store, group, depth + 1usize)?;
+            let identity = node(store, group, depth + 1usize, pages)?;
             store::push_bytes(&mut bytes, identity.as_bytes());
         }
     }
     let identity = sha256::hex_digest(&bytes);
     if store.get("semantic-page", &identity).is_none() { store.put("semantic-page", &identity, &bytes); }
+    pages.push(identity.clone());
     Ok(identity)
 }
 fn snapshot_bytes(source: &str, checked_ir: &str, root: &str, selector: &str, facts: usize) -> Vec<u8> {
@@ -103,7 +104,10 @@ fn decode_snapshot(bytes: &[u8]) -> Option<Snapshot> {
     Some(Snapshot { identity: sha256::hex_digest(bytes), source, checked_ir, root, selector, facts })
 }
 pub fn publish(store: &mut store::Store, selector: &str, catalog: &semantic::Catalog, checked: &ir::CheckedProgram) -> Result<Snapshot, String> {
-    let facts = semantic_facts::build(catalog, checked)?;
+    publish_emitted(store, selector, catalog, checked, &BTreeMap::new())
+}
+pub fn publish_emitted(store: &mut store::Store, selector: &str, catalog: &semantic::Catalog, checked: &ir::CheckedProgram, native_sizes: &BTreeMap<String, usize>) -> Result<Snapshot, String> {
+    let facts = semantic_facts::build_emitted(catalog, checked, native_sizes)?;
     let mut entries = Vec::new();
     let mut count = 0usize;
     for (name, lines) in facts.records {
@@ -124,7 +128,8 @@ pub fn publish(store: &mut store::Store, selector: &str, catalog: &semantic::Cat
             if next.is_none() { break; }
         }
     }
-    let root = node(store, entries, 0usize)?;
+    let mut pages = Vec::new();
+    let root = node(store, entries, 0usize, &mut pages)?;
     let checked_ir = sha256::hex_digest(&ir_binary::write(checked.program()));
     let bytes = snapshot_bytes(&catalog.input_digest, &checked_ir, &root, selector, count);
     let snapshot = decode_snapshot(&bytes).ok_or("E_QUERY_INDEX could not form snapshot")?;
@@ -132,8 +137,9 @@ pub fn publish(store: &mut store::Store, selector: &str, catalog: &semantic::Cat
     store.put("semantic-latest", selector, &bytes);
     // Publishing can be refused by the disposable store's budget or lock. Never
     // print a usable snapshot identity until its fixed root was actually retained.
-    if store.get("semantic-root", &snapshot.identity).is_none() {
-        return Err("E_QUERY_INDEX store refused snapshot publication; increase --store-bytes or retry".to_string());
+    if store.get("semantic-root", &snapshot.identity).is_none() || !store.query_pages_retained(&pages) {
+        store.invalidate_query_snapshot(&snapshot.identity, selector);
+        return Err("E_QUERY_INDEX store refused complete snapshot publication; increase --store-bytes or retry".to_string());
     }
     Ok(snapshot)
 }
