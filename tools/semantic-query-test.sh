@@ -47,6 +47,36 @@ mod grouped {
     use crate::{helpers::{self as helpers, Color as Color}, exports::square};
     pub fn run(value: Color) -> i64 { helpers::square(square(3)) }
 }
+mod self_function {
+    use crate::helpers::square::{self};
+    pub fn run() -> i64 { square(3) }
+}
+mod self_terminal {
+    use crate::helpers::{square::self};
+    pub fn run() -> i64 { square(3) }
+}
+mod self_transparent {
+    use crate::helpers::square::{{self}};
+    pub fn run() -> i64 { square(3) }
+}
+mod self_sibling {
+    use crate::{helpers::{Counter as Other}, helpers::square::{self}};
+    pub fn run() -> i64 { square(3) }
+}
+mod self_repeated {
+    use crate::helpers::square::self::self;
+    pub fn run() -> i64 { square(3) }
+}
+mod self_alias {
+    use crate::helpers::{square::{self as renamed}};
+    pub fn run() -> i64 { renamed(3) }
+}
+mod self_reexport {
+    use crate::exports::square::{self};
+    pub fn run() -> i64 { square(3) }
+}
+pub fn namespace_probe() -> i64 { let mut value = 1i64; std::mem::replace(&mut value, 2i64) }
+pub fn turbofish_probe() -> i64 { helpers::identity::<i64>(1i64) }
 mod visibility {
     pub(in crate::visibility) fn hidden() -> i64 { 1 }
 }
@@ -143,6 +173,36 @@ grep -Eq '"helpers".*kind=alias-qualification' "$fixture/grouped" || fail 'group
 grep -Eq '"helpers::square".*kind=alias-value' "$fixture/grouped" || fail 'grouped reexport alias lost'
 query uses helpers::square --limit 120 > "$fixture/reexport-uses"
 grep -Eq 'kind=alias-import' "$fixture/reexport-uses" || fail 'reexport import treated as original declaration spelling'
+for identity in self_function self_terminal self_transparent self_sibling self_repeated self_alias; do
+    query references "$identity" > "$fixture/self-import"
+    grep -Eq '^"helpers::square".*kind=import( |$)' "$fixture/self-import" || fail "missing exact self import: $identity"
+    if grep -Eq 'unresolved-reference' "$fixture/self-import"; then fail "self import retained a false namespace gap: $identity"; fi
+    perl - "$fixture/source/main.lkj" "$fixture/self-import" <<'PERL'
+use strict;
+use warnings;
+open my $source_file, '<:raw', shift @ARGV or die $!;
+my $source = do { local $/; <$source_file> };
+open my $facts, '<:raw', shift @ARGV or die $!;
+my $found = 0;
+while (<$facts>) {
+    next unless /^"helpers::square".* start=(\d+) end=(\d+) kind=import(?: |$)/;
+    die "wrong inherited import span\n" unless substr($source, $1, $2 - $1) eq 'square';
+    ++$found;
+}
+die "missing inherited import span\n" unless $found == 1;
+PERL
+done
+query references self_alias::run > "$fixture/self-alias-use"
+grep -Eq '^"helpers::square".*kind=alias-value' "$fixture/self-alias-use" || fail 'self leaf alias provenance lost'
+query references self_reexport > "$fixture/self-reexport"
+grep -Eq '^"helpers::square".*kind=alias-import' "$fixture/self-reexport" || fail 'self reexport alias provenance lost'
+if grep -Eq 'unresolved-reference' "$fixture/self-reexport"; then fail 'self reexport retained a false namespace gap'; fi
+query references namespace_probe > "$fixture/namespace-probe"
+grep -Eq 'kind=unresolved-namespace-qualification' "$fixture/namespace-probe" || fail 'exact nonterminal namespace role missing'
+query references turbofish_probe > "$fixture/turbofish-probe"
+grep -Eq '^"helpers::identity".*kind=value' "$fixture/turbofish-probe" || fail 'turbofish terminal value binding missing'
+if grep -Eq 'unresolved-namespace-qualification' "$fixture/turbofish-probe"; then fail 'turbofish terminal became a namespace'; fi
+
 query references visibility::hidden > "$fixture/visibility"
 grep -Eq 'kind=visibility-qualification.*claim=partial' "$fixture/visibility" || fail 'visibility qualification gap omitted'
 

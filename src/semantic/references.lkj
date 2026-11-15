@@ -70,12 +70,11 @@ pub(super) fn path_reference(result: &mut Catalog, files: &[SourceText], owner: 
 pub(super) fn import_reference(result: &mut Catalog, files: &[SourceText], owner: String,
     target: String, imported: &a::Use, alias: bool) {
     let file = &files[imported.span.file];
-    let end = token_at(&file.tokens, imported.span.end);
-    if end == 0usize { return; }
-    let mut index = end - 1usize;
-    if index > 1usize && file.tokens[index - 1usize].text == "as" { index -= 2usize; }
+    let Some((index, _)) = import_token(file, imported) else {
+        record_site(result, files, owner, target, a::Span { end: imported.span.start, ..imported.span }, "implicit-source", false);
+        return;
+    };
     let token = &file.tokens[index];
-    if token.text == "self" { return; } // The inherited qualification names its target.
     let proven = token.text == leaf_name(&imported.path);
     record_site(result, files, owner, target, a::Span { file: imported.span.file, ..token.span }, if alias { "alias-import" } else { "import" }, proven);
 }
@@ -198,19 +197,24 @@ fn written_path(file: &SourceText, span: a::Span, last: usize) -> String {
 fn qualification_site(result: &mut Catalog, files: &[SourceText], program: &a::Program,
     resolver: &resolve::Resolver<'_>, owner: &str, scope: a::ModuleId, prefix: &str, span: a::Span, spelling: &str) {
     if matches!(spelling, "crate" | "self" | "super" | "Self") { return; }
+    // Only an exact following identifier proves that this spelling occupies
+    // a namespace role. Grouped self, glob and turbofish prefixes do not.
+    let namespace = namespace_following(&files[span.file], span);
+    let unresolved = if namespace { "unresolved-namespace-qualification" } else { "unresolved-qualification" };
     match resolve::semantic_type_path(resolver, scope, prefix, span) {
         Ok(path) => {
             let Some(declaration) = path.declaration else {
-                // Builtin and generic qualifiers have no global declaration edge.
-                record_site(result, files, owner.to_string(), prefix.to_string(), span, "intrinsic-qualification", false);
+                let kind = if namespace { "intrinsic-qualification" } else { unresolved };
+                record_site(result, files, owner.to_string(), prefix.to_string(), span, kind, false);
                 return;
             };
             let Some(target) = declaration_identity(program, declaration, &result.function_ids) else {
-                record_site(result, files, owner.to_string(), prefix.to_string(), span, "unresolved-qualification", false);
+                record_site(result, files, owner.to_string(), prefix.to_string(), span, unresolved, false);
                 return;
             };
             if module_name(&path.name) != target {
-                record_site(result, files, owner.to_string(), prefix.to_string(), span, "associated-qualification", false);
+                let kind = if namespace { "associated-qualification" } else { unresolved };
+                record_site(result, files, owner.to_string(), prefix.to_string(), span, kind, false);
                 return;
             }
             let canonical: Option<String> = result.by_identity.get(&target).map(|index: &usize| -> String { result.items[*index].name.clone() });
@@ -225,7 +229,7 @@ fn qualification_site(result: &mut Catalog, files: &[SourceText], program: &a::P
             // The standard-library root has no source item. A local declaration
             // called std would have resolved above and remains a real reference.
             if prefix != "std" {
-                record_site(result, files, owner.to_string(), prefix.to_string(), span, "unresolved-qualification", false);
+                record_site(result, files, owner.to_string(), prefix.to_string(), span, unresolved, false);
             }
         }
     }
@@ -254,11 +258,31 @@ pub(super) fn import_qualifications(result: &mut Catalog, files: &[SourceText], 
     // One scan per use tree, retaining inherited group prefixes. Each Use span
     // starts at the same use keyword and ends at its particular leaf or alias.
     let mut trees: BTreeMap<(usize, usize), (usize, a::ModuleId, String)> = BTreeMap::new();
+    let mut self_values: BTreeSet<(usize, usize)> = BTreeSet::new();
     for imported in &program.uses {
+        let scope = resolve::module(program, &imported.module);
+        if !imported.glob {
+            if let Some((at, inherited)) = import_token(&files[imported.span.file], imported) {
+                let token = &files[imported.span.file].tokens[at];
+                if inherited && token.text == leaf_name(&imported.path)
+                    && resolve::semantic_type_path(resolver, scope, &imported.path, imported.span).is_err() {
+                    let path = a::Path { declaration: None, name: imported.path.clone(), args: Vec::new() };
+                    if let Ok(resolved) = resolver.value_path(scope, &path, imported.span) {
+                        if let Some(target) = value_identity(program, &resolved, &result.function_ids) {
+                            if result.by_identity.contains_key(&target) {
+                                // import_reference publishes this exact value binding.
+                                // It is not an unresolved type-namespace prefix.
+                                self_values.insert((imported.span.file, token.span.start));
+                            }
+                        }
+                    }
+                }
+            }
+        }
         let key = (imported.span.file, imported.span.start);
         if trees.contains_key(&key) {
             let tree = trees.get_mut(&key).unwrap(); tree.0 = tree.0.max(imported.span.end);
-        } else { trees.insert(key, (imported.span.end, resolve::module(program, &imported.module), root_parent(&imported.module))); }
+        } else { trees.insert(key, (imported.span.end, scope, root_parent(&imported.module))); }
     }
     for ((file_id, start), (end, scope, owner)) in trees {
         let file = &files[file_id];
@@ -281,7 +305,8 @@ pub(super) fn import_qualifications(result: &mut Catalog, files: &[SourceText], 
                 if !prefix.is_empty() { prefix.push_str("::"); }
                 prefix.push_str(&token.text);
             }
-            if at + 1usize < file.tokens.len() && file.tokens[at + 1usize].text == "::" {
+            if at + 1usize < file.tokens.len() && file.tokens[at + 1usize].text == "::"
+                && !self_values.contains(&(file_id, token.span.start)) {
                 qualification_site(result, files, program, resolver, &owner, scope, &prefix,
                     a::Span { file: file_id, ..token.span }, &token.text);
             }
@@ -326,4 +351,50 @@ fn path_start(file: &SourceText, span: a::Span) -> usize {
     }
     if at < file.tokens.len() && file.tokens[at].text == "::" { at += 1usize; }
     at
+}
+
+fn import_token(file: &SourceText, imported: &a::Use) -> Option<(usize, bool)> {
+    let start = token_at(&file.tokens, imported.span.start);
+    let end = token_at(&file.tokens, imported.span.end);
+    if end <= start { return None; }
+    let mut at = end - 1usize;
+    if at >= start + 2usize && file.tokens[at - 1usize].text == "as" { at -= 2usize; }
+    if file.tokens[at].text != "self" { return Some((at, false)); }
+    // A flattened self leaf inherits the last real identifier of its parsed
+    // prefix. Walk only enclosing use groups, balancing completed siblings.
+    loop {
+        if at >= start + 2usize && file.tokens[at - 1usize].text == "::" {
+            at -= 2usize;
+            let token = &file.tokens[at];
+            if token.kind != 0u8 { return None; }
+            if token.text == "self" { continue; }
+            if matches!(token.text.as_str(), "crate" | "super" | "Self") { return None; }
+            return Some((at, true));
+        }
+        let mut depth = 0usize;
+        let mut scan = at;
+        let mut group = None;
+        while scan > start {
+            scan -= 1usize;
+            match file.tokens[scan].text.as_str() {
+                "}" => depth += 1usize,
+                "{" => {
+                    if depth == 0usize { group = Some(scan); break; }
+                    depth -= 1usize;
+                }
+                _ => {}
+            }
+        }
+        at = group?;
+    }
+}
+
+fn namespace_following(file: &SourceText, span: a::Span) -> bool {
+    let at = token_at(&file.tokens, span.start);
+    at + 2usize < file.tokens.len()
+        && file.tokens[at].span.start == span.start
+        && file.tokens[at].span.end == span.end
+        && file.tokens[at + 1usize].text == "::"
+        && file.tokens[at + 2usize].kind == 0u8
+        && file.tokens[at + 2usize].text != "self"
 }
