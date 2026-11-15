@@ -166,7 +166,7 @@ fn wholly_static(source: &a::Program, result: usize) -> bool {
                             | "Stdout"
                             | "Stdin"
                             | "Stderr"
-                            | "Directory" | "ReadDirectory" | "ReadFile" | "ForeignCommand" | "NullDevice"
+                            | "Directory" | "ReadDirectory" | "ReadFile" | "ForeignCommand" | "ForeignSession" | "NullDevice"
                             | "File"
                             | "Vec"
                             | "Box"

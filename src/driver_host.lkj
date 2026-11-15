@@ -9,6 +9,7 @@ enum Handle {
     ImportedFile(File, u64),
     RemoteFile(u64),
     ForeignCommand(u64),
+    ForeignSession(u64),
     NullDevice(u64),
     RemoteChild(u64),
     Listener(u64),
@@ -219,6 +220,7 @@ impl<'world, 'program> Host<'world, 'program> {
             | Handle::Readiness(descriptor)
             | Handle::Stop(descriptor, _) => self.network.close_remote(descriptor),
             Handle::RemoteChild(identity) => self.network.drop_remote_child(identity),
+            Handle::ForeignSession(identity) => self.network.drop_foreign(identity),
             _ => {}
         }
     }
@@ -494,6 +496,21 @@ impl interpreter::Host for Host<'_, '_> {
         let root = self.directory_handle(root)?;
         let opened = self.network.run_foreign(command, root, sink, arguments, duration)?;
         self.insert_handle(Handle::RemoteFile(opened))
+    }
+    fn start_foreign(&mut self, command: u64, root: u64, sink: u64, arguments: &[u8], duration: usize) -> Result<u64, i64> {
+        let command = match self.handles.get(&command) { Some(Handle::ForeignCommand(value)) => *value, _ => return Err(9) };
+        let sink = match self.handles.get(&sink) { Some(Handle::NullDevice(value)) => *value, _ => return Err(9) };
+        let root = self.directory_handle(root)?;
+        let session = self.network.start_foreign(command, root, sink, arguments, duration)?;
+        self.insert_handle(Handle::ForeignSession(session))
+    }
+    fn exchange_foreign(&mut self, session: u64, request: &[u8], response: &mut [u8], duration: usize) -> Result<usize, i64> {
+        let session = match self.handles.get(&session) { Some(Handle::ForeignSession(value)) => *value, _ => return Err(9) };
+        self.network.exchange_foreign(session, request, response, duration)
+    }
+    fn finish_foreign(&mut self, session: u64, duration: usize) -> Result<u64, i64> {
+        let session = match self.handles.get(&session) { Some(Handle::ForeignSession(value)) => *value, _ => return Err(9) };
+        self.network.finish_foreign(session, duration)
     }
     fn open_directory(&mut self, path: &[u8]) -> Result<u64, i64> {
         let directory = self.network.open_root(self.world, path);

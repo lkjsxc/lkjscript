@@ -17,6 +17,7 @@ impl Infer<'_, '_> {
             Value::ReadDirectory => self.atom("ReadDirectory"),
             Value::ReadFile => self.atom("ReadFile"),
             Value::ForeignCommand => self.atom("ForeignCommand"),
+            Value::ForeignSession => self.atom("ForeignSession"),
             Value::NullDevice => self.atom("NullDevice"),
             Value::File => self.atom("File"),
             Value::Process => self.atom("Process"),
@@ -71,6 +72,7 @@ impl Infer<'_, '_> {
             Value::ResultDirectory
             | Value::ResultReadDirectory
             | Value::ResultReadFile
+            | Value::ResultForeignSession
             | Value::ResultFile
             | Value::ResultCount
             | Value::ResultBytes
@@ -91,6 +93,7 @@ impl Infer<'_, '_> {
                     Value::ResultDirectory => self.capability_type(Value::Directory, span)?,
                     Value::ResultReadDirectory => self.capability_type(Value::ReadDirectory, span)?,
                     Value::ResultReadFile => self.capability_type(Value::ReadFile, span)?,
+                    Value::ResultForeignSession => self.capability_type(Value::ForeignSession, span)?,
                     Value::ResultFile => self.capability_type(Value::File, span)?,
                     Value::ResultChild => self.capability_type(Value::Child, span)?,
                     Value::ResultListener => self.capability_type(Value::Listener, span)?,

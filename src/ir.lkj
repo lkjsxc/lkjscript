@@ -53,6 +53,8 @@ pub enum TypeKind {
     ReadFile,
     /// Affine immutable admitted foreign image; only confined execution can use it.
     ForeignCommand,
+    /// Attached confined worker; destruction terminates and reaps its process.
+    ForeignSession,
     /// Explicit descriptor authority for the kernel's null device.
     NullDevice,
     /// Affine open file; structural destruction closes its handle.
@@ -342,6 +344,9 @@ pub enum IntrinsicOp {
     FileModifiedNanoseconds,
     ForeignRun,
     ForeignImage,
+    ForeignStart,
+    ForeignExchange,
+    ForeignFinish,
 }
 impl IntrinsicOp {
     pub fn parse(text: &str) -> Option<IntrinsicOp> {
@@ -435,6 +440,9 @@ impl IntrinsicOp {
             "file_modified_nanoseconds" => Some(IntrinsicOp::FileModifiedNanoseconds),
             "foreign_run" => Some(IntrinsicOp::ForeignRun),
             "foreign_image" => Some(IntrinsicOp::ForeignImage),
+            "foreign_start" => Some(IntrinsicOp::ForeignStart),
+            "foreign_exchange" => Some(IntrinsicOp::ForeignExchange),
+            "foreign_finish" => Some(IntrinsicOp::ForeignFinish),
 
             _ => None,
         }
@@ -530,6 +538,9 @@ impl IntrinsicOp {
             IntrinsicOp::FileModifiedNanoseconds => "file_modified_nanoseconds",
             IntrinsicOp::ForeignRun => "foreign_run",
             IntrinsicOp::ForeignImage => "foreign_image",
+            IntrinsicOp::ForeignStart => "foreign_start",
+            IntrinsicOp::ForeignExchange => "foreign_exchange",
+            IntrinsicOp::ForeignFinish => "foreign_finish",
 
         }
     }

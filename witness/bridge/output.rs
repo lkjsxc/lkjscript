@@ -56,8 +56,14 @@ pub struct ReadFile { handle: std::fs::File }
 // Foreign authority is supplied only by the native or descriptor-broker entry.
 // The optional Rust witness has no grant constructor and fails closed if used.
 pub struct ForeignCommand { _seal: () }
+pub struct ForeignSession { _seal: () }
+impl ForeignSession {
+    pub fn __lkjscript_exchange(&mut self, _request: &[u8], _response: &mut [u8], _duration: usize) -> i64 { -38 }
+    pub fn __lkjscript_finish(&mut self, _duration: usize) -> i64 { -38 }
+}
 pub struct NullDevice { _seal: () }
 impl ForeignCommand {
+    pub fn __lkjscript_start(&mut self, _root: &mut ReadDirectory, _sink: &mut NullDevice, _arguments: &[u8], _duration: usize) -> Result<ForeignSession, i64> { Err(38) }
     pub fn run(&mut self, _root: &mut ReadDirectory, _sink: &mut NullDevice, _arguments: &[Vec<u8>], _duration: usize) -> Result<ReadFile, i64> { Err(38) }
     pub fn __lkjscript_run(&mut self, _root: &mut ReadDirectory, _sink: &mut NullDevice, _arguments: &[u8], _duration: usize) -> Result<ReadFile, i64> { Err(38) }
     pub fn __lkjscript_image(&mut self) -> Result<ReadFile, i64> { Err(38) }

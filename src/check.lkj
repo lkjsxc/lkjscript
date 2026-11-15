@@ -106,6 +106,7 @@ pub fn is_data(types: &[Type], ty: usize) -> bool {
             | TypeKind::ReadDirectory
             | TypeKind::ReadFile
             | TypeKind::ForeignCommand
+            | TypeKind::ForeignSession
             | TypeKind::NullDevice
             | TypeKind::File
             | TypeKind::Process

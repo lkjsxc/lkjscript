@@ -199,17 +199,20 @@ pub(super) fn signature(
             let kind = if name == IntrinsicOp::DirectorySync { TypeKind::Directory } else { TypeKind::File };
             args.len() == 1 && authority(types, args[0], &kind) && status_result(types, result)
         }
-        IntrinsicOp::ForeignRun => {
+        IntrinsicOp::ForeignRun | IntrinsicOp::ForeignStart => {
             args.len() == 5 && authority(types, args[0], &TypeKind::ForeignCommand)
                 && authority(types, args[1], &TypeKind::ReadDirectory)
                 && authority(types, args[2], &TypeKind::NullDevice)
                 && bytes(types, args[3], false) && args[4] == U64
-                && opened(types, result, &TypeKind::ReadFile)
+                && opened(types, result, &if name == IntrinsicOp::ForeignStart { TypeKind::ForeignSession } else { TypeKind::ReadFile })
         }
         IntrinsicOp::ForeignImage => {
+
             args.len() == 1 && authority(types, args[0], &TypeKind::ForeignCommand)
                 && opened(types, result, &TypeKind::ReadFile)
         }
+        IntrinsicOp::ForeignExchange => { args.len() == 4 && authority(types, args[0], &TypeKind::ForeignSession) && bytes(types, args[1], false) && bytes(types, args[2], true) && args[3] == U64 && result == I64 }
+        IntrinsicOp::ForeignFinish => { args.len() == 2 && authority(types, args[0], &TypeKind::ForeignSession) && args[1] == U64 && result == I64 }
         IntrinsicOp::FileSeek => {
             args.len() == 3 && authority(types, args[0], &TypeKind::File)
                 && args[1] == I64 && args[2] == U8

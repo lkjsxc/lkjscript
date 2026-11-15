@@ -4,10 +4,10 @@ use crate::x86::*;
 use super::broker::{empty as reply_empty, check_fd, REQUEST, SCRATCH, LAST_OPERATION};
 
 #[derive(Clone, Copy)]
-pub(super) struct ForeignCode { pub foreign_open: Label, pub null_open: Label, pub foreign_run: Label }
+pub(super) struct ForeignCode { pub foreign_open: Label, pub null_open: Label, pub foreign_run: Label, pub foreign_start: Label, pub foreign_exchange: Label, pub foreign_finish: Label, pub foreign_session_drop: Label, pub foreign_shutdown: Label }
 impl ForeignCode {
     pub(super) fn new(a: &mut Assembler) -> Self {
-        Self { foreign_open: a.label(), null_open: a.label(), foreign_run: a.label() }
+        Self { foreign_open: a.label(), null_open: a.label(), foreign_run: a.label(), foreign_start: a.label(), foreign_exchange: a.label(), foreign_finish: a.label(), foreign_session_drop: a.label(), foreign_shutdown: a.label() }
     }
 }
 fn epilogue(a: &mut Assembler) { a.mov(SP,BP); a.pop(BP); a.ret(); }
@@ -300,6 +300,7 @@ pub(super) fn emit(a: &mut Assembler, p: ForeignCode) {
     reopen(a,p,readable);
     image(a,p,write,copy,name,loader,readable); null_device(a,p,null_path,readable);
     run(a,p,write,copy,name,filter,bytes.len()/8,&environment,empty);
+    super::foreign_session::emit(a,p,filter,bytes.len()/8,&environment,empty);
     a.bind(write);
     let writing=a.label(); let written=a.label(); let write_error=a.label();
     a.bind(writing); a.test(D,true); a.condition(4,written); call(a,1); a.test(A,true); a.condition(8,write_error);

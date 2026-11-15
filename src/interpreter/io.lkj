@@ -121,6 +121,7 @@ impl<H: Host> Interpreter<'_, H> {
                     TypeKind::Directory => Value::Directory(handle),
                     TypeKind::ReadDirectory => Value::ReadDirectory(handle),
                     TypeKind::ReadFile => Value::ReadFile(handle),
+                    TypeKind::ForeignSession => Value::ForeignSession(handle),
                     TypeKind::File => Value::File(handle),
                     TypeKind::Child => Value::Child(handle),
                     TypeKind::Listener => Value::Listener(handle),
@@ -144,6 +145,7 @@ impl<H: Host> Interpreter<'_, H> {
             | Value::ReadDirectory(handle)
             | Value::ReadFile(handle)
             | Value::ForeignCommand(handle)
+            | Value::ForeignSession(handle)
             | Value::NullDevice(handle)
             | Value::File(handle)
             | Value::Child(handle)
@@ -259,8 +261,10 @@ impl<H: Host> Interpreter<'_, H> {
         values: &[(usize, Value)],
     ) -> Result<Option<Value>, RunError> {
         let storage_arity = match name {
-            ir::IntrinsicOp::ForeignRun => 5usize,
+            ir::IntrinsicOp::ForeignRun | ir::IntrinsicOp::ForeignStart => 5usize,
             ir::IntrinsicOp::ForeignImage => 1usize,
+            ir::IntrinsicOp::ForeignExchange => 4usize,
+            ir::IntrinsicOp::ForeignFinish => 2usize,
             ir::IntrinsicOp::DirectoryCreateNew | ir::IntrinsicOp::DirectoryCreatePrivate | ir::IntrinsicOp::DirectoryOpenAppend | ir::IntrinsicOp::FileTruncate | ir::IntrinsicOp::ReadDirectoryOpen | ir::IntrinsicOp::ReadDirectoryOpenDirectory => 2usize,
             ir::IntrinsicOp::DirectorySync | ir::IntrinsicOp::FileSync | ir::IntrinsicOp::FileLockExclusive | ir::IntrinsicOp::FileLockWait => 1usize,
             ir::IntrinsicOp::WorldEntropy | ir::IntrinsicOp::ClockUnixSeconds | ir::IntrinsicOp::ClockUnixNanoseconds | ir::IntrinsicOp::FileSetPrivate
@@ -283,22 +287,38 @@ impl<H: Host> Interpreter<'_, H> {
                 let opened = self.host.foreign_image(handle);
                 self.io_open_result(types, opened, TypeKind::ReadFile)?
             }
-            ir::IntrinsicOp::ForeignRun => {
+            ir::IntrinsicOp::ForeignRun | ir::IntrinsicOp::ForeignStart => {
                 let authority = self.io_authority(values, TypeKind::ForeignCommand)?;
                 let root = self.io_reference(values, 1, true)?;
                 let sink = self.io_reference(values, 2, true)?;
                 if *self.kind(root.ty)? != TypeKind::ReadDirectory || *self.kind(sink.ty)? != TypeKind::NullDevice {
                     return Err(self.invalid("foreign execution requires its borrowed read root and null device"));
                 }
-                let types = self.io_open_types(result, TypeKind::ReadFile)?;
+                let kind = if name == ir::IntrinsicOp::ForeignStart { TypeKind::ForeignSession } else { TypeKind::ReadFile };
+                let types = self.io_open_types(result, kind.clone())?;
                 let command = self.io_handle(&authority)?;
                 let root = self.io_handle(&root)?;
                 let sink = self.io_handle(&sink)?;
                 let arguments = self.io_buffer(values, 3, false)?;
                 let arguments = self.bytes(&arguments)?;
                 let duration = self.io_number(values, 4, ir::U64)? as usize;
-                let opened = self.host.run_foreign(command, root, sink, &arguments, duration);
-                self.io_open_result(types, opened, TypeKind::ReadFile)?
+                let opened = if name == ir::IntrinsicOp::ForeignStart { self.host.start_foreign(command, root, sink, &arguments, duration) } else { self.host.run_foreign(command, root, sink, &arguments, duration) };
+                self.io_open_result(types, opened, kind)?
+            }
+            ir::IntrinsicOp::ForeignExchange => {
+                let authority = self.io_authority(values, TypeKind::ForeignSession)?; self.io_result_type(result, ir::I64)?;
+                let handle = self.io_handle(&authority)?; let request = self.io_buffer(values, 1, false)?; let request = self.bytes(&request)?;
+                let target = self.io_buffer(values, 2, true)?; let mut response = self.bytes(&target)?;
+                let duration = self.io_number(values, 3, ir::U64)? as usize;
+                let outcome = self.host.exchange_foreign(handle, &request, &mut response, duration);
+                let count = self.io_count(outcome, response.len())?; if (count as i64) >= 0 { self.io_write_buffer(&target, &response)?; }
+                Value::Bits(count)
+            }
+            ir::IntrinsicOp::ForeignFinish => {
+                let authority = self.io_authority(values, TypeKind::ForeignSession)?; self.io_result_type(result, ir::I64)?;
+                let handle = self.io_handle(&authority)?; let duration = self.io_number(values, 1, ir::U64)? as usize;
+                let outcome = self.host.finish_foreign(handle, duration);
+                Value::Bits(match outcome { Ok(status) => status, Err(errno) => (-errno) as u64 })
             }
             ir::IntrinsicOp::FileDuplicate | ir::IntrinsicOp::FileReadOnly if values.len() == 1 => {
                 let authority = self.io_authority(values, TypeKind::File)?;

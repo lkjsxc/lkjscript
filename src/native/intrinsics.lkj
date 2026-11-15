@@ -332,7 +332,7 @@ impl Body<'_> {
                 self.intrinsic_open_result(dst);
                 return Ok(true);
             }
-            IntrinsicOp::ForeignRun => {
+            IntrinsicOp::ForeignRun | IntrinsicOp::ForeignStart => {
                 for index in 0usize..3usize {
                     self.read(args[index], A);
                     self.a.load(A, A, 0);
@@ -345,10 +345,17 @@ impl Body<'_> {
                 self.read(args[4], A);
                 self.a.store(BP, self.scratch[5], A);
                 self.a.lea(DI, BP, self.scratch[0]);
-                self.a.call(self.platform.foreign_run);
+                self.a.call(if name == IntrinsicOp::ForeignStart { self.platform.foreign_start } else { self.platform.foreign_run });
                 self.intrinsic_open_result(dst);
                 return Ok(true);
             }
+            IntrinsicOp::ForeignExchange => {
+                self.read(args[0], A); self.a.load(A, A, 0); self.a.store(BP, self.scratch[0], A);
+                for index in 1usize..3usize { self.read_word(args[index], 0, A); self.a.store(BP, self.scratch[index*2-1], A); self.read_word(args[index], 1, A); self.a.store(BP, self.scratch[index*2], A); }
+                self.read(args[3], A); self.a.store(BP, self.scratch[5], A);
+                self.a.lea(DI, BP, self.scratch[0]); self.a.call(self.platform.foreign_exchange);
+            }
+            IntrinsicOp::ForeignFinish => { self.read(args[0], DI); self.a.load(DI, DI, 0); self.read(args[1], SI); self.a.call(self.platform.foreign_finish); }
             IntrinsicOp::ProcessSpawn => {
                 self.read(args[1], A);
                 self.a.load(A, A, 0);

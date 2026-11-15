@@ -18,6 +18,7 @@ impl Builder<'_, '_> {
             Value::ReadDirectory => self.compiler.intern(String::new(), ir::TypeKind::ReadDirectory),
             Value::ReadFile => self.compiler.intern(String::new(), ir::TypeKind::ReadFile),
             Value::ForeignCommand => self.compiler.intern(String::new(), ir::TypeKind::ForeignCommand),
+            Value::ForeignSession => self.compiler.intern(String::new(), ir::TypeKind::ForeignSession),
             Value::NullDevice => self.compiler.intern(String::new(), ir::TypeKind::NullDevice),
             Value::File => self.compiler.intern(String::new(), ir::TypeKind::File),
             Value::Process => self.compiler.intern(String::new(), ir::TypeKind::Process),
@@ -88,6 +89,7 @@ impl Builder<'_, '_> {
             Value::ResultDirectory
             | Value::ResultReadDirectory
             | Value::ResultReadFile
+            | Value::ResultForeignSession
             | Value::ResultFile
             | Value::ResultCount
             | Value::ResultBytes
@@ -108,6 +110,7 @@ impl Builder<'_, '_> {
                     Value::ResultDirectory => self.capability_type(Value::Directory, span)?,
                     Value::ResultReadDirectory => self.capability_type(Value::ReadDirectory, span)?,
                     Value::ResultReadFile => self.capability_type(Value::ReadFile, span)?,
+                    Value::ResultForeignSession => self.capability_type(Value::ForeignSession, span)?,
                     Value::ResultFile => self.capability_type(Value::File, span)?,
                     Value::ResultChild => self.capability_type(Value::Child, span)?,
                     Value::ResultListener => self.capability_type(Value::Listener, span)?,

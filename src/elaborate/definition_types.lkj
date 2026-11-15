@@ -61,6 +61,7 @@ impl Shape {
             Self::Atom(name) if name == "ReadDirectory" => Receiver::ReadDirectory,
             Self::Atom(name) if name == "ReadFile" => Receiver::ReadFile,
             Self::Atom(name) if name == "ForeignCommand" => Receiver::ForeignCommand,
+            Self::Atom(name) if name == "ForeignSession" => Receiver::ForeignSession,
             Self::Atom(name) if name == "NullDevice" => Receiver::NullDevice,
             Self::Atom(name) if name == "File" => Receiver::File,
             Self::Atom(name) if name == "Process" => Receiver::Process,

@@ -1,0 +1,241 @@
+//! Independent syscall-broker implementation of attached confined sessions.
+//! No checker, IR, runtime or native-emitter implementation is imported.
+use super::foreign::ForeignCode;
+use super::broker::{empty as reply_empty, check_fd, REQUEST, SCRATCH, LAST_OPERATION};
+use crate::x86::*;
+
+fn call(a: &mut Assembler, number: u64) {
+    if number == 3 { a.immediate(A, number); a.syscall(); return; }
+    let again = a.label(); a.bind(again); a.immediate(R11,number); a.store(R13,0,R11);
+    a.immediate(A, number); a.syscall(); a.immediate(C, (-4i64) as u64); a.compare(A,C); a.condition(4,again);
+}
+fn checked(a: &mut Assembler, number: u64, failed: Label) { call(a,number); a.test(A,true); a.condition(8,failed); }
+fn epilogue(a: &mut Assembler) { a.mov(SP,BP); a.pop(BP); a.ret(); }
+fn enter(a: &mut Assembler, _p: ForeignCode, bytes: u64) { a.push(BP); a.mov(BP,SP); a.lea(SP,SP,-(bytes as i64)); }
+fn constant(a: &mut Assembler, at: i64, value: u64) { a.immediate(A,value); a.store(BP,at,A); }
+fn close(a: &mut Assembler, slot: i64) { let skip=a.label(); a.load(DI,BP,slot); a.test(DI,true); a.condition(8,skip); call(a,3); constant(a,slot,!0); a.bind(skip); }
+fn promote(a: &mut Assembler, failed: Label) {
+    let done=a.label(); a.immediate(C,10); a.compare(A,C); a.condition(3,done);
+    a.mov(R8,A); a.mov(DI,A); a.immediate(SI,1030); a.immediate(D,10); call(a,72);
+    a.mov(R9,A); a.mov(DI,R8); call(a,3); a.mov(A,R9); a.test(A,true); a.condition(8,failed); a.bind(done);
+}
+fn mapping(a: &mut Assembler, bytes: u64, failed: Label) {
+    a.immediate(DI,0); a.immediate(SI,bytes); a.immediate(D,3); a.immediate(R10,0x22); a.immediate(R8,!0); a.immediate(R9,0); checked(a,9,failed);
+}
+// Timer deadlines are absolute and never refreshed by partial I/O.
+fn timer(a: &mut Assembler, p: ForeignCode, label: Label) {
+    a.bind(label); enter(a,p,80); a.store(BP,-8,DI); a.store(BP,-16,SI);
+    let invalid=a.label(); let overflow=a.label(); let failed=a.label();
+    a.test(SI,true); a.condition(4,invalid);
+    a.immediate(DI,1); a.lea(SI,BP,-32); checked(a,228,failed);
+    a.load(A,BP,-16); a.immediate(C,1_000_000_000); a.immediate(D,0); a.divide(C,false);
+    a.load(C,BP,-32); a.rr(0x01,A,C,true); a.condition(0,overflow); a.store(BP,-56,A);
+    a.load(C,BP,-24); a.rr(0x01,D,C,true); a.immediate(C,1_000_000_000);
+    let normalized=a.label(); a.compare(D,C); a.condition(2,normalized); a.rr(0x29,D,C,true);
+    a.load(A,BP,-56); a.lea(A,A,1); a.store(BP,-56,A); a.bind(normalized); a.store(BP,-48,D);
+    constant(a,-72,0); constant(a,-64,0);
+    a.load(DI,BP,-8); a.immediate(SI,1); a.lea(D,BP,-72); a.immediate(R10,0); checked(a,286,failed);
+    a.immediate(A,0); epilogue(a);
+    a.bind(invalid); a.immediate(A,(-22i64) as u64); a.jump(failed);
+    a.bind(overflow); a.immediate(A,(-75i64) as u64); a.bind(failed); epilogue(a);
+}
+// DI state, SI desired readiness, D observed descriptor. Timer wins ties.
+fn ready(a: &mut Assembler, p: ForeignCode, label: Label) {
+    a.bind(label); enter(a,p,64);
+    for at in vec![-48i64,-40,-32] { constant(a,at,0); }
+    a.store_width(BP,-48,D,4); a.store_width(BP,-44,SI,2);
+    a.load(A,DI,8); a.store_width(BP,-40,A,4); a.load(A,DI,24); a.store_width(BP,-32,A,4);
+    a.immediate(A,1); a.store_width(BP,-36,A,2); a.store_width(BP,-28,A,2);
+    let again=a.label(); let failed=a.label(); let timeout=a.label(); let dead=a.label(); let okay=a.label();
+    a.bind(again); a.lea(DI,BP,-48); a.immediate(SI,3); a.immediate(D,!0); checked(a,7,failed);
+    a.load_width(A,BP,-26,2,false); a.test(A,false); a.condition(5,timeout);
+    a.load_width(A,BP,-42,2,false); a.test(A,false); a.condition(5,okay);
+    a.load_width(A,BP,-34,2,false); a.test(A,false); a.condition(5,dead); a.jump(again);
+    a.bind(okay); a.immediate(A,0); a.jump(failed);
+    a.bind(timeout); a.immediate(A,(-110i64) as u64); a.jump(failed);
+    a.bind(dead); a.immediate(A,(-32i64) as u64); a.bind(failed); epilogue(a);
+}
+fn reap(a: &mut Assembler, p: ForeignCode, label: Label, kill: Label) {
+    a.bind(kill); enter(a,p,32); a.store(BP,-8,DI);
+    let stopped=a.label(); a.load(A,DI,0); a.test(A,true); a.condition(4,stopped);
+    a.load(DI,DI,8); a.immediate(SI,9); a.immediate(D,0); a.immediate(R10,0); call(a,424);
+    a.bind(stopped); a.load(DI,BP,-8); a.call(label); epilogue(a);
+    a.bind(label); enter(a,p,32); a.store(BP,-8,DI);
+    let done=a.label(); a.load(A,DI,0); a.test(A,true); a.condition(4,done);
+    a.mov(DI,A); a.lea(SI,BP,-16); a.immediate(D,0); a.immediate(R10,0); call(a,61);
+    let failed=a.label(); a.test(A,true); a.condition(8,failed);
+    a.load(DI,BP,-8); a.immediate(A,0); a.store(DI,0,A); a.load_width(A,BP,-16,4,false); a.store(DI,32,A);
+    a.bind(done); a.load(DI,BP,-8); a.load(A,DI,32); a.bind(failed); epilogue(a);
+}
+fn dispose(a: &mut Assembler, p: ForeignCode, kill: Label) {
+    a.bind(p.foreign_session_drop); enter(a,p,32); a.store(BP,-8,DI); a.call(kill);
+    for offset in vec![8i64,16,24] {
+        let absent=a.label(); a.load(A,BP,-8); a.load(DI,A,offset); a.test(DI,true); a.condition(8,absent); call(a,3); a.bind(absent);
+    }
+    a.load(DI,BP,-8); a.immediate(SI,64); call(a,11); a.immediate(A,0); epilogue(a);
+}
+fn start(a: &mut Assembler, p: ForeignCode, timer: Label, ready: Label, filter: Label, filters: usize, environment: &[Label], empty: Label) {
+    a.bind(p.foreign_start); enter(a,p,1152); a.store(BP,-8,DI);
+    let invalid=a.label(); let overflow=a.label(); let failed=a.label(); let cleanup=a.label(); let child=a.label(); let child_failed=a.label(); let parent=a.label();
+    for at in vec![-24i64,-32,-40,-48,-56] { constant(a,at,!0); }
+    for at in vec![-16i64,-64,-72,-80] { constant(a,at,0); }
+    mapping(a,64,failed); a.store(BP,-16,A); a.mov(R8,A);
+    a.immediate(A,0); a.store(R8,0,A); a.store(R8,40,A);
+    a.immediate(A,!0); for at in vec![8i64,16,24,32] { a.store(R8,at,A); }
+    a.immediate(DI,1); a.immediate(SI,0x80800); checked(a,283,failed); promote(a,failed);
+    a.load(R8,BP,-16); a.store(R8,24,A); a.mov(DI,A); a.load(A,BP,-8); a.load(SI,A,-40); a.call(timer); a.test(A,true); a.condition(8,failed);
+    a.immediate(DI,1); a.immediate(SI,0x80001); a.immediate(D,0); a.lea(R10,BP,-400); checked(a,53,failed);
+    a.load_width(A,BP,-400,4,false); a.load(R8,BP,-16); a.store(R8,16,A); a.load_width(A,BP,-396,4,false); a.store(BP,-32,A);
+    a.load_width(A,BP,-400,4,false); promote(a,failed); a.load(R8,BP,-16); a.store(R8,16,A);
+    a.load_width(A,BP,-396,4,false); promote(a,failed); a.store(BP,-32,A);
+    a.lea(DI,BP,-408); a.immediate(SI,0x80000); checked(a,293,failed);
+    a.load_width(A,BP,-408,4,false); a.store(BP,-48,A); a.load_width(A,BP,-404,4,false); a.store(BP,-56,A);
+    a.load_width(A,BP,-408,4,false); promote(a,failed); a.store(BP,-48,A);
+    a.load_width(A,BP,-404,4,false); promote(a,failed); a.store(BP,-56,A);
+    a.load(DI,BP,-8); a.load(DI,DI,-8); a.immediate(SI,1030); a.immediate(D,10); checked(a,72,failed); a.store(BP,-40,A);
+    a.load(DI,BP,-8); a.load(SI,DI,-24); a.load(D,DI,-32); a.test(D,true); a.condition(4,invalid);
+    a.store(BP,-184,SI); a.store(BP,-192,D); a.mov(R8,SI); a.rr(0x01,R8,D,true);
+    a.load_width(A,R8,-1,1,false); a.test(A,false); a.condition(5,invalid);
+    a.immediate(R9,0); a.mov(R8,SI); let count=a.label(); let counted=a.label(); a.bind(count); a.test(D,true); a.condition(4,counted);
+    a.load_width(A,R8,0,1,false); a.test(A,false); let nonzero=a.label(); a.condition(5,nonzero); a.lea(R9,R9,1); a.bind(nonzero);
+    a.lea(R8,R8,1); a.lea(D,D,-1); a.jump(count); a.bind(counted);
+    a.immediate(C,(!0u64)/8-1); a.compare(R9,C); a.condition(7,overflow);
+    a.lea(SI,R9,1); a.shift(SI,4,3); a.store(BP,-72,SI);
+    a.immediate(DI,0); a.immediate(D,3); a.immediate(R10,0x22); a.immediate(R8,!0); a.immediate(R9,0); checked(a,9,failed); a.store(BP,-64,A);
+    a.mov(R8,A); a.load(SI,BP,-184); a.load(D,BP,-192); a.store(R8,0,SI); a.lea(R8,R8,8);
+    let pointers=a.label(); let pointed=a.label(); a.bind(pointers); a.load_width(A,SI,0,1,false); a.lea(SI,SI,1); a.lea(D,D,-1); a.test(D,true); a.condition(4,pointed);
+    a.test(A,false); a.condition(5,pointers); a.store(R8,0,SI); a.lea(R8,R8,8); a.jump(pointers);
+    a.bind(pointed); a.immediate(A,0); a.store(R8,0,A);
+    call(a,39); a.store(BP,-128,A);
+    a.immediate(DI,0x1011); a.immediate(SI,0); a.lea(D,BP,-96); a.immediate(R10,0); a.immediate(R8,0); checked(a,56,failed);
+    a.test(A,true); a.condition(4,child); a.load(R8,BP,-16); a.store(R8,0,A); a.load_width(A,BP,-96,4,false); a.store(R8,8,A); a.jump(parent);
+
+    a.bind(child); a.load(A,BP,-56); a.store(BP,-216,A);
+    a.immediate(DI,1); a.immediate(SI,9); a.immediate(D,0); a.immediate(R10,0); a.immediate(R8,0); checked(a,157,child_failed);
+    call(a,110); a.load(C,BP,-128); a.compare(A,C); let parent_alive=a.label(); a.condition(4,parent_alive); a.immediate(A,(-10i64) as u64); a.jump(child_failed); a.bind(parent_alive);
+    for target in 0usize..6usize {
+        if target<2 { a.load(DI,BP,-32); }
+        else if target==2 { a.load(DI,BP,-8); a.load(DI,DI,-16); }
+        else if target==3 { a.load(DI,BP,-8); a.load(DI,DI,0); }
+        else if target==4 { a.load(DI,BP,-56); }
+        else { a.load(DI,BP,-40); }
+        a.immediate(SI,target as u64); a.immediate(D,if target==3 || target==4 {0x80000} else {0}); checked(a,292,child_failed);
+        if target==4 { constant(a,-216,4); }
+    }
+    a.immediate(DI,6); a.immediate(SI,0xffffffff); a.immediate(D,0); checked(a,436,child_failed);
+    for at in vec![-1024i64,-1016,-1008,-1000] { constant(a,at,0); }
+    a.immediate(DI,2); a.lea(SI,BP,-1024); a.immediate(D,0); a.immediate(R10,8); checked(a,14,child_failed);
+    a.immediate(DI,13); a.lea(SI,BP,-1024); a.immediate(D,0); a.immediate(R10,8); checked(a,13,child_failed);
+    a.immediate(DI,5); checked(a,81,child_failed);
+    a.immediate(DI,0); a.immediate(SI,0); a.immediate(D,1); checked(a,444,child_failed);
+    a.immediate(C,9); a.compare(A,C); let supported=a.label(); a.condition(3,supported); a.immediate(A,(-95i64) as u64); a.jump(child_failed); a.bind(supported);
+    a.mov(R8,A); constant(a,-544,0x1ffff); constant(a,-536,3); constant(a,-528,3);
+    a.immediate(C,10); a.compare(R8,C); let net_ready=a.label(); a.condition(2,net_ready); constant(a,-536,15); a.bind(net_ready);
+    a.lea(DI,BP,-544); a.immediate(SI,24); a.immediate(D,0); checked(a,444,child_failed); a.store(BP,-224,A);
+    constant(a,-576,13); constant(a,-568,5); a.load(DI,BP,-224); a.immediate(SI,1); a.lea(D,BP,-576); a.immediate(R10,0); checked(a,445,child_failed);
+    constant(a,-576,6); constant(a,-568,2); a.load(DI,BP,-224); a.immediate(SI,1); a.lea(D,BP,-576); a.immediate(R10,0); checked(a,445,child_failed);
+    a.immediate(DI,38); a.immediate(SI,1); a.immediate(D,0); a.immediate(R10,0); a.immediate(R8,0); checked(a,157,child_failed);
+    a.load(DI,BP,-224); a.immediate(SI,0); checked(a,446,child_failed); a.load(DI,BP,-224); call(a,3);
+    constant(a,-512,filters as u64); a.address(A,filter); a.store(BP,-504,A); a.immediate(DI,22); a.immediate(SI,2); a.lea(D,BP,-512); a.immediate(R10,0); a.immediate(R8,0); checked(a,157,child_failed);
+    for (index,label) in environment.iter().enumerate() { a.address(A,*label); a.store(BP,-896+(index as i64)*8,A); }
+    constant(a,-896+(environment.len() as i64)*8,0);
+    a.immediate(DI,3); a.address(SI,empty); a.load(D,BP,-64); a.lea(R10,BP,-896); a.immediate(R8,4096); call(a,322);
+    a.bind(child_failed); a.store(BP,-800,A); a.load(DI,BP,-216); a.lea(SI,BP,-800); a.immediate(D,8); call(a,1);
+    a.immediate(DI,125); a.immediate(A,60); a.syscall(); a.raw(&[0x0f,0x0b]);
+
+    a.bind(parent); for at in vec![-32i64,-40,-56] { close(a,at); }
+    a.load(DI,BP,-16); a.immediate(SI,1); a.load(D,BP,-48); a.call(ready); a.test(A,true); a.condition(8,failed);
+    a.load(DI,BP,-48); a.lea(SI,BP,-800); a.immediate(D,8); checked(a,0,failed);
+    a.test(A,true); let exec_ready=a.label(); a.condition(4,exec_ready);
+    a.immediate(C,8); a.compare(A,C); a.condition(5,invalid); a.load(A,BP,-800); a.jump(failed);
+    a.bind(exec_ready); a.load(A,BP,-16); a.store(BP,-88,A); constant(a,-16,0); a.jump(cleanup);
+    a.bind(invalid); a.immediate(A,(-22i64) as u64); a.jump(failed);
+    a.bind(overflow); a.immediate(A,(-75i64) as u64);
+    a.bind(failed); a.store(BP,-88,A); a.load(DI,BP,-16); a.test(DI,true); let absent=a.label(); a.condition(4,absent); a.call(p.foreign_session_drop); a.bind(absent);
+    a.bind(cleanup); for at in vec![-24i64,-32,-40,-48,-56] { close(a,at); }
+    a.load(DI,BP,-64); a.test(DI,true); let unmapped=a.label(); a.condition(4,unmapped); a.load(SI,BP,-72); call(a,11); a.bind(unmapped);
+    a.load(A,BP,-88); epilogue(a);
+}
+fn exchange(a: &mut Assembler, p: ForeignCode, timer: Label, ready: Label, kill: Label) {
+    a.bind(p.foreign_exchange); enter(a,p,160); a.store(BP,-120,DI);
+    for (index,at) in vec![-8i64,-16,-24,-32,-40,-80].iter().enumerate() { a.load(A,DI,-((index as i64)*8)); a.store(BP,*at,A); }
+    a.load(A,BP,-40); a.store(BP,-48,A); constant(a,-64,0);
+    let failed=a.label(); let poison=a.label(); let invalid=a.label(); let end=a.label(); let timeout=a.label(); let broken=a.label();
+    a.load(DI,BP,-8); a.load(A,DI,0); a.test(A,true); a.condition(4,broken);
+    a.load(A,DI,40); a.test(A,true); a.condition(5,broken);
+    a.load(A,BP,-48); a.test(A,true); a.condition(8,invalid); let allocated=a.label(); a.condition(4,allocated);
+    a.mov(SI,A); a.immediate(DI,0); a.immediate(D,3); a.immediate(R10,0x22); a.immediate(R8,!0); a.immediate(R9,0); checked(a,9,failed); a.store(BP,-64,A);
+    a.bind(allocated); a.load(A,BP,-64); a.store(BP,-72,A);
+    a.load(DI,BP,-8); a.load(DI,DI,24); a.load(SI,BP,-80); a.call(timer); a.test(A,true); a.condition(8,failed);
+    let sending=a.label(); let reading=a.label(); let write_wait=a.label(); let read_wait=a.label(); let complete=a.label();
+    a.bind(sending); a.load(D,BP,-24); a.test(D,true); a.condition(4,reading);
+    a.load(DI,BP,-8); a.load(DI,DI,16); a.load(SI,BP,-16); a.immediate(R10,0x4040); a.immediate(R8,0); a.immediate(R9,0); call(a,44);
+    a.immediate(C,(-11i64) as u64); a.compare(A,C); a.condition(4,write_wait); a.test(A,true); a.condition(8,poison); a.condition(4,broken);
+    a.load(C,BP,-16); a.rr(0x01,C,A,true); a.store(BP,-16,C); a.load(C,BP,-24); a.rr(0x29,C,A,true); a.store(BP,-24,C); a.jump(sending);
+    a.bind(write_wait); a.load(DI,BP,-8); a.immediate(SI,4); a.load(D,DI,16); a.call(ready); a.test(A,true); a.condition(8,poison); a.jump(sending);
+    a.bind(reading); a.load(D,BP,-40); a.test(D,true); a.condition(4,complete);
+    a.load(DI,BP,-8); a.load(DI,DI,16); a.load(SI,BP,-72); a.immediate(R10,0x40); a.immediate(R8,0); a.immediate(R9,0); call(a,45);
+    a.immediate(C,(-11i64) as u64); a.compare(A,C); a.condition(4,read_wait); a.test(A,true); a.condition(8,poison); a.condition(4,broken);
+    a.load(C,BP,-72); a.rr(0x01,C,A,true); a.store(BP,-72,C); a.load(C,BP,-40); a.rr(0x29,C,A,true); a.store(BP,-40,C); a.jump(reading);
+    a.bind(read_wait); a.load(DI,BP,-8); a.immediate(SI,1); a.load(D,DI,16); a.call(ready); a.test(A,true); a.condition(8,poison); a.jump(reading);
+    a.bind(complete); a.load(DI,BP,-8); a.load(DI,DI,24); a.lea(SI,BP,-96); a.immediate(D,8); call(a,0);
+    a.immediate(C,(-11i64) as u64); a.compare(A,C); let commit=a.label(); a.condition(4,commit); a.test(A,true); a.condition(8,poison); a.jump(timeout);
+    a.bind(commit); a.load(DI,BP,-32); a.load(SI,BP,-64); a.load(C,BP,-48); a.raw(&[0xf3,0xa4]); a.load(A,BP,-48); a.jump(failed);
+    a.bind(invalid); a.immediate(A,(-22i64) as u64); a.jump(failed);
+    a.bind(timeout); a.immediate(A,(-110i64) as u64); a.jump(poison);
+    a.bind(broken); a.immediate(A,(-32i64) as u64);
+    a.bind(poison); a.immediate(C,(-104i64) as u64); a.compare(A,C); let named=a.label(); a.condition(5,named); a.immediate(A,(-32i64) as u64); a.bind(named); a.store(BP,-56,A); a.load(DI,BP,-8); a.store(DI,40,A); a.call(kill); a.load(A,BP,-56);
+    a.bind(failed); a.store(BP,-56,A); a.load(DI,BP,-64); a.test(DI,true); a.condition(4,end); a.load(SI,BP,-48); call(a,11);
+    a.bind(end); a.load(A,BP,-56); epilogue(a);
+}
+fn finish(a: &mut Assembler, p: ForeignCode, timer: Label, ready: Label, reap: Label, kill: Label) {
+    a.bind(p.foreign_finish); enter(a,p,32); a.store(BP,-8,DI); a.store(BP,-16,SI);
+    let done=a.label(); let failed=a.label(); let poison=a.label();
+    a.load(A,DI,0); a.test(A,true); a.condition(4,done);
+    a.load(DI,DI,24); a.call(timer); a.test(A,true); a.condition(8,failed);
+    a.load(DI,BP,-8); a.load(DI,DI,16); a.immediate(SI,1); call(a,48);
+    a.load(DI,BP,-8); a.immediate(SI,1); a.load(D,DI,8); a.call(ready); a.test(A,true); a.condition(8,poison);
+    a.load(DI,BP,-8); a.call(reap); a.jump(failed);
+    a.bind(done); a.load(A,DI,32); a.jump(failed);
+    a.bind(poison); a.store(BP,-24,A); a.load(DI,BP,-8); a.store(DI,40,A); a.call(kill); a.load(A,BP,-24);
+    a.bind(failed); epilogue(a);
+}
+pub(super) fn emit(a: &mut Assembler, p: ForeignCode, filter: Label, filters: usize, environment: &[Label], empty: Label) {
+    let timed=a.label(); let wait=a.label(); let reaped=a.label(); let killed=a.label();
+    timer(a,p,timed); ready(a,p,wait); reap(a,p,reaped,killed); dispose(a,p,killed);
+    start(a,p,timed,wait,filter,filters,environment,empty);
+    exchange(a,p,timed,wait,killed); finish(a,p,timed,wait,reaped,killed);
+}
+
+fn dispatch_call(a: &mut Assembler, function: Label) { a.push(R13); a.lea(R13,BP,LAST_OPERATION); a.call(function); a.pop(R13); }
+// Every pointer used by RPC is found in this private list before dereferencing.
+fn locate(a: &mut Assembler, bad: Label) {
+    a.lea(DI,BP,-240); a.load(C,DI,0); a.load(R8,BP,REQUEST+8);
+    let next=a.label(); let found=a.label(); a.bind(next); a.test(C,true); a.condition(4,bad); a.compare(C,R8); a.condition(4,found);
+    a.lea(DI,C,48); a.load(C,DI,0); a.jump(next); a.bind(found); a.store(BP,SCRATCH-64,C); a.store(BP,SCRATCH-72,DI);
+}
+pub(super) fn dispatch(a: &mut Assembler, p: ForeignCode, labels: &[Label], reply: Label, bad: Label) {
+    a.bind(labels[0]);
+    for index in 0usize..3usize { a.load(A,BP,REQUEST+8+index as i64*8); check_fd(a,A,bad); a.store(BP,SCRATCH-index as i64*8,A); }
+    a.store(BP,SCRATCH-24,R14); a.store(BP,SCRATCH-32,R15); a.load(A,BP,REQUEST+32); a.store(BP,SCRATCH-40,A);
+    a.lea(DI,BP,SCRATCH); dispatch_call(a,p.foreign_start);
+    let start_failed=a.label(); a.test(A,true); a.condition(8,start_failed);
+    a.load(C,BP,-240); a.store(A,48,C); a.store(BP,-240,A); a.bind(start_failed); reply_empty(a,reply);
+
+    a.bind(labels[1]); locate(a,bad); a.store(BP,SCRATCH,C); a.store(BP,SCRATCH-8,R14); a.store(BP,SCRATCH-16,R15);
+    a.load(A,BP,REQUEST+16); a.store(BP,SCRATCH-32,A); a.test(A,true); let zero=a.label(); let allocated=a.label(); let failed=a.label(); a.condition(4,zero); a.condition(8,bad);
+    a.mov(SI,A); a.immediate(DI,0); a.immediate(D,3); a.immediate(R10,0x22); a.immediate(R8,!0); a.immediate(R9,0);
+    a.immediate(A,9); a.syscall(); a.test(A,true); a.condition(8,failed); a.jump(allocated);
+    a.bind(zero); a.immediate(A,0); a.bind(allocated); a.store(BP,SCRATCH-24,A); a.store(BP,SCRATCH-80,A);
+    a.load(A,BP,REQUEST+24); a.store(BP,SCRATCH-40,A); a.lea(DI,BP,SCRATCH); dispatch_call(a,p.foreign_exchange); a.store(BP,SCRATCH-88,A);
+    a.test(R14,true); let no_request=a.label(); a.condition(4,no_request); a.mov(DI,R14); a.mov(SI,R15); a.immediate(A,11); a.syscall(); a.bind(no_request);
+    a.load(R14,BP,SCRATCH-80); a.load(R15,BP,REQUEST+16); a.load(A,BP,SCRATCH-88); a.test(A,true); a.condition(8,failed);
+    a.mov(R8,R14); a.mov(R9,R15); a.jump(reply);
+    a.bind(failed); reply_empty(a,reply);
+
+    a.bind(labels[2]); locate(a,bad); a.mov(DI,C); a.load(SI,BP,REQUEST+16); dispatch_call(a,p.foreign_finish); reply_empty(a,reply);
+    a.bind(labels[3]); locate(a,bad); a.load(A,C,48); a.store(DI,0,A); a.mov(DI,C); dispatch_call(a,p.foreign_session_drop); reply_empty(a,reply);
+    a.bind(p.foreign_shutdown); a.push(R13); a.lea(R13,BP,LAST_OPERATION);
+    let next=a.label(); let done=a.label(); a.bind(next); a.load(DI,BP,-240); a.test(DI,true); a.condition(4,done);
+    a.load(A,DI,48); a.store(BP,-240,A); a.call(p.foreign_session_drop); a.jump(next); a.bind(done); a.pop(R13); a.ret();
+}

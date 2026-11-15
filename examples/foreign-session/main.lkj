@@ -1,0 +1,59 @@
+use std::foreign_session;
+use std::foreign;
+
+fn command() -> Vec<Vec<u8>> { vec![b"cat-file"[..].to_vec(), b"--batch"[..].to_vec()] }
+fn request(hash: &[u8]) -> Vec<u8> { let mut bytes=hash.to_vec(); bytes.push(b'\n'); bytes }
+fn expected(hash: &[u8]) -> Vec<u8> { let mut bytes=hash.to_vec(); bytes.extend_from_slice(b" blob 6\nhello\n\n"); bytes }
+
+pub fn main(mut tool: ForeignCommand, mut root: ReadDirectory, mut sink: NullDevice, mut args: Arguments, mut output: Stdout, mut clock: Clock) {
+    let arguments=args.args(); assert_eq!(arguments.len(),1usize);
+    let query=request(&arguments[0]); let reply=expected(&arguments[0]); let argv=command();
+    let before=clock.nanoseconds().unwrap();
+    let mut session=match foreign_session::start(&mut tool,&mut root,&mut sink,&argv,3_000_000_000usize) {
+        Ok(value)=>value,
+        Err(error)=>{ assert!(error==38i64 || error==95i64 || error==1i64); output.write(format!("ok foreign session unavailable: {error}\n").as_bytes()); return; }
+    };
+    let started=clock.nanoseconds().unwrap();
+    for _index in 0usize..64usize {
+        assert_eq!(foreign_session::exchange(&mut session,&query,reply.len(),3_000_000_000usize).unwrap(),reply);
+    }
+    let served=clock.nanoseconds().unwrap();
+    assert_eq!(foreign_session::finish(&mut session,3_000_000_000usize).unwrap(),0usize);
+    assert_eq!(foreign_session::finish(&mut session,3_000_000_000usize).unwrap(),0usize);
+    assert_eq!(foreign_session::exchange(&mut session,&query,reply.len(),3_000_000_000usize).unwrap_err(),32i64);
+    drop(session);
+    let mut timeout=foreign_session::start(&mut tool,&mut root,&mut sink,&argv,3_000_000_000usize).unwrap();
+    let mut buffer=vec![77u8;5usize];
+    assert_eq!(timeout.__lkjscript_exchange(b"",&mut buffer,20_000_000usize),-110i64);
+    assert_eq!(buffer,vec![77u8;5usize]);
+    assert_eq!(foreign_session::exchange(&mut timeout,&query,reply.len(),3_000_000_000usize).unwrap_err(),32i64);
+    assert_eq!(foreign_session::finish(&mut timeout,3_000_000_000usize).unwrap(),9usize);
+    drop(timeout);
+    let invalid=vec![b"cat-file"[..].to_vec(),b"--invalid-foreign-session-test"[..].to_vec()];
+    let mut dead=foreign_session::start(&mut tool,&mut root,&mut sink,&invalid,3_000_000_000usize).unwrap();
+    assert_eq!(foreign_session::exchange(&mut dead,&query,reply.len(),3_000_000_000usize).unwrap_err(),32i64);
+    assert!(foreign_session::finish(&mut dead,3_000_000_000usize).unwrap()!=0usize);
+    drop(dead);
+    let mut slot: Option<ForeignSession>=None;
+    assert_eq!(foreign_session::idempotent_request(&mut tool,&mut root,&mut sink,&argv,&mut slot,&query,reply.len(),3_000_000_000usize,1usize).unwrap(),reply);
+    let failed=foreign_session::exchange(slot.as_mut().unwrap(),b"",1usize,20_000_000usize);
+    assert_eq!(failed.unwrap_err(),110i64);
+    assert_eq!(foreign_session::idempotent_request(&mut tool,&mut root,&mut sink,&argv,&mut slot,&query,reply.len(),3_000_000_000usize,1usize).unwrap(),reply);
+    drop(slot);
+    let empty: Vec<Vec<u8>>=Vec::new();
+    assert!(foreign_session::start(&mut tool,&mut root,&mut sink,&empty,0usize).is_err());
+    assert!(foreign_session::start(&mut tool,&mut root,&mut sink,&vec![b"bad\0arg"[..].to_vec()],3_000_000_000usize).is_err());
+    let baseline=clock.nanoseconds().unwrap();
+    for _index in 0usize..16usize {
+        let result=foreign::run(&mut tool,&mut root,&mut sink,&vec![b"cat-file"[..].to_vec(),b"blob"[..].to_vec(),arguments[0].clone()],3_000_000_000usize).unwrap();
+        assert_eq!(result.output.as_slice(),b"hello\n"); assert_eq!(result.exit_code,Some(0u8));
+    }
+    let finished=clock.nanoseconds().unwrap();
+    output.write(format!("ok foreign session: 64 ordered replies, deadline poison, EOF, transactional output, bounded restart; start_ns={} request_ns={} spawn_request_ns={}\n",started-before,(served-started)/64usize,(finished-baseline)/16usize).as_bytes());
+}
+
+pub fn hold(mut tool: ForeignCommand, mut root: ReadDirectory, mut sink: NullDevice, mut output: Stdout, mut clock: Clock) {
+    let argv=command(); let session=foreign_session::start(&mut tool,&mut root,&mut sink,&argv,3_000_000_000usize).unwrap();
+    output.write(b"ready\n"); let limit=clock.nanoseconds().unwrap()+10_000_000_000usize;
+    while clock.nanoseconds().unwrap()<limit {} drop(session);
+}

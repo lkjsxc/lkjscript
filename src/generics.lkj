@@ -1577,6 +1577,7 @@ fn trait_requirements(
             | TypeKind::ReadDirectory
             | TypeKind::ReadFile
             | TypeKind::ForeignCommand
+            | TypeKind::ForeignSession
             | TypeKind::NullDevice
             | TypeKind::File
             | TypeKind::Process
@@ -1649,6 +1650,7 @@ fn trait_requirements(
             | TypeKind::ReadDirectory
             | TypeKind::ReadFile
             | TypeKind::ForeignCommand
+            | TypeKind::ForeignSession
             | TypeKind::NullDevice
             | TypeKind::File
             | TypeKind::Process

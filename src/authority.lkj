@@ -48,6 +48,7 @@ fn capability(kind: &TypeKind) -> Option<(&'static str, bool)> {
         TypeKind::Directory => Some(("Directory", true)),
         TypeKind::ReadDirectory => Some(("ReadDirectory", true)),
         TypeKind::ForeignCommand => Some(("ForeignCommand", true)),
+        TypeKind::ForeignSession => Some(("ForeignSession", true)),
         TypeKind::NullDevice => Some(("NullDevice", false)),
         TypeKind::Listener => Some(("Listener", true)),
         TypeKind::Connector => Some(("Connector", true)),
@@ -235,6 +236,7 @@ fn cleanup(
             TypeKind::Vec { inner } | TypeKind::Box { inner } => pending.push(*inner),
             TypeKind::File | TypeKind::ReadFile => operation(operations, "file_close", line, column, true),
             TypeKind::ForeignCommand => operation(operations, "foreign_command_close", line, column, true),
+            TypeKind::ForeignSession => operation(operations, "foreign_session_kill_reap_close", line, column, true),
             TypeKind::NullDevice => operation(operations, "null_device_close", line, column, true),
             TypeKind::Directory | TypeKind::ReadDirectory => operation(operations, "directory_close", line, column, true),
             TypeKind::Listener => operation(operations, "listener_close", line, column, true),
@@ -430,18 +432,27 @@ pub fn render(checked: &CheckedProgram, report: &Report) -> String {
         }
     }
     let mut foreign = false;
+    let mut persistent = false;
+    let mut captured = false;
     for function in &report.functions {
         for operation in &function.operations {
-            if operation.name == "foreign_run" { foreign = true; }
+            if operation.name == "foreign_run" { foreign = true; captured = true; }
+            if operation.name == "foreign_start" { foreign = true; persistent = true; }
         }
     }
     if foreign {
         text.push_str("foreign execution profile (invocation template):\n");
+        if persistent {
+            text.push_str("  long-lived sessions: attached stdin/stdout channel; stderr goes to the explicit NullDevice; absolute per-request deadlines poison, kill and reap; drop kills and reaps\n");
+        }
         text.push_str("  immutable initial ELF snapshot; foreign_image exposes its transformed bytes for checked SHA256\n");
-        text.push_str("  read/execute beneath the exclusively borrowed root until reap, including preexisting special files and mutable runtime code\n");
-        text.push_str("  explicit verified NullDevice read/write without ioctl; private readable/writable/seekable stdout/stderr capture memfds\n");
-        text.push_str("  no socket syscalls, descendants, filesystem metadata mutation syscalls or credential changes; reexec retains confinement\n  anonymous capture content can be reexecuted within the same confinement; runtime files need not be immutable\n");
-        text.push_str("  absolute monotonic deadline begins before setup; attached parent-death lifecycle; return only after kill/reap\n");
+        text.push_str("  read/execute beneath the passed read-only root until reap, including preexisting special files and mutable runtime code\n");
+        if captured {
+            text.push_str("  explicit verified NullDevice read/write without ioctl; private readable/writable/seekable stdout/stderr capture memfds\n");
+        }
+        text.push_str("  no socket-creation syscalls, descendants, filesystem metadata mutation syscalls or credential changes; reexec retains confinement; runtime files need not be immutable\n");
+        if captured { text.push_str("  one-shot captures can be reexecuted inside the same confinement; absolute deadline begins before setup; return only after kill/reap\n"); }
+        if persistent { text.push_str("  sessions retain a read-only root descriptor after the start borrow ends; exchanges have one absolute deadline across request and response; idle lifetime is attached to the owner\n"); }
         text.push_str("  outside metadata, clocks and entropy remain observable; no claim of complete IPC/information isolation\n");
         text.push_str("  fixed environment: LD_LIBRARY_PATH=/proc/self/fd/5/.runtime; HOME=/proc/self/fd/5; GIT_CONFIG_GLOBAL=/proc/self/fd/5/.no-global-config; GIT_CONFIG_NOSYSTEM=1; GIT_OPTIONAL_LOCKS=0; GIT_TERMINAL_PROMPT=0; LC_ALL=C\n");
     }

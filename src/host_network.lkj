@@ -10,6 +10,8 @@ mod directories;
 mod lifecycle;
 #[path = "host_network/foreign.lkj"]
 mod foreign;
+#[path = "host_network/foreign_session.lkj"]
+mod foreign_session;
 use crate::x86::*;
 
 struct Connection {
@@ -191,6 +193,16 @@ impl Network {
         let (handle, _) = self.request(54, &[command, root, sink, duration as u64], arguments)?;
         Ok(handle as u64)
     }
+    pub fn start_foreign(&mut self, command: u64, root: u64, sink: u64, arguments: &[u8], duration: usize) -> Result<u64, i64> {
+        let (handle, _) = self.request(57, &[command, root, sink, duration as u64], arguments)?; Ok(handle as u64)
+    }
+    pub fn exchange_foreign(&mut self, session: u64, request: &[u8], response: &mut [u8], duration: usize) -> Result<usize, i64> {
+        let (count, body) = self.request(58, &[session, response.len() as u64, duration as u64], request)?;
+        if count as usize != response.len() || body.len() != response.len() { return Err(5); }
+        response.copy_from_slice(&body); Ok(body.len())
+    }
+    pub fn finish_foreign(&mut self, session: u64, duration: usize) -> Result<u64, i64> { let (status, _) = self.request(59, &[session, duration as u64], b"")?; Ok(status as u64) }
+    pub fn drop_foreign(&mut self, session: u64) { let _ = self.unit_request(60, &[session]); }
     pub fn readonly_remote(&mut self, file: u64) -> Result<u64, i64> {
         let (handle, _) = self.request(9, &[file], b"")?;
         Ok(handle as u64)

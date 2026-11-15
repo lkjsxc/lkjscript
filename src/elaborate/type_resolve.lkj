@@ -473,7 +473,7 @@ impl Compiler<'_> {
                     | "Stdout"
                     | "Stdin"
                     | "Stderr"
-                    | "Directory" | "ReadDirectory" | "ReadFile" | "ForeignCommand" | "NullDevice"
+                    | "Directory" | "ReadDirectory" | "ReadFile" | "ForeignCommand" | "ForeignSession" | "NullDevice"
                     | "File"
                     | "Process"
                     | "Clock"
@@ -504,6 +504,7 @@ impl Compiler<'_> {
                 "ReadDirectory" => ir::TypeKind::ReadDirectory,
                 "ReadFile" => ir::TypeKind::ReadFile,
                 "ForeignCommand" => ir::TypeKind::ForeignCommand,
+                "ForeignSession" => ir::TypeKind::ForeignSession,
                 "NullDevice" => ir::TypeKind::NullDevice,
                 "File" => ir::TypeKind::File,
                 "Process" => ir::TypeKind::Process,

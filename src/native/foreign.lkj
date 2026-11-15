@@ -287,6 +287,7 @@ pub(super) fn emit(a: &mut Assembler, p: Platform) {
     reopen(a,p,readable);
     image(a,p,write,copy,name,loader,readable); null_device(a,p,null_path,readable);
     run(a,p,write,copy,name,filter,bytes.len()/8,&environment,empty);
+    super::foreign_session::emit(a, p, filter, bytes.len()/8, &environment, empty);
     a.bind(write);
     let writing=a.label(); let written=a.label(); let write_error=a.label();
     a.bind(writing); a.test(D,true); a.condition(4,written); call(a,1); a.test(A,true); a.condition(8,write_error);

@@ -22,6 +22,8 @@ mod ownership;
 pub(crate) mod platform;
 mod process;
 mod foreign;
+#[path = "native/foreign_session.lkj"]
+mod foreign_session;
 mod network;
 mod readiness;
 mod storage;
@@ -1398,6 +1400,7 @@ fn emit_drop(
                 a.call(runtime.release);
             }
         }
+        TypeKind::ForeignSession => { a.load(DI, BP, -8); a.load(DI, DI, 0); a.call(p.foreign_session_drop); }
         TypeKind::Child => {
             a.load(DI, BP, -8);
             a.call(p.child_drop);
@@ -1661,8 +1664,8 @@ fn prepare_program(
         matches!(instruction.op, Op::Intrinsic { name: IntrinsicOp::FileLockWait, .. })));
     let command_environment = program.types.iter().any(|ty| matches!(ty.kind, TypeKind::Environment))
         || match grants { Some(grants) => grants.iter().any(|grant| matches!(grant, ir::EntryGrant::DirectoryEnvironment(_) | ir::EntryGrant::ReadDirectoryEnvironment(_))), None => false };
-    let foreign = program.functions.iter().any(|function| function.body.iter().any(|instruction|
-        matches!(instruction.op, Op::Intrinsic { name: IntrinsicOp::ForeignRun | IntrinsicOp::ForeignImage, .. })))
+    let foreign = program.types.iter().any(|ty| matches!(ty.kind, TypeKind::ForeignSession)) || program.functions.iter().any(|function| function.body.iter().any(|instruction|
+        matches!(instruction.op, Op::Intrinsic { name: IntrinsicOp::ForeignRun | IntrinsicOp::ForeignImage | IntrinsicOp::ForeignStart | IntrinsicOp::ForeignExchange | IntrinsicOp::ForeignFinish, .. })))
         || grants.map_or(false, |provided| provided.iter().any(|grant| matches!(grant, ir::EntryGrant::ForeignCommand(_) | ir::EntryGrant::NullDevice)));
     let private_file = program.functions.iter().any(|function| function.body.iter().any(|instruction|
         matches!(instruction.op, Op::Intrinsic { name: IntrinsicOp::FileSetPrivate, .. })));

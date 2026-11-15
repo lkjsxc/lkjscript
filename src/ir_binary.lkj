@@ -78,6 +78,7 @@ fn ty(out: &mut Vec<u8>, value: &ir::Type) {
         ir::TypeKind::ReadFile => out.push(31),
         ir::TypeKind::ForeignCommand => out.push(32),
         ir::TypeKind::NullDevice => out.push(33),
+        ir::TypeKind::ForeignSession => out.push(34),
     }
 }
 fn returns(out: &mut Vec<u8>, value: &Option<ir::ReturnSource>) {
@@ -280,6 +281,7 @@ impl<'a> Reader<'a> {
             31 => ir::TypeKind::ReadFile,
             32 => ir::TypeKind::ForeignCommand,
             33 => ir::TypeKind::NullDevice,
+            34 => ir::TypeKind::ForeignSession,
             _ => return None,
         };
         Some(ir::Type { name, kind })

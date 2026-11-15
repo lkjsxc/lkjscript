@@ -38,6 +38,9 @@ pub trait Host {
     fn open_null_device(&mut self) -> Result<u64, i64> { Err(38) }
     fn foreign_image(&mut self, _handle: u64) -> Result<u64, i64> { Err(38) }
     fn run_foreign(&mut self, _command: u64, _root: u64, _sink: u64, _arguments: &[u8], _duration: usize) -> Result<u64, i64> { Err(38) }
+    fn start_foreign(&mut self, _command: u64, _root: u64, _sink: u64, _arguments: &[u8], _duration: usize) -> Result<u64, i64> { Err(38) }
+    fn exchange_foreign(&mut self, _session: u64, _request: &[u8], _response: &mut [u8], _duration: usize) -> Result<usize, i64> { Err(38) }
+    fn finish_foreign(&mut self, _session: u64, _duration: usize) -> Result<u64, i64> { Err(38) }
     fn open_file(&mut self, directory: u64, path: &[u8], create: bool) -> Result<u64, i64>;
     fn open_read_file(&mut self, directory: u64, path: &[u8]) -> Result<u64, i64>;
     fn seek_file(&mut self, handle: u64, offset: i64, whence: u8) -> Result<usize, i64>;
@@ -364,6 +367,7 @@ enum Value {
     ReadDirectory(u64),
     ReadFile(u64),
     ForeignCommand(u64),
+    ForeignSession(u64),
     NullDevice(u64),
     File(u64),
     Process,
@@ -818,6 +822,7 @@ impl<H: Host> Interpreter<'_, H> {
             | Value::ReadDirectory(_)
             | Value::ReadFile(_)
             | Value::ForeignCommand(_)
+            | Value::ForeignSession(_)
             | Value::NullDevice(_)
             | Value::File(_)
             | Value::Child(_)
@@ -1019,6 +1024,7 @@ impl<H: Host> Interpreter<'_, H> {
             | (TypeKind::ReadDirectory, Value::ReadDirectory(handle))
             | (TypeKind::ReadFile, Value::ReadFile(handle))
             | (TypeKind::ForeignCommand, Value::ForeignCommand(handle))
+            | (TypeKind::ForeignSession, Value::ForeignSession(handle))
             | (TypeKind::NullDevice, Value::NullDevice(handle))
             | (TypeKind::File, Value::File(handle))
             | (TypeKind::Child, Value::Child(handle))
@@ -1499,7 +1505,7 @@ impl<H: Host> Interpreter<'_, H> {
             Value::Child(handle) => self.host.drop_process(handle),
             Value::Readiness(handle) => self.host.close_readiness(handle),
             Value::Stop(handle) => self.host.close_stop(handle),
-            Value::Directory(handle) | Value::ReadDirectory(handle) | Value::ReadFile(handle) | Value::ForeignCommand(handle) | Value::NullDevice(handle) | Value::File(handle) | Value::Listener(handle) => self.host.close_handle(handle),
+            Value::Directory(handle) | Value::ReadDirectory(handle) | Value::ReadFile(handle) | Value::ForeignCommand(handle) | Value::ForeignSession(handle) | Value::NullDevice(handle) | Value::File(handle) | Value::Listener(handle) => self.host.close_handle(handle),
             _ => {}
         }
         if work.release {
@@ -2644,7 +2650,7 @@ fn run_inner<'a, H: Host>(
                             | ir::EntryGrant::ReadDirectoryEnvironment(_) | ir::EntryGrant::ReadDirectoryEnvironmentValue(_, _) | ir::EntryGrant::Environment(_)) { 1001 } else { 1000 };
                     for (_, previous) in &values {
                         match previous {
-                            Value::Directory(handle) | Value::ReadDirectory(handle) | Value::ForeignCommand(handle) | Value::NullDevice(handle) | Value::Listener(handle) => interpreter.host.close_handle(*handle),
+                            Value::Directory(handle) | Value::ReadDirectory(handle) | Value::ForeignCommand(handle) | Value::ForeignSession(handle) | Value::NullDevice(handle) | Value::Listener(handle) => interpreter.host.close_handle(*handle),
                             Value::Readiness(handle) => interpreter.host.close_readiness(*handle),
                             Value::Stop(handle) => interpreter.host.close_stop(*handle),
                             _ => {}
