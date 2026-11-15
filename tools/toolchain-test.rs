@@ -1,5 +1,6 @@
 // Run with a compiler executable and an existing empty work directory.
 // This suite uses only lkjscript capabilities and leaves that directory empty.
+mod static_view_edit_tests;
 mod diagnostic_edits;
 mod borrow_edit_tests;
 mod consumer_edit_tests;
@@ -505,6 +506,7 @@ fn diagnostics(
     report: &mut Report,
 ) -> Result<(), String> {
     rewrite_diagnostics(world, executable, directory, config, report)?;
+    static_view_edit_tests::run(world, executable, directory, config, report)?;
     borrow_edit_tests::run(world, executable, directory, config, report)?;
     consumer_edit_tests::run(world, executable, directory, config, report)?;
     iterator_edit_tests::run(world, executable, directory, config, report)?;

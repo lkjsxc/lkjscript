@@ -161,7 +161,7 @@ checked on each live leaf. A named shared output lifetime without a source input
 is universal and also requires static origin. Inactive leaves satisfy that contract;
 absence of active input leaves does not prove output absence. Ordinary dynamic
 outputs may shorten static literals. Explicit static input/local/field/alias/bound
-constraints or mixed static/dynamic source output annotations remain unsupported; own a text label as String instead of a &'static str field.
+constraints or mixed static/dynamic source output annotations remain unsupported; own a text label as String instead of a &'static str field, take the constructor input as &str, and construct the owned field with label.to_string().
 Direct IR can express mixed per-leaf maps. [Static view](../tests/reference/static_view.rs).
 
 ## Inference, generics and traits

@@ -118,17 +118,6 @@ pub fn probe() -> Message {
         report.require(rejected.status == 1 && !contains(&rejected.errors, b"LKJSCRIPT_EDITS "),
             format!("unsafe consumer rewrite for {name}: {}", display_bytes(&rejected.errors)));
     }
-    let explained: Vec<(String, String, String)> = vec![
-        ("static-owned-label.rs".to_string(), include_str!("../tests/diagnostics/static_view_owned_aggregate.rs").to_string(),
-            "struct field Reply.kind declares an explicit static view".to_string()),
-    ];
-    for (name, source, reason) in explained {
-        write(directory, &name, source.as_bytes())?;
-        let rejected = invoke(world, executable, &command(config, "check", &name), b"")?;
-        report.require(rejected.status == 1 && contains(&rejected.errors, reason.as_bytes())
-            && contains(&rejected.errors, b"docs/language.md") && !contains(&rejected.errors, b"LKJSCRIPT_EDITS "),
-            format!("pending consumer explanation for {name}: {}", display_bytes(&rejected.errors)));
-    }
     ir_flags(world, executable, directory, config, report)?;
     Ok(())
 }

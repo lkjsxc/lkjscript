@@ -1,4 +1,5 @@
 //! Reporting data does not carry checked IR and cannot authorize emission.
+mod static_label_edits;
 mod borrow_edits;
 mod consumer_edits;
 mod iterator_edits;
@@ -17,6 +18,7 @@ pub struct BlockedRegion {
 /// Report every recognized unsupported site, including those after the first
 /// failed body. Existing diagnostics retain their more specific explanation.
 pub fn complete_unsupported(report: &mut SourceReport) {
+    static_label_edits::complete(&report.program, &mut report.diagnostics);
     iterator_edits::complete(&report.program, &mut report.diagnostics);
     consumer_edits::complete(&report.program, &mut report.diagnostics);
     borrow_edits::complete(&report.program, &mut report.diagnostics);
