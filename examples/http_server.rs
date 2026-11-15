@@ -37,10 +37,15 @@ pub struct Reply {
     kind: String,
     body: Body,
     headers: Vec<(String, String)>,
+    standard_headers: bool,
 }
 impl Reply {
     pub fn new(status: u16, kind: &str, body: Body) -> Reply {
-        Reply { status, kind: kind.to_string(), body, headers: Vec::new() }
+        Reply { status, kind: kind.to_string(), body, headers: Vec::new(), standard_headers: true }
+    }
+    // Complete application headers, with framing, connection and Date still owned by the engine.
+    pub fn from_headers(status: u16, body: Body, headers: Vec<(String, String)>) -> Reply {
+        Reply { status, kind: String::new(), body, headers, standard_headers: false }
     }
     pub fn header(mut self, name: &str, value: &str) -> Reply {
         self.headers.push((name.to_string(), value.to_string()));
@@ -68,17 +73,19 @@ struct Response {
     close: bool,
 }
 impl Response {
-    fn new(status: u16, head: bool, keep_alive: bool, elapsed: usize, kind: &str, body: Body, methods: &str, date: &str, extra: Vec<(String, String)>) -> Response {
+    fn new(status: u16, head: bool, keep_alive: bool, elapsed: usize, kind: &str, body: Body, methods: &str, date: &str, extra: Vec<(String, String)>, standard_headers: bool) -> Response {
         let length = match &body {
             Body::Message(text) => text.len(),
             Body::File(bytes) => bytes.len(),
         };
         let connection = if keep_alive { "keep-alive" } else { "close" };
         let allow = if status == 405u16 { format!("Allow: {methods}\r\n") } else { String::new() };
-        let mut headers = format!(
+        let mut headers = if standard_headers { format!(
             "HTTP/1.1 {status} {}\r\nContent-Length: {length}\r\nContent-Type: {kind}\r\nConnection: {connection}\r\nDate: {date}\r\nX-Content-Type-Options: nosniff\r\nX-Elapsed-Nanoseconds: {elapsed}\r\n{allow}",
             reason(status)
-        );
+        ) } else {
+            format!("HTTP/1.1 {status} {}\r\nContent-Length: {length}\r\nConnection: {connection}\r\nDate: {date}\r\n", reason(status))
+        };
         for (name, value) in extra { headers.push_str(&format!("{name}: {value}\r\n")); }
         headers.push_str("\r\n");
         Response { headers, header_offset: 0usize, body, body_offset: 0usize,
@@ -86,7 +93,7 @@ impl Response {
     }
     fn error(status: u16, head: bool, keep_alive: bool, elapsed: usize, methods: &str, date: &str) -> Response {
         Response::new(status, head, keep_alive, elapsed, "text/plain; charset=utf-8",
-            Body::Message(format!("{status} {}\n", reason(status))), methods, date, Vec::new())
+            Body::Message(format!("{status} {}\n", reason(status))), methods, date, Vec::new(), true)
     }
     fn close_after(&mut self) {
         self.close = true;
@@ -211,7 +218,7 @@ impl Connection {
         let elapsed = now - self.started;
         let keep_alive = request.keep_alive && self.more_admitted();
         self.begin_write(Response::new(reply.status, request.head, keep_alive, elapsed,
-            &reply.kind, reply.body, handler.methods(), &date, reply.headers), now);
+            &reply.kind, reply.body, handler.methods(), &date, reply.headers, reply.standard_headers), now);
         Ok(Step::Again)
     }
     fn read_header_step<H: Handler>(&mut self, handler: &mut H, clock: &mut Clock) -> Result<Step, i64> {
@@ -233,7 +240,7 @@ impl Connection {
                 // Reject before retaining or waiting for this request's body.
                 // Its unread framing requires closing after the response.
                 self.begin_write(Response::new(reply.status, request.head, false, elapsed,
-                    &reply.kind, reply.body, handler.methods(), &date, reply.headers), now);
+                    &reply.kind, reply.body, handler.methods(), &date, reply.headers, reply.standard_headers), now);
                 return Ok(Step::Again);
             }
             self.retaining = handler.retain_body(&request);

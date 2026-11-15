@@ -33,13 +33,14 @@ Copies/calls/runtime own internal frame accesses; arithmetic includes register m
 
 ## Programs
 
-2.4 complete: Stop, Entropy, private file creation, signed wall time and HTTP dates reach both executors and authority reports.
-Shutdown drains admitted requests to a fixed deadline, syncs and exits 0; native target is the program, interpreter target its broker.
-Native hostile-stop proof: 2.010 s, load 6.16/5.15/4.96 unchanged; interpreted partial-request stop: 0.650 s, load 2.39/3.63/4.44 unchanged.
-Journal writes require signed expiring tokens before body retention and again before mutation; the separate issuer holds key-directory authority.
-Issuer/restart/authentication cases pass both routes: 62.150 s combined, load 2.41/3.73/4.49 -> 3.63/3.77/4.45; private keys survive restart.
-Shared HMAC matches RFC/OpenSSL vectors; final-compiler equal-length MAC comparison has no content-dependent branch.
-Rebased four-worker gate passes: 242.634 s, load 1.76/2.50/3.67 -> 4.49/3.51/3.80; seed fixed point and both shutdown routes pass.
+2.5 complete: 12 published paths, 51 computed search queries and 13 HTTP probes match the live origin; HEAD/range/conditional/traversal cases included.
+Hardened parity: 0.706 s, load 1.95/2.16/2.61 unchanged; process RSS 1,380 KiB, cgroup peak 1,409,024 B under the original 128 MiB limit.
+Sealed executable 863,424 B, 383 IR functions, 38,244 instructions; build 755.832 ms, load 1.95/2.16/2.61 unchanged.
+DynamicUser blocks openat2; embedding the public archive removed the runtime Directory grant while retaining the original unit settings.
+Source-only text passes all 1,112,064 scalar mappings against Rust; 0.741 s, load 2.94/3.07/2.76 unchanged.
+2.4: Stop drains admitted requests to a fixed deadline, syncs and exits 0; signal native program PID or interpreted broker PID.
+Kernel Entropy and wall time support private durable keys and signed expiring write tokens; final default/inline64 native MAC comparison has no content-dependent branch.
+Issuer/restart/authentication passed both routes in 62.150 s, load 2.41/3.73/4.49 -> 3.63/3.77/4.45; lifecycle/socket CI repair is green.
 2.3: 1,000 write kills + 1,000 confirmed recovery kills preserved 1,129 acknowledgements; 2,124 complete records, 1,127,051 checked frames.
 Campaign 143.375 s, load 14.19/9.46/6.20 -> 8.66/10.14/7.02; seed 6840227782638526189; deterministic torn-tail/corruption cases also pass.
 2.2: 990 silent plus ten active peers gave 22,032/s, 100.22% of bracketing unloaded mean; load 2.92/4.16/5.41 -> 3.19/4.08/5.33.
@@ -54,7 +55,6 @@ Idle process RSS cost 2,205.2 bytes/peer; slow header closed at 2.003 s, hostile
 
 2.1 full-body 6,161 -> 11,506/s; 17,513/15,001 samples; baseline load 8.67/6.26/4.40 -> 6.01/5.87/4.33, after 3.89/4.54/4.31 -> 3.67/4.44/4.29.
 2.1 framing 21,975/s, load 3.67/4.44/4.29 -> 2.83/4.16/4.20; numeric Connector grants and lkjscript clients replaced curl.
-Interpreter children now consistently belong to the broker; the unused local Child path is removed; three diagnostic cases record consumer friction.
-CI fixtures pass Debian/Ubuntu; isolated repair gate 133.960 s, load 2.04/2.07/2.40 -> 3.83/2.70/2.58; capability semantics unchanged.
-All consumer proof children, broker helpers, fresh ports, credentials, fixture directories and ignored proof outputs are removed.
-Next: documentation-origin candidate and parity; live service and /opt remain untouched.
+Relay queues, three scoped-thread cases and the interpreter's unused local Child path are removed; processes provide parallelism.
+Final four-worker gate passes: 217.411 s, load 1.40/1.79/2.39 -> 4.50/3.14/2.80; five site diagnostic cases record consumer friction.
+All test children, ports, units and proof files are gone; live PID 256 unchanged. Candidate/unit/24-line switch and rollback are ready for Claude.

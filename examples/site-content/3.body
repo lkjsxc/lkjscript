@@ -1,0 +1,106 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="lkjscript: a meaning-oriented language and application platform. Explore the language, its implementation and its current limits."><title>Your first program · lkjscript</title><link rel="stylesheet" href="/assets/site.css"></head><body><a class="skip" href="#content">Skip to content</a><header><a class="brand" href="/">lkj<span>script</span><span class="badge">EXPERIMENTAL</span></a><nav aria-label="Primary"><a href="/docs/start">Learn</a><a href="/docs/direction">Design</a><a href="/docs/status">Status</a><a href="https://github.com/lkjsxc/lkjscript">Source ↗</a></nav></header><main id="content"><div class="docs"><aside class="sidebar"><p class="eyebrow">DOCUMENTATION</p><a href="/docs/start" aria-current="page">Your first program</a><a href="/docs/web">Build for the web</a><a href="/docs/http">HTTP applications</a><a href="/docs/forms">Typed form handling</a><a href="/docs/direction">Language direction</a><a href="/docs/architecture">Architecture</a><a href="/docs/status">Development status</a><a href="/docs/security">Trust and security</a><a class="source-link" href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/guides/native-command.md">View this source ↗</a></aside><div class="document"><div class="document-meta"><span>REPOSITORY SNAPSHOT</span><a href="/search">Search ↗</a></div><article><h1 id="your-first-native-command">Your first native command</h1>
+<p>Start with one compatible lkjscript executable in a new working directory.
+This guide uses the same public operations on released v0.1.44 and the local
+v0.1.45 development product. It does not require a compiler checkout, Cargo,
+Python or a host-language semantic generator. Ordinary file copying and editing
+are host operations, not hidden program-authoring interfaces.</p>
+<h2 id="create-check-and-run">Create, check and run</h2>
+<pre><code class="language-sh">lkjscript new hello --template command --name hello
+lkjscript --project hello status
+lkjscript --project hello check
+lkjscript --project hello run main
+lkjscript --project hello build --output hello/generated/application.lkja
+lkjscript run --deployment hello/command.deployment.json
+</code></pre>
+<p>Both runs return <code>"hello"</code>. Project execution of a pure command compares two
+independent evaluators. Deployment execution runs production once. The generated
+descriptor points to <code>generated/application.lkja</code> relative to itself; building an
+unrelated filename does not update that descriptor.</p>
+<h2 id="author-your-own-function-test-and-target">Author your own function, test and target</h2>
+<p>Save the following <a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/guides/examples/squares.lkjc">literal native unit</a> as <code>squares.lkjc</code>.
+Replace <code>BASE</code> with the exact <code>revision id=rev_...</code> from the current <code>status</code>.
+Do not include <code>id=</code> in the replacement. These identifiers are observed values,
+not names to invent or copy from another project.</p>
+<pre><code class="language-text">request base=BASE
+declarations.begin
+(units
+  (use std builtin)
+  (module create math (as $math)
+    (function create square (visibility public)
+      (parameter create value (type I64))
+      (returns I64) (effect pure)
+      (body (call std::multiply (local value) (local value))))
+    (function create answer (visibility private)
+      (returns I64) (effect pure)
+      (body (call square (i64 12))))
+    (test create twelve-squared (visibility private)
+      (actual (call square (i64 12))) (expected (i64 144)))
+    (component create console (visibility private)
+      (port create main (type (function () I64)) (function answer))))
+  (target create squares (component math::console) (runner command) (port math::console::main)))
+declarations.end
+</code></pre>
+<p>The public function multiplies its input by itself. A private entry point supplies
+12, the independent expected-value test requires 144, and the Command target
+exposes that entry point. Arithmetic, types and declarations use the same public
+language as larger libraries; this is not a special demonstration primitive.</p>
+<h2 id="review-before-publication">Review before publication</h2>
+<pre><code class="language-sh">lkjscript --project hello change plan --input-file squares.lkjc --output squares.logical-plan
+lkjscript --project hello change apply --input-file squares.lkjc --plan TOKEN
+lkjscript --project hello check
+lkjscript --project hello run squares
+</code></pre>
+<p>Inspect the proposed owners, tests and semantic effects. Replace <code>TOKEN</code> with the
+exact <code>plan token=plan_...</code> from the successful plan before running apply.
+The result is <code>144</code>. The plan file is inspectable evidence, not imported authority.
+The token binds the request and its validated effects at the exact base revision.
+An accepted edit changes that revision; fetch a fresh status for a later proposal.
+An invalid or stale request must not partially publish meaning.</p>
+<h2 id="re-enter-without-the-original-source">Re-enter without the original source</h2>
+<p>Discover the accepted module, using its observed <code>mod_...</code> identity:</p>
+<pre><code class="language-sh">lkjscript --project hello query find module math
+lkjscript --project hello change draft --owner MODULE --output math-draft.lkjc
+lkjscript --project hello change plan --input-file math-draft.lkjc
+</code></pre>
+<p>Replace <code>MODULE</code> with that exact identity. An untouched draft reports
+<code>outcome=unchanged</code>: it needs no application step and no plan-output destination.
+Edit that proposal, review a new plan and apply its exact token to change the
+program. The draft is reconstructed from accepted meaning, not from the saved
+<code>squares.lkjc</code> file. There is no second synchronized source authority.</p>
+<p>With a v0.1.53 development executable, <a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/guides/native-history.md">recent history</a> shows
+which changes were actually accepted, separately from a current check:</p>
+<pre><code class="language-sh">lkjscript --project hello inspect history --limit 5
+</code></pre>
+<p>This reads existing revision and receipt records, not the original proposal files.
+The history command is absent from the older public executables used above.</p>
+<h2 id="run-independently-of-the-authoring-project">Run independently of the authoring project</h2>
+<p>Create a new runtime directory and build the accepted bundle there:</p>
+<pre><code class="language-sh">mkdir runtime
+lkjscript --project hello build --output runtime/squares.lkja
+cp hello/command.deployment.json runtime/squares.deployment.json
+</code></pre>
+<p>Edit only these two deployment fields, keeping the other generated fields intact:</p>
+<pre><code class="language-json">"artifact": "squares.lkja",
+"target": "squares"
+</code></pre>
+<p>This is a fragment of the existing object, not a complete descriptor. It selects
+an accepted target; it does not author a new function or grant a capability.
+Copy your actual executable into <code>runtime/lkjscript</code>, then run there:</p>
+<pre><code class="language-sh">cd runtime
+./lkjscript run --deployment squares.deployment.json
+</code></pre>
+<p>The result remains <code>144</code>. Runtime files are just the executable, bundle and
+descriptor. Move the authoring directory and literal proposal aside to demonstrate
+that this route does not reopen them. Retain those sources separately for future
+changes: an artifact is not an authoring backup or a self-contained native binary.
+The descriptor's relative artifact path remains valid when the runtime directory
+moves. Keep a compatible executable; runtime selection does not migrate data.</p>
+<h2 id="continue-with-ordinary-composition">Continue with ordinary composition</h2>
+<p>The <a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/guides/native-library.md">library guide</a> transports a generic library into another
+application. <a href="/docs/http">HTTP</a> and <a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/guides/native-html.md">typed HTML</a> add actual
+resident workloads. <a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/guides/native-text.md">Text composition</a> needs the newer standard;
+it is not provided by public v0.1.44. Each guide identifies its tested runtime.</p>
+<p><a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/generated/change-grammar.md">Generated grammar</a> and the executable's
+<code>capabilities change</code> describe further declaration kinds and their bounds.
+<a href="/docs/status">Current status</a> separates public releases from development source.</p>
+</article></div></div></main><footer><span>Built in Rust. No browser JavaScript.</span><span>Documentation snapshot · <code>2e72b47897452627e41c48e6311373927110e9c7</code></span><a href="/docs/security">Trust boundaries</a></footer></body></html>

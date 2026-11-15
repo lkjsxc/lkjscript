@@ -1,0 +1,154 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="lkjscript: a meaning-oriented language and application platform. Explore the language, its implementation and its current limits."><title>HTTP applications · lkjscript</title><link rel="stylesheet" href="/assets/site.css"></head><body><a class="skip" href="#content">Skip to content</a><header><a class="brand" href="/">lkj<span>script</span><span class="badge">EXPERIMENTAL</span></a><nav aria-label="Primary"><a href="/docs/start">Learn</a><a href="/docs/direction">Design</a><a href="/docs/status">Status</a><a href="https://github.com/lkjsxc/lkjscript">Source ↗</a></nav></header><main id="content"><div class="docs"><aside class="sidebar"><p class="eyebrow">DOCUMENTATION</p><a href="/docs/start">Your first program</a><a href="/docs/web">Build for the web</a><a href="/docs/http" aria-current="page">HTTP applications</a><a href="/docs/forms">Typed form handling</a><a href="/docs/direction">Language direction</a><a href="/docs/architecture">Architecture</a><a href="/docs/status">Development status</a><a href="/docs/security">Trust and security</a><a class="source-link" href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/guides/native-http.md">View this source ↗</a></aside><div class="document"><div class="document-meta"><span>REPOSITORY SNAPSHOT</span><a href="/search">Search ↗</a></div><article><h1 id="build-a-native-http-service-with-an-ordinary-library">Build a native HTTP service with an ordinary library</h1>
+<p>This example works with the published Linux x86-64 v0.1.44 executable. It creates
+an independently exported response library and a service with a static home page,
+health check, query-driven greeting and byte-preserving POST echo. Both programs
+are complete native declarations. No compiler checkout, Rust implementation or
+host-language semantic generator is needed to author them.</p>
+<p>The service uses the existing typed HTTP target and request-scoped <code>ByteStream</code>
+capability. It does not introduce a second router or a framework-specific intrinsic.
+Keep the same executable for both fresh projects so their standard selections agree.</p>
+<h2 id="create-the-response-library">Create the response library</h2>
+<p>Start in a new directory with your executable copied to <code>./lkjscript</code>. Copy
+<a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/guides/examples/http-responses.lkjc">http-responses.lkjc</a> and
+<a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/guides/examples/http-site.lkjc">http-site.lkjc</a> into that directory, then run:</p>
+<pre><code class="language-sh">./lkjscript new ./responses --template command --name http-responses
+./lkjscript --project ./responses status
+</code></pre>
+<p>In <code>http-responses.lkjc</code>, replace <code>LIBRARY_BASE</code> with the <code>rev_...</code> from the
+<code>revision id=...</code> status record. Plan, read the complete logical proposal, then
+apply using this plan's own <code>plan_...</code> token in place of <code>LIBRARY_PLAN</code>:</p>
+<pre><code class="language-sh">./lkjscript --project ./responses change plan --input-file ./http-responses.lkjc --output ./responses.logical-plan
+./lkjscript --project ./responses change apply --input-file ./http-responses.lkjc --plan LIBRARY_PLAN
+./lkjscript --project ./responses check
+./lkjscript --project ./responses package current export --kind transport --output ./responses.lkjp
+</code></pre>
+<p>The four exported pure functions are <code>header</code>, <code>respond</code>, <code>plain</code> and
+<code>with-header</code>. They construct the existing structural response type. <code>plain</code>
+encodes text as UTF-8; <code>respond</code> accepts arbitrary bytes; <code>with-header</code> appends
+without replacing earlier headers or changing the status/body. These are small
+composition helpers, not a validator for every HTTP status/header combination.
+They do not add HTML escaping, authentication, redirects or CORS policy.</p>
+<p>Keep these fields from the export's <code>package</code> record:</p>
+<table><thead><tr><th>Export field</th><th>Placeholder</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td><code>LIBRARY_PACKAGE</code></td></tr>
+<tr><td><code>revision</code></td><td><code>LIBRARY_REVISION</code></td></tr>
+<tr><td><code>package-revision</code></td><td><code>LIBRARY_PACKAGE_REVISION</code></td></tr>
+<tr><td><code>transport</code></td><td><code>LIBRARY_TRANSPORT</code></td></tr>
+</tbody></table>
+<p>The transport carries private implementation bodies and exact dependencies.
+Visibility is not source confidentiality. Do not substitute a package name for
+these identities or mix transports from independently authored attempts.</p>
+<h2 id="create-the-service-and-import-the-library">Create the service and import the library</h2>
+<pre><code class="language-sh">./lkjscript new ./site --template http --name native-http
+./lkjscript --project ./site package dependency stage --transport LIBRARY_TRANSPORT --input-file ./responses.lkjp
+./lkjscript --project ./site status
+</code></pre>
+<p>Replace <code>SITE_BASE</code> in <code>http-site.lkjc</code> with the site's current revision and replace
+its three library placeholders using the export above. Staging alone does not
+change accepted meaning. The request explicitly selects the dependency and creates
+the service together. Review and apply its own plan:</p>
+<pre><code class="language-sh">./lkjscript --project ./site change plan --input-file ./http-site.lkjc --output ./site.logical-plan
+./lkjscript --project ./site change apply --input-file ./http-site.lkjc --plan SITE_PLAN
+./lkjscript --project ./site check
+./lkjscript --project ./site build --output ./site/generated/application.lkja
+</code></pre>
+<p>The starter targets remain available; the new HTTP target is named <code>web</code>.
+<code>GET /greet</code> uses the first decoded <code>name</code> query value. An absent value returns
+<code>Hello, world</code>, while <code>name=</code> returns <code>Hello, </code> with an empty suffix. User input
+is served as <code>text/plain; charset=utf-8</code>, never interpolated into the static HTML
+home page. This is not a general HTML-escaping or template library.</p>
+<p><code>POST /echo</code> uses one explicitly allowed <code>ByteStream.read-all</code> call with a
+1,048,576-byte bound. It returns bytes unchanged as <code>application/octet-stream</code>.
+The handler's bound and HTTP adapter's body limits are separate controls.</p>
+<h2 id="select-deployment-and-serve">Select deployment and serve</h2>
+<p>Copy the generated <code>site/service.deployment.json</code> to <code>site/web.deployment.json</code>.
+Change only the following fields, keeping the generated runtime, execution, stream,
+configuration and grant objects intact:</p>
+<table><thead><tr><th>Field</th><th>Value</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td><code>"web"</code></td></tr>
+<tr><td><code>http.maximum_request_body_bytes</code></td><td><code>1048576</code></td></tr>
+<tr><td><code>http.maximum_response_body_bytes</code></td><td><code>1048576</code></td></tr>
+</tbody></table>
+<p>Keep <code>artifact</code> as <code>"generated/application.lkja"</code>. The generated <code>streams</code> grant
+admits the declared request-body operation; use the actual generated authority
+revision, not a value copied from another project. Keep the loopback listener
+<code>127.0.0.1:0</code> for this local example; port zero selects a free port.</p>
+<pre><code class="language-sh">./lkjscript serve --deployment ./site/web.deployment.json
+</code></pre>
+<p>Read <code>local_address</code> in the <code>ready</code> event. In another terminal, substitute that
+actual port below:</p>
+<pre><code class="language-sh">ORIGIN=http://127.0.0.1:ACTUAL_PORT
+curl -fsS "$ORIGIN/"
+curl -i "$ORIGIN/health"
+curl -fsS "$ORIGIN/greet?name=Ada&amp;name=Grace"
+printf 'native body' | curl -fsS --data-binary @- "$ORIGIN/echo"
+</code></pre>
+<p>The health body is <code>ready</code> with <code>cache-control: no-store</code>; the greeting is
+<code>Hello, Ada</code>; the echo is <code>native body</code>. Stop this foreground server with Ctrl+C.
+SIGINT termination was observed to join successfully. Do not assume SIGTERM has
+the same graceful behavior in this runner.</p>
+<p>The published v0.1.44 executable used by this walkthrough requires explicit numeric
+execution and runtime policy.
+Removing <code>execution</code> or using <code>instruction_fuel: null</code> is not an unmetered mode.
+Keep the generated values for this example; its 10,000,000 instruction allowance
+is a deployment setting, not a new language requirement introduced by this library.
+This v0.1.44 observation does not claim optional resident metering. Newer development
+executables provide explicit nullable cumulative quotas as described in the
+<a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/guides/resident-policy.md">resident policy guide</a>; preserve the matching executable and
+configuration when using either contract.</p>
+<h2 id="run-without-the-authoring-projects">Run without the authoring projects</h2>
+<p>After stopping the first server, copy just the executable, bundle and descriptor:</p>
+<pre><code class="language-sh">mkdir -p ./runtime/generated
+cp ./lkjscript ./runtime/lkjscript
+cp ./site/generated/application.lkja ./runtime/generated/application.lkja
+cp ./site/web.deployment.json ./runtime/web.deployment.json
+cd ./runtime
+./lkjscript serve --deployment ./web.deployment.json
+</code></pre>
+<p>The artifact includes the library and its dependency closure. No library project,
+site project, original declaration file or package transport is required by this
+runtime. In the recorded test, both authoring roots were moved away from their
+original paths before serving; they were retained elsewhere, not destroyed.
+The bundle still requires a compatible lkjscript executable. It is not a standalone
+machine executable or a replacement official release archive.</p>
+<h2 id="edit-routes-through-accepted-meaning">Edit routes through accepted meaning</h2>
+<p>Return to the authoring directory. Query the target and use its actual <code>target_...</code>
+identity in place of <code>WEB_TARGET</code>:</p>
+<pre><code class="language-sh">./lkjscript --project ./site query find target web
+./lkjscript --project ./site change draft --owner WEB_TARGET --output ./web-target.lkjc
+./lkjscript --project ./site change plan --input-file ./web-target.lkjc
+</code></pre>
+<p>An untouched draft reports <code>outcome=unchanged</code>. Find the existing <code>/health</code> route's
+port reference in that draft. Inside the same target, add the following declaration,
+replacing <code>HEALTH_PORT</code> with that reference alias while retaining all existing routes:</p>
+<pre><code class="language-text">(route create ready (method GET) (path "/ready") (port HEALTH_PORT))
+</code></pre>
+<p>Plan the edited request to a new logical-plan file, review the single added route,
+then apply with its new token and check again. Build to a new bundle path and select
+it explicitly in a copied deployment descriptor. The new bundle serves both
+<code>/ready</code> and <code>/health</code>; the original bundle still returns 404 for <code>/ready</code>.
+Changing the draft file alone neither edits accepted meaning nor changes a running
+server. A duplicate GET path is rejected at planning without moving accepted HEAD.</p>
+<h2 id="tested-boundary">Tested boundary</h2>
+<p>The public v0.1.44 library check passes 53 graph tests and the service passes 59,
+including the exact standard and starter tests: seven library tests and five service
+tests are new. Development source <code>6d2c6df1</code> passes 59 and 65 respectively because
+its standard includes six additional tests. Both evaluators agree. These counts
+are not a claim that all tests were authored for this example.</p>
+<p>Each executable passed 39 independently asserted detached HTTP cases, including
+all 256 octets, exact 1 MiB echo, repeated/empty query values, UTF-8 and NUL,
+16 echo requests across eight concurrent clients, declared-size rejection and
+recovery. Each also passed eight old/new-bundle selection assertions after the
+route edit. This is a designed guide example, not maintained application adoption,
+a throughput benchmark or a complete production framework.</p>
+<p>For these exact routes, wrong methods (including HEAD), path case changes and a
+trailing slash return 404. There is no implicit HEAD-to-GET mapping or automatic
+405/Allow behavior in this example. Query data is separate from path matching.
+The over-limit test declares Content-Length before uploading; an oversized chunked
+body was not included in this acceptance. The listener is plaintext and the guide
+does not establish public-network deployment safety, inbound TLS, authentication,
+hostile-code isolation or browser-side WebAssembly support.</p>
+<p>The <a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/campaigns/202609241913.md">execution record</a> retains acquisition boundaries,
+failed harness attempts, acceptance scope and the separately unresolved verifier
+process-lifecycle defect.</p>
+</article></div></div></main><footer><span>Built in Rust. No browser JavaScript.</span><span>Documentation snapshot · <code>2e72b47897452627e41c48e6311373927110e9c7</code></span><a href="/docs/security">Trust boundaries</a></footer></body></html>

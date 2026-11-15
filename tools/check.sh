@@ -113,6 +113,7 @@ parallel_step 2 http timeout --kill-after=10s 600s sh tools/http-test.sh --compi
 parallel_step 2 journal timeout --kill-after=10s 600s sh tools/http-journal-cases.sh --compiler "$check_binary"
 parallel_step 2 stop timeout --kill-after=10s 600s sh tools/http-stop.sh --compiler "$check_binary"
 parallel_step 2 stop-interpreter timeout --kill-after=10s 600s sh tools/http-stop.sh --compiler "$check_binary" --engine interpreter
+parallel_step 2 site timeout --kill-after=10s 600s sh tools/http-site-test.sh --compiler "$check_binary" --offline
 parallel_step "$check_suite_jobs" conformance timeout --kill-after=10s 600s "$check_binary" test tests/conformance --jobs "$check_suite_jobs" "${check_reuse[@]}"
 parallel_step "$check_suite_jobs" generated timeout --kill-after=10s 600s "$check_binary" test target/gate/generated --jobs "$check_suite_jobs" "${check_reuse[@]}"
 parallel_step "$check_suite_jobs" optimized-conformance timeout --kill-after=10s 600s "$check_binary" test tests/conformance --jobs "$check_suite_jobs" --inline-limit 64 "${check_reuse[@]}"

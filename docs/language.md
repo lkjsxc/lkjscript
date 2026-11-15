@@ -494,5 +494,5 @@ File/Directory/Listener/Readiness/Stop drops close once; standard-stream capabil
 Readiness drops only its wait set. Unwatch before closing a watched descriptor if aliases remain. Wait batches at most 64 events without limiting registrations; expired deadlines poll once.
 Read interest reports half-close; drain readable final bytes. Write-only interest does not report peer write-half closure repeatedly.
 
-Generated programs have no ambient filesystem/environment/process imports or source-declared host imports. std::time::http_date formats supplied time; it grants no ambient clock.
+Generated programs have no ambient filesystem/environment/process imports or source-declared host imports. std::time::http_date formats supplied time; it grants no ambient clock. std::text supplies source-only utf8_lossy (maximal ill-formed subparts), form_decode, escape_html, Unicode whitespace trim and Unicode 17 scalar lowercase_chars (expansions, no contextual final sigma); it grants no effects.
 Normal destructor order matches the supported Rust intersection; outputs/statuses stay distinct from traps. witness/bridge/output.rs observes bytes/status/trap kind separately.

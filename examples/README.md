@@ -421,3 +421,12 @@ The shell records host load and removes the private data and executables.
 schedule. A process crash exercises commit ordering and repeatable recovery.
 The stable-storage promise also requires a filesystem and storage device that
 honor successful sync operations; this campaign does not emulate a host power cut.
+
+## Documentation-origin candidate
+
+`site.rs` embeds the exact twelve-path public documentation snapshot and computes
+dynamic search, with explicit Listener, Clock, Readiness, Stop and output grants. [site.md](site.md) explains the captured content, text helpers,
+independent live parity, offline regression checks and temporary systemd proof.
+The candidate unit is [lkjscript-site.service](lkjscript-site.service); the
+[24-line switch and rollback procedure](site-switch.md) is for Claude to execute.
+The live origin and /opt are left untouched during preparation.

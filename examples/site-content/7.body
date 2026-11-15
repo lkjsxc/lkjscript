@@ -1,0 +1,182 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="lkjscript: a meaning-oriented language and application platform. Explore the language, its implementation and its current limits."><title>Build for the web · lkjscript</title><link rel="stylesheet" href="/assets/site.css"></head><body><a class="skip" href="#content">Skip to content</a><header><a class="brand" href="/">lkj<span>script</span><span class="badge">EXPERIMENTAL</span></a><nav aria-label="Primary"><a href="/docs/start">Learn</a><a href="/docs/direction">Design</a><a href="/docs/status">Status</a><a href="https://github.com/lkjsxc/lkjscript">Source ↗</a></nav></header><main id="content"><div class="docs"><aside class="sidebar"><p class="eyebrow">DOCUMENTATION</p><a href="/docs/start">Your first program</a><a href="/docs/web" aria-current="page">Build for the web</a><a href="/docs/http">HTTP applications</a><a href="/docs/forms">Typed form handling</a><a href="/docs/direction">Language direction</a><a href="/docs/architecture">Architecture</a><a href="/docs/status">Development status</a><a href="/docs/security">Trust and security</a><a class="source-link" href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/guides/native-web.md">View this source ↗</a></aside><div class="document"><div class="document-meta"><span>REPOSITORY SNAPSHOT</span><a href="/search">Search ↗</a></div><article><h1 id="an-editable-web-app-from-one-binary">An editable web app from one binary</h1>
+<p><strong>Creation boundary:</strong> public v0.1.47. <code>lkjscript capabilities new</code> must
+advertise <code>web</code>. This is not a retroactive addition to the immutable public
+v0.1.46 executable. <a href="/docs/status">Current status</a> owns publication
+state; the <a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/campaigns/202609251450.md">campaign</a> owns exact evidence.</p>
+<p>The <code>web</code> starter is an ordinary native application plus editable local UI
+modules. It does not require Node.js, a Rust toolchain, downloaded library sources,
+manual dependency identities or an application-written HTML/CSS/JavaScript file.
+The Rust runtime remains the reference implementation; this is not a Wasm backend.</p>
+<p>For an authenticated POST editor with persistent notes instead of this stateless
+GET starter, see <a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/guides/native-web-editor.md">Durable web app from one executable</a>.
+That opt-in template is available in public v0.1.50 and has explicit data and
+secret setup; this <code>web</code> template retains its original requirements and behavior.</p>
+<h2 id="create-check-build-and-serve">Create, check, build and serve</h2>
+<p>From an owned working directory with the selected binary on <code>PATH</code>:</p>
+<pre><code class="language-sh">lkjscript new my-app --template web --name my-app
+cd my-app
+lkjscript check
+lkjscript build --output generated/application.lkja
+lkjscript serve --deployment service.deployment.json
+</code></pre>
+<p>Use the actual loopback address reported by the <code>ready</code> event. The starter uses
+<code>127.0.0.1:0</code>, allowing the operating system to choose an available port. Stop the
+owned foreground process with Ctrl-C. No listener is opened by <code>new</code>, <code>check</code> or
+<code>build</code>, and creating a project does not overwrite an existing destination.</p>
+<p>The page contains a labeled name field and light/dark submit buttons. A browser
+GET rebuilds the page from the URL; no page JavaScript runs and no server state is
+saved. Empty names remain empty, repeated query keys select their first value,
+and only the exact theme value <code>dark</code> selects the dark palette. Unicode and text
+that resembles markup remain input data, escaped by the shared renderer.</p>
+<p><strong>Do not enter secrets:</strong> GET form values appear in URLs and may appear in browser
+history and request logs. This starter has no accounts, authentication, persistent
+saves, file upload, client-side event system or automatic live updates.</p>
+<h2 id="what-the-project-owns">What the project owns</h2>
+<p>Creation embeds these exact maintained literal sources and admits them through
+the same declaration decoder, typed change preparation and publication owners
+used by public native requests:</p>
+<table><thead><tr><th>Source</th><th>Created local module</th><th>Responsibility</th></tr></thead><tbody>
+<tr><td><a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/guides/examples/ui.lkjc">ui.lkjc</a></td><td><code>ui</code></td><td>Typed controls, layout, themes, escaping and fixed HTML/CSS rendering.</td></tr>
+<tr><td><a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/guides/examples/ui-tests.lkjc">ui-tests.lkjc</a></td><td><code>ui-tests</code></td><td>The same 19 shared UI tests used by the independent library example.</td></tr>
+<tr><td><a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/guides/examples/web-starter.lkjc">web-starter.lkjc</a></td><td><code>web</code></td><td>Page structure, query interpretation, response headers, one HTTP route and 13 app tests.</td></tr>
+</tbody></table>
+<p>The only package dependency is the selected executable's exact built-in standard.
+UI code is <strong>vendored at creation</strong>, not a hidden compiler intrinsic or a separately
+pinned supplier. It belongs to this project and can be changed like any other
+local declaration. Installing another runtime does not silently update an existing
+project's UI. The <a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/guides/native-library.md">independent library workflow</a> remains available
+when separately versioned, explicitly imported packages are appropriate.</p>
+<p>Intermediate recipe revisions exist only in an owned private staging repository.
+The destination becomes visible as one complete initial project. Rejected native
+inputs and synchronous creation failures do not expose an intermediate graph or
+partial deployment. The project retains the UI tests rather than weakening
+validation to bootstrap the application.</p>
+<h2 id="edit-native-declarations-not-generated-browser-code">Edit native declarations, not generated browser code</h2>
+<p>The accepted graph is the program authority. An original recipe file or an
+exported <code>.lkjc</code> draft is a proposal, not an automatically synchronized second
+source. Inspect the accepted names and export a targeted draft:</p>
+<pre><code class="language-sh">lkjscript query find module web
+lkjscript query find declaration page-title --parent MODULE_ID
+lkjscript change draft --owner TITLE_ID --output title.lkjc
+</code></pre>
+<p>Copy the returned module and declaration identities into the corresponding
+commands. Development v0.1.51 additionally provides a one-command route when
+<code>lkjscript capabilities change</code> advertises <code>--declaration</code>:</p>
+<pre><code class="language-sh">lkjscript change draft --declaration web::page-title --output title.lkjc
+</code></pre>
+<p>Choose one route, not both: drafts do not overwrite an existing file. The named
+route resolves the exact local name at one accepted revision and emits the same
+ID-bound canonical draft as <code>--owner</code>. It is not in the v0.1.50 executable. Use
+<code>--module web</code> for the whole local module or <code>--target serve</code> for this starter's
+target; inspect actual target names rather than assuming a different app has <code>serve</code>.
+Names do not weaken plan review or silently rebase stale drafts after a rename.</p>
+<p>In <code>title.lkjc</code>, change the text in the <code>page-title</code> function body, then:</p>
+<pre><code class="language-sh">lkjscript change plan --input-file title.lkjc
+lkjscript change apply --input-file title.lkjc --plan PLAN_TOKEN
+lkjscript check
+lkjscript build --deployment service.deployment.json
+</code></pre>
+<p>Review the plan and use its returned token. The deployment-build selector requires
+public v0.1.48 or later; discover it with <code>lkjscript capabilities build</code>.
+It removes the manual artifact-name and copied-descriptor edits from repeated builds.
+The <code>output.path</code> record names the complete content-addressed bundle in <code>generated/</code>;
+<code>deployment.path</code> names a complete descriptor beside <code>service.deployment.json</code>.
+Copy that returned deployment path into the next command:</p>
+<pre><code class="language-sh">lkjscript serve --deployment DEPLOYMENT_PATH
+</code></pre>
+<p>New deployment descriptors are owner-only. Sharing one with another runtime account
+requires an explicit access decision; build never broadens its permissions or changes
+an existing file's owner or mode.</p>
+<p>Building never replaces the original descriptor, deletes a working bundle or changes
+a running server. An unchanged rebuild verifies and reuses the same exact pair;
+changed code or configuration produces the required new immutable outputs. Stop an
+earlier server first when the configured fixed listener cannot be shared. This
+starter's port-zero listener also permits independently observed old/new processes.</p>
+<p>The descriptor stays beside its template, preserving the meaning of relative
+persistent-data paths in stateful applications. Building neither opens nor migrates
+that data. The retained original pair can be selected again with its original serve
+command, but choosing an old program never rolls back application data. This stateless
+example needs no migration; other applications need their own recovery policy.
+Older runtimes without this selector still support <code>build --output</code> to an unused name
+and an explicitly copied/repointed descriptor. That route remains create-new and
+rejects even identical existing bytes. Do not delete retained working files simply
+to make a build succeed. See the <a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/spec/semantic-cli.md#build">build contract</a>
+for bounds, exact reuse, failure states and explicit retention.</p>
+<p>A changed title preserves the declaration identity and its callers. A body with the wrong return
+type is rejected without advancing the accepted head. An unchanged draft plans as unchanged.</p>
+<p>Public v0.1.50 also preserves the function's internal expression and binding identities for
+proved same-structure literal edits. For example, draft <code>web::controls</code> and change only the label
+<code>Apply dark theme</code> to <code>Use the dark theme</code>. The reviewed change updates one existing expression,
+not all sixteen expressions in that function. Complete before/after identity and impact evidence remains available
+with <code>change plan --input-file controls.lkjc --output controls.lkjplan</code>; it is not hidden to make
+the summary look smaller. Edits to control structure, referenced declarations, bindings or scalar
+kinds use ordinary complete body replacement and validation. Re-plan an older reviewed input
+before applying it with a runtime that normalizes the edit differently.</p>
+<p>This is an authoring improvement, not live reload: running old deployments and their artifacts
+remain unchanged. The <a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/campaigns/202609261118.md">literal-edit campaign</a> owns the measured
+comparison and negative tests. The feature was first included in the withheld v0.1.49 candidate,
+then published with the corrected shared runtime in v0.1.50; it is not in v0.1.48.</p>
+<p>The normal plan summary reports counts and commitments, not a literal before/after diff.
+The complete <code>.lkjplan</code> records exact owner-object digests, validation and impact evidence;
+it is not a copy of the old and new function text. Preserve the freshly exported unchanged
+draft separately before editing, compare that proposal with the edited draft, and review both
+the intended text change and its exact plan. A small owner count alone is not approval.
+An altered input or a changed base requires a new plan; do not replace the draft's base to
+make an old review appear current. Review also binds executable capabilities: after upgrading
+<code>lkjscript</code>, plan the original proposal again rather than reusing an incompatible review token.
+The plan's selected-test count is not a passing-test count; <code>check</code> supplies execution evidence.</p>
+<p>To change the layout, draft <code>web::screen</code> using the same module/declaration lookup.
+Its nodes are ordinary <code>ui::node</code> values. To change a reusable control or styling,
+draft the relevant function in the local <code>ui</code> module. Applications compose typed
+nodes; HTML/CSS ownership stays in that library. New controls or framework policy
+are not silently injected by the compiler.</p>
+<h2 id="move-a-standalone-application">Move a standalone application</h2>
+<p>Keep one compatible executable and this layout in a separate deployment directory:</p>
+<pre><code class="language-text">lkjscript
+service.deployment.json
+generated/
+  application.lkja
+</code></pre>
+<p>The generated descriptor resolves the bundle relative to itself, so it needs no
+path edits when the directory moves. Execute the copied binary's <code>serve</code> command
+with that descriptor. The authoring graph, original native files, compiler checkout
+and package transports are unnecessary at runtime. A bundle is not itself a native
+executable; it still needs a compatible lkjscript runtime.</p>
+<p>For <code>build --deployment</code>, retain the returned <code>build-….deployment.json</code> and its
+referenced <code>generated/build-….lkja</code> instead of renaming them to the example names.
+Move the containing directory as a unit, preserving that relative layout and the
+owner-only descriptor permissions. Invocation from a different working directory
+does not rebase its artifact or local-data paths. An unchanged rebuild at the new
+location reuses the same filenames and bytes; the location is not program identity.</p>
+<p>A stateful application's declared data directory, such as <code>state.lkjdata/</code>, is a
+separate required resource. Moving only configuration and code does not migrate,
+restore or initialize it. Stop its writers and follow that application's storage
+transfer/recovery procedure before moving data. A same-filesystem, stopped command
+workflow tests complete-directory relocation, retained store identity and subsequent
+transactions; it does not establish a live cross-filesystem backup or migration
+protocol. This web starter remains stateless and creates no data directory.</p>
+<p>The <a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/campaigns/202609261015.md">deployment continuation</a> also tests an actual
+script-free Chromium session against moved old/new snapshot deployments. A reviewed
+title edit preserves its declaration identity; the old server remains unchanged,
+and after both snapshots move, the browser observes their independently selected
+titles. Unicode form input, themes, keyboard submission and reload pass without the
+authoring graph. This observation uses the development executable; finalized
+release-archive acceptance is a separate claim at the release evidence owner.</p>
+<p>A bounded independent observation created this template with development v0.1.47,
+removed the authoring graph and served its unchanged bundle with the anonymously
+acquired public v0.1.46 musl executable. Ordinary GET, Unicode text, escaping and
+dark-theme responses passed, followed by joined shutdown. That older executable
+still rejects <code>new --template web</code>: runtime compatibility does not add a creation
+recipe to an already published binary. The <a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/campaigns/202609251450.md">campaign</a>
+retains the exact binary relationship and does not generalize it to arbitrary
+future bundles.</p>
+<p>The deployment grants only the HTTP request-stream interface. Its listener is
+plaintext and loopback-only; it does not acquire host filesystem, outbound network,
+secret-verifier or application-data authority. Operational request deadlines and
+live resource limits remain independent of optional cumulative execution quotas.
+Do not treat this scaffold as a public multi-tenant deployment or a hostile-code
+sandbox.</p>
+<p>The <a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/guides/native-editor.md">durable editor</a> separately demonstrates explicit POST,
+shared authentication, Origin admission, transactional saves and visible conflicts.
+Those policies are not silently inherited by this stateless starter.</p>
+</article></div></div></main><footer><span>Built in Rust. No browser JavaScript.</span><span>Documentation snapshot · <code>2e72b47897452627e41c48e6311373927110e9c7</code></span><a href="/docs/security">Trust boundaries</a></footer></body></html>

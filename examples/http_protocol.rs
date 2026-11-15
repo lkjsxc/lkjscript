@@ -3,6 +3,8 @@ pub struct Request {
     pub method: String,
     pub authorization: Option<String>,
     pub path: String,
+    pub raw_path: String,
+    pub query: String,
     pub head: bool,
     pub body: usize,
     pub keep_alive: bool,
@@ -166,7 +168,7 @@ fn hex(byte: u8) -> Option<u8> {
         None
     }
 }
-fn target_path(target: &[u8]) -> Result<String, u16> {
+fn target_path(target: &[u8]) -> Result<(String, String, String), u16> {
     if target.is_empty() {
         return Err(400u16);
     }
@@ -182,8 +184,9 @@ fn target_path(target: &[u8]) -> Result<String, u16> {
         start = end;
     }
     if start > 0 && start == target.len() {
-        return Ok("language.md".to_string());
+        return Ok((String::new(), "/".to_string(), String::new()));
     }
+    let raw_start = start;
     if target[start] == b'/' {
         start += 1;
     } else if start == 0 || target[start] != b'?' {
@@ -216,13 +219,16 @@ fn target_path(target: &[u8]) -> Result<String, u16> {
             return Err(400u16);
         }
     }
-    if decoded.is_empty() {
-        return Ok("language.md".to_string());
-    }
-    match String::from_utf8(decoded) {
-        Ok(path) => Ok(path),
-        Err(_) => Err(400u16),
-    }
+    let path = match String::from_utf8(decoded) {
+        Ok(path) => path,
+        Err(_) => return Err(400u16),
+    };
+    let raw_path = if index == raw_start { "/".to_string() }
+        else { String::from_utf8(target[raw_start..index].to_vec()).unwrap() };
+    let query = if index < target.len() {
+        String::from_utf8(target[index + 1usize..].to_vec()).unwrap()
+    } else { String::new() };
+    Ok((path, raw_path, query))
 }
 fn crlf(bytes: &[u8], start: usize) -> Result<usize, u16> {
     let mut index = start;
@@ -373,11 +379,13 @@ pub fn parse_with_methods(bytes: &[u8], methods: &str) -> Result<Request, u16> {
     if transfer {
         return Err(501u16);
     }
-    let path = target_path(&line[first + 1..second])?;
+    let (path, raw_path, query) = target_path(&line[first + 1..second])?;
     Ok(Request {
         method: String::from_utf8(line[..first].to_vec()).unwrap(),
         authorization,
         path,
+        raw_path,
+        query,
         head,
         body: length.unwrap_or(0usize),
         keep_alive: !close && (version == b"HTTP/1.1" || keep_alive),
@@ -400,12 +408,12 @@ pub fn header_end(bytes: &[u8], start: usize) -> Option<usize> {
 #[test]
 fn ordinary_requests() {
     let cases:Vec<(String,String,bool,usize)>=vec![
-        ("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n".to_string(),"language.md".to_string(),false,0usize),
+        ("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n".to_string(),"".to_string(),false,0usize),
         ("HEAD /ir.md?view=1 HTTP/1.1\r\nhOsT:\t127.0.0.1:8000 \r\n\r\n".to_string(),"ir.md".to_string(),true,0usize),
         ("GET /%6canguage.md HTTP/1.0\r\n\r\n".to_string(),"language.md".to_string(),false,0usize),
         ("GET http://localhost:80/direction.md?x=1 HTTP/1.1\r\nHost: localhost\r\n\r\n".to_string(),"direction.md".to_string(),false,0usize),
-        ("GET http://localhost HTTP/1.1\r\nHost: localhost\r\n\r\n".to_string(),"language.md".to_string(),false,0usize),
-        ("GET http://localhost?view=1 HTTP/1.1\r\nHost: localhost\r\n\r\n".to_string(),"language.md".to_string(),false,0usize),
+        ("GET http://localhost HTTP/1.1\r\nHost: localhost\r\n\r\n".to_string(),"".to_string(),false,0usize),
+        ("GET http://localhost?view=1 HTTP/1.1\r\nHost: localhost\r\n\r\n".to_string(),"".to_string(),false,0usize),
         ("GET /file%23name%20with%20spaces HTTP/1.1\r\nHost: localhost\r\nContent-Length: 12345\r\n\r\n".to_string(),"file#name with spaces".to_string(),false,12345usize),
         ("GET /%2e%2e/AGENTS.md HTTP/1.1\r\nHost: localhost\r\n\r\n".to_string(),"../AGENTS.md".to_string(),false,0usize),
         ("GET /%CF%80 HTTP/1.1\r\nHost: localhost\r\n\r\n".to_string(),"π".to_string(),false,0usize),
@@ -566,4 +574,27 @@ fn authorization_field() {
     assert!(request.authorization == Some("Bearer token".to_string()));
     assert!(matches!(parse(b"GET / HTTP/1.1\r\nHost: a\r\nAuthorization: Bearer a\r\nauthorization: Bearer b\r\n\r\n"), Err(400u16)));
     assert!(matches!(parse(b"GET / HTTP/1.1\r\nHost: a\r\nAuthorization: \xff\r\n\r\n"), Err(400u16)));
+}
+
+#[test]
+fn root_and_query_are_application_input() {
+    let root = parse(b"GET /?q=read+file%26x HTTP/1.1\r\nHost: a\r\n\r\n").unwrap();
+    assert!(root.path.is_empty() && root.query == "q=read+file%26x");
+    let document = parse(b"GET /language.md?unused=yes HTTP/1.1\r\nHost: a\r\n\r\n").unwrap();
+    assert!(document.path == "language.md" && document.query == "unused=yes");
+    let decoded = parse(b"GET /docs/%73tart?x=y HTTP/1.1\r\nHost: a\r\n\r\n").unwrap();
+    assert!(decoded.path == "docs/start" && decoded.query == "x=y");
+}
+
+#[test]
+fn raw_path_retains_route_spelling() {
+    let encoded = parse(b"GET /docs/%73tart?q=cat HTTP/1.1\r\nHost: a\r\n\r\n").unwrap();
+    assert!(encoded.path == "docs/start" && encoded.raw_path == "/docs/%73tart");
+    assert!(encoded.query == "q=cat");
+    let slash = parse(b"GET /docs%2fstart HTTP/1.1\r\nHost: a\r\n\r\n").unwrap();
+    assert!(slash.path == "docs/start" && slash.raw_path == "/docs%2fstart");
+    let absolute = parse(b"GET http://localhost/assets/%73ite.css?x=y HTTP/1.1\r\nHost: a\r\n\r\n").unwrap();
+    assert!(absolute.raw_path == "/assets/%73ite.css" && absolute.path == "assets/site.css");
+    let root = parse(b"GET http://localhost?q=x HTTP/1.1\r\nHost: a\r\n\r\n").unwrap();
+    assert!(root.path.is_empty() && root.raw_path == "/" && root.query == "q=x");
 }

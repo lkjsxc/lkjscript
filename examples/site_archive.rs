@@ -1,0 +1,207 @@
+//! Validated metadata and bodies downloaded through the origin's public HTTP paths.
+use std::json::{self, Value};
+
+pub struct Page {
+    pub path: String,
+    pub status: u16,
+    pub kind: String,
+    pub headers: Vec<(String, String)>,
+    pub body: String,
+}
+pub struct Archive {
+    pages: Vec<Page>,
+    not_found: Page,
+}
+// The sealed candidate carries the exact downloaded UTF-8 bytes. These are
+// compiler inputs, never runtime paths or filesystem authority.
+fn embedded_text(name: &str) -> Result<&'static str, String> {
+    match name {
+        "0.body" => Ok(include_str!("site-content/0.body")),
+        "1.body" => Ok(include_str!("site-content/1.body")),
+        "2.body" => Ok(include_str!("site-content/2.body")),
+        "3.body" => Ok(include_str!("site-content/3.body")),
+        "4.body" => Ok(include_str!("site-content/4.body")),
+        "5.body" => Ok(include_str!("site-content/5.body")),
+        "6.body" => Ok(include_str!("site-content/6.body")),
+        "7.body" => Ok(include_str!("site-content/7.body")),
+        "8.body" => Ok(include_str!("site-content/8.body")),
+        "9.body" => Ok(include_str!("site-content/9.body")),
+        "10.body" => Ok(include_str!("site-content/10.body")),
+        "11.body" => Ok(include_str!("site-content/11.body")),
+        "12.body" => Ok(include_str!("site-content/12.body")),
+        "search-0.md" => Ok(include_str!("site-content/search-0.md")),
+        "search-1.md" => Ok(include_str!("site-content/search-1.md")),
+        "search-2.md" => Ok(include_str!("site-content/search-2.md")),
+        "search-3.md" => Ok(include_str!("site-content/search-3.md")),
+        "search-4.md" => Ok(include_str!("site-content/search-4.md")),
+        "search-5.md" => Ok(include_str!("site-content/search-5.md")),
+        "search-6.md" => Ok(include_str!("site-content/search-6.md")),
+        "search-7.md" => Ok(include_str!("site-content/search-7.md")),
+        _ => Err(format!("archive has no embedded text {name}")),
+    }
+}
+fn field<'a>(value: &'a Value, name: &str) -> Result<&'a Value, String> {
+    value.get(name).ok_or(format!("archive is missing {name}"))
+}
+fn text_field(value: &Value, name: &str) -> Result<String, String> {
+    Ok(field(value, name)?.as_str().ok_or(format!("archive {name} must be a string"))?.to_string())
+}
+fn target(value: &str) -> bool {
+    if !value.starts_with("/") { return false; }
+    for byte in value.as_bytes() {
+        if *byte <= 32u8 || *byte >= 127u8 || *byte == b'#' { return false; }
+    }
+    true
+}
+fn body_name(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    if bytes.len() <= 5usize || !value.ends_with(".body") { return false; }
+    for byte in &bytes[..bytes.len() - 5usize] {
+        if *byte < b'0' || *byte > b'9' { return false; }
+    }
+    true
+}
+fn search_name(value: &str) -> bool {
+    if value.len() != 11usize || !value.starts_with("search-") || !value.ends_with(".md") { return false; }
+    let number = value.as_bytes()[7usize];
+    number >= b'0' && number <= b'7'
+}
+fn header_name(value: &str) -> bool {
+    if value.is_empty() { return false; }
+    for byte in value.as_bytes() {
+        if !((*byte >= b'a' && *byte <= b'z') || (*byte >= b'0' && *byte <= b'9')
+            || *byte == b'!' || *byte == b'#' || *byte == b'$' || *byte == b'%'
+            || *byte == b'&' || *byte == b'\'' || *byte == b'*' || *byte == b'+'
+            || *byte == b'-' || *byte == b'.' || *byte == b'^' || *byte == b'_'
+            || *byte == 96u8 || *byte == b'|' || *byte == b'~') { return false; }
+    }
+    true
+}
+fn header_value(value: &str) -> bool {
+    for byte in value.as_bytes() {
+        if (*byte < 32u8 && *byte != b'\t') || *byte == 127u8 { return false; }
+    }
+    true
+}
+fn page(value: &Value) -> Result<Page, String> {
+    let path = text_field(value, "path")?;
+    if !target(&path) { return Err("archive path must be an ASCII origin target without a fragment".to_string()); }
+    let status = field(value, "status")?.as_usize().ok_or("archive status must be an unsigned integer".to_string())?;
+    if status < 200usize || status > 599usize { return Err("archive status is outside 200..599".to_string()); }
+    let body = text_field(value, "body")?;
+    if !body_name(&body) { return Err("archive body must have a decimal .body filename".to_string()); }
+    let pairs = field(value, "headers")?.as_array().ok_or("archive headers must be an array".to_string())?;
+    let mut headers: Vec<(String, String)> = Vec::new();
+    let mut kind: Option<String> = None;
+    for pair in pairs {
+        let pair = pair.as_array().ok_or("archive header must be a name/value pair".to_string())?;
+        if pair.len() != 2usize { return Err("archive header must contain exactly two strings".to_string()); }
+        let name = pair[0usize].as_str().ok_or("archive header name must be a string".to_string())?;
+        let value = pair[1usize].as_str().ok_or("archive header value must be a string".to_string())?;
+        if !header_name(name) || !header_value(value) { return Err("archive header contains an invalid name or value".to_string()); }
+        if name == "content-length" || name == "connection" || name == "date"
+            || name == "transfer-encoding" {
+            return Err(format!("archive must not supply transport header {name}"));
+        }
+        if name == "content-type" {
+            if kind.is_some() { return Err("archive contains duplicate content-type".to_string()); }
+            kind = Some(value.to_string());
+        } else {
+            headers.push((name.to_string(), value.to_string()));
+        }
+    }
+    let kind = kind.ok_or("archive page has no content-type".to_string())?;
+    Ok(Page { path, status: status as u16, kind, headers, body })
+}
+fn manifest(bytes: &[u8]) -> Result<(Vec<Page>, Page), String> {
+    let value = match json::parse(bytes) {
+        Ok(value) => value,
+        Err(problem) => return Err(format!("archive JSON at byte {}: {}", problem.offset, problem.message)),
+    };
+    if field(&value, "version")?.as_usize() != Some(1usize) {
+        return Err("archive version must be 1".to_string());
+    }
+    let entries = field(&value, "pages")?.as_array().ok_or("archive pages must be an array".to_string())?;
+    let mut pages: Vec<Page> = Vec::new();
+    let mut names = std::collections::BTreeSet::<String>::new();
+    for entry in entries {
+        let entry = page(entry)?;
+        if !names.insert(entry.path.clone()) { return Err(format!("archive repeats path {}", entry.path)); }
+        pages.push(entry);
+    }
+    let not_found = page(field(&value, "not_found")?)?;
+    if not_found.status != 404u16 { return Err("archive not_found status must be 404".to_string()); }
+    Ok((pages, not_found))
+}
+impl Archive {
+    pub fn open() -> Result<Archive, String> {
+        let (pages, not_found) = manifest(include_str!("site-content/manifest.json").as_bytes())?;
+        for page in &pages { let _ = embedded_text(&page.body)?; }
+        let _ = embedded_text(&not_found.body)?;
+        Ok(Archive { pages, not_found })
+    }
+    pub fn index(&self, path: &str) -> Option<usize> {
+        for index in 0usize..self.pages.len() {
+            if self.pages[index].path == path { return Some(index); }
+        }
+        None
+    }
+    pub fn page(&self, index: Option<usize>) -> &Page {
+        match index { Some(index) => &self.pages[index], None => &self.not_found }
+    }
+    pub fn read(&mut self, index: Option<usize>) -> Result<String, String> {
+        let name = { self.page(index).body.clone() };
+        self.raw(&name)
+    }
+    pub fn text(&mut self, path: &str) -> Result<String, String> {
+        let index = self.index(path).ok_or(format!("archive lacks {path}"))?;
+        let name = self.pages[index].body.clone();
+        self.raw(&name)
+    }
+    pub fn raw(&mut self, name: &str) -> Result<String, String> {
+        if !body_name(name) && !search_name(name) {
+            return Err("archive text name must be a body or published search source".to_string());
+        }
+        Ok(embedded_text(name)?.to_string())
+    }
+}
+
+#[test]
+fn sealed_archive_names() {
+    assert!(body_name("0.body") && body_name("127.body"));
+    let invalid: Vec<String> = vec![".body".to_string(), "x.body".to_string(), "../0.body".to_string(), "0.body/1".to_string(), "0.body\n".to_string()];
+    for name in invalid {
+        assert!(!body_name(&name));
+    }
+    assert!(search_name("search-0.md") && search_name("search-7.md"));
+    assert!(!search_name("search-8.md") && !search_name("../search-0.md"));
+    assert!(target("/") && target("/search?q=read%20file"));
+    assert!(!target("https://other/") && !target("/#fragment"));
+    assert!(header_name("cache-control") && header_value("no-cache"));
+    assert!(!header_name("Content-Type") && !header_value("a\r\nb"));
+}
+#[test]
+fn archive_metadata() {
+    let bytes = b"{\"version\":1,\"pages\":[{\"path\":\"/\",\"status\":200,\"headers\":[[\"content-type\",\"text/html\"],[\"cache-control\",\"no-cache\"]],\"body\":\"0.body\"}],\"not_found\":{\"path\":\"/missing\",\"status\":404,\"headers\":[[\"content-type\",\"text/html\"]],\"body\":\"1.body\"}}";
+    let (pages, missing) = manifest(bytes).unwrap();
+    assert!(pages.len() == 1usize && pages[0usize].path == "/");
+    assert!(pages[0usize].kind == "text/html" && pages[0usize].headers[0usize].0 == "cache-control");
+    assert!(missing.status == 404u16 && missing.body == "1.body");
+    let bad = b"{\"version\":1,\"pages\":[],\"not_found\":{\"path\":\"/missing\",\"status\":404,\"headers\":[[\"content-type\",\"text/html\"],[\"content-length\",\"5\"]],\"body\":\"1.body\"}}";
+    assert!(manifest(bad).is_err());
+}
+
+#[test]
+fn sealed_public_content() {
+    let mut archive = Archive::open().unwrap();
+    assert!(archive.pages.len() == 12usize);
+    assert!(archive.text("/").unwrap().len() == 4506usize);
+    assert!(archive.text("/assets/site.css").unwrap().len() == 7239usize);
+    assert!(archive.read(None).unwrap().len() == 1188usize);
+    assert!(archive.raw("13.body").is_err());
+    assert!(archive.raw("../0.body").is_err());
+    assert!(archive.raw("search-8.md").is_err());
+    for number in 0usize..8usize {
+        assert!(!archive.raw(&format!("search-{number}.md")).unwrap().is_empty());
+    }
+}

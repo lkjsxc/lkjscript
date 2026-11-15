@@ -1,0 +1,119 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="lkjscript: a meaning-oriented language and application platform. Explore the language, its implementation and its current limits."><title>Trust and security · lkjscript</title><link rel="stylesheet" href="/assets/site.css"></head><body><a class="skip" href="#content">Skip to content</a><header><a class="brand" href="/">lkj<span>script</span><span class="badge">EXPERIMENTAL</span></a><nav aria-label="Primary"><a href="/docs/start">Learn</a><a href="/docs/direction">Design</a><a href="/docs/status">Status</a><a href="https://github.com/lkjsxc/lkjscript">Source ↗</a></nav></header><main id="content"><div class="docs"><aside class="sidebar"><p class="eyebrow">DOCUMENTATION</p><a href="/docs/start">Your first program</a><a href="/docs/web">Build for the web</a><a href="/docs/http">HTTP applications</a><a href="/docs/forms">Typed form handling</a><a href="/docs/direction">Language direction</a><a href="/docs/architecture">Architecture</a><a href="/docs/status">Development status</a><a href="/docs/security" aria-current="page">Trust and security</a><a class="source-link" href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/security.md">View this source ↗</a></aside><div class="document"><div class="document-meta"><span>REPOSITORY SNAPSHOT</span><a href="/search">Search ↗</a></div><article><h1 id="security-and-trust-model">Security and trust model</h1>
+<p>This threat model covers the canonical graph platform and <code>lkjournal</code>. It does not grant a
+hostile-code sandbox or distributed-system guarantee.</p>
+<h2 id="trust-boundaries">Trust boundaries</h2>
+<p>The local repository operator, compiled bootstrap, locked Rust dependency closure, accepted graph
+meaning, deployment author, host OS/filesystem administrator, first-party data-root operator, and
+object-store administrator are trusted within their named authority. Packed graph/artifact bytes,
+data-format/revision/head/logical-backup bytes, public change and query requests, continuation
+handles, deployment descriptors, HTTP input, JSON, object responses, queue records, and environment
+values are hostile decoding inputs. WebSocket upgrade headers, masked frames, fragmentation,
+control payloads, text, close codes, and close reasons are hostile transport inputs. Outbound DNS answers, certificate chains, HTTP responses, and
+named PEM-root secret bytes are also hostile at their owning validation boundaries.</p>
+<p>Accepted lkjscript meaning is validated and resource-bounded but is not isolated as hostile tenant
+code. A process, package digest, repository ID, data-store identity, or runtime task is not an
+application actor identity.</p>
+<h2 id="canonical-graph-threats">Canonical graph threats</h2>
+<table><thead><tr><th>Threat</th><th>Implemented control</th><th>Residual assumption</th></tr></thead><tbody>
+<tr><td>Malformed or excessive packed objects</td><td>typed domain magic, exact version/length, domain-separated digest, trailing rejection, checked bounds before decode</td><td>Rust and dependency correctness</td></tr>
+<tr><td>Persistent-root page substitution</td><td>root-bound page digests, canonical page encoding, bounded changed-path traversal, generated parent-link checks, missing/corrupt-page rejection on access, exhaustive deep reconstruction</td><td>repository operations never delete accepted-base objects; external damage to an untouched reused subtree may remain latent until read or deep doctor</td></tr>
+<tr><td>Identity-domain confusion</td><td>tagged opaque IDs, typed selectors, graph shape validation, foreign-domain rejection tests</td><td>callers preserve full durable IDs</td></tr>
+<tr><td>Partial or torn publication</td><td>exact-base lock, immutable objects first, filesystem durability before one synchronized atomic HEAD rename</td><td>local filesystem honors documented operations</td></tr>
+<tr><td>Corrupt current authority</td><td>object-key verification, deep reconstruction independent of indexes, writes blocked on observed corruption</td><td>operator restores or repairs from trusted backup</td></tr>
+<tr><td>Index substitution or loss</td><td>revision/root/contract-bound manifests; content-addressed local exact shards; local/full indexes are disposable and rebuild</td><td>loss may widen the next local change or query to broad reconstruction</td></tr>
+<tr><td>Semantic-fact substitution</td><td>typed module/validator/input summaries, persistent fact-page digests and typed keys, a revision/root-bound manifest, and a revision-core certificate over the exact map roots</td><td>summary, page, and manifest bytes are persisted but disposable; loss or malformed bytes rebuild, while a rebuilt certificate mismatch is canonical corruption</td></tr>
+<tr><td>Name-driven reference drift</td><td>canonical imports, exports, declaration references, and targets bind typed stable IDs; module name uniqueness uses the persistent name map; module and declaration rename have full-oracle differential locality tests</td><td>declaration move remains a complete-path operation because exact references include the owning module identity</td></tr>
+<tr><td>Stale concurrent write</td><td>HEAD reread under exclusive lock and exact base comparison</td><td>one local repository lock domain</td></tr>
+<tr><td>Replay confusion</td><td>optional bounded idempotency key binds one exact transaction digest</td><td>caller scopes keys appropriately</td></tr>
+<tr><td>Oversized query or traversal</td><td>item, byte, work, depth, fanout, and continuation bounds</td><td>elapsed-time cancellation is process-level, not a hard realtime guarantee</td></tr>
+<tr><td>Tampered continuation</td><td>revision/query/cursor binding plus domain-separated integrity digest</td><td>handle is integrity protected, not confidential</td></tr>
+<tr><td>Review text becoming authority</td><td>projection is span-free, marked non-authoritative, and has no apply/import path</td><td>reviewer understands it is a projection</td></tr>
+<tr><td>Embedded bootstrap drift</td><td>built-in artifact is exact, inspected through the ordinary artifact decoder, exported for reproduction, and checked against maintained standard authority</td><td>the built executable and its locked build inputs are trusted</td></tr>
+</tbody></table>
+<p>On Linux, publication closes all new immutable files, uses <code>syncfs</code> on the containing filesystem,
+then writes and synchronizes the HEAD stage and store directory. This batches data durability
+without weakening the visibility point. Non-Linux builds use per-file synchronization. Network
+filesystems and platforms not covered by retained evidence are not claimed.</p>
+<h2 id="capability-and-service-threats">Capability and service threats</h2>
+<table><thead><tr><th>Threat</th><th>Implemented control</th><th>Residual assumption</th></tr></thead><tbody>
+<tr><td>Deployment artifact substitution</td><td>strict relative regular path, symlink-component rejection, artifact bundle checksum/digest validation, exact root target and requirement closure before secrets or readiness</td><td>deployment directory and descriptor author are trusted operational authority</td></tr>
+<tr><td>Capability confusion</td><td>exact interface/operation/alias/limit requirement and deployment grant equality</td><td>deployment author chooses appropriate authority</td></tr>
+<tr><td>Outbound destination/SSRF expansion</td><td>graph receives no URL; one immutable canonical deployment endpoint; whole-set request-time address classification; connect only to validated addresses; public HTTPS or explicit loopback-only plaintext; no redirect/proxy</td><td>deployment author and system resolver select the intended exact endpoint; this is not DNSSEC or a general sandbox</td></tr>
+<tr><td>Outbound TLS bypass</td><td>exact hostname/chain/validity verification against locked WebPKI roots or one bounded named PEM root; no insecure switch, platform trust, trust union, or client certificate</td><td>operator protects the selected root secret and endpoint DNS authority</td></tr>
+<tr><td>Secret disclosure</td><td>environment acquisition into opaque redacted values; no durable graph or artifact secret</td><td>OS environment and administrator are trusted</td></tr>
+<tr><td>Typed data substitution</td><td>nominal/runtime layout digest, envelope checksum, independent production/reference codecs, canonical/trailing/bounds rejection</td><td>graph-owned schema and index policy is reviewed application meaning</td></tr>
+<tr><td>Data corruption or torn commit</td><td>immutable complete revisions, cross-process writer lock, exact-base recheck, data-before-head synchronization, old-or-new fault tests, complete verify</td><td>local filesystem and operator honor the supported trusted-host boundary</td></tr>
+<tr><td>ABA or stale application write</td><td>opaque per-put entry revisions plus exact/missing conditional mutation; any failed expectation rolls back the whole transaction</td><td>application performs the primary conditional mutation before dependent indexes</td></tr>
+<tr><td>Cross-actor access</td><td>graph-owned session and owner checks with deterministic denial tests</td><td>one confined first-party data authority is trusted</td></tr>
+<tr><td>Password theft</td><td>bounded Argon2 hashes, random salt, generic verification</td><td>deployment protects transport and local data/object roots</td></tr>
+<tr><td>Request denial</td><td>bounded headers/body/admission/tasks/streams and operational deadlines</td><td>no per-IP limiter or TLS proxy is included</td></tr>
+<tr><td>Interactive-session exhaustion or protocol confusion</td><td>bounded pending/admitted sessions, frame/message/mailbox/state/transition/process bytes, finite callbacks, exact phase pairs, reserved output capacity, one structured parent, cancellation and joined cleanup, RFC 6455 validation</td><td>descriptor author chooses limits for the host; no per-IP policy, TLS, origin policy, or service-level guarantee is included</td></tr>
+<tr><td>Object overwrite or traversal</td><td>existing real local-root components, validated opaque keys/prefixes, no-replace publication, checksums</td><td>object root and credentials are operator-controlled</td></tr>
+<tr><td>Possibly visible write</td><td>post-head data interruption is separately reconcilable; object effects use closed <code>possible_visibility</code> plus application reconciliation</td><td>data head and object-provider truth remain distinct authorities</td></tr>
+<tr><td>Duplicate background work</td><td>idempotency key, exact attempt/lease owner, stale completion rejection</td><td>handlers keep domain publication idempotent</td></tr>
+<tr><td>Diagnostic leakage</td><td>closed projections, bounded excerpts, secret redaction</td><td>graph-authored response text is trusted</td></tr>
+</tbody></table>
+<p>Artifacts contain typed requirements, not grants, host coordinates, credentials, or live handles.
+Deployment descriptors bind concrete adapters and secrets after artifact verification. Generic Rust
+does not own lkjournal routes, spaces/indexes, roles, object keys, or queue transitions.</p>
+<h2 id="native-and-test-boundaries">Native and test boundaries</h2>
+<p>First-party Rust forbids <code>unsafe</code>. <code>rustix</code> supplies safe Linux filesystem/process wrappers;
+Axum/Tokio and Tokio-Tungstenite own inbound HTTP/RFC 6455 and task mechanics; <code>httparse</code>, Rustls, Tokio-Rustls, and the locked
+WebPKI root set own outbound HTTP/TLS mechanics; <code>object_store</code> owns local/S3 mechanics; Argon2 and OS
+randomness own cryptographic mechanics. The <code>postgres</code> crate exists only in contributor differential
+tooling and is absent from the product dependency graph. Locked dependencies may contain unsafe code
+outside the first-party prohibition.</p>
+<p>The predecessor parser has no public CLI or application-development path. Its remaining callers are
+Rust-test fixtures that provide an independent structural language oracle. Fixture text is not
+maintained program authority. The predecessor value, VM, capability, artifact, and adapter stack is
+deleted. Source-era project markers and predecessor artifact/store contracts reject at public
+boundaries; there is no fallback decoder.</p>
+<p>Explicit rank-one type/effect substitution and named pure/task callable values are validated before
+preparation. Type and effect parameters have distinct stable IDs and exact scopes; calls require
+complete ordered applications. Expanding ordinary-type polymorphic recursion still rejects.
+Callable descriptors contain an exact prepared target, closed arguments and a flat capture-safe
+prefix. They retain no grant, adapter, credential, live resource, transaction or frame. Task invocation
+requires both the current activation's declared allowance and actual checked component grants,
+including canonical grant identity for compatible requirement mappings. Sharing a grant does not
+widen an allowance or reset accounting. These checks do not establish hostile-code isolation.</p>
+<h2 id="current-static-distribution-boundary">Current static distribution boundary</h2>
+<p>The current release path selects one <code>x86_64-unknown-linux-musl</code> candidate and treats every build,
+handoff, archive, manifest, checksum, receipt, image, and downloaded asset as hostile or mutable
+input until validated. First-party ELF inspection requires little-endian ELF64 x86-64 with no
+runtime interpreter, <code>DT_NEEDED</code> library, or GLIBC symbol-version requirement. Strict archive
+verification rejects links, traversal, duplicates, extras, noncanonical metadata, target/linkage
+contradiction, checksum corruption, candidate substitution, and unsafe extraction targets.</p>
+<p>Exact v0.1.13 candidate execution passed in pinned Alpine 3.22.5/musl 1.2 and Debian 11/glibc 2.31
+userlands with network unavailable and no host library mounts. Transferred
+application verification receives only exact candidate/verifier bytes, an explicit create-new
+private root, loopback HTTP, and isolated local data/object roots. It does not gain a checkout,
+Cargo, application helper, raw retained secret, database server, or publication permission. The
+separate publication job receives no verifier and executes no repository code.</p>
+<p>Public 0.1.13 adds outbound acceptance against deterministic local raw HTTP/TLS/DNS fixtures,
+including destination classes, certificate trust/hostname/validity, redirect denial, limits,
+timeout, cancellation, malformed protocol, and cleanup. Exact-tag and latest downloads passed that
+oracle independently. This is not a live-relay observation, privacy guarantee, DNSSEC claim, or
+general network sandbox.</p>
+<p>Immutable v0.1.13 and its independent anonymous exact/latest checks completed the current
+release controls. They
+establish static runtime linkage and only the named Linux/amd64 userland boundary; they do not
+establish a minimum kernel, every CPU feature or filesystem, container independence,
+reproducible-build provenance, binary signing, or universal Linux compatibility. Immutable v0.1.8
+remains an unclosed historical recovery point after a workflow-only cross-application equality
+defect; none of its external objects was changed during additive recovery.</p>
+<h2 id="explicit-non-claims">Explicit non-claims</h2>
+<p>The system does not isolate hostile lkjscript programs, native dependencies, an OS administrator,
+data-root/object-store administrators or co-resident processes. It does not provide
+tenant CPU/RSS isolation, encrypted stores/backups, artifact signatures, authenticated provenance,
+distributed consensus, multi-node publication, cross-authority transactions, inbound certificate
+management, CSRF middleware, audit-log durability, or production portability beyond retained
+exact Linux x86-64 target and userland evidence.</p>
+<p>The inbound HTTP/RFC 6455 listener is plaintext, and first-party data roots/backups are not
+encrypted. The transport negotiates no WebSocket extension or subprotocol and does not provide
+application authentication, origin, browser, proxy, or NIP-01 policy. lkjscript does not implement
+inbound TLS termination, certificate issuance/rotation, ACME, outbound WebSocket clients, outbound
+client certificates, insecure trust bypass, a browser trust UI, or a pinning framework. Outbound
+HTTPS authenticates only the exact deployment endpoint under locked public roots or one named PEM
+root; it does not protect inbound transport or local storage and is not a privacy layer. External
+protection does not make the runtime a hostile-code sandbox or provide multi-tenant isolation.</p>
+</article></div></div></main><footer><span>Built in Rust. No browser JavaScript.</span><span>Documentation snapshot · <code>2e72b47897452627e41c48e6311373927110e9c7</code></span><a href="/docs/security">Trust boundaries</a></footer></body></html>

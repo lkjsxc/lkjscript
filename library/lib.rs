@@ -10,6 +10,8 @@ pub mod timers;
 pub mod json;
 pub mod hmac;
 pub mod time;
+pub mod text;
+mod text_lower;
 pub mod bytes;
 pub mod char;
 pub mod fmt;

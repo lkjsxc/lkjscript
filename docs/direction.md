@@ -92,19 +92,19 @@ HTTP/1.1 persistence and pipelining retain exact framing; clients are lkjscript.
 Profile before removing at most two costs; owned chunks replace per-byte assembly.
 Use readiness for concurrency, processes for parallelism.
 Readiness temporarily borrows owned handles into a kernel wait set without storing language views.
-Keep explicit connection state, indexed deadlines and bounded work per dispatch.
-Header and write deadlines do not extend when a hostile peer makes tiny progress.
-The three scoped-thread cases are deleted; closure escape stays pending, with no new shared-memory ownership rules.
+Keep explicit connection state, indexed deadlines and bounded work per dispatch; tiny progress never extends header/write deadlines.
+The three scoped-thread cases are deleted; closure escape stays pending, without shared-memory ownership rules.
 Keep compiler source within the stored seed's forms; never refresh seed here.
 The independent interpreter helper operates actual descriptors without relay queues.
-Journal acknowledges only after log fsync, a synced head file and atomic rename plus directory fsync.
-Replay validates checksums and the committed boundary before incomplete-tail repair; one lock owns writes.
-Stop claims SIGTERM for the execution lifetime; drain already admitted requests to a fixed deadline, sync and exit.
-Signal the published target: native program PID or interpreted broker PID; requested consumes signals, readiness reports unread ones.
+Journal acknowledges after log fsync, a synced head and atomic rename plus directory fsync; one lock owns writes.
+Replay validates checksums and the committed boundary before incomplete-tail repair.
+Stop claims SIGTERM; signal the native program or interpreted broker, drain admitted requests to a fixed deadline, sync and exit.
 Entropy supplies kernel bytes; session keys are created private before writing, synced and atomically published.
 Write tokens bind expiry and a random nonce through shared HMAC; a separate key-directory grant authorizes issuance.
 JSON rejects ambiguous keys; authentication precedes body retention and is checked again before mutation.
-Next match the documentation origin through GET-only observation; never modify the live unit or /opt.
+The documentation candidate embeds published bodies and search Markdown because DynamicUser blocks openat2; text stays source library code.
+Keep live walking parity and a frozen offline oracle; preserve observed route spellings and headers, including unusual HEAD behavior.
+Prove the candidate in an isolated hardened unit; never modify the live origin or /opt. Claude owns the documented switch and rollback.
 
 ## Authenticated reuse
 

@@ -1,0 +1,63 @@
+# Parity-only GET targets. The candidate never reads this file.
+# Search ordering: title matches first, then summary/source in published order.
+/search?q=Rust
+/search?q=graph
+/search?q=HTTP
+/search?q=meaning
+/search?q=typed
+# Phrases from the homepage summaries rather than document titles.
+/search?q=from+one+installed+executable
+/search?q=ordinary+language+libraries
+/search?q=security+nonclaims
+# Match the pinned Markdown source, including syntax omitted by HTML rendering.
+/search?q=%23%23
+/search?q=%60
+/search?q=%60%60%60
+# Non-ASCII input, Unicode case mapping, and Unicode whitespace.
+/search?q=%E7%8C%AB
+/search?q=%E2%84%AA
+/search?q=%C4%B0
+/search?q=%CE%9F%CE%A3
+/search?q=%C2%A0HTTP%C2%A0
+/search?q=%C2%A0
+# Both the input attribute and all HTML-sensitive characters must be escaped.
+/search?q=%22%27%3C%3E%26
+/search?q=HTTP%26Rust
+# Malformed percent escapes remain literal.
+/search?q=%
+/search?q=%2
+/search?q=%GG
+/search?q=Rust%G1
+# Invalid UTF-8 uses maximal ill-formed subpart replacement.
+/search?q=%FF
+/search?q=%E2%82
+/search?q=%E2%28%A1
+/search?q=%ED%A0%80
+/search?q=%F4%90%80%80
+# Query deserialization: duplicate, unknown, encoded keys and empty fields.
+/search?q=Rust&q=HTTP
+/search?q=&q=Rust
+/search?x=Rust
+/search?q=Rust&x=1
+/search?=value
+/search?Q=Rust
+/search?%71=HTTP
+/search?%FF=HTTP
+/search?
+/search?&
+/search?q
+/search?q=
+/search?&&q=HTTP&&
+# Controls are rejected before trimming, including C1 Unicode controls.
+/search?q=%09HTTP
+/search?q=HTTP%0A
+/search?q=%00
+/search?q=%7F
+/search?q=%C2%85
+# Byte-length boundary, including 128/129 bytes made from multibyte scalars.
+/search?q=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+/search?q=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+/search?q=%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%ABxx
+/search?q=%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB%E7%8C%AB
+# Length is checked before trimming an otherwise empty query.
+/search?q=+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

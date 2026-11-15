@@ -13,6 +13,8 @@ fn compiled(text: &str) -> ir::CheckedProgram {
         "$std/json.rs".to_string(),
         "$std/hmac.rs".to_string(),
         "$std/time.rs".to_string(),
+        "$std/text.rs".to_string(),
+        "$std/text_lower.rs".to_string(),
         "$std/bytes.rs".to_string(),
         "$std/string.rs".to_string(),
         "$std/str.rs".to_string(),

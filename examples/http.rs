@@ -34,7 +34,8 @@ impl Handler for Documents {
     fn retain_body(&self, _request: &Request) -> bool { false }
     fn finish(&mut self) -> Result<(), String> { Ok(()) }
     fn respond(&mut self, request: &Request, _body: Vec<u8>, _now: i64) -> Result<Reply, String> {
-        let mut file = match self.root.open(&request.path) {
+        let path = if request.path.is_empty() { "language.md" } else { request.path.as_str() };
+        let mut file = match self.root.open(path) {
             Ok(file) => file,
             Err(errno) => {
                 let status = match errno {
@@ -46,7 +47,7 @@ impl Handler for Documents {
             }
         };
         Ok(match ReadBuffer::read(&mut file) {
-            Ok(body) => Reply::new(200u16, content_type(&request.path), Body::File(body)),
+            Ok(body) => Reply::new(200u16, content_type(path), Body::File(body)),
             Err(errno) => Reply::error(if errno == 21i64 { 404u16 } else { 500u16 }),
         })
     }

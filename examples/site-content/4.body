@@ -1,0 +1,185 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="lkjscript: a meaning-oriented language and application platform. Explore the language, its implementation and its current limits."><title>Language direction · lkjscript</title><link rel="stylesheet" href="/assets/site.css"></head><body><a class="skip" href="#content">Skip to content</a><header><a class="brand" href="/">lkj<span>script</span><span class="badge">EXPERIMENTAL</span></a><nav aria-label="Primary"><a href="/docs/start">Learn</a><a href="/docs/direction">Design</a><a href="/docs/status">Status</a><a href="https://github.com/lkjsxc/lkjscript">Source ↗</a></nav></header><main id="content"><div class="docs"><aside class="sidebar"><p class="eyebrow">DOCUMENTATION</p><a href="/docs/start">Your first program</a><a href="/docs/web">Build for the web</a><a href="/docs/http">HTTP applications</a><a href="/docs/forms">Typed form handling</a><a href="/docs/direction" aria-current="page">Language direction</a><a href="/docs/architecture">Architecture</a><a href="/docs/status">Development status</a><a href="/docs/security">Trust and security</a><a class="source-link" href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/direction.md">View this source ↗</a></aside><div class="document"><div class="document-meta"><span>REPOSITORY SNAPSHOT</span><a href="/search">Search ↗</a></div><article><h1 id="language-first-project-direction">Language-first project direction</h1>
+<p>Owner decision: 2026-09-28, amended 2026-09-29 (Asia/Tokyo) to select Rust for first-party implementation and request a public site. The numbered earlier owner answers are retained in
+<a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/campaigns/202609281300.md">the mandate</a>. This document separates binding direction
+from delegated, revisable engineering selections. <a href="/docs/status">Status</a> describes
+implemented behavior; <a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/roadmap.md">the roadmap</a> selects the next work. A selected
+design is not a claim of implementation, performance, proof or publication.</p>
+<h2 id="non-negotiable-authority-and-priorities">Non-negotiable authority and priorities</h2>
+<p>The accepted typed meaning graph is the sole editable program-meaning authority.
+Do not weaken this priority, restore text as a competing source of truth, or treat
+the graph as merely a compiler cache. Physical storage and derived representations
+remain replaceable. Type, ownership, lifetime and effect contracts belong to meaning;
+placement, code generation and recomputable analyses are derived.</p>
+<p>The language is agent-native. Human comprehension, manual authoring, readable
+syntax, human-facing explanations and human participation are not requirements.
+Do not introduce mandatory human review into the program-editing protocol.
+Machine-readable discovery, exact contracts, diagnostic evidence and validation
+remain necessary for agents and verifiers; machine verification is not a UI mandate.
+Do not deliberately obscure information or couple the language to one model.</p>
+<p>Prioritize the language core: powerful, composable generics, traits, ownership,
+lifetimes, effects and concurrency, rather than another application starter.
+Rust is a conceptual reference, not a syntax, source-compatibility or immediate
+benchmark target. Better abstractions and their sound composition are the current
+objective. Do not postpone architectural scale questions until optimization work.</p>
+<p>Memory safety is a baseline. Avoid unnecessary copying. Immediate speed contests
+are not a priority, but when performance tradeoffs must be selected, balance costs
+with a preference for speed and scalability over minimizing memory at any price.
+Keep CPU-cache locality, multicore/NUMA behavior and SSD-backed working sets in the
+long-term design. Do not confuse allocation totals, live memory, RSS and PSS.</p>
+<p>Shared runtime execution is a major product requirement, not a distant optional
+wrapper. Multiple agents editing one project concurrently are also a required
+future capability, desired early, but not a claim about the current CLI.</p>
+<h2 id="selected-semantic-direction-delegated-revisable">Selected semantic direction (delegated, revisable)</h2>
+<p>Design one typed contract system across values and resources. Explore type,
+lifetime/region, effect and bounded value parameters; associated type families,
+higher-ranked borrowing and higher-kinded abstractions where they compose soundly.
+Traits should carry typed methods, associated items and explicit implementation
+witnesses. A trait constraint is not an execution grant. Select and retain exact
+implementation identity rather than letting an added package silently change
+resolution. Coherence, termination and ambiguity are explicit design obligations.</p>
+<p>Infer local facts where unambiguous; preserve independently checkable contracts
+across function and package boundaries. Keep proof checking distinct from search:
+resource exhaustion while finding a witness is not proof that a valid program is
+invalid. Neither an AI assertion nor a generated proof unchecked by the kernel is
+acceptance. General dependent proofs and unrestricted solver power are not immediate
+requirements. Add an expressive feature through a complete composition witness,
+not through a disconnected syntax inventory. Prefer graph-native metaprogramming:
+generated meaning passes the same checker, with no privileged generator bypass.
+Explicit dynamic checks may be admitted where specified; unresolved static
+ownership obligations do not silently become unchecked execution.</p>
+<p>Use ownership modes for unique ownership, bounded borrowing, region-local aliases,
+transferable ownership and transitively immutable sharing. These are semantic roles,
+not frozen keywords or a requirement to expose a Rust-like surface.
+Permit local mutation and reuse when the ownership/effect contract allows it;
+retain pure external value semantics where promised. Do not silently insert deep
+copies or globally shared mutable state to make an ownership error disappear.</p>
+<p>Make effectful control and resource completion compositional. Explore typed effect
+handlers, but a continuation retaining affine resources must not be duplicated
+without a valid resource contract. Expected failures have typed outcomes. Traps,
+cancellation and allocation failure have explicit boundaries; losing a response is
+not rollback. Integer overflow and floating-point transformations require declared
+semantics, not optimization-dependent accidental behavior.</p>
+<h2 id="selected-memory-direction-not-an-arc-centered-end-state">Selected memory direction (not an Arc-centered end state)</h2>
+<p>Prefer an ownership-and-region model over universal per-object shared ownership.
+A uniquely owned region may contain internal aliases or cycles if its external
+access contract remains sound. Allow a locally managed/traced region for dynamic
+cyclic data; GC is a language-supported candidate, not forbidden and not a mandatory
+whole-program heap. Static ownership, arenas, local tracing and immutable shared
+segments may coexist under one contract system.</p>
+<p>Keep ordinary object access local where possible. Cross-region references, roots,
+freezing, region transfer and reclamation must have exact protocols. Freezing must
+cover the reachable closure, not only its root. Regions must not retain unrelated
+large objects indefinitely merely to reduce allocation calls.</p>
+<p>A moving collector cannot invalidate live borrows: compare handles, pinning and
+scoped no-move access with explicit costs before selecting a mechanism. Native
+code must provide the necessary roots/safepoints or use an admitted nonmoving path.
+GC releases storage; it does not implicitly commit transactions, acknowledge work
+or reliably complete external I/O. Resource completion remains separately owned.</p>
+<p>Retain a path for collector-free/no-allocation regions and eventual freestanding
+profiles. A program requiring hosted services need not compile for those profiles.
+Do not delete current Rust Arc/Box implementations merely to change a percentage;
+they are bootstrap mechanisms, not the final language model or a prohibited tool.
+Permit explicit allocation/layout constraints at resource-sensitive boundaries,
+while keeping default placement derived. Ordinary application code gets no universal
+unchecked escape hatch; any later low-level kernel must own a separately checked
+safe boundary. No zero-copy, pause-free or bounded-RSS claim follows from this selection.</p>
+<h2 id="shared-runtime-and-isolation-domains">Shared runtime and isolation domains</h2>
+<p>Distinguish shared installation, shared code/metadata and multiple live application
+instances in one runtime process. Only the last, with actual shared infrastructure,
+closes the requested shared-runtime capability. A launcher creating one full process
+per application does not close it.</p>
+<p>Share compatible immutable code, type/layout metadata and exact library instances,
+plus scheduler, I/O services and derived caches where their contracts permit it.
+Do not share application mutable state, captures, credentials, capability grants,
+transaction state, cancellation lineage or per-application accounting by accident.
+Code sharing never grants permission to execute an imported capability.</p>
+<p>An isolate/domain is a lifetime, state, authority and accounting boundary, not an
+OS thread and not necessarily one request or one application. Give it an exact
+program revision, local roots and owned tasks. Allow multiple independently owned
+tasks/regions within one application. Share only explicit frozen data or transfer
+owned data through checked channels; no arbitrary cross-domain mutable pointers.</p>
+<p>Use a compatible runtime pool, not one universal process forever. Runtime ABI,
+trust boundary, target and required services determine pooling; incompatible
+versions may coexist. Permit process/NUMA sharding without changing program meaning.
+Initially support trusted code. Logical isolation does not establish hostile-code
+containment, Spectre resistance or survival of a fatal host-process failure.</p>
+<p>Own admission, readiness, stop, joined cleanup, unload and version replacement.
+Bound queues and account shared resources as well as private allocations. Reserve
+receiver capacity before an ownership transfer becomes visible. Distinguish send
+acceptance from message processing and durable completion. A blocked native call
+cannot become safely preemptible merely by cancelling a future; safepoints and
+blocking-work placement are separate obligations.</p>
+<h2 id="parallel-programs-and-parallel-authors">Parallel programs and parallel authors</h2>
+<p>Select structured concurrency with ownership-aware tasks, typed bounded channels
+and data-parallel library operations. State-owning actors are useful, but do not
+make every application a single serialized event loop. Permit parallel work on
+disjoint regions and immutable inputs. Explore scheduling from declared access
+requirements without confusing memory independence with external-effect ordering.
+Work-stealing and locality-aware scheduling are mechanisms to compare, not proofs
+of scaling. Backpressure, fairness, cancellation and reclamation must compose.</p>
+<p>Separate multicore execution from future multi-machine distribution. A same-process
+transfer may reuse storage; cross-process/host messages need a transport contract,
+and cannot promise shared addresses, zero copying or exactly-once effects.</p>
+<p>For parallel AI editing, use immutable base revisions and private candidates.
+Read and prepare in parallel, then revalidate dependency/contract footprints at
+publication. Disjoint edited owners are not sufficient when type, trait resolution,
+effect or reference dependencies overlap. A short serialized publication point is
+compatible with parallel preparation. History should provide conventional revision,
+branch/tag, difference, merge and retained-root concepts rather than every analysis
+forever; exact features and reclamation remain unimplemented until verified.</p>
+<h2 id="execution-storage-and-long-horizon">Execution, storage and long horizon</h2>
+<p>Support both a dedicated runtime and native executables from the same accepted
+meaning and semantic lowering. A native executable may embed needed runtime services;
+it need not depend on a shared daemon. A later freestanding profile should reject
+unsupported hosted effects instead of silently changing their meaning.</p>
+<p>Ordinary hosted programs come first. Keep OS, driver and embedded use in the eventual
+horizon. Linux x86-64 remains the initial supported target. Wasm is optional; if
+selected, derive it from the meaning graph, not from a second authored language.
+Other-language interoperability is not a priority or an excuse to defer native
+capabilities. Preserve ordinary development without external semantic generators.</p>
+<p>Own the persistence engine and typed data semantics; do not select an external
+database engine as the required persistence substrate. OS/filesystem interfaces
+remain implementation boundaries. Separate memory reclamation from durable storage,
+transactions, snapshots and disk compaction. SSD layout, caching, batching and
+recovery are explicit storage design questions, not a transparent unlimited heap.</p>
+<p>Keep offline development possible and dependencies exact, with explicit updates.
+A convenient single distribution need not make every application retain every
+service. The 2026-09-29 owner instruction now selects Rust for first-party
+implementation, including tooling, compiler, runtime and the documentation server.
+This supersedes the earlier implementation self-hosting/removal-of-Rust goal.
+Ordinary user programs and native standard-library/application examples still
+exercise the language; their inputs and serialized artifacts are not an additional
+implementation language for the host tools. Preserve historical evidence rather
+than rewriting it to manufacture a Rust-only statistic. Replace interpreted tool
+implementations with tested Rust owners; do not conceal remaining workflow or
+installation shell glue, or claim third-party dependencies are all written in Rust.</p>
+<h2 id="governance-and-experimental-compatibility">Governance and experimental compatibility</h2>
+<p>lkjsxc has final authority over the official project's direction and acceptance;
+agents exercise delegated engineering judgment. Apache-2.0 remains the license.
+Official-mainline governance does not alter the license or third-party permissions.
+There is no current stability, compatibility, user-acquisition or support promise.</p>
+<p>The owner permits breaking changes without a required migration path, including
+resetting owner-authorized experimental lkjscript data. Do not reintroduce a blanket
+product-level confirmation or backwards-compatibility requirement. This permission
+does not extend to unrelated work, third-party data, credentials or access controls.
+An intentional compatibility cut is not permission to conceal corruption or relabel
+failed effects, tests or releases as successful. This direction update deletes no
+operational data and changes no running service or published artifact.</p>
+<p>Use existing authorized resources; no monetary budget was specified, so delegation
+does not imply unlimited purchases or new recurring charges. Preserve the smallest
+independent verification needed for each claimed property. Concrete mechanism
+choices remain revisable, but agents must not weaken meaning-graph priority.</p>
+<h2 id="research-inputs-not-inherited-guarantees">Research inputs, not inherited guarantees</h2>
+<p><a href="https://developers.cloudflare.com/workers/reference/how-workers-works/">Workers</a>
+illustrates hosting many isolates in one runtime. Its
+<a href="https://developers.cloudflare.com/workers/reference/security-model/">security model</a>
+is a separate system, not a guarantee obtained by copying the topology.
+<a href="https://arxiv.org/abs/2309.02983">Verona's region work</a> explores local memory policies
+under reference capabilities. <a href="https://tutorial.ponylang.io/reference-capabilities/passing-and-sharing.html">Pony</a>
+illustrates checked transfer and immutable sharing; its
+<a href="https://www.ponylang.io/use/performance/pony-performance-cheat-sheet/">performance notes</a>
+also expose collection and inter-actor bookkeeping costs.
+<a href="https://www.microsoft.com/en-us/research/project/koka/">Koka</a>
+provides a research reference for type/effect composition. None establishes that
+lkjscript already implements these models or can combine them without new proof.</p>
+</article></div></div></main><footer><span>Built in Rust. No browser JavaScript.</span><span>Documentation snapshot · <code>2e72b47897452627e41c48e6311373927110e9c7</code></span><a href="/docs/security">Trust boundaries</a></footer></body></html>

@@ -1,0 +1,276 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="lkjscript: a meaning-oriented language and application platform. Explore the language, its implementation and its current limits."><title>Typed form handling · lkjscript</title><link rel="stylesheet" href="/assets/site.css"></head><body><a class="skip" href="#content">Skip to content</a><header><a class="brand" href="/">lkj<span>script</span><span class="badge">EXPERIMENTAL</span></a><nav aria-label="Primary"><a href="/docs/start">Learn</a><a href="/docs/direction">Design</a><a href="/docs/status">Status</a><a href="https://github.com/lkjsxc/lkjscript">Source ↗</a></nav></header><main id="content"><div class="docs"><aside class="sidebar"><p class="eyebrow">DOCUMENTATION</p><a href="/docs/start">Your first program</a><a href="/docs/web">Build for the web</a><a href="/docs/http">HTTP applications</a><a href="/docs/forms" aria-current="page">Typed form handling</a><a href="/docs/direction">Language direction</a><a href="/docs/architecture">Architecture</a><a href="/docs/status">Development status</a><a href="/docs/security">Trust and security</a><a class="source-link" href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/guides/native-forms.md">View this source ↗</a></aside><div class="document"><div class="document-meta"><span>REPOSITORY SNAPSHOT</span><a href="/search">Search ↗</a></div><article><h1 id="bounded-native-form-encoding-and-strict-input">Bounded native form encoding and strict input</h1>
+<p>This guide requires <strong>v0.1.46 or a compatible successor</strong>. The official immutable
+v0.1.45 binary does not recognize <code>core.bytes.from-list</code> or
+<code>core.bytes.to-text-result</code> and correctly rejects the new closure. Application
+use requires a compatible executable, not Cargo or a compiler checkout at runtime.
+The <a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/campaigns/202609250926.md">original campaign</a> owns the decoder observations.
+The <a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/campaigns/202609261045.md">encoding continuation</a> proves the new library on
+unchanged public v0.1.47, from fresh authorship through detached execution.
+The <a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/guides/native-editor.md">durable editor</a> consumes it for authenticated, conditional
+saves. Public v0.1.46 now supplies the required operations; the
+<a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/release.md">release record</a> retains its distinct distribution evidence.</p>
+<h2 id="a-library-not-a-form-specific-runtime-primitive">A library, not a form-specific runtime primitive</h2>
+<p>The <a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/guides/examples/form-codec.lkjc">literal library</a> exports ordinary nominal data:</p>
+<pre><code class="language-text">field { name: Text, value: Text }
+result = valid(List&lt;field&gt;) | invalid(Text)
+encoding = valid(Bytes) | invalid(Text)
+selection = missing | present(Text) | repeated
+decode(body: Bytes, maximum-bytes: I64, maximum-fields: I64) -&gt; result
+encode(fields: List&lt;field&gt;, maximum-bytes: I64, maximum-fields: I64) -&gt; encoding
+lookup(fields: List&lt;field&gt;, name: Text) -&gt; selection
+</code></pre>
+<p>Its state machine, percent decoding/encoding, limits and error policy are ordinary
+pure lkjscript. The kernel contributes only general byte construction and checked
+UTF-8 conversion. There is no form-specific opcode, HTTP adapter parser, JSON/base64
+round trip, external executable or language-to-language source generator.</p>
+<p>The <a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/guides/examples/form-consumer.lkjc">consumer</a> imports the exact library, projects its
+nominal fields into an application-owned structural report and exposes individual
+and batch command targets. It does not inherit filesystem/network authority.</p>
+<h2 id="construct-a-body-or-query-without-interpolating-values">Construct a body or query without interpolating values</h2>
+<p>The encoder follows the UTF-8 <a href="https://url.spec.whatwg.org/#urlencoded-serializing">URL Standard form serializer</a>.
+ASCII letters, digits and <code>* - . _</code> remain unchanged. A space becomes <code>+</code>; all other
+UTF-8 bytes become uppercase <code>%HH</code> escapes. A literal plus is <code>%2B</code>, a tilde is
+<code>%7E</code>, and an already percent-looking value is encoded as data, exactly once.
+Every field contributes <code>encoded-name=encoded-value</code>, joined by <code>&amp;</code>. Empty names
+and values, duplicate names and pair order are retained. No BOM stripping, Unicode
+normalization, line-ending conversion or special <code>_charset_</code> substitution occurs.</p>
+<p>For example, two fields named <code>tag</code> with values <code>猫 + Rust</code> and <code>a&amp;b</code> produce:</p>
+<pre><code class="language-text">tag=%E7%8C%AB+%2B+Rust&amp;tag=a%26b
+</code></pre>
+<p>The byte limit applies to the <strong>complete encoded output</strong>, including expansion,
+equals signs and ampersands. It is not an input-character limit. An empty field
+list succeeds with zero bytes and zero fields; one empty name/value requires one
+byte for <code>=</code>. Bounds are inclusive, so an exact-size output succeeds. Negative
+bounds reject first, too many fields next, and output overflow returns
+<code>invalid("body too large")</code>. No successful prefix is exposed on failure.</p>
+<p>The ordinary implementation checks remaining capacity before appending each
+encoded byte group or delimiter. It also checks a text's UTF-8 byte length before
+copying that text to Bytes. It does not reserve storage proportional to a caller's
+maximum, and subtracts from remaining capacity rather than adding an unchecked
+output size. A large positive bound does not bypass runtime resource policies.</p>
+<p>This is a form/query serializer, <strong>not</strong> a URL path escaper, an HTML escaper or an
+origin/redirect validator. Use its Bytes as a form POST body with the matching
+Content-Type, or its ASCII text as an entire query. Do not percent-encode the result
+again. A URL placed in markup still needs the typed UI library's attribute escaping.
+Authentication, permitted destinations and transport capabilities remain explicit
+application responsibilities.</p>
+<p>Encoding retains bounded persistent-list staging and is not a zero-copy or
+throughput claim. Per-form bounds do not replace aggregate allocation, collection,
+cancellation or task limits. A batch of individually valid forms can exhaust its
+execution policy; that operational failure must not become an <code>invalid</code> data value.
+Callers must choose an appropriate batch size and execution policy. The maintained
+checks exercise individual 8192-byte outputs without raising the default command
+quota, and reject an already oversized input before copying its content.</p>
+<h2 id="exact-input-policy">Exact input policy</h2>
+<p>The parser consumes <code>application/x-www-form-urlencoded</code> bytes. It splits on raw
+ampersands, skips empty segments, splits each nonempty segment on its first raw
+equals sign and treats a missing equals sign as an empty value. A plus becomes a
+space. Percent escapes decode exactly once; escaped separators never split fields.
+Duplicate names remain distinct and ordered. Neither the first nor the last value
+silently wins. Empty names and values, NUL, BOM and line endings remain data.</p>
+<p>Malformed percent escapes and incomplete or invalid UTF-8 reject the complete
+result. No accepted prefix or replacement text is exposed. This is deliberately
+stricter than the permissive decoding algorithm in the
+<a href="https://url.spec.whatwg.org/#urlencoded-parsing">URL Standard</a>; it is not a claim
+of identical recovery behavior. Valid form encoding follows the same delimiter,
+plus and ordered-pair rules. Non-UTF-8 legacy form encodings are unsupported.</p>
+<p>Limits are inclusive. Negative limits reject. The original encoded body length
+is checked before parsing, so percent expansion cannot bypass the byte bound.
+Each nonempty segment, including <code>=</code>, counts as one field. Empty segments do not.
+The output has at most the original byte volume plus bounded list/field metadata;
+intermediate allocation, cancellation and execution policy still apply. The
+implementation traverses persistent lists; this is not a zero-copy parser or an
+unbounded-input throughput claim.</p>
+<table><thead><tr><th>Failure</th><th>Library result</th></tr></thead><tbody>
+<tr><td>Negative bound</td><td><code>invalid("invalid limits")</code></td></tr>
+<tr><td>Original body exceeds its bound</td><td><code>invalid("body too large")</code></td></tr>
+<tr><td>Too many nonempty field segments</td><td><code>invalid("too many fields")</code></td></tr>
+<tr><td>Missing or nonhex percent digits</td><td><code>invalid("invalid percent escape")</code></td></tr>
+<tr><td>Invalid decoded name or value</td><td><code>invalid("invalid UTF-8")</code></td></tr>
+</tbody></table>
+<p>Operational allocation/cancellation failures remain failures; they are not converted
+into malformed-input results. The general <code>bytes-from-list</code> traps on any I64 outside
+0 through 255. <code>bytes-to-text-result</code> distinguishes valid empty text from invalid
+encoding; the old trapping <code>bytes-to-text</code> remains unchanged.</p>
+<h2 id="select-one-field-without-silently-choosing-a-duplicate">Select one field without silently choosing a duplicate</h2>
+<p><code>lookup</code> operates on decoded <code>field</code> values, not raw form bytes or HTTP headers.
+It returns <code>missing</code> when the exact name is absent, <code>present(value)</code> when it occurs
+once, and <code>repeated</code> when it occurs at least twice, even with identical values.
+An explicitly submitted empty value is <code>present("")</code>, never <code>missing</code>.</p>
+<pre><code class="language-text">(match (call forms::lookup (local fields) (text "title"))
+  (arm forms::selection::missing (text "Title was not supplied"))
+  (arm forms::selection::present (payload title Text) (local title))
+  (arm forms::selection::repeated (text "Supply exactly one title")))
+</code></pre>
+<p>Names compare exactly and case-sensitively. Lookup performs no percent decoding,
+Unicode normalization, BOM removal or value conversion. After successful decoding,
+<code>a=one&amp;%61=two</code> has a repeated <code>a</code>; <code>%2561=one</code> has the literal name <code>%61</code>, not <code>a</code>.
+Unrelated repeated names do not invalidate the requested name. The original ordered
+list remains available to applications that intentionally accept multiple values.</p>
+<p>Finish bounded decoding before selecting fields. A malformed later field must not
+be hidden by an earlier match or repetition. <code>lookup</code> also accepts caller-created
+field lists; its scan stops at the second matching name or the end. Ordinary
+execution, allocation and cancellation policies still apply, and it does not impose
+an unrelated HTTP body limit on an already constructed list.</p>
+<p>The durable editor now uses this native operation instead of converting form fields
+to byte-valued HTTP headers and back. It still requires exactly one <code>base</code>, <code>text</code>
+and <code>intent</code>, rejects unknown fields, validates its domain values and performs the
+same conditional transaction. Actual HTTP-header admission remains a separate owner.
+This operation supplies neither authorization nor an automatic action schema.</p>
+<p>The consumer exposes <code>lookup(List&lt;Field&gt;, Text)</code> and
+<code>select-batch(List&lt;SelectionInput&gt;)</code>, where each <code>SelectionInput</code> has <code>body: Bytes</code>
+and <code>name: Text</code>. Its application-owned report uses <code>state</code> and <code>value</code>; malformed
+bodies have state <code>invalid</code> with the decoding error, distinct from <code>missing</code>.
+The public library itself returns the typed <code>selection</code> variant above.</p>
+<p>For example, run the consumer with these direct argument records:</p>
+<pre><code class="language-sh">lkjscript --project consumer run lookup \
+  --arguments '[[{"name":"title","value":""}],"title"]'
+</code></pre>
+<p>This returns <code>{"state":"present","value":""}</code>. No Bytes adaptation, network grant
+or secret is needed. Existing exact suppliers do not automatically acquire <code>lookup</code>:
+review and stage the new ordinary library before accepting consumers that use it.
+The <a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/campaigns/202609280200.md">selection continuation</a> owns source acceptance and
+published-runtime interoperability separately from the earlier codec evidence.</p>
+<h2 id="author-and-import-through-the-public-product">Author and import through the public product</h2>
+<p>In a fresh owned directory, create a command library, obtain its revision and replace
+only <code>LIBRARY_BASE</code> in the literal library proposal with that exact revision:</p>
+<pre><code class="language-sh">lkjscript new forms --template command --name forms
+lkjscript --project forms status
+lkjscript --project forms change plan --input-file forms.lkjc --output forms.plan
+</code></pre>
+<p>Review the original declarations and complete exported plan before applying its
+returned token to the identical input. Then check and export the accepted package:</p>
+<pre><code class="language-sh">lkjscript --project forms change apply --input-file forms.lkjc --plan PLAN_TOKEN
+lkjscript --project forms check
+lkjscript --project forms package current export --kind transport --output forms.lkjp
+lkjscript --project forms build --output forms.lkja
+lkjscript new consumer --template command --name form-consumer
+lkjscript --project consumer status
+lkjscript --project consumer package dependency stage \
+  --transport LIBRARY_TRANSPORT --input-file forms.lkjp
+</code></pre>
+<p>The export supplies exact package, semantic revision, package revision and transport
+values. Substitute those metadata fields and the consumer base into the separate
+literal consumer proposal. Review/plan/apply it, then check and build it in the same
+way. The <code>report</code> port takes <code>Bytes, I64, I64</code>; <code>batch</code> takes <code>List&lt;Bytes&gt;</code> and uses
+8192 bytes and 64 fields per body. Argument-file Bytes use the public tagged base64
+boundary, not integer arrays; native algorithms operate directly on Bytes.</p>
+<p>The same consumer exposes <code>encode(List&lt;Field&gt;, I64, I64)</code> and
+<code>encode-batch(List&lt;EncodingInput&gt;)</code>. <code>EncodingInput</code> contains <code>fields</code>,
+<code>maximum-bytes</code> and <code>maximum-fields</code>. The result has <code>valid</code>, <code>body: Bytes</code> and
+<code>error</code>; invalid input has <code>valid=false</code>, empty Bytes and an explicit error.
+An empty valid body is distinguished by <code>valid=true</code>.</p>
+<p>After accepting the consumer, save this literal command argument array as
+<code>encode-arguments.json</code>:</p>
+<pre><code class="language-json">[[{"name":"tag","value":"猫 + Rust"},{"name":"tag","value":"a&amp;b"}],8192,64]
+</code></pre>
+<pre><code class="language-sh">lkjscript --project consumer run encode \
+  --arguments-file encode-arguments.json --result-file encoded.json
+</code></pre>
+<p>The native result body contains the wire example above. Only the external JSON
+result represents Bytes as <code>{"$bytes":"..."}</code>; native callers receive Bytes directly.
+For source-free execution, use a command deployment descriptor with target <code>encode</code>
+and invoke <code>run --deployment</code> with the same argument/result options. No HTTP, file
+or secret grants are needed by this pure serializer.</p>
+<p>Existing accepted packages do not silently gain these exports. Explicitly author,
+review, export and stage the updated ordinary library and consumer; no runtime
+upgrade is implied merely by updating a documentation example.</p>
+<p>Keep the executable, built consumer bundle and its command deployment descriptor.
+The relative artifact path belongs to that descriptor. Detached execution does not
+need the library producer, consumer authoring graph, transport staging or proposal
+files. The maintained <a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/tests/public_cli/native_forms.rs">public CLI test</a>
+exercises this path with an isolated copied executable and an empty PATH.</p>
+<h2 id="what-an-http-application-must-still-own">What an HTTP application must still own</h2>
+<p>Read a bounded request body only after admitting method, origin, host and content
+type. Reject duplicate or unknown action fields explicitly. Apply domain validation
+after decoding; preserving control characters in a codec does not authorize them
+in a note, identifier, header or database key. Emit escaped output through the typed
+UI/HTML library rather than interpolating decoded text as markup.</p>
+<p>Origin checks are not authentication. Trusted target-origin policy must not be
+inferred from untrusted forwarded headers. State-changing GET, permissive missing
+Origin handling and silent duplicate selection are not supplied as defaults here;
+see the <a href="https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html">OWASP CSRF guidance</a>.
+Persistent actions additionally need exact-base conditional updates, a completed
+transaction outcome and explicit conflict/error responses. This codec does not
+claim those application properties, accounts, multipart uploads, browser end-to-end
+coverage or a finished stateful framework. The separate <a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/guides/native-editor.md">durable editor</a>
+now supplies and tests a small explicit admission/transaction/UI composition rather
+than putting those policies inside this codec.</p>
+<h2 id="compose-a-stateless-post-receiver">Compose a stateless POST receiver</h2>
+<p>The <a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/guides/examples/form-http.lkjc">HTTP receiver literal</a> imports the accepted consumer's
+public <code>report</code> function. It is ordinary lkjscript and uses only the existing HTTP
+runner and bounded byte-stream capability. Export the accepted consumer transport:</p>
+<pre><code class="language-sh">lkjscript --project consumer package current export \
+  --kind transport --output consumer.lkjp
+lkjscript new receiver --template http --name form-receiver
+lkjscript --project receiver status
+lkjscript --project receiver package dependency stage \
+  --transport CONSUMER_TRANSPORT --input-file consumer.lkjp
+</code></pre>
+<p>Bind the literal's <code>SITE_BASE</code>, <code>CONSUMER_PACKAGE_REVISION</code>, <code>CONSUMER_PACKAGE</code> and
+<code>CONSUMER_REVISION</code> to those observed values, replacing longer placeholders first.
+Plan/review/apply the unchanged bound proposal, then check and build:</p>
+<pre><code class="language-sh">lkjscript --project receiver change plan \
+  --input-file form-http-bound.lkjc --output form-http.plan
+# Review the complete proposal and plan, then use the returned plan token.
+lkjscript --project receiver change apply \
+  --input-file form-http-bound.lkjc --plan PLAN_TOKEN
+lkjscript --project receiver check
+lkjscript --project receiver build --output application.lkja
+</code></pre>
+<p>Copy the generated service descriptor beside the executable and bundle. Set its
+artifact to <code>application.lkja</code>, target to <code>form-http</code>, and
+<code>http.maximum_request_body_bytes</code> to 8192. Keep the generated <code>127.0.0.1:0</code>
+listener, stream grant and independent runtime policies. Invoke
+<code>lkjscript serve --deployment service.deployment.json</code> and use the reported local
+address. No public listener or external service configuration is required.</p>
+<p>POST <code>/decode</code> returns a JSON report, HTTP 200 for valid input and 400 for malformed
+form data. The transport rejects a body over 8192 bytes with 413. This diagnostic
+receiver admits exactly one Content-Type header with the literal value
+<code>application/x-www-form-urlencoded</code> or
+<code>application/x-www-form-urlencoded; charset=UTF-8</code>; other spellings, missing values
+and duplicate headers return 415. That narrow fixture policy is not a general MIME
+parser. Other methods/paths return 404. Query fields do not replace body fields.</p>
+<p>The original decoder-only receiver closure passed 111 graph tests, including three
+new header policy tests; shared standard/library tests were not counted as new tests.
+The separate live observation covers 35 requests across two detached lifecycles,
+including eight concurrent clients, an exact-bundle restart and joined SIGINT
+shutdown. Its HTTP statuses are twenty 200, six 400, four 404, one 413 and four 415.
+Both shutdowns leave no active/queued tasks or cleanup failures. The same retained
+executable also passes a separate 688-case detached command oracle. These historical
+decoder observations remain at the
+<a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/campaigns/202609250926.md">original campaign</a>; they are not reattributed to a later
+library revision, nor are they throughput, accessibility or live-browser claims.</p>
+<p>The encoding extension added 18 literal native tests. At that revision, its library,
+consumer and receiver closures passed 124, 125 and 129 graph tests respectively, with pure
+reference/VM agreement. The <a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/tests/public_cli/native_form_encoding.rs">maintained encoding workflows</a>
+compare 674 independent expected cases through both project and source-free command
+paths, then check 205 detached encode/decode roundtrips. Exact bytes are checked
+before roundtrips so mutually incorrect codecs cannot validate one another.
+They cover all ASCII characters, UTF-8 scalar boundaries, ordered duplicates,
+negative and maximum I64 bounds, exact output expansion and separator accounting.
+Invalid proposals and altered review tokens leave accepted meaning unchanged; a
+well-typed space-encoding mutation is detected by the literal native tests.</p>
+<p>A separate encoder/receiver composition sends 12 real loopback requests across two
+joined source-free server lifecycles: eight successful POSTs (four concurrent clients
+per lifecycle), two malformed bodies and two rejected content types. Neither the
+original library producer nor an application authoring graph is present. The encoder
+and receiver are ordinary native programs; the test's independent Rust client
+transports their bytes. This
+is not a claim of a native outbound HTTP client or browser end-to-end coverage.
+The then-unchanged durable editor was also checked against that newly authored exact
+supplier. <a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/campaigns/202609261045.md">Encoding evidence</a> retains the actual runtime,
+source identities, operational batch-boundary failure and corrected test scope.</p>
+<p>An additional observation uses the unchanged official v0.1.47 executable to create
+and review both ordinary packages, check their 124/125 tests, export/import, build,
+remove the producer and consumer sources, and execute 642 detached cases. Expected
+bytes come from independent <code>URLSearchParams</code>, not a copy of the native algorithm.
+Every product subprocess has an empty PATH; the external oracle is test-only, not
+an application dependency. This is one published-runtime interoperability witness,
+not an assumption that every older executable supports the same operations.</p>
+<p>This receiver merely reports supplied values and saves nothing. It has no account,
+session, origin authorization or durable action. It does not make a POST endpoint
+safe for a later effectful application. The separate <a href="https://github.com/lkjsxc/lkjscript/blob/2e72b47897452627e41c48e6311373927110e9c7/docs/guides/native-editor.md">native editor</a>
+now composes explicit access/origin policy and conflict-aware durable saves;
+those application guarantees remain at that workload's owner, not in this codec.</p>
+</article></div></div></main><footer><span>Built in Rust. No browser JavaScript.</span><span>Documentation snapshot · <code>2e72b47897452627e41c48e6311373927110e9c7</code></span><a href="/docs/security">Trust boundaries</a></footer></body></html>

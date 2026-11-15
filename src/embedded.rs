@@ -9,6 +9,8 @@ pub fn library(path: &str) -> Option<Vec<u8>> {
         "$std/json.rs" => include_str!("../library/json.rs"),
         "$std/hmac.rs" => include_str!("../library/hmac.rs"),
         "$std/time.rs" => include_str!("../library/time.rs"),
+        "$std/text.rs" => include_str!("../library/text.rs"),
+        "$std/text_lower.rs" => include_str!("../library/text_lower.rs"),
         "$std/bytes.rs" => include_str!("../library/bytes.rs"),
         "$std/string.rs" => include_str!("../library/string.rs"),
         "$std/str.rs" => include_str!("../library/str.rs"),
