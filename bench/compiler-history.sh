@@ -44,17 +44,21 @@ free_space() {
 : > "$output.space"
 free_space "$history_head" "$history_head" || exit 2
 fixture=$(mktemp -d "$PWD/target/compiler-history.XXXXXX")
-trap 'rm -rf "$fixture"' EXIT HUP INT TERM
+trap 'rm -rf "$fixture"' EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 mkdir "$fixture/store" "$output.logs"
 compiler_origin=$compiler
 cp -- "$compiler" "$fixture/compiler"
 compiler="$fixture/compiler"
 git -C "$repository" log -n "$scan" --format='%H %P' "$history_head" > "$fixture/revisions"
-printf 'ordinal\trevision\tparent\tstatus\tprojection\toperations\tstdout_lines\twall_s\tuser_s\tsys_s\tpeak_kib\tload_before\tload_after\treason\n' > "$output"
-printf 'mode=%s root=src/main.lkj scan=%s wanted=%s memory_bytes=%s timeout_seconds=%s store_bytes=%s\n' \
+printf 'ordinal\trevision\tparent\tstatus\tprojection\toperations\tstdout_lines\twall_s\tuser_s\tsys_s\tpeak_kib\tload_before\tload_after\treason\tlibrary_environment\tsource_root\n' > "$output"
+printf 'mode=%s root_policy=common-main-otherwise-common-lib scan=%s wanted=%s memory_bytes=%s timeout_seconds=%s store_bytes=%s\n' \
     "$mode" "$scan" "$count" "$memory_bytes" "$timeout_seconds" "$store_bytes" > "$output.meta"
 printf 'history_head=%s\ncompiler_origin=%s\n' "$history_head" "$compiler_origin" >> "$output.meta"
 sha256sum "$compiler" >> "$output.meta"
+printf 'library_policy=historical-roots-when-both-present-else-frozen-compiler-embedded-on-both-sides\nstop_file=%s.stop\n' "$output" >> "$output.meta"
 
 # Listing/archiving is restricted to these four trees. Never copy repository
 # metadata, generation-one, data/services, releases or unrelated projects.
@@ -81,7 +85,7 @@ materialize() {
             projection=legacy-rs-copies
         fi
     done < <(rg --files --no-ignore -0 -g '*.rs' "$destination" || true)
-    [[ -f "$destination/src/main.lkj" && -f "$destination/library/lib.lkj" ]] || return 14
+    [[ -f "$destination/src/main.lkj" || -f "$destination/src/lib.lkj" ]] || return 14
 }
 if [[ $mode == replay ]]; then
     # Prefer bounded historical changes, without pretending ineligible revisions
@@ -101,11 +105,14 @@ fi
 passed=0
 attempted=0
 while IFS=$'\t' read -r weight revision parent; do
+    if [[ -e "$output.stop" ]]; then printf 'stop_requested=true\n' >> "$output.meta"; break; fi
     ((attempted += 1))
     rm -rf "$fixture/before" "$fixture/after"
     projection=native-lkj
+    library_environment=not-loaded
+    source_root=unavailable
     if ! free_space "$parent" "$revision"; then
-        printf '%s\t%s\t%s\trefused\t%s\t0\t0\t-\t-\t-\t-\t-\t-\tE_HISTORY_SPACE\n' \
+        printf '%s\t%s\t%s\trefused\t%s\t0\t0\t-\t-\t-\t-\t-\t-\tE_HISTORY_SPACE\tnot-loaded\tunavailable\n' \
             "$attempted" "$revision" "$parent" "$projection" >> "$output"
         break
     fi
@@ -113,18 +120,41 @@ while IFS=$'\t' read -r weight revision parent; do
     materialize "$parent" "$fixture/before" || prep=$?
     if [[ $prep == 0 ]]; then materialize "$revision" "$fixture/after" || prep=$?; fi
     stem="$output.logs/$(printf '%03d' "$attempted")-$revision"
+    if [[ $prep == 0 ]]; then
+        if [[ -f "$fixture/before/src/main.lkj" && -f "$fixture/after/src/main.lkj" ]]; then
+            source_root=src/main.lkj
+        elif [[ -f "$fixture/before/src/lib.lkj" && -f "$fixture/after/src/lib.lkj" ]]; then
+            source_root=src/lib.lkj
+        else
+            prep=14
+        fi
+    fi
     if [[ $prep != 0 ]]; then
-        printf '%s\t%s\t%s\tineligible\t%s\t0\t0\t-\t-\t-\t-\t-\t-\tarchive-or-projection-%s\n' \
+        printf '%s\t%s\t%s\tineligible\t%s\t0\t0\t-\t-\t-\t-\t-\t-\tarchive-or-projection-%s\tnot-loaded\tunavailable\n' \
             "$attempted" "$revision" "$parent" "$projection" "$prep" >> "$output"
         continue
     fi
+    git -C "$repository" diff --name-only --no-renames -z "$parent" "$revision" -- src library > "$stem.changed-paths"
     load_before=$(cut -d ' ' -f 1 /proc/loadavg)
     if [[ $mode == replay ]]; then
-        args=(edit src/main.lkj --source-dir "$fixture/before" --library-dir "$fixture/before/library"
-            --against "$fixture/after/src/main.lkj" --against-library-dir "$fixture/after/library")
+        args=(edit "$source_root" --source-dir "$fixture/before"
+            --against "$fixture/after/$source_root")
     else
-        args=(compare "$fixture/after/src/main.lkj" --library-dir "$fixture/after/library"
-            --against "$fixture/before/src/main.lkj" --against-library-dir "$fixture/before/library" --limit 20)
+        args=(compare "$fixture/after/$source_root"
+            --against "$fixture/before/$source_root" --limit 20)
+    fi
+    if [[ -f "$fixture/before/library/lib.lkj" && -f "$fixture/after/library/lib.lkj" ]]; then
+        library_environment=historical-roots
+        if [[ $mode == replay ]]; then
+            args+=(--library-dir "$fixture/before/library" --against-library-dir "$fixture/after/library")
+        else
+            args+=(--library-dir "$fixture/after/library" --against-library-dir "$fixture/before/library")
+        fi
+    else
+        # The copied compiler is frozen for the entire campaign. Omitting both
+        # library roots selects its same embedded standard library on both sides.
+        # Historical source bytes, including include data, remain unchanged.
+        library_environment=frozen-compiler-embedded
     fi
     args+=(--store "$fixture/store" --store-bytes "$store_bytes" --store-key "$private_key" --stats)
     result=0
@@ -142,35 +172,74 @@ while IFS=$'\t' read -r weight revision parent; do
     if [[ $result == 0 ]]; then
         if [[ $mode == replay ]]; then
             if operations=$(perl -ne 'if (/^replay desired=([0-9a-f]{64}) candidate=([0-9a-f]{64}) verified=true operations=([0-9]+)$/ && $1 eq $2) { $count=$3; } END { if ($count) { print $count; } else { exit 1; } }' "$stem.out"); then
-                status=passed
-                reason=desired-checked-meaning-identical
+                # A proof for a selected root does not prove changes outside
+                # that closure. Every changed source/library file must appear
+                # in the applied transaction's exact file facts.
+                if perl - "$stem.out" "$stem.changed-paths" "$fixture/before" > "$stem.scope" <<'PERL'
+use strict; use warnings; use JSON::PP;
+my ($plan_path, $changed_path, $before) = @ARGV;
+open my $plan, '<:raw', $plan_path or die $!;
+my %applied;
+while (<$plan>) {
+    if (/^("(?:\\.|[^"])*") level=source-claim file before=[0-9a-f]{64} after=[0-9a-f]{64}$/) {
+        $applied{decode_json($1)} = 1;
+    }
+}
+open my $changed, '<:raw', $changed_path or die $!;
+local $/ = "\0";
+my $missing = 0;
+while (<$changed>) {
+    chomp;
+    my $historical = $_;
+    s/\.rs$/.lkj/;
+    unless ($applied{"$before/$_"}) { print "$historical\n"; $missing++; }
+}
+exit($missing ? 1 : 0);
+PERL
+                then
+                    status=passed
+                    reason=desired-checked-meaning-identical
+                else
+                    reason=changed-source-outside-applied-operation-files
+                fi
             else
+                status=implementation-failure
                 reason=missing-replay-equality-proof
             fi
-        elif [[ $lines -le 30 ]]; then
+        elif [[ $lines -le 30 ]] && rg -q '^program level=checked-ir identity-domain=' "$stem.out" \
+            && rg -q '^program level=checked-ir verdict=' "$stem.out" \
+            && rg -q '^program changed-facts=' "$stem.out"; then
             status=passed
             reason=bounded-comparison
         else
-            reason=comparison-exceeded-30-lines
+            status=implementation-failure
+            reason=missing-or-unbounded-comparison
         fi
     else
         reason=$(perl -ne 'if (/(E_[A-Z0-9_]+)/) { print $1; exit; }' "$stem.err")
         [[ -n $reason ]] || reason="exit-$result"
+        if rg -q 'E_REPLAY_(SOURCE|SPAN).*(duplicate source path|conflicting|absent from snapshot|does not match source)' "$stem.err"; then
+            status=implementation-failure
+        fi
         if [[ -e "$fixture/before/.lkjscript-edit.pending" ]]; then
             (
                 cd "$fixture"
-                "$compiler" edit src/main.lkj --source-dir "$fixture/before" --library-dir "$fixture/before/library" \
+                "$compiler" edit "$source_root" --source-dir "$fixture/before" \
                     --recover --no-store --store-key "$private_key"
             ) > "$stem.recovery" 2>&1
         fi
     fi
     metrics=$(tail -n 1 "$stem.time")
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
         "$attempted" "$revision" "$parent" "$status" "$projection" "$operations" "$lines" "$metrics" \
-        "$load_before" "$load_after" "$reason" >> "$output"
+        "$load_before" "$load_after" "$reason" "$library_environment" "$source_root" >> "$output"
     if [[ $status == passed ]]; then ((passed += 1)); fi
     printf 'history mode=%s attempted=%s passed=%s revision=%s result=%s reason=%s\n' \
         "$mode" "$attempted" "$passed" "$revision" "$status" "$reason"
+    if [[ $status == implementation-failure ]]; then
+        printf 'implementation_failure=%s\n' "$reason" >> "$output.meta"
+        break
+    fi
     if [[ $mode == replay && $passed -ge $count ]]; then break; fi
 done < "$fixture/ordered"
 printf 'attempted=%s passed=%s wanted=%s\n' "$attempted" "$passed" "$count" >> "$output.meta"
