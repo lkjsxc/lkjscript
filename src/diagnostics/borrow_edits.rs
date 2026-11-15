@@ -196,6 +196,74 @@ fn simple_view(program: &a::Program, expression: usize) -> bool {
     pure_place(program, *base) && pure_range(program, *index)
 }
 
+fn qualified(module: &str, name: &str) -> String {
+    if module.is_empty() { name.to_string() } else { format!("{module}::{name}") }
+}
+
+// A scope cannot shorten a loan carried by the result itself. Resolve source
+// names and inspect fields; only known owned results qualify for this rewrite.
+fn owned_result(program: &a::Program, callee: usize) -> bool {
+    let Expr::Path(path) = &program.exprs[callee].kind else { return false; };
+    let Ok(names) = crate::resolve::Resolver::new(program) else { return false; };
+    let node = &program.exprs[callee];
+    let Ok(resolved) = names.value_path(node.scope, path, node.span) else { return false; };
+    let mut result: Option<usize> = None;
+    for (index, function) in program.functions.iter().enumerate() {
+        if qualified(&function.module, &function.name) != resolved.name { continue; }
+        if !function.generics.is_empty() { return false; }
+        for implementation in &program.impls {
+            if implementation.methods.contains(&index) { return false; }
+        }
+        result = Some(function.result);
+    }
+    let Some(result) = result else { return false; };
+    let mut pending = vec![(result, false)];
+    let mut seen: std::collections::BTreeSet<(usize, bool)> = std::collections::BTreeSet::new();
+    while let Some((ty, parameters_owned)) = pending.pop() {
+        if !seen.insert((ty, parameters_owned)) { continue; }
+        let node = &program.types[ty];
+        match &node.kind {
+            Type::Tuple(items) => {
+                for item in items { pending.push((*item, parameters_owned)); }
+            }
+            Type::Array { inner, .. } => pending.push((*inner, parameters_owned)),
+            Type::Never => {}
+            Type::Path(path) => {
+                if names.is_type_parameter(path, node.span) {
+                    if !parameters_owned { return false; }
+                    continue;
+                }
+                let Ok(name) = names.type_name(node.scope, &path.name, node.span) else { return false; };
+                for argument in &path.args { pending.push((*argument, parameters_owned)); }
+                let mut found = false;
+                for item in &program.structs {
+                    if qualified(&item.module, &item.name) != name { continue; }
+                    found = true;
+                    for field in &item.fields { pending.push((field.ty, true)); }
+                }
+                for item in &program.enums {
+                    if qualified(&item.module, &item.name) != name { continue; }
+                    found = true;
+                    for variant in &item.variants {
+                        for field in &variant.fields { pending.push((field.ty, true)); }
+                    }
+                }
+                for item in &program.aliases {
+                    if qualified(&item.module, &item.name) != name { continue; }
+                    found = true;
+                    pending.push((item.ty, true));
+                }
+                if !found && !matches!(name.as_str(), "bool" | "char" | "u8" | "u16" | "u32" | "u64" | "usize"
+                    | "i8" | "i16" | "i32" | "i64" | "isize" | "f64" | "String" | "Vec" | "Box"
+                    | "World" | "Stdout" | "Stdin" | "Stderr" | "Directory" | "File" | "Process"
+                    | "Clock" | "Child" | "Listener" | "Connector" | "Readiness") { return false; }
+            }
+            _ => return false,
+        }
+    }
+    true
+}
+
 fn scoped_value(program: &a::Program, span: Span) -> Vec<Edit> {
     let saved = fresh(program, "owned");
     vec![
@@ -314,7 +382,7 @@ fn advice(program: &a::Program, problem: &Diagnostic) -> Option<(String, Vec<Edi
                     if encloses(arm.span, candidate.span) { in_arm = true; }
                 }
             }
-            if !in_arm { continue; }
+            if !in_arm || !owned_result(program, *callee) { continue; }
             let call_span = program.exprs[*value].span;
             let argument_span = program.exprs[args[0]].span;
             let edits = if tight_place(program, *callee)

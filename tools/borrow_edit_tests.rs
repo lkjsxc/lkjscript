@@ -129,6 +129,18 @@ pub fn main(mut world: World) {
         run_value(world, executable, config, report, &item.name, &item.entry, &item.expected)?;
     }
     let unchanged: Vec<(String, String)> = vec![
+        ("match-returned-view.rs".to_string(), r#"fn parsed<'a>(bytes: &'a [u8]) -> Option<&'a [u8]> { Some(bytes) }
+struct State { bytes: Vec<u8> }
+impl State {
+    fn update(&mut self) {
+        match parsed(&self.bytes[..]) {
+            Some(view) => { self.bytes.clear(); assert!(!view.is_empty()); }
+            None => {}
+        }
+    }
+}
+pub fn probe() { let mut state = State { bytes: vec![1u8] }; state.update(); }
+"#.to_string()),
         ("mutable-receiver-group.rs".to_string(), r#"struct State { started: usize }
 impl State {
     fn set(&mut self, value: usize) { self.started = value; }
