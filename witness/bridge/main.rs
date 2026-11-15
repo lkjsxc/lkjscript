@@ -4,7 +4,7 @@
 mod host;
 pub use lkjscript::{
     ast, authority, entry_grants, backend, check, diagnostic, diagnostics, elaborate, frontend, generics, interpreter, ir,
-    ir_text, json, names, native, optimizer, resolve, reuse, runtime, runtime_memory, sha256, source, syntax, x86,
+    ir_text, ir_binary, json, names, native, optimizer, resolve, reuse, runtime, runtime_memory, sha256, source, syntax, x86,
 };
 #[path = "../../src/embedded.rs"]
 mod embedded;
@@ -19,6 +19,10 @@ mod driver_host {
 mod store {
     use super::host::{Clock, Directory, File, World};
     include!("../../src/store.rs");
+}
+mod program_directory {
+    use super::host::World;
+    include!("../../src/program_directory.rs");
 }
 mod driver {
     use super::host::{Child, Clock, Directory, File, Listener, Process, World};

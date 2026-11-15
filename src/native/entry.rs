@@ -105,6 +105,9 @@ impl Plan {
                 a.address(R8, self.failure_buffer);
                 a.lea(R8, R8, 128);
                 super::platform::diagnostic_text(a, "\n");
+                if let Some(endpoint) = crate::entry_grants::endpoint(grant) {
+                    super::platform::diagnostic_text(a, &format!(" ({endpoint})"));
+                }
                 a.pop(A);
                 a.negate(A);
                 super::platform::diagnostic_decimal(a, 1);

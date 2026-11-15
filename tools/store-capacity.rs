@@ -1,0 +1,39 @@
+//! Exercise disposable-store policy at a small bound, without a compiler CLI limit.
+mod diagnostic;
+mod ir;
+mod ir_text;
+mod ir_binary;
+mod reuse;
+mod sha256;
+mod store;
+
+fn number(bytes: &[u8]) -> usize {
+    String::from_utf8(bytes.to_vec()).unwrap().as_str().parse::<usize>().unwrap()
+}
+fn main(mut world: World) {
+    let arguments = world.args();
+    assert!(arguments.len() >= 5usize && arguments.len() <= 7usize);
+    let directory = Some(String::from_utf8(arguments[0].clone()).unwrap());
+    let key_file = Some(String::from_utf8(arguments[1].clone()).unwrap());
+    let capacity = number(&arguments[2]);
+    let offset = number(&arguments[3]);
+    let count = number(&arguments[4]);
+    let length = if arguments.len() == 7usize { number(&arguments[6]) } else { 512usize };
+    assert!(count != 0usize);
+    let mut cache = store::Store::open_bounded(&mut world, &directory, &key_file, capacity).unwrap();
+    for index in 0usize..count {
+        let key = sha256::hex_digest(format!("capacity entry {}", offset + index).as_bytes());
+        let payload = vec![(offset + index) as u8; length];
+        cache.put("capacity", &key, &payload);
+        assert!(cache.retained_bytes <= capacity);
+    }
+    let last = sha256::hex_digest(format!("capacity entry {}", offset + count - 1usize).as_bytes());
+    let expected = vec![(offset + count - 1usize) as u8; length];
+    assert!(cache.get("capacity", &last).unwrap() == expected);
+    assert!(cache.writes != 0usize);
+    // A trap has no unwinding: this models a process lost before policy publication.
+    if arguments.len() >= 6usize { panic!("interrupted before store index checkpoint"); }
+    cache.finish();
+    assert!(cache.retained_bytes <= capacity);
+    world.stdout().write(format!("ok bounded store bytes={} evicted={}\n", cache.retained_bytes, cache.evicted).as_bytes());
+}

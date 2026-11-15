@@ -9,10 +9,6 @@ pub struct Sha256 {
     bytes: u64,
 }
 
-fn rotate(value: u32, bits: u32) -> u32 {
-    (value >> bits) | (value << (32u32 - bits))
-}
-
 fn compress(state: &mut [u32; 8], block: &[u8]) {
     let constants = [
         0x428a2f98u32, 0x71374491u32, 0xb5c0fbcfu32, 0xe9b5dba5u32,
@@ -42,11 +38,12 @@ fn compress(state: &mut [u32; 8], block: &[u8]) {
             | block[at + 3] as u32;
         i += 1;
     }
+    // Spell fixed rotations here: a helper adds 576 calls per block with inlining off.
     while i < 64 {
         let x = words[i - 15];
         let y = words[i - 2];
-        let a = rotate(x, 7u32) ^ rotate(x, 18u32) ^ (x >> 3u32);
-        let b = rotate(y, 17u32) ^ rotate(y, 19u32) ^ (y >> 10u32);
+        let a = ((x >> 7u32) | (x << 25u32)) ^ ((x >> 18u32) | (x << 14u32)) ^ (x >> 3u32);
+        let b = ((y >> 17u32) | (y << 15u32)) ^ ((y >> 19u32) | (y << 13u32)) ^ (y >> 10u32);
         words[i] = words[i - 16].wrapping_add(a).wrapping_add(words[i - 7]).wrapping_add(b);
         i += 1;
     }
@@ -60,11 +57,11 @@ fn compress(state: &mut [u32; 8], block: &[u8]) {
     let mut h = state[7];
     i = 0;
     while i < 64 {
-        let upper = rotate(e, 6u32) ^ rotate(e, 11u32) ^ rotate(e, 25u32);
+        let upper = ((e >> 6u32) | (e << 26u32)) ^ ((e >> 11u32) | (e << 21u32)) ^ ((e >> 25u32) | (e << 7u32));
         let choice = (e & f) ^ ((!e) & g);
         let first = h.wrapping_add(upper).wrapping_add(choice)
             .wrapping_add(constants[i]).wrapping_add(words[i]);
-        let lower = rotate(a, 2u32) ^ rotate(a, 13u32) ^ rotate(a, 22u32);
+        let lower = ((a >> 2u32) | (a << 30u32)) ^ ((a >> 13u32) | (a << 19u32)) ^ ((a >> 22u32) | (a << 10u32));
         let majority = (a & b) ^ (a & c) ^ (b & c);
         let second = lower.wrapping_add(majority);
         h = g;

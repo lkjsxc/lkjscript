@@ -1,5 +1,5 @@
 // expect: reject E_UNSUPPORTED
-// pending: Explain that chars() is provided on a str view and suggest value.as_str().chars() for an owned String, instead of an unspecified implemented method or loop.
+// Diagnostic: explain the str view receiver and suggest value.as_str().chars().
 pub fn probe() -> usize {
     let value = "text".to_string();
     let mut count = 0usize;

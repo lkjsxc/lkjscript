@@ -2,6 +2,105 @@
 // The pure reuse module authenticates entries before consumers see their payload.
 use crate::{reuse, sha256};
 
+use std::collections::{BTreeMap, BTreeSet};
+
+// This bounds published authenticated file contents, including the index.
+// The index controls eviction only; it never admits a program or a result.
+struct StoredEntry { producer: String, bytes: usize }
+struct Budget {
+    generations: Vec<String>,
+    entries: BTreeMap<String, StoredEntry>,
+    bytes: usize,
+    metadata: usize,
+}
+fn hex_identity(text: &str) -> bool {
+    if text.len() != 64usize { return false; }
+    for byte in text.bytes() {
+        if !byte.is_ascii_digit() && !(b'a' <= byte && byte <= b'f') { return false; }
+    }
+    true
+}
+fn entry_producer(name: &str) -> Option<String> {
+    let bytes = name.as_bytes();
+    if bytes.len() < 131usize { return None; }
+    let key = bytes.len() - 64usize;
+    let producer = key - 65usize;
+    if bytes[producer - 1usize] != b'-' || bytes[key - 1usize] != b'-' { return None; }
+    if !hex_identity(&name[producer..key - 1usize]) || !hex_identity(&name[key..]) { return None; }
+    for byte in &bytes[..producer - 1usize] {
+        if !byte.is_ascii_lowercase() && !byte.is_ascii_digit() && *byte != b'-' { return None; }
+    }
+    Some(name[producer..key - 1usize].to_string())
+}
+impl Budget {
+    fn new() -> Self {
+        Self { generations: Vec::new(), entries: BTreeMap::new(), bytes: 0, metadata: 24 }
+    }
+    fn size(&self) -> usize { self.bytes + self.metadata + reuse::header_size() + 32usize }
+    fn forget(&mut self, name: &str) {
+        if let Some(entry) = self.entries.remove(&name.to_string()) {
+            self.bytes -= entry.bytes;
+            self.metadata -= 16usize + name.len();
+        }
+    }
+    fn remember(&mut self, name: &str, producer: &str, bytes: usize) {
+        self.forget(name);
+        if !self.generations.contains(&producer.to_string()) {
+            self.generations.push(producer.to_string());
+            self.metadata += 8usize + producer.len();
+        }
+        self.metadata += 16usize + name.len();
+        self.bytes += bytes;
+        self.entries.insert(name.to_string(), StoredEntry { producer: producer.to_string(), bytes });
+    }
+    fn growth(&self, name: &str, producer: &str, bytes: usize, current_index: usize) -> Option<usize> {
+        let generation = if self.generations.contains(&producer.to_string()) { 0usize } else { 8usize + producer.len() };
+        let index = self.metadata.checked_add(generation)?.checked_add(16usize)?.checked_add(name.len())?
+            .checked_add(reuse::header_size() + 32usize)?;
+        self.bytes.checked_add(bytes)?.checked_add(index.max(current_index))
+    }
+    fn encode(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        push_word(&mut out, 1usize);
+        push_word(&mut out, self.generations.len());
+        for generation in &self.generations { push_bytes(&mut out, generation.as_bytes()); }
+        push_word(&mut out, self.entries.len());
+        for (name, entry) in &self.entries {
+            push_bytes(&mut out, name.as_bytes());
+            push_word(&mut out, entry.bytes);
+        }
+        out
+    }
+    fn decode(bytes: &[u8]) -> Option<Self> {
+        let mut reader = Reader::new(bytes);
+        if reader.word()? != 1usize { return None; }
+        let count = reader.word()?;
+        if count > bytes.len() / 72usize { return None; }
+        let mut result = Self::new();
+        for _ in 0usize..count {
+            let producer = reader.text()?;
+            if !hex_identity(&producer) || result.generations.contains(&producer) { return None; }
+            result.metadata = result.metadata.checked_add(8usize + producer.len())?;
+            result.generations.push(producer);
+        }
+        let count = reader.word()?;
+        if count > bytes.len() / 16usize { return None; }
+        for _ in 0usize..count {
+            let name = reader.text()?;
+            let producer = entry_producer(&name)?;
+            let length = reader.word()?;
+            if !result.generations.contains(&producer) || result.entries.contains_key(&name)
+                || length < reuse::header_size() + 32usize { return None; }
+            result.bytes = result.bytes.checked_add(length)?;
+            result.metadata = result.metadata.checked_add(16usize + name.len())?;
+            result.entries.insert(name, StoredEntry { producer, bytes: length });
+        }
+        result.bytes.checked_add(result.metadata)?.checked_add(reuse::header_size() + 32usize)?;
+        if !reader.done() { return None; }
+        Some(result)
+    }
+}
+
 pub struct Store {
     directory: Directory,
     clock: Clock,
@@ -9,6 +108,14 @@ pub struct Store {
     producer_slot: String,
     secret: Vec<u8>,
     sequence: usize,
+    capacity: usize,
+    index_bytes: usize,
+    writer: Option<File>,
+    write_state: u8,
+    budget: Budget,
+    dirty: bool,
+    pub retained_bytes: usize,
+    pub evicted: usize,
     pub hits: usize,
     pub misses: usize,
     pub rejected: usize,
@@ -23,8 +130,20 @@ fn location(path: &str) -> (&str, &str) {
     }
 }
 
+// O_RDWR opens a FIFO without waiting for a peer; nonblocking reads then turn
+// hostile stream-like entries into misses. Read-only disposable entries may miss.
+fn cache_file(directory: &mut Directory, name: &str) -> Option<File> {
+    let mut file = directory.open_append(name).ok()?;
+    file.set_nonblocking(true).ok()?;
+    Some(file)
+}
+
 impl Store {
     pub fn open(world: &mut World, path: &Option<String>, key: &Option<String>) -> Option<Self> {
+        Self::open_bounded(world, path, key, 256usize * 1024usize * 1024usize)
+    }
+
+    pub fn open_bounded(world: &mut World, path: &Option<String>, key: &Option<String>, capacity: usize) -> Option<Self> {
         let path = path.as_ref()?;
         let key = key.as_ref()?;
         let (parent, name) = location(key);
@@ -53,16 +172,18 @@ impl Store {
             directory, clock: world.clock(), producer: producer[..].to_vec(),
             producer_slot: sha256::hex_digest(&producer), secret,
             sequence: 0, hits: 0, misses: 0, rejected: 0, writes: 0,
+            capacity, index_bytes: 0, writer: None, write_state: 0u8, budget: Budget::new(), dirty: false,
+            retained_bytes: 0, evicted: 0,
         })
     }
 
     fn raw(&mut self, namespace: &str, key: &str) -> Option<Vec<u8>> {
-        // Different compiler generations share the Directory without evicting one
-        // another. Authentication still binds the original executable digest.
+        // Generations coexist until the disposable store reaches its size cap.
+        // Authentication always binds the original executable digest.
         let name = format!("{namespace}-{}-{key}", self.producer_slot);
-        let mut file = self.directory.open(&name).ok()?;
+        let mut file = cache_file(&mut self.directory, &name)?;
         let result = read_envelope(&mut file, &self.producer, &self.secret, namespace, key);
-        if result.is_none() { self.rejected += 1; }
+        if result.is_none() { self.rejected += 1; self.discard(namespace, key); }
         result
     }
 
@@ -73,48 +194,188 @@ impl Store {
         };
         match reuse::authenticate(&self.producer, &self.secret, namespace, key, &raw) {
             Some(payload) => { self.hits += 1; Some(payload) }
-            None => { self.rejected += 1; self.misses += 1; None }
+            None => { self.rejected += 1; self.misses += 1; self.discard(namespace, key); None }
         }
     }
 
-    pub fn records(&mut self, namespace: &str, keys: &[String]) -> reuse::Records {
-        let mut records = reuse::Records::new(&self.producer, &self.secret);
-        for key in keys {
-            if let Some(raw) = self.raw(namespace, key) {
-                records.load(namespace, key, &raw);
-            }
+    pub fn records(&mut self, namespace: &str, group: &str, keys: &[String]) -> reuse::Records {
+        let mut records = reuse::Records::packed(&self.producer, &self.secret, namespace, group);
+        if let Some(raw) = self.raw(namespace, group) {
+            if !records.load_pack(&raw) { self.discard(namespace, group); }
         }
+        records.retain(namespace, keys);
         records
     }
 
-    fn publish(&mut self, namespace: &str, key: &str, bytes: &[u8]) {
-        let stamp = match self.clock.nanoseconds() { Ok(stamp) => stamp, Err(_) => return };
+    fn erase(&mut self, name: &str) -> bool {
+        match self.directory.remove(name) {
+            Ok(()) | Err(2) => {
+                self.budget.forget(name);
+                self.dirty = true;
+                self.evicted += 1usize;
+                true
+            }
+            Err(_) => { self.write_state = 2u8; false }
+        }
+    }
+
+    fn evict_oldest(&mut self) -> bool {
+        let Some(producer) = ({ self.budget.generations.first().cloned() }) else { return false; };
+        let mut names: Vec<String> = Vec::new();
+        for (name, entry) in &self.budget.entries {
+            if entry.producer == producer { names.push(name.clone()); }
+        }
+        for name in names { if !self.erase(&name) { return false; } }
+        let generations = std::mem::replace(&mut self.budget.generations, Vec::new());
+        for generation in generations {
+            if generation == producer { self.budget.metadata -= 8usize + generation.len(); }
+            else { self.budget.generations.push(generation); }
+        }
+        self.dirty = true;
+        true
+    }
+
+    fn writable(&mut self) -> bool {
+        if self.write_state != 0u8 { return self.write_state == 1u8; }
+        self.write_state = 2u8;
+        let mut lock = match self.directory.open_append(".budget-lock") { Ok(file) => file, Err(_) => return false };
+        match lock.lock_exclusive() {
+            Ok(()) => {}
+            Err(11) => { self.write_state = 0u8; return false; }
+            Err(_) => return false,
+        }
+        self.writer = Some(lock);
+        self.write_state = 1u8;
+        let identity = sha256::digest(b"lkjscript-store-size-index-1");
+        let mut valid_index = false;
+        if let Some(mut file) = cache_file(&mut self.directory, ".budget-index") {
+            if let Some(raw) = read_envelope(&mut file, &identity[..], &self.secret, "size-index", "1") {
+                if let Some(payload) = reuse::authenticate(&identity[..], &self.secret, "size-index", "1", &raw) {
+                    if let Some(budget) = Budget::decode(&payload) {
+                        self.budget = budget;
+                        self.index_bytes = raw.len();
+                        valid_index = true;
+                    }
+                }
+            }
+        }
+        if !valid_index {
+            match self.directory.remove(".budget-index") {
+                Ok(()) | Err(2) => {}
+                Err(_) => { self.write_state = 2u8; return false; }
+            }
+        }
+        let names = match self.directory.list() { Ok(names) => names, Err(_) => { self.write_state = 2u8; return false; } };
+        let mut present: BTreeSet<String> = BTreeSet::new();
+        for bytes in names {
+            let Ok(name) = String::from_utf8(bytes) else { continue; };
+            if entry_producer(&name).is_some() {
+                let expected = match self.budget.entries.get(&name) { Some(entry) => Some(entry.bytes), None => None };
+                let mut valid = false;
+                if let Some(expected) = expected {
+                    if let Some(mut file) = cache_file(&mut self.directory, &name) {
+                        let mut header = vec![0u8; reuse::header_size()];
+                        if read_exact(&mut file, &mut header) {
+                            if let Some(payload) = reuse::payload_length(&header) {
+                                valid = payload.checked_add(header.len() + 32usize) == Some(expected);
+                            }
+                        }
+                    }
+                }
+                // A failed prior index checkpoint can leave a larger valid pack.
+                // Its old accounting is a miss; never undercharge the replacement.
+                if valid { present.insert(name); }
+                else if !self.erase(&name) { return false; }
+            } else if name.starts_with(".tmp-") {
+                if let Ok(mut temporary) = self.directory.open_directory(&name) { let _ = temporary.remove("entry"); }
+                let _ = self.directory.remove_directory(&name);
+            }
+        }
+        let mut absent: Vec<String> = Vec::new();
+        for (name, _) in &self.budget.entries {
+            if !present.contains(name) { absent.push(name.clone()); }
+        }
+        for name in absent { self.budget.forget(&name); self.dirty = true; }
+        while self.budget.size() > self.capacity {
+            if !self.evict_oldest() {
+                let _ = self.directory.remove(".budget-index");
+                self.write_state = 2u8;
+                self.retained_bytes = 0usize;
+                return false;
+            }
+        }
+        self.retained_bytes = self.budget.bytes + self.index_bytes;
+        true
+    }
+
+    fn discard(&mut self, namespace: &str, key: &str) {
+        let name = format!("{namespace}-{}-{key}", self.producer_slot);
+        if entry_producer(&name).is_some() && self.writable() { let _ = self.erase(&name); }
+    }
+
+    fn atomic_publish(&mut self, name: &str, bytes: &[u8]) -> bool {
+        let stamp = match self.clock.nanoseconds() { Ok(stamp) => stamp, Err(_) => return false };
         let temporary: String = loop {
             self.sequence = self.sequence.wrapping_add(1);
             let name = format!(".tmp-{stamp}-{}", self.sequence);
             match self.directory.create_directory(&name) {
                 Ok(()) => break name,
                 Err(17) => continue,
-                Err(_) => return,
+                Err(_) => return false,
             }
         };
         let mut written = false;
         if let Ok(mut directory) = self.directory.open_directory(&temporary) {
-            if let Ok(mut file) = directory.create("entry") {
-                written = file.write_all(bytes).is_ok();
-            }
+            if let Ok(mut file) = directory.create("entry") { written = file.write_all(bytes).is_ok(); }
         }
         let from = format!("{temporary}/entry");
-        if written {
-            if self.directory.rename(&from, &format!("{namespace}-{}-{key}", self.producer_slot)).is_ok() {
-                self.writes += 1;
-            }
-        }
+        let published = written && self.directory.rename(&from, name).is_ok();
         let _ = self.directory.remove(&from);
         let _ = self.directory.remove_directory(&temporary);
+        published
+    }
+
+    fn checkpoint(&mut self) {
+        if self.write_state != 1u8 || !self.dirty { return; }
+        let payload = self.budget.encode();
+        let identity = sha256::digest(b"lkjscript-store-size-index-1");
+        let bytes = reuse::seal(&identity[..], &self.secret, "size-index", "1", &payload);
+        if self.atomic_publish(".budget-index", &bytes) {
+            self.dirty = false;
+            self.index_bytes = bytes.len();
+        }
+        self.retained_bytes = self.budget.bytes + self.index_bytes;
+    }
+
+    fn publish(&mut self, namespace: &str, key: &str, bytes: &[u8]) {
+        let name = format!("{namespace}-{}-{key}", self.producer_slot);
+        let valid = { match entry_producer(&name) { Some(producer) => producer == self.producer_slot, None => false } };
+        if !valid || !self.writable() { return; }
+        if self.budget.entries.contains_key(&name) && !self.erase(&name) { return; }
+        loop {
+            let fits = match self.budget.growth(&name, &self.producer_slot, bytes.len(), self.index_bytes) {
+                Some(size) => size <= self.capacity, None => false,
+            };
+            if fits { break; }
+            if !self.evict_oldest() {
+                self.checkpoint();
+                let fits = match self.budget.growth(&name, &self.producer_slot, bytes.len(), self.index_bytes) {
+                    Some(size) => size <= self.capacity, None => false,
+                };
+                if fits { break; }
+                return;
+            }
+        }
+        if self.atomic_publish(&name, bytes) {
+            self.budget.remember(&name, &self.producer_slot, bytes.len());
+            self.dirty = true;
+            self.writes += 1usize;
+            self.retained_bytes = self.budget.bytes + self.index_bytes;
+        }
     }
 
     pub fn put(&mut self, namespace: &str, key: &str, payload: &[u8]) {
+        if payload.len() > self.capacity || !self.writable() { return; }
         let envelope = reuse::seal(&self.producer, &self.secret, namespace, key, payload);
         self.publish(namespace, key, &envelope);
     }
@@ -123,10 +384,17 @@ impl Store {
         self.hits += records.hits;
         self.misses += records.misses;
         self.rejected += records.rejected;
-        for pending in records.pending() {
+        if let Some(pending) = records.sealed_pack() {
             self.publish(&pending.namespace, &pending.key, &pending.bytes);
         }
     }
+
+    /// Commit policy metadata once at the process boundary, while holding its lock.
+    pub fn finish(&mut self) { self.checkpoint(); }
+}
+
+impl Drop for Store {
+    fn drop(&mut self) { self.finish(); }
 }
 
 // Every loader request is recorded, including absent alternative module paths.

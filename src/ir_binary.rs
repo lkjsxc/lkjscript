@@ -1,0 +1,376 @@
+//! Lossless binary representation of untrusted IR. Decoding grants no proof.
+//! Canonical unsigned varints frame indices/counts; scalar bits remain fixed64.
+use crate::ir;
+
+fn word(out: &mut Vec<u8>, mut value: usize) {
+    while value >= 128usize {
+        out.push(((value & 127usize) as u8) | 128u8);
+        value >>= 7usize;
+    }
+    out.push(value as u8);
+}
+fn fixed(out: &mut Vec<u8>, value: usize) {
+    for shift in 0..8usize { out.push((value >> (shift * 8)) as u8); }
+}
+fn boolean(out: &mut Vec<u8>, value: bool) { out.push(if value { 1 } else { 0 }); }
+fn bytes(out: &mut Vec<u8>, value: &[u8]) {
+    word(out, value.len()); out.extend_from_slice(value);
+}
+fn text(out: &mut Vec<u8>, value: &str) { bytes(out, value.as_bytes()); }
+fn indices(out: &mut Vec<u8>, values: &[usize]) {
+    word(out, values.len()); for value in values { word(out, *value); }
+}
+fn projections(out: &mut Vec<u8>, values: &[ir::Projection]) {
+    word(out, values.len());
+    for value in values {
+        match value {
+            ir::Projection::Deref => out.push(0),
+            ir::Projection::Field(field) => { out.push(1); word(out, *field); }
+            ir::Projection::VariantField(variant, field) => { out.push(2); word(out, *variant); word(out, *field); }
+            ir::Projection::Index(index) => { out.push(3); word(out, *index); }
+        }
+    }
+}
+fn place(out: &mut Vec<u8>, value: &ir::Place) {
+    word(out, value.local); projections(out, &value.projections);
+}
+fn fields(out: &mut Vec<u8>, values: &[ir::Field]) {
+    word(out, values.len());
+    for value in values { text(out, &value.name); word(out, value.ty); }
+}
+fn ty(out: &mut Vec<u8>, value: &ir::Type) {
+    text(out, &value.name);
+    match &value.kind {
+        ir::TypeKind::Unit => out.push(0),
+        ir::TypeKind::Bool => out.push(1),
+        ir::TypeKind::Char => out.push(2),
+        ir::TypeKind::Int { bits, signed } => { out.push(3); out.push(*bits); boolean(out, *signed); }
+        ir::TypeKind::F64 => out.push(4),
+        ir::TypeKind::Struct { fields: members, copy } => { out.push(5); boolean(out, *copy); fields(out, members); }
+        ir::TypeKind::Enum { variants, copy } => {
+            out.push(6); boolean(out, *copy); word(out, variants.len());
+            for variant in variants { text(out, &variant.name); fields(out, &variant.fields); }
+        }
+        ir::TypeKind::Ref { inner, mutable } => { out.push(7); word(out, *inner); boolean(out, *mutable); }
+        ir::TypeKind::Slice { inner, mutable } => { out.push(8); word(out, *inner); boolean(out, *mutable); }
+        ir::TypeKind::Array { inner, len } => { out.push(9); word(out, *inner); word(out, *len); }
+        ir::TypeKind::Vec { inner } => { out.push(10); word(out, *inner); }
+        ir::TypeKind::Box { inner } => { out.push(11); word(out, *inner); }
+        ir::TypeKind::Str => out.push(12),
+        ir::TypeKind::World => out.push(13),
+        ir::TypeKind::Stdout => out.push(14),
+        ir::TypeKind::Stdin => out.push(15),
+        ir::TypeKind::Stderr => out.push(16),
+        ir::TypeKind::Directory => out.push(17),
+        ir::TypeKind::File => out.push(18),
+        ir::TypeKind::Process => out.push(19),
+        ir::TypeKind::Clock => out.push(20),
+        ir::TypeKind::Child => out.push(21),
+        ir::TypeKind::Listener => out.push(22),
+        ir::TypeKind::Connector => out.push(23),
+        ir::TypeKind::Readiness => out.push(24),
+        ir::TypeKind::Entropy => out.push(25),
+        ir::TypeKind::Stop => out.push(26),
+        ir::TypeKind::Arguments => out.push(27),
+        ir::TypeKind::Environment => out.push(28),
+        ir::TypeKind::ExitStatus => out.push(29),
+    }
+}
+fn returns(out: &mut Vec<u8>, value: &Option<ir::ReturnSource>) {
+    match value {
+        None => out.push(0),
+        Some(ir::ReturnSource::Parameter { index, projections: path }) => {
+            out.push(1); word(out, *index); projections(out, path);
+        }
+        Some(ir::ReturnSource::Static) => out.push(2),
+        Some(ir::ReturnSource::Leaves(leaves)) => {
+            out.push(3); word(out, leaves.len());
+            for leaf in leaves {
+                projections(out, &leaf.projections);
+                match &leaf.origin {
+                    ir::LeafOrigin::Inputs { inputs, exact } => {
+                        out.push(0); boolean(out, *exact); word(out, inputs.len());
+                        for input in inputs { word(out, input.index); projections(out, &input.projections); }
+                    }
+                    ir::LeafOrigin::Static => out.push(1),
+                }
+            }
+        }
+    }
+}
+fn op(out: &mut Vec<u8>, value: &ir::Op) {
+    match value {
+        ir::Op::Text { dst, bytes: value } => { out.push(0); word(out, *dst); bytes(out, value); }
+        ir::Op::Int { dst, value } => { out.push(1); word(out, *dst); fixed(out, *value as usize); }
+        ir::Op::Float { dst, bits } => { out.push(2); word(out, *dst); fixed(out, *bits as usize); }
+        ir::Op::Unit { dst } => { out.push(3); word(out, *dst); }
+        ir::Op::Read { dst, place: source, moving } => { out.push(4); word(out, *dst); place(out, source); boolean(out, *moving); }
+        ir::Op::Borrow { dst, place: source, mutable } => { out.push(5); word(out, *dst); place(out, source); boolean(out, *mutable); }
+        ir::Op::SliceBorrow { dst, place: source, mutable } => { out.push(6); word(out, *dst); place(out, source); boolean(out, *mutable); }
+        ir::Op::ViewRange { dst, place: source, start, end, inclusive, mutable } => {
+            out.push(7); word(out, *dst); place(out, source); word(out, *start); word(out, *end);
+            boolean(out, *inclusive); boolean(out, *mutable);
+        }
+        ir::Op::Array { dst, elements } => { out.push(8); word(out, *dst); indices(out, elements); }
+        ir::Op::Assign { place: target, src } => { out.push(9); place(out, target); word(out, *src); }
+        ir::Op::Drop { place: target } => { out.push(10); place(out, target); }
+        ir::Op::DropIf { place: target } => { out.push(11); place(out, target); }
+        ir::Op::Unary { dst, op, src } => { out.push(12); word(out, *dst); text(out, op.as_str()); word(out, *src); }
+        ir::Op::Binary { dst, op, left, right } => {
+            out.push(13); word(out, *dst); text(out, op.as_str()); word(out, *left); word(out, *right);
+        }
+        ir::Op::Call { dst, function, args } => { out.push(14); word(out, *dst); word(out, *function); indices(out, args); }
+        ir::Op::Struct { dst, fields } => { out.push(15); word(out, *dst); indices(out, fields); }
+        ir::Op::Variant { dst, variant, fields } => { out.push(16); word(out, *dst); word(out, *variant); indices(out, fields); }
+        ir::Op::Discriminant { dst, src } => { out.push(17); word(out, *dst); word(out, *src); }
+        ir::Op::TagTest { dst, place: source, variant } => { out.push(18); word(out, *dst); place(out, source); word(out, *variant); }
+        ir::Op::Intrinsic { dst, name, args } => { out.push(19); word(out, *dst); text(out, name.as_str()); indices(out, args); }
+        ir::Op::If { condition } => { out.push(20); word(out, *condition); }
+        ir::Op::Else => out.push(21),
+        ir::Op::End => out.push(22),
+        ir::Op::Loop => out.push(23),
+        ir::Op::Break => out.push(24),
+        ir::Op::Continue => out.push(25),
+        ir::Op::BreakTo { depth } => { out.push(26); word(out, *depth); }
+        ir::Op::ContinueTo { depth } => { out.push(27); word(out, *depth); }
+        ir::Op::Return { src } => { out.push(28); word(out, *src); }
+        ir::Op::Trap { message } => { out.push(29); text(out, message); }
+    }
+}
+fn function(out: &mut Vec<u8>, value: &ir::Function) {
+    word(out, value.file); text(out, &value.name); word(out, value.params); word(out, value.result);
+    returns(out, &value.return_source); boolean(out, value.test);
+    word(out, value.locals.len());
+    for local in &value.locals { text(out, &local.name); word(out, local.ty); boolean(out, local.mutable); }
+    word(out, value.body.len());
+    for instruction in &value.body {
+        match instruction.file { None => out.push(0), Some(file) => { out.push(1); word(out, file); } }
+        word(out, instruction.line); word(out, instruction.column); op(out, &instruction.op);
+    }
+}
+
+pub fn write_function(value: &ir::Function) -> Vec<u8> {
+    let mut out = b"LKJIRF01"[..].to_vec();
+    function(&mut out, value); out
+}
+pub fn write(program: &ir::Program) -> Vec<u8> {
+    let mut out = b"LKJIRB01"[..].to_vec();
+    word(&mut out, program.types.len());
+    for value in &program.types { ty(&mut out, value); }
+    word(&mut out, program.functions.len());
+    for value in &program.functions { function(&mut out, value); }
+    word(&mut out, program.destructors.len());
+    for (ty, function) in &program.destructors { word(&mut out, *ty); word(&mut out, *function); }
+    out
+}
+
+struct Reader<'a> { data: &'a [u8], at: usize }
+impl<'a> Reader<'a> {
+    fn new(data: &'a [u8]) -> Self { Self { data, at: 0 } }
+    fn byte(&mut self) -> Option<u8> {
+        if self.at == self.data.len() { return None; }
+        let value = self.data[self.at]; self.at += 1; Some(value)
+    }
+    fn boolean(&mut self) -> Option<bool> {
+        match self.byte()? { 0 => Some(false), 1 => Some(true), _ => None }
+    }
+    fn word(&mut self) -> Option<usize> {
+        let mut value = 0usize;
+        let mut shift = 0usize;
+        loop {
+            let byte = self.byte()?;
+            let part = (byte & 127u8) as usize;
+            if shift == 63usize && part > 1usize { return None; }
+            value |= part << shift;
+            if byte & 128u8 == 0u8 {
+                if shift != 0usize && part == 0usize { return None; }
+                return Some(value);
+            }
+            if shift == 63usize { return None; }
+            shift += 7usize;
+        }
+    }
+    fn fixed(&mut self) -> Option<usize> {
+        if self.data.len() - self.at < 8 { return None; }
+        let mut value = 0usize;
+        for shift in 0..8usize { value |= (self.data[self.at + shift] as usize) << (shift * 8); }
+        self.at += 8; Some(value)
+    }
+    // The lower bound is encoded bytes per element, never an acceptance budget.
+    // No reservation/allocation is made from an unchecked count.
+    fn count(&mut self, minimum: usize) -> Option<usize> {
+        let count = self.word()?;
+        if count > (self.data.len() - self.at) / minimum { None } else { Some(count) }
+    }
+    fn bytes(&mut self) -> Option<Vec<u8>> {
+        let count = self.count(1)?;
+        let value = self.data[self.at..self.at + count].to_vec();
+        self.at += count; Some(value)
+    }
+    fn text(&mut self) -> Option<String> { String::from_utf8(self.bytes()?).ok() }
+    fn indices(&mut self) -> Option<Vec<usize>> {
+        let count = self.count(1)?; let mut result = Vec::new();
+        for _ in 0..count { result.push(self.word()?); } Some(result)
+    }
+    fn projections(&mut self) -> Option<Vec<ir::Projection>> {
+        let count = self.count(1)?; let mut result = Vec::new();
+        for _ in 0..count {
+            result.push(match self.byte()? {
+                0 => ir::Projection::Deref,
+                1 => ir::Projection::Field(self.word()?),
+                2 => ir::Projection::VariantField(self.word()?, self.word()?),
+                3 => ir::Projection::Index(self.word()?),
+                _ => return None,
+            });
+        }
+        Some(result)
+    }
+    fn place(&mut self) -> Option<ir::Place> {
+        Some(ir::Place { local: self.word()?, projections: self.projections()? })
+    }
+    fn fields(&mut self) -> Option<Vec<ir::Field>> {
+        let count = self.count(2)?; let mut result = Vec::new();
+        for _ in 0..count { result.push(ir::Field { name: self.text()?, ty: self.word()? }); }
+        Some(result)
+    }
+    fn ty(&mut self) -> Option<ir::Type> {
+        let name = self.text()?;
+        let kind = match self.byte()? {
+            0 => ir::TypeKind::Unit,
+            1 => ir::TypeKind::Bool,
+            2 => ir::TypeKind::Char,
+            3 => ir::TypeKind::Int { bits: self.byte()?, signed: self.boolean()? },
+            4 => ir::TypeKind::F64,
+            5 => ir::TypeKind::Struct { copy: self.boolean()?, fields: self.fields()? },
+            6 => {
+                let copy = self.boolean()?; let count = self.count(2)?; let mut variants = Vec::new();
+                for _ in 0..count { variants.push(ir::Variant { name: self.text()?, fields: self.fields()? }); }
+                ir::TypeKind::Enum { copy, variants }
+            }
+            7 => ir::TypeKind::Ref { inner: self.word()?, mutable: self.boolean()? },
+            8 => ir::TypeKind::Slice { inner: self.word()?, mutable: self.boolean()? },
+            9 => ir::TypeKind::Array { inner: self.word()?, len: self.word()? },
+            10 => ir::TypeKind::Vec { inner: self.word()? },
+            11 => ir::TypeKind::Box { inner: self.word()? },
+            12 => ir::TypeKind::Str,
+            13 => ir::TypeKind::World,
+            14 => ir::TypeKind::Stdout,
+            15 => ir::TypeKind::Stdin,
+            16 => ir::TypeKind::Stderr,
+            17 => ir::TypeKind::Directory,
+            18 => ir::TypeKind::File,
+            19 => ir::TypeKind::Process,
+            20 => ir::TypeKind::Clock,
+            21 => ir::TypeKind::Child,
+            22 => ir::TypeKind::Listener,
+            23 => ir::TypeKind::Connector,
+            24 => ir::TypeKind::Readiness,
+            25 => ir::TypeKind::Entropy,
+            26 => ir::TypeKind::Stop,
+            27 => ir::TypeKind::Arguments,
+            28 => ir::TypeKind::Environment,
+            29 => ir::TypeKind::ExitStatus,
+            _ => return None,
+        };
+        Some(ir::Type { name, kind })
+    }
+    fn returns(&mut self) -> Option<Option<ir::ReturnSource>> {
+        Some(match self.byte()? {
+            0 => None,
+            1 => Some(ir::ReturnSource::Parameter { index: self.word()?, projections: self.projections()? }),
+            2 => Some(ir::ReturnSource::Static),
+            3 => {
+                let count = self.count(2)?; let mut leaves = Vec::new();
+                for _ in 0..count {
+                    let projections = self.projections()?;
+                    let origin = match self.byte()? {
+                        0 => {
+                            let exact = self.boolean()?; let count = self.count(2)?; let mut inputs = Vec::new();
+                            for _ in 0..count { inputs.push(ir::InputLeaf { index: self.word()?, projections: self.projections()? }); }
+                            ir::LeafOrigin::Inputs { inputs, exact }
+                        }
+                        1 => ir::LeafOrigin::Static,
+                        _ => return None,
+                    };
+                    leaves.push(ir::ReturnLeaf { projections, origin });
+                }
+                Some(ir::ReturnSource::Leaves(leaves))
+            }
+            _ => return None,
+        })
+    }
+    fn op(&mut self) -> Option<ir::Op> {
+        Some(match self.byte()? {
+            0 => ir::Op::Text { dst: self.word()?, bytes: self.bytes()? },
+            1 => ir::Op::Int { dst: self.word()?, value: self.fixed()? as i64 },
+            2 => ir::Op::Float { dst: self.word()?, bits: self.fixed()? as u64 },
+            3 => ir::Op::Unit { dst: self.word()? },
+            4 => ir::Op::Read { dst: self.word()?, place: self.place()?, moving: self.boolean()? },
+            5 => ir::Op::Borrow { dst: self.word()?, place: self.place()?, mutable: self.boolean()? },
+            6 => ir::Op::SliceBorrow { dst: self.word()?, place: self.place()?, mutable: self.boolean()? },
+            7 => ir::Op::ViewRange {
+                dst: self.word()?, place: self.place()?, start: self.word()?, end: self.word()?,
+                inclusive: self.boolean()?, mutable: self.boolean()?,
+            },
+            8 => ir::Op::Array { dst: self.word()?, elements: self.indices()? },
+            9 => ir::Op::Assign { place: self.place()?, src: self.word()? },
+            10 => ir::Op::Drop { place: self.place()? },
+            11 => ir::Op::DropIf { place: self.place()? },
+            12 => ir::Op::Unary { dst: self.word()?, op: ir::UnaryOp::parse(&self.text()?)?, src: self.word()? },
+            13 => ir::Op::Binary {
+                dst: self.word()?, op: ir::BinaryOp::parse(&self.text()?)?, left: self.word()?, right: self.word()?,
+            },
+            14 => ir::Op::Call { dst: self.word()?, function: self.word()?, args: self.indices()? },
+            15 => ir::Op::Struct { dst: self.word()?, fields: self.indices()? },
+            16 => ir::Op::Variant { dst: self.word()?, variant: self.word()?, fields: self.indices()? },
+            17 => ir::Op::Discriminant { dst: self.word()?, src: self.word()? },
+            18 => ir::Op::TagTest { dst: self.word()?, place: self.place()?, variant: self.word()? },
+            19 => ir::Op::Intrinsic {
+                dst: self.word()?, name: ir::IntrinsicOp::parse(&self.text()?)?, args: self.indices()?,
+            },
+            20 => ir::Op::If { condition: self.word()? },
+            21 => ir::Op::Else,
+            22 => ir::Op::End,
+            23 => ir::Op::Loop,
+            24 => ir::Op::Break,
+            25 => ir::Op::Continue,
+            26 => ir::Op::BreakTo { depth: self.word()? },
+            27 => ir::Op::ContinueTo { depth: self.word()? },
+            28 => ir::Op::Return { src: self.word()? },
+            29 => ir::Op::Trap { message: self.text()? },
+            _ => return None,
+        })
+    }
+    fn function(&mut self) -> Option<ir::Function> {
+        let file = self.word()?; let name = self.text()?; let params = self.word()?; let result = self.word()?;
+        let return_source = self.returns()?; let test = self.boolean()?;
+        let count = self.count(3)?; let mut locals = Vec::new();
+        for _ in 0..count { locals.push(ir::Local { name: self.text()?, ty: self.word()?, mutable: self.boolean()? }); }
+        let count = self.count(4)?; let mut body = Vec::new();
+        for _ in 0..count {
+            let file = match self.byte()? { 0 => None, 1 => Some(self.word()?), _ => return None };
+            let line = self.word()?; let column = self.word()?; let op = self.op()?;
+            body.push(ir::Instruction { file, line, column, op });
+        }
+        Some(ir::Function { file, name, params, result, return_source, test, locals, body })
+    }
+    fn done(&self) -> bool { self.at == self.data.len() }
+}
+
+pub fn read_function(data: &[u8]) -> Option<ir::Function> {
+    if !data.starts_with(b"LKJIRF01") { return None; }
+    let mut input = Reader::new(&data[8..]);
+    let function = input.function()?;
+    if input.done() { Some(function) } else { None }
+}
+pub fn read(data: &[u8]) -> Option<ir::Program> {
+    if !data.starts_with(b"LKJIRB01") { return None; }
+    let mut input = Reader::new(&data[8..]);
+    let count = input.count(2)?; let mut types = Vec::new();
+    for _ in 0..count { types.push(input.ty()?); }
+    let count = input.count(8)?; let mut functions = Vec::new();
+    for _ in 0..count { functions.push(input.function()?); }
+    let count = input.count(2)?; let mut destructors = Vec::new();
+    for _ in 0..count { destructors.push((input.word()?, input.word()?)); }
+    if input.done() { Some(ir::Program { types, functions, destructors }) } else { None }
+}

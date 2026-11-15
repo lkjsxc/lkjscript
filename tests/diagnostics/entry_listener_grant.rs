@@ -1,5 +1,5 @@
 // expect: check
-// pending: Include the granted numeric endpoint in the located startup failure; Listener kind and errno now identify the refusal instead of blaming output.
+// Diagnostic: Occupied grants report Listener, errno and the granted numeric endpoint at the entry site; tools/http-site-test.sh proves both engines.
 pub fn main(mut incoming: Listener) {
     let _ = incoming.port().unwrap();
 }

@@ -35,7 +35,13 @@ pub const KIND_ARITHMETIC: u8 = 6;
 pub const KIND_BRANCH: u8 = 7;
 pub const KIND_ALLOCATOR: u8 = 8;
 pub const KIND_RUNTIME: u8 = 9;
-pub const KIND_COUNT: usize = 10;
+pub const KIND_MOVE: u8 = 10;
+pub const KIND_ADDRESS: u8 = 11;
+pub const KIND_CONSTANT: u8 = 12;
+pub const KIND_ARGUMENT: u8 = 13;
+pub const KIND_PROLOGUE: u8 = 14;
+pub const KIND_RETURN: u8 = 15;
+pub const KIND_COUNT: usize = 16;
 
 
 struct Reference {
@@ -130,6 +136,13 @@ impl Assembler {
             let offset = self.bytes.len();
             self.record_kind(offset, kind);
         }
+    }
+    fn transfer_kind(&mut self, kind: u8) {
+        // CALL and RET remain visible inside ABI setup/teardown. Runtime and
+        // allocator regions still own all of their internal instructions.
+        let previous = self.scope_kind(kind);
+        self.kind(kind);
+        self.scope_kind(previous);
     }
     fn record_kind(&mut self, offset: usize, kind: u8) {
         let count = self.kinds.len();
@@ -369,7 +382,7 @@ impl Assembler {
         }
     }
     pub fn rr(&mut self, opcode: u8, dst: u8, src: u8, wide: bool) {
-        if self.profile { self.kind(KIND_ARITHMETIC); }
+        if self.profile { self.kind(if opcode == 0x88 || opcode == 0x89 { KIND_MOVE } else { KIND_ARITHMETIC }); }
         let byte = opcode == 0x88
             || opcode == 0x00
             || opcode == 0x08
@@ -411,7 +424,7 @@ impl Assembler {
     }
     /// Materialize a bit pattern without changing flags. The payload is 4 or 8 bytes.
     pub fn immediate(&mut self, reg: u8, value: u64) -> usize {
-        if self.profile { self.kind(KIND_ARITHMETIC); }
+        if self.profile { self.kind(KIND_CONSTANT); }
         if value <= 0xffff_ffffu64 {
             self.rex_for(false, 0, reg, false);
             self.bytes.push(0xb8 | (reg & 7));
@@ -442,13 +455,13 @@ impl Assembler {
         });
     }
     pub fn address(&mut self, reg: u8, label: Label) {
-        if self.profile { self.kind(KIND_ARITHMETIC); }
+        if self.profile { self.kind(KIND_ADDRESS); }
         self.rex_for(true, reg, 0, false);
         self.raw_bytes(&[0x8d, 0x05 | ((reg & 7) << 3)]);
         self.relative(label);
     }
     pub fn memory(&mut self, opcode: &[u8], reg: u8, base: u8, offset: i64, wide: bool) {
-        if self.profile { self.kind(if opcode.len() == 1 && opcode[0] == 0x8d { KIND_ARITHMETIC } else if base == BP || base == SP { KIND_FRAME } else { KIND_MEMORY }); }
+        if self.profile { self.kind(if opcode.len() == 1 && opcode[0] == 0x8d { KIND_ADDRESS } else if base == BP || base == SP { KIND_FRAME } else { KIND_MEMORY }); }
         if offset < -2147483648i64 || offset > 2147483647i64 {
             self.fail("x86-64 memory displacement exceeds signed 32-bit representation");
         }
@@ -571,7 +584,7 @@ impl Assembler {
         self.raw_bytes(&[0x0f, 0xb6, 0xc0 | ((reg & 7) << 3) | (reg & 7)]);
     }
     pub fn cmov(&mut self, dst: u8, src: u8, condition: u8) {
-        if self.profile { self.kind(KIND_ARITHMETIC); }
+        if self.profile { self.kind(KIND_MOVE); }
         self.rex_for(true, dst, src, false);
         self.raw_bytes(&[
             0x0f,
@@ -580,12 +593,12 @@ impl Assembler {
         ]);
     }
     pub fn push(&mut self, reg: u8) {
-        if self.profile { self.kind(KIND_CALL); }
+        if self.profile { self.kind(KIND_FRAME); }
         self.rex_for(false, 0, reg, false);
         self.bytes.push(0x50 | (reg & 7));
     }
     pub fn pop(&mut self, reg: u8) {
-        if self.profile { self.kind(KIND_CALL); }
+        if self.profile { self.kind(KIND_FRAME); }
         self.rex_for(false, 0, reg, false);
         self.bytes.push(0x58 | (reg & 7));
     }
@@ -600,7 +613,7 @@ impl Assembler {
         self.relative(label);
     }
     pub fn call(&mut self, label: Label) {
-        if self.profile { self.kind(KIND_CALL); }
+        if self.profile { self.transfer_kind(KIND_CALL); }
         self.bytes.push(0xe8);
         self.relative(label);
     }
@@ -610,12 +623,12 @@ impl Assembler {
         self.raw_bytes(&[0xff, 0xe0 | (reg & 7)]);
     }
     pub fn call_register(&mut self, reg: u8) {
-        if self.profile { self.kind(KIND_CALL); }
+        if self.profile { self.transfer_kind(KIND_CALL); }
         self.rex_for(false, 0, reg, false);
         self.raw_bytes(&[0xff, 0xd0 | (reg & 7)]);
     }
     pub fn ret(&mut self) {
-        if self.profile { self.kind(KIND_CALL); }
+        if self.profile { self.transfer_kind(KIND_RETURN); }
         self.bytes.push(0xc3);
     }
     pub fn syscall(&mut self) {
@@ -633,13 +646,13 @@ impl Assembler {
         self.memory(&[0x0f, 0x7f], xmm, base, offset, false);
     }
     pub fn mov_to_xmm(&mut self, xmm: u8, reg: u8) {
-        if self.profile { self.kind(KIND_ARITHMETIC); }
+        if self.profile { self.kind(KIND_MOVE); }
         self.bytes.push(0x66);
         self.rex_for(true, xmm, reg, false);
         self.raw_bytes(&[0x0f, 0x6e, 0xc0 | ((xmm & 7) << 3) | (reg & 7)]);
     }
     pub fn mov_from_xmm(&mut self, reg: u8, xmm: u8) {
-        if self.profile { self.kind(KIND_ARITHMETIC); }
+        if self.profile { self.kind(KIND_MOVE); }
         self.bytes.push(0x66);
         self.rex_for(true, xmm, reg, false);
         self.raw_bytes(&[0x0f, 0x7e, 0xc0 | ((xmm & 7) << 3) | (reg & 7)]);

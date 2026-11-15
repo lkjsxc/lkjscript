@@ -214,6 +214,39 @@ fn malformed_payloads_and_other_domains_do_not_admit_bodies() {
     assert_eq!(damaged.rejected, 1usize);
     assert!(damaged.get("check", "anything").is_none());
 }
+fn authenticated_packs_bind_the_graph_and_reuse_changed_bodies() {
+    let producer = [0x11u8; 32]; let secret = [0x22u8; 32];
+    let program = small(); let prepared = reuse::Prepared::new(program.clone());
+    let group = prepared.keys().graph().to_string();
+    let mut cold = reuse::Records::packed(&producer, &secret, "check", &group);
+    assert!(check::check_all_cached(prepared, &mut cold).is_ok());
+    assert_eq!(cold.writes, 2usize);
+    assert!(cold.pending().is_empty());
+    let pack = cold.sealed_pack().unwrap();
+    let mut warm = reuse::Records::packed(&producer, &secret, "check", &group);
+    assert!(warm.load_pack(&pack.bytes));
+    assert!(check::check_all_cached(reuse::Prepared::new(program.clone()), &mut warm).is_ok());
+    assert_eq!(warm.hits, 2usize); assert!(warm.sealed_pack().is_none());
+    let mut changed = program;
+    changed.functions[0].body[0].op = ir::Op::Int { dst: 0, value: 9 };
+    assert!(check::check_all_cached(reuse::Prepared::new(changed), &mut warm).is_ok());
+    assert_eq!(warm.writes, 1usize); assert!(warm.sealed_pack().is_some());
+    let mut wrong = reuse::Records::packed(&producer, &secret, "check", "other graph");
+    assert!(!wrong.load_pack(&pack.bytes));
+    let mut wrong = reuse::Records::packed(&producer, &secret, "native", &group);
+    assert!(!wrong.load_pack(&pack.bytes));
+    for end in 0..pack.bytes.len() {
+        let mut reader = reuse::Records::packed(&producer, &secret, "check", &group);
+        assert!(!reader.load_pack(&pack.bytes[..end]));
+    }
+    let mut damaged = pack.bytes.clone();
+    damaged[reuse::header_size() + 8] ^= 255u8;
+    assert!(!warm.load_pack(&damaged));
+    let mut payload = reuse::authenticate(&producer, &secret, "check", &group, &pack.bytes).unwrap();
+    for index in 8..16 { payload[index] = 255u8; }
+    let forged_count = reuse::seal(&producer, &secret, "check", &group, &payload);
+    assert!(!warm.load_pack(&forged_count));
+}
 pub fn run(world: &mut World, trace: bool) -> usize {
     if trace { world.stdout().write(b"reuse_hmac_standard_vectors\n"); }
     hmac_standard_vectors();
@@ -231,5 +264,7 @@ pub fn run(world: &mut World, trace: bool) -> usize {
     malformed_payloads_and_other_domains_do_not_admit_bodies();
     if trace { world.stdout().write(b"reuse_native_fragment_validation\n"); }
     crate::native::cache_contracts();
-    8usize
+    if trace { world.stdout().write(b"reuse_authenticated_packs\n"); }
+    authenticated_packs_bind_the_graph_and_reuse_changed_bodies();
+    9usize
 }

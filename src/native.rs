@@ -38,6 +38,18 @@ pub struct Entry {
 pub struct Image {
     pub bytes: Vec<u8>,
 }
+/// Owned encoded instructions and relocations; final layout is separately measurable.
+pub struct PreparedImage {
+    assembler: Assembler,
+    data_offset: usize,
+}
+impl PreparedImage {
+    pub fn finish(self) -> Result<Image, Diagnostic> {
+        let image = self.assembler.finish()?;
+        Ok(Image { bytes: platform::elf(image, self.data_offset)? })
+    }
+}
+
 #[derive(Clone, Copy)]
 struct RuntimeLabels {
     allocate: Label,
@@ -137,7 +149,7 @@ fn frame_extent(bytes: u64, site: Span) -> Result<u64, Diagnostic> {
     Ok(aligned)
 }
 fn stack_available(a: &mut Assembler, p: platform::Platform, bytes: u64, site: Span) {
-    let kind = a.scope_kind(KIND_CALL);
+    let kind = a.scope_kind(KIND_PROLOGUE);
     let exhausted = a.label();
     let ready = a.label();
     let grown = a.label();
@@ -163,7 +175,7 @@ fn stack_available(a: &mut Assembler, p: platform::Platform, bytes: u64, site: S
     a.scope_kind(kind);
 }
 fn prologue(a: &mut Assembler, p: platform::Platform, bytes: u64, site: Span) {
-    let kind = a.scope_kind(KIND_CALL);
+    let kind = a.scope_kind(KIND_PROLOGUE);
     stack_available(a, p, bytes + 16, site);
     a.push(BP);
     a.mov(BP, SP);
@@ -248,7 +260,7 @@ fn copy_bytes(a: &mut Assembler, _p: platform::Platform, bytes: u64) {
     a.scope_kind(kind);
 }
 fn epilogue(a: &mut Assembler) {
-    let kind = a.scope_kind(KIND_CALL);
+    let kind = a.scope_kind(KIND_PROLOGUE);
     a.mov(SP, BP);
     a.pop(BP);
     a.ret();
@@ -800,10 +812,10 @@ impl<'a> Body<'a> {
         };
         self.a
             .location(self.site.file, self.site.line, self.site.column);
-        let call_kind = if matches!(instruction.op, Op::Call { .. } | Op::Return { .. }) {
-            Some(self.a.scope_kind(KIND_CALL))
-        } else {
-            None
+        let call_kind = match instruction.op {
+            Op::Call { .. } => Some(self.a.scope_kind(KIND_ARGUMENT)),
+            Op::Return { .. } => Some(self.a.scope_kind(KIND_RETURN)),
+            _ => None,
         };
         self.consume_inputs(&instruction.op);
         match &instruction.op {
@@ -1147,7 +1159,7 @@ fn emit_function(
     let return_label = a.label();
     a.location(site.file, site.line, site.column);
     a.bind(functions[function_index]);
-    let entry_kind = a.scope_kind(KIND_CALL);
+    let entry_kind = a.scope_kind(KIND_PROLOGUE);
     prologue(
         a,
         p,
@@ -1161,6 +1173,7 @@ fn emit_function(
         a.store(BP, slot, DI);
     }
     let hidden = if result_slot.is_some() { 1 } else { 0 };
+    a.scope_kind(KIND_ARGUMENT);
     // Scalar parameters go straight to their storage. Only aggregate pointers
     // need staging before a copy can clobber the incoming argument registers.
     for index in 0..function.params {
@@ -1194,6 +1207,7 @@ fn emit_function(
             copy_bytes(a, p, storage.bytes);
         }
     }
+    a.scope_kind(KIND_PROLOGUE);
     ownership.initialize(a, function.params);
     a.scope_kind(entry_kind);
     let mut body = Body {
@@ -1224,7 +1238,7 @@ fn emit_function(
         body.emit(instruction)?;
     }
     body.a.bind(return_label);
-    let return_kind = body.a.scope_kind(KIND_CALL);
+    let return_kind = body.a.scope_kind(KIND_PROLOGUE);
     for (register, slot) in &saved {
         body.a.load(*register, BP, *slot);
     }
@@ -1442,9 +1456,16 @@ pub fn encode_granted(
     result_fd: Option<u32>,
     profile_path: Option<&str>,
 ) -> Result<Image, Diagnostic> {
-    let entry = Entry { function, arguments: vec![0i64; grants.len()], result_fd };
-    encode_program(checked.program(), runtime, entry, false, profile_path, Some(grants), None)
+    prepare_granted(checked, runtime, function, grants, result_fd, profile_path)?.finish()
 }
+pub(crate) fn prepare_granted(
+    checked: &CheckedProgram, runtime: &Runtime, function: usize,
+    grants: &[ir::EntryGrant], result_fd: Option<u32>, profile_path: Option<&str>,
+) -> Result<PreparedImage, Diagnostic> {
+    let entry = Entry { function, arguments: vec![0i64; grants.len()], result_fd };
+    prepare_program(checked.program(), runtime, entry, false, profile_path, Some(grants), None)
+}
+
 
 pub(crate) fn cache_namespace(
     checked: &crate::reuse::Checked,
@@ -1454,7 +1475,7 @@ pub(crate) fn cache_namespace(
 ) -> String {
     cache::namespace(checked, runtime, grants, profile_path)
 }
-pub(crate) fn encode_granted_reusing(
+pub(crate) fn prepare_granted_reusing(
     checked: &crate::reuse::Checked,
     runtime: &Runtime,
     function: usize,
@@ -1463,13 +1484,13 @@ pub(crate) fn encode_granted_reusing(
     profile_path: Option<&str>,
     namespace: &str,
     records: &mut crate::reuse::Records,
-) -> Result<Image, Diagnostic> {
+) -> Result<PreparedImage, Diagnostic> {
     let Some(keys) = checked.keys() else {
-        return encode_granted(checked.checked(), runtime, function, grants, result_fd, profile_path);
+        return prepare_granted(checked.checked(), runtime, function, grants, result_fd, profile_path);
     };
     let entry = Entry { function, arguments: vec![0i64; grants.len()], result_fd };
     let mut cache = cache::Context { namespace, keys, records, prefix: 0 };
-    encode_program(checked.program(), runtime, entry, false, profile_path, Some(grants), Some(&mut cache))
+    prepare_program(checked.program(), runtime, entry, false, profile_path, Some(grants), Some(&mut cache))
 }
 fn valid_environment(name: &[u8]) -> bool {
     if name.len() < 2 || name[name.len() - 1] != 0 { return false; }
@@ -1526,6 +1547,13 @@ fn argument_fits(kind: &TypeKind, value: u64) -> bool {
     }
 }
 fn encode_program(
+    program: &Program, runtime: &Runtime, entry: Entry, runtime_model: bool,
+    profile_path: Option<&str>, grants: Option<&[ir::EntryGrant]>,
+    cache: Option<&mut cache::Context<'_>>,
+) -> Result<Image, Diagnostic> {
+    prepare_program(program, runtime, entry, runtime_model, profile_path, grants, cache)?.finish()
+}
+fn prepare_program(
     program: &Program,
     runtime: &Runtime,
     entry: Entry,
@@ -1533,7 +1561,7 @@ fn encode_program(
     profile_path: Option<&str>,
     grants: Option<&[ir::EntryGrant]>,
     mut cache: Option<&mut cache::Context<'_>>,
-) -> Result<Image, Diagnostic> {
+) -> Result<PreparedImage, Diagnostic> {
     let selected = match program.functions.get(entry.function) {
         Some(function) => function,
         None => {
@@ -1877,7 +1905,5 @@ fn encode_program(
         a.bytes.push(0);
     }
     a.bytes.extend_from_slice(&data);
-    let image = a.finish()?;
-    let bytes = platform::elf(image, data_offset)?;
-    Ok(Image { bytes })
+    Ok(PreparedImage { assembler: a, data_offset })
 }

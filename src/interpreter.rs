@@ -2537,7 +2537,15 @@ fn run_inner<'a, H: Host>(
                             _ => {}
                         }
                     }
-                    return Err(interpreter.trap(7, &format!("entry grant {} failed: errno {errno}", program.types[function.locals[index].ty].name)));
+                    let endpoint = match &grants[index] {
+                        ir::EntryGrant::Listener(address) | ir::EntryGrant::Connector(address)
+                            if address.len() == 16 && address[0] == 2 && address[1] == 0 => {
+                            let port = ((address[2] as usize) << 8usize) | address[3] as usize;
+                            format!(" ({}.{}.{}.{}:{port})", address[4], address[5], address[6], address[7])
+                        }
+                        _ => String::new(),
+                    };
+                    return Err(interpreter.trap(7, &format!("entry grant {} failed: errno {errno}{endpoint}", program.types[function.locals[index].ty].name)));
                 }
             }
         }

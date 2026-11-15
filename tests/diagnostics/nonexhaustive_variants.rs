@@ -1,5 +1,5 @@
 // expect: reject E_TYPE
-// pending: Name the missing enum variants in a non-exhaustive match diagnostic so a new capability does not require searching every type inventory.
+// Diagnostic: A non-exhaustive enum match names the entirely missing variants; guarded arms do not establish coverage.
 enum Authority { Arguments, Environment, ExitStatus }
 pub fn probe() -> usize {
     let value = Authority::Environment;

@@ -12,6 +12,7 @@ mod diagnostic_edits;
 mod floats;
 mod generic_check;
 mod inference;
+pub mod incremental;
 mod integers;
 mod methods;
 mod operators;
@@ -319,6 +320,12 @@ pub fn infer_resolved_all(
 pub fn lower_definitions(
     definitions: TypedDefinitions<'_>,
 ) -> std::result::Result<ir::Program, Vec<a::Diagnostic>> {
+    lower_definitions_recorded(definitions, &mut None)
+}
+
+pub fn lower_definitions_recorded(
+    definitions: TypedDefinitions<'_>, catalog: &mut Option<Vec<u8>>,
+) -> std::result::Result<ir::Program, Vec<a::Diagnostic>> {
     let source = definitions.compiler.source;
     let mut problems = definitions.problems;
     let meaning = match elaborate_definitions(
@@ -327,7 +334,7 @@ pub fn lower_definitions(
         definitions.verifier,
         definitions.evidence,
         definitions.all_library,
-        &mut problems,
+        &mut problems, catalog,
     ) {
         std::result::Result::Ok(meaning) => meaning,
         std::result::Result::Err(error) => {
@@ -463,6 +470,7 @@ fn elaborate_definitions(
     evidence: generic_check::DefinitionEvidence,
     all_library: bool,
     problems: &mut Vec<a::Diagnostic>,
+    catalog: &mut Option<Vec<u8>>,
 ) -> Result<ir::Program> {
     c.method_selections = evidence.methods;
     c.definition_types = evidence.types;
@@ -549,6 +557,7 @@ fn elaborate_definitions(
     for problem in scoped_problems {
         problems.push(problem);
     }
+    if catalog.is_some() { *catalog = Some(incremental::catalog(&c)); }
     let mut program = ir::Program {
         types: c.types,
         functions: c.functions,
@@ -4830,7 +4839,7 @@ impl Builder<'_, '_> {
             roots.push(root);
         }
         if !self.patterns_exhaustive(&plan, &coverage, ty)? {
-            return Err(err(span, "E_TYPE", "match is not exhaustive"));
+            return Err(err(span, "E_TYPE", &self.nonexhaustive_message(&plan, &coverage, ty)));
         }
         let mut unique_places = BTreeSet::new();
         for root in &roots {

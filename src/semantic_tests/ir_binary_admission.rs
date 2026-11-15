@@ -1,0 +1,15 @@
+//! Decoding constructs data; only the independent checker admits it.
+use crate::{check, ir, ir_binary};
+
+pub fn run() -> usize {
+    let function = ir::Function {
+        file: 0, name: "bad".to_string(), params: 0, result: ir::I64,
+        return_source: None, locals: Vec::new(), test: false,
+        body: vec![ir::Instruction { op: ir::Op::Return { src: 19 }, file: None, line: 1, column: 2 }],
+    };
+    let program = ir::Program { types: ir::primitives(), functions: vec![function], destructors: Vec::new() };
+    let decoded = ir_binary::read(&ir_binary::write(&program)).unwrap();
+    assert_eq!(decoded, program);
+    assert!(check::check_all(decoded).is_err());
+    1
+}

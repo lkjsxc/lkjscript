@@ -7,7 +7,7 @@ mod language;
 
 pub(crate) use language::facts;
 pub use language::{
-    ast, authority, entry_grants, backend, check, diagnostic, diagnostics, elaborate, frontend, generics, ir, ir_text, json,
+    ast, authority, entry_grants, backend, check, diagnostic, diagnostics, elaborate, frontend, generics, ir, ir_text, ir_binary, json,
     names, native, optimizer, resolve, reuse, runtime_memory, sha256, source, syntax,
 };
 

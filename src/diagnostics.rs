@@ -2,6 +2,7 @@
 mod static_label_edits;
 mod borrow_edits;
 mod consumer_edits;
+mod site_edits;
 mod iterator_edits;
 use crate::ast::{Span, Type};
 use crate::source::SourceReport;
@@ -18,6 +19,7 @@ pub struct BlockedRegion {
 /// Report every recognized unsupported site, including those after the first
 /// failed body. Existing diagnostics retain their more specific explanation.
 pub fn complete_unsupported(report: &mut SourceReport) {
+    site_edits::complete(report);
     static_label_edits::complete(&report.program, &mut report.diagnostics);
     iterator_edits::complete(&report.program, &mut report.diagnostics);
     consumer_edits::complete(&report.program, &mut report.diagnostics);

@@ -118,6 +118,8 @@ pub fn probe() -> Message {
         report.require(rejected.status == 1 && !contains(&rejected.errors, b"LKJSCRIPT_EDITS "),
             format!("unsafe consumer rewrite for {name}: {}", display_bytes(&rejected.errors)));
     }
+    site_advice(world, executable, directory, config, report)?;
+    desk_advice(world, executable, directory, config, report)?;
     ir_flags(world, executable, directory, config, report)?;
     Ok(())
 }
@@ -173,5 +175,126 @@ fn ir_flags(world: &mut World, executable: &File, directory: &mut Directory,
         write(directory, &name, valid.as_bytes())?;
         run_value(world, executable, config, report, &name, "probe", "42\n")?;
     }
+    Ok(())
+}
+
+
+fn advice_case(name: &str, source: &str, needle: &str, replacement: &str,
+    entry: &str, expected: &str, rule: &str) -> (Case, String) {
+    assert!(source.contains(needle));
+    (case(name, source, entry, expected, rule), source.replace(needle, replacement))
+}
+
+fn site_advice(world: &mut World, executable: &File, directory: &mut Directory,
+    config: &Config, report: &mut Report) -> Result<(), String> {
+    let option = format!("{}\npub fn observed() -> usize {{ probe(); 1usize }}\n",
+        include_str!("../tests/diagnostics/option_constructor_inference.rs"));
+    let raw = format!("{}\npub fn observed() -> usize {{ probe(); 1usize }}\n",
+        include_str!("../tests/diagnostics/raw_byte_string.rs"));
+    let scalar = format!("{}\npub fn observed() -> usize {{ probe() as u32 as usize }}\n",
+        include_str!("../tests/diagnostics/scalar_char_cast.rs"));
+    let vector = format!("{}\npub fn observed() -> usize {{ probe(); 1usize }}\n",
+        include_str!("../tests/diagnostics/vec_loop_element_inference.rs"));
+    let cases = vec![
+        advice_case("site-cfg-advice.rs", include_str!("../tests/diagnostics/cfg_test_helper.rs"),
+            "#[cfg(test)]", "", "probe", "1\n", "is excluded by #[cfg(test)]"),
+        advice_case("site-option-advice.rs", &option,
+            "let mut value = None", "let mut value: Option<String> = None", "observed", "1\n",
+            "None leaves Option's element type unknown"),
+        advice_case("site-raw-advice.rs", &raw,
+            r##"br#"{"version":1}"#"##, r#"b"{\"version\":1}""#, "observed", "1\n",
+            "raw byte-string literals are unsupported"),
+        advice_case("site-scalar-advice.rs", &scalar,
+            "code as char", "match char::from_u32(code) { Some(character) => character, None => '\\0' }",
+            "observed", "66600\n", "integer-to-char casts are unavailable"),
+        advice_case("site-scalar-invalid-advice.rs", &scalar.as_str().replace("0x10428u32", "0xd800u32"),
+            "code as char", "match char::from_u32(code) { Some(character) => character, None => '\\0' }",
+            "observed", "0\n", "integer-to-char casts are unavailable"),
+        advice_case("site-chars-advice.rs", include_str!("../tests/diagnostics/string_chars.rs"),
+            "value.chars()", "value.as_str().chars()", "probe", "4\n", "chars() is provided on a str view"),
+        advice_case("site-vector-advice.rs", &vector,
+            "for value in vec![\"text\".to_string()]",
+            "let values: Vec<String> = vec![\"text\".to_string()]; for value in values",
+            "observed", "1\n", "this Vec loop needs its owned String element type"),
+    ];
+    for (item, rewritten) in cases {
+        write(directory, &item.name, item.source.as_bytes())?;
+        let rejected = invoke(world, executable, &command(config, "check", &item.name), b"")?;
+        report.require(rejected.status == 1 && contains(&rejected.errors, item.rule.as_bytes())
+            && contains(&rejected.errors, b"docs/language.md"),
+            format!("site diagnostic {} omitted its explanation: {}", item.name, display_bytes(&rejected.errors)));
+        write(directory, &item.name, rewritten.as_bytes())?;
+        run_value(world, executable, config, report, &item.name, &item.entry, &item.expected)?;
+    }
+    let unrelated = "mod hidden { #[cfg(test)] fn fixture() {} }\npub fn probe() { fixture(); }\n";
+    write(directory, "site-cfg-unrelated.rs", unrelated.as_bytes())?;
+    let rejected = invoke(world, executable, &command(config, "check", "site-cfg-unrelated.rs"), b"")?;
+    report.require(rejected.status == 1 && contains(&rejected.errors, b"E_NAME unresolved name fixture")
+        && !contains(&rejected.errors, b"is excluded by #[cfg(test)]")
+        && !contains(&rejected.errors, b"E_BLOCKED excluded"),
+        format!("cfg advice attributed another module's declaration: {}", display_bytes(&rejected.errors)));
+    write(directory, "site-cfg-enabled.rs",
+        b"#[cfg(not(test))] fn fixture() -> usize { 7usize }\n#[cfg(test)] fn unused() { unavailable(); }\npub fn probe() -> usize { fixture() }\n")?;
+    run_value(world, executable, config, report, "site-cfg-enabled.rs", "probe", "7\n")?;
+    Ok(())
+}
+
+
+fn desk_advice(world: &mut World, executable: &File, directory: &mut Directory,
+    config: &Config, report: &mut Report) -> Result<(), String> {
+    let name = "desk-enum-advice.rs";
+    let source = include_str!("../tests/diagnostics/nonexhaustive_variants.rs");
+    write(directory, name, source.as_bytes())?;
+    let rejected = invoke(world, executable, &command(config, "check", name), b"")?;
+    report.require(rejected.status == 1
+        && contains(&rejected.errors, b"missing enum variants: Authority::Environment, Authority::ExitStatus"),
+        format!("missing enum variants were not named: {}", display_bytes(&rejected.errors)));
+    let rewritten = source.replace("Authority::Arguments => 1usize",
+        "Authority::Arguments => 1usize, Authority::Environment => 2usize, Authority::ExitStatus => 3usize");
+    write(directory, name, rewritten.as_bytes())?;
+    run_value(world, executable, config, report, name, "probe", "2\n")?;
+    let cases: Vec<(String, String, String)> = vec![
+        ("desk-enum-guard.rs".to_string(),
+            "enum Choice { First, Second, Third }\npub fn probe() -> usize { let value = Choice::Second; match value { Choice::First | Choice::Second if false => 1usize, Choice::Third => 3usize } }\n".to_string(),
+            "missing enum variants: Choice::First, Choice::Second".to_string()),
+        ("desk-enum-reference.rs".to_string(),
+            "enum Choice { First, Second, Third }\npub fn probe() -> usize { let value = Choice::First; match &value { Choice::First | Choice::Second => 1usize } }\n".to_string(),
+            "missing enum variants: Choice::Third".to_string()),
+        ("desk-enum-payload.rs".to_string(),
+            "enum Choice { Flag(bool), Done }\npub fn probe() -> usize { let value = Choice::Flag(false); match value { Choice::Flag(true) => 1usize, Choice::Done => 2usize } }\n".to_string(),
+            "match is not exhaustive".to_string()),
+    ];
+    for (name, source, wanted) in cases {
+        write(directory, &name, source.as_bytes())?;
+        let rejected = invoke(world, executable, &command(config, "check", &name), b"")?;
+        report.require(rejected.status == 1 && contains(&rejected.errors, wanted.as_bytes()),
+            format!("enum coverage advice {name}: {}", display_bytes(&rejected.errors)));
+        if name == "desk-enum-payload.rs" {
+            report.require(!contains(&rejected.errors, b"missing enum variants:"),
+                "partial payload coverage must not call a present variant absent".to_string());
+        }
+    }
+    let name = "desk-arguments-advice.rs";
+    let source = include_str!("../tests/diagnostics/unbounded_capability_helper.rs");
+    write(directory, name, source.as_bytes())?;
+    let rejected = invoke(world, executable, &command(config, "check", name), b"")?;
+    report.require(rejected.status == 1
+        && contains(&rejected.errors, b"requires a mutable Arguments capability")
+        && contains(&rejected.errors, b"arguments: &mut Arguments"),
+        format!("generic capability helper omitted its concrete receiver: {}", display_bytes(&rejected.errors)));
+    let rewritten = source.replace("command_args<T>(arguments: &mut T)", "command_args(arguments: &mut Arguments)");
+    write(directory, name, format!("{rewritten}\npub fn probe() -> usize {{ 42usize }}\n").as_bytes())?;
+    run_value(world, executable, config, report, name, "probe", "42\n")?;
+    let name = "desk-child-authority.rs";
+    write(directory, name, include_str!("../tests/diagnostics/external_child_authority.rs").as_bytes())?;
+    let rejected = invoke(world, executable, &command(config, "check", name), b"")?;
+    report.require(rejected.status == 1 && contains(&rejected.errors, b"E_CAPABILITY")
+        && contains(&rejected.errors, b"immutable authenticated admitted image")
+        && contains(&rejected.errors, b"checked entry grants")
+        && contains(&rejected.errors, b"World.process()"),
+        format!("external child boundary omitted its missing proof: {}", display_bytes(&rejected.errors)));
+    let name = "desk-capability-intern.rs";
+    write(directory, name, include_str!("../tests/diagnostics/command_capability_intern.rs").as_bytes())?;
+    run_value(world, executable, config, report, name, "main", "ok\n")?;
     Ok(())
 }

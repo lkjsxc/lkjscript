@@ -2099,6 +2099,34 @@ mod x86_tests {
                 0, 0xc3
             ]
         );
+
+        let mut a = Assembler::new();
+        a.enable_profile();
+        let callee = a.label();
+        a.immediate(A, 0);
+        a.mov(R8, A);
+        a.lea(DI, BP, -8);
+        a.rr(0x01, A, C, true);
+        a.load(A, BP, -8);
+        a.store(DI, 0, A);
+        a.scope_kind(KIND_ARGUMENT);
+        a.mov(DI, A);
+        a.call(callee);
+        a.mov(SI, A);
+        a.scope_kind(KIND_PROLOGUE);
+        a.push(BP);
+        a.ret();
+        a.region_kind(KIND_RUNTIME);
+        a.mov(A, DI);
+        a.bind(callee);
+        a.ret();
+        assert_eq!(a.take_kinds(), vec![
+            (0, KIND_CONSTANT), (5, KIND_MOVE), (8, KIND_ADDRESS),
+            (12, KIND_ARITHMETIC), (15, KIND_FRAME), (19, KIND_MEMORY),
+            (22, KIND_ARGUMENT), (25, KIND_CALL), (30, KIND_ARGUMENT),
+            (33, KIND_PROLOGUE), (34, KIND_RETURN), (35, KIND_RUNTIME),
+        ]);
+        finish(a);
     }
     pub fn memory_widths_handle_low_byte_registers_and_stack_bases() {
         let mut a = Assembler::new();

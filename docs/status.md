@@ -1,35 +1,34 @@
 # Status — 2026-11-15
 
-## Compiler: checked reuse, rechecked inlining and executable diagnostic rewrites
+## Compiler: proportional construction, authenticated reuse and directory programs
 
-Reuse cold/edit/unchanged: 23.27/17.20/1.42 s (load 3.76→3.72 / 3.72→4.92 / 3.72→3.72); edit reuses 9,639/9,640 checks.
-No-store/edit control: 17.13/17.63 s (load 3.76→3.76 / 4.92→5.49); cold overhead +35.84%; store 54,320,913 B, two versions 70,300,130 B.
-Seed 3,077,565 B; gate cold/warm 394.211/200.040 s (load 0.84→4.56 / 4.56→4.45); warm 32,768 inline64 mutants: zero findings, 64.435 s (load 1.42→6.26).
-Scalar Clone→Read; inline16 removes 17,622 calls in 3,701 bodies, retaining 5,939 original proofs. Default zero: candidate admission exceeds code gains.
-All 23 diagnostic inputs and 618 Rust checks pass alongside applied edits; literal panic payloads were previously discarded. Automatic unwrap caller/errno remains pending; explicit match works.
+Build cold/edit/unchanged 23.011/7.791/0.953 s (load 11.72→9.42 /9.42→9.06 /9.42→9.42); phase seconds below.
 
-| Compiler self-build, store disabled | No inline: seconds (load before) | Inline16: seconds (load before) |
-| --- | ---: | ---: |
-| Self-built | 17.21 (3.76) | 21.31 (3.72) |
-| Rust opt=0, one codegen unit | 10.01 (3.76) | 12.81 (4.92) |
-| Rust -O, one codegen unit | 2.61 (3.57) | 3.29 (5.49) |
-Outputs agree byte for byte for each policy. Native0 is 1.72x opt=0 and 6.59x -O; inline16 is 6.48x -O. The 3x target remains unmet.
+| Phase | Cold | One-body edit | Unchanged |
+| --- | ---: | ---: | ---: |
+| Read and parse | 0.879 | 0.885 | 0.011 |
+| Resolve | 0.174 | 0.228 | 0.000 |
+| Elaborate / monomorphize | 11.575 | 0.170 | 0.000 |
+| Key / hash | 1.084 | 1.084 | 0.349 |
+| Check | 6.226 | 0.077 | 0.000 |
+| Emit | 1.419 | 0.549 | 0.000 |
+| Assemble / write | 0.067 | 0.063 | 0.002 |
+| Store I/O + authentication | 1.352 | 3.998 | 0.591 |
+| Other (checkpoint codec included) | 0.236 | 0.737 | 0.001 |
+Edit rebuilds 1/2,713 definitions and 1/10,071 functions; reuses 10,070 checks and 9,921 fragments; runnable images equal no-store bytes. Initial dominant inference/construction now 0.163/0.007 s; 3 s unmet, whole-graph authentication/identity remain.
+No-store 20.35 s (load 13.46→11.72), cold +13.12%; remaining costs in bench/README.md. Cap 256 MiB/Directory, 512 MiB with four workers; cold/edit contents 71,676,829/88,449,732 B; overfill/oldest-generation eviction passes.
+Gate cold/warm 535.033/156.966 s (load 6.71→10.97 /10.97→18.47); warm groups below partition wall time, not overlapping suite-time sums.
 
-| Exclusive emitted-code samples | Self-build %, 0 / 16 | HTTP server %, 0 / 16 |
-| --- | ---: | ---: |
-| Inline copy | 19.3 / 18.7 | 5.2 / 4.8 |
-| Checks | 1.1 / 1.2 | 0.8 / 1.0 |
-| Call setup / prologue / return | 14.0 / 11.2 | 2.7 / 2.2 |
-| Frame load/store | 4.4 / 4.6 | 15.3 / 15.0 |
-| Other memory | 11.4 / 11.4 | 5.5 / 6.4 |
-| Arithmetic / registers | 35.4 / 37.1 | 36.7 / 35.5 |
-| Branch | 2.4 / 2.8 | 5.7 / 6.0 |
-| Allocator | 9.3 / 10.5 | 2.1 / 2.2 |
-| Runtime | 2.2 / 2.0 | 25.5 / 26.5 |
-| Unknown | 0.0 / 0.0 | 0.0 / 0.0 |
-Self0/16: 16,826/20,034 samples, 17.30/20.50 s (load 3.03→3.20 / 2.50→2.21).
-HTTP0/16: 27,025/26,971 samples, 35,354/36,701 requests/s over 30.001/30.000 s (load 3.76→4.47 / 4.92→5.45); same 8,195-byte body and client.
-Copies/calls/runtime own internal frame accesses; arithmetic includes register moves/addresses. Next: source graph/copy and reuse-authentication costs.
+| Warm suite group | Seconds (load) | Reused / rerun | Why rerun |
+| --- | --- | --- | --- |
+| Prelude + host/proof overlap | 85.672 (10.97→13.72) | 39/1 requests; 15 fresh suites | Host/proof observations; explicit-library fixture |
+| Conformance 0 /64 | 39.642 (13.72→12.47 /12.47→11.76) | 1,534/22 requests | 11 open observations per policy |
+| Generated 0 /64 | 1.529 (12.47→12.47 /11.76→11.76) | 2,430/0 requests | Exact authenticated captures |
+| Semantic structure | 27.907 (11.76→18.47) | 0/762 contracts | Fresh structural comparisons |
+| Semantic/reference + mutation | 2.216 (18.47→18.47) | 449/0 requests; 128 fresh mutants | Case proofs reused; mutation comparisons fresh |
+Warm skips 4,452 requests on exact authenticated producer/input closure. Actual checker-body edit skips 5 closed contracts on equal fresh checked ELF/stable runner; verdicts stay generation-bound. Cold 150 s unmet; every wall slice is in bench/README.md.
+Directory program.rs SOURCE/ENTRY/GRANTS/CASES is ready; site/journal/desk adoption cases are pending. Consumer diagnostics and test-library forwarding pass; automatic unwrap caller/errno is closed: generic E lacks implicit formatting/output authority; explicit match retains payload/location.
+Seed 3,242,241 B; current generations equal 16,772,694 B. Long inline64 mutation: 32,768, 0 findings, 67.715 s (load 18.47→14.74). Current seed-only CI awaits push; next: current split profile and proven-dead aggregate storage, with 1.0x opt0 unclaimed.
 
 ## Programs
 

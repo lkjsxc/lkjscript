@@ -74,6 +74,43 @@ if cmp -s "$bench_directory/no-store.image" "$bench_directory/checker-edit.image
     echo "checker body edit did not change emitted bytes" >&2
     exit 1
 fi
+# The two actual compiler images must also run and agree on a closed gate root.
+# Build afresh with each producer; only execution proofs share the private store.
+closed_before="$bench_directory/closed-before"
+closed_after="$bench_directory/closed-after"
+closed_store="$bench_directory/closed-store"
+mkdir "$closed_store"
+proof_load_before=$(load)
+proof_started_ns=$(date +%s%N)
+LKJSCRIPT_STORE_KEY= bash tools/closed-semantics.sh "$bench_directory/no-store.image" build "$closed_before"
+LKJSCRIPT_STORE_KEY= bash tools/closed-semantics.sh "$bench_directory/checker-edit.image" build "$closed_after"
+for artifact in runner cases authority; do
+    cmp "$closed_before/$artifact" "$closed_after/$artifact"
+done
+if ! LKJSCRIPT_STORE="$closed_store" LKJSCRIPT_STORE_KEY="$key" \
+    bash tools/closed-semantics.sh "$bench_directory/no-store.image" run "$closed_before" \
+    > "$bench_directory/closed-before.log" 2>&1; then
+    cat "$bench_directory/closed-before.log" >&2
+    exit 1
+fi
+if ! LKJSCRIPT_STORE="$closed_store" LKJSCRIPT_STORE_KEY="$key" \
+    bash tools/closed-semantics.sh "$bench_directory/checker-edit.image" run "$closed_after" \
+    > "$bench_directory/closed-after.log" 2>&1; then
+    cat "$bench_directory/closed-after.log" >&2
+    exit 1
+fi
+if ! grep -q '^LKJSCRIPT_CLOSED_GATE reused=0 rerun=5 ' "$bench_directory/closed-before.log" \
+    || ! grep -q '^LKJSCRIPT_CLOSED_GATE reused=5 rerun=0 ' "$bench_directory/closed-after.log"; then
+    cat "$bench_directory/closed-before.log" "$bench_directory/closed-after.log" >&2
+    echo "checker body edit did not reuse the identical closed gate artifact" >&2
+    exit 1
+fi
+proof_elapsed_ns=$(($(date +%s%N)-proof_started_ns))
+proof_load_after=$(load)
+awk -v elapsed_ns="$proof_elapsed_ns" -v before="$proof_load_before" -v after="$proof_load_after" 'BEGIN {
+    printf "checker-edit-closed-proof elapsed_s=%.3f load_before=%s load_after=%s reused_before=0 reused_after=5\n", elapsed_ns / 1000000000, before, after
+}'
+cat "$bench_directory/closed-before.log" "$bench_directory/closed-after.log"
 awk -v baseline="$baseline_elapsed" -v cold="$cold_elapsed" 'BEGIN {
     if (baseline > 0) printf "cold_overhead_percent=%.2f\n", 100 * (cold / baseline - 1)
 }'

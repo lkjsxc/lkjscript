@@ -1,5 +1,5 @@
 // expect: reject E_TYPE
-// pending: Name the uninferred Option element type and suggest Option<String> instead of reporting the wrong number of type arguments on None.
+// Diagnostic: name the unknown Option element and suggest an explicit Option<String> local.
 pub fn probe() {
     let mut value = None;
     if value.is_some() { return; }

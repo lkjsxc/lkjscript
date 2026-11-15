@@ -545,10 +545,12 @@ fn workers(
     cases: &[Case],
     jobs: usize,
     engines: &[String],
+    library_directory: &Option<String>,
     store_directory: &Option<String>,
     store_key: &Option<String>,
     stats: bool,
     inline_limit: Option<usize>,
+    store_capacity: usize,
 ) -> Result<Vec<Worker>, String> {
     let executable = world.executable().map_err(|e: i64| io("compiler executable", e))?;
     let mut result = Vec::new();
@@ -581,8 +583,15 @@ fn workers(
             "--engines".as_bytes().to_vec(), routes.as_bytes().to_vec(),
             "--roundtrip".as_bytes().to_vec(),
         ];
+        if let Some(path) = library_directory {
+            args.push("--library-dir".as_bytes().to_vec()); args.push(path.as_bytes().to_vec());
+        }
         if let Some(path) = store_directory {
-            args.push("--store".as_bytes().to_vec()); args.push(path.as_bytes().to_vec());
+            // Stable worker partitions let every batch publish without contending
+            // on a different worker's lifetime policy lock.
+            if let Ok(mut parent) = world.directory(path) { let _ = parent.create_directory(&name); }
+            args.push("--store".as_bytes().to_vec()); args.push(format!("{path}/{name}").into_bytes());
+            args.push("--store-bytes".as_bytes().to_vec()); args.push(format!("{}", store_capacity / 4usize).into_bytes());
         }
         if let Some(path) = store_key {
             args.push("--store-key".as_bytes().to_vec()); args.push(path.as_bytes().to_vec());
@@ -603,12 +612,14 @@ fn run_inner(
     cases: &[Case],
     jobs: usize,
     engines: &[String],
+    library_directory: &Option<String>,
     store_directory: &Option<String>,
     store_key: &Option<String>,
     stats: bool,
     inline_limit: Option<usize>,
+    store_capacity: usize,
 ) -> Result<(usize, usize, usize), String> {
-    let active = workers(world, directory, temporary, cases, jobs, engines, store_directory, store_key, stats, inline_limit)?;
+    let active = workers(world, directory, temporary, cases, jobs, engines, library_directory, store_directory, store_key, stats, inline_limit, store_capacity)?;
     let mut passed = 0usize;
     let mut pending = 0usize;
     let mut failed = 0usize;
@@ -675,10 +686,12 @@ pub fn run_stored(
     path: &str,
     jobs: usize,
     engines: &[String],
+    library_directory: &Option<String>,
     store_directory: &Option<String>,
     store_key: &Option<String>,
     stats: bool,
     inline_limit: Option<usize>,
+    store_capacity: usize,
 ) -> Result<u8, String> {
     if jobs == 0 || jobs > 8 {
         return Err("E_USAGE --jobs must be between one and eight".to_string());
@@ -696,7 +709,7 @@ pub fn run_stored(
     let result = match parent.open_directory(&temporary) {
         Err(errno) => Err(io("worker directory", errno)),
         Ok(mut directory) => {
-            let result = run_inner(world, &mut directory, &temporary, &cases, jobs, engines, store_directory, store_key, stats, inline_limit);
+            let result = run_inner(world, &mut directory, &temporary, &cases, jobs, engines, library_directory, store_directory, store_key, stats, inline_limit, store_capacity);
             for worker in 0..jobs {
                 let _ = directory.remove(&format!("worker-{worker}"));
             }

@@ -1,3 +1,3 @@
 // expect: reject E_PARSE
-// pending: Explain that raw byte-string literals are unsupported and suggest a byte string with escaped quotes instead of reporting a missing semicolon and unrelated identifier errors.
+// Diagnostic: reject the raw byte literal at its prefix and suggest escaped byte-string syntax.
 pub fn probe() { let bytes = br#"{"version":1}"#; assert!(bytes.len() > 0usize); }

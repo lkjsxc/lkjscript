@@ -61,6 +61,29 @@ Each process writes its own `OUTPUT.samples.PID` file, with a twenty-digit PID.
 Use `lkjscript profile SAMPLE_FILE` for a compact report of self and inclusive
 function samples. Profiling needs no external profiler or symbol/debug package.
 
+## Program directories
+
+A directory's `program.rs` is the reviewed invocation. It contains existing
+source constant forms, with literal values only:
+
+```rust
+const SOURCE: &str = "main.rs";
+const ENTRY: &str = "main";
+const GRANTS: &[&str] = &["out", "clock", "listen=127.0.0.1:8080"];
+const CASES: &[&str] = &["cases"];
+```
+
+`build path/to/program`, `test path/to/program`, and `authority path/to/program`
+use the same entry and grant values. `run` accepts the directory too. Ordinary
+module discovery follows `SOURCE`; source and case paths remain beneath the
+directory. Directory grant values are relative to that directory unless absolute or the existing env:NAME invocation selector.
+The entry signature alone determines authority: missing and unrequested grants
+are errors naming both `program.rs` and the entry's parameters. Command-line
+entry, grant and source-root overrides reject instead of bypassing the review.
+Testing first validates that invocation, then runs the listed case files or
+collections. No manifest expression is executed. The default build output is
+`path/to/program/program.elf`; `-o` can select another artifact path.
+
 ## Reuse across builds
 
 Bootstrap and the gate use a local, ignored `target/store`. Explicit builds opt in:

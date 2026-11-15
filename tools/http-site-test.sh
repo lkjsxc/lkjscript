@@ -146,7 +146,8 @@ for route in native interpreter; do
             --engine interpreter --grant "incoming=127.0.0.1:$port" >"$site_work/refused.out" 2>"$site_work/refused.err" || refused=$?
     fi
     [ "$refused" -eq 1 ]
-    grep -q 'entry grant Listener failed: errno 98' "$site_work/refused.err"
+    grep -Fq "entry grant Listener failed: errno 98 (127.0.0.1:$port)" "$site_work/refused.err"
+    grep -Eq 'R0007 at line 4 file 0:|entry_listener_grant.rs:4: R0007 ' "$site_work/refused.err"
 done
 kill -TERM "$stop_target"
 attempt=0

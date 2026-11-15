@@ -1,7 +1,6 @@
 #!/bin/sh
-# pending: test --library-dir must forward the explicit library to both child
-# routes. If it cannot, name the embedded-library fallback instead of reporting
-# a missing function from a file that the invocation explicitly replaced.
+# Regression: test --library-dir forwards the explicit library to both child
+# routes; the added marker is absent from the compiler's embedded library.
 # Reproduction: sh tests/diagnostics/test_library_directory.sh COMPILER
 set -eu
 compiler=$1
@@ -18,4 +17,4 @@ pub fn probe() -> i64 { time::invocation_library_marker() }
 CASE
 "$compiler" run "$test_root/case.rs" --engine interpreter --library-dir "$test_root/library" --no-store >"$test_root/direct"
 test "$(cat "$test_root/direct")" = 42
-"$compiler" test "$test_root/case.rs" --library-dir "$test_root/library" --no-store --jobs 1
+"$compiler" test "$test_root/case.rs" --library-dir "$test_root/library" --no-store --jobs 1 --engines native,interpreter --stats

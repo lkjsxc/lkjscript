@@ -1,7 +1,8 @@
 // expect: reject E_CAPABILITY
-// pending: An exact external executable path does not prove its child effects
-// stay within this entry's grants; name the missing admitted-child proof or
-// explicitly broader host authority, not merely "processes not implemented".
+// pending: Narrow external-child execution deliberately requires an immutable
+// authenticated admitted image, checked entry grants and transferred handles.
+// An exact path alone is insufficient; the diagnostic names this proof and
+// World.process() as explicitly broader host authority.
 // A future executable test must deny reading an outside fixture and observing
 // an unrelated inherited descriptor even when the host user could access them.
 use std::process::Command;

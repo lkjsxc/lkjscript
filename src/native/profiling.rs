@@ -352,7 +352,7 @@ pub fn data(
     let mut starts: Vec<usize> = Vec::new();
     for (start, _) in &sorted { starts.push(*start); }
     let mut table = vec![0u8; HEADER + starts.len() * ROW];
-    table[..8].copy_from_slice(b"LKJPROF2");
+    table[..8].copy_from_slice(b"LKJPROF3");
     put(&mut table, 8, starts.len() as u64);
     put(&mut table, 16, PERIOD_US * 1000);
     for (index, (start, name)) in sorted.iter().enumerate() {
@@ -437,7 +437,7 @@ fn display_name(name: &str) -> String {
 }
 pub fn report(bytes: &[u8]) -> Result<String, String> {
     let invalid = "E_PROFILE invalid or incomplete samples file";
-    if bytes.len() < HEADER || &bytes[..8] != b"LKJPROF2" {
+    if bytes.len() < HEADER || &bytes[..8] != b"LKJPROF3" {
         return Err(invalid.to_string());
     }
     let count = get(bytes, 8) as usize;
@@ -501,7 +501,7 @@ pub fn report(bytes: &[u8]) -> Result<String, String> {
         out.push_str(if mode == 0 { "Top self time\n" } else { "Top inclusive time\n" });
         out.push_str("self% incl% samples function\n");
         let mut used = vec![false; count];
-        for _ in 0..10 {
+        for _ in 0..7 {
             let mut best = None;
             let mut largest = 0u64;
             for i in 0..count {
@@ -528,13 +528,19 @@ fn kind_name(kind: usize) -> &'static str {
     match kind {
         1 => "inline copy",
         2 => "checks",
-        3 => "call setup / prologue / return",
+        3 => "call instruction",
         4 => "frame load/store",
         5 => "other memory",
-        6 => "arithmetic/register operations",
+        6 => "arithmetic / comparison / conversion",
         7 => "branch",
         8 => "allocator",
         9 => "runtime",
+        10 => "register-to-register move",
+        11 => "address formation (LEA)",
+        12 => "immediate constant",
+        13 => "argument setup / result capture",
+        14 => "prologue / epilogue",
+        15 => "return",
         _ => "unknown",
     }
 }

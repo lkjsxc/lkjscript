@@ -2,6 +2,7 @@
 pub mod ast;
 pub mod authority;
 pub mod entry_grants;
+pub mod program_directory;
 pub mod backend;
 pub mod check;
 pub mod diagnostic;
@@ -17,6 +18,7 @@ pub mod generics;
 pub mod interpreter;
 pub mod ir;
 pub mod ir_text;
+pub mod ir_binary;
 pub mod json;
 pub mod names;
 pub mod native;

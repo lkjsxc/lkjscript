@@ -1353,6 +1353,35 @@ impl Builder<'_, '_> {
         }
         true
     }
+    pub(super) fn nonexhaustive_message(&self, plan: &PatternPlan, roots: &[usize], ty: usize) -> String {
+        let mut message = "match is not exhaustive".to_string();
+        let mut owner = ty;
+        while let ir::TypeKind::Ref { inner, .. } = &self.compiler.types[owner].kind { owner = *inner; }
+        let ir::TypeKind::Enum { variants, .. } = &self.compiler.types[owner].kind else { return message; };
+        let mut present = vec![false; variants.len()];
+        let mut pending = roots.to_vec();
+        while let Some(id) = pending.pop() {
+            match &plan.nodes[id].kind {
+                PatternKind::Or(alternatives) => pending.extend_from_slice(alternatives),
+                PatternKind::Deref(inner) => pending.push(*inner),
+                PatternKind::Variant { tag, .. } => present[*tag] = true,
+                PatternKind::Any | PatternKind::Bind { .. } => return message,
+                _ => {}
+            }
+        }
+        // Name entirely absent constructors. A mentioned variant can still have
+        // uncovered payloads; the existing matrix remains the only verdict.
+        let mut first = true;
+        for tag in 0..variants.len() {
+            if !present[tag] {
+                message.push_str(if first { "; missing enum variants: " } else { ", " });
+                message.push_str(&format!("{}::{}", self.compiler.display_type(owner), variants[tag].name));
+                first = false;
+            }
+        }
+        if !first { message.push_str("; help: add arms for these variants or a wildcard"); }
+        message
+    }
     pub(super) fn patterns_exhaustive(
         &self,
         plan: &PatternPlan,

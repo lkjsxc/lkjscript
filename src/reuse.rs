@@ -1,6 +1,6 @@
 //! Pure identities and authenticated reuse. The driver owns all store I/O.
 //! Cache readers do not acquire proof authority from filenames or checksums.
-use crate::{ir, ir_text, sha256};
+use crate::{ir, ir_binary, sha256};
 use std::collections::BTreeMap;
 
 fn hex(bytes: &[u8]) -> String {
@@ -45,12 +45,11 @@ impl Keys {
             functions: signatures,
             destructors: program.destructors.clone(),
         };
-        let encoded = ir_text::write(&shape);
+        let encoded = ir_binary::write(&shape);
         let mut hash = sha256::Sha256::new();
         hash.update(b"lkjscript-reuse-graph-1\0");
-        hash.update(encoded.as_bytes());
-        // Text IR omits an empty leaf contract, which structure validation
-        // rejects. Identity still distinguishes every exact representation.
+        hash.update(&encoded);
+        // Preserve the explicit return-contract domain in graph identities.
         hash.update(b"\0return-contract-tags\0");
         for function in &program.functions {
             let kind = match &function.return_source {
@@ -67,11 +66,11 @@ impl Keys {
         complete.update(&graph);
         let mut functions = Vec::new();
         for function in &program.functions {
-            let text = ir_text::write_function(function);
+            let text = ir_binary::write_function(function);
             let mut hash = sha256::Sha256::new();
             hash.update(b"lkjscript-reuse-function-1\0");
             hash.update(&graph);
-            hash.update(text.as_bytes());
+            hash.update(&text);
             let digest = hash.finish();
             complete.update(&digest);
             functions.push(hex(&digest));
@@ -318,6 +317,8 @@ pub struct Records {
     secret: Vec<u8>,
     entries: BTreeMap<String, Vec<u8>>,
     pending: Vec<Pending>,
+    packed: Option<(String, String)>,
+    dirty: bool,
     pub hits: usize,
     pub misses: usize,
     pub rejected: usize,
@@ -331,11 +332,55 @@ impl Records {
     pub fn new(producer: &[u8], secret: &[u8]) -> Self {
         Self {
             producer: producer.to_vec(), secret: secret.to_vec(),
-            entries: BTreeMap::new(), pending: Vec::new(),
+            entries: BTreeMap::new(), pending: Vec::new(), packed: None, dirty: false,
             hits: 0, misses: 0, rejected: 0, writes: 0,
         }
     }
-    pub fn enabled(&self) -> bool { self.producer.len() == 32 && self.secret.len() == 32 }
+    pub fn packed(producer: &[u8], secret: &[u8], namespace: &str, group: &str) -> Self {
+        let mut records = Self::new(producer, secret);
+        records.packed = Some((namespace.to_string(), group.to_string()));
+        records
+    }
+    /// One independently authenticated collection avoids a filesystem object
+    /// and an HMAC initialization for every tiny body proof or code fragment.
+    /// The envelope still binds exact producer, target, namespace and graph.
+    pub fn load_pack(&mut self, envelope: &[u8]) -> bool {
+        let Some((namespace, group)) = &self.packed else { return false; };
+        let Some(payload) = authenticate(&self.producer, &self.secret, namespace, group, envelope) else {
+            self.rejected += 1; return false;
+        };
+        let Some(entries) = decode_pack(namespace, &payload) else {
+            self.rejected += 1; return false;
+        };
+        self.entries = entries;
+        true
+    }
+    /// Keep one graph generation's requested bodies. Evicted old bodies are
+    /// misses, and a stream of unique mutants cannot grow one pack quadratically.
+    pub fn retain(&mut self, namespace: &str, keys: &[String]) {
+        let mut retained = BTreeMap::new();
+        for key in keys {
+            let id = identity(namespace, key);
+            if let Some(value) = self.entries.remove(&id) { retained.insert(id, value); }
+        }
+        self.entries = retained;
+    }
+    pub fn sealed_pack(&self) -> Option<Pending> {
+        if !self.dirty { return None; }
+        let (namespace, group) = self.packed.as_ref()?;
+        let mut payload = b"LKJPACK1"[..].to_vec();
+        pack_word(&mut payload, self.entries.len());
+        for (key, value) in &self.entries {
+            pack_bytes(&mut payload, key.as_bytes());
+            pack_bytes(&mut payload, value);
+        }
+        Some(Pending {
+            namespace: namespace.clone(), key: group.clone(),
+            bytes: seal(&self.producer, &self.secret, namespace, group, &payload),
+        })
+    }
+    pub fn enabled(&self) -> bool
+ { self.producer.len() == 32 && self.secret.len() == 32 }
     pub fn load(&mut self, namespace: &str, key: &str, bytes: &[u8]) -> bool {
         if !self.enabled() { return false; }
         match authenticate(&self.producer, &self.secret, namespace, key, bytes) {
@@ -359,12 +404,51 @@ impl Records {
         if let Some(previous) = self.entries.get(&identity) {
             if previous.as_slice() == payload { return; }
         }
-        let bytes = seal(&self.producer, &self.secret, namespace, key, payload);
-        self.entries.insert(identity, payload.to_vec());
-        self.pending.push(Pending {
-            namespace: namespace.to_string(), key: key.to_string(), bytes,
-        });
+        if let Some((owner, _)) = &self.packed {
+            if owner != namespace { return; }
+            self.entries.insert(identity, payload.to_vec());
+            self.dirty = true;
+        } else {
+            let bytes = seal(&self.producer, &self.secret, namespace, key, payload);
+            self.entries.insert(identity, payload.to_vec());
+            self.pending.push(Pending {
+                namespace: namespace.to_string(), key: key.to_string(), bytes,
+            });
+        }
         self.writes += 1;
     }
     pub fn pending(&self) -> &[Pending] { &self.pending }
+}
+
+fn pack_word(out: &mut Vec<u8>, value: usize) {
+    for shift in 0..8 { out.push((value >> (shift * 8)) as u8); }
+}
+fn pack_bytes(out: &mut Vec<u8>, bytes: &[u8]) {
+    pack_word(out, bytes.len()); out.extend_from_slice(bytes);
+}
+fn unpack_word(bytes: &[u8], at: &mut usize) -> Option<usize> {
+    if bytes.len() - *at < 8 { return None; }
+    let mut result = 0usize;
+    for shift in 0..8 { result |= (bytes[*at + shift] as usize) << (shift * 8); }
+    *at += 8; Some(result)
+}
+fn unpack_bytes(bytes: &[u8], at: &mut usize) -> Option<Vec<u8>> {
+    let length = unpack_word(bytes, at)?;
+    if length > bytes.len() - *at { return None; }
+    let result = bytes[*at..*at + length].to_vec(); *at += length; Some(result)
+}
+fn decode_pack(namespace: &str, bytes: &[u8]) -> Option<BTreeMap<String, Vec<u8>>> {
+    if bytes.len() < 16 || &bytes[..8] != b"LKJPACK1" { return None; }
+    let mut at = 8usize;
+    let count = unpack_word(bytes, &mut at)?;
+    if count > (bytes.len() - at) / 16 { return None; }
+    let prefix = format!("{}:{namespace}", namespace.len());
+    let mut entries = BTreeMap::new();
+    for _ in 0..count {
+        let key = String::from_utf8(unpack_bytes(bytes, &mut at)?).ok()?;
+        if !key.starts_with(&prefix) || entries.contains_key(&key) { return None; }
+        let value = unpack_bytes(bytes, &mut at)?;
+        entries.insert(key, value);
+    }
+    if at == bytes.len() { Some(entries) } else { None }
 }

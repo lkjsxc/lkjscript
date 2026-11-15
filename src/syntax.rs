@@ -253,7 +253,10 @@ impl Lexer<'_> {
             let mut span = self.here();
             let kind: TokenKind;
             let text: String;
-            if b == b'b' && (self.byte(1) == b'"' || self.byte(1) == b'\'') {
+            if b == b'b' && self.byte(1) == b'r' && (self.byte(2) == b'"' || self.byte(2) == b'#') {
+                return Err(Diagnostic::new(span, "E_PARSE",
+                    "raw byte-string literals are unsupported; help: use an ordinary byte string b\"...\", escaping double quotes and backslashes (docs/language.md, Scalars and evaluation)"));
+            } else if b == b'b' && (self.byte(1) == b'"' || self.byte(1) == b'\'') {
                 self.advance();
                 let quote = self.byte(0);
                 let s = self.quoted(quote, true)?;
@@ -1106,9 +1109,30 @@ impl Parser {
         ))
     }
 
+    // Remember only a name for diagnostics; excluded tokens never become declarations.
+    fn remember_test_exclusion(&mut self, attrs: &[Attribute]) {
+        let mut test = false;
+        for attr in attrs {
+            if attr.name == "cfg" && attr.args.len() == 1usize && attr.args[0] == "test" { test = true; }
+        }
+        if !test { return; }
+        let mut at = self.at;
+        if self.tokens[at].text == "pub" { at += 1usize; }
+        if at + 1usize >= self.tokens.len() || self.tokens[at].text != "fn"
+            || self.tokens[at + 1usize].kind != TokenKind::Ident { return; }
+        let name = &self.tokens[at + 1usize];
+        let qualified = if self.module.is_empty() { name.text.clone() }
+            else { format!("{}::{}", self.module, name.text) };
+        self.blocked.push(BlockedRegion {
+            path: self.program.files[name.span.file].path.clone(), span: name.span,
+            kind: "excluded cfg(test) declaration".to_string(), reason: qualified,
+        });
+    }
+
     fn next_item(&mut self, disabled: &mut bool) -> Result<Option<Item>, Diagnostic> {
         let attrs = self.attrs()?;
         if !self.enabled(&attrs)? {
+            self.remember_test_exclusion(&attrs);
             self.skip_disabled()?;
             *disabled = true;
             return Ok(None);
@@ -1435,6 +1459,9 @@ impl Parser {
                     }
                     "std::io" => {
                         "use world.stdin(), world.stdout(), or world.stderr() and pass that capability explicitly"
+                    }
+                    "std::process" if name == "std::process::Command" || name.starts_with("std::process::Command::") => {
+                        "an exact executable path does not prove a child capability subset; a narrow child needs an immutable authenticated admitted image, checked entry grants and explicit transferred handles; World.process() instead declares broader host execution authority (docs/language.md, World and capabilities)"
                     }
                     "std::process" => {
                         "accept granted ExitStatus, call .set_status(code), and return for cleanup; World.process() is broad host execution authority and does not prove a child capability subset"

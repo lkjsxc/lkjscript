@@ -44,8 +44,8 @@ build --profile embeds function and operation-kind maps and opts into OUTPUT.sam
 A Linux CPU timer samples instruction pointers and real frame chains without a depth cap.
 Reports survive exit/signals and show self/inclusive functions and exclusive kinds
 in at most 37 lines, without DWARF or perf; the explicit option grants instrumentation.
-Measure self-built / witness opt=0 / witness -O and emitted kinds; stop near 3x -O
-or after two measured causes are gone. Keep compiler, call/vector, HTTP and map rows in bench/.
+Measure self-built / witness opt=0 / witness -O and split emitted kinds; 1.0x opt=0 is the next stopping point, 3x -O the horizon.
+Stop at evidence if larger register work is required; prioritize edit/gate latency. Keep compiler, call/vector, HTTP and map rows in bench/.
 Scalar Clone lowers to Read. --inline-limit N copies small acyclic bodies and forwards dead temporaries.
 Recheck changed bodies; exact original bodies under unchanged shared graphs retain their proof.
 Keep the original interpreter/authority oracle and copied source locations; compare complete custom traps and reject the whole bad candidate.
@@ -63,8 +63,7 @@ self-execution may emit checked native code, never unchecked mutation input.
 The private result descriptor preserves stderr; standalone traps report on stderr.
 Raw negation preserves NaN payload/sign; binary arithmetic canonicalizes NaNs.
 Check all user bodies and demanded library bodies; check-library verifies every body.
-The stored seed starts native bootstrap without Rust/Node; two consecutive current-emitter
-generations must agree byte for byte, using a bridge when the seed's emitter differs.
+The seed bootstraps without Rust/Node; require two consecutive current-emitter generations byte for byte, bridging stale emitters. Refresh after source/emitter changes.
 
 ## Gate and optional witness
 
@@ -110,17 +109,19 @@ For outbound HTTPS choose TLS in the checked library: certificate validation and
 
 --store grants a disposable Directory; --store-key grants a private 32-byte secret.
 Keep the key outside every source/library/program read grant, including include_bytes!.
-Key readers and compiler replacers are equally trusted; this is an explicit authority.
-HMAC-SHA-256 binds exact compiler bytes, target, dependency identity and result bytes.
-Producer-specific slots let different compiler generations coexist without eviction.
+Key readers and compiler replacers are equally trusted; HMAC binds exact compiler bytes, target, dependency identity and result bytes.
 Only admitted originals or authenticated prior proofs skip body checks; revalidate shared structure.
-Function keys bind types, destructors, signatures, return contracts and exact bodies.
-Native fragments retain relocations; runtime/drop stubs remain ordinary emission.
-Source-closure reuse records every actual read, including absent module candidates;
-runtime dependencies are the bytes actually sealed. Closed tests on the embedded runtime
-reuse returns and language traps; resource, host and model failures always rerun.
-Authenticate large entries in bounded buffers before allocation, then recheck the reread.
-Corruption, refused writes, disappearing stores and concurrent writers are misses.
+Graph packs bind types, destructors, signatures, contracts and exact bodies; native fragments retain relocations.
+Front checkpoints reuse only stable source/arena spans, declarations, expanded string/byte literals, type spellings, catalogs and IR storage/call skeletons.
+Freshly infer/construct changed free nongeneric bodies; other edits miss. Advance successful checkpoints and independently check all resulting IR.
+Compact binary IR preserves exact tags and raw bits; decoding gives no checker authority.
+One invocation shares actual source reads, including absent candidates; runtime dependencies are the bytes actually sealed.
+Closed tests include fixed stdout/stderr captures only when both checked original/native effect closures permit those four operations; other host/resource/model outcomes rerun.
+Fresh checked zero-authority ELF execution may reuse an exact stable-runner/image/input proof; compiler verdicts stay generation-bound.
+Authenticate large entries in bounded buffers before allocation, require EOF and reauthenticate rereads.
+Default cap: 256 MiB of published compiler-owned bytes per Directory; evict oldest producer generations. Each worker-N gets one quarter of the base budget: 512 MiB for four workers, 768 MiB for eight.
+Valid reads do not lock; nonblocking writers enforce the cap and commit accounting at invocation end. Corruption/refusal/concurrency/orphans are misses.
+Program directories use literal SOURCE/ENTRY/GRANTS/CASES constants in program.rs; signature authority is unchanged and missing/extra grants reject.
 No entries are committed; deleting the store or rotating its key is always safe.
 
 ## Resources and measurement
@@ -131,8 +132,7 @@ any external limit leaving room for actual use. Report located allocation/stack
 traps when requests cannot be satisfied. No default tool memory envelopes,
 output caps or stack overrides. Use a generous normal-program watchdog and a
 separate short allowance for generated/mutated nontermination, not a language rule.
-Keep one heap and one stack exhaustion test; do not compare their route locations.
-Recursion is fine until a real program fails. Use four workers per stream and leave
+Keep one heap and one stack exhaustion test; do not compare route locations. Recursion is fine until a real program fails. Use four workers per stream and leave
 no background jobs or temporary files. Report --stats/bench timings, RSS, IR/code
 sizes in status and commits. Measurements do not gate. Measure remaining gaps.
 

@@ -1,0 +1,177 @@
+//! Closed binary representation contracts, with an independent text-format oracle.
+use crate::{ir, ir_binary, ir_text};
+
+fn empty_function() -> ir::Function {
+    ir::Function { file: 0, name: String::new(), params: 0, result: 0,
+        return_source: None, locals: Vec::new(), body: Vec::new(), test: false }
+}
+fn instruction(op: ir::Op, index: usize) -> ir::Instruction {
+    ir::Instruction { op, file: if index % 2 == 0 { None } else { Some(index) },
+        line: index + 1, column: index + 2 }
+}
+fn rich() -> ir::Program {
+    let fields = vec![ir::Field { name: "field\0é".to_string(), ty: 7 }];
+    let kinds = vec![
+        ir::TypeKind::Unit, ir::TypeKind::Bool, ir::TypeKind::Char,
+        ir::TypeKind::Int { bits: 8, signed: false }, ir::TypeKind::Int { bits: 64, signed: true },
+        ir::TypeKind::F64, ir::TypeKind::Struct { fields: fields.clone(), copy: true },
+        ir::TypeKind::Enum { variants: vec![ir::Variant { name: "v\n".to_string(), fields }], copy: false },
+        ir::TypeKind::Ref { inner: 8, mutable: false }, ir::TypeKind::Slice { inner: 9, mutable: true },
+        ir::TypeKind::Array { inner: 10, len: 257 }, ir::TypeKind::Vec { inner: 11 },
+        ir::TypeKind::Box { inner: 12 }, ir::TypeKind::Str, ir::TypeKind::World,
+        ir::TypeKind::Stdout, ir::TypeKind::Stdin, ir::TypeKind::Stderr, ir::TypeKind::Directory,
+        ir::TypeKind::File, ir::TypeKind::Process, ir::TypeKind::Clock, ir::TypeKind::Child,
+        ir::TypeKind::Listener, ir::TypeKind::Connector, ir::TypeKind::Readiness,
+        ir::TypeKind::Entropy, ir::TypeKind::Stop, ir::TypeKind::Arguments,
+        ir::TypeKind::Environment, ir::TypeKind::ExitStatus,
+    ];
+    let mut types = Vec::new();
+    for (index, kind) in kinds.into_iter().enumerate() {
+        types.push(ir::Type { name: format!("t{index}"), kind });
+    }
+    let path = ir::Place { local: 300, projections: vec![
+        ir::Projection::Deref, ir::Projection::Field(127),
+        ir::Projection::VariantField(128, 16384), ir::Projection::Index(18446744073709551615usize),
+    ] };
+    let mut operations = vec![
+        ir::Op::Text { dst: 0, bytes: vec![0u8, 255, 0xc3, 0xa9] },
+        ir::Op::Int { dst: 1, value: -9223372036854775808i64 },
+        ir::Op::Int { dst: 1, value: 9223372036854775807i64 },
+        ir::Op::Float { dst: 2, bits: 0x7ff8000000000042u64 },
+        ir::Op::Float { dst: 2, bits: 0x8000000000000000u64 },
+        ir::Op::Unit { dst: 3 },
+        ir::Op::Read { dst: 4, place: path.clone(), moving: true },
+        ir::Op::Borrow { dst: 5, place: path.clone(), mutable: false },
+        ir::Op::SliceBorrow { dst: 6, place: path.clone(), mutable: true },
+        ir::Op::ViewRange { dst: 7, place: path.clone(), start: 8, end: 9, inclusive: true, mutable: false },
+        ir::Op::Array { dst: 8, elements: vec![127, 128, 16383, 16384] },
+        ir::Op::Assign { place: path.clone(), src: 9 },
+        ir::Op::Drop { place: path.clone() }, ir::Op::DropIf { place: path.clone() },
+        ir::Op::Unary { dst: 12, op: ir::UnaryOp::Neg, src: 13 },
+        ir::Op::Unary { dst: 12, op: ir::UnaryOp::Not, src: 13 },
+        ir::Op::Call { dst: 14, function: 128, args: vec![1, 2] },
+        ir::Op::Struct { dst: 15, fields: vec![3, 4] },
+        ir::Op::Variant { dst: 16, variant: 257, fields: vec![5, 6] },
+        ir::Op::Discriminant { dst: 17, src: 7 },
+        ir::Op::TagTest { dst: 18, place: path.clone(), variant: 8 },
+        ir::Op::If { condition: 20 }, ir::Op::Else, ir::Op::End, ir::Op::Loop,
+        ir::Op::Break, ir::Op::Continue, ir::Op::BreakTo { depth: 128 },
+        ir::Op::ContinueTo { depth: 257 }, ir::Op::Return { src: 28 },
+        ir::Op::Trap { message: "trap\n\0é".to_string() },
+    ];
+    for op in vec![
+        ir::BinaryOp::Add, ir::BinaryOp::Sub, ir::BinaryOp::Mul, ir::BinaryOp::Div,
+        ir::BinaryOp::Rem, ir::BinaryOp::BitAnd, ir::BinaryOp::BitOr, ir::BinaryOp::BitXor,
+        ir::BinaryOp::Shl, ir::BinaryOp::Shr, ir::BinaryOp::Eq, ir::BinaryOp::Ne,
+        ir::BinaryOp::Lt, ir::BinaryOp::Le, ir::BinaryOp::Gt, ir::BinaryOp::Ge,
+        ir::BinaryOp::And, ir::BinaryOp::Or, ir::BinaryOp::WrappingAdd,
+        ir::BinaryOp::WrappingSub, ir::BinaryOp::WrappingMul,
+    ] { operations.push(ir::Op::Binary { dst: 13, op, left: 1, right: 2 }); }
+    let names = "char_from_u32 f64_from_bits f64_to_bits array_repeat str_len str_as_bytes str_from_utf8 assert vec_new vec_len vec_push vec_pop replace box_new cast clone world_stdout world_stdin world_stderr world_arg_count world_arg_len world_arg_copy world_exit_status environment_len environment_copy world_directory directory_open stdin_read file_read file_write stdout_write stderr_write world_process world_clock world_file clock_read process_spawn child_wait child_terminate directory_open_directory directory_read directory_rewind directory_create directory_remove directory_rename file_rewind file_executable file_duplicate file_readonly world_listen listener_accept listener_accept_nodelay world_connector connector_connect listener_address world_readiness file_set_nonblocking listener_set_nonblocking readiness_watch_file readiness_watch_listener readiness_unwatch_file readiness_unwatch_listener readiness_wait directory_create_new directory_open_append directory_sync file_sync file_truncate file_lock_exclusive file_lock_wait world_entropy entropy_fill clock_unix_seconds clock_unix_nanoseconds file_set_private world_stop stop_requested stop_target readiness_watch_stop readiness_unwatch_stop child_request_stop directory_create_private";
+    let mut begin = 0usize;
+    for end in 0..=names.len() {
+        if end == names.len() || names.as_bytes()[end] == b' ' {
+            let name = ir::IntrinsicOp::parse(&names[begin..end]).unwrap();
+            operations.push(ir::Op::Intrinsic { dst: 19, name, args: vec![1, 2, 3] });
+            begin = end + 1;
+        }
+    }
+    let mut body = Vec::new();
+    for (index, op) in operations.into_iter().enumerate() { body.push(instruction(op, index)); }
+    let leaves = vec![
+        ir::ReturnLeaf { projections: vec![ir::Projection::Field(0)], origin: ir::LeafOrigin::Inputs {
+            exact: true, inputs: vec![ir::InputLeaf { index: 0, projections: path.projections.clone() }],
+        } },
+        ir::ReturnLeaf { projections: vec![ir::Projection::Field(1)], origin: ir::LeafOrigin::Static },
+        ir::ReturnLeaf { projections: vec![ir::Projection::Field(2)], origin: ir::LeafOrigin::Inputs {
+            exact: false, inputs: vec![ir::InputLeaf { index: 1, projections: Vec::new() }],
+        } },
+    ];
+    let mut functions = Vec::new();
+    for contract in vec![
+        None, Some(ir::ReturnSource::Static),
+        Some(ir::ReturnSource::Parameter { index: 128, projections: path.projections }),
+        Some(ir::ReturnSource::Leaves(Vec::new())), Some(ir::ReturnSource::Leaves(leaves)),
+    ] {
+        let index = functions.len();
+        functions.push(ir::Function {
+            file: 18446744073709551615usize, name: format!("f{index}"), params: 1, result: 3,
+            return_source: contract, test: index % 2 == 0,
+            locals: vec![
+                ir::Local { name: "a".to_string(), ty: 0, mutable: true },
+                ir::Local { name: "b\n".to_string(), ty: 257, mutable: false },
+            ],
+            body: if index == 0 { body.clone() } else { Vec::new() },
+        });
+    }
+    ir::Program { types, functions, destructors: vec![(0usize, 1usize), (128, 16384)] }
+}
+fn exact_representation_and_text_oracle() {
+    let original = rich();
+    let encoded = ir_binary::write(&original);
+    let decoded = ir_binary::read(&encoded).unwrap();
+    assert_eq!(decoded, original);
+    assert_eq!(ir_binary::write(&decoded), encoded);
+    assert_eq!(ir_text::write(&decoded), ir_text::write(&original));
+    // Text may normalize an empty Leaves contract; roundtrip its actual output
+    // independently and require binary to preserve that exact parsed result.
+    let canonical = ir_text::read(&ir_text::write(&original)).unwrap();
+    let binary = ir_binary::read(&ir_binary::write(&canonical)).unwrap();
+    assert_eq!(binary, canonical);
+    assert_eq!(ir_text::write(&binary), ir_text::write(&canonical));
+    for function in &original.functions {
+        let bytes = ir_binary::write_function(function);
+        assert_eq!(ir_binary::read_function(&bytes), Some(function.clone()));
+    }
+    let mut unrepresentable = empty_function();
+    unrepresentable.return_source = Some(ir::ReturnSource::Leaves(vec![ir::ReturnLeaf {
+        projections: Vec::new(), origin: ir::LeafOrigin::Inputs { exact: false, inputs: Vec::new() },
+    }]));
+    assert_eq!(ir_binary::read_function(&ir_binary::write_function(&unrepresentable)), Some(unrepresentable));
+}
+fn malformed_data_and_canonical_encoding() {
+    let encoded = ir_binary::write(&rich());
+    for end in 0..encoded.len() { assert!(ir_binary::read(&encoded[..end]).is_none()); }
+    let mut appended = encoded.clone(); appended.push(0);
+    assert!(ir_binary::read(&appended).is_none());
+    // A successful parse must reproduce every byte, including enum and option
+    // tags. Mutations that describe another representation may parse, never alias.
+    for index in 0..encoded.len() {
+        let mut changed = encoded.clone(); changed[index] ^= 255u8;
+        if let Some(program) = ir_binary::read(&changed) {
+            assert_eq!(ir_binary::write(&program), changed);
+        }
+    }
+    for tail in vec![
+        vec![128u8, 0, 0, 0],
+        vec![255u8, 255, 255, 255, 255, 255, 255, 255, 255, 2],
+        vec![255u8, 255, 255, 255, 255, 255, 255, 255, 255, 129, 0],
+        vec![255u8, 255, 255, 255, 255, 255, 255, 255, 255, 1],
+    ] {
+        let mut hostile = b"LKJIRB01"[..].to_vec(); hostile.extend_from_slice(&tail);
+        assert!(ir_binary::read(&hostile).is_none());
+    }
+    let function = empty_function();
+    let encoded = ir_binary::write_function(&function);
+    assert_eq!(encoded.len(), 16usize);
+    for (offset, value) in vec![(12usize, 4u8), (13usize, 2u8), (14usize, 255u8)] {
+        let mut changed = encoded.clone(); changed[offset] = value;
+        assert!(ir_binary::read_function(&changed).is_none());
+    }
+    let mut invalid_utf8 = encoded[..9].to_vec();
+    invalid_utf8.extend_from_slice(&[1u8, 255u8]);
+    invalid_utf8.extend_from_slice(&encoded[10..]);
+    assert!(ir_binary::read_function(&invalid_utf8).is_none());
+    let mut located = empty_function();
+    located.body.push(instruction(ir::Op::End, 0));
+    let bytes = ir_binary::write_function(&located);
+    for (offset, value) in vec![(16usize, 2u8), (19usize, 255u8)] {
+        let mut changed = bytes.clone(); changed[offset] = value;
+        assert!(ir_binary::read_function(&changed).is_none());
+    }
+}
+pub fn run() -> usize {
+    exact_representation_and_text_oracle();
+    malformed_data_and_canonical_encoding();
+    2
+}

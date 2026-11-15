@@ -29,7 +29,32 @@ step() {
     fi
     elapsed_ns=$(($(date +%s%N)-started_ns))
     read -r load_end _ < /proc/loadavg
-    awk -v label="$label" -v elapsed_ns="$elapsed_ns" -v before="$load_start" -v after="$load_end" 'BEGIN { printf "ok %s (%.3f s, load %s -> %s)\n", label, elapsed_ns / 1000000000, before, after }'
+    awk -v label="$label" -v elapsed_ns="$elapsed_ns" -v before="$load_start" -v after="$load_end" '
+        /^LKJSCRIPT_STATS / {
+            if (match($0, /"test_reused":[0-9]+/)) {
+                value=substr($0, RSTART, RLENGTH); sub(/^[^:]*:/, "", value)
+                reused += value; counted=1
+            }
+            if (match($0, /"test_rerun":[0-9]+/)) {
+                value=substr($0, RSTART, RLENGTH); sub(/^[^:]*:/, "", value)
+                rerun += value
+            }
+        }
+        /^LKJSCRIPT_CLOSED_GATE / {
+            for (i=1; i<=NF; i++) {
+                if ($i ~ /^reused=/) { value=$i; sub(/^reused=/, "", value); reused += value }
+                if ($i ~ /^rerun=/) { value=$i; sub(/^rerun=/, "", value); rerun += value }
+            }
+            counted=1; closed=1
+        }
+        END {
+            printf "ok %s (%.3f s, load %s -> %s)", label, elapsed_ns / 1000000000, before, after
+            if (closed) printf "; cases reused=%d rerun=%d (authenticated exact stable runner, sealed ELF and closed input contract)", reused, rerun
+            else if (counted && reused + rerun > 0) printf "; cases reused=%d rerun=%d (authenticated producer and input closure; misses/open effects rerun)", reused, rerun
+            else printf "; rerun suite (host observations or structural proof)"
+            printf "\n"
+        }
+    ' "$details"
 }
 step bootstrap timeout --kill-after=10s 600s sh tools/bootstrap.sh
 check_binary=target/lkjscript
@@ -42,6 +67,7 @@ step tool-build timeout --kill-after=10s 600s bash -c '
     target/lkjscript build tools/world-test.rs -o target/gate/world-test "${reuse[@]}"
     target/lkjscript build src/semantic_main.rs -o target/gate/semantic-test "${reuse[@]}"
 '
+step closed-build timeout --kill-after=10s 600s bash tools/closed-semantics.sh "$check_binary" build
 toolchain() (
     toolchain_directory=$(mktemp -d target/gate/toolchain.XXXXXX)
     trap 'rm -rf "$toolchain_directory"' EXIT HUP INT TERM
@@ -52,6 +78,10 @@ world_cases() (
     trap 'rm -rf "$world_directory"' EXIT HUP INT TERM
     timeout --kill-after=10s 600s target/gate/world-test "$check_binary" "$world_directory"
 )
+diagnostic_cases() {
+    timeout --kill-after=10s 600s "$check_binary" test tests/diagnostics --stats "${check_reuse[@]}" || return 1
+    timeout --kill-after=10s 600s sh tests/diagnostics/test_library_directory.sh "$check_binary"
+}
 semantics() {
     local pids=() shard result=0
     for ((shard=0; shard<check_suite_jobs; shard++)); do
@@ -79,51 +109,70 @@ generate() {
 step generate generate
 # Each suite declares its worker count. The scheduler never exceeds the shared
 # host allowance; a worker's native child runs while its compiler waits.
-check_pids=()
 check_logs=()
-check_weights=()
-check_waited=0
+declare -A check_weights=()
 check_active=0
 check_failed=0
-wait_oldest() {
-    if ! wait "${check_pids[$check_waited]}"; then check_failed=1; fi
-    check_active=$((check_active - check_weights[check_waited]))
-    check_waited=$((check_waited + 1))
+wait_finished() {
+    local finished= status=0
+    # Do not leave idle workers behind a long-running earlier suite.
+    wait -n -p finished "${!check_weights[@]}" || status=$?
+    if [[ -z "${finished:-}" ]]; then
+        # Bash may already have reaped every completed child before wait -n.
+        # Explicit wait still retrieves its status; all registered PIDs are ours.
+        for finished in "${!check_weights[@]}"; do break; done
+        status=0
+        wait "$finished" || status=$?
+    fi
+    if ((status)); then check_failed=1; fi
+    check_active=$((check_active - check_weights[$finished]))
+    unset 'check_weights[$finished]'
 }
 parallel_step() {
     local weight=$1
     shift
-    while ((check_active + weight > check_jobs)); do wait_oldest; done
+    while ((check_active + weight > check_jobs)); do wait_finished; done
     local log="target/gate/$1.log"
     (step "$@") >"$log" 2>&1 &
-    check_pids+=("$!")
+    check_weights[$!]=$weight
     check_logs+=("$log")
-    check_weights+=("$weight")
     check_active=$((check_active + weight))
 }
+parallel_step 1 closed-semantics timeout --kill-after=10s 600s bash tools/closed-semantics.sh "$check_binary" run
+parallel_step 1 closed-proof-attacks timeout --kill-after=10s 600s bash tools/gate-reuse-test.sh "$check_binary"
 parallel_step 1 toolchain toolchain
 parallel_step 1 world world_cases
 parallel_step 1 profiler timeout --kill-after=10s 600s sh tools/profile-test.sh "$check_binary"
 parallel_step 1 optimizer timeout --kill-after=10s 600s bash tools/optimizer-test.sh "$check_binary"
 parallel_step 1 resources timeout --kill-after=10s 600s bash tools/resource-test.sh "$check_binary"
-parallel_step 1 runner timeout --kill-after=10s 600s "$check_binary" test src/test_runner.rs "${check_reuse[@]}"
-parallel_step 1 diagnostic-cases timeout --kill-after=10s 600s "$check_binary" test tests/diagnostics "${check_reuse[@]}"
+parallel_step 1 runner timeout --kill-after=10s 600s "$check_binary" test src/test_runner.rs --stats "${check_reuse[@]}"
+parallel_step 1 diagnostic-cases diagnostic_cases
 parallel_step 2 store timeout --kill-after=10s 600s bash tools/store-test.sh "$check_binary"
+parallel_step 2 program-directory timeout --kill-after=10s 600s bash tools/program-directory-test.sh "$check_binary"
 parallel_step 2 http timeout --kill-after=10s 600s sh tools/http-test.sh --compiler "$check_binary" --seconds 0 --out target/gate/http-profiles
 parallel_step 2 journal timeout --kill-after=10s 600s sh tools/http-journal-cases.sh --compiler "$check_binary"
 parallel_step 2 stop timeout --kill-after=10s 600s sh tools/http-stop.sh --compiler "$check_binary"
 parallel_step 2 stop-interpreter timeout --kill-after=10s 600s sh tools/http-stop.sh --compiler "$check_binary" --engine interpreter
 parallel_step 2 site timeout --kill-after=10s 600s sh tools/http-site-test.sh --compiler "$check_binary" --offline
 parallel_step 2 desk timeout --kill-after=10s 600s bash tools/http-desk-test.sh --compiler "$check_binary"
-parallel_step "$check_suite_jobs" conformance timeout --kill-after=10s 600s "$check_binary" test tests/conformance --jobs "$check_suite_jobs" "${check_reuse[@]}"
-parallel_step "$check_suite_jobs" generated timeout --kill-after=10s 600s "$check_binary" test target/gate/generated --jobs "$check_suite_jobs" "${check_reuse[@]}"
-parallel_step "$check_suite_jobs" optimized-conformance timeout --kill-after=10s 600s "$check_binary" test tests/conformance --jobs "$check_suite_jobs" --inline-limit 64 "${check_reuse[@]}"
-parallel_step "$check_suite_jobs" optimized-generated timeout --kill-after=10s 600s "$check_binary" test target/gate/generated --jobs "$check_suite_jobs" --inline-limit 64 "${check_reuse[@]}"
+parallel_step "$check_suite_jobs" conformance timeout --kill-after=10s 600s "$check_binary" test tests/conformance --stats --jobs "$check_suite_jobs" "${check_reuse[@]}"
+parallel_step "$check_suite_jobs" generated timeout --kill-after=10s 600s "$check_binary" test target/gate/generated --stats --jobs "$check_suite_jobs" "${check_reuse[@]}"
+parallel_step "$check_suite_jobs" optimized-conformance timeout --kill-after=10s 600s "$check_binary" test tests/conformance --stats --jobs "$check_suite_jobs" --inline-limit 64 "${check_reuse[@]}"
+parallel_step "$check_suite_jobs" optimized-generated timeout --kill-after=10s 600s "$check_binary" test target/gate/generated --stats --jobs "$check_suite_jobs" --inline-limit 64 "${check_reuse[@]}"
 parallel_step "$check_suite_jobs" semantic-structure semantics
-parallel_step "$check_suite_jobs" semantic-cases timeout --kill-after=10s 600s "$check_binary" test tests/semantics --jobs "$check_suite_jobs" "${check_reuse[@]}"
-parallel_step 1 references timeout --kill-after=10s 600s "$check_binary" test tests/reference "${check_reuse[@]}"
-while ((check_waited < ${#check_pids[@]})); do wait_oldest; done
+parallel_step "$check_suite_jobs" semantic-cases timeout --kill-after=10s 600s "$check_binary" test tests/semantics --stats --jobs "$check_suite_jobs" "${check_reuse[@]}"
+parallel_step 1 references timeout --kill-after=10s 600s "$check_binary" test tests/reference --stats "${check_reuse[@]}"
+while ((check_active)); do wait_finished; done
 for log in "${check_logs[@]}"; do cat "$log"; done
+awk '
+    /; cases reused=/ {
+        for (i=1; i<=NF; i++) {
+            if ($i ~ /^reused=/) { value=$i; sub(/^reused=/, "", value); reused += value }
+            if ($i ~ /^rerun=/) { value=$i; sub(/^rerun=/, "", value); rerun += value }
+        }
+    }
+    END { printf "ok gate selection: skipped %d case requests on authenticated exact compiler/input closure or stable runner/sealed ELF/closed contract equality; reran %d misses/open effects; host suites rerun\n", reused, rerun }
+' "${check_logs[@]}"
 if ((check_failed)); then exit 1; fi
 step ir-mutation timeout --kill-after=10s 600s "$check_binary" mutate 1701 128 --jobs "$check_jobs" "${check_reuse[@]}"
 check_elapsed_ns=$(($(date +%s%N)-check_started_ns))

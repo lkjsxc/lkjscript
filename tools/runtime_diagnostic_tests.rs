@@ -56,8 +56,9 @@ fn unwrap_help(world: &mut World, executable: &File, directory: &mut Directory,
     write(directory, name, include_str!("../tests/diagnostics/unwrap_call_site.rs").as_bytes())?;
     let extra: Vec<Vec<u8>> = Vec::new();
     let mut original: Vec<u8> = Vec::new();
-    for engine in pair("interpreter", "native") {
-        let observed = execute(world, executable, config, name, &engine, "0", &extra)?;
+    for limit in pair("0", "64") {
+      for engine in pair("interpreter", "native") {
+        let observed = execute(world, executable, config, name, &engine, &limit, &extra)?;
         let text = String::from_utf8(observed.errors.clone()).unwrap();
         report.require(observed.status == 1 && observed.output.is_empty() && observed.result.is_empty()
             && text.starts_with("file ") && !text.contains(&path(config, name))
@@ -65,9 +66,10 @@ fn unwrap_help(world: &mut World, executable: &File, directory: &mut Directory,
             && contains(&observed.errors, b"help: replace unwrap() with an explicit match")
             && contains(&observed.errors, b"already granted output capability")
             && contains(&observed.errors, b"docs/language.md"),
-            format!("unwrap static help/{engine}: {} {}", observed.status, display_bytes(&observed.errors)));
+            format!("unwrap static help/{engine}/inline{limit}: {} {}", observed.status, display_bytes(&observed.errors)));
         if engine == "interpreter" { original = observed.errors; }
         else { report.equal("unwrap static help", "complete native/interpreter diagnostic", &observed.errors, &original); }
+      }
     }
     Ok(())
 }
@@ -103,20 +105,22 @@ fn main(mut world: World) {
         let mut extra: Vec<Vec<u8>> = Vec::new();
         for _ in 0usize..count { extra.push("next".as_bytes().to_vec()); }
         let mut original: Vec<u8> = Vec::new();
-        for engine in pair("interpreter", "native") {
-            let observed = execute(world, executable, config, name, &engine, "0", &extra)?;
+        for limit in pair("0", "64") {
+          for engine in pair("interpreter", "native") {
+            let observed = execute(world, executable, config, name, &engine, &limit, &extra)?;
             if count == 2usize {
-                report.outcome(&format!("explicit unwrap match success/{engine}"), &observed, 0, b"ok 1\n", b"");
+                report.outcome(&format!("explicit unwrap match success/{engine}/inline{limit}"), &observed, 0, b"ok 1\n", b"");
             } else {
                 let errno = if count == 0usize { 5i64 } else { 11i64 };
                 let text = String::from_utf8(observed.errors.clone()).unwrap();
                 let prefix = format!("operation attempt 1: errno {errno}\n{}:{line}: R", path(config, name));
                 report.require(observed.status == 1 && observed.output.is_empty() && observed.result.is_empty()
                     && text.starts_with(&prefix) && text.ends_with(" operation failed\n"),
-                    format!("explicit unwrap match errno {errno}/{engine}: {} {}", observed.status, display_bytes(&observed.errors)));
+                    format!("explicit unwrap match errno {errno}/{engine}/inline{limit}: {} {}", observed.status, display_bytes(&observed.errors)));
                 if engine == "interpreter" { original = observed.errors; }
                 else { report.equal("explicit unwrap match", "complete native/interpreter diagnostic", &observed.errors, &original); }
             }
+          }
         }
     }
     Ok(())

@@ -124,10 +124,94 @@ restore
 printf 'pub fn answer() -> i64 { 41 }\n' > "$source_directory/dependency.rs"
 "$compiler" build main.rs --source-dir "$source_directory" -o "$test_directory/changed-expected"
 cached_build replayed
+(( $(field "$test_directory/replayed.log" front_reused) > 0 )) || fail "body edit did not reuse unaffected front-end definitions"
+(( $(field "$test_directory/replayed.log" front_definitions) == 1 )) || fail "body edit elaborated more than its changed definition"
 cmp "$test_directory/changed-expected" "$test_directory/result"
 "$compiler" run main.rs --source-dir "$source_directory" --store "$store" --store-key "$key" > "$test_directory/changed-value"
 [[ $(cat "$test_directory/changed-value") == 43 ]] || fail "changed dependency replayed old native code"
+printf 'pub fn answer() -> i64 { 42 }\n' > "$source_directory/dependency.rs"
+"$compiler" build main.rs --source-dir "$source_directory" --no-store -o "$test_directory/changed-next-expected"
+cached_build replayed-next
+(( $(field "$test_directory/replayed-next.log" front_reused) > 0 )) || fail "successive body edit did not reuse the advanced checkpoint"
+(( $(field "$test_directory/replayed-next.log" front_definitions) == 1 )) || fail "successive body edit elaborated more than one definition"
+cmp "$test_directory/changed-next-expected" "$test_directory/result"
+"$compiler" run main.rs --source-dir "$source_directory" --store "$store" --store-key "$key" > "$test_directory/changed-next-value"
+[[ $(cat "$test_directory/changed-next-value") == 44 ]] || fail "successive dependency edit replayed an earlier body"
 printf 'pub fn answer() -> i64 { 40 }\n' > "$source_directory/dependency.rs"
+
+# Signature, constant-control and source-span changes cannot replay an old front end.
+cp "$source_file" "$test_directory/front-original.rs"
+for variant in generic control length; do
+    cp "$test_directory/front-original.rs" "$source_file"
+    printf 'pub fn answer() -> i64 { 40 }\n' > "$source_directory/dependency.rs"
+    case "$variant" in
+        generic)
+            cat > "$source_file" <<'SOURCE'
+mod dependency;
+fn add<T>(value: T) -> T { value }
+pub fn probe() -> i64 { add::<i64>(dependency::answer()) + 2 }
+SOURCE
+            ;;
+        control)
+            cat > "$source_file" <<'SOURCE'
+mod dependency;
+const EXTRA: i64 = 3;
+fn add(value: i64) -> i64 { value + EXTRA }
+pub fn probe() -> i64 { add(dependency::answer()) }
+SOURCE
+            ;;
+        length)
+            printf 'pub fn answer() -> i64 { 400 }\n' > "$source_directory/dependency.rs"
+            ;;
+    esac
+    "$compiler" build main.rs --source-dir "$source_directory" --no-store -o "$test_directory/front-expected"
+    cached_build "front-$variant"
+    cmp "$test_directory/front-expected" "$test_directory/result"
+    (( $(field "$test_directory/front-$variant.log" front_reused) == 0 )) ||
+        fail "$variant context change reused an inapplicable front end"
+done
+cp "$test_directory/front-original.rs" "$source_file"
+printf 'pub fn answer() -> i64 { 40 }\n' > "$source_directory/dependency.rs"
+
+# Includes can read a file which is also parsed as a module. The included
+# literal is a peer dependency, including equal-span and successive body edits.
+include_source="$source_directory/parsed-includes"
+mkdir "$include_source"
+for kind in str bytes; do
+    include_store="$test_directory/include-$kind-store"
+    mkdir "$include_store"
+    if [[ "$kind" == str ]]; then
+        expression='include_str!("dependency.rs").as_bytes()[26usize]'
+    else
+        expression='include_bytes!("dependency.rs")[26usize]'
+    fi
+    cat > "$include_source/main.rs" <<SOURCE
+mod dependency;
+pub fn main(mut world: World) {
+    let byte = $expression;
+    world.stdout().write(&[byte]);
+}
+SOURCE
+    for value in 40 41 42; do
+        printf 'pub fn answer() -> i64 { %s }\n' "$value" > "$include_source/dependency.rs"
+        "$compiler" build main.rs --source-dir "$include_source" --no-library --no-store \
+            -o "$test_directory/include-expected"
+        "$compiler" build main.rs --source-dir "$include_source" --no-library \
+            --store "$include_store" --store-key "$key" --stats -o "$test_directory/include-result" \
+            > "$test_directory/include-$kind-$value.out" 2> "$test_directory/include-$kind-$value.log"
+        cmp "$test_directory/include-expected" "$test_directory/include-result"
+        [[ $("$test_directory/include-result") == "$((value - 40))" ]] ||
+            fail "$kind parsed-source include retained old bytes after body $value"
+        (( $(field "$test_directory/include-$kind-$value.log" front_reused) == 0 )) ||
+            fail "$kind changed include payload resumed stale peer IR"
+        "$compiler" build main.rs --source-dir "$include_source" --no-library \
+            --store "$include_store" --store-key "$key" --stats -o "$test_directory/include-result" \
+            > "$test_directory/include-$kind-$value-warm.out" 2> "$test_directory/include-$kind-$value-warm.log"
+        cmp "$test_directory/include-expected" "$test_directory/include-result"
+        (( $(field "$test_directory/include-$kind-$value-warm.log" build_reused) > 0 )) ||
+            fail "$kind unchanged include image was not reused"
+    done
+done
 
 # A previously absent alternate module is also an input dependency.
 restore
@@ -261,6 +345,115 @@ if "$compiler" test "$source_directory/cases" --jobs 2 --store "$store" --store-
     fail "changed test expectation replayed an old pass"
 fi
 
+# Fixed private stdout/stderr captures are closed observations, including writes
+# reached through calls and custom cleanup. Both checked graphs must prove this.
+mkdir "$source_directory/captured"
+cat > "$source_directory/captured/output.rs" <<'SOURCE'
+// expect: output 6162
+// stderr: 6364
+struct Tail { errors: Stderr }
+impl Drop for Tail { fn drop(&mut self) { self.errors.write(b"d"); } }
+fn speak(world: &mut World) {
+    world.stdout().write(b"a");
+    world.stderr().write(b"c");
+}
+pub fn main(mut world: World) {
+    let tail = Tail { errors: world.stderr() };
+    speak(&mut world);
+    world.stdout().write(b"b");
+}
+SOURCE
+cat > "$source_directory/captured/trap.rs" <<'SOURCE'
+// expect: trap R0005
+// stdout: 78
+// stderr: 79
+pub fn main(mut world: World) {
+    world.stdout().write(b"x");
+    world.stderr().write(b"y");
+    assert!(false);
+}
+SOURCE
+for limit in 0 64; do
+    for pass in cold warm; do
+        "$compiler" test "$source_directory/captured" --jobs 2 --inline-limit "$limit" \
+            --store "$store" --store-key "$key" --stats \
+            > "$test_directory/captured-$limit-$pass.out" 2> "$test_directory/captured-$limit-$pass.log"
+        sed 's/ ([0-9][0-9]*[.][0-9][0-9]* s)$//' "$test_directory/captured-$limit-$pass.out" \
+            > "$test_directory/captured-$limit-$pass.summary"
+    done
+    cmp "$test_directory/captured-$limit-cold.summary" "$test_directory/captured-$limit-warm.summary"
+    (( $(field "$test_directory/captured-$limit-warm.log" test_reused) == 2 )) ||
+        fail "fixed stdout/stderr success and trap were not reused at inline $limit"
+done
+sed -i 's/write(b"b")/write(b"e")/' "$source_directory/captured/output.rs"
+if "$compiler" test "$source_directory/captured/output.rs" --jobs 1 --inline-limit 0 \
+    --store "$store" --store-key "$key" --stats \
+    > "$test_directory/captured-changed.out" 2> "$test_directory/captured-changed.log"; then
+    fail "changed output body replayed an old passing capture"
+fi
+(( $(field "$test_directory/captured-changed.log" test_reused) == 0 )) ||
+    fail "changed output body was reused"
+sed -i 's/expect: output 6162/expect: output 6165/' "$source_directory/captured/output.rs"
+"$compiler" test "$source_directory/captured/output.rs" --jobs 1 --inline-limit 0 \
+    --store "$store" --store-key "$key" --stats \
+    > "$test_directory/captured-corrected.out" 2> "$test_directory/captured-corrected.log"
+sed -i 's/expect: output 6165/expect: output 6166/' "$source_directory/captured/output.rs"
+if "$compiler" test "$source_directory/captured/output.rs" --jobs 1 --inline-limit 0 \
+    --store "$store" --store-key "$key" --stats \
+    > "$test_directory/captured-expectation.out" 2> "$test_directory/captured-expectation.log"; then
+    fail "changed output expectation replayed an old pass"
+fi
+(( $(field "$test_directory/captured-expectation.log" test_reused) == 0 )) ||
+    fail "changed output expectation was reused"
+
+# A fixed observed value cannot make external authority deterministic. Effects
+# in a callee, an owned destructor, and either checked branch all prevent replay.
+mkdir "$source_directory/external"
+cat > "$source_directory/external/clock.rs" <<'SOURCE'
+// expect: output
+pub fn main(mut world: World) { let _ = world.clock().nanoseconds().unwrap(); }
+SOURCE
+cat > "$source_directory/external/args.rs" <<'SOURCE'
+// expect: output
+pub fn main(mut world: World) { let _ = world.args(); }
+SOURCE
+cat > "$source_directory/external/entropy.rs" <<'SOURCE'
+// expect: output
+pub fn main(mut world: World) {
+    let mut bytes = [0u8; 1];
+    world.entropy().fill(&mut bytes).unwrap();
+}
+SOURCE
+cat > "$source_directory/external/callee.rs" <<'SOURCE'
+// expect: output
+fn hidden(world: &mut World) { let _ = world.args(); }
+pub fn main(mut world: World) { hidden(&mut world); }
+SOURCE
+cat > "$source_directory/external/destructor.rs" <<'SOURCE'
+// expect: output
+struct Hidden { world: World }
+impl Drop for Hidden { fn drop(&mut self) { let _ = self.world.args(); } }
+pub fn main(world: World) { let hidden = Hidden { world }; }
+SOURCE
+cat > "$source_directory/external/branch.rs" <<'SOURCE'
+// expect: output 42
+pub fn main(mut world: World) {
+    if false { let _ = world.args(); }
+    world.stdout().write(b"B");
+}
+SOURCE
+for limit in 0 64; do
+    for pass in cold warm; do
+        "$compiler" test "$source_directory/external" --jobs 2 --inline-limit "$limit" \
+            --store "$store" --store-key "$key" --stats \
+            > "$test_directory/external-$limit-$pass.out" 2> "$test_directory/external-$limit-$pass.log"
+        (( $(field "$test_directory/external-$limit-$pass.log" test_reused) == 0 )) ||
+            fail "external effect was reused at inline $limit ($pass)"
+        (( $(field "$test_directory/external-$limit-$pass.log" test_rerun) == 6 )) ||
+            fail "external effect case did not execute at inline $limit ($pass)"
+    done
+done
+
 # Closed language traps are deterministic observations on both execution routes.
 # Resource/host failures remain observations to rerun, even with trap-looking paths.
 mkdir "$source_directory/traps"
@@ -347,7 +540,7 @@ cmp "$test_directory/runtime-image-expected" "$test_directory/result"
 (( $(field "$test_directory/runtime-image-changed.log" build_reused) == 0 )) ||
     fail "runtime-source edit replayed an old image"
 
-# A World entry must run even if the source and expected output are unchanged.
+# Directory effects must run even if source and expected output are unchanged.
 cat > "$source_directory/effect.rs" <<SOURCE
 // expect: output
 pub fn main(mut world: World) {
@@ -358,9 +551,11 @@ pub fn main(mut world: World) {
 SOURCE
 for pass in cold warm; do
     rm -f "$test_directory/effect"
-    "$compiler" test "$source_directory/effect.rs" --jobs 1 --store "$store" --store-key "$key" \
+    "$compiler" test "$source_directory/effect.rs" --jobs 1 --store "$store" --store-key "$key" --stats \
         > "$test_directory/effect-$pass.out" 2> "$test_directory/effect-$pass.log"
     [[ $(cat "$test_directory/effect") == executed ]] || fail "$pass effectful test was skipped"
+    (( $(field "$test_directory/effect-$pass.log" test_reused) == 0 )) ||
+        fail "$pass Directory effect was reused"
 done
 
 # Function fragments remain relocatable across mixed hits, changing earlier
@@ -400,11 +595,10 @@ relocation_build cold
 relocation_build warm
 warm_emitted=$(field "$test_directory/relocation-warm.log" emitted_reused)
 (( warm_emitted > 1 )) || fail "relocation fixture did not reuse multiple functions"
-emission_entry=0
-for entry in "$relocation_store"/native-*; do
-    emission_entry=$((emission_entry+1))
-    if (( emission_entry % 2 == 1 )); then rm "$entry"; fi
-done
+# A pack authenticates several fragments together. Changing one equal-span
+# body leaves its peers reusable while requiring one new native fragment.
+sed -i 's/if shared.len() > 3/if shared.len() > 4/' "$source_directory/relocation.rs"
+"$compiler" build relocation.rs --source-dir "$source_directory" --no-store -o "$test_directory/relocation-expected"
 relocation_build mixed
 mixed_emitted=$(field "$test_directory/relocation-mixed.log" emitted_reused)
 (( mixed_emitted > 0 && mixed_emitted < warm_emitted )) || fail "mixed emission did not combine hits and misses"
@@ -420,6 +614,97 @@ changed_emitted=$(field "$test_directory/relocation-changed.log" emitted_reused)
     > "$test_directory/relocation-interpreted"
 cmp "$test_directory/relocation-native" "$test_directory/relocation-interpreted"
 [[ $(cat "$test_directory/relocation-native") == 56 ]] || fail "relocated fragments changed observable behavior"
+
+# The same store implementation uses a tiny bound here; exercise real signed
+# entries and oldest-generation eviction without hashing hundreds of MiB.
+bounded="$test_directory/bounded"
+mkdir "$bounded"
+mkdir "$test_directory/capacity-source"
+cp tools/store-capacity.rs "$test_directory/capacity-source/main.rs"
+cp src/diagnostic.rs src/ir.rs src/ir_text.rs src/ir_binary.rs src/reuse.rs src/store.rs library/sha256.rs "$test_directory/capacity-source/"
+"$compiler" build main.rs --source-dir "$test_directory/capacity-source" --no-store -o "$test_directory/capacity-a"
+"$test_directory/capacity-a" "$bounded" "$key" 4096 0 3 > "$test_directory/capacity-a.log"
+mapfile -t generation_a < <(find "$bounded" -maxdepth 1 -type f -name 'capacity-*')
+(( ${#generation_a[@]} == 3 )) || fail "capacity fixture did not retain its first generation"
+cp "$test_directory/capacity-a" "$test_directory/capacity-b"
+printf 'another bounded-store generation\n' >> "$test_directory/capacity-b"
+"$test_directory/capacity-b" "$bounded" "$key" 4096 100 3 > "$test_directory/capacity-b.log"
+for entry in "${generation_a[@]}"; do
+    [[ ! -e "$entry" ]] || fail "capacity evicted the new generation before the old one"
+done
+"$test_directory/capacity-b" "$bounded" "$key" 4096 200 32 > "$test_directory/capacity-many.log"
+grep -Eq 'evicted=[1-9][0-9]*' "$test_directory/capacity-many.log" || fail "capacity fixture did not cross its bound"
+bounded_bytes=$(find "$bounded" -maxdepth 1 -type f -printf '%s\n' | awk '{ sum += $1 } END { print sum+0 }')
+(( bounded_bytes <= 4096 )) || fail "authenticated bytes plus index exceed the store bound"
+printf 'forged size index\n' > "$bounded/.budget-index"
+"$test_directory/capacity-b" "$bounded" "$key" 4096 300 1 > "$test_directory/capacity-forged.log"
+bounded_bytes=$(find "$bounded" -maxdepth 1 -type f -printf '%s\n' | awk '{ sum += $1 } END { print sum+0 }')
+(( bounded_bytes <= 4096 )) || fail "forged policy metadata escaped bounded publication"
+
+# Losing a process before its index checkpoint leaves only disposable misses.
+stale_entry=$(find "$bounded" -maxdepth 1 -type f -name 'capacity-*' | head -1)
+cp "$bounded/.budget-index" "$test_directory/budget-before"
+find "$bounded" -maxdepth 1 -type f -name 'capacity-*' | sort > "$test_directory/budget-files-before"
+if "$test_directory/capacity-b" "$bounded" "$key" 4096 400 1 interrupt > "$test_directory/capacity-interrupt.log" 2>&1; then
+    fail "interrupted publisher ran its normal checkpoint"
+fi
+grep -q 'interrupted before store index checkpoint' "$test_directory/capacity-interrupt.log" ||
+    fail "publisher failed before the intended interruption"
+cmp "$bounded/.budget-index" "$test_directory/budget-before"
+find "$bounded" -maxdepth 1 -type f -name 'capacity-*' | sort > "$test_directory/budget-files-after"
+orphan=$(comm -13 "$test_directory/budget-files-before" "$test_directory/budget-files-after")
+[[ -n "$orphan" && -f "$orphan" ]] || fail "interrupted publisher left no owned orphan"
+"$test_directory/capacity-b" "$bounded" "$key" 4096 500 1 > "$test_directory/capacity-recovered.log"
+[[ ! -e "$orphan" ]] || fail "writer retained an unindexed owned orphan"
+cp "$bounded/.budget-index" "$test_directory/budget-before"
+if "$test_directory/capacity-b" "$bounded" "$key" 4096 300 1 interrupt 1536 > "$test_directory/capacity-stale-size.log" 2>&1; then
+    fail "enlarged publisher ran its normal checkpoint"
+fi
+grep -q 'interrupted before store index checkpoint' "$test_directory/capacity-stale-size.log" ||
+    fail "enlarged publisher failed before the intended interruption"
+cmp "$bounded/.budget-index" "$test_directory/budget-before"
+(( $(wc -c < "$stale_entry") > 1536 )) || fail "stale-size fixture did not grow"
+"$test_directory/capacity-b" "$bounded" "$key" 4096 600 1 > "$test_directory/capacity-size-recovered.log"
+[[ ! -e "$stale_entry" ]] || fail "writer trusted stale byte accounting for a larger pack"
+bounded_bytes=$(find "$bounded" -maxdepth 1 -type f -printf '%s\n' | awk '{ sum += $1 } END { print sum+0 }')
+(( bounded_bytes <= 4096 )) || fail "checkpoint interruption escaped the publication bound"
+"$compiler" build main.rs --source-dir "$source_directory" --store "$bounded" --store-key "$key" --store-bytes 4096 -o "$test_directory/capacity-result"
+cmp "$test_directory/expected" "$test_directory/capacity-result"
+bounded_bytes=$(find "$bounded" -maxdepth 1 -type f -printf '%s\n' | awk '{ sum += $1 } END { print sum+0 }')
+(( bounded_bytes <= 4096 )) || fail "ordinary build exceeded its explicit disposable-store bound"
+
+# Hostile FIFOs must miss without waiting for a reader or writer, including
+# old-generation metadata that this compilation would not otherwise request.
+fifo_build() {
+    local label=$1 executable=$2
+    if ! timeout --kill-after=2s 30s "$executable" build main.rs --source-dir "$source_directory" \
+        --store "$store" --store-key "$key" -o "$test_directory/result" \
+        > "$test_directory/fifo-$label.out" 2> "$test_directory/fifo-$label.log"; then
+        fail "FIFO $label blocked or changed an ordinary build"
+    fi
+    cmp "$test_directory/expected" "$test_directory/result"
+}
+for attack in raw index lock old-generation; do
+    restore
+    without_image
+    executable="$compiler"
+    case "$attack" in
+        index) rm -f "$store/.budget-index"; mkfifo "$store/.budget-index" ;;
+        lock) rm -f "$store/.budget-lock"; mkfifo "$store/.budget-lock" ;;
+        raw|old-generation)
+            entry=$(find "$store" -maxdepth 1 -type f -name 'native-*' | head -1)
+            [[ -n "$entry" ]] || fail "FIFO fixture found no native pack"
+            rm "$entry"
+            mkfifo "$entry"
+            if [[ "$attack" == old-generation ]]; then
+                cp "$compiler" "$test_directory/fifo-compiler"
+                printf 'different FIFO-scan producer\n' >> "$test_directory/fifo-compiler"
+                executable="$test_directory/fifo-compiler"
+            fi
+            ;;
+    esac
+    fifo_build "$attack" "$executable"
+done
 
 # Remove the directory after the compiler has actually opened its capability.
 # Bodies are deliberately independent; the test exercises store disappearance,

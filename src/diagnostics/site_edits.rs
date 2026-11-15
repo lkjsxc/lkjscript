@@ -1,0 +1,113 @@
+//! Diagnostic advice for forms encountered by the documentation consumer.
+//! Suggestions do not change admission or introduce hidden coercions.
+use crate::ast::{self as a, Expr, Type};
+use crate::diagnostic::Diagnostic;
+use crate::source::SourceReport;
+use super::borrow_edits::{primary, qualified};
+
+fn exclusions(report: &mut SourceReport) {
+    let mut excluded: Vec<super::BlockedRegion> = Vec::new();
+    let regions = std::mem::replace(&mut report.blocked, Vec::new());
+    for region in regions {
+        if region.kind == "excluded cfg(test) declaration" { excluded.push(region); }
+        else { report.blocked.push(region); }
+    }
+    let mut problem_index = 0usize;
+    while problem_index < report.diagnostics.len() {
+        let problem = &mut report.diagnostics[problem_index];
+        problem_index += 1usize;
+        if problem.code != "E_NAME" { continue; }
+        for node in &report.program.exprs {
+            if !primary(problem, node.span) { continue; }
+            let Expr::Path(path) = &node.kind else { continue; };
+            if path.name.contains("::") || !path.args.is_empty() { continue; }
+            let name = qualified(&report.program.scopes[node.scope].path, &path.name);
+            for region in &excluded {
+                if region.reason == name {
+                    problem.message = format!("{}; declaration {} at {}:{} is excluded by #[cfg(test)], including under lkjscript test; help: make the helper unconditional and keep the test entry separate (docs/language.md, Source graph and names)",
+                        problem.message, path.name, region.path, region.span.line);
+                }
+            }
+        }
+    }
+}
+
+fn option_type(program: &a::Program, problem: &Diagnostic) -> Option<String> {
+    if !problem.message.contains("wrong number of type arguments") { return None; }
+    let names = crate::resolve::Resolver::new(program).ok()?;
+    for node in &program.exprs {
+        if !primary(problem, node.span) { continue; }
+        let Expr::Path(path) = &node.kind else { continue; };
+        let option = names.library_type("prelude", "Option", node.span).ok()?;
+        let value = names.value_path(node.scope, path, node.span).ok()?;
+        if value.name != format!("{}::None", option.name) { continue; }
+        return Some("None leaves Option's element type unknown before later assignments are checked; help: annotate the local, for example let mut value: Option<String> = None when later values are owned text (docs/language.md, Inference, generics and traits)".to_string());
+    }
+    None
+}
+
+fn owned_text(program: &a::Program, expression: usize) -> bool {
+    let Expr::Method { receiver, name, types, args } = &program.exprs[expression].kind else { return false; };
+    if name != "to_string" || !types.is_empty() || !args.is_empty()
+        || !matches!(program.exprs[*receiver].kind, Expr::String(_)) { return false; }
+    for function in &program.functions {
+        if function.name == "to_string" && !function.module.starts_with("$std") { return false; }
+    }
+    true
+}
+
+fn vector_loop(program: &a::Program, problem: &Diagnostic) -> Option<String> {
+    if !problem.message.contains("generic argument types disagree") { return None; }
+    for node in &program.exprs {
+        if !primary(problem, node.span) { continue; }
+        let Expr::For { iterator, .. } = node.kind else { continue; };
+        let Expr::Macro { name, args, separator } = &program.exprs[iterator].kind else { continue; };
+        if name != "vec" || separator != "," || args.is_empty() { continue; }
+        let mut strings = true;
+        for argument in args { if !owned_text(program, *argument) { strings = false; } }
+        if strings {
+            return Some("this Vec loop needs its owned String element type before borrowing elements as str; help: bind let values: Vec<String> = vec![...]; then write for value in values (docs/language.md, Inference, generics and traits)".to_string());
+        }
+    }
+    None
+}
+
+fn advice(program: &a::Program, problem: &Diagnostic) -> Option<String> {
+    if problem.code == "E_UNSUPPORTED" && problem.message.contains("has 0 applicable implementations") {
+        for node in &program.exprs {
+            if !primary(problem, node.span) { continue; }
+            let Expr::Method { name, .. } = &node.kind else { continue; };
+            if matches!(name.as_str(), "__lkjscript_arg_count" | "__lkjscript_arg_len" | "__lkjscript_arg_copy") {
+                return Some(format!("{name} requires a mutable Arguments capability (or the entry's explicit full World authority); generic T does not prove this receiver; help: write arguments: &mut Arguments and pass the granted Arguments value (docs/language.md, World and capabilities)"));
+            }
+        }
+    }
+    if problem.code == "E_TYPE" {
+        for node in &program.exprs {
+            if !primary(problem, node.span) { continue; }
+            if let Expr::Cast { ty, .. } = node.kind {
+                if matches!(&program.types[ty].kind, Type::Path(path) if path.name == "char" && path.args.is_empty()) {
+                    return Some("integer-to-char casts are unavailable; help: for a u32 code point use char::from_u32(code) and handle Some(character) or None; surrogate and out-of-range values return None (docs/language.md, Scalars and evaluation)".to_string());
+                }
+            }
+        }
+        if let Some(message) = option_type(program, problem) { return Some(message); }
+        return vector_loop(program, problem);
+    }
+    if problem.code == "E_UNSUPPORTED" && problem.message.contains("method chars on string::String has 0 applicable implementations") {
+        return Some("chars() is provided on a str view; help: borrow the owned String with value.as_str().chars() (docs/language.md, Source library)".to_string());
+    }
+    None
+}
+
+pub(super) fn complete(report: &mut SourceReport) {
+    exclusions(report);
+    let mut index = 0usize;
+    while index < report.diagnostics.len() {
+        let problem = &mut report.diagnostics[index];
+        if let Some(message) = advice(&report.program, problem) {
+            problem.message = format!("{}; {message}", problem.message);
+        }
+        index += 1usize;
+    }
+}

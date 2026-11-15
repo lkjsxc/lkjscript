@@ -396,7 +396,7 @@ fn check_mutation(
 ) -> Result<crate::reuse::Checked, Vec<crate::diagnostic::Diagnostic>> {
     if let Some(store) = store {
         let prepared = crate::reuse::Prepared::new(program);
-        let mut records = store.records("check", prepared.keys().all());
+        let mut records = store.records("check", prepared.keys().graph(), prepared.keys().all());
         let result = check::check_all_cached(prepared, &mut records);
         counts.checked_reused += records.hits;
         store.flush(&records);
@@ -419,7 +419,7 @@ fn recheck_mutation(
 ) -> Result<reuse::Checked, Vec<crate::diagnostic::Diagnostic>> {
     if let Some(store) = store {
         let prepared = reuse::Prepared::new(program);
-        let mut records = store.records("check", prepared.keys().all());
+        let mut records = store.records("check", prepared.keys().graph(), prepared.keys().all());
         let result = check::recheck_all_cached(original, prepared, &mut records);
         counts.checked_reused += records.hits;
         store.flush(&records);
@@ -484,7 +484,7 @@ fn emit_mutation(
         if let Some(keys) = checked.keys() {
             let grants: Vec<ir::EntryGrant> = Vec::new();
             let namespace = backend::cache_namespace(checked, runtime, &grants, None);
-            let mut records = store.records(&namespace, keys.all());
+            let mut records = store.records(&namespace, keys.graph(), keys.all());
             let image = backend::emit_granted_reusing(
                 checked, runtime, "probe", &grants, Some(3), None, &namespace, &mut records,
             );

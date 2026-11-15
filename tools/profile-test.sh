@@ -16,7 +16,7 @@ awk '
     if ($2 < 0 || $2 > 100 || $3 > total) exit 1
     kinds++
     kind_samples += $3
-    if ($4 == "arithmetic/register" && $3 > 0) arithmetic=1
+    if ($4 == "arithmetic" && $3 > 0) arithmetic=1
   }
   /^[0-9]/ {
     if ($1 < 0 || $1 > 100 || $2 < 0 || $2 > 100 || $3 > total) exit 1
@@ -24,7 +24,7 @@ awk '
     if ($4 == "recurse" && $2 > 50) recursive=1
     if ($4 == "main" && $2 > 50) root=1
   }
-  END { if (NR > 40 || !hot || !recursive || !root || kinds != 10 || kind_samples != total || !arithmetic) exit 1 }
+  END { if (NR > 37 || !hot || !recursive || !root || kinds != 16 || kind_samples != total || !arithmetic) exit 1 }
 ' "$profile_test/report"
 "$compiler" ir tests/fixtures/profile.rs -o "$profile_test/plain.lkjir"
 sed 's/^fn "work" /fn "work\\ncontrol" /' "$profile_test/plain.lkjir" > "$profile_test/named.lkjir"
@@ -33,7 +33,7 @@ sed 's/^fn "work" /fn "work\\ncontrol" /' "$profile_test/plain.lkjir" > "$profil
 cmp "$profile_test/plain.out" "$profile_test/named.out"
 "$compiler" profile "$profile_test"/named.samples.* > "$profile_test/named.report"
 grep -qF 'work\u{a}control' "$profile_test/named.report"
-test "$(wc -l < "$profile_test/named.report")" -le 40
+test "$(wc -l < "$profile_test/named.report")" -le 37
 cp "$profile_test"/sampled.samples.* "$profile_test/invalid-metadata"
 printf '\377\377\377\377\377\377\377\377' |
     dd of="$profile_test/invalid-metadata" bs=1 seek=48 conv=notrunc status=none

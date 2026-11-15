@@ -73,6 +73,16 @@ fn address(endpoint: &str) -> Result<Vec<u8>, String> {
     if part != 4 { return Err(problem("network grant needs four IPv4 octets")); }
     Ok(output)
 }
+/// Canonical numeric endpoint for a validated grant; no host lookup is needed.
+pub fn endpoint(grant: &EntryGrant) -> Option<String> {
+    let address = match grant {
+        EntryGrant::Listener(address) | EntryGrant::Connector(address) => address,
+        _ => return None,
+    };
+    if address.len() != 16 || address[0] != 2 || address[1] != 0 { return None; }
+    let port = (address[2] as u16) * 256u16 + address[3] as u16;
+    Some(format!("{}.{}.{}.{}:{port}", address[4], address[5], address[6], address[7]))
+}
 pub fn prepare(program: &Program, entry: usize, supplied: &[String]) -> Result<Vec<EntryGrant>, String> {
     validate(program, entry)?;
     let function = &program.functions[entry];

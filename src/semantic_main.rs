@@ -13,6 +13,7 @@ pub mod generics;
 pub mod interpreter;
 pub mod ir;
 pub mod ir_text;
+pub mod ir_binary;
 pub mod json;
 pub mod names;
 pub mod native;
