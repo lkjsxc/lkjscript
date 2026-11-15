@@ -63,8 +63,314 @@ pub fn item_delta(before: &semantic::Item, after: &semantic::Item) -> String {
     if before.file != after.file { field(&mut out, "projection-file"); }
     out
 }
+
+pub(crate) mod verified {
+    use crate::{authority, entry_grants, ir, ir_binary, native, semantic, sha256};
+    use std::collections::{BTreeMap, BTreeSet};
+    pub struct Fact {
+        pub identity: String,
+        pub kind: String,
+        pub before: String,
+        pub after: String,
+    }
+    fn word(out: &mut Vec<u8>, value: u64) {
+        for shift in 0usize..8usize { out.push((value >> (shift * 8usize)) as u8); }
+    }
+    fn text(out: &mut Vec<u8>, value: &str) {
+        word(out, value.len() as u64); out.extend_from_slice(value.as_bytes());
+    }
+    fn layout(out: &mut Vec<u8>, value: &native::semantic::Layout) {
+        word(out, value.bytes); word(out, value.alignment as u64);
+        word(out, if value.cleanup { 1u64 } else { 0u64 });
+        word(out, value.fields.len() as u64);
+        for offset in &value.fields { word(out, *offset); }
+        word(out, value.variants.len() as u64);
+        for fields in &value.variants {
+            word(out, fields.len() as u64);
+            for offset in fields { word(out, *offset); }
+        }
+    }
+    fn remap(ty: &mut ir::Type, mapping: &BTreeMap<usize, usize>, labels: bool) {
+        if !labels { ty.name = String::new(); }
+        match &mut ty.kind {
+            ir::TypeKind::Struct { fields, .. } => {
+                for at in 0usize..fields.len() {
+                    if !labels { fields[at].name = String::new(); }
+                    fields[at].ty = *mapping.get(&fields[at].ty).unwrap();
+                }
+            }
+            ir::TypeKind::Enum { variants, .. } => {
+                for at in 0usize..variants.len() {
+                    let variant = &mut variants[at];
+                    if !labels { variant.name = String::new(); }
+                    for field in 0usize..variant.fields.len() {
+                        if !labels { variant.fields[field].name = String::new(); }
+                        variant.fields[field].ty = *mapping.get(&variant.fields[field].ty).unwrap();
+                    }
+                }
+            }
+            ir::TypeKind::Ref { inner, .. } | ir::TypeKind::Slice { inner, .. }
+            | ir::TypeKind::Array { inner, .. } | ir::TypeKind::Vec { inner }
+            | ir::TypeKind::Box { inner } => *inner = *mapping.get(inner).unwrap(),
+            _ => {}
+        }
+    }
+    // Iterative Kosaraju walks each graph edge twice. Components are ordered
+    // from callers/owners to their dependencies, so reverse order hashes leaves
+    // first. Cycles are encoded once, never expanded once per reachable root.
+    fn components(edges: &[Vec<usize>]) -> (Vec<Vec<usize>>, Vec<usize>) {
+        let mut reverse: Vec<Vec<usize>> = vec![Vec::new(); edges.len()];
+        for from in 0usize..edges.len() {
+            for to in &edges[from] { reverse[*to].push(from); }
+        }
+        let mut seen = vec![false; edges.len()];
+        let mut finished = Vec::new();
+        for root in 0usize..edges.len() {
+            if seen[root] { continue; }
+            let mut stack = vec![(root, 0usize)];
+            seen[root] = true;
+            while !stack.is_empty() {
+                let top = stack.len() - 1usize;
+                let (node, next) = stack[top];
+                if next == edges[node].len() {
+                    stack.pop(); finished.push(node);
+                } else {
+                    let child = edges[node][next];
+                    stack[top].1 += 1usize;
+                    if !seen[child] { seen[child] = true; stack.push((child, 0usize)); }
+                }
+            }
+        }
+        let mut groups: Vec<Vec<usize>> = Vec::new();
+        let mut membership = vec![edges.len(); edges.len()];
+        while let Some(root) = finished.pop() {
+            if membership[root] != edges.len() { continue; }
+            let group = groups.len();
+            let mut members = Vec::new();
+            let mut pending = vec![root];
+            membership[root] = group;
+            while let Some(node) = pending.pop() {
+                members.push(node);
+                for predecessor in &reverse[node] {
+                    if membership[*predecessor] == edges.len() {
+                        membership[*predecessor] = group;
+                        pending.push(*predecessor);
+                    }
+                }
+            }
+            groups.push(members);
+        }
+        (groups, membership)
+    }
+    fn fingerprints(program: &ir::Program, names: &[String], layouts: &[native::semantic::Layout],
+        labels: bool) -> Vec<String> {
+        let mut edges = Vec::new();
+        for ty in &program.types { edges.push(super::children(&ty.kind)); }
+        let (groups, membership) = components(&edges);
+        let mut hashes = vec![String::new(); program.types.len()];
+        let mut remaining = groups.len();
+        while remaining != 0usize {
+            remaining -= 1usize;
+            let mut ordered: Vec<(String, usize)> = Vec::new();
+            for index in &groups[remaining] { ordered.push((names[*index].clone(), *index)); }
+            ordered.sort();
+            let mut mapping: BTreeMap<usize, usize> = BTreeMap::new();
+            for at in 0usize..ordered.len() { mapping.insert(ordered[at].1, at); }
+            let mut external: BTreeSet<String> = BTreeSet::new();
+            for (_, index) in &ordered {
+                for child in &edges[*index] {
+                    if membership[*child] != remaining { external.insert(hashes[*child].clone()); }
+                }
+            }
+            let mut external_ids = BTreeMap::new();
+            for digest in &external {
+                let at = ordered.len() + external_ids.len();
+                external_ids.insert(digest.clone(), at);
+            }
+            for (_, index) in &ordered {
+                for child in &edges[*index] {
+                    if membership[*child] != remaining {
+                        mapping.insert(*child, *external_ids.get(&hashes[*child]).unwrap());
+                    }
+                }
+            }
+            let mut projected = ir::Program { sources: Vec::new(), types: Vec::new(),
+                functions: Vec::new(), destructors: Vec::new() };
+            let mut bytes = if labels { b"lkjscript-ir-type-identity-linux-x86_64-1\0"[..].to_vec() }
+                else { b"lkjscript-ir-type-shape-linux-x86_64-1\0"[..].to_vec() };
+            word(&mut bytes, ordered.len() as u64);
+            for (_, original) in &ordered {
+                let mut ty = program.types[*original].clone();
+                ty.name = names[*original].clone();
+                remap(&mut ty, &mapping, labels);
+                projected.types.push(ty);
+                layout(&mut bytes, &layouts[*original]);
+            }
+            // These are encoded dependency digests, not checked placeholder types.
+            for digest in external { projected.types.push(ir::Type { name: digest, kind: ir::TypeKind::Unit }); }
+            bytes.extend_from_slice(&ir_binary::write(&projected));
+            let component = sha256::hex_digest(&bytes);
+            for at in 0usize..ordered.len() {
+                let mut root = b"lkjscript-ir-type-component-root-1\0"[..].to_vec();
+                text(&mut root, &component); word(&mut root, at as u64);
+                hashes[ordered[at].1] = sha256::hex_digest(&root);
+            }
+        }
+        hashes
+    }
+    pub fn type_identities(checked: &ir::CheckedProgram) -> Result<Vec<String>, String> {
+        let layouts = native::semantic::layouts(checked).map_err(|problem| -> String { problem.message })?;
+        let mut names = Vec::new();
+        for index in 0usize..checked.program().types.len() {
+            names.push(semantic::ir_type_name(checked.program(), index));
+        }
+        Ok(fingerprints(checked.program(), &names, &layouts, true))
+    }
+    fn instance(program: &ir::Program, catalog: &semantic::Catalog, shapes: &[String], index: usize) -> String {
+        let original = &program.functions[index];
+        let mut type_names: BTreeSet<String> = BTreeSet::new();
+        type_names.insert(shapes[original.result].clone());
+        for local in &original.locals { type_names.insert(shapes[local.ty].clone()); }
+        let mut callees: BTreeSet<String> = BTreeSet::new();
+        for instruction in &original.body {
+            if let ir::Op::Call { function, .. } = instruction.op {
+                callees.insert(catalog.instance_ids[function].clone());
+            }
+        }
+        let mut type_ids: BTreeMap<String, usize> = BTreeMap::new();
+        let mut call_ids: BTreeMap<String, usize> = BTreeMap::new();
+        let mut bytes = b"lkjscript-ir-instance-body-1\0"[..].to_vec();
+        word(&mut bytes, type_names.len() as u64);
+        for name in type_names { text(&mut bytes, &name); let at = type_ids.len(); type_ids.insert(name, at); }
+        word(&mut bytes, callees.len() as u64);
+        for name in callees { text(&mut bytes, &name); let at = call_ids.len(); call_ids.insert(name, at); }
+        let mut value = original.clone();
+        value.name = String::new(); value.file = 0usize;
+        value.result = *type_ids.get(&shapes[value.result]).unwrap();
+        for at in 0usize..value.locals.len() {
+            value.locals[at].name = String::new();
+            value.locals[at].ty = *type_ids.get(&shapes[value.locals[at].ty]).unwrap();
+        }
+        for at in 0usize..value.body.len() {
+            let instruction = &mut value.body[at];
+            instruction.file = None; instruction.line = 0usize; instruction.column = 0usize;
+            if let ir::Op::Call { function, .. } = &mut instruction.op {
+                *function = *call_ids.get(&catalog.instance_ids[*function]).unwrap();
+            }
+        }
+        bytes.extend_from_slice(&ir_binary::write_function(&value));
+        sha256::hex_digest(&bytes)
+    }
+    fn join(values: &BTreeSet<String>) -> String {
+        let mut out = String::new();
+        for value in values { if !out.is_empty() { out.push(','); } out.push_str(value); }
+        out
+    }
+    pub fn authority_sets(checked: &ir::CheckedProgram, catalog: &semantic::Catalog) -> BTreeMap<String, BTreeSet<String>> {
+        let relations = authority::relations(checked);
+        let mut edges: Vec<Vec<usize>> = Vec::new();
+        for relation in &relations {
+            let mut children = Vec::new();
+            for (callee, _) in &relation.calls { children.push(*callee); }
+            edges.push(children);
+        }
+        let (groups, membership) = components(&edges);
+        let mut effects: Vec<BTreeSet<String>> = vec![BTreeSet::new(); groups.len()];
+        let mut remaining = groups.len();
+        while remaining != 0usize {
+            remaining -= 1usize;
+            let mut values: BTreeSet<String> = BTreeSet::new();
+            for function in &groups[remaining] {
+                for operation in &relations[*function].operations {
+                    values.insert(format!("effect:{}", operation.name));
+                }
+                for callee in &edges[*function] {
+                    let group = membership[*callee];
+                    if group != remaining {
+                        for effect in &effects[group] { values.insert(effect.clone()); }
+                    }
+                }
+            }
+            effects[remaining] = values;
+        }
+        let mut result = BTreeMap::new();
+        for index in 0usize..checked.program().functions.len() {
+            if entry_grants::validate(checked.program(), index).is_err() { continue; }
+            let manifest = match authority::manifest(checked, index) { Ok(value) => value, Err(_) => continue };
+            let mut values = effects[membership[index]].clone();
+            if manifest.full_world { values.insert("grant:World".to_string()); }
+            for grant in &manifest.requirements {
+                values.insert(format!("grant:{}:{}", grant.parameter, grant.capability));
+            }
+            result.insert(catalog.instance_ids[index].clone(), values);
+        }
+        result
+    }
+    pub fn authorities(checked: &ir::CheckedProgram, catalog: &semantic::Catalog) -> BTreeMap<String, String> {
+        let mut result = BTreeMap::new();
+        for (name, values) in authority_sets(checked, catalog) { result.insert(name, join(&values)); }
+        result
+    }
+    fn delta(out: &mut Vec<Fact>, kind: &str, old: &BTreeMap<String, String>, new: &BTreeMap<String, String>) {
+        let mut names: BTreeSet<String> = BTreeSet::new();
+        for (name, _) in old { names.insert(name.clone()); }
+        for (name, _) in new { names.insert(name.clone()); }
+        for name in names {
+            if old.get(&name) == new.get(&name) { continue; }
+            let before = match old.get(&name) { Some(value) => value.clone(), None => "absent".to_string() };
+            let after = match new.get(&name) { Some(value) => value.clone(), None => "absent".to_string() };
+            out.push(Fact { identity: name, kind: kind.to_string(), before, after });
+        }
+    }
+    fn shapes(checked: &ir::CheckedProgram) -> Result<(Vec<String>, BTreeMap<String, String>, BTreeMap<String, String>), String> {
+        let program = checked.program();
+        let layouts = native::semantic::layouts(checked).map_err(|problem| -> String { problem.message })?;
+        let mut names = Vec::new();
+        for index in 0usize..program.types.len() { names.push(semantic::ir_type_name(program, index)); }
+        let shapes = fingerprints(program, &names, &layouts, false);
+        let identities = fingerprints(program, &names, &layouts, true);
+        let mut physical = BTreeMap::new();
+        let mut nominal = BTreeMap::new();
+        for index in 0usize..program.types.len() {
+            let identity = format!("ir:type:{}", names[index]);
+            let mut bytes = Vec::new(); layout(&mut bytes, &layouts[index]);
+            physical.insert(identity.clone(), format!("bytes={} alignment={} layout={}",
+                layouts[index].bytes, layouts[index].alignment, sha256::hex_digest(&bytes)));
+            nominal.insert(identity, identities[index].clone());
+        }
+        Ok((shapes, physical, nominal))
+    }
+    fn destructors(checked: &ir::CheckedProgram, catalog: &semantic::Catalog) -> BTreeMap<String, String> {
+        let mut values = BTreeMap::new();
+        for (ty, function) in &checked.program().destructors {
+            values.insert(format!("ir:type:{}", semantic::ir_type_name(checked.program(), *ty)), catalog.instance_ids[*function].clone());
+        }
+        values
+    }
+    pub fn changes(before: &semantic::Catalog, old: &ir::CheckedProgram,
+        after: &semantic::Catalog, new: &ir::CheckedProgram) -> Result<Vec<Fact>, String> {
+        let mut out = Vec::new();
+        delta(&mut out, "authority", &authorities(old, before), &authorities(new, after));
+        let (old_shapes, old_layouts, old_types) = shapes(old)?;
+        let (new_shapes, new_layouts, new_types) = shapes(new)?;
+        delta(&mut out, "layout", &old_layouts, &new_layouts);
+        delta(&mut out, "type-identity", &old_types, &new_types);
+        delta(&mut out, "destructor", &destructors(old, before), &destructors(new, after));
+        let mut old_instances = BTreeMap::new();
+        let mut new_instances = BTreeMap::new();
+        for index in 0usize..old.program().functions.len() {
+            old_instances.insert(before.instance_ids[index].clone(), instance(old.program(), before, &old_shapes, index));
+        }
+        for index in 0usize..new.program().functions.len() {
+            new_instances.insert(after.instance_ids[index].clone(), instance(new.program(), after, &new_shapes, index));
+        }
+        delta(&mut out, "instance", &old_instances, &new_instances);
+        Ok(out)
+    }
+}
+
 pub fn compare(before: &semantic::Catalog, old: &ir::CheckedProgram,
-    after: &semantic::Catalog, new: &ir::CheckedProgram, limit: usize, detail: &str) -> String {
+    after: &semantic::Catalog, new: &ir::CheckedProgram, limit: usize, detail: &str) -> Result<String, String> {
     let old_meaning = identity(old);
     let new_meaning = identity(new);
     let old_exact = exact_identity(old);
@@ -77,12 +383,23 @@ pub fn compare(before: &semantic::Catalog, old: &ir::CheckedProgram,
     } else { "checked IR differs" };
     out.push_str(&format!("program level=checked-ir verdict={} diagnostic-metadata={}\n",
         semantic::quote(verdict), if old_exact == new_exact { "identical" } else { "differs" }));
+    let verified = verified::changes(before, old, after, new)?;
     let mut names: BTreeSet<String> = BTreeSet::new();
     for value in &before.items { names.insert(value.identity.clone()); }
     for value in &after.items { names.insert(value.identity.clone()); }
     let mut emitted = 0usize;
     let mut omitted = 0usize;
     let mut changed = 0usize;
+    for fact in &verified {
+        if !detail.is_empty() && detail != fact.identity { continue; }
+        changed += 1usize;
+        if emitted < limit {
+            out.push_str(&format!("{} level=checked-ir changed={} before={} after={}\n",
+                semantic::quote(&fact.identity), fact.kind, semantic::quote(&fact.before), semantic::quote(&fact.after)));
+            emitted += 1usize;
+        } else { omitted += 1usize; }
+    }
+    let verified_changes = changed;
     for name in names {
         if !detail.is_empty() && detail != name { continue; }
         let old_item = before.by_identity.get(&name).map(|index| &before.items[*index]);
@@ -100,9 +417,9 @@ pub fn compare(before: &semantic::Catalog, old: &ir::CheckedProgram,
             emitted += 1usize;
         } else { omitted += 1usize; }
     }
-    out.push_str(&format!("program changed-identities={} shown={} omitted={} detail=--id identity\n",
-        changed, emitted, omitted));
-    out
+    out.push_str(&format!("program changed-facts={} checked-facts={} source-facts={} shown={} omitted={} detail=--id identity\n",
+        changed, verified_changes, changed - verified_changes, emitted, omitted));
+    Ok(out)
 }
 
 
@@ -131,21 +448,21 @@ fn children(kind: &ir::TypeKind) -> Vec<usize> {
     }
     out
 }
-fn remap_type(value: &mut ir::Type, types: &[Option<usize>]) {
-    value.name = String::new();
+fn remap_type(value: &mut ir::Type, types: &[Option<usize>], diagnostic_metadata: bool) {
+    if !diagnostic_metadata { value.name = String::new(); }
     match &mut value.kind {
         ir::TypeKind::Struct { fields, .. } => {
             for index in 0usize..fields.len() {
-                fields[index].name = String::new();
+                if !diagnostic_metadata { fields[index].name = String::new(); }
                 fields[index].ty = types[fields[index].ty].unwrap();
             }
         }
         ir::TypeKind::Enum { variants, .. } => {
             for index in 0usize..variants.len() {
                 let variant = &mut variants[index];
-                variant.name = String::new();
+                if !diagnostic_metadata { variant.name = String::new(); }
                 for field in 0usize..variant.fields.len() {
-                    variant.fields[field].name = String::new();
+                    if !diagnostic_metadata { variant.fields[field].name = String::new(); }
                     variant.fields[field].ty = types[variant.fields[field].ty].unwrap();
                 }
             }
@@ -196,7 +513,7 @@ pub fn closure_identity(checked: &ir::CheckedProgram, entry: usize, diagnostic_m
     let mut source_ids: std::collections::BTreeMap<usize, usize> = std::collections::BTreeMap::new();
     for original in &type_order {
         let mut value = program.types[*original].clone();
-        remap_type(&mut value, &types);
+        remap_type(&mut value, &types, diagnostic_metadata);
         projected.types.push(value);
         if let Some(function) = destructors.get(original) {
             projected.destructors.push((types[*original].unwrap(), functions[*function].unwrap()));

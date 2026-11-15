@@ -83,24 +83,7 @@ fn unchanged_inputs(world: &mut World, before: &Memo, after: &Memo) -> Result<()
     }
     Ok(())
 }
-fn entries(checked: &ir::CheckedProgram, catalog: &semantic::Catalog) -> BTreeMap<String, BTreeSet<String>> {
-    let program = checked.program();
-    let mut entries: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    for index in 0usize..program.functions.len() {
-        if entry_grants::validate(program, index).is_err() { continue; }
-        let report = match authority::analyze(checked, index) { Ok(report) => report, Err(_) => continue };
-        let mut facts: BTreeSet<String> = BTreeSet::new();
-        if report.manifest.full_world { facts.insert("grant:World".to_string()); }
-        for requirement in &report.manifest.requirements {
-            facts.insert(format!("grant:{}:{}", requirement.parameter, requirement.capability));
-        }
-        for function in &report.functions {
-            for operation in &function.operations { facts.insert(format!("effect:{}", operation.name)); }
-        }
-        entries.insert(catalog.instance_ids[index].clone(), facts);
-    }
-    entries
-}
+fn entries(checked: &ir::CheckedProgram, catalog: &semantic::Catalog) -> BTreeMap<String, BTreeSet<String>> { meaning::verified::authority_sets(checked, catalog) }
 fn joined(values: &[String]) -> String {
     let mut out = String::new();
     for value in values {
@@ -155,7 +138,7 @@ fn compare(world: &mut World, request: &Request, stats: &mut Stats) -> Result<u8
     finish(&mut after);
     let new_catalog = after.catalog.take().ok_or("E_EDIT_SOURCE comparison requires source, not raw IR")?;
     let out = meaning::compare(&old_catalog, old.original().checked(), &new_catalog,
-        new.original().checked(), request.limit, &request.detail);
+        new.original().checked(), request.limit, &request.detail)?;
     world.stdout().write(out.as_bytes());
     Ok(0u8)
 }
