@@ -398,3 +398,32 @@ fn namespace_following(file: &SourceText, span: a::Span) -> bool {
         && file.tokens[at + 2usize].kind == 0u8
         && file.tokens[at + 2usize].text != "self"
 }
+
+pub(super) fn untyped_local(program: &a::Program, bindings: &BTreeMap<(String, String), usize>,
+    function: usize, owner: &str, name: &str, span: a::Span) -> Option<LocalTarget> {
+    // The caller selected this exact innermost declaration through Owners.
+    // A nested function has its own environment; other item owners cannot call
+    // this fallback. This proves lexical identity only, never an inferred type.
+    let function = &program.functions[function];
+    let body = &program.blocks[function.body?];
+    if span.file != body.span.file || span.start < body.span.start || span.end > body.span.end { return None; }
+    let count = bindings.get(&(owner.to_string(), name.to_string())).copied().unwrap_or(0usize);
+    let mut parameter = None;
+    for (index, value) in function.params.iter().enumerate() {
+        if value.name != name { continue; }
+        if parameter.is_some() { return None; }
+        parameter = Some(index);
+    }
+    if count == 0usize { return parameter.map(|position: usize| LocalTarget::Parameter(position)); }
+    // All patterns, including closure parameters, contribute to count. Even a
+    // shadow in an unrelated branch leaves the exact binding unproved here.
+    if count != 1usize || parameter.is_some() { return None; }
+    for statement in &body.statements {
+        let a::Stmt::Let { pattern, span: declaration, .. } = statement else { continue; };
+        let a::Pattern::Bind { name: binding, .. } = &program.patterns[*pattern].kind else { continue; };
+        if binding == name && declaration.file == span.file && declaration.end <= span.start {
+            return Some(LocalTarget::Pattern(*pattern));
+        }
+    }
+    None
+}

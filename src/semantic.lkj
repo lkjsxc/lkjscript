@@ -612,12 +612,17 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
             match &node.kind {
                 a::Expr::Path(path) | a::Expr::Struct { path, .. } => {
                     path_qualifications(&mut result, &files, program, &resolver, &owner, node.scope, node.span);
-                    let local_target = evidence.as_ref().and_then(|evidence| evidence.locals.get(&expression)).copied();
+                    let typed_owner = evidence.as_ref().is_some_and(|evidence| source_functions.get(&owner).is_some_and(|function| evidence.definitions.contains(function)));
+                    let mut local_target = evidence.as_ref().and_then(|evidence| evidence.locals.get(&expression)).copied();
+                    if local_target.is_none() && !typed_owner && matches!(node.kind, a::Expr::Path(_)) {
+                        if let Some(function) = source_functions.get(&owner) {
+                            local_target = untyped_local(program, &binding_counts, *function, &owner, &path.name, node.span);
+                        }
+                    }
                     if let Some(target) = local_target {
                         local_reference(&mut result, &files, program, &binding_ids, &source_functions, &owner, node, &path.name, target);
                         continue;
                     }
-                    let typed_owner = evidence.as_ref().is_some_and(|evidence| source_functions.get(&owner).is_some_and(|function| evidence.definitions.contains(function)));
                     let local = !typed_owner && local_names.get(&owner).is_some_and(|locals| locals.contains(&path.name));
                     if local {
                         add_reference(&mut result, &files, owner, path.name.clone(), node.span, leaf_name(&path.name), "lexical-name", false);

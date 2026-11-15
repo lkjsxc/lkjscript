@@ -307,4 +307,65 @@ mv "$fixture/hidden-source" "$fixture/source"
 build
 query authority writes > "$fixture/repaired"
 grep -Eq stdout_write "$fixture/repaired" || fail 'indexed rebuild did not repair the missing page'
+# Library definitions remain undemanded: lexical evidence must not invent types.
+mkdir "$fixture/untyped" "$fixture/untyped-library" "$fixture/untyped-store"
+cat > "$fixture/untyped/main.lkj" <<'SOURCE'
+fn main() -> i64 { 0i64 }
+SOURCE
+cat > "$fixture/untyped-library/lib.lkj" <<'SOURCE'
+pub mod scope {
+    pub fn target() -> i64 { 7i64 }
+    pub fn unshadowed(target: i64) -> i64 { target }
+    pub fn top_local() -> i64 { let target = 3i64; target }
+    pub fn shadowed(target: i64) -> i64 { let target = target + 1i64; target }
+    pub fn before() -> i64 { let first = target(); let target = 1i64; first + target }
+    pub fn initializer() -> i64 { let target = target(); target }
+    pub fn nested_block() -> i64 { { let target = 1i64; let _ = target; } target() }
+    pub fn closure_shadow(target: i64) -> i64 { (|target: i64| -> i64 { target })(1i64) }
+    pub fn outer(target: i64) -> i64 { fn inner() -> i64 { target() } inner() + target }
+    pub const SOURCE: i64 = 9i64;
+    pub fn item_boundary(SOURCE: i64) -> i64 { const N: i64 = SOURCE; N + SOURCE }
+}
+SOURCE
+untyped_common=(main.lkj --source-dir "$fixture/untyped" --library-dir "$fixture/untyped-library" --store "$fixture/untyped-store" --store-key "$fixture/key")
+"$compiler" build "${untyped_common[@]}" --index -o "$fixture/untyped-image" > "$fixture/untyped-build.log" 2>&1 || { cat "$fixture/untyped-build.log" >&2; fail 'untyped library build'; }
+untyped_snapshot=$(sed -n 's/^LKJSCRIPT_SNAPSHOT \([0-9a-f]*\) .*/\1/p' "$fixture/untyped-build.log")
+[[ ${#untyped_snapshot} == 64 ]] || fail 'untyped library snapshot'
+untyped_query() { "$compiler" query "${untyped_common[@]}" --snapshot "$untyped_snapshot" --kind "$1" --id "$2" --limit 80; }
+untyped_query references std::scope::unshadowed > "$fixture/untyped-param"
+grep -Eq '^"std::scope::unshadowed::param:target".*kind=local-value' "$fixture/untyped-param" || fail 'unshadowed library parameter identity missing'
+if grep -Eq 'kind=lexical-name' "$fixture/untyped-param"; then fail 'proved parameter remained ambiguous'; fi
+untyped_query references std::scope::top_local > "$fixture/untyped-local"
+local_identity=$(sed -n 's/^"\(std::scope::top_local::body:[^"]*::binding:target:0\)".*kind=local-value.*/\1/p' "$fixture/untyped-local")
+[[ -n "$local_identity" ]] || fail 'unique top-level library binding identity missing'
+untyped_query type "$local_identity" > "$fixture/untyped-local-type"
+grep -Eq 'fact=type-unavailable' "$fixture/untyped-local-type" || fail 'lexical identity invented an inferred type'
+for identity in shadowed before initializer nested_block closure_shadow; do
+    untyped_query references "std::scope::$identity" > "$fixture/untyped-ambiguous"
+    grep -Eq 'kind=lexical-name.*claim=partial' "$fixture/untyped-ambiguous" || fail "unproved lexical scope was accepted: $identity"
+done
+untyped_query references std::scope::outer > "$fixture/untyped-outer"
+grep -Eq '^"std::scope::outer::param:target".*kind=local-value' "$fixture/untyped-outer" || fail 'outer parameter identity missing'
+untyped_query uses std::scope::target > "$fixture/untyped-inner"
+grep -Eq 'inner".*kind=value' "$fixture/untyped-inner" || fail 'nested function captured the outer parameter'
+untyped_query uses std::scope::SOURCE > "$fixture/untyped-item"
+grep -Eq '::N".*kind=value' "$fixture/untyped-item" || fail 'nested constant captured the outer parameter'
+cat > "$fixture/untyped-refuse.json" <<'REQUEST'
+{"version":1,"operations":[{"op":"rename","id":"std::scope::target","name":"renamed"}]}
+REQUEST
+if "$compiler" edit main.lkj --source-dir "$fixture/untyped" --library-dir "$fixture/untyped-library" --no-store --store-key "$fixture/key" --dry-run --request "$fixture/untyped-refuse.json" > "$fixture/untyped-refuse.out" 2> "$fixture/untyped-refuse.err"; then
+    fail 'rename ignored an unproved library lexical use'
+fi
+grep -Eq 'E_EDIT_REFERENCES' "$fixture/untyped-refuse.err" || { cat "$fixture/untyped-refuse.err" >&2; fail 'missing lexical rename refusal'; }
+mkdir "$fixture/library-rename"
+cat > "$fixture/library-rename/main.lkj" <<'SOURCE'
+mod edit { pub fn target(value: u64) -> u64 { value ^ 1u64 } }
+fn main() -> u64 { edit::target(41u64) }
+SOURCE
+cat > "$fixture/library-rename.json" <<'REQUEST'
+{"version":1,"operations":[{"op":"rename","id":"edit::target","name":"target_renamed"}]}
+REQUEST
+"$compiler" edit main.lkj --source-dir "$fixture/library-rename" --library-dir "$PWD/library" --no-store --store-key "$fixture/key" --dry-run --request "$fixture/library-rename.json" > "$fixture/library-rename.out" 2> "$fixture/library-rename.err" || { cat "$fixture/library-rename.err" >&2; fail 'real-library free-function rename'; }
+grep -Eq 'mode=dry-run' "$fixture/library-rename.out" || fail 'missing checked real-library rename plan'
+
 printf 'ok semantic-query: identities, source/IR levels, ordinary authority, all question kinds, bounded authenticated cursor, source-free lookup, physical move/formatting, explicit snapshot replay and five index attacks\n'
