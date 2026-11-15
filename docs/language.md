@@ -412,7 +412,7 @@ on stderr and exit 1, preserving prior output. Both routes format scalars identi
 the source root; --library-dir/--runtime-source replace embedded components explicitly.
 --help gives options. Test expectation headers declare value, output bytes, diagnostic
 or trap; pending headers name the missing intended feature. The gate compares exact
-values/bytes/status/file effects and trap kinds; exhaustion locations may differ.
+values/bytes/status/file effects and trap kinds; R0004 expectations classify custom traps, while same-source native/interpreter comparisons preserve their full code, message and location. Exhaustion locations may differ.
 Terminating cases use generous watchdogs, mutants a separate short allowance.
 
 Parser recovery synchronizes balanced item/method/statement boundaries, marking

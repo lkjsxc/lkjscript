@@ -48,8 +48,8 @@ Measure self-built / witness opt=0 / witness -O and emitted kinds; stop near 3x 
 or after two measured causes are gone. Keep compiler, call/vector, HTTP and map rows in bench/.
 Scalar Clone lowers to Read. --inline-limit N copies small acyclic bodies and forwards dead temporaries.
 Recheck changed bodies; exact original bodies under unchanged shared graphs retain their proof.
-Keep the original interpreter/authority oracle and copied source locations; reject the whole bad candidate.
-Default zero: measured cold self-build admission costs exceed the generated-code gains; inlining stays explicit.
+Keep the original interpreter/authority oracle and copied source locations; compare complete custom traps and reject the whole bad candidate.
+Default zero: measured cold self-build admission costs exceed code gains; inlining stays explicit. The 3x witness target remains unmet.
 
 ## One executable and bootstrap
 
