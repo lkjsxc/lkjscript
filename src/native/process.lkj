@@ -325,6 +325,7 @@ fn spawn(a: &mut Assembler, p: Platform) {
     a.store(BP, -8, DI);
     a.immediate(A, 0);
     a.store(BP, -24, A);
+    a.store(BP, -144, A); // Received bytes in the exec-status handshake.
     for offset in vec![-40i64, -48, -56, -64, -72, -80, -88] {
         a.immediate(A, !0u64);
         a.store(BP, offset, A);
@@ -445,6 +446,8 @@ fn spawn(a: &mut Assembler, p: Platform) {
         a.store(BP, -56 - index as i64 * 8, A);
         a.bind(duplicated);
     }
+    syscall(a, 39);
+    a.store(BP, -136, A); // Original owner, captured before fork.
     syscall(a, 57);
     a.test(A, true);
     a.condition(8, failed);
@@ -455,15 +458,42 @@ fn spawn(a: &mut Assembler, p: Platform) {
     a.syscall();
     a.immediate(A, !0u64);
     a.store(BP, -48, A);
+    let status_read = a.label();
+    let status_eof = a.label();
+    let status_failed = a.label();
+    let launched = a.label();
+    a.bind(status_read);
+    a.load(R8, BP, -144);
     a.load(DI, BP, -40);
     a.lea(SI, BP, -128);
+    a.rr(0x01, SI, R8, true);
     a.immediate(D, 8);
+    a.rr(0x29, D, R8, true);
     syscall(a, 0);
     a.test(A, true);
-    let launched = a.label();
-    a.condition(4, launched);
+    a.condition(8, status_failed);
+    a.condition(4, status_eof);
+    a.load(R8, BP, -144);
+    a.rr(0x01, R8, A, true);
+    a.store(BP, -144, R8);
+    a.immediate(A, 8);
+    a.compare(R8, A);
+    a.condition(5, status_read);
     a.load(A, BP, -128);
+    a.test(A, true);
+    a.condition(8, status_failed);
+    a.immediate(A, (-5i64) as u64);
+    a.jump(status_failed);
+    a.bind(status_eof);
+    a.load(A, BP, -144);
+    a.test(A, true);
+    a.condition(4, launched);
+    a.immediate(A, (-5i64) as u64);
+    a.bind(status_failed);
     a.store(BP, -112, A);
+    a.load(DI, BP, -104);
+    a.immediate(SI, 9);
+    syscall(a, 62);
     a.load(DI, BP, -104);
     a.immediate(SI, 0);
     a.immediate(D, 0);
@@ -485,6 +515,14 @@ fn spawn(a: &mut Assembler, p: Platform) {
     syscall(a, 157); // PR_SET_PDEATHSIG: owner death stops the child.
     a.test(A, true);
     a.condition(8, child_failed);
+    syscall(a, 110);
+    a.load(C, BP, -136);
+    a.compare(A, C);
+    let owner_alive = a.label();
+    a.condition(4, owner_alive);
+    a.immediate(A, (-10i64) as u64);
+    a.jump(child_failed);
+    a.bind(owner_alive);
     a.immediate(DI, 13);
     a.address(SI, signal_default);
     a.immediate(D, 0);
@@ -512,6 +550,14 @@ fn spawn(a: &mut Assembler, p: Platform) {
         a.syscall();
         a.bind(assigned);
     }
+    // Keep only the explicitly assigned stdio/result slots at exec. The
+    // executable and error pipe remain usable until successful exec closes them.
+    a.immediate(DI, 4);
+    a.immediate(SI, 0xffffffff);
+    a.immediate(D, 4); // CLOSE_RANGE_CLOEXEC.
+    syscall(a, 436);
+    a.test(A, true);
+    a.condition(8, child_failed);
     a.load(DI, BP, -56);
     a.address(SI, empty);
     a.load(D, BP, -24);
@@ -523,7 +569,17 @@ fn spawn(a: &mut Assembler, p: Platform) {
     a.load(DI, BP, -48);
     a.lea(SI, BP, -128);
     a.immediate(D, 8);
+    let status_write = a.label();
+    let child_exit = a.label();
+    a.bind(status_write);
     syscall(a, 1);
+    a.test(A, true);
+    a.condition(14, child_exit);
+    a.rr(0x01, SI, A, true);
+    a.rr(0x29, D, A, true);
+    a.test(D, true);
+    a.condition(5, status_write);
+    a.bind(child_exit);
     a.immediate(DI, 127);
     a.immediate(A, 60);
     a.syscall();

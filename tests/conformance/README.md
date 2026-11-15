@@ -43,9 +43,9 @@ generous suite watchdog and accounts for all workers within LKJSCRIPT_GATE_JOBS
 (2..8). The HTTP suite reserves two workers for its server/client pair; individual
 `lkjscript test --jobs 1` runs remain available.
 
-The four pending cases specify scoped tasks and rejection of escaping borrowed
-closures. They remain tests of intended language rules; unrelated rejection,
-wrong results, and malformed worker output fail the suite.
+Only borrowed_closure_escape remains pending. The former claim of three scoped-task
+cases was stale; concurrency now uses isolated processes, without shared-address-space
+thread rules. Unrelated rejection, wrong results and malformed worker output fail.
 
 The mandatory gate requires no Rust or Node. `bash witness/check.sh` optionally
 builds the Rust witness, compares complete compiler bytes, and checks every

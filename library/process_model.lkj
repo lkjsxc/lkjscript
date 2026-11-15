@@ -1,0 +1,210 @@
+//! Independent observable-protocol specification for isolated process workers.
+//! This validates event histories; it does not schedule native processes and is
+//! not a data-race detector. Runtime specimens supply their actual histories.
+
+#[derive(Clone, Copy)]
+pub enum Event {
+    Dispatch(usize, usize),
+    Complete(usize, usize, u64),
+    Eof,
+    Shutdown(usize),
+    Exit(usize, i64),
+    Commit,
+}
+
+struct WorkerState {
+    job: Option<usize>,
+    shutdown: bool,
+    exited: bool,
+}
+pub struct Outcome {
+    pub accepted: usize,
+    pub completed: usize,
+    pub exited: usize,
+    pub failed: bool,
+    pub committed: bool,
+    /// Empty before commit and on every failed invocation; otherwise input order.
+    pub results: Vec<u64>,
+}
+struct Pool {
+    workers: Vec<WorkerState>,
+    results: Vec<Option<u64>>,
+    capacity: usize,
+    accepted: usize,
+    completed: usize,
+    active: usize,
+    eof: bool,
+    failed: bool,
+    committed: bool,
+}
+impl Pool {
+    fn invariant(&self) -> bool {
+        if self.active > self.capacity || self.accepted > self.results.len()
+            || self.completed > self.accepted { return false; }
+        let mut active = 0usize;
+        let mut worker = 0usize;
+        while worker < self.workers.len() {
+            if let Some(job) = self.workers[worker].job {
+                if self.workers[worker].shutdown || self.workers[worker].exited
+                    || job >= self.accepted || self.results[job].is_some() { return false; }
+                active += 1usize;
+                let mut other = 0usize;
+                while other < worker {
+                    if self.workers[other].job == Some(job) { return false; }
+                    other += 1usize;
+                }
+            }
+            worker += 1usize;
+        }
+        let mut completed = 0usize;
+        let mut job = 0usize;
+        while job < self.results.len() {
+            if self.results[job].is_some() {
+                if job >= self.accepted { return false; }
+                completed += 1usize;
+            }
+            job += 1usize;
+        }
+        active == self.active && completed == self.completed
+    }
+
+    fn apply(&mut self, expected: &[u64], event: Event) -> bool {
+        if self.committed { return false; }
+        match event {
+            Event::Dispatch(worker, job) => {
+                if self.eof || self.failed || worker >= self.workers.len()
+                    || job != self.accepted || job >= expected.len()
+                    || self.active == self.capacity { return false; }
+                if self.workers[worker].job.is_some() || self.workers[worker].shutdown
+                    || self.workers[worker].exited { return false; }
+                self.workers[worker].job = Some(job);
+                self.accepted += 1usize;
+                self.active += 1usize;
+            }
+            Event::Complete(worker, job, value) => {
+                if worker >= self.workers.len() || job >= self.accepted
+                    || self.workers[worker].job != Some(job)
+                    || self.results[job].is_some() || value != expected[job] { return false; }
+                self.workers[worker].job = None;
+                self.results[job] = Some(value);
+                self.active -= 1usize;
+                self.completed += 1usize;
+            }
+            Event::Eof => {
+                if self.eof { return false; }
+                self.eof = true;
+            }
+            Event::Shutdown(worker) => {
+                if !self.eof || worker >= self.workers.len()
+                    || self.workers[worker].job.is_some()
+                    || self.workers[worker].shutdown || self.workers[worker].exited { return false; }
+                self.workers[worker].shutdown = true;
+            }
+            Event::Exit(worker, status) => {
+                if worker >= self.workers.len() || self.workers[worker].exited { return false; }
+                if self.workers[worker].job.is_some() {
+                    self.workers[worker].job = None;
+                    self.active -= 1usize;
+                }
+                if status != 0i64 || !self.workers[worker].shutdown { self.failed = true; }
+                self.workers[worker].exited = true;
+            }
+            Event::Commit => {
+                if !self.eof || self.failed || self.active != 0usize
+                    || self.accepted != self.completed { return false; }
+                let mut worker = 0usize;
+                while worker < self.workers.len() {
+                    if !self.workers[worker].exited { return false; }
+                    worker += 1usize;
+                }
+                self.committed = true;
+            }
+        }
+        self.invariant()
+    }
+}
+
+/// Validate the observed sequence. Successful prefixes return an uncommitted
+/// outcome. A consumer must require committed=true before exposing its ordered
+/// result vector. Failure latches even when other workers later finish normally.
+pub fn verify_trace(
+    workers: usize, capacity: usize, expected: &[u64], events: &[Event],
+) -> Option<Outcome> {
+    if workers == 0usize || capacity == 0usize { return None; }
+    let mut states: Vec<WorkerState> = Vec::new();
+    let mut worker = 0usize;
+    while worker < workers {
+        states.push(WorkerState { job: None, shutdown: false, exited: false });
+        worker += 1usize;
+    }
+    let mut results: Vec<Option<u64>> = Vec::new();
+    let mut job = 0usize;
+    while job < expected.len() { results.push(None); job += 1usize; }
+    let mut pool = Pool {
+        workers: states, results, capacity, accepted: 0usize, completed: 0usize,
+        active: 0usize, eof: false, failed: false, committed: false,
+    };
+    let mut index = 0usize;
+    while index < events.len() {
+        if !pool.apply(expected, events[index]) { return None; }
+        index += 1usize;
+    }
+    let mut exited = 0usize;
+    let mut worker = 0usize;
+    while worker < pool.workers.len() {
+        if pool.workers[worker].exited { exited += 1usize; }
+        worker += 1usize;
+    }
+    let mut ordered: Vec<u64> = Vec::new();
+    if pool.committed {
+        let mut job = 0usize;
+        while job < pool.accepted {
+            ordered.push(pool.results[job].unwrap());
+            job += 1usize;
+        }
+    }
+    Some(Outcome {
+        accepted: pool.accepted, completed: pool.completed, exited,
+        failed: pool.failed, committed: pool.committed, results: ordered,
+    })
+}
+
+/// An actor's reply claims that this increment is already in its serialized map.
+#[derive(Clone, Copy)]
+pub struct MapEvent {
+    pub worker: usize,
+    pub sequence: usize,
+    pub key: usize,
+    pub delta: u64,
+    pub reply: u64,
+}
+
+/// Independent short-transcript oracle: recompute each reply from the preceding
+/// history, without sharing the actor's map implementation or mutation routine.
+/// Complexity is quadratic in transcript length; use representative gate traces.
+pub fn verify_map_trace(workers: usize, keys: usize, events: &[MapEvent]) -> bool {
+    if workers == 0usize || keys == 0usize { return false; }
+    let mut next = vec![0usize; workers];
+    let mut index = 0usize;
+    while index < events.len() {
+        let event = events[index];
+        if event.worker >= workers || event.key >= keys || event.sequence != next[event.worker] {
+            return false;
+        }
+        let mut value = event.delta;
+        let mut prior = 0usize;
+        while prior < index {
+            if events[prior].key == event.key {
+                value = match value.checked_add(events[prior].delta) {
+                    Some(value) => value,
+                    None => return false,
+                };
+            }
+            prior += 1usize;
+        }
+        if event.reply != value { return false; }
+        next[event.worker] += 1usize;
+        index += 1usize;
+    }
+    true
+}

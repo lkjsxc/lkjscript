@@ -296,9 +296,8 @@ IR checking; they grant no authority. Disjoint mutable outputs stay disjoint, an
 shared results may outlive reference-only environments while owners live.
 Generic/associated result families can refine similarly: acyclic callees first,
 recursive groups conservatively. This does not prove unused generic hidden effects.
-Opaque generic reference outputs, impl Trait closure returns, lending closures,
-dynamic callables and scoped concurrency remain unfinished. Pending escape/three
-concurrency cases specify intended ownership rules, with their missing features.
+Opaque generic reference outputs, impl Trait closure returns, lending closures and dynamic callables remain unfinished.
+Only borrowed_closure_escape remains pending; concurrency uses isolated processes and owned messages, not shared-address-space threads.
 
 ## Source library
 
@@ -316,6 +315,7 @@ concurrency cases specify intended ownership rules, with their missing features.
 | Collection copying/equality | extend_from_slice/to_vec clone in order; empty input does no clones. Vec Clone requires Clone; equality requires only PartialEq, checks length then element ==, and Vec ne negates the whole result. Nested types/floats/custom implementations follow selected traits. | Inherent clone/ne cannot replace generic contracts. Arrays use array[..].to_vec(); helper signatures and element constraints check independently. |
 | Slice/Vec helpers | starts_with borrows; copy_from_slice needs Copy and equal lengths, with array receivers written as array[..].copy_from_slice(source); predicate split retains empty groups at delimiters. clear/truncate destroy removed elements forward; stable sort/retain are source operations. | General From/Into, Sum/FromIterator and exclusive iter_mut need their own contracts. |
 | Ordered maps/sets | BTreeMap uses an indexed AVL arena/free slots with logarithmic lookup/insertion/removal; BTreeSet reuses it. Sorted shared/owned iteration, map keys/values/first_key_value/pop_first/retain and set first/pop_first. Clear/drop and partially consumed iterators destroy in key order; Clone/Default/equality ignore arena shape. | Entirely source algorithms over existing storage, not new trusted primitives. |
+| Generational arenas | std::arena::Arena<T,Kind> owns graph nodes; Handle<Kind> stores owner namespace/index/generation. get/get_mut lend temporary checked views; remove moves the value and invalidates prior handles. Exhausted generations retire. | Caller assigns distinct same-Kind owner IDs while any handle survives. Handles are values, not authority; no heap views or new IR. [Million-node specimen](../examples/object_graph/README.md). |
 
 Option/Result also provide map, map_or/map_or_else, and_then/or_else/unwrap_or_else;
 Option has filter and Result map_err. A map_err closure needs known input/result types: annotate the missing type. For a literal.to_string() result use |_| -> std::String { literal.to_string() }; this supplies the result type while preserving receiver evaluation and the closure's capture/return/? scope. String ordering/from conversion, scalar

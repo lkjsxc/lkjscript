@@ -5,6 +5,7 @@ pub fn library(path: &str) -> Option<Vec<u8>> {
         "$std/prelude.lkj" => include_str!("../library/prelude.lkj"),
         "$std/sequence.lkj" => include_str!("../library/sequence.lkj"),
         "$std/arena.lkj" => include_str!("../library/arena.lkj"),
+        "$std/process_model.lkj" => include_str!("../library/process_model.lkj"),
         "$std/buffer.lkj" => include_str!("../library/buffer.lkj"),
         "$std/timers.lkj" => include_str!("../library/timers.lkj"),
         "$std/http_protocol.lkj" => include_str!("../library/http_protocol.lkj"),
