@@ -136,4 +136,52 @@ cmp "$fixture/library-main-before" "$fixture/library-edit/main.lkj"
 test ! -e "$fixture/library-edit/.lkjscript-edit.pending"
 printf '%s\n' 'fn main() -> i64 { std::unused(40i64) }' > "$fixture/library-edit/probe.lkj"
 test "$("$compiler" run "$fixture/library-edit/probe.lkj" --library-dir "$fixture/library-edit/library" --no-store)" = 42
+# Promotion keeps mixed transactions atomic, bypasses warm demanded-only
+# checkpoints, and compares replay targets in the same all-library mode.
+mkdir -p "$fixture/promotion/library" "$fixture/promotion-store"
+printf '%s\n' 'fn main() -> i64 { 0i64 }' > "$fixture/promotion/main.lkj"
+cat > "$fixture/promotion/library/lib.lkj" <<'SOURCE'
+pub fn unused(value: i64) -> i64 { value + 1i64 }
+pub fn unused_generic<T>(value: T) -> i64 { 1i64 }
+SOURCE
+promotion_common=(main.lkj --source-dir "$fixture/promotion" --library-dir "$fixture/promotion/library")
+promotion_snapshot() { (cd "$fixture/promotion"; sha256sum main.lkj library/lib.lkj); }
+promotion_snapshot > "$fixture/promotion-before"
+printf '%s\n' '{"version":1,"operations":[{"op":"replace-body","id":"main","source":"{ 9i64 }"},{"op":"replace-body","id":"std::unused","source":"{ missing() }"}]}' > "$fixture/promotion-request"
+if "$compiler" edit "${promotion_common[@]}" --no-store --store-key "$fixture/key" --request "$fixture/promotion-request" > "$fixture/promotion-plan" 2> "$fixture/promotion-error"; then
+    printf 'unexpected accepted mixed invalid library transaction\n' >&2; exit 1
+fi
+grep -q 'E_EDIT_CHECK' "$fixture/promotion-error"
+grep -q 'missing' "$fixture/promotion-error"
+promotion_snapshot > "$fixture/promotion-after"
+cmp "$fixture/promotion-before" "$fixture/promotion-after"
+test ! -e "$fixture/promotion/.lkjscript-edit.pending"
+for pass in 1 2; do
+    "$compiler" check "${promotion_common[@]}" --store "$fixture/promotion-store" --store-key "$fixture/key" --inline-limit 0 --stats > "$fixture/promotion-warm" 2> "$fixture/promotion-warm-stats"
+done
+grep -Eq 'front_reused[^0-9]*[1-9][0-9]*' "$fixture/promotion-warm-stats"
+printf '%s\n' '{"version":1,"operations":[{"op":"replace-body","id":"std::unused_generic","source":"{ missing() }"}]}' > "$fixture/promotion-request"
+if "$compiler" edit "${promotion_common[@]}" --store "$fixture/promotion-store" --store-key "$fixture/key" --request "$fixture/promotion-request" > "$fixture/promotion-plan" 2> "$fixture/promotion-error"; then
+    printf 'unexpected accepted invalid unused generic library body after warm check\n' >&2; exit 1
+fi
+grep -q 'E_EDIT_CHECK' "$fixture/promotion-error"
+grep -q 'std::unused_generic' "$fixture/promotion-error"
+grep -q 'missing' "$fixture/promotion-error"
+promotion_snapshot > "$fixture/promotion-after"
+cmp "$fixture/promotion-before" "$fixture/promotion-after"
+test ! -e "$fixture/promotion/.lkjscript-edit.pending"
+mkdir -p "$fixture/promotion-desired/library"
+cp "$fixture/promotion/main.lkj" "$fixture/promotion-desired/main.lkj"
+sed 's/value + 1i64/value + 2i64/' "$fixture/promotion/library/lib.lkj" > "$fixture/promotion-desired/library/lib.lkj"
+"$compiler" edit "${promotion_common[@]}" --no-store --store-key "$fixture/key" --against "$fixture/promotion-desired/main.lkj" --against-library-dir "$fixture/promotion-desired/library" > "$fixture/promotion-plan" 2> "$fixture/promotion-error" || { cat "$fixture/promotion-error" >&2; exit 1; }
+grep -q 'library-validation=all' "$fixture/promotion-plan"
+grep -q 'mode=apply' "$fixture/promotion-plan"
+grep -Eq '^replay desired=([0-9a-f]{64}) candidate=\1 verified=true operations=[1-9][0-9]*$' "$fixture/promotion-plan"
+before_identity=$(sed -n 's/^program level=checked-ir before=\([^ ]*\).*/\1/p' "$fixture/promotion-plan")
+after_identity=$(sed -n 's/^program level=checked-ir .* after=\([^ ]*\).*/\1/p' "$fixture/promotion-plan")
+test -n "$before_identity"
+test "$before_identity" != "$after_identity"
+cmp "$fixture/promotion/main.lkj" "$fixture/promotion-desired/main.lkj"
+cmp "$fixture/promotion/library/lib.lkj" "$fixture/promotion-desired/library/lib.lkj"
+test ! -e "$fixture/promotion/.lkjscript-edit.pending"
 printf 'ok structural transactions: checks, refusals, untouched bytes, rename/comment identity, authenticated recovery\n'

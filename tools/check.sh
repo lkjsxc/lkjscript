@@ -138,6 +138,7 @@ parallel_step 1 toolchain toolchain
 parallel_step 1 world world_cases
 parallel_step 1 semantic-query timeout --kill-after=10s 600s bash tools/semantic-query-test.sh "$check_binary"
 parallel_step 1 structure-edit timeout --kill-after=10s 600s bash tools/structure-test.sh "$check_binary"
+parallel_step 1 structure-embedded timeout --kill-after=10s 600s bash tools/structure-embedded-test.sh "$check_binary"
 parallel_step 1 structure-refactor timeout --kill-after=10s 600s bash tools/structure-refactor-test.sh "$check_binary"
 parallel_step 1 checked-meaning timeout --kill-after=10s 600s bash tools/meaning-test.sh "$check_binary"
 parallel_step 1 type-identity timeout --kill-after=10s 600s bash tools/type-identity-test.sh "$check_binary"

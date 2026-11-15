@@ -1806,6 +1806,7 @@ struct Memo {
     inline_attempts: usize,
     inline_accepted: usize,
     inline_rejected: usize,
+    embedded_sources: Vec<String>,
 }
 impl Memo {
     fn protect_source(&self, bytes: &[u8]) -> Result<(), String> {
@@ -1821,6 +1822,7 @@ impl Memo {
             store: store::Store::open_bounded(world, &options.store_directory, &options.store_key, options.store_bytes),
             private_source_digest: None,
             capture_catalog: options.index, catalog_items_only: false, catalog: None, native_sizes: BTreeMap::new(),
+            embedded_sources: Vec::new(),
             inputs: Vec::new(), source_inputs: Vec::new(), input_snapshot: BTreeMap::new(), front_reused: 0, front_definitions: 0, front_functions: 0, valid_inputs: true, runtime_input: None,
             checked_reused: 0, checked_local_reused: 0, emitted_reused: 0, test_reused: 0, test_rerun: 0, build_reused: 0,
             inline_calls: 0, inline_functions: 0, inline_attempts: 0, inline_accepted: 0, inline_rejected: 0,
@@ -2164,6 +2166,7 @@ fn compile_snapshot(
 ) -> Result<reuse::Selection, String> {
     memo.inputs.clear();
     memo.source_inputs.clear();
+    memo.embedded_sources.clear();
     memo.valid_inputs = true;
     if options.path.ends_with(".lkjir") {
         let bytes = memo.read_path(world, &options.path)?;
@@ -2225,6 +2228,9 @@ fn compile_snapshot(
             memo.read_source(&mut directory, &directory_path, path, stats)
         };
         if let Ok(Some(bytes)) = &result {
+            if memo.capture_catalog && path.starts_with("$std/") && options.library_directory.is_none() {
+                memo.embedded_sources.push(diagnostic_source_path(path, options));
+            }
             memo.protect_source(bytes)?;
             if memo.store.is_some() || memo.capture_catalog { memo.source_inputs.push((path.to_string(), bytes.clone())); }
         }

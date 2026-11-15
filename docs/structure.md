@@ -151,6 +151,9 @@ Apply/recovery requires a private 32-byte authentication key outside every
 source/library read grant. The same private-key source-digest exclusion used
 for child images applies during elaboration. Embedded library text can be
 queried, but editing it requires an explicit editable `--library-dir`.
+The loader records embedded origin before assigning diagnostic paths. A physical
+`include_bytes!` input with the same displayed path cannot turn embedded code
+into editable source, even when its length and all later spans match.
 
 One writer holds `.lkjscript-edit.lock`. The compiler validates all original
 source bytes and the actual positive/negative dependency read set, then syncs

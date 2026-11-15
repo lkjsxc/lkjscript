@@ -58,6 +58,10 @@ fn physical(root: &str, path: &str) -> String {
 fn replace_snapshot(before: &Memo, after: &mut Memo, draft: &structure_edit::Draft) -> Result<(), String> {
     after.input_snapshot = before.input_snapshot.clone();
     for change in &draft.changes {
+        if before.embedded_sources.contains(&normal(&change.file)) {
+            return Err(format!("{} E_EDIT_EMBEDDED source is embedded; supply an explicit editable --library-dir",
+                semantic::quote(&change.file)));
+        }
         let mut keys = Vec::new();
         for ((root, path), _) in &before.input_snapshot {
             if physical(root, path) == normal(&change.file) { keys.push((root.clone(), path.clone())); }
