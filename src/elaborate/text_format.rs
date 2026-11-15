@@ -4,6 +4,76 @@ use super::{Builder, Result, a, err, ir, place_type};
 use crate::syntax::formatting::{self, Part, Specification};
 use std::collections::BTreeMap;
 impl Builder<'_, '_> {
+    // This is source-only literal expansion. No dynamic argument is evaluated,
+    // and the ordinary checker still admits the resulting static Trap.
+    fn panic_literal_capture(&self, name: &str, span: a::Span) -> Option<String> {
+        let local = self.binding(name)?;
+        if local < self.function.params || self.function.locals[local].mutable
+            || self.capture_locals.contains(&local) || self.guard_aliases.contains_key(&name.to_string())
+        { return None; }
+        let ir::TypeKind::Ref { inner, mutable: false } = self.compiler.types[self.ty(local)].kind else {
+            return None;
+        };
+        if !matches!(self.compiler.types[inner].kind, ir::TypeKind::Str) { return None; }
+        let source = self.compiler.source;
+        let function = &source.functions[self.source_function];
+        if function.span.file != span.file || function.params.iter().any(|param| param.name == name) {
+            return None;
+        }
+        // A same-named binding anywhere in the function, including a nested or
+        // later shadow, makes this intentionally narrow expansion ineligible.
+        let mut unique = None;
+        for (index, pattern) in source.patterns.iter().enumerate() {
+            if pattern.span.file != span.file || pattern.span.start < function.span.start
+                || pattern.span.end > function.span.end
+            { continue; }
+            if let a::Pattern::Bind { name: bound, mutable, by_ref, ref_mut } = &pattern.kind {
+                if bound == name {
+                    if unique.is_some() || *mutable || *by_ref || *ref_mut { return None; }
+                    unique = Some(index);
+                }
+            }
+        }
+        let unique = unique?;
+        let block = &source.blocks[function.body?];
+        for statement in &block.statements {
+            if let a::Stmt::Let { pattern, value: Some(value), span: binding, .. } = statement {
+                if *pattern == unique && binding.file == span.file && binding.end <= span.start {
+                    if let a::Expr::String(text) = &source.exprs[*value].kind {
+                        return Some(text.clone());
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    fn static_panic_message(&self, args: &[usize], span: a::Span) -> Option<String> {
+        if args.len() != 1usize { return None; }
+        let a::Expr::String(text) = &self.compiler.source.exprs[args[0]].kind else { return None; };
+        let parts = formatting::parse(text, span).ok()?;
+        let mut message = String::new();
+        for part in parts {
+            match part {
+                Part::Text(text) => message.push_str(&text),
+                Part::Value { argument, spelling, .. } => {
+                    if !spelling.is_empty() || argument.is_empty() || argument.as_bytes()[0].is_ascii_digit() {
+                        return None;
+                    }
+                    message.push_str(&self.panic_literal_capture(&argument, span)?);
+                }
+            }
+        }
+        Some(message)
+    }
+
+    pub(super) fn panic_message(&self, args: &[usize], span: a::Span) -> String {
+        if args.is_empty() { return "explicit panic".to_string(); }
+        self.static_panic_message(args, span).unwrap_or_else(|| {
+            "explicit panic; help: write format!(...) bytes through an already granted output capability before panic!() (docs/language.md, Statements, control and patterns)".to_string()
+        })
+    }
+
     pub(super) fn text_equality_values(
         &mut self,
         operation: &str,

@@ -8,6 +8,7 @@ mod function_owners;
 mod interpreter_contracts;
 mod library_demand;
 mod optimizer;
+mod panic_messages;
 mod parser_contracts;
 mod resolver;
 mod reuse;
@@ -113,6 +114,7 @@ pub fn run(world: &mut World, shard: usize, workers: usize, trace: bool) -> (usi
         count += reuse::run(world, trace);
         count += recheck::run(world, trace);
         count += optimizer::run(world, trace);
+        count += panic_messages::run(world, trace);
         crate::interpreter::assert_reference_reuse();
         count += 1;
     }

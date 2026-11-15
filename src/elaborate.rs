@@ -4711,10 +4711,13 @@ impl Builder<'_, '_> {
                 Ok((dst, ir::UNIT))
             }
             "panic" | "unreachable" => {
+                let message = if name == "panic" {
+                    self.panic_message(args, span)
+                } else {
+                    "explicit panic".to_string()
+                };
                 self.emit(
-                    ir::Op::Trap {
-                        message: "explicit panic".to_string(),
-                    },
+                    ir::Op::Trap { message },
                     span.line,
                 );
                 Ok(self.unit(span.line))

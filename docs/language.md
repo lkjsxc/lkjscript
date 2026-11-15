@@ -27,7 +27,7 @@ Cases: [scalar bits](../tests/reference/scalar_bits.rs), [evaluation order](../t
 
 Functions, structs, enums, module constants, aliases, generics, trait implementations,
 match, if, while, loop and for are implemented. Assertions, panic and vec forms
-are fixed syntax. Panic payloads are not printed: write format!(...) bytes through an already granted output capability before panic!(). Local const declarations reject; move the declaration to its containing module.
+are fixed syntax. Literal panic messages and plain named captures of unique immutable outer-block literal bindings become static trap text. Other panic payloads are not evaluated: write format!(...) bytes through an already granted output capability before panic!(). Local const declarations reject; move the declaration to its containing module.
 
 Unparenthesized block forms in statement position end before a binary operator,
 call or index that can start another expression; dot and ? continue the expression.
