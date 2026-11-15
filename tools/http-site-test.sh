@@ -82,6 +82,9 @@ trap 'exit 143' TERM
 
 site_load_before=$(cat /proc/loadavg)
 site_started_ns=$(date +%s%N)
+if [ "$offline" = yes ]; then
+    "$compiler" test tools/http-site-parity.rs --library-dir library --jobs 1
+fi
 "$compiler" build examples/site.rs --library-dir library \
     --grant output --grant listener=127.0.0.1:0 \
     --grant clock --grant ready --grant stop -o "$site_work/server"

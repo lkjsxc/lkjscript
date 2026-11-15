@@ -1,6 +1,6 @@
 //! Compare a fresh crawl of the live origin with a granted candidate endpoint.
 //! Only GET and HEAD are sent. The manifest is a coverage check, never the
-//! source of crawl links; optional paths.txt adds query/search observations.
+//! source of crawl links; required paths.txt supplies the 51 search probes.
 mod http_client;
 mod http_site_links;
 mod http_site;
@@ -29,10 +29,23 @@ fn probe(output: &mut Stdout, origin: &mut Connector, candidate: &mut Connector,
         expected.status, expected.body.len()).as_bytes());
     Ok(())
 }
+// A successful live/hardened handoff must include the same complete search
+// coverage as the frozen oracle. Validate before either Connector is used.
+fn query_coverage(paths: &[String]) -> Result<(), String> {
+    require(paths.len() == 51usize, &format!("live site parity requires 51 search query paths in paths.txt, found {}", paths.len()))?;
+    let mut seen = std::collections::BTreeSet::<String>::new();
+    for path in paths {
+        require(path.starts_with("/search?"), &format!("paths.txt contains a non-search query target: {path}"))?;
+        require(seen.insert(path.clone()), &format!("paths.txt repeats search query target: {path}"))?;
+    }
+    Ok(())
+}
 fn parity(output: &mut Stdout, origin: &mut Connector, candidate: &mut Connector, root: &mut Directory) -> Result<(), String> {
     let archived = http_site::manifest_paths(root)?;
+    let queries = http_site::extra_paths(root)?;
+    query_coverage(&queries)?;
     let mut crawl = Crawl::new(true);
-    for path in http_site::extra_paths(root)? { crawl.add(path); }
+    for path in queries { crawl.add(path); }
     let mut walked = 0usize;
     let mut body_bytes = 0usize;
     while let Some(path) = crawl.next() {
@@ -64,4 +77,36 @@ pub fn main(mut output: Stdout, mut origin: Connector, mut candidate: Connector,
         output.write(format!("site parity: {problem}\n").as_bytes());
         panic!("{problem}");
     }
+}
+
+fn published_query_paths() -> Vec<String> {
+    let mut paths: Vec<String> = Vec::new();
+    for line in include_str!("../examples/site-content/paths.txt").lines() {
+        let line = std::str::trim_ascii(line);
+        if line.is_empty() || line.starts_with("#") { continue; }
+        paths.push(http_site_links::resolve("/", line).unwrap());
+    }
+    paths
+}
+#[test]
+fn live_query_coverage_accepts_published_fixture() {
+    assert!(query_coverage(&published_query_paths()).is_ok());
+}
+#[test]
+fn live_query_coverage_rejects_missing_or_short_fixture() {
+    let missing: Vec<String> = Vec::new();
+    assert!(query_coverage(&missing).is_err());
+    let mut short = published_query_paths();
+    short.pop();
+    assert!(query_coverage(&short).is_err());
+}
+#[test]
+fn live_query_coverage_rejects_duplicates_and_non_search_targets() {
+    let mut paths = published_query_paths();
+    let last = paths.len() - 1usize;
+    let duplicate = paths[0usize].clone();
+    paths[last] = duplicate;
+    assert!(query_coverage(&paths).is_err());
+    paths[last] = "/docs/start?parity=1".to_string();
+    assert!(query_coverage(&paths).is_err());
 }

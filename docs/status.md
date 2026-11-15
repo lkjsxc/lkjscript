@@ -34,10 +34,11 @@ Copies/calls/runtime own internal frame accesses; arithmetic includes register m
 ## Programs
 
 2.5 complete: 12 published paths, 51 computed search queries and 13 HTTP probes match the live origin; HEAD/range/conditional/traversal cases included.
-Hardened parity: 0.706 s, load 1.95/2.16/2.61 unchanged; process RSS 1,380 KiB, cgroup peak 1,409,024 B under the original 128 MiB limit.
-Sealed executable 863,424 B, 383 IR functions, 38,244 instructions; build 755.832 ms, load 1.95/2.16/2.61 unchanged.
-DynamicUser blocks openat2; embedding the public archive removed the runtime Directory grant while retaining the original unit settings.
-Source-only text passes all 1,112,064 scalar mappings against Rust; 0.741 s, load 2.94/3.07/2.76 unchanged.
+Hardened parity: 0.730 s, load 5.40/5.35/4.80 -> 5.21/5.31/4.79; process RSS 1,376 KiB, cgroup peak 2,097,152 B under the original 128 MiB limit.
+Sealed executable 863,424 B, 383 IR functions, 38,257 instructions; build 744.114 ms, load 5.40/5.35/4.80 unchanged.
+RestrictSUIDSGID blocks openat2; embedding the public archive removed the runtime Directory grant while retaining the original unit settings.
+Review repair: buffered pipelines retain receive-time deadlines; old server fails, header/body/later-read/idle regression passes in 7.215 s, load 6.48/5.11/4.71 -> 5.94/5.04/4.69.
+Handoff requires all 51 unique query probes and supports interrupted rollback within 25 lines; 16 cases pass in 36.241 s, load 4.35/4.71/4.60 -> 3.81/4.52/4.54.
 2.4: Stop drains admitted requests to a fixed deadline, syncs and exits 0; signal native program PID or interpreted broker PID.
 Kernel Entropy and wall time support private durable keys and signed expiring write tokens; final default/inline64 native MAC comparison has no content-dependent branch.
 Issuer/restart/authentication passed both routes in 62.150 s, load 2.41/3.73/4.49 -> 3.63/3.77/4.45; lifecycle/socket CI repair is green.
@@ -54,7 +55,6 @@ Idle process RSS cost 2,205.2 bytes/peer; slow header closed at 2.003 s, hostile
 | platform::file_write | 3.4% | 20.8% |
 
 2.1 full-body 6,161 -> 11,506/s; 17,513/15,001 samples; baseline load 8.67/6.26/4.40 -> 6.01/5.87/4.33, after 3.89/4.54/4.31 -> 3.67/4.44/4.29.
-2.1 framing 21,975/s, load 3.67/4.44/4.29 -> 2.83/4.16/4.20; numeric Connector grants and lkjscript clients replaced curl.
-Relay queues, three scoped-thread cases and the interpreter's unused local Child path are removed; processes provide parallelism.
-Final four-worker gate passes: 217.411 s, load 1.40/1.79/2.39 -> 4.50/3.14/2.80; five site diagnostic cases record consumer friction.
-All test children, ports, units and proof files are gone; live PID 256 unchanged. Candidate/unit/24-line switch and rollback are ready for Claude.
+2.1 framing 21,975/s, load 3.67/4.44/4.29 -> 2.83/4.16/4.20; Connector/lkjscript clients replaced curl. Relay queues, three thread cases and unused local Child are removed.
+Four-worker gate passes: 262.690 s, one-minute load 2.93 -> 7.22; a sixth site diagnostic case records the excluded cfg(test) helper's misleading error.
+All test processes, ports, units and proof files are gone; live PID 256 unchanged. Candidate/unit/25-line switch and rollback are ready for Claude; no switch performed.

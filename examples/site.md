@@ -120,8 +120,9 @@ queries and thirteen protocol probes against frozen live observations:
 status, Content-Length, stable headers and the hash of the entire body.
 
 The default live proof independently walks every published link again and
-compares the origin and candidate. It also reads the 51 query probes from
-`site-content/paths.txt`, which is test configuration, not server input.
+compares the origin and candidate. Before either connection is opened, it requires
+51 unique search-query probes in `site-content/paths.txt`; a missing, shortened,
+duplicate or non-search list fails. This is test configuration, not server input.
 The shared thirteen protocol requests cover the required missing, traversal,
 huge-header, HEAD, range and conditional cases, plus route spelling boundaries.
 Date and Connection are intentionally excluded from equality; all six stable
@@ -139,27 +140,27 @@ filenames and oracle files are never silently overwritten.
 The sealed candidate passed the 12 published paths, 51 search queries and
 13 protocol probes under the origin's effective systemd restrictions. Live
 parity compared 274,818 walked body bytes plus each protocol response exactly.
-The startup/client-build/parity/shutdown phase took 0.706 seconds, with load
-1.95/2.16/2.61 unchanged. Process RSS and high-water RSS were 1,380 KiB;
-cgroup current/peak memory were 1,302,528/1,409,024 bytes under MemoryMax=128 MiB.
+The startup/client-build/parity/shutdown phase took 0.730 seconds, with load
+5.40/5.35/4.80 -> 5.21/5.31/4.79. Process RSS and high-water RSS were 1,376 KiB;
+cgroup current/peak memory were 2,072,576/2,097,152 bytes under MemoryMax=128 MiB.
 
-The native executable was 863,424 bytes: 383 IR functions and 38,244 IR
-instructions. Compilation took 755.832 ms, with load 1.95/2.16/2.61 unchanged,
-and compiler peak RSS 49,602,560 bytes. The source checks passed 30 tests in
-45.712 seconds, load 1.56/2.14/2.63 -> 2.04/2.18/2.62. The offline response
-proof compared 316,466 bytes in 1.334 seconds, load 1.56/2.14/2.63 unchanged.
+The native executable was 863,424 bytes: 383 IR functions and 38,257 IR
+instructions. Compilation took 744.114 ms, with load 5.40/5.35/4.80 unchanged,
+and compiler peak RSS 59,367,424 bytes. The focused parity-source checks passed
+16 tests in 36.241 seconds, load 4.35/4.71/4.60 -> 3.81/4.52/4.54. The offline
+site gate includes those checks and compares 316,466 response body bytes;
+the complete site job took 37.083 seconds, one-minute load 4.19 -> 3.36.
 
 The final four-worker gate, including bootstrap fixed points, both executor
-routes, explicit inlining, semantic contracts and mutation, passed in 217.411
-seconds, load 1.40/1.79/2.39 -> 4.50/3.14/2.80.
+routes, explicit inlining, semantic contracts and mutation, passed in 262.690
+seconds, one-minute load 2.93 -> 7.22.
 
 SIGTERM produced the graceful stopped marker and successful exit. Launcher
-952038, candidate 952042, port 35623 and the uniquely named transient unit were
-gone; its /run stage and private work directory were removed. The live origin
-remained active at PID 256. The earlier file-backed startup unit
-lkjscript-programs-http-site-systemd-pfTsDN, launcher 945445 and its staging
-directories were also verified absent. All ignored proof binaries, logs, witness
-builds and generated case directories were removed after the final gate.
+1355335, candidate 1355339 and port 55087 were gone; transient unit
+lkjscript-programs-http-site-systemd-Y7ntx6 was collected, and its /run stage
+and private work directory were removed. The live origin remained active at
+PID 256. All ignored proof binaries, logs and generated case directories were
+removed after the final gate.
 
 ## Hardening and activation
 
@@ -190,7 +191,10 @@ PrivateNetwork=no. It also assigns NoNewPrivileges=no, but the effective value
 is yes because DynamicUser implies it. The proof reports effective settings
 rather than claiming those overridden restrictions were active.
 
-The only activation instructions are in `site-switch.md` (24 lines).
+The only activation instructions are in `site-switch.md` (25 lines).
 Claude performs the switch. A new release keeps a copy of the old unit and a
-link to the old release before replacing current by atomic rename; rollback
-restores both. The candidate preparation does not execute those commands.
+link to the old release before replacing current by atomic rename. A separate
+attempt pointer keeps rollback tied to that backup even after current is restored;
+rollback can be retried after either staging or rename. Required preparation and
+reload commands fail before later activation steps. The candidate preparation
+does not execute those commands.
