@@ -20,6 +20,39 @@ timeout_seconds=${LKJSCRIPT_HISTORY_TIMEOUT_SECONDS:-240}
 store_bytes=${LKJSCRIPT_HISTORY_STORE_BYTES:-2147483648}
 history_head=$(git -C "$repository" rev-parse --verify "${LKJSCRIPT_HISTORY_HEAD:-HEAD}^{commit}")
 compiler_bytes=$(stat -c %s "$compiler")
+compiler_sha=$(sha256sum "$compiler" | cut -d ' ' -f 1)
+resume=${LKJSCRIPT_HISTORY_RESUME:-0}
+[[ $resume == 0 || $resume == 1 ]] || exit 2
+specification="mode=$mode root_policy=common-main-otherwise-common-lib scan=$scan wanted=$count memory_bytes=$memory_bytes timeout_seconds=$timeout_seconds store_bytes=$store_bytes"
+passed=0
+attempted=0
+if [[ $resume == 1 ]]; then
+    if [[ ! -f $output || ! -f $output.meta || ! -d $output.logs ]]; then
+        printf 'E_HISTORY_RESUME missing prior campaign files\n' >&2
+        exit 2
+    fi
+    if ! rg -Fxq "$specification" "$output.meta" || ! rg -Fxq "history_head=$history_head" "$output.meta"; then
+        printf 'E_HISTORY_RESUME campaign population or limits differ\n' >&2
+        exit 2
+    fi
+    old_compiler_sha=$(awk '/^[0-9a-f]+  / && length($1)==64 {print $1; exit}' "$output.meta")
+    if [[ $old_compiler_sha != "$compiler_sha" ]]; then
+        printf 'E_HISTORY_RESUME compiler identity differs\n' >&2
+        exit 2
+    fi
+    if ! awk -F '\t' 'NR==1 && NF==16 && $16=="source_root" { good=1 } END { exit !good }' "$output"; then
+        printf 'E_HISTORY_RESUME incompatible result schema\n' >&2
+        exit 2
+    fi
+    passed=$(awk -F '\t' 'NR>1 && $4=="passed" && !seen[$2]++ { n++ } END { print n+0 }' "$output")
+    attempted=$(awk -F '\t' 'NR>1 && $1>n { n=$1 } END { print n+0 }' "$output")
+    rm -f -- "$output.stop"
+else
+    if [[ -e $output || -e $output.logs || -e $output.meta ]]; then
+        printf 'E_HISTORY_EXISTS choose a new output or set LKJSCRIPT_HISTORY_RESUME=1\n' >&2
+        exit 2
+    fi
+fi
 archive_blocks() {
     git -C "$repository" ls-tree -rl "$1" -- src library tools tests |
         awk '$4 ~ /^[0-9]+$/ { bytes += int(($4 + 4095) / 4096) * 4096 } END { printf "%.0f\n", bytes }'
@@ -41,24 +74,30 @@ free_space() {
         return 1
     fi
 }
-: > "$output.space"
+if [[ $resume == 0 ]]; then : > "$output.space"; fi
 free_space "$history_head" "$history_head" || exit 2
 fixture=$(mktemp -d "$PWD/target/compiler-history.XXXXXX")
 trap 'rm -rf "$fixture"' EXIT
 trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
-mkdir "$fixture/store" "$output.logs"
+mkdir "$fixture/store"
+if [[ $resume == 0 ]]; then mkdir "$output.logs"; fi
 compiler_origin=$compiler
 cp -- "$compiler" "$fixture/compiler"
 compiler="$fixture/compiler"
 git -C "$repository" log -n "$scan" --format='%H %P' "$history_head" > "$fixture/revisions"
-printf 'ordinal\trevision\tparent\tstatus\tprojection\toperations\tstdout_lines\twall_s\tuser_s\tsys_s\tpeak_kib\tload_before\tload_after\treason\tlibrary_environment\tsource_root\n' > "$output"
-printf 'mode=%s root_policy=common-main-otherwise-common-lib scan=%s wanted=%s memory_bytes=%s timeout_seconds=%s store_bytes=%s\n' \
-    "$mode" "$scan" "$count" "$memory_bytes" "$timeout_seconds" "$store_bytes" > "$output.meta"
-printf 'history_head=%s\ncompiler_origin=%s\n' "$history_head" "$compiler_origin" >> "$output.meta"
-sha256sum "$compiler" >> "$output.meta"
-printf 'library_policy=historical-roots-when-both-present-else-frozen-compiler-embedded-on-both-sides\nstop_file=%s.stop\n' "$output" >> "$output.meta"
+if [[ $resume == 0 ]]; then
+    printf 'ordinal\trevision\tparent\tstatus\tprojection\toperations\tstdout_lines\twall_s\tuser_s\tsys_s\tpeak_kib\tload_before\tload_after\treason\tlibrary_environment\tsource_root\n' > "$output"
+    printf '%s\n' "$specification" > "$output.meta"
+    printf 'history_head=%s\ncompiler_origin=%s\n' "$history_head" "$compiler_origin" >> "$output.meta"
+    sha256sum "$compiler" >> "$output.meta"
+    printf 'library_policy=historical-roots-when-both-present-else-frozen-compiler-embedded-on-both-sides\nstop_file=%s.stop\n' "$output" >> "$output.meta"
+else
+    printf 'resume=true previous_attempted=%s previous_passed=%s store_state=cold load=%s\n' \
+        "$attempted" "$passed" "$(cut -d ' ' -f 1 /proc/loadavg)" >> "$output.meta"
+fi
+awk -F '\t' 'NR>1 && ($4=="passed" || $4=="ineligible") {print $2}' "$output" > "$fixture/completed"
 
 # Listing/archiving is restricted to these four trees. Never copy repository
 # metadata, generation-one, data/services, releases or unrelated projects.
@@ -102,10 +141,10 @@ if [[ $mode == replay ]]; then
 else
     awk -v wanted="$count" 'NF >= 2 { print NR "\t" $1 "\t" $2; if (++seen == wanted) exit; }' "$fixture/revisions" > "$fixture/ordered"
 fi
-passed=0
-attempted=0
 while IFS=$'\t' read -r weight revision parent; do
     if [[ -e "$output.stop" ]]; then printf 'stop_requested=true\n' >> "$output.meta"; break; fi
+    if [[ $passed -ge $count ]]; then break; fi
+    if rg -Fxq "$revision" "$fixture/completed"; then continue; fi
     ((attempted += 1))
     rm -rf "$fixture/before" "$fixture/after"
     projection=native-lkj
