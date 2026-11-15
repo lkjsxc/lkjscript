@@ -209,49 +209,59 @@ entries, swapped reports and failures have permanent attack cases.
 
 ### Remaining reuse cost
 
-The initial checker edit measured 20.241 s (external wall 20.25 s, load
-3.85→4.45). Inference at 6.391 s and IR construction at 6.778 s were its two
-largest phases. The guarded stable-span checker edit measured 7.791 s against
-a 23.011 s cold build and 0.953 s unchanged build (one-minute load 9.42→9.06, 11.72→9.42 and 9.42→9.42).
-It reconstructed one of 2,713 definitions and one of 10,071 concrete functions;
-10,070 checks and 9,921 native fragments were reused. All cached images matched
-the corresponding no-store images, and the edited compiler built and ran the
-closed gate root with the same bytes. This remains above the 3 s target.
-The former inference/construction costs are now 0.163/0.007 s; whole-image
-identity and authenticated rereads remain 1.084/3.998 s, and checkpoint
-restore/encode remains 0.547/0.130 s. These costs are explicit remaining work.
+The initial edit probe spent 20.241 s at load 3.85→4.45, with inference
+6.391 s and IR construction 6.778 s its two largest raw phases. The current
+coalesced compiler's stable-span checker edit measured 10.539 s against a
+33.840 s cold build and 1.244 s unchanged build (one-minute load 19.68→18.58,
+21.25→19.68 and 19.68→19.68). It reconstructed one of 2,714 definitions and
+one of 10,072 concrete functions; 10,071 checks and 9,922 native fragments
+were reused. All cached images matched the corresponding no-store images,
+and the edited compiler built and ran the closed gate root with the same bytes.
 
-Cold storage overhead was 13.12% against the 20.35 s no-store control
-(load 11.72→9.42 versus 13.46→11.72). The 2.667 s phase-accounted extra wall time is:
+The initial dominant inference/construction phases are now 0.242/0.015 s
+within that edit interval. The 3 s target remains unmet: the present largest
+costs are whole-graph authenticated rereads and identity work, 5.313/1.606 s.
+Checkpoint restore/encode costs 0.690/0.195 s. These remaining phases have not
+become proportional to the edit. The construction counters establish what
+changed; heavily loaded wall observations are not an isolated speedup estimate.
 
-- Dependency and producer identities: 1.084 s; these bind real bytes rather than paths or mtimes.
-- Authentication and store I/O: 1.352 s; large reads authenticate before sized allocation, then authenticate the reread.
-- Fragment reuse bookkeeping and materialization: 0.658 s over ordinary instruction emission.
-- Checkpoint encoding and other publication preparation: 0.158 s extra, including 0.153 s encoding.
-- Other ordinary-phase variation: −0.585 s in this pair of observations; the falling host load affects the comparison, and timing is not a gate threshold.
+Cold storage overhead was 10.51% against the 30.64 s no-store control
+(load 21.25→19.68 versus 19.83→21.25). The 3.216 s phase-accounted extra wall time is:
+
+- Dependency and producer identities: 1.629 s; these bind real bytes rather than paths or mtimes.
+- Authentication and store I/O: 2.199 s; large reads authenticate before sized allocation, then authenticate the reread.
+- Fragment reuse bookkeeping and materialization: 0.641 s over ordinary instruction emission.
+- Checkpoint encoding and other publication preparation: 0.273 s extra, including 0.286 s encoding.
+- Other ordinary-phase variation: −1.527 s in this pair of observations; changing host load affects the comparison, and timing is not a gate threshold.
 
 Five published records replace the former per-function files. Measured store
-bytes were 71,676,829 B after cold and 88,449,732 B after the edit, below the
+bytes were 70,532,103 B after cold and 86,760,238 B after the edit, below the
 explicit per-directory policy. The bound is on authenticated contents and its
 index; filesystem metadata and transient atomic-publication files are not counted.
 
 ### Gate cost
 
-The guarded-checkpoint gate measured below used four workers, the refreshed
-3,242,241-byte seed and the source including Programs commit `2d50e71b` and
-the expanded-include invalidation regression. The cold run began with an empty
+The current emission gate measured below used four workers and the refreshed
+seed with aggregate frame-slot coalescing. Expanded-include invalidation and the
+Programs desk consumer remain in the gate. The cold run began with an empty
 compiler store; the warm run used the same source, seed and populated store.
 Filesystem caches were not reset. Loads are the one-minute average before and
 after each timed interval, not peak load.
 
-The cold gate took **535.033 s (load 6.71→10.97)** and reran all 4,475 counted
-case requests. The warm gate took **156.966 s (load 10.97→18.47)**, reusing 4,452
+The cold gate took **513.135 s (load 10.98→16.30)** and reran all 4,477 counted
+case requests. The warm gate took **147.070 s (load 16.30→9.43)**, reusing 4,454
 requests and rerunning 23. Those counts exclude the 762 structural contracts,
 128 mutation comparisons and uncounted host/proof suites, which still run.
 The 23 warm misses consist of 11 conformance requests under each inline policy
 without a reusable observation proof and one deliberately no-store library
-override fixture. Compile failures other than source I/O failures can have
+override fixture. Reachable effects and completion classes outside fixed-capture
+eligibility stay fresh. Compile failures other than source I/O failures can have
 authenticated verdict proofs; negative cases do not all rerun.
+
+First-landing CI run `43711410926`, at seed commit `e9b8c940`, separately
+passed its seed-only, empty-store gate in **874.494 s (load 0.98→2.80)**,
+with 0 reused / 4,475 rerun requests. Its optional witness job also passed.
+That identified CI result predates the coalesced source measured locally here.
 
 This is a same-producer warm measurement. Across a checker body edit, the
 separate benchmark proves five closed contracts can skip execution after the
@@ -262,23 +272,23 @@ host observations and resource availability are still tested afresh.
 
 The following partition sums wall time without double-counting overlapping
 suites. The first row comprises serial preparation plus the weighted host/proof
-window and orchestration. Cold preparation was 59.118 s (load 6.71→10.45) and
-the remaining window 85.406 s (load 10.45→11.13); warm preparation was 5.676 s
-(load 10.97→10.41) and the remaining window 79.996 s (load 10.41→13.72).
+window and orchestration. Cold preparation was 63.374 s (load 10.98→11.07) and
+the remaining window 80.796 s (load 11.07→9.32); warm preparation was 7.076 s
+(load 16.30→17.87) and the remaining window 80.112 s (load 17.87→12.23).
 The window is computed as the residual after serialized steps, so it also
 includes scheduling and rounding overhead.
 
 | Wall-clock group | Cold s (load 1m) | Warm s (load 1m) |
 | --- | --- | --- |
-| Preparation + overlapping host/proof suites | 144.524 (6.71→11.13) | 85.672 (10.97→13.72) |
-| Conformance default / inline 64 | 217.358 (11.13→12.16 / 14.66→11.82) | 39.642 (13.72→12.47 / 12.47→11.76) |
-| Generated default / inline 64 | 130.144 (12.16→14.66 / 11.82→11.61) | 1.529 (12.47→12.47 / 11.76→11.76) |
-| Semantic structure | 22.772 (11.61→10.29) | 27.907 (11.76→18.47) |
-| Semantic/reference cases + mutation | 20.235 (10.29→10.97) | 2.216 (18.47→18.47) |
-| **Total** | **535.033 (6.71→10.97)** | **156.966 (10.97→18.47)** |
+| Preparation + overlapping host/proof suites | 144.170 (10.98→9.32) | 87.188 (16.30→12.23) |
+| Conformance default / inline 64 | 168.753 (9.32→11.25 / 14.21→14.95) | 32.629 (12.23→11.41 / 11.41→9.73) |
+| Generated default / inline 64 | 148.845 (11.25→14.21 / 14.95→16.09) | 1.337 (11.41→11.41 / 9.73→9.73) |
+| Semantic structure | 26.727 (16.09→16.43) | 23.512 (9.73→7.81) |
+| Semantic/reference cases + mutation | 24.640 (16.43→16.30) | 2.404 (7.81→9.43) |
+| **Total** | **513.135 (10.98→16.30)** | **147.070 (16.30→9.43)** |
 
 The cold 150 s goal remains unmet. The four corpus passes alone occupy
-347.502 s (load 11.13→11.61) at four workers; cold construction, host proofs,
+317.598 s (load 9.32→16.09) at four workers; cold construction, host proofs,
 structure and the tail account for the rest as above. This is the current
 source including the desk consumer, not an isolated comparison against the
 older source described in the second compiler note.
@@ -291,33 +301,232 @@ authenticated artifacts.
 
 | Suite | Cold s (load 1m) | Warm s (load 1m) | Requests cold → warm (reused/rerun) | Rerun or reuse reason |
 | --- | --- | --- | --- | --- |
-| bootstrap | 27.290 (6.71→7.61) | 2.514 (10.97→10.41) | — | Fresh seed bootstrap; authenticated build images may reuse. |
-| independence | 0.002 (7.61→7.61) | 0.002 (10.41→10.41) | — | Fresh repository independence check. |
-| tool-build | 27.808 (7.61→10.66) | 1.517 (10.41→10.41) | — | Fresh build requests; authenticated images may reuse. |
-| closed-build | 3.927 (10.66→10.45) | 1.562 (10.41→10.41) | — | Fresh same-IR authority report and sealed image. |
-| generate | 0.091 (10.45→10.45) | 0.081 (10.41→10.41) | — | Fresh deterministic corpus generation. |
-| closed-semantics | 0.413 (10.45→10.45) | 0.037 (10.41→10.41) | 0/5 → 5/0 | Successful exact runner/ELF/contract proof; five cases. |
-| closed-proof-attacks | 0.727 (10.45→10.45) | 0.654 (10.41→10.41) | — | Fresh authentication, identity and report-swap attacks. |
-| toolchain | 61.567 (10.45→10.52) | 60.847 (10.41→12.17) | — | Fresh host and toolchain integration proofs. |
-| world | 31.498 (10.45→10.65) | 28.821 (10.41→9.56) | — | Fresh host capability observations. |
-| profiler | 1.226 (10.45→10.45) | 1.110 (10.41→10.41) | — | Fresh sampling and profile-format proofs. |
-| optimizer | 9.199 (10.45→10.84) | 7.636 (10.41→10.12) | — | Fresh optimizer admission and comparison proofs. |
-| resources | 0.889 (10.45→10.45) | 0.591 (10.41→10.14) | — | Fresh resource and refusal observations. |
-| runner | 5.388 (10.45→10.65) | 4.140 (10.14→10.14) | — | Fresh runner structural checks. |
-| diagnostic-cases | 7.226 (10.65→10.94) | 0.904 (10.14→10.12) | 0/35 → 34/1 | Warm: 34 verdict proofs; one library-override fixture forces no store. |
-| store | 45.482 (10.94→10.52) | 45.002 (10.12→12.80) | — | Fresh store corruption, invalidation, bounds and refusal attacks. |
-| program-directory | 5.219 (10.52→10.64) | 4.831 (12.80→12.17) | — | Fresh manifest, grants, environment and directory proofs. |
-| http | 19.954 (10.52→11.14) | 18.734 (12.17→13.72) | — | Fresh HTTP server/client observations. |
-| journal | 2.359 (10.64→11.07) | 2.253 (12.17→13.28) | — | Fresh journal persistence and HTTP observations. |
-| stop | 3.188 (11.07→11.07) | 3.064 (13.28→13.28) | — | Fresh native shutdown observations. |
-| stop-interpreter | 7.315 (11.07→11.14) | 6.630 (13.28→13.17) | — | Fresh interpreter shutdown observations. |
-| site | 2.187 (11.14→11.14) | 2.577 (13.17→13.17) | — | Fresh offline site consumer proof. |
-| desk | 4.453 (11.14→11.13) | 4.554 (13.17→13.72) | — | Fresh desk consumer proof. |
-| conformance | 107.976 (11.13→12.16) | 19.509 (13.72→12.47) | 0/778 → 767/11 | Warm: 11 requests have no reusable observation proof. |
-| generated | 65.424 (12.16→14.66) | 0.903 (12.47→12.47) | 0/1215 → 1215/0 | Warm: all fixed captures have authenticated proofs. |
-| optimized-conformance | 109.382 (14.66→11.82) | 20.133 (12.47→11.76) | 0/778 → 767/11 | Same rule, independently keyed inline-limit 64. |
-| optimized-generated | 64.720 (11.82→11.61) | 0.626 (11.76→11.76) | 0/1215 → 1215/0 | Same fixed-capture rule, independently keyed inline-limit 64. |
-| semantic-structure | 22.772 (11.61→10.29) | 27.907 (11.76→18.47) | — | 762 fresh structural contracts in each gate. |
-| semantic-cases | 16.609 (10.29→11.49) | 0.881 (18.47→18.47) | 0/436 → 436/0 | Warm: all exact compiler/input proofs reused. |
-| references | 3.047 (11.49→10.97) | 0.641 (18.47→18.47) | 0/13 → 13/0 | Warm: all exact compiler/input proofs reused. |
-| ir-mutation | 0.579 (10.97→10.97) | 0.694 (18.47→18.47) | — | 128 fresh mutation comparisons; zero findings in each gate. |
+| bootstrap | 29.329 (10.98→12.00) | 3.063 (16.30→18.03) | — | Fresh seed bootstrap; authenticated build images may reuse. |
+| independence | 0.003 (12.00→12.00) | 0.003 (18.03→18.03) | — | Fresh repository independence check. |
+| tool-build | 30.717 (12.00→11.59) | 1.948 (18.03→18.03) | — | Fresh build requests; authenticated images may reuse. |
+| closed-build | 3.237 (11.59→11.07) | 1.944 (18.03→17.87) | — | Fresh same-IR authority report and sealed image. |
+| generate | 0.088 (11.07→11.07) | 0.118 (17.87→17.87) | — | Fresh deterministic corpus generation. |
+| closed-semantics | 0.345 (11.07→11.07) | 0.037 (17.87→17.87) | 0/5 → 5/0 | Successful exact runner/ELF/contract proof; five cases. |
+| closed-proof-attacks | 0.576 (11.07→11.07) | 0.632 (17.87→17.87) | — | Fresh authentication, identity and report-swap attacks. |
+| toolchain | 60.511 (11.07→9.14) | 62.858 (17.87→13.75) | — | Fresh host and toolchain integration proofs. |
+| world | 29.504 (11.07→10.58) | 30.853 (17.87→16.47) | — | Fresh host capability observations. |
+| profiler | 1.056 (11.07→11.07) | 1.180 (17.87→17.87) | — | Fresh sampling and profile-format proofs. |
+| optimizer | 7.348 (11.07→10.58) | 8.664 (17.87→17.34) | — | Fresh optimizer admission and comparison proofs. |
+| resources | 0.718 (11.07→11.07) | 0.806 (17.87→17.87) | — | Fresh resource and refusal observations. |
+| runner | 4.290 (11.07→10.58) | 4.300 (17.87→17.72) | — | Fresh runner structural checks. |
+| diagnostic-cases | 6.580 (10.58→10.85) | 0.895 (17.72→17.72) | 0/35 → 34/1 | Warm: 34 verdict proofs; one library-override fixture forces no store. |
+| store | 43.402 (10.85→9.24) | 43.785 (17.34→14.08) | — | Fresh store corruption, invalidation, bounds and refusal attacks. |
+| program-directory | 5.041 (9.24→9.14) | 5.200 (14.08→13.75) | — | Fresh manifest, grants, environment and directory proofs. |
+| http | 18.351 (9.14→8.74) | 17.492 (13.75→12.42) | — | Fresh HTTP server/client observations. |
+| journal | 2.008 (9.14→9.14) | 1.920 (13.75→13.13) | — | Fresh journal persistence and HTTP observations. |
+| stop | 2.928 (9.14→9.05) | 2.874 (13.13→13.13) | — | Fresh native shutdown observations. |
+| stop-interpreter | 5.889 (9.05→8.89) | 5.616 (13.13→12.42) | — | Fresh interpreter shutdown observations. |
+| site | 2.418 (8.89→8.89) | 2.213 (12.42→12.42) | — | Fresh offline site consumer proof. |
+| desk | 6.036 (8.89→9.32) | 4.543 (12.42→12.23) | — | Fresh desk consumer proof. |
+| conformance | 82.891 (9.32→11.25) | 16.221 (12.23→11.41) | 0/779 → 768/11 | Warm: 11 requests have no reusable observation proof. |
+| generated | 72.556 (11.25→14.21) | 0.746 (11.41→11.41) | 0/1215 → 1215/0 | Warm: all fixed captures have authenticated proofs. |
+| optimized-conformance | 85.862 (14.21→14.95) | 16.408 (11.41→9.73) | 0/779 → 768/11 | Same rule, independently keyed inline-limit 64. |
+| optimized-generated | 76.289 (14.95→16.09) | 0.591 (9.73→9.73) | 0/1215 → 1215/0 | Same fixed-capture rule, independently keyed inline-limit 64. |
+| semantic-structure | 26.727 (16.09→16.43) | 23.512 (9.73→7.81) | — | 762 fresh structural contracts in each gate. |
+| semantic-cases | 19.549 (16.43→16.50) | 0.956 (7.81→9.43) | 0/436 → 436/0 | Warm: all exact compiler/input proofs reused. |
+| references | 4.407 (16.50→16.30) | 0.653 (9.43→9.43) | 0/13 → 13/0 | Warm: all exact compiler/input proofs reused. |
+| ir-mutation | 0.684 (16.30→16.30) | 0.795 (9.43→9.43) | — | 128 fresh mutation comparisons; zero findings in each gate. |
+
+After both gates, the separate 32,768-mutant campaign at inline limit 64
+completed with zero findings in 67.973 s (load 9.43→15.71), using four workers.
+It is not included in either gate's wall time or 128-mutant count.
+
+## Native emission evidence
+
+These observations use source commit `4d7bb759` and seed commit `e9b8c940`,
+including the expanded-literal checkpoint guard, with the aggregate storage
+candidate applied. The measurement snapshot's `src/`, `library/` and witness
+bridge matched the working tree byte for byte after that application. The
+baseline executable was reproduced from the same snapshot before this storage
+change and matched the first landing's native compiler. Both executables then
+built the same candidate sources with `--no-store --inline-limit 0`.
+
+The candidate changes native frame-slot selection only. A whole-local aggregate
+transfer can share its source's slot when the source has no view anywhere in the
+function, its final access is this transfer, its first definition is earlier in
+the same straight-line block, and the destination's first access is this write.
+Types must match and scalar/empty storage is excluded. The original checked IR
+is retained for interpretation. Chained transfers inherit the selected slot;
+cleanup still follows the original IR and ownership flags.
+
+Loop safety also depends on the checker's existing exact backedge restoration,
+not just a linear interval. A destination first initialized within a loop cannot
+remain live at its backedge when it was absent at entry; loan holders and origins
+must also match the entry state. Dropping that destination while a view survives
+is rejected. Thus a view newly borrowed from the destination cannot survive into
+the next iteration and observe an earlier source initialization. This was
+reviewed against both `End` and targeted `Continue` validation. The permanent
+`aggregate_transfer_storage.rs` fixture compares the baseline native route,
+candidate native route and original-IR interpreter, including Copy chains,
+source redefinitions, branches, loops, a later destination borrow and owned
+aggregate cleanup. A by-value Copy parameter plus a separately supplied mutable
+view keeps its value snapshot; a read-only callee parameter is not automatically
+safe to alias to caller storage.
+
+The candidate's native fixed point is **16,227,926 bytes**, against the
+baseline's **16,772,694 bytes** (544,768 bytes, 3.25%, smaller). The candidate
+matches the compiler subsequently reproduced by the main checkout. Rust
+witnesses at optimization levels 0 and 3, built with one codegen unit, produced
+exactly the same compiler output bytes as the candidate native executable.
+Profiling each compiler also preserved its corresponding unprofiled output
+bytes. Baseline output can differ from candidate output because storage
+selection changed.
+
+### Compiler and workload measurements
+
+Each row below is one sequential observation, with one worker allocated to this
+measurement process. The root stream used at most one other compiler worker
+during the suite; the host was shared and heavily loaded. Load is the
+1/5/15-minute average immediately before that row. User and kernel time are
+shown separately from elapsed time. These are not isolated causal estimates,
+and no timing is an acceptance limit.
+
+| Compiler route | Wall s | User s | Kernel s | Peak RSS KiB | Executable bytes | Load 1/5/15 |
+| --- | --- | --- | --- | --- | --- | --- |
+| native candidate | 27.24 | 25.57 | 0.25 | 497988 | 16227926 | 13.21/11.92/11.16 |
+| Rust witness opt0 | 15.35 | 14.60 | 0.19 | 367040 | 15965856 | 19.14/13.32/11.64 |
+| Rust witness opt3 | 4.55 | 4.23 | 0.16 | 358264 | 6027856 | 17.88/13.34/11.67 |
+| native baseline | 31.76 | 30.09 | 0.30 | 496848 | 16772694 | 17.57/13.35/11.68 |
+
+The native candidate measured **1.775×** the opt0 witness in wall time
+(27.24/15.35 s), and **1.746×** in user-plus-kernel time
+(25.82/14.79 s), at the row loads above. Against opt3 it measured **5.987×**
+wall time and **5.882×** CPU time. The baseline observation was 31.76 s wall
+and 30.39 s CPU. Both routes have the same self-build input snapshot, but their
+loads differ; the observations do not establish that every reduction was caused
+by frame-slot sharing.
+
+Every microbenchmark route passed its small-input check and produced identical
+stdout, empty stderr and status zero on the measured input. All nine
+baseline/candidate native executable pairs differ byte for byte, even where
+their sizes match.
+
+| Workload | Route | Wall s | User s | Kernel s | Peak RSS KiB | Executable bytes | Load 1/5/15 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| aggregate64 | native candidate | 0.41 | 0.39 | 0.00 | 264 | 30138 | 23.39/15.26/12.38 |
+| aggregate64 | native baseline | 0.42 | 0.39 | 0.00 | 264 | 30138 | 23.39/15.26/12.38 |
+| aggregate64 | rustc opt0 | 0.35 | 0.34 | 0.00 | 1964 | 4438584 | 23.39/15.26/12.38 |
+| aggregate64 | rustc opt3 | 0.11 | 0.10 | 0.00 | 1720 | 4363752 | 23.39/15.26/12.38 |
+| vector64 | native candidate | 0.10 | 0.06 | 0.02 | 65588 | 30138 | 23.39/15.26/12.38 |
+| vector64 | native baseline | 0.07 | 0.05 | 0.01 | 64596 | 30138 | 23.39/15.26/12.38 |
+| vector64 | rustc opt0 | 0.09 | 0.07 | 0.01 | 64692 | 4440776 | 23.39/15.26/12.38 |
+| vector64 | rustc opt3 | 0.03 | 0.01 | 0.01 | 64460 | 4364016 | 23.39/15.26/12.38 |
+| aggregate | native candidate | 0.10 | 0.10 | 0.00 | 264 | 26042 | 22.24/15.15/12.36 |
+| aggregate | native baseline | 0.11 | 0.10 | 0.00 | 264 | 30138 | 22.24/15.15/12.36 |
+| aggregate | rustc opt0 | 0.02 | 0.02 | 0.00 | 1972 | 4438008 | 22.24/15.15/12.36 |
+| aggregate | rustc opt3 | 0.02 | 0.01 | 0.00 | 2040 | 4363336 | 22.24/15.15/12.36 |
+| scalar | native candidate | 0.37 | 0.37 | 0.00 | 264 | 26042 | 22.24/15.15/12.36 |
+| scalar | native baseline | 0.49 | 0.48 | 0.00 | 264 | 26042 | 22.24/15.15/12.36 |
+| scalar | rustc opt0 | 0.29 | 0.29 | 0.00 | 1740 | 4437808 | 22.24/15.15/12.36 |
+| scalar | rustc opt3 | 0.31 | 0.28 | 0.00 | 1756 | 4363104 | 22.24/15.15/12.36 |
+| scalar_add | native candidate | 0.28 | 0.25 | 0.00 | 264 | 26042 | 22.24/15.15/12.36 |
+| scalar_add | native baseline | 0.24 | 0.22 | 0.00 | 264 | 26042 | 22.14/15.25/12.41 |
+| scalar_add | rustc opt0 | 0.30 | 0.28 | 0.00 | 1908 | 4437880 | 22.14/15.25/12.41 |
+| scalar_add | rustc opt3 | 0.16 | 0.14 | 0.00 | 1964 | 4363104 | 22.14/15.25/12.41 |
+| buffers | native candidate | 0.54 | 0.52 | 0.00 | 264 | 30138 | 22.14/15.25/12.41 |
+| buffers | native baseline | 0.48 | 0.46 | 0.00 | 264 | 30138 | 22.14/15.25/12.41 |
+| buffers | rustc opt0 | 0.67 | 0.64 | 0.00 | 1916 | 4440512 | 22.14/15.25/12.41 |
+| buffers | rustc opt3 | 0.14 | 0.10 | 0.00 | 1968 | 4364080 | 22.14/15.25/12.41 |
+| vector | native candidate | 0.23 | 0.21 | 0.01 | 41804 | 30138 | 22.14/15.25/12.41 |
+| vector | native baseline | 0.25 | 0.24 | 0.00 | 41808 | 30138 | 22.14/15.25/12.41 |
+| vector | rustc opt0 | 0.27 | 0.26 | 0.00 | 41124 | 4440368 | 21.25/15.18/12.40 |
+| vector | rustc opt3 | 0.09 | 0.07 | 0.00 | 40664 | 4363792 | 21.25/15.18/12.40 |
+| http_parse | native candidate | 1.09 | 1.06 | 0.00 | 264 | 88260 | 21.25/15.18/12.40 |
+| http_parse | native baseline | 1.31 | 1.28 | 0.00 | 264 | 92356 | 21.25/15.18/12.40 |
+| http_parse | rustc opt0 | 0.51 | 0.50 | 0.00 | 1984 | 4480016 | 21.25/15.18/12.40 |
+| http_parse | rustc opt3 | 0.05 | 0.04 | 0.00 | 1768 | 4382912 | 20.27/15.08/12.38 |
+| string_map | native candidate | 1.80 | 1.77 | 0.00 | 3112 | 71606 | 20.27/15.08/12.38 |
+| string_map | native baseline | 1.81 | 1.71 | 0.00 | 3116 | 71606 | 20.27/15.08/12.38 |
+| string_map | rustc opt0 | 0.25 | 0.24 | 0.00 | 2496 | 4523120 | 20.89/15.29/12.47 |
+| string_map | rustc opt3 | 0.06 | 0.05 | 0.00 | 2460 | 4382328 | 20.89/15.29/12.47 |
+
+The regressions remain visible: candidate versus baseline wall/CPU observations
+were 0.10/0.08 versus 0.07/0.06 s for `vector64`,
+0.28/0.25 versus 0.24/0.22 s for `scalar_add`, and
+0.54/0.52 versus 0.48/0.46 s for `buffers`, at their listed loads.
+`string_map` was 1.80/1.77 versus 1.81/1.71 s, so its CPU observation also
+increased. Subsecond rows and changing host load limit interpretation; the
+results are retained without repeating the broad suite to select better numbers.
+The String-map witness still uses Rust's BTreeMap while native uses the source
+AVL implementation, as described above.
+
+### Exclusive kind split and remaining work
+
+Both profiles execute the same candidate-source self-build at the requested
+1,000 µs sampling period. Totals are 28,527 baseline and 25,029 candidate CPU
+samples. Every sample belongs to exactly one of the following sixteen categories;
+both sums were checked, and unknown is zero. Percentages here are calculated
+from those integer counts and rounded to two decimals, rather than the report's
+one-decimal truncation.
+
+| Profile route | Wall s | User s | Kernel s | Peak RSS KiB | Load 1/5/15 before → after |
+| --- | --- | --- | --- | --- | --- |
+| Baseline | 30.43 | 28.28 | 0.34 | 553408 | 20.89/15.29/12.47 → 19.07/15.38/12.59 |
+| Candidate | 26.23 | 24.89 | 0.24 | 559620 | 19.07/15.38/12.59 → 16.24/15.02/12.54 |
+
+| Exclusive kind | Baseline samples | Baseline % | Candidate samples | Candidate % |
+| --- | --- | --- | --- | --- |
+| unknown | 0 | 0.00 | 0 | 0.00 |
+| inline copy | 4740 | 16.62 | 3365 | 13.44 |
+| checks | 325 | 1.14 | 347 | 1.39 |
+| call instruction | 208 | 0.73 | 203 | 0.81 |
+| frame load/store | 1319 | 4.62 | 1158 | 4.63 |
+| other memory | 2872 | 10.07 | 2604 | 10.40 |
+| arithmetic / comparison / conversion | 3024 | 10.60 | 2830 | 11.31 |
+| branch | 706 | 2.47 | 658 | 2.63 |
+| allocator | 2901 | 10.17 | 2755 | 11.01 |
+| runtime | 698 | 2.45 | 686 | 2.74 |
+| register-to-register move | 4044 | 14.18 | 3663 | 14.64 |
+| address formation (LEA) | 1754 | 6.15 | 1490 | 5.95 |
+| immediate constant | 1674 | 5.87 | 1503 | 6.01 |
+| argument setup / result capture | 599 | 2.10 | 562 | 2.25 |
+| prologue / epilogue | 2869 | 10.06 | 2513 | 10.04 |
+| return | 794 | 2.78 | 692 | 2.76 |
+| **Total** | **28527** | **100.00** | **25029** | **100.00** |
+
+Copy regions include their own address calculation, moves and memory
+instructions; allocator/runtime regions similarly own their internal instructions.
+Argument/result setup and prologue/epilogue regions have precedence over the
+low-level arithmetic/move classes. Consequently these are exclusive emitted
+regions, not overlapping estimates of all moves or all loads. The low-level
+`call instruction` row alone is not total calling cost.
+
+The largest candidate self functions returned by the same profile were:
+
+| Function | Self samples | Self % | Inclusive % |
+| --- | --- | --- | --- |
+| `$std::sequence::__lkjscript_slice_order<T=t5;>` | 966 | 3.8 | 3.8 |
+| `$runtime::allocate` | 718 | 2.8 | 6.7 |
+| `$std::bytes::append_bytes` | 711 | 2.8 | 4.4 |
+| `$runtime::release` | 620 | 2.4 | 3.2 |
+| `$runtime::payload_class` | 564 | 2.2 | 2.2 |
+| `check::check_function_body` | 406 | 1.6 | 41.8 |
+| `$runtime::valid_utf8_bytes` | 393 | 1.5 | 1.8 |
+
+These function percentages preserve the report's truncation. Inclusive counts
+overlap and must not be added: `driver::compile` contains 23,874 samples
+(95.3%), while `check::check_all` contains 10,464 (41.8%). The observed self
+cost is distributed across checking, ordering, byte handling and allocation.
+
+The 1.0× opt0 milestone is **not met**. The copy share fell from 16.62% to
+13.44%, while register-to-register moves alone are 14.64%. Copy plus every
+call-related category totals 7,335/25,029 samples, **29.31%**. Matching opt0
+would require reducing the observed native wall time by **43.65%**, or CPU time
+by **42.72%**. If those sample shares represent the unprofiled workload, even
+eliminating all copy and call-category cost would leave about **1.255×** the
+opt0 wall time and **1.234×** its CPU time. This is an optimistic inference from
+sampling, not a demonstrated lower bound or a promise that such elimination is
+possible.
+
+Register moves, frame traffic and other memory together are 29.67%; much of that
+may be necessary work. Existing scalar allocation already carries some values
+across blocks and calls. Closing the remaining gap requires broader investigation
+of storage/register traffic or library/container work; this table does not prove
+that a new register allocator is the only route. The scoped aggregate change
+stops here, with the regressions, opt0 gap and opt3 horizon recorded rather than
+opening another optimizer project.

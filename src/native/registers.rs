@@ -7,6 +7,7 @@ struct Intervals {
     first: Vec<usize>,
     last: Vec<usize>,
     address: Vec<bool>,
+    borrowed: Vec<bool>,
 }
 impl Intervals {
     fn access(&mut self, local: usize, point: usize, loops: &[usize], ends: &[usize]) {
@@ -42,6 +43,7 @@ impl Intervals {
 pub(super) struct Registers {
     pub locals: Vec<Option<u8>>,
     pub saved: Vec<u8>,
+    pub storage: Vec<usize>,
 }
 impl Registers {
     pub fn new(program: &Program, function: &Function, layout: &Layouts) -> Self {
@@ -50,6 +52,7 @@ impl Registers {
             first: vec![!0usize; count],
             last: vec![0; count],
             address: vec![false; count],
+            borrowed: vec![false; count],
         };
         for local in 0..function.params {
             spans.first[local] = 0;
@@ -97,6 +100,7 @@ impl Registers {
                     spans.access(*dst, write, &loops, &ends);
                 }
                 Op::Borrow { dst, place, .. } | Op::SliceBorrow { dst, place, .. } => {
+                    spans.borrowed[place.local] = true;
                     spans.place(place, read, &loops, &ends, true);
                     spans.access(*dst, write, &loops, &ends);
                 }
@@ -107,6 +111,7 @@ impl Registers {
                     end,
                     ..
                 } => {
+                    spans.borrowed[place.local] = true;
                     spans.place(place, read, &loops, &ends, true);
                     spans.access(*start, read, &loops, &ends);
                     spans.access(*end, read, &loops, &ends);
@@ -221,6 +226,7 @@ impl Registers {
         let mut result = Self {
             locals: vec![None; count],
             saved: Vec::new(),
+            storage: storage_plan::coalesce(function, layout, &spans.first, &spans.last, &spans.borrowed),
         };
         for (first, local) in order {
             let begin = first / 2 + first % 2;

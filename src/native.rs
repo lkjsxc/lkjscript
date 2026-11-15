@@ -22,6 +22,7 @@ mod process;
 mod network;
 mod readiness;
 mod storage;
+mod storage_plan;
 mod lifecycle;
 pub mod profiling;
 mod registers;
@@ -419,6 +420,10 @@ impl<'a> Body<'a> {
         }
         let ty = self.ty(destination);
         let scalar = self.layout.storage(ty).scalar;
+        if !scalar && self.slots[destination] == self.slots[source] {
+            self.mark(destination);
+            return;
+        }
         if self.layout.storage(ty).bytes == 0 {
             self.mark(destination);
         } else if scalar {
@@ -1122,11 +1127,15 @@ fn emit_function(
     let mut slots = Vec::new();
     for index in 0..function.locals.len() {
         let storage = layout.storage(function.locals[index].ty);
-        slots.push(if registers.locals[index].is_some() || storage.bytes == 0 {
+        slots.push(if registers.locals[index].is_some() || storage.bytes == 0
+            || registers.storage[index] != index {
             0
         } else {
             allocate_slot(&mut frame, storage.bytes, storage.alignment, site)?
         });
+    }
+    for index in 0..slots.len() {
+        slots[index] = slots[registers.storage[index]];
     }
     let mut saved = Vec::new();
     for register in &registers.saved {

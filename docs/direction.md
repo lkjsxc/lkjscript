@@ -27,7 +27,7 @@ cold failure paths; allocation/stack failures may use a static function location
 Allocate scalar locals/temporaries to registers; aggregates and address-taken
 locals occupy frames. Forward straight-line values. No register-allocation
 project, cross-block propagation or peephole collection in this milestone.
-Emit nothing for scalar drops, unit values or copies onto themselves.
+Emit nothing for scalar drops, unit values or copies onto themselves. Share aggregate slots only for same-block, unborrowed-source final-use transfers into new identical-type locals; retain separate drop flags and original IR.
 Aggregates/vector elements are inline; views are addresses or address/count pairs.
 Frames use the machine stack. Retain bounds, arithmetic, division, UTF-8, tag
 and stack checks. Reject unencodable rel32 calls/branches with a located error.
