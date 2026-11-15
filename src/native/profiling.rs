@@ -4,7 +4,7 @@ use super::platform::{Platform, CODE_OFFSET, IMAGE_BASE};
 use crate::x86::*;
 use std::collections::BTreeMap;
 
-const HEADER: usize = 48;
+const HEADER: usize = 80;
 const ROW: usize = 64;
 const PERIOD_US: u64 = 1000;
 
@@ -15,6 +15,7 @@ pub struct Labels {
     restore: Label,
     lookup: Label,
     include: Label,
+    classify: Label,
     state: Label,
     table: Label,
     end: Label,
@@ -28,7 +29,7 @@ impl Labels {
     pub fn new(a: &mut Assembler) -> Self {
         Self {
             start: a.label(), handler: a.label(), restore: a.label(),
-            lookup: a.label(), include: a.label(), state: a.label(),
+            lookup: a.label(), include: a.label(), classify: a.label(), state: a.label(),
             table: a.label(), end: a.label(), path: a.label(),
             action: a.label(), timer: a.label(), altstack: a.label(), stack: a.label(),
         }
@@ -152,6 +153,8 @@ pub fn emit(a: &mut Assembler, p: Platform, l: Labels, path_len: usize) {
     a.load(R15, A, 48); // stack top
     a.load(A, R10, 168);
     a.mov(R13, A);
+    a.call(l.classify);
+    a.mov(A, R13);
     a.call(l.lookup);
     let walking = a.label();
     a.test(A, true);
@@ -269,6 +272,61 @@ pub fn emit(a: &mut Assembler, p: Platform, l: Labels, path_len: usize) {
     a.store(A, 24, D);
     a.bind(included);
     a.ret();
+
+    // Exactly one operation category is charged for the interrupted RIP.
+    // Function/frame attribution remains the independent table above.
+    a.bind(l.classify);
+    a.load(A, R12, 56);
+    a.compare(R13, A);
+    let unknown_kind = a.label();
+    let count_kind = a.label();
+    a.condition(2, unknown_kind);
+    a.load(A, R12, 64);
+    a.compare(R13, A);
+    a.condition(3, unknown_kind);
+    a.load(R9, R12, 32);
+    a.rr(0x01, R9, R12, true);
+    a.immediate(SI, 0);
+    a.load(DI, R12, 40);
+    let kind_search = a.label();
+    let kind_lower = a.label();
+    let kind_found = a.label();
+    a.bind(kind_search);
+    a.compare(SI, DI);
+    a.condition(3, kind_found);
+    a.mov(C, SI);
+    a.rr(0x01, C, DI, true);
+    a.shift(C, 5, 1);
+    a.mov(R8, C);
+    a.shift(R8, 4, 4);
+    a.rr(0x01, R8, R9, true);
+    a.load(A, R8, 0);
+    a.compare(R13, A);
+    a.condition(2, kind_lower);
+    a.lea(SI, C, 1);
+    a.jump(kind_search);
+    a.bind(kind_lower);
+    a.mov(DI, C);
+    a.jump(kind_search);
+    a.bind(kind_found);
+    a.test(SI, true);
+    a.condition(4, unknown_kind);
+    a.lea(R8, SI, -1);
+    a.shift(R8, 4, 4);
+    a.rr(0x01, R8, R9, true);
+    a.load(A, R8, 8);
+    a.jump(count_kind);
+    a.bind(unknown_kind);
+    a.immediate(A, KIND_UNKNOWN as u64);
+    a.bind(count_kind);
+    a.load(D, R12, 48);
+    a.rr(0x01, D, R12, true);
+    a.shift(A, 4, 3);
+    a.rr(0x01, D, A, true);
+    a.load(A, D, 0);
+    add(a, A, 1);
+    a.store(D, 0, A);
+    a.ret();
 }
 
 fn put(bytes: &mut [u8], at: usize, value: u64) {
@@ -283,7 +341,7 @@ fn word(bytes: &mut Vec<u8>, value: u64) {
 }
 pub fn data(
     a: &mut Assembler, l: Labels, bytes: &mut Vec<u8>, offset: usize,
-    path: &str, symbols: &[(Label, String)], code_end: usize,
+    path: &str, symbols: &[(Label, String)], code_end: usize, kinds: &[(usize, u8)],
 ) {
     let mut sorted: BTreeMap<usize, String> = BTreeMap::new();
     for (label, name) in symbols {
@@ -294,7 +352,7 @@ pub fn data(
     let mut starts: Vec<usize> = Vec::new();
     for (start, _) in &sorted { starts.push(*start); }
     let mut table = vec![0u8; HEADER + starts.len() * ROW];
-    table[..8].copy_from_slice(b"LKJPROF1");
+    table[..8].copy_from_slice(b"LKJPROF2");
     put(&mut table, 8, starts.len() as u64);
     put(&mut table, 16, PERIOD_US * 1000);
     for (index, (start, name)) in sorted.iter().enumerate() {
@@ -318,6 +376,19 @@ pub fn data(
         put(&mut table, at + 48, name.len() as u64);
         table.extend_from_slice(name.as_bytes());
     }
+    let kind_offset = table.len();
+    put(&mut table, 32, kind_offset as u64);
+    put(&mut table, 40, kinds.len() as u64);
+    let base = IMAGE_BASE + CODE_OFFSET as u64;
+    put(&mut table, 56, base);
+    put(&mut table, 64, base + code_end as u64);
+    for (start, kind) in kinds {
+        word(&mut table, base + *start as u64);
+        word(&mut table, *kind as u64);
+    }
+    let counter_offset = table.len();
+    put(&mut table, 48, counter_offset as u64);
+    for _ in 0..KIND_COUNT { word(&mut table, 0); }
     a.data_label(l.state, offset + bytes.len());
     word(bytes, 0);
     a.data_label(l.action, offset + bytes.len());
@@ -366,14 +437,14 @@ fn display_name(name: &str) -> String {
 }
 pub fn report(bytes: &[u8]) -> Result<String, String> {
     let invalid = "E_PROFILE invalid or incomplete samples file";
-    if bytes.len() < HEADER || &bytes[..8] != b"LKJPROF1" {
+    if bytes.len() < HEADER || &bytes[..8] != b"LKJPROF2" {
         return Err(invalid.to_string());
     }
     let count = get(bytes, 8) as usize;
     if count > (bytes.len() - HEADER) / ROW {
         return Err(invalid.to_string());
     }
-    let total = get(bytes, 24);
+    let serial = get(bytes, 24);
     let mut names: Vec<String> = Vec::new();
     let mut self_counts: Vec<u64> = Vec::new();
     let mut inclusive: Vec<u64> = Vec::new();
@@ -392,12 +463,45 @@ pub fn report(bytes: &[u8]) -> Result<String, String> {
         self_counts.push(get(bytes, row + 16));
         inclusive.push(get(bytes, row + 24));
     }
+    let kind_table = get(bytes, 32) as usize;
+    let kind_count = get(bytes, 40) as usize;
+    let counters = get(bytes, 48) as usize;
+    let code_start = get(bytes, 56);
+    let code_end = get(bytes, 64);
+    if kind_table > bytes.len() || kind_count > (bytes.len() - kind_table) / 16
+        || counters > bytes.len() || KIND_COUNT > (bytes.len() - counters) / 8
+        || kind_count == 0 || code_end <= code_start
+    {
+        return Err(invalid.to_string());
+    }
+    let mut previous = 0u64;
+    for index in 0..kind_count {
+        let at = kind_table + index * 16;
+        let start = get(bytes, at);
+        let kind = get(bytes, at + 8);
+        if kind >= KIND_COUNT as u64 || start < code_start || start >= code_end
+            || (index == 0 && start != code_start) || (index != 0 && start <= previous)
+        {
+            return Err(invalid.to_string());
+        }
+        previous = start;
+    }
+    let mut total = 0u64;
+    for kind in 0..KIND_COUNT {
+        let samples = get(bytes, counters + kind * 8);
+        if samples > !0u64 - total { return Err(invalid.to_string()); }
+        total += samples;
+    }
+    // The serial advances before category storage. Termination may interrupt one
+    // handler there; SIGPROF is blocked during its handler, so it cannot nest.
+    // Report completed category samples, retaining the serial for frame dedup.
+    if serial < total || serial - total > 1 { return Err(invalid.to_string()); }
     let mut out = format!("CPU samples: {total}; requested period {} us; inclusive counts each function once per sample\n", get(bytes, 16) / 1000);
     for mode in 0..2 {
         out.push_str(if mode == 0 { "Top self time\n" } else { "Top inclusive time\n" });
         out.push_str("self% incl% samples function\n");
         let mut used = vec![false; count];
-        for _ in 0..14 {
+        for _ in 0..10 {
             let mut best = None;
             let mut largest = 0u64;
             for i in 0..count {
@@ -412,5 +516,48 @@ pub fn report(bytes: &[u8]) -> Result<String, String> {
             }
         }
     }
+    out.push_str("Emitted instruction kinds (self samples)\n");
+    out.push_str("kind self% samples class\n");
+    for kind in 0..KIND_COUNT {
+        let samples = get(bytes, counters + kind * 8);
+        out.push_str(&format!("kind {} {} {}\n", percent(samples, total), samples, kind_name(kind)));
+    }
     Ok(out)
+}
+fn kind_name(kind: usize) -> &'static str {
+    match kind {
+        1 => "inline copy",
+        2 => "checks",
+        3 => "call setup / prologue / return",
+        4 => "frame load/store",
+        5 => "other memory",
+        6 => "arithmetic/register operations",
+        7 => "branch",
+        8 => "allocator",
+        9 => "runtime",
+        _ => "unknown",
+    }
+}
+
+/// Allocate/release/reallocate and their checked runtime callees form the
+/// allocator region. Platform leaves and remaining runtime bodies are runtime.
+pub(super) fn allocator_functions(runtime: &crate::runtime::Runtime) -> Vec<bool> {
+    let program = runtime.checked_program();
+    let mut selected = vec![false; program.functions.len()];
+    let mut pending = vec![
+        runtime.entry(crate::runtime::Entry::Allocate),
+        runtime.entry(crate::runtime::Entry::Release),
+        runtime.entry(crate::runtime::Entry::Reallocate),
+    ];
+    while let Some(index) = pending.pop() {
+        if !selected[index] {
+            selected[index] = true;
+            for instruction in &program.functions[index].body {
+                if let crate::ir::Op::Call { function, .. } = instruction.op {
+                    pending.push(function);
+                }
+            }
+        }
+    }
+    selected
 }

@@ -40,7 +40,7 @@ fn take_span(bytes: &[u8], at: &mut usize) -> Option<Span> {
     })
 }
 fn encode(fragment: &Fragment) -> Vec<u8> {
-    let mut out = "LKJCODE1".as_bytes().to_vec();
+    let mut out = "LKJCODE2".as_bytes().to_vec();
     word(&mut out, fragment.label_base);
     span(&mut out, fragment.site);
     word(&mut out, fragment.bytes.len());
@@ -61,10 +61,15 @@ fn encode(fragment: &Fragment) -> Vec<u8> {
         word(&mut out, bytes.len());
         out.extend_from_slice(bytes);
     }
+    word(&mut out, fragment.kinds.len());
+    for (offset, kind) in &fragment.kinds {
+        word(&mut out, *offset);
+        word(&mut out, *kind as usize);
+    }
     out
 }
 fn decode(bytes: &[u8]) -> Option<Fragment> {
-    if bytes.len() < 8 || &bytes[..8] != b"LKJCODE1" {
+    if bytes.len() < 8 || &bytes[..8] != b"LKJCODE2" {
         return None;
     }
     let mut at = 8;
@@ -111,10 +116,21 @@ fn decode(bytes: &[u8]) -> Option<Fragment> {
         symbols.push((label, bytes[at..at + length].to_vec()));
         at += length;
     }
+    let count = take_word(bytes, &mut at)?;
+    if count > (bytes.len() - at) / 16 {
+        return None;
+    }
+    let mut kinds = Vec::new();
+    for _ in 0..count {
+        let offset = take_word(bytes, &mut at)?;
+        let kind = take_word(bytes, &mut at)?;
+        if kind >= KIND_COUNT { return None; }
+        kinds.push((offset, kind as u8));
+    }
     if at != bytes.len() {
         return None;
     }
-    Some(Fragment { bytes: code, label_base, labels, references, symbols, site })
+    Some(Fragment { bytes: code, label_base, labels, references, symbols, site, kinds })
 }
 
 pub(super) fn namespace(
@@ -123,7 +139,7 @@ pub(super) fn namespace(
     grants: &[ir::EntryGrant],
     profile_path: Option<&str>,
 ) -> String {
-    let mut inputs = "lkjscript-native-functions-1\0linux-x86_64\0".as_bytes().to_vec();
+    let mut inputs = "lkjscript-native-functions-2\0linux-x86_64\0".as_bytes().to_vec();
     // Grant values and the selected entry do not occur in function bodies, but
     // grant count and profiler presence change the external label prefix.
     word(&mut inputs, grants.len());
@@ -195,6 +211,7 @@ pub(super) fn emit(
 
 fn fixture(padding: usize, existing: bool) -> (Assembler, Label, Label, BTreeMap<Vec<u8>, Label>) {
     let mut a = Assembler::new();
+    a.enable_profile();
     let target = a.label();
     let bound = a.label();
     a.bind(target);
@@ -239,12 +256,13 @@ fn fixture_body(
     a.ret();
     a.fragment(checkpoint, vec![(first, first_bytes), (second, second_bytes)]).unwrap()
 }
-fn fixture_finish(mut a: Assembler, symbols: &BTreeMap<Vec<u8>, Label>) -> Vec<u8> {
+fn fixture_finish(mut a: Assembler, symbols: &BTreeMap<Vec<u8>, Label>) -> (Vec<u8>, Vec<(usize, u8)>) {
+    let kinds = a.take_kinds();
     for (bytes, label) in symbols {
         a.bind(*label);
         a.raw(bytes);
     }
-    a.finish().unwrap()
+    (a.finish().unwrap(), kinds)
 }
 pub(super) fn contracts() {
     let (mut original, target, bound, mut symbols) = fixture(0, true);
@@ -271,6 +289,10 @@ pub(super) fn contracts() {
     let (mut a, _, bound, mut symbols) = fixture(11, false);
     let before = a.bytes.clone();
     let labels = a.label_count();
+    assert!(!a.append_fragment(&broken, bound, 2, &mut symbols));
+    assert!(a.bytes == before && a.label_count() == labels && symbols.is_empty());
+    let mut broken = decode(&encoded).unwrap();
+    broken.kinds[0].0 = 1;
     assert!(!a.append_fragment(&broken, bound, 2, &mut symbols));
     assert!(a.bytes == before && a.label_count() == labels && symbols.is_empty());
 }

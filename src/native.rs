@@ -134,6 +134,7 @@ fn frame_extent(bytes: u64, site: Span) -> Result<u64, Diagnostic> {
     Ok(aligned)
 }
 fn stack_available(a: &mut Assembler, p: platform::Platform, bytes: u64, site: Span) {
+    let kind = a.scope_kind(KIND_CALL);
     let exhausted = a.label();
     let ready = a.label();
     let grown = a.label();
@@ -156,8 +157,10 @@ fn stack_available(a: &mut Assembler, p: platform::Platform, bytes: u64, site: S
     a.immediate(A, 8);
     a.jump(p.trap);
     a.bind(ready);
+    a.scope_kind(kind);
 }
 fn prologue(a: &mut Assembler, p: platform::Platform, bytes: u64, site: Span) {
+    let kind = a.scope_kind(KIND_CALL);
     stack_available(a, p, bytes + 16, site);
     a.push(BP);
     a.mov(BP, SP);
@@ -165,11 +168,13 @@ fn prologue(a: &mut Assembler, p: platform::Platform, bytes: u64, site: Span) {
         a.immediate(A, bytes);
         a.rr(0x29, SP, A, true);
     }
+    a.scope_kind(kind);
 }
 fn copy_bytes(a: &mut Assembler, _p: platform::Platform, bytes: u64) {
     if bytes == 0 {
         return;
     }
+    let kind = a.scope_kind(KIND_COPY);
     if bytes == 1 || bytes == 2 || bytes == 4 || bytes == 8 {
         a.load_width(A, SI, 0, bytes as u8, false);
         a.store_width(DI, 0, A, bytes as u8);
@@ -237,11 +242,14 @@ fn copy_bytes(a: &mut Assembler, _p: platform::Platform, bytes: u64) {
         a.raw(&[0xfc, 0xf3, 0xa4]);
         a.bind(done);
     }
+    a.scope_kind(kind);
 }
 fn epilogue(a: &mut Assembler) {
+    let kind = a.scope_kind(KIND_CALL);
     a.mov(SP, BP);
     a.pop(BP);
     a.ret();
+    a.scope_kind(kind);
 }
 enum Control {
     Conditional {
@@ -331,6 +339,7 @@ impl<'a> Body<'a> {
         self.a.lea(register, BP, self.slots[local]);
     }
     fn trap(&mut self, code: u64) {
+        let kind = self.a.scope_kind(KIND_CHECK);
         self.a.immediate(
             LINE,
             if self.source_lines {
@@ -349,12 +358,27 @@ impl<'a> Body<'a> {
         );
         self.a.immediate(A, code);
         self.a.jump(self.platform.trap);
+        self.a.scope_kind(kind);
     }
     fn trap_if(&mut self, condition: u8, code: u64) {
+        let kind = self.a.scope_kind(KIND_CHECK);
         let valid = self.a.label();
         self.a.condition(condition ^ 1, valid);
         self.trap(code);
         self.a.bind(valid);
+        self.a.scope_kind(kind);
+    }
+    fn check_compare(&mut self, left: u8, right: u8, condition: u8, code: u64) {
+        let kind = self.a.scope_kind(KIND_CHECK);
+        self.a.compare(left, right);
+        self.trap_if(condition, code);
+        self.a.scope_kind(kind);
+    }
+    fn check_test(&mut self, register: u8, wide: bool, condition: u8, code: u64) {
+        let kind = self.a.scope_kind(KIND_CHECK);
+        self.a.test(register, wide);
+        self.trap_if(condition, code);
+        self.a.scope_kind(kind);
     }
     // Small inline copies read every source word before writing any destination;
     // larger copies use inline directional rep movsb. Registers are caller-saved.
@@ -482,8 +506,7 @@ impl<'a> Body<'a> {
                         _ => return Err(self.problem("checked index has no collection")),
                     };
                     self.read(*index, A);
-                    self.a.compare(A, R11);
-                    self.trap_if(3, 3);
+                    self.check_compare(A, R11, 3, 3);
                     self.a.immediate(C, self.layout.stride(inner));
                     self.a.imul(A, C);
                     self.a.rr(0x01, R10, A, true);
@@ -631,17 +654,16 @@ impl<'a> Body<'a> {
         let (source, stride) = self.collection(place)?;
         self.read(end, A);
         self.a.load(C, BP, self.scratch[1]);
-        self.a.compare(A, C);
-        self.trap_if(if inclusive { 3 } else { 7 }, 3);
+        self.check_compare(A, C, if inclusive { 3 } else { 7 }, 3);
         if inclusive {
             self.a.immediate(C, 1);
             self.a.rr(0x01, A, C, true);
         }
         self.a.store(BP, self.scratch[2], A);
         self.read(start, C);
-        self.a.compare(C, A);
-        self.trap_if(7, 3);
+        self.check_compare(C, A, 7, 3);
         if matches!(self.program.types[source].kind, TypeKind::Str) {
+            let kind = self.a.scope_kind(KIND_CHECK);
             for endpoint in 0..2 {
                 if endpoint == 0 {
                     self.read(start, A);
@@ -658,10 +680,10 @@ impl<'a> Body<'a> {
                 self.a.immediate(C, 0xc0);
                 self.a.rr(0x21, A, C, true);
                 self.a.immediate(C, 0x80);
-                self.a.compare(A, C);
-                self.trap_if(4, 3);
+                self.check_compare(A, C, 4, 3);
                 self.a.bind(boundary);
             }
+            self.a.scope_kind(kind);
         }
         self.read(start, A);
         self.a.immediate(C, stride);
@@ -775,6 +797,11 @@ impl<'a> Body<'a> {
         };
         self.a
             .location(self.site.file, self.site.line, self.site.column);
+        let call_kind = if matches!(instruction.op, Op::Call { .. } | Op::Return { .. }) {
+            Some(self.a.scope_kind(KIND_CALL))
+        } else {
+            None
+        };
         self.consume_inputs(&instruction.op);
         match &instruction.op {
             Op::Int { dst, value } => {
@@ -1044,6 +1071,7 @@ impl<'a> Body<'a> {
                 self.trap(16 + index as u64);
             }
         }
+        if let Some(kind) = call_kind { self.a.scope_kind(kind); }
         Ok(())
     }
 }
@@ -1116,6 +1144,7 @@ fn emit_function(
     let return_label = a.label();
     a.location(site.file, site.line, site.column);
     a.bind(functions[function_index]);
+    let entry_kind = a.scope_kind(KIND_CALL);
     prologue(
         a,
         p,
@@ -1163,6 +1192,7 @@ fn emit_function(
         }
     }
     ownership.initialize(a, function.params);
+    a.scope_kind(entry_kind);
     let mut body = Body {
         a,
         program,
@@ -1191,10 +1221,12 @@ fn emit_function(
         body.emit(instruction)?;
     }
     body.a.bind(return_label);
+    let return_kind = body.a.scope_kind(KIND_CALL);
     for (register, slot) in &saved {
         body.a.load(*register, BP, *slot);
     }
     epilogue(body.a);
+    body.a.scope_kind(return_kind);
     Ok(())
 }
 fn emit_primitive(a: &mut Assembler, p: platform::Platform, label: Label, primitive: Primitive) {
@@ -1545,6 +1577,7 @@ fn encode_program(
     });
 
     let mut a = Assembler::new();
+    if profile_path.is_some() { a.enable_profile(); }
     let p = platform::Platform::new(&mut a);
     let grant_plan = match grants {
         Some(grants) => Some(entry::Plan::new(&mut a, grants, first_site(selected))),
@@ -1634,6 +1667,7 @@ fn encode_program(
             needed[index] = true;
         }
     }
+    let platform_kind = a.region_kind(KIND_RUNTIME);
     platform::emit(&mut a, p, functions[entry.function], &entry, profile, grant_plan.as_ref());
     if connector { network::emit_connector(&mut a, p); }
     if accept_nodelay { network::emit_accept_nodelay(&mut a, p); }
@@ -1643,6 +1677,7 @@ fn encode_program(
         symbols.push((profile.start, "$profiler".to_string()));
         profiling::emit(&mut a, p, profile, profile_path.unwrap().len());
     }
+    a.region_kind(platform_kind);
     {
         let selection = Selection {
             program,
@@ -1712,7 +1747,9 @@ fn encode_program(
             messages: &runtime_messages,
             source_lines: false,
         };
+        let allocator = if profile.is_some() { profiling::allocator_functions(runtime) } else { Vec::new() };
         for index in 0..meaning.functions.len() {
+            let region = a.region_kind(if profile.is_some() && allocator[index] { KIND_ALLOCATOR } else { KIND_RUNTIME });
             if let Some(primitive) = runtime.primitive(index) {
                 emit_primitive(&mut a, p, runtime_functions[index], primitive);
             } else {
@@ -1726,6 +1763,7 @@ fn encode_program(
                     &mut literals,
                 )?;
             }
+            a.region_kind(region);
         }
     }
     if profile.is_some() {
@@ -1747,7 +1785,8 @@ fn encode_program(
     platform::data(&mut a, p, &mut data, data_offset, &trap_messages);
     if let Some(plan) = grant_plan { plan.data(&mut a, &mut data, data_offset); }
     if let Some(profile) = profile {
-        profiling::data(&mut a, profile, &mut data, data_offset, profile_path.unwrap(), &symbols, code_end);
+        let kinds = a.take_kinds();
+        profiling::data(&mut a, profile, &mut data, data_offset, profile_path.unwrap(), &symbols, code_end, &kinds);
     }
     for (bytes, label) in &literals {
         a.data_label(*label, data_offset + data.len());

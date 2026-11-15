@@ -23,6 +23,21 @@ pub const STACK_FLOOR: u8 = R13;
 pub const LINE: u8 = R14;
 pub const FILE: u8 = R15;
 
+// Mutually exclusive emitted-code categories; these describe machine work,
+// independently of the source function which happens to contain it.
+pub const KIND_UNKNOWN: u8 = 0;
+pub const KIND_COPY: u8 = 1;
+pub const KIND_CHECK: u8 = 2;
+pub const KIND_CALL: u8 = 3;
+pub const KIND_FRAME: u8 = 4;
+pub const KIND_MEMORY: u8 = 5;
+pub const KIND_ARITHMETIC: u8 = 6;
+pub const KIND_BRANCH: u8 = 7;
+pub const KIND_ALLOCATOR: u8 = 8;
+pub const KIND_RUNTIME: u8 = 9;
+pub const KIND_COUNT: usize = 10;
+
+
 struct Reference {
     at: usize,
     label: Label,
@@ -35,6 +50,7 @@ pub(crate) struct Checkpoint {
     bytes: usize,
     labels: usize,
     references: usize,
+    kinds: usize,
 }
 pub(crate) struct FragmentReference {
     pub at: usize,
@@ -48,6 +64,7 @@ pub(crate) struct Fragment {
     pub references: Vec<FragmentReference>,
     pub symbols: Vec<(Label, Vec<u8>)>,
     pub site: Span,
+    pub kinds: Vec<(usize, u8)>,
 }
 
 pub struct Assembler {
@@ -56,6 +73,10 @@ pub struct Assembler {
     references: Vec<Reference>,
     site: Span,
     problem: Option<Diagnostic>,
+    profile: bool,
+    scope_kind: u8,
+    region_kind: u8,
+    kinds: Vec<(usize, u8)>,
 }
 impl Default for Assembler {
     fn default() -> Self {
@@ -76,7 +97,61 @@ impl Assembler {
                 column: 1,
             },
             problem: None,
+            profile: false,
+            scope_kind: KIND_UNKNOWN,
+            region_kind: KIND_UNKNOWN,
+            kinds: Vec::new(),
         }
+    }
+
+
+    pub(crate) fn enable_profile(&mut self) {
+        self.profile = true;
+    }
+    pub(crate) fn scope_kind(&mut self, kind: u8) -> u8 {
+        let previous = self.scope_kind;
+        self.scope_kind = kind;
+        previous
+    }
+    pub(crate) fn region_kind(&mut self, kind: u8) -> u8 {
+        let previous = self.region_kind;
+        self.region_kind = kind;
+        previous
+    }
+    fn kind(&mut self, default: u8) {
+        if self.profile {
+            let kind = if self.region_kind != KIND_UNKNOWN {
+                self.region_kind
+            } else if self.scope_kind != KIND_UNKNOWN {
+                self.scope_kind
+            } else {
+                default
+            };
+            let offset = self.bytes.len();
+            self.record_kind(offset, kind);
+        }
+    }
+    fn record_kind(&mut self, offset: usize, kind: u8) {
+        let count = self.kinds.len();
+        if count != 0 {
+            if self.kinds[count - 1].0 == offset {
+                self.kinds[count - 1].1 = kind;
+                if count > 1 && self.kinds[count - 2].1 == kind {
+                    self.kinds.pop();
+                }
+                return;
+            }
+            if self.kinds[count - 1].1 == kind {
+                return;
+            }
+        }
+        self.kinds.push((offset, kind));
+    }
+    pub(crate) fn take_kinds(&mut self) -> Vec<(usize, u8)> {
+        std::mem::replace(&mut self.kinds, Vec::new())
+    }
+    fn raw_bytes(&mut self, bytes: &[u8]) {
+        self.bytes.extend_from_slice(bytes);
     }
 
     pub(crate) fn label_count(&self) -> usize {
@@ -87,6 +162,7 @@ impl Assembler {
             bytes: self.bytes.len(),
             labels: self.labels.len(),
             references: self.references.len(),
+            kinds: self.kinds.len(),
         }
     }
     pub(crate) fn fragment(
@@ -113,6 +189,20 @@ impl Assembler {
                 site: reference.site,
             });
         }
+        let mut kinds = Vec::new();
+        if self.profile && checkpoint.bytes < self.bytes.len() {
+            let previous = if checkpoint.kinds == 0 { 0 } else { checkpoint.kinds - 1 };
+            let previous = previous.min(self.kinds.len());
+            let kind = if previous == 0 { KIND_UNKNOWN } else { self.kinds[previous - 1].1 };
+            kinds.push((0, kind));
+            for (offset, kind) in &self.kinds[previous..] {
+                if *offset <= checkpoint.bytes {
+                    kinds[0].1 = *kind;
+                } else if *offset < self.bytes.len() {
+                    kinds.push((*offset - checkpoint.bytes, *kind));
+                }
+            }
+        }
         Some(Fragment {
             bytes: self.bytes[checkpoint.bytes..].to_vec(),
             label_base: checkpoint.labels,
@@ -120,6 +210,7 @@ impl Assembler {
             references,
             symbols,
             site: self.site,
+            kinds,
         })
     }
     /// Append authenticated relocatable bytes only after a complete preflight.
@@ -170,6 +261,18 @@ impl Assembler {
                 }
             }
         }
+        if self.profile != !fragment.kinds.is_empty() {
+            return false;
+        }
+        let mut previous = 0usize;
+        for (index, (offset, kind)) in fragment.kinds.iter().enumerate() {
+            if *offset >= fragment.bytes.len() || *kind as usize >= KIND_COUNT
+                || (index == 0 && *offset != 0) || (index != 0 && *offset <= previous)
+            {
+                return false;
+            }
+            previous = *offset;
+        }
         // No validation failure may allocate a label or introduce a data symbol.
         let offset = self.bytes.len();
         let mut locals = Vec::new();
@@ -199,6 +302,9 @@ impl Assembler {
             }
         }
         self.bytes.extend_from_slice(&fragment.bytes);
+        for (position, kind) in &fragment.kinds {
+            self.record_kind(offset + *position, *kind);
+        }
         for reference in &fragment.references {
             let label = match rebound.get(&reference.label) {
                 Some(label) => *label,
@@ -246,6 +352,7 @@ impl Assembler {
         self.labels[label] = Some(offset);
     }
     pub fn raw(&mut self, bytes: &[u8]) {
+        if self.profile { self.kind(KIND_UNKNOWN); }
         self.bytes.extend_from_slice(bytes);
     }
     fn word(&mut self, value: u64, bytes: usize) {
@@ -262,6 +369,7 @@ impl Assembler {
         }
     }
     pub fn rr(&mut self, opcode: u8, dst: u8, src: u8, wide: bool) {
+        if self.profile { self.kind(KIND_ARITHMETIC); }
         let byte = opcode == 0x88
             || opcode == 0x00
             || opcode == 0x08
@@ -270,7 +378,7 @@ impl Assembler {
             || opcode == 0x30
             || opcode == 0x38;
         self.rex_for(wide, src, dst, byte && (src >= 4 || dst >= 4));
-        self.raw(&[opcode, 0xc0 | ((src & 7) << 3) | (dst & 7)]);
+        self.raw_bytes(&[opcode, 0xc0 | ((src & 7) << 3) | (dst & 7)]);
     }
     pub fn mov(&mut self, dst: u8, src: u8) {
         if dst != src {
@@ -279,6 +387,7 @@ impl Assembler {
     }
     /// Apply a scalar storage width while retaining the value in a register.
     pub fn normalize(&mut self, reg: u8, bytes: u8, signed: bool) {
+        if self.profile { self.kind(KIND_ARITHMETIC); }
         match bytes {
             1 | 2 => {
                 self.rex_for(signed, reg, reg, bytes == 1 && reg >= 4);
@@ -289,11 +398,11 @@ impl Assembler {
                 } else {
                     0xb7
                 };
-                self.raw(&[0x0f, opcode, 0xc0 | ((reg & 7) << 3) | (reg & 7)]);
+                self.raw_bytes(&[0x0f, opcode, 0xc0 | ((reg & 7) << 3) | (reg & 7)]);
             }
             4 if signed => {
                 self.rex_for(true, reg, reg, false);
-                self.raw(&[0x63, 0xc0 | ((reg & 7) << 3) | (reg & 7)]);
+                self.raw_bytes(&[0x63, 0xc0 | ((reg & 7) << 3) | (reg & 7)]);
             }
             4 => self.rr(0x89, reg, reg, false),
             8 => {}
@@ -302,6 +411,7 @@ impl Assembler {
     }
     /// Materialize a bit pattern without changing flags. The payload is 4 or 8 bytes.
     pub fn immediate(&mut self, reg: u8, value: u64) -> usize {
+        if self.profile { self.kind(KIND_ARITHMETIC); }
         if value <= 0xffff_ffffu64 {
             self.rex_for(false, 0, reg, false);
             self.bytes.push(0xb8 | (reg & 7));
@@ -310,7 +420,7 @@ impl Assembler {
             at
         } else if value >= 0xffff_ffff_8000_0000u64 {
             self.rex_for(true, 0, reg, false);
-            self.raw(&[0xc7, 0xc0 | (reg & 7)]);
+            self.raw_bytes(&[0xc7, 0xc0 | (reg & 7)]);
             let at = self.bytes.len();
             self.word(value, 4);
             at
@@ -332,17 +442,19 @@ impl Assembler {
         });
     }
     pub fn address(&mut self, reg: u8, label: Label) {
+        if self.profile { self.kind(KIND_ARITHMETIC); }
         self.rex_for(true, reg, 0, false);
-        self.raw(&[0x8d, 0x05 | ((reg & 7) << 3)]);
+        self.raw_bytes(&[0x8d, 0x05 | ((reg & 7) << 3)]);
         self.relative(label);
     }
     pub fn memory(&mut self, opcode: &[u8], reg: u8, base: u8, offset: i64, wide: bool) {
+        if self.profile { self.kind(if opcode.len() == 1 && opcode[0] == 0x8d { KIND_ARITHMETIC } else if base == BP || base == SP { KIND_FRAME } else { KIND_MEMORY }); }
         if offset < -2147483648i64 || offset > 2147483647i64 {
             self.fail("x86-64 memory displacement exceeds signed 32-bit representation");
         }
         let byte = opcode.len() == 1 && (opcode[0] == 0x88 || opcode[0] == 0x8a);
         self.rex_for(wide, reg, base, byte && reg >= 4);
-        self.raw(opcode);
+        self.raw_bytes(opcode);
         let mode = if offset == 0 && (base & 7) != 5 {
             0u8
         } else if offset >= -128i64 && offset <= 127i64 {
@@ -389,6 +501,7 @@ impl Assembler {
         }
     }
     pub fn store_width(&mut self, base: u8, offset: i64, reg: u8, bytes: u8) {
+        if self.profile { self.kind(if base == BP || base == SP { KIND_FRAME } else { KIND_MEMORY }); }
         match bytes {
             1 => self.memory(&[0x88], reg, base, offset, false),
             2 => {
@@ -410,120 +523,150 @@ impl Assembler {
         self.rr(0x85, reg, reg, wide);
     }
     pub fn shift(&mut self, reg: u8, kind: u8, count: u8) {
+        if self.profile { self.kind(KIND_ARITHMETIC); }
         self.rex_for(true, 0, reg, false);
-        self.raw(&[0xc1, 0xc0 | ((kind & 7) << 3) | (reg & 7), count]);
+        self.raw_bytes(&[0xc1, 0xc0 | ((kind & 7) << 3) | (reg & 7), count]);
     }
     pub fn shift_cl(&mut self, reg: u8, kind: u8) {
+        if self.profile { self.kind(KIND_ARITHMETIC); }
         self.rex_for(true, 0, reg, false);
-        self.raw(&[0xd3, 0xc0 | ((kind & 7) << 3) | (reg & 7)]);
+        self.raw_bytes(&[0xd3, 0xc0 | ((kind & 7) << 3) | (reg & 7)]);
     }
     pub fn imul(&mut self, dst: u8, src: u8) {
+        if self.profile { self.kind(KIND_ARITHMETIC); }
         self.rex_for(true, dst, src, false);
-        self.raw(&[0x0f, 0xaf, 0xc0 | ((dst & 7) << 3) | (src & 7)]);
+        self.raw_bytes(&[0x0f, 0xaf, 0xc0 | ((dst & 7) << 3) | (src & 7)]);
     }
     pub fn mul(&mut self, src: u8) {
+        if self.profile { self.kind(KIND_ARITHMETIC); }
         self.rex_for(true, 0, src, false);
-        self.raw(&[0xf7, 0xe0 | (src & 7)]);
+        self.raw_bytes(&[0xf7, 0xe0 | (src & 7)]);
+    }
+    pub fn sign_extend_dividend(&mut self) {
+        if self.profile { self.kind(KIND_ARITHMETIC); }
+        self.raw_bytes(&[0x48, 0x99]);
     }
     /// Divide the caller-prepared RDX:RAX pair. The quotient is RAX, remainder RDX.
     pub fn divide(&mut self, src: u8, signed: bool) {
+        if self.profile { self.kind(KIND_ARITHMETIC); }
         self.rex_for(true, 0, src, false);
-        self.raw(&[0xf7, (if signed { 0xf8 } else { 0xf0 }) | (src & 7)]);
+        self.raw_bytes(&[0xf7, (if signed { 0xf8 } else { 0xf0 }) | (src & 7)]);
     }
     pub fn negate(&mut self, reg: u8) {
+        if self.profile { self.kind(KIND_ARITHMETIC); }
         self.rex_for(true, 0, reg, false);
-        self.raw(&[0xf7, 0xd8 | (reg & 7)]);
+        self.raw_bytes(&[0xf7, 0xd8 | (reg & 7)]);
     }
     pub fn not(&mut self, reg: u8) {
+        if self.profile { self.kind(KIND_ARITHMETIC); }
         self.rex_for(true, 0, reg, false);
-        self.raw(&[0xf7, 0xd0 | (reg & 7)]);
+        self.raw_bytes(&[0xf7, 0xd0 | (reg & 7)]);
     }
     /// Both SETcc and MOVZX preserve flags, allowing multiple predicates.
     pub fn setcc(&mut self, reg: u8, condition: u8) {
+        if self.profile { self.kind(KIND_ARITHMETIC); }
         self.rex_for(false, 0, reg, reg >= 4);
-        self.raw(&[0x0f, 0x90 | (condition & 15), 0xc0 | (reg & 7)]);
+        self.raw_bytes(&[0x0f, 0x90 | (condition & 15), 0xc0 | (reg & 7)]);
         self.rex_for(false, reg, reg, reg >= 4);
-        self.raw(&[0x0f, 0xb6, 0xc0 | ((reg & 7) << 3) | (reg & 7)]);
+        self.raw_bytes(&[0x0f, 0xb6, 0xc0 | ((reg & 7) << 3) | (reg & 7)]);
     }
     pub fn cmov(&mut self, dst: u8, src: u8, condition: u8) {
+        if self.profile { self.kind(KIND_ARITHMETIC); }
         self.rex_for(true, dst, src, false);
-        self.raw(&[
+        self.raw_bytes(&[
             0x0f,
             0x40 | (condition & 15),
             0xc0 | ((dst & 7) << 3) | (src & 7),
         ]);
     }
     pub fn push(&mut self, reg: u8) {
+        if self.profile { self.kind(KIND_CALL); }
         self.rex_for(false, 0, reg, false);
         self.bytes.push(0x50 | (reg & 7));
     }
     pub fn pop(&mut self, reg: u8) {
+        if self.profile { self.kind(KIND_CALL); }
         self.rex_for(false, 0, reg, false);
         self.bytes.push(0x58 | (reg & 7));
     }
     pub fn jump(&mut self, label: Label) {
+        if self.profile { self.kind(KIND_BRANCH); }
         self.bytes.push(0xe9);
         self.relative(label);
     }
     pub fn condition(&mut self, condition: u8, label: Label) {
-        self.raw(&[0x0f, 0x80 | (condition & 15)]);
+        if self.profile { self.kind(KIND_BRANCH); }
+        self.raw_bytes(&[0x0f, 0x80 | (condition & 15)]);
         self.relative(label);
     }
     pub fn call(&mut self, label: Label) {
+        if self.profile { self.kind(KIND_CALL); }
         self.bytes.push(0xe8);
         self.relative(label);
     }
     pub fn jump_register(&mut self, reg: u8) {
+        if self.profile { self.kind(KIND_BRANCH); }
         self.rex_for(false, 0, reg, false);
-        self.raw(&[0xff, 0xe0 | (reg & 7)]);
+        self.raw_bytes(&[0xff, 0xe0 | (reg & 7)]);
     }
     pub fn call_register(&mut self, reg: u8) {
+        if self.profile { self.kind(KIND_CALL); }
         self.rex_for(false, 0, reg, false);
-        self.raw(&[0xff, 0xd0 | (reg & 7)]);
+        self.raw_bytes(&[0xff, 0xd0 | (reg & 7)]);
     }
     pub fn ret(&mut self) {
+        if self.profile { self.kind(KIND_CALL); }
         self.bytes.push(0xc3);
     }
     pub fn syscall(&mut self) {
-        self.raw(&[0x0f, 0x05]);
+        if self.profile { self.kind(KIND_RUNTIME); }
+        self.raw_bytes(&[0x0f, 0x05]);
     }
     pub fn load128(&mut self, xmm: u8, base: u8, offset: i64) {
-        self.raw(&[0xf3]);
+        if self.profile { self.kind(if base == BP || base == SP { KIND_FRAME } else { KIND_MEMORY }); }
+        self.raw_bytes(&[0xf3]);
         self.memory(&[0x0f, 0x6f], xmm, base, offset, false);
     }
     pub fn store128(&mut self, base: u8, offset: i64, xmm: u8) {
-        self.raw(&[0xf3]);
+        if self.profile { self.kind(if base == BP || base == SP { KIND_FRAME } else { KIND_MEMORY }); }
+        self.raw_bytes(&[0xf3]);
         self.memory(&[0x0f, 0x7f], xmm, base, offset, false);
     }
     pub fn mov_to_xmm(&mut self, xmm: u8, reg: u8) {
+        if self.profile { self.kind(KIND_ARITHMETIC); }
         self.bytes.push(0x66);
         self.rex_for(true, xmm, reg, false);
-        self.raw(&[0x0f, 0x6e, 0xc0 | ((xmm & 7) << 3) | (reg & 7)]);
+        self.raw_bytes(&[0x0f, 0x6e, 0xc0 | ((xmm & 7) << 3) | (reg & 7)]);
     }
     pub fn mov_from_xmm(&mut self, reg: u8, xmm: u8) {
+        if self.profile { self.kind(KIND_ARITHMETIC); }
         self.bytes.push(0x66);
         self.rex_for(true, xmm, reg, false);
-        self.raw(&[0x0f, 0x7e, 0xc0 | ((xmm & 7) << 3) | (reg & 7)]);
+        self.raw_bytes(&[0x0f, 0x7e, 0xc0 | ((xmm & 7) << 3) | (reg & 7)]);
     }
     pub fn f64_op(&mut self, opcode: u8, dst: u8, src: u8) {
+        if self.profile { self.kind(KIND_ARITHMETIC); }
         self.bytes.push(0xf2);
         self.rex_for(false, dst, src, false);
-        self.raw(&[0x0f, opcode, 0xc0 | ((dst & 7) << 3) | (src & 7)]);
+        self.raw_bytes(&[0x0f, opcode, 0xc0 | ((dst & 7) << 3) | (src & 7)]);
     }
     pub fn f64_compare(&mut self, left: u8, right: u8) {
+        if self.profile { self.kind(KIND_ARITHMETIC); }
         self.bytes.push(0x66);
         self.rex_for(false, left, right, false);
-        self.raw(&[0x0f, 0x2e, 0xc0 | ((left & 7) << 3) | (right & 7)]);
+        self.raw_bytes(&[0x0f, 0x2e, 0xc0 | ((left & 7) << 3) | (right & 7)]);
     }
     pub fn int_to_f64(&mut self, xmm: u8, reg: u8) {
+        if self.profile { self.kind(KIND_ARITHMETIC); }
         self.bytes.push(0xf2);
         self.rex_for(true, xmm, reg, false);
-        self.raw(&[0x0f, 0x2a, 0xc0 | ((xmm & 7) << 3) | (reg & 7)]);
+        self.raw_bytes(&[0x0f, 0x2a, 0xc0 | ((xmm & 7) << 3) | (reg & 7)]);
     }
     pub fn f64_to_int(&mut self, reg: u8, xmm: u8) {
+        if self.profile { self.kind(KIND_ARITHMETIC); }
         self.bytes.push(0xf2);
         self.rex_for(true, reg, xmm, false);
-        self.raw(&[0x0f, 0x2c, 0xc0 | ((reg & 7) << 3) | (xmm & 7)]);
+        self.raw_bytes(&[0x0f, 0x2c, 0xc0 | ((reg & 7) << 3) | (xmm & 7)]);
     }
     pub fn finish(mut self) -> Result<Vec<u8>, Diagnostic> {
         if let Some(problem) = self.problem {

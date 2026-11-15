@@ -40,10 +40,10 @@ hello under a 4 GiB address-space limit.
 
 ## Profile first, then remove structural costs
 
-build --profile embeds a function-address map and opts into OUTPUT.samples.PID.
+build --profile embeds function and operation-kind maps and opts into OUTPUT.samples.PID.
 A Linux CPU timer samples instruction pointers and real frame chains without a
-depth cap. The shared samples file survives exit/signals; profile reports self
-and inclusive source function counts in at most 40 lines, without DWARF or perf.
+depth cap. The shared file survives exit/signals; profile reports self/inclusive
+functions and exclusive operation kinds in at most 37 lines, without DWARF or perf.
 Instrumentation file/timer authority is granted by this explicit build option.
 Sparse query visits, packed facts and inline known-size copies remove prior costs.
 Measure self-built / witness opt=0 / witness -O and emitted instruction kinds

@@ -34,11 +34,9 @@ impl Body<'_> {
                             0u64.wrapping_sub(minimum)
                         };
                         self.a.immediate(C, minimum);
-                        self.a.compare(register, C);
-                        self.trap_if(4, 1);
+                        self.check_compare(register, C, 4, 1);
                     } else {
-                        self.a.test(register, true);
-                        self.trap_if(5, 1);
+                        self.check_test(register, true, 5, 1);
                     }
                     self.a.negate(register);
                 }
@@ -55,15 +53,12 @@ impl Body<'_> {
         }
         if signed {
             self.a.immediate(D, 0u64.wrapping_sub(1u64 << (bits - 1)));
-            self.a.compare(register, D);
-            self.trap_if(12, 1);
+            self.check_compare(register, D, 12, 1);
             self.a.immediate(D, (1u64 << (bits - 1)) - 1);
-            self.a.compare(register, D);
-            self.trap_if(15, 1);
+            self.check_compare(register, D, 15, 1);
         } else {
             self.a.immediate(D, (1u64 << bits) - 1);
-            self.a.compare(register, D);
-            self.trap_if(7, 1);
+            self.check_compare(register, D, 7, 1);
         }
     }
 
@@ -205,8 +200,7 @@ impl Body<'_> {
             BinaryOp::Mul | BinaryOp::WrappingMul => {
                 if !signed && bits == 64 && op == BinaryOp::Mul {
                     self.a.mul(C);
-                    self.a.test(D, true);
-                    self.trap_if(5, 1);
+                    self.check_test(D, true, 5, 1);
                 } else {
                     self.a.imul(register, C);
                     if op == BinaryOp::Mul {
@@ -218,18 +212,18 @@ impl Body<'_> {
                 }
             }
             BinaryOp::Div | BinaryOp::Rem => {
-                self.a.test(C, true);
-                self.trap_if(4, 2);
+                self.check_test(C, true, 4, 2);
                 if signed {
+                    let kind = self.a.scope_kind(KIND_CHECK);
                     let ordinary = self.a.label();
                     self.a.immediate(D, 0u64.wrapping_sub(1u64 << (bits - 1)));
                     self.a.compare(register, D);
                     self.a.condition(5, ordinary);
                     self.a.immediate(D, !0u64);
-                    self.a.compare(C, D);
-                    self.trap_if(4, 1);
+                    self.check_compare(C, D, 4, 1);
                     self.a.bind(ordinary);
-                    self.a.raw(&[0x48, 0x99]);
+                    self.a.scope_kind(kind);
+                    self.a.sign_extend_dividend();
                 } else {
                     self.a.rr(0x31, D, D, true);
                 }
@@ -243,8 +237,7 @@ impl Body<'_> {
             BinaryOp::BitXor => self.a.rr(0x31, register, C, true),
             BinaryOp::Shl | BinaryOp::Shr => {
                 self.a.immediate(D, bits as u64);
-                self.a.compare(C, D);
-                self.trap_if(3, 1);
+                self.check_compare(C, D, 3, 1);
                 self.a.shift_cl(
                     register,
                     if op == BinaryOp::Shl {

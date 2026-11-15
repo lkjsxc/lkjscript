@@ -4,6 +4,16 @@
 use crate::ast::{Diagnostic, Program, Span};
 use std::fmt;
 
+impl fmt::Debug for crate::diagnostic::Edit {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.debug_struct("Edit")
+            .field("start", &self.start)
+            .field("end", &self.end)
+            .field("replacement", &self.replacement)
+            .finish()
+    }
+}
+
 impl fmt::Debug for Diagnostic {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
@@ -14,6 +24,7 @@ impl fmt::Debug for Diagnostic {
             .field("column", &self.column)
             .field("code", &self.code)
             .field("message", &self.message)
+            .field("edits", &self.edits)
             .finish()
     }
 }

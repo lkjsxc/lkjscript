@@ -53,8 +53,7 @@ impl Body<'_> {
                 } else {
                     self.platform.stderr_write
                 });
-                self.a.test(A, true);
-                self.trap_if(8, 7);
+                self.check_test(A, true, 8, 7);
             }
             IntrinsicOp::WorldArgCount => self.a.call(self.platform.argument_count),
             IntrinsicOp::WorldArgLen => {
@@ -289,8 +288,7 @@ impl Body<'_> {
             _ => return Ok(false),
         }
         if name == IntrinsicOp::WorldArgLen || name == IntrinsicOp::WorldArgCopy {
-            self.a.test(A, true);
-            self.trap_if(8, 3);
+            self.check_test(A, true, 8, 3);
         }
         self.write(dst, A);
         Ok(true)
@@ -353,14 +351,12 @@ impl Body<'_> {
         self.a.immediate(A, 2);
         self.a.bind(grow);
         self.a.immediate(C, (!0u64) / 2);
-        self.a.compare(A, C);
-        self.trap_if(7, 6);
+        self.check_compare(A, C, 7, 6);
         self.a.shift(A, 4, 1);
         self.a.store(BP, self.scratch[2], A);
         self.a.immediate(C, stride);
         self.a.mul(C);
-        self.a.test(D, true);
-        self.trap_if(5, 6);
+        self.check_test(D, true, 5, 6);
         self.a.mov(SI, A);
         self.a.load(DI, R8, 0);
         self.a.call(self.runtime.reallocate);
@@ -505,8 +501,7 @@ impl Body<'_> {
         match name {
             IntrinsicOp::Assert => {
                 self.read(args[0], A);
-                self.a.test(A, true);
-                self.trap_if(4, 5);
+                self.check_test(A, true, 4, 5);
                 self.intrinsic_unit(dst);
             }
             IntrinsicOp::Cast => self.scalar_cast(dst, args[0])?,

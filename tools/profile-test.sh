@@ -12,13 +12,19 @@ cmp "$profile_test/plain.out" "$profile_test/sampled.out"
 "$compiler" profile "$profile_test"/sampled.samples.* > "$profile_test/report"
 awk '
   /^CPU samples:/ { total=$3+0; if (total < 10) exit 1 }
+  /^kind [0-9]/ {
+    if ($2 < 0 || $2 > 100 || $3 > total) exit 1
+    kinds++
+    kind_samples += $3
+    if ($4 == "arithmetic/register" && $3 > 0) arithmetic=1
+  }
   /^[0-9]/ {
     if ($1 < 0 || $1 > 100 || $2 < 0 || $2 > 100 || $3 > total) exit 1
     if ($4 == "work" && $1 > 50) hot=1
     if ($4 == "recurse" && $2 > 50) recursive=1
     if ($4 == "main" && $2 > 50) root=1
   }
-  END { if (NR > 40 || !hot || !recursive || !root) exit 1 }
+  END { if (NR > 40 || !hot || !recursive || !root || kinds != 10 || kind_samples != total || !arithmetic) exit 1 }
 ' "$profile_test/report"
 "$compiler" ir tests/fixtures/profile.rs -o "$profile_test/plain.lkjir"
 sed 's/^fn "work" /fn "work\\ncontrol" /' "$profile_test/plain.lkjir" > "$profile_test/named.lkjir"
@@ -28,10 +34,50 @@ cmp "$profile_test/plain.out" "$profile_test/named.out"
 "$compiler" profile "$profile_test"/named.samples.* > "$profile_test/named.report"
 grep -qF 'work\u{a}control' "$profile_test/named.report"
 test "$(wc -l < "$profile_test/named.report")" -le 40
+cp "$profile_test"/sampled.samples.* "$profile_test/invalid-metadata"
+printf '\377\377\377\377\377\377\377\377' |
+    dd of="$profile_test/invalid-metadata" bs=1 seek=48 conv=notrunc status=none
+if "$compiler" profile "$profile_test/invalid-metadata" > "$profile_test/out" 2> "$profile_test/error"; then
+    echo 'profiler accepted invalid category metadata' >&2
+    exit 1
+fi
+grep -q E_PROFILE "$profile_test/error"
+cp "$profile_test"/sampled.samples.* "$profile_test/invalid-count"
+printf '\377\377\377\377\377\377\377\377' |
+    dd of="$profile_test/invalid-count" bs=1 seek=24 conv=notrunc status=none
+if "$compiler" profile "$profile_test/invalid-count" > "$profile_test/out" 2> "$profile_test/error"; then
+    echo 'profiler accepted inconsistent sample totals' >&2
+    exit 1
+fi
+grep -q E_PROFILE "$profile_test/error"
+# Termination can interrupt the handler after its serial advances but before
+# its category counter. Such a file reports the same completed samples.
+profile_samples=$(awk '/^CPU samples:/ { print $3+0 }' "$profile_test/report")
+for gap in -1 1 2; do
+    cp "$profile_test"/sampled.samples.* "$profile_test/serial-$gap"
+    LC_ALL=C awk -v serial="$((profile_samples + gap))" '
+        BEGIN {
+            for (byte=0; byte<8; byte++) {
+                printf "%c", serial % 256
+                serial=int(serial / 256)
+            }
+        }
+    ' | dd of="$profile_test/serial-$gap" bs=1 seek=24 conv=notrunc status=none
+    if [ "$gap" = 1 ]; then
+        "$compiler" profile "$profile_test/serial-$gap" > "$profile_test/interrupted.report"
+        cmp "$profile_test/report" "$profile_test/interrupted.report"
+    else
+        if "$compiler" profile "$profile_test/serial-$gap" > "$profile_test/out" 2> "$profile_test/error"; then
+            echo "profiler accepted invalid sample serial gap $gap" >&2
+            exit 1
+        fi
+        grep -q E_PROFILE "$profile_test/error"
+    fi
+done
 printf 'invalid samples\n' > "$profile_test/invalid"
 if "$compiler" profile "$profile_test/invalid" > "$profile_test/out" 2> "$profile_test/error"; then
     echo 'profiler accepted invalid input' >&2
     exit 1
 fi
 grep -q E_PROFILE "$profile_test/error"
-printf 'ok profiler (native value, sampled hot function, unbounded recursive inclusion, escaped names, invalid input)\n'
+printf 'ok profiler (native value, sampled functions and operation kinds, unbounded recursive inclusion, escaped names, interrupted sample, invalid input)\n'

@@ -1,35 +1,35 @@
 # Status — 2026-11-15
 
-## Compiler: authenticated reuse complete; profiling next
+## Compiler: reuse and diagnostic rewrites landed; optimizer baseline measured
 
-Shared SHA-256 passes standard, padding and streaming vectors on both routes.
-The store reuses checked bodies, relocatable emission, images and closed observations.
-HMAC binds compiler bytes, target, options and full inputs; producer slots coexist.
-The private key stays outside source/program grants; key readers are trusted as compiler replacers.
-Shared IR structure is always checked. Corpus roundtrips compare fresh/cold/warm bytes and verdicts.
-Gate cases reject hostile records and cover dependency changes, refused/disappearing stores and races.
-Only embedded-runtime closed executions reuse returns/traps; effects and resource failures rerun.
+Reuse gate cold/warm: 212.913/110.015 s, load 10.04→11.42 / 11.42→7.14; both CI jobs pass.
+Reuse self-build cold/edit/unchanged: 21.09/16.21/1.44 s, load 7.43→7.69 / 7.56→7.62 / 7.69→7.56.
+Cold overhead +37.93%; two versions 64,564,271 bytes. Warm 32,768 mutations: zero findings.
+Three consumer diagnostics now carry tested JSON byte edits; receiver evaluation and closure scope survive.
 
-| Measurement (four workers for gates) | Seconds | Load before → after |
+| Compiler self-build before Readiness, store disabled | Seconds | Load 1/5/15 before |
+| --- | ---: | --- |
+| Self-built | 15.93 | 2.09/4.44/4.80 |
+| Rust opt=0, one codegen unit | 8.41 | 1.91/4.29/4.74 |
+| Rust -O, one codegen unit | 2.23 | 2.00/4.23/4.71 |
+Outputs agree byte for byte: native is 1.89x opt=0 and 7.14x -O; the gap is not only optimization.
+
+| Before Readiness: exclusive emitted-code samples | Self-build % | HTTP server % |
 | --- | ---: | ---: |
-| Self-build, store disabled | 15.29 | 7.14 → 7.43 |
-| Cold self-build | 21.09 | 7.43 → 7.69 |
-| Warm, one checker function changed | 16.21 | 7.56 → 7.62 |
-| Same edit, store disabled | 16.13 | 7.62 → 7.18 |
-| Warm, unchanged | 1.44 | 7.69 → 7.56 |
-| Cold gate, refreshed seed | 212.913 | 10.04 → 11.42 |
-| Warm gate, refreshed seed | 110.015 | 11.42 → 7.14 |
-
-Cold overhead: +5.80 s (+37.93%). One edit reuses 9,127 checks and 8,986 emitted bodies;
-authentication/serialization consume the saved checking time: edit latency remains at fresh-build cost.
-Store: 49,949,909 bytes cold; 64,564,271 after two versions, including directory metadata.
-Compiler: 14,613,309 bytes; 9,128 functions / 797,533 IR instructions; cached/fresh images identical.
-Seed: 2,816,325 bytes; two native generations and the Rust witness agree. No entries are committed.
-Warm-store mutation: 32,768, zero findings; 29,433/min (66.797 s, load 7.18 → 9.73).
-26,168 rejected; 6,041 values; 466 traps; 93 nontermination allowances; zero resource failures.
-24,966 checked and 9,850 emitted reuses; no rejected records. Runtime/drop helpers still emit normally.
-Deleted the transitional seed probe. bench/reuse.sh reproduces the snapshot/edit/size measurements.
-Next: the three diagnostic rewrites, then the compiler opt=0/-O triple and emitted-code-kind profiles.
+| Inline copy | 19.7 | 3.2 |
+| Checks | 1.1 | 0.5 |
+| Call setup / prologue / return | 15.0 | 2.6 |
+| Frame load/store | 4.3 | 17.4 |
+| Other memory | 10.5 | 3.7 |
+| Arithmetic / registers | 34.6 | 36.9 |
+| Branch | 2.6 | 6.8 |
+| Allocator | 9.5 | 1.1 |
+| Runtime | 2.2 | 27.4 |
+| Unknown | 0.0 | 0.0 |
+Self: 15,486 samples, 15.86 s, load 3.43→2.89; HTTP: 14,719, 11,746/s over 30.002 s, load 4.17→3.38.
+Copies/calls/runtime own their internal frame accesses; arithmetic includes register moves and addresses.
+Combined Readiness/profiling gate: 253.475 s, load 1.53→4.90; seed bootstrap and every suite pass.
+Next: scalar Clone→Read, then measured rechecked inlining; retain the original interpreter oracle.
 
 ## Programs
 
