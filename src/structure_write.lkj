@@ -57,7 +57,7 @@ fn atomic(root: &mut Directory, path: &str, bytes: &[u8]) -> Result<(), String> 
     let temporary = if parent == "." { format!(".{name}.lkjscript-next") }
         else { format!("{parent}/.{name}.lkjscript-next") };
     remove(root, &temporary)?;
-    let mut file = io(root.create_new(&temporary), "create projection replacement")?;
+    let mut file = io(root.create_private(&temporary), "create projection replacement")?;
     io(file.write_all(bytes), "write projection replacement")?;
     io(file.sync(), "sync projection replacement")?;
     drop(file);
@@ -69,6 +69,7 @@ pub struct Writer {
     root: Directory,
     scope: String,
     secret: Vec<u8>,
+    entropy: Entropy,
     // Keeping this affine File alive holds the interprocess writer lock.
     lock: File,
 }
@@ -89,7 +90,7 @@ impl Writer {
         let mut root = io(world.directory(scope), "open transaction root")?;
         let mut lock = io(root.open_append(".lkjscript-edit.lock"), "open transaction lock")?;
         io(lock.lock_wait(), "lock source transaction")?;
-        Ok(Self { root, scope: scope.to_string(), secret, lock })
+        Ok(Self { root, scope: scope.to_string(), secret, entropy: world.entropy(), lock })
     }
     pub fn private_source_digest(&self) -> [u8; 32] { sha256::digest(&self.secret) }
     pub fn key_digest(&self) -> String { sha256::hex_digest(&self.secret) }
@@ -105,7 +106,7 @@ impl Writer {
         }
         Ok(())
     }
-    fn pending(&mut self) -> Result<Option<Vec<structure_edit::Change>>, String> {
+    fn pending(&mut self) -> Result<Option<Intent>, String> {
         if !contains(&mut self.root, b".lkjscript-edit.pending")? { return Ok(None); }
         // O_RDWR plus nonblocking read cannot hang on a planted FIFO. Opening
         // the final path uses the existing no-final-symlink storage operation.
@@ -138,6 +139,9 @@ impl Writer {
             || value.get("root").and_then(|value| value.as_str()) != Some(self.scope.as_str()) {
             return Err(failure("intent version or root differs"));
         }
+        let generation = value.get("generation").and_then(|value| value.as_str())
+            .ok_or_else(|| failure("missing source generation"))?;
+        if !valid_generation(generation) { return Err(failure("invalid source generation")); }
         let entries = value.get("changes").and_then(|value| value.as_array()).ok_or_else(|| failure("missing changes"))?;
         let mut seen: BTreeSet<String> = BTreeSet::new();
         let mut changes = Vec::new();
@@ -149,10 +153,18 @@ impl Writer {
             changes.push(structure_edit::Change { file: path.to_string(), before: before.as_bytes().to_vec(), after: after.as_bytes().to_vec() });
         }
         if changes.is_empty() { return Err(failure("empty intent")); }
-        Ok(Some(changes))
+        Ok(Some(Intent { changes, generation: generation.to_string() }))
     }
     pub fn recover(&mut self) -> Result<usize, String> {
-        let changes = match self.pending()? { Some(changes) => changes, None => return Ok(0usize) };
+        let intent = match self.pending()? {
+            Some(intent) => intent,
+            None => {
+                remove(&mut self.root, "..lkjscript-edit.pending.lkjscript-next")?;
+                remove(&mut self.root, "..lkjscript-edit.generation.lkjscript-next")?;
+                return Ok(0usize);
+            }
+        };
+        let changes = intent.changes;
         // Validate all preconditions before writing even the first file.
         for change in &changes {
             let current = read(&mut self.root, &change.file)?;
@@ -160,6 +172,9 @@ impl Writer {
                 return Err(format!("{} E_EDIT_STALE source is neither the old nor new transaction value; intent retained", change.file));
             }
         }
+        // The random generation changes before the first projection file. A
+        // participating compiler can reject a read spanning this publication.
+        atomic(&mut self.root, ".lkjscript-edit.generation", intent.generation.as_bytes())?;
         for change in &changes {
             let current = read(&mut self.root, &change.file)?;
             if current != change.after { atomic(&mut self.root, &change.file, &change.after)?; }
@@ -185,15 +200,58 @@ impl Writer {
                 ("after".to_string(), Value::String(after)),
             ]));
         }
+        let mut nonce = [0u8; 32];
+        io(self.entropy.fill(&mut nonce), "generate source publication identity")?;
+        let generation = sha256::hex_digest(&nonce);
         let payload = json::stringify(&Value::Object(vec![
             ("version".to_string(), Value::from_usize(1usize)),
             ("root".to_string(), Value::String(self.scope.clone())),
             ("changes".to_string(), Value::Array(entries)),
+            ("generation".to_string(), Value::String(generation)),
         ])).map_err(|problem| failure(&problem.message))?;
         let producer = signer();
         let envelope = reuse::seal(&producer, &self.secret, "source-transaction", &self.key(), payload.as_bytes());
         atomic(&mut self.root, ".lkjscript-edit.pending", &envelope)?;
-        self.recover()?;
+        self.recover().map_err(|problem| -> String { format!("{problem}; checked transaction is committed; run edit --recover") })?;
         Ok(())
     }
+}
+
+struct Intent {
+    changes: Vec<structure_edit::Change>,
+    generation: String,
+}
+
+fn valid_generation(value: &str) -> bool {
+    if value.len() != 64usize { return false; }
+    for byte in value.bytes() {
+        if !(b'0' <= byte && byte <= b'9') && !(b'a' <= byte && byte <= b'f') { return false; }
+    }
+    true
+}
+
+pub fn stamp(world: &mut World, scope: &str) -> Result<String, String> {
+    let mut root = io(world.directory(scope), "open source transaction scope")?;
+    if contains(&mut root, b".lkjscript-edit.pending")? {
+        return Err(format!("{} E_EDIT_RECOVERY interrupted publication; recover with edit --recover and its private key", scope));
+    }
+    let value = if contains(&mut root, b".lkjscript-edit.generation")? {
+        let mut file = io(root.open_append(".lkjscript-edit.generation"), "open source generation")?;
+        io(file.set_nonblocking(true), "make generation read nonblocking")?;
+        let mut bytes = [0u8; 65];
+        let mut at = 0usize;
+        while at < bytes.len() {
+            let count = io(file.read(&mut bytes[at..]), "read source generation")?;
+            if count == 0usize { break; }
+            at += count;
+        }
+        if at != 64usize { return Err(failure("invalid source generation length")); }
+        let value = String::from_utf8(bytes[..64usize].to_vec()).map_err(|_| failure("invalid source generation"))?;
+        if !valid_generation(&value) { return Err(failure("invalid source generation")); }
+        value
+    } else { String::new() };
+    if contains(&mut root, b".lkjscript-edit.pending")? {
+        return Err(format!("{} E_EDIT_RECOVERY source publication began during capture", scope));
+    }
+    Ok(value)
 }

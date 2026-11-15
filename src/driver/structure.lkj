@@ -217,3 +217,35 @@ pub(super) fn run(world: &mut World, values: &[String]) -> Result<u8, String> {
     stats.finish(world, if result.is_ok() { "done" } else { "failed" })?;
     result
 }
+
+pub(crate) mod consistency {
+    use super::Options;
+    pub(crate) fn capture(world: &mut World, options: &Options) -> Result<Vec<(String, String)>, String> {
+        let root = options.source_directory.as_ref().map_or(".", |value| value.as_str());
+        let actual = if options.path.starts_with('/') { options.path.clone() }
+            else if root == "." { options.path.clone() } else { format!("{root}/{}", options.path) };
+        let mut roots: Vec<String> = vec![root.to_string()];
+        if let Some(at) = actual.rfind('/') {
+            let parent = if at == 0usize { "/".to_string() } else { actual[..at].to_string() };
+            if !roots.contains(&parent) { roots.push(parent); }
+        }
+        if let Some(path) = &options.library_directory {
+            if !roots.contains(path) { roots.push(path.clone()); }
+        }
+        let mut values = Vec::new();
+        for root in roots {
+            let stamp = crate::structure_write::stamp(world, &root)?;
+            values.push((root, stamp));
+        }
+        Ok(values)
+    }
+    pub(crate) fn verify(world: &mut World, values: &[(String, String)]) -> Result<(), String> {
+        for (root, before) in values {
+            let after = crate::structure_write::stamp(world, root)?;
+            if *before != after {
+                return Err(format!("{} E_EDIT_STALE source transaction changed during compilation; retry against the completed projection", root));
+            }
+        }
+        Ok(())
+    }
+}

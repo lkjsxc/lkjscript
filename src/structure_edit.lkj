@@ -254,9 +254,16 @@ fn finish(inputs: &[(String, Vec<u8>)], patches: Vec<Patch>) -> Result<Draft, St
     Ok(Draft { changes, identities: names, patches: all })
 }
 pub(crate) fn one_item(identity: &str, source: &str, body: bool) -> Result<(), String> {
-    let wrapped = if body { format!("fn __lkjscript_transaction_body() {source}") } else { source.to_string() };
+    let wrapped = if body { format!("fn __lkjscript_transaction_body() {source}") }
+        else { format!("mod __lkjscript_transaction_scope {{ {source} }}") };
     let parsed = syntax::parse(&wrapped).map_err(|problem| error(identity, "SYNTAX", &problem.message))?;
-    if parsed.items.len() != 1usize {
+    let count = if body { parsed.items.len() } else if parsed.items.len() == 1usize {
+        match parsed.items[0usize] {
+            crate::ast::Item::Module(index) => parsed.modules[index].items.len(),
+            _ => 0usize,
+        }
+    } else { 0usize };
+    if count != 1usize {
         return Err(error(identity, "ITEM", "replacement must contain exactly one item or one body"));
     }
     Ok(())

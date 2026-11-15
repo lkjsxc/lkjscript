@@ -518,203 +518,10 @@ fn compile(
     stats: &mut Stats,
     memo: &mut Memo,
 ) -> Result<reuse::Selection, String> {
-    memo.inputs.clear();
-    memo.source_inputs.clear();
-    memo.valid_inputs = true;
-    if options.path.ends_with(".lkjir") {
-        let bytes = memo.read_path(world, &options.path)?;
-        memo.protect_source(&bytes)?;
-        if memo.store.is_some() {
-            let (parent, name) = location(&options.path);
-            memo.inputs.push(store::input(&parent, &name, &Some(bytes.clone())));
-        }
-        let input = text(bytes, &options.path)?;
-        let meaning = ir_text::read_located(&input, &options.path).map_err(|problem| report(&options.path, problem))?;
-        stats.mark("parse_ir")?;
-        let checked = check_reusing(meaning, memo, options.roundtrip, stats)
-            .map_err(|problems: Vec<ast::Diagnostic>| ir_failure(&options.path, problems))?;
-        stats.mark("check")?;
-        return select_checked(checked, options, stats, memo);
-    }
-    if !options.path.ends_with(".lkj") {
-        return Err(format!("{}: E_SOURCE_EXTENSION source files use .lkj; checked IR uses .lkjir", options.path));
-    }
-    let (directory_path, root): (String, String) = match &options.source_directory {
-        Some(path) => (path.to_string(), options.path.clone()),
-        None => {
-            if options.path.starts_with('/') {
-                ("/".to_string(), options.path.clone())
-            } else {
-                (".".to_string(), options.path.clone())
-            }
-        }
-    };
-    let mut directory = world
-        .directory(&directory_path)
-        .map_err(|errno: i64| io(&directory_path, "open directory", errno))?;
-    let mut library: Option<Directory> = None;
-    if let Some(path) = &options.library_directory {
-        library = Some(match world.directory(path) {
-            Ok(directory) => directory,
-            Err(errno) => return Err(io(path, "open library", errno)),
-        });
-    }
-    let standard = if options.no_library {
-        None
-    } else {
-        Some("$std/lib.lkj")
-    };
-    let absolute_source = options.source_directory.is_none() && options.path.starts_with('/');
-    let mut loaded = source::load_report(&root, standard, &mut |path: &str| {
-        let result = if options.command == "check-library" && path == "$toolchain/library-check.lkj" {
-            Ok(Some("fn main() {}".as_bytes().to_vec()))
-        } else if path.starts_with("$std/") {
-            match library.as_mut() {
-                Some(directory) => {
-                    memo.read_source(directory, options.library_directory.as_ref().unwrap(), &path[5..], stats)
-                },
-                None => Ok(embedded::library(path)),
-            }
-        } else if absolute_source && path.starts_with('/') {
-            memo.read_source(&mut directory, &directory_path, &path[1..], stats)
-        } else {
-            memo.read_source(&mut directory, &directory_path, path, stats)
-        };
-        if let Ok(Some(bytes)) = &result {
-            memo.protect_source(bytes)?;
-            if memo.store.is_some() || memo.capture_catalog { memo.source_inputs.push((path.to_string(), bytes.clone())); }
-        }
-        result
-    });
-    // Discovery uses capability-relative names; diagnostic identities name the
-    // same source files as the operating agent opens. Bind both fingerprint
-    // sides before resolution so resumed IR carries this exact identity too.
-    for index in 0..loaded.program.files.len() {
-        loaded.program.files[index].path = diagnostic_source_path(&loaded.program.files[index].path, options);
-    }
-    for index in 0..memo.source_inputs.len() {
-        memo.source_inputs[index].0 = diagnostic_source_path(&memo.source_inputs[index].0, options);
-    }
-    stats.mark("load_parse")?;
-    if !loaded.diagnostics.is_empty() {
-        return Err(analysis_failure(&options.path, &mut loaded, Vec::new(), ""));
-    }
-    let resolved = match resolve::resolve(&loaded.program) {
-        Ok(resolved) => resolved,
-        Err(problem) => {
-            return Err(analysis_failure(
-                &options.path,
-                &mut loaded,
-                vec![problem],
-                "declaration resolution failed; dependent definition and IR analysis was not attempted",
-            ));
-        }
-    };
-    stats.mark("resolve")?;
-    // The current frontend checkpoint omits definition/source-site evidence.
-    // A requested catalog must not depend on whether that checkpoint was warm.
-    let front = if memo.store.is_some() && !memo.capture_catalog && options.command != "check-library" {
-        elaborate::incremental::fingerprint(&resolved, &memo.source_inputs)
-    } else { None };
-    stats.mark("key_hash")?;
-    if let Some(fingerprint) = &front {
-        let key = request_key(options);
-        let payload: Option<Vec<u8>> = memo.store.as_mut().and_then(|store| store.get("front", &key));
-        stats.mark("store_io")?;
-        if let Some(payload) = payload {
-            let resumed = {
-                let mut mark = |phase: &str| { let _ = stats.mark(phase); };
-                elaborate::incremental::resume(&resolved, fingerprint, &payload, &mut mark)
-            };
-            if let Some(resumed) = resumed {
-                memo.front_reused += resolved.functions.len() - resumed.definitions;
-                memo.front_definitions += resumed.definitions;
-                memo.front_functions += resumed.functions;
-                if resumed.definitions != 0 {
-                    let bytes = elaborate::incremental::encode(fingerprint, &resumed.catalog, &resumed.program);
-                    stats.mark("front_encode")?;
-                    if let Some(store) = memo.store.as_mut() { store.put("front", &key, &bytes); }
-                    stats.mark("store_io")?;
-                }
-
-                let checked = check_reusing(resumed.program, memo, options.roundtrip, stats)
-                    .map_err(|problems| analysis_failure(&options.path, &mut loaded, problems, "resumed IR failed independent checking"))?;
-                stats.mark("check")?;
-                stats.count("ir_functions", checked.program().functions.len());
-                let mut instructions = 0usize;
-                for function in &checked.program().functions { instructions += function.body.len(); }
-                stats.count("ir_instructions", instructions);
-                if memo.capture_catalog {
-                    memo.catalog = Some(crate::semantic::catalog(&resolved, &memo.source_inputs, checked.checked())?);
-                    stats.mark("semantic_catalog")?;
-                }
-                return select_checked(checked, options, stats, memo);
-            }
-        }
-        stats.mark("front_miss")?;
-    }
-    let inferred = if options.command == "check-library" {
-        elaborate::infer_resolved_report_all_library(&resolved)
-    } else {
-        elaborate::infer_resolved_report(&resolved)
-    };
-    let definitions = match inferred {
-        Ok(definitions) => definitions,
-        Err(problems) => {
-            return Err(analysis_failure(
-                &options.path,
-                &mut loaded,
-                problems,
-                "definition analysis failed; dependent IR construction and checking was not attempted",
-            ));
-        }
-    };
-    stats.mark("type")?;
-    let mut front_catalog = front.as_ref().map(|_| Vec::new());
-    let mut structural = if memo.capture_catalog { Some(elaborate::semantic::Evidence::default()) } else { None };
-    let meaning = match elaborate::lower_definitions_recorded_semantic(definitions, &mut front_catalog, &mut structural) {
-        Ok(meaning) => meaning,
-        Err(problems) => {
-            return Err(analysis_failure(
-                &options.path,
-                &mut loaded,
-                problems,
-                "failed bodies are blocked; independent typed bodies were constructed and checked",
-            ));
-        }
-    };
-    stats.mark("build_ir")?;
-    if let (Some(fingerprint), Some(catalog)) = (&front, &front_catalog) {
-        let payload = elaborate::incremental::encode(fingerprint, catalog, &meaning);
-        stats.mark("front_encode")?;
-        if let Some(store) = memo.store.as_mut() { store.put("front", &request_key(options), &payload); }
-        stats.mark("store_io")?;
-    }
-    memo.front_definitions += resolved.functions.len();
-    memo.front_functions += meaning.functions.len();
-    let checked = match check_reusing(meaning, memo, options.roundtrip, stats) {
-        Ok(checked) => checked,
-        Err(problems) => {
-            return Err(analysis_failure(
-                &options.path,
-                &mut loaded,
-                problems,
-                "each invalid IR body stops at its diagnostic; no artifact is produced",
-            ));
-        }
-    };
-    stats.mark("check")?;
-    stats.count("ir_functions", checked.program().functions.len());
-    let mut instructions = 0usize;
-    for function in &checked.program().functions {
-        instructions += function.body.len();
-    }
-    stats.count("ir_instructions", instructions);
-    if memo.capture_catalog {
-        memo.catalog = Some(crate::semantic::catalog_typed(&resolved, &memo.source_inputs, checked.checked(), &structural)?);
-        stats.mark("semantic_catalog")?;
-    }
-    select_checked(checked, options, stats, memo)
+    let stamps = structure::consistency::capture(world, options)?;
+    let result = compile_snapshot(world, options, stats, memo);
+    structure::consistency::verify(world, &stamps)?;
+    result
 }
 
 pub(crate) fn load_runtime(
@@ -1769,6 +1576,7 @@ fn execute_source(world: &mut World, options: &Options, stats: &mut Stats, memo:
         return Ok(deliver(world, outcome, true));
     }
     if options.command == "build" {
+        let source_stamps = structure::consistency::capture(world, options)?;
         if let Some(bytes) = memo.lookup(world, options, "image", stats) {
             let path: String = match &options.output { Some(path) => path.clone(), None => format!("{}.elf", options.path) };
             let mut ready = !options.index;
@@ -1786,6 +1594,7 @@ fn execute_source(world: &mut World, options: &Options, stats: &mut Stats, memo:
                 }
             }
             if ready {
+            structure::consistency::verify(world, &source_stamps)?;
             publish(world, &path, &bytes, true)?;
             stats.mark("write")?;
             memo.build_reused += 1;
@@ -2337,4 +2146,209 @@ fn decode_outcomes(bytes: &[u8], count: usize) -> Option<(bool, Vec<Outcome>)> {
     }
     if !reader.done() { return None; }
     Some((accepted != 0, outcomes))
+}
+
+fn compile_snapshot(
+    world: &mut World,
+    options: &Options,
+    stats: &mut Stats,
+    memo: &mut Memo,
+) -> Result<reuse::Selection, String> {
+    memo.inputs.clear();
+    memo.source_inputs.clear();
+    memo.valid_inputs = true;
+    if options.path.ends_with(".lkjir") {
+        let bytes = memo.read_path(world, &options.path)?;
+        memo.protect_source(&bytes)?;
+        if memo.store.is_some() {
+            let (parent, name) = location(&options.path);
+            memo.inputs.push(store::input(&parent, &name, &Some(bytes.clone())));
+        }
+        let input = text(bytes, &options.path)?;
+        let meaning = ir_text::read_located(&input, &options.path).map_err(|problem| report(&options.path, problem))?;
+        stats.mark("parse_ir")?;
+        let checked = check_reusing(meaning, memo, options.roundtrip, stats)
+            .map_err(|problems: Vec<ast::Diagnostic>| ir_failure(&options.path, problems))?;
+        stats.mark("check")?;
+        return select_checked(checked, options, stats, memo);
+    }
+    if !options.path.ends_with(".lkj") {
+        return Err(format!("{}: E_SOURCE_EXTENSION source files use .lkj; checked IR uses .lkjir", options.path));
+    }
+    let (directory_path, root): (String, String) = match &options.source_directory {
+        Some(path) => (path.to_string(), options.path.clone()),
+        None => {
+            if options.path.starts_with('/') {
+                ("/".to_string(), options.path.clone())
+            } else {
+                (".".to_string(), options.path.clone())
+            }
+        }
+    };
+    let mut directory = world
+        .directory(&directory_path)
+        .map_err(|errno: i64| io(&directory_path, "open directory", errno))?;
+    let mut library: Option<Directory> = None;
+    if let Some(path) = &options.library_directory {
+        library = Some(match world.directory(path) {
+            Ok(directory) => directory,
+            Err(errno) => return Err(io(path, "open library", errno)),
+        });
+    }
+    let standard = if options.no_library {
+        None
+    } else {
+        Some("$std/lib.lkj")
+    };
+    let absolute_source = options.source_directory.is_none() && options.path.starts_with('/');
+    let mut loaded = source::load_report(&root, standard, &mut |path: &str| {
+        let result = if options.command == "check-library" && path == "$toolchain/library-check.lkj" {
+            Ok(Some("fn main() {}".as_bytes().to_vec()))
+        } else if path.starts_with("$std/") {
+            match library.as_mut() {
+                Some(directory) => {
+                    memo.read_source(directory, options.library_directory.as_ref().unwrap(), &path[5..], stats)
+                },
+                None => Ok(embedded::library(path)),
+            }
+        } else if absolute_source && path.starts_with('/') {
+            memo.read_source(&mut directory, &directory_path, &path[1..], stats)
+        } else {
+            memo.read_source(&mut directory, &directory_path, path, stats)
+        };
+        if let Ok(Some(bytes)) = &result {
+            memo.protect_source(bytes)?;
+            if memo.store.is_some() || memo.capture_catalog { memo.source_inputs.push((path.to_string(), bytes.clone())); }
+        }
+        result
+    });
+    // Discovery uses capability-relative names; diagnostic identities name the
+    // same source files as the operating agent opens. Bind both fingerprint
+    // sides before resolution so resumed IR carries this exact identity too.
+    for index in 0..loaded.program.files.len() {
+        loaded.program.files[index].path = diagnostic_source_path(&loaded.program.files[index].path, options);
+    }
+    for index in 0..memo.source_inputs.len() {
+        memo.source_inputs[index].0 = diagnostic_source_path(&memo.source_inputs[index].0, options);
+    }
+    stats.mark("load_parse")?;
+    if !loaded.diagnostics.is_empty() {
+        return Err(analysis_failure(&options.path, &mut loaded, Vec::new(), ""));
+    }
+    let resolved = match resolve::resolve(&loaded.program) {
+        Ok(resolved) => resolved,
+        Err(problem) => {
+            return Err(analysis_failure(
+                &options.path,
+                &mut loaded,
+                vec![problem],
+                "declaration resolution failed; dependent definition and IR analysis was not attempted",
+            ));
+        }
+    };
+    stats.mark("resolve")?;
+    // The current frontend checkpoint omits definition/source-site evidence.
+    // A requested catalog must not depend on whether that checkpoint was warm.
+    let front = if memo.store.is_some() && !memo.capture_catalog && options.command != "check-library" {
+        elaborate::incremental::fingerprint(&resolved, &memo.source_inputs)
+    } else { None };
+    stats.mark("key_hash")?;
+    if let Some(fingerprint) = &front {
+        let key = request_key(options);
+        let payload: Option<Vec<u8>> = memo.store.as_mut().and_then(|store| store.get("front", &key));
+        stats.mark("store_io")?;
+        if let Some(payload) = payload {
+            let resumed = {
+                let mut mark = |phase: &str| { let _ = stats.mark(phase); };
+                elaborate::incremental::resume(&resolved, fingerprint, &payload, &mut mark)
+            };
+            if let Some(resumed) = resumed {
+                memo.front_reused += resolved.functions.len() - resumed.definitions;
+                memo.front_definitions += resumed.definitions;
+                memo.front_functions += resumed.functions;
+                if resumed.definitions != 0 {
+                    let bytes = elaborate::incremental::encode(fingerprint, &resumed.catalog, &resumed.program);
+                    stats.mark("front_encode")?;
+                    if let Some(store) = memo.store.as_mut() { store.put("front", &key, &bytes); }
+                    stats.mark("store_io")?;
+                }
+
+                let checked = check_reusing(resumed.program, memo, options.roundtrip, stats)
+                    .map_err(|problems| analysis_failure(&options.path, &mut loaded, problems, "resumed IR failed independent checking"))?;
+                stats.mark("check")?;
+                stats.count("ir_functions", checked.program().functions.len());
+                let mut instructions = 0usize;
+                for function in &checked.program().functions { instructions += function.body.len(); }
+                stats.count("ir_instructions", instructions);
+                if memo.capture_catalog {
+                    memo.catalog = Some(crate::semantic::catalog(&resolved, &memo.source_inputs, checked.checked())?);
+                    stats.mark("semantic_catalog")?;
+                }
+                return select_checked(checked, options, stats, memo);
+            }
+        }
+        stats.mark("front_miss")?;
+    }
+    let inferred = if options.command == "check-library" {
+        elaborate::infer_resolved_report_all_library(&resolved)
+    } else {
+        elaborate::infer_resolved_report(&resolved)
+    };
+    let definitions = match inferred {
+        Ok(definitions) => definitions,
+        Err(problems) => {
+            return Err(analysis_failure(
+                &options.path,
+                &mut loaded,
+                problems,
+                "definition analysis failed; dependent IR construction and checking was not attempted",
+            ));
+        }
+    };
+    stats.mark("type")?;
+    let mut front_catalog = front.as_ref().map(|_| Vec::new());
+    let mut structural = if memo.capture_catalog { Some(elaborate::semantic::Evidence::default()) } else { None };
+    let meaning = match elaborate::lower_definitions_recorded_semantic(definitions, &mut front_catalog, &mut structural) {
+        Ok(meaning) => meaning,
+        Err(problems) => {
+            return Err(analysis_failure(
+                &options.path,
+                &mut loaded,
+                problems,
+                "failed bodies are blocked; independent typed bodies were constructed and checked",
+            ));
+        }
+    };
+    stats.mark("build_ir")?;
+    if let (Some(fingerprint), Some(catalog)) = (&front, &front_catalog) {
+        let payload = elaborate::incremental::encode(fingerprint, catalog, &meaning);
+        stats.mark("front_encode")?;
+        if let Some(store) = memo.store.as_mut() { store.put("front", &request_key(options), &payload); }
+        stats.mark("store_io")?;
+    }
+    memo.front_definitions += resolved.functions.len();
+    memo.front_functions += meaning.functions.len();
+    let checked = match check_reusing(meaning, memo, options.roundtrip, stats) {
+        Ok(checked) => checked,
+        Err(problems) => {
+            return Err(analysis_failure(
+                &options.path,
+                &mut loaded,
+                problems,
+                "each invalid IR body stops at its diagnostic; no artifact is produced",
+            ));
+        }
+    };
+    stats.mark("check")?;
+    stats.count("ir_functions", checked.program().functions.len());
+    let mut instructions = 0usize;
+    for function in &checked.program().functions {
+        instructions += function.body.len();
+    }
+    stats.count("ir_instructions", instructions);
+    if memo.capture_catalog {
+        memo.catalog = Some(crate::semantic::catalog_typed(&resolved, &memo.source_inputs, checked.checked(), &structural)?);
+        stats.mark("semantic_catalog")?;
+    }
+    select_checked(checked, options, stats, memo)
 }
