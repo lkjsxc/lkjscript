@@ -1,34 +1,35 @@
 # Status — 2026-11-15
 
-## Compiler: authenticated reuse complete; seed refresh next
+## Compiler: authenticated reuse complete; profiling next
 
 Shared SHA-256 passes standard, padding and streaming vectors on both routes.
-The disposable store reuses checked bodies, relocatable emission and closed test successes.
-HMAC binds exact compiler bytes, target, options and input closure; the private key is
-outside source/program grants. Key readers and compiler replacers are equally trusted.
-Shared IR structure is always checked; malformed, swapped, replayed and forged entries miss.
-Gate cases cover compiler/key changes, missing/full stores, races and dependency changes.
-Runtime/drop helpers still emit normally; unchanged whole images bypass assembly too.
+The store reuses checked bodies, relocatable emission, images and closed observations.
+HMAC binds compiler bytes, target, options and full inputs; producer slots coexist.
+The private key stays outside source/program grants; key readers are trusted as compiler replacers.
+Shared IR structure is always checked. Corpus roundtrips compare fresh/cold/warm bytes and verdicts.
+Gate cases reject hostile records and cover dependency changes, refused/disappearing stores and races.
+Only embedded-runtime closed executions reuse returns/traps; effects and resource failures rerun.
 
 | Measurement (four workers for gates) | Seconds | Load before → after |
 | --- | ---: | ---: |
-| Self-build, store disabled | 15.53 | 1.67 → 1.94 |
-| Cold self-build | 20.92 | 1.94 → 2.19 |
-| Warm, one checker function changed | 15.78 | 2.19 → 2.51 |
-| Warm, unchanged | 1.32 | 2.19 → 2.19 |
-| Cold gate, previous seed | 213.141 | 1.77 → 6.77 |
-| Warm gate, previous seed | 114.747 | 3.34 → 4.06 |
+| Self-build, store disabled | 15.29 | 7.14 → 7.43 |
+| Cold self-build | 21.09 | 7.43 → 7.69 |
+| Warm, one checker function changed | 16.21 | 7.56 → 7.62 |
+| Same edit, store disabled | 16.13 | 7.62 → 7.18 |
+| Warm, unchanged | 1.44 | 7.69 → 7.56 |
+| Cold gate, refreshed seed | 212.913 | 10.04 → 11.42 |
+| Warm gate, refreshed seed | 110.015 | 11.42 → 7.14 |
 
-Cold overhead: +5.39 s (+34.7%). One edit reuses 9,062 checks and 8,921 emitted bodies;
-authentication/serialization currently consume the saved checking time. No edit speedup yet.
-Two versions occupy 63,837,509 logical bytes, 121,652 KiB allocated, 17,990 files.
-Compiler: 14,451,862 bytes; 9,063 functions / 787,647 IR instructions; fresh/cached identical.
-Native fixed point and optional Rust witness agree; all cold/warm gate verdicts agree.
-Warm-store mutation: 32,768, zero findings; 29,117/min (67.523 s, load 4.75 → 10.64).
-26,168 rejected; 6,041 values; 466 traps; 93 nontermination allowances; zero resources.
-24,966 checked and 9,850 emitted reuses; no rejected authenticated records in the campaign.
-No store entries are committed. bench/reuse.sh reproduces the build/edit/size comparison.
-Next: separate seed refresh, then compiler opt=0/-O triple and emitted-code-kind profiles.
+Cold overhead: +5.80 s (+37.93%). One edit reuses 9,127 checks and 8,986 emitted bodies;
+authentication/serialization consume the saved checking time: edit latency remains at fresh-build cost.
+Store: 49,949,909 bytes cold; 64,564,271 after two versions, including directory metadata.
+Compiler: 14,613,309 bytes; 9,128 functions / 797,533 IR instructions; cached/fresh images identical.
+Seed: 2,816,325 bytes; two native generations and the Rust witness agree. No entries are committed.
+Warm-store mutation: 32,768, zero findings; 29,433/min (66.797 s, load 7.18 → 9.73).
+26,168 rejected; 6,041 values; 466 traps; 93 nontermination allowances; zero resource failures.
+24,966 checked and 9,850 emitted reuses; no rejected records. Runtime/drop helpers still emit normally.
+Deleted the transitional seed probe. bench/reuse.sh reproduces the snapshot/edit/size measurements.
+Next: the three diagnostic rewrites, then the compiler opt=0/-O triple and emitted-code-kind profiles.
 
 ## Programs
 
