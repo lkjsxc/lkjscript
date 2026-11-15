@@ -829,9 +829,8 @@ fn interpret(
                 if semantic_trap(*code) { completion = Completion::SemanticTrap; }
             }
             format!(
-                "{}:{}: {} {}",
-                options.path,
-                problem.line,
+                "{}: {} {}",
+                runtime_site(&options.path, problem.file as u64, problem.line as u64),
                 problem.code(),
                 problem.message
             )
@@ -852,6 +851,11 @@ fn trap_number(text: &str) -> Option<u64> {
     }
     text.parse::<u64>().ok()
 }
+// Source loading assigns the root file index zero. IR retains other numeric
+// identities without a filename map; never label their lines as the root path.
+fn runtime_site(path: &str, file: u64, line: u64) -> String {
+    if file == 0 { format!("{path}:{line}") } else { format!("file {file}:{line}") }
+}
 pub(crate) fn native_trap(path: &str, raw: &[u8]) -> Option<(u64, String, String)> {
     let text = String::from_utf8(raw.to_vec()).ok()?;
     if !text.ends_with("\n") { return None; }
@@ -863,15 +867,15 @@ pub(crate) fn native_trap(path: &str, raw: &[u8]) -> Option<(u64, String, String
         return None;
     }
     let code = trap_number(&parts[0][1..])?;
-    trap_number(&parts[3])?;
-    trap_number(&parts[5][..parts[5].len() - 1])?;
+    let line = trap_number(&parts[3])?;
+    let file = trap_number(&parts[5][..parts[5].len() - 1])?;
     let message = &parts[6];
     let message = if message.ends_with("\n") {
         &message[..message.len() - 1]
     } else {
         message.as_str()
     };
-    Some((code, format!("{path}:{}: {} {message}", parts[3], parts[0]), message.to_string()))
+    Some((code, format!("{}: {} {message}", runtime_site(path, file, line), parts[0]), message.to_string()))
 }
 pub(crate) fn normalize_trap(path: &str, raw: &[u8]) -> Option<String> {
     native_trap(path, raw).map(|trap: (u64, String, String)| trap.1)

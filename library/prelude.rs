@@ -178,7 +178,7 @@ impl<T, E> Result<T, E> {
     pub fn unwrap(self) -> T {
         match self {
             Result::Ok(value) => return value,
-            Result::Err(_) => panic!("called Result::unwrap on Err"),
+            Result::Err(_) => panic!("called Result::unwrap on Err; static trap text omits the error payload; help: replace unwrap() with an explicit match, write the Err(error) detail through an already granted output capability, then panic!() (docs/language.md, Source library)"),
         }
     }
 
