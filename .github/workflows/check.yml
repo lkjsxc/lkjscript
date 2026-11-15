@@ -20,6 +20,9 @@ jobs:
   witness:
     runs-on: ubuntu-latest
     continue-on-error: true
+    env:
+      CARGO_BUILD_JOBS: '1'
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
