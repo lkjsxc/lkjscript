@@ -138,10 +138,10 @@ not used for the shared-memory performance number.
 The publication specimen publishes only after every worker joins, through a
 parent-owned temporary file, file sync, rename and directory sync. Its retained
 campaign kills the parent twenty times at six publication barriers and after
-observing active workers. Every result is the complete old or complete new
+observing a newly forked child PID. Those eight kills need not reach user code. Every result is the complete old or complete new
 128-byte value; thirty-two adopted workers are reaped. The campaign took
 3.455 s, load 8.16 → 9.03. This is the atomic publication contract for this
-pure-result specimen, not a promise to roll back arbitrary File effects.
+pure-result specimen, not a sudden-power-loss experiment or a promise to roll back arbitrary File effects.
 
 The optional independent OS witness holds a forked child before its first
 instruction and proves that spawn's deadline kills and reaps it. It checks

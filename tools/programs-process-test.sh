@@ -10,7 +10,7 @@ if [[ "${LKJSCRIPT_PROGRAMS_TEST_REAPER:-0}" != 1 ]]; then
         $ENV{LKJSCRIPT_PROGRAMS_TEST_REAPER}=1;
         my $child=fork();defined($child) or die "fork: $!";
         if(!$child){exec "bash",@ARGV;die "exec: $!";}
-        $SIG{TERM}=sub{kill "TERM",$child;};$SIG{INT}=sub{kill "INT",$child;};
+        $SIG{TERM}=sub{kill "TERM",$child;};$SIG{INT}=sub{kill "INT",$child;};$SIG{HUP}=sub{kill "HUP",$child;};
         my $result;do {$result=waitpid($child,0);}while($result<0 && $!{EINTR});
         my $status=$?;
         while(waitpid(-1,1)>0){}
