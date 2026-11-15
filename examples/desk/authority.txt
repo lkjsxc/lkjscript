@@ -11,7 +11,7 @@ and listener to 127.0.0.1:0 for an isolated, kernel-selected loopback port.
 DESK_STATE must name an existing directory. No World or Process grant is used.
 
 Command entry: main
-Command: target/lkjscript authority examples/desk.rs --entry main --library-dir library --no-store
+Command: target/lkjscript authority examples/desk.lkj --entry main --library-dir library --no-store
 
 entry main
 declared authority:
@@ -288,7 +288,7 @@ reachable functions (205; each listed once):
   $std::sequence::__lkjscript_slice_order<T=t5;>
 
 Service entry: serve
-Command: target/lkjscript authority examples/desk.rs --entry serve --library-dir library --no-store
+Command: target/lkjscript authority examples/desk.lkj --entry serve --library-dir library --no-store
 
 entry serve
 declared authority:

@@ -1,0 +1,121 @@
+//! Apply a narrow shared-Vec iterator rewrite, then compare both execution routes.
+use super::{command, contains, diagnostic_edits, display_bytes, invoke, path, run_value, write, Config, Report};
+
+struct Case { name: String, source: String, entry: String, expected: String }
+fn case(name: &str, source: &str, entry: &str, expected: &str) -> Case {
+    Case { name: name.to_string(), source: source.to_string(), entry: entry.to_string(), expected: expected.to_string() }
+}
+
+pub fn run(world: &mut World, executable: &File, directory: &mut Directory,
+    config: &Config, report: &mut Report) -> Result<(), String> {
+    let fixture = include_str!("../tests/diagnostics/iterator_return_view.lkj");
+    let cases = vec![
+        case("iterator-view-edit.lkj", fixture, "probe", "5\n"),
+        case("iterator-control-edit.lkj", r#"struct Table { fields: Vec<(String, String)> }
+impl Table {
+    fn get(&self, key: &str, seen: &mut usize) -> Option<&String> {
+        let __lkjscript_iterator_index_0 = 77usize;
+        let __lkjscript_iterator_current_0 = 88usize;
+        for field in &self.fields {
+            *seen += 1usize;
+            assert!(__lkjscript_iterator_index_0 == 77usize);
+            assert!(__lkjscript_iterator_current_0 == 88usize);
+            if field.0.as_str() == "skip" { continue; }
+            if field.0.as_str() == "stop" { break; }
+            if field.0.as_str() == key { return Some(&field.1); }
+        }
+        None
+    }
+}
+pub fn probe() -> usize {
+    let table = Table { fields: vec![
+        ("skip".to_string(), "ignored".to_string()),
+        ("key".to_string(), "first".to_string()),
+        ("key".to_string(), "second".to_string()),
+        ("stop".to_string(), "end".to_string()),
+        ("late".to_string(), "hidden".to_string())
+    ] };
+    let mut seen = 0usize;
+    { let found = table.get("key", &mut seen).unwrap(); assert!(found.as_str() == "first"); }
+    assert!(seen == 2usize);
+    seen = 0usize;
+    { let found = table.get("late", &mut seen); assert!(found.is_none()); }
+    assert!(seen == 4usize);
+    let empty = Table { fields: Vec::new() };
+    seen = 0usize;
+    { let found = empty.get("key", &mut seen); assert!(found.is_none()); }
+    assert!(seen == 0usize);
+    42usize
+}
+"#, "probe", "42\n"),
+        case("iterator-drop-edit.lkj", r#"struct Item { key: String, value: String, output: Stdout, tag: u8 }
+impl Drop for Item { fn drop(&mut self) { self.output.write(&[self.tag]); } }
+struct Table { fields: Vec<Item> }
+impl Table {
+    fn get(&self, key: &str) -> Option<&String> {
+        for item in &self.fields {
+            if item.key.as_str() == key { return Some(&item.value); }
+        }
+        None
+    }
+}
+pub fn main(mut world: World) {
+    let table = Table { fields: vec![
+        Item { key: "skip".to_string(), value: "X".to_string(), output: world.stdout(), tag: b'1' },
+        Item { key: "key".to_string(), value: "V".to_string(), output: world.stdout(), tag: b'2' }
+    ] };
+    { let found = table.get("key").unwrap(); world.stdout().write(found.as_bytes()); }
+    drop(table);
+    world.stdout().write(b"\n");
+}
+"#, "main", "V12\n"),
+    ];
+    for item in cases {
+        write(directory, &item.name, item.source.as_bytes())?;
+        let rejected = invoke(world, executable, &command(config, "check", &item.name), b"")?;
+        report.require(rejected.status == 1 && contains(&rejected.errors, b"returned element view is tied to the loop iterator temporary")
+            && contains(&rejected.errors, b"advancing before the original body") && contains(&rejected.errors, b"docs/language.md"),
+            format!("iterator edit omitted its construct, rule or reference: {}", display_bytes(&rejected.errors)));
+        let rewritten = diagnostic_edits::apply(&item.source, &rejected.errors, &path(config, &item.name))
+            .map_err(|error: String| -> String { format!("{}: {error}; diagnostic {}", item.name, display_bytes(&rejected.errors)) })?;
+        if item.name == "iterator-control-edit.lkj" {
+            report.require(rewritten.contains("let mut __lkjscript_iterator_index_1")
+                && rewritten.contains("let __lkjscript_iterator_current_1")
+                && rewritten.contains("if field.0.as_str() == \"skip\" { continue; }"),
+                "iterator rewrite captured a local name or changed the original body".to_string());
+        }
+        write(directory, &item.name, rewritten.as_bytes())?;
+        run_value(world, executable, config, report, &item.name, &item.entry, &item.expected)?;
+    }
+    let custom_iterator = format!("{fixture}\nstruct Other;\nimpl Iterator for Other {{ type Item = u8; fn next(&mut self) -> Option<u8> {{ None }} }}\nimpl IntoIterator for Other {{ type IntoIter = Other; fn into_iter(self) -> Other {{ self }} }}\n");
+    let iterator_drop = format!("{fixture}\nimpl<'a, T> Drop for std::iter::Iter<'a, T> {{ fn drop(&mut self) {{ panic!(\"iterator cleanup\"); }} }}\n");
+    let custom_index = format!("{fixture}\ntrait Index {{ fn index(&self) -> &u8; }}\nstruct Other {{ value: u8 }}\nimpl Index for Other {{ fn index(&self) -> &u8 {{ &self.value }} }}\n");
+    let custom_deref = format!("{fixture}\ntrait Deref {{ fn deref(&self) -> &u8; }}\nstruct Other {{ value: u8 }}\nimpl Deref for Other {{ fn deref(&self) -> &u8 {{ &self.value }} }}\n");
+    let custom_len = format!("{fixture}\nstruct Other;\nimpl Other {{ fn len(&self) -> usize {{ 0usize }} }}\n");
+    let alias = format!("type Fields = Vec<(String, String)>;\n{}", fixture.replace("fields: Vec<(String, String)>", "fields: Fields"));
+    let generic = fixture.replace("struct Table {", "struct Table<T> {")
+        .as_str().replace("fields: Vec<(String, String)>", "fields: Vec<T>")
+        .as_str().replace("impl Table {", "impl Table<(String, String)> {");
+    let mutable = fixture.replace("fn get(&self", "fn get(&mut self")
+        .as_str().replace("let table = Table", "let mut table = Table");
+    let computed = fixture.replace("in &self.fields", "in &{ self }.fields");
+    let unchanged: Vec<(String, String)> = vec![
+        ("iterator-custom-protocol.lkj".to_string(), custom_iterator),
+        ("iterator-custom-drop.lkj".to_string(), iterator_drop),
+        ("iterator-custom-index.lkj".to_string(), custom_index),
+        ("iterator-custom-deref.lkj".to_string(), custom_deref),
+        ("iterator-shadow-len.lkj".to_string(), custom_len),
+        ("iterator-field-alias.lkj".to_string(), alias),
+        ("iterator-generic-owner.lkj".to_string(), generic),
+        ("iterator-mutable-owner.lkj".to_string(), mutable),
+        ("iterator-computed-owner.lkj".to_string(), computed),
+    ];
+    for (name, source) in unchanged {
+        write(directory, &name, source.as_bytes())?;
+        let rejected = invoke(world, executable, &command(config, "check", &name), b"")?;
+        report.require(rejected.status == 1 && contains(&rejected.errors, b"E_BORROW")
+            && contains(&rejected.errors, b":iterator conflicts") && !contains(&rejected.errors, b"LKJSCRIPT_EDITS "),
+            format!("unsafe iterator rewrite or unrelated rejection for {name}: {}", display_bytes(&rejected.errors)));
+    }
+    Ok(())
+}

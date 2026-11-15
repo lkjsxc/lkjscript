@@ -4,16 +4,16 @@ Run these commands from the repository root after `sh tools/bootstrap.sh`.
 
 ## Hello
 
-`hello.rs` writes through an owned `Stdout` derived from its `World` entry:
+`hello.lkj` writes through an owned `Stdout` derived from its `World` entry:
 
 ```sh
-target/lkjscript run examples/hello.rs
-target/lkjscript run examples/hello.rs --engine interpreter
+target/lkjscript run examples/hello.lkj
+target/lkjscript run examples/hello.lkj --engine interpreter
 ```
 
 ## HTTP documents
 
-`http.rs` serves files below a granted `Directory`. Its entry declares the six
+`http.lkj` serves files below a granted `Directory`. Its entry declares the six
 capabilities it needs:
 
 ```rust
@@ -29,8 +29,8 @@ The executable has no `World`, process capability or ambient filesystem access.
 Inspect authority from checked source or from its checked IR:
 
 ```sh
-target/lkjscript authority examples/http.rs
-target/lkjscript ir examples/http.rs -o target/http.lkjir
+target/lkjscript authority examples/http.lkj
+target/lkjscript ir examples/http.lkj -o target/http.lkjir
 target/lkjscript authority target/http.lkjir
 ```
 
@@ -38,7 +38,7 @@ Build with each entry grant supplied explicitly. Port zero asks the kernel to
 choose a free local port; the program prints `port NUMBER` after startup.
 
 ```sh
-target/lkjscript build examples/http.rs --profile \
+target/lkjscript build examples/http.lkj --profile \
     --grant output --grant root=docs \
     --grant listener=127.0.0.1:0 --grant clock --grant ready --grant stop -o target/http
 target/http
@@ -47,7 +47,7 @@ target/http
 From another terminal, substitute the printed port:
 
 ```sh
-target/lkjscript build tools/http-get.rs --grant output --grant input \
+target/lkjscript build tools/http-get.lkj --grant output --grant input \
     --grant target=127.0.0.1:NUMBER -o target/http-get
 printf 'GET /language.md HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' | target/http-get
 ```
@@ -110,14 +110,14 @@ backpressure through `ReadBuffer::write_some` and an owned `WriteCursor`.
 response, a later read that starts another request, and a fresh request after idle.
 The native HTTP gate runs these cases after its functional server exits.
 
-`http_server.rs` shares the connection engine through an ordinary generic handler;
-`http.rs` supplies the static-file handler and `journal.rs` supplies the journal.
-`http_protocol.rs` parses requests with the handler's allowed method list. Its native test functions
+`http_server.lkj` shares the connection engine through an ordinary generic handler;
+`http.lkj` supplies the static-file handler and `journal.lkj` supplies the journal.
+`http_protocol.lkj` parses requests with the handler's allowed method list. Its native test functions
 cover request syntax and incremental header recognition through both execution
 routes:
 
 ```sh
-target/lkjscript test examples/http_protocol.rs --jobs 1
+target/lkjscript test examples/http_protocol.lkj --jobs 1
 ```
 
 ### Graceful stop
@@ -170,13 +170,13 @@ Their clients, server/broker, port, FIFO and temporary files are removed afterwa
 
 `Connector` grants one numeric IPv4 TCP destination. Its `connect()` method returns
 an owned `File` stream; the caller cannot substitute another destination.
-`tools/http-get.rs` accepts a raw request on its granted input and writes one
+`tools/http-get.lkj` accepts a raw request on its granted input and writes one
 framed response to its granted output. It recognizes HEAD and Content-Length.
 
-`tools/http-test.rs` connects directly through lkjscript and checks GET/HEAD bytes
+`tools/http-test.lkj` connects directly through lkjscript and checks GET/HEAD bytes
 and headers, missing files, traversal and symlinks, malformed requests, request
 bodies, a 65,537-byte header, persistent requests and pipelining.
-`tools/http-load.rs` holds one TCP connection open, pipelines requests, and checks
+`tools/http-load.lkj` holds one TCP connection open, pipelines requests, and checks
 every response's status, framing and exact body against its granted fixture.
 It reports elapsed monotonic nanoseconds, requests/second and the validation mode.
 The default `--verification full` compares every body byte. `--verification framing`
@@ -208,7 +208,7 @@ Temporary documents and executables are removed on success and interruption.
 
 ## Many clients and hostile peers
 
-`tools/http-concurrency.rs` drives ten persistent connections concurrently, with
+`tools/http-concurrency.lkj` drives ten persistent connections concurrently, with
 32 requests in flight per connection and a 40,108-byte response. Every response
 checks status, length and connection policy and drains the full body. It brackets
 the silent-peer measurement with unloaded measurements, then exercises a header
@@ -232,7 +232,7 @@ test workload and compiler; they do not alter language resource rules.
 
 ## Durable HTTP journal
 
-`journal.rs` accepts JSON entries, retains the latest version of each entry in an
+`journal.lkj` accepts JSON entries, retains the latest version of each entry in an
 in-memory index, and stores every mutation in an append-only log beneath its granted
 `Directory`. Its entry grants are output, root directory, listener, clock, readiness, Stop and
 Entropy. The latter initializes the durable session-signing key. The granted root is writable
@@ -240,7 +240,7 @@ and should be a private directory used by one journal.
 
 ```sh
 mkdir -p target/journal-data
-target/lkjscript build examples/journal.rs \
+target/lkjscript build examples/journal.lkj \
     --grant output --grant root=target/journal-data \
     --grant listener=127.0.0.1:0 --grant clock --grant ready --grant stop --grant entropy -o target/journal
 target/journal
@@ -251,11 +251,11 @@ and `stop-target PID`. After that first startup, issue a write token from a sepa
 program that receives the signing-key directory:
 
 ```sh
-target/lkjscript build examples/journal-token.rs \
+target/lkjscript build examples/journal-token.lkj \
     --grant output --grant errors --grant input --grant root=target/journal-data \
     --grant entropy --grant clock -o target/journal-token
 journal_token=$(printf '3600\n' | target/journal-token)
-target/lkjscript build tools/http-get.rs --grant output --grant input \
+target/lkjscript build tools/http-get.lkj --grant output --grant input \
     --grant target=127.0.0.1:NUMBER -o target/journal-get
 printf 'POST /entries HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer %s\r\nContent-Type: application/json\r\nContent-Length: 16\r\nConnection: close\r\n\r\n{"text":"hello"}' "$journal_token" | target/journal-get
 ```
@@ -374,7 +374,7 @@ and exits as described in the graceful-stop section.
 
 ### Focused journal checks
 
-`tools/http-journal-cases.rs` uses the lkjscript HTTP client to check append,
+`tools/http-journal-cases.lkj` uses the lkjscript HTTP client to check append,
 replace, exact Unicode/control-character roundtrips, pipelining, reads, ranges,
 HEAD and strict JSON input. Its shell supervisor checks single-writer refusal,
 three incomplete-tail boundaries, abandoned staging files, adoption of a complete
@@ -430,7 +430,7 @@ honor successful sync operations; this campaign does not emulate a host power cu
 
 ## Documentation-origin candidate
 
-`site.rs` embeds the exact twelve-path public documentation snapshot and computes
+`site.lkj` embeds the exact twelve-path public documentation snapshot and computes
 dynamic search, with explicit Listener, Clock, Readiness, Stop and output grants. [site.md](site.md) explains the captured content, text helpers,
 independent live parity, offline regression checks and temporary systemd proof.
 The candidate unit is [lkjscript-site.service](lkjscript-site.service); the

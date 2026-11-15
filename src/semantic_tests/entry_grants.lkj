@@ -1,0 +1,272 @@
+//! Entry capabilities are validated before acquisition in both execution APIs.
+use super::interpreter_contracts::FailingHost;
+use crate::{check, frontend, interpreter, ir, ir_text, native, runtime, source};
+use interpreter::{ErrorKind, InterpreterError};
+
+fn prepared() -> runtime::Runtime {
+    let input = source::SourceInput {
+        path: "runtime.lkj".to_string(),
+        text: include_str!("../../library/runtime.lkj").to_string(),
+    };
+    let bundle = source::SourceBundle {
+        root: "runtime.lkj".to_string(),
+        library: None,
+        files: vec![input],
+    };
+    runtime::seal(frontend::check_bundle(&bundle).unwrap()).unwrap()
+}
+fn entry() -> ir::CheckedProgram {
+    check::check(
+        ir_text::read(include_str!(
+            "../../tests/fixtures/authority/grant_pair.lkjir"
+        ))
+        .unwrap(),
+    )
+    .unwrap()
+}
+fn directory() -> ir::EntryGrant {
+    ir::EntryGrant::Directory("docs\0".as_bytes().to_vec())
+}
+fn listener() -> ir::EntryGrant {
+    ir::EntryGrant::Listener(vec![2u8, 0, 0, 0, 127, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0])
+}
+fn mismatched_grants_do_not_acquire_authority() {
+    let checked = entry();
+    let runtime = prepared();
+    let cases: Vec<Vec<ir::EntryGrant>> = vec![
+        Vec::new(),
+        vec![directory()],
+        vec![directory(), listener(), ir::EntryGrant::Clock],
+        // The first Directory would acquire successfully if validation were incremental.
+        vec![directory(), ir::EntryGrant::Stdout],
+        vec![ir::EntryGrant::Clock, listener()],
+    ];
+    for grants in cases {
+        let mut host = FailingHost(Vec::new());
+        let error = interpreter::run_granted(checked.program(), 0, &grants, &mut host)
+            .err()
+            .expect("interpreter accepted mismatched entry grants");
+        assert!(error.kind == ErrorKind::Interpreter(InterpreterError::InvalidIr));
+        assert!(
+            host.0.is_empty(),
+            "entry mismatch acquired or closed host authority"
+        );
+        let error = native::encode_granted(&checked, &runtime, 0, &grants, None, None)
+            .err()
+            .expect("native emission accepted mismatched entry grants");
+        assert_eq!(error.code, "E_ENTRY");
+    }
+}
+fn acquisition_failure_closes_the_preceding_directory() {
+    let checked = entry();
+    let mut host = FailingHost(Vec::new());
+    let error = interpreter::run_granted(
+        checked.program(),
+        0,
+        &vec![directory(), listener()],
+        &mut host,
+    )
+    .err()
+    .expect("injected Listener acquisition failure was ignored");
+    assert!(error.kind == ErrorKind::Trap(7));
+    // D acquires handle 1, L refuses, C checks and closes that exact handle once.
+    assert_eq!(host.0.as_slice(), b"DLC");
+}
+fn listener_cannot_be_forged_from_raw_scalar_arguments() {
+    let checked = entry();
+    let runtime = prepared();
+    for argument in vec![0u64, 41u64] {
+        let mut host = FailingHost(Vec::new());
+        let error = interpreter::run(checked.program(), 1, &[argument], &mut host)
+            .err()
+            .expect("interpreter accepted raw Listener bits");
+        assert!(error.kind == ErrorKind::Interpreter(InterpreterError::InvalidIr));
+        assert!(host.0.is_empty());
+        let selected = native::Entry {
+            function: 1,
+            arguments: vec![argument as i64],
+            result_fd: None,
+        };
+        let error = native::encode(&checked, &runtime, selected)
+            .err()
+            .expect("native emission accepted raw Listener bits");
+        assert_eq!(error.code, "E_ENTRY");
+    }
+}
+fn non_scalar_result_rejects_before_acquisition() {
+    let checked = entry();
+    let runtime = prepared();
+    let grants = vec![directory()];
+    let mut host = FailingHost(Vec::new());
+    let error = interpreter::run_granted(checked.program(), 2, &grants, &mut host)
+        .err()
+        .expect("interpreter accepted a capability entry result");
+    assert!(error.kind == ErrorKind::Interpreter(InterpreterError::InvalidIr));
+    assert!(host.0.is_empty(), "invalid entry result acquired authority");
+    let error = native::encode_granted(&checked, &runtime, 2, &grants, None, None)
+        .err()
+        .expect("native emission accepted a capability entry result");
+    assert_eq!(error.code, "E_ENTRY");
+}
+fn connector_grants_are_exact_and_unforgeable() {
+    let checked = check::check(ir_text::read(include_str!(
+        "../../tests/fixtures/authority/connector_entry.lkjir"
+    )).unwrap()).unwrap();
+    let runtime = prepared();
+    let mut host = FailingHost(Vec::new());
+    let endpoint = vec![2u8, 0, 1, 187, 127, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0];
+    let grants = crate::entry_grants::prepare(checked.program(), 0, &[
+        "target=127.000.0.1:443".to_string(),
+    ]).unwrap();
+    assert!(matches!(&grants[0], ir::EntryGrant::Connector(address) if *address == endpoint));
+    interpreter::run_granted(checked.program(), 0, &grants, &mut host).unwrap();
+    assert!(host.0.is_empty(), "granting an endpoint performs no socket acquisition");
+    native::encode_granted(&checked, &runtime, 0, &grants, None, None).unwrap();
+    for value in vec![0u64, 1u64, 65535u64] {
+        let error = interpreter::run(checked.program(), 0, &[value], &mut host)
+            .err().expect("raw bits forged Connector");
+        assert!(error.kind == ErrorKind::Interpreter(InterpreterError::InvalidIr));
+        let selected = native::Entry { function: 0, arguments: vec![value as i64], result_fd: None };
+        assert_eq!(native::encode(&checked, &runtime, selected).err().unwrap().code, "E_ENTRY");
+    }
+    for text in vec![
+        "target".to_string(), "target=localhost:443".to_string(),
+        "target=127.0.0.1:65536".to_string(), "target=127.0.0.256:443".to_string(),
+    ] {
+        assert!(crate::entry_grants::prepare(checked.program(), 0, &[text]).is_err());
+    }
+    let mismatched = vec![ir::EntryGrant::Listener(endpoint)];
+    assert!(interpreter::run_granted(checked.program(), 0, &mismatched, &mut host).is_err());
+    assert!(native::encode_granted(&checked, &runtime, 0, &mismatched, None, None).is_err());
+    assert!(host.0.is_empty());
+}
+fn readiness_grants_are_owned_and_unforgeable() {
+    let checked = check::check(ir_text::read(include_str!(
+        "../../tests/fixtures/authority/readiness_entry.lkjir"
+    )).unwrap()).unwrap();
+    let runtime = prepared();
+    let grants = crate::entry_grants::prepare(checked.program(), 0, &["ready".to_string()]).unwrap();
+    assert!(matches!(&grants[0], ir::EntryGrant::Readiness));
+    let mut host = FailingHost(Vec::new());
+    interpreter::run_granted(checked.program(), 0, &grants, &mut host).unwrap();
+    assert_eq!(host.0.as_slice(), b"Rr");
+    native::encode_granted(&checked, &runtime, 0, &grants, None, None).unwrap();
+    for supplied in vec![Vec::<String>::new(), vec!["ready=1".to_string()], vec!["ready".to_string(), "ready".to_string()]] {
+        assert!(crate::entry_grants::prepare(checked.program(), 0, &supplied).is_err());
+    }
+    for value in vec![0u64, 1u64, 65535u64] {
+        let mut host = FailingHost(Vec::new());
+        let error = interpreter::run(checked.program(), 0, &[value], &mut host).err().unwrap();
+        assert!(error.kind == ErrorKind::Interpreter(InterpreterError::InvalidIr));
+        assert!(host.0.is_empty());
+        let selected = native::Entry { function: 0, arguments: vec![value as i64], result_fd: None };
+        assert_eq!(native::encode(&checked, &runtime, selected).err().unwrap().code, "E_ENTRY");
+    }
+    let mut host = FailingHost(Vec::new());
+    let mismatch = vec![ir::EntryGrant::Clock];
+    assert!(interpreter::run_granted(checked.program(), 0, &mismatch, &mut host).is_err());
+    assert!(native::encode_granted(&checked, &runtime, 0, &mismatch, None, None).is_err());
+    assert!(host.0.is_empty());
+    let error = interpreter::run_granted(checked.program(), 1, &vec![ir::EntryGrant::Readiness, listener()], &mut host).err().unwrap();
+    assert!(error.kind == ErrorKind::Trap(7));
+    assert_eq!(host.0.as_slice(), b"RLr");
+}
+fn lifecycle_grants_are_explicit_owned_and_unforgeable() {
+    let checked = check::check(ir_text::read(include_str!(
+        "../../tests/fixtures/authority/lifecycle_entry.lkjir"
+    )).unwrap()).unwrap();
+    let runtime = prepared();
+    for entry in 0usize..2usize {
+        let name = if entry == 0 { "entropy" } else { "stop" };
+        let grants = crate::entry_grants::prepare(checked.program(), entry, &[name.to_string()]).unwrap();
+        let mut host = FailingHost(Vec::new());
+        interpreter::run_granted(checked.program(), entry, &grants, &mut host).unwrap();
+        assert_eq!(host.0.as_slice(), if entry == 0 { &b""[..] } else { &b"Qq"[..] });
+        native::encode_granted(&checked, &runtime, entry, &grants, None, None).unwrap();
+        for supplied in vec![Vec::<String>::new(), vec![format!("{name}=1")], vec![name.to_string(), name.to_string()]] {
+            assert!(crate::entry_grants::prepare(checked.program(), entry, &supplied).is_err());
+        }
+        for value in vec![0u64, 1u64, 65535u64] {
+            let mut host = FailingHost(Vec::new());
+            let error = interpreter::run(checked.program(), entry, &[value], &mut host).err().unwrap();
+            assert!(error.kind == ErrorKind::Interpreter(InterpreterError::InvalidIr));
+            assert!(host.0.is_empty());
+            let selected = native::Entry { function: entry, arguments: vec![value as i64], result_fd: None };
+            assert_eq!(native::encode(&checked, &runtime, selected).err().unwrap().code, "E_ENTRY");
+        }
+        let mut host = FailingHost(Vec::new());
+        let mismatch = vec![ir::EntryGrant::Clock];
+        assert!(interpreter::run_granted(checked.program(), entry, &mismatch, &mut host).is_err());
+        assert!(native::encode_granted(&checked, &runtime, entry, &mismatch, None, None).is_err());
+        assert!(host.0.is_empty());
+    }
+    let mut host = FailingHost(Vec::new());
+    let error = interpreter::run_granted(checked.program(), 2, &vec![ir::EntryGrant::Stop, listener()], &mut host).err().unwrap();
+    assert!(error.kind == ErrorKind::Trap(7));
+    assert_eq!(host.0.as_slice(), b"QLq");
+}
+fn command_grants_are_named_affine_and_unforgeable() {
+    let checked = check::check(ir_text::read(include_str!(
+        "../../tests/fixtures/authority/command_entry.lkjir"
+    )).unwrap()).unwrap();
+    let runtime = prepared();
+    let grants = crate::entry_grants::prepare(checked.program(), 0, &[
+        "args".to_string(), "value=DESK_STATE".to_string(), "status".to_string(),
+    ]).unwrap();
+    assert!(matches!(&grants[0], ir::EntryGrant::Arguments));
+    assert!(matches!(&grants[1], ir::EntryGrant::Environment(name) if name.as_slice() == b"DESK_STATE\0"));
+    assert!(matches!(&grants[2], ir::EntryGrant::ExitStatus));
+    for ty in 7usize..10usize {
+        assert!(!check::is_copy(&checked.program().types, ty));
+        assert!(!check::is_data(&checked.program().types, ty));
+    }
+    let mut host = FailingHost(Vec::new());
+    interpreter::run_granted(checked.program(), 0, &grants, &mut host).unwrap();
+    native::encode_granted(&checked, &runtime, 0, &grants, None, None).unwrap();
+    assert!(host.0.is_empty());
+    for name in vec![
+        "value".to_string(), "value=".to_string(), "value=A=B".to_string(),
+        "value=A\0B".to_string(), "value=A B".to_string(),
+    ] {
+        assert!(crate::entry_grants::prepare(checked.program(), 0, &[
+            "args".to_string(), name, "status".to_string(),
+        ]).is_err());
+    }
+    for bad in vec![
+        ir::EntryGrant::Clock,
+        ir::EntryGrant::Environment(Vec::new()),
+        ir::EntryGrant::Environment(b"A=B\0"[..].to_vec()),
+        ir::EntryGrant::Environment(b"A\0B\0"[..].to_vec()),
+        ir::EntryGrant::EnvironmentValue(Some(b"A\0B"[..].to_vec())),
+    ] {
+        let malformed = vec![ir::EntryGrant::Arguments, bad, ir::EntryGrant::ExitStatus];
+        assert!(interpreter::run_granted(checked.program(), 0, &malformed, &mut host).is_err());
+        assert!(native::encode_granted(&checked, &runtime, 0, &malformed, None, None).is_err());
+    }
+    let raw = vec![1u64, 1u64, 1u64];
+    assert!(interpreter::run(checked.program(), 0, &raw, &mut host).is_err());
+    let selected = native::Entry { function: 0, arguments: vec![1i64, 1i64, 1i64], result_fd: None };
+    assert!(native::encode(&checked, &runtime, selected).is_err());
+    assert!(host.0.is_empty());
+}
+
+pub fn probe() -> i64 {
+
+    mismatched_grants_do_not_acquire_authority();
+    acquisition_failure_closes_the_preceding_directory();
+    listener_cannot_be_forged_from_raw_scalar_arguments();
+    non_scalar_result_rejects_before_acquisition();
+    connector_grants_are_exact_and_unforgeable();
+    readiness_grants_are_owned_and_unforgeable();
+    lifecycle_grants_are_explicit_owned_and_unforgeable();
+    command_grants_are_named_affine_and_unforgeable();
+    8
+}
+pub fn run(world: &mut World, trace: bool) -> usize {
+    if trace {
+        world
+            .stdout()
+            .write(b"entry_grants_validate_acquire_rollback_and_reject_raw_authority\n");
+    }
+    probe() as usize
+}

@@ -1,0 +1,1416 @@
+// Native seeded generators, direct IR attacks and disagreement reduction.
+#[path = "test_generators/extended_cases.lkj"]
+mod extended_cases;
+#[path = "test_generators/integer_cases.lkj"]
+mod integer_cases;
+#[path = "test_generators/mutation.lkj"]
+mod mutation;
+#[path = "test_generators/ownership.lkj"]
+mod ownership;
+#[path = "test_generators/reduction.lkj"]
+mod reduction;
+#[path = "test_generators/scale.lkj"]
+mod scale;
+#[path = "test_generators/source_cases.lkj"]
+mod source_cases;
+#[path = "test_generators/values.lkj"]
+mod values;
+
+use crate::{backend, check, driver, ir, ir_text, optimizer, reuse, runtime, test_runner};
+
+pub struct Random {
+    state: u64,
+}
+impl Random {
+    pub fn new(seed: u64) -> Self {
+        let value = seed.wrapping_mul(0x9e3779b97f4a7c15u64);
+        Self {
+            state: if value == 0 { 1 } else { value },
+        }
+    }
+    pub fn pick(&mut self, length: usize) -> usize {
+        self.state ^= self.state << 13u64;
+        self.state ^= self.state >> 7u64;
+        self.state ^= self.state << 17u64;
+        (self.state % length as u64) as usize
+    }
+}
+
+fn fields(text: &str, separator: u8) -> Vec<String> {
+    let mut result: Vec<String> = Vec::new();
+    let mut begin = 0usize;
+    for (at, byte) in text.as_bytes().iter().enumerate() {
+        if *byte == separator {
+            result.push(text[begin..at].to_string());
+            begin = at + 1;
+        }
+    }
+    result.push(text[begin..].to_string());
+    result
+}
+fn whitespace(text: &str) -> Vec<String> {
+    let bytes = text.as_bytes();
+    let mut result = Vec::new();
+    let mut at = 0usize;
+    while at < bytes.len() {
+        if bytes[at].is_ascii_whitespace() {
+            at += 1;
+            continue;
+        }
+        let begin = at;
+        while at < bytes.len() && !bytes[at].is_ascii_whitespace() {
+            at += 1;
+        }
+        result.push(text[begin..at].to_string());
+    }
+    result
+}
+fn trim(text: &str) -> &str {
+    let bytes = text.as_bytes();
+    let mut begin = 0usize;
+    let mut end = bytes.len();
+    while begin < end && bytes[begin].is_ascii_whitespace() {
+        begin += 1;
+    }
+    while end > begin && bytes[end - 1].is_ascii_whitespace() {
+        end -= 1;
+    }
+    &text[begin..end]
+}
+fn display(bytes: &[u8]) -> String {
+    let mut out = String::new();
+    for byte in bytes {
+        if *byte >= 32 && *byte < 127 || *byte == b'\n' || *byte == b'\t' {
+            out.push(*byte as char);
+        } else {
+            out.push_str(&format!("\\x{byte:02x}"));
+        }
+    }
+    out
+}
+
+fn problem(operation: &str, errno: i64) -> String {
+    format!("E_IO {operation}: errno {errno}")
+}
+fn integer(value: &str, name: &str) -> Result<usize, String> {
+    let mut out = 0usize;
+    if value.is_empty() {
+        return Err(format!("E_USAGE invalid {name}: {value}"));
+    }
+    for byte in value.as_bytes() {
+        if !byte.is_ascii_digit() {
+            return Err(format!("E_USAGE invalid {name}: {value}"));
+        }
+        let digit = (*byte - b'0') as usize;
+        if out > ((!0usize) - digit) / 10 {
+            return Err(format!("E_USAGE {name} exceeds integer representation"));
+        }
+        out = out * 10 + digit;
+    }
+    Ok(out)
+}
+fn read(world: &mut World, path: &str) -> Result<String, String> {
+    let (parent, name) = path_parts(path);
+    let mut directory = world
+        .directory(&parent)
+        .map_err(|errno: i64| problem(path, errno))?;
+    let mut file = directory
+        .open(&name)
+        .map_err(|errno: i64| problem(path, errno))?;
+    let bytes = file
+        .read_to_end()
+        .map_err(|errno: i64| problem(path, errno))?;
+    String::from_utf8(bytes).map_err(|_| format!("E_IO {path} is not UTF-8"))
+}
+fn path_parts(path: &str) -> (String, String) {
+    let mut split = 0usize;
+    for (index, byte) in path.as_bytes().iter().enumerate() {
+        if *byte == b'/' {
+            split = index + 1;
+        }
+    }
+    if split == 0 {
+        (".".to_string(), path.to_string())
+    } else {
+        (path[..split].to_string(), path[split..].to_string())
+    }
+}
+fn write(world: &mut World, path: &str, bytes: &[u8]) -> Result<(), String> {
+    let (parent, name) = path_parts(path);
+    let mut directory = world
+        .directory(&parent)
+        .map_err(|errno: i64| problem(path, errno))?;
+    let mut file = directory
+        .create(&name)
+        .map_err(|errno: i64| problem(path, errno))?;
+    file.write_all(bytes)
+        .map_err(|errno: i64| problem(path, errno))
+}
+fn remove(world: &mut World, path: &str) -> Result<(), String> {
+    let (parent, name) = path_parts(path);
+    let mut directory = world
+        .directory(&parent)
+        .map_err(|errno: i64| problem(path, errno))?;
+    directory
+        .remove(&name)
+        .map_err(|errno: i64| problem(path, errno))
+}
+fn ensure_directory(world: &mut World, path: &str) -> Result<(), String> {
+    let mut current = if path.starts_with('/') {
+        "/".to_string()
+    } else {
+        String::new()
+    };
+    for part in fields(path, b'/') {
+        if part.is_empty() || part == "." {
+            continue;
+        }
+        let parent = if current.is_empty() {
+            "."
+        } else {
+            current.as_str()
+        };
+        let mut directory = world
+            .directory(parent)
+            .map_err(|errno: i64| problem(parent, errno))?;
+        if let Err(errno) = directory.create_directory(&part) {
+            if errno != 17 {
+                return Err(problem(path, errno));
+            }
+        }
+        if !current.is_empty() && !current.ends_with('/') {
+            current.push('/');
+        }
+        current.push_str(&part);
+    }
+    Ok(())
+}
+fn seed_paths() -> Vec<String> {
+    let mut paths = vec![
+        "tools/generators/ir-seeds/calls.lkjir".to_string(),
+        "tools/generators/ir-seeds/array-repeat.lkjir".to_string(),
+    ];
+    for name in vec![
+        "drop_if_owned".to_string(),
+        "conditional_owner_cleanup".to_string(),
+        "conditional_owned_view_field".to_string(),
+        "targeted_loop_transfer".to_string(),
+        "per_leaf_transport".to_string(),
+        "per_leaf_static_mix".to_string(),
+        "conditional_reference_cleanup".to_string(),
+        "per_leaf_input_alternatives".to_string(),
+        "shared_reference_carrier_cleanup".to_string(),
+        "shared_reference_exclusive_ancestor".to_string(),
+        "enum_alternative_join".to_string(),
+        "enum_fixed_pointer_tag".to_string(),
+        "integer_wrapping".to_string(),
+        "range_full_extent".to_string(),
+        "range_empty".to_string(),
+        "range_mutable".to_string(),
+        "range_utf8".to_string(),
+        "range_nested_call".to_string(),
+        "self_move_preserves_cleanup".to_string(),
+    ] {
+        paths.push(format!("tests/conformance/ir/{name}.lkjir"));
+    }
+    paths
+}
+fn seeds(
+    world: &mut World,
+    store: &mut Option<crate::store::Store>,
+    counts: &mut Counts,
+    runtime: &runtime::Runtime,
+    inline_limit: Option<usize>,
+) -> Result<Vec<mutation::Seed>, String> {
+    let mut out: Vec<mutation::Seed> = Vec::new();
+    for path in seed_paths() {
+        let source = read(world, &path)?;
+        let prepared = mutation::prepare(&path, source)?;
+        let program = ir_text::read(&prepared.text).map_err(
+            |diagnostic: crate::diagnostic::Diagnostic| -> String {
+                format!("{path}: {}", diagnostic.message)
+            },
+        )?;
+        let checked = check_mutation(program, store, counts).map_err(
+            |problems: Vec<crate::diagnostic::Diagnostic>| -> String {
+                format!("{path}: canonical seed failed: {} {}", problems[0].code, problems[0].message)
+            },
+        )?;
+        if store.is_some() {
+            let selected = select_mutation(checked, store, counts, inline_limit);
+            emit_mutation(selected.native(), runtime, store, counts).map_err(
+                |diagnostic: crate::diagnostic::Diagnostic| -> String {
+                    format!("{path}: canonical seed emission failed: {} {}", diagnostic.code, diagnostic.message)
+                },
+            )?;
+        }
+        out.push(prepared);
+    }
+    Ok(out)
+}
+
+#[derive(Clone, PartialEq, Eq)]
+struct Observation {
+    kind: String,
+    code: String,
+    line: usize,
+    status: usize,
+    stdout: Vec<u8>,
+    program_stderr: Vec<u8>,
+    stderr: Vec<u8>,
+}
+fn diagnostic(text: &str) -> (String, usize) {
+    let mut code = String::new();
+    let mut line = 0usize;
+    for row in mutation::lines(text) {
+        let mut previous = String::new();
+        for word in whitespace(&row) {
+            if word.starts_with("R0") || word.starts_with("M_") || word.starts_with("E_") {
+                code = word.to_string();
+                let mut parts: Vec<String> = Vec::new();
+                for part in fields(&previous, b':') {
+                    if !part.is_empty() {
+                        parts.push(part.to_string());
+                    }
+                }
+                if !parts.is_empty() {
+                    let last = parts.len() - 1;
+                    if code.starts_with("E_") && last > 0
+                        && integer(&parts[last - 1], "diagnostic line").is_ok() {
+                        line = integer(&parts[last - 1], "diagnostic line").unwrap();
+                    } else {
+                        line = integer(&parts[last], "diagnostic line").unwrap_or(0);
+                    }
+                }
+                break;
+            }
+            previous = word.to_string();
+        }
+        if !code.is_empty() {
+            break;
+        }
+    }
+    if code.starts_with('R') && integer(&code[1..], "trap code").unwrap_or(0) >= 16 {
+        code = "R0004".to_string();
+    }
+    (code, line)
+}
+fn observe(capture: test_runner::Capture) -> Observation {
+    let (code, line) = diagnostic(&display(&capture.stderr));
+    let kind = if capture.timed_out {
+        "did-not-terminate"
+    } else if code.starts_with("M_") {
+        if code == "M_INVALID_IR" || code == "M_UNSUPPORTED" {
+            "model-error"
+        } else {
+            "safety-error"
+        }
+    } else if capture.status >= 128 {
+        "host-error"
+    } else if code == "R0006" || code == "R0008" {
+        "resource"
+    } else if code.starts_with('R') {
+        "trap"
+    } else if code.starts_with("E_") {
+        "rejected"
+    } else if capture.status == 0 && capture.stderr.is_empty() {
+        "value"
+    } else {
+        "host-error"
+    };
+    Observation {
+        kind: kind.to_string(),
+        code,
+        line,
+        status: capture.status as usize,
+        stdout: capture.stdout,
+        program_stderr: Vec::new(),
+        stderr: capture.stderr,
+    }
+}
+fn compare(left: &Observation, right: &Observation, locations: bool) -> String {
+    for fatal in vec![
+        "safety-error".to_string(),
+        "model-error".to_string(),
+        "host-error".to_string(),
+        "rejected".to_string(),
+    ] {
+        if left.kind == fatal || right.kind == fatal {
+            return if fatal == "rejected" {
+                "execution-rejected".to_string()
+            } else {
+                fatal
+            };
+        }
+    }
+    if left.kind == "did-not-terminate" || right.kind == "did-not-terminate" {
+        return "did-not-terminate".to_string();
+    }
+    if left.kind == "resource" || right.kind == "resource" {
+        return "resource".to_string();
+    }
+    if left.kind != right.kind {
+        return "ending-differs".to_string();
+    }
+    if left.stdout != right.stdout {
+        return "value-differs".to_string();
+    }
+    if left.program_stderr != right.program_stderr {
+        return "stderr-differs".to_string();
+    }
+    if left.kind == "value" {
+        return if left.status == right.status {
+            "value-equal".to_string()
+        } else {
+            "status-differs".to_string()
+        };
+    }
+    if locations && (test_runner::custom_trap(&display(&left.stderr))
+        || test_runner::custom_trap(&display(&right.stderr))) && left.stderr != right.stderr {
+        return "trap-differs".to_string();
+    }
+    if left.code != right.code || (locations && left.line != right.line) {
+        return "trap-differs".to_string();
+    }
+    "trap-equal".to_string()
+}
+fn finding(category: &str) -> bool {
+    !matches!(
+        category,
+        "rejected" | "value-equal" | "trap-equal" | "did-not-terminate" | "resource"
+    )
+}
+fn arguments(values: &[String]) -> Vec<Vec<u8>> {
+    let mut out: Vec<Vec<u8>> = Vec::new();
+    for value in values {
+        out.push(value.as_bytes().to_vec());
+    }
+    out
+}
+// The campaign exercises the same authenticated proof/code paths as the CLI.
+// Interpretation and execution results are never memoized here.
+fn check_mutation(
+    program: ir::Program,
+    store: &mut Option<crate::store::Store>,
+    counts: &mut Counts,
+) -> Result<crate::reuse::Checked, Vec<crate::diagnostic::Diagnostic>> {
+    if let Some(store) = store {
+        let prepared = crate::reuse::Prepared::new(program);
+        let mut records = store.records("check", prepared.keys().graph(), prepared.keys().all());
+        let result = check::check_all_cached(prepared, &mut records);
+        counts.checked_reused += records.hits;
+        store.flush(&records);
+        result
+    } else {
+        match check::check_all(program) {
+            Ok(checked) => Ok(crate::reuse::Checked::uncached(checked)),
+            Err(problems) => Err(problems),
+        }
+    }
+}
+
+// Retained original authority can discharge only exact, unchanged bodies. The
+// checker validates the shared graph before making that comparison.
+fn recheck_mutation(
+    original: &ir::CheckedProgram,
+    program: ir::Program,
+    store: &mut Option<crate::store::Store>,
+    counts: &mut Counts,
+) -> Result<reuse::Checked, Vec<crate::diagnostic::Diagnostic>> {
+    if let Some(store) = store {
+        let prepared = reuse::Prepared::new(program);
+        let mut records = store.records("check", prepared.keys().graph(), prepared.keys().all());
+        let result = check::recheck_all_cached(original, prepared, &mut records);
+        counts.checked_reused += records.hits;
+        store.flush(&records);
+        match result {
+            Ok((checked, reused)) => {
+                counts.checked_local_reused += reused;
+                Ok(checked)
+            }
+            Err(problems) => Err(problems),
+        }
+    } else {
+        match check::recheck_all(original, program) {
+            Ok((checked, reused)) => {
+                counts.checked_local_reused += reused;
+                Ok(reuse::Checked::uncached(checked))
+            }
+            Err(problems) => Err(problems),
+        }
+    }
+}
+
+// Original checking has already granted authority. The candidate must earn its
+// own verdict before it can replace any native body; failed admission falls back.
+fn select_mutation(
+    original: reuse::Checked,
+    store: &mut Option<crate::store::Store>,
+    counts: &mut Counts,
+    inline_limit: Option<usize>,
+) -> reuse::Selection {
+    let limit = inline_limit.unwrap_or(optimizer::default_limit());
+    let rewrite = optimizer::inline(original.program(), limit);
+    let Some(candidate) = rewrite.program else {
+        return reuse::Selection::unchanged(original);
+    };
+    counts.inline_attempts += 1;
+    counts.inline_calls += rewrite.calls;
+    counts.inline_functions += rewrite.functions;
+    let result = recheck_mutation(original.checked(), candidate, store, counts);
+    let selected = reuse::Selection::after_check(original, result);
+    if selected.rejected() {
+        counts.inline_rejected += 1;
+    } else {
+        counts.inline_accepted += 1;
+    }
+    selected
+}
+
+fn inline_setting(limit: Option<usize>) -> String {
+    match limit {
+        Some(limit) => format!("{limit}"),
+        None => format!("default({})", optimizer::default_limit()),
+    }
+}
+
+fn emit_mutation(
+    checked: &crate::reuse::Checked,
+    runtime: &runtime::Runtime,
+    store: &mut Option<crate::store::Store>,
+    counts: &mut Counts,
+) -> Result<Vec<u8>, crate::diagnostic::Diagnostic> {
+    if let Some(store) = store {
+        if let Some(keys) = checked.keys() {
+            let grants: Vec<ir::EntryGrant> = Vec::new();
+            let namespace = backend::cache_namespace(checked, runtime, &grants, None);
+            let mut records = store.records(&namespace, keys.graph(), keys.all());
+            let image = backend::emit_granted_reusing(
+                checked, runtime, "probe", &grants, Some(3), None, &namespace, &mut records,
+            );
+            counts.emitted_reused += records.hits;
+            store.flush(&records);
+            return image;
+        }
+    }
+    backend::emit_for_run(checked.checked(), runtime, "probe")
+}
+
+fn execute_ir(
+    world: &mut World,
+    executable: &File,
+    path: &str,
+    selection: &reuse::Selection,
+    runtime: &runtime::Runtime,
+    store: &mut Option<crate::store::Store>,
+    counts: &mut Counts,
+) -> Result<(String, Observation, Observation), String> {
+    let args = arguments(&vec![
+        "run".to_string(),
+        path.to_string(),
+        "--entry".to_string(),
+        "probe".to_string(),
+        "--engine".to_string(),
+        "interpreter".to_string(),
+        "--unchecked-ir".to_string(),
+    ]);
+    let left = observe(test_runner::invoke(
+        world,
+        executable,
+        &args,
+        2_000_000_000,
+    )?);
+    if left.kind == "did-not-terminate" || left.kind == "safety-error" || left.kind == "model-error"
+    {
+        return Ok((left.kind.clone(), left.clone(), left));
+    }
+    let mut index = None;
+    for (candidate, function) in selection.original().program().functions.iter().enumerate() {
+        if function.name == "probe" {
+            index = Some(candidate);
+            break;
+        }
+    }
+    let selected = index.ok_or("E_ENTRY mutation seed has no probe")?;
+    let image = emit_mutation(selection.native(), runtime, store, counts).map_err(
+        |diagnostic: crate::diagnostic::Diagnostic| -> String {
+            format!(
+                "E_MUTATION_NATIVE {} {}",
+                diagnostic.code, diagnostic.message
+            )
+        },
+    )?;
+    let mut file = world
+        .temporary_file()
+        .map_err(|errno: i64| problem("native mutant", errno))?;
+    file.write_all(&image)
+        .map_err(|errno: i64| problem("native mutant write", errno))?;
+    file.set_executable()
+        .map_err(|errno: i64| problem("native mutant executable", errno))?;
+    let arguments: Vec<Vec<u8>> = Vec::new();
+    let mut capture = test_runner::invoke(world, &file, &arguments, 2_000_000_000)?;
+    if selection.optimized() { counts.inline_executed += 1; }
+    if !capture.timed_out {
+        if capture.result.len() == 8 {
+            let result = driver::raw_scalar(selection.original().program(), selected, &capture.result)?;
+            capture.stdout.extend_from_slice(result.as_bytes());
+        } else if let Some((code, diagnostic, message)) = driver::native_trap(path, &capture.result) {
+            let complete = code >= 6 && code <= 8
+                || driver::complete_semantic_trap(selection.native().program(), code, &message);
+            if capture.status == 1 && complete {
+                capture.stderr.extend_from_slice(diagnostic.as_bytes());
+                capture.stderr.push(b'\n');
+            } else {
+                capture.stderr.extend_from_slice(b"E_HOST native mutant trap identity mismatch");
+                capture.status = 1;
+            }
+        } else if capture.status == 0 {
+            capture
+                .stderr
+                .extend_from_slice(b"E_HOST native mutant omitted its result");
+            capture.status = 1;
+        }
+    }
+    let right = observe(capture);
+    let category = compare(&left, &right, true);
+    Ok((category, left, right))
+}
+#[derive(Clone)]
+struct Counts {
+    total: usize,
+    rejected: usize,
+    values: usize,
+    traps: usize,
+    timeout: usize,
+    resources: usize,
+    findings: usize,
+    checked_reused: usize,
+    emitted_reused: usize,
+    store_rejected: usize,
+    inline_attempts: usize,
+    inline_accepted: usize,
+    inline_executed: usize,
+    inline_rejected: usize,
+    inline_calls: usize,
+    inline_functions: usize,
+    checked_local_reused: usize,
+}
+impl Counts {
+    fn new() -> Self {
+        Self {
+            total: 0,
+            rejected: 0,
+            values: 0,
+            traps: 0,
+            timeout: 0,
+            resources: 0,
+            findings: 0,
+            checked_reused: 0,
+            emitted_reused: 0,
+            store_rejected: 0,
+            inline_attempts: 0,
+            inline_accepted: 0,
+            inline_executed: 0,
+            inline_rejected: 0,
+            inline_calls: 0,
+            inline_functions: 0,
+            checked_local_reused: 0,
+        }
+    }
+    fn add(&mut self, category: &str) {
+        self.total += 1;
+        match category {
+            "rejected" => self.rejected += 1,
+            "value-equal" => self.values += 1,
+            "trap-equal" => self.traps += 1,
+            "did-not-terminate" => self.timeout += 1,
+            "resource" => self.resources += 1,
+            _ => self.findings += 1,
+        }
+    }
+    fn merge(&mut self, other: &Counts) {
+        self.total += other.total;
+        self.rejected += other.rejected;
+        self.values += other.values;
+        self.traps += other.traps;
+        self.timeout += other.timeout;
+        self.resources += other.resources;
+        self.findings += other.findings;
+        self.checked_reused += other.checked_reused;
+        self.emitted_reused += other.emitted_reused;
+        self.store_rejected += other.store_rejected;
+        self.inline_attempts += other.inline_attempts;
+        self.inline_accepted += other.inline_accepted;
+        self.inline_executed += other.inline_executed;
+        self.inline_rejected += other.inline_rejected;
+        self.inline_calls += other.inline_calls;
+        self.inline_functions += other.inline_functions;
+        self.checked_local_reused += other.checked_local_reused;
+    }
+    fn encode(&self) -> String {
+        format!(
+            "{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
+            self.total,
+            self.rejected,
+            self.values,
+            self.traps,
+            self.timeout,
+            self.resources,
+            self.findings,
+            self.checked_reused,
+            self.emitted_reused,
+            self.store_rejected,
+            self.inline_attempts,
+            self.inline_accepted,
+            self.inline_executed,
+            self.inline_rejected,
+            self.inline_calls,
+            self.inline_functions,
+            self.checked_local_reused
+        )
+    }
+}
+fn decode_counts(text: &str) -> Result<Counts, String> {
+    let mut fields: Vec<usize> = Vec::new();
+    for field in whitespace(text) {
+        fields.push(integer(&field, "worker count")?);
+    }
+    if fields.len() != 17 {
+        return Err("E_HOST invalid mutation worker summary".to_string());
+    }
+    Ok(Counts {
+        total: fields[0],
+        rejected: fields[1],
+        values: fields[2],
+        traps: fields[3],
+        timeout: fields[4],
+        resources: fields[5],
+        findings: fields[6],
+        checked_reused: fields[7],
+        emitted_reused: fields[8],
+        store_rejected: fields[9],
+        inline_attempts: fields[10],
+        inline_accepted: fields[11],
+        inline_executed: fields[12],
+        inline_rejected: fields[13],
+        inline_calls: fields[14],
+        inline_functions: fields[15],
+        checked_local_reused: fields[16],
+    })
+}
+fn mutation_worker(
+    world: &mut World,
+    seed: usize,
+    count: usize,
+    jobs: usize,
+    worker: usize,
+    output: &str,
+    store_path: &Option<String>,
+    store_key: &Option<String>,
+    inline_limit: Option<usize>,
+) -> Result<Counts, String> {
+    let mut store = crate::store::Store::open(world, store_path, store_key);
+    let executable = world
+        .executable()
+        .map_err(|errno: i64| problem("compiler executable", errno))?;
+    let runtime = driver::load_runtime(world, &None)?;
+    let mut warm = Counts::new();
+    let seeds = seeds(world, &mut store, &mut warm, &runtime, inline_limit)?;
+    // Inline counts describe mutants, not canonical-seed warming. Otherwise
+    // accepted seed rewrites could hide universal fallback during the campaign.
+    let mut counts = Counts::new();
+    counts.checked_reused = warm.checked_reused;
+    counts.emitted_reused = warm.emitted_reused;
+    let mut random = Random::new(seed as u64);
+    let path = format!("{output}/worker-{worker}.lkjir");
+    for index in 0..count {
+        let (base, mutation) = mutation::choose(&seeds, &mut random);
+        if index % jobs != worker {
+            continue;
+        }
+        let source = mutation::apply(&seeds[base].text, mutation)?;
+        let checked = match ir_text::read(&source) {
+            Ok(program) => match check_mutation(program, &mut store, &mut counts) {
+                Ok(checked) => Some(checked),
+                Err(_) => None,
+            },
+            Err(_) => None,
+        };
+        let category = if let Some(checked) = checked {
+            let selection = select_mutation(checked, &mut store, &mut counts, inline_limit);
+            // The raw model child always receives the original mutant text.
+            write(world, &path, source.as_bytes())?;
+            let (category, left, right) =
+                execute_ir(world, &executable, &path, &selection, &runtime, &mut store, &mut counts)?;
+            if finding(&category) {
+                let case_path = format!("{output}/finding-{index}.lkjir");
+                write(world, &case_path, source.as_bytes())?;
+                let details = format!(
+                    "seed {seed}, index {index}, base {}, mutation {}, category {category}, inline {}\ninterpreter {} {} line {}\n{}\nnative {} {} line {}\n{}\n",
+                    seeds[base].path,
+                    mutation.kind,
+                    inline_setting(inline_limit),
+                    left.kind,
+                    left.code,
+                    left.line,
+                    display(&left.stderr),
+                    right.kind,
+                    right.code,
+                    right.line,
+                    display(&right.stderr)
+                );
+                write(
+                    world,
+                    &format!("{output}/finding-{index}.txt"),
+                    details.as_bytes(),
+                )?;
+            }
+            category
+        } else {
+            "rejected".to_string()
+        };
+        counts.add(&category);
+    }
+    if counts.total > counts.rejected {
+        remove(world, &path)?;
+    }
+    if let Some(store) = &store { counts.store_rejected = store.rejected; }
+    Ok(counts)
+}
+struct Worker {
+    child: Child,
+    output: File,
+    errors: File,
+}
+fn read_capture(file: &mut File) -> Result<String, String> {
+    file.rewind()
+        .map_err(|errno: i64| problem("worker rewind", errno))?;
+    let bytes = file
+        .read_to_end()
+        .map_err(|errno: i64| problem("worker read", errno))?;
+    String::from_utf8(bytes).map_err(|_| "E_HOST non-UTF-8 worker report".to_string())
+}
+fn mutation_campaign(
+    world: &mut World,
+    seed: usize,
+    count: usize,
+    jobs: usize,
+    output: &str,
+    store_path: &Option<String>,
+    store_key: &Option<String>,
+    inline_limit: Option<usize>,
+) -> Result<Counts, String> {
+    if jobs == 1 {
+        return mutation_worker(world, seed, count, 1, 0, output, store_path, store_key, inline_limit);
+    }
+    let executable = world
+        .executable()
+        .map_err(|errno: i64| problem("compiler executable", errno))?;
+    let mut children: Vec<Worker> = Vec::new();
+    for worker in 0..jobs {
+        let mut values = vec![
+            "mutate".to_string(),
+            format!("{seed}"),
+            format!("{count}"),
+            "--jobs".to_string(),
+            format!("{jobs}"),
+            "--worker".to_string(),
+            format!("{worker}"),
+            "-o".to_string(),
+            output.to_string(),
+        ];
+        if let Some(path) = store_path {
+            values.push("--store".to_string());
+            values.push(path.clone());
+        }
+        if let Some(key) = store_key {
+            values.push("--store-key".to_string());
+            values.push(key.clone());
+        }
+        if let Some(limit) = inline_limit {
+            values.push("--inline-limit".to_string());
+            values.push(format!("{limit}"));
+        }
+        let args = arguments(&values);
+        let input = world
+            .temporary_file()
+            .map_err(|errno: i64| problem("worker input", errno))?;
+        let out = world
+            .temporary_file()
+            .map_err(|errno: i64| problem("worker output", errno))?;
+        let errors = world
+            .temporary_file()
+            .map_err(|errno: i64| problem("worker errors", errno))?;
+        let result = world
+            .temporary_file()
+            .map_err(|errno: i64| problem("worker result", errno))?;
+        let child = world
+            .process()
+            .spawn_file(&executable, &args, &input, &out, &errors, &result)
+            .map_err(|errno: i64| problem("mutation worker spawn", errno))?;
+        children.push(Worker {
+            child,
+            output: out,
+            errors,
+        });
+    }
+    let mut combined = Counts::new();
+    let mut failure = String::new();
+    while let Some(mut worker) = children.pop() {
+        let status = worker
+            .child
+            .wait()
+            .map_err(|errno: i64| problem("mutation worker wait", errno))?;
+        let output = read_capture(&mut worker.output)?;
+        let errors = read_capture(&mut worker.errors)?;
+        if status != 0 {
+            failure.push_str(&format!(
+                "E_HOST mutation worker status {status}: {errors}\n"
+            ));
+        } else {
+            match decode_counts(trim(&output)) {
+                Ok(counts) => combined.merge(&counts),
+                Err(problem) => failure.push_str(&problem),
+            }
+        }
+    }
+    if failure.is_empty() {
+        Ok(combined)
+    } else {
+        Err(failure)
+    }
+}
+
+fn self_test(world: &mut World) -> Result<(), String> {
+    reduction::self_test()?;
+    let source = read(world, "tools/generators/ir-seeds/calls.lkjir")?;
+    let prepared = mutation::prepare("calls", source.clone())?;
+    let entries = vec![prepared];
+    let mut first = Random::new(1701);
+    let mut second = Random::new(1701);
+    let mut kinds: Vec<String> = Vec::new();
+    for _ in 0..128usize {
+        let (_, a) = mutation::choose(&entries, &mut first);
+        let (_, b) = mutation::choose(&entries, &mut second);
+        if a != b {
+            return Err("E_MUTATION deterministic replay differs".to_string());
+        }
+        let changed = mutation::apply(&source, a)?;
+        if changed == source {
+            return Err("E_MUTATION generated an empty edit".to_string());
+        }
+        if !kinds.contains(&a.kind) {
+            kinds.push(a.kind.clone());
+        }
+        let mut invalid = a.clone();
+        invalid.edits[0].before.push_str(" stale");
+        if mutation::apply(&source, &invalid).is_ok() {
+            return Err("E_MUTATION stale preimage accepted".to_string());
+        }
+    }
+    if kinds.len() < 5 {
+        return Err("E_MUTATION too few exercised operators".to_string());
+    }
+    let authority = "lkjscript-ir 1\ntype \"World\" world\nfn \"probe\" 0 0\nendfn\n";
+    if mutation::prepare("authority", authority.to_string()).is_ok() {
+        return Err("E_MUTATION authority admitted as pure seed".to_string());
+    }
+    for kind in vec!["world".to_string(), "listener".to_string(), "connector".to_string(), "readiness".to_string()] {
+        let text = format!("lkjscript-ir 1\ntype \"authority\" {kind}\nfn \"probe\" 0 0\nendfn\n");
+        match mutation::prepare("authority", text) {
+            Err(problem) if problem.contains("authority type") => {}
+            _ => return Err("E_MUTATION listener type admitted as pure seed".to_string()),
+        }
+    }
+    for name in vec![
+        "world_listen".to_string(),
+        "listener_accept".to_string(),
+        "listener_accept_nodelay".to_string(),
+        "world_connector".to_string(),
+        "connector_connect".to_string(),
+        "world_readiness".to_string(),
+        "readiness_wait".to_string(),
+        "readiness_watch_file".to_string(),
+        "readiness_watch_listener".to_string(),
+        "readiness_unwatch_file".to_string(),
+        "readiness_unwatch_listener".to_string(),
+        "file_set_nonblocking".to_string(),
+        "listener_set_nonblocking".to_string(),
+
+        "listener_address".to_string(),
+    ] {
+        let text = format!(
+            "lkjscript-ir 1\ntype \"unit\" unit\nfn \"probe\" 0 0\n@1 intrinsic 0 \"{name}\"\nendfn\n"
+        );
+        match mutation::prepare("authority", text) {
+            Err(problem) if problem.contains("authority intrinsic") => {}
+            _ => return Err("E_MUTATION listener operation admitted as pure seed".to_string()),
+        }
+    }
+    for (text, expected) in vec![
+        ("file 7:37: R0003 bounds".to_string(), 37usize),
+        ("file 7:37: R0016 alpha".to_string(), 37usize),
+        ("file 7:37: M_INVALID_IR body".to_string(), 37usize),
+        ("source.lkj:12:3: E_BORROW loan".to_string(), 12usize),
+    ] {
+        if diagnostic(&text).1 != expected {
+            return Err("E_MUTATION runtime file index confused with source line".to_string());
+        }
+    }
+    let left = Observation {
+        kind: "trap".to_string(),
+        code: "R0003".to_string(),
+        line: 19,
+        status: 1,
+        stdout: Vec::new(),
+        program_stderr: Vec::new(),
+        stderr: Vec::new(),
+    };
+    let mut right = left.clone();
+    if compare(&left, &right, true) != "trap-equal" {
+        return Err("E_MUTATION equal trap classification".to_string());
+    }
+    right.line = 20;
+    if compare(&left, &right, true) != "trap-differs" {
+        return Err("E_MUTATION trap location ignored".to_string());
+    }
+    right.kind = "rejected".to_string();
+    let category = compare(&left, &right, true);
+    if category != "execution-rejected" || !finding(&category) {
+        return Err("E_MUTATION checked execution rejection hidden".to_string());
+    }
+    right.kind = "model-error".to_string();
+    if !finding(&compare(&left, &right, true)) {
+        return Err("E_MUTATION model failure hidden".to_string());
+    }
+    let mut custom = left.clone();
+    custom.code = "R0004".to_string();
+    custom.stderr = "file 1:19: R0016 alpha\nR0006 is text\n".as_bytes().to_vec();
+    if compare(&custom, &custom, true) != "trap-equal" {
+        return Err("E_MUTATION identical custom trap rejected".to_string());
+    }
+    for text in vec![
+        "file 1:19: R0017 alpha\nR0006 is text\n".to_string(),
+        "file 1:19: R0016 beta\nR0006 is text\n".to_string(),
+        "file 2:19: R0016 alpha\nR0006 is text\n".to_string(),
+        "file 1:19: R0016 alpha\n".to_string(),
+    ] {
+        let mut changed = custom.clone();
+        changed.stderr = text.into_bytes();
+        if compare(&custom, &changed, true) != "trap-differs"
+            || compare(&custom, &changed, false) != "trap-equal"
+        { return Err("E_MUTATION custom trap identity/reference classification conflated".to_string()); }
+    }
+    let normal = checked_observation(test_runner::Observation {
+        checked: true,
+        status: 101,
+        stdout: vec![0u8, 255u8],
+        stderr: "E_BORROW R0001".as_bytes().to_vec(),
+        diagnostic: String::new(),
+        timed_out: false,
+    });
+    if normal.kind != "value" || compare(&normal, &normal, false) != "value-equal" {
+        return Err("E_REDUCER program stderr or exit misclassified".to_string());
+    }
+    let mut different = normal.clone();
+    different.status = 7;
+    if compare(&normal, &different, false) != "status-differs" {
+        return Err("E_REDUCER normal exit ignored".to_string());
+    }
+    different = normal.clone();
+    different.program_stderr.push(0);
+    if compare(&normal, &different, false) != "stderr-differs" {
+        return Err("E_REDUCER program stderr ignored".to_string());
+    }
+    different = normal.clone();
+    different.stdout.push(1);
+    if !preserved(
+        "value-differs",
+        &normal,
+        &different,
+        "value-differs",
+        &normal,
+        &different,
+    ) {
+        return Err("E_REDUCER disagreement lost".to_string());
+    }
+    different.kind = "rejected".to_string();
+    if preserved(
+        "value-differs",
+        &normal,
+        &normal,
+        "value-differs",
+        &normal,
+        &different,
+    ) {
+        return Err("E_REDUCER rejected candidate replaced evidence".to_string());
+    }
+    Ok(())
+}
+fn generate(world: &mut World, args: &[String]) -> Result<u8, String> {
+    if args.len() == 1 && args[0] == "--self-test" {
+        self_test(world)?;
+        world.stdout().write(b"ok generator/reducer contracts\n");
+        return Ok(0);
+    }
+    if args.len() < 3 {
+        return Err("E_USAGE generate FAMILY SEED COUNT [-o DIRECTORY]".to_string());
+    }
+    let family = args[0].clone();
+    let seed = integer(&args[1], "seed")?;
+    let count = integer(&args[2], "count")?;
+    let mut directory = format!("target/generated-{family}-{seed}");
+    if args.len() > 3 {
+        if args.len() != 5 || args[3] != "-o" {
+            return Err("E_USAGE generate FAMILY SEED COUNT [-o DIRECTORY]".to_string());
+        }
+        directory = args[4].clone();
+    }
+    ensure_directory(world, &directory)?;
+    if family.starts_with("scale-") {
+        let name = &family[6..];
+        let source = scale::generate(name, count)?;
+        let path = format!("{directory}/{name}-{count}.lkj");
+        write(world, &path, source.as_bytes())?;
+        world
+            .stdout()
+            .write(format!("ok generate: scale {name} size {count} in {path}\n").as_bytes());
+        return Ok(0);
+    }
+    if family == "integers" {
+        let cases = integer_cases::cases();
+        for (name, source) in &cases {
+            write(world, &format!("{directory}/{name}"), source.as_bytes())?;
+        }
+        world.stdout().write(
+            format!(
+                "ok generate: {} integer boundary cases in {directory}\n",
+                cases.len()
+            )
+            .as_bytes(),
+        );
+        return Ok(0);
+    }
+    let families: Vec<String> = if family == "all" {
+        vec![
+            "values".to_string(),
+            "ownership".to_string(),
+            "output".to_string(),
+            "drops".to_string(),
+            "sugar".to_string(),
+            "closures".to_string(),
+        ]
+    } else {
+        vec![family]
+    };
+    let mut random = Random::new(seed as u64);
+    let mut total = 0usize;
+    for name in &families {
+        for index in 0..count {
+            let generated = source_cases::generate(name, &mut random, index)?;
+            let path = format!("{directory}/{name}-{index}.lkj");
+            let mut header = format!(
+                "// expect: {}\n// generated: {} seed {seed} index {index}\n",
+                generated.expectation, generated.family
+            );
+            if let Some(reference) = generated.reference {
+                let reference_path = format!("{directory}/{name}-{index}.reference.lkj");
+                write(world, &reference_path, reference.as_bytes())?;
+                header.push_str(&format!("// reference: {reference_path}\n"));
+            }
+            header.push_str(&generated.source);
+            write(world, &path, header.as_bytes())?;
+            total += 1;
+        }
+    }
+    world
+        .stdout()
+        .write(format!("ok generate: {total} seeded cases in {directory}\n").as_bytes());
+    Ok(0)
+}
+fn checked_observation(result: test_runner::Observation) -> Observation {
+    let (code, line) = diagnostic(&result.diagnostic);
+    let kind = if result.timed_out {
+        "did-not-terminate"
+    } else if !result.checked {
+        "rejected"
+    } else if code.starts_with("M_") {
+        if code == "M_INVALID_IR" || code == "M_UNSUPPORTED" {
+            "model-error"
+        } else {
+            "safety-error"
+        }
+    } else if code == "R0006" || code == "R0008" {
+        "resource"
+    } else if code.starts_with('R') {
+        "trap"
+    } else if !result.diagnostic.is_empty() {
+        "host-error"
+    } else {
+        "value"
+    };
+    Observation {
+        kind: kind.to_string(),
+        code,
+        line,
+        status: result.status,
+        stdout: result.stdout,
+        program_stderr: result.stderr,
+        stderr: result.diagnostic.into_bytes(),
+    }
+}
+fn source_observations(
+    world: &mut World,
+    executable: &File,
+    path: &str,
+    entry: &str,
+    inline_limit: Option<usize>,
+) -> Result<(String, Observation, Observation), String> {
+    let mut routes: Vec<Observation> = Vec::new();
+    let engines: Vec<String> = vec!["interpreter".to_string(), "native".to_string()];
+    for engine in engines {
+        routes.push(checked_observation(test_runner::evaluate(
+            world,
+            executable,
+            path,
+            entry,
+            &engine,
+            60_000_000_000,
+            inline_limit,
+        )?));
+    }
+    // Compilation is candidate validity, not an execution finding. In contrast,
+    // a mutation was already checked before its execution and cannot reject.
+    let category = if routes[0].kind == "rejected" || routes[1].kind == "rejected" {
+        "rejected".to_string()
+    } else {
+        compare(&routes[0], &routes[1], false)
+    };
+    let right = routes.pop().unwrap();
+    let left = routes.pop().unwrap();
+    Ok((category, left, right))
+}
+fn reduction_observations(
+    world: &mut World,
+    executable: &File,
+    path: &str,
+    entry: &str,
+    reference: &Option<Observation>,
+    inline_limit: Option<usize>,
+) -> Result<(String, Observation, Observation), String> {
+    let observed = source_observations(world, executable, path, entry, inline_limit)?;
+    if observed.0 == "value-equal" || observed.0 == "trap-equal" {
+        if let Some(reference) = reference {
+            return Ok((
+                compare(&observed.1, reference, false),
+                observed.1,
+                reference.clone(),
+            ));
+        }
+    }
+    Ok(observed)
+}
+fn preserved(
+    category: &str,
+    left: &Observation,
+    right: &Observation,
+    next: &str,
+    a: &Observation,
+    b: &Observation,
+) -> bool {
+    finding(category)
+        && category == next
+        && left.kind == a.kind
+        && right.kind == b.kind
+        && left.code == a.code
+        && right.code == b.code
+}
+fn reduce(world: &mut World, args: &[String]) -> Result<u8, String> {
+    if args.is_empty() {
+        return Err(
+            "E_USAGE reduce SOURCE [-o OUTPUT] [--entry NAME] [--reference SOURCE] [--inline-limit N|--no-opt]".to_string(),
+        );
+    }
+    let source_path = args[0].clone();
+    let source = read(world, &source_path)?;
+    let is_ir = source_path.ends_with(".lkjir");
+    let mut output = if is_ir {
+        format!("{source_path}.reduced.lkjir")
+    } else {
+        format!("{source_path}.reduced.lkj")
+    };
+    let mut entry = String::new();
+    let mut reference_path = String::new();
+    let mut inline_limit = None;
+    let mut at = 1usize;
+    while at < args.len() {
+        let option = args[at].as_str();
+        at += 1;
+        if option == "--no-opt" {
+            inline_limit = Some(0);
+            continue;
+        }
+        if at == args.len() {
+            return Err(format!("E_USAGE {option} needs a value"));
+        }
+        match option {
+            "-o" => output = args[at].clone(),
+            "--entry" => entry = args[at].clone(),
+            "--reference" => reference_path = args[at].clone(),
+            "--inline-limit" => inline_limit = Some(integer(&args[at], "inline limit")?),
+            _ => return Err(format!("E_USAGE invalid reduce option {option}")),
+        }
+        at += 1;
+    }
+    let executable = world
+        .executable()
+        .map_err(|errno: i64| problem("compiler executable", errno))?;
+    let reference = if reference_path.is_empty() {
+        None
+    } else {
+        let oracle = source_observations(world, &executable, &reference_path, &entry, inline_limit)?;
+        if oracle.0 != "value-equal" && oracle.0 != "trap-equal" {
+            return Err(format!(
+                "E_REDUCER reference must agree on both routes: {}",
+                oracle.0
+            ));
+        }
+        Some(oracle.1)
+    };
+    let stage = if is_ir {
+        format!("{output}.candidate.lkjir")
+    } else {
+        format!("{output}.candidate.lkj")
+    };
+    write(world, &stage, source.as_bytes())?;
+    let baseline = reduction_observations(world, &executable, &stage, &entry, &reference, inline_limit)?;
+    if !finding(&baseline.0) || baseline.0 == "rejected" {
+        remove(world, &stage)?;
+        return Err(format!(
+            "E_REDUCER baseline is not an executable disagreement: {}",
+            baseline.0
+        ));
+    }
+    let mut current = source;
+    let mut attempts = 0usize;
+    let mut accepted = 0usize;
+    loop {
+        let candidates = if is_ir {
+            reduction::ir_spans(&current)
+        } else {
+            reduction::statement_spans(&current)
+        };
+        let mut changed = false;
+        for span in candidates {
+            let candidate = format!("{}{}", &current[..span.start], &current[span.end..]);
+            write(world, &stage, candidate.as_bytes())?;
+            let observed = reduction_observations(world, &executable, &stage, &entry, &reference, inline_limit)?;
+            attempts += 1;
+            if preserved(
+                &baseline.0,
+                &baseline.1,
+                &baseline.2,
+                &observed.0,
+                &observed.1,
+                &observed.2,
+            ) {
+                current = candidate;
+                accepted += 1;
+                changed = true;
+                write(world, &output, current.as_bytes())?;
+                break;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    write(world, &output, current.as_bytes())?;
+    remove(world, &stage)?;
+    world.stdout().write(format!("ok reduce: {} preserved, {attempts} candidates, {accepted} deletions, {} bytes in {output}; inline {}\n",baseline.0,current.len(),inline_setting(inline_limit)).as_bytes());
+    Ok(0)
+}
+
+pub fn run(world: &mut World, args: &[String]) -> Result<u8, String> {
+    if args.is_empty() {
+        return Err("E_USAGE expected generate, mutate or reduce".to_string());
+    }
+    if args[0] == "generate" {
+        return generate(world, &args[1..]);
+    }
+    if args[0] == "reduce" {
+        return reduce(world, &args[1..]);
+    }
+    if args[0] != "mutate" || args.len() < 3 {
+        return Err("E_USAGE mutate SEED COUNT [--jobs N] [-o DIRECTORY] [--store DIR --store-key FILE] [--inline-limit N|--no-opt]".to_string());
+    }
+    let seed = integer(&args[1], "seed")?;
+    let count = integer(&args[2], "count")?;
+    let mut jobs = 1usize;
+    let mut worker = None;
+    let mut store_path = None;
+    let mut store_key = None;
+    let mut inline_limit = None;
+    let mut output = format!("target/mutation-{seed}-{count}");
+    let mut at = 3usize;
+    while at < args.len() {
+        let option = args[at].as_str();
+        at += 1;
+        if option == "--no-opt" {
+            inline_limit = Some(0);
+            continue;
+        }
+        if at == args.len() {
+            return Err(format!("E_USAGE {option} needs a value"));
+        }
+        match option {
+            "--jobs" => jobs = integer(&args[at], "worker count")?,
+            "--worker" => worker = Some(integer(&args[at], "worker index")?),
+            "--store" => store_path = Some(args[at].clone()),
+            "--store-key" => store_key = Some(args[at].clone()),
+            "--inline-limit" => inline_limit = Some(integer(&args[at], "inline limit")?),
+            "-o" => output = args[at].clone(),
+            _ => return Err(format!("E_USAGE unknown mutation option {option}")),
+        }
+        at += 1;
+    }
+    if jobs == 0 || jobs > 8 || count == 0 {
+        return Err("E_USAGE positive count and one to eight workers required".to_string());
+    }
+    ensure_directory(world, &output)?;
+    if let Some(index) = worker {
+        if index >= jobs {
+            return Err("E_USAGE worker index exceeds worker count".to_string());
+        }
+        let counts = mutation_worker(world, seed, count, jobs, index, &output, &store_path, &store_key, inline_limit)?;
+        world
+            .stdout()
+            .write(format!("{}\n", counts.encode()).as_bytes());
+        return Ok(0);
+    }
+    let mut clock = world.clock();
+    let start = clock
+        .nanoseconds()
+        .map_err(|errno: i64| problem("clock", errno))?;
+    let counts = mutation_campaign(world, seed, count, jobs, &output, &store_path, &store_key, inline_limit)?;
+    let elapsed = clock
+        .nanoseconds()
+        .map_err(|errno: i64| problem("clock", errno))?
+        - start;
+    let per_minute = if elapsed == 0 {
+        0
+    } else {
+        counts.total * 60_000_000_000usize / elapsed
+    };
+    let reuse = if store_path.is_some() {
+        format!("; {} checked reuses, {} emitted reuses, {} store rejects", counts.checked_reused, counts.emitted_reused, counts.store_rejected)
+    } else {
+        String::new()
+    };
+    let inlining = format!("; inline {}, {} attempts, {} accepted, {} executed, {} rejected, {} candidate calls in {} bodies, {} local body proofs",
+        inline_setting(inline_limit), counts.inline_attempts, counts.inline_accepted,
+        counts.inline_executed, counts.inline_rejected, counts.inline_calls, counts.inline_functions,
+        counts.checked_local_reused);
+    world.stdout().write(format!("{} mutation: {} mutants, {} rejected, {} values, {} traps, {} did not terminate, {} resources, {} findings; {} mutants/minute ({}.{:03} s, {} workers){reuse}{inlining}\n", if counts.findings == 0 { "ok" } else { "FAIL" }, counts.total, counts.rejected, counts.values, counts.traps, counts.timeout, counts.resources, counts.findings, per_minute, elapsed / 1_000_000_000, elapsed / 1_000_000 % 1000, jobs).as_bytes());
+    Ok(if counts.findings == 0 { 0 } else { 1 })
+}

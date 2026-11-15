@@ -10,7 +10,7 @@ Keep the IR checker independent of elaboration; keep the interpreter independent
 of the checker and backend. Recheck optimizer output and discard it on rejection.
 Native emission assumes only checked IR and the sealed runtime interface.
 Views live in locals, parameters, results and view aggregates, never heap containers.
-Name the ecosystem lkjscript, its representation lkjscript IR, and its files .lkjir.
+Name the ecosystem lkjscript, its representation lkjscript IR, its source files .lkj and IR files .lkjir.
 Use ir/interpreter/backend in code, lkjscript for commands, and LKJSCRIPT_* variables.
 IR text starts with lkjscript-ir 1. No compatibility aliases or obsolete paths.
 

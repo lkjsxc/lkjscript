@@ -117,7 +117,7 @@ mkdir "$deadline_work/root"
 printf 'ok\n' > "$deadline_work/root/ok.txt"
 dd if=/dev/zero of="$deadline_work/root/large.bin" bs=1048576 count=32 status=none
 printf '60\n1\n10\n' > "$deadline_work/root/.http-policy"
-"$compiler" build examples/http.rs --library-dir library \
+"$compiler" build examples/http.lkj --library-dir library \
     --grant output --grant "root=$deadline_work/root" \
     --grant listener=127.0.0.1:0 --grant clock --grant ready --grant stop \
     -o "$deadline_work/server"
@@ -141,7 +141,7 @@ case "$bound_port" in ''|*[!0-9]*) printf 'invalid deadline server port\n' >&2; 
 [ "$bound_port" -gt 0 ] && [ "$bound_port" -le 65535 ]
 port=$bound_port
 test "$stop_target" = "$server_pid"
-"$compiler" build tools/http-deadline.rs --library-dir library \
+"$compiler" build tools/http-deadline.lkj --library-dir library \
     --grant output --grant "target=127.0.0.1:$port" --grant clock --grant ready \
     -o "$deadline_work/client"
 timeout --kill-after=5s 60s "$deadline_work/client" >"$deadline_work/client.out" 2>"$deadline_work/client.err" &

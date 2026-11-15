@@ -4,13 +4,13 @@ cd "$(dirname "$0")/.."
 compiler=${1:-target/lkjscript}
 resource_directory=$(mktemp -d target/resource-test.XXXXXX)
 trap 'rm -rf "$resource_directory"' EXIT HUP INT TERM
-"$compiler" build examples/hello.rs -o "$resource_directory/hello"
+"$compiler" build examples/hello.lkj -o "$resource_directory/hello"
 (ulimit -v 4194304; exec "$resource_directory/hello") > "$resource_directory/hello.out"
-"$compiler" build tests/fixtures/runtime_pressure.rs -o "$resource_directory/pressure"
+"$compiler" build tests/fixtures/runtime_pressure.lkj -o "$resource_directory/pressure"
 (ulimit -v 32768; exec "$resource_directory/pressure") > "$resource_directory/pressure.out"
 grep -q '^ok pressure$' "$resource_directory/pressure.out"
-"$compiler" build tests/fixtures/runtime_heap_exhaustion.rs -o "$resource_directory/heap"
-"$compiler" build tests/fixtures/runtime_stack_exhaustion.rs -o "$resource_directory/stack"
+"$compiler" build tests/fixtures/runtime_heap_exhaustion.lkj -o "$resource_directory/heap"
+"$compiler" build tests/fixtures/runtime_stack_exhaustion.lkj -o "$resource_directory/stack"
 for kind in heap stack; do
     code=0
     (ulimit -v 65536; exec "$resource_directory/$kind") > "$resource_directory/$kind.out" 2> "$resource_directory/$kind.err" || code=$?

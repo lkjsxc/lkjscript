@@ -1,0 +1,458 @@
+// Run with a compiler executable and an existing empty work directory.
+// This suite uses only lkjscript capabilities and leaves that directory empty.
+struct Outcome {
+    status: i64,
+    output: Vec<u8>,
+    errors: Vec<u8>,
+    result: Vec<u8>,
+}
+
+struct Config {
+    directory: String,
+    options: Vec<Vec<u8>>,
+}
+
+struct Report {
+    failures: Vec<String>,
+}
+
+impl Report {
+    fn require(&mut self, condition: bool, message: String) {
+        if !condition {
+            self.failures.push(message);
+        }
+    }
+
+    fn equal(&mut self, label: &str, stream: &str, actual: &[u8], expected: &[u8]) {
+        if actual != expected {
+            let mut index = 0usize;
+            while index < actual.len() && index < expected.len() && actual[index] == expected[index]
+            {
+                index = index + 1;
+            }
+            self.failures.push(format!(
+                "{label}: {stream} differs at byte {index}; expected {} bytes, got {} bytes",
+                expected.len(),
+                actual.len()
+            ));
+        }
+    }
+
+    fn outcome(
+        &mut self,
+        label: &str,
+        actual: &Outcome,
+        status: i64,
+        output: &[u8],
+        errors: &[u8],
+    ) {
+        if actual.status != status {
+            self.failures.push(format!(
+                "{label}: expected status {status}, got {}; stderr {}",
+                actual.status,
+                display_bytes(&actual.errors)
+            ));
+        }
+        self.equal(label, "stdout", &actual.output, output);
+        self.equal(label, "stderr", &actual.errors, errors);
+        self.equal(label, "driver result descriptor", &actual.result, b"");
+    }
+}
+
+fn display_bytes(bytes: &[u8]) -> String {
+    let mut text = String::new();
+    for byte in bytes {
+        if *byte >= 32 && *byte < 127 {
+            text.push(*byte as char);
+        } else {
+            text.push_str(&format!("\\x{:02x}", *byte));
+        }
+    }
+    text
+}
+
+fn contains(bytes: &[u8], needle: &[u8]) -> bool {
+    if needle.len() > bytes.len() {
+        return false;
+    }
+    let mut index = 0usize;
+    while index <= bytes.len() - needle.len() {
+        if &bytes[index..index + needle.len()] == needle {
+            return true;
+        }
+        index = index + 1;
+    }
+    false
+}
+
+fn io_result<T>(result: Result<T, i64>, label: &str) -> Result<T, String> {
+    match result {
+        Ok(value) => Ok(value),
+        Err(errno) => Err(format!("{label}: errno {errno}")),
+    }
+}
+
+fn text(bytes: Vec<u8>, label: &str) -> Result<String, String> {
+    match String::from_utf8(bytes) {
+        Ok(value) => Ok(value),
+        Err(_) => Err(format!("{label} is not UTF-8")),
+    }
+}
+
+fn temporary(world: &mut World) -> Result<File, String> {
+    io_result(world.temporary_file(), &format!("temporary file"))
+}
+
+fn invoke(
+    world: &mut World,
+    executable: &File,
+    arguments: &[Vec<u8>],
+    input: &[u8],
+) -> Result<Outcome, String> {
+    let mut stdin: File = temporary(world)?;
+    let mut stdout: File = temporary(world)?;
+    let mut stderr: File = temporary(world)?;
+    let mut result: File = temporary(world)?;
+    if let Err(errno) = stdin.write_all(input) {
+        return Err(format!("input write: errno {errno}"));
+    }
+    io_result(stdin.rewind(), &format!("input rewind"))?;
+    let mut process = world.process();
+    let mut child = io_result(
+        process.spawn_file(executable, arguments, &stdin, &stdout, &stderr, &result),
+        &format!("spawn compiler"),
+    )?;
+    let status = io_result(child.wait(), &format!("wait compiler"))?;
+    io_result(stdout.rewind(), &format!("output rewind"))?;
+    io_result(stderr.rewind(), &format!("error rewind"))?;
+    io_result(result.rewind(), &format!("result rewind"))?;
+    let output = io_result(stdout.read_to_end(), &format!("output read"))?;
+    let errors = io_result(stderr.read_to_end(), &format!("error read"))?;
+    let result = io_result(result.read_to_end(), &format!("result read"))?;
+    Ok(Outcome {
+        status,
+        output,
+        errors,
+        result,
+    })
+}
+
+fn path(config: &Config, name: &str) -> String {
+    format!("{}/{name}", config.directory)
+}
+
+fn command(config: &Config, verb: &str, name: &str) -> Vec<Vec<u8>> {
+    let mut arguments = vec![
+        verb.as_bytes().to_vec(),
+        path(config, name).as_bytes().to_vec(),
+    ];
+    for option in &config.options {
+        arguments.push(option.clone());
+    }
+    arguments
+}
+
+fn option(arguments: &mut Vec<Vec<u8>>, name: &str, value: &str) {
+    arguments.push(name.as_bytes().to_vec());
+    arguments.push(value.as_bytes().to_vec());
+}
+
+fn write(directory: &mut Directory, name: &str, bytes: &[u8]) -> Result<(), String> {
+    let mut file = match directory.create(name) {
+        Ok(file) => file,
+        Err(errno) => return Err(format!("create {name}: errno {errno}")),
+    };
+    match file.write_all(bytes) {
+        Ok(()) => Ok(()),
+        Err(errno) => Err(format!("write {name}: errno {errno}")),
+    }
+}
+
+fn read(directory: &mut Directory, name: &str) -> Result<Vec<u8>, String> {
+    let mut file = match directory.open(name) {
+        Ok(file) => file,
+        Err(errno) => return Err(format!("open {name}: errno {errno}")),
+    };
+    io_result(file.read_to_end(), &format!("read {name}"))
+}
+
+fn clean(directory: &mut Directory) -> Result<(), String> {
+    let names: Vec<Vec<u8>> = match directory.list() {
+        Ok(names) => names,
+        Err(errno) => return Err(format!("cleanup list: errno {errno}")),
+    };
+    for bytes in names {
+        let name = text(bytes, "cleanup name")?;
+        match directory.open_directory(&name) {
+            Ok(mut child) => {
+                clean(&mut child)?;
+                drop(child);
+                io_result(
+                    directory.remove_directory(&name),
+                    &format!("cleanup directory {name}"),
+                )?;
+            }
+            Err(_) => {
+                io_result(directory.remove(&name), &format!("cleanup file {name}"))?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn open_executable(world: &mut World, path: &str) -> Result<File, String> {
+    let mut slash = None;
+    let bytes = path.as_bytes();
+    let mut index = 0usize;
+    while index < bytes.len() {
+        if bytes[index] == b'/' {
+            slash = Some(index);
+        }
+        index = index + 1;
+    }
+    let parent: String = match slash {
+        Some(0) => "/".to_string(),
+        Some(at) => path[..at].to_string(),
+        None => ".".to_string(),
+    };
+    let name: String = match slash {
+        Some(at) => path[at + 1..].to_string(),
+        None => path.to_string(),
+    };
+    let mut directory = io_result(world.directory(&parent), &format!("compiler directory"))?;
+    match directory.open(&name) {
+        Ok(file) => Ok(file),
+        Err(errno) => Err(format!("open compiler: errno {errno}")),
+    }
+}
+
+
+fn prepare(
+    world: &mut World,
+    compiler: &File,
+    directory: &mut Directory,
+    config: &Config,
+    report: &mut Report,
+    name: &str,
+) -> Result<(), String> {
+    let source = format!("tests/fixtures/world/{name}.lkj");
+    let built = path(config, &format!("{name}.elf"));
+    let args = vec!["build".as_bytes().to_vec(), source.as_bytes().to_vec(),
+        "-o".as_bytes().to_vec(), built.as_bytes().to_vec()];
+    let outcome = invoke(world, compiler, &args, b"")?;
+    report.outcome(&format!("{name} build"), &outcome, 0, b"", b"");
+    if outcome.status != 0 { return Err(format!("{name} build failed")); }
+    let args = vec!["ir".as_bytes().to_vec(), source.as_bytes().to_vec()];
+    let outcome = invoke(world, compiler, &args, b"")?;
+    report.require(outcome.status == 0, format!("{name} IR extraction: {}", display_bytes(&outcome.errors)));
+    write(directory, &format!("{name}.lkjir"), &outcome.output)?;
+    let args = vec!["build".as_bytes().to_vec(), path(config, &format!("{name}.lkjir")).into_bytes(),
+        "-o".as_bytes().to_vec(), path(config, &format!("{name}-ir.elf")).into_bytes()];
+    let outcome = invoke(world, compiler, &args, b"")?;
+    report.outcome(&format!("{name} IR build"), &outcome, 0, b"", b"");
+    let direct = read(directory, &format!("{name}.elf"))?;
+    let roundtrip = read(directory, &format!("{name}-ir.elf"))?;
+    report.equal(name, "source/IR bytes", &direct, &roundtrip);
+    Ok(())
+}
+
+fn execute(
+    world: &mut World,
+    compiler: &File,
+    config: &Config,
+    name: &str,
+    route: usize,
+    arguments: &[Vec<u8>],
+    input: &[u8],
+    close: &str,
+) -> Result<Outcome, String> {
+    let program = if route == 0 { path(config, &format!("{name}.elf")) }
+        else { text(world.args()[0].clone(), "compiler path")? };
+    let mut argv = Vec::new();
+    if route != 0 {
+        argv.push("run".as_bytes().to_vec());
+        argv.push(format!("tests/fixtures/world/{name}.lkj").into_bytes());
+        argv.push("--engine".as_bytes().to_vec());
+        argv.push(if route == 1 { "native".as_bytes().to_vec() } else { "interpreter".as_bytes().to_vec() });
+        argv.push("--".as_bytes().to_vec());
+    }
+    for value in arguments { argv.push(value.clone()); }
+    if close.is_empty() {
+        if route == 0 {
+            let executable = open_executable(world, &program)?;
+            return invoke(world, &executable, &argv, input);
+        }
+        return invoke(world, compiler, &argv, input);
+    }
+    let shell = open_executable(world, "/bin/sh")?;
+    let mut command = vec![path(config, "launch.sh").into_bytes(), close.as_bytes().to_vec(),
+        path(config, "pipe-ready").into_bytes(), program.into_bytes()];
+    for value in argv { command.push(value); }
+    invoke(world, &shell, &command, input)
+}
+
+fn data_directory(directory: &mut Directory, config: &Config, name: &str) -> Result<String, String> {
+    io_result(directory.create_directory(name), &format!("create {name}"))?;
+    Ok(path(config, name))
+}
+
+fn exercise(
+    world: &mut World,
+    compiler: &File,
+    directory: &mut Directory,
+    config: &Config,
+    report: &mut Report,
+) -> Result<(), String> {
+    let launcher = "mode=$1\nmarker=$2\nshift 2\ncase \"$mode\" in\nclose0) exec 0<&-; exec \"$@\";;\nclose1) exec 1>&-; exec \"$@\";;\nclose2) exec 2>&-; exec \"$@\";;\nlimit64) ulimit -n 64; exec \"$@\";;\nblocked) exec /usr/bin/env --block-signal=TERM,USR1 \"$@\";;\nprivate0) umask 000; exec \"$@\";;\nprivate777) umask 777; exec \"$@\";;\npipe1) rm -f \"$marker\" \"$marker.status\"; { while test ! -f \"$marker\"; do :; done; \"$@\"; code=$?; printf \"%s\\n\" \"$code\" > \"$marker.status\"; } | { exec 0<&-; : > \"$marker\"; }; read code < \"$marker.status\"; exit \"$code\";;\npipe2) rm -f \"$marker\" \"$marker.status\"; { while test ! -f \"$marker\"; do :; done; \"$@\" 2>&1 1>&3; code=$?; printf \"%s\\n\" \"$code\" > \"$marker.status\"; } 3>&1 | { exec 0<&-; : > \"$marker\"; }; read code < \"$marker.status\"; exit \"$code\";;\nesac\n";
+    write(directory, "launch.sh", launcher.as_bytes())?;
+    let names: Vec<String> = vec!["main".to_string(), "paths".to_string(), "closed_stdin".to_string(),
+        "handle_cleanup".to_string(), "output_failure".to_string(), "arguments".to_string(),
+        "invalid_argument".to_string(), "status_marker".to_string(), "status".to_string(),
+        "system".to_string(), "closed_process".to_string(), "self_spawn".to_string(), "file_readonly".to_string(), "listener_closed".to_string(), "closed_readiness".to_string(), "closed_storage".to_string(), "storage_permissions".to_string(), "private_file".to_string(), "lifecycle_mask".to_string()];
+    for name in &names { prepare(world, compiler, directory, config, report, name)?; }
+    let empty: Vec<Vec<u8>> = Vec::new();
+    let payload = vec![255u8, 128u8, 97u8, 10u8, 192u8];
+    let samples: Vec<usize> = vec![0usize, 5usize, 17003usize];
+    for sample in samples {
+        let mut input = Vec::new();
+        for index in 0..sample { input.push((index % 256) as u8); }
+        for route in 0..3 {
+            let root = data_directory(directory, config, &format!("main-{sample}-{route}"))?;
+            let arguments = vec![payload.clone(), root.as_bytes().to_vec(), "output.bin".as_bytes().to_vec()];
+            let outcome = execute(world, compiler, config, "main", route, &arguments, &input, "")?;
+            let mut expected = payload.clone();
+            expected.extend_from_slice(&input);
+            report.outcome(&format!("bytes {sample}/{route}"), &outcome, 7, &expected, &input);
+            let mut child = io_result(world.directory(&root), "main result directory")?;
+            report.equal("file round trip", "file", &read(&mut child, "output.bin")?, &expected);
+        }
+    }
+    for route in 0..3 {
+        let root = data_directory(directory, config, &format!("paths-{route}"))?;
+        let mut child = io_result(world.directory(&root), "paths data")?;
+        write(&mut child, "inside", b"inside")?;
+        write(directory, "outside", b"outside")?;
+        let shell = open_executable(world, "/bin/sh")?;
+        let args = vec!["-c".as_bytes().to_vec(), "ln -s inside \"$1/inward\" && ln -s ../outside \"$1/outward\"".as_bytes().to_vec(),
+            "world-test".as_bytes().to_vec(), root.as_bytes().to_vec()];
+        let setup = invoke(world, &shell, &args, b"")?;
+        report.outcome("symlink setup", &setup, 0, b"", b"");
+        let arguments = vec![root.into_bytes()];
+        let outcome = execute(world, compiler, config, "paths", route, &arguments, b"", "")?;
+        report.outcome(&format!("paths/{route}"), &outcome, 0, b"paths ok\n", b"");
+    }
+    for route in 0..3 {
+        let root = data_directory(directory, config, &format!("closed-{route}"))?;
+        let arguments = vec![root.into_bytes()];
+        let outcome = execute(world, compiler, config, "closed_stdin", route, &arguments, b"", "close0")?;
+        report.outcome(&format!("closed input/{route}"), &outcome, 0, b"closed ok\n", b"");
+        let root = data_directory(directory, config, &format!("cleanup-{route}"))?;
+        let arguments = vec![root.into_bytes()];
+        let outcome = execute(world, compiler, config, "handle_cleanup", route, &arguments, b"", "")?;
+        report.outcome(&format!("handle cleanup/{route}"), &outcome, 0, b"cleanup ok\n", b"");
+    }
+    for mode in 0..2 {
+        for fd in 1..3 {
+            for route in 0..3 {
+                let root = data_directory(directory, config, &format!("failure-{mode}-{fd}-{route}"))?;
+                let arguments = vec![root.as_bytes().to_vec(), format!("{fd}").into_bytes()];
+                let close = if mode == 0 { format!("close{fd}") } else { format!("pipe{fd}") };
+                let outcome = execute(world, compiler, config, "output_failure", route, &arguments, b"", &close)?;
+                let located = if route == 0 {
+                    contains(&outcome.errors, b"R0007 at line 10 file 0:")
+                } else {
+                    contains(&outcome.errors, b":10: R0007 ")
+                };
+                report.require(outcome.status == 1
+                    && outcome.output.is_empty()
+                    && (if fd == 1 { located } else { outcome.errors.is_empty() }),
+                    format!("output failure/{close}/{route}: {} {}", outcome.status, display_bytes(&outcome.errors)));
+                let mut child = io_result(world.directory(&root), "failure data")?;
+                report.equal("owned descriptor", "file", &read(&mut child, "owned-file")?, b"owned\n");
+            }
+        }
+    }
+    for route in 0..3 {
+        let outcome = execute(world, compiler, config, "arguments", route, &vec![payload.clone()], b"", "")?;
+        report.outcome(&format!("arguments/{route}"), &outcome, 0, b"arguments ok\n", b"");
+        let outcome = execute(world, compiler, config, "invalid_argument", route, &empty, b"", "")?;
+        report.require(outcome.status != 0 && contains(&outcome.errors, b"R0003"), format!("invalid arguments/{route}"));
+        let outcome = execute(world, compiler, config, "status_marker", route, &empty, b"", "")?;
+        report.outcome(&format!("status marker/{route}"), &outcome, 101, b"", b"LKJSCRIPT_RUST_TRAP R0005\n");
+        let outcome = execute(world, compiler, config, "status", route, &empty, b"", "")?;
+        report.outcome(&format!("status bytes/{route}"), &outcome, 23, &[0u8,255u8], &[255u8,0u8,128u8]);
+        let root = data_directory(directory, config, &format!("system-{route}"))?;
+        let outcome = execute(world, compiler, config, "system", route, &vec![root.into_bytes()], b"", "")?;
+        report.outcome(&format!("system/{route}"), &outcome, 0, b"system ok\n", b"");
+        let outcome = execute(world, compiler, config, "file_readonly", route, &empty, b"", "")?;
+        report.outcome(&format!("readonly/{route}"), &outcome, 0, b"readonly ok\n", b"");
+        let outcome = execute(world, compiler, config, "self_spawn", route, &empty, b"", "")?;
+        report.outcome(&format!("self spawn/{route}"), &outcome, 0, b"42\n", b"");
+        let outcome = execute(world, compiler, config, "closed_readiness", route, &empty, b"x", "close2")?;
+        report.outcome(&format!("closed readiness/{route}"), &outcome, 0, b"9 9 9 9 22\n", b"");
+        let outcome = execute(world, compiler, config, "closed_storage", route, &empty, b"x", "close2")?;
+        report.outcome(&format!("closed storage/{route}"), &outcome, 0, b"9 9 9 9 9\n", b"");
+        let outcome = execute(world, compiler, config, "lifecycle_mask", route, &empty, b"", "")?;
+        report.outcome(&format!("child mask unclaimed and claimed/{route}"), &outcome, 0, b"mask 0\n", b"");
+        let outcome = execute(world, compiler, config, "lifecycle_mask", route, &empty, b"", "close0")?;
+        report.outcome(&format!("stop and child mask with closed stdin/{route}"), &outcome, 0, b"mask 0\n", b"");
+        let outcome = execute(world, compiler, config, "lifecycle_mask", route, &empty, b"", "blocked")?;
+        report.outcome(&format!("child inherited TERM and USR1 mask/{route}"), &outcome, 0, b"mask 16896\n", b"");
+        let arguments = vec!["exhaust".as_bytes().to_vec()];
+        let outcome = execute(world, compiler, config, "lifecycle_mask", route, &arguments, b"", "limit64")?;
+        report.outcome(&format!("failed Stop acquisition restores mask/{route}"), &outcome, 0, b"mask 0\n", b"");
+        for mode in 0usize..2usize {
+            let root = data_directory(directory, config, &format!("private-{mode}-{route}"))?;
+            let launch = if mode == 0 { "private0" } else { "private777" };
+            let outcome = execute(world, compiler, config, "private_file", route, &vec![root.as_bytes().to_vec()], b"", launch)?;
+            report.outcome(&format!("private files/{mode}/{route}"), &outcome, 0, b"private files ok\n", b"");
+            let stat = open_executable(world, "/usr/bin/stat")?;
+            let arguments = vec!["-c".as_bytes().to_vec(), "%a".as_bytes().to_vec(),
+                format!("{root}/atomic").into_bytes(), format!("{root}/repaired").into_bytes()];
+            let outcome = invoke(world, &stat, &arguments, b"")?;
+            let expected = if mode == 0 { &b"600\n600\n"[..] } else { &b"0\n600\n"[..] };
+            report.outcome(&format!("private initial and repaired modes/{mode}/{route}"), &outcome, 0, expected, b"");
+        }
+        let root = data_directory(directory, config, &format!("storage-permissions-{route}"))?;
+        let chmod = open_executable(world, "/bin/chmod")?;
+        let restrict = vec!["0300".as_bytes().to_vec(), root.as_bytes().to_vec()];
+        let outcome = invoke(world, &chmod, &restrict, b"")?;
+        report.outcome(&format!("storage permissions setup/{route}"), &outcome, 0, b"", b"");
+        let outcome = execute(world, compiler, config, "storage_permissions", route, &vec![root.as_bytes().to_vec()], b"", "close0")?;
+        report.outcome(&format!("storage permissions/{route}"), &outcome, 0, b"storage permissions ok\n", b"");
+        let restore = vec!["0700".as_bytes().to_vec(), root.as_bytes().to_vec()];
+        let outcome = invoke(world, &chmod, &restore, b"")?;
+        report.outcome(&format!("storage permissions cleanup/{route}"), &outcome, 0, b"", b"");
+        for fd in 0..3 {
+
+            let args = vec![format!("{fd}").into_bytes()];
+            let outcome = execute(world, compiler, config, "closed_process", route, &args, b"", &format!("close{fd}"))?;
+            report.outcome(&format!("closed process/{fd}/{route}"), &outcome, 0, b"", b"");
+            let outcome = execute(world, compiler, config, "listener_closed", route, &args, b"", &format!("close{fd}"))?;
+            report.outcome(&format!("closed listener/{fd}/{route}"), &outcome, 0, b"", b"");
+        }
+    }
+    Ok(())
+}
+
+fn main(mut world: World) {
+    let args = world.args();
+    assert_eq!(args.len(), 2usize);
+    let compiler_path = text(args[0].clone(), "compiler path").unwrap();
+    let directory_path = text(args[1].clone(), "directory path").unwrap();
+    let compiler = open_executable(&mut world, &compiler_path).unwrap();
+    let mut directory = world.directory(&directory_path).unwrap();
+    assert!(directory.list().unwrap().is_empty());
+    let config = Config { directory: directory_path, options: Vec::new() };
+    let mut report = Report { failures: Vec::new() };
+    if let Err(problem) = exercise(&mut world, &compiler, &mut directory, &config, &mut report) {
+        report.failures.push(problem);
+    }
+    if let Err(problem) = clean(&mut directory) { report.failures.push(problem); }
+    if report.failures.is_empty() {
+        world.stdout().write(b"ok World streams, directories, process, listener and descriptor cases\n");
+    } else {
+        for problem in report.failures { world.stderr().write(format!("FAIL {problem}\n").as_bytes()); }
+        world.set_exit_status(1);
+    }
+}

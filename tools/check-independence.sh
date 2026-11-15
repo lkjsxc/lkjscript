@@ -12,5 +12,5 @@ awk '
   }
 }
 END { if (bad) exit 1 }
-' src/interpreter.rs src/interpreter/*.rs src/runtime_memory.rs
+' src/interpreter.lkj src/interpreter/*.lkj src/runtime_memory.lkj
 printf 'ok independent interpreter imports\n'

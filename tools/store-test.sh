@@ -24,7 +24,7 @@ umask 077
 store="$test_directory/store"
 key="$test_directory/key"
 source_directory="$test_directory/source"
-source_file="$source_directory/main.rs"
+source_file="$source_directory/main.lkj"
 mkdir "$store" "$source_directory"
 head -c 32 /dev/urandom > "$key"
 cp "$key" "$test_directory/key-copy"
@@ -33,7 +33,7 @@ mod dependency;
 fn add(value: i64) -> i64 { value + 2 }
 pub fn probe() -> i64 { add(dependency::answer()) }
 SOURCE
-printf 'pub fn answer() -> i64 { 40 }\n' > "$source_directory/dependency.rs"
+printf 'pub fn answer() -> i64 { 40 }\n' > "$source_directory/dependency.lkj"
 cat > "$test_directory/invalid.lkjir" <<'IR'
 lkjscript-ir 1
 type "()" unit
@@ -51,7 +51,7 @@ field() {
 cached_build() {
     local label=$1
     shift
-    "$compiler" build main.rs --source-dir "$source_directory" --store "$store" --store-key "$key" --stats \
+    "$compiler" build main.lkj --source-dir "$source_directory" --store "$store" --store-key "$key" --stats \
         -o "$test_directory/result" "$@" > "$test_directory/$label.out" 2> "$test_directory/$label.log"
 }
 without_image() {
@@ -71,7 +71,7 @@ rejected() {
 entries() { find "$store" -maxdepth 1 -type f ! -name '.*' -print; }
 
 # All emitted bytes are independent of an absent, cold or warm store.
-"$compiler" build main.rs --source-dir "$source_directory" -o "$test_directory/expected"
+"$compiler" build main.lkj --source-dir "$source_directory" -o "$test_directory/expected"
 same_build cold
 (( $(field "$test_directory/cold.log" store_writes) > 0 )) || fail "cold store wrote no entries"
 same_build warm
@@ -121,29 +121,29 @@ cmp "$key" "$test_directory/key-copy"
 
 # Old results cannot survive a changed source dependency, even at the same path.
 restore
-printf 'pub fn answer() -> i64 { 41 }\n' > "$source_directory/dependency.rs"
-"$compiler" build main.rs --source-dir "$source_directory" -o "$test_directory/changed-expected"
+printf 'pub fn answer() -> i64 { 41 }\n' > "$source_directory/dependency.lkj"
+"$compiler" build main.lkj --source-dir "$source_directory" -o "$test_directory/changed-expected"
 cached_build replayed
 (( $(field "$test_directory/replayed.log" front_reused) > 0 )) || fail "body edit did not reuse unaffected front-end definitions"
 (( $(field "$test_directory/replayed.log" front_definitions) == 1 )) || fail "body edit elaborated more than its changed definition"
 cmp "$test_directory/changed-expected" "$test_directory/result"
-"$compiler" run main.rs --source-dir "$source_directory" --store "$store" --store-key "$key" > "$test_directory/changed-value"
+"$compiler" run main.lkj --source-dir "$source_directory" --store "$store" --store-key "$key" > "$test_directory/changed-value"
 [[ $(cat "$test_directory/changed-value") == 43 ]] || fail "changed dependency replayed old native code"
-printf 'pub fn answer() -> i64 { 42 }\n' > "$source_directory/dependency.rs"
-"$compiler" build main.rs --source-dir "$source_directory" --no-store -o "$test_directory/changed-next-expected"
+printf 'pub fn answer() -> i64 { 42 }\n' > "$source_directory/dependency.lkj"
+"$compiler" build main.lkj --source-dir "$source_directory" --no-store -o "$test_directory/changed-next-expected"
 cached_build replayed-next
 (( $(field "$test_directory/replayed-next.log" front_reused) > 0 )) || fail "successive body edit did not reuse the advanced checkpoint"
 (( $(field "$test_directory/replayed-next.log" front_definitions) == 1 )) || fail "successive body edit elaborated more than one definition"
 cmp "$test_directory/changed-next-expected" "$test_directory/result"
-"$compiler" run main.rs --source-dir "$source_directory" --store "$store" --store-key "$key" > "$test_directory/changed-next-value"
+"$compiler" run main.lkj --source-dir "$source_directory" --store "$store" --store-key "$key" > "$test_directory/changed-next-value"
 [[ $(cat "$test_directory/changed-next-value") == 44 ]] || fail "successive dependency edit replayed an earlier body"
-printf 'pub fn answer() -> i64 { 40 }\n' > "$source_directory/dependency.rs"
+printf 'pub fn answer() -> i64 { 40 }\n' > "$source_directory/dependency.lkj"
 
 # Signature, constant-control and source-span changes cannot replay an old front end.
-cp "$source_file" "$test_directory/front-original.rs"
+cp "$source_file" "$test_directory/front-original.lkj"
 for variant in generic control length; do
-    cp "$test_directory/front-original.rs" "$source_file"
-    printf 'pub fn answer() -> i64 { 40 }\n' > "$source_directory/dependency.rs"
+    cp "$test_directory/front-original.lkj" "$source_file"
+    printf 'pub fn answer() -> i64 { 40 }\n' > "$source_directory/dependency.lkj"
     case "$variant" in
         generic)
             cat > "$source_file" <<'SOURCE'
@@ -161,17 +161,17 @@ pub fn probe() -> i64 { add(dependency::answer()) }
 SOURCE
             ;;
         length)
-            printf 'pub fn answer() -> i64 { 400 }\n' > "$source_directory/dependency.rs"
+            printf 'pub fn answer() -> i64 { 400 }\n' > "$source_directory/dependency.lkj"
             ;;
     esac
-    "$compiler" build main.rs --source-dir "$source_directory" --no-store -o "$test_directory/front-expected"
+    "$compiler" build main.lkj --source-dir "$source_directory" --no-store -o "$test_directory/front-expected"
     cached_build "front-$variant"
     cmp "$test_directory/front-expected" "$test_directory/result"
     (( $(field "$test_directory/front-$variant.log" front_reused) == 0 )) ||
         fail "$variant context change reused an inapplicable front end"
 done
-cp "$test_directory/front-original.rs" "$source_file"
-printf 'pub fn answer() -> i64 { 40 }\n' > "$source_directory/dependency.rs"
+cp "$test_directory/front-original.lkj" "$source_file"
+printf 'pub fn answer() -> i64 { 40 }\n' > "$source_directory/dependency.lkj"
 
 # Includes can read a file which is also parsed as a module. The included
 # literal is a peer dependency, including equal-span and successive body edits.
@@ -181,11 +181,11 @@ for kind in str bytes; do
     include_store="$test_directory/include-$kind-store"
     mkdir "$include_store"
     if [[ "$kind" == str ]]; then
-        expression='include_str!("dependency.rs").as_bytes()[26usize]'
+        expression='include_str!("dependency.lkj").as_bytes()[26usize]'
     else
-        expression='include_bytes!("dependency.rs")[26usize]'
+        expression='include_bytes!("dependency.lkj")[26usize]'
     fi
-    cat > "$include_source/main.rs" <<SOURCE
+    cat > "$include_source/main.lkj" <<SOURCE
 mod dependency;
 pub fn main(mut world: World) {
     let byte = $expression;
@@ -193,10 +193,10 @@ pub fn main(mut world: World) {
 }
 SOURCE
     for value in 40 41 42; do
-        printf 'pub fn answer() -> i64 { %s }\n' "$value" > "$include_source/dependency.rs"
-        "$compiler" build main.rs --source-dir "$include_source" --no-library --no-store \
+        printf 'pub fn answer() -> i64 { %s }\n' "$value" > "$include_source/dependency.lkj"
+        "$compiler" build main.lkj --source-dir "$include_source" --no-library --no-store \
             -o "$test_directory/include-expected"
-        "$compiler" build main.rs --source-dir "$include_source" --no-library \
+        "$compiler" build main.lkj --source-dir "$include_source" --no-library \
             --store "$include_store" --store-key "$key" --stats -o "$test_directory/include-result" \
             > "$test_directory/include-$kind-$value.out" 2> "$test_directory/include-$kind-$value.log"
         cmp "$test_directory/include-expected" "$test_directory/include-result"
@@ -204,7 +204,7 @@ SOURCE
             fail "$kind parsed-source include retained old bytes after body $value"
         (( $(field "$test_directory/include-$kind-$value.log" front_reused) == 0 )) ||
             fail "$kind changed include payload resumed stale peer IR"
-        "$compiler" build main.rs --source-dir "$include_source" --no-library \
+        "$compiler" build main.lkj --source-dir "$include_source" --no-library \
             --store "$include_store" --store-key "$key" --stats -o "$test_directory/include-result" \
             > "$test_directory/include-$kind-$value-warm.out" 2> "$test_directory/include-$kind-$value-warm.log"
         cmp "$test_directory/include-expected" "$test_directory/include-result"
@@ -216,23 +216,23 @@ done
 # A previously absent alternate module is also an input dependency.
 restore
 mkdir "$source_directory/dependency"
-printf 'pub fn answer() -> i64 { 9 }\n' > "$source_directory/dependency/mod.rs"
-if "$compiler" check main.rs --source-dir "$source_directory" > "$test_directory/ambiguous.out" 2> "$test_directory/ambiguous.expected"; then
+printf 'pub fn answer() -> i64 { 9 }\n' > "$source_directory/dependency/mod.lkj"
+if "$compiler" check main.lkj --source-dir "$source_directory" > "$test_directory/ambiguous.out" 2> "$test_directory/ambiguous.expected"; then
     fail "alternate module fixture was not ambiguous"
 fi
 if cached_build absent-alternative; then fail "cached source plan ignored a newly present module"; fi
 sed '/^LKJSCRIPT_STATS /d' "$test_directory/absent-alternative.log" > "$test_directory/ambiguous.actual"
 cmp "$test_directory/ambiguous.expected" "$test_directory/ambiguous.actual"
-rm "$source_directory/dependency/mod.rs"
+rm "$source_directory/dependency/mod.lkj"
 rmdir "$source_directory/dependency"
 
 # A cached build never expands the source Directory grant. This sibling is
 # harmless fixture data; the signing key is never included in source.
 printf 'outside source grant\\n' > "$test_directory/outside"
-cat > "$source_directory/escape.rs" <<'SOURCE'
+cat > "$source_directory/escape.lkj" <<'SOURCE'
 pub fn probe() -> i64 { include_bytes!("../outside")[0] as i64 }
 SOURCE
-if "$compiler" check escape.rs --source-dir "$source_directory" --store "$store" --store-key "$key" \
+if "$compiler" check escape.lkj --source-dir "$source_directory" --store "$store" --store-key "$key" \
     > "$test_directory/escape.out" 2> "$test_directory/escape.log"; then
     fail "source include escaped its Directory"
 fi
@@ -240,9 +240,9 @@ fi
 # Options also identify code. Use the same output path because profile output
 # embeds its sample-file prefix.
 restore
-"$compiler" build main.rs --source-dir "$source_directory" --profile -o "$test_directory/profile"
+"$compiler" build main.lkj --source-dir "$source_directory" --profile -o "$test_directory/profile"
 cp "$test_directory/profile" "$test_directory/profile-expected"
-"$compiler" build main.rs --source-dir "$source_directory" --profile --store "$store" --store-key "$key" \
+"$compiler" build main.lkj --source-dir "$source_directory" --profile --store "$store" --store-key "$key" \
     -o "$test_directory/profile"
 cmp "$test_directory/profile-expected" "$test_directory/profile"
 
@@ -281,7 +281,7 @@ cp "$test_directory/key-copy" "$key"
 restore
 cp "$compiler" "$test_directory/another-compiler"
 printf 'different compiler identity\n' >> "$test_directory/another-compiler"
-"$test_directory/another-compiler" build main.rs --source-dir "$source_directory" --store "$store" --store-key "$key" --stats \
+"$test_directory/another-compiler" build main.lkj --source-dir "$source_directory" --store "$store" --store-key "$key" --stats \
     -o "$test_directory/result" > "$test_directory/producer.out" 2> "$test_directory/producer.log"
 cmp "$test_directory/expected" "$test_directory/result"
 (( $(field "$test_directory/producer.log" store_hits) == 0 )) || fail "another producer reused entries"
@@ -289,7 +289,7 @@ cached_build producer-a-repeat
 cmp "$test_directory/expected" "$test_directory/result"
 (( $(field "$test_directory/producer-a-repeat.log" build_reused) > 0 )) ||
     fail "another producer displaced the original producer's image"
-"$test_directory/another-compiler" build main.rs --source-dir "$source_directory" --store "$store" --store-key "$key" --stats \
+"$test_directory/another-compiler" build main.lkj --source-dir "$source_directory" --store "$store" --store-key "$key" --stats \
     -o "$test_directory/result" > "$test_directory/producer-b-repeat.out" 2> "$test_directory/producer-b-repeat.log"
 cmp "$test_directory/expected" "$test_directory/result"
 (( $(field "$test_directory/producer-b-repeat.log" build_reused) > 0 )) ||
@@ -300,7 +300,7 @@ cmp "$test_directory/expected" "$test_directory/result"
 # instead of killing the process; this command publishes no ordinary output.
 rm -rf "$store"
 mkdir "$store"
-( trap '' XFSZ; ulimit -f 0; "$compiler" check main.rs --source-dir "$source_directory" --store "$store" --store-key "$key" )
+( trap '' XFSZ; ulimit -f 0; "$compiler" check main.lkj --source-dir "$source_directory" --store "$store" --store-key "$key" )
 same_build after-refusal
 
 rm -rf "$store"
@@ -310,10 +310,10 @@ rm "$store"
 mkdir "$store"
 
 # Both writers publish exactly the same independently checked bytes.
-"$compiler" build main.rs --source-dir "$source_directory" --store "$store" --store-key "$key" -o "$test_directory/race-a" \
+"$compiler" build main.lkj --source-dir "$source_directory" --store "$store" --store-key "$key" -o "$test_directory/race-a" \
     > "$test_directory/race-a.out" 2> "$test_directory/race-a.log" &
 children+=("$!")
-"$compiler" build main.rs --source-dir "$source_directory" --store "$store" --store-key "$key" -o "$test_directory/race-b" \
+"$compiler" build main.lkj --source-dir "$source_directory" --store "$store" --store-key "$key" -o "$test_directory/race-b" \
     > "$test_directory/race-b.out" 2> "$test_directory/race-b.log" &
 children+=("$!")
 for child in "${children[@]}"; do wait "$child"; done
@@ -325,7 +325,7 @@ same_build after-race
 
 # Test observations are reusable only with their complete pure input closure.
 mkdir "$source_directory/cases"
-cat > "$source_directory/cases/pure.rs" <<'SOURCE'
+cat > "$source_directory/cases/pure.lkj" <<'SOURCE'
 // expect: value 42
 pub fn probe() -> i64 { 42 }
 SOURCE
@@ -336,10 +336,10 @@ for pass in cold warm; do
 done
 cmp "$test_directory/test-cold.summary" "$test_directory/test-warm.summary"
 (( $(field "$test_directory/test-warm.log" test_reused) > 0 )) || fail "warm pure test was not reused"
-sed -i 's/42/43/g' "$source_directory/cases/pure.rs"
+sed -i 's/42/43/g' "$source_directory/cases/pure.lkj"
 "$compiler" test "$source_directory/cases" --jobs 2 --store "$store" --store-key "$key" \
     > "$test_directory/test-changed.out" 2> "$test_directory/test-changed.log"
-sed -i 's/expect: value 43/expect: value 44/' "$source_directory/cases/pure.rs"
+sed -i 's/expect: value 43/expect: value 44/' "$source_directory/cases/pure.lkj"
 if "$compiler" test "$source_directory/cases" --jobs 2 --store "$store" --store-key "$key" \
     > "$test_directory/test-expectation.out" 2> "$test_directory/test-expectation.log"; then
     fail "changed test expectation replayed an old pass"
@@ -348,7 +348,7 @@ fi
 # Fixed private stdout/stderr captures are closed observations, including writes
 # reached through calls and custom cleanup. Both checked graphs must prove this.
 mkdir "$source_directory/captured"
-cat > "$source_directory/captured/output.rs" <<'SOURCE'
+cat > "$source_directory/captured/output.lkj" <<'SOURCE'
 // expect: output 6162
 // stderr: 6364
 struct Tail { errors: Stderr }
@@ -363,7 +363,7 @@ pub fn main(mut world: World) {
     world.stdout().write(b"b");
 }
 SOURCE
-cat > "$source_directory/captured/trap.rs" <<'SOURCE'
+cat > "$source_directory/captured/trap.lkj" <<'SOURCE'
 // expect: trap R0005
 // stdout: 78
 // stderr: 79
@@ -385,20 +385,20 @@ for limit in 0 64; do
     (( $(field "$test_directory/captured-$limit-warm.log" test_reused) == 2 )) ||
         fail "fixed stdout/stderr success and trap were not reused at inline $limit"
 done
-sed -i 's/write(b"b")/write(b"e")/' "$source_directory/captured/output.rs"
-if "$compiler" test "$source_directory/captured/output.rs" --jobs 1 --inline-limit 0 \
+sed -i 's/write(b"b")/write(b"e")/' "$source_directory/captured/output.lkj"
+if "$compiler" test "$source_directory/captured/output.lkj" --jobs 1 --inline-limit 0 \
     --store "$store" --store-key "$key" --stats \
     > "$test_directory/captured-changed.out" 2> "$test_directory/captured-changed.log"; then
     fail "changed output body replayed an old passing capture"
 fi
 (( $(field "$test_directory/captured-changed.log" test_reused) == 0 )) ||
     fail "changed output body was reused"
-sed -i 's/expect: output 6162/expect: output 6165/' "$source_directory/captured/output.rs"
-"$compiler" test "$source_directory/captured/output.rs" --jobs 1 --inline-limit 0 \
+sed -i 's/expect: output 6162/expect: output 6165/' "$source_directory/captured/output.lkj"
+"$compiler" test "$source_directory/captured/output.lkj" --jobs 1 --inline-limit 0 \
     --store "$store" --store-key "$key" --stats \
     > "$test_directory/captured-corrected.out" 2> "$test_directory/captured-corrected.log"
-sed -i 's/expect: output 6165/expect: output 6166/' "$source_directory/captured/output.rs"
-if "$compiler" test "$source_directory/captured/output.rs" --jobs 1 --inline-limit 0 \
+sed -i 's/expect: output 6165/expect: output 6166/' "$source_directory/captured/output.lkj"
+if "$compiler" test "$source_directory/captured/output.lkj" --jobs 1 --inline-limit 0 \
     --store "$store" --store-key "$key" --stats \
     > "$test_directory/captured-expectation.out" 2> "$test_directory/captured-expectation.log"; then
     fail "changed output expectation replayed an old pass"
@@ -409,33 +409,33 @@ fi
 # A fixed observed value cannot make external authority deterministic. Effects
 # in a callee, an owned destructor, and either checked branch all prevent replay.
 mkdir "$source_directory/external"
-cat > "$source_directory/external/clock.rs" <<'SOURCE'
+cat > "$source_directory/external/clock.lkj" <<'SOURCE'
 // expect: output
 pub fn main(mut world: World) { let _ = world.clock().nanoseconds().unwrap(); }
 SOURCE
-cat > "$source_directory/external/args.rs" <<'SOURCE'
+cat > "$source_directory/external/args.lkj" <<'SOURCE'
 // expect: output
 pub fn main(mut world: World) { let _ = world.args(); }
 SOURCE
-cat > "$source_directory/external/entropy.rs" <<'SOURCE'
+cat > "$source_directory/external/entropy.lkj" <<'SOURCE'
 // expect: output
 pub fn main(mut world: World) {
     let mut bytes = [0u8; 1];
     world.entropy().fill(&mut bytes).unwrap();
 }
 SOURCE
-cat > "$source_directory/external/callee.rs" <<'SOURCE'
+cat > "$source_directory/external/callee.lkj" <<'SOURCE'
 // expect: output
 fn hidden(world: &mut World) { let _ = world.args(); }
 pub fn main(mut world: World) { hidden(&mut world); }
 SOURCE
-cat > "$source_directory/external/destructor.rs" <<'SOURCE'
+cat > "$source_directory/external/destructor.lkj" <<'SOURCE'
 // expect: output
 struct Hidden { world: World }
 impl Drop for Hidden { fn drop(&mut self) { let _ = self.world.args(); } }
 pub fn main(world: World) { let hidden = Hidden { world }; }
 SOURCE
-cat > "$source_directory/external/branch.rs" <<'SOURCE'
+cat > "$source_directory/external/branch.lkj" <<'SOURCE'
 // expect: output 42
 pub fn main(mut world: World) {
     if false { let _ = world.args(); }
@@ -457,26 +457,26 @@ done
 # Closed language traps are deterministic observations on both execution routes.
 # Resource/host failures remain observations to rerun, even with trap-looking paths.
 mkdir "$source_directory/traps"
-cp tests/conformance/trap/integer_shift_width.rs "$source_directory/traps/overflow.rs"
-cat > "$source_directory/traps/division.rs" <<'SOURCE'
+cp tests/conformance/trap/integer_shift_width.lkj "$source_directory/traps/overflow.lkj"
+cat > "$source_directory/traps/division.lkj" <<'SOURCE'
 // expect: trap R0002
 pub fn probe() -> i64 {
     let divisor = 0i64;
     7i64 / divisor
 }
 SOURCE
-cat > "$source_directory/traps/bounds.rs" <<'SOURCE'
+cat > "$source_directory/traps/bounds.lkj" <<'SOURCE'
 // expect: trap R0003
 pub fn probe() -> i64 {
     let values = vec![1i64];
     values[1]
 }
 SOURCE
-cat > "$source_directory/traps/assertion.rs" <<'SOURCE'
+cat > "$source_directory/traps/assertion.lkj" <<'SOURCE'
 // expect: trap R0005
 pub fn probe() { assert!(false); }
 SOURCE
-cat > "$source_directory/traps/explicit.rs" <<'SOURCE'
+cat > "$source_directory/traps/explicit.lkj" <<'SOURCE'
 // expect: trap R0004
 pub fn probe() { panic!("a closed semantic trap\nR0006 is message text"); }
 SOURCE
@@ -488,10 +488,10 @@ done
 cmp "$test_directory/traps-cold.summary" "$test_directory/traps-warm.summary"
 (( $(field "$test_directory/traps-warm.log" test_reused) == 5 )) || fail "closed semantic traps were not reused"
 
-cat > "$source_directory/R0003-native-resource.rs" <<'SOURCE'
+cat > "$source_directory/R0003-native-resource.lkj" <<'SOURCE'
 pub fn probe() -> i64 { 42 }
 SOURCE
-printf 'run\tprobe\t%s/R0003-native-resource.rs\n' "$source_directory" > "$test_directory/resource-batch"
+printf 'run\tprobe\t%s/R0003-native-resource.lkj\n' "$source_directory" > "$test_directory/resource-batch"
 for pass in first repeated; do
     (ulimit -n 10; exec "$compiler" batch "$test_directory/resource-batch" --engines native \
         --store "$store" --store-key "$key" --stats) \
@@ -517,7 +517,7 @@ grep -q '"checkStatus":0,"status":0,"stdoutHex":"34320a"' "$test_directory/resou
 # checked bodies remain reusable, but its executions are not closed observations.
 for pass in cold warm; do
     "$compiler" batch "$test_directory/resource-batch" --engines native,interpreter --roundtrip \
-        --runtime-source library/runtime.rs --store "$store" --store-key "$key" --stats \
+        --runtime-source library/runtime.lkj --store "$store" --store-key "$key" --stats \
         > "$test_directory/runtime-$pass.out" 2> "$test_directory/runtime-$pass.log"
     grep -q '"checkStatus":0,"status":0,"stdoutHex":"34320a"' "$test_directory/runtime-$pass.out" ||
         fail "explicit runtime probe did not complete"
@@ -528,20 +528,20 @@ done
     fail "explicit runtime disabled independent body reuse"
 
 # Whole-image identity includes exact runtime-source bytes, even a harmless edit.
-cp library/runtime.rs "$test_directory/runtime.rs"
-cached_build runtime-image-cold --runtime-source "$test_directory/runtime.rs"
+cp library/runtime.lkj "$test_directory/runtime.lkj"
+cached_build runtime-image-cold --runtime-source "$test_directory/runtime.lkj"
 cp "$test_directory/result" "$test_directory/runtime-image-expected"
-cached_build runtime-image-warm --runtime-source "$test_directory/runtime.rs"
+cached_build runtime-image-warm --runtime-source "$test_directory/runtime.lkj"
 (( $(field "$test_directory/runtime-image-warm.log" build_reused) > 0 )) ||
     fail "explicit runtime image was not reused"
-printf '\n// changed runtime input closure\n' >> "$test_directory/runtime.rs"
-cached_build runtime-image-changed --runtime-source "$test_directory/runtime.rs"
+printf '\n// changed runtime input closure\n' >> "$test_directory/runtime.lkj"
+cached_build runtime-image-changed --runtime-source "$test_directory/runtime.lkj"
 cmp "$test_directory/runtime-image-expected" "$test_directory/result"
 (( $(field "$test_directory/runtime-image-changed.log" build_reused) == 0 )) ||
     fail "runtime-source edit replayed an old image"
 
 # Directory effects must run even if source and expected output are unchanged.
-cat > "$source_directory/effect.rs" <<SOURCE
+cat > "$source_directory/effect.lkj" <<SOURCE
 // expect: output
 pub fn main(mut world: World) {
     let mut directory = world.directory("$test_directory").unwrap();
@@ -551,7 +551,7 @@ pub fn main(mut world: World) {
 SOURCE
 for pass in cold warm; do
     rm -f "$test_directory/effect"
-    "$compiler" test "$source_directory/effect.rs" --jobs 1 --store "$store" --store-key "$key" --stats \
+    "$compiler" test "$source_directory/effect.lkj" --jobs 1 --store "$store" --store-key "$key" --stats \
         > "$test_directory/effect-$pass.out" 2> "$test_directory/effect-$pass.log"
     [[ $(cat "$test_directory/effect") == executed ]] || fail "$pass effectful test was skipped"
     (( $(field "$test_directory/effect-$pass.log" test_reused) == 0 )) ||
@@ -562,7 +562,7 @@ done
 # control flow, literal interning and demanded owning cleanup.
 relocation_store="$test_directory/relocation-store"
 mkdir "$relocation_store"
-cat > "$source_directory/relocation.rs" <<'SOURCE'
+cat > "$source_directory/relocation.lkj" <<'SOURCE'
 struct Owner { value: i64 }
 impl Drop for Owner {
     fn drop(&mut self) { assert!(self.value == 7); }
@@ -586,31 +586,31 @@ SOURCE
 relocation_build() {
     local label=$1
     rm -f "$relocation_store"/inputs-image-*
-    "$compiler" build relocation.rs --source-dir "$source_directory" --store "$relocation_store" --store-key "$key" --stats \
+    "$compiler" build relocation.lkj --source-dir "$source_directory" --store "$relocation_store" --store-key "$key" --stats \
         -o "$test_directory/relocation-result" > "$test_directory/relocation-$label.out" 2> "$test_directory/relocation-$label.log"
     cmp "$test_directory/relocation-expected" "$test_directory/relocation-result"
 }
-"$compiler" build relocation.rs --source-dir "$source_directory" --no-store -o "$test_directory/relocation-expected"
+"$compiler" build relocation.lkj --source-dir "$source_directory" --no-store -o "$test_directory/relocation-expected"
 relocation_build cold
 relocation_build warm
 warm_emitted=$(field "$test_directory/relocation-warm.log" emitted_reused)
 (( warm_emitted > 1 )) || fail "relocation fixture did not reuse multiple functions"
 # A pack authenticates several fragments together. Changing one equal-span
 # body leaves its peers reusable while requiring one new native fragment.
-sed -i 's/if shared.len() > 3/if shared.len() > 4/' "$source_directory/relocation.rs"
-"$compiler" build relocation.rs --source-dir "$source_directory" --no-store -o "$test_directory/relocation-expected"
+sed -i 's/if shared.len() > 3/if shared.len() > 4/' "$source_directory/relocation.lkj"
+"$compiler" build relocation.lkj --source-dir "$source_directory" --no-store -o "$test_directory/relocation-expected"
 relocation_build mixed
 mixed_emitted=$(field "$test_directory/relocation-mixed.log" emitted_reused)
 (( mixed_emitted > 0 && mixed_emitted < warm_emitted )) || fail "mixed emission did not combine hits and misses"
 # Preserve line numbers so unchanged bodies retain their exact diagnostic input.
-sed -i 's/if x > 2 { shared.len() as i64 } else { x }/if x > 2 { if x > 3 { let extra = "earlier extra literal"; shared.len() as i64 + extra.len() as i64 - extra.len() as i64 } else { x } } else { x }/' "$source_directory/relocation.rs"
-"$compiler" build relocation.rs --source-dir "$source_directory" --no-store -o "$test_directory/relocation-expected"
+sed -i 's/if x > 2 { shared.len() as i64 } else { x }/if x > 2 { if x > 3 { let extra = "earlier extra literal"; shared.len() as i64 + extra.len() as i64 - extra.len() as i64 } else { x } } else { x }/' "$source_directory/relocation.lkj"
+"$compiler" build relocation.lkj --source-dir "$source_directory" --no-store -o "$test_directory/relocation-expected"
 relocation_build changed
 changed_emitted=$(field "$test_directory/relocation-changed.log" emitted_reused)
 (( changed_emitted > 0 && changed_emitted < warm_emitted )) || fail "body change did not retain unchanged function fragments"
-"$compiler" run relocation.rs --source-dir "$source_directory" --engine native --store "$relocation_store" --store-key "$key" \
+"$compiler" run relocation.lkj --source-dir "$source_directory" --engine native --store "$relocation_store" --store-key "$key" \
     > "$test_directory/relocation-native"
-"$compiler" run relocation.rs --source-dir "$source_directory" --engine interpreter --no-store \
+"$compiler" run relocation.lkj --source-dir "$source_directory" --engine interpreter --no-store \
     > "$test_directory/relocation-interpreted"
 cmp "$test_directory/relocation-native" "$test_directory/relocation-interpreted"
 [[ $(cat "$test_directory/relocation-native") == 56 ]] || fail "relocated fragments changed observable behavior"
@@ -620,9 +620,9 @@ cmp "$test_directory/relocation-native" "$test_directory/relocation-interpreted"
 bounded="$test_directory/bounded"
 mkdir "$bounded"
 mkdir "$test_directory/capacity-source"
-cp tools/store-capacity.rs "$test_directory/capacity-source/main.rs"
-cp src/diagnostic.rs src/ir.rs src/ir_text.rs src/ir_binary.rs src/reuse.rs src/store.rs library/sha256.rs "$test_directory/capacity-source/"
-"$compiler" build main.rs --source-dir "$test_directory/capacity-source" --no-store -o "$test_directory/capacity-a"
+cp tools/store-capacity.lkj "$test_directory/capacity-source/main.lkj"
+cp src/diagnostic.lkj src/ir.lkj src/ir_text.lkj src/ir_binary.lkj src/reuse.lkj src/store.lkj library/sha256.lkj "$test_directory/capacity-source/"
+"$compiler" build main.lkj --source-dir "$test_directory/capacity-source" --no-store -o "$test_directory/capacity-a"
 "$test_directory/capacity-a" "$bounded" "$key" 4096 0 3 > "$test_directory/capacity-a.log"
 mapfile -t generation_a < <(find "$bounded" -maxdepth 1 -type f -name 'capacity-*')
 (( ${#generation_a[@]} == 3 )) || fail "capacity fixture did not retain its first generation"
@@ -668,7 +668,7 @@ cmp "$bounded/.budget-index" "$test_directory/budget-before"
 [[ ! -e "$stale_entry" ]] || fail "writer trusted stale byte accounting for a larger pack"
 bounded_bytes=$(find "$bounded" -maxdepth 1 -type f -printf '%s\n' | awk '{ sum += $1 } END { print sum+0 }')
 (( bounded_bytes <= 4096 )) || fail "checkpoint interruption escaped the publication bound"
-"$compiler" build main.rs --source-dir "$source_directory" --store "$bounded" --store-key "$key" --store-bytes 4096 -o "$test_directory/capacity-result"
+"$compiler" build main.lkj --source-dir "$source_directory" --store "$bounded" --store-key "$key" --store-bytes 4096 -o "$test_directory/capacity-result"
 cmp "$test_directory/expected" "$test_directory/capacity-result"
 bounded_bytes=$(find "$bounded" -maxdepth 1 -type f -printf '%s\n' | awk '{ sum += $1 } END { print sum+0 }')
 (( bounded_bytes <= 4096 )) || fail "ordinary build exceeded its explicit disposable-store bound"
@@ -677,7 +677,7 @@ bounded_bytes=$(find "$bounded" -maxdepth 1 -type f -printf '%s\n' | awk '{ sum 
 # old-generation metadata that this compilation would not otherwise request.
 fifo_build() {
     local label=$1 executable=$2
-    if ! timeout --kill-after=2s 30s "$executable" build main.rs --source-dir "$source_directory" \
+    if ! timeout --kill-after=2s 30s "$executable" build main.lkj --source-dir "$source_directory" \
         --store "$store" --store-key "$key" -o "$test_directory/result" \
         > "$test_directory/fifo-$label.out" 2> "$test_directory/fifo-$label.log"; then
         fail "FIFO $label blocked or changed an ordinary build"
@@ -709,11 +709,11 @@ done
 # Remove the directory after the compiler has actually opened its capability.
 # Bodies are deliberately independent; the test exercises store disappearance,
 # not large-program acceptance limits.
-awk 'BEGIN { for (i=0;i<1000;i++) print "fn f" i "() -> i64 { " i " }"; print "pub fn probe() -> i64 { f0() + 42 }" }' > "$source_directory/many.rs"
+awk 'BEGIN { for (i=0;i<1000;i++) print "fn f" i "() -> i64 { " i " }"; print "pub fn probe() -> i64 { f0() + 42 }" }' > "$source_directory/many.lkj"
 rm -rf "$store"
 mkdir "$store"
 absolute_store=$(realpath "$store")
-"$compiler" check many.rs --source-dir "$source_directory" --store "$store" --store-key "$key" \
+"$compiler" check many.lkj --source-dir "$source_directory" --store "$store" --store-key "$key" \
     > "$test_directory/disappeared.out" 2> "$test_directory/disappeared.log" &
 children=("$!")
 observed=0

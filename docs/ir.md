@@ -129,7 +129,7 @@ Bit conversions preserve every bit.
 Ordinary integer arithmetic, division and shifts trap on invalid operations.
 Wrapping operations compute modulo the declared width.
 
-The intrinsic signatures are checked in `src/check.rs` and `src/check/io.rs`:
+The intrinsic signatures are checked in `src/check.lkj` and `src/check/io.lkj`:
 
 | Intrinsics | Contract |
 | --- | --- |

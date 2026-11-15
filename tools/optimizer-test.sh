@@ -23,11 +23,11 @@ key="$test_directory/key"
 source_directory="$test_directory/source"
 mkdir "$store" "$source_directory"
 head -c 32 /dev/urandom > "$key"
-cat > "$source_directory/main.rs" <<'SOURCE'
+cat > "$source_directory/main.lkj" <<'SOURCE'
 mod helper;
 pub fn probe() -> i64 { helper::add(40) + 1 }
 SOURCE
-printf 'pub fn add(value: i64) -> i64 { value + 1 }\n' > "$source_directory/helper.rs"
+printf 'pub fn add(value: i64) -> i64 { value + 1 }\n' > "$source_directory/helper.lkj"
 cat > "$test_directory/invalid.lkjir" <<'IR'
 lkjscript-ir 1
 type "()" unit
@@ -50,7 +50,7 @@ field() {
 build() {
     local label=$1
     shift
-    "$compiler" build main.rs --source-dir "$source_directory" --no-library --entry probe \
+    "$compiler" build main.lkj --source-dir "$source_directory" --no-library --entry probe \
         --stats -o "$test_directory/result" "$@" \
         > "$test_directory/$label.out" 2> "$test_directory/$label.log"
 }
@@ -77,14 +77,14 @@ done
 # IR and authority are observations of the original. Interpretation stays its
 # independent oracle even when native code is selected from a checked candidate.
 for command in ir authority; do
-    "$compiler" "$command" main.rs --source-dir "$source_directory" --no-library --entry probe --no-opt \
+    "$compiler" "$command" main.lkj --source-dir "$source_directory" --no-library --entry probe --no-opt \
         > "$test_directory/$command-zero"
-    "$compiler" "$command" main.rs --source-dir "$source_directory" --no-library --entry probe --inline-limit 64 \
+    "$compiler" "$command" main.lkj --source-dir "$source_directory" --no-library --entry probe --inline-limit 64 \
         > "$test_directory/$command-inline"
     cmp "$test_directory/$command-zero" "$test_directory/$command-inline"
 done
 for engine in interpreter native; do
-    "$compiler" run main.rs --source-dir "$source_directory" --no-library --entry probe \
+    "$compiler" run main.lkj --source-dir "$source_directory" --no-library --entry probe \
         --engine "$engine" --inline-limit 64 \
         > "$test_directory/value-$engine" 2> "$test_directory/value-$engine.log"
     test "$(cat "$test_directory/value-$engine")" = 42 || fail "$engine value changed"
@@ -145,7 +145,7 @@ cached_build profile-warm --inline-limit 64 --profile
     fail "profiled optimized fragments were not reused"
 cmp "$test_directory/expected-profile" "$test_directory/result"
 
-printf 'run\tprobe\tmain.rs\n' > "$test_directory/batch"
+printf 'run\tprobe\tmain.lkj\n' > "$test_directory/batch"
 for setting in default zero inline; do
     options=()
     case "$setting" in
@@ -169,11 +169,11 @@ done
 
 # A copied bounds check reports the callee's source file and source line in the
 # native trap record. Compare raw records, before the driver renders a path.
-cat > "$source_directory/main.rs" <<'SOURCE'
+cat > "$source_directory/main.lkj" <<'SOURCE'
 mod helper;
 pub fn probe() -> i64 { helper::fail(1) }
 SOURCE
-cat > "$source_directory/helper.rs" <<'SOURCE'
+cat > "$source_directory/helper.lkj" <<'SOURCE'
 pub fn fail(index: usize) -> i64 {
     let values = [42i64];
     values[index]
@@ -193,12 +193,12 @@ cmp "$test_directory/trap-0.raw" "$test_directory/trap-64.raw"
 
 # Lexical custom-message identity survives an earlier copied callee, including
 # authenticated closed-test replay. Compare complete records across both policies.
-cat > "$source_directory/main.rs" <<'SOURCE'
+cat > "$source_directory/main.lkj" <<'SOURCE'
 mod helper;
 pub fn probe() -> i64 { helper::alpha() }
 fn zeta() -> i64 { panic!("zeta"); 0 }
 SOURCE
-cat > "$source_directory/helper.rs" <<'SOURCE'
+cat > "$source_directory/helper.lkj" <<'SOURCE'
 pub fn alpha() -> i64 {
     panic!("alpha");
     42
@@ -223,7 +223,7 @@ cmp "$test_directory/messages-0-cold.out" "$test_directory/messages-64-cold.out"
 
 # Interpreted World programs embed the selected, rechecked native self-image.
 for engine in native interpreter; do
-    "$compiler" run tests/fixtures/world/self_spawn.rs --engine "$engine" --inline-limit 64 --stats \
+    "$compiler" run tests/fixtures/world/self_spawn.lkj --engine "$engine" --inline-limit 64 --stats \
         > "$test_directory/self-$engine.out" 2> "$test_directory/self-$engine.log"
     test "$(cat "$test_directory/self-$engine.out")" = 42 || fail "$engine self-image changed"
     (( $(field "$test_directory/self-$engine.log" inline_accepted) > 0 )) ||

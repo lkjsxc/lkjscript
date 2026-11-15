@@ -79,7 +79,7 @@ borrowed_closure_escape remains pending; programs decides the scoped-concurrency
 Cargo, bridge and rustc shim stay in witness/. CI gates from an empty store and seed
 without cargo/rustc/node; inspect the nonblocking witness job and never constrain
 language design for Rust. Accepted programs agree; delete the witness when it blocks
-needed forms or ceases to find useful differences. Keep .rs until that decision.
+needed forms or ceases to find useful differences. Source uses .lkj to identify lkjscript before reading; only actual Rust witness code uses .rs. Retain Rust shape; child.lkj/child/mod.lkj and program.lkj have no .rs alias or fallback.
 
 ## Real consumers (programs stream)
 
@@ -121,7 +121,7 @@ Fresh checked zero-authority ELF execution may reuse an exact stable-runner/imag
 Authenticate large entries in bounded buffers before allocation, require EOF and reauthenticate rereads.
 Default cap: 256 MiB of published compiler-owned bytes per Directory; evict oldest producer generations. Each worker-N gets one quarter of the base budget: 512 MiB for four workers, 768 MiB for eight.
 Valid reads do not lock; nonblocking writers enforce the cap and commit accounting at invocation end. Corruption/refusal/concurrency/orphans are misses.
-Program directories use literal SOURCE/ENTRY/GRANTS/CASES constants in program.rs; signature authority is unchanged and missing/extra grants reject.
+Program directories use literal SOURCE/ENTRY/GRANTS/CASES constants in program.lkj; signature authority is unchanged and missing/extra grants reject.
 No entries are committed; deleting the store or rotating its key is always safe.
 
 ## Resources and measurement

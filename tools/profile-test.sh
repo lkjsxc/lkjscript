@@ -4,8 +4,8 @@ cd "$(dirname "$0")/.."
 compiler=${1:-target/lkjscript}
 profile_test=$(mktemp -d target/profile-test.XXXXXX)
 trap 'rm -rf "$profile_test"' EXIT HUP INT TERM
-"$compiler" build tests/fixtures/profile.rs -o "$profile_test/plain"
-"$compiler" build tests/fixtures/profile.rs --profile -o "$profile_test/sampled"
+"$compiler" build tests/fixtures/profile.lkj -o "$profile_test/plain"
+"$compiler" build tests/fixtures/profile.lkj --profile -o "$profile_test/sampled"
 "$profile_test/plain" > "$profile_test/plain.out"
 "$profile_test/sampled" > "$profile_test/sampled.out"
 cmp "$profile_test/plain.out" "$profile_test/sampled.out"
@@ -26,7 +26,7 @@ awk '
   }
   END { if (NR > 37 || !hot || !recursive || !root || kinds != 16 || kind_samples != total || !arithmetic) exit 1 }
 ' "$profile_test/report"
-"$compiler" ir tests/fixtures/profile.rs -o "$profile_test/plain.lkjir"
+"$compiler" ir tests/fixtures/profile.lkj -o "$profile_test/plain.lkjir"
 sed 's/^fn "work" /fn "work\\ncontrol" /' "$profile_test/plain.lkjir" > "$profile_test/named.lkjir"
 "$compiler" build "$profile_test/named.lkjir" --profile -o "$profile_test/named"
 "$profile_test/named" > "$profile_test/named.out"

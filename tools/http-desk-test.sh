@@ -45,11 +45,11 @@ desk_load_before=$(cat /proc/loadavg)
 desk_started_ns=$(date +%s%N)
 mkdir "$desk_work/native" "$desk_work/python"
 bash tools/http-desk-capabilities.sh --compiler "$compiler"
-"$compiler" build examples/desk.rs --library-dir library --no-store \
+"$compiler" build examples/desk.lkj --library-dir library --no-store \
     --grant args --grant state=env:DESK_STATE --grant state_env=DESK_STATE \
     --grant timezone=TZ --grant output --grant errors --grant input --grant clock \
     --grant entropy --grant exit --stats -o "$desk_work/desk" 2>"$desk_work/build.err"
-"$compiler" build examples/desk.rs --entry serve --library-dir library --no-store \
+"$compiler" build examples/desk.lkj --entry serve --library-dir library --no-store \
     --grant output --grant state=env:DESK_STATE --grant clock --grant id_clock \
     --grant entropy --grant listener=127.0.0.1:0 --grant ready --grant stop \
     --stats -o "$desk_work/server" 2>"$desk_work/service-build.err"
@@ -187,7 +187,7 @@ for ((attempt=0;attempt<6000;attempt++)); do
     sleep 0.01
 done
 test -n "$port"
-"$compiler" build tools/http-desk-cases.rs --library-dir library --no-store \
+"$compiler" build tools/http-desk-cases.lkj --library-dir library --no-store \
     --grant output --grant input --grant target=127.0.0.1:"$port" \
     --grant page=examples/desk -o "$desk_work/client"
 printf '%s\n' "$question" | timeout --kill-after=5s 60s "$desk_work/client"

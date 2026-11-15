@@ -1,0 +1,34 @@
+//! Independent token construction for HTTP test programs. Production issuance
+//! uses examples/journal-token.lkj; this checks the service's documented wire form.
+use crate::http_client::{io, require};
+
+fn hex(bytes: &[u8]) -> String {
+    let alphabet = b"0123456789abcdef";
+    let mut text = String::new();
+    for byte in bytes {
+        text.push(alphabet[(*byte >> 4u8) as usize] as char);
+        text.push(alphabet[(*byte & 15u8) as usize] as char);
+    }
+    text
+}
+pub fn issue(root: &mut Directory, entropy: &mut Entropy, now: i64, lifetime: i64) -> Result<String, String> {
+    let mut file = io(root.open("session.key"), "test open signing key")?;
+    let mut key = [0u8; 33];
+    let mut length = 0usize;
+    while length < key.len() {
+        let count = io(file.read(&mut key[length..]), "test read signing key")?;
+        if count == 0usize { break; }
+        length += count;
+    }
+    require(length == 32usize, "test signing key length")?;
+    let mut nonce = [0u8; 32];
+    io(entropy.fill(&mut nonce), "test session nonce")?;
+    let expires = now.checked_add(lifetime).ok_or("test expiry overflow".to_string())?;
+    let prefix = format!("v1.{expires}.{}", hex(&nonce));
+    let input = format!("lkjscript-journal-session-v1\n{prefix}");
+    let tag = std::hmac::sha256(&key[..32], input.as_bytes());
+    Ok(format!("{prefix}.{}", hex(&tag)))
+}
+pub fn header(token: &str) -> String {
+    if token.is_empty() { String::new() } else { format!("Authorization: Bearer {token}\r\n") }
+}

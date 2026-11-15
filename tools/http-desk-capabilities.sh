@@ -20,7 +20,7 @@ fail() { printf 'desk capabilities: %s\n' "$*" >&2; exit 1; }
 printf 'desk capabilities load_before '; cat /proc/loadavg
 start=$(date +%s%N)
 grants=(--grant args --grant value=DESK_CAPS_TEST --grant input --grant output --grant status)
-"$compiler" build tests/fixtures/authority/command.rs --library-dir library --no-store \
+"$compiler" build tests/fixtures/authority/command.lkj --library-dir library --no-store \
     "${grants[@]}" -o "$case_dir/command"
 printf 'stdin:入力\n' > "$case_dir/input"
 for mode in absent empty utf8 binary; do
@@ -40,7 +40,7 @@ for mode in absent empty utf8 binary; do
         if [[ "$engine" = standalone ]]; then
             "$case_dir/command" '' '日本語 argument' < "$case_dir/input" > "$case_dir/output"
         else
-            "$compiler" run tests/fixtures/authority/command.rs --library-dir library --no-store \
+            "$compiler" run tests/fixtures/authority/command.lkj --library-dir library --no-store \
                 "${grants[@]}" --engine "$engine" -- '' '日本語 argument' \
                 < "$case_dir/input" > "$case_dir/output"
         fi
@@ -53,7 +53,7 @@ done
 mkdir "$case_dir/state"
 export DESK_CAPS_ROOT="$case_dir/state"
 lock_grants=(--grant state=env:DESK_CAPS_ROOT --grant clock --grant output --grant status)
-"$compiler" build tests/fixtures/authority/command_lock.rs --library-dir library --no-store \
+"$compiler" build tests/fixtures/authority/command_lock.lkj --library-dir library --no-store \
     "${lock_grants[@]}" -o "$case_dir/lock"
 printf 'waiting\nlocked\n' > "$case_dir/lock-expected"
 printf 'waiting\n' > "$case_dir/lock-waiting"
@@ -64,7 +64,7 @@ for engine in standalone native interpreter; do
     if [[ "$engine" = standalone ]]; then
         "$case_dir/lock" 9>&- > "$case_dir/lock-output" &
     else
-        "$compiler" run tests/fixtures/authority/command_lock.rs --library-dir library --no-store \
+        "$compiler" run tests/fixtures/authority/command_lock.lkj --library-dir library --no-store \
             "${lock_grants[@]}" --engine "$engine" 9>&- > "$case_dir/lock-output" &
     fi
     child=$!

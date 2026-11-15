@@ -1,6 +1,6 @@
 # Documentation-origin candidate
 
-`site.rs` is the lkjscript replacement candidate for the loopback documentation
+`site.lkj` is the lkjscript replacement candidate for the loopback documentation
 origin. It seals the exact published snapshot into the executable at build time
 and uses the shared readiness-based HTTP engine. Its entry grants are output,
 listener, clock, readiness and Stop. It has no runtime Directory, World,
@@ -130,7 +130,7 @@ headers and every response body byte are compared.
 
 The recorder and frozen oracle are documented in
 `../tests/fixtures/site/README.md`. The snapshot program is
-`../tools/http-site-snapshot.rs`; its explicit grants are output, origin and
+`../tools/http-site-snapshot.lkj`; its explicit grants are output, origin and
 root. Capture into a new empty directory, then supply the eight exact source
 blobs above from the commit named in the observed pages. Existing archive
 filenames and oracle files are never silently overwritten.

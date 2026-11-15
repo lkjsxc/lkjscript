@@ -50,10 +50,10 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' HUP TERM
 mkdir "$journal_work/data"
-"$compiler" build examples/journal.rs --library-dir library \
+"$compiler" build examples/journal.lkj --library-dir library \
     --grant output --grant "root=$journal_absolute/data" \
     --grant listener=127.0.0.1:0 --grant clock --grant ready --grant stop --grant entropy -o "$journal_work/server"
-"$compiler" build tools/http-journal-test.rs --library-dir library -o "$journal_work/supervisor"
+"$compiler" build tools/http-journal-test.lkj --library-dir library -o "$journal_work/supervisor"
 printf 'Journal campaign: %s write kills + %s recovery kills; seed %s; UTC %s; loadavg %s\n' \
     "$cycles" "$cycles" "$seed" "$(date -u +%FT%TZ)" "$(cat /proc/loadavg)"
 "$journal_work/supervisor" "$journal_absolute" "$cycles" "$seed" >"$journal_work/output" 2>"$journal_work/errors" &

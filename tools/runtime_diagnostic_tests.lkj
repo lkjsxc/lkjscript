@@ -1,0 +1,134 @@
+//! Runtime diagnostics retain honest locations; explicit matches retain errno.
+use super::{command, contains, display_bytes, invoke, option, pair, path, write, Config, Outcome, Report};
+
+fn execute(world: &mut World, executable: &File, config: &Config, name: &str,
+    engine: &str, limit: &str, extra: &[Vec<u8>]) -> Result<Outcome, String> {
+    let mut arguments = command(config, "run", name);
+    option(&mut arguments, "--engine", engine);
+    option(&mut arguments, "--inline-limit", limit);
+    arguments.push("--no-store".as_bytes().to_vec());
+    if !extra.is_empty() {
+        arguments.push("--".as_bytes().to_vec());
+        for value in extra { arguments.push(value.clone()); }
+    }
+    invoke(world, executable, &arguments, b"")
+}
+
+fn locations(world: &mut World, executable: &File, directory: &mut Directory,
+    config: &Config, report: &mut Report) -> Result<(), String> {
+    write(directory, "runtime-root.lkj", b"pub fn probe() {\n    let zero = 0i64;\n    let value = 1i64 / zero;\n}\n")?;
+    write(directory, "runtime-module.lkj", b"mod runtime_child;\npub fn probe() { runtime_child::fail(); }\n")?;
+    write(directory, "runtime_child.lkj", b"pub fn fail() {\n    let zero = 0i64;\n    let value = 1i64 / zero;\n}\n")?;
+    let raw = r#"lkjscript-ir 1
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+fn "probe" 0 0 file 7
+@37:1 trap "raw location"
+endfn
+"#;
+    write(directory, "runtime-file.lkjir", raw.as_bytes())?;
+    let cases: Vec<(String, String)> = vec![
+        ("runtime-root.lkj".to_string(), format!("{}:3: R0002 division by zero\n", path(config, "runtime-root.lkj"))),
+        ("runtime-module.lkj".to_string(), "file 1:3: R0002 division by zero\n".to_string()),
+        ("runtime-file.lkjir".to_string(), "file 7:37: R0016 raw location\n".to_string()),
+    ];
+    let extra: Vec<Vec<u8>> = Vec::new();
+    for (name, expected) in cases {
+        for limit in pair("0", "64") {
+            for engine in pair("native", "interpreter") {
+                let observed = execute(world, executable, config, &name, &engine, &limit, &extra)?;
+                report.outcome(&format!("runtime location {name}/{engine}/inline{limit}"),
+                    &observed, 1, b"", expected.as_bytes());
+            }
+        }
+    }
+    Ok(())
+}
+
+fn unwrap_help(world: &mut World, executable: &File, directory: &mut Directory,
+    config: &Config, report: &mut Report) -> Result<(), String> {
+    let name = "unwrap-help.lkj";
+    write(directory, name, include_str!("../tests/diagnostics/unwrap_call_site.lkj").as_bytes())?;
+    let extra: Vec<Vec<u8>> = Vec::new();
+    let mut original: Vec<u8> = Vec::new();
+    for limit in pair("0", "64") {
+      for engine in pair("interpreter", "native") {
+        let observed = execute(world, executable, config, name, &engine, &limit, &extra)?;
+        let text = String::from_utf8(observed.errors.clone()).unwrap();
+        report.require(observed.status == 1 && observed.output.is_empty() && observed.result.is_empty()
+            && text.starts_with("file ") && !text.contains(&path(config, name))
+            && contains(&observed.errors, b"called Result::unwrap on Err; static trap text omits the error payload")
+            && contains(&observed.errors, b"help: replace unwrap() with an explicit match")
+            && contains(&observed.errors, b"already granted output capability")
+            && contains(&observed.errors, b"docs/language.md"),
+            format!("unwrap static help/{engine}/inline{limit}: {} {}", observed.status, display_bytes(&observed.errors)));
+        if engine == "interpreter" { original = observed.errors; }
+        else { report.equal("unwrap static help", "complete native/interpreter diagnostic", &observed.errors, &original); }
+      }
+    }
+    Ok(())
+}
+
+fn explicit_match(world: &mut World, executable: &File, directory: &mut Directory,
+    config: &Config, report: &mut Report) -> Result<(), String> {
+    let name = "unwrap-match.lkj";
+    let source = r#"fn operation(errno: i64, calls: &mut usize) -> Result<(), i64> {
+    *calls += 1usize;
+    if errno == 0i64 { Ok(()) } else { Err(errno) }
+}
+fn main(mut world: World) {
+    let arguments = world.args();
+    let errno = if arguments.len() == 0usize { 5i64 } else if arguments.len() == 1usize { 11i64 } else { 0i64 };
+    let mut calls = 0usize;
+    let mut output = world.stderr();
+    match operation(errno, &mut calls) {
+        Ok(()) => { world.stdout().write(format!("ok {calls}\n").as_bytes()); }
+        Err(error) => {
+            output.write(format!("operation attempt {calls}: errno {error}\n").as_bytes());
+            panic!("operation failed");
+        }
+    }
+}
+"#;
+    write(directory, name, source.as_bytes())?;
+    let mut line = 0usize;
+    for (index, text) in source.lines().enumerate() {
+        if text.contains("panic!(\"operation failed\")") { line = index + 1usize; }
+    }
+    report.require(line != 0usize, "explicit-match panic line was not found".to_string());
+    for count in 0usize..3usize {
+        let mut extra: Vec<Vec<u8>> = Vec::new();
+        for _ in 0usize..count { extra.push("next".as_bytes().to_vec()); }
+        let mut original: Vec<u8> = Vec::new();
+        for limit in pair("0", "64") {
+          for engine in pair("interpreter", "native") {
+            let observed = execute(world, executable, config, name, &engine, &limit, &extra)?;
+            if count == 2usize {
+                report.outcome(&format!("explicit unwrap match success/{engine}/inline{limit}"), &observed, 0, b"ok 1\n", b"");
+            } else {
+                let errno = if count == 0usize { 5i64 } else { 11i64 };
+                let text = String::from_utf8(observed.errors.clone()).unwrap();
+                let prefix = format!("operation attempt 1: errno {errno}\n{}:{line}: R", path(config, name));
+                report.require(observed.status == 1 && observed.output.is_empty() && observed.result.is_empty()
+                    && text.starts_with(&prefix) && text.ends_with(" operation failed\n"),
+                    format!("explicit unwrap match errno {errno}/{engine}/inline{limit}: {} {}", observed.status, display_bytes(&observed.errors)));
+                if engine == "interpreter" { original = observed.errors; }
+                else { report.equal("explicit unwrap match", "complete native/interpreter diagnostic", &observed.errors, &original); }
+            }
+          }
+        }
+    }
+    Ok(())
+}
+
+pub fn run(world: &mut World, executable: &File, directory: &mut Directory,
+    config: &Config, report: &mut Report) -> Result<(), String> {
+    locations(world, executable, directory, config, report)?;
+    unwrap_help(world, executable, directory, config, report)?;
+    explicit_match(world, executable, directory, config, report)
+}

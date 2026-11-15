@@ -21,7 +21,7 @@ Expressions execute left to right; logical operators short circuit. Assignment
 and primitive compound assignment evaluate RHS before destination/index expressions,
 then compound assignment reads the old value. Each operand executes once. Empty [] needs an element type: use a [T; 0] binding, or &[0u8; 0] for &[u8].
 Traps terminate without cleanup or recovery; there is no unwinding.
-Cases: [scalar bits](../tests/reference/scalar_bits.rs), [evaluation order](../tests/reference/evaluation_order.rs).
+Cases: [scalar bits](../tests/reference/scalar_bits.lkj), [evaluation order](../tests/reference/evaluation_order.lkj).
 
 ## Statements, control and patterns
 
@@ -78,13 +78,13 @@ A selected constructor establishes its tag even if the pattern binds no fields.
 
 ## Source graph and names
 
-The owned loader reads inline/file modules, child.rs or child/mod.rs, and nested
+The owned loader reads inline/file modules, child.lkj or child/mod.lkj, and nested
 directories through the source Directory. Missing, ambiguous and duplicate inputs
 have distinct diagnostics. File identities survive into IR and diagnostics.
 include_str!("path") produces static UTF-8 text; include_bytes!("path") produces
 a static reference to an exact-size byte array. Paths are literal, relative to the
 containing file and beneath the granted source root. Missing/escaping paths reject;
-invalid UTF-8 needs include_bytes. [Include case](../tests/reference/include.rs).
+invalid UTF-8 needs include_bytes. [Include case](../tests/reference/include.lkj).
 
 Resolution uses declaration/module identities, lexical scopes, aliases, qualified
 crate/self/super paths and prelude priority. Local declarations shadow prelude and
@@ -153,8 +153,8 @@ coercion; inferred type equality alone never converts a move to a reborrow.
 | Writes through opaque results | Reference-free writes preserve sibling leaves/tag facts. Reference-bearing writes require an exact destination identity. | A conservative alias footprint cannot authorize clearing sibling reference evidence; mutate through the original exact place. |
 | Holder lifetime | A reference stored in a live view aggregate may retain its loan despite its last apparent source use. Temporary source views also last through match arms or a self-slice assignment. | End the carrier's lexical scope before exclusive access. Evaluate an owned match scrutinee or to_vec copy as { let saved = expression; saved } to end its temporary source view first. Mutable method receivers borrow before arguments: read a scalar self.field argument into a local before calling the method. Before returning a sliced owner, compute a scalar result inside { let view = &owner.bytes[range]; view.len() }, then assign it outside that scope. |
 
-Cases: [ranges](../tests/reference/range_views.rs), [UTF-8 trap](../tests/reference/text_boundary.rs),
-[holder rejection](../tests/reference/holder_liveness.rs), [scope rewrite](../tests/reference/holder_scope.rs).
+Cases: [ranges](../tests/reference/range_views.lkj), [UTF-8 trap](../tests/reference/text_boundary.lkj),
+[holder rejection](../tests/reference/holder_liveness.lkj), [scope rewrite](../tests/reference/holder_scope.lkj).
 
 Wholly static outputs, including aggregates, lower to Static result contracts
 checked on each live leaf. A named shared output lifetime without a source input
@@ -162,7 +162,7 @@ is universal and also requires static origin. Inactive leaves satisfy that contr
 absence of active input leaves does not prove output absence. Ordinary dynamic
 outputs may shorten static literals. Explicit static input/local/field/alias/bound
 constraints or mixed static/dynamic source output annotations remain unsupported; own a text label as String instead of a &'static str field, take the constructor input as &str, and construct the owned field with label.to_string().
-Direct IR can express mixed per-leaf maps. [Static view](../tests/reference/static_view.rs).
+Direct IR can express mixed per-leaf maps. [Static view](../tests/reference/static_view.lkj).
 
 ## Inference, generics and traits
 
@@ -171,7 +171,7 @@ identities using rigid generic parameters and declared assumptions. Constraints
 cover assignment/return, signatures, composite literals, fields, aliases, projections
 and scalar patterns; expected types flow inward. Byte-string branches of unequal lengths need slice views when passed to &[u8]: write &b"..."[..] in each branch.
 Unsuffixed integers default only after known constraints propagate. Concrete specialization uses that checked plan.
-Insufficient generic/receiver context may require annotations: BTreeSet::new needs its element type before later insert calls, so write BTreeSet::<String>::new() for owned text. Complete Rust inference is not promised. [Inference case](../tests/reference/inference.rs).
+Insufficient generic/receiver context may require annotations: BTreeSet::new needs its element type before later insert calls, so write BTreeSet::<String>::new() for owned text. Complete Rust inference is not promised. [Inference case](../tests/reference/inference.lkj).
 
 A solved type is not a coercion site. Some(r), an inferred generic field and
 identity(r) move an unconstrained mutable r; later use is E_MOVE. Explicit
@@ -200,7 +200,7 @@ sampling concrete types. Bounds, associated relationships, method signatures and
 explicit arguments check. Selected trait/source methods and receiver dereference
 counts survive specialization; newly applicable inherent methods cannot replace
 them. Rigid verification types/functions never reach execution.
-[Generic selection](../tests/reference/generic_selection.rs).
+[Generic selection](../tests/reference/generic_selection.lkj).
 
 | Trait operation | Meaning and lowering | Rejection or rewrite |
 | --- | --- | --- |
@@ -320,7 +320,7 @@ concurrency cases specify intended ownership rules, with their missing features.
 Option/Result also provide map, map_or/map_or_else, and_then/or_else/unwrap_or_else;
 Option has filter and Result map_err. A map_err closure needs known input/result types: annotate the missing type. For a literal.to_string() result use |_| -> std::String { literal.to_string() }; this supplies the result type while preserving receiver evaluation and the closure's capture/return/? scope. String ordering/from conversion, scalar
 ASCII helpers and min/max are ordinary source conveniences, not general trait evidence.
-[Formatting case](../tests/reference/formatting.rs).
+[Formatting case](../tests/reference/formatting.lkj).
 
 Iteration resolves source Iterator::Item/next and IntoIterator evidence.
 Collection for holds iterable temporaries in an outer match, loops over next and
@@ -341,7 +341,7 @@ find borrows predicate inputs and returns the matching owned item; position
 consumes and returns an index. Receiver evaluation precedes callback construction.
 Owned temporary receivers, including projected/indexed values, are writable without
 making named bindings or shared references mutable.
-[Iterator/Option case](../tests/reference/iterator_options.rs).
+[Iterator/Option case](../tests/reference/iterator_options.lkj).
 
 ## Checked IR and execution
 
@@ -473,7 +473,7 @@ Names, integers or casts cannot forge authority. IR checks each operation indepe
 | Child.wait()/try_wait() | Exit code or 128+signal, with Option for polling; reaped children later fail ECHILD. |
 | Child.terminate()/request_stop() | Result<(),i64>; send SIGKILL/SIGTERM only to the owned child, without waiting. Dropping a live Child kills and reaps it. |
 
-Convenience methods are source in library/io.rs and library/command.rs. The latter supplies concrete Arguments/Environment helpers: the current loader optionally mounts it beside canonical $std/lib.rs and check-library checks it; keeping it outside lib.rs preserves stored-seed bootstrap. Result errors carry positive Linux errno; raw read/write leaves return negative errno. EINTR retries except close, which consumes once.
+Convenience methods are source in library/io.lkj and library/command.lkj. The latter supplies concrete Arguments/Environment helpers: the current loader optionally mounts it beside canonical $std/lib.lkj and check-library checks it; keeping it outside lib.lkj preserves stored-seed bootstrap. Result errors carry positive Linux errno; raw read/write leaves return negative errno. EINTR retries except close, which consumes once.
 Paths reject NUL; raw paths need exactly one trailing NUL. Descendants use openat2 RESOLVE_BENEATH|RESOLVE_NO_MAGICLINKS without weaker fallback; absolute/escaping paths fail.
 Removal, rename and directory creation derive a parent then validate the basename.
 Ordinary new files/directories use 0666/0777 subject to umask; create_private uses 0600 subject to umask atomically, without an initially broader permission window.
@@ -496,4 +496,4 @@ Readiness drops only its wait set. Unwatch before closing a watched descriptor i
 Read interest reports half-close; drain readable final bytes. Write-only interest does not report peer write-half closure repeatedly.
 
 Generated programs have no ambient filesystem/environment/process imports or source-declared host imports. std::time::http_date formats supplied time; it grants no ambient clock. std::text supplies source-only utf8_lossy (maximal ill-formed subparts), form_decode, escape_html, Unicode whitespace trim and Unicode 17 scalar lowercase_chars (expansions, no contextual final sigma); it grants no effects.
-Normal destructor order matches the supported Rust intersection; outputs/statuses stay distinct from traps. witness/bridge/output.rs observes bytes/status/trap kind separately.
+Normal destructor order matches the supported Rust intersection; outputs/statuses stay distinct from traps. witness/bridge/output.lkj observes bytes/status/trap kind separately.

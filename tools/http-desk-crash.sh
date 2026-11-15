@@ -48,7 +48,7 @@ prefix_bytes=$(stat -c %s "$work/prefix")
 : >"$work/acknowledged"
 build_load=$(cat /proc/loadavg)
 build_start=$(date +%s%N)
-"$compiler" build examples/desk.rs --library-dir library --no-store \
+"$compiler" build examples/desk.lkj --library-dir library --no-store \
     --grant args --grant state=env:DESK_STATE --grant state_env=DESK_STATE \
     --grant timezone=TZ --grant output --grant errors --grant input --grant clock \
     --grant entropy --grant exit --stats -o "$work/desk" 2>"$work/build.err"

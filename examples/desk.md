@@ -21,7 +21,7 @@ JST-9 or +/-HH:MM. Regional timezone transition files are a future library need.
 Build the command from the repository root:
 
 ~~~sh
-target/lkjscript build examples/desk.rs --library-dir library -o target/desk \
+target/lkjscript build examples/desk.lkj --library-dir library -o target/desk \
   --grant args --grant state=env:DESK_STATE --grant state_env=DESK_STATE \
   --grant timezone=TZ --grant output --grant errors --grant input \
   --grant clock --grant entropy --grant exit
@@ -62,7 +62,7 @@ The original page still polls. Duplicate security/framing headers or JSON keys, 
 where the page sends strings are rejected explicitly.
 
 ~~~sh
-target/lkjscript build examples/desk.rs --entry serve --library-dir library \
+target/lkjscript build examples/desk.lkj --entry serve --library-dir library \
   --grant output --grant state=env:DESK_STATE --grant clock --grant id_clock \
   --grant entropy --grant listener=127.0.0.1:0 --grant ready --grant stop \
   -o target/desk-service

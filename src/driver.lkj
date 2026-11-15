@@ -1,0 +1,1988 @@
+// Command line and orchestration for the complete owned toolchain.
+use crate::{
+    ast, backend, check, driver_host, elaborate, embedded, interpreter, ir, ir_text, json, runtime,
+    source, reuse, store, sha256, optimizer,
+};
+use crate::{diagnostics, resolve};
+use std::collections::BTreeMap;
+
+#[derive(Clone)]
+struct Options {
+    command: String,
+    path: String,
+    entry: Option<String>,
+    program: Option<crate::program_directory::Plan>,
+    grants: Vec<String>,
+    output: Option<String>,
+    engine: String,
+    engines: Vec<String>,
+    stats: bool,
+    profile: bool,
+    roundtrip: bool,
+    inline_limit: Option<usize>,
+    jobs: usize,
+    witness: Option<String>,
+    tool_arguments: Vec<String>,
+    unchecked: bool,
+    source_directory: Option<String>,
+    library_directory: Option<String>,
+    runtime_source: Option<String>,
+    store_directory: Option<String>,
+    store_key: Option<String>,
+    store_bytes: usize,
+    no_library: bool,
+    arguments: Vec<Vec<u8>>,
+}
+
+fn usage() -> &'static str {
+    "lkjscript check|build|run|test|ir|authority <source.lkj|program.lkjir|directory> [options]\n\n  check  Check all source or input IR\n  build  Write a static Linux x86-64 executable\n  run    Execute main (or probe); bytes after -- are program arguments\n  test   Run #[test] functions through native and interpreter routes\n  ir     Write checked lkjscript IR\n  authority  Report entry grants and reachable checked-IR effects\n\n  --entry NAME                 Select an entry\n  --grant NAME[=VALUE]          Grant an owned entry capability (repeatable)\n  --engine native|interpreter  Select the execution route\n  -o PATH                     Write an artifact or IR\n  --stats                     Report phase times, counts and peak RSS\n  --profile                   Sample CPU to OUTPUT.samples.PID in built programs\n  --inline-limit N            Recheck inlining of bodies with at most N IR operations\n  --no-opt                    Keep original checked IR for native emission\n  profile SAMPLES             Report top self and inclusive functions\n  --jobs N                    Native test workers (1..8)\n  --witness RUSTC             Compare marked cases with optional rustc\n  --source-dir DIR            Grant a root for source reads\n  --library-dir DIR           Use explicit library sources\n  --no-library                Compile without the source library\n  --runtime-source PATH       Use an explicit source runtime\n  --store DIR                 Reuse authenticated work beneath this Directory\n  --store-key PATH            Grant a private 32-byte key outside source roots\n  --store-bytes N             Bound disposable bytes (default 268435456)\n  --no-store                  Disable stored reuse\n  --unchecked-ir              Interpret raw IR for checker testing\n  runtime-ir                  Write the checked source runtime as IR\n  check-library               Check every source library body\n\nScalar runs print the value; f64 prints exact bits as f64:0x0123456789abcdef.\n"
+}
+
+fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
+    let mut values: Vec<String> = Vec::new();
+    let mut arguments: Vec<Vec<u8>> = Vec::new();
+    let mut after = false;
+    for value in bytes {
+        if after {
+            arguments.push(value);
+        } else if value.len() == 2 && value[0] == b'-' && value[1] == b'-' {
+            after = true;
+        } else {
+            match String::from_utf8(value) {
+                Ok(text) => values.push(text),
+                Err(_) => {
+                    return Err(
+                        "E_USAGE compiler arguments must be UTF-8; program bytes follow --"
+                            .to_string(),
+                    );
+                }
+            }
+        }
+    }
+    let command = if values.is_empty() {
+        "--help".to_string()
+    } else {
+        values[0].clone()
+    };
+    let mut out = Options {
+        command,
+        path: String::new(),
+        entry: None,
+        program: None,
+        grants: Vec::new(),
+        output: None,
+        engine: "native".to_string(),
+        engines: vec!["native".to_string(), "interpreter".to_string()],
+        stats: false,
+        profile: false,
+        roundtrip: false,
+        inline_limit: None,
+        jobs: 1,
+        witness: None,
+        tool_arguments: Vec::new(),
+        unchecked: false,
+        source_directory: None,
+        library_directory: None,
+        runtime_source: None,
+        store_directory: None,
+        store_key: None,
+        store_bytes: 256usize * 1024usize * 1024usize,
+        no_library: false,
+        arguments,
+    };
+    if out.command == "generate" || out.command == "mutate" || out.command == "reduce" || out.command == "mutate-run" {
+        out.tool_arguments = values;
+        return Ok(out);
+    }
+    let mut at = 1usize;
+    while at < values.len() {
+        let option = values[at].clone();
+        match option.as_str() {
+            "--stats" => out.stats = true,
+            "--profile" => out.profile = true,
+            "--roundtrip" => out.roundtrip = true,
+            "--no-opt" => out.inline_limit = Some(0),
+            "--unchecked-ir" => out.unchecked = true,
+            "--no-library" => out.no_library = true,
+            "--no-store" => { out.store_directory = None; out.store_key = None; },
+            "--entry" | "-o" | "--engine" | "--engines" | "--source-dir" | "--library-dir"
+            | "--runtime-source" | "--jobs" | "--witness" | "--grant" | "--store" | "--store-key" | "--store-bytes" | "--inline-limit" => {
+                at += 1;
+                if at == values.len() {
+                    return Err(format!("E_USAGE {option} needs a value"));
+                }
+                let value = values[at].clone();
+                match option.as_str() {
+                    "--entry" => out.entry = Some(value),
+                    "--grant" => out.grants.push(value),
+                    "-o" => out.output = Some(value),
+                    "--engine" => {
+                        out.engine = value.clone();
+                        out.engines = vec![value];
+                    }
+                    "--engines" => {
+                        out.engines.clear();
+                        for name in split(&value, b',', 0) {
+                            out.engines.push(name);
+                        }
+                    }
+                    "--jobs" => {
+                        out.jobs = 0;
+                        for byte in value.as_bytes() {
+                            if *byte < b'0' || *byte > b'9' || out.jobs > 8 { return Err("E_USAGE --jobs must be between 1 and 8".to_string()); }
+                            out.jobs = out.jobs * 10 + (*byte - b'0') as usize;
+                        }
+                        if out.jobs == 0 || out.jobs > 8 { return Err("E_USAGE --jobs must be between 1 and 8".to_string()); }
+                    }
+                    "--inline-limit" => out.inline_limit = Some(inline_limit(&value)?),
+                    "--witness" => out.witness = Some(value),
+                    "--source-dir" => out.source_directory = Some(value),
+                    "--library-dir" => out.library_directory = Some(value),
+                    "--store" => out.store_directory = Some(value),
+                    "--store-key" => out.store_key = Some(value),
+                    "--store-bytes" => out.store_bytes = inline_limit(&value).map_err(|_: String| -> String { "E_USAGE --store-bytes requires a nonnegative decimal byte count".to_string() })?,
+                    _ => out.runtime_source = Some(value),
+                }
+            }
+            _ => {
+                if option.starts_with('-') || !out.path.is_empty() {
+                    return Err(format!("E_USAGE unexpected argument {option}"));
+                }
+                out.path = option.clone();
+            }
+        }
+        at += 1;
+    }
+    if out.command == "--help" || out.command == "-h" {
+        return Ok(out);
+    }
+    if out.command != "runtime-ir"
+        && out.command != "check-library"
+        && out.command != "check"
+        && out.command != "build"
+        && out.command != "run"
+        && out.command != "test"
+        && out.command != "ir"
+        && out.command != "batch"
+        && out.command != "profile"
+        && out.command != "authority"
+    {
+        return Err("E_USAGE expected check|build|run|test|ir|authority".to_string());
+    }
+    if out.command == "test" && out.path.is_empty() { out.path = "tests/conformance".to_string(); }
+    if out.witness.is_some() && out.command != "test" { return Err("E_USAGE --witness requires test".to_string()); }
+    if !out.grants.is_empty() && out.command != "build" && out.command != "run" { return Err("E_USAGE --grant requires build or run".to_string()); }
+    if out.profile && out.command != "build" { return Err("E_USAGE --profile requires build".to_string()); }
+    if out.command != "runtime-ir" && out.command != "check-library" && out.path.is_empty() {
+        return Err("E_USAGE a source or IR path is required".to_string());
+    }
+    if out.engine != "native" && out.engine != "interpreter" {
+        return Err("E_USAGE engine is native or interpreter".to_string());
+    }
+    for (index, name) in out.engines.iter().enumerate() {
+        if name != "native" && name != "interpreter" {
+            return Err("E_USAGE engines are native,interpreter".to_string());
+        }
+        for earlier in &out.engines[..index] {
+            if earlier == name {
+                return Err("E_USAGE duplicate engine".to_string());
+            }
+        }
+    }
+    if out.engines.is_empty() {
+        return Err("E_USAGE at least one engine is required".to_string());
+    }
+    if out.unchecked
+        && (out.engine != "interpreter"
+            || !out.path.ends_with(".lkjir")
+            || (out.command != "run" && out.command != "test"))
+    {
+        return Err(
+            "E_USAGE --unchecked-ir requires .lkjir input and interpreter run/test".to_string(),
+        );
+    }
+    if !out.arguments.is_empty() && out.command != "run" && out.command != "test" {
+        return Err("E_USAGE program arguments require run or test".to_string());
+    }
+    if out.no_library && out.command == "check-library" {
+        return Err("E_USAGE check-library requires the source library".to_string());
+    }
+    if out.no_library && out.library_directory.is_some() {
+        return Err("E_USAGE choose --no-library or --library-dir".to_string());
+    }
+    if out.command == "check-library" {
+        out.path = "$toolchain/library-check.lkj".to_string();
+    }
+    Ok(out)
+}
+
+fn inline_limit(text: &str) -> Result<usize, String> {
+    if text.is_empty() { return Err("E_USAGE --inline-limit requires a nonnegative decimal integer".to_string()); }
+    let mut value = 0usize;
+    for byte in text.as_bytes() {
+        if *byte < b'0' || *byte > b'9' {
+            return Err("E_USAGE --inline-limit requires a nonnegative decimal integer".to_string());
+        }
+        let digit = (*byte - b'0') as usize;
+        if value > ((!0usize) - digit) / 10usize {
+            return Err("E_USAGE --inline-limit exceeds usize".to_string());
+        }
+        value = value * 10usize + digit;
+    }
+    Ok(value)
+}
+
+fn io(path: &str, operation: &str, errno: i64) -> String {
+    format!("{path}:1:1: E_IO {operation} failed (errno {errno})")
+}
+
+fn location(path: &str) -> (String, String) {
+    let mut last = None;
+    for (index, byte) in path.as_bytes().iter().enumerate() {
+        if *byte == b'/' {
+            last = Some(index);
+        }
+    }
+    match last {
+        Some(0) => ("/".to_string(), path[1..].to_string()),
+        Some(index) => (path[..index].to_string(), path[index + 1..].to_string()),
+        None => (".".to_string(), path.to_string()),
+    }
+}
+
+fn read(directory: &mut Directory, path: &str) -> Result<Option<Vec<u8>>, String> {
+    let mut file = match directory.open(path) {
+        Ok(file) => file,
+        Err(errno) => {
+            if errno == 2 || errno == 20 {
+                return Ok(None);
+            }
+            return Err(io(path, "open", errno));
+        }
+    };
+    Ok(Some(
+        file.read_to_end()
+            .map_err(|errno: i64| io(path, "read", errno))?,
+    ))
+}
+
+fn read_path(world: &mut World, path: &str) -> Result<Vec<u8>, String> {
+    let (parent, name) = location(path);
+    let mut directory = world
+        .directory(&parent)
+        .map_err(|errno: i64| io(&parent, "open directory", errno))?;
+    read(&mut directory, &name)?.ok_or_else(|| io(path, "open", 2))
+}
+
+fn text(bytes: Vec<u8>, path: &str) -> Result<String, String> {
+    String::from_utf8(bytes).map_err(|_| format!("{path}:1:1: E_IO input is not valid UTF-8"))
+}
+
+fn report(path: &str, problem: ast::Diagnostic) -> String {
+    let label = if problem.path.is_empty() { path } else { problem.path.as_str() };
+    let mut output = format!(
+        "{label}:{}:{}: {} {}",
+        problem.line, problem.column, problem.code, problem.message
+    );
+    if !problem.edits.is_empty() {
+        output.push('\n');
+        output.push_str(&diagnostics::edit_record(label, &problem));
+    }
+    output
+}
+fn located(path: &str, program: &ast::Program, mut problem: ast::Diagnostic) -> String {
+    if problem.path.is_empty() {
+        if let Some(file) = program.files.get(problem.file) {
+            problem.path = file.path.clone();
+        }
+    }
+    report(path, problem)
+}
+
+fn join_lines(lines: &[String]) -> String {
+    let mut text = String::new();
+    for (index, line) in lines.iter().enumerate() {
+        if index != 0 {
+            text.push('\n');
+        }
+        text.push_str(line);
+    }
+    text
+}
+
+fn analysis_failure(
+    path: &str,
+    source: &mut source::SourceReport,
+    problems: Vec<ast::Diagnostic>,
+    blocked: &str,
+) -> String {
+    for mut problem in problems {
+        if problem.path.is_empty() {
+            if let Some(file) = source.program.files.get(problem.file) {
+                problem.path = file.path.clone();
+            }
+        }
+        source.diagnostics.push(problem);
+    }
+    diagnostics::complete_unsupported(source);
+    let mut messages: Vec<String> = Vec::new();
+    for problem in &source.diagnostics {
+        messages.push(report(path, problem.clone()));
+    }
+    for region in &source.blocked {
+        messages.push(format!(
+            "{}:{}:{}: E_BLOCKED {}: {}",
+            region.path, region.span.line, region.span.column, region.kind, region.reason
+        ));
+    }
+    if !blocked.is_empty() {
+        messages.push(format!(
+            "{path}:1:1: E_BLOCKED remaining semantic analysis: {blocked}"
+        ));
+    }
+    join_lines(&messages)
+}
+fn ir_failure(path: &str, problems: Vec<ast::Diagnostic>) -> String {
+    let mut messages = Vec::new();
+    for problem in problems {
+        messages.push(report(path, problem));
+    }
+    join_lines(&messages)
+}
+
+fn milliseconds(nanoseconds: usize) -> String {
+    format!(
+        "{}.{:03}",
+        nanoseconds / 1000000,
+        (nanoseconds % 1000000) / 1000
+    )
+}
+fn split(text: &str, separator: u8, fields: usize) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut start = 0usize;
+    for (index, byte) in text.as_bytes().iter().enumerate() {
+        if *byte == separator && (fields == 0 || out.len() + 1 < fields) {
+            out.push(text[start..index].to_string());
+            start = index + 1;
+        }
+    }
+    out.push(text[start..].to_string());
+    out
+}
+
+struct Stats {
+    enabled: bool,
+    clock: Clock,
+    started: usize,
+    previous: usize,
+    times: BTreeMap<String, usize>,
+    counts: BTreeMap<String, usize>,
+}
+impl Stats {
+    fn new(world: &mut World, enabled: bool) -> Result<Stats, String> {
+        let mut clock = world.clock();
+        let started = if enabled {
+            clock
+                .nanoseconds()
+                .map_err(|errno: i64| io("clock", "read", errno))?
+        } else {
+            0
+        };
+        Ok(Stats {
+            enabled,
+            clock,
+            started,
+            previous: started,
+            times: BTreeMap::new(),
+            counts: BTreeMap::new(),
+        })
+    }
+    fn mark(&mut self, stage: &str) -> Result<(), String> {
+        if self.enabled {
+            let now = self
+                .clock
+                .nanoseconds()
+                .map_err(|errno: i64| io("clock", "read", errno))?;
+            let key = stage.to_string();
+            let before = self.times.get(&key).copied().unwrap_or(0);
+            self.times.insert(key, before + now - self.previous);
+            self.previous = now;
+        }
+        Ok(())
+    }
+    fn count(&mut self, name: &str, value: usize) {
+        if self.enabled {
+            self.counts.insert(name.to_string(), value);
+        }
+    }
+    fn finish(&mut self, world: &mut World, stopped: &str) -> Result<(), String> {
+        if !self.enabled {
+            return Ok(());
+        }
+        let now = self
+            .clock
+            .nanoseconds()
+            .map_err(|errno: i64| io("clock", "read", errno))?;
+        let mut out = format!(
+            "LKJSCRIPT_STATS {{\"route\":\"compiler\",\"stopped_stage\":\"{stopped}\",\"total_ms\":{}",
+            milliseconds(now - self.started)
+        );
+        for (name, value) in &self.times {
+            out.push_str(&format!(",\"{name}_ms\":{}", milliseconds(*value)));
+        }
+        for (name, value) in &self.counts {
+            out.push_str(&format!(",\"{name}\":{value}"));
+        }
+        if let Ok(bytes) = read_path(world, "/proc/self/status") {
+            if let Ok(status) = String::from_utf8(bytes) {
+                for line in split(&status, b'\n', 0) {
+                    if line.starts_with("VmHWM:") {
+                        let mut kib = 0usize;
+                        for byte in line.as_bytes() {
+                            if *byte >= b'0' && *byte <= b'9' {
+                                kib = kib * 10 + (*byte - b'0') as usize;
+                            }
+                        }
+                        out.push_str(&format!(",\"peak_rss_bytes\":{}", kib * 1024));
+                    }
+                }
+            }
+        }
+        out.push_str("}\n");
+        world.stderr().write(out.as_bytes());
+        Ok(())
+    }
+}
+
+fn compile(
+    world: &mut World,
+    options: &Options,
+    stats: &mut Stats,
+    memo: &mut Memo,
+) -> Result<reuse::Selection, String> {
+    memo.inputs.clear();
+    memo.source_inputs.clear();
+    memo.valid_inputs = true;
+    if options.path.ends_with(".lkjir") {
+        let bytes = read_path(world, &options.path)?;
+        if memo.store.is_some() {
+            let (parent, name) = location(&options.path);
+            memo.inputs.push(store::input(&parent, &name, &Some(bytes.clone())));
+        }
+        let input = text(bytes, &options.path)?;
+        let meaning = ir_text::read(&input).map_err(|problem| report(&options.path, problem))?;
+        stats.mark("parse_ir")?;
+        let checked = check_reusing(meaning, memo, options.roundtrip, stats)
+            .map_err(|problems: Vec<ast::Diagnostic>| ir_failure(&options.path, problems))?;
+        stats.mark("check")?;
+        return select_checked(checked, options, stats, memo);
+    }
+    if !options.path.ends_with(".lkj") {
+        return Err(format!("{}: E_SOURCE_EXTENSION source files use .lkj; checked IR uses .lkjir", options.path));
+    }
+    let (directory_path, root): (String, String) = match &options.source_directory {
+        Some(path) => (path.to_string(), options.path.clone()),
+        None => {
+            if options.path.starts_with('/') {
+                ("/".to_string(), options.path.clone())
+            } else {
+                (".".to_string(), options.path.clone())
+            }
+        }
+    };
+    let mut directory = world
+        .directory(&directory_path)
+        .map_err(|errno: i64| io(&directory_path, "open directory", errno))?;
+    let mut library: Option<Directory> = None;
+    if let Some(path) = &options.library_directory {
+        library = Some(match world.directory(path) {
+            Ok(directory) => directory,
+            Err(errno) => return Err(io(path, "open library", errno)),
+        });
+    }
+    let standard = if options.no_library {
+        None
+    } else {
+        Some("$std/lib.lkj")
+    };
+    let absolute_source = options.source_directory.is_none() && options.path.starts_with('/');
+    let mut loaded = source::load_report(&root, standard, &mut |path: &str| {
+        let result = if options.command == "check-library" && path == "$toolchain/library-check.lkj" {
+            Ok(Some("fn main() {}".as_bytes().to_vec()))
+        } else if path.starts_with("$std/") {
+            match library.as_mut() {
+                Some(directory) => {
+                    memo.read_source(directory, options.library_directory.as_ref().unwrap(), &path[5..], stats)
+                },
+                None => Ok(embedded::library(path)),
+            }
+        } else if absolute_source && path.starts_with('/') {
+            memo.read_source(&mut directory, &directory_path, &path[1..], stats)
+        } else {
+            memo.read_source(&mut directory, &directory_path, path, stats)
+        };
+        if memo.store.is_some() {
+            if let Ok(Some(bytes)) = &result { memo.source_inputs.push((path.to_string(), bytes.clone())); }
+        }
+        result
+    });
+    stats.mark("load_parse")?;
+    if !loaded.diagnostics.is_empty() {
+        return Err(analysis_failure(&options.path, &mut loaded, Vec::new(), ""));
+    }
+    let resolved = match resolve::resolve(&loaded.program) {
+        Ok(resolved) => resolved,
+        Err(problem) => {
+            return Err(analysis_failure(
+                &options.path,
+                &mut loaded,
+                vec![problem],
+                "declaration resolution failed; dependent definition and IR analysis was not attempted",
+            ));
+        }
+    };
+    stats.mark("resolve")?;
+    let front = if memo.store.is_some() && options.command != "check-library" {
+        elaborate::incremental::fingerprint(&resolved, &memo.source_inputs)
+    } else { None };
+    stats.mark("key_hash")?;
+    if let Some(fingerprint) = &front {
+        let key = request_key(options);
+        let payload: Option<Vec<u8>> = memo.store.as_mut().and_then(|store| store.get("front", &key));
+        stats.mark("store_io")?;
+        if let Some(payload) = payload {
+            let resumed = {
+                let mut mark = |phase: &str| { let _ = stats.mark(phase); };
+                elaborate::incremental::resume(&resolved, fingerprint, &payload, &mut mark)
+            };
+            if let Some(resumed) = resumed {
+                memo.front_reused += resolved.functions.len() - resumed.definitions;
+                memo.front_definitions += resumed.definitions;
+                memo.front_functions += resumed.functions;
+                if resumed.definitions != 0 {
+                    let bytes = elaborate::incremental::encode(fingerprint, &resumed.catalog, &resumed.program);
+                    stats.mark("front_encode")?;
+                    if let Some(store) = memo.store.as_mut() { store.put("front", &key, &bytes); }
+                    stats.mark("store_io")?;
+                }
+
+                let checked = check_reusing(resumed.program, memo, options.roundtrip, stats)
+                    .map_err(|problems| analysis_failure(&options.path, &mut loaded, problems, "resumed IR failed independent checking"))?;
+                stats.mark("check")?;
+                stats.count("ir_functions", checked.program().functions.len());
+                let mut instructions = 0usize;
+                for function in &checked.program().functions { instructions += function.body.len(); }
+                stats.count("ir_instructions", instructions);
+                return select_checked(checked, options, stats, memo);
+            }
+        }
+        stats.mark("front_miss")?;
+    }
+    let inferred = if options.command == "check-library" {
+        elaborate::infer_resolved_report_all_library(&resolved)
+    } else {
+        elaborate::infer_resolved_report(&resolved)
+    };
+    let definitions = match inferred {
+        Ok(definitions) => definitions,
+        Err(problems) => {
+            return Err(analysis_failure(
+                &options.path,
+                &mut loaded,
+                problems,
+                "definition analysis failed; dependent IR construction and checking was not attempted",
+            ));
+        }
+    };
+    stats.mark("type")?;
+    let mut front_catalog = front.as_ref().map(|_| Vec::new());
+    let meaning = match elaborate::lower_definitions_recorded(definitions, &mut front_catalog) {
+        Ok(meaning) => meaning,
+        Err(problems) => {
+            return Err(analysis_failure(
+                &options.path,
+                &mut loaded,
+                problems,
+                "failed bodies are blocked; independent typed bodies were constructed and checked",
+            ));
+        }
+    };
+    stats.mark("build_ir")?;
+    if let (Some(fingerprint), Some(catalog)) = (&front, &front_catalog) {
+        let payload = elaborate::incremental::encode(fingerprint, catalog, &meaning);
+        stats.mark("front_encode")?;
+        if let Some(store) = memo.store.as_mut() { store.put("front", &request_key(options), &payload); }
+        stats.mark("store_io")?;
+    }
+    memo.front_definitions += resolved.functions.len();
+    memo.front_functions += meaning.functions.len();
+    let checked = match check_reusing(meaning, memo, options.roundtrip, stats) {
+        Ok(checked) => checked,
+        Err(problems) => {
+            return Err(analysis_failure(
+                &options.path,
+                &mut loaded,
+                problems,
+                "each invalid IR body stops at its diagnostic; no artifact is produced",
+            ));
+        }
+    };
+    stats.mark("check")?;
+    stats.count("ir_functions", checked.program().functions.len());
+    let mut instructions = 0usize;
+    for function in &checked.program().functions {
+        instructions += function.body.len();
+    }
+    stats.count("ir_instructions", instructions);
+    select_checked(checked, options, stats, memo)
+}
+
+pub(crate) fn load_runtime(
+    world: &mut World,
+    runtime_source: &Option<String>,
+) -> Result<runtime::Runtime, String> {
+    let code = match runtime_source {
+        Some(path) => text(read_path(world, path)?, path)?,
+        None => embedded::runtime()
+            .ok_or("E_RUNTIME this seed needs --runtime-source library/runtime.lkj")?,
+    };
+    prepare_runtime(code)
+}
+fn prepare_runtime(code: String) -> Result<runtime::Runtime, String> {
+    let parsed = source::load("$runtime/runtime.lkj", None, &mut |path: &str| {
+        if path == "$runtime/runtime.lkj" {
+            Ok(Some(code.as_bytes().to_vec()))
+        } else {
+            Ok(None)
+        }
+    })
+    .map_err(|problem| report("$runtime/runtime.lkj", problem))?;
+    let meaning = elaborate::elaborate(&parsed)
+        .map_err(|problem| located("$runtime/runtime.lkj", &parsed, problem))?;
+    let checked =
+        check::check(meaning).map_err(|problem| report("$runtime/runtime.lkj", problem))?;
+    runtime::seal(checked).map_err(|problem| report("$runtime/runtime.lkj", problem))
+}
+
+fn ensure_runtime(
+    world: &mut World,
+    options: &Options,
+    cache: &mut Option<runtime::Runtime>,
+    memo: &mut Memo,
+) -> Result<(), String> {
+    if cache.is_none() {
+        let runtime = match &options.runtime_source {
+            Some(path) => {
+                let bytes = read_path(world, path)?;
+                if memo.store.is_some() {
+                    let (parent, name) = location(path);
+                    memo.runtime_input = Some(store::input(&parent, &name, &Some(bytes.clone())));
+                }
+                prepare_runtime(text(bytes, path)?)?
+            }
+            None => load_runtime(world, &None)?,
+        };
+        *cache = Some(runtime);
+    }
+    Ok(())
+}
+
+pub(crate) fn interpreter_image(
+    world: &mut World,
+    checked: &ir::CheckedProgram,
+    index: usize,
+    runtime_source: &Option<String>,
+) -> Result<Vec<u8>, String> {
+    let runtime = load_runtime(world, runtime_source)?;
+    backend::emit_for_run(checked, &runtime, &checked.program().functions[index].name)
+        .map_err(|problem| report("interpreter executable", problem))
+}
+
+fn entry(program: &ir::Program, requested: &Option<String>) -> Result<usize, String> {
+    let mut main = "probe".to_string();
+    for function in &program.functions {
+        if function.name == "main" {
+            main = "main".to_string();
+            break;
+        }
+    }
+    let name = requested.as_ref().unwrap_or(&main);
+    for (index, function) in program.functions.iter().enumerate() {
+        if &function.name == name {
+            return Ok(index);
+        }
+    }
+    Err(format!("E_ENTRY unknown function {name}"))
+}
+
+fn validate_entry(program: &ir::Program, index: usize) -> Result<(), String> {
+    crate::entry_grants::validate(program, index)
+}
+fn checked_entry(program: &ir::Program, requested: &Option<String>) -> Result<usize, String> {
+    let index = entry(program, requested)?;
+    validate_entry(program, index)?;
+    Ok(index)
+}
+
+pub(crate) fn scalar(value: interpreter::Scalar) -> String {
+    match value {
+        interpreter::Scalar::Unit => String::new(),
+        interpreter::Scalar::Bool(value) => format!("{value}\n"),
+        interpreter::Scalar::Char(value) => format!("{value}\n"),
+        interpreter::Scalar::Int {
+            value,
+            bits,
+            signed,
+        } => {
+            if signed {
+                let shift = 64u32 - bits as u32;
+                format!("{}\n", ((value << shift) as i64) >> shift)
+            } else {
+                format!("{value}\n")
+            }
+        }
+        interpreter::Scalar::F64 { bits } => format!("f64:0x{bits:016x}\n"),
+    }
+}
+pub(crate) fn raw_scalar(program: &ir::Program, index: usize, bytes: &[u8]) -> Result<String, String> {
+    if bytes.len() != 8 {
+        return Err(format!(
+            "E_HOST expected eight scalar bytes, got {}",
+            bytes.len()
+        ));
+    }
+    let mut value = 0u64;
+    for index in 0..8usize {
+        value |= (bytes[index] as u64) << (index * 8);
+    }
+    let result = &program.types[program.functions[index].result].kind;
+    match result {
+        ir::TypeKind::Unit => Ok(String::new()),
+        ir::TypeKind::Bool => {
+            if value > 1 {
+                return Err("E_HOST invalid bool result".to_string());
+            }
+            Ok(format!("{}\n", value != 0))
+        }
+        ir::TypeKind::Char => {
+            if value > 0x10ffff {
+                return Err("E_HOST invalid char result".to_string());
+            }
+            let character = char::from_u32(value as u32).ok_or("E_HOST invalid char result")?;
+            Ok(format!("{character}\n"))
+        }
+        ir::TypeKind::Int { bits, signed } => Ok(scalar(interpreter::Scalar::Int {
+            value,
+            bits: *bits,
+            signed: *signed,
+        })),
+        ir::TypeKind::F64 => Ok(scalar(interpreter::Scalar::F64 { bits: value })),
+        _ => Err("E_ENTRY host entry result must be unit or a scalar".to_string()),
+    }
+}
+
+#[derive(Clone, Copy)]
+enum Completion {
+    Success,
+    SemanticTrap,
+    Other,
+}
+fn semantic_trap(code: u64) -> bool {
+    // Fixed language traps and message-table traps are deterministic. Resource,
+    // output and reserved trap codes cannot authorize a reusable observation.
+    (code >= 1 && code <= 5) || code >= 16
+}
+#[derive(Clone)]
+struct Outcome {
+    status: u8,
+    completion: Completion,
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+    diagnostic: String,
+}
+fn interpret(
+    world: &mut World,
+    program: &ir::Program,
+    index: usize,
+    options: &Options,
+    capture: bool,
+    executable_checked: Option<&ir::CheckedProgram>,
+) -> Outcome {
+    let grants = if executable_checked.is_none() && options.grants.is_empty() {
+        None
+    } else {
+        match prepare_grants(program, index, options) {
+            Ok(grants) => Some(grants),
+            Err(problem) => {
+                return Outcome { status: 1, completion: Completion::Other, stdout: Vec::new(), stderr: Vec::new(), diagnostic: problem };
+            }
+        }
+    };
+    let mut host = match driver_host::Host::new(
+        world,
+        options.arguments.clone(),
+        capture,
+        executable_checked,
+        index,
+        options.runtime_source.clone(),
+    ) {
+        Ok(host) => host,
+        Err(problem) => {
+            return Outcome {
+                status: 1,
+                completion: Completion::Other,
+                stdout: Vec::new(),
+                stderr: Vec::new(),
+                diagnostic: problem,
+            };
+        }
+    };
+    let arguments: Vec<u64> = Vec::new();
+    let result = match &grants {
+        Some(grants) => interpreter::run_granted(program, index, grants, &mut host),
+        None => interpreter::run(program, index, &arguments, &mut host),
+    };
+    if let Err(problem) = host.finish() {
+        return Outcome {
+            status: 1,
+            completion: Completion::Other,
+            stdout: host.stdout,
+            stderr: host.stderr,
+            diagnostic: problem,
+        };
+    }
+    let mut status = host.status;
+    let mut completion = if status == 0 { Completion::Success } else { Completion::Other };
+    let diagnostic = match result {
+        Ok(result) => {
+            host.stdout
+                .extend_from_slice(scalar(result.value).as_bytes());
+            String::new()
+        }
+        Err(problem) => {
+            status = 1;
+            completion = Completion::Other;
+            if let interpreter::ErrorKind::Trap(code) = &problem.kind {
+                if semantic_trap(*code) { completion = Completion::SemanticTrap; }
+            }
+            format!(
+                "{}: {} {}",
+                runtime_site(&options.path, problem.file as u64, problem.line as u64),
+                problem.code(),
+                problem.message
+            )
+        }
+    };
+    Outcome {
+        status,
+        completion,
+        stdout: host.stdout,
+        stderr: host.stderr,
+        diagnostic,
+    }
+}
+
+fn trap_number(text: &str) -> Option<u64> {
+    if text.is_empty() || text.as_bytes().iter().any(|byte: &u8| *byte < b'0' || *byte > b'9') {
+        return None;
+    }
+    text.parse::<u64>().ok()
+}
+// Source loading assigns the root file index zero. IR retains other numeric
+// identities without a filename map; never label their lines as the root path.
+fn runtime_site(path: &str, file: u64, line: u64) -> String {
+    if file == 0 { format!("{path}:{line}") } else { format!("file {file}:{line}") }
+}
+pub(crate) fn native_trap(path: &str, raw: &[u8]) -> Option<(u64, String, String)> {
+    let text = String::from_utf8(raw.to_vec()).ok()?;
+    if !text.ends_with("\n") { return None; }
+    let parts = split(&text, b' ', 7);
+    if parts.len() != 7 || parts[1] != "at" || parts[2] != "line" || parts[4] != "file" {
+        return None;
+    }
+    if parts[0].len() < 5 || !parts[0].starts_with("R") || !parts[5].ends_with(":") {
+        return None;
+    }
+    let code = trap_number(&parts[0][1..])?;
+    let line = trap_number(&parts[3])?;
+    let file = trap_number(&parts[5][..parts[5].len() - 1])?;
+    let message = &parts[6];
+    let message = if message.ends_with("\n") {
+        &message[..message.len() - 1]
+    } else {
+        message.as_str()
+    };
+    Some((code, format!("{}: {} {message}", runtime_site(path, file, line), parts[0]), message.to_string()))
+}
+pub(crate) fn normalize_trap(path: &str, raw: &[u8]) -> Option<String> {
+    native_trap(path, raw).map(|trap: (u64, String, String)| trap.1)
+}
+pub(crate) fn complete_semantic_trap(program: &ir::Program, code: u64, message: &str) -> bool {
+    // A refused diagnostic write can leave a syntactically valid prefix. Match
+    // the entire message, including embedded newlines, before reusing the result.
+    match code {
+        1 => return message == "integer overflow",
+        2 => return message == "division by zero",
+        3 => return message == "index out of bounds",
+        4 => return message == "explicit trap",
+        5 => return message == "assertion failed",
+        _ => {}
+    }
+    if code < 16 { return false; }
+    let mut messages = Vec::new();
+    for function in &program.functions {
+        for instruction in &function.body {
+            if let ir::Op::Trap { message: expected } = &instruction.op {
+                if !messages.contains(expected) { messages.push(expected.clone()); }
+            }
+        }
+    }
+    messages.sort();
+    let index = code - 16;
+    index < messages.len() as u64 && messages[index as usize].as_str() == message
+}
+
+// The process primitive deliberately supplies an empty environment. Bind only
+// named invocation grants before native run; a standalone build keeps names and
+// resolves them when its owner invokes it.
+fn invocation_grants(world: &mut World, grants: Vec<ir::EntryGrant>) -> Result<Vec<ir::EntryGrant>, String> {
+    let mut values = Vec::new();
+    for grant in grants {
+        let value = match grant {
+            ir::EntryGrant::Environment(name) => {
+                let key = &name[..name.len() - 1];
+                let value = driver_host::environment_value(world, key)
+                    .map_err(|errno: i64| -> String { format!("E_ENTRY environment value failed: errno {errno}") })?;
+                ir::EntryGrant::EnvironmentValue(value)
+            }
+            ir::EntryGrant::DirectoryEnvironment(name) => {
+                let key = &name[..name.len() - 1];
+                let mut value = driver_host::environment_value(world, key)
+                    .map_err(|errno: i64| -> String { format!("E_ENTRY directory environment failed: errno {errno}") })?
+                    .unwrap_or(Vec::new());
+                if value.is_empty() {
+                    return Err(format!("E_ENTRY directory environment {} is absent or empty: errno 2", String::from_utf8(key.to_vec()).unwrap()));
+                }
+                value.push(0);
+                ir::EntryGrant::Directory(value)
+            }
+            value => value,
+        };
+        values.push(value);
+    }
+    Ok(values)
+}
+
+fn native_run(
+    world: &mut World,
+    checked: &reuse::Selection,
+    runtime: &runtime::Runtime,
+    index: usize,
+    options: &Options,
+    capture: bool,
+    stats: &mut Stats,
+    memo: &mut Memo,
+) -> Result<Outcome, String> {
+    let name = &checked.original().program().functions[index].name;
+    let grants = prepare_grants(checked.original().program(), index, options)?;
+    let grants = invocation_grants(world, grants)?;
+    let bytes = emit_reusing(checked.native(), runtime, name, &grants, Some(3), None, memo, stats)
+        .map_err(|problem| report(&options.path, problem))?;
+    stats.count("emitted_bytes", bytes.len());
+    stats.mark("native_encode")?;
+    let mut executable = world
+        .temporary_file()
+        .map_err(|errno: i64| io("artifact", "create", errno))?;
+    executable
+        .write_all(&bytes)
+        .map_err(|errno: i64| io("artifact", "write", errno))?;
+    executable
+        .set_executable()
+        .map_err(|errno: i64| io("artifact", "set executable", errno))?;
+    let input = if capture {
+        world.temporary_file()
+    } else {
+        world.stdin_file()
+    }
+    .map_err(|errno: i64| io("stdin", "derive stream", errno))?;
+    let mut output = if capture {
+        world.temporary_file()
+    } else {
+        world.stdout_file()
+    }
+    .map_err(|errno: i64| io("stdout", "derive stream", errno))?;
+    let mut errors = if capture {
+        world.temporary_file()
+    } else {
+        world.stderr_file()
+    }
+    .map_err(|errno: i64| io("stderr", "derive stream", errno))?;
+    let mut result = world
+        .temporary_file()
+        .map_err(|errno: i64| io("result", "create capture", errno))?;
+    let mut process = world.process();
+    let mut child = process
+        .spawn_file(
+            &executable,
+            &options.arguments,
+            &input,
+            &output,
+            &errors,
+            &result,
+        )
+        .map_err(|errno: i64| io("artifact", "spawn", errno))?;
+    let status = child
+        .wait()
+        .map_err(|errno: i64| io("artifact", "wait", errno))? as u8;
+    stats.mark("native_run")?;
+    let stdout = if capture {
+        output
+            .rewind()
+            .map_err(|errno: i64| io("stdout", "rewind", errno))?;
+        output
+            .read_to_end()
+            .map_err(|errno: i64| io("stdout", "read", errno))?
+    } else {
+        Vec::new()
+    };
+    let stderr = if capture {
+        errors
+            .rewind()
+            .map_err(|errno: i64| io("stderr", "rewind", errno))?;
+        errors
+            .read_to_end()
+            .map_err(|errno: i64| io("stderr", "read", errno))?
+    } else {
+        Vec::new()
+    };
+    result
+        .rewind()
+        .map_err(|errno: i64| io("result", "rewind", errno))?;
+    let raw = result
+        .read_to_end()
+        .map_err(|errno: i64| io("result", "read", errno))?;
+    let mut outcome = Outcome {
+        status,
+        completion: if status == 0 { Completion::Success } else { Completion::Other },
+        stdout,
+        stderr: Vec::new(),
+        diagnostic: String::new(),
+    };
+    if raw.len() != 8 && status != 0 {
+        outcome.diagnostic = match native_trap(&options.path, &raw) {
+            Some((code, diagnostic, message)) => {
+                if status == 1 && complete_semantic_trap(checked.native().program(), code, &message) {
+                    outcome.completion = Completion::SemanticTrap;
+                }
+                diagnostic
+            }
+            None => format!("E_HOST native program exited with status {status} without a scalar result"),
+        };
+    } else {
+        outcome
+            .stdout
+            .extend_from_slice(raw_scalar(checked.original().program(), index, &raw)?.as_bytes());
+    }
+    outcome.stderr = stderr;
+    Ok(outcome)
+}
+
+fn publish(world: &mut World, path: &str, bytes: &[u8], executable: bool) -> Result<(), String> {
+    let (parent, name) = location(path);
+    let mut directory = world
+        .directory(&parent)
+        .map_err(|errno: i64| io(&parent, "open output directory", errno))?;
+    let mut clock = world.clock();
+    let stamp = clock
+        .nanoseconds()
+        .map_err(|errno: i64| io("clock", "read", errno))?;
+    let mut destination = 14695981039346656037u64;
+    for byte in name.as_bytes() {
+        destination = (destination ^ *byte as u64).wrapping_mul(1099511628211u64);
+    }
+    let temporary = format!(".lkjscript-{destination:x}-{stamp}.tmp");
+    let result = {
+        let mut file = directory
+            .create(&temporary)
+            .map_err(|errno: i64| io(path, "create temporary", errno))?;
+        match file.write_all(bytes) {
+            Err(errno) => Err(io(path, "write", errno)),
+            Ok(()) => {
+                if executable {
+                    file.set_executable()
+                        .map_err(|errno: i64| io(path, "set executable", errno))
+                } else {
+                    Ok(())
+                }
+            }
+        }
+    };
+    if let Err(problem) = result {
+        let _ = directory.remove(&temporary);
+        return Err(problem);
+    }
+    if let Err(errno) = directory.rename(&temporary, &name) {
+        let _ = directory.remove(&temporary);
+        return Err(io(path, "rename", errno));
+    }
+    Ok(())
+}
+
+fn deliver(world: &mut World, outcome: Outcome, show_value: bool) -> u8 {
+    if show_value {
+        world.stdout().write(&outcome.stdout);
+    }
+    world.stderr().write(&outcome.stderr);
+    if !outcome.diagnostic.is_empty() {
+        world
+            .stderr()
+            .write(format!("{}\n", outcome.diagnostic).as_bytes());
+    }
+    outcome.status
+}
+
+fn quoted(value: &str) -> String {
+    let mut bytes = Vec::new();
+    json::write_string(&mut bytes, value);
+    String::from_utf8(bytes).unwrap()
+}
+fn hex(bytes: &[u8]) -> String {
+    let digits = b"0123456789abcdef";
+    let mut text = String::new();
+    for byte in bytes {
+        text.push(digits[(*byte >> 4) as usize] as char);
+        text.push(digits[(*byte & 15) as usize] as char);
+    }
+    text
+}
+fn record(world: &mut World, index: usize, engine: &str, checked: bool, outcome: &Outcome) {
+    let code = if checked { 0 } else { 1 };
+    let text = format!(
+        "{{\"index\":{index},\"engine\":{},\"checkStatus\":{code},\"status\":{},\"stdoutHex\":\"{}\",\"stderrHex\":\"{}\",\"stderr\":{}}}\n",
+        quoted(engine),
+        outcome.status,
+        hex(&outcome.stdout),
+        hex(&outcome.stderr),
+        quoted(&outcome.diagnostic)
+    );
+    world.stdout().write(text.as_bytes());
+}
+// Captures are fresh private descriptors; only their fixed output is replayed.
+fn captured_observation(checked: &ir::CheckedProgram, entry: usize) -> bool {
+    let report = match crate::authority::analyze(checked, entry) {
+        Ok(report) => report, Err(_) => return false,
+    };
+    if !report.manifest.full_world {
+        for requirement in &report.manifest.requirements {
+            if !matches!(checked.program().types[requirement.ty].kind,
+                ir::TypeKind::Stdout | ir::TypeKind::Stderr) { return false; }
+        }
+    }
+    for function in &report.functions {
+        for operation in &function.operations {
+            if !matches!(operation.name.as_str(),
+                "world_stdout" | "world_stderr" | "stdout_write" | "stderr_write") { return false; }
+        }
+    }
+    true
+}
+
+fn captured_selection(checked: &reuse::Selection, entry: &Option<String>) -> bool {
+    let original = match checked_entry(checked.original().program(), entry) {
+        Ok(selected) => selected, Err(_) => return false,
+    };
+    if !captured_observation(checked.original().checked(), original) { return false; }
+    if checked.optimized() {
+        let native = match checked_entry(checked.native().program(), entry) {
+            Ok(selected) => selected, Err(_) => return false,
+        };
+        return captured_observation(checked.native().checked(), native);
+    }
+    true
+}
+
+fn batch(world: &mut World, options: &Options, stats: &mut Stats, memo: &mut Memo) -> Result<u8, String> {
+    let input = text(read_path(world, &options.path)?, &options.path)?;
+    let mut runtime = None;
+    for (index, row) in split(&input, b'\n', 0).iter().enumerate() {
+        if row.is_empty() {
+            continue;
+        }
+        let columns = split(row, b'\t', 3);
+        if columns.len() != 3 || (columns[0] != "check" && columns[0] != "run") {
+            return Err(format!("E_USAGE invalid batch request {}", index + 1));
+        }
+        let mut request = options.clone();
+        request.command = columns[0].to_string();
+        request.path = columns[2].to_string();
+        request.arguments.clear();
+        request.entry = if columns[1].is_empty() {
+            None
+        } else {
+            Some(columns[1].to_string())
+        };
+        if request.runtime_source.is_some() {
+            runtime = None;
+            memo.runtime_input = None;
+        }
+        if let Some(bytes) = memo.lookup(world, &request, "test", stats) {
+            if let Some((accepted, outcomes)) = decode_outcomes(&bytes, options.engines.len()) {
+                for (route, outcome) in outcomes.iter().enumerate() {
+                    record(world, index, &options.engines[route], accepted, outcome);
+                }
+                memo.test_reused += 1;
+                continue;
+            }
+        }
+        memo.test_rerun += 1;
+        let checked = match compile(world, &request, stats, memo) {
+            Ok(checked) => checked,
+            Err(problem) => {
+                let outcome = Outcome {
+                    status: 1,
+                    completion: Completion::Other,
+                    stdout: Vec::new(),
+                    stderr: Vec::new(),
+                    diagnostic: problem,
+                };
+                for engine in &options.engines {
+                    record(world, index, engine, false, &outcome);
+                }
+                if !outcome.diagnostic.contains("E_IO") {
+                    let mut outcomes = Vec::new();
+                    for _ in &options.engines { outcomes.push(outcome.clone()); }
+                    memo.remember(&request, "test", &encode_outcomes(false, &outcomes));
+                }
+                continue;
+            }
+        };
+        if options.roundtrip {
+            let encoded = ir_text::write(checked.original().program());
+            let decoded = match ir_text::read(&encoded) {
+                Ok(decoded) => decoded,
+                Err(problem) => return Err(report(&request.path, problem)),
+            };
+            let replay = match check::check(decoded) {
+                Ok(replay) => replay,
+                Err(problem) => return Err(report(&request.path, problem)),
+            };
+
+            if ir_text::write(replay.program()) != encoded {
+                return Err(format!("E_TEST IR roundtrip changed {}", request.path));
+            }
+            let replay = if checked.optimized() {
+                let encoded_native = ir_text::write(checked.native().program());
+                let decoded_native = match ir_text::read(&encoded_native) {
+                    Ok(decoded) => decoded,
+                    Err(problem) => return Err(report(&request.path, problem)),
+                };
+                let replay_native = match check::check(decoded_native) {
+                    Ok(replay) => replay,
+                    Err(problem) => return Err(report(&request.path, problem)),
+                };
+                if ir_text::write(replay_native.program()) != encoded_native {
+                    return Err(format!("E_TEST optimized IR roundtrip changed {}", request.path));
+                }
+                replay_native
+            } else { replay };
+            if let Ok(selected) = checked_entry(checked.original().program(), &request.entry) {
+                // A check-only case need not grant an executable entry. Always
+                // recheck its IR above; compare native bytes only when the
+                // invocation supplies every required capability.
+                if let Ok(grants) = prepare_grants(
+                    checked.original().program(), selected, &request,
+                ) {
+                    ensure_runtime(world, &request, &mut runtime, memo)?;
+                    let name = &checked.original().program().functions[selected].name;
+                    let original = match backend::emit_granted(
+                        checked.native().checked(), runtime.as_ref().unwrap(), name, &grants, None, None,
+                    ) {
+                        Ok(bytes) => bytes,
+                        Err(problem) => return Err(report(&request.path, problem)),
+                    };
+                    let repeated = match backend::emit_granted(
+                        &replay, runtime.as_ref().unwrap(), name, &grants, None, None,
+                    ) {
+                        Ok(bytes) => bytes,
+                        Err(problem) => return Err(report(&request.path, problem)),
+                    };
+                    if original != repeated { return Err(format!("E_TEST IR roundtrip changed native bytes for {}", request.path)); }
+                    if memo.store.is_some() {
+                        // The second call reloads the entries flushed by the
+                        // first, proving warm byte identity in an empty-store gate.
+                        for pass in 0..2usize {
+                            let reused = match emit_reusing(
+                                checked.native(), runtime.as_ref().unwrap(), name, &grants, None, None, memo, stats,
+                            ) {
+                                Ok(bytes) => bytes,
+                                Err(problem) => return Err(report(&request.path, problem)),
+                            };
+                            if original != reused {
+                                let phase = if pass == 0 { "first" } else { "warm" };
+                                return Err(format!("E_TEST {phase} store emission changed native bytes for {}", request.path));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let mut outcomes = Vec::new();
+        let reusable = request.runtime_source.is_none() && !request.profile
+            && (request.command == "check" || captured_selection(&checked, &request.entry));
+        for engine in &options.engines {
+            let outcome = if request.command == "check" {
+                Outcome {
+                    status: 0,
+                    completion: Completion::Success,
+                    stdout: Vec::new(),
+                    stderr: Vec::new(),
+                    diagnostic: String::new(),
+                }
+            } else {
+                match checked_entry(checked.original().program(), &request.entry) {
+                    Err(problem) => Outcome {
+                        status: 1,
+                        completion: Completion::Other,
+                        stdout: Vec::new(),
+                        stderr: Vec::new(),
+                        diagnostic: problem,
+                    },
+                    Ok(selected) => {
+                        if engine == "interpreter" {
+                            interpret(
+                                world,
+                                checked.original().program(),
+                                selected,
+                                &request,
+                                true,
+                                Some(checked.native().checked()),
+                            )
+                        } else {
+                            ensure_runtime(world, &request, &mut runtime, memo)?;
+                            match native_run(
+                                world,
+                                &checked,
+                                runtime.as_ref().unwrap(),
+                                selected,
+                                &request,
+                                true,
+                                stats,
+                                memo,
+                            ) {
+                                Ok(outcome) => outcome,
+                                Err(problem) => Outcome {
+                                    status: 1,
+                                    completion: Completion::Other,
+                                    stdout: Vec::new(),
+                                    stderr: Vec::new(),
+                                    diagnostic: problem,
+                                },
+                            }
+                        }
+                    }
+                }
+            };
+            record(world, index, engine, true, &outcome);
+            outcomes.push(outcome);
+        }
+        let mut completed = reusable;
+        for outcome in &outcomes {
+            if !matches!(outcome.completion, Completion::Success | Completion::SemanticTrap) {
+                completed = false;
+            }
+        }
+        if completed {
+            memo.remember(&request, "test", &encode_outcomes(true, &outcomes));
+        }
+    }
+    Ok(0)
+}
+
+fn prepare_grants(program: &ir::Program, entry: usize, options: &Options) -> Result<Vec<ir::EntryGrant>, String> {
+    match &options.program {
+        Some(plan) => crate::program_directory::prepare(plan, program, entry),
+        None => crate::entry_grants::prepare(program, entry, &options.grants),
+    }
+}
+
+fn program_options(options: &Options, plan: crate::program_directory::Plan) -> Result<Options, String> {
+    if options.entry.is_some() || !options.grants.is_empty() || options.source_directory.is_some() || options.unchecked {
+        return Err(format!("{}: E_PROGRAM SOURCE, ENTRY and GRANTS come from program.lkj; remove --source-dir, --entry, --grant and --unchecked-ir overrides", plan.manifest));
+    }
+    let mut configured = options.clone();
+    configured.path = plan.source.clone();
+    configured.source_directory = Some(plan.directory.clone());
+    configured.entry = Some(plan.entry.clone());
+    configured.grants = plan.grants.clone();
+    if configured.command == "build" && configured.output.is_none() {
+        configured.output = Some(crate::program_directory::join(&plan.directory, "program.elf"));
+    }
+    configured.program = Some(plan);
+    Ok(configured)
+}
+
+fn execute(world: &mut World, options: &Options, stats: &mut Stats, memo: &mut Memo) -> Result<u8, String> {
+    if options.program.is_none() && matches!(options.command.as_str(), "build" | "run" | "test" | "authority") {
+        if let Some(plan) = crate::program_directory::load(world, &options.path)? {
+            let configured = program_options(options, plan.clone())?;
+            if options.command != "test" {
+                return execute_source(world, &configured, stats, memo);
+            }
+            // Cases cannot hide a stale or unused grant in the reviewed entry.
+            let checked = compile(world, &configured, stats, memo)?;
+            let selected = checked_entry(checked.original().program(), &configured.entry)?;
+            prepare_grants(checked.original().program(), selected, &configured)?;
+            for path in &plan.cases {
+                let mut case = options.clone();
+                case.path = crate::program_directory::join(&plan.directory, path);
+                case.entry = None;
+                case.grants.clear();
+                case.program = None;
+                case.source_directory = None;
+                case.output = None;
+                let status = execute_source(world, &case, stats, memo)?;
+                if status != 0 { return Ok(status); }
+            }
+            world.stdout().write(format!("ok program {}: {} case paths\n", plan.manifest, plan.cases.len()).as_bytes());
+            return Ok(0);
+        }
+    }
+    execute_source(world, options, stats, memo)
+}
+
+fn execute_source(world: &mut World, options: &Options, stats: &mut Stats, memo: &mut Memo) -> Result<u8, String> {
+    if options.command == "--help" || options.command == "-h" {
+        world.stdout().write(usage().as_bytes());
+        return Ok(0);
+    }
+    if !options.tool_arguments.is_empty() {
+        return crate::test_generators::run(world, &options.tool_arguments);
+    }
+    if options.command == "profile" {
+        let bytes = read_path(world, &options.path)?;
+        let report = crate::native::profiling::report(&bytes)?;
+        world.stdout().write(report.as_bytes());
+        return Ok(0);
+    }
+    if options.command == "test" {
+        if let Some(rustc) = &options.witness {
+            return crate::test_runner::witness(world, &options.path, rustc);
+        }
+    }
+    if options.command == "test" && crate::test_runner::has_cases(world, &options.path)? {
+        return crate::test_runner::run_stored(world, &options.path, options.jobs, &options.engines,
+            &options.library_directory, &options.store_directory, &options.store_key, options.stats, options.inline_limit, options.store_bytes);
+    }
+    if options.command == "batch" {
+        return batch(world, options, stats, memo);
+    }
+    let mut runtime = None;
+    if options.command == "runtime-ir" {
+        ensure_runtime(world, options, &mut runtime, memo)?;
+        let text = ir_text::write(runtime.as_ref().unwrap().checked_program());
+        world.stdout().write(text.as_bytes());
+        return Ok(0);
+    }
+    if options.unchecked {
+        let input = text(read_path(world, &options.path)?, &options.path)?;
+        let program = ir_text::read(&input).map_err(|problem| report(&options.path, problem))?;
+        let selected = entry(&program, &options.entry)?;
+        let outcome = interpret(world, &program, selected, options, false, None);
+        return Ok(deliver(world, outcome, true));
+    }
+    if options.command == "build" {
+        if let Some(bytes) = memo.lookup(world, options, "image", stats) {
+            let path: String = match &options.output { Some(path) => path.clone(), None => format!("{}.elf", options.path) };
+            publish(world, &path, &bytes, true)?;
+            stats.mark("write")?;
+            memo.build_reused += 1;
+            stats.count("emitted_bytes", bytes.len());
+            stats.mark("stored_build")?;
+            return Ok(0);
+        }
+    }
+    let checked = compile(world, options, stats, memo)?;
+    if options.command == "check" || options.command == "check-library" {
+        return Ok(0);
+    }
+    if options.command == "ir" {
+        let text = ir_text::write(checked.original().program());
+        stats.count("ir_bytes", text.len());
+        stats.mark("ir_write")?;
+        match &options.output {
+            Some(path) => publish(world, path, text.as_bytes(), false)?,
+            None => world.stdout().write(text.as_bytes()),
+        }
+        return Ok(0);
+    }
+    if options.command == "authority" {
+        let selected = checked_entry(checked.original().program(), &options.entry)?;
+        if let Some(plan) = &options.program {
+            prepare_grants(checked.original().program(), selected, options)?;
+            world.stdout().write(format!("program {}\nconfigured grants:\n", quoted(&plan.manifest)).as_bytes());
+            for grant in &plan.grants { world.stdout().write(format!("  {}\n", quoted(grant)).as_bytes()); }
+        }
+        let analysis = crate::authority::analyze(checked.original().checked(), selected)?;
+        let output = crate::authority::render(checked.original().checked(), &analysis);
+        world.stdout().write(output.as_bytes());
+        return Ok(0);
+    }
+    if options.command == "build" {
+        let selected = checked_entry(checked.original().program(), &options.entry)?;
+        let grants = prepare_grants(checked.original().program(), selected, options)?;
+        ensure_runtime(world, options, &mut runtime, memo)?;
+        stats.mark("runtime")?;
+        let path: String = match &options.output {
+            Some(path) => path.to_string(),
+            None => format!("{}.elf", options.path),
+        };
+        let name = &checked.original().program().functions[selected].name;
+        let bytes = if options.profile {
+            let profile_path = format!("{path}.samples");
+            emit_reusing(checked.native(), runtime.as_ref().unwrap(), name, &grants, None, Some(profile_path.as_str()), memo, stats)
+        } else {
+            emit_reusing(checked.native(), runtime.as_ref().unwrap(), name, &grants, None, None, memo, stats)
+        }.map_err(|problem| report(&options.path, problem))?;
+        stats.count("emitted_bytes", bytes.len());
+        stats.mark("native_encode")?;
+        publish(world, &path, &bytes, true)?;
+        stats.mark("write")?;
+        memo.remember(options, "image", &bytes);
+        stats.mark("store_io")?;
+        return Ok(0);
+    }
+    if options.command == "test" {
+        let mut count = 0usize;
+        let mut failed = false;
+        for (index, function) in checked.original().program().functions.iter().enumerate() {
+            if !function.test {
+                continue;
+            }
+            validate_entry(checked.original().program(), index)?;
+            for engine in &options.engines {
+                let outcome = if engine == "interpreter" {
+                    interpret(
+                        world,
+                        checked.original().program(),
+                        index,
+                        options,
+                        true,
+                        Some(checked.native().checked()),
+                    )
+                } else {
+                    ensure_runtime(world, options, &mut runtime, memo)?;
+                    native_run(
+                        world,
+                        &checked,
+                        runtime.as_ref().unwrap(),
+                        index,
+                        options,
+                        true,
+                        stats,
+                        memo,
+                    )?
+                };
+                count += 1;
+                if outcome.status != 0 || !outcome.diagnostic.is_empty() {
+                    failed = true;
+                    world.stderr().write(
+                        format!("FAIL {} {} {engine}\n", options.path, function.name).as_bytes(),
+                    );
+                    deliver(world, outcome, true);
+                }
+            }
+        }
+        if failed {
+            return Ok(1);
+        }
+        world
+            .stdout()
+            .write(format!("ok {count} tests\n").as_bytes());
+        return Ok(0);
+    }
+    let selected = checked_entry(checked.original().program(), &options.entry)?;
+    let outcome = if options.engine == "interpreter" {
+        interpret(
+            world,
+            checked.original().program(),
+            selected,
+            options,
+            false,
+            Some(checked.native().checked()),
+        )
+    } else {
+        ensure_runtime(world, options, &mut runtime, memo)?;
+        stats.mark("runtime")?;
+        native_run(
+            world,
+            &checked,
+            runtime.as_ref().unwrap(),
+            selected,
+            options,
+            false,
+            stats,
+            memo,
+        )?
+    };
+    Ok(deliver(world, outcome, true))
+}
+
+pub fn main(mut world: World) {
+    let result = match options(world.args()) {
+        Err(problem) => Err(problem),
+        Ok(options) => match Stats::new(&mut world, options.stats) {
+            Err(problem) => Err(problem),
+            Ok(mut stats) => {
+                let mut memo = Memo::new(&mut world, &options);
+                let _ = stats.mark("producer_hash");
+                let result = execute(&mut world, &options, &mut stats, &mut memo);
+                let _ = stats.mark("other");
+                if let Some(store) = memo.store.as_mut() { store.finish(); }
+                let _ = stats.mark("store_io");
+                memo.stats(&mut stats);
+                let stopped = if result.is_ok() { "done" } else { "failed" };
+                let measured = stats.finish(&mut world, stopped);
+                match measured {
+                    Err(problem) => Err(problem),
+                    Ok(()) => result,
+                }
+            }
+        },
+    };
+    match result {
+        Ok(status) => world.set_exit_status(status),
+        Err(problem) => {
+            world.stderr().write(format!("{problem}\n").as_bytes());
+            world.set_exit_status(1);
+        }
+    }
+}
+
+struct Memo {
+    store: Option<store::Store>,
+    inputs: Vec<store::Input>,
+    source_inputs: Vec<(String, Vec<u8>)>,
+    input_snapshot: BTreeMap<(String, String), (Option<Vec<u8>>, Option<String>)>,
+    front_reused: usize,
+    front_definitions: usize,
+    front_functions: usize,
+    valid_inputs: bool,
+    runtime_input: Option<store::Input>,
+    checked_reused: usize,
+    checked_local_reused: usize,
+    emitted_reused: usize,
+    test_reused: usize,
+    test_rerun: usize,
+    build_reused: usize,
+    inline_calls: usize,
+    inline_functions: usize,
+    inline_attempts: usize,
+    inline_accepted: usize,
+    inline_rejected: usize,
+}
+impl Memo {
+    fn new(world: &mut World, options: &Options) -> Self {
+        Self {
+            store: store::Store::open_bounded(world, &options.store_directory, &options.store_key, options.store_bytes),
+            inputs: Vec::new(), source_inputs: Vec::new(), input_snapshot: BTreeMap::new(), front_reused: 0, front_definitions: 0, front_functions: 0, valid_inputs: true, runtime_input: None,
+            checked_reused: 0, checked_local_reused: 0, emitted_reused: 0, test_reused: 0, test_rerun: 0, build_reused: 0,
+            inline_calls: 0, inline_functions: 0, inline_attempts: 0, inline_accepted: 0, inline_rejected: 0,
+        }
+    }
+    fn stats(&self, stats: &mut Stats) {
+        stats.count("front_reused", self.front_reused);
+        stats.count("front_definitions", self.front_definitions);
+        stats.count("front_functions", self.front_functions);
+        stats.count("checked_reused", self.checked_reused);
+        stats.count("checked_local_reused", self.checked_local_reused);
+        stats.count("emitted_reused", self.emitted_reused);
+        stats.count("test_reused", self.test_reused);
+        stats.count("test_rerun", self.test_rerun);
+        stats.count("build_reused", self.build_reused);
+        stats.count("inline_calls", self.inline_calls);
+        stats.count("inline_functions", self.inline_functions);
+        stats.count("inline_attempts", self.inline_attempts);
+        stats.count("inline_accepted", self.inline_accepted);
+        stats.count("inline_rejected", self.inline_rejected);
+        if let Some(store) = &self.store {
+            stats.count("store_hits", store.hits);
+            stats.count("store_misses", store.misses);
+            stats.count("store_rejected", store.rejected);
+            stats.count("store_writes", store.writes);
+            stats.count("store_retained_bytes", store.retained_bytes);
+            stats.count("store_evicted", store.evicted);
+        }
+    }
+    // One invocation reads a source path once. Stored closure validation and
+    // normal loading use the same snapshot, including absent module candidates.
+    fn read_source(&mut self, directory: &mut Directory, root: &str, path: &str, stats: &mut Stats) -> Result<Option<Vec<u8>>, String> {
+        stats.mark("load_parse")?;
+        if self.store.is_none() { return read(directory, path); }
+        let key = (root.to_string(), path.to_string());
+        if let Some((bytes, digest)) = self.input_snapshot.get(&key) {
+            self.inputs.push(store::Input { directory: root.to_string(), path: path.to_string(), digest: digest.clone() });
+            return Ok(bytes.clone());
+        }
+        let result = read(directory, path);
+        stats.mark("source_read")?;
+        match &result {
+            Ok(bytes) => {
+                let input = store::input(root, path, bytes);
+                stats.mark("key_hash")?;
+                self.input_snapshot.insert(key, (bytes.clone(), input.digest.clone()));
+                self.inputs.push(input);
+            }
+            Err(_) => self.valid_inputs = false,
+        }
+        result
+    }
+    fn inputs_match(&mut self, world: &mut World, bytes: &[u8], stats: &mut Stats) -> bool {
+        let mut reader = store::Reader::new(bytes);
+        let count = match reader.word() { Some(count) => count, None => return false };
+        if count > bytes.len() / 24 { return false; }
+        for _ in 0..count {
+            let root = match reader.text() { Some(root) => root, None => return false };
+            let path = match reader.text() { Some(path) => path, None => return false };
+            let wanted = match reader.text() { Some(digest) => digest, None => return false };
+            let key = (root.clone(), path.clone());
+            if !self.input_snapshot.contains_key(&key) {
+                let _ = stats.mark("key_hash");
+                let mut directory = match world.directory(&root) { Ok(directory) => directory, Err(_) => return false };
+                let bytes = match read(&mut directory, &path) { Ok(bytes) => bytes, Err(_) => return false };
+                let _ = stats.mark("source_read");
+                let digest = store::input(&root, &path, &bytes).digest;
+                self.input_snapshot.insert(key.clone(), (bytes, digest));
+            }
+            let digest = &self.input_snapshot.get(&key).unwrap().1;
+            if digest.as_ref().map(|digest: &String| digest.as_str()).unwrap_or("") != wanted.as_str() { return false; }
+        }
+        reader.done()
+    }
+    fn lookup(&mut self, world: &mut World, options: &Options, kind: &str, stats: &mut Stats) -> Option<Vec<u8>> {
+        if self.store.is_none() { return None; }
+        let _ = stats.mark("other");
+        let request = request_key(options);
+        let _ = stats.mark("key_hash");
+        let plan = self.store.as_mut()?.get(&format!("inputs-{kind}"), &request);
+        let _ = stats.mark("store_io");
+        let plan = plan?;
+        let mut reader = store::Reader::new(&plan);
+        let inputs = reader.bytes()?;
+        let result = reader.text()?;
+        if !reader.done() || !self.inputs_match(world, &inputs, stats) { return None; }
+        let _ = stats.mark("key_hash");
+        let bytes = self.store.as_mut()?.get(kind, &result);
+        let _ = stats.mark("store_io");
+        bytes
+    }
+    fn remember(&mut self, options: &Options, kind: &str, bytes: &[u8]) {
+        if !self.valid_inputs { return; }
+        if let Some(store) = self.store.as_mut() {
+            let request = request_key(options);
+            let mut closure = self.inputs.clone();
+            if let Some(input) = &self.runtime_input { closure.push(input.clone()); }
+            let inputs = store::encode_inputs(&closure);
+            let mut identity = Vec::new();
+            store::push_bytes(&mut identity, request.as_bytes());
+            store::push_bytes(&mut identity, &inputs);
+            let result = sha256::hex_digest(&identity);
+            store.put(kind, &result, bytes);
+            let mut plan = Vec::new();
+            store::push_bytes(&mut plan, &inputs);
+            store::push_bytes(&mut plan, result.as_bytes());
+            store.put(&format!("inputs-{kind}"), &request, &plan);
+        }
+    }
+}
+fn optional_key(out: &mut Vec<u8>, value: &Option<String>) {
+    match value {
+        Some(value) => { store::push_word(out, 1); store::push_bytes(out, value.as_bytes()); }
+        None => store::push_word(out, 0),
+    }
+}
+fn request_key(options: &Options) -> String {
+    let mut out = Vec::new();
+    store::push_bytes(&mut out, b"lkjscript-input-closure-1");
+    optional_key(&mut out, &options.program.as_ref().map(|plan| plan.directory.clone()));
+    store::push_bytes(&mut out, options.command.as_bytes());
+    store::push_bytes(&mut out, options.path.as_bytes());
+    optional_key(&mut out, &options.entry);
+    optional_key(&mut out, &options.source_directory);
+    optional_key(&mut out, &options.library_directory);
+    optional_key(&mut out, &options.runtime_source);
+    store::push_word(&mut out, options.no_library as usize);
+    store::push_word(&mut out, options.profile as usize);
+    store::push_word(&mut out, options.roundtrip as usize);
+    match options.inline_limit {
+        Some(limit) => { store::push_word(&mut out, 1); store::push_word(&mut out, limit); }
+        None => store::push_word(&mut out, 0),
+    }
+    if options.profile { optional_key(&mut out, &options.output); }
+    store::push_word(&mut out, options.grants.len());
+    for grant in &options.grants { store::push_bytes(&mut out, grant.as_bytes()); }
+    store::push_word(&mut out, options.engines.len());
+    for engine in &options.engines { store::push_bytes(&mut out, engine.as_bytes()); }
+    store::push_word(&mut out, options.arguments.len());
+    for argument in &options.arguments { store::push_bytes(&mut out, argument); }
+    sha256::hex_digest(&out)
+}
+fn select_checked(
+    original: reuse::Checked, options: &Options, stats: &mut Stats, memo: &mut Memo,
+) -> Result<reuse::Selection, String> {
+    // Observation-only commands need the original verdict, not a native candidate.
+    // Roundtrip corpus checks still exercise both representations and emissions.
+    if !options.roundtrip && matches!(options.command.as_str(), "check" | "check-library" | "ir" | "authority") {
+        return Ok(reuse::Selection::unchanged(original));
+    }
+    let limit = options.inline_limit.unwrap_or(optimizer::default_limit());
+    if limit == 0 { return Ok(reuse::Selection::unchanged(original)); }
+    let rewrite = optimizer::inline(original.program(), limit);
+    memo.inline_calls += rewrite.calls;
+    memo.inline_functions += rewrite.functions;
+    stats.mark("inline")?;
+    let Some(candidate) = rewrite.program else {
+        return Ok(reuse::Selection::unchanged(original));
+    };
+    memo.inline_attempts += 1;
+    let result = check_reusing_with_prior(candidate, memo, options.roundtrip, Some(original.checked()), stats);
+    stats.mark("check_optimized")?;
+    if let Err(problems) = &result {
+        for problem in problems {
+            if problem.code == "E_TEST" {
+                return Err(ir_failure(&options.path, problems.clone()));
+            }
+        }
+    }
+    let selected = reuse::Selection::after_check(original, result);
+    if selected.rejected() { memo.inline_rejected += 1; }
+    else { memo.inline_accepted += 1; }
+    Ok(selected)
+}
+
+fn check_reusing(
+    program: ir::Program, memo: &mut Memo, verify: bool, stats: &mut Stats,
+) -> Result<reuse::Checked, Vec<ast::Diagnostic>> {
+    check_reusing_with_prior(program, memo, verify, None, stats)
+}
+fn check_reusing_with_prior(
+    program: ir::Program, memo: &mut Memo, verify: bool,
+    prior: Option<&ir::CheckedProgram>, stats: &mut Stats,
+) -> Result<reuse::Checked, Vec<ast::Diagnostic>> {
+    // The corpus compares both local proof reuse and authenticated records
+    // against ordinary checking, including complete located diagnostics/edits.
+    let expected: Option<Option<Vec<ast::Diagnostic>>> =
+        if verify && (prior.is_some() || memo.store.is_some()) {
+            Some(check::check_all(program.clone()).err())
+        } else { None };
+    let _ = stats.mark("check_verification");
+    let checked = if let Some(store) = memo.store.as_mut() {
+        // A graph pack carries only the current body keys; local proof reuse
+        // remains independently validated by the checker.
+        let prepared = reuse::Prepared::new(program);
+        let _ = stats.mark("key_hash");
+        let mut records = store.records("check", prepared.keys().graph(), prepared.keys().all());
+        let _ = stats.mark("store_io");
+        let checked = match prior {
+            Some(original) => match check::recheck_all_cached(original, prepared, &mut records) {
+                Ok((checked, count)) => { memo.checked_local_reused += count; Ok(checked) }
+                Err(problems) => Err(problems),
+            },
+            None => check::check_all_cached(prepared, &mut records),
+        };
+        let _ = stats.mark("check_body");
+        memo.checked_reused += records.hits;
+        store.flush(&records);
+        let _ = stats.mark("store_io");
+        checked
+    } else {
+        match prior {
+            Some(original) => match check::recheck_all(original, program) {
+                Ok((checked, count)) => {
+                    memo.checked_local_reused += count;
+                    Ok(reuse::Checked::uncached(checked))
+                }
+                Err(problems) => Err(problems),
+            },
+            None => check::check_all(program).map(|checked: ir::CheckedProgram| reuse::Checked::uncached(checked)),
+        }
+    };
+    let _ = stats.mark("check_body");
+    if let Some(expected) = expected {
+        let identical = match (&expected, &checked) {
+            (None, Ok(_)) => true,
+            (Some(left), Err(right)) => left == right,
+            _ => false,
+        };
+        if !identical {
+            memo.valid_inputs = false;
+            return Err(vec![ast::Diagnostic {
+                path: String::new(), file: 0, line: 1, column: 1,
+                code: "E_TEST".to_string(),
+                message: "proof reuse changed the checker verdict".to_string(),
+                edits: Vec::new(),
+            }]);
+        }
+    }
+    checked
+}
+fn emit_reusing(
+    checked: &reuse::Checked,
+    runtime: &runtime::Runtime,
+    entry: &str,
+    grants: &[ir::EntryGrant],
+    result_fd: Option<u32>,
+    profile_path: Option<&str>,
+    memo: &mut Memo, stats: &mut Stats,
+) -> Result<Vec<u8>, ast::Diagnostic> {
+    if let Some(keys) = checked.keys() {
+        if let Some(store) = memo.store.as_mut() {
+            let namespace = backend::cache_namespace(checked, runtime, grants, profile_path);
+            let _ = stats.mark("key_hash");
+            let mut records = store.records(&namespace, keys.graph(), keys.all());
+            let _ = stats.mark("store_io");
+            let result = backend::prepare_granted_reusing(
+                checked, runtime, entry, grants, result_fd, profile_path, &namespace, &mut records,
+            );
+            let _ = stats.mark("emit");
+            let result = result.and_then(|image: crate::native::PreparedImage| image.finish()).map(|image: crate::native::Image| image.bytes);
+            let _ = stats.mark("assemble");
+            memo.emitted_reused += records.hits;
+            store.flush(&records);
+            let _ = stats.mark("store_io");
+            return result;
+        }
+    }
+    let result = backend::prepare_granted(checked.checked(), runtime, entry, grants, result_fd, profile_path);
+    let _ = stats.mark("emit");
+    let result = result.and_then(|image: crate::native::PreparedImage| image.finish()).map(|image: crate::native::Image| image.bytes);
+    let _ = stats.mark("assemble");
+    result
+}
+fn encode_outcomes(accepted: bool, outcomes: &[Outcome]) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    store::push_word(&mut bytes, accepted as usize);
+    store::push_word(&mut bytes, outcomes.len());
+    for outcome in outcomes {
+        store::push_word(&mut bytes, outcome.status as usize);
+        store::push_bytes(&mut bytes, &outcome.stdout);
+        store::push_bytes(&mut bytes, &outcome.stderr);
+        store::push_bytes(&mut bytes, outcome.diagnostic.as_bytes());
+    }
+    bytes
+}
+fn decode_outcomes(bytes: &[u8], count: usize) -> Option<(bool, Vec<Outcome>)> {
+    let mut reader = store::Reader::new(bytes);
+    let accepted = reader.word()?;
+    if accepted > 1 || reader.word()? != count { return None; }
+    let mut outcomes = Vec::new();
+    for _ in 0..count {
+        let status = reader.word()?;
+        if status > 255 { return None; }
+        outcomes.push(Outcome {
+            status: status as u8, completion: Completion::Other,
+            stdout: reader.bytes()?, stderr: reader.bytes()?, diagnostic: reader.text()?,
+        });
+    }
+    if !reader.done() { return None; }
+    Some((accepted != 0, outcomes))
+}

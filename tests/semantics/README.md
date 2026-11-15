@@ -6,7 +6,7 @@ scalar assertions, including integer boundaries, aggregate layout, native regist
 preservation, projection/drop interactions and checked runtime operations. Both the
 interpreter and the native executable must satisfy each expectation header.
 
-The separate `src/semantic_main.rs` executable imports the production compiler
+The separate `src/semantic_main.lkj` executable imports the production compiler
 modules and checks 536 source/parser contracts plus 170 direct compiler/model
 contracts. These cover diagnostic recovery and original source locations, include
 reader confinement, generic owner identity, library demand, cyclic return contracts,
@@ -17,7 +17,7 @@ modules come from the current embedded library. The native gate builds and shard
 this executable automatically:
 
 ```sh
-target/lkjscript build src/semantic_main.rs -o target/semantic-test
+target/lkjscript build src/semantic_main.lkj -o target/semantic-test
 target/semantic-test 0 1
 ```
 

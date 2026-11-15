@@ -52,7 +52,7 @@ builds the Rust witness, compares complete compiler bytes, and checks every
 marked case with overflow checks enabled. Its native test coordinator keeps
 program stderr and Rust trap/status records separate.
 
-`tools/world-test.rs` checks binary arguments and streams, directory confinement,
+`tools/world-test.lkj` checks binary arguments and streams, directory confinement,
 closed and broken descriptors, process ownership, Listener descriptor promotion,
 and source/IR identity. Listener conformance cases cover IPv4 parsing, raw socket
 address bounds, failed-acquisition cleanup, affine ownership, and drop/rebind.

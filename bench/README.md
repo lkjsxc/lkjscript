@@ -14,16 +14,16 @@ status zero. Timing is sequential and observational; no time is an acceptance li
 
 | Program | Default workload | Observable result |
 | --- | --- | --- |
-| src/main.rs | Complete self-build with explicit current library/runtime | Compiler artifact |
-| aggregate64.rs | 10 million 64-byte records passed/returned through three call levels | All eight fields in recurrence checksum |
-| vector64.rs | 1 million inline 64-byte records, then 10 million reads | All eight fields in sum |
-| aggregate.rs | 20 million calls taking/returning a two-word Copy struct | Recurrence checksum |
-| scalar.rs | 200 million multiply/add/xor iterations | Final word |
-| scalar_add.rs | 200 million add/xor/mask iterations | Final word |
-| buffers.rs | 200,000 fresh Vec<i64> buffers of 1,000 elements | Indexed checksum |
-| vector.rs | 5 million Vec<i64> pushes, then 100 million reads | Sum |
-| http_parse.rs | 200,000 changing HTTP/1.1 requests through the consumer parser | Header boundary, path byte/length, method, body length and persistence checksum |
-| string_map.rs | 4,096 owned qualified String keys; 500,000 lookups with replacement/removal/reinsertion | Lookup and final ordered traversal checksum |
+| src/main.lkj | Complete self-build with explicit current library/runtime | Compiler artifact |
+| aggregate64.lkj | 10 million 64-byte records passed/returned through three call levels | All eight fields in recurrence checksum |
+| vector64.lkj | 1 million inline 64-byte records, then 10 million reads | All eight fields in sum |
+| aggregate.lkj | 20 million calls taking/returning a two-word Copy struct | Recurrence checksum |
+| scalar.lkj | 200 million multiply/add/xor iterations | Final word |
+| scalar_add.lkj | 200 million add/xor/mask iterations | Final word |
+| buffers.lkj | 200,000 fresh Vec<i64> buffers of 1,000 elements | Indexed checksum |
+| vector.lkj | 5 million Vec<i64> pushes, then 100 million reads | Sum |
+| http_parse.lkj | 200,000 changing HTTP/1.1 requests through the consumer parser | Header boundary, path byte/length, method, body length and persistence checksum |
+| string_map.lkj | 4,096 owned qualified String keys; 500,000 lookups with replacement/removal/reinsertion | Lookup and final ordered traversal checksum |
 
 Counts and seeds are runtime arguments. Call-chain functions use inline(never),
 which rustc honors. lkjscript IR has no source inline hints: use --inline-limit 0
@@ -34,7 +34,7 @@ workloads. Reports include elapsed/user/kernel time, peak RSS and executable siz
 transient results and images stay beneath target/bench/. Each timing includes the
 1/5/15-minute load averages read immediately before that run on the shared host.
 
-The HTTP row stages the current `examples/http_protocol.rs` beside its native
+The HTTP row stages the current `examples/http_protocol.lkj` beside its native
 source; the Rust wrapper imports that same example file. There is no duplicate
 parser implementation. A path digit changes on every iteration, and the row also
 checks HEAD, URL decoding, query stripping, connection close and missing Host
@@ -97,11 +97,11 @@ execution of compiler code; warm image reuse is measured separately below.
 A profiled compiler can attribute its own build by function and emitted-code kind:
 
 ```sh
-target/lkjscript build src/main.rs --library-dir library \
-    --runtime-source library/runtime.rs --profile --no-store -o target/bench/compiler-profile
+target/lkjscript build src/main.lkj --library-dir library \
+    --runtime-source library/runtime.lkj --profile --no-store -o target/bench/compiler-profile
 rm -f target/bench/compiler-profile.samples.*
-target/bench/compiler-profile build src/main.rs --library-dir library \
-    --runtime-source library/runtime.rs --no-store -o target/bench/profile-output
+target/bench/compiler-profile build src/main.lkj --library-dir library \
+    --runtime-source library/runtime.lkj --no-store -o target/bench/profile-output
 target/lkjscript profile target/bench/compiler-profile.samples.*
 ```
 
@@ -361,7 +361,7 @@ must also match the entry state. Dropping that destination while a view survives
 is rejected. Thus a view newly borrowed from the destination cannot survive into
 the next iteration and observe an earlier source initialization. This was
 reviewed against both `End` and targeted `Continue` validation. The permanent
-`aggregate_transfer_storage.rs` fixture compares the baseline native route,
+`aggregate_transfer_storage.lkj` fixture compares the baseline native route,
 candidate native route and original-IR interpreter, including Copy chains,
 source redefinitions, branches, loops, a later destination borrow and owned
 aggregate cleanup. A by-value Copy parameter plus a separately supplied mutable

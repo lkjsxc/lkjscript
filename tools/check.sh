@@ -63,9 +63,9 @@ step tool-build timeout --kill-after=10s 600s bash -c '
     set -e
     reuse=()
     if [[ -n "$LKJSCRIPT_STORE_KEY" ]]; then reuse=(--store "$LKJSCRIPT_STORE" --store-key "$LKJSCRIPT_STORE_KEY"); fi
-    target/lkjscript build tools/toolchain-test.rs -o target/gate/toolchain-test "${reuse[@]}"
-    target/lkjscript build tools/world-test.rs -o target/gate/world-test "${reuse[@]}"
-    target/lkjscript build src/semantic_main.rs -o target/gate/semantic-test "${reuse[@]}"
+    target/lkjscript build tools/toolchain-test.lkj -o target/gate/toolchain-test "${reuse[@]}"
+    target/lkjscript build tools/world-test.lkj -o target/gate/world-test "${reuse[@]}"
+    target/lkjscript build src/semantic_main.lkj -o target/gate/semantic-test "${reuse[@]}"
 '
 step closed-build timeout --kill-after=10s 600s bash tools/closed-semantics.sh "$check_binary" build
 toolchain() (
@@ -145,7 +145,7 @@ parallel_step 1 world world_cases
 parallel_step 1 profiler timeout --kill-after=10s 600s sh tools/profile-test.sh "$check_binary"
 parallel_step 1 optimizer timeout --kill-after=10s 600s bash tools/optimizer-test.sh "$check_binary"
 parallel_step 1 resources timeout --kill-after=10s 600s bash tools/resource-test.sh "$check_binary"
-parallel_step 1 runner timeout --kill-after=10s 600s "$check_binary" test src/test_runner.rs --stats "${check_reuse[@]}"
+parallel_step 1 runner timeout --kill-after=10s 600s "$check_binary" test src/test_runner.lkj --stats "${check_reuse[@]}"
 parallel_step 1 diagnostic-cases diagnostic_cases
 parallel_step 2 store timeout --kill-after=10s 600s bash tools/store-test.sh "$check_binary"
 parallel_step 2 program-directory timeout --kill-after=10s 600s bash tools/program-directory-test.sh "$check_binary"

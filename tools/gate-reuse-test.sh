@@ -30,20 +30,20 @@ reject_pair() {
     fi
     grep -Fq 'exact image digest' "$test_directory/$label.log" || fail "$label did not check the image digest"
 }
-cat > "$test_directory/source/pass.rs" <<'SOURCE'
+cat > "$test_directory/source/pass.lkj" <<'SOURCE'
 pub fn main() { assert_eq!(17usize + 25usize, 42usize); }
 SOURCE
-cat > "$test_directory/source/fail.rs" <<'SOURCE'
+cat > "$test_directory/source/fail.lkj" <<'SOURCE'
 pub fn main() { assert!(false); }
 SOURCE
-cat > "$test_directory/source/world.rs" <<SOURCE
+cat > "$test_directory/source/world.lkj" <<SOURCE
 pub fn main(mut world: World) {
     let mut directory = world.directory("$test_directory").unwrap();
     let mut marker = directory.create("host-marker").unwrap();
     marker.write_all(b"host observation").unwrap();
 }
 SOURCE
-"$compiler" ir pass.rs --source-dir "$test_directory/source" --no-store -o "$test_directory/pass.lkjir"
+"$compiler" ir pass.lkj --source-dir "$test_directory/source" --no-store -o "$test_directory/pass.lkjir"
 "$compiler" authority "$test_directory/pass.lkjir" --no-store > "$test_directory/pass.authority"
 "$compiler" build "$test_directory/pass.lkjir" --no-store -o "$test_directory/pass"
 seal_report "$test_directory/pass.authority" "$test_directory/pass"
@@ -94,7 +94,7 @@ expect renewed 'reused=0 rerun=1' "${invoke[@]}" 1 "$store" "$key"
 expect generation 'reused=1 rerun=0' "$runner" "$test_directory/pass-again" "$test_directory/pass-again.authority" "$contract" 1 "$store" "$key"
 
 # World/effect reports reject before a lookup. Failure is never published.
-"$compiler" ir world.rs --source-dir "$test_directory/source" --no-store -o "$test_directory/world.lkjir"
+"$compiler" ir world.lkj --source-dir "$test_directory/source" --no-store -o "$test_directory/world.lkjir"
 "$compiler" authority "$test_directory/world.lkjir" --no-store > "$test_directory/world.authority"
 "$compiler" build "$test_directory/world.lkjir" --no-store -o "$test_directory/world"
 seal_report "$test_directory/world.authority" "$test_directory/world"
@@ -104,7 +104,7 @@ if "$runner" "$test_directory/pass" "$test_directory/world.authority" "$contract
     fail 'open authority was eligible for reuse'
 fi
 grep -Fq 'no grants or reachable effects' "$test_directory/open.log" || fail 'open authority diagnostic'
-"$compiler" ir fail.rs --source-dir "$test_directory/source" --no-store -o "$test_directory/fail.lkjir"
+"$compiler" ir fail.lkj --source-dir "$test_directory/source" --no-store -o "$test_directory/fail.lkjir"
 "$compiler" authority "$test_directory/fail.lkjir" --no-store > "$test_directory/fail.authority"
 "$compiler" build "$test_directory/fail.lkjir" --no-store -o "$test_directory/fail"
 seal_report "$test_directory/fail.authority" "$test_directory/fail"

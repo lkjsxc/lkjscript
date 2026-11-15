@@ -6,35 +6,34 @@ pub use lkjscript::{
     ast, authority, entry_grants, backend, check, diagnostic, diagnostics, elaborate, frontend, generics, interpreter, ir,
     ir_text, ir_binary, json, names, native, optimizer, resolve, reuse, runtime, runtime_memory, sha256, source, syntax, x86,
 };
-#[path = "../../src/embedded.rs"]
-mod embedded;
+include!(concat!(env!("OUT_DIR"), "/embedded-module.rs"));
 mod host_network {
     use super::host::{Child, File, World};
-    include!("../../src/host_network.rs");
+    include!(concat!(env!("OUT_DIR"), "/source/src/host_network.rs"));
 }
 mod driver_host {
     use super::host::{Child, Clock, Directory, File, Listener, Process, World};
-    include!("../../src/driver_host.rs");
+    include!(concat!(env!("OUT_DIR"), "/source/src/driver_host.rs"));
 }
 mod store {
     use super::host::{Clock, Directory, File, World};
-    include!("../../src/store.rs");
+    include!(concat!(env!("OUT_DIR"), "/source/src/store.rs"));
 }
 mod program_directory {
     use super::host::World;
-    include!("../../src/program_directory.rs");
+    include!(concat!(env!("OUT_DIR"), "/source/src/program_directory.rs"));
 }
 mod driver {
     use super::host::{Child, Clock, Directory, File, Listener, Process, World};
-    include!("../../src/driver.rs");
+    include!(concat!(env!("OUT_DIR"), "/source/src/driver.rs"));
 }
 mod test_runner {
     use super::host::{Child, Clock, Directory, File, Listener, Process, World};
-    include!("../../src/test_runner.rs");
+    include!(concat!(env!("OUT_DIR"), "/source/src/test_runner.rs"));
 }
 mod test_generators {
     use super::host::{Child, Clock, Directory, File, Listener, Process, World};
-    include!("../../src/test_generators.rs");
+    include!(concat!(env!("OUT_DIR"), "/source/src/test_generators.rs"));
 }
 fn main() {
     host::enter(driver::main);

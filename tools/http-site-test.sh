@@ -86,14 +86,14 @@ site_load_before=$(cat /proc/loadavg)
 site_started_ns=$(date +%s%N)
 if [ "$offline" = yes ]; then
     sh tools/http-site-switch-test.sh
-    "$compiler" build tools/http-site-query-cases.rs --library-dir library -o "$site_work/query-check"
+    "$compiler" build tools/http-site-query-cases.lkj --library-dir library -o "$site_work/query-check"
     timeout --kill-after=2s 30s "$site_work/query-check"
     printf 'ok site query guard: complete list accepted; missing, duplicate and non-search lists refused\n'
     if [ "$campaign" = yes ]; then
-        "$compiler" test tools/http-site-parity.rs --library-dir library --jobs 1
+        "$compiler" test tools/http-site-parity.lkj --library-dir library --jobs 1
     fi
 fi
-"$compiler" build examples/site.rs --library-dir library \
+"$compiler" build examples/site.lkj --library-dir library \
     --grant output --grant listener=127.0.0.1:0 \
     --grant clock --grant ready --grant stop -o "$site_work/server"
 "$site_work/server" >"$site_work/server.out" 2>"$site_work/server.err" &
@@ -116,12 +116,12 @@ port=$bound_port
 test "$stop_target" = "$server_pid"
 
 if [ "$offline" = yes ]; then
-    "$compiler" build tools/http-site-cases.rs --library-dir library \
+    "$compiler" build tools/http-site-cases.lkj --library-dir library \
         --grant output --grant root=. --grant target=127.0.0.1:"$port" \
         -o "$site_work/client"
     mode=offline
 else
-    "$compiler" build tools/http-site-parity.rs --library-dir library \
+    "$compiler" build tools/http-site-parity.lkj --library-dir library \
         --grant output --grant root=examples/site-content --grant origin=127.0.0.1:8798 \
         --grant candidate=127.0.0.1:"$port" -o "$site_work/client"
     mode=live
@@ -135,19 +135,19 @@ cat "$site_work/client.out"
 
 # The startup diagnostic must identify a refused Listener, and the same address
 # must remain usable after this service actively closes its accepted streams.
-"$compiler" build tests/diagnostics/entry_listener_grant.rs --library-dir library \
+"$compiler" build tests/diagnostics/entry_listener_grant.lkj --library-dir library \
     --grant "incoming=127.0.0.1:$port" -o "$site_work/rebind"
 for route in native interpreter; do
     refused=0
     if [ "$route" = native ]; then
         timeout --kill-after=2s 30s "$site_work/rebind" >"$site_work/refused.out" 2>"$site_work/refused.err" || refused=$?
     else
-        timeout --kill-after=2s 30s "$compiler" run tests/diagnostics/entry_listener_grant.rs --library-dir library \
+        timeout --kill-after=2s 30s "$compiler" run tests/diagnostics/entry_listener_grant.lkj --library-dir library \
             --engine interpreter --grant "incoming=127.0.0.1:$port" >"$site_work/refused.out" 2>"$site_work/refused.err" || refused=$?
     fi
     [ "$refused" -eq 1 ]
     grep -Fq "entry grant Listener failed: errno 98 (127.0.0.1:$port)" "$site_work/refused.err"
-    grep -Eq 'R0007 at line 4 file 0:|entry_listener_grant.rs:4: R0007 ' "$site_work/refused.err"
+    grep -Eq 'R0007 at line 4 file 0:|entry_listener_grant.lkj:4: R0007 ' "$site_work/refused.err"
 done
 kill -TERM "$stop_target"
 attempt=0
@@ -163,7 +163,7 @@ hex=$(printf '%04X' "$port")
 awk -v wanted="$hex" '$4 == "06" {split($2, address, ":"); if(address[2] == wanted) found++}
     END {exit found ? 0 : 1}' /proc/net/tcp
 timeout --kill-after=2s 30s "$site_work/rebind"
-timeout --kill-after=2s 30s "$compiler" run tests/diagnostics/entry_listener_grant.rs --library-dir library \
+timeout --kill-after=2s 30s "$compiler" run tests/diagnostics/entry_listener_grant.lkj --library-dir library \
     --engine interpreter --grant "incoming=127.0.0.1:$port"
 printf 'ok Listener: occupied address refused with errno; TIME_WAIT rebind passed in native and interpreter\n'
 site_elapsed_ms=$((($(date +%s%N) - site_started_ns) / 1000000))

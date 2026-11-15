@@ -4,10 +4,10 @@
 origin at `http://127.0.0.1:8798`. It is an operational test fixture, separate
 from the archive served by the candidate. The candidate never opens this file.
 
-The recorder is `tools/http-site-record.rs`. Its only network authority is the
+The recorder is `tools/http-site-record.lkj`. Its only network authority is the
 granted origin connector. It reads the 51 search-query targets in
 `examples/site-content/paths.txt` and the thirteen protocol probes shared with live
-parity in `tools/http_site_probes.rs`. Every record stores the request, observed
+parity in `tools/http_site_probes.lkj`. Every record stores the request, observed
 status, Content-Length presence/value, all six stable header pairs, and SHA-256
 of the complete response body. Date and Connection are excluded. Header names
 are lowercase; duplicate header pairs, if present, remain separate.
@@ -27,7 +27,7 @@ sh tools/http-site-test.sh --offline
 ```
 
 The harness starts a candidate on a fresh loopback port and runs
-`tools/http-site-cases.rs` with output, repository-directory and candidate
+`tools/http-site-cases.lkj` with output, repository-directory and candidate
 connector grants. The checker has no live-origin connector. It verifies all
 twelve published archive paths and the archived 404 byte-for-byte, then compares
 the 64 recorded requests with the frozen status, framing, stable headers and
@@ -42,7 +42,7 @@ refuses an existing `origin.json`; preserve the old file for comparison, then
 remove it intentionally before executing:
 
 ```sh
-target/lkjscript build tools/http-site-record.rs --library-dir library \
+target/lkjscript build tools/http-site-record.lkj --library-dir library \
   --grant output --grant origin=127.0.0.1:8798 --grant root=. \
   -o target/http-site-record
 target/http-site-record

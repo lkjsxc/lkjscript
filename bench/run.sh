@@ -54,32 +54,32 @@ measure() {
 set --
 if [ -n "$inline_limit" ]; then set -- --inline-limit "$inline_limit"; fi
 # This row measures the compiler code which the microbenchmarks cannot represent.
-measure self_build native "$compiler" "$compiler" build src/main.rs \
-    --library-dir library --runtime-source library/runtime.rs --no-store "$@" -o "$output/compiler-native"
+measure self_build native "$compiler" "$compiler" build src/main.lkj \
+    --library-dir library --runtime-source library/runtime.lkj --no-store "$@" -o "$output/compiler-native"
 if [ -n "$witness0" ]; then
-    measure self_build witness0 "$witness0" "$witness0" build src/main.rs \
-        --library-dir library --runtime-source library/runtime.rs --no-store "$@" -o "$output/compiler-witness0"
+    measure self_build witness0 "$witness0" "$witness0" build src/main.lkj \
+        --library-dir library --runtime-source library/runtime.lkj --no-store "$@" -o "$output/compiler-witness0"
     cmp "$output/compiler-native" "$output/compiler-witness0"
 fi
 if [ -n "$witness" ]; then
-    measure self_build witness3 "$witness" "$witness" build src/main.rs \
-        --library-dir library --runtime-source library/runtime.rs --no-store "$@" -o "$output/compiler-witness"
+    measure self_build witness3 "$witness" "$witness" build src/main.lkj \
+        --library-dir library --runtime-source library/runtime.lkj --no-store "$@" -o "$output/compiler-witness"
     cmp "$output/compiler-native" "$output/compiler-witness"
 fi
 if [ -n "$previous" ]; then
-    measure self_build previous "$previous" "$previous" build src/main.rs \
-        --library-dir library --runtime-source library/runtime.rs --no-store -o "$output/compiler-previous"
+    measure self_build previous "$previous" "$previous" build src/main.lkj \
+        --library-dir library --runtime-source library/runtime.lkj --no-store -o "$output/compiler-previous"
 fi
 
 host=witness/bridge/output.rs
 while read -r program count length seed small_count small_length; do
     [ -n "$program" ] || continue
-    source="bench/$program.rs"
+    source="bench/$program.lkj"
     if [ "$program" = http_parse ]; then
         mkdir -p "$output/http_parse-source"
-        cp "$source" "$output/http_parse-source/main.rs"
-        cp bench/common.rs examples/http_protocol.rs "$output/http_parse-source/"
-        source="$output/http_parse-source/main.rs"
+        cp "$source" "$output/http_parse-source/main.lkj"
+        cp bench/common.lkj examples/http_protocol.lkj "$output/http_parse-source/"
+        source="$output/http_parse-source/main.lkj"
     fi
     routes=native
     if [ -n "$inline_limit" ]; then
@@ -94,8 +94,8 @@ while read -r program count length seed small_count small_length; do
     if [ "$rust" = yes ]; then
         {
             printf '#[path="%s/%s"] mod __lkjscript_host;\nmod case {\n' "$root" "$host"
-            sed -e "s|^mod common;$|#[path=\"$root/bench/common.rs\"] mod common;|" \
-                -e "s|^mod http_protocol;$|#[path=\"$root/examples/http_protocol.rs\"] mod http_protocol;|" "$source"
+            sed -e "s|^mod common;$|#[path=\"$root/bench/common.lkj\"] mod common;|" \
+                -e "s|^mod http_protocol;$|#[path=\"$root/examples/http_protocol.lkj\"] mod http_protocol;|" "$source"
             printf '\nuse crate::__lkjscript_host::World;\n}\nfn main(){__lkjscript_host::enter(case::main);}\n'
         } > "$output/$program-witness.rs"
         for level in 0 3; do

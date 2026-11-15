@@ -1,5 +1,7 @@
 # Status — 2026-11-15
 
+**Source decision: .lkj, landed as 1,072 language sources.** Loader, program.lkj, cases/tools/docs and witness agree; only actual Rust stays .rs, with no alias/fallback. Gate 461.920 s (load 3.92→8.04), current generations byte-identical. Rename and required seed are separate commits pushed together because the old seed only discovers .rs; Programs can rebase now.
+
 **Compiler.** Cold/edit/unchanged builds 33.840/10.539/1.244 s (load 21.25→19.68 /19.68→18.58 /19.68→19.68). Edit rebuilds 1/2,714 definitions and 1/10,072 functions; reuses 10,071 checks and 9,922 fragments; runnable images equal no-store bytes. Initial dominant inference/construction now 0.242/0.015 s; 3 s unmet, whole-graph authentication/identity remain. Cold store +10.51% versus 30.64 s no-store (load 19.83→21.25); cap 256 MiB/Directory, 512 MiB with four workers; costs/overfill proofs in bench/README.md.
 
 | Phase seconds | Cold | One-body edit | Unchanged |

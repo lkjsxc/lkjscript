@@ -42,7 +42,7 @@ cannot replace executable evidence. `--reference SOURCE` also compares against a
 fixed independent expansion that agrees on both routes. Exit status and program
 stderr are compared separately from compiler diagnostics.
 
-Implementation lives in src/test_generators.rs and src/test_generators/.
+Implementation lives in src/test_generators.lkj and src/test_generators/.
 `generate --self-test` checks deterministic mutation replay, stale edit detection,
 authority exclusion, outcome classification and balanced reduction boundaries.
 

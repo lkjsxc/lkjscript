@@ -55,17 +55,17 @@ printf 'ok\n' > "$stop_work/root/ok.txt"
 if [ "$engine" = native ]; then
     printf '60\n60\n60\n2\n' > "$stop_work/root/.http-policy"
     dd if=/dev/zero of="$stop_work/root/large.bin" bs=1048576 count=32 status=none
-    "$compiler" build examples/http.rs --library-dir library --grant output --grant root="$stop_work/root" \
+    "$compiler" build examples/http.lkj --library-dir library --grant output --grant root="$stop_work/root" \
         --grant listener=127.0.0.1:0 --grant clock --grant ready --grant stop -o "$stop_work/server"
 else
     # A tiny fixture with the compatible three-line policy and default 5s drain.
     printf '60\n30\n30\n' > "$stop_work/root/.http-policy"
 fi
-"$compiler" build tools/http-stop.rs --library-dir library -o "$stop_work/client"
+"$compiler" build tools/http-stop.lkj --library-dir library -o "$stop_work/client"
 if [ "$engine" = native ]; then
     "$stop_work/server" >"$stop_work/server.out" 2>"$stop_work/server.err" &
 else
-    "$compiler" run examples/http.rs --engine interpreter --library-dir library \
+    "$compiler" run examples/http.lkj --engine interpreter --library-dir library \
         --grant output --grant root="$stop_work/root" --grant listener=127.0.0.1:0 \
         --grant clock --grant ready --grant stop >"$stop_work/server.out" 2>"$stop_work/server.err" &
 fi

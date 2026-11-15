@@ -1,0 +1,478 @@
+// Independent syscall broker for interpreter effects; no IR or native lowering.
+// Explicit paths also preserve child resolution when the Rust witness includes this file.
+#[path = "host_network/broker.lkj"]
+mod broker;
+#[path = "host_network/process.lkj"]
+mod process;
+#[path = "host_network/directories.lkj"]
+mod directories;
+#[path = "host_network/lifecycle.lkj"]
+mod lifecycle;
+use crate::x86::*;
+
+struct Connection {
+    control: Option<File>,
+    child: Child,
+    address: Vec<u8>,
+    nonce: Vec<u8>,
+}
+pub struct Network {
+    broker: Option<Connection>,
+    sleeper: Option<File>,
+}
+fn read_exact(file: &mut File, bytes: &mut [u8]) -> Result<(), i64> {
+    let mut offset = 0usize;
+    while offset < bytes.len() {
+        let count = file.read(&mut bytes[offset..])?;
+        if count == 0 { return Err(5); }
+        offset += count;
+    }
+    Ok(())
+}
+fn word(bytes: &[u8]) -> u64 {
+    let mut result = 0u64;
+    for index in 0usize..8usize {
+        result |= (bytes[index] as u64) << ((index * 8) as u64);
+    }
+    result
+}
+impl Network {
+    pub fn new() -> Self {
+        Self { broker: None, sleeper: None }
+    }
+    pub fn finish(&mut self) {
+        if let Some(mut connection) = self.broker.take() {
+            drop(connection.control.take());
+            let _ = connection.child.wait();
+        }
+    }
+    fn pause(&mut self, world: &mut World, empty: &File) -> Result<(), i64> {
+        if self.sleeper.is_none() {
+            let mut file = world.temporary_file()?;
+            file.write_all(&sleep_image()?)?;
+            file.set_executable()?;
+            self.sleeper = Some(file);
+        }
+        let executable = self.sleeper.as_ref().ok_or(5i64)?;
+        let mut process = world.process();
+        let arguments: Vec<Vec<u8>> = Vec::new();
+        let mut child = process.spawn_file(executable, &arguments, empty, empty, empty, empty)?;
+        if child.wait()? != 0 { return Err(5); }
+        Ok(())
+    }
+    fn started(&mut self, world: &mut World, child: &mut Child, status: &mut File, empty: &File) -> Result<(), i64> {
+        let mut bytes = [0u8; 8];
+        let mut exited = false;
+        loop {
+            status.rewind()?;
+            let count = status.read(&mut bytes)?;
+            if count == 8 {
+                let error = word(&bytes);
+                if error == 0 { return Ok(()); }
+                if error > 4095 { return Err(5); }
+                return Err(error as i64);
+            }
+            if exited { return Err(5); }
+            exited = child.try_wait()?.is_some();
+            if !exited { self.pause(world, empty)?; }
+        }
+    }
+    fn ensure(&mut self, world: &mut World) -> Result<(), i64> {
+        if self.broker.is_some() { return Ok(()); }
+        let mut random_root = world.directory("/dev")?;
+        let mut random = random_root.open("urandom")?;
+        let mut nonce = vec![0u8; 32];
+        read_exact(&mut random, &mut nonce)?;
+        let mut address = vec![1u8, 0, 0];
+        address.extend_from_slice(&nonce);
+        let mut listener = world.listen("127.0.0.1", 0u16)?;
+        let mut local = [0u8; 16];
+        let status = listener.__lkjscript_address(&mut local);
+        if status < 0 { return Err(-status); }
+        let image = broker::image(&local, &address, &nonce)?;
+        let mut executable = world.temporary_file()?;
+        executable.write_all(&image)?;
+        executable.set_executable()?;
+        let empty = world.temporary_file()?;
+        let mut startup = world.temporary_file()?;
+        let arguments: Vec<Vec<u8>> = Vec::new();
+        let mut process = world.process();
+        let mut child = process.spawn_file(&executable, &arguments, &empty, &startup, &empty, &empty)?;
+        self.started(world, &mut child, &mut startup, &empty)?;
+        let mut stream = listener.accept()?;
+        let mut claimed = [0u8; 32];
+        read_exact(&mut stream, &mut claimed)?;
+        if claimed[..] != nonce[..] { return Err(13); }
+        set_nodelay(world, &stream, true)?;
+        self.broker = Some(Connection { control: Some(stream), child, address, nonce });
+        Ok(())
+    }
+    fn request(&mut self, operation: u64, arguments: &[u64], payload: &[u8]) -> Result<(i64, Vec<u8>), i64> {
+        assert!(arguments.len() <= 6);
+        let connection = self.broker.as_mut().ok_or(9i64)?;
+        let control = connection.control.as_mut().ok_or(9i64)?;
+        let mut header = Vec::new();
+        append_word(&mut header, operation, 8);
+        for argument in arguments { append_word(&mut header, *argument, 8); }
+        for _index in arguments.len()..6usize { append_word(&mut header, 0, 8); }
+        append_word(&mut header, payload.len() as u64, 8);
+        control.write_all(&header)?;
+        control.write_all(payload)?;
+        let mut response = [0u8; 16];
+        read_exact(control, &mut response)?;
+        let result = word(&response[..8]) as i64;
+        let length = word(&response[8..]) as usize;
+        let mut body = vec![0u8; length];
+        read_exact(control, &mut body)?;
+        if result < 0 { return Err(-result); }
+        Ok((result, body))
+    }
+    fn unit_request(&mut self, operation: u64, arguments: &[u64]) -> Result<(), i64> {
+        self.request(operation, arguments, b"")?;
+        Ok(())
+    }
+    pub fn open_stream(&mut self, world: &mut World, address: &[u8]) -> Result<u64, i64> {
+        self.ensure(world)?;
+        let (handle, _) = self.request(1, &[0u64; 0], address)?;
+        Ok(handle as u64)
+    }
+    pub fn open_listener(&mut self, world: &mut World, address: &[u8]) -> Result<u64, i64> {
+        self.ensure(world)?;
+        let (handle, _) = self.request(2, &[0u64; 0], address)?;
+        Ok(handle as u64)
+    }
+    pub fn take_connection(&mut self, listener: u64, nodelay: bool) -> Result<u64, i64> {
+        let (handle, _) = self.request(3, &[listener, nodelay as u64], b"")?;
+        Ok(handle as u64)
+    }
+    pub fn address_of(&mut self, listener: u64, bytes: &mut [u8]) -> Result<(), i64> {
+        if bytes.len() != 16 { return Err(22); }
+        let (_, address) = self.request(4, &[listener], b"")?;
+        if address.len() != 16 { return Err(5); }
+        bytes.copy_from_slice(&address);
+        Ok(())
+    }
+    pub fn read_remote(&mut self, file: u64, bytes: &mut [u8]) -> Result<usize, i64> {
+        let (count, body) = self.request(5, &[file, bytes.len() as u64], b"")?;
+        if count as usize != body.len() || body.len() > bytes.len() { return Err(5); }
+        bytes[..body.len()].copy_from_slice(&body);
+        Ok(body.len())
+    }
+    pub fn write_remote(&mut self, file: u64, bytes: &[u8]) -> Result<usize, i64> {
+        let (count, _) = self.request(6, &[file], bytes)?;
+        if count as usize > bytes.len() { return Err(5); }
+        Ok(count as usize)
+    }
+    pub fn close_remote(&mut self, file: u64) {
+        let _ = self.unit_request(7, &[file]);
+    }
+    pub fn duplicate_remote(&mut self, file: u64) -> Result<u64, i64> {
+        let (handle, _) = self.request(8, &[file], b"")?;
+        Ok(handle as u64)
+    }
+    pub fn readonly_remote(&mut self, file: u64) -> Result<u64, i64> {
+        let (handle, _) = self.request(9, &[file], b"")?;
+        Ok(handle as u64)
+    }
+    pub fn rewind_remote(&mut self, file: u64) -> Result<(), i64> {
+        self.unit_request(10, &[file])
+    }
+    pub fn executable_remote(&mut self, file: u64) -> Result<(), i64> {
+        self.unit_request(11, &[file])
+    }
+    pub fn set_status_flags(&mut self, file: u64, enabled: bool) -> Result<(), i64> {
+        self.unit_request(12, &[file, enabled as u64])
+    }
+    pub fn random_bytes(&mut self, world: &mut World, bytes: &mut [u8]) -> Result<(), i64> {
+        if bytes.is_empty() { return Ok(()); }
+        self.ensure(world)?;
+        let (filled, body) = self.request(42, &[bytes.len() as u64], b"")?;
+        if filled as usize > bytes.len() || body.len() < 8 || body.len() - 8 != filled as usize { return Err(5); }
+        let error = word(&body[..8]);
+        bytes[..filled as usize].copy_from_slice(&body[8..]);
+        if error > 4095 { return Err(5); }
+        if error != 0 { return Err(error as i64); }
+        if filled as usize != bytes.len() { return Err(5); }
+        Ok(())
+    }
+    pub fn realtime_nanoseconds(&mut self, world: &mut World) -> Result<usize, i64> {
+        self.ensure(world)?;
+        let (_, body) = self.request(43, &[1u64], b"")?;
+        if body.len() != 16 { return Err(5); }
+        let seconds = word(&body[..8]);
+        let nanos = word(&body[8..]);
+        if (seconds as i64) < 0 || nanos >= 1_000_000_000 || seconds > ((!0u64) - nanos) / 1_000_000_000 { return Err(75); }
+        Ok((seconds * 1_000_000_000 + nanos) as usize)
+    }
+    pub fn realtime_value(&mut self, world: &mut World) -> Result<i64, i64> {
+        self.ensure(world)?;
+        let (_, body) = self.request(43, &[0u64; 0], b"")?;
+        if body.len() != 8 { return Err(5); }
+        Ok(word(&body) as i64)
+    }
+    pub fn private_remote(&mut self, file: u64) -> Result<(), i64> {
+        self.unit_request(44, &[file])
+    }
+    pub fn acquire_stop(&mut self, world: &mut World) -> Result<u64, i64> {
+        self.ensure(world)?;
+        let (descriptor, _) = self.request(45, &[0u64; 0], b"")?;
+        Ok(descriptor as u64)
+    }
+    pub fn consume_stop(&mut self, descriptor: u64) -> Result<bool, i64> {
+        let (value, _) = self.request(46, &[descriptor], b"")?;
+        if value > 1 { return Err(5); }
+        Ok(value == 1)
+    }
+    pub fn signal_endpoint(&mut self, descriptor: u64) -> Result<u32, i64> {
+        let (pid, _) = self.request(47, &[descriptor], b"")?;
+        if pid == 0 || pid > 4294967295 { return Err(5); }
+        Ok(pid as u32)
+    }
+    pub fn stop_remote_child(&mut self, child: u64) -> Result<(), i64> {
+        self.unit_request(24, &[child])
+    }
+    pub fn create_selector(&mut self, world: &mut World) -> Result<u64, i64> {
+        self.ensure(world)?;
+        let (handle, _) = self.request(13, &[0u64; 0], b"")?;
+        Ok(handle as u64)
+    }
+    pub fn register_interest(&mut self, selector: u64, file: u64, token: usize, interest: u8) -> Result<(), i64> {
+        self.unit_request(14, &[selector, file, token as u64, interest as u64])
+    }
+    pub fn remove_interest(&mut self, selector: u64, file: u64) -> Result<(), i64> {
+        self.unit_request(15, &[selector, file])
+    }
+    pub fn wait_events(&mut self, selector: u64, deadline: usize) -> Result<Vec<(usize, u8)>, i64> {
+        let (count, bytes) = self.request(16, &[selector, deadline as u64], b"")?;
+        if bytes.len() % 16usize != 0 || bytes.len() / 16usize != count as usize { return Err(5); }
+        let mut events = Vec::new();
+        let mut offset = 0usize;
+        while offset < bytes.len() {
+            events.push((word(&bytes[offset..offset + 8]) as usize, word(&bytes[offset + 8..offset + 16]) as u8));
+            offset += 16;
+        }
+        Ok(events)
+    }
+    pub fn import_owned(&mut self, world: &mut World, file: &File) -> Result<u64, i64> {
+        self.ensure(world)?;
+        let connection = self.broker.as_ref().ok_or(9i64)?;
+        let image = broker::import_image(&connection.address, &connection.nonce)?;
+        let mut executable = world.temporary_file()?;
+        executable.write_all(&image)?;
+        executable.set_executable()?;
+        let mut output = world.temporary_file()?;
+        let empty = world.temporary_file()?;
+        let mut process = world.process();
+        let arguments: Vec<Vec<u8>> = Vec::new();
+        let mut child = process.spawn_file(&executable, &arguments, file, &output, &empty, &empty)?;
+        if child.wait()? != 0 { return Err(5); }
+        output.rewind()?;
+        let mut bytes = [0u8; 8];
+        read_exact(&mut output, &mut bytes)?;
+        let result = word(&bytes) as i64;
+        if result < 0 { return Err(-result); }
+        Ok(result as u64)
+    }
+    pub fn open_root(&mut self, world: &mut World, path: &[u8]) -> Result<u64, i64> {
+        self.ensure(world)?;
+        let (handle, _) = self.request(35, &[0u64; 0], path)?;
+        Ok(handle as u64)
+    }
+    pub fn open_relative_file(&mut self, directory: u64, path: &[u8], create: bool) -> Result<u64, i64> {
+        let (handle, _) = self.request(36, &[directory, create as u64], path)?;
+        Ok(handle as u64)
+    }
+    pub fn open_relative_directory(&mut self, directory: u64, path: &[u8]) -> Result<u64, i64> {
+        let (handle, _) = self.request(37, &[directory], path)?;
+        Ok(handle as u64)
+    }
+    pub fn read_entries(&mut self, directory: u64, bytes: &mut [u8]) -> Result<usize, i64> {
+        let (count, body) = self.request(38, &[directory, bytes.len() as u64], b"")?;
+        if count as usize != body.len() || body.len() > bytes.len() { return Err(5); }
+        bytes[..body.len()].copy_from_slice(&body);
+        Ok(body.len())
+    }
+    pub fn make_directory(&mut self, directory: u64, name: &[u8]) -> Result<(), i64> {
+        self.request(39, &[directory], name)?;
+        Ok(())
+    }
+    pub fn unlink_entry(&mut self, directory: u64, name: &[u8], is_directory: bool) -> Result<(), i64> {
+        self.request(40, &[directory, is_directory as u64], name)?;
+        Ok(())
+    }
+    pub fn move_entry(&mut self, from: u64, old: &[u8], to: u64, new: &[u8]) -> Result<(), i64> {
+        let mut names = old.to_vec();
+        names.extend_from_slice(new);
+        self.request(41, &[from, to, old.len() as u64], &names)?;
+        Ok(())
+    }
+    pub fn open_storage(&mut self, directory: u64, path: &[u8], append: bool) -> Result<u64, i64> {
+        let (handle, _) = self.request(if append { 31 } else { 30 }, &[directory], path)?;
+        Ok(handle as u64)
+    }
+    pub fn open_private(&mut self, directory: u64, path: &[u8]) -> Result<u64, i64> {
+        let (handle, _) = self.request(48, &[directory], path)?;
+        Ok(handle as u64)
+    }
+    pub fn sync_remote(&mut self, file: u64) -> Result<(), i64> {
+        self.unit_request(32, &[file])
+    }
+    pub fn resize_remote(&mut self, file: u64, length: usize) -> Result<(), i64> {
+        self.unit_request(33, &[file, length as u64])
+    }
+    pub fn lock_remote_wait(&mut self, file: u64) -> Result<(), i64> {
+        self.unit_request(34, &[file, 1u64])
+    }
+    pub fn lock_remote(&mut self, file: u64) -> Result<(), i64> {
+        self.unit_request(34, &[file])
+    }
+    pub fn spawn_remote(&mut self, executable: u64, arguments: &[u8], input: u64, output: u64, errors: u64, result: u64) -> Result<u64, i64> {
+        let (identity, _) = self.request(20, &[executable, input, output, errors, result], arguments)?;
+        Ok(identity as u64)
+    }
+    pub fn wait_remote_child(&mut self, child: u64, nonblocking: bool) -> Result<Option<i64>, i64> {
+        let (status, _) = self.request(21, &[child, nonblocking as u64], b"")?;
+        if status == 0 { Ok(None) } else { Ok(Some(status - 1)) }
+    }
+    pub fn terminate_remote_child(&mut self, child: u64) -> Result<(), i64> {
+        self.unit_request(22, &[child])
+    }
+    pub fn drop_remote_child(&mut self, child: u64) {
+        let _ = self.unit_request(23, &[child]);
+    }
+}
+impl Drop for Network {
+    fn drop(&mut self) {
+        // An interrupted RPC may be blocked in an actual kernel operation.
+        // Child destruction kills/reaps; broker descendants inherit PDEATHSIG.
+        self.broker = None;
+    }
+}
+
+fn append_word(bytes: &mut Vec<u8>, value: u64, width: usize) {
+    for index in 0usize..width {
+        bytes.push((value >> ((index * 8) as u64)) as u8);
+    }
+}
+
+fn elf(code: Vec<u8>) -> Vec<u8> {
+    let header = 176usize;
+    let base = 0x400000u64;
+    let size = (header + code.len()) as u64;
+    let mut bytes = vec![0x7fu8, b'E', b'L', b'F', 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    append_word(&mut bytes, 2, 2);
+    append_word(&mut bytes, 62, 2);
+    append_word(&mut bytes, 1, 4);
+    append_word(&mut bytes, base + header as u64, 8);
+    append_word(&mut bytes, 64, 8);
+    append_word(&mut bytes, 0, 8);
+    append_word(&mut bytes, 0, 4);
+    append_word(&mut bytes, 64, 2);
+    append_word(&mut bytes, 56, 2);
+    append_word(&mut bytes, 2, 2);
+    append_word(&mut bytes, 0, 2);
+    append_word(&mut bytes, 0, 2);
+    append_word(&mut bytes, 0, 2);
+    append_word(&mut bytes, 1, 4); // PT_LOAD, read/execute only.
+    append_word(&mut bytes, 5, 4);
+    append_word(&mut bytes, 0, 8);
+    append_word(&mut bytes, base, 8);
+    append_word(&mut bytes, base, 8);
+    append_word(&mut bytes, size, 8);
+    append_word(&mut bytes, size, 8);
+    append_word(&mut bytes, 4096, 8);
+    append_word(&mut bytes, 0x6474e551, 4); // Nonexecutable stack.
+    append_word(&mut bytes, 6, 4);
+    for _index in 0usize..5usize { append_word(&mut bytes, 0, 8); }
+    append_word(&mut bytes, 16, 8);
+    bytes.extend_from_slice(&code);
+    bytes
+}
+
+fn syscall(a: &mut Assembler, number: u64) {
+    let retry = a.label();
+    a.bind(retry);
+    a.immediate(A, number);
+    a.syscall();
+    a.immediate(C, (-4i64) as u64);
+    a.compare(A, C);
+    a.condition(4, retry);
+}
+
+fn sleep_image() -> Result<Vec<u8>, i64> {
+    let mut a = Assembler::new();
+    a.lea(SP, SP, -32);
+    a.immediate(A, 0);
+    a.store(SP, 0, A);
+    a.immediate(A, 1000000);
+    a.store(SP, 8, A);
+    a.mov(DI, SP);
+    a.immediate(SI, 0);
+    syscall(&mut a, 35);
+    a.immediate(DI, 0);
+    a.immediate(A, 60);
+    a.syscall();
+    let code = a.finish().map_err(|_| 8i64)?;
+    Ok(elf(code))
+}
+
+
+pub fn set_nodelay(world: &mut World, file: &File, enabled: bool) -> Result<(), i64> {
+    // Configure the private control channel without consuming its bytes.
+    let mut executable = world.temporary_file()?;
+    executable.write_all(&nodelay_image(enabled)?)?;
+    executable.set_executable()?;
+    let mut output = world.temporary_file()?;
+    let empty = world.temporary_file()?;
+    let arguments: Vec<Vec<u8>> = Vec::new();
+    let mut process = world.process();
+    let mut child = process.spawn_file(
+        &executable, &arguments, file, &output, &empty, &empty,
+    )?;
+    if child.wait()? != 0 { return Err(5); }
+    output.rewind()?;
+    let mut bytes = [0u8; 8];
+    read_exact(&mut output, &mut bytes)?;
+    let error = word(&bytes);
+    if error == 0 { return Ok(()); }
+    if error > 4095 { return Err(5); }
+    Err(error as i64)
+}
+
+fn nodelay_image(enabled: bool) -> Result<Vec<u8>, i64> {
+    let mut a = Assembler::new();
+    let more = a.label();
+    let failed = a.label();
+    let exit = a.label();
+    a.lea(SP, SP, -16);
+    a.immediate(A, enabled as u64);
+    a.store_width(SP, 0, A, 4);
+    a.immediate(DI, 0);
+    a.immediate(SI, 6); // IPPROTO_TCP
+    a.immediate(D, 1); // TCP_NODELAY
+    a.mov(R10, SP);
+    a.immediate(R8, 4);
+    syscall(&mut a, 54);
+    a.negate(A);
+    a.store(SP, 0, A);
+    a.immediate(DI, 1);
+    a.mov(SI, SP);
+    a.immediate(D, 8);
+    a.bind(more);
+    syscall(&mut a, 1);
+    a.test(A, true);
+    a.condition(14, failed);
+    a.rr(0x01, SI, A, true);
+    a.rr(0x29, D, A, true);
+    a.test(D, true);
+    a.condition(5, more);
+    a.immediate(DI, 0);
+    a.jump(exit);
+    a.bind(failed);
+    a.immediate(DI, 1);
+    a.bind(exit);
+    a.immediate(A, 60);
+    a.syscall();
+    let code = a.finish().map_err(|_| 8i64)?;
+    Ok(elf(code))
+}

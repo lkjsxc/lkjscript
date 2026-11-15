@@ -29,8 +29,8 @@ measure() {
     shift
     before=$(load)
     if /usr/bin/time -f '%e %M' -o "$bench_directory/$label.time" \
-        "$compiler" build src/main.rs --source-dir "$snapshot" \
-        --library-dir "$snapshot/library" --runtime-source "$snapshot/library/runtime.rs" \
+        "$compiler" build src/main.lkj --source-dir "$snapshot" \
+        --library-dir "$snapshot/library" --runtime-source "$snapshot/library/runtime.lkj" \
         --stats -o "$bench_directory/$label.image" "$@" \
         > "$bench_directory/$label.out" 2> "$bench_directory/$label.log"; then
         :
@@ -65,8 +65,8 @@ awk '
     { print }
     /^}/ { inside = 0 }
     END { if (!changed) exit 1 }
-' "$snapshot/src/check.rs" > "$bench_directory/check.rs"
-mv "$bench_directory/check.rs" "$snapshot/src/check.rs"
+' "$snapshot/src/check.lkj" > "$bench_directory/check.lkj"
+mv "$bench_directory/check.lkj" "$snapshot/src/check.lkj"
 measure checker-edit --store "$store" --store-key "$key"
 measure checker-edit-no-store --no-store
 cmp "$bench_directory/checker-edit.image" "$bench_directory/checker-edit-no-store.image"

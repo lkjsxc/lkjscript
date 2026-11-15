@@ -37,7 +37,7 @@ for family in "${family_list[@]}"; do
     for size in "${size_list[@]}"; do
         [[ $size =~ ^[1-9][0-9]*$ ]] || { printf 'size must be positive\n' >&2; exit 2; }
         "$binary" generate "scale-$family" 0 "$size" -o "$out" >/dev/null
-        source="$out/$family-$size.rs"
+        source="$out/$family-$size.lkj"
         command=("$binary" "$verb" "$source" --stats)
         if [[ $verb == run ]]; then command+=(--entry probe --engine "$engine"); fi
         if [[ $verb == build ]]; then command+=(-o "$out/$family-$size.elf"); fi

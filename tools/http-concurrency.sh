@@ -70,7 +70,7 @@ trap 'exit 143' HUP TERM
 mkdir "$http_work/root"
 dd if=/dev/zero of="$http_work/root/load.bin" bs=40108 count=1 status=none
 dd if=/dev/zero of="$http_work/root/blocked.bin" bs=1048576 count=32 status=none
-"$compiler" build examples/http.rs \
+"$compiler" build examples/http.lkj \
     --grant output --grant "root=$http_work/root" \
     --grant listener=127.0.0.1:0 --grant clock --grant ready --grant stop -o "$http_work/server"
 : > "$http_work/server.out"
@@ -92,7 +92,7 @@ while ! read -r marker port < "$http_work/server.out" || [ "$marker" != port ]; 
     sleep 0.05
 done
 case "$port" in ''|*[!0-9]*) echo "invalid server port" >&2; exit 1;; esac
-"$compiler" build tools/http-concurrency.rs \
+"$compiler" build tools/http-concurrency.lkj \
     --grant output --grant input --grant "target=127.0.0.1:$port" \
     --grant clock --grant ready --grant "inspect=/proc/$server_pid/fd" -o "$http_work/client"
 printf '%s\n%s\n' "$seconds" "$idle" > "$http_work/config"

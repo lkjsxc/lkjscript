@@ -13,8 +13,8 @@ if [[ -n "${LKJSCRIPT_STORE_KEY:-}" ]]; then
 fi
 if [[ "$action" == build ]]; then
     mkdir -p "$closed_directory"
-    "$compiler" build src/gate_reuse_main.rs -o "$closed_directory/runner" "${reuse[@]}"
-    "$compiler" ir src/closed_semantics.rs -o "$closed_directory/cases.lkjir" "${reuse[@]}"
+    "$compiler" build src/gate_reuse_main.lkj -o "$closed_directory/runner" "${reuse[@]}"
+    "$compiler" ir src/closed_semantics.lkj -o "$closed_directory/cases.lkjir" "${reuse[@]}"
     "$compiler" authority "$closed_directory/cases.lkjir" "${reuse[@]}" > "$closed_directory/authority"
     "$compiler" build "$closed_directory/cases.lkjir" -o "$closed_directory/cases" "${reuse[@]}"
     read -r image_digest _ < <(sha256sum "$closed_directory/cases")

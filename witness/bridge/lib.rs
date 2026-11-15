@@ -1,9 +1,8 @@
-//! Rust bootstrap library host. The source compiler remains rooted at src/lib.rs.
+//! Rust bootstrap library host. The source compiler remains rooted at src/lib.lkj.
 #[path = "runtime.rs"]
 pub mod bootstrap_runtime;
 mod debug;
-#[path = "../../src/lib.rs"]
-mod language;
+include!(concat!(env!("OUT_DIR"), "/language-module.rs"));
 
 pub(crate) use language::facts;
 pub use language::{

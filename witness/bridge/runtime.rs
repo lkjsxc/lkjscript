@@ -9,11 +9,11 @@ pub fn get() -> Result<&'static Runtime, String> {
     RUNTIME
         .get_or_init(|| {
             let bundle = SourceBundle {
-                root: "$runtime/runtime.rs".to_string(),
+                root: "$runtime/runtime.lkj".to_string(),
                 library: None,
                 files: vec![SourceInput {
-                    path: "$runtime/runtime.rs".to_string(),
-                    text: include_str!("../../library/runtime.rs").to_string(),
+                    path: "$runtime/runtime.lkj".to_string(),
+                    text: include_str!("../../library/runtime.lkj").to_string(),
                 }],
             };
             runtime::prepare(&bundle).map_err(|error| {

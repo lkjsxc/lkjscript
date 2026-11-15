@@ -6,8 +6,9 @@ instead of by confinement, and capabilities for every effect.
 
 The lkjscript IR is the semantic boundary. An independent checker verifies types,
 ownership, initialization, loans and capability use before native emission.
-The Rust-shaped source language is one IR producer. Programs accepted by both
-lkjscript and Rust behave the same; support for every Rust form is not a goal.
+The Rust-shaped source language uses `.lkj` files and is one IR producer.
+Programs accepted by both lkjscript and Rust behave the same; support for every
+Rust form is not a goal. Modules use `child.lkj` or `child/mod.lkj`.
 
 ## Bootstrap and use
 
@@ -27,15 +28,15 @@ source. Copy that file to use the toolchain elsewhere; it needs no adjacent
 compiler or library files.
 
 ```sh
-target/lkjscript check examples/hello.rs
-target/lkjscript ir examples/hello.rs -o target/hello.lkjir
+target/lkjscript check examples/hello.lkj
+target/lkjscript ir examples/hello.lkj -o target/hello.lkjir
 target/lkjscript build target/hello.lkjir -o target/hello
 target/hello
-target/lkjscript run examples/hello.rs
-target/lkjscript run examples/hello.rs --engine interpreter
-target/lkjscript test path/to/tests.rs
+target/lkjscript run examples/hello.lkj
+target/lkjscript run examples/hello.lkj --engine interpreter
+target/lkjscript test path/to/tests.lkj
 target/lkjscript test tests/conformance --jobs 4
-target/lkjscript authority examples/http.rs
+target/lkjscript authority examples/http.lkj
 ```
 
 All six commands accept source or `.lkjir` input. `check` is silent on success.
@@ -63,11 +64,11 @@ function samples. Profiling needs no external profiler or symbol/debug package.
 
 ## Program directories
 
-A directory's `program.rs` is the reviewed invocation. It contains existing
+A directory's `program.lkj` is the reviewed invocation. It contains existing
 source constant forms, with literal values only:
 
 ```rust
-const SOURCE: &str = "main.rs";
+const SOURCE: &str = "main.lkj";
 const ENTRY: &str = "main";
 const GRANTS: &[&str] = &["out", "clock", "listen=127.0.0.1:8080"];
 const CASES: &[&str] = &["cases"];
@@ -78,7 +79,7 @@ use the same entry and grant values. `run` accepts the directory too. Ordinary
 module discovery follows `SOURCE`; source and case paths remain beneath the
 directory. Directory grant values are relative to that directory unless absolute or the existing env:NAME invocation selector.
 The entry signature alone determines authority: missing and unrequested grants
-are errors naming both `program.rs` and the entry's parameters. Command-line
+are errors naming both `program.lkj` and the entry's parameters. Command-line
 entry, grant and source-root overrides reject instead of bypassing the review.
 Testing first validates that invocation, then runs the listed case files or
 collections. No manifest expression is executed. The default build output is
@@ -90,7 +91,7 @@ Bootstrap and the gate use a local, ignored `target/store`. Explicit builds opt 
 
 ```sh
 store_key=$(sh tools/store-key.sh)
-target/lkjscript build examples/hello.rs -o target/hello \
+target/lkjscript build examples/hello.lkj -o target/hello \
     --store target/store --store-key "$store_key"
 ```
 
