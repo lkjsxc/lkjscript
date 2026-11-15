@@ -45,8 +45,9 @@ target/http
 From another terminal, substitute the printed port:
 
 ```sh
-curl --noproxy '*' http://127.0.0.1:NUMBER/language.md
-curl --noproxy '*' --head http://127.0.0.1:NUMBER/ir.md
+target/lkjscript build tools/http-get.rs --grant output --grant input \
+    --grant target=127.0.0.1:NUMBER -o target/http-get
+printf 'GET /language.md HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' | target/http-get
 ```
 
 The server runs until its owner stops it. Profiling is a separate, explicit build
@@ -60,10 +61,14 @@ target/lkjscript profile target/http.samples.PID
 ### Request behavior
 
 The server supports GET and HEAD with HTTP/1.0 or HTTP/1.1 request lines. It sends
-an HTTP/1.1 response with Content-Length and closes that connection afterward.
-The process keeps serving subsequent connections. HEAD reports the GET length
+an HTTP/1.1 response with Content-Length. HTTP/1.1 connections stay open by default;
+HTTP/1.0 requires `Connection: keep-alive`. `Connection: close` always wins.
+Pipelined requests retain their exact body boundaries. HEAD reports the GET length
 without a body. The root path serves `language.md`; query text does not select a
 different file. Response headers include the elapsed monotonic nanoseconds.
+Accepted sockets use `accept_nodelay()` so separate header and body writes do not
+wait for Nagle batching. `std::buffer::ReadBuffer` snapshots files in owned chunks
+before any response bytes are sent; its chunk size does not limit file size.
 
 Header bytes accumulate in growable storage using fixed read chunks. There is no
 header-size acceptance cap. Content-Length request bodies are drained before the
@@ -76,8 +81,8 @@ and an unsupported HTTP version returns 505.
 Percent-decoded paths remain relative to the directory capability. The directory
 operation enforces confinement, including symlinks: an inward link can be opened,
 while a path or symlink escaping the granted root returns 403. Missing documents
-return 404. This example handles one request at a time and has no request timeout;
-a production concurrency policy is future language work.
+return 404. This stage handles one connection at a time and has no request timeout;
+readiness and per-connection deadlines are the next consumer requirement.
 
 `http_protocol.rs` is the parser used by the server. Its native test functions
 cover request syntax and incremental header recognition through both execution
@@ -87,39 +92,42 @@ routes:
 target/lkjscript test examples/http_protocol.rs --jobs 1
 ```
 
-## Generated traffic and the hour run
+## Outbound clients and persistent traffic
 
-The load generator in `tools/http-test.rs` is a native lkjscript program. Its
-test-only `World` authority opens the explicitly supplied curl executable and
-spawns it with owned argument and stream files. Curl configuration files and
-proxies are disabled for the local test.
+`Connector` grants one numeric IPv4 TCP destination. Its `connect()` method returns
+an owned `File` stream; the caller cannot substitute another destination.
+`tools/http-get.rs` accepts a raw request on its granted input and writes one
+framed response to its granted output. It recognizes HEAD and Content-Length.
 
-`tools/http-test.sh` builds a profiled server and the generator, starts the server
-on a fresh loopback port, and grants a private copy of the documentation. It
-checks GET/HEAD bytes and headers, missing files, path traversal and symlinks,
-malformed requests, a multi-chunk body and a 65,537-byte header. After warmup, it
-generates deterministic mixed traffic for one hour by default. The native client
-records verified requests and completed batches once per minute.
+`tools/http-test.rs` connects directly through lkjscript and checks GET/HEAD bytes
+and headers, missing files, traversal and symlinks, malformed requests, request
+bodies, a 65,537-byte header, persistent requests and pipelining.
+`tools/http-load.rs` holds one TCP connection open, pipelines requests, and checks
+every response's status, framing and exact body against its granted fixture.
+It reports elapsed monotonic nanoseconds, requests/second and the validation mode.
+The default `--verification full` compares every body byte. `--verification framing`
+checks every status, length and connection policy and drains every body, while
+skipping byte comparisons to measure beyond a verifying client's CPU limit.
+Client startup and connection setup are outside the sustained measurement.
+
+`tools/http-test.sh` builds these programs and a profiled server, grants a private
+copy of the documentation, and chooses a fresh loopback port. No external HTTP
+client is involved.
 
 ```sh
-sh tools/http-test.sh
-# Short integration check using the same functional cases:
+# Functional requests plus a short persistent measurement:
 sh tools/http-test.sh --seconds 2
-# Functional requests through the independent interpreter; no repeated load:
+# Framing-only throughput; functional cases still compare exact bodies:
+sh tools/http-test.sh --seconds 30 --verification framing
+# Functional requests through the independent interpreter:
 sh tools/http-test.sh --engine interpreter --seconds 0
 ```
 
-The supervisor owns the server PID and samples its RSS, virtual size and peak RSS
-every thirty seconds. It reports post-warmup first/last/min/max measurements and
-the verified request rate, then prints the CPU profile. Measurements do not
-impose a memory or throughput limit. Test request watchdogs and the selected load
-duration belong to the harness; they do not change the server's behavior.
+The harness records the host load average beside elapsed measurements and samples
+server RSS, virtual size and peak RSS. It prints the source CPU profile after
+stopping and reaping its server. The watchdog, pipeline size and duration are
+test settings, not language acceptance limits.
 
-The supervisor stops and reaps its server, and the native generator waits for
-each curl child. An interrupted run stops the server first so the active client
-can finish and reap curl. Temporary documents and executables are removed.
-A completed run preserves raw memory samples under
-`target/http-profiles/http.memory.PID`; native runs also keep their self-contained
-CPU samples as `target/http-profiles/http.samples.PID`.
-`--out DIRECTORY` selects another location.
-`--compiler PATH` and `--curl PATH` select explicit executables.
+Temporary documents and executables are removed on success and interruption.
+`--out DIRECTORY` selects the destination for memory and CPU samples;
+`--compiler PATH` selects the compiler under test.

@@ -108,12 +108,45 @@ fn non_scalar_result_rejects_before_acquisition() {
         .expect("native emission accepted a capability entry result");
     assert_eq!(error.code, "E_ENTRY");
 }
+fn connector_grants_are_exact_and_unforgeable() {
+    let checked = check::check(ir_text::read(include_str!(
+        "../../tests/fixtures/authority/connector_entry.lkjir"
+    )).unwrap()).unwrap();
+    let runtime = prepared();
+    let mut host = FailingHost(Vec::new());
+    let endpoint = vec![2u8, 0, 1, 187, 127, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0];
+    let grants = crate::entry_grants::prepare(checked.program(), 0, &[
+        "target=127.000.0.1:443".to_string(),
+    ]).unwrap();
+    assert!(matches!(&grants[0], ir::EntryGrant::Connector(address) if *address == endpoint));
+    interpreter::run_granted(checked.program(), 0, &grants, &mut host).unwrap();
+    assert!(host.0.is_empty(), "granting an endpoint performs no socket acquisition");
+    native::encode_granted(&checked, &runtime, 0, &grants, None, None).unwrap();
+    for value in vec![0u64, 1u64, 65535u64] {
+        let error = interpreter::run(checked.program(), 0, &[value], &mut host)
+            .err().expect("raw bits forged Connector");
+        assert!(error.kind == ErrorKind::Interpreter(InterpreterError::InvalidIr));
+        let selected = native::Entry { function: 0, arguments: vec![value as i64], result_fd: None };
+        assert_eq!(native::encode(&checked, &runtime, selected).err().unwrap().code, "E_ENTRY");
+    }
+    for text in vec![
+        "target".to_string(), "target=localhost:443".to_string(),
+        "target=127.0.0.1:65536".to_string(), "target=127.0.0.256:443".to_string(),
+    ] {
+        assert!(crate::entry_grants::prepare(checked.program(), 0, &[text]).is_err());
+    }
+    let mismatched = vec![ir::EntryGrant::Listener(endpoint)];
+    assert!(interpreter::run_granted(checked.program(), 0, &mismatched, &mut host).is_err());
+    assert!(native::encode_granted(&checked, &runtime, 0, &mismatched, None, None).is_err());
+    assert!(host.0.is_empty());
+}
 pub fn probe() -> i64 {
     mismatched_grants_do_not_acquire_authority();
     acquisition_failure_closes_the_preceding_directory();
     listener_cannot_be_forged_from_raw_scalar_arguments();
     non_scalar_result_rejects_before_acquisition();
-    4
+    connector_grants_are_exact_and_unforgeable();
+    5
 }
 pub fn run(world: &mut World, trace: bool) -> usize {
     if trace {

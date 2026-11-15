@@ -8,6 +8,7 @@ pub mod diagnostic;
 pub mod diagnostics;
 pub mod driver;
 pub mod driver_host;
+pub mod host_network;
 pub mod elaborate;
 pub mod embedded;
 pub(crate) mod facts;

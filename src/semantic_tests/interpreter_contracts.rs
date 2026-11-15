@@ -8,6 +8,7 @@ fn compiled(text: &str) -> ir::CheckedProgram {
         "$std/lib.rs".to_string(),
         "$std/prelude.rs".to_string(),
         "$std/sequence.rs".to_string(),
+        "$std/buffer.rs".to_string(),
         "$std/bytes.rs".to_string(),
         "$std/string.rs".to_string(),
         "$std/str.rs".to_string(),
@@ -382,6 +383,7 @@ fn raw_ir_cannot_fabricate_host_authority_or_supply_it_as_integer_argument() {
         ir::TypeKind::Clock,
         ir::TypeKind::Child,
         ir::TypeKind::Listener,
+        ir::TypeKind::Connector,
     ] {
         let program = raw(
             vec![ir::Type {
@@ -492,11 +494,18 @@ impl interpreter::Host for FailingHost {
     fn world_file(&mut self, _kind: u8) -> Result<u64, i64> {
         Err(38)
     }
+    fn connect_socket(&mut self, _address: &[u8]) -> Result<u64, i64> {
+        self.0.push(b'N');
+        Err(38)
+    }
     fn open_listener(&mut self, _address: &[u8]) -> Result<u64, i64> {
         self.0.push(b'L');
         Err(38)
     }
     fn accept_listener(&mut self, _listener: u64) -> Result<u64, i64> {
+        Err(38)
+    }
+    fn accept_listener_nodelay(&mut self, _listener: u64) -> Result<u64, i64> {
         Err(38)
     }
     fn listener_address(&mut self, _listener: u64, _bytes: &mut [u8]) -> Result<(), i64> {
@@ -870,6 +879,12 @@ fn listener_intrinsics_reject_wrong_signatures_without_host_effects() {
             "fn main(mut world: World) { let _directory = world.__lkjscript_directory(b\".\\0\"); }".to_string(),
             ir::IntrinsicOp::WorldDirectory,
             ir::IntrinsicOp::ListenerAccept,
+            true,
+        ),
+        (
+            "fn main(mut world: World) { let _directory = world.__lkjscript_directory(b\".\\0\"); }".to_string(),
+            ir::IntrinsicOp::WorldDirectory,
+            ir::IntrinsicOp::ListenerAcceptNoDelay,
             true,
         ),
         (

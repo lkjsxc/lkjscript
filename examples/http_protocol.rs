@@ -1,9 +1,9 @@
-//! A persistent static-file HTTP consumer with an explicit authority manifest.
-//! Each connection receives one response and closes; all request storage is local.
+//! HTTP request framing and connection persistence for the static-file consumer.
 pub struct Request {
     pub path: String,
     pub head: bool,
     pub body: usize,
+    pub keep_alive: bool,
 }
 fn lower(byte: u8) -> u8 {
     if byte >= b'A' && byte <= b'Z' {
@@ -53,6 +53,27 @@ fn trim(bytes: &[u8]) -> &[u8] {
         end -= 1;
     }
     &bytes[start..end]
+}
+fn connection_options(bytes: &[u8]) -> Result<(bool, bool), u16> {
+    let mut close = false;
+    let mut keep_alive = false;
+    let mut start = 0usize;
+    let mut end = 0usize;
+    while end <= bytes.len() {
+        if end == bytes.len() || bytes[end] == b',' {
+            let option = trim(&bytes[start..end]);
+            for byte in option {
+                if !token(*byte) {
+                    return Err(400u16);
+                }
+            }
+            close = close || same(option, b"close");
+            keep_alive = keep_alive || same(option, b"keep-alive");
+            start = end + 1;
+        }
+        end += 1;
+    }
+    Ok((close, keep_alive))
 }
 fn number(bytes: &[u8]) -> Result<usize, u16> {
     if bytes.is_empty() {
@@ -260,6 +281,8 @@ pub fn parse(bytes: &[u8]) -> Result<Request, u16> {
     let mut length = None;
     let mut transfer = false;
     let mut expectation = false;
+    let mut close = false;
+    let mut keep_alive = false;
     let mut at = line_end + 2;
     loop {
         let end = crlf(bytes, at)?;
@@ -301,6 +324,10 @@ pub fn parse(bytes: &[u8]) -> Result<Request, u16> {
             transfer = true;
         } else if same(name, b"expect") {
             expectation = true;
+        } else if same(name, b"connection") {
+            let (found_close, found_keep_alive) = connection_options(value)?;
+            close = close || found_close;
+            keep_alive = keep_alive || found_keep_alive;
         }
         at = end + 2;
     }
@@ -325,6 +352,7 @@ pub fn parse(bytes: &[u8]) -> Result<Request, u16> {
         path,
         head,
         body: length.unwrap_or(0usize),
+        keep_alive: !close && (version == b"HTTP/1.1" || keep_alive),
     })
 }
 pub fn header_end(bytes: &[u8], start: usize) -> Option<usize> {
@@ -466,4 +494,25 @@ fn header_chunks_and_growth() {
             }
         }
     }
+}
+
+#[test]
+fn connection_persistence() {
+    let cases: Vec<(String, bool)> = vec![
+        ("GET / HTTP/1.1\r\nHost: a\r\n\r\n".to_string(), true),
+        ("GET / HTTP/1.0\r\n\r\n".to_string(), false),
+        ("HEAD / HTTP/1.0\r\nConnection: Keep-Alive\r\n\r\n".to_string(), true),
+        ("GET / HTTP/1.1\r\nHost: a\r\nConnection: Close\r\n\r\n".to_string(), false),
+        ("GET / HTTP/1.1\r\nHost: a\r\nConnection: upgrade, keep-alive\r\n\r\n".to_string(), true),
+        ("GET / HTTP/1.1\r\nHost: a\r\nConnection: keep-alive, CLOSE\r\n\r\n".to_string(), false),
+        ("GET / HTTP/1.0\r\nConnection: close\r\nConnection: keep-alive\r\n\r\n".to_string(), false),
+        ("GET / HTTP/1.0\r\nConnection: , keep-alive,\r\n\r\n".to_string(), true),
+    ];
+    for (input, keep_alive) in cases {
+        assert_eq!(parse(input.as_bytes()).unwrap().keep_alive, keep_alive);
+    }
+    assert!(matches!(
+        parse(b"GET / HTTP/1.1\r\nHost: a\r\nConnection: keep alive\r\n\r\n"),
+        Err(400u16)
+    ));
 }

@@ -52,6 +52,8 @@ pub enum TypeKind {
     Child,
     /// Affine IPv4 TCP listener; structural destruction closes its handle.
     Listener,
+    /// Affine authority to connect to one numeric IPv4 endpoint.
+    Connector,
 }
 
 /// Explicit host provisioning data; executors validate every descriptor against
@@ -68,6 +70,7 @@ pub enum EntryGrant {
     Directory(Vec<u8>),
     /// Exact sixteen-byte IPv4 sockaddr, matching WorldListen.
     Listener(Vec<u8>),
+    Connector(Vec<u8>),
 }
 
 #[derive(Clone, PartialEq)]
@@ -263,6 +266,9 @@ pub enum IntrinsicOp {
     FileReadOnly,
     WorldListen,
     ListenerAccept,
+    ListenerAcceptNoDelay,
+    WorldConnector,
+    ConnectorConnect,
     ListenerAddress,
 }
 impl IntrinsicOp {
@@ -316,7 +322,10 @@ impl IntrinsicOp {
             "file_duplicate" => Some(IntrinsicOp::FileDuplicate),
             "file_readonly" => Some(IntrinsicOp::FileReadOnly),
             "world_listen" => Some(IntrinsicOp::WorldListen),
+            "world_connector" => Some(IntrinsicOp::WorldConnector),
+            "connector_connect" => Some(IntrinsicOp::ConnectorConnect),
             "listener_accept" => Some(IntrinsicOp::ListenerAccept),
+            "listener_accept_nodelay" => Some(IntrinsicOp::ListenerAcceptNoDelay),
             "listener_address" => Some(IntrinsicOp::ListenerAddress),
             _ => None,
         }
@@ -371,7 +380,10 @@ impl IntrinsicOp {
             IntrinsicOp::FileDuplicate => "file_duplicate",
             IntrinsicOp::FileReadOnly => "file_readonly",
             IntrinsicOp::WorldListen => "world_listen",
+            IntrinsicOp::WorldConnector => "world_connector",
+            IntrinsicOp::ConnectorConnect => "connector_connect",
             IntrinsicOp::ListenerAccept => "listener_accept",
+            IntrinsicOp::ListenerAcceptNoDelay => "listener_accept_nodelay",
             IntrinsicOp::ListenerAddress => "listener_address",
         }
     }

@@ -104,7 +104,8 @@ pub fn is_data(types: &[Type], ty: usize) -> bool {
             | TypeKind::Process
             | TypeKind::Clock
             | TypeKind::Child
-            | TypeKind::Listener => return false,
+            | TypeKind::Listener
+            | TypeKind::Connector => return false,
             TypeKind::Ref { inner, .. }
             | TypeKind::Slice { inner, .. }
             | TypeKind::Vec { inner }

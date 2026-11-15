@@ -178,6 +178,7 @@ fn authority_intrinsic(word: &str) -> bool {
         "\"child_".to_string(),
         "\"clock_".to_string(),
         "\"listener_".to_string(),
+        "\"connector_".to_string(),
         "\"socket_".to_string(),
     ] {
         if word.starts_with(&prefix) {

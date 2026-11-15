@@ -211,11 +211,36 @@ impl<H: Host> Interpreter<'_, H> {
                 };
                 self.io_open_result(types, opened, TypeKind::Listener)?
             }
-            ir::IntrinsicOp::ListenerAccept if values.len() == 1 => {
+            ir::IntrinsicOp::WorldConnector if values.len() == 2 => {
+                self.io_authority(values, TypeKind::World)?;
+                let types = self.io_open_types(result, TypeKind::Connector)?;
+                let access = self.io_buffer(values, 1, false)?;
+                let address = self.bytes(&access)?;
+                let (tag, ty, value) = if valid_connector(&address) {
+                    (0usize, types.0, Value::Connector(address))
+                } else {
+                    (1usize, types.1, Value::Bits(22))
+                };
+                let child = self.allocate(ty, Some(value), false)?;
+                Value::Aggregate { variant: Some(tag), fields: vec![child] }
+            }
+            ir::IntrinsicOp::ConnectorConnect if values.len() == 1 => {
+                let authority = self.io_authority(values, TypeKind::Connector)?;
+                let types = self.io_open_types(result, TypeKind::File)?;
+                let address = match self.value(authority.cell)? {
+                    Value::Connector(address) => address.clone(),
+                    _ => return Err(self.invalid("connector has no granted endpoint")),
+                };
+                let opened = self.host.connect_socket(&address);
+                self.io_open_result(types, opened, TypeKind::File)?
+            }
+            ir::IntrinsicOp::ListenerAccept | ir::IntrinsicOp::ListenerAcceptNoDelay if values.len() == 1 => {
                 let authority = self.io_authority(values, TypeKind::Listener)?;
                 let types = self.io_open_types(result, TypeKind::File)?;
                 let handle = self.io_handle(&authority)?;
-                let opened = self.host.accept_listener(handle);
+                let opened = if name == ir::IntrinsicOp::ListenerAcceptNoDelay {
+                    self.host.accept_listener_nodelay(handle)
+                } else { self.host.accept_listener(handle) };
                 self.io_open_result(types, opened, TypeKind::File)?
             }
             ir::IntrinsicOp::ListenerAddress if values.len() == 2 => {

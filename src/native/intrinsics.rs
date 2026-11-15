@@ -85,10 +85,26 @@ impl Body<'_> {
                 self.intrinsic_open_result(dst);
                 return Ok(true);
             }
-            IntrinsicOp::ListenerAccept => {
+            IntrinsicOp::WorldConnector => {
+                self.read_word(args[1], 0, DI);
+                self.read_word(args[1], 1, SI);
+                self.a.call(self.platform.world_connector);
+                self.intrinsic_open_result(dst);
+                return Ok(true);
+            }
+            IntrinsicOp::ConnectorConnect => {
                 self.read(args[0], DI);
                 self.a.load(DI, DI, 0);
-                self.a.call(self.platform.listener_accept);
+                self.a.call(self.platform.connector_connect);
+                self.intrinsic_open_result(dst);
+                return Ok(true);
+            }
+            IntrinsicOp::ListenerAccept | IntrinsicOp::ListenerAcceptNoDelay => {
+                self.read(args[0], DI);
+                self.a.load(DI, DI, 0);
+                self.a.call(if name == IntrinsicOp::ListenerAcceptNoDelay {
+                    self.platform.listener_accept_nodelay
+                } else { self.platform.listener_accept });
                 self.intrinsic_open_result(dst);
                 return Ok(true);
             }

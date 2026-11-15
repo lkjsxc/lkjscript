@@ -58,3 +58,31 @@ Inclusive rows overlap; the remaining cost is spread across checking, inference 
 
 SHA-256 is shared source; standard, padding and streaming vectors pass on both routes.
 Four-worker gate: 174.560 s, load 4.35 → 5.04. Next: authenticated checked-work reuse.
+
+## Programs
+
+2.1 complete: exact numeric Connector grants, persistent HTTP and lkjscript clients.
+41 functional/persistent requests pass; the interpreted server run was 130.491 s,
+load 4.88/4.27/4.23 -> 3.09/3.76/4.04. Socket-option cases also pass both routes.
+Full-body baseline: 184,896 / 30.006 s = 6,161/s; load 8.67/6.26/4.40 -> 6.01/5.87/4.33.
+Full-body after: 345,216 / 30.003 s = 11,506/s; load 3.89/4.54/4.31 -> 3.67/4.44/4.29.
+Framing after: 659,296 / 30.001 s = 21,975/s; load 3.67/4.44/4.29 -> 2.83/4.16/4.20.
+All runs: one persistent connection, pipeline 32, 40,108-byte body; server RSS 372 -> 408 KiB.
+Full verification used 50% server / 94% client CPU; framing used 88% / 19%, draining every byte.
+
+| Server function (self samples) | Before | After, full |
+| --- | ---: | ---: |
+| bytes::append_bytes | 78.7% | 0.9% |
+| io::file_read_to_end | 3.6% | removed |
+| buffer::ReadBuffer::read | absent | 48.8% |
+| platform::file_write | 3.4% | 20.8% |
+| read_header | 3.7% | 7.7% |
+
+Profiles contain 17,513 / 15,001 CPU samples. Owned chunks removed byte-at-a-time assembly.
+accept_nodelay removes the introduced 42-ms packet stalls; stop after these two causes.
+Removed curl execution and --curl. Three pending diagnostic cases record concrete rewrites.
+Unchanged-seed fixed point and four-worker gate pass: 184.141 s; load 1.38/3.02/3.76 -> 7.10/5.76/4.74.
+The independent interpreter helper drains acknowledged writes (32 MiB delayed-reader proof);
+delete that adapter once the compiler stream's stored seed admits direct Connector calls.
+All measurement/verification processes were reaped and their temporary ports/directories removed.
+Next: readiness for many clients, then durable journal state, stop/sessions and the origin candidate.

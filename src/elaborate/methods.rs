@@ -21,6 +21,7 @@ pub(super) enum Receiver {
     Clock,
     Child,
     Listener,
+    Connector,
     Other,
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -54,6 +55,7 @@ pub(super) fn receiver(kind: &ir::TypeKind) -> Receiver {
         ir::TypeKind::Clock => Receiver::Clock,
         ir::TypeKind::Child => Receiver::Child,
         ir::TypeKind::Listener => Receiver::Listener,
+        ir::TypeKind::Connector => Receiver::Connector,
         _ => Receiver::Other,
     }
 }

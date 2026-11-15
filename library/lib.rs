@@ -5,6 +5,7 @@ pub use prelude::{
     Result, SequencePrefix, SliceClone, SliceCopy, TextView, VecAccess, VecAccessMut, VecClear,
     VecContains, VecExtend,
 };
+pub mod buffer;
 pub mod bytes;
 pub mod char;
 pub mod fmt;

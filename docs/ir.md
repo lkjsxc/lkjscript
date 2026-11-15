@@ -39,7 +39,7 @@ The first seven types must match this primitive prefix exactly, including names.
 | `array TYPE LENGTH` | Fixed-length owned elements. |
 | `vec TYPE`, `box TYPE` | Owned growable sequence or owned indirection. |
 | `str` | Unsized immutable UTF-8 text; values require a shared reference. |
-| `world`, `stdout`, `stdin`, `stderr`, `directory`, `file`, `process`, `clock`, `child`, `listener` | Affine authority-bearing values. |
+| `world`, `stdout`, `stdin`, `stderr`, `directory`, `file`, `process`, `clock`, `child`, `listener`, `connector` | Affine authority-bearing values. |
 
 All type indices must exist. Recursive by-value layouts reject; introduce Box or
 another indirection. Unsized text cannot be stored by value or as a container
@@ -147,7 +147,9 @@ The intrinsic signatures are checked in `src/check.rs` and `src/check/io.rs`:
 | `world_directory directory_open directory_open_directory` | Acquire a root Directory from World, or a File/Directory beneath an existing Directory. |
 | `world_file` | World plus u8 selector: 0 anonymous file, 1/2/3 owned stdin/stdout/stderr, 4 running executable. Return Result<File, i64>; closed standard streams produce closed Files. |
 | `world_listen` | `(&mut world, &[u8]) -> Result<listener, i64>`: bind and listen on an exact IPv4 socket address. |
-| `listener_accept` | `(&mut listener) -> Result<file, i64>`: accept an owned TCP byte stream. |
+| `listener_accept listener_accept_nodelay` | `(&mut listener) -> Result<file, i64>`: accept an owned TCP byte stream; the second disables Nagle before returning it, closing on configuration failure. |
+| `world_connector` | `(&mut world, &[u8]) -> Result<connector, i64>`: authorize one exact numeric IPv4 TCP destination. |
+| `connector_connect` | `(&mut connector) -> Result<file, i64>`: connect only to its authorized destination. |
 | `listener_address` | `(&mut listener, &mut [u8]) -> i64`: write its local socket address; zero or negative errno. |
 | `file_duplicate` | Duplicate an exclusively borrowed File, sharing its offset and preserving closed state. Return Result<File, i64>. |
 | `file_readonly` | Reopen an exclusively borrowed File read-only with a fresh offset at zero, preserving closed state. Return Result<File, i64>; no path authority is granted. |
@@ -160,16 +162,18 @@ The intrinsic signatures are checked in `src/check.rs` and `src/check/io.rs`:
 | `stdin_read file_read file_write` | Use an exclusive authority reference and a byte slice; return i64 count or negative errno. |
 | `stdout_write stderr_write` | Write an immutable byte slice through the corresponding exclusive authority reference. |
 
-Listener addresses contain exactly 16 bytes: bytes 0..2 hold AF_INET (2) as a
+Listener and Connector addresses contain exactly 16 bytes: bytes 0..2 hold AF_INET (2) as a
 little-endian u16, bytes 2..4 hold the port as a big-endian u16, bytes 4..8 hold
 the IPv4 octets, and the remaining bytes are padding. A zero port requests a
-kernel-selected port. Acquisition rejects another length or family with errno
-22. Address queries require an exact 16-byte writable slice and reject another
+kernel-selected listener port. Construction rejects another length or family with errno
+22. Connector additionally requires zero padding and snapshots the destination. Address queries require an exact 16-byte writable slice and reject another
 length without writing it. No DNS lookup or outbound connection is implicit.
 
 Listener is non-Copy and non-Data. Structural destruction closes its owned
-handle; accepted Files follow ordinary File read/write/drop rules. Both
-acquisition results require a non-Copy enum with two alternatives: one success
+handle; accepted Files follow ordinary File read/write/drop rules. Connector is
+non-Copy and non-Data, but owns only an immutable endpoint: constructing or dropping
+it acquires or releases no socket. Each connect returns a separate owned stream.
+Capability acquisition results require a non-Copy enum with two alternatives: one success
 field of the declared capability type, then one i64 errno field. Native handles
 occupy eight bytes. Socket descriptors are close-on-exec and promoted above
 standard streams before exposure, preserving any originally closed stdio.
@@ -227,7 +231,7 @@ temporary reference carrier cannot become an escaping view's origin.
 ## Host entry and authority reports
 
 A host entry returns unit or a scalar. It may take no parameters, a sole World,
-or owned Stdout/Stdin/Stderr, Directory, Listener, Process and Clock parameters.
+or owned Stdout/Stdin/Stderr, Directory, Listener, Connector, Process and Clock parameters.
 The sole World entry declares implicit full authority. Every other parameter
 requires an explicit invocation grant selected by its distinct, nonempty local
 name. ASCII whitespace, control bytes and equals signs cannot occur in grant names.
@@ -235,7 +239,7 @@ File, Child, reference and aggregate parameters cannot be provisioned as entries
 use a Directory entry and acquire files through ordinary checked operations.
 
 Grants are invocation data outside the IR. Directory descriptors contain the
-NUL-terminated root path; Listener descriptors contain the sixteen-byte address
+NUL-terminated root path; Listener and Connector descriptors contain the sixteen-byte address
 above. Other allowed capabilities need no payload. Both executors independently
 validate the complete parameter/grant correspondence before acquiring handles.
 Raw scalar arguments cannot manufacture an address or derived capability.

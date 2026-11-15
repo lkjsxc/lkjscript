@@ -5,6 +5,12 @@ mod scalar;
 use crate::ir::{self, Op, Place, Program, Projection, TypeKind};
 use std::collections::{BTreeMap, BTreeSet};
 
+fn valid_connector(address: &[u8]) -> bool {
+    if address.len() != 16 || address[0] != 2 || address[1] != 0 { return false; }
+    for byte in &address[8..] { if *byte != 0 { return false; } }
+    true
+}
+
 pub trait Host {
     /// Consume bytes before returning. The borrowed buffer cannot be retained.
     fn write_stdout(&mut self, bytes: &[u8]) -> Result<(), String>;
@@ -20,7 +26,9 @@ pub trait Host {
     fn set_exit_status(&mut self, status: u8);
     fn world_file(&mut self, kind: u8) -> Result<u64, i64>;
     fn open_listener(&mut self, address: &[u8]) -> Result<u64, i64>;
+    fn connect_socket(&mut self, address: &[u8]) -> Result<u64, i64>;
     fn accept_listener(&mut self, listener: u64) -> Result<u64, i64>;
+    fn accept_listener_nodelay(&mut self, listener: u64) -> Result<u64, i64>;
     fn listener_address(&mut self, listener: u64, bytes: &mut [u8]) -> Result<(), i64>;
     fn duplicate_file(&mut self, handle: u64) -> Result<u64, i64>;
     fn readonly_file(&mut self, handle: u64) -> Result<u64, i64>;
@@ -91,10 +99,16 @@ impl Host for Vec<u8> {
     fn world_file(&mut self, _kind: u8) -> Result<u64, i64> {
         Err(38)
     }
+    fn connect_socket(&mut self, _address: &[u8]) -> Result<u64, i64> {
+        Err(38)
+    }
     fn open_listener(&mut self, _address: &[u8]) -> Result<u64, i64> {
         Err(38)
     }
     fn accept_listener(&mut self, _listener: u64) -> Result<u64, i64> {
+        Err(38)
+    }
+    fn accept_listener_nodelay(&mut self, _listener: u64) -> Result<u64, i64> {
         Err(38)
     }
     fn listener_address(&mut self, _listener: u64, _bytes: &mut [u8]) -> Result<(), i64> {
@@ -253,6 +267,7 @@ enum Value {
     Clock,
     Child(u64),
     Listener(u64),
+    Connector(Vec<u8>),
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Empty {
@@ -694,7 +709,8 @@ impl<H: Host> Interpreter<'_, H> {
             | Value::Directory(_)
             | Value::File(_)
             | Value::Child(_)
-            | Value::Listener(_) => Err(self.error(
+            | Value::Listener(_)
+            | Value::Connector(_) => Err(self.error(
                 InterpreterError::MissingDrop,
                 "owned value requires structural destruction",
             )),
@@ -885,6 +901,7 @@ impl<H: Host> Interpreter<'_, H> {
             | (TypeKind::File, Value::File(handle))
             | (TypeKind::Child, Value::Child(handle))
             | (TypeKind::Listener, Value::Listener(handle)) => *handle != 0,
+            (TypeKind::Connector, Value::Connector(address)) => valid_connector(address),
             (TypeKind::Ref { inner, mutable }, Value::Reference(reference)) => {
                 *inner == reference.referent && *mutable == reference.mutable
             }
@@ -2357,6 +2374,7 @@ fn run_inner<'a, H: Host>(
                 ir::EntryGrant::Process => matches!(kind, TypeKind::Process),
                 ir::EntryGrant::Directory(_) => matches!(kind, TypeKind::Directory),
                 ir::EntryGrant::Listener(_) => matches!(kind, TypeKind::Listener),
+                ir::EntryGrant::Connector(_) => matches!(kind, TypeKind::Connector),
             };
             if !valid { return Err(interpreter.invalid("entry grant does not match its owned capability parameter")); }
         }
@@ -2373,6 +2391,9 @@ fn run_inner<'a, H: Host>(
                     Ok(handle) if handle != 0 => Ok(Value::Directory(handle)),
                     Ok(_) => Err(0),
                     Err(errno) => Err(errno),
+                },
+                ir::EntryGrant::Connector(address) => {
+                    if valid_connector(address) { Ok(Value::Connector(address.clone())) } else { Err(22) }
                 },
                 ir::EntryGrant::Listener(address) => match interpreter.host.open_listener(address) {
                     Ok(handle) if handle != 0 => Ok(Value::Listener(handle)),

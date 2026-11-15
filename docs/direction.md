@@ -98,22 +98,24 @@ Programs accepted by both compilers behave the same. Keep .rs while the witness
 lives; choose a native extension when deleting it. Delete the witness when it
 blocks necessary source forms or stops finding useful differences.
 
-## Real consumers (6.4, complete)
+## Real consumers (programs stream)
 
-The persistent HTTP server serves docs/ beneath a Directory with Listener and Clock.
-Its four owned entry parameters declare authority; --grant names each parameter,
-with a root path for Directory and a numeric IPv4:port for Listener. A sole World
-continues to declare implicit full authority. Entry File/Child/borrowed/aggregate
-parameters reject; derive files beneath an explicitly granted Directory.
-Both executors validate entry grants before acquisition. Native artifacts acquire
-handles at startup; check-only cases never manufacture invocation authority.
-Listener accepts owned File streams, closes on destruction and preserves closed
-standard descriptors. The kernel determines backlog and resource limits.
-authority reads checked IR alone, including .lkjir inputs, following reachable
-calls, structured control and owning cleanup, including custom destructors.
-The hour-long local generated-request run measures memory and profiles source
-functions. The gate keeps its full functional requests; never deploy this example
-or touch a running service. The compiler is one consumer among ordinary programs.
+Programs work in /home/coder/workspace/lkjscript-programs-20261115 on programs;
+land through fetch/rebase, bootstrap, four-worker gate and push HEAD:main.
+The HTTP consumer grants Directory, Listener, Clock and output explicitly.
+Connector grants one numeric IPv4:port; connect yields an owned File stream.
+No DNS or substitute destination follows from that grant. Both executors validate
+entry descriptors; authority follows checked-IR effects and owning cleanup.
+HTTP/1.1 persistence and pipelining retain exact framing. Functional and load
+clients are lkjscript; measure verified requests on persistent connections.
+Profile before removing at most two costs. Fixed-size owned byte chunks remove
+per-byte file assembly without adding an intrinsic or caching changing files.
+Keep compiler source within the stored seed's forms; never refresh seed here.
+The interpreter's independent syscall helper preserves ordinary File transport;
+normal completion drains and reaps it, abnormal cleanup kills and reaps it.
+Next prove readiness/deadlines, crash-durable journal state, stop and sessions.
+A documentation candidate may come earlier; never modify the live unit or /opt.
+The compiler is one consumer among ordinary programs; no deployment here.
 
 ## Resources and measurement
 

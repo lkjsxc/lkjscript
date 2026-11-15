@@ -1575,7 +1575,8 @@ fn trait_requirements(
             | TypeKind::Process
             | TypeKind::Clock
             | TypeKind::Child
-            | TypeKind::Listener => return None,
+            | TypeKind::Listener
+            | TypeKind::Connector => return None,
             TypeKind::Ref { inner, .. }
             | TypeKind::Slice { inner, .. }
             | TypeKind::Vec { inner }
@@ -1636,7 +1637,8 @@ fn trait_requirements(
             | TypeKind::Process
             | TypeKind::Clock
             | TypeKind::Child
-            | TypeKind::Listener => {
+            | TypeKind::Listener
+            | TypeKind::Connector => {
                 return None;
             }
             TypeKind::Vec { inner } | TypeKind::Box { inner } | TypeKind::Array { inner, .. } => {

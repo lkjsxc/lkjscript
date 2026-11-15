@@ -25,6 +25,11 @@ impl Plan {
                     a.immediate(SI, path.len() as u64);
                     a.call(p.directory_open);
                 }
+                EntryGrant::Connector(address) => {
+                    a.address(DI, self.paths[index]);
+                    a.immediate(SI, address.len() as u64);
+                    a.call(p.world_connector);
+                }
                 EntryGrant::Listener(address) => {
                     a.address(DI, self.paths[index]);
                     a.immediate(SI, address.len() as u64);
@@ -55,7 +60,7 @@ impl Plan {
             a.data_label(self.paths[index], offset + bytes.len());
             match grant {
                 EntryGrant::Directory(path) => bytes.extend_from_slice(path),
-                EntryGrant::Listener(address) => bytes.extend_from_slice(address),
+                EntryGrant::Listener(address) | EntryGrant::Connector(address) => bytes.extend_from_slice(address),
                 _ => {}
             }
         }

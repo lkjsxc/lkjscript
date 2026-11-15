@@ -20,6 +20,7 @@ pub struct Host<'world, 'program> {
     world: &'world mut World,
     process: Process,
     clock: Clock,
+    network: crate::host_network::Network,
     handles: BTreeMap<u64, Handle>,
     next_handle: u64,
     arguments: Vec<Vec<u8>>,
@@ -103,6 +104,7 @@ impl<'world, 'program> Host<'world, 'program> {
             world,
             process,
             clock,
+            network: crate::host_network::Network::new(),
             handles: BTreeMap::new(),
             next_handle: 1,
             arguments,
@@ -120,6 +122,7 @@ impl<'world, 'program> Host<'world, 'program> {
 
     pub fn finish(&mut self) -> Result<(), String> {
         self.handles = BTreeMap::new();
+        self.network.finish();
         if let Some(streams) = self.capture.as_mut() {
             self.stdout = read_capture(&mut streams.output)?;
             self.stderr = read_capture(&mut streams.errors)?;
@@ -211,6 +214,11 @@ impl interpreter::Host for Host<'_, '_> {
         }
     }
 
+    fn connect_socket(&mut self, address: &[u8]) -> Result<u64, i64> {
+        let stream = self.network.open_stream(self.world, address)?;
+        self.insert_handle(Handle::File(stream))
+    }
+
     fn open_listener(&mut self, address: &[u8]) -> Result<u64, i64> {
         let listener = self.world.__lkjscript_listen(address)?;
         self.insert_handle(Handle::Listener(listener))
@@ -221,6 +229,15 @@ impl interpreter::Host for Host<'_, '_> {
             Some(Handle::Listener(listener)) => listener.__lkjscript_accept(),
             _ => return Err(9),
         }?;
+        self.insert_handle(Handle::File(stream))
+    }
+
+    fn accept_listener_nodelay(&mut self, listener: u64) -> Result<u64, i64> {
+        let stream = match self.handles.get_mut(&listener) {
+            Some(Handle::Listener(listener)) => listener.__lkjscript_accept(),
+            _ => return Err(9),
+        }?;
+        crate::host_network::set_nodelay(self.world, &stream, true)?;
         self.insert_handle(Handle::File(stream))
     }
 

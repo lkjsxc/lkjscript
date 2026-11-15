@@ -74,7 +74,18 @@ pub(super) fn signature(
                 && bytes(types, args[1], false)
                 && opened(types, result, &TypeKind::Listener)
         }
-        IntrinsicOp::ListenerAccept => {
+        IntrinsicOp::WorldConnector => {
+            args.len() == 2
+                && authority(types, args[0], &TypeKind::World)
+                && bytes(types, args[1], false)
+                && opened(types, result, &TypeKind::Connector)
+        }
+        IntrinsicOp::ConnectorConnect => {
+            args.len() == 1
+                && authority(types, args[0], &TypeKind::Connector)
+                && opened(types, result, &TypeKind::File)
+        }
+        IntrinsicOp::ListenerAccept | IntrinsicOp::ListenerAcceptNoDelay => {
             args.len() == 1
                 && authority(types, args[0], &TypeKind::Listener)
                 && opened(types, result, &TypeKind::File)

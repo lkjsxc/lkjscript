@@ -1413,6 +1413,7 @@ fn grant_matches(kind: &TypeKind, grant: &ir::EntryGrant, parameters: usize) -> 
         ir::EntryGrant::Process => matches!(kind, TypeKind::Process),
         ir::EntryGrant::Directory(_) => matches!(kind, TypeKind::Directory),
         ir::EntryGrant::Listener(_) => matches!(kind, TypeKind::Listener),
+        ir::EntryGrant::Connector(_) => matches!(kind, TypeKind::Connector),
     }
 }
 fn scalar_entry(kind: &TypeKind) -> bool {
@@ -1498,6 +1499,13 @@ fn encode_program(
             ));
         }
     }
+    let connector = program.types.iter().any(|ty| matches!(ty.kind, TypeKind::Connector));
+    let accept_nodelay = program.functions.iter().any(|function| {
+        function.body.iter().any(|instruction| matches!(
+            instruction.op, Op::Intrinsic { name: IntrinsicOp::ListenerAcceptNoDelay, .. }
+        ))
+    });
+
     let mut a = Assembler::new();
     let p = platform::Platform::new(&mut a);
     let grant_plan = match grants {
@@ -1536,7 +1544,14 @@ fn encode_program(
         symbols.push((p.world_file, "$platform::world_file".to_string()));
         symbols.push((p.world_listen, "$platform::world_listen".to_string()));
         symbols.push((p.listener_accept, "$platform::listener_accept".to_string()));
+        if accept_nodelay {
+            symbols.push((p.listener_accept_nodelay, "$platform::listener_accept_nodelay".to_string()));
+        }
         symbols.push((p.listener_address, "$platform::listener_address".to_string()));
+        if connector {
+            symbols.push((p.world_connector, "$platform::world_connector".to_string()));
+            symbols.push((p.connector_connect, "$platform::connector_connect".to_string()));
+        }
         symbols.push((p.clock_read, "$platform::clock_read".to_string()));
         symbols.push((p.process_spawn, "$platform::process_spawn".to_string()));
         symbols.push((p.child_wait, "$platform::child_wait".to_string()));
@@ -1573,6 +1588,8 @@ fn encode_program(
         }
     }
     platform::emit(&mut a, p, functions[entry.function], &entry, profile, grant_plan.as_ref());
+    if connector { network::emit_connector(&mut a, p); }
+    if accept_nodelay { network::emit_accept_nodelay(&mut a, p); }
     if let Some(profile) = profile {
         symbols.push((profile.start, "$profiler".to_string()));
         profiling::emit(&mut a, p, profile, profile_path.unwrap().len());

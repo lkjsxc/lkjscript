@@ -29,7 +29,39 @@ pub struct File {
 pub struct Listener {
     handle: std::fs::File,
 }
+pub struct Connector {
+    address: [u8; 16],
+}
 impl World {
+    pub fn connector(&mut self, address: &str, port: u16) -> Result<Connector, i64> {
+        let mut bytes = [0u8; 16];
+        bytes[0] = 2;
+        bytes[2..4].copy_from_slice(&port.to_be_bytes());
+        let mut parts = address.split('.');
+        for part in 0..4 {
+            let text = parts.next().ok_or(22i64)?;
+            if text.is_empty() { return Err(22); }
+            let mut value = 0u16;
+            for byte in text.bytes() {
+                if !byte.is_ascii_digit() { return Err(22); }
+                value = value * 10 + u16::from(byte - b'0');
+                if value > 255 { return Err(22); }
+            }
+            bytes[4 + part] = value as u8;
+        }
+        if parts.next().is_some() { return Err(22); }
+        self.__lkjscript_connector(&bytes)
+    }
+    pub fn __lkjscript_connector(&mut self, address: &[u8]) -> Result<Connector, i64> {
+        if address.len() != 16 || address[0] != 2 || address[1] != 0
+            || address[8..].iter().any(|byte| *byte != 0) {
+            return Err(22);
+        }
+        let mut value = [0u8; 16];
+        value.copy_from_slice(address);
+        Ok(Connector { address: value })
+    }
+
     pub fn listen(&mut self, address: &str, port: u16) -> Result<Listener, i64> {
         let mut bytes = [0u8; 16];
         bytes[0] = 2;
@@ -53,9 +85,22 @@ impl World {
         Ok(Listener { handle: files::listen(address)? })
     }
 }
+impl Connector {
+    pub fn connect(&mut self) -> Result<File, i64> {
+        Ok(File { handle: Some(files::connect(&self.address)?) })
+    }
+    pub fn __lkjscript_connect(&mut self) -> Result<File, i64> {
+        self.connect()
+    }
+}
 impl Listener {
     pub fn accept(&mut self) -> Result<File, i64> {
         Ok(File { handle: Some(files::accept(self.handle.as_raw_fd())?) })
+    }
+    pub fn accept_nodelay(&mut self) -> Result<File, i64> {
+        let handle = files::accept(self.handle.as_raw_fd())?;
+        files::set_nodelay(handle.as_raw_fd())?;
+        Ok(File { handle: Some(handle) })
     }
     pub fn __lkjscript_accept(&mut self) -> Result<File, i64> {
         self.accept()
@@ -719,6 +764,16 @@ pub(crate) mod files {
     pub fn executable(descriptor: i32) -> Result<(), i64> {
         retry(|| unsafe { syscall(91, i64::from(descriptor), 0o755_i64) }).map(|_| ())
     }
+    pub fn connect(address: &[u8]) -> Result<std::fs::File, i64> {
+        if address.len() != 16 || address[0] != 2 || address[1] != 0 {
+            return Err(22);
+        }
+        let handle = owned(retry(|| unsafe { syscall(41, 2_i64, 0x80001_i64, 0_i64) })?)?;
+        match retry(|| unsafe { syscall(42, i64::from(handle.as_raw_fd()), address.as_ptr(), 16_i64) }) {
+            Ok(_) | Err(106) => Ok(handle),
+            Err(error) => Err(error),
+        }
+    }
     pub fn listen(address: &[u8]) -> Result<std::fs::File, i64> {
         if address.len() != 16 || address[0] != 2 || address[1] != 0 {
             return Err(22);
@@ -730,6 +785,10 @@ pub(crate) mod files {
     }
     pub fn accept(descriptor: i32) -> Result<std::fs::File, i64> {
         owned(retry(|| unsafe { syscall(288, i64::from(descriptor), 0_i64, 0_i64, 0x80000_i64) })?)
+    }
+    pub fn set_nodelay(descriptor: i32) -> Result<(), i64> {
+        let enabled = 1u32;
+        retry(|| unsafe { syscall(54, i64::from(descriptor), 6_i64, 1_i64, &enabled as *const u32, 4_i64) }).map(|_| ())
     }
     pub fn listener_address(descriptor: i32, address: &mut [u8]) -> Result<(), i64> {
         if address.len() != 16 { return Err(22); }

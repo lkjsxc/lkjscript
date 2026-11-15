@@ -426,15 +426,15 @@ Single-error APIs select the first diagnostic from these same production paths.
 
 ## World and capabilities
 
-Entries take owned Stdout/Stdin/Stderr, Directory, Listener, Process or Clock
+Entries take owned Stdout/Stdin/Stderr, Directory, Listener, Connector, Process or Clock
 parameters, no parameters, or a sole World declaring implicit full authority.
 build/run require --grant NAME for each parameter; Directory takes NAME=PATH,
-Listener takes NAME=IPv4:PORT (numeric address; port zero requests a fresh port).
+Listener/Connector take NAME=IPv4:PORT; only Listener uses port zero to choose a port.
 build embeds these descriptors; handles are acquired at executable startup.
 Duplicate, missing, unknown or malformed grants reject before publication/execution;
 acquisition failure traps R0007 at entry. File/Child/borrowed/aggregate entry
 parameters reject; accept Directory and open a File inside the entry instead.
-World, Stdout/Stdin/Stderr, Directory, File, Listener, Process, Clock and Child are
+World, Stdout/Stdin/Stderr, Directory, File, Listener, Connector, Process, Clock and Child are
 affine intrinsic types with no constructor or Copy/Clone/Data/Send/Sync implementation.
 Names, integers or casts cannot forge authority. Every capability operation checks
 independently in IR; methods below exclusively borrow the receiver. Derived owners
@@ -446,7 +446,9 @@ can outlive that borrow and move normally.
 | World.stdout()/stdin()/stderr() | Corresponding inherited stream capability. |
 | World.directory(path) | Result<Directory,i64> acquiring a root. |
 | World.listen(address,port) | Result<Listener,i64> binding a numeric IPv4 TCP endpoint. |
-| Listener.accept(), port() | Result<File,i64> owning a connected stream; Result<u16,i64> with the bound port. |
+| Listener.accept()/accept_nodelay(), port() | Result<File,i64> owning a connected stream (the second disables Nagle); Result<u16,i64> with the bound port. |
+| World.connector(address,port) | Result<Connector,i64> authorizing one numeric IPv4 TCP destination. |
+| Connector.connect() | Result<File,i64> owning a stream to exactly the granted destination. |
 | World.process()/clock() | Process or monotonic-clock capability. |
 | World.temporary_file() | Result<File,i64>, anonymous read/write storage. |
 | World.stdin_file()/stdout_file()/stderr_file() | Owned inherited-stream duplicate, preserving closed streams. |

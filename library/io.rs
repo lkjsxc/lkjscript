@@ -284,11 +284,10 @@ pub fn __lkjscript_directory_list(directory: &mut Directory) -> Result<Vec<Vec<u
     Result::Ok(names)
 }
 
-pub fn __lkjscript_listen(
-    world: &mut World,
+pub fn __lkjscript_ipv4_address(
     address: &str,
     port: u16,
-) -> Result<Listener, i64> {
+) -> Vec<u8> {
     let input = address.as_bytes();
     let mut bytes = [0u8; 16];
     bytes[0] = 2;
@@ -301,28 +300,37 @@ pub fn __lkjscript_listen(
         while at < input.len() && input[at] != b'.' {
             let byte = input[at];
             if byte < b'0' || byte > b'9' {
-                return Result::Err(22);
+                return Vec::new();
             }
             value = value * 10 + (byte - b'0') as u16;
             if value > 255 {
-                return Result::Err(22);
+                return Vec::new();
             }
             digits = true;
             at += 1;
         }
         if !digits {
-            return Result::Err(22);
+            return Vec::new();
         }
         bytes[4 + part] = value as u8;
         if part < 3 {
             if at == input.len() {
-                return Result::Err(22);
+                return Vec::new();
             }
             at += 1;
         } else if at != input.len() {
-            return Result::Err(22);
+            return Vec::new();
         }
     }
+    bytes[..].to_vec()
+}
+
+pub fn __lkjscript_listen(
+    world: &mut World,
+    address: &str,
+    port: u16,
+) -> Result<Listener, i64> {
+    let bytes = __lkjscript_ipv4_address(address, port);
     world.__lkjscript_listen(&bytes)
 }
 

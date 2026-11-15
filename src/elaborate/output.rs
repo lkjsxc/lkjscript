@@ -20,6 +20,7 @@ impl Builder<'_, '_> {
             Value::Clock => self.compiler.intern(String::new(), ir::TypeKind::Clock),
             Value::Child => self.compiler.intern(String::new(), ir::TypeKind::Child),
             Value::Listener => self.compiler.intern(String::new(), ir::TypeKind::Listener),
+            Value::Connector => self.compiler.intern(String::new(), ir::TypeKind::Connector),
             Value::Port => *self.compiler.type_names.get(&"u16".to_string()).unwrap(),
             Value::FileRef | Value::DirectoryRef => {
                 let kind = if matches!(value, Value::FileRef) {
@@ -73,6 +74,7 @@ impl Builder<'_, '_> {
             | Value::ResultUnit
             | Value::ResultChild
             | Value::ResultListener
+            | Value::ResultConnector
             | Value::ResultPort
             | Value::ResultNames
             | Value::ResultStatus
@@ -82,6 +84,7 @@ impl Builder<'_, '_> {
                     Value::ResultFile => self.capability_type(Value::File, span)?,
                     Value::ResultChild => self.capability_type(Value::Child, span)?,
                     Value::ResultListener => self.capability_type(Value::Listener, span)?,
+                    Value::ResultConnector => self.capability_type(Value::Connector, span)?,
                     Value::ResultPort => self.capability_type(Value::Port, span)?,
                     Value::ResultNames => self.capability_type(Value::Arguments, span)?,
                     Value::ResultStatus => ir::I64,
@@ -163,6 +166,22 @@ impl Builder<'_, '_> {
             }
             values.push(value.0);
             index += 1;
+        }
+        if matches!(method, capabilities::Method::WorldConnector) {
+            let address = self.source_library_call(
+                "io", "__lkjscript_ipv4_address", BTreeMap::new(),
+                vec![values[1], values[2]], span,
+            )?;
+            let bytes = self.capability_type(capabilities::Value::Bytes, span)?;
+            let borrowed = self.temp(bytes);
+            self.emit(ir::Op::SliceBorrow {
+                dst: borrowed, place: ir::Place::local(address.0), mutable: false,
+            }, span.line);
+            let dst = self.temp(result);
+            self.emit(ir::Op::Intrinsic {
+                dst, name: ir::IntrinsicOp::WorldConnector, args: vec![values[0], borrowed],
+            }, span.line);
+            return Ok((dst, result));
         }
         if let Some(operation) = method.intrinsic() {
             let dst = self.temp(result);

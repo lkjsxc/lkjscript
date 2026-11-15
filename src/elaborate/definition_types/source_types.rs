@@ -91,6 +91,7 @@ impl Infer<'_, '_> {
                                         | "Clock"
                                         | "Child"
                                         | "Listener"
+                                        | "Connector"
                                 )
                             {
                                 values.push(self.atom(&path.name));

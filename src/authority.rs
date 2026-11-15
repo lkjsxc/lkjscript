@@ -44,6 +44,7 @@ fn capability(kind: &TypeKind) -> Option<(&'static str, bool)> {
         TypeKind::Process => Some(("Process", false)),
         TypeKind::Directory => Some(("Directory", true)),
         TypeKind::Listener => Some(("Listener", true)),
+        TypeKind::Connector => Some(("Connector", true)),
         _ => None,
     }
 }
@@ -400,7 +401,7 @@ pub fn render(checked: &CheckedProgram, report: &Report) -> String {
         for requirement in &report.manifest.requirements {
             let value = if requirement.capability == "Directory" {
                 "=PATH"
-            } else if requirement.capability == "Listener" {
+            } else if requirement.capability == "Listener" || requirement.capability == "Connector" {
                 "=ADDRESS"
             } else {
                 ""

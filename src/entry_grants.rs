@@ -25,7 +25,7 @@ pub fn validate(program: &Program, entry: usize) -> Result<(), String> {
         if matches!(ty.kind, TypeKind::File) {
             return Err(problem(&format!("File parameter {} cannot be granted; accept Directory and open the file inside the entry", local.name)));
         }
-        if !matches!(ty.kind, TypeKind::Stdout | TypeKind::Stdin | TypeKind::Stderr | TypeKind::Clock | TypeKind::Process | TypeKind::Directory | TypeKind::Listener) {
+        if !matches!(ty.kind, TypeKind::Stdout | TypeKind::Stdin | TypeKind::Stderr | TypeKind::Clock | TypeKind::Process | TypeKind::Directory | TypeKind::Listener | TypeKind::Connector) {
             return Err(problem(&format!("parameter {} requires an owned grantable capability; World must be the only parameter", local.name)));
         }
         if !valid_name(&local.name) || names.contains(&local.name) {
@@ -39,9 +39,9 @@ fn decimal(text: &str, maximum: u64) -> Result<u64, String> {
     if text.is_empty() { return Err(problem("empty decimal address component")); }
     let mut value = 0u64;
     for byte in text.as_bytes() {
-        if *byte < b'0' || *byte > b'9' { return Err(problem("Listener grant requires numeric IPv4:port")); }
+        if *byte < b'0' || *byte > b'9' { return Err(problem("network grant requires numeric IPv4:port")); }
         value = value * 10 + (*byte - b'0') as u64;
-        if value > maximum { return Err(problem("Listener address component is out of range")); }
+        if value > maximum { return Err(problem("network address component is out of range")); }
     }
     Ok(value)
 }
@@ -50,11 +50,11 @@ fn address(endpoint: &str) -> Result<Vec<u8>, String> {
     let mut colon = None;
     for index in 0..bytes.len() {
         if bytes[index] == b':' {
-            if colon.is_some() { return Err(problem("Listener grant requires numeric IPv4:port")); }
+            if colon.is_some() { return Err(problem("network grant requires numeric IPv4:port")); }
             colon = Some(index);
         }
     }
-    let at = colon.ok_or_else(|| problem("Listener grant requires numeric IPv4:port"))?;
+    let at = colon.ok_or_else(|| problem("network grant requires numeric IPv4:port"))?;
     let port = decimal(&endpoint[at + 1..], 65535)?;
     let mut output = vec![0u8; 16];
     output[0] = 2;
@@ -64,13 +64,13 @@ fn address(endpoint: &str) -> Result<Vec<u8>, String> {
     let mut part = 0usize;
     for end in 0..=at {
         if end == at || bytes[end] == b'.' {
-            if part >= 4 { return Err(problem("Listener grant needs four IPv4 octets")); }
+            if part >= 4 { return Err(problem("network grant needs four IPv4 octets")); }
             output[4 + part] = decimal(&endpoint[begin..end], 255)? as u8;
             part += 1;
             begin = end + 1;
         }
     }
-    if part != 4 { return Err(problem("Listener grant needs four IPv4 octets")); }
+    if part != 4 { return Err(problem("network grant needs four IPv4 octets")); }
     Ok(output)
 }
 pub fn prepare(program: &Program, entry: usize, supplied: &[String]) -> Result<Vec<EntryGrant>, String> {
@@ -104,7 +104,7 @@ pub fn prepare(program: &Program, entry: usize, supplied: &[String]) -> Result<V
         let value = supplied_by_name.get(&local.name).ok_or_else(|| problem(&format!("missing --grant {}", local.name)))?;
         let kind = &program.types[local.ty].kind;
         let grant = match kind {
-            TypeKind::Directory | TypeKind::Listener => {
+            TypeKind::Directory | TypeKind::Listener | TypeKind::Connector => {
                 let value = value.as_ref().ok_or_else(|| problem(&format!("--grant {} requires a value", local.name)))?;
                 if value.is_empty() { return Err(problem("grant path or address is empty")); }
                 for byte in value.as_bytes() {
@@ -114,6 +114,8 @@ pub fn prepare(program: &Program, entry: usize, supplied: &[String]) -> Result<V
                     let mut path = value.as_bytes().to_vec();
                     path.push(0);
                     EntryGrant::Directory(path)
+                } else if matches!(kind, TypeKind::Connector) {
+                    EntryGrant::Connector(address(value)?)
                 } else {
                     EntryGrant::Listener(address(value)?)
                 }

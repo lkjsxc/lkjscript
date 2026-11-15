@@ -698,7 +698,7 @@ fn self_test(world: &mut World) -> Result<(), String> {
     if mutation::prepare("authority", authority.to_string()).is_ok() {
         return Err("E_MUTATION authority admitted as pure seed".to_string());
     }
-    for kind in vec!["world".to_string(), "listener".to_string()] {
+    for kind in vec!["world".to_string(), "listener".to_string(), "connector".to_string()] {
         let text = format!("lkjscript-ir 1\ntype \"authority\" {kind}\nfn \"probe\" 0 0\nendfn\n");
         match mutation::prepare("authority", text) {
             Err(problem) if problem.contains("authority type") => {}
@@ -708,6 +708,9 @@ fn self_test(world: &mut World) -> Result<(), String> {
     for name in vec![
         "world_listen".to_string(),
         "listener_accept".to_string(),
+        "listener_accept_nodelay".to_string(),
+        "world_connector".to_string(),
+        "connector_connect".to_string(),
         "listener_address".to_string(),
     ] {
         let text = format!(

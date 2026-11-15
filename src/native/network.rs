@@ -113,3 +113,119 @@ pub(super) fn emit(a: &mut Assembler, p: Platform) {
     a.bind(promoted);
     a.ret();
 }
+
+// These leaves are appended only for programs containing the Connector primitive.
+// Compiler source itself uses the seed-compatible independent host relay, so old
+// seed emission remains byte-identical for the compiler fixed point.
+pub(super) fn emit_connector(a: &mut Assembler, p: Platform) {
+    let invalid = a.label();
+    let packed = a.label();
+    a.bind(p.world_connector);
+    prologue(a, p, 0, Span::default());
+    a.immediate(A, 16);
+    a.compare(SI, A);
+    a.condition(5, invalid);
+    a.load_width(A, DI, 0, 2, false);
+    a.immediate(C, 2);
+    a.compare(A, C);
+    a.condition(5, invalid);
+    a.load(A, DI, 8);
+    a.test(A, true);
+    a.condition(5, invalid);
+    a.load(A, DI, 0);
+    a.shift(A, 5, 16); // The endpoint occupies 48 bits; never a signed errno.
+    a.jump(packed);
+    a.bind(invalid);
+    a.immediate(A, (-22i64) as u64);
+    a.bind(packed);
+    epilogue(a);
+
+    let failed = a.label();
+    let done = a.label();
+    let connected = a.label();
+    let promoted = a.label();
+    a.bind(p.connector_connect);
+    prologue(a, p, 32, Span::default());
+    a.mov(A, DI);
+    a.shift(A, 4, 16);
+    a.immediate(C, 2);
+    a.rr(0x09, A, C, true);
+    a.store(BP, -32, A);
+    a.immediate(A, 0);
+    a.store(BP, -24, A);
+    a.immediate(DI, 2);
+    a.immediate(SI, 0x80001);
+    a.immediate(D, 0);
+    syscall(a, 41);
+    a.test(A, true);
+    a.condition(8, done);
+    a.immediate(C, 3);
+    a.compare(A, C);
+    a.condition(3, promoted);
+    a.store(BP, -8, A);
+    a.mov(DI, A);
+    a.immediate(SI, 1030);
+    a.immediate(D, 3);
+    syscall(a, 72);
+    a.store(BP, -16, A);
+    a.load(DI, BP, -8);
+    a.immediate(A, 3);
+    a.syscall();
+    a.load(A, BP, -16);
+    a.test(A, true);
+    a.condition(8, done);
+    a.bind(promoted);
+    a.store(BP, -8, A);
+    a.mov(DI, A);
+    a.lea(SI, BP, -32);
+    a.immediate(D, 16);
+    syscall(a, 42);
+    a.immediate(C, (-106i64) as u64); // EISCONN after an interrupted connect.
+    a.compare(A, C);
+    a.condition(4, connected);
+    a.test(A, true);
+    a.condition(8, failed);
+    a.bind(connected);
+    a.load(A, BP, -8);
+    a.jump(done);
+    a.bind(failed);
+    a.store(BP, -16, A);
+    a.load(DI, BP, -8);
+    a.immediate(A, 3);
+    a.syscall();
+    a.load(A, BP, -16);
+    a.bind(done);
+    epilogue(a);
+}
+
+// The ordinary listener leaf stays unchanged for stored-seed reproduction.
+pub(super) fn emit_accept_nodelay(a: &mut Assembler, p: Platform) {
+    let done = a.label();
+    let failed = a.label();
+    a.bind(p.listener_accept_nodelay);
+    prologue(a, p, 32, Span::default());
+    a.call(p.listener_accept);
+    a.test(A, true);
+    a.condition(8, done);
+    a.store(BP, -8, A);
+    a.mov(DI, A);
+    a.immediate(A, 1);
+    a.store_width(BP, -16, A, 4);
+    a.immediate(SI, 6); // IPPROTO_TCP
+    a.immediate(D, 1); // TCP_NODELAY
+    a.lea(R10, BP, -16);
+    a.immediate(R8, 4);
+    syscall(a, 54); // setsockopt
+    a.test(A, true);
+    a.condition(8, failed);
+    a.load(A, BP, -8);
+    a.jump(done);
+    a.bind(failed);
+    a.store(BP, -24, A);
+    a.load(DI, BP, -8);
+    a.immediate(A, 3);
+    a.syscall(); // close consumes the newly accepted descriptor.
+    a.load(A, BP, -24);
+    a.bind(done);
+    epilogue(a);
+}

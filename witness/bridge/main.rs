@@ -8,6 +8,10 @@ pub use lkjscript::{
 };
 #[path = "../../src/embedded.rs"]
 mod embedded;
+mod host_network {
+    use super::host::{Child, File, World};
+    include!("../../src/host_network.rs");
+}
 mod driver_host {
     use super::host::{Child, Clock, Directory, File, Listener, Process, World};
     include!("../../src/driver_host.rs");

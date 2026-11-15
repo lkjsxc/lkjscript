@@ -6,6 +6,7 @@ pub mod diagnostic;
 pub mod diagnostics;
 pub mod elaborate;
 pub mod embedded;
+pub mod entry_grants;
 pub(crate) mod facts;
 pub mod frontend;
 pub mod generics;
