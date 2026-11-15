@@ -74,7 +74,7 @@ report count/throughput and preserve every finding as a permanent case.
 Reference examples are executable cases; language.md stays below 500 lines with
 form, meaning, lowering, rejection and rewrite. Port language/IR contracts; drop host tests.
 Holder liveness is conservative; its rejection names the lexical-scope rewrite.
-borrowed_closure_escape remains pending; programs decides the scoped-concurrency cases.
+borrowed_closure_escape remains pending; obsolete prose about three absent scoped-concurrency cases is not a contract.
 Cargo, bridge and rustc shim stay in witness/. CI gates from an empty store and seed
 without cargo/rustc/node; inspect the nonblocking witness job and never constrain
 language design for Rust. Accepted programs agree; delete the witness when it blocks
@@ -82,11 +82,11 @@ needed forms or ceases to find useful differences. Source uses .lkj to identify 
 
 ## Program specimens (programs stream)
 
-Applications are specimens of program classes, not goals; site, journal and desk remain gate cases. The compiler is the first consumer of structural operations.
+[Runtime demand table](runtime-demands.md) orders programs work. Applications are specimens; site, journal and desk remain gate cases. The compiler is the first consumer.
 Programs work in /home/coder/workspace/lkjscript-programs-20261115 on programs; fetch/rebase, bootstrap, four-worker gate, push HEAD:main. Never refresh seed here.
 Connector grants one numeric IPv4:port without DNS or retargeting; both executors validate descriptors and authority follows checked-IR effects and cleanup.
 HTTP/1.1 persistence/pipelining retain exact framing. Keep indexed deadlines, bounded dispatch and receive times; tiny progress never renews a deadline.
-Use readiness for concurrency, processes for parallelism. Wait sets borrow handles without storing language views; closure escape remains pending, without thread rules.
+Concurrency decision: readiness for idle work and isolated processes for parallelism; no shared mutable address space, heap views or thread claims. Pools/serialized map owners/bounded channels are library; only sealed immutable payloads may be shared.
 Keep compiler source within the stored seed's forms. The independent interpreter broker operates actual descriptors, without relay queues.
 Journal acknowledges after log fsync, a synced head and atomic rename plus directory fsync; one writer lock. Replay validates checksums/boundaries before tail repair. Stop claims SIGTERM, drains admitted work to a fixed deadline, syncs and exits.
 Entropy supplies kernel bytes; publish private synced keys atomically. Write tokens bind expiry/nonce through HMAC and a separate key-root grant; authenticate before mutation.
@@ -139,7 +139,7 @@ sizes in status and commits. Measurements do not gate. Measure remaining gaps.
 ## Horizon and working policy
 
 Make structure directly operable: source claims and checked-instance facts are labelled, queries are bounded, edits are checked transactions, and comparisons use checked identities. Size measurements decide checking units; range facts follow measured use. A checked-IR seed and a second target still follow need. No mandatory formatter or fragment marker: retained diagnostic cases show no need for their frontend cost; delta prints accepted rewrites.
-Programs decides concurrency; do not build on pending scoped-concurrency cases.
+Processes-only parallelism is chosen; a single-address-space compiler pays IPC/unit-serialization costs until separately checked thread/allocator rules exist.
 Compiler owns main, seed, emission, driver/store, bench, CI and hash; programs owns
 its separate worktree, consumers and new capabilities. Preserve its additions.
 Only compiler refreshes seed, in its own commit. Do not move/reformat whole files.
