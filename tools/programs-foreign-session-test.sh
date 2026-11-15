@@ -22,7 +22,7 @@ env -i PATH=/usr/bin:/bin GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null /usr
 hash=$(printf 'hello\n' | env -i PATH=/usr/bin:/bin GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null /usr/bin/git -C "$LKJSCRIPT_FOREIGN_ROOT" hash-object -w --stdin)
 "$compiler" build examples/foreign-session --library-dir library --no-store -o "$work/session" >"$work/build.out" 2>"$work/build.err"
 "$compiler" authority examples/foreign-session --library-dir library >"$work/authority"
-for text in ForeignCommand ReadDirectory NullDevice foreign_start foreign_exchange foreign_finish foreign_session_kill_reap_close 'long-lived sessions:'; do rg -Fq "$text" "$work/authority"; done
+for text in ForeignCommand ReadDirectory NullDevice foreign_start foreign_exchange foreign_finish foreign_session_kill_reap_close 'long-lived sessions:'; do grep -Fq "$text" "$work/authority"; done
 for engine in standalone native interpreter; do
     read -r engine_before rest < /proc/loadavg
     if [[ $engine == standalone ]]; then command=("$work/session" "$hash")
@@ -30,7 +30,7 @@ for engine in standalone native interpreter; do
     fi
     timeout --kill-after=2s 40s "${command[@]}" >"$work/output" 2>"$work/error"
     test ! -s "$work/error"
-    rg -q '^ok foreign session(:| unavailable:)' "$work/output"
+    grep -E -q '^ok foreign session(:| unavailable:)' "$work/output"
     read -r engine_after rest < /proc/loadavg
     printf '%s load %s -> %s ' "$engine" "$engine_before" "$engine_after"; cat "$work/output"
 done

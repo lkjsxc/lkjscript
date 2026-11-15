@@ -66,7 +66,7 @@ run_case() {
     for grant in "$@";do args+=(--grant "$grant");done
     for engine in native interpreter;do
         timeout --kill-after=3s 60s "$compiler" run "${args[@]}" --engine "$engine" > "$work/output" 2>"$work/error"
-        rg -qx "$expected" "$work/output"
+        grep -E -qx "$expected" "$work/output"
     done
     "$compiler" build "${args[@]}" -o "$work/$fixture-parent" > "$work/build.out" 2>"$work/error"
     timeout --kill-after=3s 30s "$work/$fixture-parent" > "$work/output" 2>"$work/error"
@@ -99,7 +99,7 @@ run_case region_unsealed_errno none 22
 run_case pool pool_worker 42 clock
 run_case lifecycle pool_worker 42 clock
 "$compiler" authority tests/fixtures/process/parent.lkj --library-dir library --no-store --image-key "$work/private/key" --grant "image=$work/worker" --grant clock --grant "root=$work/state" > "$work/parent.authority" 2>"$work/error"
-rg -q 'Channel\(slot0,owned\)' "$work/parent.authority"
+grep -E -q 'Channel\(slot0,owned\)' "$work/parent.authority"
 head -c 32 /dev/urandom > "$work/private/wrong"
 if "$compiler" build tests/fixtures/process/parent.lkj --library-dir library --no-store --image-key "$work/private/wrong" --grant "image=$work/worker" --grant clock --grant "root=$work/state" -o "$work/refused" > "$work/output" 2>"$work/error";then exit 1;fi
 build_child unsupported_worker
@@ -128,7 +128,7 @@ for path in ok panic ok ok spin ok bad ok;do
     fi
 done
 wait "$server_pid";server_pid=
-rg -qx 'accepted=5 rejected=1 failed=2 restarts=2' "$work/state/supervisor-result"
+grep -E -qx 'accepted=5 rejected=1 failed=2 restarts=2' "$work/state/supervisor-result"
 test -s "$work/state/failure-1"
 printf 'ok isolated parser supervisor: eight requests, trap/deadline restart, parent root/listener retained\n'
 bash tools/programs-process-mutate.sh --compiler "$compiler"

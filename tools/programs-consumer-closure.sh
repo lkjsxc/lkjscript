@@ -43,7 +43,7 @@ started=$(date +%s%N)
 total=0
 for source in library/http_protocol.lkj library/http_policy.lkj tools/http_client.lkj src/programs_directory_cases.lkj; do
     run bash tools/programs-unit-cases.sh "$work/compiler" "$source" >"$work/cold" 2>&1 || { cat "$work/cold" >&2; exit 1; }
-    summary=$(rg '^LKJSCRIPT_UNIT_GATE ' "$work/cold")
+    summary=$(grep -E '^LKJSCRIPT_UNIT_GATE ' "$work/cold")
     [[ $(printf '%s\n' "$summary" | wc -l) -eq 1 ]] || { cat "$work/cold" >&2; exit 1; }
     read -r tag cases observations cached fresh rest <<<"$summary"
     [[ "$cases" =~ ^cases=[1-9][0-9]*$ && "$observations" =~ ^observations=[1-9][0-9]*$ ]] \
@@ -54,7 +54,7 @@ for source in library/http_protocol.lkj library/http_policy.lkj tools/http_clien
         || { cat "$work/cold" >&2; exit 1; }
     run bash tools/programs-unit-cases.sh "$work/compiler-next" "$source" >"$work/renewed" 2>&1 || { cat "$work/renewed" >&2; exit 1; }
     expected_summary="LKJSCRIPT_UNIT_GATE cases=$count observations=$expected reused=$expected rerun=0 source=$source"
-    [[ $(rg '^LKJSCRIPT_UNIT_GATE ' "$work/renewed") == "$expected_summary" ]] \
+    [[ $(grep -E '^LKJSCRIPT_UNIT_GATE ' "$work/renewed") == "$expected_summary" ]] \
         || { cat "$work/renewed" >&2; exit 1; }
     cat "$work/renewed"
     total=$((total + expected))

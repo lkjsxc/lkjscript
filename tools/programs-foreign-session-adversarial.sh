@@ -38,14 +38,14 @@ for engine in standalone native interpreter; do
     if [[ $engine == standalone ]]; then command=("$work/main" "$work/outside")
     else command=("$compiler" run "$fixture" --library-dir library --no-store --engine "$engine" "${base[@]}" --grant arguments --grant output -- "$work/outside"); fi
     timeout --kill-after=2s 60s "${command[@]}" >"$work/output" 2>"$work/error"
-    test ! -s "$work/error"; rg -Fq 'ok persistent confinement:' "$work/output"; cat "$work/output"
+    test ! -s "$work/error"; grep -Fq 'ok persistent confinement:' "$work/output"; cat "$work/output"
     if [[ $engine == standalone ]]; then command=("$work/owner")
     else command=("$compiler" run "$fixture" --entry owner --library-dir library --no-store --engine "$engine" "${base[@]}" --grant clock); fi
     for round in 1 2 3 4; do "$work/lifecycle" --parent-death "${command[@]}" >"$work/output" 2>"$work/error"; test ! -s "$work/error"; done
     if [[ $engine == standalone ]]; then command=("$work/unavailable")
     else command=("$compiler" run "$fixture" --entry unavailable --library-dir library --no-store --engine "$engine" "${base[@]}" --grant output); fi
     "$work/lifecycle" --unavailable "${command[@]}" >"$work/output" 2>"$work/error"
-    test ! -s "$work/error"; rg -Fq 'unsupported kernel refuses' "$work/output"
+    test ! -s "$work/error"; grep -Fq 'unsupported kernel refuses' "$work/output"
     read -r engine_after rest < /proc/loadavg
     printf 'ok %s: confinement, four owner kills/reaps, fail-closed; load %s -> %s\n' "$engine" "$engine_before" "$engine_after"
 done

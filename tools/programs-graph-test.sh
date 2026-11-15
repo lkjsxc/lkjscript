@@ -70,7 +70,12 @@ measure() {
     local load_before started_ns
     load_before=$(cat /proc/loadavg)
     started_ns=$(date +%s%N)
+    if [[ -x /usr/bin/time ]]; then
     /usr/bin/time -f '%e %U %S %M' -o "$work/$label.time" "$executable" "$nodes" "$mutations" "$seed" >"$work/$label.output" 2>"$work/$label.err"
+    else
+        "$executable" "$nodes" "$mutations" "$seed" >"$work/$label.output" 2>"$work/$label.err"
+        printf 'not collected (GNU time unavailable)' >"$work/$label.time"
+    fi
     test ! -s "$work/$label.err"
     cat "$work/$label.output"
     printf 'graph %s: %s ms; wall/user/system/RSS-KiB %s; load %s -> %s\n' "$label" "$((($(date +%s%N)-started_ns)/1000000))" "$(cat "$work/$label.time")" "$load_before" "$(cat /proc/loadavg)"

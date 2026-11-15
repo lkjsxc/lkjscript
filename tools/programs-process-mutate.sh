@@ -29,7 +29,7 @@ for file in tests/fixtures/process/region_ir_*control.lkjir; do
 done
 for file in tests/fixtures/process/region_fail_*; do
     if "$compiler" check "$file" --library-dir library --no-store >"$work/output" 2>"$work/error"; then printf 'unexpected region mutant acceptance: %s\n' "$file" >&2;exit 1;fi
-    rg -q 'E_BORROW|E_TYPE' "$work/error"
-    if rg -q 'E_IR_TEXT|E_PARSE' "$work/error"; then exit 1;fi
+    grep -E -q 'E_BORROW|E_TYPE' "$work/error"
+    if grep -E -q 'E_IR_TEXT|E_PARSE' "$work/error"; then exit 1;fi
 done
 printf 'ok Region source/IR boundary: two text controls, eight owner/mutability/return/heap rejections\n'
