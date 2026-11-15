@@ -1,0 +1,24 @@
+lkjscript-ir 1
+# expect: trap R0001
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+fn "probe" 0 4
+local "left" 4 let
+local "right" 4 let
+local "left-copy" 4 let
+local "right-copy" 4 let
+local "result" 4 let
+@1 int 0 -1
+@2 int 1 1
+@7 read 2 copy 0
+@8 read 3 copy 1
+@9 binary 4 "+" 2 3
+@10 drop 0
+@11 drop 1
+@12 return 4
+endfn

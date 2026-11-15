@@ -6,6 +6,8 @@ The [fixed-byte hash attribution](hash.md) isolates exact producer identity cost
 and compares optimization levels, explicit inlining removal and native profiles.
 The [fixed-source compiler attribution](compiler_attribution.md) repeats the
 original compiler workload across optimization and inlining settings.
+The [final compiler questions and slices](compiler-query-final.md) record the
+forty bounded replies, exact producer cost and the still-unmet 100 ms target.
 
 Run from the checkout after bootstrap:
 

@@ -330,3 +330,81 @@ same copied source and interleave three old/new pairs. Profile and optional Rust
 rows remain separately labelled. The original fixed-byte workload's retained
 canonical-result mean is still above 100 ms; no query-latency target or whole
 compiler optimization milestone is claimed by this table.
+
+## Integrated producer follow-up and discarded copied-operands fusion
+
+After integration of image authority, questions and structural operations, the
+compiler itself is 19,584,049 bytes, SHA-256
+`54db01f51ca7b5802f932a8f4b76737ee2671cbe306f229c62e3c3ccae54c1e3`.
+It was emitted for one extra generation so its own hashing code uses the
+retained selectors. This is a larger input than the original 17,039,220-byte
+hash workload; the two input sizes are not silently treated as the same trial.
+
+Twenty unprofiled hashes of the integrated producer took 178.761 ms each,
+outer 3.57 / 3.50 / 0.02 s wall/user/kernel, RSS 264 KiB,
+load 7.13/6.04/5.81 → 6.96/6.02/5.80. The separate profiled route took
+3.50 / 3.42 / 0.02 s, RSS 272 KiB, load
+6.96/6.02/5.80 → 6.96/6.02/5.80; its elapsed interval does not replace the
+unprofiled result. Of 3,429 samples, 3,383 (98.6%) were in SHA compression.
+Arithmetic/conversion accounted for 988 samples (28.8%), checks 664 (19.3%),
+register moves 628 (18.3%), frame traffic 405 (11.8%), constants 341 (9.9%),
+branches 159 (4.6%), other memory 122 (3.5%), address formation 91 (2.6%) and
+runtime 22 (0.6%). The exact one-shot query measurements are in
+[the final compiler report](compiler-query-final.md); all forty commands still
+exceeded 100 ms.
+
+The checked SHA IR contains exact sequences of two plain copying Reads
+followed by one consuming Binary. One trial fed the original source locals
+directly to the existing scalar selector. It accepted only identical unsigned
+32- or 64-bit operand types, preserved the original Binary's source location,
+and excluded sources or final destinations that alias either temporary/source
+in a way that changes the original sequencing. In particular, the first Read's
+destination cannot be the second Read's source: that would make the omitted
+write semantically observable. Borrowed temporaries cannot be consumed by the
+original checked Binary. Unsigned primitive temporaries have no custom Drop
+or ownership cleanup to omit.
+
+Independent review found no counterexample under those restrictions. The
+focused interpreter/native suite was expanded to 27 cases and 54 routes,
+including adversarial checked-IR dependency aliases, final-destination reuse,
+a surviving shared view of a source, checked overflow, division by zero and an
+out-of-width shift. All passed. The trial was then measured against the same
+retained selector on the exact same integrated producer bytes, three interleaved
+pairs of twenty hashes:
+
+| Route | ms/hash | Wall / user / kernel s | Load before → after |
+| --- | ---: | --- | --- |
+| Retained selector | 177.100 | 3.54 / 3.45 / 0.02 | 7.58/8.26/7.63 → 7.61/8.26/7.63 |
+| Copied-operands trial | 172.375 | 3.44 / 3.38 / 0.02 | 7.61/8.26/7.63 → 7.73/8.27/7.64 |
+| Retained selector | 179.636 | 3.59 / 3.54 / 0.02 | 7.73/8.27/7.64 → 7.59/8.23/7.63 |
+| Copied-operands trial | 176.920 | 3.53 / 3.49 / 0.02 | 7.59/8.23/7.63 → 7.59/8.23/7.63 |
+| Retained selector | 179.504 | 3.59 / 3.52 / 0.02 | 7.59/8.23/7.63 → 7.54/8.21/7.63 |
+| Copied-operands trial | 171.617 | 3.43 / 3.39 / 0.02 | 7.54/8.21/7.63 → 7.58/8.21/7.63 |
+
+Each unprofiled row has 264 KiB peak RSS and a 110,152-byte workload image.
+Equal image lengths do not establish equal machine-code bytes. All digests
+match the independent host reference. The paired means are
+178.747 → 173.637 ms/hash, a **2.86%** reduction. The trial is discarded under
+the ten-percent rule. The original scalar-copy path already selects direct
+assigned-register moves, but no additive attribution of the remaining cost is
+claimed from that observation alone.
+
+| Trial validation / rollback | Wall / user / kernel s | Peak RSS KiB | Load before → after |
+| --- | ---: | ---: | --- |
+| Apply checked trial transaction | 39.57 / 38.56 / 0.31 | 920,188 | 7.62/8.76/7.65 → 6.63/8.35/7.56 |
+| Build trial producer | 21.41 / 20.81 / 0.17 | 534,012 | 6.63/8.35/7.56 → 8.64/8.66/7.67 |
+| 27 cases / 54 native and original-IR routes | 13.04 / 12.77 / 0.07 | 39,860 | 6.84/8.15/7.59 → 7.58/8.26/7.63 |
+| Restore original source transaction | 42.08 / 40.84 / 0.39 | 921,764 | 8.72/8.56/7.90 → 8.96/8.68/7.97 |
+
+The restoration returns the compiler's canonical checked IR to
+`b677ad116d98b50f4d952d0dcf0b733e7ae0edc50716f73525c803aa093b5a0c`
+and its production source bytes to the committed retained selector. Removing
+the added helper left one extra EOF blank line outside item spans; guarded
+projection cleanup removed that line. Both source operations and their
+rollbacks cancel from the retained adoption count. Four hand-authored IR
+regression fixtures remain; the source-operation CLI does not edit IR
+fixtures. There is no retained fusion implementation or source-library change.
+
+This concrete follow-up leaves the exact-producer hashing wall named, not
+solved. It establishes neither the 100 ms question target nor a whole-compiler
+-O milestone, and it is not a proof of a permanent backend performance floor.
