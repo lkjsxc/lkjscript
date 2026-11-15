@@ -1,5 +1,5 @@
 // expect: reject E_BORROW
-// pending: Explain that the receiver is borrowed before its arguments; suggest computing `self.started` in a local before the call.
+// rewrite: Explain receiver-before-argument borrowing; read the scalar field into a fresh local before the mutable call.
 struct State { started: usize }
 impl State {
     fn set(&mut self, value: usize) { self.started = value; }

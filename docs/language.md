@@ -151,7 +151,7 @@ coercion; inferred type equality alone never converts a move to a reborrow.
 | Reference-bearing replacement | Returns old provenance and installs new provenance; initialized borrowed/indexed storage stays initialized while the separate old owner is destroyed. | Reference-field writes must preserve enclosing source/exclusivity contracts. |
 | External parameter writes | May preserve each leaf's exact symbolic origin, including projections, or clear it. | Changing origins is E_BORROW until cross-parameter mutation contracts exist. Use explicit local views/owned values. |
 | Writes through opaque results | Reference-free writes preserve sibling leaves/tag facts. Reference-bearing writes require an exact destination identity. | A conservative alias footprint cannot authorize clearing sibling reference evidence; mutate through the original exact place. |
-| Holder lifetime | A reference stored in a live view aggregate may retain its loan despite its last apparent source use. | End the carrier's lexical scope before borrowing the owner exclusively; this conservative rejection is intentional. |
+| Holder lifetime | A reference stored in a live view aggregate may retain its loan despite its last apparent source use. Temporary source views also last through match arms or a self-slice assignment. | End the carrier's lexical scope before exclusive access. Evaluate an owned match scrutinee or to_vec copy as { let saved = expression; saved } to end its temporary source view first. Mutable method receivers borrow before arguments: read a scalar self.field argument into a local before calling the method. |
 
 Cases: [ranges](../tests/reference/range_views.rs), [UTF-8 trap](../tests/reference/text_boundary.rs),
 [holder rejection](../tests/reference/holder_liveness.rs), [scope rewrite](../tests/reference/holder_scope.rs).
@@ -328,7 +328,7 @@ Collection for holds iterable temporaries in an outer match, loops over next and
 binds each item with an irrefutable let. Non-unit bodies/refutable patterns reject;
 break/continue/return/exhaustion preserve item/iterator cleanup. Numeric ranges
 share binding machinery. No iteration IR operation or nominal-name shortcut exists.
-Shared Vec/slice/map/set and owned Vec/Option/map/set iteration are supported. Owned arrays need an IntoIterator implementation; index them, or use vec![elements] for owned literal iteration.
+Shared Vec/slice/map/set and owned Vec/Option/map/set iteration are supported. IntoIterator for &mut Vec<T> is absent: evaluate the collection once, then use an index loop that advances before borrowing each element, so continue still progresses. Owned arrays need an IntoIterator implementation; index them, or use vec![elements] for owned literal iteration.
 
 enumerate/skip/take/zip are source adapters; chain currently needs identical
 iterator types to prove Item equality. map/filter/filter_map/inspect store the

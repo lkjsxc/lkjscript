@@ -1,6 +1,7 @@
 // Run with a compiler executable and an existing empty work directory.
 // This suite uses only lkjscript capabilities and leaves that directory empty.
 mod diagnostic_edits;
+mod borrow_edit_tests;
 struct Outcome {
     status: i64,
     output: Vec<u8>,
@@ -502,6 +503,7 @@ fn diagnostics(
     report: &mut Report,
 ) -> Result<(), String> {
     rewrite_diagnostics(world, executable, directory, config, report)?;
+    borrow_edit_tests::run(world, executable, directory, config, report)?;
     write(directory, "recovered.rs", b"fn broken() { let = 1; } fn probe() -> i64 { 42 }")?;
     write(directory, "independent.rs", b"fn first() -> i64 { true }\nfn second() -> bool { 1i64 }\n")?;
     for name in pair("recovered.rs", "independent.rs") {

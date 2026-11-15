@@ -1,5 +1,5 @@
 // expect: reject E_BORROW
-// pending: Explain that a temporary view in the match scrutinee remains live through its arms; suggest evaluating it in a separate lexical block first.
+// rewrite: Explain the scrutinee view lifetime; evaluate its owned result in a lexical block before entering the match arms.
 struct Request { path: String }
 fn parsed(bytes: &[u8]) -> Result<Request, u8> {
     if bytes.is_empty() { Err(0u8) } else { Ok(Request { path: "x".to_string() }) }

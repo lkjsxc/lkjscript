@@ -1,0 +1,213 @@
+//! Exercise actual CLI edits, then admit and execute the rewritten source again.
+use super::{command, contains, diagnostic_edits, display_bytes, invoke, path, run_value, write, Config, Report};
+
+struct Case {
+    name: String,
+    source: String,
+    entry: String,
+    expected: String,
+    construct: String,
+}
+fn case(name: &str, source: &str, entry: &str, expected: &str, construct: &str) -> Case {
+    Case { name: name.to_string(), source: source.to_string(), entry: entry.to_string(),
+        expected: expected.to_string(), construct: construct.to_string() }
+}
+
+pub fn run(
+    world: &mut World,
+    executable: &File,
+    directory: &mut Directory,
+    config: &Config,
+    report: &mut Report,
+) -> Result<(), String> {
+    let cases = vec![
+        case("mutable-vec-edit.rs", include_str!("../tests/diagnostics/mutable_vec_iteration.rs"), "probe", "2\n", "mutable Vec iteration requires IntoIterator"),
+        case("mutable-receiver-edit.rs", include_str!("../tests/diagnostics/mutable_receiver_argument.rs"), "probe", "", "mutable method receiver is borrowed before its arguments"),
+        case("match-view-edit.rs", include_str!("../tests/diagnostics/match_scrutinee_borrow.rs"), "probe", "", "match scrutinee retains its temporary source view"),
+        case("self-slice-edit.rs", include_str!("../tests/diagnostics/self_slice_assignment.rs"), "probe", "", "self-slice assignment keeps the source view alive"),
+        case("mutable-vec-once.rs", r#"// π: fresh names and offsets also preserve UTF-8 comments.
+pub fn probe() -> u64 {
+    let __lkjscript_collection_0 = 7u64;
+    let __lkjscript_index_0 = 8u64;
+    let __lkjscript_current_0 = 9u64;
+    let mut calls = 0u64;
+    let mut sum = 0u64;
+    for value in &mut { calls += 1u64; vec![1u64, 2u64, 3u64, 4u64] } {
+        if *value == 2u64 { continue; }
+        *value += 10u64;
+        sum += *value;
+        if *value == 13u64 { break; }
+    }
+    calls * 1000u64 + sum + __lkjscript_collection_0 + __lkjscript_index_0 + __lkjscript_current_0
+}"#, "probe", "1048\n", "mutable Vec iteration requires IntoIterator"),
+        case("mutable-receiver-hygiene.rs", r#"struct State { started: u64 }
+impl State {
+    fn set(&mut self, value: u64) { self.started = value + 1u64; }
+    fn update(&mut self) -> u64 {
+        let __lkjscript_argument_0 = 7u64;
+        self.set(self.started);
+        self.started + __lkjscript_argument_0
+    }
+}
+pub fn probe() -> u64 { let mut state = State { started: 34u64 }; state.update() }
+"#, "probe", "42\n", "mutable method receiver is borrowed before its arguments"),
+        case("match-view-branches.rs", r#"struct Request { value: usize }
+fn parsed(bytes: &[u8]) -> Result<Request, u8> {
+    if bytes.is_empty() { Err(0u8) } else { Ok(Request { value: bytes[0] as usize }) }
+}
+struct State { bytes: Vec<u8>, total: usize }
+impl State {
+    fn clear(&mut self) { self.total += 1usize; self.bytes.clear(); }
+    fn update(&mut self) {
+        let __lkjscript_owned_0 = 0usize;
+        let request = match parsed(&self.bytes[..]) {
+            Ok(request) => request,
+            Err(_) => return self.clear(),
+        };
+        self.total += request.value + __lkjscript_owned_0;
+    }
+}
+pub fn probe() -> usize {
+    let mut empty = State { bytes: Vec::new(), total: 0usize };
+    empty.update();
+    let mut full = State { bytes: vec![40u8], total: 0usize };
+    full.update();
+    empty.total + full.total + 1usize
+}
+"#, "probe", "42\n", "match scrutinee retains its temporary source view"),
+        case("self-slice-values.rs", r#"struct State { bytes: Vec<u8> }
+impl State {
+    fn update(&mut self) {
+        let __lkjscript_owned_0 = 40usize;
+        self.bytes = self.bytes[1usize..].to_vec();
+        assert!(__lkjscript_owned_0 == 40usize);
+    }
+}
+pub fn probe() -> usize {
+    let mut state = State { bytes: vec![1u8, 2u8, 40u8] };
+    state.update();
+    state.bytes[0] as usize + state.bytes[1] as usize
+}
+"#, "probe", "42\n", "self-slice assignment keeps the source view alive"),
+        case("self-slice-drop.rs", r#"struct Item { output: Option<Stdout>, value: u8 }
+impl Clone for Item {
+    fn clone(&self) -> Item { Item { output: None, value: self.value } }
+}
+impl Drop for Item {
+    fn drop(&mut self) {
+        if let Some(output) = self.output.as_mut() { output.write(&[self.value]); }
+    }
+}
+struct State { items: Vec<Item> }
+impl State {
+    fn update(&mut self) { self.items = self.items[1usize..].to_vec(); }
+}
+pub fn main(mut world: World) {
+    let mut state = State { items: vec![
+        Item { output: Some(world.stdout()), value: b'1' },
+        Item { output: Some(world.stdout()), value: b'2' },
+    ] };
+    state.update();
+    assert!(state.items.len() == 1usize && state.items[0].value == b'2');
+    world.stdout().write(b"C\n");
+}
+"#, "main", "12C\n", "self-slice assignment keeps the source view alive"),
+    ];
+    for item in cases {
+        write(directory, &item.name, item.source.as_bytes())?;
+        let checked = invoke(world, executable, &command(config, "check", &item.name), b"")?;
+        if checked.status != 1 {
+            return Err(format!("borrow edit fixture {} did not reject before rewriting: {}", item.name, display_bytes(&checked.errors)));
+        }
+        report.require(
+            contains(&checked.errors, item.construct.as_bytes()) && contains(&checked.errors, b"docs/language.md"),
+            format!("borrow edit fixture {} omitted its construct, rule or reference: {}", item.name, display_bytes(&checked.errors)),
+        );
+        let rewritten = diagnostic_edits::apply(&item.source, &checked.errors, &path(config, &item.name))
+            .map_err(|error: String| -> String { format!("{}: {error}; diagnostic {}", item.name, display_bytes(&checked.errors)) })?;
+        write(directory, &item.name, rewritten.as_bytes())?;
+        run_value(world, executable, config, report, &item.name, &item.entry, &item.expected)?;
+    }
+    let unchanged: Vec<(String, String)> = vec![
+        ("mutable-receiver-group.rs".to_string(), r#"struct State { started: usize }
+impl State {
+    fn set(&mut self, value: usize) { self.started = value; }
+    fn update(&mut self) { (self).set(self.started); }
+}
+pub fn probe() { let mut state = State { started: 1usize }; state.update(); }
+"#.to_string()),
+        ("self-slice-group.rs".to_string(), r#"struct State { bytes: Vec<u8> }
+impl State { fn update(&mut self) { self.bytes = (self.bytes[1usize..]).to_vec(); } }
+pub fn probe() { let mut state = State { bytes: vec![1u8, 2u8] }; state.update(); }
+"#.to_string()),
+        ("match-view-group.rs".to_string(), r#"fn parsed(bytes: &[u8]) -> Result<usize, u8> {
+    if bytes.is_empty() { Err(0u8) } else { Ok(bytes.len()) }
+}
+struct State { bytes: Vec<u8> }
+impl State {
+    fn clear(&mut self) { self.bytes.clear(); }
+    fn update(&mut self) {
+        let _length = match (parsed)(&self.bytes[..]) {
+            Ok(length) => length,
+            Err(_) => return self.clear(),
+        };
+    }
+}
+pub fn probe() { let mut state = State { bytes: Vec::new() }; state.update(); }
+"#.to_string()),
+        ("mutable-vec-tuple-shadow.rs".to_string(), r#"struct Other;
+pub fn probe() {
+    let mut values = vec![1u64];
+    let (mut values, _) = (Other, 0u64);
+    for _value in &mut values {}
+}
+"#.to_string()),
+        ("mutable-vec-shadow.rs".to_string(), r#"pub fn probe() {
+    let mut values = vec![1u64];
+    { let mut values = vec![2u64]; for value in &mut values { *value += 1u64; } }
+}
+"#.to_string()),
+        ("mutable-receiver-computed.rs".to_string(), r#"struct State { started: usize }
+impl State {
+    fn set(&mut self, value: usize) { self.started = value; }
+    fn update(&mut self) { self.set(self.started + 0usize); }
+}
+pub fn probe() { let mut state = State { started: 1usize }; state.update(); }
+"#.to_string()),
+        ("self-slice-computed-bound.rs".to_string(), r#"fn start() -> usize { 1usize }
+struct State { bytes: Vec<u8> }
+impl State { fn update(&mut self) { self.bytes = self.bytes[start()..].to_vec(); } }
+pub fn probe() { let mut state = State { bytes: vec![1u8, 2u8] }; state.update(); }
+"#.to_string()),
+        ("match-view-computed-bound.rs".to_string(), r#"fn start() -> usize { 0usize }
+fn parsed(bytes: &[u8]) -> Result<usize, u8> {
+    if bytes.is_empty() { Err(0u8) } else { Ok(bytes.len()) }
+}
+struct State { bytes: Vec<u8> }
+impl State {
+    fn clear(&mut self) { self.bytes.clear(); }
+    fn update(&mut self) {
+        let _length = match parsed(&self.bytes[start()..]) {
+            Ok(length) => length,
+            Err(_) => return self.clear(),
+        };
+    }
+}
+pub fn probe() { let mut state = State { bytes: Vec::new() }; state.update(); }
+"#.to_string()),
+        ("mutable-vec-pattern.rs".to_string(), r#"pub fn probe() {
+    let mut values = vec![(1u64, 2u64)];
+    for (first, second) in &mut values { *first += *second; }
+}
+"#.to_string()),
+    ];
+    for (name, source) in unchanged {
+        write(directory, &name, source.as_bytes())?;
+        let rejected = invoke(world, executable, &command(config, "check", &name), b"")?;
+        report.require(
+            rejected.status == 1 && !contains(&rejected.errors, b"LKJSCRIPT_EDITS "),
+            format!("unsafe or context-dependent borrow rewrite for {name}: {}", display_bytes(&rejected.errors)),
+        );
+    }
+    Ok(())
+}
