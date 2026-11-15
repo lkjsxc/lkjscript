@@ -107,6 +107,7 @@ parallel_step 1 profiler timeout --kill-after=10s 600s sh tools/profile-test.sh 
 parallel_step 1 optimizer timeout --kill-after=10s 600s bash tools/optimizer-test.sh "$check_binary"
 parallel_step 1 resources timeout --kill-after=10s 600s bash tools/resource-test.sh "$check_binary"
 parallel_step 1 runner timeout --kill-after=10s 600s "$check_binary" test src/test_runner.rs "${check_reuse[@]}"
+parallel_step 1 diagnostic-cases timeout --kill-after=10s 600s "$check_binary" test tests/diagnostics "${check_reuse[@]}"
 parallel_step 2 store timeout --kill-after=10s 600s bash tools/store-test.sh "$check_binary"
 parallel_step 2 http timeout --kill-after=10s 600s sh tools/http-test.sh --compiler "$check_binary" --seconds 0 --out target/gate/http-profiles
 parallel_step 2 journal timeout --kill-after=10s 600s sh tools/http-journal-cases.sh --compiler "$check_binary"
