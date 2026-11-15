@@ -723,9 +723,21 @@ pub(crate) fn raw_scalar(program: &ir::Program, index: usize, bytes: &[u8]) -> R
     }
 }
 
+#[derive(Clone, Copy)]
+enum Completion {
+    Success,
+    SemanticTrap,
+    Other,
+}
+fn semantic_trap(code: u64) -> bool {
+    // Fixed language traps and message-table traps are deterministic. Resource,
+    // output and reserved trap codes cannot authorize a reusable observation.
+    (code >= 1 && code <= 5) || code >= 16
+}
 #[derive(Clone)]
 struct Outcome {
     status: u8,
+    completion: Completion,
     stdout: Vec<u8>,
     stderr: Vec<u8>,
     diagnostic: String,
@@ -744,7 +756,7 @@ fn interpret(
         match crate::entry_grants::prepare(program, index, &options.grants) {
             Ok(grants) => Some(grants),
             Err(problem) => {
-                return Outcome { status: 1, stdout: Vec::new(), stderr: Vec::new(), diagnostic: problem };
+                return Outcome { status: 1, completion: Completion::Other, stdout: Vec::new(), stderr: Vec::new(), diagnostic: problem };
             }
         }
     };
@@ -760,6 +772,7 @@ fn interpret(
         Err(problem) => {
             return Outcome {
                 status: 1,
+                completion: Completion::Other,
                 stdout: Vec::new(),
                 stderr: Vec::new(),
                 diagnostic: problem,
@@ -774,12 +787,14 @@ fn interpret(
     if let Err(problem) = host.finish() {
         return Outcome {
             status: 1,
+            completion: Completion::Other,
             stdout: host.stdout,
             stderr: host.stderr,
             diagnostic: problem,
         };
     }
     let mut status = host.status;
+    let mut completion = if status == 0 { Completion::Success } else { Completion::Other };
     let diagnostic = match result {
         Ok(result) => {
             host.stdout
@@ -788,6 +803,10 @@ fn interpret(
         }
         Err(problem) => {
             status = 1;
+            completion = Completion::Other;
+            if let interpreter::ErrorKind::Trap(code) = &problem.kind {
+                if semantic_trap(*code) { completion = Completion::SemanticTrap; }
+            }
             format!(
                 "{}:{}: {} {}",
                 options.path,
@@ -799,25 +818,67 @@ fn interpret(
     };
     Outcome {
         status,
+        completion,
         stdout: host.stdout,
         stderr: host.stderr,
         diagnostic,
     }
 }
 
-pub(crate) fn normalize_trap(path: &str, raw: &[u8]) -> Option<String> {
+fn trap_number(text: &str) -> Option<u64> {
+    if text.is_empty() || text.as_bytes().iter().any(|byte: &u8| *byte < b'0' || *byte > b'9') {
+        return None;
+    }
+    text.parse::<u64>().ok()
+}
+fn native_trap(path: &str, raw: &[u8]) -> Option<(u64, String, String)> {
     let text = String::from_utf8(raw.to_vec()).ok()?;
+    if !text.ends_with("\n") { return None; }
     let parts = split(&text, b' ', 7);
     if parts.len() != 7 || parts[1] != "at" || parts[2] != "line" || parts[4] != "file" {
         return None;
     }
+    if parts[0].len() < 5 || !parts[0].starts_with("R") || !parts[5].ends_with(":") {
+        return None;
+    }
+    let code = trap_number(&parts[0][1..])?;
+    trap_number(&parts[3])?;
+    trap_number(&parts[5][..parts[5].len() - 1])?;
     let message = &parts[6];
     let message = if message.ends_with("\n") {
         &message[..message.len() - 1]
     } else {
         message.as_str()
     };
-    Some(format!("{path}:{}: {} {message}", parts[3], parts[0]))
+    Some((code, format!("{path}:{}: {} {message}", parts[3], parts[0]), message.to_string()))
+}
+pub(crate) fn normalize_trap(path: &str, raw: &[u8]) -> Option<String> {
+    native_trap(path, raw).map(|trap: (u64, String, String)| trap.1)
+}
+fn complete_semantic_trap(program: &ir::Program, code: u64, message: &str) -> bool {
+    // A refused diagnostic write can leave a syntactically valid prefix. Match
+    // the entire message, including embedded newlines, before reusing the result.
+    match code {
+        1 => return message == "integer overflow",
+        2 => return message == "division by zero",
+        3 => return message == "index out of bounds",
+        4 => return message == "explicit trap",
+        5 => return message == "assertion failed",
+        _ => {}
+    }
+    if code < 16 { return false; }
+    let mut messages = Vec::new();
+    for function in &program.functions {
+        for instruction in &function.body {
+            if let ir::Op::Trap { message: expected } = &instruction.op {
+                if !messages.contains(expected) {
+                    if messages.len() as u64 == code - 16 { return expected.as_str() == message; }
+                    messages.push(expected.clone());
+                }
+            }
+        }
+    }
+    false
 }
 
 fn native_run(
@@ -909,14 +970,21 @@ fn native_run(
         .map_err(|errno: i64| io("result", "read", errno))?;
     let mut outcome = Outcome {
         status,
+        completion: if status == 0 { Completion::Success } else { Completion::Other },
         stdout,
         stderr: Vec::new(),
         diagnostic: String::new(),
     };
     if raw.len() != 8 && status != 0 {
-        outcome.diagnostic = normalize_trap(&options.path, &raw).unwrap_or_else(|| {
-            format!("E_HOST native program exited with status {status} without a scalar result")
-        });
+        outcome.diagnostic = match native_trap(&options.path, &raw) {
+            Some((code, diagnostic, message)) => {
+                if status == 1 && complete_semantic_trap(checked.program(), code, &message) {
+                    outcome.completion = Completion::SemanticTrap;
+                }
+                diagnostic
+            }
+            None => format!("E_HOST native program exited with status {status} without a scalar result"),
+        };
     } else {
         outcome
             .stdout
@@ -1044,6 +1112,7 @@ fn batch(world: &mut World, options: &Options, stats: &mut Stats, memo: &mut Mem
             Err(problem) => {
                 let outcome = Outcome {
                     status: 1,
+                    completion: Completion::Other,
                     stdout: Vec::new(),
                     stderr: Vec::new(),
                     diagnostic: problem,
@@ -1115,12 +1184,14 @@ fn batch(world: &mut World, options: &Options, stats: &mut Stats, memo: &mut Mem
             }
         }
         let mut outcomes = Vec::new();
-        let reusable = request.command == "check" || checked_entry(checked.program(), &request.entry)
-            .map(|selected: usize| checked.program().functions[selected].params == 0).unwrap_or(false);
+        let reusable = request.command == "check" || (request.runtime_source.is_none()
+            && checked_entry(checked.program(), &request.entry)
+                .map(|selected: usize| checked.program().functions[selected].params == 0).unwrap_or(false));
         for engine in &options.engines {
             let outcome = if request.command == "check" {
                 Outcome {
                     status: 0,
+                    completion: Completion::Success,
                     stdout: Vec::new(),
                     stderr: Vec::new(),
                     diagnostic: String::new(),
@@ -1129,6 +1200,7 @@ fn batch(world: &mut World, options: &Options, stats: &mut Stats, memo: &mut Mem
                 match checked_entry(checked.program(), &request.entry) {
                     Err(problem) => Outcome {
                         status: 1,
+                        completion: Completion::Other,
                         stdout: Vec::new(),
                         stderr: Vec::new(),
                         diagnostic: problem,
@@ -1158,6 +1230,7 @@ fn batch(world: &mut World, options: &Options, stats: &mut Stats, memo: &mut Mem
                                 Ok(outcome) => outcome,
                                 Err(problem) => Outcome {
                                     status: 1,
+                                    completion: Completion::Other,
                                     stdout: Vec::new(),
                                     stderr: Vec::new(),
                                     diagnostic: problem,
@@ -1172,7 +1245,9 @@ fn batch(world: &mut World, options: &Options, stats: &mut Stats, memo: &mut Mem
         }
         let mut completed = reusable;
         for outcome in &outcomes {
-            if outcome.status != 0 || !outcome.diagnostic.is_empty() { completed = false; }
+            if !matches!(outcome.completion, Completion::Success | Completion::SemanticTrap) {
+                completed = false;
+            }
         }
         if completed {
             memo.remember(&request, "test", &encode_outcomes(true, &outcomes));
@@ -1541,7 +1616,8 @@ fn decode_outcomes(bytes: &[u8], count: usize) -> Option<(bool, Vec<Outcome>)> {
         let status = reader.word()?;
         if status > 255 { return None; }
         outcomes.push(Outcome {
-            status: status as u8, stdout: reader.bytes()?, stderr: reader.bytes()?, diagnostic: reader.text()?,
+            status: status as u8, completion: Completion::Other,
+            stdout: reader.bytes()?, stderr: reader.bytes()?, diagnostic: reader.text()?,
         });
     }
     if !reader.done() { return None; }

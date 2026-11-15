@@ -72,8 +72,10 @@ target/lkjscript build examples/hello.rs -o target/hello \
 ```
 
 The store retains authenticated checker successes, relocatable function code,
-complete images and successful closed tests. Effects still execute on every test
-run. Every entry binds the exact compiler, target and dependencies; a changed
+complete images and closed tests using the embedded runtime. Both normal returns
+and language traps reuse observations; resource and host failures rerun. Effects
+still execute on every test run. Different compiler generations keep separate entries. Every entry binds the exact
+compiler, target and dependencies; a changed
 source file or previously absent module invalidates the affected result.
 `--no-store` disables reuse. Deleting the store is always safe.
 
@@ -94,15 +96,16 @@ relationships use indices or owned values.
 
 An entry's owned capability parameters are its authority manifest. Supply each by
 name with `--grant NAME`; Directory requires `--grant NAME=PATH`, and Listener
-requires `--grant NAME=IPv4:PORT`. A sole World parameter declares implicit full
+and Connector require `--grant NAME=IPv4:PORT`. A sole World parameter declares implicit full
 authority. Missing, duplicate and unknown grants are rejected before execution or
 artifact publication. `build` records the grants; the executable acquires the
 handles at startup. `run` supports the same grants on both execution routes.
 
 World derives byte arguments, streams, exit status, files and directory changes,
 child processes with explicit arguments and streams, a monotonic clock, and IPv4
-TCP listeners. Directory confines descendant operations beneath its root.
-Listener accepts connections as owned Files. File, Directory and Listener close
+TCP listeners and exact numeric outbound destinations. Directory confines descendant
+operations beneath its root. Connector connects only to its granted destination;
+Listener accepts connections as owned Files. File, Directory, Listener and Connector close
 on destruction; dropping a live Child terminates and reaps it.
 
 `lkjscript authority PATH` reports the declared entry grants and conservatively
@@ -119,7 +122,7 @@ includes a generated-traffic harness with memory measurement and CPU profiling.
 - [Direction](docs/direction.md): the ordered development course.
 
 The development gate bootstraps from the stored seed and needs no Rust or Node.
-Its HTTP test uses curl as an explicit client:
+Its HTTP test uses an explicit lkjscript client:
 
 ```sh
 LKJSCRIPT_GATE_JOBS=4 bash tools/check.sh

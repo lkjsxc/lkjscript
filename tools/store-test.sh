@@ -201,6 +201,16 @@ printf 'different compiler identity\n' >> "$test_directory/another-compiler"
     -o "$test_directory/result" > "$test_directory/producer.out" 2> "$test_directory/producer.log"
 cmp "$test_directory/expected" "$test_directory/result"
 (( $(field "$test_directory/producer.log" store_hits) == 0 )) || fail "another producer reused entries"
+cached_build producer-a-repeat
+cmp "$test_directory/expected" "$test_directory/result"
+(( $(field "$test_directory/producer-a-repeat.log" build_reused) > 0 )) ||
+    fail "another producer displaced the original producer's image"
+"$test_directory/another-compiler" build main.rs --source-dir "$source_directory" --store "$store" --store-key "$key" --stats \
+    -o "$test_directory/result" > "$test_directory/producer-b-repeat.out" 2> "$test_directory/producer-b-repeat.log"
+cmp "$test_directory/expected" "$test_directory/result"
+(( $(field "$test_directory/producer-b-repeat.log" build_reused) > 0 )) ||
+    fail "producer entries do not coexist"
+
 
 # Refused writes are merely misses. Ignore SIGXFSZ so the kernel returns EFBIG
 # instead of killing the process; this command publishes no ordinary output.
@@ -250,6 +260,92 @@ if "$compiler" test "$source_directory/cases" --jobs 2 --store "$store" --store-
     > "$test_directory/test-expectation.out" 2> "$test_directory/test-expectation.log"; then
     fail "changed test expectation replayed an old pass"
 fi
+
+# Closed language traps are deterministic observations on both execution routes.
+# Resource/host failures remain observations to rerun, even with trap-looking paths.
+mkdir "$source_directory/traps"
+cp tests/conformance/trap/integer_shift_width.rs "$source_directory/traps/overflow.rs"
+cat > "$source_directory/traps/division.rs" <<'SOURCE'
+// expect: trap R0002
+pub fn probe() -> i64 {
+    let divisor = 0i64;
+    7i64 / divisor
+}
+SOURCE
+cat > "$source_directory/traps/bounds.rs" <<'SOURCE'
+// expect: trap R0003
+pub fn probe() -> i64 {
+    let values = vec![1i64];
+    values[1]
+}
+SOURCE
+cat > "$source_directory/traps/assertion.rs" <<'SOURCE'
+// expect: trap R0005
+pub fn probe() { assert!(false); }
+SOURCE
+cat > "$source_directory/traps/explicit.rs" <<'SOURCE'
+// expect: trap R0004
+pub fn probe() { panic!("a closed semantic trap\nR0006 is message text"); }
+SOURCE
+for pass in cold warm; do
+    "$compiler" test "$source_directory/traps" --jobs 2 --store "$store" --store-key "$key" --stats \
+        > "$test_directory/traps-$pass.out" 2> "$test_directory/traps-$pass.log"
+    sed 's/ ([0-9][0-9]*[.][0-9][0-9]* s)$//' "$test_directory/traps-$pass.out" > "$test_directory/traps-$pass.summary"
+done
+cmp "$test_directory/traps-cold.summary" "$test_directory/traps-warm.summary"
+(( $(field "$test_directory/traps-warm.log" test_reused) == 5 )) || fail "closed semantic traps were not reused"
+
+cat > "$source_directory/R0003-native-resource.rs" <<'SOURCE'
+pub fn probe() -> i64 { 42 }
+SOURCE
+printf 'run\tprobe\t%s/R0003-native-resource.rs\n' "$source_directory" > "$test_directory/resource-batch"
+for pass in first repeated; do
+    (ulimit -n 10; exec "$compiler" batch "$test_directory/resource-batch" --engines native \
+        --store "$store" --store-key "$key" --stats) \
+        > "$test_directory/resource-$pass.out" 2> "$test_directory/resource-$pass.log"
+    grep -Eq '"checkStatus":0,"status":[1-9][0-9]*.*E_(IO|HOST)' "$test_directory/resource-$pass.out" ||
+        fail "descriptor refusal did not reach native execution setup"
+    (( $(field "$test_directory/resource-$pass.log" test_reused) == 0 )) ||
+        fail "transient resource failure was reused"
+    if [[ "$pass" == repeated ]]; then
+        (( $(field "$test_directory/resource-$pass.log" checked_reused) > 0 )) ||
+            fail "descriptor refusal disabled the store"
+    fi
+done
+"$compiler" batch "$test_directory/resource-batch" --engines native \
+    --store "$store" --store-key "$key" --stats \
+    > "$test_directory/resource-recovered.out" 2> "$test_directory/resource-recovered.log"
+grep -q '"checkStatus":0,"status":0,"stdoutHex":"34320a"' "$test_directory/resource-recovered.out" ||
+    fail "restored descriptor limit replayed a resource failure"
+(( $(field "$test_directory/resource-recovered.log" test_reused) == 0 )) ||
+    fail "resource failure became a reusable observation"
+
+# An explicit raw runtime can inspect kernel allocation outcomes. Its code and
+# checked bodies remain reusable, but its executions are not closed observations.
+for pass in cold warm; do
+    "$compiler" batch "$test_directory/resource-batch" --engines native,interpreter --roundtrip \
+        --runtime-source library/runtime.rs --store "$store" --store-key "$key" --stats \
+        > "$test_directory/runtime-$pass.out" 2> "$test_directory/runtime-$pass.log"
+    grep -q '"checkStatus":0,"status":0,"stdoutHex":"34320a"' "$test_directory/runtime-$pass.out" ||
+        fail "explicit runtime probe did not complete"
+    (( $(field "$test_directory/runtime-$pass.log" test_reused) == 0 )) ||
+        fail "explicit runtime execution was reused"
+done
+(( $(field "$test_directory/runtime-warm.log" checked_reused) > 0 )) ||
+    fail "explicit runtime disabled independent body reuse"
+
+# Whole-image identity includes exact runtime-source bytes, even a harmless edit.
+cp library/runtime.rs "$test_directory/runtime.rs"
+cached_build runtime-image-cold --runtime-source "$test_directory/runtime.rs"
+cp "$test_directory/result" "$test_directory/runtime-image-expected"
+cached_build runtime-image-warm --runtime-source "$test_directory/runtime.rs"
+(( $(field "$test_directory/runtime-image-warm.log" build_reused) > 0 )) ||
+    fail "explicit runtime image was not reused"
+printf '\n// changed runtime input closure\n' >> "$test_directory/runtime.rs"
+cached_build runtime-image-changed --runtime-source "$test_directory/runtime.rs"
+cmp "$test_directory/runtime-image-expected" "$test_directory/result"
+(( $(field "$test_directory/runtime-image-changed.log" build_reused) == 0 )) ||
+    fail "runtime-source edit replayed an old image"
 
 # A World entry must run even if the source and expected output are unchanged.
 cat > "$source_directory/effect.rs" <<SOURCE

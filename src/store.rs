@@ -6,6 +6,7 @@ pub struct Store {
     directory: Directory,
     clock: Clock,
     producer: Vec<u8>,
+    producer_slot: String,
     secret: Vec<u8>,
     sequence: usize,
     pub hits: usize,
@@ -49,13 +50,16 @@ impl Store {
         }
         let producer = hash.finish();
         Some(Self {
-            directory, clock: world.clock(), producer: producer[..].to_vec(), secret,
+            directory, clock: world.clock(), producer: producer[..].to_vec(),
+            producer_slot: sha256::hex_digest(&producer), secret,
             sequence: 0, hits: 0, misses: 0, rejected: 0, writes: 0,
         })
     }
 
     fn raw(&mut self, namespace: &str, key: &str) -> Option<Vec<u8>> {
-        let name = format!("{namespace}-{key}");
+        // Different compiler generations share the Directory without evicting one
+        // another. Authentication still binds the original executable digest.
+        let name = format!("{namespace}-{}-{key}", self.producer_slot);
         let mut file = self.directory.open(&name).ok()?;
         let result = read_envelope(&mut file, &self.producer, &self.secret, namespace, key);
         if result.is_none() { self.rejected += 1; }
@@ -102,7 +106,7 @@ impl Store {
         }
         let from = format!("{temporary}/entry");
         if written {
-            if self.directory.rename(&from, &format!("{namespace}-{key}")).is_ok() {
+            if self.directory.rename(&from, &format!("{namespace}-{}-{key}", self.producer_slot)).is_ok() {
                 self.writes += 1;
             }
         }

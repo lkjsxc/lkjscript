@@ -106,11 +106,13 @@ The compiler is one consumer among ordinary programs; no deployment here.
 Keep the key outside every source/library/program read grant, including include_bytes!.
 Key readers and compiler replacers are equally trusted; this is an explicit authority.
 HMAC-SHA-256 binds exact compiler bytes, target, dependency identity and result bytes.
+Producer-specific slots let different compiler generations coexist without eviction.
 Only authenticated prior proofs skip body checks; always revalidate shared structure.
 Function keys bind types, destructors, signatures, return contracts and exact bodies.
 Native fragments retain relocations; runtime/drop stubs remain ordinary emission.
 Source-closure reuse records every actual read, including absent module candidates;
-runtime dependencies are the bytes actually sealed. Only closed pure test successes reuse runs.
+runtime dependencies are the bytes actually sealed. Closed tests on the embedded runtime
+reuse returns and language traps; resource, host and model failures always rerun.
 Authenticate large entries in bounded buffers before allocation, then recheck the reread.
 Corruption, refused writes, disappearing stores and concurrent writers are misses.
 No entries are committed; deleting the store or rotating its key is always safe.
