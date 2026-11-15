@@ -46,14 +46,14 @@ Runtime admission receives IR after startup, uses the build-time checker, admits
 | Protocol model | 25.080 (4.71→5.88) | 64 success +64 death schedules, 64 map histories; no native scheduling claim |
 | Foreign session suite | 9.205 (5.67→5.94) | Three engines; persistent Git 28.775 µs vs spawn 771.479 µs, 26.81× (5.67→5.67) |
 | Million-node graph native /Rust0 /Rust3 | 0.986 /0.660 /0.274 (each 5.35→5.35) | Same source/output; 254,556 /245,908 /246,256 KiB; 40,449 stale references |
-| Live IR admission, excluding producer build | 0.735 (33.28→33.28) | Value42, authority refusal, six mutants, located trap, deadline and recovery |
-| Pool publication kill campaign | 3.455 (8.16→9.03) | 20 parent kills; complete old/new128-byte result; 32 adopted workers reaped |
+| Live IR admission, excluding producer build | 0.735 (33.28→33.28) | Value 42, authority refusal, six mutants, located trap, deadline and recovery |
+| Pool publication kill campaign | 3.455 (8.16→9.03) | 20 parent kills; complete old/new 128-byte result; 32 adopted workers reaped |
 | Independent process OS witness | 1.596 (7.70→7.48) | Pre-exec deadline, pre-prctl parent death, ancillary/buffer/descriptor cleanup |
-| Consumer closure cold +producer renewal | 73.330 (4.15→10.15) | All32 HTTP/client/program-directory observations reused; zero reruns |
+| Consumer closure cold +producer renewal | 73.330 (4.15→10.15) | All 32 HTTP/client/program-directory observations reused; zero reruns |
 | Actual HTTP /program-directory wrappers | 30.544 (13.09→15.21) /43.107 (15.21→13.32) | Live I/O stays fresh; own processes, ports and state cleaned |
 
-Targeted final IR campaigns reject all552 worker/region and517 foreign-session mutants; 46+2 controls admit, 48 Copy/Data checks pass. Earlier audit findings were fixed before these runs.
+Targeted final IR campaigns reject all 552 worker/region and 517 foreign-session mutants; 46+2 controls admit, 48 Copy/Data checks pass. Earlier audit findings were fixed before these runs.
 Remaining handoffs: semantic message identity/generated codecs, other capability message kinds, compiler-driver pool adoption, narrow admission provenance and runtime-grant key exclusion (including hardlinks). Foreign descriptor/shared-region transport, same-address-space threads and other targets remain explicit gaps.
 Code wins: the old three scoped-concurrency pending cases were stale; only borrowed_closure_escape exists. consumer_gate_closure was prose; it now has an executable cross-producer proof. The initial worktree was eight commits behind its fetched baseline, not four.
-This note touched24 tagged diagnostic/handoff records: Rust-form12 /new-rule8 /bad-message4, not attempt totals. The graph had four repaired diagnostic cases; all retry causes remain under tests/diagnostics.
-Integration is complete; final empty-store four-worker gate and landing are next. Programs seed remains unchanged.
+This note touched 25 tagged diagnostic/handoff records: Rust form 12 / new rule 8 / bad message 5, not attempt totals. The graph had four repaired diagnostic cases; all retry causes remain under tests/diagnostics.
+The first integrated gate found a stale canonical test-library inventory. Its central fix passes all 721 closed structural contracts; the final empty-store gate and landing are next. Programs seed remains unchanged.
