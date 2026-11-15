@@ -72,6 +72,7 @@ pub fn parse(bytes: &[u8]) -> Result<Request, String> {
         for (key, _) in fields {
             if key != "op" && key != "id" && key != "source" && key != "name"
                 && key != "parent" && key != "expect"
+                && !(key == "before" && kind == "add-item")
                 && matches!(kind.as_str(), "replace-body" | "replace-item" | "add-item" | "remove-item" | "rename" | "move") {
                 return Err(error("transaction", "REQUEST", &format!("unknown operation field {key}")));
             }
@@ -126,8 +127,11 @@ pub(crate) fn validate_item(target: &semantic::Item, inputs: &[(String, Vec<u8>)
 }
 pub(crate) fn rename(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)], target: &semantic::Item,
     name: &str, patches: &mut Vec<Patch>) -> Result<(), String> {
+    if !catalog.references_recorded {
+        return Err(error(&target.identity, "REFERENCES", "rename requires a full resolved-reference catalog"));
+    }
     if !identifier(name) { return Err(error(&target.identity, "NAME", "new name must be one identifier")); }
-    if matches!(target.kind.as_str(), "field" | "variant" | "parameter" | "binding" | "implementation" | "method" | "generic-parameter") {
+    if matches!(target.kind.as_str(), "field" | "variant" | "parameter" | "binding" | "implementation" | "method" | "generic-parameter" | "struct" | "enum" | "trait" | "alias" | "module") {
         return Err(error(&target.identity, "REFERENCES", "this identity needs complete typed constructor, pattern or lexical reference evidence before rename"));
     }
     let free_function = target.kind == "function" && (target.parent == "crate"
@@ -152,7 +156,7 @@ pub(crate) fn rename(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)], 
     }
     patch(patches, &target.identity, &target.file, target.name_start, target.name_end, name);
     for reference in &catalog.references {
-        if reference.target != target.identity || reference.kind == "alias-value" || reference.kind == "alias-type" { continue; }
+        if reference.target != target.identity || reference.kind.starts_with("alias-") { continue; }
         let bytes = input(inputs, &reference.file)?;
         if reference.start > reference.end || reference.end > bytes.len() {
             return Err(error(&reference.owner, "SPAN", "reference span is outside source"));
@@ -277,7 +281,7 @@ pub fn plan(catalog: &semantic::Catalog,
     for operation in &request.operations {
         if operation.kind == "add-item" {
             one_item(&operation.identity, &operation.source, false)?;
-            let (file, at) = insertion(catalog, inputs, &operation.identity)?;
+            let (file, at) = add_location(catalog, inputs, operation)?;
             patch(&mut patches, &operation.identity, &file, at, at, &format!("\n{}\n", operation.source));
             continue;
         }
@@ -295,7 +299,10 @@ pub fn plan(catalog: &semantic::Catalog,
                 one_item(&operation.identity, &operation.source, false)?;
                 patch(&mut patches, &operation.identity, &target.file, target.start, target.end, &operation.source);
             }
-            "remove-item" => patch(&mut patches, &operation.identity, &target.file, target.start, target.end, ""),
+            "remove-item" => {
+                let (start, end) = remove_span(target, inputs)?;
+                patch(&mut patches, &operation.identity, &target.file, start, end, "");
+            },
             "rename" => rename(catalog, inputs, target, &operation.name, &mut patches)?,
             "move" => {
                 // Relocation within one semantic module preserves the source
@@ -307,7 +314,8 @@ pub fn plan(catalog: &semantic::Catalog,
                 if file == target.file && target.start <= at && at < target.end {
                     return Err(error(&operation.identity, "OVERLAP", "cannot move an item into itself"));
                 }
-                patch(&mut patches, &operation.identity, &target.file, target.start, target.end, "");
+                let (start, end) = remove_span(target, inputs)?;
+                patch(&mut patches, &operation.identity, &target.file, start, end, "");
                 patch(&mut patches, &operation.identity, &file, at, at, &format!("\n{}\n", target.text));
             }
             _ => return Err(error(&operation.identity, "OPERATION", &format!("unsupported structural operation {}", operation.kind))),
@@ -326,4 +334,31 @@ pub fn report(draft: &Draft) -> String {
     }
     out.push_str(&format!("transaction sites={} files={} identities={}\n", draft.patches.len(), draft.changes.len(), draft.identities.len()));
     out
+}
+
+pub(crate) fn remove_span(target: &semantic::Item, inputs: &[(String, Vec<u8>)]) -> Result<(usize, usize), String> {
+    let bytes = input(inputs, &target.file)?;
+    let mut start = target.start;
+    while start > 0usize && bytes[start - 1usize] != b'\n' {
+        let byte = bytes[start - 1usize];
+        if byte != b' ' && byte != b'\t' && byte != b'\r' { start = target.start; break; }
+        start -= 1usize;
+    }
+    let mut end = target.end;
+    while end < bytes.len() && (bytes[end] == b' ' || bytes[end] == b'\t' || bytes[end] == b'\r') { end += 1usize; }
+    if end < bytes.len() && bytes[end] == b'\n' { end += 1usize; }
+    else if end != bytes.len() { end = target.end; }
+    Ok((start, end))
+}
+
+fn add_location(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)], operation: &Operation) -> Result<(String, usize), String> {
+    let value = json::parse(operation.data.as_bytes()).map_err(|problem| error(&operation.identity, "REQUEST", &problem.message))?;
+    let before = string(&value, "before", false)?;
+    if before.is_empty() { return insertion(catalog, inputs, &operation.identity); }
+    let anchor = item(catalog, &before)?;
+    if anchor.parent != operation.identity {
+        return Err(error(&operation.identity, "PARENT", "before anchor belongs to another module"));
+    }
+    validate_item(anchor, inputs, "")?;
+    Ok((anchor.file.clone(), remove_span(anchor, inputs)?.0))
 }

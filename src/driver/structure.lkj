@@ -83,7 +83,7 @@ fn unchanged_inputs(world: &mut World, before: &Memo, after: &Memo) -> Result<()
     }
     Ok(())
 }
-fn entries(checked: &ir::CheckedProgram) -> BTreeMap<String, BTreeSet<String>> {
+fn entries(checked: &ir::CheckedProgram, catalog: &semantic::Catalog) -> BTreeMap<String, BTreeSet<String>> {
     let program = checked.program();
     let mut entries: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for index in 0usize..program.functions.len() {
@@ -97,7 +97,7 @@ fn entries(checked: &ir::CheckedProgram) -> BTreeMap<String, BTreeSet<String>> {
         for function in &report.functions {
             for operation in &function.operations { facts.insert(format!("effect:{}", operation.name)); }
         }
-        entries.insert(program.functions[index].name.clone(), facts);
+        entries.insert(catalog.instance_ids[index].clone(), facts);
     }
     entries
 }
@@ -109,9 +109,9 @@ fn joined(values: &[String]) -> String {
     }
     out
 }
-fn authority_delta(old: &ir::CheckedProgram, new: &ir::CheckedProgram) -> String {
-    let before = entries(old);
-    let after = entries(new);
+fn authority_delta(old: &ir::CheckedProgram, old_catalog: &semantic::Catalog, new: &ir::CheckedProgram, new_catalog: &semantic::Catalog) -> String {
+    let before = entries(old, old_catalog);
+    let after = entries(new, new_catalog);
     let mut names: BTreeSet<String> = BTreeSet::new();
     for (name, _) in &before { names.insert(name.clone()); }
     for (name, _) in &after { names.insert(name.clone()); }
@@ -144,11 +144,13 @@ fn compare(world: &mut World, request: &Request, stats: &mut Stats) -> Result<u8
     if !request.against_library.is_empty() { before_options.library_directory = Some(request.against_library.clone()); }
     let mut before = Memo::new(world, &before_options);
     before.capture_catalog = true;
+    before.catalog_items_only = true;
     let old = super::compile(world, &before_options, stats, &mut before)?;
     finish(&mut before);
     let old_catalog = before.catalog.take().ok_or("E_EDIT_SOURCE comparison requires source, not raw IR")?;
     let mut after = Memo::new(world, &request.options);
     after.capture_catalog = true;
+    after.catalog_items_only = true;
     let new = super::compile(world, &request.options, stats, &mut after)?;
     finish(&mut after);
     let new_catalog = after.catalog.take().ok_or("E_EDIT_SOURCE comparison requires source, not raw IR")?;
@@ -178,26 +180,55 @@ fn edit(world: &mut World, request: &Request, stats: &mut Stats) -> Result<u8, S
     }
     if request.request.is_empty() { return Err("E_USAGE edit requires --request JSON_FILE".to_string()); }
     let operations = structure_edit::parse(&super::read_path(world, &request.request)?)?;
+    let mut items_only = true;
+    let mut renames: Vec<structure_edit::Operation> = Vec::new();
+    for operation in &operations.operations {
+        if !matches!(operation.kind.as_str(), "replace-body" | "replace-item" | "add-item" | "remove-item" | "move") { items_only = false; }
+        if operation.kind == "rename" { renames.push(operation.clone()); }
+    }
     let mut before = Memo::new(world, &request.options);
+    before.catalog_items_only = items_only;
     before.capture_catalog = true;
     if let Some(writer) = writer.as_ref() { before.private_source_digest = Some(writer.private_source_digest()); }
     let old = super::compile(world, &request.options, stats, &mut before)?;
     let old_catalog = before.catalog.take().ok_or("E_EDIT_SOURCE transactions require source, not raw IR")?;
     let draft = structure_edit::plan(&old_catalog, &before.source_inputs, &operations)?;
+    if !renames.is_empty() && renames.len() != operations.operations.len() {
+        let rename_request = structure_edit::Request { snapshot: operations.snapshot.clone(), operations: renames.clone() };
+        let rename_draft = structure_edit::plan(&old_catalog, &before.source_inputs, &rename_request)?;
+        let mut proof_options = request.options.clone(); proof_options.store_directory = None;
+        let mut proof = Memo::new(world, &proof_options);
+        proof.capture_catalog = true; proof.catalog_items_only = true;
+        proof.private_source_digest = before.private_source_digest;
+        replace_snapshot(&before, &mut proof, &rename_draft)?;
+        let renamed = super::compile(world, &proof_options, stats, &mut proof)?;
+        if meaning::identity(old.original().checked()) != meaning::identity(renamed.original().checked()) {
+            return Err("transaction E_EDIT_MEANING rename subset changed checked IR; no source was published".to_string());
+        }
+    }
     let mut uncached = request.options.clone();
     uncached.store_directory = None;
     let mut after = Memo::new(world, &uncached);
     after.capture_catalog = true;
+    after.catalog_items_only = items_only;
     after.private_source_digest = before.private_source_digest;
     after.store = before.store.take();
     replace_snapshot(&before, &mut after, &draft)?;
     let new = super::compile(world, &request.options, stats, &mut after)?;
     let new_catalog = after.catalog.take().ok_or("E_EDIT_SOURCE candidate source catalog is missing")?;
+    if !renames.is_empty() && renames.len() == operations.operations.len()
+        && meaning::identity(old.original().checked()) != meaning::identity(new.original().checked()) {
+        return Err("transaction E_EDIT_MEANING rename changed checked IR; no source was published".to_string());
+    }
     unchanged_inputs(world, &before, &after)?;
     let mut report = structure_edit::report(&draft);
-    report.push_str(&authority_delta(old.original().checked(), new.original().checked()));
-    report.push_str(&format!("program level=checked-ir before={} after={} rebuild=changed-source-and-dependent-instances\n",
-        meaning::identity(old.original().checked()), meaning::identity(new.original().checked())));
+    report.push_str(&authority_delta(old.original().checked(), &old_catalog, new.original().checked(), &new_catalog));
+    let total = new.original().program().functions.len();
+    let counted = after.checked_reused + after.checked_local_reused;
+    let reused = if counted > total { total } else { counted };
+    report.push_str(&format!("program level=checked-ir before={} after={} checked-instances={} fresh-checked={} proof-reused={} frontend-resumed={}\n",
+        meaning::identity(old.original().checked()), meaning::identity(new.original().checked()),
+        total, total - reused, reused, after.front_reused));
     report.push_str(&format!("transaction source-before={} source-after={} mode={}\n",
         old_catalog.input_digest, new_catalog.input_digest, if request.dry { "dry-run" } else { "apply" }));
     if let Some(writer) = writer.as_mut() {
@@ -225,9 +256,11 @@ pub(crate) mod consistency {
         let actual = if options.path.starts_with('/') { options.path.clone() }
             else if root == "." { options.path.clone() } else { format!("{root}/{}", options.path) };
         let mut roots: Vec<String> = vec![root.to_string()];
+        if !options.path.starts_with("$toolchain/") {
         if let Some(at) = actual.rfind('/') {
             let parent = if at == 0usize { "/".to_string() } else { actual[..at].to_string() };
             if !roots.contains(&parent) { roots.push(parent); }
+        }
         }
         if let Some(path) = &options.library_directory {
             if !roots.contains(path) { roots.push(path.clone()); }
