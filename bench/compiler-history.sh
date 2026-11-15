@@ -18,18 +18,42 @@ scan=${7:-300}
 memory_bytes=${LKJSCRIPT_HISTORY_MEMORY_BYTES:-4294967296}
 timeout_seconds=${LKJSCRIPT_HISTORY_TIMEOUT_SECONDS:-240}
 store_bytes=${LKJSCRIPT_HISTORY_STORE_BYTES:-2147483648}
+history_head=$(git -C "$repository" rev-parse --verify "${LKJSCRIPT_HISTORY_HEAD:-HEAD}^{commit}")
+compiler_bytes=$(stat -c %s "$compiler")
+archive_blocks() {
+    git -C "$repository" ls-tree -rl "$1" -- src library tools tests |
+        awk '$4 ~ /^[0-9]+$/ { bytes += int(($4 + 4095) / 4096) * 4096 } END { printf "%.0f\n", bytes }'
+}
+free_space() {
+    local before_bytes after_bytes allowance required available
+    before_bytes=$(archive_blocks "$1") || return 1
+    after_bytes=$(archive_blocks "$2") || return 1
+    # Two measured trees, doubled for retained .rs plus .lkj copies; a 128 MiB
+    # floor covers directory metadata and small revisions. Reserve 2x the store
+    # budget for authenticated envelopes/block overhead, plus binary and logs.
+    allowance=$((2 * (before_bytes + after_bytes)))
+    if (( allowance < 134217728 )); then allowance=134217728; fi
+    required=$((2 * store_bytes + allowance + compiler_bytes + 134217728))
+    available=$(df -B1 --output=avail "$PWD" | tail -n 1)
+    printf '%s\t%s\t%s\t%s\t%s\n' "$available" "$required" "$allowance" "$1" "$2" >> "$output.space"
+    if (( available < required )); then
+        printf 'E_HISTORY_SPACE available=%s required=%s measured_tree_allowance=%s\n' "$available" "$required" "$allowance" >&2
+        return 1
+    fi
+}
+: > "$output.space"
+free_space "$history_head" "$history_head" || exit 2
 fixture=$(mktemp -d "$PWD/target/compiler-history.XXXXXX")
 trap 'rm -rf "$fixture"' EXIT HUP INT TERM
 mkdir "$fixture/store" "$output.logs"
 compiler_origin=$compiler
 cp -- "$compiler" "$fixture/compiler"
 compiler="$fixture/compiler"
-df -B1 --output=avail "$fixture" > "$output.space"
-git -C "$repository" log -n "$scan" --format='%H %P' > "$fixture/revisions"
+git -C "$repository" log -n "$scan" --format='%H %P' "$history_head" > "$fixture/revisions"
 printf 'ordinal\trevision\tparent\tstatus\tprojection\toperations\tstdout_lines\twall_s\tuser_s\tsys_s\tpeak_kib\tload_before\tload_after\treason\n' > "$output"
 printf 'mode=%s root=src/main.lkj scan=%s wanted=%s memory_bytes=%s timeout_seconds=%s store_bytes=%s\n' \
     "$mode" "$scan" "$count" "$memory_bytes" "$timeout_seconds" "$store_bytes" > "$output.meta"
-printf 'compiler_origin=%s\n' "$compiler_origin" >> "$output.meta"
+printf 'history_head=%s\ncompiler_origin=%s\n' "$history_head" "$compiler_origin" >> "$output.meta"
 sha256sum "$compiler" >> "$output.meta"
 
 # Listing/archiving is restricted to these four trees. Never copy repository
@@ -80,6 +104,11 @@ while IFS=$'\t' read -r weight revision parent; do
     ((attempted += 1))
     rm -rf "$fixture/before" "$fixture/after"
     projection=native-lkj
+    if ! free_space "$parent" "$revision"; then
+        printf '%s\t%s\t%s\trefused\t%s\t0\t0\t-\t-\t-\t-\t-\t-\tE_HISTORY_SPACE\n' \
+            "$attempted" "$revision" "$parent" "$projection" >> "$output"
+        break
+    fi
     prep=0
     materialize "$parent" "$fixture/before" || prep=$?
     if [[ $prep == 0 ]]; then materialize "$revision" "$fixture/after" || prep=$?; fi
@@ -99,9 +128,12 @@ while IFS=$'\t' read -r weight revision parent; do
     fi
     args+=(--store "$fixture/store" --store-bytes "$store_bytes" --store-key "$private_key" --stats)
     result=0
-    /usr/bin/time -q -f '%e\t%U\t%S\t%M' -o "$stem.time" \
-        prlimit --as="$memory_bytes" -- timeout --kill-after=5s "$timeout_seconds" \
-        "$compiler" "${args[@]}" > "$stem.out" 2> "$stem.err" || result=$?
+    (
+        cd "$fixture"
+        /usr/bin/time -q -f '%e\t%U\t%S\t%M' -o "$stem.time" \
+            prlimit --as="$memory_bytes" -- timeout --kill-after=5s "$timeout_seconds" \
+            "$compiler" "${args[@]}" > "$stem.out" 2> "$stem.err"
+    ) || result=$?
     load_after=$(cut -d ' ' -f 1 /proc/loadavg)
     lines=$(wc -l < "$stem.out")
     status=ineligible
@@ -125,8 +157,11 @@ while IFS=$'\t' read -r weight revision parent; do
         reason=$(perl -ne 'if (/(E_[A-Z0-9_]+)/) { print $1; exit; }' "$stem.err")
         [[ -n $reason ]] || reason="exit-$result"
         if [[ -e "$fixture/before/.lkjscript-edit.pending" ]]; then
-            "$compiler" edit src/main.lkj --source-dir "$fixture/before" --library-dir "$fixture/before/library" \
-                --recover --no-store --store-key "$private_key" > "$stem.recovery" 2>&1
+            (
+                cd "$fixture"
+                "$compiler" edit src/main.lkj --source-dir "$fixture/before" --library-dir "$fixture/before/library" \
+                    --recover --no-store --store-key "$private_key"
+            ) > "$stem.recovery" 2>&1
         fi
     fi
     metrics=$(tail -n 1 "$stem.time")
