@@ -1,0 +1,132 @@
+10000 body_transaction
+"edit::target" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-bench-20261116/target/scale.UiEuhL/source/edit.lkj" level=source-claim file before=b580c07ebeb918056105792f08191869adb72a5d7799afa37fd3aaaa1d4e7a0c after=04e1031f9b7e0c7c933ad815f07879694fd7ec33ebf221fa80673bcedead0722
+transaction sites=1 files=1 identities=1
+"edit::target" level=source-claim changed=body
+program level=checked-ir authority-delta=none
+program level=checked-ir before=4efb8836a8ac19bdec0551dba18e7e7da4fbb90041f86111672c78255ef53082 after=94f212a1913a062627e8e5fcfbb28738192c9a92121fdb30de72579e5c9d05c9 checked-instances=426 fresh-checked=1 proof-reused=425 frontend-resumed=1141
+transaction source-before=caf9a163fe18fa9af7e67a74b94975318631e3d52ecdb1ba76aa972ce5edcda2 source-after=3c9823dd38955850dd670711718993ebfd88b81b0f2bcc15906593f9a4df6cb4 mode=apply
+10000 signature_transaction
+"edit::target" level=source-claim operation-target
+"m0::d1::f0" level=source-claim operation-target
+"m0::d1::f1" level=source-claim operation-target
+"m0::d1::f2" level=source-claim operation-target
+"m0::d1::f3" level=source-claim operation-target
+"m0::d1::f4" level=source-claim operation-target
+"m0::d1::f5" level=source-claim operation-target
+"m0::d1::f6" level=source-claim operation-target
+"m0::d1::f7" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-bench-20261116/target/scale.UiEuhL/source/edit.lkj" level=source-claim file before=04e1031f9b7e0c7c933ad815f07879694fd7ec33ebf221fa80673bcedead0722 after=1494d06599979017a9e719fcef3ee4538d4b07b58ebfac27624bbb8bb6951697
+"/home/coder/workspace/lkjscript-compiler-bench-20261116/target/scale.UiEuhL/source/m0.lkj" level=source-claim file before=4895deb8b98c0ca2b9715e0a5bcce8a0136b7f0ac9b0a0d5e8ae3505a490a50d after=11438c4406971207dd0e4f0a621e3ece9b7a3142ce2b716e1ec396bc2f868593
+transaction sites=10 files=2 identities=9
+"edit::target" level=source-claim changed=signature,body
+"edit::target::param:extra" level=source-claim changed=added
+"m0::d1" level=source-claim changed=text-only
+"m0::d1::f0" level=source-claim changed=body
+"m0::d1::f1" level=source-claim changed=body
+"m0::d1::f2" level=source-claim changed=body
+"m0::d1::f3" level=source-claim changed=body
+"m0::d1::f4" level=source-claim changed=body
+"m0::d1::f5" level=source-claim changed=body
+"m0::d1::f6" level=source-claim changed=body
+"m0::d1::f7" level=source-claim changed=body
+program level=checked-ir authority-delta=none
+program level=checked-ir before=94f212a1913a062627e8e5fcfbb28738192c9a92121fdb30de72579e5c9d05c9 after=7a690faf73642792dd65589c4d161cda8b9151dbe3fd404473019224c1b452bb checked-instances=426 fresh-checked=426 proof-reused=0 frontend-resumed=0
+transaction source-before=3c9823dd38955850dd670711718993ebfd88b81b0f2bcc15906593f9a4df6cb4 source-after=019e8ea1a23bb9e9b270d6988bab1b418b11b8516f5d28dfa2ad811d7a2aaf9a mode=apply
+10000 rename
+"edit::target" level=source-claim operation-target
+"m0::d1::f0" level=source-claim operation-target
+"m0::d1::f1" level=source-claim operation-target
+"m0::d1::f2" level=source-claim operation-target
+"m0::d1::f3" level=source-claim operation-target
+"m0::d1::f4" level=source-claim operation-target
+"m0::d1::f5" level=source-claim operation-target
+"m0::d1::f6" level=source-claim operation-target
+"m0::d1::f7" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-bench-20261116/target/scale.UiEuhL/source/edit.lkj" level=source-claim file before=1494d06599979017a9e719fcef3ee4538d4b07b58ebfac27624bbb8bb6951697 after=44b17a817f02bed7945b01f47f792748c3c7f4b9d9ace7613183b9ec3b2944f1
+"/home/coder/workspace/lkjscript-compiler-bench-20261116/target/scale.UiEuhL/source/m0.lkj" level=source-claim file before=11438c4406971207dd0e4f0a621e3ece9b7a3142ce2b716e1ec396bc2f868593 after=acc0a2f4492e40b9320f808b1cad14cc810b7d0df4c0e4b8c9893f0114341623
+transaction sites=9 files=2 identities=9
+"edit::target" level=source-claim changed=removed
+"edit::target::param:extra" level=source-claim changed=removed
+"edit::target::param:value" level=source-claim changed=removed
+"edit::target_renamed" level=source-claim changed=added
+"edit::target_renamed::param:extra" level=source-claim changed=added
+"edit::target_renamed::param:value" level=source-claim changed=added
+"m0::d1" level=source-claim changed=text-only
+"m0::d1::f0" level=source-claim changed=body
+"m0::d1::f1" level=source-claim changed=body
+"m0::d1::f2" level=source-claim changed=body
+"m0::d1::f3" level=source-claim changed=body
+"m0::d1::f4" level=source-claim changed=body
+"m0::d1::f5" level=source-claim changed=body
+"m0::d1::f6" level=source-claim changed=body
+"m0::d1::f7" level=source-claim changed=body
+program level=checked-ir authority-delta=none
+program level=checked-ir before=7a690faf73642792dd65589c4d161cda8b9151dbe3fd404473019224c1b452bb after=7a690faf73642792dd65589c4d161cda8b9151dbe3fd404473019224c1b452bb checked-instances=426 fresh-checked=426 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=019e8ea1a23bb9e9b270d6988bab1b418b11b8516f5d28dfa2ad811d7a2aaf9a source-after=e3b2fe6b5538951ce4227c60324787cefd4809d3cb14450e42dc8632a86c110c mode=apply
+100000 body_transaction
+"edit::target" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-bench-20261116/target/scale.UiEuhL/source/edit.lkj" level=source-claim file before=b580c07ebeb918056105792f08191869adb72a5d7799afa37fd3aaaa1d4e7a0c after=04e1031f9b7e0c7c933ad815f07879694fd7ec33ebf221fa80673bcedead0722
+transaction sites=1 files=1 identities=1
+"edit::target" level=source-claim changed=body
+program level=checked-ir authority-delta=none
+program level=checked-ir before=6506d19623350e1a3d6e566b4ff98824ea6c8d332db6b1b4ce68873781f860fd after=1c8b5011717886f4f3539e7dee82cac24966bc07624bd5e2342da5ff32bfade1 checked-instances=4209 fresh-checked=1 proof-reused=4208 frontend-resumed=4684
+transaction source-before=ec2b760e3799112b1f6ac69b2d4de46189608d2ba15dd3a7697ff51c74094c8f source-after=0de4ab23b3f458b2bc9db0f6e54f89dd10b4e9e5b2c50a0e11283d5f24ec6fe7 mode=apply
+100000 signature_transaction
+"edit::target" level=source-claim operation-target
+"m0::d1::f0" level=source-claim operation-target
+"m0::d1::f1" level=source-claim operation-target
+"m0::d1::f2" level=source-claim operation-target
+"m0::d1::f3" level=source-claim operation-target
+"m0::d1::f4" level=source-claim operation-target
+"m0::d1::f5" level=source-claim operation-target
+"m0::d1::f6" level=source-claim operation-target
+"m0::d1::f7" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-bench-20261116/target/scale.UiEuhL/source/edit.lkj" level=source-claim file before=04e1031f9b7e0c7c933ad815f07879694fd7ec33ebf221fa80673bcedead0722 after=1494d06599979017a9e719fcef3ee4538d4b07b58ebfac27624bbb8bb6951697
+"/home/coder/workspace/lkjscript-compiler-bench-20261116/target/scale.UiEuhL/source/m0.lkj" level=source-claim file before=4895deb8b98c0ca2b9715e0a5bcce8a0136b7f0ac9b0a0d5e8ae3505a490a50d after=11438c4406971207dd0e4f0a621e3ece9b7a3142ce2b716e1ec396bc2f868593
+transaction sites=10 files=2 identities=9
+"edit::target" level=source-claim changed=signature,body
+"edit::target::param:extra" level=source-claim changed=added
+"m0::d1" level=source-claim changed=text-only
+"m0::d1::f0" level=source-claim changed=body
+"m0::d1::f1" level=source-claim changed=body
+"m0::d1::f2" level=source-claim changed=body
+"m0::d1::f3" level=source-claim changed=body
+"m0::d1::f4" level=source-claim changed=body
+"m0::d1::f5" level=source-claim changed=body
+"m0::d1::f6" level=source-claim changed=body
+"m0::d1::f7" level=source-claim changed=body
+program level=checked-ir authority-delta=none
+program level=checked-ir before=1c8b5011717886f4f3539e7dee82cac24966bc07624bd5e2342da5ff32bfade1 after=5eb940c345207328b00bc33cd50c682ed69eae2b4325e5ecabd42183cf153c6d checked-instances=4209 fresh-checked=4209 proof-reused=0 frontend-resumed=0
+transaction source-before=0de4ab23b3f458b2bc9db0f6e54f89dd10b4e9e5b2c50a0e11283d5f24ec6fe7 source-after=8e3193573b94b77834c7ecbaa8bea6e68f3d195e0fc592d683b5fac76d7f67a2 mode=apply
+100000 rename
+"edit::target" level=source-claim operation-target
+"m0::d1::f0" level=source-claim operation-target
+"m0::d1::f1" level=source-claim operation-target
+"m0::d1::f2" level=source-claim operation-target
+"m0::d1::f3" level=source-claim operation-target
+"m0::d1::f4" level=source-claim operation-target
+"m0::d1::f5" level=source-claim operation-target
+"m0::d1::f6" level=source-claim operation-target
+"m0::d1::f7" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-bench-20261116/target/scale.UiEuhL/source/edit.lkj" level=source-claim file before=1494d06599979017a9e719fcef3ee4538d4b07b58ebfac27624bbb8bb6951697 after=44b17a817f02bed7945b01f47f792748c3c7f4b9d9ace7613183b9ec3b2944f1
+"/home/coder/workspace/lkjscript-compiler-bench-20261116/target/scale.UiEuhL/source/m0.lkj" level=source-claim file before=11438c4406971207dd0e4f0a621e3ece9b7a3142ce2b716e1ec396bc2f868593 after=acc0a2f4492e40b9320f808b1cad14cc810b7d0df4c0e4b8c9893f0114341623
+transaction sites=9 files=2 identities=9
+"edit::target" level=source-claim changed=removed
+"edit::target::param:extra" level=source-claim changed=removed
+"edit::target::param:value" level=source-claim changed=removed
+"edit::target_renamed" level=source-claim changed=added
+"edit::target_renamed::param:extra" level=source-claim changed=added
+"edit::target_renamed::param:value" level=source-claim changed=added
+"m0::d1" level=source-claim changed=text-only
+"m0::d1::f0" level=source-claim changed=body
+"m0::d1::f1" level=source-claim changed=body
+"m0::d1::f2" level=source-claim changed=body
+"m0::d1::f3" level=source-claim changed=body
+"m0::d1::f4" level=source-claim changed=body
+"m0::d1::f5" level=source-claim changed=body
+"m0::d1::f6" level=source-claim changed=body
+"m0::d1::f7" level=source-claim changed=body
+program level=checked-ir authority-delta=none
+program level=checked-ir before=5eb940c345207328b00bc33cd50c682ed69eae2b4325e5ecabd42183cf153c6d after=5eb940c345207328b00bc33cd50c682ed69eae2b4325e5ecabd42183cf153c6d checked-instances=4209 fresh-checked=4209 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=8e3193573b94b77834c7ecbaa8bea6e68f3d195e0fc592d683b5fac76d7f67a2 source-after=c540691ac9a81ce28f3f313cf1777d0325c04627b09348c7ec5bdfe0d8d45b6d mode=apply

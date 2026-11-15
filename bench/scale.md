@@ -319,3 +319,233 @@ All three attempts passed the checks they reached: unchanged image equality,
 unchanged index identity, bounded query framing, and cached body/signature
 images equal to their independent no-store builds. A successful compiler exit
 for those phases does not turn the later refused rename into a successful rung.
+
+
+## Completed structural ladder
+
+The complete follow-up uses the frozen ordinary/query producer above and rename
+producer source 498345eeb26d7ca53ff1e02e984549c789001a4f, SHA-256
+4e5a0d3e3ea1cc0c7651ded221093866f00ab32e5f5fc8b0dddd49e9e9b241f0,
+19,812,919 bytes. The latter includes the precise local/member-reference repairs
+and validation of explicitly selected source-library edits. Its driver source
+src/driver/structure.lkj has SHA-256
+a77a8dfa80d533d345fb2e07152c13de3a5d594343605ae0f15074eabd5e3761.
+The ordinary/query producer stayed byte-identical throughout both rungs.
+The operation hook selects the generated user source root and the compiler's
+default embedded library; it does not pass --library-dir. It edits only
+edit::target, with no colliding physical include files. The later embedded-origin
+guard at cac9d51f is outside this frozen measurement, not silently folded into
+its producer identity.
+
+The measured invocation was:
+
+    bash bench/scale.sh --compiler target/compiler-fast-operations-candidate \
+      --rename-compiler target/compiler-library-validation-producer \
+      --shape-root target/compiler-final-source.3jFRGE \
+      --rungs 10000,100000 --structural --no-real \
+      --memory-ceiling-mib 4096 --timeout-ceiling 600 \
+      --results target/compiler-scale-structural-repaired.tsv
+
+Those producer copies and source snapshots are temporary experiment inputs;
+their exact source and byte identities above are the reproduction record.
+
+One worker completed the 10k and 100k trees under 2,048 and 4,096 MiB external
+address-space limits. The next-rung prediction used the preceding rung's maximum
+RSS, phase wall time and retained store size, including its index and
+transactions. Both rungs completed without resource refusal. Their store budgets
+were 1,073,741,824 and 1,638,057,860 bytes. The watchdog ceilings remained 600 seconds;
+the documented rule selected 120 seconds for 10k and 463 seconds for 100k.
+The original 1M allocation refusal and 10M extrapolation above remain separate
+observations from the older producer; neither large rung was rerun.
+
+The complete portable evidence is the [build/transaction TSV](compiler-scale-final.tsv),
+[question TSV](compiler-scale-final-queries.tsv),
+[phase records](compiler-scale-final-phases.log),
+[transaction plans](compiler-scale-final-operations.log),
+[run log](compiler-scale-final.log) and [producer/shape metadata](compiler-scale-final.meta).
+The earlier incomplete attempts remain intact; no earlier observation replaces
+a row from this complete run.
+
+### Generated shape and construction
+
+| Rung | Source bytes | Files | Functions / generic | Call sites | Types / fields / variants / vector edges | Tail constants | IR instances | Cold / signature image bytes |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 10k | 384,223 | 12 | 384 / 17 | 4,973 | 14 / 24 / 19 / 10 | 0 | 426 | 452,730 / 452,730 |
+| 100k | 3,923,070 | 169 | 3,764 / 155 | 47,607 | 196 / 637 / 204 / 375 | 6 | 4,209 | 4,458,943 / 4,463,039 |
+
+The generator was built in 2.492653 seconds (load 3.38/6.51/10.77 →
+3.27/6.43/10.72), and the frozen census took 1.617592 seconds (load
+3.27/6.43/10.72 → 3.27/6.43/10.72). Generation took 0.116522 seconds for 10k
+(load 3.27/6.43/10.72 → 3.27/6.43/10.72) and 1.131472 seconds for 100k
+(load 4.35/6.31/10.50 → 4.35/6.31/10.50). The actual physical line counts
+equal the requested rungs.
+
+### Build and transaction observations
+
+CPU is user plus kernel time; the TSV retains them separately. Index construction
+is a distinct command after the ordinary cold/unchanged pair, with ordinary
+checker/native records already present. It is not an independent empty-store
+indexed build. Body and signature transactions also perform elaboration and
+checking before their subsequent build rows. A reused verdict in the latter
+may have been produced by the transaction itself.
+
+Rename is the first use of the repaired producer on that rung's store.
+The exact-producer authentication contract therefore gives it different cache
+conditions from the ordinary/query phases. Its cost is disclosed as observed,
+not presented as an unchanged-producer warm-cache measurement. The retained
+store after rename contains records produced by both identified executables.
+Image sizes in transaction rows refer to the most recently built image; rename
+proves checked meaning without an additional native build.
+
+| Rung | Phase | Wall / CPU s | Peak RSS KiB | Retained store bytes | Load before → after, 1/5/15 min |
+| --- | --- | ---: | ---: | ---: | --- |
+| 10k | Ordinary cold build | 1.50 / 1.47 | 110,408 | 2,658,039 | 3.27/6.43/10.72 → 3.89/6.51/10.72 |
+| 10k | Ordinary unchanged | 0.18 / 0.17 | 5,560 | 2,658,039 | 3.89/6.51/10.72 → 3.89/6.51/10.72 |
+| 10k | Index after ordinary cold | 11.43 / 10.88 | 370,004 | 77,515,995 | 3.89/6.51/10.72 → 3.90/6.43/10.65 |
+| 10k | Unchanged indexed build | 0.18 / 0.17 | 5,624 | 77,515,995 | 3.90/6.43/10.65 → 3.90/6.43/10.65 |
+| 10k | Body transaction | 2.48 / 2.39 | 149,776 | 78,717,157 | 3.90/6.39/10.61 → 3.91/6.35/10.58 |
+| 10k | Body build after transaction | 1.09 / 1.06 | 94,496 | 79,170,128 | 3.91/6.35/10.58 → 3.91/6.35/10.58 |
+| 10k | Body no-store control | 1.16 / 1.14 | 98,516 | 79,170,128 | 3.91/6.35/10.58 → 3.91/6.35/10.58 |
+| 10k | Signature/body transaction | 5.40 / 5.21 | 223,088 | 79,209,641 | 3.91/6.35/10.58 → 3.76/6.27/10.53 |
+| 10k | Signature build after transaction | 1.58 / 1.54 | 106,868 | 80,623,967 | 3.76/6.27/10.53 → 3.86/6.25/10.50 |
+| 10k | Signature no-store control | 1.18 / 1.15 | 95,636 | 80,623,967 | 3.86/6.25/10.50 → 3.86/6.25/10.50 |
+| 10k | Rename | 6.26 / 6.09 | 219,972 | 81,902,893 | 3.86/6.25/10.50 → 4.35/6.31/10.50 |
+| 100k | Ordinary cold build | 15.41 / 13.46 | 694,740 | 26,658,808 | 4.35/6.31/10.50 → 5.82/6.50/10.46 |
+| 100k | Ordinary unchanged | 0.37 / 0.36 | 15,224 | 26,658,808 | 5.82/6.50/10.46 → 5.82/6.50/10.46 |
+| 100k | Index after ordinary cold | 111.57 / 106.80 | 2,670,368 | 613,720,812 | 5.82/6.50/10.46 → 7.14/6.77/10.12 |
+| 100k | Unchanged indexed build | 0.27 / 0.27 | 18,748 | 613,720,812 | 7.14/6.77/10.12 → 7.14/6.77/10.12 |
+| 100k | Body transaction | 22.08 / 21.74 | 1,098,436 | 625,558,568 | 6.81/6.70/10.08 → 6.87/6.70/9.99 |
+| 100k | Body build after transaction | 11.63 / 11.47 | 630,268 | 630,017,752 | 6.87/6.70/9.99 → 7.20/6.78/9.98 |
+| 100k | Body no-store control | 12.11 / 11.89 | 675,660 | 630,017,752 | 7.20/6.78/9.98 → 7.33/6.82/9.95 |
+| 100k | Signature/body transaction | 55.70 / 54.96 | 1,651,288 | 630,393,952 | 7.47/6.85/9.95 → 7.97/7.13/9.87 |
+| 100k | Signature build after transaction | 16.14 / 15.94 | 767,004 | 644,765,714 | 7.97/7.13/9.87 → 7.44/7.06/9.80 |
+| 100k | Signature no-store control | 11.74 / 11.56 | 698,668 | 644,765,714 | 7.44/7.06/9.80 → 7.43/7.07/9.77 |
+| 100k | Rename | 61.85 / 60.75 | 1,699,772 | 657,354,608 | 7.43/7.07/9.77 → 7.32/6.97/9.55 |
+
+Both unchanged images equal their respective cold image. Every cached body and
+signature image equals its independently rebuilt no-store control. The body
+edit changes the image contents even where its byte count stays the same.
+Each rename passed the independent byte-for-byte projection oracle across all
+generated source files. Canonical checked-IR identity before and after rename is:
+
+| Rung | Equal canonical checked-IR identity |
+| --- | --- |
+| 10k | 7a690faf73642792dd65589c4d161cda8b9151dbe3fd404473019224c1b452bb |
+| 100k | 5eb940c345207328b00bc33cd50c682ed69eae2b4325e5ecabd42183cf153c6d |
+
+All generated trees, stores and scale keys were removed by successful exit
+cleanup. The report retains observations and identities, not generated trees.
+
+### Bounded questions
+
+Each rung runs 21 substantive questions plus a deliberately short outline and
+its continuation, after the unchanged indexed build. Eight discovery commands
+at 10k and nine at 100k identify subjects through bounded authenticated outlines.
+All 63 commands succeed; the 46 requested/continuation commands are tabulated
+below. The query driver does not read source files before choosing those names.
+Every reply fits the 32,768-byte cap and carries its continuation declaration.
+
+Depth and fact limit appear in each row; 30 is the normal fact limit. The generic
+subject differs because discovery follows the authenticated lexical ordering of
+module identities: m2::d1::f141 at 10k and m100::f2264 at 100k. Each has three
+reported instances. No same-identity exponent is computed for that pair.
+Seven 10k replies and eight 100k replies require continuation; that count includes
+the deliberately bounded outline and its continuation page.
+
+| Question / identity; depth, limit | 10k wall / lookup ms | 10k load before → after | 100k wall / lookup ms | 100k load before → after | Answer bytes, 10k → 100k |
+| --- | ---: | --- | ---: | --- | ---: |
+| outline `crate`; 1, 30 | 174.080 / 2.979 | 3.90/6.43/10.65 → 3.90/6.43/10.65 | 192.936 / 10.922 | 7.14/6.77/10.12 → 7.14/6.77/10.12 | 1,738 → 4,060 |
+| outline `m0::d1`; 1, 30 | 177.313 / 7.484 | 3.90/6.43/10.65 → 3.90/6.43/10.65 | 185.904 / 7.615 | 7.14/6.77/10.12 → 7.14/6.77/10.12 | 4,591 → 4,591 |
+| outline `m0::d1::Record`; 1, 30 | 181.504 / 1.511 | 3.90/6.43/10.65 → 3.90/6.43/10.65 | 168.235 / 0.967 | 7.14/6.77/10.12 → 6.81/6.70/10.08 | 617 → 617 |
+| item `edit::target`; 1, 30 | 211.159 / 2.279 | 3.90/6.43/10.65 → 3.90/6.43/10.65 | 171.450 / 1.515 | 6.81/6.70/10.08 → 6.81/6.70/10.08 | 1,232 → 1,232 |
+| slice `edit::target`; 1, 30 | 178.918 / 4.376 | 3.90/6.43/10.65 → 3.90/6.43/10.65 | 182.845 / 2.971 | 6.81/6.70/10.08 → 6.81/6.70/10.08 | 1,352 → 1,352 |
+| slice `m0::d1::f0`; 2, 30 | 191.659 / 18.592 | 3.90/6.43/10.65 → 3.90/6.43/10.65 | 186.534 / 12.619 | 6.81/6.70/10.08 → 6.81/6.70/10.08 | 2,431 → 2,431 |
+| uses `edit::target`; 1, 30 | 165.272 / 2.384 | 3.90/6.43/10.65 → 3.90/6.39/10.61 | 173.674 / 2.620 | 6.81/6.70/10.08 → 6.81/6.70/10.08 | 2,020 → 2,020 |
+| callers `edit::target`; 1, 30 | 196.604 / 2.868 | 3.90/6.39/10.61 → 3.90/6.39/10.61 | 174.081 / 2.282 | 6.81/6.70/10.08 → 6.81/6.70/10.08 | 1,645 → 1,645 |
+| callers `edit::target`; 3, 30 | 185.556 / 11.609 | 3.90/6.39/10.61 → 3.90/6.39/10.61 | 181.308 / 8.744 | 6.81/6.70/10.08 → 6.81/6.70/10.08 | 5,360 → 5,396 |
+| callees `main`; 1, 30 | 171.625 / 1.190 | 3.90/6.39/10.61 → 3.90/6.39/10.61 | 177.901 / 1.022 | 6.81/6.70/10.08 → 6.81/6.70/10.08 | 617 → 617 |
+| callees `main`; 3, 30 | 189.309 / 10.935 | 3.90/6.39/10.61 → 3.90/6.39/10.61 | 174.857 / 8.749 | 6.81/6.70/10.08 → 6.81/6.70/10.08 | 5,369 → 5,400 |
+| impls `m0::d1::Record`; 1, 30 | 173.054 / 2.339 | 3.90/6.39/10.61 → 3.90/6.39/10.61 | 168.207 / 1.369 | 6.81/6.70/10.08 → 6.81/6.70/10.08 | 590 → 590 |
+| impls `std::iter::IntoIterator`; 1, 30 | 182.613 / 9.269 | 3.90/6.39/10.61 → 3.90/6.39/10.61 | 181.182 / 6.749 | 6.81/6.70/10.08 → 6.81/6.70/10.08 | 6,067 → 6,067 |
+| instances `m2::d1::f141` → `m100::f2264`; 1, 30 | 207.978 / 1.934 | 3.90/6.39/10.61 → 3.90/6.39/10.61 | 177.413 / 1.244 | 6.81/6.70/10.08 → 6.81/6.70/10.08 | 1,066 → 1,064 |
+| type `edit::target::param:value`; 1, 30 | 173.528 / 0.976 | 3.90/6.39/10.61 → 3.90/6.39/10.61 | 167.252 / 0.784 | 6.81/6.70/10.08 → 6.81/6.70/10.08 | 594 → 594 |
+| type `m0::d1::Record`; 1, 30 | 180.677 / 1.142 | 3.90/6.39/10.61 → 3.90/6.39/10.61 | 162.650 / 1.275 | 6.81/6.70/10.08 → 6.81/6.70/10.08 | 793 → 793 |
+| layout `m0::d1::Record`; 1, 30 | 174.295 / 1.200 | 3.90/6.39/10.61 → 3.90/6.39/10.61 | 171.301 / 0.925 | 6.81/6.70/10.08 → 6.81/6.70/10.08 | 762 → 762 |
+| authority `main`; 1, 30 | 176.320 / 1.485 | 3.90/6.39/10.61 → 3.90/6.39/10.61 | 178.768 / 0.688 | 6.81/6.70/10.08 → 6.81/6.70/10.08 | 569 → 569 |
+| authority `edit::target`; 1, 30 | 173.675 / 0.925 | 3.90/6.39/10.61 → 3.90/6.39/10.61 | 171.976 / 0.939 | 6.81/6.70/10.08 → 6.81/6.70/10.08 | 593 → 593 |
+| dependents `edit::target`; 1, 30 | 185.205 / 5.017 | 3.90/6.39/10.61 → 3.90/6.39/10.61 | 177.341 / 6.748 | 6.81/6.70/10.08 → 6.81/6.70/10.08 | 2,042 → 2,042 |
+| dependents `edit::target`; 3, 30 | 218.155 / 9.959 | 3.90/6.39/10.61 → 3.90/6.39/10.61 | 257.272 / 8.240 | 6.81/6.70/10.08 → 6.81/6.70/10.08 | 3,980 → 3,980 |
+| outline `crate`; 1, 3 | 169.567 / 0.906 | 3.90/6.39/10.61 → 3.90/6.39/10.61 | 174.667 / 1.337 | 6.81/6.70/10.08 → 6.81/6.70/10.08 | 1,105 → 1,172 |
+| outline continuation `crate`; 1, 3 | 180.759 / 0.944 | 3.90/6.39/10.61 → 3.90/6.39/10.61 | 170.790 / 1.315 | 6.81/6.70/10.08 → 6.81/6.70/10.08 | 1,070 → 1,172 |
+
+All 46 command wall times exceed 100 ms. Their median wall times are 180.677 ms
+at 10k and 174.857 ms at 100k; median index lookup times are 2.339 and 1.515 ms.
+These are summaries of the load-paired rows above, not additional measurements.
+The median reply is 1,232 bytes at both rungs. The TSV retains exact producer
+hashing, internal totals, page/fact counts, CPU, RSS and reply digests for every
+command. The 257.272 ms 100k dependent query remains in the table; it is not
+replaced by a faster repetition or assigned an unmeasured cause.
+
+Matched-identity command-wall exponents range from -0.0905 to 0.0716 across
+these two observations. This supports bounded retrieval at the measured sizes,
+while host variation and different returned fact counts prevent an asymptotic
+claim. For example, the root outline grows from 13 to 30 facts and correspondingly
+reads more pages. Exact executable authentication remains the dominant fixed
+cost. The independent 100 ms requirement remains unmet.
+
+### Exponents and remaining walls
+
+| Cost, 10k → 100k | Wall exponent | CPU exponent | RSS exponent |
+| --- | ---: | ---: | ---: |
+| Ordinary cold build | 1.0117 | 0.9617 | 0.7988 |
+| Ordinary unchanged | 0.3129 | 0.3259 | 0.4375 |
+| Index after ordinary cold | 0.9895 | 0.9919 | 0.8584 |
+| Unchanged indexed build | 0.1761 | 0.2009 | 0.5229 |
+| Body transaction | 0.9495 | 0.9589 | 0.8653 |
+| Body build after transaction | 1.0282 | 1.0343 | 0.8241 |
+| Body no-store control | 1.0187 | 1.0183 | 0.8362 |
+| Signature/body transaction | 1.0135 | 1.0232 | 0.8693 |
+| Signature build after transaction | 1.0092 | 1.0150 | 0.8559 |
+| Signature no-store control | 0.9978 | 1.0023 | 0.8636 |
+| Rename | 0.9948 | 0.9989 | 0.8880 |
+
+The ordinary cold CPU constant at 100k is 134.6 microseconds per generated line,
+with 6.9474 KiB peak RSS per line. Index construction after the ordinary cold
+build costs 1.068 ms CPU per line and 26.70368 KiB peak RSS per line, retaining
+6,137.20812 bytes per line. These constants divide the load-paired rows above
+and include fixed source-library/runtime work. Two successful rungs do not
+establish behavior at 1M or 10M.
+
+The later post-transaction body build reconstructs exactly one frontend
+definition and one IR function, with 1.436 ms in changed IR construction.
+It reuses 4,684 frontend definitions, all 4,209 checker verdicts already
+available after the transaction, and 4,203 native fragments. The elapsed build
+still reaches 11.63 seconds: store I/O is 5,667.465 ms, parsing 2,427.832 ms,
+checkpoint restore 946.175 ms, keys/hashes 912.469 ms and type bookkeeping
+647.251 ms, all within load 6.87/6.70/9.99 → 7.20/6.78/9.98.
+The preceding body transaction itself costs 22.08 seconds in its separate
+load window shown above. Neither cost follows only the changed body.
+
+The eight-caller signature transaction is followed by reconstruction of all
+4,685 frontend definitions and all 4,209 IR functions; no native fragment is
+reused. Checker verdict reuse in that build comes after the transaction has
+already admitted the changed program. It does not show that the original
+signature's dependents alone were invalidated. Its store I/O costs 5,239.285 ms,
+IR construction 3,162.036 ms, type work 3,055.058 ms and parsing 2,263.179 ms,
+within load 7.97/7.13/9.87 → 7.44/7.06/9.80.
+
+The first measured walls are therefore unchanged in kind: whole-program
+parse/checkpoint/store work for a body edit, global signature invalidation for
+frontend/native reuse, and whole-program catalog/index construction. The
+authenticated questions already read a small bounded answer at both successful
+sizes, but exact executable hashing keeps their command latency above the
+target. Rename and both transactions have approximately linear wall exponents
+despite a fixed eight-site target.
+
+The checking-unit recommendation remains independently authenticated definition
+and instance records with checked dependency interfaces, plus source-file-local
+syntax records. The measured index memory and store footprint strengthen that
+recommendation; they do not turn an unimplemented unit boundary into a completed
+feature. The original 1M refusal, unrun 10M rung and separately labelled
+extrapolation stay the top-rung evidence. Neither size-independent edits nor
+the 100 ms question target is declared complete.
