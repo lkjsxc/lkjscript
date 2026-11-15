@@ -51,13 +51,35 @@ count. Cached images for both edits must equal independently rebuilt no-store
 images. The unchanged image must equal the cold one, and the body edit must
 change the image.
 
-Until the compiler exposes identity operations, the harness labels the edits
-as projection edits and reports query/rename rows as pending. It never counts
-sed as a checked semantic transaction. --query-driver supplies an executable
-which receives compiler, source root, store, key path, line count, memory limit
-and watchdog, and must report each bounded question separately. --operation-driver
-receives compiler, source root, store and key path and is timed as the rename
-transaction. Hooks are executable paths, not evaluated shell strings.
+The default route preserves the historical projection-edit baseline and labels
+questions/rename as pending. `--structural` activates the authenticated query and
+identity-transaction drivers. It measures an indexed build and its unchanged
+repeat, bounded questions, checked body replacement, a checked two-operation
+signature/body transaction, and rename. Transactions and their subsequent
+builds are separate rows. Cached body/signature images still must equal their
+independent no-store controls. Rename must report equal canonical checked-IR
+identities, and every source file is compared to the deterministic expected
+projection. The text substitution in that final check is only a byte oracle;
+it does not perform the operation.
+
+`--query-driver` receives compiler, source root, store, key path, line count,
+memory limit, watchdog, store budget and authenticated snapshot identity.
+`--operation-driver` receives compiler, source root, store, key path, operation
+kind (body, signature or rename) and store budget. Hooks are executable paths,
+not evaluated shell strings. The supplied query driver discovers names from
+bounded authenticated outlines rather than reading source files or guessing
+trait identities. It records missing identities within the discovery bound as
+coverage results. Each response has at most 32,768 bytes and a stated
+continuation; the deliberately small outline also fetches one continuation
+page as a separate command.
+
+`--shape-root` selects the frozen compiler source used by the census and real
+compiler specimen. `--rename-compiler` optionally supplies a separate existing
+producer for rename only. Its exact SHA-256 is recorded in metadata and each
+rename row; every other row keeps the main selected producer. This option
+makes a production repair during a long experiment explicit, rather than
+quietly changing a compiler executable in place. There is no interactive
+handoff or polling protocol.
 
 ## Resource and measurement contract
 
@@ -69,13 +91,15 @@ source copies and generated trees are removed by the exit trap. The private
 authentication key is created outside all source/library grants and removed
 by the same trap. Each run records its owned directory, process identity, key
 location and current phase before starting work. If the supervisor itself disappears,
-`bash bench/scale.sh --cleanup RUN_DIRECTORY` refuses a live owner, verifies paired
+`bash bench/scale.sh --cleanup RUN_DIRECTORY` refuses a live owner or another
+process still referring to its owned tree, verifies paired
 ownership markers, preserves checkpoint/shape/workload/time/stderr/stdout in a
 recovery directory and removes only that run and its key. An unavailable time
 record remains unavailable; recovery does not infer an exit status or peak RSS.
 
 The first rung uses a 2 GiB external address-space limit. Later limits predict
-from the preceding successful peak RSS, line ratio and observed memory exponent
+from the maximum successful peak RSS across the preceding rung's build, index
+and transaction phases, line ratio and observed memory exponent
 (with a floor of linear growth), then allow twice the prediction plus 256 MiB.
 The default experiment ceiling is 8 GiB. This is RLIMIT_AS, not an RSS limit:
 allocator reservations and address-space fragmentation can cause refusal at a
@@ -83,16 +107,23 @@ lower resident size. It is a harness boundary, never a language or tool policy.
 --memory-ceiling-mib explicitly changes that experimental ceiling. The compiler
 continues to discover actual mapping refusal normally.
 
-The watchdog similarly scales from the previous cold time; ordinary compiler
+The watchdog similarly scales from the previous rung's longest completed phase;
+ordinary compiler
 work gets a generous allowance. --prior-results can supply a preceding successful
 rung from an earlier invocation for resource prediction. Disk space is checked
 before each generated tree using measured source bytes per line and predicted
-store retention. A resource refusal remains a result. Higher rungs are marked
+store retention. Predictions use maximum observed store retention across the
+preceding rung; indexed experiments have a 1 GiB minimum store budget. A resource
+refusal remains a result. Higher rungs are marked
 not run after that refusal; they are not invented measurements.
 
---results selects the TSV, with .shape source observations and .phases actual
-compiler statistics beside it. The generator's input seed and compiler SHA-256
-are printed. Successful adjacent observations produce exponents
+--results selects a new TSV and refuses an existing result path, with .shape
+source observations, .phases actual compiler statistics, .queries bounded
+question rows and .operations transaction plans beside it. A .failures file
+preserves complete failed-phase diagnostics before the temporary tree is removed. The .meta file binds
+the seed, shape digest, producer identities and experimental limits. Every build
+or transaction row includes its producer SHA-256. The generator's input seed
+and compiler SHA-256 are also printed. Successful adjacent observations produce exponents
 log(cost_after / cost_before) / log(lines_after / lines_before). Fixed compiler
 startup cost, source-library cost and host load affect small-rung exponents;
 an exponent below one does not prove asymptotically sublinear cold compilation.
@@ -209,5 +240,82 @@ identity and bytes of each lazily opened record.
 This is the measured architectural recommendation, not an implementation claim.
 The first walls are whole-program parse/checkpoint/hash work at 100k, whole-graph
 signature invalidation at 10k already, and allocation refusal at the 1M experiment
-ceiling. Query and identity-rename costs remain pending their production
-interfaces; no target is declared met by these baseline observations.
+ceiling. Query and identity-rename costs were pending their production interfaces in
+this baseline. The later structural follow-up measures them separately; no
+target is declared met by these baseline observations.
+
+
+## Structural follow-up provenance
+
+The follow-up freezes source revision
+0b30ca8987bd4ba343ab45ab01751b6721c7151a, source tree
+b2496ac90633a09efac4bde2c35239f0a1d1eec7 and library tree
+9962344d5071e103e937e892c662f3ff4609898d. The ordinary build, index, question,
+body and signature producer is a self-built generation of that source, SHA-256
+54db01f51ca7b5802f932a8f4b76737ee2671cbe306f229c62e3c3ccae54c1e3,
+19,584,049 bytes. Its own executable uses the retained rotation and canonical
+result selectors. A separately identified producer handles rename because
+the follow-up exposed missing source-reference evidence in the initial
+implementation.
+
+This census is larger than the earlier 1f48bd24 specimen: 83,992 parsed lines,
+3,364,828 bytes, 164 files, 3,138 function bodies and 44,730 call/method sites.
+The serialized shape SHA-256 is
+0457f8f9424882d2e3160a568f280193d49b9b046a5fae2d6e2d0b6da047072c.
+There are 136 generic functions (4.334%), 425 nominal types, 2,067 fields,
+1,610 nominal field-type occurrences and 820 variants. Module depths 0/1/2/3
+contain 1/1,506/1,559/72 bodies. The 163 files with bodies average 19.252
+functions, with a maximum of 139.
+
+| Source observation | Median | p90 | p99 | Maximum | Mean |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Function physical lines | 9 | 59 | 242 | 984 | 24.362 |
+| Resolved call/method sites per body | 4 | 33 | 156 | 557 | 14.254 |
+| Functions per nonempty source file | 11 | 52 | 95 | 139 | 19.252 |
+
+The quantile convention chooses sorted observation floor((n - 1) * p).
+The generator and seed 20261116 are unchanged, but this changed shape population
+changes the generated programs. Comparisons with the earlier ladder cannot
+attribute their entire difference to the retained emitter changes.
+
+The 10k follow-up tree has 384,223 source bytes in 12 files, 384 function
+definitions (17 generic), 4,973 generated call sites, 14 nominal types,
+24 fields, 19 variants, 10 vector edges and no tail constants.
+It produces 426 checked instances and a 452,730-byte native image. The eight
+direct source callers of edit::target remain the signature and rename subjects.
+
+The real compiler's indexed build, unchanged index and forty bounded question
+measurements are recorded in [the final query report](compiler-query-final.md).
+Its median depth-one slice is 3,593 bytes, with two of twenty slices requiring
+continuation. The report preserves every command, including the unexplained
+lookup outlier. Those real-program measurements and the generated ladder
+answer different parts of the size question.
+
+### Preserved incomplete attempts
+
+The portable TSVs keep every completed row, its exact producer and both load
+samples. Each query TSV contains discovery commands as well as the requested
+bounded questions; discovery is not silently charged to a later single
+question. None of these incomplete attempts is used to select a preferred
+timing from the eventual complete run.
+
+| Attempt | Preserved measurements | Stopping cause |
+| --- | --- | --- |
+| 1,000-line smoke, main producer throughout | [Builds and transactions](compiler-scale-smoke.tsv), [questions](compiler-scale-smoke-queries.tsv) | Rename conservatively refused an unrelated implicit-source site in std::foreign::__lkjscript_run. |
+| First 10k run | [Builds and transactions](compiler-scale-partial.tsv), [questions](compiler-scale-partial-queries.tsv) | The temporary harness handoff read EOF before rename. This was a harness failure; no rename result exists. The handoff was removed in favor of an explicit immutable producer argument. |
+| 10k run with repaired rename producer | [Builds and transactions](compiler-scale-refused.tsv), [questions](compiler-scale-refused-queries.tsv), [full refusal](compiler-scale-refused.log) | Rename refused the lexical-name receiver target in std::bytes::append_bytes, library/bytes.lkj bytes 751..757. The 100k rung was not run after this refusal. |
+
+The third attempt's rename producer is source 87a69131, SHA-256
+e681f7e3e186ec5b7e7986ac6c0ce7bd875c777d1db873670456cf937c44908d.
+Every other phase uses the frozen main producer above. Its refused rename
+took 4.31 s wall, 4.21 s CPU and 228,452 KiB peak RSS, with load
+10.08/10.31/8.08 → 9.75/10.23/8.07. The name target in the reported library
+span is an unrelated local parameter. The refusal is evidence that the
+catalog had not proved that relationship, and cannot be treated as a completed
+rename or resolved by ignoring every lexical-name site. The generated source,
+store and private key were removed after the full diagnostic was preserved.
+
+All three attempts passed the checks they reached: unchanged image equality,
+unchanged index identity, bounded query framing, and cached body/signature
+images equal to their independent no-store builds. A successful compiler exit
+for those phases does not turn the later refused rename into a successful rung.

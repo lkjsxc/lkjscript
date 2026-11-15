@@ -408,3 +408,81 @@ fixtures. There is no retained fusion implementation or source-library change.
 This concrete follow-up leaves the exact-producer hashing wall named, not
 solved. It establishes neither the 100 ms question target nor a whole-compiler
 -O milestone, and it is not a proof of a permanent backend performance floor.
+
+### Remaining work indicated by the existing profile
+
+The 178.761 ms observation is not a lower bound. Hashing alone needs about
+44.1% less elapsed time to reach 100 ms, and a whole command also needs startup
+and fact-retrieval headroom. Two measured bounded slices already spend about
+89–90 ms in the index phase, so merely bringing hashing just below 100 ms would
+not complete the command-latency target.
+
+A rough Amdahl calculation illustrates the scale of the remaining work.
+Deleting every sampled check would leave approximately 144 ms; deleting every
+register move and frame access would leave approximately 125 ms. These are
+optimistic calculations from sampled instruction categories, not measured
+speedups or rigorous performance bounds. Some checks, copies and memory
+accesses are necessary. The three sampled call instructions concern this SHA
+profile; they do not support ordinary native inlining as its next dominant
+hot-path intervention. Whole-compiler workloads need separate inlining
+measurements.
+
+The concrete general work is stronger control-flow range and value analysis.
+The SHA loops expose specific proofs: the input loop has i below 16 and
+i*4+3 below 64; the schedule loop has i from 16 through 63 and therefore safe
+i-2, i-7, i-15 and i-16 offsets; the round loop has i below 64. A transformation
+must preserve the original overflow, shift and projection traps whenever those
+facts are not established. Eliminating initial schedule zeroing additionally
+requires a complete overwrite and no-escape proof. A source name or an
+unverified index fact cannot provide any of these guarantees.
+
+Copy equivalence and liveness across loop updates are another concrete
+opportunity. The current allocator assigns registers to local intervals; the
+smaller direct-operand and copied-read trials did not deliver ten percent.
+An IR pass cannot simply replace copied temporaries with their original
+locals when Binary consumes its operands: the resulting ownership/use
+structure may fail the checker. A backend transformation can retain the
+original checked IR, but needs a more complete value and alias analysis than
+the rejected three-instruction pattern. Any new proof representation must be
+validated at the existing trust boundary.
+
+A narrower untried candidate is non-destructive wrapping-add selection through
+LEA. The aggregate profile does not establish that it would exceed ten percent,
+and it provides no credible measured route for that selector alone to the
+required reduction. No further experiment is claimed here. The next supported
+work item is a larger range-analysis and register-allocation project with
+independent differential oracles and paired measurements. These observations
+name the remaining wall; they do not establish a permanent backend floor.
+
+### Production-only adoption under the landed-commit denominator
+
+The final status uses a separate, conservative denominator: additions plus
+deletions in retained `src/` and `library/` .lkj files in the landed change,
+excluding benchmark files and tests/conformance. For source commit
+`5ba8e48f` (main's `f9e8eb6e`), that denominator is 152 lines:
+
+| Production file | Landed additions + deletions | Conservatively credited to operations |
+| --- | ---: | ---: |
+| native.lkj | 30 + 4 = 34 | 33 |
+| native/scalar.lkj | 101 + 0 = 101 | 100 |
+| x86.lkj | 17 + 0 = 17 | 0 |
+| **Total** | **152** | **133 (87.50%)** |
+
+The credited native hunks are the typed scalar-load replacement (4 additions,
+2 deletions), rotation dispatch loop (9 additions, 2 deletions), and new
+canonical-write implementation (16 additions). The scalar count includes the
+four-line final dispatch hook and 96 lines of added rotation/emission/word32
+items. A boundary blank line in each file is excluded from the lower bound.
+
+All x86 additions are excluded conservatively. Its encoder helpers were first
+written before operation activation. Two were later removed during the
+rotation-only trial and reintroduced through the canonical-result transaction,
+and the final projection also contains two added blank lines. This measure
+does not credit the whole rewritten assembler implementation or conflate
+reapplication with initial authorship. The earlier 298/304 table remains the
+different activation-snapshot-and-fixture measure; it is not substituted for
+this production-only fraction.
+
+The later copied-operands experiment retains no additional production .lkj
+delta after rollback. Its four IR regression fixtures add 137 text lines
+outside this production-source denominator and outside the source operation API.
