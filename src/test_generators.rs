@@ -364,6 +364,10 @@ fn compare(left: &Observation, right: &Observation, locations: bool) -> String {
             "status-differs".to_string()
         };
     }
+    if locations && (test_runner::custom_trap(&display(&left.stderr))
+        || test_runner::custom_trap(&display(&right.stderr))) && left.stderr != right.stderr {
+        return "trap-differs".to_string();
+    }
     if left.code != right.code || (locations && left.line != right.line) {
         return "trap-differs".to_string();
     }
@@ -554,6 +558,7 @@ fn execute_ir(
                 || driver::complete_semantic_trap(selection.native().program(), code, &message);
             if capture.status == 1 && complete {
                 capture.stderr.extend_from_slice(diagnostic.as_bytes());
+                capture.stderr.push(b'\n');
             } else {
                 capture.stderr.extend_from_slice(b"E_HOST native mutant trap identity mismatch");
                 capture.status = 1;
@@ -966,6 +971,24 @@ fn self_test(world: &mut World) -> Result<(), String> {
     right.kind = "model-error".to_string();
     if !finding(&compare(&left, &right, true)) {
         return Err("E_MUTATION model failure hidden".to_string());
+    }
+    let mut custom = left.clone();
+    custom.code = "R0004".to_string();
+    custom.stderr = "file 1:19: R0016 alpha\nR0006 is text\n".as_bytes().to_vec();
+    if compare(&custom, &custom, true) != "trap-equal" {
+        return Err("E_MUTATION identical custom trap rejected".to_string());
+    }
+    for text in vec![
+        "file 1:19: R0017 alpha\nR0006 is text\n".to_string(),
+        "file 1:19: R0016 beta\nR0006 is text\n".to_string(),
+        "file 2:19: R0016 alpha\nR0006 is text\n".to_string(),
+        "file 1:19: R0016 alpha\n".to_string(),
+    ] {
+        let mut changed = custom.clone();
+        changed.stderr = text.into_bytes();
+        if compare(&custom, &changed, true) != "trap-differs"
+            || compare(&custom, &changed, false) != "trap-equal"
+        { return Err("E_MUTATION custom trap identity/reference classification conflated".to_string()); }
     }
     let normal = checked_observation(test_runner::Observation {
         checked: true,

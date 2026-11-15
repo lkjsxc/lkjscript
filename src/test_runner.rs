@@ -409,7 +409,7 @@ fn diagnostic_code(text: &str) -> String {
     String::new()
 }
 
-pub fn trap_code(text: &str) -> String {
+fn raw_trap_code(text: &str) -> String {
     let bytes = text.as_bytes();
     let mut at = 0usize;
     while at + 4 < bytes.len() {
@@ -422,13 +422,21 @@ pub fn trap_code(text: &str) -> String {
             }
             if valid {
                 let value = &text[at..at + 5];
-                let code = number(&value[1..]).unwrap();
-                return if code >= 16 { "R0004".to_string() } else { value.to_string() };
+                return value.to_string();
             }
         }
         at += 1;
     }
     String::new()
+}
+
+pub fn custom_trap(text: &str) -> bool {
+    let code = raw_trap_code(text);
+    !code.is_empty() && number(&code[1..]).unwrap_or(0) >= 16
+}
+pub fn trap_code(text: &str) -> String {
+    let code = raw_trap_code(text);
+    if !code.is_empty() && number(&code[1..]).unwrap_or(0) >= 16 { "R0004".to_string() } else { code }
 }
 
 fn trim(text: &str) -> &str {
@@ -515,6 +523,9 @@ fn trap_line(text: &str) -> Option<usize> {
 
 fn same_source(left: &Record, right: &Record) -> bool {
     if !same(left, right) { return false; }
+    if custom_trap(&left.diagnostic) || custom_trap(&right.diagnostic) {
+        return left.diagnostic == right.diagnostic;
+    }
     if trap_code(&left.diagnostic).is_empty() { return true; }
     match (trap_line(&left.diagnostic), trap_line(&right.diagnostic)) {
         (Some(left), Some(right)) => left == right,
@@ -777,6 +788,26 @@ fn comparisons_preserve_same_source_locations_and_reference_bytes() {
     assert_eq!(verify(&comparison, &reference).unwrap(), false);
 }
 
+
+
+#[test]
+fn same_source_custom_traps_preserve_message_code_and_file() {
+    let actual = record("{\"index\":0,\"engine\":\"native\",\"checkStatus\":0,\"status\":1,\"stdoutHex\":\"\",\"stderrHex\":\"\",\"stderr\":\"file 1:12: R0016 alpha\\nR0006 is text\"}").unwrap();
+    let mut reference = actual.clone();
+    reference.engine = "interpreter".to_string();
+    assert!(same_source(&actual, &reference));
+    for diagnostic in vec![
+        "file 1:12: R0017 alpha\nR0006 is text".to_string(),
+        "file 1:12: R0016 beta\nR0006 is text".to_string(),
+        "file 2:12: R0016 alpha\nR0006 is text".to_string(),
+        "file 1:13: R0016 alpha\nR0006 is text".to_string(),
+        "file 1:12: R0016 alpha".to_string(),
+    ] {
+        reference.diagnostic = diagnostic;
+        assert!(same(&actual, &reference));
+        assert!(!same_source(&actual, &reference));
+    }
+}
 
 fn write(directory: &mut Directory, name: &str, text: &str) -> Result<(), String> {
     let mut file = directory.create(name).map_err(|e: i64| io(name, e))?;

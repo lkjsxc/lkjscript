@@ -191,6 +191,36 @@ done
     fail "cross-file trap candidate was not admitted"
 cmp "$test_directory/trap-0.raw" "$test_directory/trap-64.raw"
 
+# Lexical custom-message identity survives an earlier copied callee, including
+# authenticated closed-test replay. Compare complete records across both policies.
+cat > "$source_directory/main.rs" <<'SOURCE'
+mod helper;
+pub fn probe() -> i64 { helper::alpha() }
+fn zeta() -> i64 { panic!("zeta"); 0 }
+SOURCE
+cat > "$source_directory/helper.rs" <<'SOURCE'
+pub fn alpha() -> i64 {
+    panic!("alpha");
+    42
+}
+SOURCE
+for limit in 0 64; do
+    for pass in cold warm; do
+        "$compiler" batch "$test_directory/batch" --source-dir "$source_directory" --no-library \
+            --engines native,interpreter --roundtrip --inline-limit "$limit" \
+            --store "$store" --store-key "$key" --stats \
+            > "$test_directory/messages-$limit-$pass.out" 2> "$test_directory/messages-$limit-$pass.log"
+        grep -q '"checkStatus":0,"status":1' "$test_directory/messages-$limit-$pass.out" ||
+            fail "closed custom trap did not terminate as a language trap"
+        grep -q 'R0016 alpha' "$test_directory/messages-$limit-$pass.out" ||
+            fail "custom trap lost its exact lexical identity"
+    done
+    (( $(field "$test_directory/messages-$limit-warm.log" test_reused) > 0 )) ||
+        fail "complete custom trap was not reused"
+    cmp "$test_directory/messages-$limit-cold.out" "$test_directory/messages-$limit-warm.out"
+done
+cmp "$test_directory/messages-0-cold.out" "$test_directory/messages-64-cold.out"
+
 # Interpreted World programs embed the selected, rechecked native self-image.
 for engine in native interpreter; do
     "$compiler" run tests/fixtures/world/self_spawn.rs --engine "$engine" --inline-limit 64 --stats \
