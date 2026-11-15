@@ -1,11 +1,13 @@
 # Direction — 2026-11-15
 
-lkjscript is a language an agent can own completely and trust without a sandbox:
-one small self-reproducing binary, a checked IR that admits native code by proof
-instead of by confinement, and capabilities for every effect.
+lkjscript is an AI-native general-purpose language in which agents directly
+understand, query and change a program's semantic structure, with a foundation
+for software at any scale, including Chromium. One self-reproducing binary,
+checked IR as the single trust boundary and capabilities for every effect remain.
+Text stays the stored, mergeable projection; storing structure itself requires the
+owner's decision. Work on projection operations while that alternative is open.
 
 ## Semantic boundary
-
 The lkjscript IR is the identity; the Rust-shaped surface is one producer.
 The frontend is untrusted. The checker independently verifies monomorphic,
 structured IR: ownership, loans, initialization, types and reachable authority.
@@ -21,7 +23,6 @@ Apply the two-way rule: add everyday forms through existing IR/library contracts
 rewrite consumers when a rare form would enlarge trusted semantics.
 
 ## Direct native execution (6.1, complete)
-
 Keep direct x86-64 instruction selection plain. Materialize source paths/lines on
 cold failure paths; allocation/stack failures may use a static function location.
 Whole-function scalar linear scan extends live intervals across blocks and loops;
@@ -44,15 +45,14 @@ build --profile embeds function and operation-kind maps and opts into OUTPUT.sam
 A Linux CPU timer samples instruction pointers and real frame chains without a depth cap.
 Reports survive exit/signals and show self/inclusive functions and exclusive kinds
 in at most 37 lines, without DWARF or perf; the explicit option grants instrumentation.
-Measure self-built / witness opt=0 / witness -O and split emitted kinds; 1.0x opt=0 is the next stopping point, 3x -O the horizon.
-Stop when a step offers less than 10%: the extra operand/coalescing trial gave under 1% CPU gain and was discarded. Prioritize edit/gate latency; retain compiler, call/vector, HTTP and map rows in bench/.
+Measure self-built / witness opt=0 / witness -O and attribute transformations before optimizing; -O milestones are 4x, 3x and 2x, or a measured backend floor.
+Discard steps below 10%; the last coalescing trial gave under 1% CPU and was discarded. Structure queries, transactions and scale precede speed unless compiler speed is the measured scale wall.
 Scalar Clone lowers to Read. --inline-limit N copies small acyclic bodies and forwards dead temporaries.
 Recheck changed bodies; exact original bodies under unchanged shared graphs retain their proof.
 Keep the original interpreter/authority oracle and copied source locations; compare complete custom traps and reject the whole bad candidate.
 Default zero: measured cold self-build admission costs exceed code gains; inlining stays explicit. The 3x witness target remains unmet.
 
 ## One executable and bootstrap
-
 One static executable contains frontend, checker, backend, independent interpreter,
 CLI and embedded source library/runtime. Stages exchange checked IR in memory;
 text IR remains for output, .lkjir inputs, tests and mutation.
@@ -66,7 +66,6 @@ Check all user bodies and demanded library bodies; check-library verifies every 
 The seed bootstraps without Rust/Node; require two consecutive current-emitter generations byte for byte, bridging stale emitters. Refresh after source/emitter changes.
 
 ## Gate and optional witness
-
 Case files carry value/output/diagnostic/trap expectations. The native test driver
 runs native and independent interpretation in processes, with details only on failure.
 Seeded generators, direct IR mutation and disagreement reduction are lkjscript programs.
@@ -81,8 +80,9 @@ without cargo/rustc/node; inspect the nonblocking witness job and never constrai
 language design for Rust. Accepted programs agree; delete the witness when it blocks
 needed forms or ceases to find useful differences. Source uses .lkj to identify lkjscript before reading; only actual Rust witness code uses .rs. Retain Rust shape; child.lkj/child/mod.lkj and program.lkj have no .rs alias or fallback.
 
-## Real consumers (programs stream)
+## Program specimens (programs stream)
 
+Applications are specimens of program classes, not goals; site, journal and desk remain gate cases. The compiler is the first consumer of structural operations.
 Programs work in /home/coder/workspace/lkjscript-programs-20261115 on programs; fetch/rebase, bootstrap, four-worker gate, push HEAD:main. Never refresh seed here.
 Connector grants one numeric IPv4:port without DNS or retargeting; both executors validate descriptors and authority follows checked-IR effects and cleanup.
 HTTP/1.1 persistence/pipelining retain exact framing. Keep indexed deadlines, bounded dispatch and receive times; tiny progress never renews a deadline.
@@ -138,7 +138,7 @@ sizes in status and commits. Measurements do not gate. Measure remaining gaps.
 
 ## Horizon and working policy
 
-Range facts, IR queries, a checked-IR seed and a second target follow measured use. No mandatory formatter or fragment marker: retained diagnostic cases show no need for their frontend cost; delta prints accepted rewrites.
+Structure is now directly operable: source claims and checked-instance facts are labelled, queries are bounded, edits are checked transactions, and comparisons use checked identities. Size measurements decide checking units; range facts follow measured use. A checked-IR seed and a second target still follow need. No mandatory formatter or fragment marker: retained diagnostic cases show no need for their frontend cost; delta prints accepted rewrites.
 Programs decides concurrency; do not build on pending scoped-concurrency cases.
 Compiler owns main, seed, emission, driver/store, bench, CI and hash; programs owns
 its separate worktree, consumers and new capabilities. Preserve its additions.

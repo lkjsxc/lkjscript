@@ -1,5 +1,7 @@
 # Status — 2026-11-15 UTC
 
+**Direction.** Fourth note: AI-native general-purpose semantic operations at any program size; applications are specimens. Text remains the stored projection. Programs should rebase this direction before its runtime-demand table; compiler starts with authenticated child images, then structural questions/transactions and the size ladder.
+
 **Source and landing.** .lkj renamed 1,072 language sources at a3c2f046; child.lkj/child/mod.lkj/program.lkj have no alias/fallback. Integrated source 4048e172/70680680 and separate seed 695d0fca are pushed, including Programs 9d145128. [CI43734314339](https://github.com/lkjsxc/lkjscript/actions/runs/43734314339) passed the empty-store seed gate in 786.671 s (load 0.46→2.96) and witness in 103 s (load not recorded; 274 value/output cases, 344 verdicts and byte identity).
 
 **Failure interface.** Source 4048e172 passes 63 isolated transient-unit cases, 15.048 s (load 6.14→7.85); original-IR oracle plus 32,768 inline64 mutants, 91.790 s (5.99→8.88), zero findings. Path/line, capability/grant, operation and symbolic errno share one bounded line; native terminal formatting allocates nothing, supervisor interpretation/private decoding still allocate. Earlier code had a separate grant/errno line; why the live journal omitted it was not reproduced. Fixed point 17,039,220 B; reproducible seed 3,312,682 B. No production service was touched.
