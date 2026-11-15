@@ -195,6 +195,15 @@ impl Network {
         if filled as usize != bytes.len() { return Err(5); }
         Ok(())
     }
+    pub fn realtime_nanoseconds(&mut self, world: &mut World) -> Result<usize, i64> {
+        self.ensure(world)?;
+        let (_, body) = self.request(43, &[1u64], b"")?;
+        if body.len() != 16 { return Err(5); }
+        let seconds = word(&body[..8]);
+        let nanos = word(&body[8..]);
+        if (seconds as i64) < 0 || nanos >= 1_000_000_000 || seconds > ((!0u64) - nanos) / 1_000_000_000 { return Err(75); }
+        Ok((seconds * 1_000_000_000 + nanos) as usize)
+    }
     pub fn realtime_value(&mut self, world: &mut World) -> Result<i64, i64> {
         self.ensure(world)?;
         let (_, body) = self.request(43, &[0u64; 0], b"")?;
@@ -310,6 +319,9 @@ impl Network {
     }
     pub fn resize_remote(&mut self, file: u64, length: usize) -> Result<(), i64> {
         self.unit_request(33, &[file, length as u64])
+    }
+    pub fn lock_remote_wait(&mut self, file: u64) -> Result<(), i64> {
+        self.unit_request(34, &[file, 1u64])
     }
     pub fn lock_remote(&mut self, file: u64) -> Result<(), i64> {
         self.unit_request(34, &[file])

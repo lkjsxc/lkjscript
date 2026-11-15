@@ -471,6 +471,7 @@ impl interpreter::Host for FailingHost {
     fn argument(&self, _index: usize) -> Option<Vec<u8>> {
         None
     }
+    fn environment(&mut self, _name: &[u8]) -> Result<Option<Vec<u8>>, i64> { Ok(None) }
     fn read_stdin(&mut self, _bytes: &mut [u8]) -> Result<usize, i64> {
         Err(38)
     }
@@ -489,6 +490,7 @@ impl interpreter::Host for FailingHost {
     fn sync_directory(&mut self, _handle: u64) -> Result<(), i64> { self.0.push(b'S'); Err(38) }
     fn truncate_file(&mut self, _handle: u64, _length: usize) -> Result<(), i64> { self.0.push(b'T'); Err(38) }
     fn lock_file_exclusive(&mut self, _handle: u64) -> Result<(), i64> { self.0.push(b'L'); Err(38) }
+    fn lock_file_wait(&mut self, _handle: u64) -> Result<(), i64> { self.0.push(b'L'); Err(38) }
     fn read_file(&mut self, _handle: u64, _bytes: &mut [u8]) -> Result<usize, i64> {
         Err(38)
     }
@@ -513,6 +515,7 @@ impl interpreter::Host for FailingHost {
     fn open_file_private(&mut self, _directory: u64, _path: &[u8]) -> Result<u64, i64> { self.0.push(b'V'); Err(13) }
     fn fill_entropy(&mut self, bytes: &mut [u8]) -> Result<(), i64> { self.0.push(b'E'); if !bytes.is_empty() { bytes[0] = 42; } Err(13) }
     fn realtime_seconds(&mut self) -> Result<i64, i64> { self.0.push(b'K'); Ok(-1) }
+    fn realtime_nanoseconds(&mut self) -> Result<usize, i64> { self.0.push(b'K'); Ok(1_000_000_001usize) }
     fn private_file(&mut self, _handle: u64) -> Result<(), i64> { self.0.push(b'P'); Err(13) }
     fn create_stop(&mut self) -> Result<u64, i64> { self.0.push(b'Q'); Ok(3) }
     fn close_stop(&mut self, handle: u64) { assert_eq!(handle, 3u64); self.0.push(b'q'); }

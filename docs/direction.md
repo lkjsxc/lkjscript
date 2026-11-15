@@ -84,27 +84,27 @@ needed forms or ceases to find useful differences. Keep .rs until that decision.
 
 ## Real consumers (programs stream)
 
-Programs work in /home/coder/workspace/lkjscript-programs-20261115 on programs;
-land through fetch/rebase, bootstrap, four-worker gate and push HEAD:main.
-Connector grants one numeric IPv4:port; connect yields an owned File stream, without DNS or retargeting.
-Both executors validate entry descriptors; authority follows checked-IR effects and owning cleanup.
-HTTP/1.1 persistence and pipelining retain exact framing; clients are lkjscript.
-Profile before removing at most two costs; owned chunks replace per-byte assembly.
-Use readiness for concurrency, processes for parallelism.
-Readiness temporarily borrows owned handles into a kernel wait set without storing language views.
+Programs work in /home/coder/workspace/lkjscript-programs-20261115 on programs; land through fetch/rebase, bootstrap, four-worker gate and push HEAD:main.
+Connector grants one numeric IPv4:port without DNS or retargeting; both executors validate descriptors and authority follows checked-IR effects and cleanup.
+HTTP/1.1 persistence and pipelining retain exact framing; clients are lkjscript. Profile before removing at most two costs; owned chunks replace per-byte assembly.
+Use readiness for concurrency, processes for parallelism; readiness temporarily borrows owned handles into a kernel wait set without storing language views.
 Keep explicit connection state, indexed deadlines and bounded work per dispatch; tiny progress never extends deadlines, and buffered requests retain their receive time.
 The three scoped-thread cases are deleted; closure escape stays pending, without shared-memory ownership rules.
-Keep compiler source within the stored seed's forms; never refresh seed here.
-The independent interpreter helper operates actual descriptors without relay queues.
-Journal acknowledges after log fsync, a synced head and atomic rename plus directory fsync; one lock owns writes.
-Replay validates checksums and the committed boundary before incomplete-tail repair.
+Keep compiler source within the stored seed's forms; never refresh seed here. The independent interpreter helper operates actual descriptors without relay queues.
+Journal acknowledges after log fsync, a synced head and atomic rename plus directory fsync; one lock owns writes. Replay validates checksums and the committed boundary before incomplete-tail repair.
 Stop claims SIGTERM; signal the native program or interpreted broker, drain admitted requests to a fixed deadline, sync and exit.
 Entropy supplies kernel bytes; session keys are created private before writing, synced and atomically published.
-Write tokens bind expiry and a random nonce through shared HMAC; a separate key-directory grant authorizes issuance.
-JSON rejects ambiguous keys; authentication precedes body retention and is checked again before mutation.
-The documentation candidate embeds published bodies and search Markdown because DynamicUser blocks openat2; text stays source library code.
-Keep live walking parity and a frozen offline oracle; preserve observed route spellings and headers, including unusual HEAD behavior.
+Write tokens bind expiry and a random nonce through shared HMAC and a separate key-directory grant; JSON rejects ambiguous keys and authentication precedes retention and mutation.
+The documentation candidate embeds published bodies and search Markdown because DynamicUser blocks openat2; text stays source library code. Preserve live/frozen parity, route spellings, headers and unusual HEAD behavior.
 Prove journal output, exact unit settings and same-port restart in isolation; never modify the live origin or /opt. Claude owns switch/rollback.
+Desk grants argv, exact named environment values, streams, status, clock, entropy and one directory; it never discovers HOME or enumerates environment.
+Desk locks writers and publishes a synced fresh inode by rename plus directory fsync, preserving the Python log prefix; copying that prefix keeps append linear in log size.
+An exact cxloop path cannot prove a child-authority subset: stop at commands plus serve without board/handoff/wake. Arbitrary desk listen stays outside this program.
+A future child must be an immutable authenticated admitted image with checked entry grants and explicit transferred handles; external helpers need broader host trust or confinement.
+Separate command/service entries avoid eager listener acquisition; fixed-offset local time is explicit. No live desk handoff is claimed at this boundary.
+cxloop still needs an admitted long-child lifecycle, cancellation/deadlines and explicit git/job roots; its current Bash children cannot inherit narrow language authority.
+The journal needs reviewed account/session contracts, WebSocket push and a checked worker lifecycle; start it next with Claude's disposable fixture and API contract.
+For outbound HTTPS choose TLS in the checked library: certificate validation and trust roots are missing; a helper would reintroduce the unresolved external-host boundary.
 
 ## Authenticated reuse
 

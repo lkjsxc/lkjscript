@@ -2,6 +2,7 @@
 pub struct Request {
     pub method: String,
     pub authorization: Option<String>,
+    pub x_desk: Option<String>,
     pub path: String,
     pub raw_path: String,
     pub query: String,
@@ -306,6 +307,7 @@ pub fn parse_with_methods(bytes: &[u8], methods: &str) -> Result<Request, u16> {
     let mut transfer = false;
     let mut expectation = false;
     let mut authorization = None;
+    let mut x_desk = None;
     let mut close = false;
     let mut keep_alive = false;
     let mut at = line_end + 2;
@@ -356,6 +358,13 @@ pub fn parse_with_methods(bytes: &[u8], methods: &str) -> Result<Request, u16> {
                 Err(_) => return Err(400u16),
             };
             authorization = Some(text);
+        } else if same(name, b"x-desk") {
+            if x_desk.is_some() { return Err(400u16); }
+            let text = match String::from_utf8(value.to_vec()) {
+                Ok(text) => text,
+                Err(_) => return Err(400u16),
+            };
+            x_desk = Some(text);
         } else if same(name, b"connection") {
             let (found_close, found_keep_alive) = connection_options(value)?;
             close = close || found_close;
@@ -383,6 +392,7 @@ pub fn parse_with_methods(bytes: &[u8], methods: &str) -> Result<Request, u16> {
     Ok(Request {
         method: String::from_utf8(line[..first].to_vec()).unwrap(),
         authorization,
+        x_desk,
         path,
         raw_path,
         query,
@@ -597,4 +607,13 @@ fn raw_path_retains_route_spelling() {
     assert!(absolute.raw_path == "/assets/%73ite.css" && absolute.path == "assets/site.css");
     let root = parse(b"GET http://localhost?q=x HTTP/1.1\r\nHost: a\r\n\r\n").unwrap();
     assert!(root.path.is_empty() && root.raw_path == "/" && root.query == "q=x");
+}
+
+#[test]
+fn desk_header_is_explicit_and_unambiguous() {
+    let request = parse_with_methods(b"POST /say HTTP/1.1\r\nHost: local\r\nX-Desk: 1\r\nContent-Length: 0\r\n\r\n", "GET, POST").unwrap();
+    assert!(request.x_desk.as_ref().unwrap() == "1");
+    let absent = parse_with_methods(b"POST /say HTTP/1.1\r\nHost: local\r\n\r\n", "GET, POST").unwrap();
+    assert!(absent.x_desk.is_none());
+    assert!(matches!(parse_with_methods(b"POST /say HTTP/1.1\r\nHost: local\r\nX-Desk: 1\r\nX-Desk: 0\r\n\r\n", "POST"), Err(400u16)));
 }

@@ -41,7 +41,7 @@ The first seven types must match this primitive prefix exactly, including names.
 | `array TYPE LENGTH` | Fixed-length owned elements. |
 | `vec TYPE`, `box TYPE` | Owned growable sequence or owned indirection. |
 | `str` | Unsized immutable UTF-8 text; values require a shared reference. |
-| `world`, `stdout`, `stdin`, `stderr`, `directory`, `file`, `process`, `clock`, `child`, `listener`, `connector`, `readiness`, `entropy`, `stop` | Affine authority-bearing values. |
+| `world`, `arguments`, `environment`, `exit_status`, `stdout`, `stdin`, `stderr`, `directory`, `file`, `process`, `clock`, `child`, `listener`, `connector`, `readiness`, `entropy`, `stop` | Affine authority-bearing values. |
 
 All type indices must exist. Recursive by-value layouts reject; introduce Box or
 another indirection. Unsized text cannot be stored by value or as a container
@@ -145,8 +145,10 @@ The intrinsic signatures are checked in `src/check.rs` and `src/check/io.rs`:
 | `assert` | Consume bool, returning unit or trapping. |
 | `world_stdout world_stdin world_stderr world_process world_clock world_entropy` | Derive the named capability through an exclusive World reference; world_entropy returns owned entropy directly. |
 | `entropy_fill` | `(&mut entropy, &mut [u8]) -> Result<(), i64>`: fill the entire slice from the kernel random source. |
-| `world_arg_count world_arg_len world_arg_copy` | Read/copy byte arguments through World. |
-| `world_exit_status` | Set the requested u8 process status through World. |
+| `world_arg_count world_arg_len world_arg_copy` | Read/copy byte arguments, excluding argv0, through an exclusive World or Arguments reference. Empty and non-UTF-8 arguments are preserved. |
+| `environment_len` | `(&mut environment) -> i64`: length of the granted variable's value, or -1 when absent. Empty values have length zero. |
+| `environment_copy` | `(&mut environment, &mut [u8]) -> usize`: copy at most the destination length from that same value; return bytes copied, zero when absent. No supplied lookup name or enumeration. |
+| `world_exit_status` | Set the requested u8 process status through an exclusive World or ExitStatus reference; execution and normal cleanup continue, and the last value wins. |
 | `world_directory directory_open directory_open_directory` | Acquire a root Directory from World, or a File/Directory beneath an existing Directory. |
 | `world_file` | World plus u8 selector: 0 anonymous file, 1/2/3 owned stdin/stdout/stderr, 4 running executable. Return Result<File, i64>; closed standard streams produce closed Files. |
 | `world_listen` | `(&mut world, &[u8]) -> Result<listener, i64>`: bind and listen on an exact IPv4 socket address. |
@@ -168,6 +170,7 @@ The intrinsic signatures are checked in `src/check.rs` and `src/check/io.rs`:
 | `directory_sync file_sync` | Exclusive Directory or File respectively; fsync its storage, returning Result<(), i64>. |
 | `file_truncate` | `(&mut file, usize length) -> Result<(), i64>`: set the file length without changing its offset. |
 | `file_lock_exclusive` | `(&mut file) -> Result<(), i64>`: nonblocking advisory exclusive flock, held until the last duplicate closes. |
+| `file_lock_wait` | `(&mut file) -> Result<(), i64>`: blocking advisory exclusive flock, retrying EINTR; held until the last duplicate closes. |
 | `file_set_private` | `(&mut file) -> Result<(), i64>`: fchmod to exactly 0600. |
 | `file_duplicate` | Duplicate an exclusively borrowed File, sharing its offset and preserving closed state. Return Result<File, i64>. |
 | `file_readonly` | Reopen an exclusively borrowed File read-only with a fresh offset at zero, preserving closed state. Return Result<File, i64>; no path authority is granted. |
@@ -176,6 +179,7 @@ The intrinsic signatures are checked in `src/check.rs` and `src/check/io.rs`:
 | `directory_create directory_remove directory_rename` | Mutate NUL-terminated basenames through exclusive Directory references. Reject slash, empty name, dot and dot-dot. Return zero or negative errno. |
 | `clock_read` | Clock plus mutable bytes of length at least 16. Write little-endian i64 seconds/nanoseconds from CLOCK_MONOTONIC; return zero or negative errno. |
 | `clock_unix_seconds` | `(&mut clock) -> Result<i64, i64>`: signed CLOCK_REALTIME seconds since Unix epoch; negative successful timestamps remain distinct from positive errno. |
+| `clock_unix_nanoseconds` | `(&mut clock) -> Result<usize, i64>`: CLOCK_REALTIME nanoseconds since Unix epoch, which may jump; negative or unrepresentable timestamps return EOVERFLOW (75). |
 | `process_spawn` | Exclusive Process, shared executable File, NUL-separated argv, and four shared Files for stdin/stdout/stderr/fd3. Execute with empty environment; return Result<Child, i64>. |
 | `child_wait child_terminate` | Exclusive Child. Wait takes a nonblocking bool and returns zero while running, Linux wait status plus one when reaped, or negative errno. Terminate requests SIGKILL; drop terminates and reaps a live direct child. |
 | `child_request_stop` | `(&mut child) -> Result<(), i64>`: send SIGTERM only to the owned child without waiting; a reaped child returns ECHILD. |
@@ -314,8 +318,8 @@ temporary reference carrier cannot become an escaping view's origin.
 ## Host entry and authority reports
 
 A host entry returns unit or a scalar. It may take no parameters, a sole World,
-or owned Stdout/Stdin/Stderr, Directory, Listener, Connector, Readiness, Process,
-Clock, Entropy and Stop parameters.
+or owned Arguments, Environment, ExitStatus, Stdout/Stdin/Stderr, Directory,
+Listener, Connector, Readiness, Process, Clock, Entropy and Stop parameters.
 The sole World entry declares implicit full authority. Every other parameter
 requires an explicit invocation grant selected by its distinct, nonempty local
 name. ASCII whitespace, control bytes and equals signs cannot occur in grant names.
@@ -324,7 +328,10 @@ use a Directory entry and acquire files through ordinary checked operations.
 
 Grants are invocation data outside the IR. Directory descriptors contain the
 NUL-terminated root path; Listener and Connector descriptors contain the sixteen-byte address
-above. Other allowed capabilities, including Entropy and Stop, need no payload.
+above. Environment descriptors contain one exact NUL-terminated variable name; names are nonempty and exclude ASCII whitespace/control bytes and equals signs. Other capabilities, including Arguments and ExitStatus, need no payload.
+CLI Environment grants use NAME=VARIABLE. The bound value preserves arbitrary non-NUL bytes; absence is valid and differs from an empty value.
+Directory also accepts NAME=env:VARIABLE, resolving only that variable to its root at invocation/startup. Absence or an empty value fails with errno 2; there is no default or implicit creation. This selector supplies a Directory, not an Environment value.
+Build retains names for startup resolution. Native run binds only the named environment values and directory selectors before its empty-environment launch; authority queries retain the named grant specification.
 Both executors independently validate the complete parameter/grant correspondence
 before acquiring handles.
 Raw scalar arguments cannot manufacture an address or derived capability.

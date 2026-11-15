@@ -89,6 +89,18 @@ impl Body<'_> {
                 self.read_word(args[2], 1, D);
                 self.a.call(self.platform.argument_copy);
             }
+            IntrinsicOp::EnvironmentLen => {
+                self.read(args[0], DI);
+                self.a.load(DI, DI, 0);
+                self.a.call(self.platform.environment_length);
+            }
+            IntrinsicOp::EnvironmentCopy => {
+                self.read(args[0], DI);
+                self.a.load(DI, DI, 0);
+                self.read_word(args[1], 0, SI);
+                self.read_word(args[1], 1, D);
+                self.a.call(self.platform.environment_copy);
+            }
             IntrinsicOp::WorldExitStatus => {
                 self.read(args[1], DI);
                 self.a.call(self.platform.set_exit_status);
@@ -100,8 +112,8 @@ impl Body<'_> {
                 self.intrinsic_open_result(dst);
                 return Ok(true);
             }
-            IntrinsicOp::ClockUnixSeconds => {
-                self.a.call(self.platform.clock_unix_seconds);
+            IntrinsicOp::ClockUnixSeconds | IntrinsicOp::ClockUnixNanoseconds => {
+                self.a.call(if name == IntrinsicOp::ClockUnixSeconds { self.platform.clock_unix_seconds } else { self.platform.clock_unix_nanoseconds });
                 self.intrinsic_scalar_result(dst, D);
                 return Ok(true);
             }
@@ -224,7 +236,7 @@ impl Body<'_> {
                 self.intrinsic_open_result(dst);
                 return Ok(true);
             }
-            IntrinsicOp::DirectorySync | IntrinsicOp::FileSync | IntrinsicOp::FileTruncate | IntrinsicOp::FileLockExclusive => {
+            IntrinsicOp::DirectorySync | IntrinsicOp::FileSync | IntrinsicOp::FileTruncate | IntrinsicOp::FileLockExclusive | IntrinsicOp::FileLockWait => {
                 self.read(args[0], DI);
                 self.a.load(DI, DI, 0);
                 if name == IntrinsicOp::FileTruncate { self.read(args[1], SI); }
@@ -232,6 +244,7 @@ impl Body<'_> {
                     IntrinsicOp::DirectorySync => self.platform.directory_sync,
                     IntrinsicOp::FileSync => self.platform.file_sync,
                     IntrinsicOp::FileTruncate => self.platform.file_truncate,
+                    IntrinsicOp::FileLockWait => self.platform.file_lock_wait,
                     _ => self.platform.file_lock_exclusive,
                 });
                 self.intrinsic_open_result(dst);

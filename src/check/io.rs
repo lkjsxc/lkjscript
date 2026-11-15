@@ -67,24 +67,31 @@ pub(super) fn signature(
                 && types[result].kind == kind
         }
         IntrinsicOp::WorldArgCount => {
-            args.len() == 1 && authority(types, args[0], &TypeKind::World) && result == U64
+            args.len() == 1 && (authority(types, args[0], &TypeKind::World) || authority(types, args[0], &TypeKind::Arguments)) && result == U64
         }
         IntrinsicOp::WorldArgLen => {
             args.len() == 2
-                && authority(types, args[0], &TypeKind::World)
+                && (authority(types, args[0], &TypeKind::World) || authority(types, args[0], &TypeKind::Arguments))
                 && args[1] == U64
                 && result == U64
         }
         IntrinsicOp::WorldArgCopy => {
             args.len() == 3
-                && authority(types, args[0], &TypeKind::World)
+                && (authority(types, args[0], &TypeKind::World) || authority(types, args[0], &TypeKind::Arguments))
                 && args[1] == U64
                 && bytes(types, args[2], true)
                 && result == U64
         }
+        IntrinsicOp::EnvironmentLen => {
+            args.len() == 1 && authority(types, args[0], &TypeKind::Environment) && result == I64
+        }
+        IntrinsicOp::EnvironmentCopy => {
+            args.len() == 2 && authority(types, args[0], &TypeKind::Environment)
+                && bytes(types, args[1], true) && result == U64
+        }
         IntrinsicOp::WorldExitStatus => {
             args.len() == 2
-                && authority(types, args[0], &TypeKind::World)
+                && (authority(types, args[0], &TypeKind::World) || authority(types, args[0], &TypeKind::ExitStatus))
                 && args[1] == U8
                 && result == UNIT
         }
@@ -94,6 +101,10 @@ pub(super) fn signature(
         IntrinsicOp::EntropyFill => {
             args.len() == 2 && authority(types, args[0], &TypeKind::Entropy)
                 && bytes(types, args[1], true) && status_result(types, result)
+        }
+        IntrinsicOp::ClockUnixNanoseconds => {
+            args.len() == 1 && authority(types, args[0], &TypeKind::Clock)
+                && scalar_result(types, result, &TypeKind::Int { bits: 64, signed: false })
         }
         IntrinsicOp::ClockUnixSeconds => {
             args.len() == 1 && authority(types, args[0], &TypeKind::Clock)
@@ -184,7 +195,7 @@ pub(super) fn signature(
                 && bytes(types, args[1], false)
                 && opened(types, result, &TypeKind::File)
         }
-        IntrinsicOp::DirectorySync | IntrinsicOp::FileSync | IntrinsicOp::FileLockExclusive => {
+        IntrinsicOp::DirectorySync | IntrinsicOp::FileSync | IntrinsicOp::FileLockExclusive | IntrinsicOp::FileLockWait => {
             let kind = if name == IntrinsicOp::DirectorySync { TypeKind::Directory } else { TypeKind::File };
             args.len() == 1 && authority(types, args[0], &kind) && status_result(types, result)
         }

@@ -13,6 +13,7 @@ mod cache;
 
 pub(crate) fn cache_contracts() { cache::contracts(); }
 mod entry;
+mod environment;
 mod intrinsics;
 mod layout;
 mod ownership;
@@ -1470,15 +1471,28 @@ pub(crate) fn encode_granted_reusing(
     let mut cache = cache::Context { namespace, keys, records, prefix: 0 };
     encode_program(checked.program(), runtime, entry, false, profile_path, Some(grants), Some(&mut cache))
 }
+fn valid_environment(name: &[u8]) -> bool {
+    if name.len() < 2 || name[name.len() - 1] != 0 { return false; }
+    for byte in &name[..name.len() - 1] {
+        if *byte <= 32 || *byte == 127 || *byte == b'=' { return false; }
+    }
+    true
+}
 fn grant_matches(kind: &TypeKind, grant: &ir::EntryGrant, parameters: usize) -> bool {
     match grant {
         ir::EntryGrant::World => parameters == 1 && matches!(kind, TypeKind::World),
+        ir::EntryGrant::Arguments => matches!(kind, TypeKind::Arguments),
+        ir::EntryGrant::Environment(name) => matches!(kind, TypeKind::Environment) && valid_environment(name),
+        ir::EntryGrant::EnvironmentValue(value) => matches!(kind, TypeKind::Environment)
+            && match value { Some(bytes) => !bytes.contains(&0u8), None => true },
+        ir::EntryGrant::ExitStatus => matches!(kind, TypeKind::ExitStatus),
         ir::EntryGrant::Stdout => matches!(kind, TypeKind::Stdout),
         ir::EntryGrant::Stdin => matches!(kind, TypeKind::Stdin),
         ir::EntryGrant::Stderr => matches!(kind, TypeKind::Stderr),
         ir::EntryGrant::Clock => matches!(kind, TypeKind::Clock),
         ir::EntryGrant::Process => matches!(kind, TypeKind::Process),
         ir::EntryGrant::Directory(_) => matches!(kind, TypeKind::Directory),
+        ir::EntryGrant::DirectoryEnvironment(name) => matches!(kind, TypeKind::Directory) && valid_environment(name),
         ir::EntryGrant::Listener(_) => matches!(kind, TypeKind::Listener),
         ir::EntryGrant::Connector(_) => matches!(kind, TypeKind::Connector),
         ir::EntryGrant::Readiness => matches!(kind, TypeKind::Readiness),
@@ -1580,6 +1594,12 @@ fn encode_program(
         matches!(instruction.op, Op::Intrinsic { name: IntrinsicOp::EntropyFill, .. })));
     let wall_time = program.functions.iter().any(|function| function.body.iter().any(|instruction|
         matches!(instruction.op, Op::Intrinsic { name: IntrinsicOp::ClockUnixSeconds, .. })));
+    let wall_nanoseconds = program.functions.iter().any(|function| function.body.iter().any(|instruction|
+        matches!(instruction.op, Op::Intrinsic { name: IntrinsicOp::ClockUnixNanoseconds, .. })));
+    let blocking_lock = program.functions.iter().any(|function| function.body.iter().any(|instruction|
+        matches!(instruction.op, Op::Intrinsic { name: IntrinsicOp::FileLockWait, .. })));
+    let command_environment = program.types.iter().any(|ty| matches!(ty.kind, TypeKind::Environment))
+        || match grants { Some(grants) => grants.iter().any(|grant| matches!(grant, ir::EntryGrant::DirectoryEnvironment(_))), None => false };
     let private_file = program.functions.iter().any(|function| function.body.iter().any(|instruction|
         matches!(instruction.op, Op::Intrinsic { name: IntrinsicOp::FileSetPrivate, .. })));
     let child_stop = program.functions.iter().any(|function| function.body.iter().any(|instruction|
@@ -1593,7 +1613,7 @@ fn encode_program(
         function.body.iter().any(|instruction| matches!(instruction.op,
             Op::Intrinsic { name: IntrinsicOp::DirectoryCreateNew | IntrinsicOp::DirectoryCreatePrivate | IntrinsicOp::DirectoryOpenAppend
                 | IntrinsicOp::DirectorySync | IntrinsicOp::FileSync | IntrinsicOp::FileTruncate
-                | IntrinsicOp::FileLockExclusive, .. }))
+                | IntrinsicOp::FileLockExclusive | IntrinsicOp::FileLockWait, .. }))
     });
     let accept_nodelay = program.functions.iter().any(|function| {
         function.body.iter().any(|instruction| matches!(
@@ -1607,6 +1627,8 @@ fn encode_program(
     p.stop_signals = stop_signals;
     p.listener_reuse = listener_reuse;
     p.entry_diagnostics = grants.map_or(false, |provided| provided.iter().any(|grant| entry::Plan::fallible(grant)));
+    p.command_environment = command_environment;
+    p.blocking_lock = blocking_lock;
     let grant_plan = match grants {
         Some(grants) => Some(entry::Plan::new(&mut a, grants, first_site(selected))),
         None => None,
@@ -1656,6 +1678,13 @@ fn encode_program(
         if nonblocking { symbols.push((p.handle_nonblocking, "$platform::handle_nonblocking".to_string())); }
         if entropy { symbols.push((p.entropy_fill, "$platform::entropy_fill".to_string())); }
         if wall_time { symbols.push((p.clock_unix_seconds, "$platform::clock_unix_seconds".to_string())); }
+        if wall_nanoseconds { symbols.push((p.clock_unix_nanoseconds, "$platform::clock_unix_nanoseconds".to_string())); }
+        if blocking_lock { symbols.push((p.file_lock_wait, "$platform::file_lock_wait".to_string())); }
+        if command_environment {
+            symbols.push((p.environment_lookup, "$platform::environment_lookup".to_string()));
+            symbols.push((p.environment_length, "$platform::environment_length".to_string()));
+            symbols.push((p.environment_copy, "$platform::environment_copy".to_string()));
+        }
         if private_file { symbols.push((p.file_set_private, "$platform::file_set_private".to_string())); }
         if child_stop { symbols.push((p.child_request_stop, "$platform::child_request_stop".to_string())); }
         if stop_signals {
@@ -1720,6 +1749,7 @@ fn encode_program(
     if storage { storage::emit(&mut a, p); }
     if entropy { lifecycle::entropy(&mut a, p); }
     if wall_time { lifecycle::wall_time(&mut a, p); }
+    if wall_nanoseconds { lifecycle::wall_nanoseconds(&mut a, p); }
     if private_file { lifecycle::private_file(&mut a, p); }
     if child_stop { lifecycle::child_stop(&mut a, p); }
     if stop_signals { lifecycle::stop(&mut a, p); }

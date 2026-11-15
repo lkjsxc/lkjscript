@@ -37,6 +37,9 @@ pub struct Report {
 
 fn capability(kind: &TypeKind) -> Option<(&'static str, bool)> {
     match kind {
+        TypeKind::Arguments => Some(("Arguments", false)),
+        TypeKind::Environment => Some(("Environment", true)),
+        TypeKind::ExitStatus => Some(("ExitStatus", false)),
         TypeKind::Stdout => Some(("Stdout", false)),
         TypeKind::Stdin => Some(("Stdin", false)),
         TypeKind::Stderr => Some(("Stderr", false)),
@@ -406,6 +409,8 @@ pub fn render(checked: &CheckedProgram, report: &Report) -> String {
         for requirement in &report.manifest.requirements {
             let value = if requirement.capability == "Directory" {
                 "=PATH"
+            } else if requirement.capability == "Environment" {
+                "=NAME"
             } else if requirement.capability == "Listener" || requirement.capability == "Connector" {
                 "=ADDRESS"
             } else {

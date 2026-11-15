@@ -39,6 +39,10 @@ pub enum TypeKind {
     /// Unsized immutable UTF-8 text; stored values use a shared Ref.
     Str,
     World,
+    /// Affine access to invocation arguments, one environment name, or exit status.
+    Arguments,
+    Environment,
+    ExitStatus,
     /// Affine authority to write standard output, derived from World.
     Stdout,
     Stdin,
@@ -67,6 +71,12 @@ pub enum TypeKind {
 #[derive(Clone)]
 pub enum EntryGrant {
     World,
+    Arguments,
+    /// Exactly one NUL-terminated environment name; never an enumeration grant.
+    Environment(Vec<u8>),
+    /// Launcher snapshot for native run; standalone builds retain the named grant.
+    EnvironmentValue(Option<Vec<u8>>),
+    ExitStatus,
     Stdout,
     Stdin,
     Stderr,
@@ -74,6 +84,8 @@ pub enum EntryGrant {
     Process,
     /// NUL-terminated path, matching the sealed WorldDirectory ABI.
     Directory(Vec<u8>),
+    /// Directory selected at invocation by exactly one named environment value.
+    DirectoryEnvironment(Vec<u8>),
     /// Exact sixteen-byte IPv4 sockaddr, matching WorldListen.
     Listener(Vec<u8>),
     Connector(Vec<u8>),
@@ -249,6 +261,8 @@ pub enum IntrinsicOp {
     WorldArgLen,
     WorldArgCopy,
     WorldExitStatus,
+    EnvironmentLen,
+    EnvironmentCopy,
     WorldDirectory,
     DirectoryOpen,
     StdinRead,
@@ -293,9 +307,11 @@ pub enum IntrinsicOp {
     FileSync,
     FileTruncate,
     FileLockExclusive,
+    FileLockWait,
     WorldEntropy,
     EntropyFill,
     ClockUnixSeconds,
+    ClockUnixNanoseconds,
     FileSetPrivate,
     WorldStop,
     StopRequested,
@@ -331,6 +347,8 @@ impl IntrinsicOp {
             "world_arg_len" => Some(IntrinsicOp::WorldArgLen),
             "world_arg_copy" => Some(IntrinsicOp::WorldArgCopy),
             "world_exit_status" => Some(IntrinsicOp::WorldExitStatus),
+            "environment_len" => Some(IntrinsicOp::EnvironmentLen),
+            "environment_copy" => Some(IntrinsicOp::EnvironmentCopy),
             "world_directory" => Some(IntrinsicOp::WorldDirectory),
             "directory_open" => Some(IntrinsicOp::DirectoryOpen),
             "stdin_read" => Some(IntrinsicOp::StdinRead),
@@ -375,9 +393,11 @@ impl IntrinsicOp {
             "file_sync" => Some(IntrinsicOp::FileSync),
             "file_truncate" => Some(IntrinsicOp::FileTruncate),
             "file_lock_exclusive" => Some(IntrinsicOp::FileLockExclusive),
+            "file_lock_wait" => Some(IntrinsicOp::FileLockWait),
             "world_entropy" => Some(IntrinsicOp::WorldEntropy),
             "entropy_fill" => Some(IntrinsicOp::EntropyFill),
             "clock_unix_seconds" => Some(IntrinsicOp::ClockUnixSeconds),
+            "clock_unix_nanoseconds" => Some(IntrinsicOp::ClockUnixNanoseconds),
             "file_set_private" => Some(IntrinsicOp::FileSetPrivate),
             "world_stop" => Some(IntrinsicOp::WorldStop),
             "stop_requested" => Some(IntrinsicOp::StopRequested),
@@ -415,6 +435,8 @@ impl IntrinsicOp {
             IntrinsicOp::WorldArgLen => "world_arg_len",
             IntrinsicOp::WorldArgCopy => "world_arg_copy",
             IntrinsicOp::WorldExitStatus => "world_exit_status",
+            IntrinsicOp::EnvironmentLen => "environment_len",
+            IntrinsicOp::EnvironmentCopy => "environment_copy",
             IntrinsicOp::WorldDirectory => "world_directory",
             IntrinsicOp::DirectoryOpen => "directory_open",
             IntrinsicOp::StdinRead => "stdin_read",
@@ -459,9 +481,11 @@ impl IntrinsicOp {
             IntrinsicOp::FileSync => "file_sync",
             IntrinsicOp::FileTruncate => "file_truncate",
             IntrinsicOp::FileLockExclusive => "file_lock_exclusive",
+            IntrinsicOp::FileLockWait => "file_lock_wait",
             IntrinsicOp::WorldEntropy => "world_entropy",
             IntrinsicOp::EntropyFill => "entropy_fill",
             IntrinsicOp::ClockUnixSeconds => "clock_unix_seconds",
+            IntrinsicOp::ClockUnixNanoseconds => "clock_unix_nanoseconds",
             IntrinsicOp::FileSetPrivate => "file_set_private",
             IntrinsicOp::WorldStop => "world_stop",
             IntrinsicOp::StopRequested => "stop_requested",

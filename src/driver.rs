@@ -905,6 +905,37 @@ pub(crate) fn complete_semantic_trap(program: &ir::Program, code: u64, message: 
     index < messages.len() as u64 && messages[index as usize].as_str() == message
 }
 
+// The process primitive deliberately supplies an empty environment. Bind only
+// named invocation grants before native run; a standalone build keeps names and
+// resolves them when its owner invokes it.
+fn invocation_grants(world: &mut World, grants: Vec<ir::EntryGrant>) -> Result<Vec<ir::EntryGrant>, String> {
+    let mut values = Vec::new();
+    for grant in grants {
+        let value = match grant {
+            ir::EntryGrant::Environment(name) => {
+                let key = &name[..name.len() - 1];
+                let value = driver_host::environment_value(world, key)
+                    .map_err(|errno: i64| -> String { format!("E_ENTRY environment value failed: errno {errno}") })?;
+                ir::EntryGrant::EnvironmentValue(value)
+            }
+            ir::EntryGrant::DirectoryEnvironment(name) => {
+                let key = &name[..name.len() - 1];
+                let mut value = driver_host::environment_value(world, key)
+                    .map_err(|errno: i64| -> String { format!("E_ENTRY directory environment failed: errno {errno}") })?
+                    .unwrap_or(Vec::new());
+                if value.is_empty() {
+                    return Err(format!("E_ENTRY directory environment {} is absent or empty: errno 2", String::from_utf8(key.to_vec()).unwrap()));
+                }
+                value.push(0);
+                ir::EntryGrant::Directory(value)
+            }
+            value => value,
+        };
+        values.push(value);
+    }
+    Ok(values)
+}
+
 fn native_run(
     world: &mut World,
     checked: &reuse::Selection,
@@ -917,6 +948,7 @@ fn native_run(
 ) -> Result<Outcome, String> {
     let name = &checked.original().program().functions[index].name;
     let grants = crate::entry_grants::prepare(checked.original().program(), index, &options.grants)?;
+    let grants = invocation_grants(world, grants)?;
     let bytes = emit_reusing(checked.native(), runtime, name, &grants, Some(3), None, memo)
         .map_err(|problem| report(&options.path, problem))?;
     stats.count("emitted_bytes", bytes.len());

@@ -10,6 +10,35 @@ pub struct World {
     arguments: Vec<Vec<u8>>,
     status: Rc<Cell<u8>>,
 }
+pub struct Arguments { arguments: Vec<Vec<u8>> }
+pub struct Environment { name: Vec<u8> }
+pub struct ExitStatus { status: Rc<Cell<u8>> }
+impl Arguments {
+    pub fn args(&mut self) -> Vec<Vec<u8>> { self.arguments.clone() }
+    pub fn __lkjscript_arg_count(&mut self) -> usize { self.arguments.len() }
+    pub fn __lkjscript_arg_len(&mut self, index: usize) -> usize { self.arguments[index].len() }
+    pub fn __lkjscript_arg_copy(&mut self, index: usize, bytes: &mut [u8]) -> usize {
+        let count = bytes.len().min(self.arguments[index].len());
+        bytes[..count].copy_from_slice(&self.arguments[index][..count]);
+        count
+    }
+}
+impl Environment {
+    pub fn get(&mut self) -> Option<Vec<u8>> {
+        std::env::var_os(std::ffi::OsStr::from_bytes(&self.name)).map(|value| value.as_os_str().as_bytes().to_vec())
+    }
+    pub fn __lkjscript_len(&mut self) -> i64 { self.get().map_or(-1, |value| value.len() as i64) }
+    pub fn __lkjscript_copy(&mut self, bytes: &mut [u8]) -> usize {
+        let value = self.get().unwrap_or_default();
+        let count = bytes.len().min(value.len());
+        bytes[..count].copy_from_slice(&value[..count]);
+        count
+    }
+}
+impl ExitStatus {
+    pub fn set_status(&mut self, value: u8) { self.status.set(value); }
+}
+
 pub struct Stdout {
     _seal: (),
 }
@@ -275,6 +304,7 @@ impl File {
     pub fn truncate(&mut self, length: usize) -> Result<(), i64> {
         files::truncate_file(self.descriptor(), length)
     }
+    pub fn lock_wait(&mut self) -> Result<(), i64> { files::lock_file_wait(self.descriptor()) }
     pub fn lock_exclusive(&mut self) -> Result<(), i64> {
         files::lock_file_exclusive(self.descriptor())
     }
@@ -352,6 +382,7 @@ impl World {
 }
 impl Clock {
     pub fn unix_seconds(&mut self) -> Result<i64, i64> { files::realtime_seconds() }
+    pub fn unix_nanoseconds(&mut self) -> Result<usize, i64> { files::realtime_nanoseconds() }
     pub fn __lkjscript_read(&mut self, bytes: &mut [u8]) -> i64 {
         files::monotonic_time(bytes).map_or_else(|e| -e, |()| 0)
     }
@@ -825,6 +856,13 @@ pub(crate) mod files {
         }
         Ok(())
     }
+    pub fn realtime_nanoseconds() -> Result<usize, i64> {
+        let mut time = [0i64; 2];
+        retry(|| unsafe { syscall(228, 0i64, time.as_mut_ptr()) })?;
+        let seconds = usize::try_from(time[0]).map_err(|_| 75i64)?;
+        let nanos = usize::try_from(time[1]).map_err(|_| 75i64)?;
+        seconds.checked_mul(1_000_000_000).and_then(|value| value.checked_add(nanos)).ok_or(75)
+    }
     pub fn realtime_seconds() -> Result<i64, i64> {
         let mut time = [0i64; 2];
         retry(|| unsafe { syscall(228, 0i64, time.as_mut_ptr()) })?;
@@ -870,6 +908,10 @@ pub(crate) mod files {
         retry(|| unsafe { syscall(77, i64::from(descriptor), length as i64) }).map(|_| ())
     }
 
+    pub fn lock_file_wait(descriptor: i32) -> Result<(), i64> {
+        if descriptor < 0 { return Err(9); }
+        retry(|| unsafe { syscall(73, i64::from(descriptor), 2i64) }).map(|_| ())
+    }
     pub fn lock_file_exclusive(descriptor: i32) -> Result<(), i64> {
         if descriptor < 0 { return Err(9); }
         retry(|| unsafe { syscall(73, i64::from(descriptor), 6i64) }).map(|_| ())

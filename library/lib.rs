@@ -17,6 +17,8 @@ pub mod char;
 pub mod fmt;
 pub mod integer;
 pub mod io;
+// command.rs is an optional typed capability module mounted by the current loader;
+// the stored seed reads this root without resolving the newer capability types.
 pub mod iter;
 mod ordered_map;
 mod ordered_set;

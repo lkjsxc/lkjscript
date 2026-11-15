@@ -72,3 +72,52 @@ pub fn http_date(seconds: i64) -> Result<String, String> {
     let second = within_day % 60i64;
     Ok(format!("{name}, {day:02} {month} {year:04} {hour:02}:{minute:02}:{second:02} GMT"))
 }
+
+
+/// Fixed offsets chosen by a caller from its explicitly granted configuration.
+/// This is not a timezone database: regions with seasonal or historical changes
+/// need a granted TZif file and a transition reader. The desk host uses UTC;
+/// JST-9 selects modern Japanese standard time without an ambient locale read.
+pub fn timezone_offset(name: &str) -> Result<i64, String> {
+    if name == "UTC" || name == "UTC0" || name == "Etc/UTC"
+        || name == "GMT" || name == "GMT0" { return Ok(0i64); }
+    if name == "JST-9" { return Ok(32_400i64); }
+    let bytes = name.as_bytes();
+    if bytes.len() == 6usize && (bytes[0] == b'+' || bytes[0] == b'-') && bytes[3] == b':' {
+        let mut index = 1usize;
+        while index < 6usize {
+            if index != 3usize && (bytes[index] < b'0' || bytes[index] > b'9') {
+                return Err("timezone offset needs +/-HH:MM".to_string());
+            }
+            index += 1usize;
+        }
+        let hour = (bytes[1] - b'0') as i64 * 10i64 + (bytes[2] - b'0') as i64;
+        let minute = (bytes[4] - b'0') as i64 * 10i64 + (bytes[5] - b'0') as i64;
+        if hour > 23i64 || minute > 59i64 {
+            return Err("timezone offset is outside +/-23:59".to_string());
+        }
+        let offset = hour * 3600i64 + minute * 60i64;
+        return Ok(if bytes[0] == b'-' { -offset } else { offset });
+    }
+    Err("timezone requires UTC, UTC0, JST-9 or an explicit +/-HH:MM offset; TZif regions are not implemented".to_string())
+}
+
+/// Format desk's month/day and minute using a caller-supplied fixed UTC offset.
+/// Input bounds are checked before addition, including both signed extremes.
+pub fn local_minute(seconds: i64, offset: i64) -> Result<String, String> {
+    if offset < -86_340i64 || offset > 86_340i64 {
+        return Err("local time offset is outside +/-23:59".to_string());
+    }
+    if seconds < -2_209_075_140i64 || seconds > 253_402_387_139i64 {
+        return Err("local time requires a Gregorian year from 1900 through 9999".to_string());
+    }
+    let date = http_date(seconds + offset)?;
+    let month = match &date[8..11] {
+        "Jan" => "01", "Feb" => "02", "Mar" => "03", "Apr" => "04",
+        "May" => "05", "Jun" => "06", "Jul" => "07", "Aug" => "08",
+        "Sep" => "09", "Oct" => "10", "Nov" => "11", _ => "12",
+    };
+    let day = &date[5..7];
+    let minute = &date[17..22];
+    Ok(format!("{month}-{day} {minute}"))
+}

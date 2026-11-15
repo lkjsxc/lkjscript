@@ -1,0 +1,17 @@
+lkjscript-ir 1
+# expect: reject E_TYPE
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "Environment" environment
+type "&mut Environment" ref mut 7
+fn "probe" 1 4
+local "value" 8 let
+local "result" 4 let
+@1 intrinsic 1 "world_arg_count" 0
+@1 return 1
+endfn

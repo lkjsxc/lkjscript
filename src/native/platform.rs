@@ -41,6 +41,9 @@ pub struct Platform {
     pub argument_count: Label,
     pub argument_length: Label,
     pub argument_copy: Label,
+    pub environment_lookup: Label,
+    pub environment_length: Label,
+    pub environment_copy: Label,
     pub set_exit_status: Label,
     pub directory_open: Label,
     pub file_open: Label,
@@ -64,8 +67,10 @@ pub struct Platform {
     pub directory_sync: Label,
     pub file_truncate: Label,
     pub file_lock_exclusive: Label,
+    pub file_lock_wait: Label,
     pub entropy_fill: Label,
     pub clock_unix_seconds: Label,
+    pub clock_unix_nanoseconds: Label,
     pub file_set_private: Label,
     pub world_stop: Label,
     pub stop_requested: Label,
@@ -75,6 +80,8 @@ pub struct Platform {
     pub stop_signals: bool,
     pub listener_reuse: bool,
     pub entry_diagnostics: bool,
+    pub command_environment: bool,
+    pub blocking_lock: bool,
 
     pub clock_read: Label,
     pub process_spawn: Label,
@@ -116,6 +123,9 @@ impl Platform {
             argument_count: a.label(),
             argument_length: a.label(),
             argument_copy: a.label(),
+            environment_lookup: a.label(),
+            environment_length: a.label(),
+            environment_copy: a.label(),
             set_exit_status: a.label(),
             directory_open: a.label(),
             file_open: a.label(),
@@ -139,8 +149,10 @@ impl Platform {
             directory_sync: a.label(),
             file_truncate: a.label(),
             file_lock_exclusive: a.label(),
+            file_lock_wait: a.label(),
             entropy_fill: a.label(),
             clock_unix_seconds: a.label(),
+            clock_unix_nanoseconds: a.label(),
             file_set_private: a.label(),
             world_stop: a.label(),
             stop_requested: a.label(),
@@ -150,6 +162,8 @@ impl Platform {
             stop_signals: false,
             listener_reuse: false,
             entry_diagnostics: false,
+            command_environment: false,
+            blocking_lock: false,
 
             clock_read: a.label(),
             process_spawn: a.label(),
@@ -673,6 +687,7 @@ fn io(a: &mut Assembler, p: Platform) {
     a.raw(&[0xfc, 0xf3, 0xa4]);
     a.ret();
 
+    if p.command_environment { super::environment::emit(a, p); }
     stream_write(a, p.stdout_write, 1);
     stream_write(a, p.stderr_write, 2);
     a.bind(p.stdin_read);

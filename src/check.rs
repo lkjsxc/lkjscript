@@ -96,6 +96,9 @@ pub fn is_data(types: &[Type], ty: usize) -> bool {
         }
         match &types[current].kind {
             TypeKind::World
+            | TypeKind::Arguments
+            | TypeKind::Environment
+            | TypeKind::ExitStatus
             | TypeKind::Stdout
             | TypeKind::Stdin
             | TypeKind::Stderr

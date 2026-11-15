@@ -39,6 +39,29 @@ pub struct Host<'world, 'program> {
     pub status: u8,
 }
 
+// The interpreter host already holds World; interpreted programs see only their
+// individually granted name. Read startup bytes without decoding or enumerating
+// them in the language API, and distinguish absence from host refusal.
+pub(crate) fn environment_value(world: &mut World, name: &[u8]) -> Result<Option<Vec<u8>>, i64> {
+    let mut directory = world.directory("/proc/self")?;
+    let mut file = directory.open("environ")?;
+    let bytes = file.read_to_end()?;
+    let mut begin = 0usize;
+    let mut end = 0usize;
+    while end <= bytes.len() {
+        if end == bytes.len() || bytes[end] == 0u8 {
+            if end > begin + name.len() && bytes[begin + name.len()] == b'=' {
+                if bytes[begin..begin + name.len()] == *name {
+                    return Ok(Some(bytes[begin + name.len() + 1..end].to_vec()));
+                }
+            }
+            begin = end + 1;
+        }
+        end += 1;
+    }
+    Ok(None)
+}
+
 fn temporary(world: &mut World) -> Result<File, String> {
     match world.__lkjscript_file(0u8) {
         Ok(file) => Ok(file),
@@ -270,6 +293,10 @@ impl interpreter::Host for Host<'_, '_> {
         }
     }
 
+    fn environment(&mut self, name: &[u8]) -> Result<Option<Vec<u8>>, i64> {
+        environment_value(self.world, name)
+    }
+
     fn argument_count(&self) -> usize {
         self.arguments.len()
     }
@@ -320,6 +347,9 @@ impl interpreter::Host for Host<'_, '_> {
 
     fn fill_entropy(&mut self, bytes: &mut [u8]) -> Result<(), i64> {
         self.network.random_bytes(self.world, bytes)
+    }
+    fn realtime_nanoseconds(&mut self) -> Result<usize, i64> {
+        self.network.realtime_nanoseconds(self.world)
     }
     fn realtime_seconds(&mut self) -> Result<i64, i64> {
         self.network.realtime_value(self.world)
@@ -456,6 +486,11 @@ impl interpreter::Host for Host<'_, '_> {
     fn truncate_file(&mut self, handle: u64, length: usize) -> Result<(), i64> {
         let descriptor = self.remote_file(handle)?;
         self.network.resize_remote(descriptor, length)
+    }
+
+    fn lock_file_wait(&mut self, handle: u64) -> Result<(), i64> {
+        let descriptor = self.remote_file(handle)?;
+        self.network.lock_remote_wait(descriptor)
     }
 
     fn lock_file_exclusive(&mut self, handle: u64) -> Result<(), i64> {

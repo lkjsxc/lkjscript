@@ -5,6 +5,14 @@ mod scalar;
 use crate::ir::{self, Op, Place, Program, Projection, TypeKind};
 use std::collections::{BTreeMap, BTreeSet};
 
+fn valid_environment(name: &[u8]) -> bool {
+    if name.len() < 2 || name[name.len() - 1] != 0 { return false; }
+    for byte in &name[..name.len() - 1] {
+        if *byte <= 32 || *byte == 127 || *byte == b'=' { return false; }
+    }
+    true
+}
+
 fn valid_connector(address: &[u8]) -> bool {
     if address.len() != 16 || address[0] != 2 || address[1] != 0 { return false; }
     for byte in &address[8..] { if *byte != 0 { return false; } }
@@ -16,6 +24,7 @@ pub trait Host {
     fn write_stdout(&mut self, bytes: &[u8]) -> Result<(), String>;
     fn argument_count(&self) -> usize;
     fn argument(&self, index: usize) -> Option<Vec<u8>>;
+    fn environment(&mut self, name: &[u8]) -> Result<Option<Vec<u8>>, i64>;
     fn read_stdin(&mut self, bytes: &mut [u8]) -> Result<usize, i64>;
     fn write_stderr(&mut self, bytes: &[u8]) -> Result<(), String>;
     fn open_directory(&mut self, path: &[u8]) -> Result<u64, i64>;
@@ -26,6 +35,7 @@ pub trait Host {
     fn sync_directory(&mut self, handle: u64) -> Result<(), i64>;
     fn truncate_file(&mut self, handle: u64, length: usize) -> Result<(), i64>;
     fn lock_file_exclusive(&mut self, handle: u64) -> Result<(), i64>;
+    fn lock_file_wait(&mut self, handle: u64) -> Result<(), i64>;
     fn read_file(&mut self, handle: u64, bytes: &mut [u8]) -> Result<usize, i64>;
     fn write_file(&mut self, handle: u64, bytes: &[u8]) -> Result<usize, i64>;
     fn close_handle(&mut self, handle: u64);
@@ -35,6 +45,7 @@ pub trait Host {
     fn connect_socket(&mut self, address: &[u8]) -> Result<u64, i64>;
     fn fill_entropy(&mut self, bytes: &mut [u8]) -> Result<(), i64>;
     fn realtime_seconds(&mut self) -> Result<i64, i64>;
+    fn realtime_nanoseconds(&mut self) -> Result<usize, i64>;
     fn private_file(&mut self, handle: u64) -> Result<(), i64>;
     fn create_stop(&mut self) -> Result<u64, i64>;
     fn close_stop(&mut self, handle: u64);
@@ -96,6 +107,7 @@ impl Host for Vec<u8> {
     fn argument(&self, _index: usize) -> Option<Vec<u8>> {
         None
     }
+    fn environment(&mut self, _name: &[u8]) -> Result<Option<Vec<u8>>, i64> { Ok(None) }
     fn read_stdin(&mut self, _bytes: &mut [u8]) -> Result<usize, i64> {
         Err(38)
     }
@@ -114,6 +126,7 @@ impl Host for Vec<u8> {
     fn sync_directory(&mut self, _handle: u64) -> Result<(), i64> { Err(38) }
     fn truncate_file(&mut self, _handle: u64, _length: usize) -> Result<(), i64> { Err(38) }
     fn lock_file_exclusive(&mut self, _handle: u64) -> Result<(), i64> { Err(38) }
+    fn lock_file_wait(&mut self, _handle: u64) -> Result<(), i64> { Err(38) }
     fn read_file(&mut self, _handle: u64, _bytes: &mut [u8]) -> Result<usize, i64> {
         Err(38)
     }
@@ -133,6 +146,7 @@ impl Host for Vec<u8> {
     }
     fn fill_entropy(&mut self, _bytes: &mut [u8]) -> Result<(), i64> { Err(38) }
     fn realtime_seconds(&mut self) -> Result<i64, i64> { Err(38) }
+    fn realtime_nanoseconds(&mut self) -> Result<usize, i64> { Err(38) }
     fn private_file(&mut self, _handle: u64) -> Result<(), i64> { Err(38) }
     fn create_stop(&mut self) -> Result<u64, i64> { Err(38) }
     fn close_stop(&mut self, _handle: u64) {}
@@ -309,6 +323,9 @@ enum Value {
     Box(Location),
     Reference(Reference),
     World,
+    Arguments,
+    Environment(Option<Vec<u8>>),
+    ExitStatus,
     Stdout,
     Stdin,
     Stderr,
@@ -948,6 +965,9 @@ impl<H: Host> Interpreter<'_, H> {
             }
             (TypeKind::F64, Value::Bits(_)) => true,
             (TypeKind::World, Value::World)
+            | (TypeKind::Arguments, Value::Arguments)
+            | (TypeKind::Environment, Value::Environment(_))
+            | (TypeKind::ExitStatus, Value::ExitStatus)
             | (TypeKind::Stdout, Value::Stdout)
             | (TypeKind::Stdin, Value::Stdin)
             | (TypeKind::Stderr, Value::Stderr)
@@ -2430,12 +2450,18 @@ fn run_inner<'a, H: Host>(
             let kind = interpreter.kind(function.locals[index].ty)?;
             let valid = match &grants[index] {
                 ir::EntryGrant::World => function.params == 1 && matches!(kind, TypeKind::World),
+                ir::EntryGrant::Arguments => matches!(kind, TypeKind::Arguments),
+                ir::EntryGrant::Environment(name) => matches!(kind, TypeKind::Environment) && valid_environment(name),
+                ir::EntryGrant::EnvironmentValue(value) => matches!(kind, TypeKind::Environment)
+                    && match value { Some(bytes) => !bytes.contains(&0u8), None => true },
+                ir::EntryGrant::ExitStatus => matches!(kind, TypeKind::ExitStatus),
                 ir::EntryGrant::Stdout => matches!(kind, TypeKind::Stdout),
                 ir::EntryGrant::Stdin => matches!(kind, TypeKind::Stdin),
                 ir::EntryGrant::Stderr => matches!(kind, TypeKind::Stderr),
                 ir::EntryGrant::Clock => matches!(kind, TypeKind::Clock),
                 ir::EntryGrant::Process => matches!(kind, TypeKind::Process),
                 ir::EntryGrant::Directory(_) => matches!(kind, TypeKind::Directory),
+                ir::EntryGrant::DirectoryEnvironment(name) => matches!(kind, TypeKind::Directory) && valid_environment(name),
                 ir::EntryGrant::Listener(_) => matches!(kind, TypeKind::Listener),
                 ir::EntryGrant::Connector(_) => matches!(kind, TypeKind::Connector),
                 ir::EntryGrant::Readiness => matches!(kind, TypeKind::Readiness),
@@ -2448,6 +2474,13 @@ fn run_inner<'a, H: Host>(
         for index in 0..function.params {
             let value: Result<Value, i64> = match &grants[index] {
                 ir::EntryGrant::World => Ok(Value::World),
+                ir::EntryGrant::Arguments => Ok(Value::Arguments),
+                ir::EntryGrant::Environment(name) => match interpreter.host.environment(&name[..name.len() - 1]) {
+                    Ok(value) => Ok(Value::Environment(value)),
+                    Err(errno) => Err(errno),
+                },
+                ir::EntryGrant::EnvironmentValue(value) => Ok(Value::Environment(value.clone())),
+                ir::EntryGrant::ExitStatus => Ok(Value::ExitStatus),
                 ir::EntryGrant::Stdout => Ok(Value::Stdout),
                 ir::EntryGrant::Stdin => Ok(Value::Stdin),
                 ir::EntryGrant::Stderr => Ok(Value::Stderr),
@@ -2465,6 +2498,20 @@ fn run_inner<'a, H: Host>(
                     Err(errno) => Err(errno),
                 },
 
+                ir::EntryGrant::DirectoryEnvironment(name) => match interpreter.host.environment(&name[..name.len() - 1]) {
+                    Ok(Some(mut path)) => {
+                        if path.is_empty() { Err(2) } else {
+                            path.push(0u8);
+                            match interpreter.host.open_directory(&path) {
+                                Ok(handle) if handle != 0 => Ok(Value::Directory(handle)),
+                                Ok(_) => Err(0),
+                                Err(errno) => Err(errno),
+                            }
+                        }
+                    }
+                    Ok(None) => Err(2),
+                    Err(errno) => Err(errno),
+                },
                 ir::EntryGrant::Directory(path) => match interpreter.host.open_directory(path) {
                     Ok(handle) if handle != 0 => Ok(Value::Directory(handle)),
                     Ok(_) => Err(0),

@@ -25,7 +25,7 @@ pub fn validate(program: &Program, entry: usize) -> Result<(), String> {
         if matches!(ty.kind, TypeKind::File) {
             return Err(problem(&format!("File parameter {} cannot be granted; accept Directory and open the file inside the entry", local.name)));
         }
-        if !matches!(ty.kind, TypeKind::Stdout | TypeKind::Stdin | TypeKind::Stderr | TypeKind::Clock | TypeKind::Process | TypeKind::Directory | TypeKind::Listener | TypeKind::Connector | TypeKind::Readiness | TypeKind::Entropy | TypeKind::Stop) {
+        if !matches!(ty.kind, TypeKind::Arguments | TypeKind::Environment | TypeKind::ExitStatus | TypeKind::Stdout | TypeKind::Stdin | TypeKind::Stderr | TypeKind::Clock | TypeKind::Process | TypeKind::Directory | TypeKind::Listener | TypeKind::Connector | TypeKind::Readiness | TypeKind::Entropy | TypeKind::Stop) {
             return Err(problem(&format!("parameter {} requires an owned grantable capability; World must be the only parameter", local.name)));
         }
         if !valid_name(&local.name) || names.contains(&local.name) {
@@ -104,6 +104,15 @@ pub fn prepare(program: &Program, entry: usize, supplied: &[String]) -> Result<V
         let value = supplied_by_name.get(&local.name).ok_or_else(|| problem(&format!("missing --grant {}", local.name)))?;
         let kind = &program.types[local.ty].kind;
         let grant = match kind {
+            TypeKind::Environment => {
+                let name = value.as_ref().ok_or_else(|| problem(&format!("--grant {} requires one environment name", local.name)))?;
+                if !valid_name(name) || name.as_bytes().contains(&0u8) {
+                    return Err(problem("environment grant requires one nonempty name without whitespace, equals or NUL"));
+                }
+                let mut name = name.as_bytes().to_vec();
+                name.push(0);
+                EntryGrant::Environment(name)
+            }
             TypeKind::Directory | TypeKind::Listener | TypeKind::Connector => {
                 let value = value.as_ref().ok_or_else(|| problem(&format!("--grant {} requires a value", local.name)))?;
                 if value.is_empty() { return Err(problem("grant path or address is empty")); }
@@ -111,9 +120,17 @@ pub fn prepare(program: &Program, entry: usize, supplied: &[String]) -> Result<V
                     if *byte == 0 { return Err(problem("grant path or address contains a zero byte")); }
                 }
                 if matches!(kind, TypeKind::Directory) {
-                    let mut path = value.as_bytes().to_vec();
-                    path.push(0);
-                    EntryGrant::Directory(path)
+                    if value.starts_with("env:") {
+                        let name = &value[4..];
+                        if !valid_name(name) { return Err(problem("directory environment grant needs one nonempty variable name")); }
+                        let mut key = name.as_bytes().to_vec();
+                        key.push(0);
+                        EntryGrant::DirectoryEnvironment(key)
+                    } else {
+                        let mut path = value.as_bytes().to_vec();
+                        path.push(0);
+                        EntryGrant::Directory(path)
+                    }
                 } else if matches!(kind, TypeKind::Connector) {
                     EntryGrant::Connector(address(value)?)
                 } else {
@@ -123,6 +140,8 @@ pub fn prepare(program: &Program, entry: usize, supplied: &[String]) -> Result<V
             _ => {
                 if value.is_some() { return Err(problem(&format!("--grant {} takes no value", local.name))); }
                 match kind {
+                    TypeKind::Arguments => EntryGrant::Arguments,
+                    TypeKind::ExitStatus => EntryGrant::ExitStatus,
                     TypeKind::Stdout => EntryGrant::Stdout,
                     TypeKind::Stdin => EntryGrant::Stdin,
                     TypeKind::Stderr => EntryGrant::Stderr,

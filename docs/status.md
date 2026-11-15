@@ -33,17 +33,27 @@ Copies/calls/runtime own internal frame accesses; arithmetic includes register m
 
 ## Programs
 
-2.0 complete: the failed deployment was Listener EADDRINUSE after TIME_WAIT, not a journal Output failure.
-Fresh journal output already worked. Native, independent interpreter and witness now reuse closed TCP addresses; active listeners remain exclusive.
-Fallible entry errors identify the grant kind and errno; endpoint detail has a pending case.
-Hardened proof matches installed output, DynamicUser, working directory and effective unit settings, then restarts on the same port with 76 TIME_WAIT sockets.
-Both complete live-parity rounds pass: 63 paths, 12 archived bodies and 13 protocol probes, including all 51 search queries.
-Build 763.847 ms, load 5.14/6.68/5.99 unchanged; candidate 867,645 B, RSS 1,376 KiB, cgroup peak 1,646,592 B.
-Hardened parity/restart 2.171 s, same load; cold offline 1.937 s, load 5.14/6.68/5.99 -> 5.13/6.65/5.99.
-Offline native/interpreter cases refuse occupied ports with errno 98 and restart after TIME_WAIT.
-Switch/rollback uses a fresh attempt directory; failed-release collisions, interrupted activation and repeated rollback pass without touching /opt.
-The 16 imported site tests passed once (38.668 s, load 5.44/5.32/5.03 -> 6.35/5.55/5.12); --campaign retains them outside the gate.
-Stored-seed A differs after runtime changes; B=C exactly, 16,018,836 B. Bootstrap verifies a bridge only when needed; seed unchanged.
-C build 17.640 s, load 7.62/7.48/6.13 -> 7.25/7.40/6.13; four-worker cold gate passes in 482.715 s, load 4.34 -> 7.37.
-All owned proof processes, units, ports and stages are removed; live PID 1624182 unchanged. No deployment performed.
-Next: desk commands and its isolated service; external-child authority must be proved before board/listen/wake.
+2.0 landed at d2044ada; local and CI gates/witness pass. Real-unit proof found Listener EADDRINUSE after TIME_WAIT, not journal Output.
+Same-port restart with 76 TIME_WAIT sockets passes both complete parity rounds: 63 paths, 12 archived bodies, 13 protocol probes. Claude owns deployment.
+2.1 commands plus isolated serve pass: note/ask/close/inbox/peek/path, Japanese, concurrent writers, shared files and the page/state/say routes.
+Arguments, exact-name Environment and ExitStatus are affine; named directory roots, blocking locks and realtime nanoseconds work on standalone/native-run/interpreted routes.
+96 SIGKILLs retain all 128 acknowledged IDs and the original 10,000-row byte prefix; Python reads the surviving state. Campaign stays outside the gate.
+Exact-path external execution cannot enforce the required child-authority subset. Stop at 2.1 plus serve without board/handoff/wake; arbitrary listen stays outside.
+No live desk handoff or push-page implementation is claimed. Full contract, metrics and both complete authority reports are in examples/desk.md and examples/desk/authority.txt.
+Direct source: 581 Rust + 186 unchanged HTML lines (Python 249 + 186). Binaries: command 299,635 B; service 498,357 B; service RSS 656–660 KiB.
+Cold command/service builds: 752.396/786.849 ms, measurement interval load 8.12/7.15/5.50→7.87/7.12/5.50.
+100-command mean, empty state: native 29.914 ms (load 2.40→2.37), Python 18.767 ms (2.37→2.37); native is slower with durable publication.
+At 10,000 rows: native 27.613 ms (2.37→2.37), Python 18.695 ms (2.37→2.34); append still copies the old log.
+Four-worker cold gate: 534.967 s, load 8.50→5.92; 778 conformance cases on both policies pass. Current generations agree at 16,171,123 B; seed unchanged.
+Consumer cold seconds below total 34.039; all start without reusable consumer results. Long campaign proofs stay outside the gate.
+
+| Suite | Cold seconds (load before→after) | Short regression proves |
+| --- | ---: | --- |
+| HTTP | 16.826 (8.67→8.54) | framing, readiness, deadlines |
+| Journal | 1.661 (8.30→8.30) | commit/replay, authentication |
+| Stop native | 2.814 (8.30→8.30) | signal, bounded drain, sync |
+| Stop interpreted | 6.287 (8.30→8.12) | independent broker drain |
+| Site | 2.168 (8.30→8.12) | frozen parity, occupied/TIME_WAIT bind |
+| Desk + capabilities | 4.283 (8.12→7.87) | three routes, CLI, env/status/lock, safe publication |
+
+Pending compiler diagnostics include test --library-dir child forwarding; program-directory migration awaits the compiler's pending case.

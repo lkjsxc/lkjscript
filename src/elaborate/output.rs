@@ -65,6 +65,13 @@ impl Builder<'_, '_> {
                 self.compiler
                     .reference(bytes, matches!(value, Value::MutableBytes))
             }
+            Value::MaybeBytes => {
+                let bytes = self.compiler.intern(String::new(), ir::TypeKind::Vec { inner: ir::U8 });
+                let path = self.compiler.names.library_type("prelude", "Option", span)?;
+                let mut arguments = BTreeMap::new();
+                arguments.insert("T".to_string(), bytes);
+                self.compiler.named_type(&path, &arguments, span)?
+            }
             Value::Arguments => {
                 let bytes = self
                     .compiler
@@ -238,7 +245,10 @@ impl Builder<'_, '_> {
             Ok((dst, result))
         } else {
             let helper = method.helper().expect("source capability operation");
-            let value = self.source_library_call("io", helper, BTreeMap::new(), values, span)?;
+            let module = if matches!(method, capabilities::Method::CommandArgs | capabilities::Method::EnvironmentGet) {
+                "command"
+            } else { "io" };
+            let value = self.source_library_call(module, helper, BTreeMap::new(), values, span)?;
             if value.1 != result {
                 return Err(err(
                     span,

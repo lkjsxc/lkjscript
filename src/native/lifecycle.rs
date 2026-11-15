@@ -48,6 +48,34 @@ pub(super) fn wall_time(a: &mut Assembler, p: Platform) {
     a.load(D, BP, -16);
     epilogue(a);
 }
+pub(super) fn wall_nanoseconds(a: &mut Assembler, p: Platform) {
+    a.bind(p.clock_unix_nanoseconds);
+    prologue(a, p, 16, Span::default());
+    a.immediate(DI, 0);
+    a.lea(SI, BP, -16);
+    syscall(a, 228);
+    let done = a.label();
+    let overflow = a.label();
+    a.test(A, true);
+    a.condition(8, done);
+    a.load(A, BP, -16);
+    a.test(A, true);
+    a.condition(8, overflow);
+    a.immediate(C, 1_000_000_000);
+    a.mul(C);
+    a.test(D, true);
+    a.condition(5, overflow);
+    a.load(C, BP, -8);
+    a.rr(0x01, A, C, true);
+    a.condition(2, overflow);
+    a.mov(D, A);
+    a.immediate(A, 0);
+    a.jump(done);
+    a.bind(overflow);
+    a.immediate(A, (-75i64) as u64);
+    a.bind(done);
+    epilogue(a);
+}
 pub(super) fn private_file(a: &mut Assembler, p: Platform) {
     a.bind(p.file_set_private);
     prologue(a, p, 0, Span::default());

@@ -132,7 +132,15 @@ fn emit_storage(a: &mut Assembler, labels: &[Label], reply: Label, invalid: Labe
         a.load(DI, BP, REQUEST + 8);
         check_fd(a, DI, bad);
         if index == 3 { a.load(SI, BP, REQUEST + 16); }
-        if index == 4 { a.immediate(SI, 6); }
+        if index == 4 {
+            a.immediate(SI, 6);
+            a.load(C, BP, REQUEST + 16);
+            a.test(C, true);
+            let selected = a.label();
+            a.condition(4, selected);
+            a.immediate(SI, 2);
+            a.bind(selected);
+        }
         syscall(a, if index == 2 { 74 } else if index == 3 { 77 } else { 73 });
         empty(a, reply);
     }

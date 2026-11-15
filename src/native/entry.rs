@@ -30,6 +30,43 @@ impl Plan {
     pub fn prepare(&self, a: &mut Assembler, p: Platform) {
         for (index, grant) in self.grants.iter().enumerate() {
             match grant {
+                EntryGrant::Environment(_) => {
+                    a.address(DI, self.paths[index]);
+                    a.call(p.environment_lookup);
+                },
+                EntryGrant::EnvironmentValue(value) => {
+                    if value.is_some() { a.address(A, self.paths[index]); } else { a.immediate(A, 0); }
+                },
+                EntryGrant::DirectoryEnvironment(_) => {
+                    // Resolve only the invocation-reviewed key, before application code.
+                    let missing = a.label();
+                    let scan = a.label();
+                    let open = a.label();
+                    let done = a.label();
+                    a.address(DI, self.paths[index]);
+                    a.call(p.environment_lookup);
+                    a.test(A, true);
+                    a.condition(4, missing);
+                    a.load_width(C, A, 0, 1, false);
+                    a.test(C, false);
+                    a.condition(4, missing);
+                    a.mov(DI, A);
+                    a.mov(R8, A);
+                    a.immediate(SI, 1);
+                    a.bind(scan);
+                    a.load_width(C, R8, 0, 1, false);
+                    a.test(C, false);
+                    a.condition(4, open);
+                    a.lea(R8, R8, 1);
+                    a.lea(SI, SI, 1);
+                    a.jump(scan);
+                    a.bind(open);
+                    a.call(p.directory_open);
+                    a.jump(done);
+                    a.bind(missing);
+                    a.immediate(A, (-2i64) as u64);
+                    a.bind(done);
+                }
                 EntryGrant::Directory(path) => {
                     a.address(DI, self.paths[index]);
                     a.immediate(SI, path.len() as u64);
@@ -57,6 +94,7 @@ impl Plan {
                 // generic host trap; a bind failure is not a stdout failure.
                 let name = match grant {
                     EntryGrant::Directory(_) => "Directory",
+                    EntryGrant::DirectoryEnvironment(_) => "Directory (named environment)",
                     EntryGrant::Listener(_) => "Listener",
                     EntryGrant::Connector(_) => "Connector",
                     EntryGrant::Readiness => "Readiness",
@@ -103,7 +141,8 @@ impl Plan {
         for (index, grant) in self.grants.iter().enumerate() {
             a.data_label(self.paths[index], offset + bytes.len());
             match grant {
-                EntryGrant::Directory(path) => bytes.extend_from_slice(path),
+                EntryGrant::Directory(path) | EntryGrant::DirectoryEnvironment(path) | EntryGrant::Environment(path) => bytes.extend_from_slice(path),
+                EntryGrant::EnvironmentValue(Some(value)) => { bytes.extend_from_slice(value); bytes.push(0); },
                 EntryGrant::Listener(address) | EntryGrant::Connector(address) => bytes.extend_from_slice(address),
                 _ => {}
             }

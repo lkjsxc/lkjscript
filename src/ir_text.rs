@@ -632,9 +632,13 @@ pub fn read(text: &str) -> Result<Program> {
                         TypeKind::Stdout
                     }
                     "stdin" | "stderr" | "directory" | "file" | "process" | "clock" | "child"
-                    | "listener" | "connector" | "readiness" | "entropy" | "stop" => {
+                    | "listener" | "connector" | "readiness" | "entropy" | "stop"
+                    | "arguments" | "environment" | "exit_status" => {
                         exact(&words, 3, line)?;
                         match words[2].as_str() {
+                            "arguments" => TypeKind::Arguments,
+                            "environment" => TypeKind::Environment,
+                            "exit_status" => TypeKind::ExitStatus,
                             "stdin" => TypeKind::Stdin,
                             "stderr" => TypeKind::Stderr,
                             "directory" => TypeKind::Directory,
@@ -967,6 +971,9 @@ pub fn write(program: &Program) -> String {
             TypeKind::F64 => text.push_str("f64"),
             TypeKind::Str => text.push_str("str"),
             TypeKind::World => text.push_str("world"),
+            TypeKind::Arguments => text.push_str("arguments"),
+            TypeKind::Environment => text.push_str("environment"),
+            TypeKind::ExitStatus => text.push_str("exit_status"),
             TypeKind::Stdout => text.push_str("stdout"),
             TypeKind::Stdin => text.push_str("stdin"),
             TypeKind::Stderr => text.push_str("stderr"),

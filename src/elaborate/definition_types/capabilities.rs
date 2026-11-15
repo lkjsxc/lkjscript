@@ -50,6 +50,13 @@ impl Infer<'_, '_> {
                 let bytes = self.shaped(Shape::Slice(byte));
                 self.shaped(Shape::Ref(matches!(value, Value::MutableBytes), bytes))
             }
+            Value::MaybeBytes => {
+                let byte = self.atom("u8");
+                let bytes = self.shaped(Shape::Vec(byte));
+                let path = self.names.library_type("prelude", "Option", span)?;
+                let declaration = path.declaration.ok_or_else(|| err(span, "E_TYPE", "source Option declaration is missing"))?;
+                self.shaped(Shape::Nominal(declaration, vec![bytes]))
+            }
             Value::Arguments => {
                 let byte = self.atom("u8");
                 let bytes = self.shaped(Shape::Vec(byte));

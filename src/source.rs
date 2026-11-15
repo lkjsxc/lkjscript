@@ -366,7 +366,28 @@ pub fn load_report<F: FnMut(&str) -> std::result::Result<Option<Vec<u8>>, String
         for region in parsed.blocked {
             blocked.push(region);
         }
-        let items = parsed.items;
+        let mut items = parsed.items;
+        // New capability helpers are ordinary, checked library source. Mounting
+        // this optional module here keeps the library root readable by the
+        // stored seed, whose resolver predates Arguments and Environment.
+        let mut command_declared = false;
+        for module in &program.modules {
+            if module.name == "command" && program.scopes[module.scope].parent == Some(scope) {
+                command_declared = true;
+            }
+        }
+        if scope == 1 && path == "$std/lib.rs" && !command_declared {
+            match read_source(read, "$std/command.rs", Span::default()) {
+                Ok(Some(_)) => {
+                    let extra = syntax::parse_file_report(
+                        &mut program, "pub mod command;", file, scope,
+                    );
+                    for item in extra.items { items.push(item); }
+                }
+                Ok(None) => {}
+                Err(error) => diagnostics.push(error),
+            }
+        }
         if let Some(index) = owner {
             let module: &mut Module = &mut program.modules[index];
             module.items = items;

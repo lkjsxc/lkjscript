@@ -99,6 +99,15 @@ pub(super) fn emit(a: &mut Assembler, p: Platform) {
     syscall(a, 73);
     epilogue(a);
 
+    if p.blocking_lock {
+        a.bind(p.file_lock_wait);
+        prologue(a, p, 0, Span::default());
+        reject_closed(a);
+        a.immediate(SI, 2); // LOCK_EX, waiting across processes; syscall retries EINTR.
+        syscall(a, 73);
+        epilogue(a);
+    }
+
     let dot = a.label();
     let synced = a.label();
     a.bind(p.directory_sync);

@@ -29,6 +29,13 @@ impl<H: Host> Interpreter<'_, H> {
         }
         Ok(access)
     }
+    fn io_world_or(&self, values: &[(usize, Value)], narrow: TypeKind) -> Result<Access, RunError> {
+        let access = self.io_reference(values, 0, true)?;
+        if *self.kind(access.ty)? != TypeKind::World && *self.kind(access.ty)? != narrow {
+            return Err(self.invalid("I/O requires World or its declared narrow capability"));
+        }
+        Ok(access)
+    }
     fn io_buffer(
         &self,
         values: &[(usize, Value)],
@@ -240,8 +247,8 @@ impl<H: Host> Interpreter<'_, H> {
     ) -> Result<Option<Value>, RunError> {
         let storage_arity = match name {
             ir::IntrinsicOp::DirectoryCreateNew | ir::IntrinsicOp::DirectoryCreatePrivate | ir::IntrinsicOp::DirectoryOpenAppend | ir::IntrinsicOp::FileTruncate => 2usize,
-            ir::IntrinsicOp::DirectorySync | ir::IntrinsicOp::FileSync | ir::IntrinsicOp::FileLockExclusive => 1usize,
-            ir::IntrinsicOp::WorldEntropy | ir::IntrinsicOp::ClockUnixSeconds | ir::IntrinsicOp::FileSetPrivate
+            ir::IntrinsicOp::DirectorySync | ir::IntrinsicOp::FileSync | ir::IntrinsicOp::FileLockExclusive | ir::IntrinsicOp::FileLockWait => 1usize,
+            ir::IntrinsicOp::WorldEntropy | ir::IntrinsicOp::ClockUnixSeconds | ir::IntrinsicOp::ClockUnixNanoseconds | ir::IntrinsicOp::FileSetPrivate
                 | ir::IntrinsicOp::WorldStop | ir::IntrinsicOp::StopRequested | ir::IntrinsicOp::StopTarget
                 | ir::IntrinsicOp::ChildRequestStop => 1usize,
             ir::IntrinsicOp::EntropyFill | ir::IntrinsicOp::ReadinessUnwatchStop => 2usize,
@@ -308,6 +315,12 @@ impl<H: Host> Interpreter<'_, H> {
                 // getrandom may fill a prefix before a later failure.
                 self.io_write_buffer(&buffer, &bytes)?;
                 self.io_unit_result(types, status)?
+            }
+            ir::IntrinsicOp::ClockUnixNanoseconds => {
+                self.io_authority(values, TypeKind::Clock)?;
+                let types = self.io_scalar_types(result, TypeKind::Int { bits: 64, signed: false })?;
+                let time = match self.host.realtime_nanoseconds() { Ok(value) => Ok(value as u64), Err(errno) => Err(errno) };
+                self.io_scalar_result(types, time)?
             }
             ir::IntrinsicOp::ClockUnixSeconds => {
                 self.io_authority(values, TypeKind::Clock)?;
@@ -603,7 +616,7 @@ impl<H: Host> Interpreter<'_, H> {
                 value
             }
             ir::IntrinsicOp::WorldArgCount if values.len() == 1 => {
-                self.io_authority(values, TypeKind::World)?;
+                self.io_world_or(values, TypeKind::Arguments)?;
                 self.io_result_type(result, ir::U64)?;
                 Value::Bits(self.host.argument_count() as u64)
             }
@@ -615,7 +628,7 @@ impl<H: Host> Interpreter<'_, H> {
                         3
                     } =>
             {
-                self.io_authority(values, TypeKind::World)?;
+                self.io_world_or(values, TypeKind::Arguments)?;
                 self.io_result_type(result, ir::U64)?;
                 let index = self.io_number(values, 1, ir::U64)?;
                 let index = index as usize;
@@ -633,8 +646,27 @@ impl<H: Host> Interpreter<'_, H> {
                     Value::Bits(count as u64)
                 }
             }
+            ir::IntrinsicOp::EnvironmentLen | ir::IntrinsicOp::EnvironmentCopy
+                if values.len() == if name == ir::IntrinsicOp::EnvironmentLen { 1 } else { 2 } => {
+                let access = self.io_authority(values, TypeKind::Environment)?;
+                let value = match self.value(access.cell)? {
+                    Value::Environment(value) => value.clone(),
+                    _ => return Err(self.invalid("environment authority value differs")),
+                };
+                if name == ir::IntrinsicOp::EnvironmentLen {
+                    self.io_result_type(result, ir::I64)?;
+                    Value::Bits(match value { Some(bytes) => bytes.len() as u64, None => !0u64 })
+                } else {
+                    self.io_result_type(result, ir::U64)?;
+                    let buffer = self.io_buffer(values, 1, true)?;
+                    let bytes = value.unwrap_or(Vec::new());
+                    let count = bytes.len().min(self.sequence(&buffer)?.len());
+                    self.io_write_buffer(&buffer, &bytes[..count])?;
+                    Value::Bits(count as u64)
+                }
+            }
             ir::IntrinsicOp::WorldExitStatus if values.len() == 2 => {
-                self.io_authority(values, TypeKind::World)?;
+                self.io_world_or(values, TypeKind::ExitStatus)?;
                 self.io_result_type(result, ir::UNIT)?;
                 let status = self.io_number(values, 1, ir::U8)?;
                 self.host.set_exit_status(status as u8);
@@ -659,7 +691,7 @@ impl<H: Host> Interpreter<'_, H> {
                 } else { self.host.open_file_storage(handle, &path, name == ir::IntrinsicOp::DirectoryOpenAppend) };
                 self.io_open_result(types, opened, TypeKind::File)?
             }
-            ir::IntrinsicOp::DirectorySync | ir::IntrinsicOp::FileSync | ir::IntrinsicOp::FileLockExclusive if values.len() == 1 => {
+            ir::IntrinsicOp::DirectorySync | ir::IntrinsicOp::FileSync | ir::IntrinsicOp::FileLockExclusive | ir::IntrinsicOp::FileLockWait if values.len() == 1 => {
                 let kind = if name == ir::IntrinsicOp::DirectorySync { TypeKind::Directory } else { TypeKind::File };
                 let authority = self.io_authority(values, kind)?;
                 let types = self.io_unit_types(result)?;
@@ -667,6 +699,7 @@ impl<H: Host> Interpreter<'_, H> {
                 let outcome = match name {
                     ir::IntrinsicOp::DirectorySync => self.host.sync_directory(handle),
                     ir::IntrinsicOp::FileSync => self.host.sync_file(handle),
+                    ir::IntrinsicOp::FileLockWait => self.host.lock_file_wait(handle),
                     _ => self.host.lock_file_exclusive(handle),
                 };
                 self.io_unit_result(types, outcome)?

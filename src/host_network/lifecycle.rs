@@ -94,6 +94,12 @@ pub(super) fn emit(a: &mut Assembler, labels: &[Label], reply: Label, invalid: L
     a.condition(8, returned);
     a.lea(R8, BP, SCRATCH);
     a.immediate(R9, 8);
+    a.load(C, BP, REQUEST + 8);
+    a.test(C, true);
+    let time_ready = a.label();
+    a.condition(4, time_ready);
+    a.immediate(R9, 16);
+    a.bind(time_ready);
     a.jump(reply);
 
     a.bind(labels[2]); // fchmod affects the actual open description's inode.

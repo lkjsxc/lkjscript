@@ -205,6 +205,51 @@ fn lifecycle_grants_are_explicit_owned_and_unforgeable() {
     assert!(error.kind == ErrorKind::Trap(7));
     assert_eq!(host.0.as_slice(), b"QLq");
 }
+fn command_grants_are_named_affine_and_unforgeable() {
+    let checked = check::check(ir_text::read(include_str!(
+        "../../tests/fixtures/authority/command_entry.lkjir"
+    )).unwrap()).unwrap();
+    let runtime = prepared();
+    let grants = crate::entry_grants::prepare(checked.program(), 0, &[
+        "args".to_string(), "value=DESK_STATE".to_string(), "status".to_string(),
+    ]).unwrap();
+    assert!(matches!(&grants[0], ir::EntryGrant::Arguments));
+    assert!(matches!(&grants[1], ir::EntryGrant::Environment(name) if name.as_slice() == b"DESK_STATE\0"));
+    assert!(matches!(&grants[2], ir::EntryGrant::ExitStatus));
+    for ty in 7usize..10usize {
+        assert!(!check::is_copy(&checked.program().types, ty));
+        assert!(!check::is_data(&checked.program().types, ty));
+    }
+    let mut host = FailingHost(Vec::new());
+    interpreter::run_granted(checked.program(), 0, &grants, &mut host).unwrap();
+    native::encode_granted(&checked, &runtime, 0, &grants, None, None).unwrap();
+    assert!(host.0.is_empty());
+    for name in vec![
+        "value".to_string(), "value=".to_string(), "value=A=B".to_string(),
+        "value=A\0B".to_string(), "value=A B".to_string(),
+    ] {
+        assert!(crate::entry_grants::prepare(checked.program(), 0, &[
+            "args".to_string(), name, "status".to_string(),
+        ]).is_err());
+    }
+    for bad in vec![
+        ir::EntryGrant::Clock,
+        ir::EntryGrant::Environment(Vec::new()),
+        ir::EntryGrant::Environment(b"A=B\0"[..].to_vec()),
+        ir::EntryGrant::Environment(b"A\0B\0"[..].to_vec()),
+        ir::EntryGrant::EnvironmentValue(Some(b"A\0B"[..].to_vec())),
+    ] {
+        let malformed = vec![ir::EntryGrant::Arguments, bad, ir::EntryGrant::ExitStatus];
+        assert!(interpreter::run_granted(checked.program(), 0, &malformed, &mut host).is_err());
+        assert!(native::encode_granted(&checked, &runtime, 0, &malformed, None, None).is_err());
+    }
+    let raw = vec![1u64, 1u64, 1u64];
+    assert!(interpreter::run(checked.program(), 0, &raw, &mut host).is_err());
+    let selected = native::Entry { function: 0, arguments: vec![1i64, 1i64, 1i64], result_fd: None };
+    assert!(native::encode(&checked, &runtime, selected).is_err());
+    assert!(host.0.is_empty());
+}
+
 pub fn probe() -> i64 {
 
     mismatched_grants_do_not_acquire_authority();
@@ -214,7 +259,8 @@ pub fn probe() -> i64 {
     connector_grants_are_exact_and_unforgeable();
     readiness_grants_are_owned_and_unforgeable();
     lifecycle_grants_are_explicit_owned_and_unforgeable();
-    7
+    command_grants_are_named_affine_and_unforgeable();
+    8
 }
 pub fn run(world: &mut World, trace: bool) -> usize {
     if trace {

@@ -20,6 +20,7 @@ pub fn library(path: &str) -> Option<Vec<u8>> {
         "$std/iter.rs" => include_str!("../library/iter.rs"),
         "$std/integer.rs" => include_str!("../library/integer.rs"),
         "$std/io.rs" => include_str!("../library/io.rs"),
+        "$std/command.rs" => include_str!("../library/command.rs"),
         "$std/ordered_map.rs" => include_str!("../library/ordered_map.rs"),
         "$std/ordered_set.rs" => include_str!("../library/ordered_set.rs"),
         _ => return None,

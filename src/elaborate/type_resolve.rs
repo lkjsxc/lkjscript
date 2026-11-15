@@ -467,6 +467,9 @@ impl Compiler<'_> {
             && matches!(
                 path.name.as_str(),
                 "World"
+                    | "Arguments"
+                    | "Environment"
+                    | "ExitStatus"
                     | "Stdout"
                     | "Stdin"
                     | "Stderr"
@@ -491,6 +494,9 @@ impl Compiler<'_> {
             }
             let kind = match path.name.as_str() {
                 "World" => ir::TypeKind::World,
+                "Arguments" => ir::TypeKind::Arguments,
+                "Environment" => ir::TypeKind::Environment,
+                "ExitStatus" => ir::TypeKind::ExitStatus,
                 "Stdout" => ir::TypeKind::Stdout,
                 "Stdin" => ir::TypeKind::Stdin,
                 "Stderr" => ir::TypeKind::Stderr,

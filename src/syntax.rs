@@ -1407,7 +1407,8 @@ impl Parser {
         })
     }
     fn capability_path(&self, name: &str) -> Result<(), Diagnostic> {
-        if name == "std::thread::scope" || name == "std::time" || name == "std::time::http_date" {
+        if name == "std::thread::scope" || name == "std::time" || name == "std::time::http_date"
+            || name == "std::time::local_minute" || name == "std::time::timezone_offset" {
             return Ok(());
         }
         let mut i = 0;
@@ -1430,13 +1431,13 @@ impl Parser {
                         "use world.directory(path), then directory.open(name) or directory.create(name)"
                     }
                     "std::env" => {
-                        "use world.args() for argument bytes; environment access is not implemented"
+                        "accept granted Arguments for .args() bytes or Environment for .get() of its one explicitly named variable; no ambient environment lookup or enumeration"
                     }
                     "std::io" => {
                         "use world.stdin(), world.stdout(), or world.stderr() and pass that capability explicitly"
                     }
                     "std::process" => {
-                        "use world.set_exit_status(code) and return from main; child processes are not implemented"
+                        "accept granted ExitStatus, call .set_status(code), and return for cleanup; World.process() is broad host execution authority and does not prove a child capability subset"
                     }
                     "std::cell" | "core::cell" | "std::sync" => {
                         "use owned values and indices; shared interior mutation is not supported"

@@ -1567,6 +1567,9 @@ fn trait_requirements(
         let mut children = Vec::new();
         match &ty.kind {
             TypeKind::World
+            | TypeKind::Arguments
+            | TypeKind::Environment
+            | TypeKind::ExitStatus
             | TypeKind::Stdout
             | TypeKind::Stdin
             | TypeKind::Stderr
@@ -1632,6 +1635,9 @@ fn trait_requirements(
                 }
             }
             TypeKind::World
+            | TypeKind::Arguments
+            | TypeKind::Environment
+            | TypeKind::ExitStatus
             | TypeKind::Stdout
             | TypeKind::Stdin
             | TypeKind::Stderr

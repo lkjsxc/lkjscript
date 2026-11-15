@@ -425,10 +425,10 @@ Single-error APIs select the first diagnostic from these same production paths. 
 
 ## World and capabilities
 
-Entries take owned Stdout/Stdin/Stderr, Directory, Listener, Connector, Readiness, Process, Clock, Entropy or Stop,
-no parameters, or a sole World declaring implicit full authority.
-build/run require --grant NAME for each parameter: Directory takes NAME=PATH, Listener/Connector NAME=IPv4:PORT; other grants have no payload.
+Entries take owned Arguments, Environment, ExitStatus, Stdout/Stdin/Stderr, Directory, Listener, Connector, Readiness, Process, Clock, Entropy or Stop; no parameters; or a sole World declaring implicit full authority.
+build/run require --grant NAME for each parameter: Directory takes NAME=PATH or NAME=env:VARIABLE, Environment NAME=VARIABLE, Listener/Connector NAME=IPv4:PORT; other grants have no payload.
 Only Listener permits port zero. build embeds descriptors; handles are acquired at startup.
+Directory's env:VARIABLE selector resolves only that named variable at invocation/startup; absent or empty fails with errno 2, without a default or directory creation. Reading its path bytes separately requires an Environment grant.
 Duplicate, missing, unknown or malformed grants reject before publication/execution; acquisition failure traps R0007 at entry with the grant kind and errno. Listener can rebind after TIME_WAIT; an active listener still excludes it.
 File/Child/borrowed/aggregate entry parameters reject; accept Directory and open a File inside the entry instead.
 All capability types, including World, File and Child, are affine, without constructors or Copy/Clone/Data/Send/Sync implementations.
@@ -436,7 +436,8 @@ Names, integers or casts cannot forge authority. IR checks each operation indepe
 
 | Form | Result and authority |
 | --- | --- |
-| World.args() | Vec<Vec<u8>> excluding argv0. |
+| World.args(), Arguments.args() | Vec<Vec<u8>> excluding argv0; preserve empty arguments and arbitrary bytes. |
+| Environment.get() | Option<Vec<u8>> containing only the granted variable's invocation/startup value: None for absent, Some(empty) for empty. No name argument, ambient lookup or enumeration. |
 | World.stdout()/stdin()/stderr() | Corresponding inherited stream capability. |
 | World.directory(path) | Result<Directory,i64> acquiring a root. |
 | World.listen(address,port) | Result<Listener,i64> binding a numeric IPv4 TCP endpoint. |
@@ -455,11 +456,11 @@ Names, integers or casts cannot forge authority. IR checks each operation indepe
 | World.temporary_file() | Result<File,i64>, anonymous read/write storage. |
 | World.stdin_file()/stdout_file()/stderr_file() | Owned inherited-stream duplicate, preserving closed streams. |
 | World.executable() | Read-only running executable at fresh offset; checked interpretation prepares a native image lazily, unchecked IR returns ENOSYS. |
-| World.set_exit_status(u8) | Set normal status and continue cleanup/execution; last value wins. |
+| World.set_exit_status(u8), ExitStatus.set_status(u8) | Set normal status and continue cleanup/execution; last value wins. |
 | Directory.open/create(path) | Read or create/truncate a writable descendant File. |
 | Directory.create_new/open_append(path), sync() | Result<File,i64> for exclusive create or create/atomic append; Result<(),i64> for directory fsync. |
 | Directory.create_private(path), File.set_private() | Result<File,i64> for exclusive creation with initial mode 0600; Result<(),i64> for fchmod to exactly 0600. |
-| File.sync()/truncate(length)/lock_exclusive() | Result<(),i64>: fsync, set byte length, or nonblocking advisory exclusive lock until the last duplicate closes. |
+| File.sync()/truncate(length)/lock_exclusive()/lock_wait() | Result<(),i64>: fsync, set byte length, or advisory exclusive flock (nonblocking lock_exclusive; blocking lock_wait). Locks last until the final duplicate closes; lock_wait retries EINTR. |
 | Directory.open_directory(path), list() | Descendant Directory; Vec<Vec<u8>> names excluding dot/dot-dot, unspecified order. |
 | Directory.create_directory/remove/remove_directory(path), rename(old,new) | Create directory, unlink entry, remove empty directory, or rename within root, replacing as Linux allows. |
 | Stdin/File.read(&mut [u8]), read_to_end() | Result with short-read count or collected bytes; zero is EOF for nonempty buffers. |
@@ -467,12 +468,12 @@ Names, integers or casts cannot forge authority. IR checks each operation indepe
 | File.duplicate()/readonly() | Duplicate sharing offset/state; or read-only reopen with independent zero offset. Closed remains closed. |
 | File.rewind()/set_executable() | Seek zero or set mode 0755. |
 | Stdout/Stderr.write(&[u8]) | Complete write or R0007 at the call. |
-| Clock.nanoseconds()/unix_seconds() | Result<usize,i64> monotonic time for deadlines; Result<i64,i64> signed CLOCK_REALTIME seconds since Unix epoch, which may jump. |
+| Clock.nanoseconds()/unix_seconds()/unix_nanoseconds() | Result<usize,i64> monotonic nanoseconds for deadlines; Result<i64,i64> CLOCK_REALTIME seconds; Result<usize,i64> CLOCK_REALTIME nanoseconds. Realtime may jump; unix_nanoseconds returns errno 75 for negative or unrepresentable time. |
 | Process.spawn_file(executable,&args,stdin,stdout,stderr,result) | Result<Child,i64>, explicit executable File, argument byte vectors and four File streams; result maps to descriptor 3. |
 | Child.wait()/try_wait() | Exit code or 128+signal, with Option for polling; reaped children later fail ECHILD. |
 | Child.terminate()/request_stop() | Result<(),i64>; send SIGKILL/SIGTERM only to the owned child, without waiting. Dropping a live Child kills and reaps it. |
 
-Convenience methods are source in library/io.rs. Result errors carry positive Linux errno; raw read/write leaves return negative errno. EINTR retries except close, which consumes once.
+Convenience methods are source in library/io.rs and library/command.rs. The latter supplies concrete Arguments/Environment helpers: the current loader optionally mounts it beside canonical $std/lib.rs and check-library checks it; keeping it outside lib.rs preserves stored-seed bootstrap. Result errors carry positive Linux errno; raw read/write leaves return negative errno. EINTR retries except close, which consumes once.
 Paths reject NUL; raw paths need exactly one trailing NUL. Descendants use openat2 RESOLVE_BENEATH|RESOLVE_NO_MAGICLINKS without weaker fallback; absolute/escaping paths fail.
 Removal, rename and directory creation derive a parent then validate the basename.
 Ordinary new files/directories use 0666/0777 subject to umask; create_private uses 0600 subject to umask atomically, without an initially broader permission window.

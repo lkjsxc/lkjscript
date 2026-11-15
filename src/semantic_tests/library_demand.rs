@@ -149,6 +149,45 @@ fn unused_library_layouts_still_obey_the_header_rules() {
     );
 }
 
+fn optional_command_library_is_closed_and_fully_checked() {
+    for explicit in vec![false, true] {
+        for valid in vec![false, true] {
+            let helper = if valid {
+                "pub fn args(value:&mut Arguments)->usize { value.__lkjscript_arg_count() } pub fn env(value:&mut Environment)->i64 { value.__lkjscript_len() }"
+            } else {
+                "pub fn wrong(value:&mut Environment)->usize { value.__lkjscript_arg_count() }"
+            };
+            let bundle = source::SourceBundle {
+                root: "main.rs".to_string(),
+                library: Some("$std/lib.rs".to_string()),
+                files: vec![
+                    source::SourceInput { path: "main.rs".to_string(), text: "fn main()->i64 { 42 }".to_string() },
+                    source::SourceInput { path: "$std/lib.rs".to_string(), text: if explicit { "pub mod command;".to_string() } else { String::new() } },
+                    source::SourceInput { path: "$std/command.rs".to_string(), text: helper.to_string() },
+                ],
+            };
+            let parsed = source::parse_bundle(&bundle).unwrap();
+            let mut count = 0usize;
+            for module in &parsed.modules { if module.name == "command" { count += 1; } }
+            assert_eq!(count, 1usize);
+            let resolved = resolve::resolve(&parsed).unwrap();
+            let checked: Result<ir::CheckedProgram, Vec<ast::Diagnostic>> =
+                match elaborate::infer_resolved_report_all_library(&resolved) {
+                    Ok(definitions) => match elaborate::lower_definitions(definitions) {
+                        Ok(program) => check::check_all(program),
+                        Err(problems) => Err(problems),
+                    },
+                    Err(problems) => Err(problems),
+                };
+            if valid {
+                checked.unwrap();
+            } else {
+                assert!(checked.is_err(), "optional typed capability helper bypassed the full library checker");
+            }
+        }
+    }
+}
+
 pub fn run(world: &mut World, trace: bool) -> usize {
     if trace {
         world.stdout().write(b"every_unused_user_body_is_checked\n");
@@ -190,5 +229,6 @@ pub fn run(world: &mut World, trace: bool) -> usize {
             .write(b"unused_library_layouts_still_obey_the_header_rules\n");
     }
     unused_library_layouts_still_obey_the_header_rules();
-    7usize
+    optional_command_library_is_closed_and_fully_checked();
+    8usize
 }
