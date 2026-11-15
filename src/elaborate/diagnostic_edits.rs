@@ -46,6 +46,28 @@ impl Builder<'_, '_> {
                 }
             }
         }
+        if name == "trim" && no_types && argument_count == 0usize
+            && matches!(self.compiler.types[base].kind, ir::TypeKind::Str)
+        {
+            let mut problem = err(span, "E_UNSUPPORTED",
+                "str.trim is unavailable; help: use std::str::trim_ascii(value) only when stripping ASCII whitespace bytes 9..13 and 32 is intended; non-breaking and other Unicode spaces are preserved (docs/language.md, Source library)");
+            let a::Expr::String(value) = &self.compiler.source.exprs[receiver].kind else { return Some(problem); };
+            for byte in value.as_bytes() { if *byte >= 128u8 { return Some(problem); } }
+            let Ok(helper) = self.compiler.names.library_function("str", "trim_ascii", span) else { return Some(problem); };
+            let path = a::Path { declaration: None, name: "std::str::trim_ascii".to_string(), args: Vec::new() };
+            let scope = self.compiler.source.exprs[expression].scope;
+            let Ok(path) = self.compiler.names.value_path(scope, &path, span) else { return Some(problem); };
+            let Some(declaration) = path.declaration else { return Some(problem); };
+            if self.compiler.source.declarations[declaration].item != a::Item::Function(helper)
+                || receiver_span.start != span.start || receiver_span.end + 7usize != span.end
+            { return Some(problem); }
+            // Tight literal extent avoids guessing parentheses discarded by the AST.
+            problem.edits = vec![
+                Edit { start: receiver_span.start, end: receiver_span.start, replacement: "std::str::trim_ascii(".to_string() },
+                Edit { start: receiver_span.end, end: span.end, replacement: ")".to_string() },
+            ];
+            return Some(problem);
+        }
         if argument_count != 0usize { return None; }
         if name == "to_vec" && no_types {
             if let ir::TypeKind::Array { inner, .. } = self.compiler.types[base].kind {
@@ -321,11 +343,28 @@ impl Builder<'_, '_> {
         if problem.code != "E_TRAIT"
             || problem.message != "associated projection needs its declared implementation witness"
             || arguments.len() != 1usize || values.len() != 1usize
-            || !matches!(self.compiler.types[self.ty(values[0])].kind, ir::TypeKind::Array { .. })
             || self.compiler.names.library_function("iter", "__lkjscript_into_iter", span).ok() != Some(target)
         {
             return problem;
         }
+        let ty = self.ty(values[0]);
+        let shared_array = match self.compiler.types[ty].kind {
+            ir::TypeKind::Ref { mutable: false, inner } => matches!(self.compiler.types[inner].kind, ir::TypeKind::Array { .. }),
+            _ => false,
+        };
+        if shared_array {
+            let mut revised = err(span, "E_TRAIT",
+                "borrowed-array iteration has no applicable IntoIterator implementation for &[T; N]; help: iterate the existing array as a shared slice with &values[..] (docs/language.md, Source library)");
+            let a::Expr::Borrow { mutable: false, value } = self.compiler.source.exprs[arguments[0]].kind else { return revised; };
+            for function in &self.compiler.source.functions {
+                if !function.module.starts_with("$std")
+                    && matches!(function.name.as_str(), "into_iter" | "next" | "index" | "index_mut" | "deref" | "deref_mut")
+                { return revised; }
+            }
+            revised.edits = receiver_edits(self.compiler.source.exprs[value].span, "[..]");
+            return revised;
+        }
+        if !matches!(self.compiler.types[ty].kind, ir::TypeKind::Array { .. }) { return problem; }
         let mut revised = err(
             span,
             "E_TRAIT",

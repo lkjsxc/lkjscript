@@ -5,6 +5,7 @@ mod diagnostic_edits;
 mod borrow_edit_tests;
 mod consumer_edit_tests;
 mod iterator_edit_tests;
+mod array_trim_edit_tests;
 struct Outcome {
     status: i64,
     output: Vec<u8>,
@@ -507,6 +508,7 @@ fn diagnostics(
 ) -> Result<(), String> {
     rewrite_diagnostics(world, executable, directory, config, report)?;
     static_view_edit_tests::run(world, executable, directory, config, report)?;
+    array_trim_edit_tests::run(world, executable, directory, config, report)?;
     borrow_edit_tests::run(world, executable, directory, config, report)?;
     consumer_edit_tests::run(world, executable, directory, config, report)?;
     iterator_edit_tests::run(world, executable, directory, config, report)?;
