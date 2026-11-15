@@ -1,5 +1,6 @@
 //! Independent admission, fallback and original-IR/native optimization contracts.
 use crate::{check, frontend, interpreter, ir, ir_text, native, optimizer, reuse, runtime, source};
+mod forwarding;
 
 fn compiled_files(root: &str, files: Vec<source::SourceInput>) -> reuse::Checked {
     let checked = frontend::check_bundle(&source::SourceBundle {
@@ -304,5 +305,5 @@ pub fn run(world: &mut World, trace: bool) -> usize {
     copied_traps_keep_exact_file_and_line(world, &runtime);
     if trace { world.stdout().write(b"inline_instruction_file_identity\n"); }
     instruction_file_identity_and_rejection_location();
-    10usize
+    10usize + forwarding::run(world, &runtime, trace)
 }

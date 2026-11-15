@@ -1,0 +1,320 @@
+//! Forwarding changes storage identity only for independently scanned dead temps.
+use super::*;
+
+fn local(name: &str, ty: usize, mutable: bool) -> ir::Local {
+    ir::Local { name: name.to_string(), ty, mutable }
+}
+fn instruction(op: ir::Op) -> ir::Instruction {
+    ir::Instruction { op, file: None, line: 7, column: 3 }
+}
+fn field(local: usize, field: usize) -> ir::Place {
+    ir::Place { local, projections: vec![ir::Projection::Field(field)] }
+}
+fn insert(body: &mut Vec<ir::Instruction>, at: usize, value: ir::Instruction) {
+    let mut result = Vec::new();
+    for index in 0usize..body.len() {
+        if index == at { result.push(value.clone()); }
+        result.push(body[index].clone());
+    }
+    if at == body.len() { result.push(value); }
+    *body = result;
+}
+fn record_program() -> ir::Program {
+    let mut types = ir::primitives();
+    let record = types.len();
+    let mut fields = Vec::new();
+    for index in 0usize..8usize {
+        fields.push(ir::Field { name: format!("field{index}"), ty: ir::I64 });
+    }
+    types.push(ir::Type {
+        name: "Record".to_string(), kind: ir::TypeKind::Struct { fields, copy: false },
+    });
+    let callee = ir::Function {
+        file: 1, name: "set".to_string(), params: 1, result: record,
+        return_source: None, test: false,
+        locals: vec![local("value", record, true), local("scalar", ir::I64, false), local("returned", record, false)],
+        body: vec![
+            instruction(ir::Op::Int { dst: 1, value: 42 }),
+            instruction(ir::Op::Assign { place: field(0, 0), src: 1 }),
+            instruction(ir::Op::Read { dst: 2, place: ir::Place::local(0), moving: true }),
+            instruction(ir::Op::Return { src: 2 }),
+        ],
+    };
+    let mut locals = Vec::new();
+    let mut body = Vec::new();
+    let mut fields = Vec::new();
+    for index in 0usize..8usize {
+        locals.push(local(&format!("field{index}"), ir::I64, false));
+        body.push(instruction(ir::Op::Int { dst: index, value: index as i64 }));
+        fields.push(index);
+    }
+    locals.push(local("argument", record, false));
+    locals.push(local("result", record, false));
+    locals.push(local("answer", ir::I64, false));
+    body.push(instruction(ir::Op::Struct { dst: 8, fields }));
+    body.push(instruction(ir::Op::Call { dst: 9, function: 0, args: vec![8usize] }));
+    body.push(instruction(ir::Op::Read { dst: 10, place: field(9, 0), moving: false }));
+    body.push(instruction(ir::Op::Drop { place: ir::Place::local(9) }));
+    body.push(instruction(ir::Op::Return { src: 10 }));
+    ir::Program {
+        types, destructors: Vec::new(), functions: vec![callee, ir::Function {
+            file: 0, name: "probe".to_string(), params: 0, result: ir::I64,
+            return_source: None, test: false, locals, body,
+        }],
+    }
+}
+fn raw(world: &mut World, program: ir::Program) -> reuse::Selection {
+    let original = reuse::Checked::uncached(check::check_all(program).unwrap());
+    let before = original.program().clone();
+    let rewrite = optimizer::inline(original.program(), 64usize);
+    assert!(rewrite.calls > 0);
+    assert!(original.program() == &before);
+    let result = admitted(rewrite.program.unwrap());
+    if let Err(problems) = &result {
+        for problem in problems {
+            world.stdout().write(format!("{}:{}:{} {} {}\n", problem.file, problem.line,
+                problem.column, problem.code, problem.message).as_bytes());
+        }
+    }
+    assert!(result.is_ok());
+    reuse::Selection::after_check(original, result)
+}
+fn record_moves(program: &ir::Program) -> usize {
+    let caller = &program.functions[index(program, "probe")];
+    let mut count = 0usize;
+    for instruction in &caller.body {
+        if let ir::Op::Read { dst, moving: true, .. } = instruction.op {
+            if caller.locals[dst].ty == 7usize { count += 1; }
+        }
+    }
+    count
+}
+fn observed(world: &mut World, selected: &reuse::Selection, runtime: &runtime::Runtime, expected: i64) {
+    assert!(selected.optimized());
+    assert!(!selected.rejected());
+    assert_eq!(value(selected.original().program()), expected);
+    assert_eq!(native_value(world, selected.native(), runtime), expected);
+}
+
+fn dead_aggregate_boundaries_and_returned_parameters(world: &mut World, runtime: &runtime::Runtime) {
+    let selected = raw(world, record_program());
+    observed(world, &selected, runtime, 42);
+    let caller = &selected.native().program().functions[1];
+    assert!(caller.locals[8].mutable);
+    assert_eq!(caller.locals.len(), 12usize);
+    // The internal aggregate move remains; both added boundary transfers vanish.
+    assert_eq!(record_moves(selected.native().program()), 1usize);
+    for instruction in &caller.body {
+        if let ir::Op::Assign { .. } = instruction.op { assert_eq!(instruction.file, Some(1usize)); }
+    }
+    let mut program = record_program();
+    program.functions[0].locals.truncate(2usize);
+    program.functions[0].body = vec![
+        instruction(ir::Op::Int { dst: 1, value: 42 }),
+        instruction(ir::Op::Assign { place: field(0, 0), src: 1 }),
+        instruction(ir::Op::Return { src: 0 }),
+    ];
+    let selected = raw(world, program);
+    observed(world, &selected, runtime, 42);
+    assert_eq!(record_moves(selected.native().program()), 1usize);
+    assert!(!selected.native().program().functions[1].locals[8].mutable);
+    assert!(selected.native().program().functions[1].locals[9].mutable);
+}
+
+fn argument_destination_alias_keeps_transfers(world: &mut World, runtime: &runtime::Runtime) {
+    let mut program = record_program();
+    program.functions[1].body[9].op = ir::Op::Call { dst: 8, function: 0, args: vec![8usize] };
+    program.functions[1].body[10].op = ir::Op::Read { dst: 10, place: field(8, 0), moving: false };
+    program.functions[1].body[11].op = ir::Op::Drop { place: ir::Place::local(8) };
+    let selected = raw(world, program);
+    observed(world, &selected, runtime, 42);
+    assert_eq!(record_moves(selected.native().program()), 3usize);
+    assert!(!selected.native().program().functions[1].locals[8].mutable);
+}
+
+fn caller_and_callee_address_roots_keep_distinct_storage(world: &mut World, runtime: &runtime::Runtime) {
+    for variant in 0usize..4usize {
+        let mut program = record_program();
+        let reference = program.types.len();
+        program.types.push(ir::Type {
+            name: "RecordView".to_string(), kind: ir::TypeKind::Ref { inner: 7usize, mutable: false },
+        });
+        if variant < 2 {
+            program.functions[1].locals.push(local("view", reference, false));
+            let at = if variant == 0 { 9usize } else { 10usize };
+            let root = if variant == 0 { 8usize } else { 9usize };
+            insert(&mut program.functions[1].body, at, instruction(ir::Op::Borrow {
+                dst: 11, place: ir::Place::local(root), mutable: false,
+            }));
+            insert(&mut program.functions[1].body, at + 1, instruction(ir::Op::Drop { place: ir::Place::local(11) }));
+        } else {
+            program.functions[0].locals.push(local("view", reference, false));
+            let at = if variant == 2 { 0usize } else { 3usize };
+            let root = if variant == 2 { 0usize } else { 2usize };
+            insert(&mut program.functions[0].body, at, instruction(ir::Op::Borrow {
+                dst: 3, place: ir::Place::local(root), mutable: false,
+            }));
+            insert(&mut program.functions[0].body, at + 1, instruction(ir::Op::Drop { place: ir::Place::local(3) }));
+        }
+        let selected = raw(world, program);
+        observed(world, &selected, runtime, 42);
+        assert_eq!(record_moves(selected.native().program()), 2usize);
+    }
+}
+
+fn fresh_definitions_do_not_cross_control_or_intervening_writes(world: &mut World, runtime: &runtime::Runtime) {
+    let mut program = record_program();
+    insert(&mut program.functions[1].body, 9usize, instruction(ir::Op::Loop));
+    insert(&mut program.functions[1].body, 11usize, instruction(ir::Op::Break));
+    insert(&mut program.functions[1].body, 12usize, instruction(ir::Op::End));
+    let selected = raw(world, program);
+    observed(world, &selected, runtime, 42);
+    assert_eq!(record_moves(selected.native().program()), 2usize);
+    assert!(!selected.native().program().functions[1].locals[8].mutable);
+    let mut program = record_program();
+    program.functions[1].locals[8].mutable = true;
+    program.functions[1].locals.push(local("other", ir::I64, false));
+    insert(&mut program.functions[1].body, 9usize, instruction(ir::Op::Int { dst: 11, value: 7 }));
+    insert(&mut program.functions[1].body, 10usize, instruction(ir::Op::Assign { place: field(8, 0), src: 11 }));
+    let selected = raw(world, program);
+    observed(world, &selected, runtime, 42);
+    assert_eq!(record_moves(selected.native().program()), 2usize);
+    // A complete destination that reads its old contents is not a fresh temp.
+    let selected = raw(world, ir::Program {
+        types: ir::primitives(), destructors: Vec::new(), functions: vec![
+            ir::Function {
+                file: 1, name: "bump".to_string(), params: 1, result: ir::I64, return_source: None, test: false,
+                locals: vec![local("value", ir::I64, true), local("one", ir::I64, false),
+                    local("sum", ir::I64, false), local("result", ir::I64, false)],
+                body: vec![
+                    instruction(ir::Op::Int { dst: 1, value: 1 }),
+                    instruction(ir::Op::Read { dst: 2, place: ir::Place::local(0), moving: false }),
+                    instruction(ir::Op::Binary { dst: 2, op: ir::BinaryOp::Add, left: 2, right: 1 }),
+                    instruction(ir::Op::Assign { place: ir::Place::local(0), src: 2 }),
+                    instruction(ir::Op::Read { dst: 3, place: ir::Place::local(0), moving: true }),
+                    instruction(ir::Op::Return { src: 3 }),
+                ],
+            },
+            ir::Function {
+                file: 0, name: "probe".to_string(), params: 0, result: ir::I64, return_source: None, test: false,
+                locals: vec![local("value", ir::I64, false), local("one", ir::I64, false), local("result", ir::I64, false)],
+                body: vec![
+                    instruction(ir::Op::Int { dst: 0, value: 40 }),
+                    instruction(ir::Op::Int { dst: 1, value: 1 }),
+                    instruction(ir::Op::Binary { dst: 0, op: ir::BinaryOp::Add, left: 0, right: 1 }),
+                    instruction(ir::Op::Call { dst: 2, function: 0, args: vec![0usize] }),
+                    instruction(ir::Op::Return { src: 2 }),
+                ],
+            },
+        ],
+    });
+    observed(world, &selected, runtime, 42);
+    assert!(!selected.native().program().functions[1].locals[0].mutable);
+    let selected = transformed(r#"
+        fn bump(mut value: i64) -> i64 { value += 1; value }
+        pub fn probe() -> i64 {
+            let x = 41i64;
+            let mut sum = 0i64;
+            let mut i = 0usize;
+            loop {
+                let y = bump(x);
+                if y != 42 { return -1; }
+                sum += y;
+                i += 1;
+                if i == 5 { break; }
+            }
+            sum
+        }
+    "#, 64usize);
+    observed(world, &selected, runtime, 210);
+}
+
+fn projection_indices_follow_the_explicit_map(world: &mut World, runtime: &runtime::Runtime) {
+    let mut types = ir::primitives();
+    let array = types.len();
+    types.push(ir::Type { name: "Array".to_string(), kind: ir::TypeKind::Array { inner: ir::I64, len: 2 } });
+    let reference = types.len();
+    types.push(ir::Type { name: "View".to_string(), kind: ir::TypeKind::Ref { inner: array, mutable: false } });
+    let original = ir::Program {
+        types, destructors: Vec::new(), functions: vec![
+            ir::Function {
+                file: 1, name: "get".to_string(), params: 2, result: ir::I64, return_source: None, test: false,
+                locals: vec![local("values", reference, false), local("index", ir::U64, false), local("value", ir::I64, false)],
+                body: vec![
+                    instruction(ir::Op::Read { dst: 2, place: ir::Place {
+                        local: 0, projections: vec![ir::Projection::Deref, ir::Projection::Index(1usize)],
+                    }, moving: false }),
+                    instruction(ir::Op::Drop { place: ir::Place::local(0) }),
+                    instruction(ir::Op::Drop { place: ir::Place::local(1) }),
+                    instruction(ir::Op::Return { src: 2 }),
+                ],
+            },
+            ir::Function {
+                file: 0, name: "probe".to_string(), params: 0, result: ir::I64, return_source: None, test: false,
+                locals: vec![local("first", ir::I64, false), local("second", ir::I64, false),
+                    local("array", array, false), local("view", reference, false),
+                    local("index", ir::U64, false), local("result", ir::I64, false)],
+                body: vec![
+                    instruction(ir::Op::Int { dst: 0, value: 1 }),
+                    instruction(ir::Op::Int { dst: 1, value: 42 }),
+                    instruction(ir::Op::Array { dst: 2, elements: vec![0usize, 1usize] }),
+                    instruction(ir::Op::Borrow { dst: 3, place: ir::Place::local(2), mutable: false }),
+                    instruction(ir::Op::Int { dst: 4, value: 1 }),
+                    instruction(ir::Op::Call { dst: 5, function: 0, args: vec![3usize, 4usize] }),
+                    instruction(ir::Op::Drop { place: ir::Place::local(2) }),
+                    instruction(ir::Op::Return { src: 5 }),
+                ],
+            },
+        ],
+    };
+    let selected = raw(world, original);
+    observed(world, &selected, runtime, 42);
+    let caller = &selected.native().program().functions[1];
+    assert_eq!(caller.locals.len(), 6usize);
+    let mut mapped = false;
+    for instruction in &caller.body {
+        if let ir::Op::Read { dst, place, .. } = &instruction.op {
+            if *dst == 5usize && place.local == 3usize
+                && place.projections == vec![ir::Projection::Deref, ir::Projection::Index(4usize)] {
+                mapped = true;
+            }
+        }
+    }
+    assert!(mapped);
+}
+
+fn shared_referents_and_owning_cleanup_keep_order(world: &mut World, runtime: &runtime::Runtime) {
+    let selected = transformed(r#"
+        fn sum(left: &i64, right: &i64) -> i64 { *left + *right }
+        pub fn probe() -> i64 { let value = 21i64; sum(&value, &value) }
+    "#, 64usize);
+    observed(world, &selected, runtime, 42);
+    let selected = transformed(r#"
+        struct Owner<'a> { value: &'a mut i64 }
+        impl<'a> Drop for Owner<'a> { fn drop(&mut self) { *self.value += 1; } }
+        fn bump(value: &mut i64) -> i64 { *value += 1; *value }
+        fn finish<'a>(index: i64, owner: Owner<'a>) -> i64 { drop(owner); index }
+        pub fn probe() -> i64 {
+            let mut value = 40i64;
+            let result = finish(bump(&mut value), Owner { value: &mut value });
+            result + value
+        }
+    "#, 64usize);
+    observed(world, &selected, runtime, 83);
+}
+
+pub(super) fn run(world: &mut World, runtime: &runtime::Runtime, trace: bool) -> usize {
+    if trace { world.stdout().write(b"inline_forward_dead_aggregate_and_returned_parameter\n"); }
+    dead_aggregate_boundaries_and_returned_parameters(world, runtime);
+    if trace { world.stdout().write(b"inline_forward_argument_result_alias\n"); }
+    argument_destination_alias_keeps_transfers(world, runtime);
+    if trace { world.stdout().write(b"inline_forward_address_taken_storage\n"); }
+    caller_and_callee_address_roots_keep_distinct_storage(world, runtime);
+    if trace { world.stdout().write(b"inline_forward_loop_and_block_freshness\n"); }
+    fresh_definitions_do_not_cross_control_or_intervening_writes(world, runtime);
+    if trace { world.stdout().write(b"inline_forward_projection_indices\n"); }
+    projection_indices_follow_the_explicit_map(world, runtime);
+    if trace { world.stdout().write(b"inline_forward_aliases_drop_and_order\n"); }
+    shared_referents_and_owning_cleanup_keep_order(world, runtime);
+    6usize
+}
