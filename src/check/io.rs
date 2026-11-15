@@ -32,6 +32,15 @@ fn status_result(types: &[Type], ty: usize) -> bool {
         _ => false,
     }
 }
+fn scalar_result(types: &[Type], ty: usize, success: &TypeKind) -> bool {
+    match &types[ty].kind {
+        TypeKind::Enum { variants, .. } if variants.len() == 2 => {
+            variants[0].fields.len() == 1 && types[variants[0].fields[0].ty].kind == *success
+                && variants[1].fields.len() == 1 && variants[1].fields[0].ty == I64
+        }
+        _ => false,
+    }
+}
 fn events_result(types: &[Type], ty: usize) -> bool {
     let TypeKind::Enum { variants, copy: false } = &types[ty].kind else { return false; };
     if variants.len() != 2 || variants[0].fields.len() != 1 || variants[1].fields.len() != 1 || variants[1].fields[0].ty != I64 { return false; }
@@ -78,6 +87,36 @@ pub(super) fn signature(
                 && authority(types, args[0], &TypeKind::World)
                 && args[1] == U8
                 && result == UNIT
+        }
+        IntrinsicOp::WorldEntropy => {
+            args.len() == 1 && authority(types, args[0], &TypeKind::World) && types[result].kind == TypeKind::Entropy
+        }
+        IntrinsicOp::EntropyFill => {
+            args.len() == 2 && authority(types, args[0], &TypeKind::Entropy)
+                && bytes(types, args[1], true) && status_result(types, result)
+        }
+        IntrinsicOp::ClockUnixSeconds => {
+            args.len() == 1 && authority(types, args[0], &TypeKind::Clock)
+                && scalar_result(types, result, &TypeKind::Int { bits: 64, signed: true })
+        }
+        IntrinsicOp::FileSetPrivate | IntrinsicOp::ChildRequestStop => {
+            let kind = if name == IntrinsicOp::FileSetPrivate { TypeKind::File } else { TypeKind::Child };
+            args.len() == 1 && authority(types, args[0], &kind) && status_result(types, result)
+        }
+        IntrinsicOp::WorldStop => {
+            args.len() == 1 && authority(types, args[0], &TypeKind::World) && opened(types, result, &TypeKind::Stop)
+        }
+        IntrinsicOp::StopRequested | IntrinsicOp::StopTarget => {
+            let success = if name == IntrinsicOp::StopRequested { TypeKind::Bool } else { TypeKind::Int { bits: 32, signed: false } };
+            args.len() == 1 && authority(types, args[0], &TypeKind::Stop) && scalar_result(types, result, &success)
+        }
+        IntrinsicOp::ReadinessWatchStop => {
+            args.len() == 3 && authority(types, args[0], &TypeKind::Readiness)
+                && authority(types, args[1], &TypeKind::Stop) && args[2] == U64 && status_result(types, result)
+        }
+        IntrinsicOp::ReadinessUnwatchStop => {
+            args.len() == 2 && authority(types, args[0], &TypeKind::Readiness)
+                && authority(types, args[1], &TypeKind::Stop) && status_result(types, result)
         }
         IntrinsicOp::WorldReadiness => {
             args.len() == 1 && authority(types, args[0], &TypeKind::World)
@@ -139,7 +178,7 @@ pub(super) fn signature(
                 && bytes(types, args[1], true)
                 && result == I64
         }
-        IntrinsicOp::DirectoryCreateNew | IntrinsicOp::DirectoryOpenAppend => {
+        IntrinsicOp::DirectoryCreateNew | IntrinsicOp::DirectoryCreatePrivate | IntrinsicOp::DirectoryOpenAppend => {
             args.len() == 2
                 && authority(types, args[0], &TypeKind::Directory)
                 && bytes(types, args[1], false)

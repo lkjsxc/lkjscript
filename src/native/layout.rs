@@ -176,6 +176,11 @@ impl Layouts {
             | TypeKind::Readiness => {
                 value.cleanup = true;
             }
+            TypeKind::Stop => {
+                value.bytes = 16;
+                value.scalar = false;
+                value.cleanup = true;
+            }
             TypeKind::Ref { inner, .. } => {
                 if matches!(
                     program.types[inner].kind,

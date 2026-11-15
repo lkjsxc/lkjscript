@@ -47,6 +47,14 @@ pub fn main(mut world: World) {
     assert_eq!(file_error(directory.__lkjscript_open_append(b"missing-zero")), 22);
     assert_eq!(file_error(directory.__lkjscript_create_new(b"a\0b\0")), 22);
     assert_eq!(file_error(directory.open_append("a\0b")), 22);
+    assert_eq!(file_error(directory.create_private("../outside")), 18);
+    assert_eq!(file_error(directory.create_private("/outside")), 18);
+    assert_eq!(file_error(directory.create_private("inward")), 17);
+    assert_eq!(file_error(directory.create_private("outward")), 17);
+    assert_eq!(file_error(directory.create_private("a\0b")), 22);
+    assert_eq!(file_error(directory.__lkjscript_create_private(b"")), 22);
+    assert_eq!(file_error(directory.__lkjscript_create_private(b"missing-zero")), 22);
+    assert_eq!(file_error(directory.__lkjscript_create_private(b"a\0b\0")), 22);
     let mut append = directory.open_append("inward").unwrap();
     assert_eq!(&append.read_to_end().unwrap()[..], b"inside");
     append.sync().unwrap();

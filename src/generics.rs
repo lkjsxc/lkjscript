@@ -1577,6 +1577,8 @@ fn trait_requirements(
             | TypeKind::Child
             | TypeKind::Listener
             | TypeKind::Readiness
+            | TypeKind::Entropy
+            | TypeKind::Stop
             | TypeKind::Connector => return None,
             TypeKind::Ref { inner, .. }
             | TypeKind::Slice { inner, .. }
@@ -1640,6 +1642,8 @@ fn trait_requirements(
             | TypeKind::Child
             | TypeKind::Listener
             | TypeKind::Readiness
+            | TypeKind::Entropy
+            | TypeKind::Stop
             | TypeKind::Connector => {
                 return None;
             }

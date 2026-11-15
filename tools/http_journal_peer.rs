@@ -8,9 +8,10 @@ pub struct Peer {
     incoming: Vec<u8>,
     pub ended: bool,
 }
-pub fn request(method: &str, path: &str, body: &[u8], close: bool) -> Vec<u8> {
+pub fn request(token: &str, method: &str, path: &str, body: &[u8], close: bool) -> Vec<u8> {
     let connection = if close { "close" } else { "keep-alive" };
-    let mut bytes = format!("{method} {path} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: {connection}\r\n\r\n", body.len()).into_bytes();
+    let authorization = crate::http_journal_auth::header(token);
+    let mut bytes = format!("{method} {path} HTTP/1.1\r\nHost: localhost\r\n{authorization}Content-Type: application/json\r\nContent-Length: {}\r\nConnection: {connection}\r\n\r\n", body.len()).into_bytes();
     bytes.extend_from_slice(body);
     bytes
 }
@@ -75,9 +76,9 @@ pub fn json(bytes: &[u8]) -> Result<std::json::Value, String> {
     std::json::parse(bytes).map_err(|problem| format!("response JSON: {problem}"))
 }
 pub fn exchange(world: &mut World, port: u16, clock: &mut Clock, ready: &mut Readiness,
-    method: &str, path: &str, body: &[u8], expected: u16) -> Result<std::json::Value, String> {
+    token: &str, method: &str, path: &str, body: &[u8], expected: u16) -> Result<std::json::Value, String> {
     let mut peer = Peer::connect(world, port)?;
-    peer.queue(&request(method, path, body, true));
+    peer.queue(&request(token, method, path, body, true));
     let deadline = io(clock.nanoseconds(), "start request clock")? + 30_000_000_000usize;
     loop {
         peer.step()?;

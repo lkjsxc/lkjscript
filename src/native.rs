@@ -21,6 +21,7 @@ mod process;
 mod network;
 mod readiness;
 mod storage;
+mod lifecycle;
 pub mod profiling;
 mod registers;
 mod scalar;
@@ -1385,7 +1386,7 @@ fn emit_drop(
             a.load(DI, BP, -8);
             a.call(p.child_drop);
         }
-        TypeKind::File | TypeKind::Directory | TypeKind::Listener | TypeKind::Readiness => {
+        TypeKind::File | TypeKind::Directory | TypeKind::Listener | TypeKind::Readiness | TypeKind::Stop => {
             a.load(DI, BP, -8);
             a.load(DI, DI, 0);
             a.call(p.handle_close);
@@ -1478,6 +1479,8 @@ fn grant_matches(kind: &TypeKind, grant: &ir::EntryGrant, parameters: usize) -> 
         ir::EntryGrant::Listener(_) => matches!(kind, TypeKind::Listener),
         ir::EntryGrant::Connector(_) => matches!(kind, TypeKind::Connector),
         ir::EntryGrant::Readiness => matches!(kind, TypeKind::Readiness),
+        ir::EntryGrant::Entropy => matches!(kind, TypeKind::Entropy),
+        ir::EntryGrant::Stop => matches!(kind, TypeKind::Stop),
     }
 }
 fn scalar_entry(kind: &TypeKind) -> bool {
@@ -1566,6 +1569,15 @@ fn encode_program(
     }
     let connector = program.types.iter().any(|ty| matches!(ty.kind, TypeKind::Connector));
     let readiness = program.types.iter().any(|ty| matches!(ty.kind, TypeKind::Readiness));
+    let stop_signals = program.types.iter().any(|ty| matches!(ty.kind, TypeKind::Stop));
+    let entropy = program.functions.iter().any(|function| function.body.iter().any(|instruction|
+        matches!(instruction.op, Op::Intrinsic { name: IntrinsicOp::EntropyFill, .. })));
+    let wall_time = program.functions.iter().any(|function| function.body.iter().any(|instruction|
+        matches!(instruction.op, Op::Intrinsic { name: IntrinsicOp::ClockUnixSeconds, .. })));
+    let private_file = program.functions.iter().any(|function| function.body.iter().any(|instruction|
+        matches!(instruction.op, Op::Intrinsic { name: IntrinsicOp::FileSetPrivate, .. })));
+    let child_stop = program.functions.iter().any(|function| function.body.iter().any(|instruction|
+        matches!(instruction.op, Op::Intrinsic { name: IntrinsicOp::ChildRequestStop, .. })));
     let nonblocking = program.functions.iter().any(|function| {
         function.body.iter().any(|instruction| matches!(instruction.op,
             Op::Intrinsic { name: IntrinsicOp::FileSetNonblocking | IntrinsicOp::ListenerSetNonblocking, .. }))
@@ -1573,7 +1585,7 @@ fn encode_program(
 
     let storage = program.functions.iter().any(|function| {
         function.body.iter().any(|instruction| matches!(instruction.op,
-            Op::Intrinsic { name: IntrinsicOp::DirectoryCreateNew | IntrinsicOp::DirectoryOpenAppend
+            Op::Intrinsic { name: IntrinsicOp::DirectoryCreateNew | IntrinsicOp::DirectoryCreatePrivate | IntrinsicOp::DirectoryOpenAppend
                 | IntrinsicOp::DirectorySync | IntrinsicOp::FileSync | IntrinsicOp::FileTruncate
                 | IntrinsicOp::FileLockExclusive, .. }))
     });
@@ -1585,7 +1597,8 @@ fn encode_program(
 
     let mut a = Assembler::new();
     if profile_path.is_some() { a.enable_profile(); }
-    let p = platform::Platform::new(&mut a);
+    let mut p = platform::Platform::new(&mut a);
+    p.stop_signals = stop_signals;
     let grant_plan = match grants {
         Some(grants) => Some(entry::Plan::new(&mut a, grants, first_site(selected))),
         None => None,
@@ -1633,6 +1646,15 @@ fn encode_program(
             symbols.push((p.readiness_wait, "$platform::readiness_wait".to_string()));
         }
         if nonblocking { symbols.push((p.handle_nonblocking, "$platform::handle_nonblocking".to_string())); }
+        if entropy { symbols.push((p.entropy_fill, "$platform::entropy_fill".to_string())); }
+        if wall_time { symbols.push((p.clock_unix_seconds, "$platform::clock_unix_seconds".to_string())); }
+        if private_file { symbols.push((p.file_set_private, "$platform::file_set_private".to_string())); }
+        if child_stop { symbols.push((p.child_request_stop, "$platform::child_request_stop".to_string())); }
+        if stop_signals {
+            symbols.push((p.world_stop, "$platform::world_stop".to_string()));
+            symbols.push((p.stop_requested, "$platform::stop_requested".to_string()));
+            symbols.push((p.stop_target, "$platform::stop_target".to_string()));
+        }
         if storage {
             symbols.push((p.file_storage_open, "$platform::file_storage_open".to_string()));
             symbols.push((p.file_sync, "$platform::file_sync".to_string()));
@@ -1688,6 +1710,11 @@ fn encode_program(
     if readiness { readiness::emit(&mut a, p); }
     if nonblocking { readiness::emit_nonblocking(&mut a, p); }
     if storage { storage::emit(&mut a, p); }
+    if entropy { lifecycle::entropy(&mut a, p); }
+    if wall_time { lifecycle::wall_time(&mut a, p); }
+    if private_file { lifecycle::private_file(&mut a, p); }
+    if child_stop { lifecycle::child_stop(&mut a, p); }
+    if stop_signals { lifecycle::stop(&mut a, p); }
     if let Some(profile) = profile {
         symbols.push((profile.start, "$profiler".to_string()));
         profiling::emit(&mut a, p, profile, profile_path.unwrap().len());
@@ -1798,6 +1825,7 @@ fn encode_program(
     let data_offset = (code_end + 4095) & !4095;
     let mut data = Vec::new();
     platform::data(&mut a, p, &mut data, data_offset, &trap_messages);
+    if stop_signals { lifecycle::data(&mut a, p, &mut data, data_offset); }
     if let Some(plan) = grant_plan { plan.data(&mut a, &mut data, data_offset); }
     if let Some(profile) = profile {
         let kinds = a.take_kinds();

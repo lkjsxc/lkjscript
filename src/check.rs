@@ -106,7 +106,9 @@ pub fn is_data(types: &[Type], ty: usize) -> bool {
             | TypeKind::Child
             | TypeKind::Listener
             | TypeKind::Connector
-            | TypeKind::Readiness => return false,
+            | TypeKind::Readiness
+            | TypeKind::Entropy
+            | TypeKind::Stop => return false,
             TypeKind::Ref { inner, .. }
             | TypeKind::Slice { inner, .. }
             | TypeKind::Vec { inner }

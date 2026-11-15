@@ -3,9 +3,11 @@ mod http_protocol;
 mod http_policy;
 mod http_server;
 mod journal_store;
+mod journal_sessions;
 use http_protocol::Request;
 use http_server::{Body, Handler, Reply};
 use journal_store::{Entry, Store};
+use journal_sessions::Sessions;
 use std::json::{self, Value};
 
 fn number(value: usize) -> Value { Value::Number(format!("{value}")) }
@@ -69,7 +71,7 @@ fn route(path: &str) -> Result<Route, String> {
     if end < first { return Err("range end precedes its first id".to_string()); }
     Ok(Route::Range(first, end))
 }
-struct Journal { store: Store }
+struct Journal { store: Store, sessions: Sessions }
 impl Journal {
     fn read(&self, route: Route) -> Reply {
         match route {
@@ -97,8 +99,26 @@ impl Journal {
 }
 impl Handler for Journal {
     fn methods(&self) -> &'static str { "GET, HEAD, POST, PUT" }
-    fn retain_body(&self) -> bool { true }
-    fn respond(&mut self, request: &Request, body: Vec<u8>) -> Result<Reply, String> {
+    fn retain_body(&self, request: &Request) -> bool {
+        request.method == "POST" || request.method == "PUT"
+    }
+    fn finish(&mut self) -> Result<(), String> { self.store.sync() }
+    fn preflight(&mut self, request: &Request, now: i64) -> Option<Reply> {
+        if request.method == "POST" || request.method == "PUT" {
+            let authorization = match &request.authorization {
+                Some(text) => text.as_str(),
+                None => "",
+            };
+            if !self.sessions.authorize(authorization, now) {
+                return Some(error(401u16, "a valid unexpired session token is required")
+                    .header("WWW-Authenticate", "Bearer realm=\"journal\""));
+            }
+        }
+        None
+    }
+    fn respond(&mut self, request: &Request, body: Vec<u8>, now: i64) -> Result<Reply, String> {
+        // A token can expire while an admitted body is arriving.
+        if let Some(reply) = self.preflight(request, now) { return Ok(reply); }
         let route = match route(&request.path) {
             Ok(route) => route,
             Err(message) => return Ok(error(400u16, &message)),
@@ -134,20 +154,28 @@ impl Handler for Journal {
     }
 }
 pub fn main(mut output: Stdout, mut root: Directory, listener: Listener,
-    clock: Clock, ready: Readiness) {
+    clock: Clock, ready: Readiness, stop: Stop, mut entropy: Entropy) {
     let policy = match http_policy::read(&mut root) {
         Ok(policy) => policy,
         Err(problem) => panic!("{problem}"),
     };
-    let store = match Store::open(root, &mut output) {
+    let mut store = match Store::open(root, &mut output) {
         Ok(store) => store,
         Err(problem) => {
             output.write(format!("journal error: {problem}\n").as_bytes());
             panic!("journal recovery failed");
         }
     };
+    let opened = { Sessions::open(store.directory(), &mut entropy) };
+    let sessions = match opened {
+        Ok(sessions) => sessions,
+        Err(problem) => {
+            output.write(format!("journal sessions: {problem}\n").as_bytes());
+            panic!("journal session initialization failed");
+        }
+    };
     output.write(format!("ready {} {}\n", store.revision(), store.entries().len()).as_bytes());
-    http_server::serve(output, listener, clock, ready, policy, Journal { store });
+    http_server::serve(output, listener, clock, ready, stop, policy, Journal { store, sessions });
 }
 
 #[test]

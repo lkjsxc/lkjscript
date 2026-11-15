@@ -21,12 +21,16 @@ impl Infer<'_, '_> {
             Value::Listener => self.atom("Listener"),
             Value::Connector => self.atom("Connector"),
             Value::Readiness => self.atom("Readiness"),
+            Value::Entropy => self.atom("Entropy"),
+            Value::Stop => self.atom("Stop"),
+            Value::Pid => self.atom("u32"),
             Value::Port => self.atom("u16"),
-            Value::FileRef | Value::DirectoryRef | Value::MutableFileRef | Value::ListenerRef | Value::ClockRef => {
+            Value::FileRef | Value::DirectoryRef | Value::MutableFileRef | Value::ListenerRef | Value::ClockRef | Value::StopRef => {
                 let inner = self.atom(match value {
                     Value::FileRef | Value::MutableFileRef => "File",
                     Value::ListenerRef => "Listener",
                     Value::ClockRef => "Clock",
+                    Value::StopRef => "Stop",
                     _ => "Directory",
                 });
                 self.shaped(Shape::Ref(!matches!(value, Value::FileRef), inner))
@@ -60,6 +64,9 @@ impl Infer<'_, '_> {
             | Value::ResultListener
             | Value::ResultConnector
             | Value::ResultReadiness
+            | Value::ResultStop
+            | Value::ResultBoolean
+            | Value::ResultPid
             | Value::ResultEvents
             | Value::ResultPort
             | Value::ResultNames
@@ -72,6 +79,9 @@ impl Infer<'_, '_> {
                     Value::ResultListener => self.capability_type(Value::Listener, span)?,
                     Value::ResultConnector => self.capability_type(Value::Connector, span)?,
                     Value::ResultReadiness => self.capability_type(Value::Readiness, span)?,
+                    Value::ResultStop => self.capability_type(Value::Stop, span)?,
+                    Value::ResultBoolean => self.capability_type(Value::Boolean, span)?,
+                    Value::ResultPid => self.capability_type(Value::Pid, span)?,
                     Value::ResultPort => self.capability_type(Value::Port, span)?,
                     Value::ResultNames => self.capability_type(Value::Arguments, span)?,
                     Value::ResultStatus => self.atom("i64"),

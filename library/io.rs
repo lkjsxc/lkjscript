@@ -48,6 +48,8 @@ pub fn __lkjscript_create(directory: &mut Directory, path: &str) -> Result<File,
     directory.__lkjscript_open(&bytes, true)
 }
 
+// Exclusive, append and private opens share this path validation. Private opens
+// choose mode0600 atomically in the kernel; set_private is a separate operation.
 // An invalid embedded NUL becomes the raw operation's invalid empty path.
 pub fn __lkjscript_storage_path(path: &str) -> Vec<u8> {
     match path_bytes(path) {

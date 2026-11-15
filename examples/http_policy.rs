@@ -1,7 +1,7 @@
 //! Optional application deadlines beneath the already-granted document root.
-//! Three decimal lines: idle seconds, whole-request seconds, whole-write seconds.
+//! Idle, whole-request and whole-write seconds; optional fourth line is shutdown seconds.
 #[derive(Clone, Copy)]
-pub struct Policy { pub idle: usize, pub request: usize, pub write: usize }
+pub struct Policy { pub idle: usize, pub request: usize, pub write: usize, pub shutdown: usize }
 
 fn duration(value: Option<&str>, name: &str) -> Result<usize, String> {
     let text = value.ok_or(format!("missing {name} seconds"))?;
@@ -18,16 +18,21 @@ fn parse(text: &str) -> Result<Policy, String> {
     let idle = duration(lines.next(), "idle")?;
     let request = duration(lines.next(), "request")?;
     let write = duration(lines.next(), "write")?;
+    let shutdown = match lines.next() {
+        None | Some("") => 5_000_000_000usize,
+        Some(text) => duration(Some(text), "shutdown")?,
+    };
     for extra in lines {
-        if !extra.is_empty() { return Err("unexpected line after write seconds".to_string()); }
+        if !extra.is_empty() { return Err("unexpected line after shutdown seconds".to_string()); }
     }
-    Ok(Policy { idle, request, write })
+    Ok(Policy { idle, request, write, shutdown })
 }
 pub fn read(root: &mut Directory) -> Result<Policy, String> {
     let mut file = match root.open(".http-policy") {
         Ok(file) => file,
         Err(2i64) => return Ok(Policy {
-            idle: 60_000_000_000usize, request: 2_000_000_000usize, write: 2_000_000_000usize
+            idle: 60_000_000_000usize, request: 2_000_000_000usize, write: 2_000_000_000usize,
+            shutdown: 5_000_000_000usize
         }),
         Err(errno) => return Err(format!("open .http-policy: errno {errno}")),
     };
@@ -63,4 +68,13 @@ fn malformed_deadlines() {
     assert!(parse("60\n2\n2\nextra").is_err());
     assert!(parse("18446744074\n2\n2").is_err());
     assert!(parse("18446744073709551616\n2\n2").is_err());
+}
+
+#[test]
+fn shutdown_deadline_compatibility() {
+    assert!(parse("60\n2\n2").unwrap().shutdown == 5_000_000_000usize);
+    assert!(parse("60\n2\n2\n").unwrap().shutdown == 5_000_000_000usize);
+    assert!(parse("60\n2\n2\n7\n").unwrap().shutdown == 7_000_000_000usize);
+    assert!(parse("60\n2\n2\n0").is_err());
+    assert!(parse("60\n2\n2\n5\n6").is_err());
 }

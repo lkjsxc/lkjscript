@@ -619,3 +619,23 @@ impl ParseInteger for isize {
         value as isize
     }
 }
+
+/// Trim only ASCII whitespace bytes 9 through 13 and 32 from both ends.
+/// Other whitespace, including non-breaking space, is preserved. Removing
+/// single-byte ASCII characters keeps both boundaries valid for a UTF-8 view.
+pub fn trim_ascii(value: &str) -> &str {
+    let bytes = value.as_bytes();
+    let mut start = 0usize;
+    let mut end = bytes.len();
+    while start < end {
+        let byte = bytes[start];
+        if byte != 32u8 && (byte < 9u8 || byte > 13u8) { break; }
+        start += 1usize;
+    }
+    while end > start {
+        let byte = bytes[end - 1usize];
+        if byte != 32u8 && (byte < 9u8 || byte > 13u8) { break; }
+        end -= 1usize;
+    }
+    &value[start..end]
+}

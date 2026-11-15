@@ -1,7 +1,13 @@
 // Independent syscall broker for interpreter effects; no IR or native lowering.
+// Explicit paths also preserve child resolution when the Rust witness includes this file.
+#[path = "host_network/broker.rs"]
 mod broker;
+#[path = "host_network/process.rs"]
 mod process;
+#[path = "host_network/directories.rs"]
 mod directories;
+#[path = "host_network/lifecycle.rs"]
+mod lifecycle;
 use crate::x86::*;
 
 struct Connection {
@@ -177,6 +183,45 @@ impl Network {
     pub fn set_status_flags(&mut self, file: u64, enabled: bool) -> Result<(), i64> {
         self.unit_request(12, &[file, enabled as u64])
     }
+    pub fn random_bytes(&mut self, world: &mut World, bytes: &mut [u8]) -> Result<(), i64> {
+        if bytes.is_empty() { return Ok(()); }
+        self.ensure(world)?;
+        let (filled, body) = self.request(42, &[bytes.len() as u64], b"")?;
+        if filled as usize > bytes.len() || body.len() < 8 || body.len() - 8 != filled as usize { return Err(5); }
+        let error = word(&body[..8]);
+        bytes[..filled as usize].copy_from_slice(&body[8..]);
+        if error > 4095 { return Err(5); }
+        if error != 0 { return Err(error as i64); }
+        if filled as usize != bytes.len() { return Err(5); }
+        Ok(())
+    }
+    pub fn realtime_value(&mut self, world: &mut World) -> Result<i64, i64> {
+        self.ensure(world)?;
+        let (_, body) = self.request(43, &[0u64; 0], b"")?;
+        if body.len() != 8 { return Err(5); }
+        Ok(word(&body) as i64)
+    }
+    pub fn private_remote(&mut self, file: u64) -> Result<(), i64> {
+        self.unit_request(44, &[file])
+    }
+    pub fn acquire_stop(&mut self, world: &mut World) -> Result<u64, i64> {
+        self.ensure(world)?;
+        let (descriptor, _) = self.request(45, &[0u64; 0], b"")?;
+        Ok(descriptor as u64)
+    }
+    pub fn consume_stop(&mut self, descriptor: u64) -> Result<bool, i64> {
+        let (value, _) = self.request(46, &[descriptor], b"")?;
+        if value > 1 { return Err(5); }
+        Ok(value == 1)
+    }
+    pub fn signal_endpoint(&mut self, descriptor: u64) -> Result<u32, i64> {
+        let (pid, _) = self.request(47, &[descriptor], b"")?;
+        if pid == 0 || pid > 4294967295 { return Err(5); }
+        Ok(pid as u32)
+    }
+    pub fn stop_remote_child(&mut self, child: u64) -> Result<(), i64> {
+        self.unit_request(24, &[child])
+    }
     pub fn create_selector(&mut self, world: &mut World) -> Result<u64, i64> {
         self.ensure(world)?;
         let (handle, _) = self.request(13, &[0u64; 0], b"")?;
@@ -254,6 +299,10 @@ impl Network {
     }
     pub fn open_storage(&mut self, directory: u64, path: &[u8], append: bool) -> Result<u64, i64> {
         let (handle, _) = self.request(if append { 31 } else { 30 }, &[directory], path)?;
+        Ok(handle as u64)
+    }
+    pub fn open_private(&mut self, directory: u64, path: &[u8]) -> Result<u64, i64> {
+        let (handle, _) = self.request(48, &[directory], path)?;
         Ok(handle as u64)
     }
     pub fn sync_remote(&mut self, file: u64) -> Result<(), i64> {

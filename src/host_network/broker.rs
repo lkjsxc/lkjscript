@@ -3,6 +3,7 @@ use crate::x86::*;
 use super::{elf, syscall};
 use super::process::{self, ProcessCode};
 use super::directories;
+use super::lifecycle;
 
 pub(super) const REQUEST: i64 = -128;
 const RESPONSE: i64 = -144;
@@ -110,6 +111,13 @@ fn emit_storage(a: &mut Assembler, labels: &[Label], reply: Label, invalid: Labe
     a.jump(scanning);
     a.bind(valid);
     a.immediate(A, 0o666);
+    a.load(C, BP, REQUEST);
+    a.immediate(R8, 48);
+    a.compare(C, R8);
+    let ordinary_mode = a.label();
+    a.condition(5, ordinary_mode);
+    a.immediate(A, 0o600);
+    a.bind(ordinary_mode);
     a.store(BP, SCRATCH + 8, A);
     a.immediate(A, 0x0a);
     a.store(BP, SCRATCH + 16, A);
@@ -153,11 +161,14 @@ pub(super) fn image(local: &[u8], address: &[u8], nonce: &[u8]) -> Result<Vec<u8
     for _index in 0usize..5usize { storage.push(a.label()); }
     let mut directories = Vec::new();
     for _index in 0usize..7usize { directories.push(a.label()); }
+    let mut lifecycle = Vec::new();
+    for _index in 0usize..6usize { lifecycle.push(a.label()); }
 
     a.mov(BP, SP);
     a.lea(SP, SP, DRAIN);
     a.immediate(A, 0);
     a.store(BP, -16, A); // Process-record head.
+    lifecycle::initialize(&mut a);
     a.immediate(R14, 0);
     a.immediate(R15, 0);
     a.immediate(DI, 1); // PR_SET_PDEATHSIG
@@ -290,6 +301,9 @@ pub(super) fn image(local: &[u8], address: &[u8], nonce: &[u8]) -> Result<Vec<u8
         a.compare(A, C);
         a.condition(4, operations[index]);
     }
+    a.immediate(C, 48);
+    a.compare(A, C);
+    a.condition(4, storage[0]);
     for index in 0usize..storage.len() {
         a.immediate(C, (index + 30) as u64);
         a.compare(A, C);
@@ -300,7 +314,12 @@ pub(super) fn image(local: &[u8], address: &[u8], nonce: &[u8]) -> Result<Vec<u8
         a.compare(A, C);
         a.condition(4, directories[index]);
     }
-    for (number, label) in vec![(20u64, p.spawn), (21u64, p.wait), (22u64, p.terminate), (23u64, p.drop_child)] {
+    for index in 0usize..lifecycle.len() {
+        a.immediate(C, (index + 42) as u64);
+        a.compare(A, C);
+        a.condition(4, lifecycle[index]);
+    }
+    for (number, label) in vec![(20u64, p.spawn), (21u64, p.wait), (22u64, p.terminate), (23u64, p.drop_child), (24u64, p.request_stop)] {
         a.immediate(C, number);
         a.compare(A, C);
         a.condition(4, label);
@@ -309,6 +328,7 @@ pub(super) fn image(local: &[u8], address: &[u8], nonce: &[u8]) -> Result<Vec<u8
 
     emit_storage(&mut a, &storage, reply, invalid, bad);
     directories::emit(&mut a, &directories, reply, invalid, bad);
+    lifecycle::emit(&mut a, &lifecycle, reply, invalid, bad);
     emit_network(&mut a, &operations, reply, invalid, bad);
     emit_files(&mut a, &operations, reply, bad);
     emit_readiness(&mut a, &operations, reply, invalid, bad);

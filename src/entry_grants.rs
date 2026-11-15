@@ -25,7 +25,7 @@ pub fn validate(program: &Program, entry: usize) -> Result<(), String> {
         if matches!(ty.kind, TypeKind::File) {
             return Err(problem(&format!("File parameter {} cannot be granted; accept Directory and open the file inside the entry", local.name)));
         }
-        if !matches!(ty.kind, TypeKind::Stdout | TypeKind::Stdin | TypeKind::Stderr | TypeKind::Clock | TypeKind::Process | TypeKind::Directory | TypeKind::Listener | TypeKind::Connector | TypeKind::Readiness) {
+        if !matches!(ty.kind, TypeKind::Stdout | TypeKind::Stdin | TypeKind::Stderr | TypeKind::Clock | TypeKind::Process | TypeKind::Directory | TypeKind::Listener | TypeKind::Connector | TypeKind::Readiness | TypeKind::Entropy | TypeKind::Stop) {
             return Err(problem(&format!("parameter {} requires an owned grantable capability; World must be the only parameter", local.name)));
         }
         if !valid_name(&local.name) || names.contains(&local.name) {
@@ -129,6 +129,8 @@ pub fn prepare(program: &Program, entry: usize, supplied: &[String]) -> Result<V
                     TypeKind::Clock => EntryGrant::Clock,
                     TypeKind::Process => EntryGrant::Process,
                     TypeKind::Readiness => EntryGrant::Readiness,
+                    TypeKind::Entropy => EntryGrant::Entropy,
+                    TypeKind::Stop => EntryGrant::Stop,
                     _ => return Err(problem("ungrantable entry capability")),
                 }
             }

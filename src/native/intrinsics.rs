@@ -28,6 +28,28 @@ impl Body<'_> {
         self.mark(dst);
     }
 
+    fn intrinsic_scalar_result(&mut self, dst: usize, success_register: u8) {
+        let ty = self.ty(dst);
+        let success = self.layout.field_offset(ty, Some(0), 0);
+        let failure = self.layout.field_offset(ty, Some(1), 0);
+        let error = self.a.label();
+        let done = self.a.label();
+        self.local_address(dst, R8);
+        self.a.test(A, true);
+        self.a.condition(8, error);
+        self.a.immediate(C, 0);
+        self.a.store(R8, 0, C);
+        self.a.store(R8, success as i64, success_register);
+        self.a.jump(done);
+        self.a.bind(error);
+        self.a.negate(A);
+        self.a.immediate(C, 1);
+        self.a.store(R8, 0, C);
+        self.a.store(R8, failure as i64, A);
+        self.a.bind(done);
+        self.mark(dst);
+    }
+
     fn intrinsic_io(
         &mut self,
         dst: usize,
@@ -39,6 +61,7 @@ impl Body<'_> {
             || name == IntrinsicOp::WorldStdin
             || name == IntrinsicOp::WorldProcess
             || name == IntrinsicOp::WorldClock
+            || name == IntrinsicOp::WorldEntropy
         {
             self.a.immediate(A, 1);
             self.write(dst, A);
@@ -70,6 +93,44 @@ impl Body<'_> {
                 self.read(args[1], DI);
                 self.a.call(self.platform.set_exit_status);
             }
+            IntrinsicOp::EntropyFill => {
+                self.read_word(args[1], 0, DI);
+                self.read_word(args[1], 1, SI);
+                self.a.call(self.platform.entropy_fill);
+                self.intrinsic_open_result(dst);
+                return Ok(true);
+            }
+            IntrinsicOp::ClockUnixSeconds => {
+                self.a.call(self.platform.clock_unix_seconds);
+                self.intrinsic_scalar_result(dst, D);
+                return Ok(true);
+            }
+            IntrinsicOp::FileSetPrivate => {
+                self.read(args[0], DI);
+                self.a.load(DI, DI, 0);
+                self.a.call(self.platform.file_set_private);
+                self.intrinsic_open_result(dst);
+                return Ok(true);
+            }
+            IntrinsicOp::WorldStop => {
+                self.a.call(self.platform.world_stop);
+                self.intrinsic_open_result(dst);
+                let success = self.layout.field_offset(self.ty(dst), Some(0), 0);
+                self.local_address(dst, R8);
+                self.a.immediate(A, 0);
+                self.a.store(R8, success as i64 + 8, A);
+                return Ok(true);
+            }
+            IntrinsicOp::StopRequested | IntrinsicOp::StopTarget | IntrinsicOp::ChildRequestStop => {
+                self.read(args[0], DI);
+                self.a.call(match name {
+                    IntrinsicOp::StopRequested => self.platform.stop_requested,
+                    IntrinsicOp::StopTarget => self.platform.stop_target,
+                    _ => self.platform.child_request_stop,
+                });
+                self.intrinsic_open_result(dst);
+                return Ok(true);
+            }
             IntrinsicOp::WorldReadiness => {
                 self.a.call(self.platform.world_readiness);
                 self.intrinsic_open_result(dst);
@@ -83,7 +144,7 @@ impl Body<'_> {
                 self.intrinsic_open_result(dst);
                 return Ok(true);
             }
-            IntrinsicOp::ReadinessWatchFile | IntrinsicOp::ReadinessWatchListener => {
+            IntrinsicOp::ReadinessWatchFile | IntrinsicOp::ReadinessWatchListener | IntrinsicOp::ReadinessWatchStop => {
                 self.read(args[0], DI);
                 self.a.load(DI, DI, 0);
                 self.read(args[1], SI);
@@ -94,7 +155,7 @@ impl Body<'_> {
                 self.intrinsic_open_result(dst);
                 return Ok(true);
             }
-            IntrinsicOp::ReadinessUnwatchFile | IntrinsicOp::ReadinessUnwatchListener => {
+            IntrinsicOp::ReadinessUnwatchFile | IntrinsicOp::ReadinessUnwatchListener | IntrinsicOp::ReadinessUnwatchStop => {
                 self.read(args[0], DI);
                 self.a.load(DI, DI, 0);
                 self.read(args[1], SI);
@@ -152,12 +213,13 @@ impl Body<'_> {
                 self.read_word(args[1], 1, D);
                 self.a.call(self.platform.listener_address);
             }
-            IntrinsicOp::DirectoryCreateNew | IntrinsicOp::DirectoryOpenAppend => {
+            IntrinsicOp::DirectoryCreateNew | IntrinsicOp::DirectoryCreatePrivate | IntrinsicOp::DirectoryOpenAppend => {
                 self.read(args[0], DI);
                 self.a.load(DI, DI, 0);
                 self.read_word(args[1], 0, SI);
                 self.read_word(args[1], 1, D);
-                self.a.immediate(C, if name == IntrinsicOp::DirectoryCreateNew { 0x800c2 } else { 0x80442 });
+                self.a.immediate(C, if name == IntrinsicOp::DirectoryOpenAppend { 0x80442 } else { 0x800c2 });
+                self.a.immediate(R8, if name == IntrinsicOp::DirectoryCreatePrivate { 0o600 } else { 0o666 });
                 self.a.call(self.platform.file_storage_open);
                 self.intrinsic_open_result(dst);
                 return Ok(true);

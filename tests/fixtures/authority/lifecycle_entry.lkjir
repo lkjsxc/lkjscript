@@ -1,0 +1,34 @@
+lkjscript-ir 1
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "Entropy" entropy
+type "Stop" stop
+type "Listener" listener
+fn "entropy_main" 1 0
+local "entropy" 7 let
+local "result" 0 let
+@1 drop 0
+@1 unit 1
+@1 return 1
+endfn
+fn "stop_main" 1 0
+local "stop" 8 let
+local "result" 0 let
+@1 drop 0
+@1 unit 1
+@1 return 1
+endfn
+fn "fail" 2 0
+local "stop" 8 let
+local "listener" 9 let
+local "result" 0 let
+@1 drop 0
+@1 drop 1
+@1 unit 2
+@1 return 2
+endfn

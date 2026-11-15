@@ -6,13 +6,14 @@ pub struct ProcessCode {
     pub spawn: Label,
     pub wait: Label,
     pub terminate: Label,
+    pub request_stop: Label,
     pub drop_child: Label,
     pub shutdown: Label,
 }
 impl ProcessCode {
     pub fn new(a: &mut Assembler) -> Self {
         Self {
-            spawn: a.label(), wait: a.label(), terminate: a.label(),
+            spawn: a.label(), wait: a.label(), terminate: a.label(), request_stop: a.label(),
             drop_child: a.label(), shutdown: a.label(),
         }
     }
@@ -125,6 +126,13 @@ pub fn emit(a: &mut Assembler, p: &ProcessCode, reply: Label) {
     locate(a, missing);
     a.load(DI, C, 8);
     a.immediate(SI, 9);
+    syscall(a, 62);
+    reply_empty(a, reply);
+
+    a.bind(p.request_stop);
+    locate(a, missing);
+    a.load(DI, C, 8);
+    a.immediate(SI, 15);
     syscall(a, 62);
     reply_empty(a, reply);
 
@@ -329,6 +337,7 @@ fn emit_spawn(a: &mut Assembler, entry: Label, reply: Label) {
     a.jump(cleanup);
 
     a.bind(child);
+    super::lifecycle::restore_child_mask(a, child_failed);
     a.immediate(DI, 1); // PR_SET_PDEATHSIG; never orphan a program on host death.
     a.immediate(SI, 9);
     a.immediate(D, 0);

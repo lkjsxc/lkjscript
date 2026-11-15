@@ -14,6 +14,12 @@ pub fn main(mut world: World) {
     file.sync().unwrap();
     drop(file);
     errno(directory.create_new("record"), 17);
+    let mut private = directory.create_private("private").unwrap();
+    private.set_private().unwrap();
+    private.write_all(b"secret").unwrap();
+    private.sync().unwrap();
+    drop(private);
+    assert_eq!(directory.__lkjscript_remove(b"private\0", false), 0i64);
     let mut append = directory.open_append("record").unwrap();
     assert_eq!(&append.read_to_end().unwrap()[..], b"first");
     append.write_all(b"second").unwrap();
@@ -30,8 +36,20 @@ pub fn main(mut world: World) {
     child.sync().unwrap();
     drop(child);
     assert_eq!(directory.__lkjscript_remove(b"child\0", true), 0i64);
-    errno(directory.sync(), 13);
-    errno(directory.list(), 13);
+    // Read-open observes whether this execution has a DAC bypass (as the root
+    // CI container does). Sync/list must agree with that actual kernel result.
+    match directory.open(".") {
+        Ok(file) => {
+            drop(file);
+            directory.sync().unwrap();
+            assert!(directory.list().unwrap().is_empty());
+        }
+        Err(13i64) => {
+            errno(directory.sync(), 13);
+            errno(directory.list(), 13);
+        }
+        Err(error) => panic!("unexpected directory read-open error: {error}"),
+    }
     let mut closed = world.stdin_file().unwrap();
     errno(closed.sync(), 9);
     world.stdout().write(b"storage permissions ok\n");

@@ -8,9 +8,10 @@ pub fn main(mut world: World) {
     let truncate = errno(closed.truncate(0usize));
     let overflow = errno(closed.truncate(!0usize));
     let lock = errno(closed.lock_exclusive());
+    let private = errno(closed.set_private());
     let mut input = world.stdin_file().unwrap();
     let mut byte = [0u8; 1];
     assert_eq!(input.read(&mut byte).unwrap(), 1usize);
     assert_eq!(byte[0], b'x');
-    world.stdout().write(format!("{sync} {truncate} {overflow} {lock}\n").as_bytes());
+    world.stdout().write(format!("{sync} {truncate} {overflow} {lock} {private}\n").as_bytes());
 }

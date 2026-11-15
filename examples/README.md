@@ -13,17 +13,17 @@ target/lkjscript run examples/hello.rs --engine interpreter
 
 ## HTTP documents
 
-`http.rs` serves files below a granted `Directory`. Its entry declares the five
+`http.rs` serves files below a granted `Directory`. Its entry declares the six
 capabilities it needs:
 
 ```rust
-pub fn main(mut output: Stdout, mut root: Directory, mut listener: Listener,
-    mut clock: Clock, mut ready: Readiness)
+pub fn main(output: Stdout, mut root: Directory, listener: Listener,
+    clock: Clock, ready: Readiness, stop: Stop)
 ```
 
 The output stream publishes the bound port, the directory supplies document
-bytes, the listener accepts connections, the clock sets deadlines, and readiness
-interleaves the owned connections.
+bytes, the listener accepts connections, the clock supplies deadlines and UTC time,
+readiness interleaves owned connections, and Stop supplies the SIGTERM request.
 The executable has no `World`, process capability or ambient filesystem access.
 
 Inspect authority from checked source or from its checked IR:
@@ -40,7 +40,7 @@ choose a free local port; the program prints `port NUMBER` after startup.
 ```sh
 target/lkjscript build examples/http.rs --profile \
     --grant output --grant root=docs \
-    --grant listener=127.0.0.1:0 --grant clock --grant ready -o target/http
+    --grant listener=127.0.0.1:0 --grant clock --grant ready --grant stop -o target/http
 target/http
 ```
 
@@ -67,7 +67,7 @@ an HTTP/1.1 response with Content-Length. HTTP/1.1 connections stay open by defa
 HTTP/1.0 requires `Connection: keep-alive`. `Connection: close` always wins.
 Pipelined requests retain their exact body boundaries. HEAD reports the GET length
 without a body. The root path serves `language.md`; query text does not select a
-different file. Response headers include the elapsed monotonic nanoseconds.
+different file. Response headers include a UTC HTTP Date and elapsed monotonic nanoseconds.
 Accepted sockets use `accept_nodelay()` so separate header and body writes do not
 wait for Nagle batching. `std::buffer::ReadBuffer` snapshots files in owned chunks
 before any response bytes are sent; its chunk size does not limit file size.
@@ -91,7 +91,8 @@ still receives replies to complete buffered requests.
 
 An optional `.http-policy` file beneath the granted root sets application timeouts:
 three decimal lines give idle, whole-request and whole-write seconds, respectively.
-Values must be positive and fit the monotonic nanosecond representation. Without
+An optional fourth line gives the shutdown drain duration; it defaults to five seconds.
+Existing three-line policy files retain their meaning. Values must be positive and fit the monotonic nanosecond representation. Without
 this file the defaults above apply; malformed policy stops startup with a located
 message. The interpreted functional fixture explicitly uses `60`, `120`, `120`
 because interpreting the large-header case exceeds the native two-second request
@@ -105,13 +106,59 @@ backpressure through `ReadBuffer::write_some` and an owned `WriteCursor`.
 
 `http_server.rs` shares the connection engine through an ordinary generic handler;
 `http.rs` supplies the static-file handler and `journal.rs` supplies the journal.
-`http_protocol.rs` parses requests with the handler\'s allowed method list. Its native test functions
+`http_protocol.rs` parses requests with the handler's allowed method list. Its native test functions
 cover request syntax and incremental header recognition through both execution
 routes:
 
 ```sh
 target/lkjscript test examples/http_protocol.rs --jobs 1
 ```
+
+### Graceful stop
+
+The server publishes `stop-target PID` beside its port. Send SIGTERM to that PID
+to request shutdown. For a native executable it is the executable's own PID.
+For an interpreted execution it is the owned syscall broker's PID: signaling the
+compiler process itself remains an abrupt interpreter termination. The explicit
+endpoint avoids pretending that a frozen-seed host has acquired a new signal handler.
+
+The first observed stop event closes the listener and idle peers. Each active
+connection freezes the bytes already read into its owned input buffer. The server
+finishes its current request/response and each pipelined request whose first byte
+was in that buffer. Later bytes may complete those admitted requests, including
+a partial final body; they cannot admit another request. The last response closes
+the connection. Headers transmitted before shutdown may already advertise
+keep-alive; the connection still closes after its final admitted response. A peer
+that sends unadmitted bytes may observe a TCP reset after that complete response.
+
+The drain has one absolute deadline, five seconds by default. Existing request
+and write deadlines remain in force and are shortened when the drain ends sooner.
+Progress and repeated SIGTERM never extend it. When connections finish or expire,
+the journal syncs its log and directory, then the executable prints `stopped`
+and exits 0. Sync failure prints an error and exits unsuccessfully. Synchronous
+handler work and the final filesystem sync still depend on the filesystem making
+progress; the deadline bounds network draining.
+
+`stopping DEADLINE` reports the absolute monotonic drain deadline for supervisors.
+Stop claims SIGTERM for the execution lifetime; its requested state is sticky
+after consumption. A repeated signal during final cleanup does not change exit 0.
+
+```sh
+sh tools/http-stop.sh
+# Select a compiler:
+sh tools/http-stop.sh --compiler target/lkjscript
+# Tiny interpreted consumer smoke using the published broker endpoint:
+sh tools/http-stop.sh --engine interpreter
+```
+
+This native check uses an explicit two-second fourth policy line. It tests a
+backpressured pipeline, an admitted incomplete body, idle closure, refusal of
+new connections and requests after stop, a nonreader, an unfinished header,
+a repeated SIGTERM, HTTP Date headers, and successful exit at the fixed deadline.
+The interpreted smoke uses only a three-byte document and checks GET, completion
+of an admitted partial request, idle closure, repeated SIGTERM to the verified
+broker child, and exit 0. Both checks run in the regular gate with weight two.
+Their clients, server/broker, port, FIFO and temporary files are removed afterwards.
 
 ## Outbound clients and persistent traffic
 
@@ -181,25 +228,30 @@ test workload and compiler; they do not alter language resource rules.
 
 `journal.rs` accepts JSON entries, retains the latest version of each entry in an
 in-memory index, and stores every mutation in an append-only log beneath its granted
-`Directory`. Its entry grants are the same five kinds as the static server:
-output, root directory, listener, clock and readiness. The granted root is writable
+`Directory`. Its entry grants are output, root directory, listener, clock, readiness, Stop and
+Entropy. The latter initializes the durable session-signing key. The granted root is writable
 and should be a private directory used by one journal.
 
 ```sh
 mkdir -p target/journal-data
 target/lkjscript build examples/journal.rs \
     --grant output --grant root=target/journal-data \
-    --grant listener=127.0.0.1:0 --grant clock --grant ready -o target/journal
+    --grant listener=127.0.0.1:0 --grant clock --grant ready --grant stop --grant entropy -o target/journal
 target/journal
 ```
 
-Startup prints recovery progress, then `ready REVISION ENTRIES` and `port NUMBER`.
-Use the printed port with the existing lkjscript HTTP client:
+Startup prints recovery progress, then `ready REVISION ENTRIES`, `port NUMBER`
+and `stop-target PID`. After that first startup, issue a write token from a separate
+program that receives the signing-key directory:
 
 ```sh
+target/lkjscript build examples/journal-token.rs \
+    --grant output --grant errors --grant input --grant root=target/journal-data \
+    --grant entropy --grant clock -o target/journal-token
+journal_token=$(printf '3600\n' | target/journal-token)
 target/lkjscript build tools/http-get.rs --grant output --grant input \
     --grant target=127.0.0.1:NUMBER -o target/journal-get
-printf 'POST /entries HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 16\r\nConnection: close\r\n\r\n{"text":"hello"}' | target/journal-get
+printf 'POST /entries HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer %s\r\nContent-Type: application/json\r\nContent-Length: 16\r\nConnection: close\r\n\r\n{"text":"hello"}' "$journal_token" | target/journal-get
 ```
 
 ### Routes and JSON
@@ -224,16 +276,45 @@ JSON numbers preserve their exact lexical value in the shared library; entry IDs
 and revisions do not pass through floating-point values.
 
 The shared HTTP engine handles persistence, pipelining, Content-Length bodies,
-HEAD and fixed deadlines. Bodies are assembled only after exact framing identifies
-their boundaries. Transfer encoding and Expect retain the static server's 501 and
+HEAD and fixed deadlines. POST/PUT bodies are assembled only after exact framing
+identifies their boundaries and header-time authentication succeeds. GET/HEAD
+bodies are drained without retaining a full body copy. Transfer encoding and Expect retain the static server's 501 and
 417 behavior. The journal enables POST and PUT; the static server still allows
 only GET and HEAD. Query text is ignored, so range bounds are path components.
 There is no application record-size cap. A malformed request cannot become a
 partial visible entry.
 
+### Signed write sessions
+
+GET and HEAD remain public. Every POST and PUT requires a valid
+`Authorization: Bearer TOKEN`, including requests for missing or malformed
+routes. Authentication follows header parsing and precedes body retention, route
+and JSON validation. Missing, invalid or expired credentials receive 401 with
+`WWW-Authenticate: Bearer realm="journal"` and a closed connection, without waiting
+for a declared body. Authorization is checked again before mutation, so a token
+that expires while its body arrives cannot authorize the write. Duplicate
+Authorization fields return 400 during HTTP parsing.
+
+The token is `v1.EXPIRY.NONCE.HMAC`: an exact decimal Unix-seconds expiry,
+32 random bytes represented by 64 lowercase hex digits, and a 32-byte HMAC-SHA256
+represented the same way. The MAC binds a fixed journal-session domain and the
+preceding token text. The shared cryptographic library compares MAC bytes without
+an early byte mismatch exit. A token expires when the current UTC seconds reach
+its expiry. The issuer reads an optional positive lifetime from stdin; empty input
+means 3,600 seconds. There is no public token-issuing HTTP route.
+
+The server creates `session.key` as exactly 32 kernel-random bytes while holding
+the journal writer lock. The staging file is created exclusively with mode 0600 before secret bytes are
+written; explicit permission repair also handles a restrictive umask. It is then
+synced, renamed and its directory synced. Existing keys are
+read exactly and survive restart; a malformed key stops startup without replacing
+it. The separately granted token issuer may read the key and issue tokens; access
+to that directory is signing authority.
+
 ### Commit and recovery
 
-The journal keeps four names beneath its granted root:
+The durable record protocol uses four names beneath its granted root; the session
+key described above is stored alongside them:
 
 | File | Purpose |
 | --- | --- |
@@ -282,8 +363,8 @@ Network reads and writes remain nonblocking with the static server's fair dispat
 and timeout policy. JSON parsing, hashing and local storage writes/syncs run
 synchronously when a complete request is ready; a stalled filesystem can delay
 the event loop. The optional `.http-policy` file sets the same idle, request and
-write deadlines described above. Stopping is currently by the supervisor; graceful
-stop and signed write sessions are the next consumer additions.
+write and shutdown deadlines described above. SIGTERM drains admitted work, syncs,
+and exits as described in the graceful-stop section.
 
 ### Focused journal checks
 
@@ -292,7 +373,11 @@ replace, exact Unicode/control-character roundtrips, pipelining, reads, ranges,
 HEAD and strict JSON input. Its shell supervisor checks single-writer refusal,
 three incomplete-tail boundaries, abandoned staging files, adoption of a complete
 unacknowledged record, corruption rejection and refusal to truncate below a durable
-head. These cases use a private directory and fresh loopback ports.
+head. They also build the separate token issuer, prove distinct random nonces and
+restart-stable authorization, reject expired/forged/duplicate credentials before
+body retention, and test private creation, permission repair, abandoned key staging
+and malformed keys without replacement. Credentials stay in private test files,
+never command arguments or logs. These cases use fresh loopback ports.
 
 ```sh
 sh tools/http-journal-cases.sh
@@ -302,8 +387,9 @@ sh tools/http-journal-cases.sh --engine interpreter
 sh tools/http-journal-cases.sh --compiler target/lkjscript
 ```
 
-The wrapper kills and reaps its own servers, verifies their ports are released,
-and removes all temporary state on success or failure. Its watchdogs bound test
+The wrapper kills and reaps its crash-test servers, then asks the final server
+to stop through its published endpoint and requires final sync plus exit 0.
+It verifies released ports and removes temporary state on success or failure. Its watchdogs bound test
 execution; they do not restrict journal data size or language execution.
 
 ### Random crash campaign

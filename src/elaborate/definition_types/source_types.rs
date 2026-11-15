@@ -93,6 +93,8 @@ impl Infer<'_, '_> {
                                         | "Listener"
                                         | "Connector"
                                         | "Readiness"
+                                        | "Entropy"
+                                        | "Stop"
                                 )
                             {
                                 values.push(self.atom(&path.name));

@@ -1407,7 +1407,7 @@ impl Parser {
         })
     }
     fn capability_path(&self, name: &str) -> Result<(), Diagnostic> {
-        if name == "std::thread::scope" {
+        if name == "std::thread::scope" || name == "std::time" || name == "std::time::http_date" {
             return Ok(());
         }
         let mut i = 0;

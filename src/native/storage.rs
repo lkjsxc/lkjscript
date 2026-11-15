@@ -67,8 +67,7 @@ pub(super) fn emit(a: &mut Assembler, p: Platform) {
     prologue(a, p, 32, Span::default());
     reject_closed(a);
     a.store(BP, -24, C);
-    a.immediate(A, 0o666);
-    a.store(BP, -16, A);
+    a.store(BP, -16, R8); // Caller selects ordinary 0666 or atomic private 0600.
     a.immediate(A, 0x0a); // RESOLVE_BENEATH | RESOLVE_NO_MAGICLINKS.
     a.store(BP, -8, A);
     path(a, invalid);

@@ -65,6 +65,8 @@ enum TypeKey {
     Listener,
     Connector,
     Readiness,
+    Entropy,
+    Stop,
     Str,
     Nominal(a::DeclarationId, Vec<usize>),
 }
@@ -815,6 +817,8 @@ impl Compiler<'_> {
             ir::TypeKind::Listener => (TypeKey::Listener, "Listener".to_string()),
             ir::TypeKind::Connector => (TypeKey::Connector, "Connector".to_string()),
             ir::TypeKind::Readiness => (TypeKey::Readiness, "Readiness".to_string()),
+            ir::TypeKind::Entropy => (TypeKey::Entropy, "Entropy".to_string()),
+            ir::TypeKind::Stop => (TypeKey::Stop, "Stop".to_string()),
             ir::TypeKind::Str => (TypeKey::Str, "str".to_string()),
             _ => unreachable!("only structural types use intern"),
         };

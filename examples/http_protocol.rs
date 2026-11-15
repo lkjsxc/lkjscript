@@ -1,6 +1,7 @@
 //! HTTP request framing and connection persistence shared by the consumers.
 pub struct Request {
     pub method: String,
+    pub authorization: Option<String>,
     pub path: String,
     pub head: bool,
     pub body: usize,
@@ -298,6 +299,7 @@ pub fn parse_with_methods(bytes: &[u8], methods: &str) -> Result<Request, u16> {
     let mut length = None;
     let mut transfer = false;
     let mut expectation = false;
+    let mut authorization = None;
     let mut close = false;
     let mut keep_alive = false;
     let mut at = line_end + 2;
@@ -341,6 +343,13 @@ pub fn parse_with_methods(bytes: &[u8], methods: &str) -> Result<Request, u16> {
             transfer = true;
         } else if same(name, b"expect") {
             expectation = true;
+        } else if same(name, b"authorization") {
+            if authorization.is_some() { return Err(400u16); }
+            let text = match String::from_utf8(value.to_vec()) {
+                Ok(text) => text,
+                Err(_) => return Err(400u16),
+            };
+            authorization = Some(text);
         } else if same(name, b"connection") {
             let (found_close, found_keep_alive) = connection_options(value)?;
             close = close || found_close;
@@ -367,6 +376,7 @@ pub fn parse_with_methods(bytes: &[u8], methods: &str) -> Result<Request, u16> {
     let path = target_path(&line[first + 1..second])?;
     Ok(Request {
         method: String::from_utf8(line[..first].to_vec()).unwrap(),
+        authorization,
         path,
         head,
         body: length.unwrap_or(0usize),
@@ -548,4 +558,12 @@ fn application_write_methods() {
     assert!(matches!(parse_with_methods(
         b"DELETE /entries/1 HTTP/1.1\r\nHost: localhost\r\n\r\n", "GET, HEAD, POST, PUT"),
         Err(405u16)));
+}
+
+#[test]
+fn authorization_field() {
+    let request = parse(b"GET / HTTP/1.1\r\nHost: a\r\naUtHoRiZaTiOn:  Bearer token\t\r\n\r\n").unwrap();
+    assert!(request.authorization == Some("Bearer token".to_string()));
+    assert!(matches!(parse(b"GET / HTTP/1.1\r\nHost: a\r\nAuthorization: Bearer a\r\nauthorization: Bearer b\r\n\r\n"), Err(400u16)));
+    assert!(matches!(parse(b"GET / HTTP/1.1\r\nHost: a\r\nAuthorization: \xff\r\n\r\n"), Err(400u16)));
 }

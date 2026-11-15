@@ -6,6 +6,22 @@ fn errno<T>(result: Result<T, i64>, expected: i64) {
         Ok(_) => panic!("expected an I/O error"),
     }
 }
+// Decode one Linux directory record. The 32-byte read buffer fits exactly one
+// entry for these short fixture names. Padding and opaque d_off cookies are not
+// part of the entry identity and need not repeat after a rewind.
+fn directory_entry(bytes: &[u8]) -> (u64, u8, Vec<u8>) {
+    assert!(bytes.len() >= 20usize);
+    let size = bytes[16usize] as usize + (bytes[17usize] as usize) * 256usize;
+    assert_eq!(size, bytes.len());
+    let mut inode = 0u64;
+    for index in 0usize..8usize {
+        inode |= (bytes[index] as u64) << ((index * 8usize) as u64);
+    }
+    let mut end = 19usize;
+    while end < size && bytes[end] != 0u8 { end += 1usize; }
+    assert!(end > 19usize && end < size);
+    (inode, bytes[18usize], bytes[19usize..end].to_vec())
+}
 pub fn main(mut world: World) {
     let mut clock = world.clock();
     let name = format!("lkjscript-storage-{}", clock.nanoseconds().unwrap());
@@ -96,13 +112,18 @@ pub fn main(mut world: World) {
     let mut buffer = [0u8; 32];
     let first_count = entries.__lkjscript_read(&mut buffer);
     assert!(first_count > 0i64);
-    let first = buffer[..first_count as usize].to_vec();
+    let first = directory_entry(&buffer[..first_count as usize]);
     let second_count = entries.__lkjscript_read(&mut buffer);
     assert!(second_count > 0i64);
-    assert!(&buffer[..second_count as usize] != &first[..]);
+    let second = directory_entry(&buffer[..second_count as usize]);
+    assert!(first.2 != second.2);
     assert_eq!(entries.__lkjscript_rewind(), 0i64);
-    assert_eq!(entries.__lkjscript_read(&mut buffer), first_count);
-    assert_eq!(&buffer[..first_count as usize], &first[..]);
+    let repeated_count = entries.__lkjscript_read(&mut buffer);
+    assert!(repeated_count > 0i64);
+    let repeated = directory_entry(&buffer[..repeated_count as usize]);
+    assert_eq!(repeated.0, first.0);
+    assert_eq!(repeated.1, first.1);
+    assert_eq!(repeated.2, first.2);
     drop(entries);
     assert!(replacement_root.list().unwrap().is_empty());
     directory.remove("journal").unwrap();

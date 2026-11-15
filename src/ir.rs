@@ -56,6 +56,10 @@ pub enum TypeKind {
     Connector,
     /// Affine readiness set; destruction closes only its kernel event handle.
     Readiness,
+    /// Affine authority to obtain kernel random bytes.
+    Entropy,
+    /// Affine SIGTERM endpoint; consumption is sticky within this owned value.
+    Stop,
 }
 
 /// Explicit host provisioning data; executors validate every descriptor against
@@ -74,6 +78,8 @@ pub enum EntryGrant {
     Listener(Vec<u8>),
     Connector(Vec<u8>),
     Readiness,
+    Entropy,
+    Stop,
 }
 
 #[derive(Clone, PartialEq)]
@@ -287,6 +293,17 @@ pub enum IntrinsicOp {
     FileSync,
     FileTruncate,
     FileLockExclusive,
+    WorldEntropy,
+    EntropyFill,
+    ClockUnixSeconds,
+    FileSetPrivate,
+    WorldStop,
+    StopRequested,
+    StopTarget,
+    ReadinessWatchStop,
+    ReadinessUnwatchStop,
+    ChildRequestStop,
+    DirectoryCreatePrivate,
 }
 impl IntrinsicOp {
     pub fn parse(text: &str) -> Option<IntrinsicOp> {
@@ -358,6 +375,17 @@ impl IntrinsicOp {
             "file_sync" => Some(IntrinsicOp::FileSync),
             "file_truncate" => Some(IntrinsicOp::FileTruncate),
             "file_lock_exclusive" => Some(IntrinsicOp::FileLockExclusive),
+            "world_entropy" => Some(IntrinsicOp::WorldEntropy),
+            "entropy_fill" => Some(IntrinsicOp::EntropyFill),
+            "clock_unix_seconds" => Some(IntrinsicOp::ClockUnixSeconds),
+            "file_set_private" => Some(IntrinsicOp::FileSetPrivate),
+            "world_stop" => Some(IntrinsicOp::WorldStop),
+            "stop_requested" => Some(IntrinsicOp::StopRequested),
+            "stop_target" => Some(IntrinsicOp::StopTarget),
+            "readiness_watch_stop" => Some(IntrinsicOp::ReadinessWatchStop),
+            "readiness_unwatch_stop" => Some(IntrinsicOp::ReadinessUnwatchStop),
+            "child_request_stop" => Some(IntrinsicOp::ChildRequestStop),
+            "directory_create_private" => Some(IntrinsicOp::DirectoryCreatePrivate),
 
             _ => None,
         }
@@ -431,6 +459,17 @@ impl IntrinsicOp {
             IntrinsicOp::FileSync => "file_sync",
             IntrinsicOp::FileTruncate => "file_truncate",
             IntrinsicOp::FileLockExclusive => "file_lock_exclusive",
+            IntrinsicOp::WorldEntropy => "world_entropy",
+            IntrinsicOp::EntropyFill => "entropy_fill",
+            IntrinsicOp::ClockUnixSeconds => "clock_unix_seconds",
+            IntrinsicOp::FileSetPrivate => "file_set_private",
+            IntrinsicOp::WorldStop => "world_stop",
+            IntrinsicOp::StopRequested => "stop_requested",
+            IntrinsicOp::StopTarget => "stop_target",
+            IntrinsicOp::ReadinessWatchStop => "readiness_watch_stop",
+            IntrinsicOp::ReadinessUnwatchStop => "readiness_unwatch_stop",
+            IntrinsicOp::ChildRequestStop => "child_request_stop",
+            IntrinsicOp::DirectoryCreatePrivate => "directory_create_private",
 
         }
     }

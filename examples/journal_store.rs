@@ -222,6 +222,12 @@ impl Store {
         io(self.root.sync(), "sync journal head directory")?;
         Ok(())
     }
+    /// Borrow the granted directory while this Store still owns its writer lock.
+    pub fn directory(&mut self) -> &mut Directory { &mut self.root }
+    pub fn sync(&mut self) -> Result<(), String> {
+        io(self.log.sync(), "sync journal shutdown log")?;
+        io(self.root.sync(), "sync journal shutdown directory")
+    }
     pub fn revision(&self) -> usize { self.revision }
     pub fn next_id(&self) -> usize { self.entries.len() + 1usize }
     pub fn entries(&self) -> &[Entry] { &self.entries }

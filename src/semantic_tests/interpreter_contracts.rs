@@ -11,6 +11,8 @@ fn compiled(text: &str) -> ir::CheckedProgram {
         "$std/buffer.rs".to_string(),
         "$std/timers.rs".to_string(),
         "$std/json.rs".to_string(),
+        "$std/hmac.rs".to_string(),
+        "$std/time.rs".to_string(),
         "$std/bytes.rs".to_string(),
         "$std/string.rs".to_string(),
         "$std/str.rs".to_string(),
@@ -387,6 +389,8 @@ fn raw_ir_cannot_fabricate_host_authority_or_supply_it_as_integer_argument() {
         ir::TypeKind::Listener,
         ir::TypeKind::Connector,
         ir::TypeKind::Readiness,
+        ir::TypeKind::Entropy,
+        ir::TypeKind::Stop,
     ] {
         let program = raw(
             vec![ir::Type {
@@ -503,6 +507,17 @@ impl interpreter::Host for FailingHost {
         self.0.push(b'F');
         Ok(1)
     }
+    fn open_file_private(&mut self, _directory: u64, _path: &[u8]) -> Result<u64, i64> { self.0.push(b'V'); Err(13) }
+    fn fill_entropy(&mut self, bytes: &mut [u8]) -> Result<(), i64> { self.0.push(b'E'); if !bytes.is_empty() { bytes[0] = 42; } Err(13) }
+    fn realtime_seconds(&mut self) -> Result<i64, i64> { self.0.push(b'K'); Ok(-1) }
+    fn private_file(&mut self, _handle: u64) -> Result<(), i64> { self.0.push(b'P'); Err(13) }
+    fn create_stop(&mut self) -> Result<u64, i64> { self.0.push(b'Q'); Ok(3) }
+    fn close_stop(&mut self, handle: u64) { assert_eq!(handle, 3u64); self.0.push(b'q'); }
+    fn stop_requested(&mut self, _handle: u64) -> Result<bool, i64> { self.0.push(b'J'); Ok(false) }
+    fn stop_target(&mut self, _handle: u64) -> Result<u32, i64> { self.0.push(b'I'); Ok(37) }
+    fn readiness_watch_stop(&mut self, _readiness: u64, _handle: u64, _token: usize) -> Result<(), i64> { self.0.push(b'w'); Err(13) }
+    fn readiness_unwatch_stop(&mut self, _readiness: u64, _handle: u64) -> Result<(), i64> { self.0.push(b'u'); Err(13) }
+    fn request_stop_process(&mut self, _child: u64) -> Result<(), i64> { self.0.push(b'G'); Err(13) }
     fn create_readiness(&mut self) -> Result<u64, i64> { self.0.push(b'R'); Ok(2) }
     fn close_readiness(&mut self, readiness: u64) { assert_eq!(readiness, 2u64); self.0.push(b'r'); }
     fn set_file_nonblocking(&mut self, _handle: u64, _enabled: bool) -> Result<(), i64> { Err(38) }
@@ -573,7 +588,7 @@ impl interpreter::Host for FailingHost {
         _stderr: u64,
         _result: u64,
     ) -> Result<u64, i64> {
-        Err(38)
+        self.0.push(b'B'); Ok(4)
     }
     fn wait_process(&mut self, _child: u64, _nonblocking: bool) -> Result<Option<i64>, i64> {
         Err(38)
@@ -581,7 +596,7 @@ impl interpreter::Host for FailingHost {
     fn terminate_process(&mut self, _child: u64) -> Result<(), i64> {
         Err(38)
     }
-    fn drop_process(&mut self, _child: u64) {}
+    fn drop_process(&mut self, child: u64) { assert_eq!(child, 4u64); self.0.push(b'b'); }
 
     fn write_stdout(&mut self, bytes: &[u8]) -> Result<(), String> {
         if !self.0.is_empty() {
@@ -944,6 +959,71 @@ fn storage_intrinsics_validate_before_host_effects() {
     }
 }
 
+fn lifecycle_intrinsics_validate_before_host_effects() {
+    let cases = vec![
+        ("fn main(mut world: World) { let mut entropy = world.entropy(); let mut bytes = [0u8; 1]; let _result = entropy.fill(&mut bytes); }".to_string(), ir::IntrinsicOp::WorldEntropy, b'E'),
+        ("fn main(mut world: World) { let mut entropy = world.entropy(); let mut bytes = [0u8; 1]; let _result = entropy.fill(&mut bytes); }".to_string(), ir::IntrinsicOp::EntropyFill, b'E'),
+        ("fn main(mut world: World) { let mut clock = world.clock(); let _result = clock.unix_seconds(); }".to_string(), ir::IntrinsicOp::ClockUnixSeconds, b'K'),
+        ("fn main(mut world: World) { let mut file = world.temporary_file().unwrap(); let _result = file.set_private(); }".to_string(), ir::IntrinsicOp::FileSetPrivate, b'P'),
+        ("fn main(mut world: World) { let _result = world.stop(); }".to_string(), ir::IntrinsicOp::WorldStop, b'Q'),
+        ("fn main(mut world: World) { let mut stop = world.stop().unwrap(); let _result = stop.requested(); }".to_string(), ir::IntrinsicOp::StopRequested, b'J'),
+        ("fn main(mut world: World) { let mut stop = world.stop().unwrap(); let _result = stop.target(); }".to_string(), ir::IntrinsicOp::StopTarget, b'I'),
+        ("fn main(mut world: World) { let mut ready = world.readiness().unwrap(); let mut stop = world.stop().unwrap(); let _result = ready.watch_stop(&mut stop, 3usize); }".to_string(), ir::IntrinsicOp::ReadinessWatchStop, b'w'),
+        ("fn main(mut world: World) { let mut ready = world.readiness().unwrap(); let mut stop = world.stop().unwrap(); let _result = ready.unwatch_stop(&mut stop); }".to_string(), ir::IntrinsicOp::ReadinessUnwatchStop, b'u'),
+        ("fn main(mut world: World) { let mut directory = world.directory(\".\").unwrap(); let _result = directory.create_private(\"key\"); }".to_string(), ir::IntrinsicOp::DirectoryCreatePrivate, b'V'),
+        ("fn main(mut world: World) { let mut process = world.process(); let file = world.temporary_file().unwrap(); let args: Vec<Vec<u8>> = Vec::new(); let mut child = process.spawn_file(&file, &args, &file, &file, &file, &file).unwrap(); let _result = child.request_stop(); }".to_string(), ir::IntrinsicOp::ChildRequestStop, b'G'),
+    ];
+    for (source, operation, marker) in cases {
+        let checked = compiled(&source);
+        let entry = function_index(checked.program(), "main");
+        let mut host = FailingHost(Vec::new());
+        interpreter::run(checked.program(), entry, &[0u64; 0], &mut host).unwrap();
+        assert!(host.0.contains(&marker));
+        for mode in 0usize..4usize {
+            if operation == ir::IntrinsicOp::WorldEntropy && mode == 1 { continue; }
+            let mut program = checked.program().clone();
+            let mut result = 0usize;
+            let mut changed = 0usize;
+            for function_index in 0usize..program.functions.len() {
+                let function = &mut program.functions[function_index];
+                for instruction_index in 0usize..function.body.len() {
+                    if let ir::Op::Intrinsic { dst, name, args } = &mut function.body[instruction_index].op {
+                        if *name == operation {
+                            result = function.locals[*dst].ty;
+                            if mode == 2 { args.pop(); }
+                            if mode == 3 {
+                                if args.len() >= 2 {
+                                    let first = args[0]; args[0] = args[1]; args[1] = first;
+                                } else { *name = ir::IntrinsicOp::DirectorySync; }
+                            }
+                            changed += 1;
+                        }
+                    }
+                }
+            }
+            assert_eq!(changed, 1usize);
+            if mode < 2 {
+                if operation == ir::IntrinsicOp::WorldEntropy {
+                    program.types[result].kind = ir::TypeKind::Bool;
+                } else if let ir::TypeKind::Enum { variants, .. } = &mut program.types[result].kind {
+                    if mode == 0 { variants[0].fields[0].ty = ir::U8; }
+                    else { variants[1].fields[0].ty = ir::U64; }
+                }
+            }
+            assert_eq!(crate::check::check(program.clone()).err().unwrap().code, "E_TYPE");
+            let mut host = FailingHost(Vec::new());
+            let error = interpreter::run(&program, entry, &[0u64; 0], &mut host).err().unwrap();
+            assert!(error.kind == ErrorKind::Interpreter(InterpreterError::InvalidIr), "{}", error.message);
+            assert!(!host.0.contains(&marker));
+        }
+    }
+    // A failed random fill preserves its written prefix and the untouched tail.
+    let checked = compiled("fn main(mut world: World) { let mut entropy=world.entropy(); let mut bytes=[7u8;2]; assert_eq!(entropy.fill(&mut bytes), Err(13i64)); assert_eq!(bytes[0],42u8); assert_eq!(bytes[1],7u8); let mut clock=world.clock(); assert_eq!(clock.unix_seconds(),Ok(-1i64)); }");
+    let entry = function_index(checked.program(), "main");
+    let mut host = FailingHost(Vec::new());
+    interpreter::run(checked.program(), entry, &[0u64; 0], &mut host).unwrap();
+}
+
 fn readiness_wait_rejects_forged_event_shapes_before_waiting() {
     let checked = compiled("fn main(mut world: World) { let mut ready = world.readiness().unwrap(); let mut clock = world.clock(); let _events = ready.wait(&mut clock, 0usize); }");
     let entry = function_index(checked.program(), "main");
@@ -1131,5 +1211,6 @@ pub fn run(world: &mut World, trace: bool) -> usize {
     listener_intrinsics_reject_wrong_signatures_without_host_effects();
     readiness_wait_rejects_forged_event_shapes_before_waiting();
     storage_intrinsics_validate_before_host_effects();
-    18
+    lifecycle_intrinsics_validate_before_host_effects();
+    19
 }

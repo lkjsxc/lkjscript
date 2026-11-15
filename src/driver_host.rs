@@ -8,10 +8,10 @@ enum Handle {
     File(File),
     ImportedFile(File, u64),
     RemoteFile(u64),
-    Child(Child),
     RemoteChild(u64),
     Listener(u64),
     Readiness(u64),
+    Stop(u64, bool),
 }
 
 struct Streams {
@@ -22,7 +22,6 @@ struct Streams {
 
 pub struct Host<'world, 'program> {
     world: &'world mut World,
-    process: Process,
     clock: Clock,
     network: crate::host_network::Network,
     handles: BTreeMap<u64, Handle>,
@@ -93,7 +92,6 @@ impl<'world, 'program> Host<'world, 'program> {
         entry: usize,
         runtime_source: Option<String>,
     ) -> Result<Self, String> {
-        let process = world.process();
         let clock = world.clock();
         let capture = if capture {
             Some(Streams {
@@ -106,7 +104,6 @@ impl<'world, 'program> Host<'world, 'program> {
         };
         Ok(Self {
             world,
-            process,
             clock,
             network: crate::host_network::Network::new(),
             handles: BTreeMap::new(),
@@ -189,7 +186,8 @@ impl<'world, 'program> Host<'world, 'program> {
             | Handle::ImportedFile(_, descriptor)
             | Handle::RemoteFile(descriptor)
             | Handle::Listener(descriptor)
-            | Handle::Readiness(descriptor) => self.network.close_remote(descriptor),
+            | Handle::Readiness(descriptor)
+            | Handle::Stop(descriptor, _) => self.network.close_remote(descriptor),
             Handle::RemoteChild(identity) => self.network.drop_remote_child(identity),
             _ => {}
         }
@@ -223,6 +221,13 @@ impl<'world, 'program> Host<'world, 'program> {
                 self.handles.insert(handle, other);
                 Err(9)
             }
+        }
+    }
+
+    fn stop_handle(&self, handle: u64) -> Result<u64, i64> {
+        match self.handles.get(&handle) {
+            Some(Handle::Stop(descriptor, _)) => Ok(*descriptor),
+            _ => Err(9),
         }
     }
 
@@ -312,6 +317,55 @@ impl interpreter::Host for Host<'_, '_> {
         self.network.address_of(descriptor, bytes)
     }
 
+    fn fill_entropy(&mut self, bytes: &mut [u8]) -> Result<(), i64> {
+        self.network.random_bytes(self.world, bytes)
+    }
+    fn realtime_seconds(&mut self) -> Result<i64, i64> {
+        self.network.realtime_value(self.world)
+    }
+    fn private_file(&mut self, handle: u64) -> Result<(), i64> {
+        let descriptor = self.remote_file(handle)?;
+        self.network.private_remote(descriptor)
+    }
+    fn create_stop(&mut self) -> Result<u64, i64> {
+        let descriptor = self.network.acquire_stop(self.world)?;
+        self.insert_handle(Handle::Stop(descriptor, false))
+    }
+    fn close_stop(&mut self, handle: u64) {
+        if let Some(value) = self.handles.remove(&handle) { self.dispose_handle(value); }
+    }
+    fn stop_requested(&mut self, handle: u64) -> Result<bool, i64> {
+        let descriptor = match self.handles.get(&handle) {
+            Some(Handle::Stop(descriptor, sticky)) => { if *sticky { return Ok(true); } *descriptor },
+            _ => return Err(9),
+        };
+        let observed = self.network.consume_stop(descriptor)?;
+        if observed {
+            if let Some(Handle::Stop(_, sticky)) = self.handles.get_mut(&handle) { *sticky = true; }
+        }
+        Ok(observed)
+    }
+    fn stop_target(&mut self, handle: u64) -> Result<u32, i64> {
+        let descriptor = self.stop_handle(handle)?;
+        self.network.signal_endpoint(descriptor)
+    }
+    fn readiness_watch_stop(&mut self, readiness: u64, handle: u64, token: usize) -> Result<(), i64> {
+        let selector = self.selector_handle(readiness)?;
+        let descriptor = self.stop_handle(handle)?;
+        self.network.register_interest(selector, descriptor, token, 1u8)
+    }
+    fn readiness_unwatch_stop(&mut self, readiness: u64, handle: u64) -> Result<(), i64> {
+        let selector = self.selector_handle(readiness)?;
+        let descriptor = self.stop_handle(handle)?;
+        self.network.remove_interest(selector, descriptor)
+    }
+    fn request_stop_process(&mut self, child: u64) -> Result<(), i64> {
+        match self.handles.get(&child) {
+            Some(Handle::RemoteChild(identity)) => self.network.stop_remote_child(*identity),
+            _ => Err(10),
+        }
+    }
+
     fn create_readiness(&mut self) -> Result<u64, i64> {
         let descriptor = self.network.create_selector(self.world)?;
         self.insert_handle(Handle::Readiness(descriptor))
@@ -376,6 +430,12 @@ impl interpreter::Host for Host<'_, '_> {
     fn open_file_storage(&mut self, directory: u64, path: &[u8], append: bool) -> Result<u64, i64> {
         let directory = self.directory_handle(directory)?;
         let opened = self.network.open_storage(directory, path, append)?;
+        self.insert_handle(Handle::RemoteFile(opened))
+    }
+
+    fn open_file_private(&mut self, directory: u64, path: &[u8]) -> Result<u64, i64> {
+        let directory = self.directory_handle(directory)?;
+        let opened = self.network.open_private(directory, path)?;
         self.insert_handle(Handle::RemoteFile(opened))
     }
 
@@ -527,52 +587,13 @@ impl interpreter::Host for Host<'_, '_> {
         errors: u64,
         result: u64,
     ) -> Result<u64, i64> {
-        let mut remote = false;
-        let selected = [executable, input, output, errors, result];
-        let mut selected_index = 0usize;
-        while selected_index < selected.len() {
-            let handle = selected[selected_index];
-            match self.handles.get(&handle) {
-                Some(Handle::RemoteFile(_)) => remote = true,
-                Some(Handle::File(_)) | Some(Handle::ImportedFile(_, _)) => {},
-                _ => return Err(9),
-            }
-            selected_index += 1;
-        }
-        if remote {
-            let executable = self.remote_file(executable)?;
-            let input = self.remote_file(input)?;
-            let output = self.remote_file(output)?;
-            let errors = self.remote_file(errors)?;
-            let result = self.remote_file(result)?;
-            let identity = self.network.spawn_remote(executable, arguments, input, output, errors, result)?;
-            return self.insert_handle(Handle::RemoteChild(identity));
-        }
-        let child = {
-            let executable = match self.handles.get(&executable) {
-                Some(Handle::File(file)) | Some(Handle::ImportedFile(file, _)) => file,
-                _ => return Err(9),
-            };
-            let input = match self.handles.get(&input) {
-                Some(Handle::File(file)) | Some(Handle::ImportedFile(file, _)) => file,
-                _ => return Err(9),
-            };
-            let output = match self.handles.get(&output) {
-                Some(Handle::File(file)) | Some(Handle::ImportedFile(file, _)) => file,
-                _ => return Err(9),
-            };
-            let errors = match self.handles.get(&errors) {
-                Some(Handle::File(file)) | Some(Handle::ImportedFile(file, _)) => file,
-                _ => return Err(9),
-            };
-            let result = match self.handles.get(&result) {
-                Some(Handle::File(file)) | Some(Handle::ImportedFile(file, _)) => file,
-                _ => return Err(9),
-            };
-            self.process
-                .__lkjscript_spawn(executable, arguments, input, output, errors, result)?
-        };
-        self.insert_handle(Handle::Child(child))
+        let executable = self.remote_file(executable)?;
+        let input = self.remote_file(input)?;
+        let output = self.remote_file(output)?;
+        let errors = self.remote_file(errors)?;
+        let result = self.remote_file(result)?;
+        let identity = self.network.spawn_remote(executable, arguments, input, output, errors, result)?;
+        self.insert_handle(Handle::RemoteChild(identity))
     }
 
     fn wait_process(&mut self, child: u64, nonblocking: bool) -> Result<Option<i64>, i64> {
@@ -585,23 +606,11 @@ impl interpreter::Host for Host<'_, '_> {
             if status.is_some() { self.handles.remove(&child); }
             return Ok(status);
         }
-        let value = match self.handles.get_mut(&child) {
-            Some(Handle::Child(process)) => process.__lkjscript_wait(nonblocking),
-            _ => return Err(10),
-        };
-        if value < 0 {
-            Err(-value)
-        } else if value == 0 {
-            Ok(None)
-        } else {
-            self.handles.remove(&child);
-            Ok(Some(value - 1))
-        }
+        Err(10)
     }
 
     fn terminate_process(&mut self, child: u64) -> Result<(), i64> {
         match self.handles.get_mut(&child) {
-            Some(Handle::Child(process)) => status(process.__lkjscript_terminate()),
             Some(Handle::RemoteChild(identity)) => self.network.terminate_remote_child(*identity),
             _ => Err(10),
         }

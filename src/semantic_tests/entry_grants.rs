@@ -171,6 +171,40 @@ fn readiness_grants_are_owned_and_unforgeable() {
     assert!(error.kind == ErrorKind::Trap(7));
     assert_eq!(host.0.as_slice(), b"RLr");
 }
+fn lifecycle_grants_are_explicit_owned_and_unforgeable() {
+    let checked = check::check(ir_text::read(include_str!(
+        "../../tests/fixtures/authority/lifecycle_entry.lkjir"
+    )).unwrap()).unwrap();
+    let runtime = prepared();
+    for entry in 0usize..2usize {
+        let name = if entry == 0 { "entropy" } else { "stop" };
+        let grants = crate::entry_grants::prepare(checked.program(), entry, &[name.to_string()]).unwrap();
+        let mut host = FailingHost(Vec::new());
+        interpreter::run_granted(checked.program(), entry, &grants, &mut host).unwrap();
+        assert_eq!(host.0.as_slice(), if entry == 0 { &b""[..] } else { &b"Qq"[..] });
+        native::encode_granted(&checked, &runtime, entry, &grants, None, None).unwrap();
+        for supplied in vec![Vec::<String>::new(), vec![format!("{name}=1")], vec![name.to_string(), name.to_string()]] {
+            assert!(crate::entry_grants::prepare(checked.program(), entry, &supplied).is_err());
+        }
+        for value in vec![0u64, 1u64, 65535u64] {
+            let mut host = FailingHost(Vec::new());
+            let error = interpreter::run(checked.program(), entry, &[value], &mut host).err().unwrap();
+            assert!(error.kind == ErrorKind::Interpreter(InterpreterError::InvalidIr));
+            assert!(host.0.is_empty());
+            let selected = native::Entry { function: entry, arguments: vec![value as i64], result_fd: None };
+            assert_eq!(native::encode(&checked, &runtime, selected).err().unwrap().code, "E_ENTRY");
+        }
+        let mut host = FailingHost(Vec::new());
+        let mismatch = vec![ir::EntryGrant::Clock];
+        assert!(interpreter::run_granted(checked.program(), entry, &mismatch, &mut host).is_err());
+        assert!(native::encode_granted(&checked, &runtime, entry, &mismatch, None, None).is_err());
+        assert!(host.0.is_empty());
+    }
+    let mut host = FailingHost(Vec::new());
+    let error = interpreter::run_granted(checked.program(), 2, &vec![ir::EntryGrant::Stop, listener()], &mut host).err().unwrap();
+    assert!(error.kind == ErrorKind::Trap(7));
+    assert_eq!(host.0.as_slice(), b"QLq");
+}
 pub fn probe() -> i64 {
 
     mismatched_grants_do_not_acquire_authority();
@@ -179,7 +213,8 @@ pub fn probe() -> i64 {
     non_scalar_result_rejects_before_acquisition();
     connector_grants_are_exact_and_unforgeable();
     readiness_grants_are_owned_and_unforgeable();
-    6
+    lifecycle_grants_are_explicit_owned_and_unforgeable();
+    7
 }
 pub fn run(world: &mut World, trace: bool) -> usize {
     if trace {

@@ -145,6 +145,8 @@ fn builtin(name: &str) -> bool {
             | "Listener"
             | "Connector"
             | "Readiness"
+            | "Entropy"
+            | "Stop"
             | "Copy"
             | "Clone"
             | "Ord"

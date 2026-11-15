@@ -17,6 +17,11 @@ impl Plan {
         for _ in grants { paths.push(a.label()); }
         Self { values, paths, grants: grants.to_vec(), site }
     }
+    fn offset(&self, index: usize) -> i64 {
+        let mut offset = 0i64;
+        for at in 0..index { offset += if matches!(self.grants[at], EntryGrant::Stop) { 16i64 } else { 8i64 }; }
+        offset
+    }
     pub fn prepare(&self, a: &mut Assembler, p: Platform) {
         for (index, grant) in self.grants.iter().enumerate() {
             match grant {
@@ -36,6 +41,7 @@ impl Plan {
                     a.call(p.world_listen);
                 }
                 EntryGrant::Readiness => { a.call(p.world_readiness); },
+                EntryGrant::Stop => { a.call(p.world_stop); },
                 _ => { a.immediate(A, 1); },
             }
             let ready = a.label();
@@ -47,16 +53,21 @@ impl Plan {
             a.jump(p.trap);
             a.bind(ready);
             a.address(R11, self.values);
-            a.store(R11, index as i64 * 8, A);
+            a.store(R11, self.offset(index), A);
+            if matches!(grant, EntryGrant::Stop) { a.immediate(A, 0); a.store(R11, self.offset(index) + 8, A); }
         }
     }
     pub fn load(&self, a: &mut Assembler, index: usize, register: u8) {
         a.address(R11, self.values);
-        a.load(register, R11, index as i64 * 8);
+        if matches!(self.grants[index], EntryGrant::Stop) { a.lea(register, R11, self.offset(index)); }
+        else { a.load(register, R11, self.offset(index)); }
     }
     pub fn data(&self, a: &mut Assembler, bytes: &mut Vec<u8>, offset: usize) {
         a.data_label(self.values, offset + bytes.len());
-        for _ in &self.grants { bytes.extend_from_slice(&[0u8; 8]); }
+        for grant in &self.grants {
+            bytes.extend_from_slice(&[0u8; 8]);
+            if matches!(grant, EntryGrant::Stop) { bytes.extend_from_slice(&[0u8; 8]); }
+        }
         for (index, grant) in self.grants.iter().enumerate() {
             a.data_label(self.paths[index], offset + bytes.len());
             match grant {

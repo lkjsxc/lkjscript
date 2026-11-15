@@ -29,6 +29,13 @@ pub(super) enum Value {
     Connector,
     ResultConnector,
     Readiness,
+    Entropy,
+    Stop,
+    StopRef,
+    Pid,
+    ResultStop,
+    ResultBoolean,
+    ResultPid,
     ResultReadiness,
     ResultEvents,
     MutableFileRef,
@@ -65,6 +72,8 @@ pub(super) enum Method {
     DirectoryOpen,
     DirectoryCreate,
     DirectoryCreateNew,
+    DirectoryCreatePrivate,
+    DirectoryCreatePrivateRaw,
     DirectoryOpenAppend,
     DirectoryCreateNewRaw,
     DirectoryOpenAppendRaw,
@@ -132,6 +141,16 @@ pub(super) enum Method {
     ReadinessUnwatchFile,
     ReadinessUnwatchListener,
     ReadinessWait,
+    WorldEntropy,
+    EntropyFill,
+    ClockUnixSeconds,
+    FileSetPrivate,
+    WorldStop,
+    StopRequested,
+    StopTarget,
+    ReadinessWatchStop,
+    ReadinessUnwatchStop,
+    ChildRequestStop,
 }
 pub(super) fn method(receiver: Receiver, name: &str) -> Option<Method> {
     Some(match (receiver, name) {
@@ -141,6 +160,16 @@ pub(super) fn method(receiver: Receiver, name: &str) -> Option<Method> {
         (Receiver::World, "args") => Method::Args,
         (Receiver::World, "directory") => Method::Directory,
         (Receiver::World, "readiness") => Method::WorldReadiness,
+        (Receiver::World, "entropy") => Method::WorldEntropy,
+        (Receiver::Entropy, "fill") => Method::EntropyFill,
+        (Receiver::Clock, "unix_seconds") => Method::ClockUnixSeconds,
+        (Receiver::File, "set_private") => Method::FileSetPrivate,
+        (Receiver::World, "stop") => Method::WorldStop,
+        (Receiver::Stop, "requested") => Method::StopRequested,
+        (Receiver::Stop, "target") => Method::StopTarget,
+        (Receiver::Readiness, "watch_stop") => Method::ReadinessWatchStop,
+        (Receiver::Readiness, "unwatch_stop") => Method::ReadinessUnwatchStop,
+        (Receiver::Child, "request_stop") => Method::ChildRequestStop,
         (Receiver::File, "set_nonblocking") => Method::FileSetNonblocking,
         (Receiver::Listener, "set_nonblocking") => Method::ListenerSetNonblocking,
         (Receiver::Readiness, "watch_file") => Method::ReadinessWatchFile,
@@ -171,6 +200,8 @@ pub(super) fn method(receiver: Receiver, name: &str) -> Option<Method> {
         (Receiver::Directory, "open") => Method::DirectoryOpen,
         (Receiver::Directory, "create") => Method::DirectoryCreate,
         (Receiver::Directory, "create_new") => Method::DirectoryCreateNew,
+        (Receiver::Directory, "create_private") => Method::DirectoryCreatePrivate,
+        (Receiver::Directory, "__lkjscript_create_private") => Method::DirectoryCreatePrivateRaw,
         (Receiver::Directory, "open_append") => Method::DirectoryOpenAppend,
         (Receiver::Directory, "__lkjscript_create_new") => Method::DirectoryCreateNewRaw,
         (Receiver::Directory, "__lkjscript_open_append") => Method::DirectoryOpenAppendRaw,
@@ -233,6 +264,15 @@ impl Method {
             Method::Args => (vec![], Value::Arguments),
             Method::Directory => (vec![Value::Text], Value::ResultDirectory),
             Method::WorldReadiness => (vec![], Value::ResultReadiness),
+            Method::WorldEntropy => (vec![], Value::Entropy),
+            Method::EntropyFill => (vec![Value::MutableBytes], Value::ResultUnit),
+            Method::ClockUnixSeconds => (vec![], Value::ResultStatus),
+            Method::FileSetPrivate | Method::ChildRequestStop => (vec![], Value::ResultUnit),
+            Method::WorldStop => (vec![], Value::ResultStop),
+            Method::StopRequested => (vec![], Value::ResultBoolean),
+            Method::StopTarget => (vec![], Value::ResultPid),
+            Method::ReadinessWatchStop => (vec![Value::StopRef, Value::Count], Value::ResultUnit),
+            Method::ReadinessUnwatchStop => (vec![Value::StopRef], Value::ResultUnit),
             Method::FileSetNonblocking | Method::ListenerSetNonblocking => (vec![Value::Boolean], Value::ResultUnit),
             Method::ReadinessWatchFile => (vec![Value::MutableFileRef, Value::Count, Value::Byte], Value::ResultUnit),
             Method::ReadinessWatchListener => (vec![Value::ListenerRef, Value::Count], Value::ResultUnit),
@@ -257,11 +297,11 @@ impl Method {
             Method::StdinRead | Method::FileRead => (vec![Value::MutableBytes], Value::ResultCount),
             Method::StdinReadRaw | Method::FileReadRaw => (vec![Value::MutableBytes], Value::Error),
             Method::StdinReadToEnd | Method::FileReadToEnd => (vec![], Value::ResultBytes),
-            Method::DirectoryOpen | Method::DirectoryCreate | Method::DirectoryCreateNew | Method::DirectoryOpenAppend => {
+            Method::DirectoryOpen | Method::DirectoryCreate | Method::DirectoryCreateNew | Method::DirectoryCreatePrivate | Method::DirectoryOpenAppend => {
                 (vec![Value::Text], Value::ResultFile)
             }
             Method::DirectoryOpenRaw => (vec![Value::Bytes, Value::Boolean], Value::ResultFile),
-            Method::DirectoryCreateNewRaw | Method::DirectoryOpenAppendRaw => (vec![Value::Bytes], Value::ResultFile),
+            Method::DirectoryCreateNewRaw | Method::DirectoryCreatePrivateRaw | Method::DirectoryOpenAppendRaw => (vec![Value::Bytes], Value::ResultFile),
             Method::DirectorySync | Method::FileSync | Method::FileLockExclusive => (vec![], Value::ResultUnit),
             Method::FileTruncate => (vec![Value::Count], Value::ResultUnit),
             Method::FileWrite => (vec![Value::Bytes], Value::ResultCount),
@@ -345,6 +385,16 @@ impl Method {
             Method::ListenerAcceptNoDelay => ir::IntrinsicOp::ListenerAcceptNoDelay,
             Method::ListenerAddressRaw => ir::IntrinsicOp::ListenerAddress,
             Method::WorldReadiness => ir::IntrinsicOp::WorldReadiness,
+            Method::WorldEntropy => ir::IntrinsicOp::WorldEntropy,
+            Method::EntropyFill => ir::IntrinsicOp::EntropyFill,
+            Method::ClockUnixSeconds => ir::IntrinsicOp::ClockUnixSeconds,
+            Method::FileSetPrivate => ir::IntrinsicOp::FileSetPrivate,
+            Method::WorldStop => ir::IntrinsicOp::WorldStop,
+            Method::StopRequested => ir::IntrinsicOp::StopRequested,
+            Method::StopTarget => ir::IntrinsicOp::StopTarget,
+            Method::ReadinessWatchStop => ir::IntrinsicOp::ReadinessWatchStop,
+            Method::ReadinessUnwatchStop => ir::IntrinsicOp::ReadinessUnwatchStop,
+            Method::ChildRequestStop => ir::IntrinsicOp::ChildRequestStop,
             Method::FileSetNonblocking => ir::IntrinsicOp::FileSetNonblocking,
             Method::ListenerSetNonblocking => ir::IntrinsicOp::ListenerSetNonblocking,
             Method::ReadinessWatchFile => ir::IntrinsicOp::ReadinessWatchFile,
@@ -358,6 +408,7 @@ impl Method {
             Method::StdinReadRaw => ir::IntrinsicOp::StdinRead,
             Method::DirectoryOpenRaw => ir::IntrinsicOp::DirectoryOpen,
             Method::DirectoryCreateNewRaw => ir::IntrinsicOp::DirectoryCreateNew,
+            Method::DirectoryCreatePrivateRaw => ir::IntrinsicOp::DirectoryCreatePrivate,
             Method::DirectoryOpenAppendRaw => ir::IntrinsicOp::DirectoryOpenAppend,
             Method::DirectorySync => ir::IntrinsicOp::DirectorySync,
             Method::FileSync => ir::IntrinsicOp::FileSync,
@@ -425,7 +476,9 @@ impl Method {
 
 fn storage_method(name: &str) -> bool {
     matches!(name, "create_new" | "open_append" | "__lkjscript_create_new" | "__lkjscript_open_append"
-        | "sync" | "truncate" | "lock_exclusive")
+        | "sync" | "truncate" | "lock_exclusive"
+        | "entropy" | "fill" | "unix_seconds" | "set_private" | "stop" | "requested" | "target"
+        | "watch_stop" | "unwatch_stop" | "request_stop" | "create_private" | "__lkjscript_create_private")
 }
 
 fn nominal_storage_target(source: &super::a::Program, mut target: usize) -> bool {
@@ -458,6 +511,8 @@ fn reserved(name: &str) -> bool {
         Receiver::Listener,
         Receiver::Connector,
         Receiver::Readiness,
+        Receiver::Entropy,
+        Receiver::Stop,
     ];
     let mut index = 0;
     while index < receivers.len() {

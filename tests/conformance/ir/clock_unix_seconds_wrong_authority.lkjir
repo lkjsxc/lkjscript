@@ -1,0 +1,21 @@
+lkjscript-ir 1
+# expect: reject E_TYPE
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "Stop" stop
+type "&mut Stop" ref mut 7
+type "Seconds" enum copy
+variant "Ok" "value" 3
+variant "Err" "error" 3
+endtype
+fn "probe" 1 9
+local "stop" 8 let
+local "result" 9 let
+@1 intrinsic 1 "clock_unix_seconds" 0
+@1 return 1
+endfn

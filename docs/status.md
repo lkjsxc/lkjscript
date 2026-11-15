@@ -33,17 +33,15 @@ Next: scalar Clone→Read, then measured rechecked inlining; retain the original
 
 ## Programs
 
-2.3 complete: durable HTTP journal; Directory/File provide exclusive create, atomic append, sync, truncate and advisory lock.
-JSON preserves number text and Unicode; malformed UTF-8, escapes, duplicate keys and invalid constructed values reject.
-Journal acknowledgements follow log sync, synced head rename and directory sync; replacements retain every old log revision.
-Recovery validates the durable boundary before incomplete-tail repair; complete corruption stops without discarding history.
-1,000 write-load kills + 1,000 confirmed recovery kills passed: 1,129 acknowledgements, 2,124 complete records.
-The oracle checked 1,127,051 frames across 1,001 snapshots and matched all HTTP state; no recovery-window misses.
-Campaign 143.375 s, load 14.19/9.46/6.20 -> 8.66/10.14/7.02; seed 6840227782638526189.
-Random run saw no torn tails; deterministic header/body/checksum truncation, corruption and locking cases pass.
-Interpreted CRUD/restart passes; real broker directory handles preserve renamed-root identity and mode0300 creates/appends.
-Rebased four-worker gate 306.680 s, load 3.43/3.43/3.70 -> 11.23/7.66/5.40; 2,001 server children reaped, test ports/files gone.
-
+2.4 complete: Stop, Entropy, private file creation, signed wall time and HTTP dates reach both executors and authority reports.
+Shutdown drains admitted requests to a fixed deadline, syncs and exits 0; native target is the program, interpreter target its broker.
+Native hostile-stop proof: 2.010 s, load 6.16/5.15/4.96 unchanged; interpreted partial-request stop: 0.650 s, load 2.39/3.63/4.44 unchanged.
+Journal writes require signed expiring tokens before body retention and again before mutation; the separate issuer holds key-directory authority.
+Issuer/restart/authentication cases pass both routes: 62.150 s combined, load 2.41/3.73/4.49 -> 3.63/3.77/4.45; private keys survive restart.
+Shared HMAC matches RFC/OpenSSL vectors; final-compiler equal-length MAC comparison has no content-dependent branch.
+Rebased four-worker gate passes: 242.634 s, load 1.76/2.50/3.67 -> 4.49/3.51/3.80; seed fixed point and both shutdown routes pass.
+2.3: 1,000 write kills + 1,000 confirmed recovery kills preserved 1,129 acknowledgements; 2,124 complete records, 1,127,051 checked frames.
+Campaign 143.375 s, load 14.19/9.46/6.20 -> 8.66/10.14/7.02; seed 6840227782638526189; deterministic torn-tail/corruption cases also pass.
 2.2: 990 silent plus ten active peers gave 22,032/s, 100.22% of bracketing unloaded mean; load 2.92/4.16/5.41 -> 3.19/4.08/5.33.
 Idle process RSS cost 2,205.2 bytes/peer; slow header closed at 2.003 s, hostile traffic 20,854/s; load 3.12/4.09/5.34 -> 3.19/4.08/5.33.
 
@@ -56,5 +54,7 @@ Idle process RSS cost 2,205.2 bytes/peer; slow header closed at 2.003 s, hostile
 
 2.1 full-body 6,161 -> 11,506/s; 17,513/15,001 samples; baseline load 8.67/6.26/4.40 -> 6.01/5.87/4.33, after 3.89/4.54/4.31 -> 3.67/4.44/4.29.
 2.1 framing 21,975/s, load 3.67/4.44/4.29 -> 2.83/4.16/4.20; numeric Connector grants and lkjscript clients replaced curl.
-The static server uses the shared HTTP engine; old local interpreter-directory wrappers are gone; nine diagnostic cases added.
-Next: graceful stop, entropy and signed expiring sessions, then the documentation candidate.
+Interpreter children now consistently belong to the broker; the unused local Child path is removed; three diagnostic cases record consumer friction.
+CI portability fixes cover witness module paths, privileged permissions, directory-record comparison and absent test utilities; witness builds.
+All consumer proof children, broker helpers, fresh ports, credentials, fixture directories and ignored proof outputs are removed.
+Next: documentation-origin candidate and parity; live service and /opt remain untouched.

@@ -22,12 +22,16 @@ impl Builder<'_, '_> {
             Value::Listener => self.compiler.intern(String::new(), ir::TypeKind::Listener),
             Value::Connector => self.compiler.intern(String::new(), ir::TypeKind::Connector),
             Value::Readiness => self.compiler.intern(String::new(), ir::TypeKind::Readiness),
+            Value::Entropy => self.compiler.intern(String::new(), ir::TypeKind::Entropy),
+            Value::Stop => self.compiler.intern(String::new(), ir::TypeKind::Stop),
+            Value::Pid => *self.compiler.type_names.get(&"u32".to_string()).unwrap(),
             Value::Port => *self.compiler.type_names.get(&"u16".to_string()).unwrap(),
-            Value::FileRef | Value::DirectoryRef | Value::MutableFileRef | Value::ListenerRef | Value::ClockRef => {
+            Value::FileRef | Value::DirectoryRef | Value::MutableFileRef | Value::ListenerRef | Value::ClockRef | Value::StopRef => {
                 let kind = match value {
                     Value::FileRef | Value::MutableFileRef => ir::TypeKind::File,
                     Value::ListenerRef => ir::TypeKind::Listener,
                     Value::ClockRef => ir::TypeKind::Clock,
+                    Value::StopRef => ir::TypeKind::Stop,
                     _ => ir::TypeKind::Directory,
                 };
                 let inner = self.compiler.intern(String::new(), kind);
@@ -77,6 +81,9 @@ impl Builder<'_, '_> {
             | Value::ResultListener
             | Value::ResultConnector
             | Value::ResultReadiness
+            | Value::ResultStop
+            | Value::ResultBoolean
+            | Value::ResultPid
             | Value::ResultEvents
             | Value::ResultPort
             | Value::ResultNames
@@ -89,6 +96,9 @@ impl Builder<'_, '_> {
                     Value::ResultListener => self.capability_type(Value::Listener, span)?,
                     Value::ResultConnector => self.capability_type(Value::Connector, span)?,
                     Value::ResultReadiness => self.capability_type(Value::Readiness, span)?,
+                    Value::ResultStop => self.capability_type(Value::Stop, span)?,
+                    Value::ResultBoolean => self.capability_type(Value::Boolean, span)?,
+                    Value::ResultPid => self.capability_type(Value::Pid, span)?,
                     Value::ResultPort => self.capability_type(Value::Port, span)?,
                     Value::ResultNames => self.capability_type(Value::Arguments, span)?,
                     Value::ResultStatus => ir::I64,
@@ -179,7 +189,7 @@ impl Builder<'_, '_> {
             values.push(value.0);
             index += 1;
         }
-        if matches!(method, capabilities::Method::DirectoryCreateNew | capabilities::Method::DirectoryOpenAppend) {
+        if matches!(method, capabilities::Method::DirectoryCreateNew | capabilities::Method::DirectoryCreatePrivate | capabilities::Method::DirectoryOpenAppend) {
             let path = self.source_library_call(
                 "io", "__lkjscript_storage_path", BTreeMap::new(), vec![values[1]], span,
             )?;
@@ -190,6 +200,8 @@ impl Builder<'_, '_> {
             }, span.line);
             let operation = if matches!(method, capabilities::Method::DirectoryCreateNew) {
                 ir::IntrinsicOp::DirectoryCreateNew
+            } else if matches!(method, capabilities::Method::DirectoryCreatePrivate) {
+                ir::IntrinsicOp::DirectoryCreatePrivate
             } else { ir::IntrinsicOp::DirectoryOpenAppend };
             let dst = self.temp(result);
             self.emit(ir::Op::Intrinsic {

@@ -21,6 +21,7 @@ pub trait Host {
     fn open_directory(&mut self, path: &[u8]) -> Result<u64, i64>;
     fn open_file(&mut self, directory: u64, path: &[u8], create: bool) -> Result<u64, i64>;
     fn open_file_storage(&mut self, directory: u64, path: &[u8], append: bool) -> Result<u64, i64>;
+    fn open_file_private(&mut self, directory: u64, path: &[u8]) -> Result<u64, i64>;
     fn sync_file(&mut self, handle: u64) -> Result<(), i64>;
     fn sync_directory(&mut self, handle: u64) -> Result<(), i64>;
     fn truncate_file(&mut self, handle: u64, length: usize) -> Result<(), i64>;
@@ -32,6 +33,16 @@ pub trait Host {
     fn world_file(&mut self, kind: u8) -> Result<u64, i64>;
     fn open_listener(&mut self, address: &[u8]) -> Result<u64, i64>;
     fn connect_socket(&mut self, address: &[u8]) -> Result<u64, i64>;
+    fn fill_entropy(&mut self, bytes: &mut [u8]) -> Result<(), i64>;
+    fn realtime_seconds(&mut self) -> Result<i64, i64>;
+    fn private_file(&mut self, handle: u64) -> Result<(), i64>;
+    fn create_stop(&mut self) -> Result<u64, i64>;
+    fn close_stop(&mut self, handle: u64);
+    fn stop_requested(&mut self, handle: u64) -> Result<bool, i64>;
+    fn stop_target(&mut self, handle: u64) -> Result<u32, i64>;
+    fn readiness_watch_stop(&mut self, readiness: u64, handle: u64, token: usize) -> Result<(), i64>;
+    fn readiness_unwatch_stop(&mut self, readiness: u64, handle: u64) -> Result<(), i64>;
+    fn request_stop_process(&mut self, child: u64) -> Result<(), i64>;
     fn create_readiness(&mut self) -> Result<u64, i64>;
     fn close_readiness(&mut self, readiness: u64);
     fn set_file_nonblocking(&mut self, handle: u64, enabled: bool) -> Result<(), i64>;
@@ -98,6 +109,7 @@ impl Host for Vec<u8> {
         Err(38)
     }
     fn open_file_storage(&mut self, _directory: u64, _path: &[u8], _append: bool) -> Result<u64, i64> { Err(38) }
+    fn open_file_private(&mut self, _directory: u64, _path: &[u8]) -> Result<u64, i64> { Err(38) }
     fn sync_file(&mut self, _handle: u64) -> Result<(), i64> { Err(38) }
     fn sync_directory(&mut self, _handle: u64) -> Result<(), i64> { Err(38) }
     fn truncate_file(&mut self, _handle: u64, _length: usize) -> Result<(), i64> { Err(38) }
@@ -119,6 +131,16 @@ impl Host for Vec<u8> {
     fn world_file(&mut self, _kind: u8) -> Result<u64, i64> {
         Err(38)
     }
+    fn fill_entropy(&mut self, _bytes: &mut [u8]) -> Result<(), i64> { Err(38) }
+    fn realtime_seconds(&mut self) -> Result<i64, i64> { Err(38) }
+    fn private_file(&mut self, _handle: u64) -> Result<(), i64> { Err(38) }
+    fn create_stop(&mut self) -> Result<u64, i64> { Err(38) }
+    fn close_stop(&mut self, _handle: u64) {}
+    fn stop_requested(&mut self, _handle: u64) -> Result<bool, i64> { Err(38) }
+    fn stop_target(&mut self, _handle: u64) -> Result<u32, i64> { Err(38) }
+    fn readiness_watch_stop(&mut self, _readiness: u64, _handle: u64, _token: usize) -> Result<(), i64> { Err(38) }
+    fn readiness_unwatch_stop(&mut self, _readiness: u64, _handle: u64) -> Result<(), i64> { Err(38) }
+    fn request_stop_process(&mut self, _child: u64) -> Result<(), i64> { Err(38) }
     fn create_readiness(&mut self) -> Result<u64, i64> { Err(38) }
     fn close_readiness(&mut self, _readiness: u64) {}
     fn set_file_nonblocking(&mut self, _handle: u64, _enabled: bool) -> Result<(), i64> { Err(38) }
@@ -298,6 +320,8 @@ enum Value {
     Listener(u64),
     Connector(Vec<u8>),
     Readiness(u64),
+    Entropy,
+    Stop(u64),
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Empty {
@@ -741,6 +765,7 @@ impl<H: Host> Interpreter<'_, H> {
             | Value::Child(_)
             | Value::Listener(_)
             | Value::Readiness(_)
+            | Value::Stop(_)
             | Value::Connector(_) => Err(self.error(
                 InterpreterError::MissingDrop,
                 "owned value requires structural destruction",
@@ -927,12 +952,14 @@ impl<H: Host> Interpreter<'_, H> {
             | (TypeKind::Stdin, Value::Stdin)
             | (TypeKind::Stderr, Value::Stderr)
             | (TypeKind::Process, Value::Process)
-            | (TypeKind::Clock, Value::Clock) => true,
+            | (TypeKind::Clock, Value::Clock)
+            | (TypeKind::Entropy, Value::Entropy) => true,
             (TypeKind::Directory, Value::Directory(handle))
             | (TypeKind::File, Value::File(handle))
             | (TypeKind::Child, Value::Child(handle))
             | (TypeKind::Listener, Value::Listener(handle))
-            | (TypeKind::Readiness, Value::Readiness(handle)) => *handle != 0,
+            | (TypeKind::Readiness, Value::Readiness(handle))
+            | (TypeKind::Stop, Value::Stop(handle)) => *handle != 0,
             (TypeKind::Connector, Value::Connector(address)) => valid_connector(address),
             (TypeKind::Ref { inner, mutable }, Value::Reference(reference)) => {
                 *inner == reference.referent && *mutable == reference.mutable
@@ -1406,6 +1433,7 @@ impl<H: Host> Interpreter<'_, H> {
             Value::Reference(reference) => self.release_reference(&reference)?,
             Value::Child(handle) => self.host.drop_process(handle),
             Value::Readiness(handle) => self.host.close_readiness(handle),
+            Value::Stop(handle) => self.host.close_stop(handle),
             Value::Directory(handle) | Value::File(handle) | Value::Listener(handle) => self.host.close_handle(handle),
             _ => {}
         }
@@ -2409,6 +2437,8 @@ fn run_inner<'a, H: Host>(
                 ir::EntryGrant::Listener(_) => matches!(kind, TypeKind::Listener),
                 ir::EntryGrant::Connector(_) => matches!(kind, TypeKind::Connector),
                 ir::EntryGrant::Readiness => matches!(kind, TypeKind::Readiness),
+                ir::EntryGrant::Entropy => matches!(kind, TypeKind::Entropy),
+                ir::EntryGrant::Stop => matches!(kind, TypeKind::Stop),
             };
             if !valid { return Err(interpreter.invalid("entry grant does not match its owned capability parameter")); }
         }
@@ -2421,6 +2451,12 @@ fn run_inner<'a, H: Host>(
                 ir::EntryGrant::Stderr => Ok(Value::Stderr),
                 ir::EntryGrant::Clock => Ok(Value::Clock),
                 ir::EntryGrant::Process => Ok(Value::Process),
+                ir::EntryGrant::Entropy => Ok(Value::Entropy),
+                ir::EntryGrant::Stop => match interpreter.host.create_stop() {
+                    Ok(handle) if handle != 0 => Ok(Value::Stop(handle)),
+                    Ok(_) => Err(0),
+                    Err(errno) => Err(errno),
+                },
                 ir::EntryGrant::Readiness => match interpreter.host.create_readiness() {
                     Ok(handle) if handle != 0 => Ok(Value::Readiness(handle)),
                     Ok(_) => Err(0),
@@ -2448,6 +2484,7 @@ fn run_inner<'a, H: Host>(
                         match previous {
                             Value::Directory(handle) | Value::Listener(handle) => interpreter.host.close_handle(*handle),
                             Value::Readiness(handle) => interpreter.host.close_readiness(*handle),
+                            Value::Stop(handle) => interpreter.host.close_stop(*handle),
                             _ => {}
                         }
                     }

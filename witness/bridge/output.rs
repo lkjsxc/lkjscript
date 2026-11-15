@@ -35,7 +35,13 @@ pub struct Readiness {
 pub struct Connector {
     address: [u8; 16],
 }
+pub struct Entropy { _seal: () }
+pub struct Stop { handle: std::fs::File, requested: bool }
 impl World {
+    pub fn entropy(&mut self) -> Entropy { Entropy { _seal: () } }
+    pub fn stop(&mut self) -> Result<Stop, i64> {
+        Ok(Stop { handle: files::stop_channel()?, requested: false })
+    }
     pub fn readiness(&mut self) -> Result<Readiness, i64> {
         Ok(Readiness { handle: files::create_readiness()? })
     }
@@ -92,7 +98,23 @@ impl World {
         Ok(Listener { handle: files::listen(address)? })
     }
 }
+impl Entropy {
+    pub fn fill(&mut self, bytes: &mut [u8]) -> Result<(), i64> { files::random_bytes(bytes) }
+}
+impl Stop {
+    pub fn requested(&mut self) -> Result<bool, i64> {
+        if !self.requested { self.requested = files::consume_stop(self.handle.as_raw_fd())?; }
+        Ok(self.requested)
+    }
+    pub fn target(&mut self) -> Result<u32, i64> { files::signal_target() }
+}
 impl Readiness {
+    pub fn watch_stop(&mut self, stop: &mut Stop, token: usize) -> Result<(), i64> {
+        files::watch(self.handle.as_raw_fd(), stop.handle.as_raw_fd(), token, 1)
+    }
+    pub fn unwatch_stop(&mut self, stop: &mut Stop) -> Result<(), i64> {
+        files::unwatch(self.handle.as_raw_fd(), stop.handle.as_raw_fd())
+    }
     pub fn watch_file(&mut self, file: &mut File, token: usize, interest: u8) -> Result<(), i64> {
         files::watch(self.handle.as_raw_fd(), file.descriptor(), token, interest)
     }
@@ -217,6 +239,12 @@ impl Directory {
     pub fn create(&mut self, path: &str) -> Result<File, i64> {
         self.__lkjscript_open(&files::path_bytes(path)?, true)
     }
+    pub fn create_private(&mut self, path: &str) -> Result<File, i64> {
+        self.__lkjscript_create_private(&files::path_bytes(path)?)
+    }
+    pub fn __lkjscript_create_private(&mut self, path: &[u8]) -> Result<File, i64> {
+        Ok(File { handle: Some(files::open_private(&self.handle, path)?) })
+    }
     pub fn create_new(&mut self, path: &str) -> Result<File, i64> {
         self.__lkjscript_create_new(&files::path_bytes(path)?)
     }
@@ -240,6 +268,7 @@ impl Directory {
     }
 }
 impl File {
+    pub fn set_private(&mut self) -> Result<(), i64> { files::private_file(self.descriptor()) }
     pub fn sync(&mut self) -> Result<(), i64> {
         files::sync_file(self.descriptor())
     }
@@ -322,6 +351,7 @@ impl World {
     }
 }
 impl Clock {
+    pub fn unix_seconds(&mut self) -> Result<i64, i64> { files::realtime_seconds() }
     pub fn __lkjscript_read(&mut self, bytes: &mut [u8]) -> i64 {
         files::monotonic_time(bytes).map_or_else(|e| -e, |()| 0)
     }
@@ -378,6 +408,10 @@ impl Process {
     }
 }
 impl Child {
+    pub fn request_stop(&mut self) -> Result<(), i64> {
+        let child = self.handle.as_ref().ok_or(10i64)?;
+        files::request_stop(child.id())
+    }
     pub fn __lkjscript_wait(&mut self, nonblocking: bool) -> i64 {
         let Some(child) = self.handle.as_mut() else {
             return -10;
@@ -634,6 +668,8 @@ pub(crate) mod files {
     // Linux state before that bootstrap policy runs, then restore it once at
     // the host entry so Rust and standalone ELF expose the same capabilities.
     static CLOSED_STANDARD_STREAMS: AtomicU8 = AtomicU8::new(0);
+    // 0: no successful Stop; 1: original SIGTERM clear; 2: original SIGTERM blocked.
+    static STOP_MASK: AtomicU8 = AtomicU8::new(0);
 
     extern "C" fn remember_closed_standard_streams() {
         let mut mask = 0_u8;
@@ -766,6 +802,62 @@ pub(crate) mod files {
                 &how as *const OpenHow, std::mem::size_of::<OpenHow>() as i64)
         })?;
         owned(descriptor)
+    }
+
+    pub fn open_private(directory: &std::fs::File, bytes: &[u8]) -> Result<std::fs::File, i64> {
+        let path = path(bytes)?;
+        let how = OpenHow { flags: 0x800c2, mode: 0o600, resolve: 0x0a };
+        owned(retry(|| unsafe {
+            syscall(437, i64::from(directory.as_raw_fd()), path.as_ptr(),
+                &how as *const OpenHow, std::mem::size_of::<OpenHow>() as i64)
+        })?)
+    }
+    pub fn private_file(descriptor: i32) -> Result<(), i64> {
+        if descriptor < 0 { return Err(9); }
+        retry(|| unsafe { syscall(91, i64::from(descriptor), 0o600i64) }).map(|_| ())
+    }
+    pub fn random_bytes(bytes: &mut [u8]) -> Result<(), i64> {
+        let mut offset = 0usize;
+        while offset < bytes.len() {
+            let count = retry(|| unsafe { syscall(318, bytes[offset..].as_mut_ptr(), bytes.len() - offset, 0i64) })? as usize;
+            if count == 0 { return Err(5); }
+            offset += count;
+        }
+        Ok(())
+    }
+    pub fn realtime_seconds() -> Result<i64, i64> {
+        let mut time = [0i64; 2];
+        retry(|| unsafe { syscall(228, 0i64, time.as_mut_ptr()) })?;
+        Ok(time[0])
+    }
+    pub fn stop_channel() -> Result<std::fs::File, i64> {
+        let mask = 0x4000u64;
+        let mut original = 0u64;
+        retry(|| unsafe { syscall(14, 0i64, &mask as *const u64, &mut original as *mut u64, 8i64) })?;
+        let descriptor = retry(|| unsafe { syscall(289, -1i64, &mask as *const u64, 8i64, 0x80800i64) });
+        let result = descriptor.and_then(owned);
+        if result.is_err() {
+            let _ = retry(|| unsafe { syscall(14, 2i64, &original as *const u64, 0usize, 8i64) });
+        } else {
+            let original = if original & mask == 0 { 1u8 } else { 2u8 };
+            let _ = STOP_MASK.compare_exchange(0, original, Ordering::SeqCst, Ordering::SeqCst);
+        }
+        result
+    }
+    pub fn consume_stop(descriptor: i32) -> Result<bool, i64> {
+        let mut bytes = [0u8; 128];
+        match read(descriptor, &mut bytes) {
+            Err(11) => Ok(false),
+            Err(error) => Err(error),
+            Ok(128) if u32::from_ne_bytes(bytes[..4].try_into().unwrap()) == 15 => Ok(true),
+            Ok(_) => Err(5),
+        }
+    }
+    pub fn signal_target() -> Result<u32, i64> {
+        Ok(retry(|| unsafe { syscall(39) })? as u32)
+    }
+    pub fn request_stop(pid: u32) -> Result<(), i64> {
+        retry(|| unsafe { syscall(62, i64::from(pid), 15i64) }).map(|_| ())
     }
 
     pub fn sync_file(descriptor: i32) -> Result<(), i64> {
@@ -1083,6 +1175,7 @@ pub(crate) mod files {
             .map(|value| value.as_ptr() as usize)
             .collect();
         pointers.push(0);
+        let stop_mask = STOP_MASK.load(Ordering::SeqCst);
         let executable_descriptor = executable.as_raw_fd();
         let result_descriptor = result.as_ref().map(|file| file.as_raw_fd());
         let mut closed = 0u8;
@@ -1093,6 +1186,13 @@ pub(crate) mod files {
         }
         unsafe {
             command.pre_exec(move || {
+                if stop_mask != 0 {
+                    let mask = 0x4000u64;
+                    let how = if stop_mask == 1 { 1i64 } else { 0i64 };
+                    if syscall(14, how, &mask as *const u64, 0usize, 8i64) < 0 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                }
                 if syscall(157, 1_i64, 9_i64, 0_i64, 0_i64, 0_i64) < 0 {
                     return Err(std::io::Error::last_os_error());
                 }

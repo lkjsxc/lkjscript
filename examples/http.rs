@@ -30,8 +30,10 @@ fn content_type(path: &str) -> &'static str {
 struct Documents { root: Directory }
 impl Handler for Documents {
     fn methods(&self) -> &'static str { "GET, HEAD" }
-    fn retain_body(&self) -> bool { false }
-    fn respond(&mut self, request: &Request, _body: Vec<u8>) -> Result<Reply, String> {
+    fn preflight(&mut self, _request: &Request, _now: i64) -> Option<Reply> { None }
+    fn retain_body(&self, _request: &Request) -> bool { false }
+    fn finish(&mut self) -> Result<(), String> { Ok(()) }
+    fn respond(&mut self, request: &Request, _body: Vec<u8>, _now: i64) -> Result<Reply, String> {
         let mut file = match self.root.open(&request.path) {
             Ok(file) => file,
             Err(errno) => {
@@ -50,10 +52,10 @@ impl Handler for Documents {
     }
 }
 pub fn main(output: Stdout, mut root: Directory, listener: Listener,
-    clock: Clock, ready: Readiness) {
+    clock: Clock, ready: Readiness, stop: Stop) {
     let policy = match http_policy::read(&mut root) {
         Ok(policy) => policy,
         Err(problem) => panic!("{problem}"),
     };
-    http_server::serve(output, listener, clock, ready, policy, Documents { root });
+    http_server::serve(output, listener, clock, ready, stop, policy, Documents { root });
 }

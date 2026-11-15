@@ -39,7 +39,7 @@ The first seven types must match this primitive prefix exactly, including names.
 | `array TYPE LENGTH` | Fixed-length owned elements. |
 | `vec TYPE`, `box TYPE` | Owned growable sequence or owned indirection. |
 | `str` | Unsized immutable UTF-8 text; values require a shared reference. |
-| `world`, `stdout`, `stdin`, `stderr`, `directory`, `file`, `process`, `clock`, `child`, `listener`, `connector`, `readiness` | Affine authority-bearing values. |
+| `world`, `stdout`, `stdin`, `stderr`, `directory`, `file`, `process`, `clock`, `child`, `listener`, `connector`, `readiness`, `entropy`, `stop` | Affine authority-bearing values. |
 
 All type indices must exist. Recursive by-value layouts reject; introduce Box or
 another indirection. Unsized text cannot be stored by value or as a container
@@ -141,7 +141,8 @@ The intrinsic signatures are checked in `src/check.rs` and `src/check/io.rs`:
 | `cast` | Checked scalar type combinations; references and capabilities cannot be cast. |
 | `f64_from_bits f64_to_bits` | Bit-preserving conversion between unsigned 64-bit integers and binary64, including NaN payloads. |
 | `assert` | Consume bool, returning unit or trapping. |
-| `world_stdout world_stdin world_stderr world_process world_clock` | Derive the named capability through an exclusive World reference. |
+| `world_stdout world_stdin world_stderr world_process world_clock world_entropy` | Derive the named capability through an exclusive World reference; world_entropy returns owned entropy directly. |
+| `entropy_fill` | `(&mut entropy, &mut [u8]) -> Result<(), i64>`: fill the entire slice from the kernel random source. |
 | `world_arg_count world_arg_len world_arg_copy` | Read/copy byte arguments through World. |
 | `world_exit_status` | Set the requested u8 process status through World. |
 | `world_directory directory_open directory_open_directory` | Acquire a root Directory from World, or a File/Directory beneath an existing Directory. |
@@ -152,19 +153,30 @@ The intrinsic signatures are checked in `src/check.rs` and `src/check/io.rs`:
 | `connector_connect` | `(&mut connector) -> Result<file, i64>`: connect only to its authorized destination. |
 | `listener_address` | `(&mut listener, &mut [u8]) -> i64`: write its local socket address; zero or negative errno. |
 | `world_readiness` | `(&mut world) -> Result<readiness, i64>`: own a kernel readiness set. |
+| `world_stop` | `(&mut world) -> Result<stop, i64>`: claim SIGTERM and own a nonblocking signal descriptor. |
+| `stop_requested` | `(&mut stop) -> Result<bool, i64>`: consume a pending SIGTERM or return false; true remains sticky for this Stop. |
+| `stop_target` | `(&mut stop) -> Result<u32, i64>`: identify the execution's explicit SIGTERM endpoint. |
 | `file_set_nonblocking listener_set_nonblocking` | Exclusive handle and bool; set O_NONBLOCK on its open file description, returning Result<(), i64>. |
 | `readiness_watch_file` | `(&mut readiness, &mut file, usize token, u8 interest) -> Result<(), i64>`: add or update a watch; interest is 0..3. |
 | `readiness_watch_listener` | `(&mut readiness, &mut listener, usize token) -> Result<(), i64>`: add or update an acceptance watch. |
-| `readiness_unwatch_file readiness_unwatch_listener` | Exclusive readiness and corresponding exclusive handle; remove its watch, returning Result<(), i64>. |
+| `readiness_watch_stop` | `(&mut readiness, &mut stop, usize token) -> Result<(), i64>`: add or update a watch for unread SIGTERM. |
+| `readiness_unwatch_file readiness_unwatch_listener readiness_unwatch_stop` | Exclusive readiness and corresponding exclusive handle; remove its watch, returning Result<(), i64>. |
 | `readiness_wait` | `(&mut readiness, &mut clock, usize deadline) -> Result<Vec<(usize,u8)>, i64>`: owned token/event tuples by an absolute monotonic nanosecond deadline. |
+| `directory_create_new directory_open_append directory_create_private` | `(&mut directory, &[u8] path) -> Result<file, i64>`: constrained exclusive create, create/append, or exclusive private create. The path has exactly one trailing NUL. |
+| `directory_sync file_sync` | Exclusive Directory or File respectively; fsync its storage, returning Result<(), i64>. |
+| `file_truncate` | `(&mut file, usize length) -> Result<(), i64>`: set the file length without changing its offset. |
+| `file_lock_exclusive` | `(&mut file) -> Result<(), i64>`: nonblocking advisory exclusive flock, held until the last duplicate closes. |
+| `file_set_private` | `(&mut file) -> Result<(), i64>`: fchmod to exactly 0600. |
 | `file_duplicate` | Duplicate an exclusively borrowed File, sharing its offset and preserving closed state. Return Result<File, i64>. |
 | `file_readonly` | Reopen an exclusively borrowed File read-only with a fresh offset at zero, preserving closed state. Return Result<File, i64>; no path authority is granted. |
 | `file_rewind file_executable directory_rewind` | Seek to byte zero or make a File executable; return zero or negative errno. |
 | `directory_read` | Read Linux directory records into mutable bytes; return count or negative errno. |
 | `directory_create directory_remove directory_rename` | Mutate NUL-terminated basenames through exclusive Directory references. Reject slash, empty name, dot and dot-dot. Return zero or negative errno. |
 | `clock_read` | Clock plus mutable bytes of length at least 16. Write little-endian i64 seconds/nanoseconds from CLOCK_MONOTONIC; return zero or negative errno. |
+| `clock_unix_seconds` | `(&mut clock) -> Result<i64, i64>`: signed CLOCK_REALTIME seconds since Unix epoch; negative successful timestamps remain distinct from positive errno. |
 | `process_spawn` | Exclusive Process, shared executable File, NUL-separated argv, and four shared Files for stdin/stdout/stderr/fd3. Execute with empty environment; return Result<Child, i64>. |
 | `child_wait child_terminate` | Exclusive Child. Wait takes a nonblocking bool and returns zero while running, Linux wait status plus one when reaped, or negative errno. Terminate requests SIGKILL; drop terminates and reaps a live direct child. |
+| `child_request_stop` | `(&mut child) -> Result<(), i64>`: send SIGTERM only to the owned child without waiting; a reaped child returns ECHILD. |
 | `stdin_read file_read file_write` | Use an exclusive authority reference and a byte slice; return i64 count or negative errno. |
 | `stdout_write stderr_write` | Write an immutable byte slice through the corresponding exclusive authority reference. |
 
@@ -180,8 +192,9 @@ handle; accepted Files follow ordinary File read/write/drop rules. Connector is
 non-Copy and non-Data, but owns only an immutable endpoint: constructing or dropping
 it acquires or releases no socket. Each connect returns a separate owned stream.
 Capability acquisition results require a non-Copy enum with two alternatives: one success
-field of the declared capability type, then one i64 errno field. Native handles
-occupy eight bytes. Socket descriptors are close-on-exec and promoted above
+field of the declared capability type, then one i64 errno field. Native capability
+values occupy eight bytes except Stop, whose descriptor and sticky observation
+occupy sixteen bytes. Owned descriptors are close-on-exec and promoted above
 standard streams before exposure, preserving any originally closed stdio.
 Interrupted operations retry; closing consumes the descriptor without retry.
 The kernel determines backlog and resource limits.
@@ -202,6 +215,51 @@ aliases remain, explicitly unwatch before closing the registered descriptor.
 Each wait returns at most 64 events, with no bound on registered handles. A past
 deadline polls once without blocking. EINTR recomputes the remaining absolute
 time. An empty result means the deadline elapsed without a ready event.
+
+Storage creation preserves the Directory's acquired identity and constrains paths
+with openat2 RESOLVE_BENEATH|RESOLVE_NO_MAGICLINKS, without a weaker fallback.
+create_new and create_private use O_CREAT|O_EXCL|O_RDWR; open_append uses
+O_CREAT|O_APPEND|O_RDWR, never truncates, starts at offset zero, and places each
+write at the current end. Ordinary creation requests mode 0666; private creation
+requests mode 0600 atomically, both subject to umask. Existing paths cause an
+exclusive create to fail. set_private sets exactly 0600 regardless of umask,
+restricting future opens but never revoking already-open descriptors. File sync
+and directory sync are separate durability effects; directory sync opens a
+readable descriptor for the acquired directory and may fail if that access is
+unavailable. Advisory locks do not exclude noncooperating writers. Closed File
+sentinels return EBADF for these effects without operating on inherited stdin.
+
+Entropy is affine and non-Data. Derivation has no fallible acquisition; fill uses
+kernel getrandom with flags zero, blocking until randomness is ready, and retries
+EINTR and short reads. Empty slices succeed. On a later error, the filled prefix
+remains changed and the rest is untouched; the interpreter preserves this result
+rather than rolling back bytes. No userspace generator or entropy fallback is used.
+Wall-clock seconds may jump; monotonic clock_read remains the deadline source.
+
+Stop is affine and non-Data. Successful acquisition blocks SIGTERM and owns a
+nonblocking, close-on-exec signalfd. It claims the signal for the execution
+lifetime: dropping any or the last Stop closes only that descriptor and does not
+restore the mask. Failure restores the previous mask and does not claim the
+signal. Multiple Stops share the process pending standard-signal queue; delivery
+is not broadcast and repeated signals may coalesce. Before its first true,
+requested consumes one pending SIGTERM, returning false without blocking if none
+is pending; later calls return cached true without consuming another signal.
+Readiness reports unread SIGTERM as read bit 1;
+after consumption the descriptor need not remain ready despite the cached result.
+
+Native stop_target returns the actual program PID. The interpreter returns the
+PID of its owned syscall broker, whose signal mask and queue implement the
+interpreted execution's Stop contract. The CLI driver or wrapper PID is not that
+endpoint: graceful interpreted stop must address the capability's published
+target. The returned integer identifies an endpoint but grants no signal-sending
+authority; child_request_stop takes an owned Child, never an arbitrary PID.
+
+On the first successful Stop acquisition, execution records the previous SIGTERM
+mask bit. Children spawned after that claim restore exactly this bit before exec,
+preserving every other mask bit; executions without a successful claim do not
+change it. Thus an originally blocked SIGTERM remains blocked in spawned children.
+This rule still applies after all Stops drop. Child stop requests do not wait or
+change reaping ownership; live Child destruction still kills and reaps.
 
 Unary, binary and intrinsic names form closed vocabularies. Unknown spellings
 reject with E_IR_TEXT; wrong typed signatures reject at the checker. A type name
@@ -254,7 +312,8 @@ temporary reference carrier cannot become an escaping view's origin.
 ## Host entry and authority reports
 
 A host entry returns unit or a scalar. It may take no parameters, a sole World,
-or owned Stdout/Stdin/Stderr, Directory, Listener, Connector, Readiness, Process and Clock parameters.
+or owned Stdout/Stdin/Stderr, Directory, Listener, Connector, Readiness, Process,
+Clock, Entropy and Stop parameters.
 The sole World entry declares implicit full authority. Every other parameter
 requires an explicit invocation grant selected by its distinct, nonempty local
 name. ASCII whitespace, control bytes and equals signs cannot occur in grant names.
@@ -263,8 +322,9 @@ use a Directory entry and acquire files through ordinary checked operations.
 
 Grants are invocation data outside the IR. Directory descriptors contain the
 NUL-terminated root path; Listener and Connector descriptors contain the sixteen-byte address
-above. Other allowed capabilities need no payload. Both executors independently
-validate the complete parameter/grant correspondence before acquiring handles.
+above. Other allowed capabilities, including Entropy and Stop, need no payload.
+Both executors independently validate the complete parameter/grant correspondence
+before acquiring handles.
 Raw scalar arguments cannot manufacture an address or derived capability.
 Missing, duplicate, unknown or malformed CLI grants reject before publication or
 execution. Build embeds validated descriptors; acquisition occurs at startup.
@@ -276,7 +336,8 @@ cleanup, including custom destructors and capabilities nested in owned values.
 Unreachable instructions after return, trap or a loop transfer do not contribute.
 Borrowed values do not cause destruction of their referents. Recursive functions
 are listed once. This query reads checked IR alone and does not infer a smaller
-grant set from source spelling or a particular runtime branch.
+grant set from source spelling or a particular runtime branch. Stop ownership
+cleanup contributes stop_close; merely borrowing Stop does not close it.
 
 ## Backend contract and trust
 

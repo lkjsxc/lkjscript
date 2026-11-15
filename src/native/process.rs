@@ -476,6 +476,7 @@ fn spawn(a: &mut Assembler, p: Platform) {
     a.jump(cleanup);
 
     a.bind(child);
+    if p.stop_signals { super::lifecycle::restore_child_mask(a, p, child_failed); }
     a.immediate(DI, 1);
     a.immediate(SI, 9);
     a.immediate(D, 0);

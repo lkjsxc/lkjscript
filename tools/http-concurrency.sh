@@ -28,6 +28,7 @@ client_pid=
 started_pids=
 port=
 cleanup() {
+    status=$?
     trap - EXIT HUP INT TERM
     if [ -n "$client_pid" ]; then
         kill "$client_pid" 2>/dev/null || :
@@ -46,9 +47,22 @@ cleanup() {
         if kill -0 "$pid" 2>/dev/null; then gone=no; fi
     done
     listening=no
-    if [ -n "$port" ] && ss -ltnH "sport = :$port" | grep -q .; then listening=yes; fi
+    if [ -n "$port" ]; then
+        port_status=0
+        awk -v suffix="$(printf ':%04X' "$port")" '
+            $4 == "0A" && substr($2, length($2) - 4) == suffix { found=1 }
+            END { exit !found }
+        ' < /proc/net/tcp || port_status=$?
+        case "$port_status" in
+            0) listening=yes ;;
+            1) ;;
+            *) listening=unknown ;;
+        esac
+    fi
+    if [ "$gone" != yes ] || [ "$listening" != no ]; then status=1; fi
     printf 'Concurrency cleanup: started PIDs%s; all gone %s; port %s listening %s; temporary directory removed\n' \
         "$started_pids" "$gone" "$port" "$listening"
+    exit "$status"
 }
 trap cleanup EXIT
 trap 'exit 130' INT
@@ -58,7 +72,7 @@ dd if=/dev/zero of="$http_work/root/load.bin" bs=40108 count=1 status=none
 dd if=/dev/zero of="$http_work/root/blocked.bin" bs=1048576 count=32 status=none
 "$compiler" build examples/http.rs \
     --grant output --grant "root=$http_work/root" \
-    --grant listener=127.0.0.1:0 --grant clock --grant ready -o "$http_work/server"
+    --grant listener=127.0.0.1:0 --grant clock --grant ready --grant stop -o "$http_work/server"
 : > "$http_work/server.out"
 : > "$http_work/server.err"
 : > "$http_work/client.out"

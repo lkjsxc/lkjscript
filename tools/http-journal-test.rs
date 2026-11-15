@@ -4,6 +4,7 @@
 mod http_client;
 mod http_journal_peer;
 mod http_journal_model;
+mod http_journal_auth;
 use http_client::{find, io, require};
 use http_journal_peer::{Peer, exchange};
 use http_journal_model::{Model, Snapshot};
@@ -54,6 +55,7 @@ struct Harness {
     reaped: usize,
     repairs: usize,
     recovery_misses: usize,
+    token: String,
 }
 impl Harness {
     fn spawn(&mut self, world: &mut World) -> Result<Server, String> {
@@ -91,6 +93,9 @@ impl Harness {
                 server.port = port;
                 require(find(&server.transcript, b"recovery done ").is_some(), "service started before recovery")?;
                 if find(&server.transcript, b"recovery repaired ").is_some() { self.repairs += 1usize; }
+                let now = io(self.clock.unix_seconds(), "session wall clock")?;
+                let mut entropy = world.entropy();
+                self.token = http_journal_auth::issue(&mut self.data, &mut entropy, now, 3600i64)?;
                 return Ok(server);
             }
             server.alive()?;
@@ -108,7 +113,7 @@ impl Harness {
     }
     fn request(&mut self, world: &mut World, port: u16, method: &str, path: &str,
         body: &[u8], expected: u16) -> Result<Value, String> {
-        exchange(world, port, &mut self.clock, &mut self.ready, method, path, body, expected)
+        exchange(world, port, &mut self.clock, &mut self.ready, &self.token, method, path, body, expected)
     }
     fn mutate(&mut self, world: &mut World, port: u16, model: &mut Model,
         id: usize, size: usize) -> Result<(), String> {
@@ -175,7 +180,7 @@ impl Harness {
     }
 }
 fn enqueue(peer: &mut Peer, model: &mut Model, pending: &mut Vec<(usize, usize)>,
-    random: &mut Random, entries: usize) -> Result<(), String> {
+    random: &mut Random, entries: usize, token: &str) -> Result<(), String> {
     for _ in 0usize..16usize {
         let value = random.next();
         let id = if value % 8usize == 0usize { 0usize } else { 1usize + value % entries };
@@ -183,7 +188,7 @@ fn enqueue(peer: &mut Peer, model: &mut Model, pending: &mut Vec<(usize, usize)>
         let body = model.body(index)?;
         let path = if id == 0usize { "/entries".to_string() } else { format!("/entries/{id}") };
         let method = if id == 0usize { "POST" } else { "PUT" };
-        let end = peer.queue(&http_journal_peer::request(method, &path, &body, false));
+        let end = peer.queue(&http_journal_peer::request(token, method, &path, &body, false));
         pending.push((index, end));
     }
     Ok(())
@@ -212,14 +217,14 @@ fn write_kill(harness: &mut Harness, world: &mut World, server: &mut Server,
     let mut peer = Peer::connect(world, server.port)?;
     let mut pending: Vec<(usize, usize)> = Vec::new();
     let mut completed = 0usize;
-    enqueue(&mut peer, model, &mut pending, random, entries)?;
+    enqueue(&mut peer, model, &mut pending, random, entries, &harness.token)?;
     let start = io(harness.clock.nanoseconds(), "write-load start")?;
     let deadline = start + 250_000usize + random.next() % 4_750_001usize;
     loop {
         peer.step()?;
         collect(&mut peer, model, &pending, &mut completed)?;
         require(!peer.ended, "server closed while write load was active")?;
-        if completed == pending.len() { enqueue(&mut peer, model, &mut pending, random, entries)?; }
+        if completed == pending.len() { enqueue(&mut peer, model, &mut pending, random, entries, &harness.token)?; }
         let now = io(harness.clock.nanoseconds(), "write-kill deadline")?;
         require(now - start < 30_000_000_000usize, "no in-flight write before kill watchdog")?;
         // A queued request alone is not load. At the signal, at least one complete
@@ -247,7 +252,7 @@ fn exercise(world: &mut World, path: &str, cycles: usize, seed: u64) -> Result<(
     let data = io(directory.open_directory("data"), "open journal data")?;
     let mut harness = Harness { process: world.process(), clock: world.clock(),
         ready: io(world.readiness(), "supervisor wait set")?, executable, data, output: world.stdout(),
-        started: 0usize, reaped: 0usize, repairs: 0usize, recovery_misses: 0usize };
+        started: 0usize, reaped: 0usize, repairs: 0usize, recovery_misses: 0usize, token: String::new() };
     let mut random = Random { state: seed };
     let mut model = Model::new();
     let mut server = harness.start(world)?;

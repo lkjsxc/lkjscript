@@ -303,12 +303,12 @@ fn exercise(
     config: &Config,
     report: &mut Report,
 ) -> Result<(), String> {
-    let launcher = "mode=$1\nmarker=$2\nshift 2\ncase \"$mode\" in\nclose0) exec 0<&-; exec \"$@\";;\nclose1) exec 1>&-; exec \"$@\";;\nclose2) exec 2>&-; exec \"$@\";;\npipe1) rm -f \"$marker\" \"$marker.status\"; { while test ! -f \"$marker\"; do :; done; \"$@\"; code=$?; printf \"%s\\n\" \"$code\" > \"$marker.status\"; } | { exec 0<&-; : > \"$marker\"; }; read code < \"$marker.status\"; exit \"$code\";;\npipe2) rm -f \"$marker\" \"$marker.status\"; { while test ! -f \"$marker\"; do :; done; \"$@\" 2>&1 1>&3; code=$?; printf \"%s\\n\" \"$code\" > \"$marker.status\"; } 3>&1 | { exec 0<&-; : > \"$marker\"; }; read code < \"$marker.status\"; exit \"$code\";;\nesac\n";
+    let launcher = "mode=$1\nmarker=$2\nshift 2\ncase \"$mode\" in\nclose0) exec 0<&-; exec \"$@\";;\nclose1) exec 1>&-; exec \"$@\";;\nclose2) exec 2>&-; exec \"$@\";;\nlimit64) ulimit -n 64; exec \"$@\";;\nblocked) exec /usr/bin/env --block-signal=TERM,USR1 \"$@\";;\nprivate0) umask 000; exec \"$@\";;\nprivate777) umask 777; exec \"$@\";;\npipe1) rm -f \"$marker\" \"$marker.status\"; { while test ! -f \"$marker\"; do :; done; \"$@\"; code=$?; printf \"%s\\n\" \"$code\" > \"$marker.status\"; } | { exec 0<&-; : > \"$marker\"; }; read code < \"$marker.status\"; exit \"$code\";;\npipe2) rm -f \"$marker\" \"$marker.status\"; { while test ! -f \"$marker\"; do :; done; \"$@\" 2>&1 1>&3; code=$?; printf \"%s\\n\" \"$code\" > \"$marker.status\"; } 3>&1 | { exec 0<&-; : > \"$marker\"; }; read code < \"$marker.status\"; exit \"$code\";;\nesac\n";
     write(directory, "launch.sh", launcher.as_bytes())?;
     let names: Vec<String> = vec!["main".to_string(), "paths".to_string(), "closed_stdin".to_string(),
         "handle_cleanup".to_string(), "output_failure".to_string(), "arguments".to_string(),
         "invalid_argument".to_string(), "status_marker".to_string(), "status".to_string(),
-        "system".to_string(), "closed_process".to_string(), "self_spawn".to_string(), "file_readonly".to_string(), "listener_closed".to_string(), "closed_readiness".to_string(), "closed_storage".to_string(), "storage_permissions".to_string()];
+        "system".to_string(), "closed_process".to_string(), "self_spawn".to_string(), "file_readonly".to_string(), "listener_closed".to_string(), "closed_readiness".to_string(), "closed_storage".to_string(), "storage_permissions".to_string(), "private_file".to_string(), "lifecycle_mask".to_string()];
     for name in &names { prepare(world, compiler, directory, config, report, name)?; }
     let empty: Vec<Vec<u8>> = Vec::new();
     let payload = vec![255u8, 128u8, 97u8, 10u8, 192u8];
@@ -391,7 +391,28 @@ fn exercise(
         let outcome = execute(world, compiler, config, "closed_readiness", route, &empty, b"x", "close2")?;
         report.outcome(&format!("closed readiness/{route}"), &outcome, 0, b"9 9 9 9 22\n", b"");
         let outcome = execute(world, compiler, config, "closed_storage", route, &empty, b"x", "close2")?;
-        report.outcome(&format!("closed storage/{route}"), &outcome, 0, b"9 9 9 9\n", b"");
+        report.outcome(&format!("closed storage/{route}"), &outcome, 0, b"9 9 9 9 9\n", b"");
+        let outcome = execute(world, compiler, config, "lifecycle_mask", route, &empty, b"", "")?;
+        report.outcome(&format!("child mask unclaimed and claimed/{route}"), &outcome, 0, b"mask 0\n", b"");
+        let outcome = execute(world, compiler, config, "lifecycle_mask", route, &empty, b"", "close0")?;
+        report.outcome(&format!("stop and child mask with closed stdin/{route}"), &outcome, 0, b"mask 0\n", b"");
+        let outcome = execute(world, compiler, config, "lifecycle_mask", route, &empty, b"", "blocked")?;
+        report.outcome(&format!("child inherited TERM and USR1 mask/{route}"), &outcome, 0, b"mask 16896\n", b"");
+        let arguments = vec!["exhaust".as_bytes().to_vec()];
+        let outcome = execute(world, compiler, config, "lifecycle_mask", route, &arguments, b"", "limit64")?;
+        report.outcome(&format!("failed Stop acquisition restores mask/{route}"), &outcome, 0, b"mask 0\n", b"");
+        for mode in 0usize..2usize {
+            let root = data_directory(directory, config, &format!("private-{mode}-{route}"))?;
+            let launch = if mode == 0 { "private0" } else { "private777" };
+            let outcome = execute(world, compiler, config, "private_file", route, &vec![root.as_bytes().to_vec()], b"", launch)?;
+            report.outcome(&format!("private files/{mode}/{route}"), &outcome, 0, b"private files ok\n", b"");
+            let stat = open_executable(world, "/usr/bin/stat")?;
+            let arguments = vec!["-c".as_bytes().to_vec(), "%a".as_bytes().to_vec(),
+                format!("{root}/atomic").into_bytes(), format!("{root}/repaired").into_bytes()];
+            let outcome = invoke(world, &stat, &arguments, b"")?;
+            let expected = if mode == 0 { &b"600\n600\n"[..] } else { &b"0\n600\n"[..] };
+            report.outcome(&format!("private initial and repaired modes/{mode}/{route}"), &outcome, 0, expected, b"");
+        }
         let root = data_directory(directory, config, &format!("storage-permissions-{route}"))?;
         let chmod = open_executable(world, "/bin/chmod")?;
         let restrict = vec!["0300".as_bytes().to_vec(), root.as_bytes().to_vec()];

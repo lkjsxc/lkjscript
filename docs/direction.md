@@ -85,25 +85,25 @@ needed forms or ceases to find useful differences. Keep .rs until that decision.
 
 Programs work in /home/coder/workspace/lkjscript-programs-20261115 on programs;
 land through fetch/rebase, bootstrap, four-worker gate and push HEAD:main.
-The HTTP consumer grants Directory, Listener, Clock, Readiness and output.
-Connector grants one numeric IPv4:port; connect yields an owned File stream.
-No DNS or substitute destination follows from that grant. Both executors validate
-entry descriptors; authority follows checked-IR effects and owning cleanup.
+Connector grants one numeric IPv4:port; connect yields an owned File stream, without DNS or retargeting.
+Both executors validate entry descriptors; authority follows checked-IR effects and owning cleanup.
 HTTP/1.1 persistence and pipelining retain exact framing; clients are lkjscript.
 Profile before removing at most two costs; owned chunks replace per-byte assembly.
 Use readiness for concurrency, processes for parallelism.
-Readiness owns a kernel wait set; temporary exclusive handle borrows register
-tokens without storing language views or extending ownership rules.
+Readiness temporarily borrows owned handles into a kernel wait set without storing language views.
 Keep explicit connection state, indexed deadlines and bounded work per dispatch.
 Header and write deadlines do not extend when a hostile peer makes tiny progress.
-Delete the three scoped-thread pending cases: no current consumer needs them.
-The closure-escape case stays pending; concurrency adds no shared-memory ownership rules.
+The three scoped-thread cases are deleted; closure escape stays pending, with no new shared-memory ownership rules.
 Keep compiler source within the stored seed's forms; never refresh seed here.
 The independent interpreter helper operates actual descriptors without relay queues.
 Journal acknowledges only after log fsync, a synced head file and atomic rename plus directory fsync.
-Replay validates checksums and the committed boundary before repairing an incomplete tail; one lock owns writes.
-Next prove stop and signed expiring sessions; JSON retains exact number text and rejects ambiguous keys.
-A documentation candidate may come earlier; never modify the live unit or /opt.
+Replay validates checksums and the committed boundary before incomplete-tail repair; one lock owns writes.
+Stop claims SIGTERM for the execution lifetime; drain already admitted requests to a fixed deadline, sync and exit.
+Signal the published target: native program PID or interpreted broker PID; requested consumes signals, readiness reports unread ones.
+Entropy supplies kernel bytes; session keys are created private before writing, synced and atomically published.
+Write tokens bind expiry and a random nonce through shared HMAC; a separate key-directory grant authorizes issuance.
+JSON rejects ambiguous keys; authentication precedes body retention and is checked again before mutation.
+Next match the documentation origin through GET-only observation; never modify the live unit or /opt.
 
 ## Authenticated reuse
 

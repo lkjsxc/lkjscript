@@ -79,7 +79,7 @@ fi
 if [ "$engine" = native ]; then
     "$compiler" build examples/http.rs --profile \
         --grant output --grant "root=$http_work/docs" \
-        --grant listener=127.0.0.1:0 --grant clock --grant ready -o "$http_work/server"
+        --grant listener=127.0.0.1:0 --grant clock --grant ready --grant stop -o "$http_work/server"
 fi
 "$compiler" build tools/http-test.rs -o "$http_work/client"
 : > "$http_work/server.out"
@@ -93,7 +93,7 @@ if [ "$engine" = native ]; then
 else
     "$compiler" run examples/http.rs --engine interpreter \
         --grant output --grant "root=$http_work/docs" \
-        --grant listener=127.0.0.1:0 --grant clock --grant ready \
+        --grant listener=127.0.0.1:0 --grant clock --grant ready --grant stop \
         <&- >"$http_work/server.out" 2>"$http_work/server.err" &
 fi
 server_pid=$!

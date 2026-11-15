@@ -109,6 +109,7 @@ impl<H: Host> Interpreter<'_, H> {
                     TypeKind::Child => Value::Child(handle),
                     TypeKind::Listener => Value::Listener(handle),
                     TypeKind::Readiness => Value::Readiness(handle),
+                    TypeKind::Stop => Value::Stop(handle),
                     _ => return Err(self.invalid("open result is not a handle capability")),
                 },
             ),
@@ -127,7 +128,8 @@ impl<H: Host> Interpreter<'_, H> {
             | Value::File(handle)
             | Value::Child(handle)
             | Value::Listener(handle)
-            | Value::Readiness(handle) => Ok(*handle),
+            | Value::Readiness(handle)
+            | Value::Stop(handle) => Ok(*handle),
             _ => Err(self.invalid("I/O capability has no live handle")),
         }
     }
@@ -178,6 +180,22 @@ impl<H: Host> Interpreter<'_, H> {
         let child = self.allocate(ty, Some(value), false)?;
         Ok(Value::Aggregate { variant: Some(tag), fields: vec![child] })
     }
+    fn io_scalar_types(&self, result: usize, success: TypeKind) -> Result<(usize, usize), RunError> {
+        let types = self.io_sum_types(result)?;
+        if *self.kind(types.0)? != success { return Err(self.invalid("I/O scalar result type differs")); }
+        Ok(types)
+    }
+    fn io_scalar_result(&mut self, types: (usize, usize), result: Result<u64, i64>) -> Result<Value, RunError> {
+        let (tag, ty, bits) = match result {
+            Ok(bits) => (0usize, types.0, bits),
+            Err(errno) if errno > 0 => (1usize, types.1, errno as u64),
+            _ => return Err(self.trap(7, "host returned an invalid scalar result")),
+        };
+        let value = Value::Bits(bits);
+        if self.validate_value(ty, &value).is_err() { return Err(self.trap(7, "host scalar is outside its result representation")); }
+        let child = self.allocate(ty, Some(value), false)?;
+        Ok(Value::Aggregate { variant: Some(tag), fields: vec![child] })
+    }
     fn io_events_types(&self, result: usize) -> Result<(usize, usize, usize), RunError> {
         let types = self.io_sum_types(result)?;
         if !matches!(self.kind(result)?, TypeKind::Enum { copy: false, .. }) { return Err(self.invalid("readiness result must be affine")); }
@@ -221,12 +239,17 @@ impl<H: Host> Interpreter<'_, H> {
         values: &[(usize, Value)],
     ) -> Result<Option<Value>, RunError> {
         let storage_arity = match name {
-            ir::IntrinsicOp::DirectoryCreateNew | ir::IntrinsicOp::DirectoryOpenAppend | ir::IntrinsicOp::FileTruncate => 2usize,
+            ir::IntrinsicOp::DirectoryCreateNew | ir::IntrinsicOp::DirectoryCreatePrivate | ir::IntrinsicOp::DirectoryOpenAppend | ir::IntrinsicOp::FileTruncate => 2usize,
             ir::IntrinsicOp::DirectorySync | ir::IntrinsicOp::FileSync | ir::IntrinsicOp::FileLockExclusive => 1usize,
+            ir::IntrinsicOp::WorldEntropy | ir::IntrinsicOp::ClockUnixSeconds | ir::IntrinsicOp::FileSetPrivate
+                | ir::IntrinsicOp::WorldStop | ir::IntrinsicOp::StopRequested | ir::IntrinsicOp::StopTarget
+                | ir::IntrinsicOp::ChildRequestStop => 1usize,
+            ir::IntrinsicOp::EntropyFill | ir::IntrinsicOp::ReadinessUnwatchStop => 2usize,
+            ir::IntrinsicOp::ReadinessWatchStop => 3usize,
             _ => 0usize,
         };
         if storage_arity != 0 && values.len() != storage_arity {
-            return Err(self.invalid("storage intrinsic argument count differs"));
+            return Err(self.invalid("capability intrinsic argument count differs"));
         }
         let value = match name {
             ir::IntrinsicOp::FileDuplicate | ir::IntrinsicOp::FileReadOnly if values.len() == 1 => {
@@ -270,6 +293,66 @@ impl<H: Host> Interpreter<'_, H> {
                     self.host.open_listener(&address)
                 };
                 self.io_open_result(types, opened, TypeKind::Listener)?
+            }
+            ir::IntrinsicOp::WorldEntropy => {
+                self.io_authority(values, TypeKind::World)?;
+                if *self.kind(result)? != TypeKind::Entropy { return Err(self.invalid("entropy derivation result differs")); }
+                Value::Entropy
+            }
+            ir::IntrinsicOp::EntropyFill => {
+                self.io_authority(values, TypeKind::Entropy)?;
+                let types = self.io_unit_types(result)?;
+                let buffer = self.io_buffer(values, 1, true)?;
+                let mut bytes = self.bytes(&buffer)?;
+                let status = self.host.fill_entropy(&mut bytes);
+                // getrandom may fill a prefix before a later failure.
+                self.io_write_buffer(&buffer, &bytes)?;
+                self.io_unit_result(types, status)?
+            }
+            ir::IntrinsicOp::ClockUnixSeconds => {
+                self.io_authority(values, TypeKind::Clock)?;
+                let types = self.io_scalar_types(result, TypeKind::Int { bits: 64, signed: true })?;
+                let time = match self.host.realtime_seconds() { Ok(seconds) => Ok(seconds as u64), Err(errno) => Err(errno) };
+                self.io_scalar_result(types, time)?
+            }
+            ir::IntrinsicOp::FileSetPrivate | ir::IntrinsicOp::ChildRequestStop => {
+                let kind = if name == ir::IntrinsicOp::FileSetPrivate { TypeKind::File } else { TypeKind::Child };
+                let authority = self.io_authority(values, kind)?;
+                let types = self.io_unit_types(result)?;
+                let handle = self.io_handle(&authority)?;
+                let status = if name == ir::IntrinsicOp::FileSetPrivate { self.host.private_file(handle) } else { self.host.request_stop_process(handle) };
+                self.io_unit_result(types, status)?
+            }
+            ir::IntrinsicOp::WorldStop => {
+                self.io_authority(values, TypeKind::World)?;
+                let types = self.io_open_types(result, TypeKind::Stop)?;
+                let opened = self.host.create_stop();
+                self.io_open_result(types, opened, TypeKind::Stop)?
+            }
+            ir::IntrinsicOp::StopRequested | ir::IntrinsicOp::StopTarget => {
+                let authority = self.io_authority(values, TypeKind::Stop)?;
+                let kind = if name == ir::IntrinsicOp::StopRequested { TypeKind::Bool } else { TypeKind::Int { bits: 32, signed: false } };
+                let types = self.io_scalar_types(result, kind)?;
+                let handle = self.io_handle(&authority)?;
+                let value = if name == ir::IntrinsicOp::StopRequested {
+                    match self.host.stop_requested(handle) { Ok(flag) => Ok(if flag { 1u64 } else { 0u64 }), Err(errno) => Err(errno) }
+                } else {
+                    match self.host.stop_target(handle) { Ok(pid) if pid != 0 => Ok(pid as u64), Ok(_) => return Err(self.trap(7, "host returned a zero signal target")), Err(errno) => Err(errno) }
+                };
+                self.io_scalar_result(types, value)?
+            }
+            ir::IntrinsicOp::ReadinessWatchStop | ir::IntrinsicOp::ReadinessUnwatchStop => {
+                let authority = self.io_authority(values, TypeKind::Readiness)?;
+                let target = self.io_reference(values, 1, true)?;
+                if *self.kind(target.ty)? != TypeKind::Stop { return Err(self.invalid("readiness stop requires a Stop capability")); }
+                let types = self.io_unit_types(result)?;
+                let ready = self.io_handle(&authority)?;
+                let handle = self.io_handle(&target)?;
+                let status = if name == ir::IntrinsicOp::ReadinessWatchStop {
+                    let token = self.io_number(values, 2, ir::U64)? as usize;
+                    self.host.readiness_watch_stop(ready, handle, token)
+                } else { self.host.readiness_unwatch_stop(ready, handle) };
+                self.io_unit_result(types, status)?
             }
             ir::IntrinsicOp::WorldReadiness if values.len() == 1 => {
                 self.io_authority(values, TypeKind::World)?;
@@ -565,13 +648,15 @@ impl<H: Host> Interpreter<'_, H> {
                 let opened = self.host.open_directory(&path);
                 self.io_open_result(types, opened, TypeKind::Directory)?
             }
-            ir::IntrinsicOp::DirectoryCreateNew | ir::IntrinsicOp::DirectoryOpenAppend if values.len() == 2 => {
+            ir::IntrinsicOp::DirectoryCreateNew | ir::IntrinsicOp::DirectoryCreatePrivate | ir::IntrinsicOp::DirectoryOpenAppend if values.len() == 2 => {
                 let authority = self.io_authority(values, TypeKind::Directory)?;
                 let types = self.io_open_types(result, TypeKind::File)?;
                 let path = self.io_buffer(values, 1, false)?;
                 let path = self.bytes(&path)?;
                 let handle = self.io_handle(&authority)?;
-                let opened = self.host.open_file_storage(handle, &path, name == ir::IntrinsicOp::DirectoryOpenAppend);
+                let opened = if name == ir::IntrinsicOp::DirectoryCreatePrivate {
+                    self.host.open_file_private(handle, &path)
+                } else { self.host.open_file_storage(handle, &path, name == ir::IntrinsicOp::DirectoryOpenAppend) };
                 self.io_open_result(types, opened, TypeKind::File)?
             }
             ir::IntrinsicOp::DirectorySync | ir::IntrinsicOp::FileSync | ir::IntrinsicOp::FileLockExclusive if values.len() == 1 => {
