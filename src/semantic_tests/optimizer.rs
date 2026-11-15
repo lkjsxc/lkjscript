@@ -266,6 +266,43 @@ fn copied_traps_keep_exact_file_and_line(world: &mut World, runtime: &runtime::R
     assert!(diagnostic.starts_with("R0003 "));
     assert!(diagnostic.contains(&format!(" at line {} file {}:", error.line, error.file)));
 }
+fn copied_trap_messages_keep_exact_codes(world: &mut World, runtime: &runtime::Runtime) {
+    let mut raw = compiled(r#"
+        pub fn probe() -> i64 { late() }
+        fn elsewhere() -> i64 { 0 }
+        fn late() -> i64 { 42 }
+    "#).program().clone();
+    let entry = index(&raw, "probe");
+    let elsewhere = index(&raw, "elsewhere");
+    let late = index(&raw, "late");
+    assert!(entry < elsewhere && elsewhere < late);
+    raw.functions[elsewhere].body[0].op = ir::Op::Trap { message: "zeta".to_string() };
+    raw.functions[late].body[0].op = ir::Op::Trap { message: "alpha".to_string() };
+    raw.functions[late].body[0].file = Some(7);
+    raw.functions[late].body[0].line = 37;
+    let original = admitted(raw).unwrap();
+    let arguments: Vec<u64> = Vec::new();
+    let mut output: Vec<u8> = Vec::new();
+    let error = interpreter::run(original.program(), entry, &arguments, &mut output).err().unwrap();
+    assert_eq!(error.message, "alpha");
+    let interpreter::ErrorKind::Trap(code) = error.kind else { panic!("expected trap"); };
+    assert_eq!(code, 16u64);
+    let expected = format!("{} at line {} file {}: {}\n", error.code(), error.line, error.file, error.message);
+    let (status, raw) = native_result(world, &original, runtime);
+    assert_eq!(status, 1u8);
+    assert_eq!(raw, expected.as_bytes().to_vec());
+    let rewrite = optimizer::inline(original.program(), 64);
+    assert!(rewrite.calls > 0);
+    let selected = reuse::Selection::after_check(original, admitted(rewrite.program.unwrap()));
+    assert!(selected.optimized());
+    // The copied alpha trap now occurs in probe, ahead of the original zeta.
+    assert!(selected.native().program().functions[entry].body.iter().any(
+        |instruction: &ir::Instruction| matches!(&instruction.op, ir::Op::Trap { message } if message == "alpha")
+    ));
+    let (status, raw) = native_result(world, selected.native(), runtime);
+    assert_eq!(status, 1u8);
+    assert_eq!(raw, expected.as_bytes().to_vec());
+}
 fn instruction_file_identity_and_rejection_location() {
     let original = compiled("pub fn probe() -> i64 { 42 }");
     let mut changed = original.program().clone();
@@ -306,5 +343,7 @@ pub fn run(world: &mut World, trace: bool) -> usize {
     copied_traps_keep_exact_file_and_line(world, &runtime);
     if trace { world.stdout().write(b"inline_instruction_file_identity\n"); }
     instruction_file_identity_and_rejection_location();
-    10usize + forwarding::run(world, &runtime, trace) + wrappers::run(world, &runtime, trace)
+    if trace { world.stdout().write(b"inline_trap_message_identity\n"); }
+    copied_trap_messages_keep_exact_codes(world, &runtime);
+    11usize + forwarding::run(world, &runtime, trace) + wrappers::run(world, &runtime, trace)
 }

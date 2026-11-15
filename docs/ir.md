@@ -116,7 +116,7 @@ use `read ... copy` to retain a value. Destinations must be uninitialized.
 | `break`, `continue` | Transfer to the nearest loop's exit or backedge. |
 | `break-to DEPTH`, `continue-to DEPTH` | Select an enclosing loop; zero is nearest, and only loops count. |
 | `return SRC` | Transfer the result after checking remaining owners and loans. |
-| `trap MESSAGE` | Terminate with a located trap; there is no unwinding. |
+| `trap MESSAGE` | Terminate with a located trap; there is no unwinding. Codes from R0016 use the zero-based lexical order of distinct message strings, so duplicating/reordering instructions preserves them. |
 
 Unary `-` supports signed integers and f64; `!` supports integers and bool.
 Integer binary operations are `+ - * / % & | ^ << >>`, comparisons, and

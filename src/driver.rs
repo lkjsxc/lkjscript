@@ -892,14 +892,13 @@ pub(crate) fn complete_semantic_trap(program: &ir::Program, code: u64, message: 
     for function in &program.functions {
         for instruction in &function.body {
             if let ir::Op::Trap { message: expected } = &instruction.op {
-                if !messages.contains(expected) {
-                    if messages.len() as u64 == code - 16 { return expected.as_str() == message; }
-                    messages.push(expected.clone());
-                }
+                if !messages.contains(expected) { messages.push(expected.clone()); }
             }
         }
     }
-    false
+    messages.sort();
+    let index = code - 16;
+    index < messages.len() as u64 && messages[index as usize].as_str() == message
 }
 
 fn native_run(

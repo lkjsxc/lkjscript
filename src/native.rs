@@ -1415,6 +1415,9 @@ fn messages(program: &Program) -> Vec<String> {
             }
         }
     }
+    // Inlining duplicates traps ahead of their original function. Codes depend
+    // on the message set, never on first occurrence in rewritten instructions.
+    messages.sort();
     messages
 }
 pub fn encode(

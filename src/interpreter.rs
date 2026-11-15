@@ -2319,6 +2319,7 @@ impl<H: Host> Interpreter<'_, H> {
                         }
                     }
                 }
+                messages.sort();
                 let mut index = 0usize;
                 while index < messages.len() && messages[index] != message {
                     index += 1;
