@@ -3949,6 +3949,37 @@ pub fn check_all(program: Program) -> Result<CheckedProgram, Vec<Diagnostic>> {
     }
 }
 
+/// Reuse only authenticated successes for the exact owned input. Shared shape
+/// validation is never cached; missing and invalid records check normally.
+pub fn check_all_cached(
+    prepared: crate::reuse::Prepared,
+    records: &mut crate::reuse::Records,
+) -> Result<crate::reuse::Checked, Vec<Diagnostic>> {
+    let (program, keys) = prepared.into_parts();
+    check_structure(&program).map_err(|problem| vec![problem])?;
+    let facts = TypeFacts::new(&program);
+    let mut problems = Vec::new();
+    for (index, function) in program.functions.iter().enumerate() {
+        let cached = match records.get("check", keys.function(index)) {
+            Some(payload) => payload.as_slice() == b"ok",
+            None => false,
+        };
+        if cached { continue; }
+        match check_function(&program, function, &facts) {
+            Ok(()) => records.put("check", keys.function(index), b"ok"),
+            Err(mut problem) => {
+                problem.file = function.file;
+                problems.push(problem);
+            }
+        }
+    }
+    if problems.is_empty() {
+        Ok(crate::reuse::Checked::cached(CheckedProgram { program }, keys))
+    } else {
+        Err(problems)
+    }
+}
+
 pub fn check(program: Program) -> Result<CheckedProgram, Diagnostic> {
     check_all(program).map_err(|problems| {
         problems

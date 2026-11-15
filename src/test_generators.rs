@@ -215,7 +215,12 @@ fn seed_paths() -> Vec<String> {
     }
     paths
 }
-fn seeds(world: &mut World) -> Result<Vec<mutation::Seed>, String> {
+fn seeds(
+    world: &mut World,
+    store: &mut Option<crate::store::Store>,
+    counts: &mut Counts,
+    runtime: &runtime::Runtime,
+) -> Result<Vec<mutation::Seed>, String> {
     let mut out: Vec<mutation::Seed> = Vec::new();
     for path in seed_paths() {
         let source = read(world, &path)?;
@@ -225,12 +230,18 @@ fn seeds(world: &mut World) -> Result<Vec<mutation::Seed>, String> {
                 format!("{path}: {}", diagnostic.message)
             },
         )?;
-        check::check(program).map_err(|diagnostic: crate::diagnostic::Diagnostic| -> String {
-            format!(
-                "{path}: canonical seed failed: {} {}",
-                diagnostic.code, diagnostic.message
-            )
-        })?;
+        let checked = check_mutation(program, store, counts).map_err(
+            |problems: Vec<crate::diagnostic::Diagnostic>| -> String {
+                format!("{path}: canonical seed failed: {} {}", problems[0].code, problems[0].message)
+            },
+        )?;
+        if store.is_some() {
+            emit_mutation(&checked, runtime, store, counts).map_err(
+                |diagnostic: crate::diagnostic::Diagnostic| -> String {
+                    format!("{path}: canonical seed emission failed: {} {}", diagnostic.code, diagnostic.message)
+                },
+            )?;
+        }
         out.push(prepared);
     }
     Ok(out)
@@ -369,12 +380,58 @@ fn arguments(values: &[String]) -> Vec<Vec<u8>> {
     }
     out
 }
+// The campaign exercises the same authenticated proof/code paths as the CLI.
+// Interpretation and execution results are never memoized here.
+fn check_mutation(
+    program: ir::Program,
+    store: &mut Option<crate::store::Store>,
+    counts: &mut Counts,
+) -> Result<crate::reuse::Checked, Vec<crate::diagnostic::Diagnostic>> {
+    if let Some(store) = store {
+        let prepared = crate::reuse::Prepared::new(program);
+        let mut records = store.records("check", prepared.keys().all());
+        let result = check::check_all_cached(prepared, &mut records);
+        counts.checked_reused += records.hits;
+        store.flush(&records);
+        result
+    } else {
+        match check::check_all(program) {
+            Ok(checked) => Ok(crate::reuse::Checked::uncached(checked)),
+            Err(problems) => Err(problems),
+        }
+    }
+}
+
+fn emit_mutation(
+    checked: &crate::reuse::Checked,
+    runtime: &runtime::Runtime,
+    store: &mut Option<crate::store::Store>,
+    counts: &mut Counts,
+) -> Result<Vec<u8>, crate::diagnostic::Diagnostic> {
+    if let Some(store) = store {
+        if let Some(keys) = checked.keys() {
+            let grants: Vec<ir::EntryGrant> = Vec::new();
+            let namespace = backend::cache_namespace(checked, runtime, &grants, None);
+            let mut records = store.records(&namespace, keys.all());
+            let image = backend::emit_granted_reusing(
+                checked, runtime, "probe", &grants, Some(3), None, &namespace, &mut records,
+            );
+            counts.emitted_reused += records.hits;
+            store.flush(&records);
+            return image;
+        }
+    }
+    backend::emit_for_run(checked.checked(), runtime, "probe")
+}
+
 fn execute_ir(
     world: &mut World,
     executable: &File,
     path: &str,
-    checked: &ir::CheckedProgram,
+    checked: &crate::reuse::Checked,
     runtime: &runtime::Runtime,
+    store: &mut Option<crate::store::Store>,
+    counts: &mut Counts,
 ) -> Result<(String, Observation, Observation), String> {
     let args = arguments(&vec![
         "run".to_string(),
@@ -403,7 +460,7 @@ fn execute_ir(
         }
     }
     let selected = index.ok_or("E_ENTRY mutation seed has no probe")?;
-    let image = backend::emit_for_run(checked, runtime, "probe").map_err(
+    let image = emit_mutation(checked, runtime, store, counts).map_err(
         |diagnostic: crate::diagnostic::Diagnostic| -> String {
             format!(
                 "E_MUTATION_NATIVE {} {}",
@@ -446,6 +503,9 @@ struct Counts {
     timeout: usize,
     resources: usize,
     findings: usize,
+    checked_reused: usize,
+    emitted_reused: usize,
+    store_rejected: usize,
 }
 impl Counts {
     fn new() -> Self {
@@ -457,6 +517,9 @@ impl Counts {
             timeout: 0,
             resources: 0,
             findings: 0,
+            checked_reused: 0,
+            emitted_reused: 0,
+            store_rejected: 0,
         }
     }
     fn add(&mut self, category: &str) {
@@ -478,17 +541,23 @@ impl Counts {
         self.timeout += other.timeout;
         self.resources += other.resources;
         self.findings += other.findings;
+        self.checked_reused += other.checked_reused;
+        self.emitted_reused += other.emitted_reused;
+        self.store_rejected += other.store_rejected;
     }
     fn encode(&self) -> String {
         format!(
-            "{} {} {} {} {} {} {}",
+            "{} {} {} {} {} {} {} {} {} {}",
             self.total,
             self.rejected,
             self.values,
             self.traps,
             self.timeout,
             self.resources,
-            self.findings
+            self.findings,
+            self.checked_reused,
+            self.emitted_reused,
+            self.store_rejected
         )
     }
 }
@@ -497,7 +566,7 @@ fn decode_counts(text: &str) -> Result<Counts, String> {
     for field in whitespace(text) {
         fields.push(integer(&field, "worker count")?);
     }
-    if fields.len() != 7 {
+    if fields.len() != 10 {
         return Err("E_HOST invalid mutation worker summary".to_string());
     }
     Ok(Counts {
@@ -508,6 +577,9 @@ fn decode_counts(text: &str) -> Result<Counts, String> {
         timeout: fields[4],
         resources: fields[5],
         findings: fields[6],
+        checked_reused: fields[7],
+        emitted_reused: fields[8],
+        store_rejected: fields[9],
     })
 }
 fn mutation_worker(
@@ -517,15 +589,18 @@ fn mutation_worker(
     jobs: usize,
     worker: usize,
     output: &str,
+    store_path: &Option<String>,
+    store_key: &Option<String>,
 ) -> Result<Counts, String> {
-    let seeds = seeds(world)?;
+    let mut store = crate::store::Store::open(world, store_path, store_key);
     let executable = world
         .executable()
         .map_err(|errno: i64| problem("compiler executable", errno))?;
     let runtime = driver::load_runtime(world, &None)?;
+    let mut counts = Counts::new();
+    let seeds = seeds(world, &mut store, &mut counts, &runtime)?;
     let mut random = Random::new(seed as u64);
     let path = format!("{output}/worker-{worker}.lkjir");
-    let mut counts = Counts::new();
     for index in 0..count {
         let (base, mutation) = mutation::choose(&seeds, &mut random);
         if index % jobs != worker {
@@ -533,7 +608,7 @@ fn mutation_worker(
         }
         let source = mutation::apply(&seeds[base].text, mutation)?;
         let checked = match ir_text::read(&source) {
-            Ok(program) => match check::check(program) {
+            Ok(program) => match check_mutation(program, &mut store, &mut counts) {
                 Ok(checked) => Some(checked),
                 Err(_) => None,
             },
@@ -542,7 +617,7 @@ fn mutation_worker(
         let category = if let Some(checked) = checked {
             write(world, &path, source.as_bytes())?;
             let (category, left, right) =
-                execute_ir(world, &executable, &path, &checked, &runtime)?;
+                execute_ir(world, &executable, &path, &checked, &runtime, &mut store, &mut counts)?;
             if finding(&category) {
                 let case_path = format!("{output}/finding-{index}.lkjir");
                 write(world, &case_path, source.as_bytes())?;
@@ -574,6 +649,7 @@ fn mutation_worker(
     if counts.total > counts.rejected {
         remove(world, &path)?;
     }
+    if let Some(store) = &store { counts.store_rejected = store.rejected; }
     Ok(counts)
 }
 struct Worker {
@@ -595,16 +671,18 @@ fn mutation_campaign(
     count: usize,
     jobs: usize,
     output: &str,
+    store_path: &Option<String>,
+    store_key: &Option<String>,
 ) -> Result<Counts, String> {
     if jobs == 1 {
-        return mutation_worker(world, seed, count, 1, 0, output);
+        return mutation_worker(world, seed, count, 1, 0, output, store_path, store_key);
     }
     let executable = world
         .executable()
         .map_err(|errno: i64| problem("compiler executable", errno))?;
     let mut children: Vec<Worker> = Vec::new();
     for worker in 0..jobs {
-        let args = arguments(&vec![
+        let mut values = vec![
             "mutate".to_string(),
             format!("{seed}"),
             format!("{count}"),
@@ -614,7 +692,16 @@ fn mutation_campaign(
             format!("{worker}"),
             "-o".to_string(),
             output.to_string(),
-        ]);
+        ];
+        if let Some(path) = store_path {
+            values.push("--store".to_string());
+            values.push(path.clone());
+        }
+        if let Some(key) = store_key {
+            values.push("--store-key".to_string());
+            values.push(key.clone());
+        }
+        let args = arguments(&values);
         let input = world
             .temporary_file()
             .map_err(|errno: i64| problem("worker input", errno))?;
@@ -1079,12 +1166,14 @@ pub fn run(world: &mut World, args: &[String]) -> Result<u8, String> {
         return reduce(world, &args[1..]);
     }
     if args[0] != "mutate" || args.len() < 3 {
-        return Err("E_USAGE mutate SEED COUNT [--jobs N] [-o DIRECTORY]".to_string());
+        return Err("E_USAGE mutate SEED COUNT [--jobs N] [-o DIRECTORY] [--store DIR --store-key FILE]".to_string());
     }
     let seed = integer(&args[1], "seed")?;
     let count = integer(&args[2], "count")?;
     let mut jobs = 1usize;
     let mut worker = None;
+    let mut store_path = None;
+    let mut store_key = None;
     let mut output = format!("target/mutation-{seed}-{count}");
     let mut at = 3usize;
     while at < args.len() {
@@ -1096,6 +1185,8 @@ pub fn run(world: &mut World, args: &[String]) -> Result<u8, String> {
         match option {
             "--jobs" => jobs = integer(&args[at], "worker count")?,
             "--worker" => worker = Some(integer(&args[at], "worker index")?),
+            "--store" => store_path = Some(args[at].clone()),
+            "--store-key" => store_key = Some(args[at].clone()),
             "-o" => output = args[at].clone(),
             _ => return Err(format!("E_USAGE unknown mutation option {option}")),
         }
@@ -1109,7 +1200,7 @@ pub fn run(world: &mut World, args: &[String]) -> Result<u8, String> {
         if index >= jobs {
             return Err("E_USAGE worker index exceeds worker count".to_string());
         }
-        let counts = mutation_worker(world, seed, count, jobs, index, &output)?;
+        let counts = mutation_worker(world, seed, count, jobs, index, &output, &store_path, &store_key)?;
         world
             .stdout()
             .write(format!("{}\n", counts.encode()).as_bytes());
@@ -1119,7 +1210,7 @@ pub fn run(world: &mut World, args: &[String]) -> Result<u8, String> {
     let start = clock
         .nanoseconds()
         .map_err(|errno: i64| problem("clock", errno))?;
-    let counts = mutation_campaign(world, seed, count, jobs, &output)?;
+    let counts = mutation_campaign(world, seed, count, jobs, &output, &store_path, &store_key)?;
     let elapsed = clock
         .nanoseconds()
         .map_err(|errno: i64| problem("clock", errno))?
@@ -1129,6 +1220,11 @@ pub fn run(world: &mut World, args: &[String]) -> Result<u8, String> {
     } else {
         counts.total * 60_000_000_000usize / elapsed
     };
-    world.stdout().write(format!("{} mutation: {} mutants, {} rejected, {} values, {} traps, {} did not terminate, {} resources, {} findings; {} mutants/minute ({}.{:03} s, {} workers)\n", if counts.findings == 0 { "ok" } else { "FAIL" }, counts.total, counts.rejected, counts.values, counts.traps, counts.timeout, counts.resources, counts.findings, per_minute, elapsed / 1_000_000_000, elapsed / 1_000_000 % 1000, jobs).as_bytes());
+    let reuse = if store_path.is_some() {
+        format!("; {} checked reuses, {} emitted reuses, {} store rejects", counts.checked_reused, counts.emitted_reused, counts.store_rejected)
+    } else {
+        String::new()
+    };
+    world.stdout().write(format!("{} mutation: {} mutants, {} rejected, {} values, {} traps, {} did not terminate, {} resources, {} findings; {} mutants/minute ({}.{:03} s, {} workers){reuse}\n", if counts.findings == 0 { "ok" } else { "FAIL" }, counts.total, counts.rejected, counts.values, counts.traps, counts.timeout, counts.resources, counts.findings, per_minute, elapsed / 1_000_000_000, elapsed / 1_000_000 % 1000, jobs).as_bytes());
     Ok(if counts.findings == 0 { 0 } else { 1 })
 }

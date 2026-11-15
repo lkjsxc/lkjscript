@@ -34,7 +34,7 @@ target/hello
 target/lkjscript run examples/hello.rs
 target/lkjscript run examples/hello.rs --engine interpreter
 target/lkjscript test path/to/tests.rs
-target/lkjscript test tests/conformance --jobs 8
+target/lkjscript test tests/conformance --jobs 4
 target/lkjscript authority examples/http.rs
 ```
 
@@ -60,6 +60,28 @@ reports phase times, counts and peak RSS on stderr.
 Each process writes its own `OUTPUT.samples.PID` file, with a twenty-digit PID.
 Use `lkjscript profile SAMPLE_FILE` for a compact report of self and inclusive
 function samples. Profiling needs no external profiler or symbol/debug package.
+
+## Reuse across builds
+
+Bootstrap and the gate use a local, ignored `target/store`. Explicit builds opt in:
+
+```sh
+store_key=$(sh tools/store-key.sh)
+target/lkjscript build examples/hello.rs -o target/hello \
+    --store target/store --store-key "$store_key"
+```
+
+The store retains authenticated checker successes, relocatable function code,
+complete images and successful closed tests. Effects still execute on every test
+run. Every entry binds the exact compiler, target and dependencies; a changed
+source file or previously absent module invalidates the affected result.
+`--no-store` disables reuse. Deleting the store is always safe.
+
+The signing key lives outside source and program Directory grants, normally under
+`$XDG_STATE_HOME/lkjscript` or `$HOME/.local/state/lkjscript`. Keep it private:
+key readers and compiler replacers have the same trust. An untrusted store writer
+cannot authorize unchecked code. See [direction](docs/direction.md) for the trust
+rule and [benchmarks](bench/README.md) for cold, warm and one-edit measurements.
 
 ## Language and authority
 
@@ -100,10 +122,10 @@ The development gate bootstraps from the stored seed and needs no Rust or Node.
 Its HTTP test uses curl as an explicit client:
 
 ```sh
-LKJSCRIPT_GATE_JOBS=8 bash tools/check.sh
+LKJSCRIPT_GATE_JOBS=4 bash tools/check.sh
 ```
 
-The gate accepts 2..8 workers; two are reserved for the HTTP server/client pair.
+The gate accepts 2..4 workers per stream; the HTTP server/client pair needs two.
 Individual `lkjscript test --jobs 1` suites can still run with one worker.
 
 It compares native execution with the independent interpreter, checks serialized

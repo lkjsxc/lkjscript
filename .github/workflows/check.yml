@@ -10,11 +10,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Seed-only native gate
         env:
-          LKJSCRIPT_GATE_JOBS: '8'
+          LKJSCRIPT_GATE_JOBS: '4'
         run: |
           ! command -v cargo
           ! command -v rustc
           ! command -v node
+          test ! -d target/store
           bash tools/check.sh
   witness:
     runs-on: ubuntu-latest

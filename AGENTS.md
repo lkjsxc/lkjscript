@@ -19,7 +19,7 @@ Request memory when needed, adapt to refusal; run under limits that fit actual u
 Report located allocation/stack traps; never size from RAM or rlimits.
 No default tool budgets, output caps, stack settings or address-space envelopes.
 Use a generous test watchdog; mutants get a short nontermination allowance.
-Keep one heap/one stack exhaustion test. Use at most eight workers on this shared host; clean up your own processes.
+Keep one heap/one stack exhaustion test. Use four workers per stream on this shared host; clean up your own processes.
 
 The surface has Rust shape; programs both compilers accept behave the same.
 The optional Rust witness must not constrain lkjscript's design; no Clippy gate.
@@ -30,10 +30,10 @@ Work on main inside /home/coder/workspace/lkjscript. Preserve .generation-one,
 other projects, running services and their data. No GitHub releases or tags.
 Never restore WebAssembly, a Node execution host, or backward compatibility.
 
-Run bash tools/check.sh with LKJSCRIPT_GATE_JOBS=8 after coherent changes and before
+Run bash tools/check.sh with LKJSCRIPT_GATE_JOBS=4 after coherent changes and before
 pushing. Keep fixed points.
-Use unique gateway operation IDs; recover uncertain operations before retrying.
-Coordinate parallel work by file ownership. Commit coherent changes, recheck
+Prefix compiler gateway IDs with compiler-; recover uncertain operations before retrying.
+Compiler owns main; programs owns its worktree and status Programs section. Recheck
 upstream, push main directly, inspect CI; never force-push or rewrite shared history.
 Keep docs/status.md within 60 lines, docs/direction.md within 150, this file within 40.
 Record decisions in direction, current results/next action in status, contracts in

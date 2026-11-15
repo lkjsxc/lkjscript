@@ -2,9 +2,15 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 check_started_ns=$(date +%s%N)
-check_jobs="${LKJSCRIPT_GATE_JOBS:-8}"
-if [[ ! "$check_jobs" =~ ^[2-8]$ ]]; then
-    echo 'LKJSCRIPT_GATE_JOBS must be between two and eight (HTTP needs a server/client pair)' >&2
+check_jobs="${LKJSCRIPT_GATE_JOBS:-4}"
+read -r check_load_start _ < /proc/loadavg
+export LKJSCRIPT_STORE="${LKJSCRIPT_STORE:-target/store}"
+export LKJSCRIPT_STORE_KEY="${LKJSCRIPT_STORE_KEY:-$(sh tools/store-key.sh || true)}"
+mkdir -p "$LKJSCRIPT_STORE"
+check_reuse=()
+if [[ -n "$LKJSCRIPT_STORE_KEY" ]]; then check_reuse=(--store "$LKJSCRIPT_STORE" --store-key "$LKJSCRIPT_STORE_KEY"); fi
+if [[ ! "$check_jobs" =~ ^[2-4]$ ]]; then
+    echo 'LKJSCRIPT_GATE_JOBS must be between two and four (HTTP needs a server/client pair)' >&2
     exit 1
 fi
 check_suite_jobs=$((check_jobs < 4 ? check_jobs : 4))
@@ -12,7 +18,8 @@ mkdir -p target/gate
 step() {
     local label=$1
     shift
-    local started_ns elapsed_ns result=0
+    local started_ns elapsed_ns load_start load_end result=0
+    read -r load_start _ < /proc/loadavg
     started_ns=$(date +%s%N)
     local details="target/gate/details-$label.log"
     "$@" >"$details" 2>&1 || result=$?
@@ -21,16 +28,19 @@ step() {
         return "$result"
     fi
     elapsed_ns=$(($(date +%s%N)-started_ns))
-    awk -v label="$label" -v elapsed_ns="$elapsed_ns" 'BEGIN { printf "ok %s (%.3f s)\n", label, elapsed_ns / 1000000000 }'
+    read -r load_end _ < /proc/loadavg
+    awk -v label="$label" -v elapsed_ns="$elapsed_ns" -v before="$load_start" -v after="$load_end" 'BEGIN { printf "ok %s (%.3f s, load %s -> %s)\n", label, elapsed_ns / 1000000000, before, after }'
 }
 step bootstrap timeout --kill-after=10s 600s sh tools/bootstrap.sh
 check_binary=target/lkjscript
 step independence sh tools/check-independence.sh
 step tool-build timeout --kill-after=10s 600s bash -c '
     set -e
-    target/lkjscript build tools/toolchain-test.rs -o target/gate/toolchain-test
-    target/lkjscript build tools/world-test.rs -o target/gate/world-test
-    target/lkjscript build src/semantic_main.rs -o target/gate/semantic-test
+    reuse=()
+    if [[ -n "$LKJSCRIPT_STORE_KEY" ]]; then reuse=(--store "$LKJSCRIPT_STORE" --store-key "$LKJSCRIPT_STORE_KEY"); fi
+    target/lkjscript build tools/toolchain-test.rs -o target/gate/toolchain-test "${reuse[@]}"
+    target/lkjscript build tools/world-test.rs -o target/gate/world-test "${reuse[@]}"
+    target/lkjscript build src/semantic_main.rs -o target/gate/semantic-test "${reuse[@]}"
 '
 toolchain() (
     toolchain_directory=$(mktemp -d target/gate/toolchain.XXXXXX)
@@ -95,16 +105,18 @@ parallel_step 1 toolchain toolchain
 parallel_step 1 world world_cases
 parallel_step 1 profiler timeout --kill-after=10s 600s sh tools/profile-test.sh "$check_binary"
 parallel_step 1 resources timeout --kill-after=10s 600s bash tools/resource-test.sh "$check_binary"
-parallel_step 1 runner timeout --kill-after=10s 600s "$check_binary" test src/test_runner.rs
+parallel_step 1 runner timeout --kill-after=10s 600s "$check_binary" test src/test_runner.rs "${check_reuse[@]}"
+parallel_step 2 store timeout --kill-after=10s 600s bash tools/store-test.sh "$check_binary"
 parallel_step 2 http timeout --kill-after=10s 600s sh tools/http-test.sh --compiler "$check_binary" --seconds 0 --out target/gate/http-profiles
-parallel_step "$check_suite_jobs" conformance timeout --kill-after=10s 600s "$check_binary" test tests/conformance --jobs "$check_suite_jobs"
-parallel_step "$check_suite_jobs" generated timeout --kill-after=10s 600s "$check_binary" test target/gate/generated --jobs "$check_suite_jobs"
+parallel_step "$check_suite_jobs" conformance timeout --kill-after=10s 600s "$check_binary" test tests/conformance --jobs "$check_suite_jobs" "${check_reuse[@]}"
+parallel_step "$check_suite_jobs" generated timeout --kill-after=10s 600s "$check_binary" test target/gate/generated --jobs "$check_suite_jobs" "${check_reuse[@]}"
 parallel_step "$check_suite_jobs" semantic-structure semantics
-parallel_step "$check_suite_jobs" semantic-cases timeout --kill-after=10s 600s "$check_binary" test tests/semantics --jobs "$check_suite_jobs"
-parallel_step 1 references timeout --kill-after=10s 600s "$check_binary" test tests/reference
+parallel_step "$check_suite_jobs" semantic-cases timeout --kill-after=10s 600s "$check_binary" test tests/semantics --jobs "$check_suite_jobs" "${check_reuse[@]}"
+parallel_step 1 references timeout --kill-after=10s 600s "$check_binary" test tests/reference "${check_reuse[@]}"
 while ((check_waited < ${#check_pids[@]})); do wait_oldest; done
 for log in "${check_logs[@]}"; do cat "$log"; done
 if ((check_failed)); then exit 1; fi
-step ir-mutation timeout --kill-after=10s 600s "$check_binary" mutate 1701 128 --jobs "$check_jobs"
+step ir-mutation timeout --kill-after=10s 600s "$check_binary" mutate 1701 128 --jobs "$check_jobs" "${check_reuse[@]}"
 check_elapsed_ns=$(($(date +%s%N)-check_started_ns))
-awk -v elapsed_ns="$check_elapsed_ns" 'BEGIN { printf "ok gate (%.3f s)\n", elapsed_ns / 1000000000 }'
+read -r check_load_end _ < /proc/loadavg
+awk -v elapsed_ns="$check_elapsed_ns" -v before="$check_load_start" -v after="$check_load_end" 'BEGIN { printf "ok gate (%.3f s, load %s -> %s)\n", elapsed_ns / 1000000000, before, after }'

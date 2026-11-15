@@ -46,6 +46,50 @@ pub fn emit_granted(
     emit_artifact(checked, runtime, entry, result_fd, profile_path, Some(grants))
 }
 
+pub fn cache_namespace(
+    checked: &crate::reuse::Checked,
+    runtime: &runtime::Runtime,
+    grants: &[EntryGrant],
+    profile_path: Option<&str>,
+) -> String {
+    native::cache_namespace(checked, runtime, grants, profile_path)
+}
+pub fn emit_granted_reusing(
+    checked: &crate::reuse::Checked,
+    runtime: &runtime::Runtime,
+    entry: &str,
+    grants: &[EntryGrant],
+    result_fd: Option<u32>,
+    profile_path: Option<&str>,
+    namespace: &str,
+    records: &mut crate::reuse::Records,
+) -> Result<Vec<u8>, Diagnostic> {
+    let meaning = checked.program();
+    let mut selected = None;
+    for (index, function) in meaning.functions.iter().enumerate() {
+        if function.name == entry {
+            selected = Some(index);
+            break;
+        }
+    }
+    let index = selected.ok_or_else(|| error(&format!("unknown function {entry}")))?;
+    if !matches!(
+        meaning.types[meaning.functions[index].result].kind,
+        TypeKind::Unit | TypeKind::Bool | TypeKind::Char | TypeKind::Int { .. } | TypeKind::F64
+    ) {
+        return Err(error("host entry result must be unit or a scalar"));
+    }
+    // The public witness bridge cannot accidentally replay a context prepared
+    // for another runtime or label-prefix option set.
+    if namespace != native::cache_namespace(checked, runtime, grants, profile_path) {
+        return emit_granted(checked.checked(), runtime, entry, grants, result_fd, profile_path);
+    }
+    let image = native::encode_granted_reusing(
+        checked, runtime, index, grants, result_fd, profile_path, namespace, records,
+    )?;
+    Ok(image.bytes)
+}
+
 fn emit_artifact(
     checked: &CheckedProgram,
     runtime: &runtime::Runtime,

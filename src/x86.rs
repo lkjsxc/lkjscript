@@ -29,6 +29,27 @@ struct Reference {
     site: Span,
 }
 
+
+#[derive(Clone, Copy)]
+pub(crate) struct Checkpoint {
+    bytes: usize,
+    labels: usize,
+    references: usize,
+}
+pub(crate) struct FragmentReference {
+    pub at: usize,
+    pub label: Label,
+    pub site: Span,
+}
+pub(crate) struct Fragment {
+    pub bytes: Vec<u8>,
+    pub label_base: usize,
+    pub labels: Vec<Option<usize>>,
+    pub references: Vec<FragmentReference>,
+    pub symbols: Vec<(Label, Vec<u8>)>,
+    pub site: Span,
+}
+
 pub struct Assembler {
     pub bytes: Vec<u8>,
     labels: Vec<Option<usize>>,
@@ -57,6 +78,143 @@ impl Assembler {
             problem: None,
         }
     }
+
+    pub(crate) fn label_count(&self) -> usize {
+        self.labels.len()
+    }
+    pub(crate) fn checkpoint(&self) -> Checkpoint {
+        Checkpoint {
+            bytes: self.bytes.len(),
+            labels: self.labels.len(),
+            references: self.references.len(),
+        }
+    }
+    pub(crate) fn fragment(
+        &self,
+        checkpoint: Checkpoint,
+        symbols: Vec<(Label, Vec<u8>)>,
+    ) -> Option<Fragment> {
+        if self.problem.is_some() {
+            return None;
+        }
+        let mut positions = Vec::new();
+        for position in &self.labels[checkpoint.labels..] {
+            positions.push(match position {
+                Some(position) if *position >= checkpoint.bytes => Some(*position - checkpoint.bytes),
+                Some(_) => return None,
+                None => None,
+            });
+        }
+        let mut references = Vec::new();
+        for reference in &self.references[checkpoint.references..] {
+            references.push(FragmentReference {
+                at: reference.at - checkpoint.bytes,
+                label: reference.label,
+                site: reference.site,
+            });
+        }
+        Some(Fragment {
+            bytes: self.bytes[checkpoint.bytes..].to_vec(),
+            label_base: checkpoint.labels,
+            labels: positions,
+            references,
+            symbols,
+            site: self.site,
+        })
+    }
+    /// Append authenticated relocatable bytes only after a complete preflight.
+    /// Labels allocated by earlier bodies never identify a literal: its bytes do.
+    pub(crate) fn append_fragment(
+        &mut self,
+        fragment: &Fragment,
+        bound: Label,
+        prefix: usize,
+        symbols: &mut std::collections::BTreeMap<Vec<u8>, Label>,
+    ) -> bool {
+        if bound >= prefix || prefix > self.labels.len()
+            || self.labels[bound].is_some() || fragment.label_base < prefix
+            || fragment.labels.len() > (!0usize) - fragment.label_base
+        {
+            return false;
+        }
+        let limit = fragment.label_base + fragment.labels.len();
+        let mut symbolic = std::collections::BTreeMap::new();
+        for (label, _) in &fragment.symbols {
+            if *label < prefix || *label >= limit || symbolic.contains_key(label) {
+                return false;
+            }
+            if *label >= fragment.label_base
+                && fragment.labels[*label - fragment.label_base].is_some()
+            {
+                return false;
+            }
+            symbolic.insert(*label, true);
+        }
+        for position in &fragment.labels {
+            if position.is_some_and(|position| position > fragment.bytes.len()) {
+                return false;
+            }
+        }
+        for reference in &fragment.references {
+            if reference.at > fragment.bytes.len()
+                || fragment.bytes.len() - reference.at < 4
+                || reference.label >= limit
+            {
+                return false;
+            }
+            if reference.label >= prefix && !symbolic.contains_key(&reference.label) {
+                if reference.label < fragment.label_base
+                    || fragment.labels[reference.label - fragment.label_base].is_none()
+                {
+                    return false;
+                }
+            }
+        }
+        // No validation failure may allocate a label or introduce a data symbol.
+        let offset = self.bytes.len();
+        let mut locals = Vec::new();
+        for _ in &fragment.labels {
+            locals.push(self.label());
+        }
+        let mut rebound = std::collections::BTreeMap::new();
+        for (label, bytes) in &fragment.symbols {
+            let current = match symbols.get(bytes) {
+                Some(current) => *current,
+                None => {
+                    let current = if *label >= fragment.label_base {
+                        locals[*label - fragment.label_base]
+                    } else {
+                        self.label()
+                    };
+                    symbols.insert(bytes.clone(), current);
+                    current
+                }
+            };
+            rebound.insert(*label, current);
+        }
+        self.bind(bound);
+        for (index, position) in fragment.labels.iter().enumerate() {
+            if let Some(position) = position {
+                self.data_label(locals[index], offset + *position);
+            }
+        }
+        self.bytes.extend_from_slice(&fragment.bytes);
+        for reference in &fragment.references {
+            let label = match rebound.get(&reference.label) {
+                Some(label) => *label,
+                None if reference.label >= fragment.label_base => locals[reference.label - fragment.label_base],
+                None => reference.label,
+            };
+            self.references.push(Reference {
+                at: offset + reference.at,
+                label,
+                site: reference.site,
+            });
+        }
+        self.site = fragment.site;
+        true
+    }
+
     pub fn location(&mut self, file: usize, line: usize, column: usize) {
         self.site.file = file;
         self.site.line = line;

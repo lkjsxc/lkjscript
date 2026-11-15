@@ -534,6 +534,9 @@ fn workers(
     cases: &[Case],
     jobs: usize,
     engines: &[String],
+    store_directory: &Option<String>,
+    store_key: &Option<String>,
+    stats: bool,
 ) -> Result<Vec<Worker>, String> {
     let executable = world.executable().map_err(|e: i64| io("compiler executable", e))?;
     let mut result = Vec::new();
@@ -561,11 +564,18 @@ fn workers(
         let name = format!("worker-{worker}");
         let mut file = directory.create(&name).map_err(|e: i64| io("requests", e))?;
         file.write_all(requests.as_bytes()).map_err(|e: i64| io("write requests", e))?;
-        let args = vec![
+        let mut args = vec![
             "batch".as_bytes().to_vec(), format!("{temporary}/{name}").into_bytes(),
             "--engines".as_bytes().to_vec(), routes.as_bytes().to_vec(),
             "--roundtrip".as_bytes().to_vec(),
         ];
+        if let Some(path) = store_directory {
+            args.push("--store".as_bytes().to_vec()); args.push(path.as_bytes().to_vec());
+        }
+        if let Some(path) = store_key {
+            args.push("--store-key".as_bytes().to_vec()); args.push(path.as_bytes().to_vec());
+        }
+        if stats { args.push("--stats".as_bytes().to_vec()); }
         result.push(Worker { process: start(world, &executable, &args)?, indices });
     }
     Ok(result)
@@ -578,8 +588,11 @@ fn run_inner(
     cases: &[Case],
     jobs: usize,
     engines: &[String],
+    store_directory: &Option<String>,
+    store_key: &Option<String>,
+    stats: bool,
 ) -> Result<(usize, usize, usize), String> {
-    let active = workers(world, directory, temporary, cases, jobs, engines)?;
+    let active = workers(world, directory, temporary, cases, jobs, engines, store_directory, store_key, stats)?;
     let mut passed = 0usize;
     let mut pending = 0usize;
     let mut failed = 0usize;
@@ -589,6 +602,7 @@ fn run_inner(
             world.stderr().write(&capture.stderr);
             return Err(format!("E_TEST worker exited {}", capture.status));
         }
+        if stats { world.stderr().write(&capture.stderr); }
         let text = utf8(capture.stdout, "E_TEST worker output UTF-8")?;
         let mut observed: BTreeMap<usize, Record> = BTreeMap::new();
         let mut references: BTreeMap<usize, Record> = BTreeMap::new();
@@ -640,11 +654,14 @@ fn run_inner(
     Ok((passed, pending, failed))
 }
 
-pub fn run(
+pub fn run_stored(
     world: &mut World,
     path: &str,
     jobs: usize,
     engines: &[String],
+    store_directory: &Option<String>,
+    store_key: &Option<String>,
+    stats: bool,
 ) -> Result<u8, String> {
     if jobs == 0 || jobs > 8 {
         return Err("E_USAGE --jobs must be between one and eight".to_string());
@@ -662,7 +679,7 @@ pub fn run(
     let result = match parent.open_directory(&temporary) {
         Err(errno) => Err(io("worker directory", errno)),
         Ok(mut directory) => {
-            let result = run_inner(world, &mut directory, &temporary, &cases, jobs, engines);
+            let result = run_inner(world, &mut directory, &temporary, &cases, jobs, engines, store_directory, store_key, stats);
             for worker in 0..jobs {
                 let _ = directory.remove(&format!("worker-{worker}"));
             }

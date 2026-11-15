@@ -1,63 +1,34 @@
 # Status — 2026-11-15
 
-## Current milestone: 6.4 complete; next content-addressed reuse
+## Compiler: authenticated reuse complete; seed refresh next
 
-build --profile samples CPU instruction/frame addresses into OUTPUT.samples.PID;
-profile reports self/inclusive source functions in at most 40 lines without DWARF.
-Owned capability entries require named grants; a sole World declares full authority.
-Listener owns IPv4 TCP acceptance. authority follows checked-IR calls and owned cleanup.
-HTTP: 8,017,696 verified requests in 3,600.002 s (2,227/s), with no errors.
-All 121 post-warmup RSS samples and peak were 452 KiB; virtual size stayed unchanged.
-Server profile: 788,786 samples; append_bytes 23.8%, slice equality 12.5%, header_end 9.2% self.
-All 26 functional requests pass natively and in the interpreter (129.417 s for the latter).
+Shared SHA-256 passes standard, padding and streaming vectors on both routes.
+The disposable store reuses checked bodies, relocatable emission and closed test successes.
+HMAC binds exact compiler bytes, target, options and input closure; the private key is
+outside source/program grants. Key readers and compiler replacers are equally trusted.
+Shared IR structure is always checked; malformed, swapped, replayed and forged entries miss.
+Gate cases cover compiler/key changes, missing/full stores, races and dependency changes.
+Runtime/drop helpers still emit normally; unchanged whole images bypass assembly too.
 
-Bare Debian gate without cargo/rustc/node: 153.050 s; bootstrap/fixed point 30.345 s.
-706 conformance cases / 1,404 route checks; four intended pending specifications (eight routes).
-805 generated cases / 2,430 checks; 711 semantic contracts; 436 IR cases / 872 checks.
-13 reference cases / 26 checks; 19 authority fixtures / 38 checks plus explicit grant tests.
-Optional Rust witness: 265 value/output + 321 verdict cases; compiler bytes agree.
-Ubuntu 26.04 env symlink/multicall handling is fixed in the optional witness orchestration.
-Long mutation: 32,768, zero findings; 50,812/minute (38.693 s, eight workers).
-26,168 rejected; 6,041 equal values; 466 equal traps; 93 two-second timeouts; no resource failures.
-
-Deleted at 6.3: Node gate/generators/reducer, cases.json, 195 repeated integer files,
-44 Cargo integration files and duplicate unit/host scaffolding; Cargo lives in witness/.
-language.md is 487 lines. Three scoped-concurrency cases and borrowed_closure_escape
-remain intended pending rules; conservative holder liveness has a rejection and scope rewrite.
-
-## Compiler measurements
-
-| Current sources | Self-built | Rust-built witness |
+| Measurement (four workers for gates) | Seconds | Load before → after |
 | --- | ---: | ---: |
-| Complete self-build | 16.15 s | 2.40 s |
-| Peak RSS | 386.8 MiB | 273.9 MiB |
-| Output bytes | 14,133,686 | Identical |
-| IR | 8,802 functions / 767,765 instructions | — |
+| Self-build, store disabled | 15.53 | 1.67 → 1.94 |
+| Cold self-build | 20.92 | 1.94 → 2.19 |
+| Warm, one checker function changed | 15.78 | 2.19 → 2.51 |
+| Warm, unchanged | 1.32 | 2.19 → 2.19 |
+| Cold gate, previous seed | 213.141 | 1.77 → 6.77 |
+| Warm gate, previous seed | 114.747 | 3.34 → 4.06 |
 
-Stored seed: 2,711,289 compressed bytes; two native generations and the witness agree.
-On unchanged 43cc8ae9 input, the profiled build improved 21.32 → 14.50 s (witness 2.03 s).
-The profile found type-sized boolean initialization/cloning, then called aggregate copies.
-Sparse query visits, packed snapshot facts and inline known-size copies remove those costs.
-The old helper already used rep movsb. Optimization stopped under the two-cause rule.
-The current gap is 6.7x. Sampled build: 16.12 s; typing 5.38 s, IR construction 4.56 s,
-checking 4.73 s, emission 0.64 s. Remaining function samples (15,942 total):
-
-| Function | Self | Inclusive |
-| --- | ---: | ---: |
-| byte-slice ordering | 3.9% | 3.9% |
-| bytes::append_bytes | 2.6% | 4.0% |
-| runtime::allocate | 2.0% | 5.3% |
-| runtime::release | 2.1% | 2.7% |
-| check::check_function_body | 1.0% | 43.3% |
-| elaborate::compile_function | <0.1% | 35.4% |
-| elaborate::infer_resolved_report | <0.1% | 33.4% |
-
-Inclusive rows overlap; the remaining cost is spread across checking, inference and IR construction.
-64-byte calls (10 M): native 0.36 s / rustc opt=0 0.30 s / rustc -O 0.10 s.
-64-byte Vec (1 M elements, 10 M reads): 0.06 / 0.08 / 0.02 s, with equal results.
-
-SHA-256 is shared source; standard, padding and streaming vectors pass on both routes.
-Four-worker gate: 174.560 s, load 4.35 → 5.04. Next: authenticated checked-work reuse.
+Cold overhead: +5.39 s (+34.7%). One edit reuses 9,062 checks and 8,921 emitted bodies;
+authentication/serialization currently consume the saved checking time. No edit speedup yet.
+Two versions occupy 63,837,509 logical bytes, 121,652 KiB allocated, 17,990 files.
+Compiler: 14,451,862 bytes; 9,063 functions / 787,647 IR instructions; fresh/cached identical.
+Native fixed point and optional Rust witness agree; all cold/warm gate verdicts agree.
+Warm-store mutation: 32,768, zero findings; 29,117/min (67.523 s, load 4.75 → 10.64).
+26,168 rejected; 6,041 values; 466 traps; 93 nontermination allowances; zero resources.
+24,966 checked and 9,850 emitted reuses; no rejected authenticated records in the campaign.
+No store entries are committed. bench/reuse.sh reproduces the build/edit/size comparison.
+Next: separate seed refresh, then compiler opt=0/-O triple and emitted-code-kind profiles.
 
 ## Programs
 

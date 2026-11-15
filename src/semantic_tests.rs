@@ -9,6 +9,7 @@ mod interpreter_contracts;
 mod library_demand;
 mod parser_contracts;
 mod resolver;
+mod reuse;
 mod return_contracts;
 mod source_cases;
 mod source_contracts;
@@ -105,6 +106,7 @@ pub fn run(world: &mut World, shard: usize, workers: usize, trace: bool) -> (usi
         count += allocator::run(world);
         count += facts::run();
         count += resolver::run();
+        count += reuse::run(world, trace);
         crate::interpreter::assert_reference_reuse();
         count += 1;
     }

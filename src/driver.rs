@@ -1,7 +1,7 @@
 // Command line and orchestration for the complete owned toolchain.
 use crate::{
     ast, backend, check, driver_host, elaborate, embedded, interpreter, ir, ir_text, json, runtime,
-    source,
+    source, reuse, store, sha256,
 };
 use crate::{diagnostics, resolve};
 use std::collections::BTreeMap;
@@ -25,12 +25,14 @@ struct Options {
     source_directory: Option<String>,
     library_directory: Option<String>,
     runtime_source: Option<String>,
+    store_directory: Option<String>,
+    store_key: Option<String>,
     no_library: bool,
     arguments: Vec<Vec<u8>>,
 }
 
 fn usage() -> &'static str {
-    "lkjscript check|build|run|test|ir|authority <source.rs|program.lkjir> [options]\n\n  check  Check all source or input IR\n  build  Write a static Linux x86-64 executable\n  run    Execute main (or probe); bytes after -- are program arguments\n  test   Run #[test] functions through native and interpreter routes\n  ir     Write checked lkjscript IR\n  authority  Report entry grants and reachable checked-IR effects\n\n  --entry NAME                 Select an entry\n  --grant NAME[=VALUE]          Grant an owned entry capability (repeatable)\n  --engine native|interpreter  Select the execution route\n  -o PATH                     Write an artifact or IR\n  --stats                     Report phase times, counts and peak RSS\n  --profile                   Sample CPU to OUTPUT.samples.PID in built programs\n  profile SAMPLES             Report top self and inclusive functions\n  --jobs N                    Native test workers (1..8)\n  --witness RUSTC             Compare marked cases with optional rustc\n  --source-dir DIR            Grant a root for source reads\n  --library-dir DIR           Use explicit library sources\n  --no-library                Compile without the source library\n  --runtime-source PATH       Use an explicit source runtime\n  --unchecked-ir              Interpret raw IR for checker testing\n  runtime-ir                  Write the checked source runtime as IR\n  check-library               Check every source library body\n\nScalar runs print the value; f64 prints exact bits as f64:0x0123456789abcdef.\n"
+    "lkjscript check|build|run|test|ir|authority <source.rs|program.lkjir> [options]\n\n  check  Check all source or input IR\n  build  Write a static Linux x86-64 executable\n  run    Execute main (or probe); bytes after -- are program arguments\n  test   Run #[test] functions through native and interpreter routes\n  ir     Write checked lkjscript IR\n  authority  Report entry grants and reachable checked-IR effects\n\n  --entry NAME                 Select an entry\n  --grant NAME[=VALUE]          Grant an owned entry capability (repeatable)\n  --engine native|interpreter  Select the execution route\n  -o PATH                     Write an artifact or IR\n  --stats                     Report phase times, counts and peak RSS\n  --profile                   Sample CPU to OUTPUT.samples.PID in built programs\n  profile SAMPLES             Report top self and inclusive functions\n  --jobs N                    Native test workers (1..8)\n  --witness RUSTC             Compare marked cases with optional rustc\n  --source-dir DIR            Grant a root for source reads\n  --library-dir DIR           Use explicit library sources\n  --no-library                Compile without the source library\n  --runtime-source PATH       Use an explicit source runtime\n  --store DIR                 Reuse authenticated work beneath this Directory\n  --store-key PATH            Grant a private 32-byte key outside source roots\n  --no-store                  Disable stored reuse\n  --unchecked-ir              Interpret raw IR for checker testing\n  runtime-ir                  Write the checked source runtime as IR\n  check-library               Check every source library body\n\nScalar runs print the value; f64 prints exact bits as f64:0x0123456789abcdef.\n"
 }
 
 fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
@@ -77,6 +79,8 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
         source_directory: None,
         library_directory: None,
         runtime_source: None,
+        store_directory: None,
+        store_key: None,
         no_library: false,
         arguments,
     };
@@ -93,8 +97,9 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
             "--roundtrip" => out.roundtrip = true,
             "--unchecked-ir" => out.unchecked = true,
             "--no-library" => out.no_library = true,
+            "--no-store" => { out.store_directory = None; out.store_key = None; },
             "--entry" | "-o" | "--engine" | "--engines" | "--source-dir" | "--library-dir"
-            | "--runtime-source" | "--jobs" | "--witness" | "--grant" => {
+            | "--runtime-source" | "--jobs" | "--witness" | "--grant" | "--store" | "--store-key" => {
                 at += 1;
                 if at == values.len() {
                     return Err(format!("E_USAGE {option} needs a value"));
@@ -125,6 +130,8 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
                     "--witness" => out.witness = Some(value),
                     "--source-dir" => out.source_directory = Some(value),
                     "--library-dir" => out.library_directory = Some(value),
+                    "--store" => out.store_directory = Some(value),
+                    "--store-key" => out.store_key = Some(value),
                     _ => out.runtime_source = Some(value),
                 }
             }
@@ -425,12 +432,20 @@ fn compile(
     world: &mut World,
     options: &Options,
     stats: &mut Stats,
-) -> Result<ir::CheckedProgram, String> {
+    memo: &mut Memo,
+) -> Result<reuse::Checked, String> {
+    memo.inputs.clear();
+    memo.valid_inputs = true;
     if options.path.ends_with(".lkjir") {
-        let input = text(read_path(world, &options.path)?, &options.path)?;
+        let bytes = read_path(world, &options.path)?;
+        if memo.store.is_some() {
+            let (parent, name) = location(&options.path);
+            memo.inputs.push(store::input(&parent, &name, &Some(bytes.clone())));
+        }
+        let input = text(bytes, &options.path)?;
         let meaning = ir_text::read(&input).map_err(|problem| report(&options.path, problem))?;
         stats.mark("parse_ir")?;
-        let checked = check::check_all(meaning)
+        let checked = check_reusing(meaning, memo, options.roundtrip)
             .map_err(|problems: Vec<ast::Diagnostic>| ir_failure(&options.path, problems))?;
         stats.mark("check")?;
         return Ok(checked);
@@ -466,13 +481,36 @@ fn compile(
             Ok(Some("fn main() {}".as_bytes().to_vec()))
         } else if path.starts_with("$std/") {
             match library.as_mut() {
-                Some(directory) => read(directory, &path[5..]),
+                Some(directory) => {
+                    let result = read(directory, &path[5..]);
+                    if memo.store.is_some() {
+                        match &result {
+                            Ok(bytes) => memo.inputs.push(store::input(options.library_directory.as_ref().unwrap(), &path[5..], bytes)),
+                            Err(_) => memo.valid_inputs = false,
+                        }
+                    }
+                    result
+                },
                 None => Ok(embedded::library(path)),
             }
         } else if absolute_source && path.starts_with('/') {
-            read(&mut directory, &path[1..])
+            let result = read(&mut directory, &path[1..]);
+            if memo.store.is_some() {
+                match &result {
+                    Ok(bytes) => memo.inputs.push(store::input(&directory_path, &path[1..], bytes)),
+                    Err(_) => memo.valid_inputs = false,
+                }
+            }
+            result
         } else {
-            read(&mut directory, path)
+            let result = read(&mut directory, path);
+            if memo.store.is_some() {
+                match &result {
+                    Ok(bytes) => memo.inputs.push(store::input(&directory_path, path, bytes)),
+                    Err(_) => memo.valid_inputs = false,
+                }
+            }
+            result
         }
     });
     stats.mark("load_parse")?;
@@ -520,7 +558,7 @@ fn compile(
         }
     };
     stats.mark("build_ir")?;
-    let checked = match check::check_all(meaning) {
+    let checked = match check_reusing(meaning, memo, options.roundtrip) {
         Ok(checked) => checked,
         Err(problems) => {
             return Err(analysis_failure(
@@ -550,6 +588,9 @@ pub(crate) fn load_runtime(
         None => embedded::runtime()
             .ok_or("E_RUNTIME this seed needs --runtime-source library/runtime.rs")?,
     };
+    prepare_runtime(code)
+}
+fn prepare_runtime(code: String) -> Result<runtime::Runtime, String> {
     let parsed = source::load("$runtime/runtime.rs", None, &mut |path: &str| {
         if path == "$runtime/runtime.rs" {
             Ok(Some(code.as_bytes().to_vec()))
@@ -569,9 +610,21 @@ fn ensure_runtime(
     world: &mut World,
     options: &Options,
     cache: &mut Option<runtime::Runtime>,
+    memo: &mut Memo,
 ) -> Result<(), String> {
     if cache.is_none() {
-        *cache = Some(load_runtime(world, &options.runtime_source)?);
+        let runtime = match &options.runtime_source {
+            Some(path) => {
+                let bytes = read_path(world, path)?;
+                if memo.store.is_some() {
+                    let (parent, name) = location(path);
+                    memo.runtime_input = Some(store::input(&parent, &name, &Some(bytes.clone())));
+                }
+                prepare_runtime(text(bytes, path)?)?
+            }
+            None => load_runtime(world, &None)?,
+        };
+        *cache = Some(runtime);
     }
     Ok(())
 }
@@ -670,6 +723,7 @@ pub(crate) fn raw_scalar(program: &ir::Program, index: usize, bytes: &[u8]) -> R
     }
 }
 
+#[derive(Clone)]
 struct Outcome {
     status: u8,
     stdout: Vec<u8>,
@@ -768,16 +822,17 @@ pub(crate) fn normalize_trap(path: &str, raw: &[u8]) -> Option<String> {
 
 fn native_run(
     world: &mut World,
-    checked: &ir::CheckedProgram,
+    checked: &reuse::Checked,
     runtime: &runtime::Runtime,
     index: usize,
     options: &Options,
     capture: bool,
     stats: &mut Stats,
+    memo: &mut Memo,
 ) -> Result<Outcome, String> {
     let name = &checked.program().functions[index].name;
     let grants = crate::entry_grants::prepare(checked.program(), index, &options.grants)?;
-    let bytes = backend::emit_granted(checked, runtime, name, &grants, Some(3), None)
+    let bytes = emit_reusing(checked, runtime, name, &grants, Some(3), None, memo)
         .map_err(|problem| report(&options.path, problem))?;
     stats.count("emitted_bytes", bytes.len());
     stats.mark("native_encode")?;
@@ -951,7 +1006,7 @@ fn record(world: &mut World, index: usize, engine: &str, checked: bool, outcome:
     );
     world.stdout().write(text.as_bytes());
 }
-fn batch(world: &mut World, options: &Options, stats: &mut Stats) -> Result<u8, String> {
+fn batch(world: &mut World, options: &Options, stats: &mut Stats, memo: &mut Memo) -> Result<u8, String> {
     let input = text(read_path(world, &options.path)?, &options.path)?;
     let mut runtime = None;
     for (index, row) in split(&input, b'\n', 0).iter().enumerate() {
@@ -971,7 +1026,20 @@ fn batch(world: &mut World, options: &Options, stats: &mut Stats) -> Result<u8, 
         } else {
             Some(columns[1].to_string())
         };
-        let checked = match compile(world, &request, stats) {
+        if request.runtime_source.is_some() {
+            runtime = None;
+            memo.runtime_input = None;
+        }
+        if let Some(bytes) = memo.lookup(world, &request, "test") {
+            if let Some((accepted, outcomes)) = decode_outcomes(&bytes, options.engines.len()) {
+                for (route, outcome) in outcomes.iter().enumerate() {
+                    record(world, index, &options.engines[route], accepted, outcome);
+                }
+                memo.test_reused += 1;
+                continue;
+            }
+        }
+        let checked = match compile(world, &request, stats, memo) {
             Ok(checked) => checked,
             Err(problem) => {
                 let outcome = Outcome {
@@ -982,6 +1050,11 @@ fn batch(world: &mut World, options: &Options, stats: &mut Stats) -> Result<u8, 
                 };
                 for engine in &options.engines {
                     record(world, index, engine, false, &outcome);
+                }
+                if !outcome.diagnostic.contains("E_IO") {
+                    let mut outcomes = Vec::new();
+                    for _ in &options.engines { outcomes.push(outcome.clone()); }
+                    memo.remember(&request, "test", &encode_outcomes(false, &outcomes));
                 }
                 continue;
             }
@@ -1007,10 +1080,10 @@ fn batch(world: &mut World, options: &Options, stats: &mut Stats) -> Result<u8, 
                 if let Ok(grants) = crate::entry_grants::prepare(
                     checked.program(), selected, &request.grants,
                 ) {
-                    ensure_runtime(world, &request, &mut runtime)?;
+                    ensure_runtime(world, &request, &mut runtime, memo)?;
                     let name = &checked.program().functions[selected].name;
                     let original = match backend::emit_granted(
-                        &checked, runtime.as_ref().unwrap(), name, &grants, None, None,
+                        checked.checked(), runtime.as_ref().unwrap(), name, &grants, None, None,
                     ) {
                         Ok(bytes) => bytes,
                         Err(problem) => return Err(report(&request.path, problem)),
@@ -1022,9 +1095,28 @@ fn batch(world: &mut World, options: &Options, stats: &mut Stats) -> Result<u8, 
                         Err(problem) => return Err(report(&request.path, problem)),
                     };
                     if original != repeated { return Err(format!("E_TEST IR roundtrip changed native bytes for {}", request.path)); }
+                    if memo.store.is_some() {
+                        // The second call reloads the entries flushed by the
+                        // first, proving warm byte identity in an empty-store gate.
+                        for pass in 0..2usize {
+                            let reused = match emit_reusing(
+                                &checked, runtime.as_ref().unwrap(), name, &grants, None, None, memo,
+                            ) {
+                                Ok(bytes) => bytes,
+                                Err(problem) => return Err(report(&request.path, problem)),
+                            };
+                            if original != reused {
+                                let phase = if pass == 0 { "first" } else { "warm" };
+                                return Err(format!("E_TEST {phase} store emission changed native bytes for {}", request.path));
+                            }
+                        }
+                    }
                 }
             }
         }
+        let mut outcomes = Vec::new();
+        let reusable = request.command == "check" || checked_entry(checked.program(), &request.entry)
+            .map(|selected: usize| checked.program().functions[selected].params == 0).unwrap_or(false);
         for engine in &options.engines {
             let outcome = if request.command == "check" {
                 Outcome {
@@ -1049,10 +1141,10 @@ fn batch(world: &mut World, options: &Options, stats: &mut Stats) -> Result<u8, 
                                 selected,
                                 &request,
                                 true,
-                                Some(&checked),
+                                Some(checked.checked()),
                             )
                         } else {
-                            ensure_runtime(world, &request, &mut runtime)?;
+                            ensure_runtime(world, &request, &mut runtime, memo)?;
                             match native_run(
                                 world,
                                 &checked,
@@ -1061,6 +1153,7 @@ fn batch(world: &mut World, options: &Options, stats: &mut Stats) -> Result<u8, 
                                 &request,
                                 true,
                                 stats,
+                                memo,
                             ) {
                                 Ok(outcome) => outcome,
                                 Err(problem) => Outcome {
@@ -1075,12 +1168,20 @@ fn batch(world: &mut World, options: &Options, stats: &mut Stats) -> Result<u8, 
                 }
             };
             record(world, index, engine, true, &outcome);
+            outcomes.push(outcome);
+        }
+        let mut completed = reusable;
+        for outcome in &outcomes {
+            if outcome.status != 0 || !outcome.diagnostic.is_empty() { completed = false; }
+        }
+        if completed {
+            memo.remember(&request, "test", &encode_outcomes(true, &outcomes));
         }
     }
     Ok(0)
 }
 
-fn execute(world: &mut World, options: &Options, stats: &mut Stats) -> Result<u8, String> {
+fn execute(world: &mut World, options: &Options, stats: &mut Stats, memo: &mut Memo) -> Result<u8, String> {
     if options.command == "--help" || options.command == "-h" {
         world.stdout().write(usage().as_bytes());
         return Ok(0);
@@ -1100,14 +1201,15 @@ fn execute(world: &mut World, options: &Options, stats: &mut Stats) -> Result<u8
         }
     }
     if options.command == "test" && crate::test_runner::has_cases(world, &options.path)? {
-        return crate::test_runner::run(world, &options.path, options.jobs, &options.engines);
+        return crate::test_runner::run_stored(world, &options.path, options.jobs, &options.engines,
+            &options.store_directory, &options.store_key, options.stats);
     }
     if options.command == "batch" {
-        return batch(world, options, stats);
+        return batch(world, options, stats, memo);
     }
     let mut runtime = None;
     if options.command == "runtime-ir" {
-        ensure_runtime(world, options, &mut runtime)?;
+        ensure_runtime(world, options, &mut runtime, memo)?;
         let text = ir_text::write(runtime.as_ref().unwrap().checked_program());
         world.stdout().write(text.as_bytes());
         return Ok(0);
@@ -1119,7 +1221,17 @@ fn execute(world: &mut World, options: &Options, stats: &mut Stats) -> Result<u8
         let outcome = interpret(world, &program, selected, options, false, None);
         return Ok(deliver(world, outcome, true));
     }
-    let checked = compile(world, options, stats)?;
+    if options.command == "build" {
+        if let Some(bytes) = memo.lookup(world, options, "image") {
+            let path: String = match &options.output { Some(path) => path.clone(), None => format!("{}.elf", options.path) };
+            publish(world, &path, &bytes, true)?;
+            memo.build_reused += 1;
+            stats.count("emitted_bytes", bytes.len());
+            stats.mark("stored_build")?;
+            return Ok(0);
+        }
+    }
+    let checked = compile(world, options, stats, memo)?;
     if options.command == "check" || options.command == "check-library" {
         return Ok(0);
     }
@@ -1135,15 +1247,15 @@ fn execute(world: &mut World, options: &Options, stats: &mut Stats) -> Result<u8
     }
     if options.command == "authority" {
         let selected = checked_entry(checked.program(), &options.entry)?;
-        let analysis = crate::authority::analyze(&checked, selected)?;
-        let output = crate::authority::render(&checked, &analysis);
+        let analysis = crate::authority::analyze(checked.checked(), selected)?;
+        let output = crate::authority::render(checked.checked(), &analysis);
         world.stdout().write(output.as_bytes());
         return Ok(0);
     }
     if options.command == "build" {
         let selected = checked_entry(checked.program(), &options.entry)?;
         let grants = crate::entry_grants::prepare(checked.program(), selected, &options.grants)?;
-        ensure_runtime(world, options, &mut runtime)?;
+        ensure_runtime(world, options, &mut runtime, memo)?;
         stats.mark("runtime")?;
         let path: String = match &options.output {
             Some(path) => path.to_string(),
@@ -1152,13 +1264,14 @@ fn execute(world: &mut World, options: &Options, stats: &mut Stats) -> Result<u8
         let name = &checked.program().functions[selected].name;
         let bytes = if options.profile {
             let profile_path = format!("{path}.samples");
-            backend::emit_granted(&checked, runtime.as_ref().unwrap(), name, &grants, None, Some(profile_path.as_str()))
+            emit_reusing(&checked, runtime.as_ref().unwrap(), name, &grants, None, Some(profile_path.as_str()), memo)
         } else {
-            backend::emit_granted(&checked, runtime.as_ref().unwrap(), name, &grants, None, None)
+            emit_reusing(&checked, runtime.as_ref().unwrap(), name, &grants, None, None, memo)
         }.map_err(|problem| report(&options.path, problem))?;
         stats.count("emitted_bytes", bytes.len());
         stats.mark("native_encode")?;
         publish(world, &path, &bytes, true)?;
+        memo.remember(options, "image", &bytes);
         return Ok(0);
     }
     if options.command == "test" {
@@ -1177,10 +1290,10 @@ fn execute(world: &mut World, options: &Options, stats: &mut Stats) -> Result<u8
                         index,
                         options,
                         true,
-                        Some(&checked),
+                        Some(checked.checked()),
                     )
                 } else {
-                    ensure_runtime(world, options, &mut runtime)?;
+                    ensure_runtime(world, options, &mut runtime, memo)?;
                     native_run(
                         world,
                         &checked,
@@ -1189,6 +1302,7 @@ fn execute(world: &mut World, options: &Options, stats: &mut Stats) -> Result<u8
                         options,
                         true,
                         stats,
+                        memo,
                     )?
                 };
                 count += 1;
@@ -1217,10 +1331,10 @@ fn execute(world: &mut World, options: &Options, stats: &mut Stats) -> Result<u8
             selected,
             options,
             false,
-            Some(&checked),
+            Some(checked.checked()),
         )
     } else {
-        ensure_runtime(world, options, &mut runtime)?;
+        ensure_runtime(world, options, &mut runtime, memo)?;
         stats.mark("runtime")?;
         native_run(
             world,
@@ -1230,6 +1344,7 @@ fn execute(world: &mut World, options: &Options, stats: &mut Stats) -> Result<u8
             options,
             false,
             stats,
+            memo,
         )?
     };
     Ok(deliver(world, outcome, true))
@@ -1241,7 +1356,9 @@ pub fn main(mut world: World) {
         Ok(options) => match Stats::new(&mut world, options.stats) {
             Err(problem) => Err(problem),
             Ok(mut stats) => {
-                let result = execute(&mut world, &options, &mut stats);
+                let mut memo = Memo::new(&mut world, &options);
+                let result = execute(&mut world, &options, &mut stats, &mut memo);
+                memo.stats(&mut stats);
                 let stopped = if result.is_ok() { "done" } else { "failed" };
                 let measured = stats.finish(&mut world, stopped);
                 match measured {
@@ -1258,4 +1375,175 @@ pub fn main(mut world: World) {
             world.set_exit_status(1);
         }
     }
+}
+
+struct Memo {
+    store: Option<store::Store>,
+    inputs: Vec<store::Input>,
+    valid_inputs: bool,
+    runtime_input: Option<store::Input>,
+    checked_reused: usize,
+    emitted_reused: usize,
+    test_reused: usize,
+    build_reused: usize,
+}
+impl Memo {
+    fn new(world: &mut World, options: &Options) -> Self {
+        Self {
+            store: store::Store::open(world, &options.store_directory, &options.store_key),
+            inputs: Vec::new(), valid_inputs: true, runtime_input: None,
+            checked_reused: 0, emitted_reused: 0, test_reused: 0, build_reused: 0,
+        }
+    }
+    fn stats(&self, stats: &mut Stats) {
+        stats.count("checked_reused", self.checked_reused);
+        stats.count("emitted_reused", self.emitted_reused);
+        stats.count("test_reused", self.test_reused);
+        stats.count("build_reused", self.build_reused);
+        if let Some(store) = &self.store {
+            stats.count("store_hits", store.hits);
+            stats.count("store_misses", store.misses);
+            stats.count("store_rejected", store.rejected);
+            stats.count("store_writes", store.writes);
+        }
+    }
+    fn lookup(&mut self, world: &mut World, options: &Options, kind: &str) -> Option<Vec<u8>> {
+        let store = self.store.as_mut()?;
+        let request = request_key(options);
+        let plan = store.get(&format!("inputs-{kind}"), &request)?;
+        let mut reader = store::Reader::new(&plan);
+        let inputs = reader.bytes()?;
+        let result = reader.text()?;
+        if !reader.done() || !store::inputs_match(world, &inputs) { return None; }
+        store.get(kind, &result)
+    }
+    fn remember(&mut self, options: &Options, kind: &str, bytes: &[u8]) {
+        if !self.valid_inputs { return; }
+        if let Some(store) = self.store.as_mut() {
+            let request = request_key(options);
+            let mut closure = self.inputs.clone();
+            if let Some(input) = &self.runtime_input { closure.push(input.clone()); }
+            let inputs = store::encode_inputs(&closure);
+            let mut identity = Vec::new();
+            store::push_bytes(&mut identity, request.as_bytes());
+            store::push_bytes(&mut identity, &inputs);
+            let result = sha256::hex_digest(&identity);
+            store.put(kind, &result, bytes);
+            let mut plan = Vec::new();
+            store::push_bytes(&mut plan, &inputs);
+            store::push_bytes(&mut plan, result.as_bytes());
+            store.put(&format!("inputs-{kind}"), &request, &plan);
+        }
+    }
+}
+fn optional_key(out: &mut Vec<u8>, value: &Option<String>) {
+    match value {
+        Some(value) => { store::push_word(out, 1); store::push_bytes(out, value.as_bytes()); }
+        None => store::push_word(out, 0),
+    }
+}
+fn request_key(options: &Options) -> String {
+    let mut out = Vec::new();
+    store::push_bytes(&mut out, b"lkjscript-input-closure-1");
+    store::push_bytes(&mut out, options.command.as_bytes());
+    store::push_bytes(&mut out, options.path.as_bytes());
+    optional_key(&mut out, &options.entry);
+    optional_key(&mut out, &options.source_directory);
+    optional_key(&mut out, &options.library_directory);
+    optional_key(&mut out, &options.runtime_source);
+    store::push_word(&mut out, options.no_library as usize);
+    store::push_word(&mut out, options.profile as usize);
+    store::push_word(&mut out, options.roundtrip as usize);
+    if options.profile { optional_key(&mut out, &options.output); }
+    store::push_word(&mut out, options.grants.len());
+    for grant in &options.grants { store::push_bytes(&mut out, grant.as_bytes()); }
+    store::push_word(&mut out, options.engines.len());
+    for engine in &options.engines { store::push_bytes(&mut out, engine.as_bytes()); }
+    store::push_word(&mut out, options.arguments.len());
+    for argument in &options.arguments { store::push_bytes(&mut out, argument); }
+    sha256::hex_digest(&out)
+}
+fn check_reusing(
+    program: ir::Program, memo: &mut Memo, verify: bool,
+) -> Result<reuse::Checked, Vec<ast::Diagnostic>> {
+    if let Some(store) = memo.store.as_mut() {
+        // The corpus roundtrip proves identical verdicts, including complete
+        // diagnostics, before its authenticated test observation is reusable.
+        let expected: Option<Option<Vec<ast::Diagnostic>>> = if verify {
+            Some(check::check_all(program.clone()).err())
+        } else { None };
+        let prepared = reuse::Prepared::new(program);
+        let mut records = store.records("check", prepared.keys().all());
+        let checked = check::check_all_cached(prepared, &mut records);
+        memo.checked_reused += records.hits;
+        store.flush(&records);
+        if let Some(expected) = expected {
+            let identical = match (&expected, &checked) {
+                (None, Ok(_)) => true,
+                (Some(left), Err(right)) => left == right,
+                _ => false,
+            };
+            if !identical {
+                memo.valid_inputs = false;
+                return Err(vec![ast::Diagnostic {
+                    path: String::new(), file: 0, line: 1, column: 1,
+                    code: "E_TEST".to_string(),
+                    message: "authenticated reuse changed the checker verdict".to_string(),
+                }]);
+            }
+        }
+        checked
+    } else {
+        check::check_all(program).map(|checked: ir::CheckedProgram| reuse::Checked::uncached(checked))
+    }
+}
+fn emit_reusing(
+    checked: &reuse::Checked,
+    runtime: &runtime::Runtime,
+    entry: &str,
+    grants: &[ir::EntryGrant],
+    result_fd: Option<u32>,
+    profile_path: Option<&str>,
+    memo: &mut Memo,
+) -> Result<Vec<u8>, ast::Diagnostic> {
+    if let Some(keys) = checked.keys() {
+        if let Some(store) = memo.store.as_mut() {
+            let namespace = backend::cache_namespace(checked, runtime, grants, profile_path);
+            let mut records = store.records(&namespace, keys.all());
+            let result = backend::emit_granted_reusing(
+                checked, runtime, entry, grants, result_fd, profile_path, &namespace, &mut records,
+            );
+            memo.emitted_reused += records.hits;
+            store.flush(&records);
+            return result;
+        }
+    }
+    backend::emit_granted(checked.checked(), runtime, entry, grants, result_fd, profile_path)
+}
+fn encode_outcomes(accepted: bool, outcomes: &[Outcome]) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    store::push_word(&mut bytes, accepted as usize);
+    store::push_word(&mut bytes, outcomes.len());
+    for outcome in outcomes {
+        store::push_word(&mut bytes, outcome.status as usize);
+        store::push_bytes(&mut bytes, &outcome.stdout);
+        store::push_bytes(&mut bytes, &outcome.stderr);
+        store::push_bytes(&mut bytes, outcome.diagnostic.as_bytes());
+    }
+    bytes
+}
+fn decode_outcomes(bytes: &[u8], count: usize) -> Option<(bool, Vec<Outcome>)> {
+    let mut reader = store::Reader::new(bytes);
+    let accepted = reader.word()?;
+    if accepted > 1 || reader.word()? != count { return None; }
+    let mut outcomes = Vec::new();
+    for _ in 0..count {
+        let status = reader.word()?;
+        if status > 255 { return None; }
+        outcomes.push(Outcome {
+            status: status as u8, stdout: reader.bytes()?, stderr: reader.bytes()?, diagnostic: reader.text()?,
+        });
+    }
+    if !reader.done() { return None; }
+    Some((accepted != 0, outcomes))
 }

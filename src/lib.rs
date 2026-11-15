@@ -17,8 +17,11 @@ pub mod json;
 pub mod names;
 pub mod native;
 pub mod resolve;
+pub mod reuse;
 pub mod runtime;
 pub mod runtime_memory;
+#[path = "../library/sha256.rs"]
+pub mod sha256;
 pub mod source;
 pub mod syntax;
 pub mod x86;

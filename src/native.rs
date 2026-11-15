@@ -9,6 +9,9 @@ use crate::x86::*;
 use crate::x86::{Assembler, Label};
 use std::collections::{BTreeMap, BTreeSet};
 
+mod cache;
+
+pub(crate) fn cache_contracts() { cache::contracts(); }
 mod entry;
 mod intrinsics;
 mod layout;
@@ -1384,13 +1387,13 @@ pub fn encode(
     runtime: &Runtime,
     entry: Entry,
 ) -> Result<Image, Diagnostic> {
-    encode_program(checked.program(), runtime, entry, false, None, None)
+    encode_program(checked.program(), runtime, entry, false, None, None, None)
 }
 pub fn encode_runtime(runtime: &Runtime, entry: Entry) -> Result<Image, Diagnostic> {
-    encode_program(runtime.checked_program(), runtime, entry, true, None, None)
+    encode_program(runtime.checked_program(), runtime, entry, true, None, None, None)
 }
 pub fn encode_profile(checked: &CheckedProgram, runtime: &Runtime, entry: Entry, path: &str) -> Result<Image, Diagnostic> {
-    encode_program(checked.program(), runtime, entry, false, Some(path), None)
+    encode_program(checked.program(), runtime, entry, false, Some(path), None, None)
 }
 pub fn encode_granted(
     checked: &CheckedProgram,
@@ -1401,7 +1404,33 @@ pub fn encode_granted(
     profile_path: Option<&str>,
 ) -> Result<Image, Diagnostic> {
     let entry = Entry { function, arguments: vec![0i64; grants.len()], result_fd };
-    encode_program(checked.program(), runtime, entry, false, profile_path, Some(grants))
+    encode_program(checked.program(), runtime, entry, false, profile_path, Some(grants), None)
+}
+
+pub(crate) fn cache_namespace(
+    checked: &crate::reuse::Checked,
+    runtime: &Runtime,
+    grants: &[ir::EntryGrant],
+    profile_path: Option<&str>,
+) -> String {
+    cache::namespace(checked, runtime, grants, profile_path)
+}
+pub(crate) fn encode_granted_reusing(
+    checked: &crate::reuse::Checked,
+    runtime: &Runtime,
+    function: usize,
+    grants: &[ir::EntryGrant],
+    result_fd: Option<u32>,
+    profile_path: Option<&str>,
+    namespace: &str,
+    records: &mut crate::reuse::Records,
+) -> Result<Image, Diagnostic> {
+    let Some(keys) = checked.keys() else {
+        return encode_granted(checked.checked(), runtime, function, grants, result_fd, profile_path);
+    };
+    let entry = Entry { function, arguments: vec![0i64; grants.len()], result_fd };
+    let mut cache = cache::Context { namespace, keys, records, prefix: 0 };
+    encode_program(checked.program(), runtime, entry, false, profile_path, Some(grants), Some(&mut cache))
 }
 fn grant_matches(kind: &TypeKind, grant: &ir::EntryGrant, parameters: usize) -> bool {
     match grant {
@@ -1448,6 +1477,7 @@ fn encode_program(
     runtime_model: bool,
     profile_path: Option<&str>,
     grants: Option<&[ir::EntryGrant]>,
+    mut cache: Option<&mut cache::Context<'_>>,
 ) -> Result<Image, Diagnostic> {
     let selected = match program.functions.get(entry.function) {
         Some(function) => function,
@@ -1575,6 +1605,7 @@ fn encode_program(
         labels(&mut a, runtime.checked_program().functions.len())
     };
     let runtime_labels = RuntimeLabels::new(runtime, &runtime_functions);
+    if let Some(cache) = &mut cache { cache.prefix = a.label_count(); }
     let trap_messages = messages(program);
     let mut literals = BTreeMap::new();
     let mut needed = vec![false; program.functions.len()];
@@ -1617,6 +1648,11 @@ fn encode_program(
                     };
                     if let Some(primitive) = primitive {
                         emit_primitive(&mut a, p, functions[index], primitive);
+                    } else if let Some(cache) = &mut cache {
+                        cache::emit(
+                            &mut a, p, &selection, index,
+                            &mut needed, &mut needed_drops, &mut literals, &mut **cache,
+                        )?;
                     } else {
                         emit_function(
                             &mut a,

@@ -936,61 +936,72 @@ pub fn write(program: &Program) -> String {
         text.push_str(&format!("destructor {ty} {function}\n"));
     }
     for function in &program.functions {
-        text.push_str(&format!(
-            "fn {} {} {}",
-            quoted(&function.name),
-            function.params,
-            function.result
-        ));
-        if function.file != 0 {
-            text.push_str(&format!(" file {}", function.file));
-        }
-        if let Some(source) = &function.return_source {
-            match source {
-                ReturnSource::Parameter { index, projections } => {
-                    text.push_str(&format!(" from {index}"));
-                    write_projections(&mut text, projections);
-                }
-                ReturnSource::Static => text.push_str(" from static"),
-                ReturnSource::Leaves(_) => {}
+        write_function_into(&mut text, function);
+    }
+    text
+}
+
+fn write_function_into(text: &mut String, function: &Function) {
+    text.push_str(&format!(
+        "fn {} {} {}",
+        quoted(&function.name),
+        function.params,
+        function.result
+    ));
+    if function.file != 0 {
+        text.push_str(&format!(" file {}", function.file));
+    }
+    if let Some(source) = &function.return_source {
+        match source {
+            ReturnSource::Parameter { index, projections } => {
+                text.push_str(&format!(" from {index}"));
+                write_projections(text, projections);
             }
+            ReturnSource::Static => text.push_str(" from static"),
+            ReturnSource::Leaves(_) => {}
         }
-        if function.test {
-            text.push_str(" test");
-        }
-        text.push('\n');
-        if let Some(ReturnSource::Leaves(leaves)) = &function.return_source {
-            for leaf in leaves {
-                text.push_str("return-leaf 0");
-                write_projections(&mut text, &leaf.projections);
-                match &leaf.origin {
-                    LeafOrigin::Static => text.push_str(" static"),
-                    LeafOrigin::Inputs { inputs, exact } => {
-                        text.push_str(if *exact { " exact " } else { " bound " });
-                        for (index, input) in inputs.iter().enumerate() {
-                            if index != 0 {
-                                text.push_str(" or ");
-                            }
-                            text.push_str(&format!("{}", input.index));
-                            write_projections(&mut text, &input.projections);
+    }
+    if function.test {
+        text.push_str(" test");
+    }
+    text.push('\n');
+    if let Some(ReturnSource::Leaves(leaves)) = &function.return_source {
+        for leaf in leaves {
+            text.push_str("return-leaf 0");
+            write_projections(text, &leaf.projections);
+            match &leaf.origin {
+                LeafOrigin::Static => text.push_str(" static"),
+                LeafOrigin::Inputs { inputs, exact } => {
+                    text.push_str(if *exact { " exact " } else { " bound " });
+                    for (index, input) in inputs.iter().enumerate() {
+                        if index != 0 {
+                            text.push_str(" or ");
                         }
+                        text.push_str(&format!("{}", input.index));
+                        write_projections(text, &input.projections);
                     }
                 }
-                text.push('\n');
             }
+            text.push('\n');
         }
-        for local in &function.locals {
-            text.push_str(&format!(
-                "local {} {} {}\n",
-                quoted(&local.name),
-                local.ty,
-                if local.mutable { "mut" } else { "let" }
-            ));
-        }
-        for instruction in &function.body {
-            write_instruction(&mut text, instruction);
-        }
-        text.push_str("endfn\n");
     }
+    for local in &function.locals {
+        text.push_str(&format!(
+            "local {} {} {}\n",
+            quoted(&local.name),
+            local.ty,
+            if local.mutable { "mut" } else { "let" }
+        ));
+    }
+    for instruction in &function.body {
+        write_instruction(text, instruction);
+    }
+    text.push_str("endfn\n");
+}
+
+/// Canonical local body bytes for content identities, without cloning the body.
+pub(crate) fn write_function(function: &Function) -> String {
+    let mut text = String::new();
+    write_function_into(&mut text, function);
     text
 }
