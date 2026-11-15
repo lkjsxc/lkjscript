@@ -18,7 +18,6 @@ fn shape(function: &Function, limit: usize) -> Option<Shape> {
     let mut returns = 0usize;
     for instruction in &function.body {
         match instruction.op {
-            Op::Call { .. } => return None,
             Op::Return { .. } => returns += 1,
             _ => {}
         }
@@ -381,11 +380,9 @@ pub fn inline(program: &Program, threshold: usize) -> Rewrite {
     let mut ready = Vec::new();
     let mut possible = false;
     for index in 0..count {
-        if remaining[index] == 0 {
-            ready.push(index);
-            if !callers[index].is_empty() && shape(&program.functions[index], threshold).is_some() {
-                possible = true;
-            }
+        if remaining[index] == 0 { ready.push(index); }
+        if !callers[index].is_empty() && shape(&program.functions[index], threshold).is_some() {
+            possible = true;
         }
     }
     if !possible { return report; }
@@ -408,8 +405,8 @@ pub fn inline(program: &Program, threshold: usize) -> Rewrite {
             if remaining[*caller] == 0 { ready.push(*caller); }
         }
     }
-    // A cycle cannot become an eligible leaf. Its callers can still use leaves
-    // already processed outside that cycle, once, without new graph machinery.
+    // Cycles and callers blocked on them never become eligible. They may still
+    // use already processed acyclic bodies once; retained calls stay ordinary.
     for index in 0..count {
         if !processed[index] {
             if let Some((function, calls)) = rewrite(&candidate.functions[index], &candidate.functions, &eligible) {

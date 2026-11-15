@@ -114,6 +114,8 @@ parallel_step 2 stop timeout --kill-after=10s 600s sh tools/http-stop.sh --compi
 parallel_step 2 stop-interpreter timeout --kill-after=10s 600s sh tools/http-stop.sh --compiler "$check_binary" --engine interpreter
 parallel_step "$check_suite_jobs" conformance timeout --kill-after=10s 600s "$check_binary" test tests/conformance --jobs "$check_suite_jobs" "${check_reuse[@]}"
 parallel_step "$check_suite_jobs" generated timeout --kill-after=10s 600s "$check_binary" test target/gate/generated --jobs "$check_suite_jobs" "${check_reuse[@]}"
+parallel_step "$check_suite_jobs" optimized-conformance timeout --kill-after=10s 600s "$check_binary" test tests/conformance --jobs "$check_suite_jobs" --inline-limit 64 "${check_reuse[@]}"
+parallel_step "$check_suite_jobs" optimized-generated timeout --kill-after=10s 600s "$check_binary" test target/gate/generated --jobs "$check_suite_jobs" --inline-limit 64 "${check_reuse[@]}"
 parallel_step "$check_suite_jobs" semantic-structure semantics
 parallel_step "$check_suite_jobs" semantic-cases timeout --kill-after=10s 600s "$check_binary" test tests/semantics --jobs "$check_suite_jobs" "${check_reuse[@]}"
 parallel_step 1 references timeout --kill-after=10s 600s "$check_binary" test tests/reference "${check_reuse[@]}"

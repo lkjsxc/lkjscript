@@ -41,14 +41,15 @@ hello under a 4 GiB address-space limit.
 ## Profile first, then remove structural costs
 
 build --profile embeds function and operation-kind maps and opts into OUTPUT.samples.PID.
-A Linux CPU timer samples instruction pointers and real frame chains without a
-depth cap. The shared file survives exit/signals; profile reports self/inclusive
-functions and exclusive operation kinds in at most 37 lines, without DWARF or perf.
-Instrumentation file/timer authority is granted by this explicit build option.
-Sparse query visits, packed facts and inline known-size copies remove prior costs.
-Measure self-built / witness opt=0 / witness -O and emitted instruction kinds
-before optimizing further; stop near 3x -O or after two measured causes are gone.
-Keep self-build, call/vector, HTTP parsing and string-map rows in bench/.
+A Linux CPU timer samples instruction pointers and real frame chains without a depth cap.
+Reports survive exit/signals and show self/inclusive functions and exclusive kinds
+in at most 37 lines, without DWARF or perf; the explicit option grants instrumentation.
+Measure self-built / witness opt=0 / witness -O and emitted kinds; stop near 3x -O
+or after two measured causes are gone. Keep compiler, call/vector, HTTP and map rows in bench/.
+Scalar Clone lowers to Read. --inline-limit N copies small acyclic bodies and forwards dead temporaries.
+Recheck changed bodies; exact original bodies under unchanged shared graphs retain their proof.
+Keep the original interpreter/authority oracle and copied source locations; reject the whole bad candidate.
+Default zero: measured cold self-build admission costs exceed the generated-code gains; inlining stays explicit.
 
 ## One executable and bootstrap
 
@@ -112,7 +113,7 @@ Keep the key outside every source/library/program read grant, including include_
 Key readers and compiler replacers are equally trusted; this is an explicit authority.
 HMAC-SHA-256 binds exact compiler bytes, target, dependency identity and result bytes.
 Producer-specific slots let different compiler generations coexist without eviction.
-Only authenticated prior proofs skip body checks; always revalidate shared structure.
+Only admitted originals or authenticated prior proofs skip body checks; revalidate shared structure.
 Function keys bind types, destructors, signatures, return contracts and exact bodies.
 Native fragments retain relocations; runtime/drop stubs remain ordinary emission.
 Source-closure reuse records every actual read, including absent module candidates;
@@ -137,8 +138,7 @@ sizes in status and commits. Measurements do not gate. Measure remaining gaps.
 
 ## Horizon and working policy
 
-Reuse precedes rechecked inlining; range facts, IR queries, machine-applicable
-diagnostics, formatting, a checked-IR seed and a second target follow measured use.
+Range facts, IR queries, formatting, a checked-IR seed and a second target follow measured use.
 Programs decides concurrency; do not build on pending scoped-concurrency cases.
 Compiler owns main, seed, emission, driver/store, bench, CI and hash; programs owns
 its separate worktree, consumers and new capabilities. Preserve its additions.

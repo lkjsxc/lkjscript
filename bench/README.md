@@ -61,6 +61,11 @@ and same-source compiler witnesses; zero disables it. Previous compiler routes
 retain their own policy. Use a compiler artifact built at each candidate threshold
 when measuring that threshold's self-build, so the producer code and output policy
 are both represented. The runtime workload outputs still agree across every route.
+The default is zero: the measured candidate-checking cost currently outweighs the
+cold self-build speedup. For an explicit optimization comparison, add
+`--inline-limit 16` to both compiler construction and this runner. The gate also
+executes the full conformance and generated corpora at threshold 64 against the
+original interpreter, regardless of the default.
 
 --witness names the optimized Rust-built compiler of the same sources.
 --witness0 adds an unoptimized Rust-built compiler. All self-build routes explicitly
