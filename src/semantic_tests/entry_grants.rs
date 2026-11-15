@@ -140,13 +140,46 @@ fn connector_grants_are_exact_and_unforgeable() {
     assert!(native::encode_granted(&checked, &runtime, 0, &mismatched, None, None).is_err());
     assert!(host.0.is_empty());
 }
+fn readiness_grants_are_owned_and_unforgeable() {
+    let checked = check::check(ir_text::read(include_str!(
+        "../../tests/fixtures/authority/readiness_entry.lkjir"
+    )).unwrap()).unwrap();
+    let runtime = prepared();
+    let grants = crate::entry_grants::prepare(checked.program(), 0, &["ready".to_string()]).unwrap();
+    assert!(matches!(&grants[0], ir::EntryGrant::Readiness));
+    let mut host = FailingHost(Vec::new());
+    interpreter::run_granted(checked.program(), 0, &grants, &mut host).unwrap();
+    assert_eq!(host.0.as_slice(), b"Rr");
+    native::encode_granted(&checked, &runtime, 0, &grants, None, None).unwrap();
+    for supplied in vec![Vec::<String>::new(), vec!["ready=1".to_string()], vec!["ready".to_string(), "ready".to_string()]] {
+        assert!(crate::entry_grants::prepare(checked.program(), 0, &supplied).is_err());
+    }
+    for value in vec![0u64, 1u64, 65535u64] {
+        let mut host = FailingHost(Vec::new());
+        let error = interpreter::run(checked.program(), 0, &[value], &mut host).err().unwrap();
+        assert!(error.kind == ErrorKind::Interpreter(InterpreterError::InvalidIr));
+        assert!(host.0.is_empty());
+        let selected = native::Entry { function: 0, arguments: vec![value as i64], result_fd: None };
+        assert_eq!(native::encode(&checked, &runtime, selected).err().unwrap().code, "E_ENTRY");
+    }
+    let mut host = FailingHost(Vec::new());
+    let mismatch = vec![ir::EntryGrant::Clock];
+    assert!(interpreter::run_granted(checked.program(), 0, &mismatch, &mut host).is_err());
+    assert!(native::encode_granted(&checked, &runtime, 0, &mismatch, None, None).is_err());
+    assert!(host.0.is_empty());
+    let error = interpreter::run_granted(checked.program(), 1, &vec![ir::EntryGrant::Readiness, listener()], &mut host).err().unwrap();
+    assert!(error.kind == ErrorKind::Trap(7));
+    assert_eq!(host.0.as_slice(), b"RLr");
+}
 pub fn probe() -> i64 {
+
     mismatched_grants_do_not_acquire_authority();
     acquisition_failure_closes_the_preceding_directory();
     listener_cannot_be_forged_from_raw_scalar_arguments();
     non_scalar_result_rejects_before_acquisition();
     connector_grants_are_exact_and_unforgeable();
-    5
+    readiness_grants_are_owned_and_unforgeable();
+    6
 }
 pub fn run(world: &mut World, trace: bool) -> usize {
     if trace {

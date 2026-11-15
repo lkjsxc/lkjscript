@@ -172,7 +172,8 @@ impl Layouts {
             | TypeKind::File
             | TypeKind::Directory
             | TypeKind::Child
-            | TypeKind::Listener => {
+            | TypeKind::Listener
+            | TypeKind::Readiness => {
                 value.cleanup = true;
             }
             TypeKind::Ref { inner, .. } => {

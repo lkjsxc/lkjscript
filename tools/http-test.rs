@@ -216,9 +216,11 @@ fn exercise(world: &mut World, port: u16, root: &mut Directory) -> Result<(), St
     let mut target = io(world.connector("127.0.0.1", port), "grant loopback connector")?;
     let cases = cases(root);
     for case in &cases {
-        let mut stream = io(target.connect(), "connect functional case")?;
-        io(stream.write_all(&request(case, "close")), "send functional case")?;
-        let actual = io(stream.read_to_end(), "read functional case")?;
+        let outgoing = request(case, "close");
+        let label = format!("functional {} {} ({} request bytes)", case.method, case.target, outgoing.len());
+        let mut stream = io(target.connect(), &format!("connect {label}"))?;
+        io(stream.write_all(&outgoing), &format!("send {label}"))?;
+        let actual = io(stream.read_to_end(), &format!("read {label}"))?;
         validate(case, &actual)?;
     }
     let persistent = persistence(&mut target, root)?;

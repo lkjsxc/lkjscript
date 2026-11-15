@@ -477,6 +477,7 @@ impl Compiler<'_> {
                     | "Child"
                     | "Listener"
                     | "Connector"
+                    | "Readiness"
             )
         {
             if !args.is_empty() {
@@ -498,6 +499,7 @@ impl Compiler<'_> {
                 "Child" => ir::TypeKind::Child,
                 "Listener" => ir::TypeKind::Listener,
                 "Connector" => ir::TypeKind::Connector,
+                "Readiness" => ir::TypeKind::Readiness,
                 _ => unreachable!(),
             };
             work.values.push(self.intern(String::new(), kind));

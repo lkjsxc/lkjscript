@@ -558,7 +558,7 @@ pub fn read(text: &str) -> Result<Program> {
                         TypeKind::Stdout
                     }
                     "stdin" | "stderr" | "directory" | "file" | "process" | "clock" | "child"
-                    | "listener" | "connector" => {
+                    | "listener" | "connector" | "readiness" => {
                         exact(&words, 3, line)?;
                         match words[2].as_str() {
                             "stdin" => TypeKind::Stdin,
@@ -569,6 +569,7 @@ pub fn read(text: &str) -> Result<Program> {
                             "child" => TypeKind::Child,
                             "listener" => TypeKind::Listener,
                             "connector" => TypeKind::Connector,
+                            "readiness" => TypeKind::Readiness,
                             _ => TypeKind::File,
                         }
                     }
@@ -898,6 +899,7 @@ pub fn write(program: &Program) -> String {
             TypeKind::Child => text.push_str("child"),
             TypeKind::Listener => text.push_str("listener"),
             TypeKind::Connector => text.push_str("connector"),
+            TypeKind::Readiness => text.push_str("readiness"),
             TypeKind::Int { bits, signed } => text.push_str(&format!(
                 "int {bits} {}",
                 if *signed { "signed" } else { "unsigned" }

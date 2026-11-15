@@ -144,6 +144,7 @@ fn builtin(name: &str) -> bool {
             | "Child"
             | "Listener"
             | "Connector"
+            | "Readiness"
             | "Copy"
             | "Clone"
             | "Ord"

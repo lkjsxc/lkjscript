@@ -29,11 +29,18 @@ pub struct File {
 pub struct Listener {
     handle: std::fs::File,
 }
+pub struct Readiness {
+    handle: std::fs::File,
+}
 pub struct Connector {
     address: [u8; 16],
 }
 impl World {
+    pub fn readiness(&mut self) -> Result<Readiness, i64> {
+        Ok(Readiness { handle: files::create_readiness()? })
+    }
     pub fn connector(&mut self, address: &str, port: u16) -> Result<Connector, i64> {
+
         let mut bytes = [0u8; 16];
         bytes[0] = 2;
         bytes[2..4].copy_from_slice(&port.to_be_bytes());
@@ -85,7 +92,25 @@ impl World {
         Ok(Listener { handle: files::listen(address)? })
     }
 }
+impl Readiness {
+    pub fn watch_file(&mut self, file: &mut File, token: usize, interest: u8) -> Result<(), i64> {
+        files::watch(self.handle.as_raw_fd(), file.descriptor(), token, interest)
+    }
+    pub fn watch_listener(&mut self, listener: &mut Listener, token: usize) -> Result<(), i64> {
+        files::watch(self.handle.as_raw_fd(), listener.handle.as_raw_fd(), token, 1)
+    }
+    pub fn unwatch_file(&mut self, file: &mut File) -> Result<(), i64> {
+        files::unwatch(self.handle.as_raw_fd(), file.descriptor())
+    }
+    pub fn unwatch_listener(&mut self, listener: &mut Listener) -> Result<(), i64> {
+        files::unwatch(self.handle.as_raw_fd(), listener.handle.as_raw_fd())
+    }
+    pub fn wait(&mut self, _clock: &mut Clock, deadline_ns: usize) -> Result<Vec<(usize, u8)>, i64> {
+        files::wait_events(self.handle.as_raw_fd(), deadline_ns)
+    }
+}
 impl Connector {
+
     pub fn connect(&mut self) -> Result<File, i64> {
         Ok(File { handle: Some(files::connect(&self.address)?) })
     }
@@ -94,6 +119,10 @@ impl Connector {
     }
 }
 impl Listener {
+    pub fn set_nonblocking(&mut self, enabled: bool) -> Result<(), i64> {
+        files::set_nonblocking(self.handle.as_raw_fd(), enabled)
+    }
+
     pub fn accept(&mut self) -> Result<File, i64> {
         Ok(File { handle: Some(files::accept(self.handle.as_raw_fd())?) })
     }
@@ -195,7 +224,11 @@ impl Directory {
     }
 }
 impl File {
+    pub fn set_nonblocking(&mut self, enabled: bool) -> Result<(), i64> {
+        files::set_nonblocking(self.descriptor(), enabled)
+    }
     fn descriptor(&self) -> i32 {
+
         self.handle.as_ref().map_or(-1, |file| file.as_raw_fd())
     }
     pub fn __lkjscript_read(&mut self, bytes: &mut [u8]) -> i64 {
@@ -764,7 +797,60 @@ pub(crate) mod files {
     pub fn executable(descriptor: i32) -> Result<(), i64> {
         retry(|| unsafe { syscall(91, i64::from(descriptor), 0o755_i64) }).map(|_| ())
     }
+    pub fn create_readiness() -> Result<std::fs::File, i64> {
+        owned(retry(|| unsafe { syscall(291, 0x80000_i64) })?)
+    }
+    pub fn set_nonblocking(descriptor: i32, enabled: bool) -> Result<(), i64> {
+        let flags = retry(|| unsafe { syscall(72, i64::from(descriptor), 3_i64, 0_i64) })?;
+        let flags = if enabled { flags | 2048 } else { flags & !2048 };
+        retry(|| unsafe { syscall(72, i64::from(descriptor), 4_i64, flags) }).map(|_| ())
+    }
+    pub fn watch(readiness: i32, descriptor: i32, token: usize, interest: u8) -> Result<(), i64> {
+        if interest > 3 { return Err(22); }
+        let flags = u32::from(interest & 1) * 0x2001 | (u32::from(interest & 2) << 1);
+        let mut event = [0u8; 12];
+        event[..4].copy_from_slice(&flags.to_le_bytes());
+        event[4..].copy_from_slice(&(token as u64).to_le_bytes());
+        match retry(|| unsafe { syscall(233, i64::from(readiness), 1_i64, i64::from(descriptor), event.as_ptr()) }) {
+            Ok(_) => Ok(()),
+            Err(17) => retry(|| unsafe { syscall(233, i64::from(readiness), 3_i64, i64::from(descriptor), event.as_ptr()) }).map(|_| ()),
+            Err(error) => Err(error),
+        }
+    }
+    pub fn unwatch(readiness: i32, descriptor: i32) -> Result<(), i64> {
+        retry(|| unsafe { syscall(233, i64::from(readiness), 2_i64, i64::from(descriptor), 0_i64) }).map(|_| ())
+    }
+    pub fn wait_events(readiness: i32, deadline_ns: usize) -> Result<Vec<(usize, u8)>, i64> {
+        let mut events = [0u8; 64 * 12];
+        loop {
+            let mut clock = [0u8; 16];
+            monotonic_time(&mut clock)?;
+            let now = u64::from_le_bytes(clock[..8].try_into().unwrap()) * 1_000_000_000
+                + u64::from_le_bytes(clock[8..].try_into().unwrap());
+            let remaining = (deadline_ns as u64).saturating_sub(now);
+            let timeout = [remaining / 1_000_000_000, remaining % 1_000_000_000];
+            let count = unsafe { syscall(441, i64::from(readiness), events.as_mut_ptr(), 64_i64, timeout.as_ptr(), 0_i64, 8_i64) };
+            if count < 0 {
+                let error = i64::from(std::io::Error::last_os_error().raw_os_error().unwrap_or(5));
+                if error == 4 { continue; }
+                return Err(error);
+            }
+            let mut result = Vec::new();
+            for event in events[..count as usize * 12].chunks_exact(12) {
+                let kernel = u32::from_le_bytes(event[..4].try_into().unwrap());
+                let token = u64::from_le_bytes(event[4..].try_into().unwrap()) as usize;
+                let mut flags = 0u8;
+                if kernel & 1 != 0 { flags |= 1; }
+                if kernel & 4 != 0 { flags |= 2; }
+                if kernel & 0x2010 != 0 { flags |= 4; }
+                if kernel & 8 != 0 { flags |= 8; }
+                result.push((token, flags));
+            }
+            return Ok(result);
+        }
+    }
     pub fn connect(address: &[u8]) -> Result<std::fs::File, i64> {
+
         if address.len() != 16 || address[0] != 2 || address[1] != 0 {
             return Err(22);
         }

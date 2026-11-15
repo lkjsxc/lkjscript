@@ -45,6 +45,7 @@ fn capability(kind: &TypeKind) -> Option<(&'static str, bool)> {
         TypeKind::Directory => Some(("Directory", true)),
         TypeKind::Listener => Some(("Listener", true)),
         TypeKind::Connector => Some(("Connector", true)),
+        TypeKind::Readiness => Some(("Readiness", false)),
         _ => None,
     }
 }
@@ -227,6 +228,7 @@ fn cleanup(
             TypeKind::File => operation(operations, "file_close", line, column, true),
             TypeKind::Directory => operation(operations, "directory_close", line, column, true),
             TypeKind::Listener => operation(operations, "listener_close", line, column, true),
+            TypeKind::Readiness => operation(operations, "readiness_close", line, column, true),
             TypeKind::Child => {
                 operation(operations, "child_terminate", line, column, true);
                 operation(operations, "child_wait", line, column, true);

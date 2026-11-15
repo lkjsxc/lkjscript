@@ -85,20 +85,23 @@ needed forms or ceases to find useful differences. Keep .rs until that decision.
 
 Programs work in /home/coder/workspace/lkjscript-programs-20261115 on programs;
 land through fetch/rebase, bootstrap, four-worker gate and push HEAD:main.
-The HTTP consumer grants Directory, Listener, Clock and output explicitly.
+The HTTP consumer grants Directory, Listener, Clock, Readiness and output.
 Connector grants one numeric IPv4:port; connect yields an owned File stream.
 No DNS or substitute destination follows from that grant. Both executors validate
 entry descriptors; authority follows checked-IR effects and owning cleanup.
-HTTP/1.1 persistence and pipelining retain exact framing. Functional and load
-clients are lkjscript; measure verified requests on persistent connections.
-Profile before removing at most two costs. Fixed-size owned byte chunks remove
-per-byte file assembly without adding an intrinsic or caching changing files.
+HTTP/1.1 persistence and pipelining retain exact framing; clients are lkjscript.
+Profile before removing at most two costs; owned chunks replace per-byte assembly.
+Use readiness for concurrency, processes for parallelism.
+Readiness owns a kernel wait set; temporary exclusive handle borrows register
+tokens without storing language views or extending ownership rules.
+Keep explicit connection state, indexed deadlines and bounded work per dispatch.
+Header and write deadlines do not extend when a hostile peer makes tiny progress.
+Delete the three scoped-thread pending cases: no current consumer needs them.
+The closure-escape case stays pending; concurrency adds no shared-memory ownership rules.
 Keep compiler source within the stored seed's forms; never refresh seed here.
-The interpreter's independent syscall helper preserves ordinary File transport;
-normal completion drains and reaps it, abnormal cleanup kills and reaps it.
-Next prove readiness/deadlines, crash-durable journal state, stop and sessions.
+The independent interpreter helper operates actual descriptors without relay queues.
+Next prove crash-durable journal state, stop and signed expiring sessions.
 A documentation candidate may come earlier; never modify the live unit or /opt.
-The compiler is one consumer among ordinary programs; no deployment here.
 
 ## Authenticated reuse
 

@@ -35,6 +35,7 @@ impl Plan {
                     a.immediate(SI, address.len() as u64);
                     a.call(p.world_listen);
                 }
+                EntryGrant::Readiness => { a.call(p.world_readiness); },
                 _ => { a.immediate(A, 1); },
             }
             let ready = a.label();

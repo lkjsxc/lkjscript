@@ -39,7 +39,7 @@ The first seven types must match this primitive prefix exactly, including names.
 | `array TYPE LENGTH` | Fixed-length owned elements. |
 | `vec TYPE`, `box TYPE` | Owned growable sequence or owned indirection. |
 | `str` | Unsized immutable UTF-8 text; values require a shared reference. |
-| `world`, `stdout`, `stdin`, `stderr`, `directory`, `file`, `process`, `clock`, `child`, `listener`, `connector` | Affine authority-bearing values. |
+| `world`, `stdout`, `stdin`, `stderr`, `directory`, `file`, `process`, `clock`, `child`, `listener`, `connector`, `readiness` | Affine authority-bearing values. |
 
 All type indices must exist. Recursive by-value layouts reject; introduce Box or
 another indirection. Unsized text cannot be stored by value or as a container
@@ -151,6 +151,12 @@ The intrinsic signatures are checked in `src/check.rs` and `src/check/io.rs`:
 | `world_connector` | `(&mut world, &[u8]) -> Result<connector, i64>`: authorize one exact numeric IPv4 TCP destination. |
 | `connector_connect` | `(&mut connector) -> Result<file, i64>`: connect only to its authorized destination. |
 | `listener_address` | `(&mut listener, &mut [u8]) -> i64`: write its local socket address; zero or negative errno. |
+| `world_readiness` | `(&mut world) -> Result<readiness, i64>`: own a kernel readiness set. |
+| `file_set_nonblocking listener_set_nonblocking` | Exclusive handle and bool; set O_NONBLOCK on its open file description, returning Result<(), i64>. |
+| `readiness_watch_file` | `(&mut readiness, &mut file, usize token, u8 interest) -> Result<(), i64>`: add or update a watch; interest is 0..3. |
+| `readiness_watch_listener` | `(&mut readiness, &mut listener, usize token) -> Result<(), i64>`: add or update an acceptance watch. |
+| `readiness_unwatch_file readiness_unwatch_listener` | Exclusive readiness and corresponding exclusive handle; remove its watch, returning Result<(), i64>. |
+| `readiness_wait` | `(&mut readiness, &mut clock, usize deadline) -> Result<Vec<(usize,u8)>, i64>`: owned token/event tuples by an absolute monotonic nanosecond deadline. |
 | `file_duplicate` | Duplicate an exclusively borrowed File, sharing its offset and preserving closed state. Return Result<File, i64>. |
 | `file_readonly` | Reopen an exclusively borrowed File read-only with a fresh offset at zero, preserving closed state. Return Result<File, i64>; no path authority is granted. |
 | `file_rewind file_executable directory_rewind` | Seek to byte zero or make a File executable; return zero or negative errno. |
@@ -179,6 +185,23 @@ occupy eight bytes. Socket descriptors are close-on-exec and promoted above
 standard streams before exposure, preserving any originally closed stdio.
 Interrupted operations retry; closing consumes the descriptor without retry.
 The kernel determines backlog and resource limits.
+
+Readiness is affine and non-Data. It owns only the wait set; dropping it does not
+close watched handles. Registration borrows are temporary and retain no language
+views. Tokens are caller data, never descriptors or authority. Interest bits are
+1 readable and 2 writable; zero watches full close/error only. Other bits fail
+EINVAL. Re-registering the same descriptor updates its token and interests.
+Event bits are 1 readable, 2 writable, 4 closed and 8 error. Read interest also
+reports peer write-half closure; write-only interest does not repeatedly report
+that half-close while a response remains backpressured. Readable data may accompany
+closure and must be drained before treating the stream as empty.
+A nonblocking operation returns errno 11 when it would block; readiness is a hint,
+so another operation must still handle that result. Aliases share O_NONBLOCK.
+The kernel removes registrations on final open-file-description closure; when
+aliases remain, explicitly unwatch before closing the registered descriptor.
+Each wait returns at most 64 events, with no bound on registered handles. A past
+deadline polls once without blocking. EINTR recomputes the remaining absolute
+time. An empty result means the deadline elapsed without a ready event.
 
 Unary, binary and intrinsic names form closed vocabularies. Unknown spellings
 reject with E_IR_TEXT; wrong typed signatures reject at the checker. A type name
@@ -231,7 +254,7 @@ temporary reference carrier cannot become an escaping view's origin.
 ## Host entry and authority reports
 
 A host entry returns unit or a scalar. It may take no parameters, a sole World,
-or owned Stdout/Stdin/Stderr, Directory, Listener, Connector, Process and Clock parameters.
+or owned Stdout/Stdin/Stderr, Directory, Listener, Connector, Readiness, Process and Clock parameters.
 The sole World entry declares implicit full authority. Every other parameter
 requires an explicit invocation grant selected by its distinct, nonempty local
 name. ASCII whitespace, control bytes and equals signs cannot occur in grant names.

@@ -878,7 +878,10 @@ fn authority_cases() -> Vec<AuthorityCase> {
             "directory_open;file_close [structural cleanup];directory_close [structural cleanup]", "world_"),
         authority_case("connector.rs", include_str!("../tests/fixtures/authority/connector.rs"), "main",
             "target: Connector (--grant target=ADDRESS);connector_connect;file_close [structural cleanup]", "world_;listener_"),
+        authority_case("readiness.rs", include_str!("../tests/fixtures/authority/readiness.rs"), "main",
+            "ready: Readiness (--grant ready);clock: Clock (--grant clock);listener_set_nonblocking;readiness_watch_listener;readiness_wait;readiness_unwatch_listener;readiness_close [structural cleanup];listener_close [structural cleanup]", "world_;connector_"),
         authority_case("listener_nodelay.rs", include_str!("../tests/fixtures/authority/listener_nodelay.rs"), "main",
+
             "incoming: Listener (--grant incoming=ADDRESS);listener_accept_nodelay;file_close [structural cleanup];listener_close [structural cleanup]", "world_;connector_"),
         authority_case("listener_cleanup.rs", include_str!("../tests/fixtures/authority/listener_cleanup.rs"), "main",
             "incoming: Listener (--grant incoming=ADDRESS);listener_address;listener_close [structural cleanup]", "world_"),

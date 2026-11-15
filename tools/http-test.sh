@@ -68,12 +68,18 @@ printf '\000\377\n' >> "$http_work/docs/chunk-tail.bin"
 printf 'outside the granted root\n' > "$http_work/outside.txt"
 ln -s language.md "$http_work/docs/link-inside"
 ln -s ../outside.txt "$http_work/docs/link-outside"
+# Interpreting the large-header parser needs explicit application wall time.
+# Native and adversarial runs retain the default 60/2/2-second deadlines.
+if [ "$engine" = interpreter ]; then
+    printf '60\n120\n120\n' > "$http_work/docs/.http-policy"
+fi
 "$compiler" test examples/http_protocol.rs --jobs 1
+"$compiler" test examples/http_policy.rs --jobs 1
 "$compiler" test tools/http_client.rs --jobs 1
 if [ "$engine" = native ]; then
     "$compiler" build examples/http.rs --profile \
         --grant output --grant "root=$http_work/docs" \
-        --grant listener=127.0.0.1:0 --grant clock -o "$http_work/server"
+        --grant listener=127.0.0.1:0 --grant clock --grant ready -o "$http_work/server"
 fi
 "$compiler" build tools/http-test.rs -o "$http_work/client"
 : > "$http_work/server.out"
@@ -87,7 +93,7 @@ if [ "$engine" = native ]; then
 else
     "$compiler" run examples/http.rs --engine interpreter \
         --grant output --grant "root=$http_work/docs" \
-        --grant listener=127.0.0.1:0 --grant clock \
+        --grant listener=127.0.0.1:0 --grant clock --grant ready \
         <&- >"$http_work/server.out" 2>"$http_work/server.err" &
 fi
 server_pid=$!
@@ -105,6 +111,8 @@ while ! read -r marker port < "$http_work/server.out" || [ "$marker" != port ]; 
     sleep 0.05
 done
 case "$port" in ''|*[!0-9]*) echo "invalid server port" >&2; exit 1;; esac
+if [ "$engine" = interpreter ]; then application_policy=60/120/120; else application_policy=60/2/2; fi
+printf 'HTTP application deadlines: idle/request/write %s seconds\n' "$application_policy"
 printf 'HTTP run: supervisor %s, server %s, port %s, engine %s, load %s s, pipeline %s, path %s, load verification %s, UTC %s; loadavg %s\n' \
     "$$" "$server_pid" "$port" "$engine" "$seconds" "$pipeline" "$load_path" "$verification" "$(date -u +%FT%TZ)" "$(cat /proc/loadavg)"
 started=$(date +%s)

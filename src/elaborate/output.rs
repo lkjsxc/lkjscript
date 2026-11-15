@@ -21,16 +21,17 @@ impl Builder<'_, '_> {
             Value::Child => self.compiler.intern(String::new(), ir::TypeKind::Child),
             Value::Listener => self.compiler.intern(String::new(), ir::TypeKind::Listener),
             Value::Connector => self.compiler.intern(String::new(), ir::TypeKind::Connector),
+            Value::Readiness => self.compiler.intern(String::new(), ir::TypeKind::Readiness),
             Value::Port => *self.compiler.type_names.get(&"u16".to_string()).unwrap(),
-            Value::FileRef | Value::DirectoryRef => {
-                let kind = if matches!(value, Value::FileRef) {
-                    ir::TypeKind::File
-                } else {
-                    ir::TypeKind::Directory
+            Value::FileRef | Value::DirectoryRef | Value::MutableFileRef | Value::ListenerRef | Value::ClockRef => {
+                let kind = match value {
+                    Value::FileRef | Value::MutableFileRef => ir::TypeKind::File,
+                    Value::ListenerRef => ir::TypeKind::Listener,
+                    Value::ClockRef => ir::TypeKind::Clock,
+                    _ => ir::TypeKind::Directory,
                 };
                 let inner = self.compiler.intern(String::new(), kind);
-                self.compiler
-                    .reference(inner, matches!(value, Value::DirectoryRef))
+                self.compiler.reference(inner, !matches!(value, Value::FileRef))
             }
             Value::ArgumentsView => {
                 let bytes = self
@@ -75,6 +76,8 @@ impl Builder<'_, '_> {
             | Value::ResultChild
             | Value::ResultListener
             | Value::ResultConnector
+            | Value::ResultReadiness
+            | Value::ResultEvents
             | Value::ResultPort
             | Value::ResultNames
             | Value::ResultStatus
@@ -85,9 +88,18 @@ impl Builder<'_, '_> {
                     Value::ResultChild => self.capability_type(Value::Child, span)?,
                     Value::ResultListener => self.capability_type(Value::Listener, span)?,
                     Value::ResultConnector => self.capability_type(Value::Connector, span)?,
+                    Value::ResultReadiness => self.capability_type(Value::Readiness, span)?,
                     Value::ResultPort => self.capability_type(Value::Port, span)?,
                     Value::ResultNames => self.capability_type(Value::Arguments, span)?,
                     Value::ResultStatus => ir::I64,
+                    Value::ResultEvents => {
+                        let pair = self.compiler.intern(String::new(), ir::TypeKind::Struct {
+                            fields: vec![ir::Field { name: "0".to_string(), ty: ir::U64 }, ir::Field { name: "1".to_string(), ty: ir::U8 }],
+                            copy: true,
+                        });
+                        self.compiler.intern(String::new(), ir::TypeKind::Vec { inner: pair })
+                    }
+
                     Value::ResultMaybeStatus => {
                         let path = self
                             .compiler

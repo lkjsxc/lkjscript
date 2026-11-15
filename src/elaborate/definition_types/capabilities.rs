@@ -20,14 +20,16 @@ impl Infer<'_, '_> {
             Value::Child => self.atom("Child"),
             Value::Listener => self.atom("Listener"),
             Value::Connector => self.atom("Connector"),
+            Value::Readiness => self.atom("Readiness"),
             Value::Port => self.atom("u16"),
-            Value::FileRef | Value::DirectoryRef => {
-                let inner = self.atom(if matches!(value, Value::FileRef) {
-                    "File"
-                } else {
-                    "Directory"
+            Value::FileRef | Value::DirectoryRef | Value::MutableFileRef | Value::ListenerRef | Value::ClockRef => {
+                let inner = self.atom(match value {
+                    Value::FileRef | Value::MutableFileRef => "File",
+                    Value::ListenerRef => "Listener",
+                    Value::ClockRef => "Clock",
+                    _ => "Directory",
                 });
-                self.shaped(Shape::Ref(matches!(value, Value::DirectoryRef), inner))
+                self.shaped(Shape::Ref(!matches!(value, Value::FileRef), inner))
             }
             Value::ArgumentsView => {
                 let byte = self.atom("u8");
@@ -57,6 +59,8 @@ impl Infer<'_, '_> {
             | Value::ResultChild
             | Value::ResultListener
             | Value::ResultConnector
+            | Value::ResultReadiness
+            | Value::ResultEvents
             | Value::ResultPort
             | Value::ResultNames
             | Value::ResultStatus
@@ -67,9 +71,17 @@ impl Infer<'_, '_> {
                     Value::ResultChild => self.capability_type(Value::Child, span)?,
                     Value::ResultListener => self.capability_type(Value::Listener, span)?,
                     Value::ResultConnector => self.capability_type(Value::Connector, span)?,
+                    Value::ResultReadiness => self.capability_type(Value::Readiness, span)?,
                     Value::ResultPort => self.capability_type(Value::Port, span)?,
                     Value::ResultNames => self.capability_type(Value::Arguments, span)?,
                     Value::ResultStatus => self.atom("i64"),
+                    Value::ResultEvents => {
+                        let token = self.atom("usize");
+                        let flags = self.atom("u8");
+                        let pair = self.shaped(Shape::Tuple(vec![token, flags]));
+                        self.shaped(Shape::Vec(pair))
+                    }
+
                     Value::ResultMaybeStatus => {
                         let status = self.atom("i64");
                         let path = self.names.library_type("prelude", "Option", span)?;

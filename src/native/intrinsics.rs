@@ -71,7 +71,45 @@ impl Body<'_> {
                 self.read(args[1], DI);
                 self.a.call(self.platform.set_exit_status);
             }
+            IntrinsicOp::WorldReadiness => {
+                self.a.call(self.platform.world_readiness);
+                self.intrinsic_open_result(dst);
+                return Ok(true);
+            }
+            IntrinsicOp::FileSetNonblocking | IntrinsicOp::ListenerSetNonblocking => {
+                self.read(args[0], DI);
+                self.a.load(DI, DI, 0);
+                self.read(args[1], SI);
+                self.a.call(self.platform.handle_nonblocking);
+                self.intrinsic_open_result(dst);
+                return Ok(true);
+            }
+            IntrinsicOp::ReadinessWatchFile | IntrinsicOp::ReadinessWatchListener => {
+                self.read(args[0], DI);
+                self.a.load(DI, DI, 0);
+                self.read(args[1], SI);
+                self.a.load(SI, SI, 0);
+                self.read(args[2], D);
+                if name == IntrinsicOp::ReadinessWatchFile { self.read(args[3], C); } else { self.a.immediate(C, 1); }
+                self.a.call(self.platform.readiness_watch);
+                self.intrinsic_open_result(dst);
+                return Ok(true);
+            }
+            IntrinsicOp::ReadinessUnwatchFile | IntrinsicOp::ReadinessUnwatchListener => {
+                self.read(args[0], DI);
+                self.a.load(DI, DI, 0);
+                self.read(args[1], SI);
+                self.a.load(SI, SI, 0);
+                self.a.call(self.platform.readiness_unwatch);
+                self.intrinsic_open_result(dst);
+                return Ok(true);
+            }
+            IntrinsicOp::ReadinessWait => {
+                self.intrinsic_readiness_wait(dst, args);
+                return Ok(true);
+            }
             IntrinsicOp::WorldDirectory => {
+
                 self.read_word(args[1], 0, DI);
                 self.read_word(args[1], 1, SI);
                 self.a.call(self.platform.directory_open);
@@ -258,7 +296,47 @@ impl Body<'_> {
         Ok(true)
     }
 
+    fn intrinsic_readiness_wait(&mut self, dst: usize, args: &[usize]) {
+        // The checked event pair is (u64, u8), with a sixteen-byte native stride.
+        let ty = self.ty(dst);
+        let success = self.layout.field_offset(ty, Some(0), 0);
+        let failure = self.layout.field_offset(ty, Some(1), 0);
+        let error = self.a.label();
+        let done = self.a.label();
+        self.a.immediate(DI, 64 * 16);
+        self.a.call(self.runtime.allocate);
+        self.a.store(BP, self.scratch[0], A);
+        self.a.mov(D, A);
+        self.read(args[0], DI);
+        self.a.load(DI, DI, 0);
+        self.read(args[2], SI);
+        self.a.call(self.platform.readiness_wait);
+        self.a.store(BP, self.scratch[1], A);
+        self.a.test(A, true);
+        self.a.condition(8, error);
+        self.local_address(dst, R8);
+        self.a.immediate(C, 0);
+        self.a.store(R8, 0, C);
+        self.a.load(C, BP, self.scratch[0]);
+        self.a.store(R8, success as i64, C);
+        self.a.store(R8, success as i64 + 8, A);
+        self.a.immediate(C, 64);
+        self.a.store(R8, success as i64 + 16, C);
+        self.a.jump(done);
+        self.a.bind(error);
+        self.a.load(DI, BP, self.scratch[0]);
+        self.a.call(self.runtime.release);
+        self.a.load(A, BP, self.scratch[1]);
+        self.a.negate(A);
+        self.local_address(dst, R8);
+        self.a.immediate(C, 1);
+        self.a.store(R8, 0, C);
+        self.a.store(R8, failure as i64, A);
+        self.a.bind(done);
+        self.mark(dst);
+    }
     fn intrinsic_vec_push(&mut self, dst: usize, args: &[usize]) {
+
         let element = self.ty(args[1]);
         let stride = self.layout.stride(element);
         let ready = self.a.label();

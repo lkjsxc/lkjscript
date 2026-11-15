@@ -27,6 +27,16 @@ pub trait Host {
     fn world_file(&mut self, kind: u8) -> Result<u64, i64>;
     fn open_listener(&mut self, address: &[u8]) -> Result<u64, i64>;
     fn connect_socket(&mut self, address: &[u8]) -> Result<u64, i64>;
+    fn create_readiness(&mut self) -> Result<u64, i64>;
+    fn close_readiness(&mut self, readiness: u64);
+    fn set_file_nonblocking(&mut self, handle: u64, enabled: bool) -> Result<(), i64>;
+    fn set_listener_nonblocking(&mut self, handle: u64, enabled: bool) -> Result<(), i64>;
+    fn readiness_watch_file(&mut self, readiness: u64, handle: u64, token: usize, interest: u8) -> Result<(), i64>;
+    fn readiness_watch_listener(&mut self, readiness: u64, handle: u64, token: usize) -> Result<(), i64>;
+    fn readiness_unwatch_file(&mut self, readiness: u64, handle: u64) -> Result<(), i64>;
+    fn readiness_unwatch_listener(&mut self, readiness: u64, handle: u64) -> Result<(), i64>;
+    fn readiness_wait(&mut self, readiness: u64, deadline_ns: usize) -> Result<Vec<(usize, u8)>, i64>;
+
     fn accept_listener(&mut self, listener: u64) -> Result<u64, i64>;
     fn accept_listener_nodelay(&mut self, listener: u64) -> Result<u64, i64>;
     fn listener_address(&mut self, listener: u64, bytes: &mut [u8]) -> Result<(), i64>;
@@ -99,6 +109,15 @@ impl Host for Vec<u8> {
     fn world_file(&mut self, _kind: u8) -> Result<u64, i64> {
         Err(38)
     }
+    fn create_readiness(&mut self) -> Result<u64, i64> { Err(38) }
+    fn close_readiness(&mut self, _readiness: u64) {}
+    fn set_file_nonblocking(&mut self, _handle: u64, _enabled: bool) -> Result<(), i64> { Err(38) }
+    fn set_listener_nonblocking(&mut self, _handle: u64, _enabled: bool) -> Result<(), i64> { Err(38) }
+    fn readiness_watch_file(&mut self, _readiness: u64, _handle: u64, _token: usize, _interest: u8) -> Result<(), i64> { Err(38) }
+    fn readiness_watch_listener(&mut self, _readiness: u64, _handle: u64, _token: usize) -> Result<(), i64> { Err(38) }
+    fn readiness_unwatch_file(&mut self, _readiness: u64, _handle: u64) -> Result<(), i64> { Err(38) }
+    fn readiness_unwatch_listener(&mut self, _readiness: u64, _handle: u64) -> Result<(), i64> { Err(38) }
+    fn readiness_wait(&mut self, _readiness: u64, _deadline_ns: usize) -> Result<Vec<(usize, u8)>, i64> { Err(38) }
     fn connect_socket(&mut self, _address: &[u8]) -> Result<u64, i64> {
         Err(38)
     }
@@ -268,6 +287,7 @@ enum Value {
     Child(u64),
     Listener(u64),
     Connector(Vec<u8>),
+    Readiness(u64),
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Empty {
@@ -710,6 +730,7 @@ impl<H: Host> Interpreter<'_, H> {
             | Value::File(_)
             | Value::Child(_)
             | Value::Listener(_)
+            | Value::Readiness(_)
             | Value::Connector(_) => Err(self.error(
                 InterpreterError::MissingDrop,
                 "owned value requires structural destruction",
@@ -900,7 +921,8 @@ impl<H: Host> Interpreter<'_, H> {
             (TypeKind::Directory, Value::Directory(handle))
             | (TypeKind::File, Value::File(handle))
             | (TypeKind::Child, Value::Child(handle))
-            | (TypeKind::Listener, Value::Listener(handle)) => *handle != 0,
+            | (TypeKind::Listener, Value::Listener(handle))
+            | (TypeKind::Readiness, Value::Readiness(handle)) => *handle != 0,
             (TypeKind::Connector, Value::Connector(address)) => valid_connector(address),
             (TypeKind::Ref { inner, mutable }, Value::Reference(reference)) => {
                 *inner == reference.referent && *mutable == reference.mutable
@@ -1373,6 +1395,7 @@ impl<H: Host> Interpreter<'_, H> {
         match value {
             Value::Reference(reference) => self.release_reference(&reference)?,
             Value::Child(handle) => self.host.drop_process(handle),
+            Value::Readiness(handle) => self.host.close_readiness(handle),
             Value::Directory(handle) | Value::File(handle) | Value::Listener(handle) => self.host.close_handle(handle),
             _ => {}
         }
@@ -2375,6 +2398,7 @@ fn run_inner<'a, H: Host>(
                 ir::EntryGrant::Directory(_) => matches!(kind, TypeKind::Directory),
                 ir::EntryGrant::Listener(_) => matches!(kind, TypeKind::Listener),
                 ir::EntryGrant::Connector(_) => matches!(kind, TypeKind::Connector),
+                ir::EntryGrant::Readiness => matches!(kind, TypeKind::Readiness),
             };
             if !valid { return Err(interpreter.invalid("entry grant does not match its owned capability parameter")); }
         }
@@ -2387,6 +2411,12 @@ fn run_inner<'a, H: Host>(
                 ir::EntryGrant::Stderr => Ok(Value::Stderr),
                 ir::EntryGrant::Clock => Ok(Value::Clock),
                 ir::EntryGrant::Process => Ok(Value::Process),
+                ir::EntryGrant::Readiness => match interpreter.host.create_readiness() {
+                    Ok(handle) if handle != 0 => Ok(Value::Readiness(handle)),
+                    Ok(_) => Err(0),
+                    Err(errno) => Err(errno),
+                },
+
                 ir::EntryGrant::Directory(path) => match interpreter.host.open_directory(path) {
                     Ok(handle) if handle != 0 => Ok(Value::Directory(handle)),
                     Ok(_) => Err(0),
@@ -2407,6 +2437,7 @@ fn run_inner<'a, H: Host>(
                     for (_, previous) in &values {
                         match previous {
                             Value::Directory(handle) | Value::Listener(handle) => interpreter.host.close_handle(*handle),
+                            Value::Readiness(handle) => interpreter.host.close_readiness(*handle),
                             _ => {}
                         }
                     }

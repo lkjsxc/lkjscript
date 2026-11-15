@@ -1,0 +1,222 @@
+//! Linux readiness over existing descriptors; watches do not duplicate ownership.
+use super::platform::Platform;
+use super::{epilogue, prologue};
+use crate::diagnostic::Span;
+use crate::x86::*;
+
+fn syscall(a: &mut Assembler, number: u64) {
+    let retry = a.label();
+    a.bind(retry);
+    a.immediate(A, number);
+    a.syscall();
+    a.immediate(C, (-4i64) as u64);
+    a.compare(A, C);
+    a.condition(4, retry);
+}
+
+fn reject_closed(a: &mut Assembler, handle: u8) {
+    // File's zero closed-stream sentinel is never Linux descriptor zero.
+    let open = a.label();
+    a.test(handle, true);
+    a.condition(5, open);
+    a.immediate(A, (-9i64) as u64);
+    epilogue(a);
+    a.bind(open);
+}
+
+pub(super) fn emit_nonblocking(a: &mut Assembler, p: Platform) {
+
+    let done = a.label();
+    let clear = a.label();
+    let set = a.label();
+    a.bind(p.handle_nonblocking);
+    prologue(a, p, 16, Span::default());
+    reject_closed(a, DI);
+    a.store(BP, -8, DI);
+    a.store(BP, -16, SI);
+    a.immediate(SI, 3); // F_GETFL
+    a.immediate(D, 0);
+    syscall(a, 72);
+    a.test(A, true);
+    a.condition(8, done);
+    a.load(C, BP, -16);
+    a.test(C, true);
+    a.condition(4, clear);
+    a.immediate(C, 2048); // O_NONBLOCK
+    a.rr(0x09, A, C, true);
+    a.jump(set);
+    a.bind(clear);
+    a.immediate(C, !2048u64);
+    a.rr(0x21, A, C, true);
+    a.bind(set);
+    a.mov(D, A);
+    a.load(DI, BP, -8);
+    a.immediate(SI, 4); // F_SETFL preserves every unrelated flag.
+    syscall(a, 72);
+    a.bind(done);
+    epilogue(a);
+}
+
+pub(super) fn emit(a: &mut Assembler, p: Platform) {
+    let created = a.label();
+    a.bind(p.world_readiness);
+    prologue(a, p, 16, Span::default());
+    a.immediate(DI, 0x80000); // EPOLL_CLOEXEC
+    syscall(a, 291); // epoll_create1
+    a.immediate(C, 3);
+    a.compare(A, C);
+    a.condition(3, created); // Includes negative errno as an unsigned value.
+    a.store(BP, -8, A);
+    a.mov(DI, A);
+    a.immediate(SI, 1030); // F_DUPFD_CLOEXEC
+    a.immediate(D, 3);
+    syscall(a, 72);
+    a.store(BP, -16, A);
+    a.load(DI, BP, -8);
+    a.immediate(A, 3);
+    a.syscall();
+    a.load(A, BP, -16);
+    a.bind(created);
+    epilogue(a);
+
+    let invalid = a.label();
+    let watched = a.label();
+    a.bind(p.readiness_watch);
+    prologue(a, p, 48, Span::default());
+    a.store(BP, -8, DI);
+    a.store(BP, -16, SI);
+    a.store(BP, -28, D); // Packed epoll_event.data follows its four-byte mask.
+    a.immediate(A, 3);
+    a.compare(C, A);
+    a.condition(7, invalid);
+    reject_closed(a, SI);
+    a.mov(A, C);
+    a.immediate(R8, 1);
+    a.rr(0x21, A, R8, true);
+    a.immediate(R8, 0x2001); // EPOLLIN | EPOLLRDHUP only for read interest.
+    a.imul(A, R8);
+    a.immediate(R8, 2);
+    a.rr(0x21, C, R8, true);
+    a.shift(C, 4, 1); // Public WRITE=2 maps to EPOLLOUT=4.
+    a.rr(0x09, A, C, true);
+    // EPOLLERR/HUP are unconditional; write-only watches omit read half-close.
+    a.store_width(BP, -32, A, 4);
+    a.mov(D, SI);
+    a.immediate(SI, 1); // EPOLL_CTL_ADD
+    a.lea(R10, BP, -32);
+    syscall(a, 233);
+    a.immediate(C, (-17i64) as u64); // EEXIST changes the existing watch.
+    a.compare(A, C);
+    a.condition(5, watched);
+    a.load(DI, BP, -8);
+    a.immediate(SI, 3); // EPOLL_CTL_MOD
+    a.load(D, BP, -16);
+    a.lea(R10, BP, -32);
+    syscall(a, 233);
+    a.jump(watched);
+    a.bind(invalid);
+    a.immediate(A, (-22i64) as u64);
+    a.bind(watched);
+    epilogue(a);
+
+    a.bind(p.readiness_unwatch);
+    prologue(a, p, 0, Span::default());
+    reject_closed(a, SI);
+    a.mov(D, SI);
+    a.immediate(SI, 2); // EPOLL_CTL_DEL
+    a.immediate(R10, 0);
+    syscall(a, 233);
+    epilogue(a);
+
+    emit_wait(a, p);
+}
+
+fn emit_wait(a: &mut Assembler, p: Platform) {
+    let again = a.label();
+    let expired = a.label();
+    let timeout = a.label();
+    let returned = a.label();
+    let convert = a.label();
+    let converted = a.label();
+    let done = a.label();
+    a.bind(p.readiness_wait);
+    // 64 packed kernel events (12 bytes each), clock/timeout pairs, and locals.
+    prologue(a, p, 848, Span::default());
+    a.store(BP, -8, DI);
+    a.store(BP, -16, SI);
+    a.store(BP, -24, D);
+    a.bind(again);
+    a.immediate(DI, 1); // CLOCK_MONOTONIC
+    a.lea(SI, BP, -48);
+    syscall(a, 228);
+    a.test(A, true);
+    a.condition(8, done);
+    a.load(A, BP, -48);
+    a.immediate(C, 1000000000);
+    a.imul(A, C);
+    a.load(D, BP, -40);
+    a.rr(0x01, A, D, true);
+    a.load(R8, BP, -16);
+    a.compare(R8, A);
+    a.condition(6, expired);
+    a.rr(0x29, R8, A, true);
+    a.mov(A, R8);
+    a.immediate(D, 0);
+    a.divide(C, false);
+    a.jump(timeout);
+    a.bind(expired);
+    a.immediate(A, 0);
+    a.immediate(D, 0);
+    a.bind(timeout);
+    a.store(BP, -64, A);
+    a.store(BP, -56, D);
+    a.load(DI, BP, -8);
+    a.lea(SI, BP, -848);
+    a.immediate(D, 64);
+    a.lea(R10, BP, -64);
+    a.immediate(R8, 0); // No signal-mask substitution.
+    a.immediate(R9, 8);
+    a.immediate(A, 441); // epoll_pwait2, nanosecond relative timeout.
+    a.syscall();
+    a.immediate(C, (-4i64) as u64);
+    a.compare(A, C);
+    a.condition(4, again); // Recompute the absolute deadline after EINTR.
+    a.test(A, true);
+    a.condition(9, returned);
+    a.jump(done);
+    a.bind(returned);
+    a.store(BP, -72, A);
+    a.mov(DI, A);
+    a.lea(R8, BP, -848);
+    a.load(R9, BP, -24);
+    a.bind(convert);
+    a.test(DI, true);
+    a.condition(4, converted);
+    a.load(D, R8, 4);
+    a.store(R9, 0, D);
+    a.load_width(A, R8, 0, 4, false);
+    a.immediate(C, 0);
+    for (kernel, public) in vec![(1u64, 1u64), (4u64, 2u64), (0x2010u64, 4u64), (8u64, 8u64)] {
+        let absent = a.label();
+        a.mov(D, A);
+        a.immediate(R10, kernel);
+        a.rr(0x21, D, R10, true);
+        a.test(D, true);
+        a.condition(4, absent);
+        a.immediate(D, public);
+        a.rr(0x09, C, D, true);
+        a.bind(absent);
+    }
+    a.store(R9, 8, C); // Zero the pair's padding with its flag byte.
+    a.immediate(C, 12);
+    a.rr(0x01, R8, C, true);
+    a.immediate(C, 16);
+    a.rr(0x01, R9, C, true);
+    a.immediate(C, 1);
+    a.rr(0x29, DI, C, true);
+    a.jump(convert);
+    a.bind(converted);
+    a.load(A, BP, -72);
+    a.bind(done);
+    epilogue(a);
+}

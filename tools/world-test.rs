@@ -308,7 +308,7 @@ fn exercise(
     let names: Vec<String> = vec!["main".to_string(), "paths".to_string(), "closed_stdin".to_string(),
         "handle_cleanup".to_string(), "output_failure".to_string(), "arguments".to_string(),
         "invalid_argument".to_string(), "status_marker".to_string(), "status".to_string(),
-        "system".to_string(), "closed_process".to_string(), "self_spawn".to_string(), "file_readonly".to_string(), "listener_closed".to_string()];
+        "system".to_string(), "closed_process".to_string(), "self_spawn".to_string(), "file_readonly".to_string(), "listener_closed".to_string(), "closed_readiness".to_string()];
     for name in &names { prepare(world, compiler, directory, config, report, name)?; }
     let empty: Vec<Vec<u8>> = Vec::new();
     let payload = vec![255u8, 128u8, 97u8, 10u8, 192u8];
@@ -388,7 +388,10 @@ fn exercise(
         report.outcome(&format!("readonly/{route}"), &outcome, 0, b"readonly ok\n", b"");
         let outcome = execute(world, compiler, config, "self_spawn", route, &empty, b"", "")?;
         report.outcome(&format!("self spawn/{route}"), &outcome, 0, b"42\n", b"");
+        let outcome = execute(world, compiler, config, "closed_readiness", route, &empty, b"x", "close2")?;
+        report.outcome(&format!("closed readiness/{route}"), &outcome, 0, b"9 9 9 9 22\n", b"");
         for fd in 0..3 {
+
             let args = vec![format!("{fd}").into_bytes()];
             let outcome = execute(world, compiler, config, "closed_process", route, &args, b"", &format!("close{fd}"))?;
             report.outcome(&format!("closed process/{fd}/{route}"), &outcome, 0, b"", b"");

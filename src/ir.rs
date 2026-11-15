@@ -54,6 +54,8 @@ pub enum TypeKind {
     Listener,
     /// Affine authority to connect to one numeric IPv4 endpoint.
     Connector,
+    /// Affine readiness set; destruction closes only its kernel event handle.
+    Readiness,
 }
 
 /// Explicit host provisioning data; executors validate every descriptor against
@@ -71,6 +73,7 @@ pub enum EntryGrant {
     /// Exact sixteen-byte IPv4 sockaddr, matching WorldListen.
     Listener(Vec<u8>),
     Connector(Vec<u8>),
+    Readiness,
 }
 
 #[derive(Clone, PartialEq)]
@@ -270,6 +273,14 @@ pub enum IntrinsicOp {
     WorldConnector,
     ConnectorConnect,
     ListenerAddress,
+    WorldReadiness,
+    FileSetNonblocking,
+    ListenerSetNonblocking,
+    ReadinessWatchFile,
+    ReadinessWatchListener,
+    ReadinessUnwatchFile,
+    ReadinessUnwatchListener,
+    ReadinessWait,
 }
 impl IntrinsicOp {
     pub fn parse(text: &str) -> Option<IntrinsicOp> {
@@ -327,6 +338,15 @@ impl IntrinsicOp {
             "listener_accept" => Some(IntrinsicOp::ListenerAccept),
             "listener_accept_nodelay" => Some(IntrinsicOp::ListenerAcceptNoDelay),
             "listener_address" => Some(IntrinsicOp::ListenerAddress),
+            "world_readiness" => Some(IntrinsicOp::WorldReadiness),
+            "file_set_nonblocking" => Some(IntrinsicOp::FileSetNonblocking),
+            "listener_set_nonblocking" => Some(IntrinsicOp::ListenerSetNonblocking),
+            "readiness_watch_file" => Some(IntrinsicOp::ReadinessWatchFile),
+            "readiness_watch_listener" => Some(IntrinsicOp::ReadinessWatchListener),
+            "readiness_unwatch_file" => Some(IntrinsicOp::ReadinessUnwatchFile),
+            "readiness_unwatch_listener" => Some(IntrinsicOp::ReadinessUnwatchListener),
+            "readiness_wait" => Some(IntrinsicOp::ReadinessWait),
+
             _ => None,
         }
     }
@@ -385,6 +405,15 @@ impl IntrinsicOp {
             IntrinsicOp::ListenerAccept => "listener_accept",
             IntrinsicOp::ListenerAcceptNoDelay => "listener_accept_nodelay",
             IntrinsicOp::ListenerAddress => "listener_address",
+            IntrinsicOp::WorldReadiness => "world_readiness",
+            IntrinsicOp::FileSetNonblocking => "file_set_nonblocking",
+            IntrinsicOp::ListenerSetNonblocking => "listener_set_nonblocking",
+            IntrinsicOp::ReadinessWatchFile => "readiness_watch_file",
+            IntrinsicOp::ReadinessWatchListener => "readiness_watch_listener",
+            IntrinsicOp::ReadinessUnwatchFile => "readiness_unwatch_file",
+            IntrinsicOp::ReadinessUnwatchListener => "readiness_unwatch_listener",
+            IntrinsicOp::ReadinessWait => "readiness_wait",
+
         }
     }
 }

@@ -33,28 +33,28 @@ Next: the three diagnostic rewrites, then the compiler opt=0/-O triple and emitt
 
 ## Programs
 
-2.1 complete: exact numeric Connector grants, persistent HTTP and lkjscript clients.
-41 functional/persistent requests pass; the interpreted server run was 130.491 s,
-load 4.88/4.27/4.23 -> 3.09/3.76/4.04. Socket-option cases also pass both routes.
-Full-body baseline: 184,896 / 30.006 s = 6,161/s; load 8.67/6.26/4.40 -> 6.01/5.87/4.33.
-Full-body after: 345,216 / 30.003 s = 11,506/s; load 3.89/4.54/4.31 -> 3.67/4.44/4.29.
-Framing after: 659,296 / 30.001 s = 21,975/s; load 3.67/4.44/4.29 -> 2.83/4.16/4.20.
-All runs: one persistent connection, pipeline 32, 40,108-byte body; server RSS 372 -> 408 KiB.
-Full verification used 50% server / 94% client CPU; framing used 88% / 19%, draining every byte.
+2.2 complete: affine Readiness, nonblocking handles and explicit owned HTTP connection states.
+1,000 open connections (990 silent, ten active), pipeline 32, 40,108-byte responses.
+Ten-second phases: 22,518/s unloaded, 22,032/s loaded, 21,450/s unloaded; loaded is 100.22% of bracket mean.
+Run load 2.92/4.16/5.41 -> 3.19/4.08/5.33; loaded phase began at 2.78/4.09/5.37.
+RSS 1,092 -> 3,224 KiB: 2,205.2 bytes per silent peer, including allocator growth, excluding kernel sockets.
+Default idle/header-body/write policy is 60/2/2 s; progress never extends request or write deadlines.
+Slow header closed at 2.003 s; all hostile server handles observed gone by 2.351 s; load 3.12/4.09/5.34 -> 3.19/4.08/5.33.
+Useful traffic during hostile peers: 104,274 / 5.000 s = 20,854/s; same load range; no active peer starved.
+41 functional/pipelined requests pass on both routes; the slow interpreter fixture explicitly uses 60/120/120 s.
+Interpreted suite 181.654 s, load 3.19/4.08/5.33 -> 4.00/4.21/5.17; native deadlines stay at defaults.
+Independent broker operates actual sockets, preserves process streams/closed handles and reaps children; no relay queues.
 
-| Server function (self samples) | Before | After, full |
+| 2.1 server function (self samples) | Before | After, full |
 | --- | ---: | ---: |
 | bytes::append_bytes | 78.7% | 0.9% |
 | io::file_read_to_end | 3.6% | removed |
 | buffer::ReadBuffer::read | absent | 48.8% |
 | platform::file_write | 3.4% | 20.8% |
-| read_header | 3.7% | 7.7% |
 
-Profiles contain 17,513 / 15,001 CPU samples. Owned chunks removed byte-at-a-time assembly.
-accept_nodelay removes the introduced 42-ms packet stalls; stop after these two causes.
-Removed curl execution and --curl. Three pending diagnostic cases record concrete rewrites.
-Unchanged-seed fixed point and four-worker gate pass: 184.141 s; load 1.38/3.02/3.76 -> 7.10/5.76/4.74.
-The independent interpreter helper drains acknowledged writes (32 MiB delayed-reader proof);
-delete that adapter once the compiler stream's stored seed admits direct Connector calls.
-All measurement/verification processes were reaped and their temporary ports/directories removed.
-Next: readiness for many clients, then durable journal state, stop/sessions and the origin candidate.
+2.1 full-body 6,161 -> 11,506/s; 17,513/15,001 samples; baseline load 8.67/6.26/4.40 -> 6.01/5.87/4.33, after 3.89/4.54/4.31 -> 3.67/4.44/4.29.
+2.1 framing 21,975/s, load 3.67/4.44/4.29 -> 2.83/4.16/4.20; numeric Connector grants and lkjscript clients replaced curl.
+Upstream-seed reproduction and four-worker gate pass: 258.696 s; load 6.53/4.29/4.65 -> 7.26/6.02/5.28. HTTP: 199,113 bytes, 205 functions, 14,623 IR instructions.
+Deleted relay queues and three scoped-thread pending cases; eight actionable diagnostic cases added.
+Measurement servers/clients/helpers were reaped; fresh listener ports and temporary measurement directories are gone.
+Next: crash-durable journal state and JSON, then graceful stop, sessions and the documentation candidate.

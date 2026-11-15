@@ -6,6 +6,7 @@ pub use prelude::{
     VecContains, VecExtend,
 };
 pub mod buffer;
+pub mod timers;
 pub mod bytes;
 pub mod char;
 pub mod fmt;

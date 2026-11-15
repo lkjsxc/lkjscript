@@ -108,6 +108,7 @@ impl<H: Host> Interpreter<'_, H> {
                     TypeKind::File => Value::File(handle),
                     TypeKind::Child => Value::Child(handle),
                     TypeKind::Listener => Value::Listener(handle),
+                    TypeKind::Readiness => Value::Readiness(handle),
                     _ => return Err(self.invalid("open result is not a handle capability")),
                 },
             ),
@@ -125,7 +126,8 @@ impl<H: Host> Interpreter<'_, H> {
             Value::Directory(handle)
             | Value::File(handle)
             | Value::Child(handle)
-            | Value::Listener(handle) => Ok(*handle),
+            | Value::Listener(handle)
+            | Value::Readiness(handle) => Ok(*handle),
             _ => Err(self.invalid("I/O capability has no live handle")),
         }
     }
@@ -155,7 +157,57 @@ impl<H: Host> Interpreter<'_, H> {
             _ => Err(self.trap(7, "host returned an invalid I/O status")),
         }
     }
+    fn io_sum_types(&self, result: usize) -> Result<(usize, usize), RunError> {
+        let TypeKind::Enum { variants, .. } = self.kind(result)? else { return Err(self.invalid("I/O result must be an enum")); };
+        if variants.len() != 2 || variants[0].fields.len() != 1 || variants[1].fields.len() != 1 || variants[1].fields[0].ty != ir::I64 {
+            return Err(self.invalid("I/O result must contain its success value or i64 errno"));
+        }
+        Ok((variants[0].fields[0].ty, ir::I64))
+    }
+    fn io_unit_types(&self, result: usize) -> Result<(usize, usize), RunError> {
+        let types = self.io_sum_types(result)?;
+        if types.0 != ir::UNIT { return Err(self.invalid("I/O status success must be unit")); }
+        Ok(types)
+    }
+    fn io_unit_result(&mut self, types: (usize, usize), result: Result<(), i64>) -> Result<Value, RunError> {
+        let (tag, ty, value) = match result {
+            Ok(()) => (0usize, types.0, Value::Unit),
+            Err(errno) if errno > 0 => (1usize, types.1, Value::Bits(errno as u64)),
+            _ => return Err(self.trap(7, "host returned an invalid I/O status")),
+        };
+        let child = self.allocate(ty, Some(value), false)?;
+        Ok(Value::Aggregate { variant: Some(tag), fields: vec![child] })
+    }
+    fn io_events_types(&self, result: usize) -> Result<(usize, usize, usize), RunError> {
+        let types = self.io_sum_types(result)?;
+        if !matches!(self.kind(result)?, TypeKind::Enum { copy: false, .. }) { return Err(self.invalid("readiness result must be affine")); }
+        let TypeKind::Vec { inner } = self.kind(types.0)? else { return Err(self.invalid("readiness events must be a vector")); };
+        if !matches!(self.kind(*inner)?, TypeKind::Struct { fields, copy: true }
+            if fields.len() == 2 && fields[0].ty == ir::U64 && fields[1].ty == ir::U8) {
+            return Err(self.invalid("readiness events must contain (usize, u8) pairs"));
+        }
+        Ok((types.0, *inner, types.1))
+    }
+    fn io_events_result(&mut self, types: (usize, usize, usize), events: Result<Vec<(usize, u8)>, i64>) -> Result<Value, RunError> {
+        let (tag, child) = match events {
+            Ok(events) => {
+                let mut fields = Vec::new();
+                for (token, flags) in events {
+                    if flags == 0 || flags > 15 { return Err(self.trap(7, "host returned invalid readiness event flags")); }
+                    let token = self.allocate(ir::U64, Some(Value::Bits(token as u64)), false)?;
+                    let flags = self.allocate(ir::U8, Some(Value::Bits(flags as u64)), false)?;
+                    let pair = self.allocate(types.1, Some(Value::Aggregate { variant: None, fields: vec![token, flags] }), false)?;
+                    fields.push(pair);
+                }
+                (0usize, self.allocate(types.0, Some(Value::Sequence(fields)), false)?)
+            }
+            Err(errno) if errno > 0 => (1usize, self.allocate(types.2, Some(Value::Bits(errno as u64)), false)?),
+            _ => return Err(self.trap(7, "host returned an invalid readiness result")),
+        };
+        Ok(Value::Aggregate { variant: Some(tag), fields: vec![child] })
+    }
     fn io_file(&self, values: &[(usize, Value)], index: usize) -> Result<u64, RunError> {
+
         let access = self.io_reference(values, index, false)?;
         if !matches!(self.kind(access.ty)?, TypeKind::File) {
             return Err(self.invalid("process stream requires a File capability"));
@@ -211,7 +263,62 @@ impl<H: Host> Interpreter<'_, H> {
                 };
                 self.io_open_result(types, opened, TypeKind::Listener)?
             }
+            ir::IntrinsicOp::WorldReadiness if values.len() == 1 => {
+                self.io_authority(values, TypeKind::World)?;
+                let types = self.io_open_types(result, TypeKind::Readiness)?;
+                let opened = self.host.create_readiness();
+                self.io_open_result(types, opened, TypeKind::Readiness)?
+            }
+            ir::IntrinsicOp::FileSetNonblocking | ir::IntrinsicOp::ListenerSetNonblocking if values.len() == 2 => {
+                let file = name == ir::IntrinsicOp::FileSetNonblocking;
+                let authority = self.io_authority(values, if file { TypeKind::File } else { TypeKind::Listener })?;
+                let types = self.io_unit_types(result)?;
+                let handle = self.io_handle(&authority)?;
+                let enabled = self.io_number(values, 1, ir::BOOL)?;
+                if enabled > 1 { return Err(self.invalid("nonblocking flag must be bool")); }
+                let status = if file { self.host.set_file_nonblocking(handle, enabled == 1) } else { self.host.set_listener_nonblocking(handle, enabled == 1) };
+                self.io_unit_result(types, status)?
+            }
+            ir::IntrinsicOp::ReadinessWatchFile | ir::IntrinsicOp::ReadinessWatchListener => {
+                let file = name == ir::IntrinsicOp::ReadinessWatchFile;
+                if values.len() != if file { 4usize } else { 3usize } { return Err(self.invalid("readiness watch argument count differs")); }
+                let authority = self.io_authority(values, TypeKind::Readiness)?;
+                let target = self.io_reference(values, 1, true)?;
+                let expected = if file { TypeKind::File } else { TypeKind::Listener };
+                if *self.kind(target.ty)? != expected { return Err(self.invalid("readiness watch requires its declared handle capability")); }
+                let types = self.io_unit_types(result)?;
+                let ready = self.io_handle(&authority)?;
+                let handle = self.io_handle(&target)?;
+                let token = self.io_number(values, 2, ir::U64)? as usize;
+                let interest = if file { self.io_number(values, 3, ir::U8)? as u8 } else { 1u8 };
+                let status = if interest > 3 { Err(22) } else if file {
+                    self.host.readiness_watch_file(ready, handle, token, interest)
+                } else { self.host.readiness_watch_listener(ready, handle, token) };
+                self.io_unit_result(types, status)?
+            }
+            ir::IntrinsicOp::ReadinessUnwatchFile | ir::IntrinsicOp::ReadinessUnwatchListener if values.len() == 2 => {
+                let authority = self.io_authority(values, TypeKind::Readiness)?;
+                let target = self.io_reference(values, 1, true)?;
+                let file = name == ir::IntrinsicOp::ReadinessUnwatchFile;
+                if *self.kind(target.ty)? != if file { TypeKind::File } else { TypeKind::Listener } { return Err(self.invalid("readiness unwatch requires its declared handle capability")); }
+                let types = self.io_unit_types(result)?;
+                let ready = self.io_handle(&authority)?;
+                let handle = self.io_handle(&target)?;
+                let status = if file { self.host.readiness_unwatch_file(ready, handle) } else { self.host.readiness_unwatch_listener(ready, handle) };
+                self.io_unit_result(types, status)?
+            }
+            ir::IntrinsicOp::ReadinessWait if values.len() == 3 => {
+                let authority = self.io_authority(values, TypeKind::Readiness)?;
+                let clock = self.io_reference(values, 1, true)?;
+                if !matches!(self.kind(clock.ty)?, TypeKind::Clock) { return Err(self.invalid("readiness wait requires a Clock capability")); }
+                let types = self.io_events_types(result)?;
+                let ready = self.io_handle(&authority)?;
+                let deadline = self.io_number(values, 2, ir::U64)? as usize;
+                let events = self.host.readiness_wait(ready, deadline);
+                self.io_events_result(types, events)?
+            }
             ir::IntrinsicOp::WorldConnector if values.len() == 2 => {
+
                 self.io_authority(values, TypeKind::World)?;
                 let types = self.io_open_types(result, TypeKind::Connector)?;
                 let access = self.io_buffer(values, 1, false)?;

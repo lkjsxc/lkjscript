@@ -23,7 +23,24 @@ fn opened(types: &[Type], ty: usize, kind: &TypeKind) -> bool {
         _ => false,
     }
 }
+fn status_result(types: &[Type], ty: usize) -> bool {
+    match &types[ty].kind {
+        TypeKind::Enum { variants, .. } if variants.len() == 2 => {
+            variants[0].fields.len() == 1 && variants[0].fields[0].ty == UNIT
+                && variants[1].fields.len() == 1 && variants[1].fields[0].ty == I64
+        }
+        _ => false,
+    }
+}
+fn events_result(types: &[Type], ty: usize) -> bool {
+    let TypeKind::Enum { variants, copy: false } = &types[ty].kind else { return false; };
+    if variants.len() != 2 || variants[0].fields.len() != 1 || variants[1].fields.len() != 1 || variants[1].fields[0].ty != I64 { return false; }
+    let TypeKind::Vec { inner } = types[variants[0].fields[0].ty].kind else { return false; };
+    matches!(&types[inner].kind, TypeKind::Struct { fields, copy: true }
+        if fields.len() == 2 && fields[0].ty == U64 && fields[1].ty == U8)
+}
 pub(super) fn signature(
+
     types: &[Type],
     result: usize,
     args: &[usize],
@@ -62,7 +79,33 @@ pub(super) fn signature(
                 && args[1] == U8
                 && result == UNIT
         }
+        IntrinsicOp::WorldReadiness => {
+            args.len() == 1 && authority(types, args[0], &TypeKind::World)
+                && opened(types, result, &TypeKind::Readiness)
+        }
+        IntrinsicOp::FileSetNonblocking | IntrinsicOp::ListenerSetNonblocking => {
+            let kind = if name == IntrinsicOp::FileSetNonblocking { TypeKind::File } else { TypeKind::Listener };
+            args.len() == 2 && authority(types, args[0], &kind) && args[1] == BOOL && status_result(types, result)
+        }
+        IntrinsicOp::ReadinessWatchFile => {
+            args.len() == 4 && authority(types, args[0], &TypeKind::Readiness)
+                && authority(types, args[1], &TypeKind::File) && args[2] == U64 && args[3] == U8 && status_result(types, result)
+        }
+        IntrinsicOp::ReadinessWatchListener => {
+            args.len() == 3 && authority(types, args[0], &TypeKind::Readiness)
+                && authority(types, args[1], &TypeKind::Listener) && args[2] == U64 && status_result(types, result)
+        }
+        IntrinsicOp::ReadinessUnwatchFile | IntrinsicOp::ReadinessUnwatchListener => {
+            let kind = if name == IntrinsicOp::ReadinessUnwatchFile { TypeKind::File } else { TypeKind::Listener };
+            args.len() == 2 && authority(types, args[0], &TypeKind::Readiness)
+                && authority(types, args[1], &kind) && status_result(types, result)
+        }
+        IntrinsicOp::ReadinessWait => {
+            args.len() == 3 && authority(types, args[0], &TypeKind::Readiness)
+                && authority(types, args[1], &TypeKind::Clock) && args[2] == U64 && events_result(types, result)
+        }
         IntrinsicOp::WorldDirectory => {
+
             args.len() == 2
                 && authority(types, args[0], &TypeKind::World)
                 && bytes(types, args[1], false)

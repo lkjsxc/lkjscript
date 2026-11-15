@@ -19,6 +19,7 @@ mod ownership;
 pub(crate) mod platform;
 mod process;
 mod network;
+mod readiness;
 pub mod profiling;
 mod registers;
 mod scalar;
@@ -1351,7 +1352,7 @@ fn emit_drop(
             a.load(DI, BP, -8);
             a.call(p.child_drop);
         }
-        TypeKind::File | TypeKind::Directory | TypeKind::Listener => {
+        TypeKind::File | TypeKind::Directory | TypeKind::Listener | TypeKind::Readiness => {
             a.load(DI, BP, -8);
             a.load(DI, DI, 0);
             a.call(p.handle_close);
@@ -1443,6 +1444,7 @@ fn grant_matches(kind: &TypeKind, grant: &ir::EntryGrant, parameters: usize) -> 
         ir::EntryGrant::Directory(_) => matches!(kind, TypeKind::Directory),
         ir::EntryGrant::Listener(_) => matches!(kind, TypeKind::Listener),
         ir::EntryGrant::Connector(_) => matches!(kind, TypeKind::Connector),
+        ir::EntryGrant::Readiness => matches!(kind, TypeKind::Readiness),
     }
 }
 fn scalar_entry(kind: &TypeKind) -> bool {
@@ -1530,6 +1532,12 @@ fn encode_program(
         }
     }
     let connector = program.types.iter().any(|ty| matches!(ty.kind, TypeKind::Connector));
+    let readiness = program.types.iter().any(|ty| matches!(ty.kind, TypeKind::Readiness));
+    let nonblocking = program.functions.iter().any(|function| {
+        function.body.iter().any(|instruction| matches!(instruction.op,
+            Op::Intrinsic { name: IntrinsicOp::FileSetNonblocking | IntrinsicOp::ListenerSetNonblocking, .. }))
+    });
+
     let accept_nodelay = program.functions.iter().any(|function| {
         function.body.iter().any(|instruction| matches!(
             instruction.op, Op::Intrinsic { name: IntrinsicOp::ListenerAcceptNoDelay, .. }
@@ -1578,6 +1586,14 @@ fn encode_program(
             symbols.push((p.listener_accept_nodelay, "$platform::listener_accept_nodelay".to_string()));
         }
         symbols.push((p.listener_address, "$platform::listener_address".to_string()));
+        if readiness {
+            symbols.push((p.world_readiness, "$platform::world_readiness".to_string()));
+            symbols.push((p.readiness_watch, "$platform::readiness_watch".to_string()));
+            symbols.push((p.readiness_unwatch, "$platform::readiness_unwatch".to_string()));
+            symbols.push((p.readiness_wait, "$platform::readiness_wait".to_string()));
+        }
+        if nonblocking { symbols.push((p.handle_nonblocking, "$platform::handle_nonblocking".to_string())); }
+
         if connector {
             symbols.push((p.world_connector, "$platform::world_connector".to_string()));
             symbols.push((p.connector_connect, "$platform::connector_connect".to_string()));
@@ -1621,6 +1637,8 @@ fn encode_program(
     platform::emit(&mut a, p, functions[entry.function], &entry, profile, grant_plan.as_ref());
     if connector { network::emit_connector(&mut a, p); }
     if accept_nodelay { network::emit_accept_nodelay(&mut a, p); }
+    if readiness { readiness::emit(&mut a, p); }
+    if nonblocking { readiness::emit_nonblocking(&mut a, p); }
     if let Some(profile) = profile {
         symbols.push((profile.start, "$profiler".to_string()));
         profiling::emit(&mut a, p, profile, profile_path.unwrap().len());

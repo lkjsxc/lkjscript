@@ -1,50 +1,18 @@
-//! Static files below the granted Directory, with framed persistent connections.
+//! Static-file HTTP with owned connection state, readiness and fixed deadlines.
 mod http_protocol;
+mod http_policy;
+use http_policy::Policy;
 use http_protocol::{header_end, parse, Request};
-use std::buffer::ReadBuffer;
-fn read_header(client: &mut File, bytes: &mut Vec<u8>) -> Result<usize, i64> {
-    let mut buffer = [0u8; 8192];
-    let mut start = 0usize;
-    loop {
-        if let Some(end) = header_end(bytes, start) {
-            return Ok(end);
-        }
-        start = if bytes.len() > 3 { bytes.len() - 3 } else { 0 };
-        let count = client.read(&mut buffer)?;
-        if count == 0 {
-            return Ok(bytes.len());
-        }
-        bytes.extend_from_slice(&buffer[..count]);
-    }
-}
-fn drain_body(
-    client: &mut File,
-    bytes: &mut Vec<u8>,
-    header: usize,
-    body: usize,
-) -> Result<bool, i64> {
-    let available = bytes.len() - header;
-    if body <= available {
-        let remaining = bytes[header + body..].to_vec();
-        *bytes = remaining;
-        return Ok(true);
-    }
-    let mut remaining = body - available;
-    bytes.clear();
-    let mut buffer = [0u8; 8192];
-    while remaining > 0 {
-        let wanted = if remaining < buffer.len() {
-            remaining
-        } else {
-            buffer.len()
-        };
-        let count = client.read(&mut buffer[..wanted])?;
-        if count == 0 {
-            return Ok(false);
-        }
-        remaining -= count;
-    }
-    Ok(true)
+use std::buffer::{ReadBuffer, WriteCursor};
+use std::timers::DeadlineQueue;
+
+const TURN_STEPS: usize = 16usize;
+const ACCEPT_STEPS: usize = 64usize;
+const EXPIRE_STEPS: usize = 64usize;
+const ACCEPT_RETRY_NS: usize = 100_000_000usize;
+
+fn deadline(now: usize, duration: usize) -> usize {
+    now.checked_add(duration).unwrap_or(!0usize)
 }
 fn reason(status: u16) -> &'static str {
     match status {
@@ -78,143 +46,376 @@ fn content_type(path: &str) -> &'static str {
         "text/plain; charset=utf-8"
     }
 }
-fn send_header(
-    client: &mut File,
-    clock: &mut Clock,
-    start: usize,
-    status: u16,
-    keep_alive: bool,
-    kind: &str,
-    length: usize,
-) -> Result<(), i64> {
-    let elapsed = clock.nanoseconds()? - start;
-    let connection = if keep_alive { "keep-alive" } else { "close" };
-    let allow = if status == 405 {
-        "Allow: GET, HEAD\r\n"
-    } else {
-        ""
-    };
-    let headers = format!(
-        "HTTP/1.1 {status} {}\r\nContent-Length: {length}\r\nContent-Type: {kind}\r\nConnection: {connection}\r\nX-Content-Type-Options: nosniff\r\nX-Elapsed-Nanoseconds: {elapsed}\r\n{allow}\r\n",
-        reason(status)
-    );
-    client.write_all(headers.as_bytes())
+
+enum Body {
+    Message(String),
+    File(ReadBuffer),
 }
-fn send(
-    client: &mut File,
-    clock: &mut Clock,
-    start: usize,
-    status: u16,
+struct Response {
+    headers: String,
+    header_offset: usize,
+    body: Body,
+    body_offset: usize,
+    cursor: WriteCursor,
     head: bool,
-    keep_alive: bool,
-    kind: &str,
-    body: &[u8],
-) -> Result<(), i64> {
-    send_header(client, clock, start, status, keep_alive, kind, body.len())?;
-    if !head { client.write_all(body)?; }
-    Ok(())
+    close: bool,
 }
-fn error(
-    client: &mut File,
-    clock: &mut Clock,
-    start: usize,
-    status: u16,
-    head: bool,
-    keep_alive: bool,
-) -> Result<(), i64> {
-    let body = format!("{status} {}\n", reason(status));
-    send(
-        client,
-        clock,
-        start,
-        status,
-        head,
-        keep_alive,
-        "text/plain; charset=utf-8",
-        body.as_bytes(),
-    )
-}
-fn respond(
-    client: &mut File,
-    root: &mut Directory,
-    clock: &mut Clock,
-    start: usize,
-    request: &Request,
-) -> Result<(), i64> {
-    let mut file = match root.open(&request.path) {
-        Ok(file) => file,
-        Err(errno) => {
-            let status = match errno {
-                1 | 13 | 18 | 40 => 403u16,
-                2 | 20 | 21 => 404u16,
-                _ => 500u16,
-            };
-            return error(client, clock, start, status, request.head, request.keep_alive);
-        }
-    };
-    let body = match ReadBuffer::read(&mut file) {
-        Ok(body) => body,
-        Err(errno) => {
-            return error(
-                client,
-                clock,
-                start,
-                if errno == 21 { 404u16 } else { 500u16 },
-                request.head,
-                request.keep_alive,
-            );
-        }
-    };
-    send_header(
-        client,
-        clock,
-        start,
-        200u16,
-        request.keep_alive,
-        content_type(&request.path),
-        body.len(),
-    )?;
-    if !request.head { body.write_to(client)?; }
-    Ok(())
-}
-fn serve(client: &mut File, root: &mut Directory, clock: &mut Clock) -> Result<(), i64> {
-    let mut bytes: Vec<u8> = Vec::new();
-    loop {
-        let start = clock.nanoseconds()?;
-        let end = read_header(client, &mut bytes)?;
-        if bytes.is_empty() {
-            return Ok(());
-        }
-        let request = match parse(&bytes[..end]) {
-            Ok(request) => request,
-            Err(status) => {
-                return error(
-                    client,
-                    clock,
-                    start,
-                    status,
-                    bytes.len() >= 5 && &bytes[..5] == b"HEAD ",
-                    false,
-                );
-            }
+impl Response {
+    fn new(status: u16, head: bool, keep_alive: bool, elapsed: usize, kind: &str, body: Body) -> Response {
+        let length = match &body {
+            Body::Message(text) => text.len(),
+            Body::File(bytes) => bytes.len(),
         };
-        if !drain_body(client, &mut bytes, end, request.body)? {
-            return error(client, clock, start, 400u16, request.head, false);
+        let connection = if keep_alive { "keep-alive" } else { "close" };
+        let allow = if status == 405u16 { "Allow: GET, HEAD\r\n" } else { "" };
+        let headers = format!(
+            "HTTP/1.1 {status} {}\r\nContent-Length: {length}\r\nContent-Type: {kind}\r\nConnection: {connection}\r\nX-Content-Type-Options: nosniff\r\nX-Elapsed-Nanoseconds: {elapsed}\r\n{allow}\r\n",
+            reason(status)
+        );
+        Response { headers, header_offset: 0usize, body, body_offset: 0usize,
+            cursor: WriteCursor::new(), head, close: !keep_alive }
+    }
+    fn error(status: u16, head: bool, keep_alive: bool, elapsed: usize) -> Response {
+        Response::new(status, head, keep_alive, elapsed, "text/plain; charset=utf-8",
+            Body::Message(format!("{status} {}\n", reason(status))))
+    }
+    // At most one nonblocking syscall. False means more output remains.
+    fn write_step(&mut self, stream: &mut File) -> Result<bool, i64> {
+        if self.header_offset < self.headers.len() {
+            let count = stream.write(&self.headers.as_bytes()[self.header_offset..])?;
+            if count == 0usize { return Err(5i64); }
+            self.header_offset += count;
+            return Ok(false);
         }
-        respond(client, root, clock, start, &request)?;
-        if !request.keep_alive {
-            return Ok(());
+        if self.head { return Ok(true); }
+        match &self.body {
+            Body::Message(text) => {
+                if self.body_offset == text.len() { return Ok(true); }
+                let count = stream.write(&text.as_bytes()[self.body_offset..])?;
+                if count == 0usize { return Err(5i64); }
+                self.body_offset += count;
+                Ok(self.body_offset == text.len())
+            }
+            Body::File(bytes) => {
+                if self.cursor.position() == bytes.len() { return Ok(true); }
+                bytes.write_some(stream, &mut self.cursor)?;
+                Ok(self.cursor.position() == bytes.len())
+            }
         }
     }
 }
-pub fn main(mut output: Stdout, mut root: Directory, mut listener: Listener, mut clock: Clock) {
+#[derive(Clone, Copy)]
+enum Phase { Idle, Header, Body, Write }
+enum Step { Again, Wait, Close }
+
+struct Connection {
+    stream: File,
+    input: Vec<u8>,
+    consumed: usize,
+    scan: usize,
+    request: Option<Request>,
+    body_left: usize,
+    response: Option<Response>,
+    phase: Phase,
+    started: usize,
+    expires: usize,
+    interest: u8,
+    queued: bool,
+    failed: bool,
+    policy: Policy,
+}
+impl Connection {
+    fn new(stream: File, now: usize, policy: Policy) -> Connection {
+        Connection { stream, input: Vec::new(), consumed: 0usize, scan: 0usize,
+            request: None, body_left: 0usize, response: None, phase: Phase::Idle,
+            started: now, expires: deadline(now, policy.idle), interest: 0u8,
+            queued: false, failed: false, policy }
+    }
+    fn update_interest(&mut self, ready: &mut Readiness, token: usize) -> Result<(), i64> {
+        let wanted = match self.phase { Phase::Write => 2u8, _ => 1u8 };
+        if wanted != self.interest {
+            ready.watch_file(&mut self.stream, token, wanted)?;
+            self.interest = wanted;
+        }
+        Ok(())
+    }
+    fn begin_write(&mut self, response: Response, now: usize) {
+        self.response = Some(response);
+        self.phase = Phase::Write;
+        self.expires = deadline(now, self.policy.write);
+    }
+    fn bad_request(&mut self, status: u16, clock: &mut Clock) -> Result<Step, i64> {
+        let now = clock.nanoseconds()?;
+        let elapsed = now - self.started;
+        let head = self.input.len() >= 5usize && &self.input[..5] == b"HEAD ";
+        self.begin_write(Response::error(status, head, false, elapsed), now);
+        Ok(Step::Again)
+    }
+    fn prepare(&mut self, root: &mut Directory, clock: &mut Clock) -> Result<Step, i64> {
+        let request = std::mem::replace(&mut self.request, None).unwrap();
+        let keep_alive = request.keep_alive;
+        let mut file = match root.open(&request.path) {
+            Ok(file) => file,
+            Err(errno) => {
+                let status = match errno {
+                    1 | 13 | 18 | 40 => 403u16,
+                    2 | 20 | 21 => 404u16,
+                    _ => 500u16,
+                };
+                let now = clock.nanoseconds()?;
+                let elapsed = now - self.started;
+                self.begin_write(Response::error(status, request.head, keep_alive, elapsed), now);
+                return Ok(Step::Again);
+            }
+        };
+        let body = match ReadBuffer::read(&mut file) {
+            Ok(body) => body,
+            Err(errno) => {
+                let now = clock.nanoseconds()?;
+                let elapsed = now - self.started;
+                self.begin_write(Response::error(if errno == 21i64 { 404u16 } else { 500u16 },
+                    request.head, keep_alive, elapsed), now);
+                return Ok(Step::Again);
+            }
+        };
+        let now = clock.nanoseconds()?;
+        let elapsed = now - self.started;
+        self.begin_write(Response::new(200u16, request.head, keep_alive, elapsed,
+            content_type(&request.path), Body::File(body)), now);
+        Ok(Step::Again)
+    }
+    fn read_header_step(&mut self, root: &mut Directory, clock: &mut Clock) -> Result<Step, i64> {
+        let found = { header_end(&self.input, self.scan) };
+        if let Some(end) = found {
+            let parsed = { parse(&self.input[..end]) };
+            let request = match parsed {
+                Ok(request) => request,
+                Err(status) => return self.bad_request(status, clock),
+            };
+            self.consumed = end;
+            self.body_left = request.body;
+            self.request = Some(request);
+            self.phase = Phase::Body;
+            return self.body_step(root, clock);
+        }
+        self.scan = if self.input.len() > 3usize { self.input.len() - 3usize } else { 0usize };
+        let mut buffer = [0u8; 8192];
+        let count = self.stream.read(&mut buffer)?;
+        if count == 0usize {
+            if self.input.is_empty() { return Ok(Step::Close); }
+            return self.bad_request(400u16, clock);
+        }
+        if self.input.is_empty() {
+            let now = clock.nanoseconds()?;
+            self.started = now;
+            self.expires = deadline(now, self.policy.request);
+            self.phase = Phase::Header;
+        }
+        self.input.extend_from_slice(&buffer[..count]);
+        Ok(Step::Again)
+    }
+    fn body_step(&mut self, root: &mut Directory, clock: &mut Clock) -> Result<Step, i64> {
+        let available = self.input.len() - self.consumed;
+        let buffered = if self.body_left < available { self.body_left } else { available };
+        self.consumed += buffered;
+        self.body_left -= buffered;
+        if self.body_left == 0usize { return self.prepare(root, clock); }
+        let mut buffer = [0u8; 8192];
+        let wanted = if self.body_left < buffer.len() { self.body_left } else { buffer.len() };
+        let count = self.stream.read(&mut buffer[..wanted])?;
+        if count == 0usize { return self.bad_request(400u16, clock); }
+        self.body_left -= count;
+        if self.body_left == 0usize { self.prepare(root, clock) } else { Ok(Step::Again) }
+    }
+    fn next_request(&mut self, now: usize) {
+        self.response = None;
+        self.request = None;
+        if self.consumed == self.input.len() {
+            self.input.clear();
+        } else {
+            let remaining = { self.input[self.consumed..].to_vec() };
+            self.input = remaining;
+        }
+        self.consumed = 0usize;
+        self.scan = 0usize;
+        self.body_left = 0usize;
+        self.started = now;
+        if self.input.is_empty() {
+            self.phase = Phase::Idle;
+            self.expires = deadline(now, self.policy.idle);
+        } else {
+            self.phase = Phase::Header;
+            self.expires = deadline(now, self.policy.request);
+        }
+    }
+    fn write_step(&mut self, clock: &mut Clock) -> Result<Step, i64> {
+        let mut response = std::mem::replace(&mut self.response, None).unwrap();
+        let result = response.write_step(&mut self.stream);
+        let close = response.close;
+        self.response = Some(response);
+        match result {
+            Err(errno) => Err(errno),
+            Ok(false) => Ok(Step::Again),
+            Ok(true) => {
+                if close { return Ok(Step::Close); }
+                self.next_request(clock.nanoseconds()?);
+                Ok(Step::Again)
+            }
+        }
+    }
+    fn turn(&mut self, root: &mut Directory, clock: &mut Clock) -> Result<Step, i64> {
+        for _step in 0usize..TURN_STEPS {
+            if self.failed || clock.nanoseconds()? >= self.expires { return Ok(Step::Close); }
+            let result = match self.phase {
+                Phase::Idle | Phase::Header => self.read_header_step(root, clock),
+                Phase::Body => self.body_step(root, clock),
+                Phase::Write => self.write_step(clock),
+            };
+            match result {
+                Err(11i64) => return Ok(Step::Wait),
+                Err(errno) => return Err(errno),
+                Ok(Step::Wait) => return Ok(Step::Wait),
+                Ok(Step::Close) => return Ok(Step::Close),
+                Ok(Step::Again) => {}
+            }
+        }
+        Ok(Step::Again)
+    }
+}
+struct Connections {
+    slots: Vec<Option<Connection>>,
+    free: Vec<usize>,
+    retired: Vec<usize>,
+    runnable: Vec<usize>,
+    timers: DeadlineQueue,
+    policy: Policy,
+}
+impl Connections {
+    fn new(policy: Policy) -> Connections {
+        Connections { slots: Vec::new(), free: Vec::new(), retired: Vec::new(),
+            runnable: Vec::new(), timers: DeadlineQueue::new(), policy }
+    }
+    fn close(&mut self, mut connection: Connection, index: usize, ready: &mut Readiness) {
+        if connection.interest != 0u8 { let _ = ready.unwatch_file(&mut connection.stream); }
+        self.timers.cancel(index);
+        self.retired.push(index);
+    }
+    fn expire(&mut self, now: usize, ready: &mut Readiness) {
+        for _step in 0usize..EXPIRE_STEPS {
+            let index = match self.timers.due(now) { Some(index) => index, None => break };
+            if let Some(connection) = std::mem::replace(&mut self.slots[index], None) {
+                self.close(connection, index, ready);
+            }
+        }
+    }
+    fn accept(&mut self, listener: &mut Listener, ready: &mut Readiness, clock: &mut Clock) -> Result<(), i64> {
+        for _step in 0usize..ACCEPT_STEPS {
+            let mut stream = match listener.accept_nodelay() {
+                Ok(stream) => stream,
+                Err(11i64) => return Ok(()),
+                Err(errno) => return Err(errno),
+            };
+            stream.set_nonblocking(true)?;
+            let now = clock.nanoseconds()?;
+            let index = match self.free.pop() {
+                Some(index) => index,
+                None => { self.slots.push(None); self.slots.len() - 1usize }
+            };
+            let mut connection = Connection::new(stream, now, self.policy);
+            match connection.update_interest(ready, index + 1usize) {
+                Ok(()) => {
+                    self.timers.schedule(index, connection.expires);
+                    self.slots[index] = Some(connection);
+                }
+                Err(errno) => {
+                    self.retired.push(index);
+                    return Err(errno);
+                }
+            }
+        }
+        Ok(())
+    }
+    fn queue(&mut self, token: usize, flags: u8) {
+        if token == 0usize || token - 1usize >= self.slots.len() { return; }
+        let index = token - 1usize;
+        if let Some(mut connection) = std::mem::replace(&mut self.slots[index], None) {
+            // A read half-close still permits replies to buffered requests.
+            // The next actual read observes EOF after their bytes are consumed.
+            if flags & 8u8 != 0u8 { connection.failed = true; }
+            if !connection.queued {
+                connection.queued = true;
+                self.runnable.push(index);
+            }
+            self.slots[index] = Some(connection);
+        }
+    }
+    fn run(&mut self, root: &mut Directory, clock: &mut Clock, ready: &mut Readiness) {
+        let work = std::mem::replace(&mut self.runnable, Vec::new());
+        for index in work {
+            if let Some(mut connection) = std::mem::replace(&mut self.slots[index], None) {
+                connection.queued = false;
+                let result = connection.turn(root, clock);
+                let mut again = false;
+                let alive = match result {
+                    Ok(Step::Again) => { again = true; true }
+                    Ok(Step::Wait) => true,
+                    _ => false,
+                };
+                if alive && connection.update_interest(ready, index + 1usize).is_ok() {
+                    self.timers.schedule(index, connection.expires);
+                    if again {
+                        connection.queued = true;
+                        self.runnable.push(index);
+                    }
+                    self.slots[index] = Some(connection);
+                } else {
+                    self.close(connection, index, ready);
+                }
+            }
+        }
+    }
+    fn release_retired(&mut self) {
+        // The entire returned kernel event batch and prior runnable list have
+        // been consumed. No old token can target a newly reused slot.
+        for index in std::mem::replace(&mut self.retired, Vec::new()) { self.free.push(index); }
+    }
+}
+pub fn main(mut output: Stdout, mut root: Directory, mut listener: Listener,
+    mut clock: Clock, mut ready: Readiness) {
+    let policy = match http_policy::read(&mut root) {
+        Ok(policy) => policy,
+        Err(problem) => panic!("{problem}"),
+    };
+    listener.set_nonblocking(true).unwrap();
+    ready.watch_listener(&mut listener, 0usize).unwrap();
     let port = listener.port().unwrap();
     output.write(format!("port {port}\n").as_bytes());
+    let mut connections = Connections::new(policy);
+    let mut accept_retry = None;
     loop {
-        let mut client = match listener.accept_nodelay() {
-            Ok(client) => client,
-            Err(_) => continue,
-        };
-        let _ = serve(&mut client, &mut root, &mut clock);
+        let now = clock.nanoseconds().unwrap();
+        connections.expire(now, &mut ready);
+        if let Some(retry) = accept_retry {
+            if now >= retry {
+                ready.watch_listener(&mut listener, 0usize).unwrap();
+                accept_retry = None;
+            }
+        }
+        let mut until = connections.timers.next_deadline().unwrap_or(!0usize);
+        if let Some(retry) = accept_retry { if retry < until { until = retry; } }
+        if !connections.runnable.is_empty() { until = now; }
+        let events = ready.wait(&mut clock, until).unwrap();
+        for (token, flags) in events {
+            if token == 0usize {
+                if accept_retry.is_none() {
+                    if let Err(_) = connections.accept(&mut listener, &mut ready, &mut clock) {
+                        let _ = ready.unwatch_listener(&mut listener);
+                        accept_retry = Some(deadline(clock.nanoseconds().unwrap(), ACCEPT_RETRY_NS));
+                    }
+                }
+            } else { connections.queue(token, flags); }
+        }
+        connections.run(&mut root, &mut clock, &mut ready);
+        connections.release_retired();
     }
 }

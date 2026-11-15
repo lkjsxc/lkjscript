@@ -61,6 +61,7 @@ impl Shape {
             Self::Atom(name) if name == "Child" => Receiver::Child,
             Self::Atom(name) if name == "Listener" => Receiver::Listener,
             Self::Atom(name) if name == "Connector" => Receiver::Connector,
+            Self::Atom(name) if name == "Readiness" => Receiver::Readiness,
             Self::Vec(_) => Receiver::Vector,
             Self::Array(_, _) => Receiver::Array,
             Self::Slice(_) => Receiver::Slice,

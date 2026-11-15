@@ -426,7 +426,7 @@ Single-error APIs select the first diagnostic from these same production paths.
 
 ## World and capabilities
 
-Entries take owned Stdout/Stdin/Stderr, Directory, Listener, Connector, Process or Clock
+Entries take owned Stdout/Stdin/Stderr, Directory, Listener, Connector, Readiness, Process or Clock
 parameters, no parameters, or a sole World declaring implicit full authority.
 build/run require --grant NAME for each parameter; Directory takes NAME=PATH,
 Listener/Connector take NAME=IPv4:PORT; only Listener uses port zero to choose a port.
@@ -434,7 +434,7 @@ build embeds these descriptors; handles are acquired at executable startup.
 Duplicate, missing, unknown or malformed grants reject before publication/execution;
 acquisition failure traps R0007 at entry. File/Child/borrowed/aggregate entry
 parameters reject; accept Directory and open a File inside the entry instead.
-World, Stdout/Stdin/Stderr, Directory, File, Listener, Connector, Process, Clock and Child are
+World, Stdout/Stdin/Stderr, Directory, File, Listener, Connector, Readiness, Process, Clock and Child are
 affine intrinsic types with no constructor or Copy/Clone/Data/Send/Sync implementation.
 Names, integers or casts cannot forge authority. Every capability operation checks
 independently in IR; methods below exclusively borrow the receiver. Derived owners
@@ -449,6 +449,12 @@ can outlive that borrow and move normally.
 | Listener.accept()/accept_nodelay(), port() | Result<File,i64> owning a connected stream (the second disables Nagle); Result<u16,i64> with the bound port. |
 | World.connector(address,port) | Result<Connector,i64> authorizing one numeric IPv4 TCP destination. |
 | Connector.connect() | Result<File,i64> owning a stream to exactly the granted destination. |
+| World.readiness() | Result<Readiness,i64> owning a wait set; an entry grant needs no payload. |
+| File/Listener.set_nonblocking(bool) | Result<(),i64>; subsequent would-block reads, writes and accepts return errno 11. |
+| Readiness.watch_file(&mut File,token,interest) | Add/update a watch: token is usize; u8 interest bits 1 read and 2 write (zero means full close/error only). |
+| Readiness.watch_listener(&mut Listener,token) | Add/update an acceptance watch. |
+| Readiness.unwatch_file(&mut File)/unwatch_listener(&mut Listener) | Remove a registration; no watched handle is consumed or retained as a view. |
+| Readiness.wait(&mut Clock,deadline) | Result<Vec<(usize,u8)>,i64>; absolute monotonic nanoseconds, events 1 read, 2 write, 4 closed, 8 error. |
 | World.process()/clock() | Process or monotonic-clock capability. |
 | World.temporary_file() | Result<File,i64>, anonymous read/write storage. |
 | World.stdin_file()/stdout_file()/stderr_file() | Owned inherited-stream duplicate, preserving closed streams. |
@@ -466,7 +472,7 @@ can outlive that borrow and move normally.
 | Clock.nanoseconds() | Result<usize,i64> monotonic differences/deadlines. |
 | Process.spawn_file(executable,&args,stdin,stdout,stderr,result) | Result<Child,i64>, explicit executable File, argument byte vectors and four File streams; result maps to descriptor3. |
 | Child.wait()/try_wait() | Exit code or 128+signal, with Option for polling; reaped children later fail ECHILD. |
-| Child.terminate() | SIGKILL then reap; dropping a live Child also kills/reaps its direct child. |
+| Child.terminate() | Request SIGKILL; wait/try_wait reap. Dropping a live Child kills and reaps its child. |
 
 Convenience methods are source in library/io.rs; Result failures carry positive Linux
 errno, raw read/write leaves negative errno. EINTR retries except close, which
@@ -480,8 +486,11 @@ EBADF, drops harmlessly and closes the assigned child stream. Spawn validates
 NUL-free arguments, chooses argv0 lkjscript, clears environment and executes the
 File with execveat, without PATH/shell fallback; exec failure returns errno.
 Direct children receive parent-death SIGKILL. No caller slice pointer survives I/O.
-File/Directory/Listener drops close once; standard-stream capability drops leave inherited
+File/Directory/Listener/Readiness drops close once; standard-stream capability drops leave inherited
 streams open. Acquiring another capability preserves inherited closed streams.
+Readiness drops only its wait set. Unwatch before closing a watched descriptor if
+aliases remain. Wait batches at most 64 ready events without limiting registrations;
+expired deadlines poll once. Read interest reports half-close; drain readable final bytes.
 
 Generated programs have no ambient filesystem/environment/process imports or
 source-declared host imports. Normal destructor order matches the supported Rust

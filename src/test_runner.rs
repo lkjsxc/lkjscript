@@ -858,7 +858,7 @@ fn witness_inner(
         if case.kind == "reject" { continue; }
         harness.push_str(&format!("mod case_{index} {{\n"));
         if case.kind != "value" {
-            harness.push_str("use crate::host::{World,Stdout,Stdin,Stderr,Directory,File,Process,Clock,Child,Listener,Connector};\n");
+            harness.push_str("use crate::host::{World,Stdout,Stdin,Stderr,Directory,File,Process,Clock,Child,Listener,Connector,Readiness};\n");
         }
         harness.push_str(&read(world, &case.path)?);
         harness.push_str("\n}\n");
@@ -913,7 +913,7 @@ fn witness_inner(
         } else {
             let source = read(world, &case.path)?;
             let source = if case.witness.contains("\"world\":true") {
-                format!("mod host {{\n{host}\n}}\nmod case {{\nuse crate::host::{{World,Stdout,Stdin,Stderr,Directory,File,Process,Clock,Child,Listener,Connector}};\n{source}\n}}\n")
+                format!("mod host {{\n{host}\n}}\nmod case {{\nuse crate::host::{{World,Stdout,Stdin,Stderr,Directory,File,Process,Clock,Child,Listener,Connector,Readiness}};\n{source}\n}}\n")
             } else { source };
             write(directory, "rejection.rs", &source)?;
             let arguments = vec!["PATH=/usr/local/bin:/usr/bin:/bin".as_bytes().to_vec(), rustc_path.as_bytes().to_vec(),

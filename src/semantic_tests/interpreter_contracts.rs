@@ -9,6 +9,7 @@ fn compiled(text: &str) -> ir::CheckedProgram {
         "$std/prelude.rs".to_string(),
         "$std/sequence.rs".to_string(),
         "$std/buffer.rs".to_string(),
+        "$std/timers.rs".to_string(),
         "$std/bytes.rs".to_string(),
         "$std/string.rs".to_string(),
         "$std/str.rs".to_string(),
@@ -384,6 +385,7 @@ fn raw_ir_cannot_fabricate_host_authority_or_supply_it_as_integer_argument() {
         ir::TypeKind::Child,
         ir::TypeKind::Listener,
         ir::TypeKind::Connector,
+        ir::TypeKind::Readiness,
     ] {
         let program = raw(
             vec![ir::Type {
@@ -494,6 +496,15 @@ impl interpreter::Host for FailingHost {
     fn world_file(&mut self, _kind: u8) -> Result<u64, i64> {
         Err(38)
     }
+    fn create_readiness(&mut self) -> Result<u64, i64> { self.0.push(b'R'); Ok(2) }
+    fn close_readiness(&mut self, readiness: u64) { assert_eq!(readiness, 2u64); self.0.push(b'r'); }
+    fn set_file_nonblocking(&mut self, _handle: u64, _enabled: bool) -> Result<(), i64> { Err(38) }
+    fn set_listener_nonblocking(&mut self, _handle: u64, _enabled: bool) -> Result<(), i64> { Err(38) }
+    fn readiness_watch_file(&mut self, _readiness: u64, _handle: u64, _token: usize, _interest: u8) -> Result<(), i64> { Err(38) }
+    fn readiness_watch_listener(&mut self, _readiness: u64, _handle: u64, _token: usize) -> Result<(), i64> { Err(38) }
+    fn readiness_unwatch_file(&mut self, _readiness: u64, _handle: u64) -> Result<(), i64> { Err(38) }
+    fn readiness_unwatch_listener(&mut self, _readiness: u64, _handle: u64) -> Result<(), i64> { Err(38) }
+    fn readiness_wait(&mut self, _readiness: u64, _deadline_ns: usize) -> Result<Vec<(usize, u8)>, i64> { self.0.push(b'W'); Err(38) }
     fn connect_socket(&mut self, _address: &[u8]) -> Result<u64, i64> {
         self.0.push(b'N');
         Err(38)
@@ -867,12 +878,64 @@ fn range_views_validate_types_loans_and_utf8_without_the_checker() {
     }
 }
 
+fn readiness_wait_rejects_forged_event_shapes_before_waiting() {
+    let checked = compiled("fn main(mut world: World) { let mut ready = world.readiness().unwrap(); let mut clock = world.clock(); let _events = ready.wait(&mut clock, 0usize); }");
+    let entry = function_index(checked.program(), "main");
+    let mut result = 0usize;
+    for function in &checked.program().functions {
+        for instruction in &function.body {
+            if let ir::Op::Intrinsic { dst, name: ir::IntrinsicOp::ReadinessWait, .. } = instruction.op {
+                result = function.locals[dst].ty;
+            }
+        }
+    }
+    let vector = match &checked.program().types[result].kind {
+        ir::TypeKind::Enum { variants, .. } => variants[0].fields[0].ty,
+        _ => panic!("readiness result is not an enum"),
+    };
+    let pair = match checked.program().types[vector].kind {
+        ir::TypeKind::Vec { inner } => inner,
+        _ => panic!("readiness result is not a vector"),
+    };
+    for mode in 0usize..3usize {
+        let mut program = checked.program().clone();
+        if let ir::TypeKind::Struct { fields, copy } = &mut program.types[pair].kind {
+            if mode == 0 { fields[0].ty = ir::I64; }
+            else if mode == 1 { fields[1].ty = ir::I64; }
+            else { *copy = false; }
+        }
+        assert_eq!(crate::check::check(program.clone()).err().unwrap().code, "E_TYPE");
+        let mut host = FailingHost(Vec::new());
+        let error = interpreter::run(&program, entry, &[0u64; 0], &mut host).err().unwrap();
+        assert!(error.kind == ErrorKind::Interpreter(InterpreterError::InvalidIr), "{}", error.message);
+        assert!(!host.0.contains(&b'W'));
+    }
+}
 fn listener_intrinsics_reject_wrong_signatures_without_host_effects() {
+
     let cases: Vec<(String, ir::IntrinsicOp, ir::IntrinsicOp, bool)> = vec![
         (
             "fn main(mut world: World) { let _directory = world.__lkjscript_directory(b\".\\0\"); }".to_string(),
             ir::IntrinsicOp::WorldDirectory,
             ir::IntrinsicOp::WorldListen,
+            false,
+        ),
+        (
+            "fn main(mut world: World) { let _directory = world.__lkjscript_directory(b\".\\0\"); }".to_string(),
+            ir::IntrinsicOp::WorldDirectory,
+            ir::IntrinsicOp::WorldReadiness,
+            true,
+        ),
+        (
+            "fn main(mut world: World) { let mut clock = world.clock(); let mut bytes = [0u8; 16]; let _status = clock.__lkjscript_read(&mut bytes); }".to_string(),
+            ir::IntrinsicOp::ClockRead,
+            ir::IntrinsicOp::FileSetNonblocking,
+            false,
+        ),
+        (
+            "fn main(mut world: World) { let mut clock = world.clock(); let mut bytes = [0u8; 16]; let _status = clock.__lkjscript_read(&mut bytes); }".to_string(),
+            ir::IntrinsicOp::ClockRead,
+            ir::IntrinsicOp::ListenerSetNonblocking,
             false,
         ),
         (
@@ -1000,5 +1063,6 @@ pub fn run(world: &mut World, trace: bool) -> usize {
         output.write(b"listener_intrinsics_reject_wrong_signatures_without_host_effects\n");
     }
     listener_intrinsics_reject_wrong_signatures_without_host_effects();
-    16
+    readiness_wait_rejects_forged_event_shapes_before_waiting();
+    17
 }

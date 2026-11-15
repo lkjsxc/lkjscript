@@ -1576,6 +1576,7 @@ fn trait_requirements(
             | TypeKind::Clock
             | TypeKind::Child
             | TypeKind::Listener
+            | TypeKind::Readiness
             | TypeKind::Connector => return None,
             TypeKind::Ref { inner, .. }
             | TypeKind::Slice { inner, .. }
@@ -1638,6 +1639,7 @@ fn trait_requirements(
             | TypeKind::Clock
             | TypeKind::Child
             | TypeKind::Listener
+            | TypeKind::Readiness
             | TypeKind::Connector => {
                 return None;
             }
