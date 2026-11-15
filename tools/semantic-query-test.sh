@@ -79,7 +79,7 @@ query() { "$compiler" query "${common[@]}" --snapshot "$snapshot" --kind "$1" --
 refuse() {
     if "$@" > "$fixture/refused.out" 2> "$fixture/refused.err"; then fail 'hostile query accepted'; fi
     [[ ! -s "$fixture/refused.out" ]] || fail 'refusal leaked a partial answer'
-    rg -q 'E_QUERY_' "$fixture/refused.err" || { cat "$fixture/refused.err" >&2; fail 'missing structural refusal'; }
+    grep -Eq 'E_QUERY_' "$fixture/refused.err" || { cat "$fixture/refused.err" >&2; fail 'missing structural refusal'; }
 }
 build
 first=$snapshot
@@ -87,97 +87,97 @@ mkdir "$fixture/small-store"
 refuse "$compiler" build main.lkj --source-dir "$fixture/source" --no-library --store "$fixture/small-store" --store-key "$fixture/key" --store-bytes 32768 --index -o "$fixture/small-program"
 refuse "$compiler" query main.lkj --source-dir "$fixture/source" --no-library --store "$fixture/small-store" --store-key "$fixture/key" --kind outline
 query outline helpers --depth 2 --limit 80 > "$fixture/outline"
-rg -q '"helpers::square".*level=source-claim.*fact=signature' "$fixture/outline" || fail outline
+grep -Eq '"helpers::square".*level=source-claim.*fact=signature' "$fixture/outline" || fail outline
 query item helpers::square > "$fixture/item"
-rg -q 'fn square' "$fixture/item" || fail 'item source'
+grep -Eq 'fn square' "$fixture/item" || fail 'item source'
 query uses helpers::square > "$fixture/uses"
-rg -q 'kind=import' "$fixture/uses" || fail 'resolved import reference'
+grep -Eq 'kind=import' "$fixture/uses" || fail 'resolved import reference'
 query references probe > "$fixture/references"
-rg -q 'kind=alias-value' "$fixture/references" || fail 'alias use is not a rename site'
+grep -Eq 'kind=alias-value' "$fixture/references" || fail 'alias use is not a rename site'
 query references shadowed --limit 80 > "$fixture/shadowed"
-[[ $(rg -c '"scalar".*kind=value' "$fixture/shadowed") == 2 ]] || fail 'lexical scope lost a free call'
-rg -q 'binding:scalar:0.*kind=local-value' "$fixture/shadowed" || fail 'local binding target'
-if rg -q 'kind=lexical-name' "$fixture/shadowed"; then fail 'typed local kept lexical ambiguity'; fi
+[[ $(grep -Ec '"scalar".*kind=value' "$fixture/shadowed") == 2 ]] || fail 'lexical scope lost a free call'
+grep -Eq 'binding:scalar:0.*kind=local-value' "$fixture/shadowed" || fail 'local binding target'
+if grep -Eq 'kind=lexical-name' "$fixture/shadowed"; then fail 'typed local kept lexical ambiguity'; fi
 query references alias_type > "$fixture/alias-type"
-rg -q 'helpers::Counter.*kind=alias-type' "$fixture/alias-type" || fail 'resolved type alias use'
+grep -Eq 'helpers::Counter.*kind=alias-type' "$fixture/alias-type" || fail 'resolved type alias use'
 for identity in borrowed_type double_borrowed; do
     query references "$identity" > "$fixture/borrowed-type"
-    rg -q '"helpers::Counter".*kind=type' "$fixture/borrowed-type" || fail 'borrowed nominal type site omitted'
-    rg -q '"helpers".*kind=qualification' "$fixture/borrowed-type" || fail 'borrowed qualification omitted'
-    if rg -q 'kind=implicit-source' "$fixture/borrowed-type"; then fail 'reference prefix confused a type path'; fi
+    grep -Eq '"helpers::Counter".*kind=type' "$fixture/borrowed-type" || fail 'borrowed nominal type site omitted'
+    grep -Eq '"helpers".*kind=qualification' "$fixture/borrowed-type" || fail 'borrowed qualification omitted'
+    if grep -Eq 'kind=implicit-source' "$fixture/borrowed-type"; then fail 'reference prefix confused a type path'; fi
 done
 query references borrowed_alias > "$fixture/borrowed-alias"
-rg -q '"helpers::Counter".*kind=alias-type' "$fixture/borrowed-alias" || fail 'borrowed alias site omitted'
+grep -Eq '"helpers::Counter".*kind=alias-type' "$fixture/borrowed-alias" || fail 'borrowed alias site omitted'
 query uses 'helpers::Counter::field:value' --limit 80 > "$fixture/field-uses"
 for kind in field constructor-field field-shorthand pattern-field pattern-field-shorthand; do
-    rg -q "kind=$kind( |$)" "$fixture/field-uses" || fail "missing $kind reference"
+    grep -Eq "kind=$kind( |$)" "$fixture/field-uses" || fail "missing $kind reference"
 done
 query uses 'helpers::Color::variant:Blue' --limit 80 > "$fixture/variant-uses"
-rg -q 'kind=pattern' "$fixture/variant-uses" || fail 'variant pattern target'
-rg -q 'kind=value' "$fixture/variant-uses" || fail 'variant constructor target'
+grep -Eq 'kind=pattern' "$fixture/variant-uses" || fail 'variant pattern target'
+grep -Eq 'kind=value' "$fixture/variant-uses" || fail 'variant constructor target'
 query references helpers::applied > "$fixture/method"
-rg -q 'Counter as helpers::Apply>::apply.*kind=method' "$fixture/method" || fail 'resolved source method'
+grep -Eq 'Counter as helpers::Apply>::apply.*kind=method' "$fixture/method" || fail 'resolved source method'
 query outline helpers::local_generic --limit 80 > "$fixture/local-outline"
 held=$(sed -n 's/^"\([^"]*::binding:held:0\)".*/\1/p' "$fixture/local-outline" | head -n 1)
 [[ -n "$held" ]] || fail 'generic binding identity'
 query type "$held" > "$fixture/generic-binding"
-rg -q 'fact=inferred-type.*value="T"' "$fixture/generic-binding" || fail 'generic definition type'
+grep -Eq 'fact=inferred-type.*value="T"' "$fixture/generic-binding" || fail 'generic definition type'
 
 query references probe > "$fixture/qualified"
-rg -q '"helpers".*kind=qualification' "$fixture/qualified" || fail 'module qualification omitted'
+grep -Eq '"helpers".*kind=qualification' "$fixture/qualified" || fail 'module qualification omitted'
 query references helpers::patterned > "$fixture/qualified-pattern"
-rg -q '"helpers::Color".*kind=qualification' "$fixture/qualified-pattern" || fail 'pattern type qualification omitted'
+grep -Eq '"helpers::Color".*kind=qualification' "$fixture/qualified-pattern" || fail 'pattern type qualification omitted'
 query references same_alias::run > "$fixture/same-alias"
-rg -q '"helpers::square".*kind=alias-value' "$fixture/same-alias" || fail 'same-spelling explicit alias lost'
+grep -Eq '"helpers::square".*kind=alias-value' "$fixture/same-alias" || fail 'same-spelling explicit alias lost'
 query references direct_import::run > "$fixture/direct-import"
-rg -q '"helpers::square".*kind=value' "$fixture/direct-import" || fail 'ordinary import became an alias'
+grep -Eq '"helpers::square".*kind=value' "$fixture/direct-import" || fail 'ordinary import became an alias'
 query references wildcard::run > "$fixture/wildcard"
-rg -q '"helpers::square".*kind=alias-value' "$fixture/wildcard" || fail 'reexport/glob alias provenance lost'
+grep -Eq '"helpers::square".*kind=alias-value' "$fixture/wildcard" || fail 'reexport/glob alias provenance lost'
 query references same_type::run > "$fixture/same-type"
-rg -q '"helpers::Counter".*kind=alias-type' "$fixture/same-type" || fail 'same-spelling type alias lost'
+grep -Eq '"helpers::Counter".*kind=alias-type' "$fixture/same-type" || fail 'same-spelling type alias lost'
 query references module_alias::run > "$fixture/module-alias"
-rg -q '"helpers".*kind=alias-qualification' "$fixture/module-alias" || fail 'module alias provenance lost'
-rg -q '"helpers::square".*kind=value' "$fixture/module-alias" || fail 'owner alias changed member spelling'
+grep -Eq '"helpers".*kind=alias-qualification' "$fixture/module-alias" || fail 'module alias provenance lost'
+grep -Eq '"helpers::square".*kind=value' "$fixture/module-alias" || fail 'owner alias changed member spelling'
 query references grouped::run > "$fixture/grouped"
-rg -q '"helpers".*kind=alias-qualification' "$fixture/grouped" || fail 'grouped self alias lost'
-rg -q '"helpers::square".*kind=alias-value' "$fixture/grouped" || fail 'grouped reexport alias lost'
+grep -Eq '"helpers".*kind=alias-qualification' "$fixture/grouped" || fail 'grouped self alias lost'
+grep -Eq '"helpers::square".*kind=alias-value' "$fixture/grouped" || fail 'grouped reexport alias lost'
 query uses helpers::square --limit 120 > "$fixture/reexport-uses"
-rg -q 'kind=alias-import' "$fixture/reexport-uses" || fail 'reexport import treated as original declaration spelling'
+grep -Eq 'kind=alias-import' "$fixture/reexport-uses" || fail 'reexport import treated as original declaration spelling'
 query references visibility::hidden > "$fixture/visibility"
-rg -q 'kind=visibility-qualification.*claim=partial' "$fixture/visibility" || fail 'visibility qualification gap omitted'
+grep -Eq 'kind=visibility-qualification.*claim=partial' "$fixture/visibility" || fail 'visibility qualification gap omitted'
 
 query outline helpers::record --limit 80 > "$fixture/nominal-outline"
 record_value=$(sed -n 's/^"\([^"]*::binding:value:0\)".*/\1/p' "$fixture/nominal-outline" | head -n 1)
 [[ -n "$record_value" ]] || fail 'nominal binding identity'
 query type "$record_value" > "$fixture/nominal-binding"
-rg -q 'fact=inferred-type.*value="helpers::Counter"' "$fixture/nominal-binding" || fail 'nominal type was not canonically qualified'
+grep -Eq 'fact=inferred-type.*value="helpers::Counter"' "$fixture/nominal-binding" || fail 'nominal type was not canonically qualified'
 
 query callees probe > "$fixture/callees"
-rg -q 'helpers::square' "$fixture/callees" || fail callees
+grep -Eq 'helpers::square' "$fixture/callees" || fail callees
 query callers helpers::square > "$fixture/callers"
-rg -q '"probe"' "$fixture/callers" || fail callers
+grep -Eq '"probe"' "$fixture/callers" || fail callers
 query instances helpers::identity > "$fixture/instances"
-rg -q 'arguments="<T=i64>"' "$fixture/instances" || fail 'generic instance arguments'
-rg -q 'native-bytes=[0-9].*native-size=producer-measurement' "$fixture/instances" || fail 'native instance bytes'
+grep -Eq 'arguments="<T=i64>"' "$fixture/instances" || fail 'generic instance arguments'
+grep -Eq 'native-bytes=[0-9].*native-size=producer-measurement' "$fixture/instances" || fail 'native instance bytes'
 query type 'scalar::param:value' > "$fixture/type"
-rg -q 'value="i64"' "$fixture/type" || fail type
+grep -Eq 'value="i64"' "$fixture/type" || fail type
 query layout helpers::Counter > "$fixture/layout"
-rg -q 'level=checked-ir.*bytes=8 alignment=8' "$fixture/layout" || fail 'checked layout'
+grep -Eq 'level=checked-ir.*bytes=8 alignment=8' "$fixture/layout" || fail 'checked layout'
 query authority scalar > "$fixture/pure"
-rg -q 'level=checked-ir.*reachable-effects=""' "$fixture/pure" || fail 'ordinary scalar authority'
+grep -Eq 'level=checked-ir.*reachable-effects=""' "$fixture/pure" || fail 'ordinary scalar authority'
 query authority writes > "$fixture/effect"
-rg -q 'level=checked-ir.*stdout_write' "$fixture/effect" || fail 'ordinary effectful authority'
+grep -Eq 'level=checked-ir.*stdout_write' "$fixture/effect" || fail 'ordinary effectful authority'
 query impls helpers::Apply > "$fixture/impls"
-rg -q 'helpers::Counter as helpers::Apply' "$fixture/impls" || fail implementations
+grep -Eq 'helpers::Counter as helpers::Apply' "$fixture/impls" || fail implementations
 query dependents helpers::square > "$fixture/dependents"
-rg -q '"probe"' "$fixture/dependents" || fail dependents
+grep -Eq '"probe"' "$fixture/dependents" || fail dependents
 query slice probe > "$fixture/slice"
-rg -q 'fn probe' "$fixture/slice" || fail slice
+grep -Eq 'fn probe' "$fixture/slice" || fail slice
 query outline helpers --limit 1 > "$fixture/page"
 cursor=$(sed -n 's/.*cursor=\([0-9a-f]*\) facts=.*/\1/p' "$fixture/page")
 [[ -n "$cursor" ]] || fail 'missing bounded continuation'
 query outline helpers --limit 1 --cursor "$cursor" > "$fixture/next"
-[[ $(rg -c 'level=source-claim' "$fixture/next") == 1 ]] || fail 'continuation bound'
+[[ $(grep -Ec 'level=source-claim' "$fixture/next") == 1 ]] || fail 'continuation bound'
 refuse query outline scalar --limit 1 --cursor "$cursor"
 query authority scalar --limit 1 > "$fixture/one-fact"
 end_cursor=$(sed -n 's/.*cursor=\([0-9a-f]*\) facts=.*/\1/p' "$fixture/one-fact")
@@ -202,12 +202,12 @@ query meta helpers::square > "$fixture/after"
 refuse query outline helpers --cursor "$cursor"
 mv "$fixture/source" "$fixture/hidden-source"
 query authority writes > "$fixture/no-source"
-rg -q stdout_write "$fixture/no-source" || fail 'query read source files'
+grep -Eq stdout_write "$fixture/no-source" || fail 'query read source files'
 cp "$fixture/old-latest" "$latest"
 "$compiler" query "${common[@]}" --kind meta --id crate > "$fixture/replayed"
-rg -q "snapshot=$first .*freshness=not-asserted" "$fixture/replayed" || fail 'replayed pointer made a freshness claim'
+grep -Eq "snapshot=$first .*freshness=not-asserted" "$fixture/replayed" || fail 'replayed pointer made a freshness claim'
 query authority writes > "$fixture/explicit"
-rg -q "snapshot=$snapshot" "$fixture/explicit" || fail 'explicit snapshot followed old pointer'
+grep -Eq "snapshot=$snapshot" "$fixture/explicit" || fail 'explicit snapshot followed old pointer'
 cp -a "$fixture/store" "$fixture/saved-store"
 root_record=$(find "$fixture/store" -maxdepth 1 -type f -name "semantic-root-*-$snapshot" -print -quit)
 root_page=$(perl - "$root_record" <<'PERL'
@@ -246,5 +246,5 @@ refuse query authority writes
 mv "$fixture/hidden-source" "$fixture/source"
 build
 query authority writes > "$fixture/repaired"
-rg -q stdout_write "$fixture/repaired" || fail 'indexed rebuild did not repair the missing page'
+grep -Eq stdout_write "$fixture/repaired" || fail 'indexed rebuild did not repair the missing page'
 printf 'ok semantic-query: identities, source/IR levels, ordinary authority, all question kinds, bounded authenticated cursor, source-free lookup, physical move/formatting, explicit snapshot replay and five index attacks\n'
