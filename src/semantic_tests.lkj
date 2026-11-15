@@ -29,7 +29,7 @@ fn source_file(path: &str, text: Option<&str>) -> source::SourceInput {
         text,
     }
 }
-// Historical fixture lists predate the shared HTTP modules. Complete only the
+// Historical fixture lists predate the current canonical library modules. Complete only the
 // embedded canonical root; custom library/missing-module fixtures stay exact.
 fn complete_library(files: &mut Vec<source::SourceInput>) {
     let canonical = source_file("$std/lib.lkj", None);
@@ -47,6 +47,8 @@ fn complete_library(files: &mut Vec<source::SourceInput>) {
         return;
     }
     let additions: Vec<String> = vec![
+        "$std/arena.lkj".to_string(),
+        "$std/process_model.lkj".to_string(),
         "$std/http_protocol.lkj".to_string(),
         "$std/http_policy.lkj".to_string(),
         "$std/http_server.lkj".to_string(),
