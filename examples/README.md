@@ -86,8 +86,10 @@ while a path or symlink escaping the granted root returns 403. Missing documents
 return 404. Each connection has explicit owned state and nonblocking I/O. A silent
 connection gets a 60-second idle deadline. Its first request byte starts a fixed
 two-second header/body deadline; a response gets a fixed two-second write deadline.
-Neither deadline extends when a peer makes tiny progress. A request-side half-close
-still receives replies to complete buffered requests.
+Neither deadline extends when a peer makes tiny progress. Buffered pipelined requests
+retain their receive time while an earlier response is written; expired lookahead
+closes before dispatch after that response finishes. A request-side half-close
+still receives replies to complete buffered requests within their deadline.
 
 An optional `.http-policy` file beneath the granted root sets application timeouts:
 three decimal lines give idle, whole-request and whole-write seconds, respectively.
@@ -103,6 +105,10 @@ per live slot; repeated requests do not accumulate stale timers. Closed slots ar
 reused only after the current event batch is consumed. File snapshots are still
 read synchronously before the response; response transmission yields under
 backpressure through `ReadBuffer::write_some` and an owned `WriteCursor`.
+
+`sh tools/http-deadline.sh` checks buffered header/body expiry behind a backpressuring
+response, a later read that starts another request, and a fresh request after idle.
+The native HTTP gate runs these cases after its functional server exits.
 
 `http_server.rs` shares the connection engine through an ordinary generic handler;
 `http.rs` supplies the static-file handler and `journal.rs` supplies the journal.

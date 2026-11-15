@@ -205,4 +205,6 @@ if [ "$engine" = native ]; then
     cp "$http_work/server.samples.$sample_pid" "$samples"
     "$compiler" profile "$samples"
     printf 'HTTP profile samples: %s\n' "$samples"
+    # Its own server/client pair starts only after the profiled server has exited.
+    sh tools/http-deadline.sh --compiler "$compiler"
 fi

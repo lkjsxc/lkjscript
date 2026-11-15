@@ -145,6 +145,7 @@ struct Connection {
     response: Option<Response>,
     phase: Phase,
     started: usize,
+    received: usize,
     expires: usize,
     interest: u8,
     queued: bool,
@@ -156,7 +157,7 @@ impl Connection {
     fn new(stream: File, now: usize, policy: Policy) -> Connection {
         Connection { stream, input: Vec::new(), consumed: 0usize, scan: 0usize,
             request: None, body_left: 0usize, retaining: false, body: Vec::new(), response: None, phase: Phase::Idle,
-            started: now, expires: deadline(now, policy.idle), interest: 0u8,
+            started: now, received: now, expires: deadline(now, policy.idle), interest: 0u8,
             queued: false, failed: false, drain: None, policy }
     }
     fn clamp_deadline(&mut self) {
@@ -257,8 +258,10 @@ impl Connection {
             if self.input.is_empty() { return Ok(Step::Close); }
             return self.bad_request(400u16, clock, handler.methods());
         }
+        // Body reads stop at body_left; only header reads can contain lookahead.
+        let now = clock.nanoseconds()?;
+        self.received = now;
         if self.input.is_empty() {
-            let now = clock.nanoseconds()?;
             self.started = now;
             self.expires = deadline(now, self.policy.request);
             self.phase = Phase::Header;
@@ -301,13 +304,14 @@ impl Connection {
         self.scan = 0usize;
         self.body_left = 0usize;
         self.retaining = false;
-        self.started = now;
+        // Surviving lookahead came from the last successful header read.
+        self.started = if self.input.is_empty() { now } else { self.received };
         if self.input.is_empty() {
             self.phase = Phase::Idle;
             self.expires = deadline(now, self.policy.idle);
         } else {
             self.phase = Phase::Header;
-            self.expires = deadline(now, self.policy.request);
+            self.expires = deadline(self.started, self.policy.request);
         }
         self.clamp_deadline();
     }

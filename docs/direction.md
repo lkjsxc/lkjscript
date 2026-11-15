@@ -92,7 +92,7 @@ HTTP/1.1 persistence and pipelining retain exact framing; clients are lkjscript.
 Profile before removing at most two costs; owned chunks replace per-byte assembly.
 Use readiness for concurrency, processes for parallelism.
 Readiness temporarily borrows owned handles into a kernel wait set without storing language views.
-Keep explicit connection state, indexed deadlines and bounded work per dispatch; tiny progress never extends header/write deadlines.
+Keep explicit connection state, indexed deadlines and bounded work per dispatch; tiny progress never extends deadlines, and buffered requests retain their receive time.
 The three scoped-thread cases are deleted; closure escape stays pending, without shared-memory ownership rules.
 Keep compiler source within the stored seed's forms; never refresh seed here.
 The independent interpreter helper operates actual descriptors without relay queues.
