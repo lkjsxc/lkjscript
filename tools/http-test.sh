@@ -30,6 +30,23 @@ case "$seconds" in ''|*[!0-9]*) echo "seconds must be a nonnegative integer" >&2
 case "$pipeline" in ''|*[!0-9]*|0) echo "pipeline must be a positive integer" >&2; exit 2;; esac
 case "$engine" in native|interpreter) ;; *) echo "engine must be native or interpreter" >&2; exit 2;; esac
 case "$verification" in full|framing) ;; *) echo "verification must be full or framing" >&2; exit 2;; esac
+# Reuse closed compiler inputs and pure case results only. Listener/file traffic
+# below still executes against fresh state on every invocation.
+compile_request() {
+    if [ -n "${LKJSCRIPT_STORE_KEY:-}" ]; then
+        "$compiler" "$@" --store "${LKJSCRIPT_STORE:-target/store}" --store-key "$LKJSCRIPT_STORE_KEY"
+    else
+        "$compiler" "$@"
+    fi
+}
+# Background jobs must replace their shell so $! owns the real compiler/broker.
+exec_request() {
+    if [ -n "${LKJSCRIPT_STORE_KEY:-}" ]; then
+        exec "$compiler" "$@" --store "${LKJSCRIPT_STORE:-target/store}" --store-key "$LKJSCRIPT_STORE_KEY"
+    else
+        exec "$compiler" "$@"
+    fi
+}
 http_work=$(mktemp -d target/http-test.XXXXXX)
 server_pid=
 client_pid=
@@ -73,15 +90,15 @@ ln -s ../outside.txt "$http_work/docs/link-outside"
 if [ "$engine" = interpreter ]; then
     printf '60\n120\n120\n' > "$http_work/docs/.http-policy"
 fi
-"$compiler" test library/http_protocol.lkj --jobs 1
-"$compiler" test library/http_policy.lkj --jobs 1
-"$compiler" test tools/http_client.lkj --jobs 1
+bash tools/programs-unit-cases.sh "$compiler" library/http_protocol.lkj
+bash tools/programs-unit-cases.sh "$compiler" library/http_policy.lkj
+bash tools/programs-unit-cases.sh "$compiler" tools/http_client.lkj
 if [ "$engine" = native ]; then
-    "$compiler" build examples/http.lkj --profile \
+    compile_request build examples/http.lkj --profile \
         --grant output --grant "root=$http_work/docs" \
         --grant listener=127.0.0.1:0 --grant clock --grant ready --grant stop -o "$http_work/server"
 fi
-"$compiler" build tools/http-test.lkj -o "$http_work/client"
+compile_request build tools/http-test.lkj -o "$http_work/client"
 : > "$http_work/server.out"
 : > "$http_work/server.err"
 : > "$http_work/client.out"
@@ -91,7 +108,7 @@ fi
 if [ "$engine" = native ]; then
     "$http_work/server" <&- >"$http_work/server.out" 2>"$http_work/server.err" &
 else
-    "$compiler" run examples/http.lkj --engine interpreter \
+    exec_request run examples/http.lkj --engine interpreter \
         --grant output --grant "root=$http_work/docs" \
         --grant listener=127.0.0.1:0 --grant clock --grant ready --grant stop \
         <&- >"$http_work/server.out" 2>"$http_work/server.err" &
@@ -153,13 +170,13 @@ await_client
 cat "$http_work/client.out"
 : > "$http_work/client.out"
 # Exercise the reusable functional client on both routes against the same server.
-"$compiler" build tools/http-get.lkj --grant output --grant input --grant "target=127.0.0.1:$port" -o "$http_work/get"
+compile_request build tools/http-get.lkj --grant output --grant input --grant "target=127.0.0.1:$port" -o "$http_work/get"
 printf 'HEAD /language.md HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' > "$http_work/request"
 "$http_work/get" <"$http_work/request" >"$http_work/client.out" 2>"$http_work/client.err" &
 client_pid=$!
 await_client
 grep -q '^HTTP/1.1 200 ' "$http_work/client.out"
-"$compiler" run tools/http-get.lkj --engine interpreter \
+exec_request run tools/http-get.lkj --engine interpreter \
     --grant output --grant input --grant "target=127.0.0.1:$port" \
     <"$http_work/request" >"$http_work/client.out" 2>"$http_work/client.err" &
 client_pid=$!
@@ -168,7 +185,7 @@ grep -q '^HTTP/1.1 200 ' "$http_work/client.out"
 printf 'ok http-get native and interpreter\n'
 : > "$http_work/client.out"
 if [ "$seconds" -gt 0 ]; then
-    "$compiler" build tools/http-load.lkj --grant output --grant input --grant clock \
+    compile_request build tools/http-load.lkj --grant output --grant input --grant clock \
         --grant "root=$http_work/docs" --grant "target=127.0.0.1:$port" -o "$http_work/load"
     printf '%s\n%s\n%s\n%s\n' "$seconds" "$pipeline" "$load_path" "$verification" > "$http_work/config"
     "$http_work/load" <"$http_work/config" >"$http_work/client.out" 2>"$http_work/client.err" &

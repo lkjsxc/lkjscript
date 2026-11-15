@@ -142,6 +142,9 @@ impl Host for Vec<u8> {
     fn close_worker(&mut self, _handle: u64) {}
 
     // This test host deliberately has no foreign process or device authority.
+    fn start_foreign(&mut self, _command: u64, _root: u64, _sink: u64, _arguments: &[u8], _duration: usize) -> Result<u64, i64> { Err(95) }
+    fn exchange_foreign(&mut self, _session: u64, _request: &[u8], _response: &mut [u8], _duration: usize) -> Result<usize, i64> { Err(95) }
+    fn finish_foreign(&mut self, _session: u64, _duration: usize) -> Result<u64, i64> { Err(95) }
     fn open_foreign_command(&mut self, _path: &[u8]) -> Result<u64, i64> { Err(95) }
     fn open_null_device(&mut self) -> Result<u64, i64> { Err(95) }
     fn foreign_image(&mut self, _handle: u64) -> Result<u64, i64> { Err(95) }

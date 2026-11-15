@@ -1,0 +1,4 @@
+// expect: reject E_UNSUPPORTED
+// cause: expected a Rust form.
+// pending: Closed unit harness used str.trim before parsing an ASCII generated count; preserve the explicit std::str::trim_ascii guidance.
+pub fn probe() -> usize { "10\n".trim().parse::<usize>().unwrap() }

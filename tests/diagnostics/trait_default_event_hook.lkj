@@ -7,3 +7,6 @@ struct Page {}
 impl Poll for Page {}
 fn interval<T: Poll>(value: &T) -> usize { value.interval() }
 pub fn probe() -> usize { interval(&Page {}) }
+// Fourth-note consumer: the closed independent-interpreter harness needs explicit
+// ForeignSession methods in Vec<u8> and FailingHost; default-only methods produced
+// E_UNSUPPORTED selected trait method start_foreign has no executable implementation.
