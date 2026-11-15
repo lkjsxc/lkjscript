@@ -48,6 +48,14 @@ pub fn __lkjscript_create(directory: &mut Directory, path: &str) -> Result<File,
     directory.__lkjscript_open(&bytes, true)
 }
 
+// An invalid embedded NUL becomes the raw operation's invalid empty path.
+pub fn __lkjscript_storage_path(path: &str) -> Vec<u8> {
+    match path_bytes(path) {
+        Result::Ok(bytes) => bytes,
+        Result::Err(_) => Vec::new(),
+    }
+}
+
 fn count_result(count: i64) -> Result<usize, i64> {
     if count < 0 {
         Result::Err(-count)

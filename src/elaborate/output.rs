@@ -179,6 +179,24 @@ impl Builder<'_, '_> {
             values.push(value.0);
             index += 1;
         }
+        if matches!(method, capabilities::Method::DirectoryCreateNew | capabilities::Method::DirectoryOpenAppend) {
+            let path = self.source_library_call(
+                "io", "__lkjscript_storage_path", BTreeMap::new(), vec![values[1]], span,
+            )?;
+            let bytes = self.capability_type(capabilities::Value::Bytes, span)?;
+            let borrowed = self.temp(bytes);
+            self.emit(ir::Op::SliceBorrow {
+                dst: borrowed, place: ir::Place::local(path.0), mutable: false,
+            }, span.line);
+            let operation = if matches!(method, capabilities::Method::DirectoryCreateNew) {
+                ir::IntrinsicOp::DirectoryCreateNew
+            } else { ir::IntrinsicOp::DirectoryOpenAppend };
+            let dst = self.temp(result);
+            self.emit(ir::Op::Intrinsic {
+                dst, name: operation, args: vec![values[0], borrowed],
+            }, span.line);
+            return Ok((dst, result));
+        }
         if matches!(method, capabilities::Method::WorldConnector) {
             let address = self.source_library_call(
                 "io", "__lkjscript_ipv4_address", BTreeMap::new(),

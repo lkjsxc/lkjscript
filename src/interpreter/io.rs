@@ -220,6 +220,14 @@ impl<H: Host> Interpreter<'_, H> {
         name: ir::IntrinsicOp,
         values: &[(usize, Value)],
     ) -> Result<Option<Value>, RunError> {
+        let storage_arity = match name {
+            ir::IntrinsicOp::DirectoryCreateNew | ir::IntrinsicOp::DirectoryOpenAppend | ir::IntrinsicOp::FileTruncate => 2usize,
+            ir::IntrinsicOp::DirectorySync | ir::IntrinsicOp::FileSync | ir::IntrinsicOp::FileLockExclusive => 1usize,
+            _ => 0usize,
+        };
+        if storage_arity != 0 && values.len() != storage_arity {
+            return Err(self.invalid("storage intrinsic argument count differs"));
+        }
         let value = match name {
             ir::IntrinsicOp::FileDuplicate | ir::IntrinsicOp::FileReadOnly if values.len() == 1 => {
                 let authority = self.io_authority(values, TypeKind::File)?;
@@ -556,6 +564,35 @@ impl<H: Host> Interpreter<'_, H> {
                 let path = self.bytes(&path)?;
                 let opened = self.host.open_directory(&path);
                 self.io_open_result(types, opened, TypeKind::Directory)?
+            }
+            ir::IntrinsicOp::DirectoryCreateNew | ir::IntrinsicOp::DirectoryOpenAppend if values.len() == 2 => {
+                let authority = self.io_authority(values, TypeKind::Directory)?;
+                let types = self.io_open_types(result, TypeKind::File)?;
+                let path = self.io_buffer(values, 1, false)?;
+                let path = self.bytes(&path)?;
+                let handle = self.io_handle(&authority)?;
+                let opened = self.host.open_file_storage(handle, &path, name == ir::IntrinsicOp::DirectoryOpenAppend);
+                self.io_open_result(types, opened, TypeKind::File)?
+            }
+            ir::IntrinsicOp::DirectorySync | ir::IntrinsicOp::FileSync | ir::IntrinsicOp::FileLockExclusive if values.len() == 1 => {
+                let kind = if name == ir::IntrinsicOp::DirectorySync { TypeKind::Directory } else { TypeKind::File };
+                let authority = self.io_authority(values, kind)?;
+                let types = self.io_unit_types(result)?;
+                let handle = self.io_handle(&authority)?;
+                let outcome = match name {
+                    ir::IntrinsicOp::DirectorySync => self.host.sync_directory(handle),
+                    ir::IntrinsicOp::FileSync => self.host.sync_file(handle),
+                    _ => self.host.lock_file_exclusive(handle),
+                };
+                self.io_unit_result(types, outcome)?
+            }
+            ir::IntrinsicOp::FileTruncate if values.len() == 2 => {
+                let authority = self.io_authority(values, TypeKind::File)?;
+                let types = self.io_unit_types(result)?;
+                let length = self.io_number(values, 1, ir::U64)? as usize;
+                let handle = self.io_handle(&authority)?;
+                let outcome = self.host.truncate_file(handle, length);
+                self.io_unit_result(types, outcome)?
             }
             ir::IntrinsicOp::DirectoryOpen if values.len() == 3 => {
                 let authority = self.io_authority(values, TypeKind::Directory)?;

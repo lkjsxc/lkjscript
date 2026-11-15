@@ -1,6 +1,7 @@
 // Independent syscall broker for interpreter effects; no IR or native lowering.
 mod broker;
 mod process;
+mod directories;
 use crate::x86::*;
 
 struct Connection {
@@ -217,6 +218,52 @@ impl Network {
         let result = word(&bytes) as i64;
         if result < 0 { return Err(-result); }
         Ok(result as u64)
+    }
+    pub fn open_root(&mut self, world: &mut World, path: &[u8]) -> Result<u64, i64> {
+        self.ensure(world)?;
+        let (handle, _) = self.request(35, &[0u64; 0], path)?;
+        Ok(handle as u64)
+    }
+    pub fn open_relative_file(&mut self, directory: u64, path: &[u8], create: bool) -> Result<u64, i64> {
+        let (handle, _) = self.request(36, &[directory, create as u64], path)?;
+        Ok(handle as u64)
+    }
+    pub fn open_relative_directory(&mut self, directory: u64, path: &[u8]) -> Result<u64, i64> {
+        let (handle, _) = self.request(37, &[directory], path)?;
+        Ok(handle as u64)
+    }
+    pub fn read_entries(&mut self, directory: u64, bytes: &mut [u8]) -> Result<usize, i64> {
+        let (count, body) = self.request(38, &[directory, bytes.len() as u64], b"")?;
+        if count as usize != body.len() || body.len() > bytes.len() { return Err(5); }
+        bytes[..body.len()].copy_from_slice(&body);
+        Ok(body.len())
+    }
+    pub fn make_directory(&mut self, directory: u64, name: &[u8]) -> Result<(), i64> {
+        self.request(39, &[directory], name)?;
+        Ok(())
+    }
+    pub fn unlink_entry(&mut self, directory: u64, name: &[u8], is_directory: bool) -> Result<(), i64> {
+        self.request(40, &[directory, is_directory as u64], name)?;
+        Ok(())
+    }
+    pub fn move_entry(&mut self, from: u64, old: &[u8], to: u64, new: &[u8]) -> Result<(), i64> {
+        let mut names = old.to_vec();
+        names.extend_from_slice(new);
+        self.request(41, &[from, to, old.len() as u64], &names)?;
+        Ok(())
+    }
+    pub fn open_storage(&mut self, directory: u64, path: &[u8], append: bool) -> Result<u64, i64> {
+        let (handle, _) = self.request(if append { 31 } else { 30 }, &[directory], path)?;
+        Ok(handle as u64)
+    }
+    pub fn sync_remote(&mut self, file: u64) -> Result<(), i64> {
+        self.unit_request(32, &[file])
+    }
+    pub fn resize_remote(&mut self, file: u64, length: usize) -> Result<(), i64> {
+        self.unit_request(33, &[file, length as u64])
+    }
+    pub fn lock_remote(&mut self, file: u64) -> Result<(), i64> {
+        self.unit_request(34, &[file])
     }
     pub fn spawn_remote(&mut self, executable: u64, arguments: &[u8], input: u64, output: u64, errors: u64, result: u64) -> Result<u64, i64> {
         let (identity, _) = self.request(20, &[executable, input, output, errors, result], arguments)?;

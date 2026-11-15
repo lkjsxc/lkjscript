@@ -20,6 +20,11 @@ pub trait Host {
     fn write_stderr(&mut self, bytes: &[u8]) -> Result<(), String>;
     fn open_directory(&mut self, path: &[u8]) -> Result<u64, i64>;
     fn open_file(&mut self, directory: u64, path: &[u8], create: bool) -> Result<u64, i64>;
+    fn open_file_storage(&mut self, directory: u64, path: &[u8], append: bool) -> Result<u64, i64>;
+    fn sync_file(&mut self, handle: u64) -> Result<(), i64>;
+    fn sync_directory(&mut self, handle: u64) -> Result<(), i64>;
+    fn truncate_file(&mut self, handle: u64, length: usize) -> Result<(), i64>;
+    fn lock_file_exclusive(&mut self, handle: u64) -> Result<(), i64>;
     fn read_file(&mut self, handle: u64, bytes: &mut [u8]) -> Result<usize, i64>;
     fn write_file(&mut self, handle: u64, bytes: &[u8]) -> Result<usize, i64>;
     fn close_handle(&mut self, handle: u64);
@@ -92,6 +97,11 @@ impl Host for Vec<u8> {
     fn open_file(&mut self, _directory: u64, _path: &[u8], _create: bool) -> Result<u64, i64> {
         Err(38)
     }
+    fn open_file_storage(&mut self, _directory: u64, _path: &[u8], _append: bool) -> Result<u64, i64> { Err(38) }
+    fn sync_file(&mut self, _handle: u64) -> Result<(), i64> { Err(38) }
+    fn sync_directory(&mut self, _handle: u64) -> Result<(), i64> { Err(38) }
+    fn truncate_file(&mut self, _handle: u64, _length: usize) -> Result<(), i64> { Err(38) }
+    fn lock_file_exclusive(&mut self, _handle: u64) -> Result<(), i64> { Err(38) }
     fn read_file(&mut self, _handle: u64, _bytes: &mut [u8]) -> Result<usize, i64> {
         Err(38)
     }

@@ -20,6 +20,7 @@ pub(crate) mod platform;
 mod process;
 mod network;
 mod readiness;
+mod storage;
 pub mod profiling;
 mod registers;
 mod scalar;
@@ -1570,6 +1571,12 @@ fn encode_program(
             Op::Intrinsic { name: IntrinsicOp::FileSetNonblocking | IntrinsicOp::ListenerSetNonblocking, .. }))
     });
 
+    let storage = program.functions.iter().any(|function| {
+        function.body.iter().any(|instruction| matches!(instruction.op,
+            Op::Intrinsic { name: IntrinsicOp::DirectoryCreateNew | IntrinsicOp::DirectoryOpenAppend
+                | IntrinsicOp::DirectorySync | IntrinsicOp::FileSync | IntrinsicOp::FileTruncate
+                | IntrinsicOp::FileLockExclusive, .. }))
+    });
     let accept_nodelay = program.functions.iter().any(|function| {
         function.body.iter().any(|instruction| matches!(
             instruction.op, Op::Intrinsic { name: IntrinsicOp::ListenerAcceptNoDelay, .. }
@@ -1626,6 +1633,13 @@ fn encode_program(
             symbols.push((p.readiness_wait, "$platform::readiness_wait".to_string()));
         }
         if nonblocking { symbols.push((p.handle_nonblocking, "$platform::handle_nonblocking".to_string())); }
+        if storage {
+            symbols.push((p.file_storage_open, "$platform::file_storage_open".to_string()));
+            symbols.push((p.file_sync, "$platform::file_sync".to_string()));
+            symbols.push((p.directory_sync, "$platform::directory_sync".to_string()));
+            symbols.push((p.file_truncate, "$platform::file_truncate".to_string()));
+            symbols.push((p.file_lock_exclusive, "$platform::file_lock_exclusive".to_string()));
+        }
 
         if connector {
             symbols.push((p.world_connector, "$platform::world_connector".to_string()));
@@ -1673,6 +1687,7 @@ fn encode_program(
     if accept_nodelay { network::emit_accept_nodelay(&mut a, p); }
     if readiness { readiness::emit(&mut a, p); }
     if nonblocking { readiness::emit_nonblocking(&mut a, p); }
+    if storage { storage::emit(&mut a, p); }
     if let Some(profile) = profile {
         symbols.push((profile.start, "$profiler".to_string()));
         profiling::emit(&mut a, p, profile, profile_path.unwrap().len());

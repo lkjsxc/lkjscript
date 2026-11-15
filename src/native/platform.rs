@@ -59,6 +59,11 @@ pub struct Platform {
     pub readiness_watch: Label,
     pub readiness_unwatch: Label,
     pub readiness_wait: Label,
+    pub file_storage_open: Label,
+    pub file_sync: Label,
+    pub directory_sync: Label,
+    pub file_truncate: Label,
+    pub file_lock_exclusive: Label,
 
     pub clock_read: Label,
     pub process_spawn: Label,
@@ -118,6 +123,11 @@ impl Platform {
             readiness_watch: a.label(),
             readiness_unwatch: a.label(),
             readiness_wait: a.label(),
+            file_storage_open: a.label(),
+            file_sync: a.label(),
+            directory_sync: a.label(),
+            file_truncate: a.label(),
+            file_lock_exclusive: a.label(),
 
             clock_read: a.label(),
             process_spawn: a.label(),

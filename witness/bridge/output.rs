@@ -217,6 +217,22 @@ impl Directory {
     pub fn create(&mut self, path: &str) -> Result<File, i64> {
         self.__lkjscript_open(&files::path_bytes(path)?, true)
     }
+    pub fn create_new(&mut self, path: &str) -> Result<File, i64> {
+        self.__lkjscript_create_new(&files::path_bytes(path)?)
+    }
+    pub fn open_append(&mut self, path: &str) -> Result<File, i64> {
+        self.__lkjscript_open_append(&files::path_bytes(path)?)
+    }
+    pub fn __lkjscript_create_new(&mut self, path: &[u8]) -> Result<File, i64> {
+        Ok(File { handle: Some(files::open_storage(&self.handle, path, false)?) })
+    }
+    pub fn __lkjscript_open_append(&mut self, path: &[u8]) -> Result<File, i64> {
+        Ok(File { handle: Some(files::open_storage(&self.handle, path, true)?) })
+    }
+    pub fn sync(&mut self) -> Result<(), i64> {
+        let file = files::open_file(&self.handle, b".\0", false)?;
+        files::sync_file(file.as_raw_fd())
+    }
     pub fn __lkjscript_open(&mut self, path: &[u8], create: bool) -> Result<File, i64> {
         Ok(File {
             handle: Some(files::open_file(&self.handle, path, create)?),
@@ -224,6 +240,15 @@ impl Directory {
     }
 }
 impl File {
+    pub fn sync(&mut self) -> Result<(), i64> {
+        files::sync_file(self.descriptor())
+    }
+    pub fn truncate(&mut self, length: usize) -> Result<(), i64> {
+        files::truncate_file(self.descriptor(), length)
+    }
+    pub fn lock_exclusive(&mut self) -> Result<(), i64> {
+        files::lock_file_exclusive(self.descriptor())
+    }
     pub fn set_nonblocking(&mut self, enabled: bool) -> Result<(), i64> {
         files::set_nonblocking(self.descriptor(), enabled)
     }
@@ -727,6 +752,35 @@ pub(crate) mod files {
             )
         })?;
         owned(descriptor)
+    }
+
+    pub fn open_storage(directory: &std::fs::File, bytes: &[u8], append: bool) -> Result<std::fs::File, i64> {
+        let path = path(bytes)?;
+        let how = OpenHow {
+            flags: if append { 0x80442 } else { 0x800c2 },
+            mode: 0o666,
+            resolve: 0x0a,
+        };
+        let descriptor = retry(|| unsafe {
+            syscall(437, i64::from(directory.as_raw_fd()), path.as_ptr(),
+                &how as *const OpenHow, std::mem::size_of::<OpenHow>() as i64)
+        })?;
+        owned(descriptor)
+    }
+
+    pub fn sync_file(descriptor: i32) -> Result<(), i64> {
+        if descriptor < 0 { return Err(9); }
+        retry(|| unsafe { syscall(74, i64::from(descriptor)) }).map(|_| ())
+    }
+
+    pub fn truncate_file(descriptor: i32, length: usize) -> Result<(), i64> {
+        if descriptor < 0 { return Err(9); }
+        retry(|| unsafe { syscall(77, i64::from(descriptor), length as i64) }).map(|_| ())
+    }
+
+    pub fn lock_file_exclusive(descriptor: i32) -> Result<(), i64> {
+        if descriptor < 0 { return Err(9); }
+        retry(|| unsafe { syscall(73, i64::from(descriptor), 6i64) }).map(|_| ())
     }
 
     pub fn read(descriptor: i32, bytes: &mut [u8]) -> Result<usize, i64> {

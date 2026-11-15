@@ -100,7 +100,9 @@ Delete the three scoped-thread pending cases: no current consumer needs them.
 The closure-escape case stays pending; concurrency adds no shared-memory ownership rules.
 Keep compiler source within the stored seed's forms; never refresh seed here.
 The independent interpreter helper operates actual descriptors without relay queues.
-Next prove crash-durable journal state, stop and signed expiring sessions.
+Journal acknowledges only after log fsync, a synced head file and atomic rename plus directory fsync.
+Replay validates checksums and the committed boundary before repairing an incomplete tail; one lock owns writes.
+Next prove stop and signed expiring sessions; JSON retains exact number text and rejects ambiguous keys.
 A documentation candidate may come earlier; never modify the live unit or /opt.
 
 ## Authenticated reuse

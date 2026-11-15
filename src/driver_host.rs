@@ -4,7 +4,7 @@ use crate::{driver, interpreter, ir};
 use std::collections::BTreeMap;
 
 enum Handle {
-    Directory(Directory),
+    Directory(u64),
     File(File),
     ImportedFile(File, u64),
     RemoteFile(u64),
@@ -137,6 +137,13 @@ impl<'world, 'program> Host<'world, 'program> {
         Ok(())
     }
 
+    fn directory_handle(&self, handle: u64) -> Result<u64, i64> {
+        match self.handles.get(&handle) {
+            Some(Handle::Directory(descriptor)) => Ok(*descriptor),
+            _ => Err(9),
+        }
+    }
+
     fn program_executable(&mut self) -> Result<File, i64> {
         if self.executable.is_none() {
             let checked = match self.checked {
@@ -178,7 +185,8 @@ impl<'world, 'program> Host<'world, 'program> {
 
     fn dispose_handle(&mut self, handle: Handle) {
         match handle {
-            Handle::ImportedFile(_, descriptor)
+            Handle::Directory(descriptor)
+            | Handle::ImportedFile(_, descriptor)
             | Handle::RemoteFile(descriptor)
             | Handle::Listener(descriptor)
             | Handle::Readiness(descriptor) => self.network.close_remote(descriptor),
@@ -355,16 +363,43 @@ impl interpreter::Host for Host<'_, '_> {
     }
 
     fn open_directory(&mut self, path: &[u8]) -> Result<u64, i64> {
-        let directory = self.world.__lkjscript_directory(path)?;
+        let directory = self.network.open_root(self.world, path)?;
         self.insert_handle(Handle::Directory(directory))
     }
 
     fn open_file(&mut self, directory: u64, path: &[u8], create: bool) -> Result<u64, i64> {
-        let opened = match self.handles.get_mut(&directory) {
-            Some(Handle::Directory(directory)) => directory.__lkjscript_open(path, create),
-            _ => return Err(9),
-        };
-        self.insert_handle(Handle::File(opened?))
+        let directory = self.directory_handle(directory)?;
+        let opened = self.network.open_relative_file(directory, path, create)?;
+        self.insert_handle(Handle::RemoteFile(opened))
+    }
+
+    fn open_file_storage(&mut self, directory: u64, path: &[u8], append: bool) -> Result<u64, i64> {
+        let directory = self.directory_handle(directory)?;
+        let opened = self.network.open_storage(directory, path, append)?;
+        self.insert_handle(Handle::RemoteFile(opened))
+    }
+
+    fn sync_file(&mut self, handle: u64) -> Result<(), i64> {
+        let descriptor = self.remote_file(handle)?;
+        self.network.sync_remote(descriptor)
+    }
+
+    fn sync_directory(&mut self, handle: u64) -> Result<(), i64> {
+        let directory = self.directory_handle(handle)?;
+        let descriptor = self.network.open_relative_directory(directory, b".\0")?;
+        let outcome = self.network.sync_remote(descriptor);
+        self.network.close_remote(descriptor);
+        outcome
+    }
+
+    fn truncate_file(&mut self, handle: u64, length: usize) -> Result<(), i64> {
+        let descriptor = self.remote_file(handle)?;
+        self.network.resize_remote(descriptor, length)
+    }
+
+    fn lock_file_exclusive(&mut self, handle: u64) -> Result<(), i64> {
+        let descriptor = self.remote_file(handle)?;
+        self.network.lock_remote(descriptor)
     }
 
     fn duplicate_file(&mut self, handle: u64) -> Result<u64, i64> {
@@ -436,23 +471,19 @@ impl interpreter::Host for Host<'_, '_> {
     }
 
     fn open_subdirectory(&mut self, directory: u64, path: &[u8]) -> Result<u64, i64> {
-        let opened = match self.handles.get_mut(&directory) {
-            Some(Handle::Directory(directory)) => directory.__lkjscript_open_directory(path),
-            _ => return Err(9),
-        };
-        self.insert_handle(Handle::Directory(opened?))
+        let directory = self.directory_handle(directory)?;
+        let opened = self.network.open_relative_directory(directory, path)?;
+        self.insert_handle(Handle::Directory(opened))
     }
 
     fn read_directory(&mut self, directory: u64, bytes: &mut [u8]) -> Result<usize, i64> {
-        match self.handles.get_mut(&directory) {
-            Some(Handle::Directory(directory)) => count(directory.__lkjscript_read(bytes)),
-            _ => Err(9),
-        }
+        let directory = self.directory_handle(directory)?;
+        self.network.read_entries(directory, bytes)
     }
 
     fn rewind_handle(&mut self, handle: u64) -> Result<(), i64> {
         match self.handles.get_mut(&handle) {
-            Some(Handle::Directory(directory)) => status(directory.__lkjscript_rewind()),
+            Some(Handle::Directory(directory)) => self.network.rewind_remote(*directory),
             Some(Handle::File(file)) | Some(Handle::ImportedFile(file, _)) => status(file.__lkjscript_rewind()),
             Some(Handle::RemoteFile(descriptor)) => self.network.rewind_remote(*descriptor),
             _ => Err(9),
@@ -460,47 +491,19 @@ impl interpreter::Host for Host<'_, '_> {
     }
 
     fn create_directory(&mut self, directory: u64, name: &[u8]) -> Result<(), i64> {
-        match self.handles.get_mut(&directory) {
-            Some(Handle::Directory(directory)) => {
-                status(directory.__lkjscript_create_directory(name))
-            }
-            _ => Err(9),
-        }
+        let directory = self.directory_handle(directory)?;
+        self.network.make_directory(directory, name)
     }
 
     fn remove_entry(&mut self, directory: u64, name: &[u8], is_directory: bool) -> Result<(), i64> {
-        match self.handles.get_mut(&directory) {
-            Some(Handle::Directory(directory)) => {
-                status(directory.__lkjscript_remove(name, is_directory))
-            }
-            _ => Err(9),
-        }
+        let directory = self.directory_handle(directory)?;
+        self.network.unlink_entry(directory, name, is_directory)
     }
 
     fn rename_entry(&mut self, from: u64, old: &[u8], to: u64, new: &[u8]) -> Result<(), i64> {
-        let mut directory = match self.handles.remove(&from) {
-            Some(Handle::Directory(directory)) => directory,
-            Some(other) => {
-                self.handles.insert(from, other);
-                return Err(9);
-            }
-            None => return Err(9),
-        };
-        let result = if from == to {
-            match directory.__lkjscript_open_directory(b".\0") {
-                Ok(mut target) => status(directory.__lkjscript_rename(old, &mut target, new)),
-                Err(error) => Err(error),
-            }
-        } else {
-            match self.handles.get_mut(&to) {
-                Some(Handle::Directory(target)) => {
-                    status(directory.__lkjscript_rename(old, target, new))
-                }
-                _ => Err(9),
-            }
-        };
-        self.handles.insert(from, Handle::Directory(directory));
-        result
+        let from = self.directory_handle(from)?;
+        let to = self.directory_handle(to)?;
+        self.network.move_entry(from, old, to, new)
     }
 
     fn file_executable(&mut self, file: u64) -> Result<(), i64> {

@@ -10,6 +10,7 @@ fn compiled(text: &str) -> ir::CheckedProgram {
         "$std/sequence.rs".to_string(),
         "$std/buffer.rs".to_string(),
         "$std/timers.rs".to_string(),
+        "$std/json.rs".to_string(),
         "$std/bytes.rs".to_string(),
         "$std/string.rs".to_string(),
         "$std/str.rs".to_string(),
@@ -476,6 +477,11 @@ impl interpreter::Host for FailingHost {
     fn open_file(&mut self, _directory: u64, _path: &[u8], _create: bool) -> Result<u64, i64> {
         Err(38)
     }
+    fn open_file_storage(&mut self, _directory: u64, _path: &[u8], _append: bool) -> Result<u64, i64> { self.0.push(b'O'); Err(38) }
+    fn sync_file(&mut self, _handle: u64) -> Result<(), i64> { self.0.push(b'S'); Err(38) }
+    fn sync_directory(&mut self, _handle: u64) -> Result<(), i64> { self.0.push(b'S'); Err(38) }
+    fn truncate_file(&mut self, _handle: u64, _length: usize) -> Result<(), i64> { self.0.push(b'T'); Err(38) }
+    fn lock_file_exclusive(&mut self, _handle: u64) -> Result<(), i64> { self.0.push(b'L'); Err(38) }
     fn read_file(&mut self, _handle: u64, _bytes: &mut [u8]) -> Result<usize, i64> {
         Err(38)
     }
@@ -494,7 +500,8 @@ impl interpreter::Host for FailingHost {
         Err(38)
     }
     fn world_file(&mut self, _kind: u8) -> Result<u64, i64> {
-        Err(38)
+        self.0.push(b'F');
+        Ok(1)
     }
     fn create_readiness(&mut self) -> Result<u64, i64> { self.0.push(b'R'); Ok(2) }
     fn close_readiness(&mut self, readiness: u64) { assert_eq!(readiness, 2u64); self.0.push(b'r'); }
@@ -878,6 +885,65 @@ fn range_views_validate_types_loans_and_utf8_without_the_checker() {
     }
 }
 
+fn storage_intrinsics_validate_before_host_effects() {
+    let cases = vec![
+        ("fn main(mut world: World) { let mut directory = world.directory(\".\").unwrap(); let _result = directory.create_new(\"record\"); }".to_string(), ir::IntrinsicOp::DirectoryCreateNew, b'O'),
+        ("fn main(mut world: World) { let mut directory = world.directory(\".\").unwrap(); let _result = directory.open_append(\"record\"); }".to_string(), ir::IntrinsicOp::DirectoryOpenAppend, b'O'),
+        ("fn main(mut world: World) { let mut directory = world.directory(\".\").unwrap(); let _result = directory.sync(); }".to_string(), ir::IntrinsicOp::DirectorySync, b'S'),
+        ("fn main(mut world: World) { let mut file = world.temporary_file().unwrap(); let _result = file.sync(); }".to_string(), ir::IntrinsicOp::FileSync, b'S'),
+        ("fn main(mut world: World) { let mut file = world.temporary_file().unwrap(); let _result = file.truncate(4usize); }".to_string(), ir::IntrinsicOp::FileTruncate, b'T'),
+        ("fn main(mut world: World) { let mut file = world.temporary_file().unwrap(); let _result = file.lock_exclusive(); }".to_string(), ir::IntrinsicOp::FileLockExclusive, b'L'),
+    ];
+    for (source, operation, marker) in cases {
+        let checked = compiled(&source);
+        let entry = function_index(checked.program(), "main");
+        let mut host = FailingHost(Vec::new());
+        interpreter::run(checked.program(), entry, &[0u64; 0], &mut host).unwrap();
+        assert!(host.0.contains(&marker));
+        for mode in 0usize..4usize {
+            let mut program = checked.program().clone();
+            let mut result = 0usize;
+            let mut changed = 0usize;
+            for function_index in 0usize..program.functions.len() {
+                let function = &mut program.functions[function_index];
+                for instruction_index in 0usize..function.body.len() {
+                    if let ir::Op::Intrinsic { dst, name, args } = &mut function.body[instruction_index].op {
+                        if *name == operation {
+                            result = function.locals[*dst].ty;
+                            if mode == 2 { args.pop(); }
+                            if mode == 3 {
+                                if args.len() == 2 {
+                                    let first = args[0];
+                                    args[0] = args[1];
+                                    args[1] = first;
+                                }
+                                else {
+                                    *name = if operation == ir::IntrinsicOp::DirectorySync {
+                                        ir::IntrinsicOp::FileSync
+                                    } else { ir::IntrinsicOp::DirectorySync };
+                                }
+                            }
+                            changed += 1;
+                        }
+                    }
+                }
+            }
+            assert_eq!(changed, 1usize);
+            if mode < 2 {
+                if let ir::TypeKind::Enum { variants, .. } = &mut program.types[result].kind {
+                    if mode == 0 { variants[0].fields[0].ty = ir::U8; }
+                    else { variants[1].fields[0].ty = ir::U64; }
+                }
+            }
+            assert_eq!(crate::check::check(program.clone()).err().unwrap().code, "E_TYPE");
+            let mut host = FailingHost(Vec::new());
+            let error = interpreter::run(&program, entry, &[0u64; 0], &mut host).err().unwrap();
+            assert!(error.kind == ErrorKind::Interpreter(InterpreterError::InvalidIr), "{}", error.message);
+            assert!(!host.0.contains(&marker));
+        }
+    }
+}
+
 fn readiness_wait_rejects_forged_event_shapes_before_waiting() {
     let checked = compiled("fn main(mut world: World) { let mut ready = world.readiness().unwrap(); let mut clock = world.clock(); let _events = ready.wait(&mut clock, 0usize); }");
     let entry = function_index(checked.program(), "main");
@@ -1064,5 +1130,6 @@ pub fn run(world: &mut World, trace: bool) -> usize {
     }
     listener_intrinsics_reject_wrong_signatures_without_host_effects();
     readiness_wait_rejects_forged_event_shapes_before_waiting();
-    17
+    storage_intrinsics_validate_before_host_effects();
+    18
 }

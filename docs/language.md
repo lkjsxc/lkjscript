@@ -461,6 +461,8 @@ can outlive that borrow and move normally.
 | World.executable() | Read-only running executable at fresh offset; checked interpretation prepares a native image lazily, unchecked IR returns ENOSYS. |
 | World.set_exit_status(u8) | Set normal status and continue cleanup/execution; last value wins. |
 | Directory.open/create(path) | Read or create/truncate a writable descendant File. |
+| Directory.create_new/open_append(path), sync() | Result<File,i64> for exclusive create or create/atomic append; Result<(),i64> for directory fsync. |
+| File.sync()/truncate(length)/lock_exclusive() | Result<(),i64>: fsync, set byte length, or nonblocking advisory exclusive lock retained until the last duplicate closes. |
 | Directory.open_directory(path), list() | Descendant Directory; Vec<Vec<u8>> names excluding dot/dot-dot, unspecified order. |
 | Directory.create_directory/remove/remove_directory(path) | Create directory, unlink entry or remove empty directory. |
 | Directory.rename(old,new) | Rename within root, replacing destination as Linux allows. |

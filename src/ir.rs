@@ -281,6 +281,12 @@ pub enum IntrinsicOp {
     ReadinessUnwatchFile,
     ReadinessUnwatchListener,
     ReadinessWait,
+    DirectoryCreateNew,
+    DirectoryOpenAppend,
+    DirectorySync,
+    FileSync,
+    FileTruncate,
+    FileLockExclusive,
 }
 impl IntrinsicOp {
     pub fn parse(text: &str) -> Option<IntrinsicOp> {
@@ -346,6 +352,12 @@ impl IntrinsicOp {
             "readiness_unwatch_file" => Some(IntrinsicOp::ReadinessUnwatchFile),
             "readiness_unwatch_listener" => Some(IntrinsicOp::ReadinessUnwatchListener),
             "readiness_wait" => Some(IntrinsicOp::ReadinessWait),
+            "directory_create_new" => Some(IntrinsicOp::DirectoryCreateNew),
+            "directory_open_append" => Some(IntrinsicOp::DirectoryOpenAppend),
+            "directory_sync" => Some(IntrinsicOp::DirectorySync),
+            "file_sync" => Some(IntrinsicOp::FileSync),
+            "file_truncate" => Some(IntrinsicOp::FileTruncate),
+            "file_lock_exclusive" => Some(IntrinsicOp::FileLockExclusive),
 
             _ => None,
         }
@@ -413,6 +425,12 @@ impl IntrinsicOp {
             IntrinsicOp::ReadinessUnwatchFile => "readiness_unwatch_file",
             IntrinsicOp::ReadinessUnwatchListener => "readiness_unwatch_listener",
             IntrinsicOp::ReadinessWait => "readiness_wait",
+            IntrinsicOp::DirectoryCreateNew => "directory_create_new",
+            IntrinsicOp::DirectoryOpenAppend => "directory_open_append",
+            IntrinsicOp::DirectorySync => "directory_sync",
+            IntrinsicOp::FileSync => "file_sync",
+            IntrinsicOp::FileTruncate => "file_truncate",
+            IntrinsicOp::FileLockExclusive => "file_lock_exclusive",
 
         }
     }

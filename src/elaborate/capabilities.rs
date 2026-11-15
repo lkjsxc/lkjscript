@@ -64,6 +64,14 @@ pub(super) enum Method {
     StdinReadToEnd,
     DirectoryOpen,
     DirectoryCreate,
+    DirectoryCreateNew,
+    DirectoryOpenAppend,
+    DirectoryCreateNewRaw,
+    DirectoryOpenAppendRaw,
+    DirectorySync,
+    FileSync,
+    FileTruncate,
+    FileLockExclusive,
     DirectoryOpenRaw,
     FileRead,
     FileWrite,
@@ -162,6 +170,14 @@ pub(super) fn method(receiver: Receiver, name: &str) -> Option<Method> {
         (Receiver::Stdin, "read_to_end") => Method::StdinReadToEnd,
         (Receiver::Directory, "open") => Method::DirectoryOpen,
         (Receiver::Directory, "create") => Method::DirectoryCreate,
+        (Receiver::Directory, "create_new") => Method::DirectoryCreateNew,
+        (Receiver::Directory, "open_append") => Method::DirectoryOpenAppend,
+        (Receiver::Directory, "__lkjscript_create_new") => Method::DirectoryCreateNewRaw,
+        (Receiver::Directory, "__lkjscript_open_append") => Method::DirectoryOpenAppendRaw,
+        (Receiver::Directory, "sync") => Method::DirectorySync,
+        (Receiver::File, "sync") => Method::FileSync,
+        (Receiver::File, "truncate") => Method::FileTruncate,
+        (Receiver::File, "lock_exclusive") => Method::FileLockExclusive,
         (Receiver::Directory, "__lkjscript_open") => Method::DirectoryOpenRaw,
         (Receiver::File, "read") => Method::FileRead,
         (Receiver::File, "write") => Method::FileWrite,
@@ -241,10 +257,13 @@ impl Method {
             Method::StdinRead | Method::FileRead => (vec![Value::MutableBytes], Value::ResultCount),
             Method::StdinReadRaw | Method::FileReadRaw => (vec![Value::MutableBytes], Value::Error),
             Method::StdinReadToEnd | Method::FileReadToEnd => (vec![], Value::ResultBytes),
-            Method::DirectoryOpen | Method::DirectoryCreate => {
+            Method::DirectoryOpen | Method::DirectoryCreate | Method::DirectoryCreateNew | Method::DirectoryOpenAppend => {
                 (vec![Value::Text], Value::ResultFile)
             }
             Method::DirectoryOpenRaw => (vec![Value::Bytes, Value::Boolean], Value::ResultFile),
+            Method::DirectoryCreateNewRaw | Method::DirectoryOpenAppendRaw => (vec![Value::Bytes], Value::ResultFile),
+            Method::DirectorySync | Method::FileSync | Method::FileLockExclusive => (vec![], Value::ResultUnit),
+            Method::FileTruncate => (vec![Value::Count], Value::ResultUnit),
             Method::FileWrite => (vec![Value::Bytes], Value::ResultCount),
             Method::FileWriteRaw => (vec![Value::Bytes], Value::Error),
             Method::FileWriteAll => (vec![Value::Bytes], Value::ResultUnit),
@@ -338,6 +357,12 @@ impl Method {
             Method::StderrWrite => ir::IntrinsicOp::StderrWrite,
             Method::StdinReadRaw => ir::IntrinsicOp::StdinRead,
             Method::DirectoryOpenRaw => ir::IntrinsicOp::DirectoryOpen,
+            Method::DirectoryCreateNewRaw => ir::IntrinsicOp::DirectoryCreateNew,
+            Method::DirectoryOpenAppendRaw => ir::IntrinsicOp::DirectoryOpenAppend,
+            Method::DirectorySync => ir::IntrinsicOp::DirectorySync,
+            Method::FileSync => ir::IntrinsicOp::FileSync,
+            Method::FileTruncate => ir::IntrinsicOp::FileTruncate,
+            Method::FileLockExclusive => ir::IntrinsicOp::FileLockExclusive,
             Method::FileReadRaw => ir::IntrinsicOp::FileRead,
             Method::FileWriteRaw => ir::IntrinsicOp::FileWrite,
             Method::Process => ir::IntrinsicOp::WorldProcess,
@@ -398,6 +423,27 @@ impl Method {
     }
 }
 
+fn storage_method(name: &str) -> bool {
+    matches!(name, "create_new" | "open_append" | "__lkjscript_create_new" | "__lkjscript_open_append"
+        | "sync" | "truncate" | "lock_exclusive")
+}
+
+fn nominal_storage_target(source: &super::a::Program, mut target: usize) -> bool {
+    // New builtin spellings must not eagerly intern unrelated ordinary types.
+    // Resolve aliases syntactically so an alias to File still receives the check.
+    let mut seen = std::collections::BTreeSet::new();
+    while seen.insert(target) {
+        let super::a::Type::Path(path) = &source.types[target].kind else { return false; };
+        let Some(declaration) = path.declaration else { return false; };
+        match source.declarations[declaration].item {
+            super::a::Item::Struct(_) | super::a::Item::Enum(_) => return true,
+            super::a::Item::Alias(alias) => target = source.aliases[alias].ty,
+            _ => return false,
+        }
+    }
+    false
+}
+
 fn reserved(name: &str) -> bool {
     let receivers = [
         Receiver::World,
@@ -433,8 +479,10 @@ impl super::Compiler<'_> {
                 continue;
             }
             let mut relevant = false;
+            let nominal = nominal_storage_target(self.source, implementation.target);
             for method in &implementation.methods {
-                if reserved(&self.source.functions[*method].name) {
+                let name = &self.source.functions[*method].name;
+                if reserved(name) && !(nominal && storage_method(name)) {
                     relevant = true;
                 }
             }

@@ -152,6 +152,29 @@ impl Body<'_> {
                 self.read_word(args[1], 1, D);
                 self.a.call(self.platform.listener_address);
             }
+            IntrinsicOp::DirectoryCreateNew | IntrinsicOp::DirectoryOpenAppend => {
+                self.read(args[0], DI);
+                self.a.load(DI, DI, 0);
+                self.read_word(args[1], 0, SI);
+                self.read_word(args[1], 1, D);
+                self.a.immediate(C, if name == IntrinsicOp::DirectoryCreateNew { 0x800c2 } else { 0x80442 });
+                self.a.call(self.platform.file_storage_open);
+                self.intrinsic_open_result(dst);
+                return Ok(true);
+            }
+            IntrinsicOp::DirectorySync | IntrinsicOp::FileSync | IntrinsicOp::FileTruncate | IntrinsicOp::FileLockExclusive => {
+                self.read(args[0], DI);
+                self.a.load(DI, DI, 0);
+                if name == IntrinsicOp::FileTruncate { self.read(args[1], SI); }
+                self.a.call(match name {
+                    IntrinsicOp::DirectorySync => self.platform.directory_sync,
+                    IntrinsicOp::FileSync => self.platform.file_sync,
+                    IntrinsicOp::FileTruncate => self.platform.file_truncate,
+                    _ => self.platform.file_lock_exclusive,
+                });
+                self.intrinsic_open_result(dst);
+                return Ok(true);
+            }
             IntrinsicOp::DirectoryOpen => {
                 self.read(args[0], DI);
                 self.a.load(DI, DI, 0);

@@ -1,0 +1,17 @@
+lkjscript-ir 1
+# expect: reject E_TYPE
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "File" file
+type "&mut File" ref mut 7
+fn "probe" 1 3
+local "file" 8 let
+local "result" 3 let
+@1 intrinsic 1 "file_lock_exclusive" 0
+@1 return 1
+endfn

@@ -2,24 +2,25 @@
 use crate::x86::*;
 use super::{elf, syscall};
 use super::process::{self, ProcessCode};
+use super::directories;
 
-const REQUEST: i64 = -128;
+pub(super) const REQUEST: i64 = -128;
 const RESPONSE: i64 = -144;
 const POLL: i64 = -160;
 const AUXILIARY: i64 = -176;
 const IMPORTED: i64 = -184;
 const SAVED: i64 = -192;
-const SCRATCH: i64 = -8192;
+pub(super) const SCRATCH: i64 = -8192;
 const EVENTS: i64 = -9216;
 const EVENT_OUTPUT: i64 = -11264;
 const DRAIN: i64 = -76800;
 
-fn empty(a: &mut Assembler, reply: Label) {
+pub(super) fn empty(a: &mut Assembler, reply: Label) {
     a.immediate(R8, 0);
     a.immediate(R9, 0);
     a.jump(reply);
 }
-fn check_fd(a: &mut Assembler, reg: u8, bad: Label) {
+pub(super) fn check_fd(a: &mut Assembler, reg: u8, bad: Label) {
     a.immediate(C, 3);
     a.compare(reg, C);
     a.condition(6, bad);
@@ -31,7 +32,7 @@ fn check_fd(a: &mut Assembler, reg: u8, bad: Label) {
     a.compare(reg, R13);
     a.condition(4, bad);
 }
-fn allocate(a: &mut Assembler, size: u8) {
+pub(super) fn allocate(a: &mut Assembler, size: u8) {
     a.mov(SI, size);
     a.immediate(DI, 0);
     a.immediate(D, 3);
@@ -76,6 +77,59 @@ fn zero(a: &mut Assembler, start: i64, count: usize) {
     }
 }
 
+fn emit_storage(a: &mut Assembler, labels: &[Label], reply: Label, invalid: Label, bad: Label) {
+    let opening = a.label();
+    a.bind(labels[0]);
+    a.immediate(A, 0x800c2); // O_CLOEXEC | O_CREAT | O_EXCL | O_RDWR.
+    a.jump(opening);
+    a.bind(labels[1]);
+    a.immediate(A, 0x80442); // O_CLOEXEC | O_CREAT | O_APPEND | O_RDWR.
+    a.bind(opening);
+    a.store(BP, SCRATCH, A);
+    a.load(DI, BP, REQUEST + 8);
+    check_fd(a, DI, bad);
+    a.test(R15, true);
+    a.condition(4, invalid);
+    a.lea(R8, R15, -1);
+    a.mov(R9, R14);
+    a.rr(0x01, R9, R8, true);
+    a.load_width(A, R9, 0, 1, false);
+    a.test(A, false);
+    a.condition(5, invalid);
+    a.mov(R9, R14);
+    let scanning = a.label();
+    let valid = a.label();
+    a.bind(scanning);
+    a.test(R8, true);
+    a.condition(4, valid);
+    a.load_width(A, R9, 0, 1, false);
+    a.test(A, false);
+    a.condition(4, invalid);
+    a.lea(R9, R9, 1);
+    a.lea(R8, R8, -1);
+    a.jump(scanning);
+    a.bind(valid);
+    a.immediate(A, 0o666);
+    a.store(BP, SCRATCH + 8, A);
+    a.immediate(A, 0x0a);
+    a.store(BP, SCRATCH + 16, A);
+    a.mov(SI, R14);
+    a.lea(D, BP, SCRATCH);
+    a.immediate(R10, 24);
+    syscall(a, 437);
+    empty(a, reply);
+
+    for index in 2usize..5usize {
+        a.bind(labels[index]);
+        a.load(DI, BP, REQUEST + 8);
+        check_fd(a, DI, bad);
+        if index == 3 { a.load(SI, BP, REQUEST + 16); }
+        if index == 4 { a.immediate(SI, 6); }
+        syscall(a, if index == 2 { 74 } else if index == 3 { 77 } else { 73 });
+        empty(a, reply);
+    }
+}
+
 pub(super) fn image(local: &[u8], address: &[u8], nonce: &[u8]) -> Result<Vec<u8>, i64> {
     let mut a = Assembler::new();
     let p = ProcessCode::new(&mut a);
@@ -95,6 +149,10 @@ pub(super) fn image(local: &[u8], address: &[u8], nonce: &[u8]) -> Result<Vec<u8
     let ready = a.label();
     let mut operations = Vec::new();
     for _index in 0usize..16usize { operations.push(a.label()); }
+    let mut storage = Vec::new();
+    for _index in 0usize..5usize { storage.push(a.label()); }
+    let mut directories = Vec::new();
+    for _index in 0usize..7usize { directories.push(a.label()); }
 
     a.mov(BP, SP);
     a.lea(SP, SP, DRAIN);
@@ -232,6 +290,16 @@ pub(super) fn image(local: &[u8], address: &[u8], nonce: &[u8]) -> Result<Vec<u8
         a.compare(A, C);
         a.condition(4, operations[index]);
     }
+    for index in 0usize..storage.len() {
+        a.immediate(C, (index + 30) as u64);
+        a.compare(A, C);
+        a.condition(4, storage[index]);
+    }
+    for index in 0usize..directories.len() {
+        a.immediate(C, (index + 35) as u64);
+        a.compare(A, C);
+        a.condition(4, directories[index]);
+    }
     for (number, label) in vec![(20u64, p.spawn), (21u64, p.wait), (22u64, p.terminate), (23u64, p.drop_child)] {
         a.immediate(C, number);
         a.compare(A, C);
@@ -239,6 +307,8 @@ pub(super) fn image(local: &[u8], address: &[u8], nonce: &[u8]) -> Result<Vec<u8
     }
     a.jump(invalid);
 
+    emit_storage(&mut a, &storage, reply, invalid, bad);
+    directories::emit(&mut a, &directories, reply, invalid, bad);
     emit_network(&mut a, &operations, reply, invalid, bad);
     emit_files(&mut a, &operations, reply, bad);
     emit_readiness(&mut a, &operations, reply, invalid, bad);

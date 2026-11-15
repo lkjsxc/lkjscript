@@ -139,6 +139,22 @@ pub(super) fn signature(
                 && bytes(types, args[1], true)
                 && result == I64
         }
+        IntrinsicOp::DirectoryCreateNew | IntrinsicOp::DirectoryOpenAppend => {
+            args.len() == 2
+                && authority(types, args[0], &TypeKind::Directory)
+                && bytes(types, args[1], false)
+                && opened(types, result, &TypeKind::File)
+        }
+        IntrinsicOp::DirectorySync | IntrinsicOp::FileSync | IntrinsicOp::FileLockExclusive => {
+            let kind = if name == IntrinsicOp::DirectorySync { TypeKind::Directory } else { TypeKind::File };
+            args.len() == 1 && authority(types, args[0], &kind) && status_result(types, result)
+        }
+        IntrinsicOp::FileTruncate => {
+            args.len() == 2
+                && authority(types, args[0], &TypeKind::File)
+                && args[1] == U64
+                && status_result(types, result)
+        }
         IntrinsicOp::DirectoryOpen => {
             args.len() == 3
                 && authority(types, args[0], &TypeKind::Directory)

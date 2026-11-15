@@ -7,6 +7,7 @@ pub use prelude::{
 };
 pub mod buffer;
 pub mod timers;
+pub mod json;
 pub mod bytes;
 pub mod char;
 pub mod fmt;

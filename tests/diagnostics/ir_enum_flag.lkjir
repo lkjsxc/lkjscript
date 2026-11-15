@@ -1,0 +1,5 @@
+lkjscript-ir 1
+# expect: reject E_IR_TEXT
+# pending: Name the invalid enum flag and list the accepted spellings copy and move.
+type "Record" enum affine
+endtype

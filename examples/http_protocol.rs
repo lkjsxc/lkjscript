@@ -1,5 +1,6 @@
-//! HTTP request framing and connection persistence for the static-file consumer.
+//! HTTP request framing and connection persistence shared by the consumers.
 pub struct Request {
+    pub method: String,
     pub path: String,
     pub head: bool,
     pub body: usize,
@@ -238,7 +239,23 @@ fn crlf(bytes: &[u8], start: usize) -> Result<usize, u16> {
     }
     Err(400u16)
 }
+fn allowed(method: &[u8], methods: &str) -> bool {
+    let bytes = methods.as_bytes();
+    let mut start = 0usize;
+    let mut end = 0usize;
+    while end <= bytes.len() {
+        if end == bytes.len() || bytes[end] == b',' {
+            if method == trim(&bytes[start..end]) { return true; }
+            start = end + 1usize;
+        }
+        end += 1usize;
+    }
+    false
+}
 pub fn parse(bytes: &[u8]) -> Result<Request, u16> {
+    parse_with_methods(bytes, "GET, HEAD")
+}
+pub fn parse_with_methods(bytes: &[u8], methods: &str) -> Result<Request, u16> {
     let line_end = crlf(bytes, 0)?;
     let line = &bytes[..line_end];
     let mut first = 0usize;
@@ -276,7 +293,7 @@ pub fn parse(bytes: &[u8]) -> Result<Request, u16> {
         return Err(400u16);
     }
     let head = &line[..first] == b"HEAD";
-    let supported = head || &line[..first] == b"GET";
+    let supported = allowed(&line[..first], methods);
     let mut host = false;
     let mut length = None;
     let mut transfer = false;
@@ -349,6 +366,7 @@ pub fn parse(bytes: &[u8]) -> Result<Request, u16> {
     }
     let path = target_path(&line[first + 1..second])?;
     Ok(Request {
+        method: String::from_utf8(line[..first].to_vec()).unwrap(),
         path,
         head,
         body: length.unwrap_or(0usize),
@@ -515,4 +533,19 @@ fn connection_persistence() {
         parse(b"GET / HTTP/1.1\r\nHost: a\r\nConnection: keep alive\r\n\r\n"),
         Err(400u16)
     ));
+}
+
+#[test]
+fn application_write_methods() {
+    let request = parse_with_methods(
+        b"POST /entries HTTP/1.1\r\nHost: localhost\r\nContent-Length: 16\r\n\r\n",
+        "GET, HEAD, POST, PUT").unwrap();
+    assert!(request.method == "POST" && request.path == "entries");
+    assert!(request.body == 16usize && request.keep_alive && !request.head);
+    assert!(matches!(parse(
+        b"POST /entries HTTP/1.1\r\nHost: localhost\r\nContent-Length: 16\r\n\r\n"),
+        Err(405u16)));
+    assert!(matches!(parse_with_methods(
+        b"DELETE /entries/1 HTTP/1.1\r\nHost: localhost\r\n\r\n", "GET, HEAD, POST, PUT"),
+        Err(405u16)));
 }

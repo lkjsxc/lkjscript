@@ -33,17 +33,19 @@ Next: scalar Clone→Read, then measured rechecked inlining; retain the original
 
 ## Programs
 
-2.2 complete: affine Readiness, nonblocking handles and explicit owned HTTP connection states.
-1,000 open connections (990 silent, ten active), pipeline 32, 40,108-byte responses.
-Ten-second phases: 22,518/s unloaded, 22,032/s loaded, 21,450/s unloaded; loaded is 100.22% of bracket mean.
-Run load 2.92/4.16/5.41 -> 3.19/4.08/5.33; loaded phase began at 2.78/4.09/5.37.
-RSS 1,092 -> 3,224 KiB: 2,205.2 bytes per silent peer, including allocator growth, excluding kernel sockets.
-Default idle/header-body/write policy is 60/2/2 s; progress never extends request or write deadlines.
-Slow header closed at 2.003 s; all hostile server handles observed gone by 2.351 s; load 3.12/4.09/5.34 -> 3.19/4.08/5.33.
-Useful traffic during hostile peers: 104,274 / 5.000 s = 20,854/s; same load range; no active peer starved.
-41 functional/pipelined requests pass on both routes; the slow interpreter fixture explicitly uses 60/120/120 s.
-Interpreted suite 181.654 s, load 3.19/4.08/5.33 -> 4.00/4.21/5.17; native deadlines stay at defaults.
-Independent broker operates actual sockets, preserves process streams/closed handles and reaps children; no relay queues.
+2.3 complete: durable HTTP journal; Directory/File provide exclusive create, atomic append, sync, truncate and advisory lock.
+JSON preserves number text and Unicode; malformed UTF-8, escapes, duplicate keys and invalid constructed values reject.
+Journal acknowledgements follow log sync, synced head rename and directory sync; replacements retain every old log revision.
+Recovery validates the durable boundary before incomplete-tail repair; complete corruption stops without discarding history.
+1,000 write-load kills + 1,000 confirmed recovery kills passed: 1,129 acknowledgements, 2,124 complete records.
+The oracle checked 1,127,051 frames across 1,001 snapshots and matched all HTTP state; no recovery-window misses.
+Campaign 143.375 s, load 14.19/9.46/6.20 -> 8.66/10.14/7.02; seed 6840227782638526189.
+Random run saw no torn tails; deterministic header/body/checksum truncation, corruption and locking cases pass.
+Interpreted CRUD/restart passes; real broker directory handles preserve renamed-root identity and mode0300 creates/appends.
+Rebased four-worker gate 306.680 s, load 3.43/3.43/3.70 -> 11.23/7.66/5.40; 2,001 server children reaped, test ports/files gone.
+
+2.2: 990 silent plus ten active peers gave 22,032/s, 100.22% of bracketing unloaded mean; load 2.92/4.16/5.41 -> 3.19/4.08/5.33.
+Idle process RSS cost 2,205.2 bytes/peer; slow header closed at 2.003 s, hostile traffic 20,854/s; load 3.12/4.09/5.34 -> 3.19/4.08/5.33.
 
 | 2.1 server function (self samples) | Before | After, full |
 | --- | ---: | ---: |
@@ -54,7 +56,5 @@ Independent broker operates actual sockets, preserves process streams/closed han
 
 2.1 full-body 6,161 -> 11,506/s; 17,513/15,001 samples; baseline load 8.67/6.26/4.40 -> 6.01/5.87/4.33, after 3.89/4.54/4.31 -> 3.67/4.44/4.29.
 2.1 framing 21,975/s, load 3.67/4.44/4.29 -> 2.83/4.16/4.20; numeric Connector grants and lkjscript clients replaced curl.
-Upstream-seed reproduction and four-worker gate pass: 258.696 s; load 6.53/4.29/4.65 -> 7.26/6.02/5.28. HTTP: 199,113 bytes, 205 functions, 14,623 IR instructions.
-Deleted relay queues and three scoped-thread pending cases; eight actionable diagnostic cases added.
-Measurement servers/clients/helpers were reaped; fresh listener ports and temporary measurement directories are gone.
-Next: crash-durable journal state and JSON, then graceful stop, sessions and the documentation candidate.
+The static server uses the shared HTTP engine; old local interpreter-directory wrappers are gone; nine diagnostic cases added.
+Next: graceful stop, entropy and signed expiring sessions, then the documentation candidate.

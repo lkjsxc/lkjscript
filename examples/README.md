@@ -103,7 +103,9 @@ reused only after the current event batch is consumed. File snapshots are still
 read synchronously before the response; response transmission yields under
 backpressure through `ReadBuffer::write_some` and an owned `WriteCursor`.
 
-`http_protocol.rs` is the parser used by the server. Its native test functions
+`http_server.rs` shares the connection engine through an ordinary generic handler;
+`http.rs` supplies the static-file handler and `journal.rs` supplies the journal.
+`http_protocol.rs` parses requests with the handler\'s allowed method list. Its native test functions
 cover request syntax and incremental header recognition through both execution
 routes:
 
@@ -174,3 +176,162 @@ The supervisor reports process RSS per silent peer, excluding kernel socket memo
 records load averages, and checks that every client handle, process, temporary
 directory and listener is gone. `--seconds`, `--idle` and `--compiler` select the
 test workload and compiler; they do not alter language resource rules.
+
+## Durable HTTP journal
+
+`journal.rs` accepts JSON entries, retains the latest version of each entry in an
+in-memory index, and stores every mutation in an append-only log beneath its granted
+`Directory`. Its entry grants are the same five kinds as the static server:
+output, root directory, listener, clock and readiness. The granted root is writable
+and should be a private directory used by one journal.
+
+```sh
+mkdir -p target/journal-data
+target/lkjscript build examples/journal.rs \
+    --grant output --grant root=target/journal-data \
+    --grant listener=127.0.0.1:0 --grant clock --grant ready -o target/journal
+target/journal
+```
+
+Startup prints recovery progress, then `ready REVISION ENTRIES` and `port NUMBER`.
+Use the printed port with the existing lkjscript HTTP client:
+
+```sh
+target/lkjscript build tools/http-get.rs --grant output --grant input \
+    --grant target=127.0.0.1:NUMBER -o target/journal-get
+printf 'POST /entries HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 16\r\nConnection: close\r\n\r\n{"text":"hello"}' | target/journal-get
+```
+
+### Routes and JSON
+
+| Request | Result |
+| --- | --- |
+| `POST /entries` with `{"text":"hello"}` | 201 and the newly appended entry. |
+| `GET /entries/ID` | 200 and the latest version, or 404 if absent. |
+| `PUT /entries/ID` with `{"text":"replacement"}` | 200 and the replacement; an absent ID returns 404. |
+| `GET /entries/FIRST/END` | 200 with `{"entries":[...]}`, including IDs from FIRST up to but excluding END. |
+| `GET /entries` | 200 with all current entries in increasing ID order. |
+| `GET /status` | 200 with `entries`, `next_id` and `revision` numeric fields. |
+| `HEAD` on a read route | The same status and representation length, with no body. |
+
+An entry is `{"id":1,"revision":1,"text":"hello"}`. IDs start at 1 and append
+contiguously; replacement retains the ID. Every mutation increments a single
+global revision, so the revision identifies the entry's last successful log record.
+The request must be a JSON object with exactly one string field named `text`.
+Malformed JSON, duplicate keys, wrong field types and extra fields return 400.
+Strings retain Unicode and escaped control characters, including embedded NUL.
+JSON numbers preserve their exact lexical value in the shared library; entry IDs
+and revisions do not pass through floating-point values.
+
+The shared HTTP engine handles persistence, pipelining, Content-Length bodies,
+HEAD and fixed deadlines. Bodies are assembled only after exact framing identifies
+their boundaries. Transfer encoding and Expect retain the static server's 501 and
+417 behavior. The journal enables POST and PUT; the static server still allows
+only GET and HEAD. Query text is ignored, so range bounds are path components.
+There is no application record-size cap. A malformed request cannot become a
+partial visible entry.
+
+### Commit and recovery
+
+The journal keeps four names beneath its granted root:
+
+| File | Purpose |
+| --- | --- |
+| `lock` | An owned File holds a nonblocking exclusive advisory lock for the server's lifetime. It is never unlinked or renamed. |
+| `journal.log` | Checksummed append-only records; the source of truth for entries and revisions. |
+| `head` | A 96-byte durable-head manifest identifying a complete log boundary. |
+| `.head-next` | The exclusive-create staging name for atomic manifest replacement. |
+
+A record contains a 40-byte header, the raw UTF-8 text, and a 32-byte SHA-256
+digest of header and text. The header begins with `LKJLOG01` and contains four
+little-endian u64 fields: text length, ID, revision, and operation (1 append,
+2 replace). The implementation uses `std::sha256`, shared with the compiler.
+
+For each mutation, the server writes the complete log record and syncs the log.
+It then creates `.head-next` exclusively, writes and syncs it, renames it over
+`head`, and syncs the directory. Only after those operations succeed does it
+queue the 201 or 200 response. The manifest starts with `LKJHEAD1`, followed by
+log end offset, revision and next ID as little-endian u64 values, the last record's
+32-byte digest, and SHA-256 of those first 64 bytes. Manifest replacement never
+exposes a partly written manifest to a reader opening `head`.
+
+Startup obtains the writer lock before inspecting or repairing state. It streams
+the log in fixed read chunks, validates checksums, UTF-8, revision order and entry
+IDs, and rebuilds the index. Declared lengths do not trigger an up-front allocation.
+An EOF-short final header, text or checksum is truncated to the previous complete
+record only after recovery has matched the durable `head` boundary. A head
+claiming a boundary beyond the complete log prefix stops recovery without repair.
+A complete record with a bad checksum or invalid sequence also stops recovery;
+corruption is never silently discarded.
+
+Complete unacknowledged records may be adopted after a restart. Before serving,
+recovery syncs the validated log and any repaired tail, removes an abandoned
+`.head-next` under the lock, and publishes the recovered head through the same
+atomic replacement sequence. Killing recovery at any point can be handled by the
+same procedure again. A malformed existing head stops startup. Startup failures
+print `journal error: ...` before exiting; an uncertain write or sync failure
+during service prints the operation error and stops before a successful response.
+
+Progress messages distinguish actual recovery from serving:
+`recovery begin`, `recovery record RECORDS OFFSET` after the first and every
+128 validated records, an optional `recovery repaired OFFSET`, and
+`recovery done RECORDS OFFSET`. These markers accompany real work; no sleep
+creates an artificial recovery window.
+
+Network reads and writes remain nonblocking with the static server's fair dispatch
+and timeout policy. JSON parsing, hashing and local storage writes/syncs run
+synchronously when a complete request is ready; a stalled filesystem can delay
+the event loop. The optional `.http-policy` file sets the same idle, request and
+write deadlines described above. Stopping is currently by the supervisor; graceful
+stop and signed write sessions are the next consumer additions.
+
+### Focused journal checks
+
+`tools/http-journal-cases.rs` uses the lkjscript HTTP client to check append,
+replace, exact Unicode/control-character roundtrips, pipelining, reads, ranges,
+HEAD and strict JSON input. Its shell supervisor checks single-writer refusal,
+three incomplete-tail boundaries, abandoned staging files, adoption of a complete
+unacknowledged record, corruption rejection and refusal to truncate below a durable
+head. These cases use a private directory and fresh loopback ports.
+
+```sh
+sh tools/http-journal-cases.sh
+# Small interpreted CRUD, pipeline and restart smoke:
+sh tools/http-journal-cases.sh --engine interpreter
+# Select the compiler under review:
+sh tools/http-journal-cases.sh --compiler target/lkjscript
+```
+
+The wrapper kills and reaps its own servers, verifies their ports are released,
+and removes all temporary state on success or failure. Its watchdogs bound test
+execution; they do not restrict journal data size or language execution.
+
+### Random crash campaign
+
+Run the final stress campaign separately from the ordinary gate:
+
+```sh
+sh tools/http-journal-test.sh --cycles 1000
+```
+
+The lkjscript supervisor creates 128 entries, then runs 1,000 rounds. Each round
+first receives a new acknowledged mutation, starts pipelined append/replace load,
+and sends SIGKILL at a seeded random deadline with a complete request still in
+flight. It next kills recovery after a randomly selected observed replay
+checkpoint. A progress marker must precede the signal and the completed output
+must contain no recovery-done marker; missed windows are retried and counted.
+Recovery is real log validation, without an artificial delay.
+
+After each pair of kills, a fresh server must start. An independent reader checks
+every complete log frame, checksum, operation, ID, revision and exact issued text.
+It checks all historical acknowledgements, including versions later replaced,
+and compares the full HTTP entry list and status against that replay. Complete
+unacknowledged writes may survive; incomplete records and missing acknowledged
+versions fail. The supervisor reports acknowledgement counts, verified frames,
+observed tail repairs, missed windows, elapsed time and all child starts/reaps.
+The shell records host load and removes the private data and executables.
+
+`--cycles 3` is a small integration check; `--seed N` selects another reproducible
+schedule. A process crash exercises commit ordering and repeatable recovery.
+The stable-storage promise also requires a filesystem and storage device that
+honor successful sync operations; this campaign does not emulate a host power cut.
