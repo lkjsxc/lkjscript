@@ -97,7 +97,7 @@ Separate command/service entries avoid eager listeners. Named environment grants
 Desk append holds .lock, repairs only an incomplete suffix and issues one O_APPEND write, never copies the log. Sync is default; buffered durability is an explicit argument shown in phase reports.
 Desk push uses durable byte cursors and idempotent row IDs; one service metadata tick does no per-idle-peer work. Queued writes have fixed deadlines; polling is the fallback.
 Wake is a durable high-water request/ack consumed idempotently by the host: launch plus acknowledgement cannot be exactly once. Prove units in fresh transient instances; no live switches.
-Authenticated children bind exact ELF length/hash, target/entry/result/transfer ABI and canonical checked capability slots in one admission record; keep its sealed memfd through verification and exec. tests/diagnostics/external_child_authority.lkj is the single pending contract; programs owns affine transfer/lifecycle APIs.
+build-child and image-authority bind exact ELF length/hash, target/entry/result/transfer ABI and canonical checked capability slots. admitted_image::SealedImage verifies the same sealed kernel file retained through exec; no pathname is reopened. Startup validates transferred slots before descriptor writes. docs/child-image.md specifies the wire contract; programs owns affine transfer/lifecycle APIs and the remaining external_child_authority case.
 A child imports transferred affine slots, never reopens baked roots or reacquires World. Reports name every image/slot; deadline exit/output values and parent-death cleanup are required.
 Foreign-child design: a separate affine command grant snapshots the initial executable; a read root and NullDevice are explicit. Broad Process is never a narrow grant.
 Stage every dynamic runtime file beneath R; report transformed PT_INTERP bytes honestly. Kernel setup between fork/exec uses Landlock, seccomp and no_new_privs, without a helper.
@@ -138,7 +138,7 @@ sizes in status and commits. Measurements do not gate. Measure remaining gaps.
 
 ## Horizon and working policy
 
-Structure is now directly operable: source claims and checked-instance facts are labelled, queries are bounded, edits are checked transactions, and comparisons use checked identities. Size measurements decide checking units; range facts follow measured use. A checked-IR seed and a second target still follow need. No mandatory formatter or fragment marker: retained diagnostic cases show no need for their frontend cost; delta prints accepted rewrites.
+Make structure directly operable: source claims and checked-instance facts are labelled, queries are bounded, edits are checked transactions, and comparisons use checked identities. Size measurements decide checking units; range facts follow measured use. A checked-IR seed and a second target still follow need. No mandatory formatter or fragment marker: retained diagnostic cases show no need for their frontend cost; delta prints accepted rewrites.
 Programs decides concurrency; do not build on pending scoped-concurrency cases.
 Compiler owns main, seed, emission, driver/store, bench, CI and hash; programs owns
 its separate worktree, consumers and new capabilities. Preserve its additions.

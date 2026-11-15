@@ -2,7 +2,7 @@
 
 **Direction.** Fourth note: AI-native general-purpose semantic operations at any program size; applications are specimens. Text remains the stored projection. Programs should rebase this direction before its runtime-demand table; compiler starts with authenticated child images, then structural questions/transactions and the size ladder.
 
-**Source and landing.** .lkj renamed 1,072 language sources at a3c2f046; child.lkj/child/mod.lkj/program.lkj have no alias/fallback. Integrated source 4048e172/70680680 and separate seed 695d0fca are pushed, including Programs 9d145128. [CI43734314339](https://github.com/lkjsxc/lkjscript/actions/runs/43734314339) passed the empty-store seed gate in 786.671 s (load 0.46→2.96) and witness in 103 s (load not recorded; 274 value/output cases, 344 verdicts and byte identity).
+**Source and landing.** Direction b579beb7 is pushed; [CI43747015139](https://github.com/lkjsxc/lkjscript/actions/runs/43747015139) passed. Authenticated-child source 72544e88 passes the full four-worker gate: 575.275 s (load 1.81→4.88), 5,356 fresh requests. Fixed point 17,259,129 B; seed refresh follows in its own commit. Source .lkj naming and Programs 9d145128 remain; child.lkj/child/mod.lkj/program.lkj have no alias/fallback.
 
 **Failure interface.** Source 4048e172 passes 63 isolated transient-unit cases, 15.048 s (load 6.14→7.85); original-IR oracle plus 32,768 inline64 mutants, 91.790 s (5.99→8.88), zero findings. Path/line, capability/grant, operation and symbolic errno share one bounded line; native terminal formatting allocates nothing, supervisor interpretation/private decoding still allocate. Earlier code had a separate grant/errno line; why the live journal omitted it was not reproduced. Fixed point 17,039,220 B; reproducible seed 3,312,682 B. No production service was touched.
 
@@ -30,7 +30,7 @@ The actual checker edit changes all 721 compiler-dependent structural images; on
 
 The binary's delta command prints frequent accepted forms. Mandatory formatting/fragment markers were declined without cause evidence.
 
-**Next:** grouped check batches, typed IR/authority request proofs and the programs consumer split are the measured remaining work. One existing external_child_authority case records the agreed exact ELF/entry/ABI/canonical slots and sealed descriptor through exec; authenticated-child implementation remains pending, with programs owning transfer/lifecycle/consumer APIs.
+**Authenticated child images.** build-child binds exact ELF/entry/ABI and canonical checked capability slots; image-authority verifies it. SealedImage retains the authenticated sealed file through Process.spawn_file, without a pathname reopen. The gate's 679 admission attacks and production descriptor-exec witness passed in 6.639 s (load 5.07→5.30); 25 optional native startup attacks also pass. No pre-admission descriptor writes. Programs now owns transfer/lifecycle/consumer completion of external_child_authority; compiler next integrates source/IR queries and checked text transactions, then the size ladder.
 
 ## Programs
 
