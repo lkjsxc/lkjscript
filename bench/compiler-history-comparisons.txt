@@ -1,0 +1,892 @@
+# Last 50 at 1f48bd24c90f98e833c3647d902ea0b4515d4d90; first-parent comparisons
+# producer 0a4ab39752523a29f7936a589a5c53fd029d8a466f638b6d4f951fababee6aa0
+
+# revision=1f48bd24c90f98e833c3647d902ea0b4515d4d90 parent=695d0fcaed2a83b30d26ea081d7ced1611c20b5c lines=3 wall_s=49.50 load=4.43->4.81
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=318d9dc6a48237444da55344ac2c96bafe90f9b0813658e8f5d19692564896f3 after=318d9dc6a48237444da55344ac2c96bafe90f9b0813658e8f5d19692564896f3 exact-before=d56d3f687d36701d21586881eac96b9b8a2540fa988a0b059e9cba8109b81117 exact-after=1a7a1cce604423262c9138b8082f31b0267b70e78f3b27bd67af7dde6a777d3d
+program level=checked-ir verdict="text identical, checked IR identical" diagnostic-metadata=differs
+program changed-facts=0 checked-facts=0 source-facts=0 shown=0 omitted=0 detail=--id identity
+
+# revision=695d0fcaed2a83b30d26ea081d7ced1611c20b5c parent=70680680009787b27640fbafa450f89c82a8b5e2 lines=3 wall_s=32.27 load=4.81->5.91
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=318d9dc6a48237444da55344ac2c96bafe90f9b0813658e8f5d19692564896f3 after=318d9dc6a48237444da55344ac2c96bafe90f9b0813658e8f5d19692564896f3 exact-before=d56d3f687d36701d21586881eac96b9b8a2540fa988a0b059e9cba8109b81117 exact-after=1a7a1cce604423262c9138b8082f31b0267b70e78f3b27bd67af7dde6a777d3d
+program level=checked-ir verdict="text identical, checked IR identical" diagnostic-metadata=differs
+program changed-facts=0 checked-facts=0 source-facts=0 shown=0 omitted=0 detail=--id identity
+
+# revision=70680680009787b27640fbafa450f89c82a8b5e2 parent=4048e172ab9d2e3d517d6d79e52072f0fedf3d46 lines=3 wall_s=14.20 load=5.91->5.59
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=318d9dc6a48237444da55344ac2c96bafe90f9b0813658e8f5d19692564896f3 after=318d9dc6a48237444da55344ac2c96bafe90f9b0813658e8f5d19692564896f3 exact-before=d56d3f687d36701d21586881eac96b9b8a2540fa988a0b059e9cba8109b81117 exact-after=1a7a1cce604423262c9138b8082f31b0267b70e78f3b27bd67af7dde6a777d3d
+program level=checked-ir verdict="text identical, checked IR identical" diagnostic-metadata=differs
+program changed-facts=0 checked-facts=0 source-facts=0 shown=0 omitted=0 detail=--id identity
+
+# revision=4048e172ab9d2e3d517d6d79e52072f0fedf3d46 parent=9d14512807476f47598c6525627c3f5ea26b469b lines=23 wall_s=30.14 load=5.59->4.38
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=040c4812385757d161e985683bfa6f065ae12f60a76434c5cf788ef5f3ea181a after=318d9dc6a48237444da55344ac2c96bafe90f9b0813658e8f5d19692564896f3 exact-before=cadf2201df3ebea551ae667cab2a261788a89efabb712c87ed11434fb043b0f5 exact-after=1a7a1cce604423262c9138b8082f31b0267b70e78f3b27bd67af7dde6a777d3d
+program level=checked-ir verdict="checked IR differs" diagnostic-metadata=differs
+"ir:test_runner::closed_contracts" level=checked-ir changed=authority before="absent" after=""
+"ir:type:$closure:100306:7089" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100336:7090" level=checked-ir changed=layout before="bytes=24 alignment=8 layout=3b7e66fdd5315213b4dcea77416fc97969a945ea5a09f9d4d1d2739428a3bd57" after="absent"
+"ir:type:$closure:100384:6963" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:100388:6964" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:100422:6845" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:100483:6843" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:101046:7101" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:101206:6604" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:10127:1645" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:101284:6915" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101299:6918" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101353:6921" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101371:7057" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101438:6585" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:101876:6765" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:101889:6766" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:101954:6767" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:101985:6768" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102183:7058" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+program changed-facts=12459 checked-facts=11987 source-facts=472 shown=20 omitted=12439 detail=--id identity
+
+# revision=9d14512807476f47598c6525627c3f5ea26b469b parent=f71dd494d2c7b4ea04471bad6e75c26c4076eb67 lines=23 wall_s=52.20 load=4.38->7.66
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=8b3ddeefc395c7a11c533d873bb074ce7658b31236c492b6132a84a3d8af72d7 after=040c4812385757d161e985683bfa6f065ae12f60a76434c5cf788ef5f3ea181a exact-before=5f7954fdda05b0e9a8dafde65233daa9df742bb9abdb0beea0d0263d6cc9de69 exact-after=6e2a72d3f2fb3cba0816e9f45aeca04bcd360c6be5128e0a98bf503b65364f5e
+program level=checked-ir verdict="checked IR differs" diagnostic-metadata=differs
+"ir:type:$closure:100029:4956" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100306:7089" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:100336:7090" level=checked-ir changed=layout before="absent" after="bytes=24 alignment=8 layout=3b7e66fdd5315213b4dcea77416fc97969a945ea5a09f9d4d1d2739428a3bd57"
+"ir:type:$closure:100340:4959" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100393:4961" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:100397:4962" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:100408:4963" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100419:4964" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:100525:4965" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:100529:4966" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:100543:4967" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100546:4968" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100557:4969" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:100819:5580" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:100828:5581" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:100837:5582" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100892:5583" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:101015:5585" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101046:7101" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:101284:6915" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+program changed-facts=13197 checked-facts=12367 source-facts=830 shown=20 omitted=13177 detail=--id identity
+
+# revision=f71dd494d2c7b4ea04471bad6e75c26c4076eb67 parent=26bf2c3c021dd79810a81fa1d9054d59f3768b06 lines=3 wall_s=33.58 load=7.66->7.33
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=8b3ddeefc395c7a11c533d873bb074ce7658b31236c492b6132a84a3d8af72d7 after=8b3ddeefc395c7a11c533d873bb074ce7658b31236c492b6132a84a3d8af72d7 exact-before=5f7954fdda05b0e9a8dafde65233daa9df742bb9abdb0beea0d0263d6cc9de69 exact-after=ef6ab3950aab937a2ba318437433458b27596a62e7dd4e5760b4cdf66cd6ae41
+program level=checked-ir verdict="text identical, checked IR identical" diagnostic-metadata=differs
+program changed-facts=0 checked-facts=0 source-facts=0 shown=0 omitted=0 detail=--id identity
+
+# revision=26bf2c3c021dd79810a81fa1d9054d59f3768b06 parent=a3c2f046d451209cd3f638b13de78f535a54bc7a lines=3 wall_s=14.79 load=7.33->7.40
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=8b3ddeefc395c7a11c533d873bb074ce7658b31236c492b6132a84a3d8af72d7 after=8b3ddeefc395c7a11c533d873bb074ce7658b31236c492b6132a84a3d8af72d7 exact-before=5f7954fdda05b0e9a8dafde65233daa9df742bb9abdb0beea0d0263d6cc9de69 exact-after=ef6ab3950aab937a2ba318437433458b27596a62e7dd4e5760b4cdf66cd6ae41
+program level=checked-ir verdict="text identical, checked IR identical" diagnostic-metadata=differs
+program changed-facts=0 checked-facts=0 source-facts=0 shown=0 omitted=0 detail=--id identity
+
+# revision=a3c2f046d451209cd3f638b13de78f535a54bc7a parent=d99e682a667797487b28089af30366bcd2e7bf01 lines=23 wall_s=29.79 load=7.40->6.48
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=5ae8a7e98af2065b2457527d652c1e2bd39583215998452ec5c2d994c5b0e7e7 after=8b3ddeefc395c7a11c533d873bb074ce7658b31236c492b6132a84a3d8af72d7 exact-before=3f0c47707b3f43053a4bcc4f5f49d7835d57ba0837170d53e160dcb5e7ec1d77 exact-after=ef6ab3950aab937a2ba318437433458b27596a62e7dd4e5760b4cdf66cd6ae41
+program level=checked-ir verdict="checked IR differs" diagnostic-metadata=differs
+"ir:type:$closure:153913:2988" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:153927:2988" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:154048:2992" level=checked-ir changed=layout before="bytes=64 alignment=8 layout=1641d69976a3a380488c2a785785b4844e72dbb10b7c18ae44ff1b05f5f5e996" after="absent"
+"ir:type:$closure:154062:2992" level=checked-ir changed=layout before="absent" after="bytes=64 alignment=8 layout=1641d69976a3a380488c2a785785b4844e72dbb10b7c18ae44ff1b05f5f5e996"
+"ir:type:$closure:154133:2997" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:154144:2998" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:154147:2997" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:154158:2998" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:154227:3001" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:154241:3001" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:154314:3003" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:154328:3003" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:154481:3015" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:154488:3017" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:154495:3015" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:154501:3019" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:154502:3017" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:154511:3020" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:154515:3019" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:154521:3022" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+program changed-facts=2866 checked-facts=2833 source-facts=33 shown=20 omitted=2846 detail=--id identity
+
+# revision=d99e682a667797487b28089af30366bcd2e7bf01 parent=a49aceb3455dbdf616ec9e14507abb8c9b657d63 lines=3 wall_s=34.10 load=6.48->8.63
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=5ae8a7e98af2065b2457527d652c1e2bd39583215998452ec5c2d994c5b0e7e7 after=5ae8a7e98af2065b2457527d652c1e2bd39583215998452ec5c2d994c5b0e7e7 exact-before=3f0c47707b3f43053a4bcc4f5f49d7835d57ba0837170d53e160dcb5e7ec1d77 exact-after=7adb2115806fa2f30ffd183e8745f5154eece5bd0cbe1103beb83ba66c527aab
+program level=checked-ir verdict="text identical, checked IR identical" diagnostic-metadata=differs
+program changed-facts=0 checked-facts=0 source-facts=0 shown=0 omitted=0 detail=--id identity
+
+# revision=a49aceb3455dbdf616ec9e14507abb8c9b657d63 parent=e9b8c940e775340a98e55f2793c0a9118853c5fe lines=23 wall_s=31.42 load=8.63->8.20
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=d1799db5177018f878a0d05bf8d50e4bae781a3448d04121eedd29cf215768cc after=5ae8a7e98af2065b2457527d652c1e2bd39583215998452ec5c2d994c5b0e7e7 exact-before=93bf591d16f1727c2869c6eabd403867a180c1846a5a3bf253095154e27819b1 exact-after=7adb2115806fa2f30ffd183e8745f5154eece5bd0cbe1103beb83ba66c527aab
+program level=checked-ir verdict="checked IR differs" diagnostic-metadata=differs
+"ir:type:$closure:100029:4956" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:100129:4959" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100182:4961" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:100186:4962" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:100197:4963" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100208:4964" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:100314:4965" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:100318:4966" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:100332:4967" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100335:4968" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100340:4959" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:100346:4969" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:100393:4961" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:100397:4962" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:100408:4963" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:100419:4964" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:100525:4965" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:100529:4966" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:100543:4967" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:100546:4968" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+program changed-facts=9656 checked-facts=9640 source-facts=16 shown=20 omitted=9636 detail=--id identity
+
+# revision=e9b8c940e775340a98e55f2793c0a9118853c5fe parent=4d7bb759b2f388a28f5164e2abe005a6aeba5c09 lines=3 wall_s=30.94 load=8.20->7.42
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=d1799db5177018f878a0d05bf8d50e4bae781a3448d04121eedd29cf215768cc after=d1799db5177018f878a0d05bf8d50e4bae781a3448d04121eedd29cf215768cc exact-before=93bf591d16f1727c2869c6eabd403867a180c1846a5a3bf253095154e27819b1 exact-after=9e0f33a4a288806d01c096bc4f40c287c1ad74674f6c4d814ff04bcfba2be141
+program level=checked-ir verdict="text identical, checked IR identical" diagnostic-metadata=differs
+program changed-facts=0 checked-facts=0 source-facts=0 shown=0 omitted=0 detail=--id identity
+
+# revision=4d7bb759b2f388a28f5164e2abe005a6aeba5c09 parent=2d50e71ba9362f9eb2d5cd08e1bd10fc5d7a50e4 lines=23 wall_s=31.23 load=7.42->7.56
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=06838eb4f501c990f69be869be8707affeb446c41c7c61f6ad3f405109db41f2 after=d1799db5177018f878a0d05bf8d50e4bae781a3448d04121eedd29cf215768cc exact-before=d9b85320f47ca3fd56b90b3a7e79da66d2506fdd3a6e6525c003b7438653c322 exact-after=9e0f33a4a288806d01c096bc4f40c287c1ad74674f6c4d814ff04bcfba2be141
+program level=checked-ir verdict="checked IR differs" diagnostic-metadata=differs
+"ir:driver::main" level=checked-ir changed=authority before="effect:child_terminate,effect:child_wait,effect:clock_read,effect:directory_close,effect:directory_create,effect:directory_open,effect:directory_open_directory,effect:directory_read,effect:directory_remove,effect:directory_rename,effect:file_close,effect:file_duplicate,effect:file_executable,effect:file_read,effect:file_readonly,effect:file_rewind,effect:file_write,effect:listener_accept,effect:listener_address,effect:listener_close,effect:process_spawn,effect:stderr_write,effect:stdin_read,effect:stdout_write,effect:world_arg_copy,effect:world_arg_count,effect:world_arg_len,effect:world_clock,effect:world_directory,effect:world_exit_status,effect:world_file,effect:world_listen,effect:world_process,effect:world_stderr,effect:world_stdin,effect:world_stdout,grant:World" after="effect:child_terminate,effect:child_wait,effect:clock_read,effect:directory_close,effect:directory_create,effect:directory_open,effect:directory_open_append,effect:directory_open_directory,effect:directory_read,effect:directory_remove,effect:directory_rename,effect:file_close,effect:file_duplicate,effect:file_executable,effect:file_lock_exclusive,effect:file_read,effect:file_readonly,effect:file_rewind,effect:file_set_nonblocking,effect:file_write,effect:listener_accept,effect:listener_address,effect:listener_close,effect:process_spawn,effect:stderr_write,effect:stdin_read,effect:stdout_write,effect:world_arg_copy,effect:world_arg_count,effect:world_arg_len,effect:world_clock,effect:world_directory,effect:world_exit_status,effect:world_file,effect:world_listen,effect:world_process,effect:world_stderr,effect:world_stdin,effect:world_stdout,grant:World"
+"ir:main" level=checked-ir changed=authority before="effect:child_terminate,effect:child_wait,effect:clock_read,effect:directory_close,effect:directory_create,effect:directory_open,effect:directory_open_directory,effect:directory_read,effect:directory_remove,effect:directory_rename,effect:file_close,effect:file_duplicate,effect:file_executable,effect:file_read,effect:file_readonly,effect:file_rewind,effect:file_write,effect:listener_accept,effect:listener_address,effect:listener_close,effect:process_spawn,effect:stderr_write,effect:stdin_read,effect:stdout_write,effect:world_arg_copy,effect:world_arg_count,effect:world_arg_len,effect:world_clock,effect:world_directory,effect:world_exit_status,effect:world_file,effect:world_listen,effect:world_process,effect:world_stderr,effect:world_stdin,effect:world_stdout,grant:World" after="effect:child_terminate,effect:child_wait,effect:clock_read,effect:directory_close,effect:directory_create,effect:directory_open,effect:directory_open_append,effect:directory_open_directory,effect:directory_read,effect:directory_remove,effect:directory_rename,effect:file_close,effect:file_duplicate,effect:file_executable,effect:file_lock_exclusive,effect:file_read,effect:file_readonly,effect:file_rewind,effect:file_set_nonblocking,effect:file_write,effect:listener_accept,effect:listener_address,effect:listener_close,effect:process_spawn,effect:stderr_write,effect:stdin_read,effect:stdout_write,effect:world_arg_copy,effect:world_arg_count,effect:world_arg_len,effect:world_clock,effect:world_directory,effect:world_exit_status,effect:world_file,effect:world_listen,effect:world_process,effect:world_stderr,effect:world_stdin,effect:world_stdout,grant:World"
+"ir:type:$closure:100129:4959" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:100151:2657" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100158:2659" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100182:4961" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:100186:4962" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:100197:4963" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:100208:4964" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:100227:7068" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:100314:4965" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:100318:4966" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:100332:4967" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:100335:4968" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:100346:4969" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:100481:5472" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:100608:5580" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:100617:5581" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:100626:5582" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:100674:6644" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+program changed-facts=12835 checked-facts=12301 source-facts=534 shown=20 omitted=12815 detail=--id identity
+
+# revision=2d50e71ba9362f9eb2d5cd08e1bd10fc5d7a50e4 parent=d2044ada0b0a608e316ce856f1a6c9c2e055cdd9 lines=23 wall_s=54.24 load=7.56->10.20
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=ab0c02c8f4ab25ff17a05eac8a8b82a7edf89d55af16b10d9fd980d5c8d8818b after=06838eb4f501c990f69be869be8707affeb446c41c7c61f6ad3f405109db41f2 exact-before=b0aafef36cd21061859e39a3d25ba925b8c02f15f3982d1fb1c966d8494964b9 exact-after=f1541e8c1089428b3e1ee178720193abb51b097a1f1d905b9caf982ae5bfefe2
+program level=checked-ir verdict="checked IR differs" diagnostic-metadata=differs
+"ir:type:$closure:100151:2657" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:100158:2659" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:100227:7068" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:100479:4840" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100481:5472" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:100509:4841" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:100674:6644" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:100904:6424" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:101003:6567" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:101427:6858" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:101440:6859" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:101625:6610" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101785:4868" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:101815:4869" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:102297:2677" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:102534:6621" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:102733:6888" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:102746:6889" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:102799:6484" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:102931:6640" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+program changed-facts=11567 checked-facts=11387 source-facts=180 shown=20 omitted=11547 detail=--id identity
+
+# revision=d2044ada0b0a608e316ce856f1a6c9c2e055cdd9 parent=68e0a8237131780c2976d15bed67129d88f8a520 lines=23 wall_s=48.54 load=10.20->8.45
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=2ee342a4f0fa316c86dae70e8d7655fc58f5597ce59c7f60e5d2c2b3ffd97037 after=ab0c02c8f4ab25ff17a05eac8a8b82a7edf89d55af16b10d9fd980d5c8d8818b exact-before=e15df956a681b02307c76720ccf6caa8622e8ce29fefc5053fbb940640a9944a exact-after=8eeab70a138136cdaffe9187ba59fa5c1bbed0e194c2d2ac6c4ed1039ee9d514
+program level=checked-ir verdict="checked IR differs" diagnostic-metadata=differs
+"ir:type:$closure:100246:4822" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100276:4823" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:100479:4840" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:100509:4841" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:101194:6839" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:101207:6840" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:101392:6591" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101427:6858" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:101440:6859" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:101625:6610" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102064:2663" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:102297:2677" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102301:6602" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:102534:6621" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:102566:6465" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:102757:6476" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:102799:6484" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102990:6495" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:103006:6477" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:103239:6496" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+program changed-facts=8603 checked-facts=8581 source-facts=22 shown=20 omitted=8583 detail=--id identity
+
+# revision=68e0a8237131780c2976d15bed67129d88f8a520 parent=075d9801c377e317002548c7edee88a4c9ef2269 lines=3 wall_s=27.72 load=8.45->7.06
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=2ee342a4f0fa316c86dae70e8d7655fc58f5597ce59c7f60e5d2c2b3ffd97037 after=2ee342a4f0fa316c86dae70e8d7655fc58f5597ce59c7f60e5d2c2b3ffd97037 exact-before=e15df956a681b02307c76720ccf6caa8622e8ce29fefc5053fbb940640a9944a exact-after=170e5180560ef55c297b0387609e65d20170efb711c6e7a9e5894e9d651a6727
+program level=checked-ir verdict="text identical, checked IR identical" diagnostic-metadata=differs
+program changed-facts=0 checked-facts=0 source-facts=0 shown=0 omitted=0 detail=--id identity
+
+# revision=075d9801c377e317002548c7edee88a4c9ef2269 parent=1bbb2df30e16252adc1d5183856ed58583b6d0e0 lines=3 wall_s=14.46 load=7.06->8.22
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=2ee342a4f0fa316c86dae70e8d7655fc58f5597ce59c7f60e5d2c2b3ffd97037 after=2ee342a4f0fa316c86dae70e8d7655fc58f5597ce59c7f60e5d2c2b3ffd97037 exact-before=e15df956a681b02307c76720ccf6caa8622e8ce29fefc5053fbb940640a9944a exact-after=170e5180560ef55c297b0387609e65d20170efb711c6e7a9e5894e9d651a6727
+program level=checked-ir verdict="text identical, checked IR identical" diagnostic-metadata=differs
+program changed-facts=0 checked-facts=0 source-facts=0 shown=0 omitted=0 detail=--id identity
+
+# revision=1bbb2df30e16252adc1d5183856ed58583b6d0e0 parent=0dae27716aa36718abaf0e6fbc33668257c327c2 lines=23 wall_s=29.90 load=9.65->8.56
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=72acbef8bb2065586a522c5b6f1d233f9fceacfb913e000f032d542d8485c718 after=2ee342a4f0fa316c86dae70e8d7655fc58f5597ce59c7f60e5d2c2b3ffd97037 exact-before=9a5fd212e0980a5ad4d3107c55c042ffb58d71d443ad1cb1b85a412589ed5867 exact-after=170e5180560ef55c297b0387609e65d20170efb711c6e7a9e5894e9d651a6727
+program level=checked-ir verdict="checked IR differs" diagnostic-metadata=differs
+"ir:type:$closure:100240:4822" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100246:4822" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:100270:4823" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:100276:4823" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:101188:6839" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:101194:6839" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:101201:6840" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:101207:6840" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:101386:6591" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101392:6591" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102058:2663" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:102064:2663" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102295:6602" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:102301:6602" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:102560:6465" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:102566:6465" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102751:6476" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:102757:6476" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:103000:6477" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:103006:6477" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+program changed-facts=5811 checked-facts=5793 source-facts=18 shown=20 omitted=5791 detail=--id identity
+
+# revision=0dae27716aa36718abaf0e6fbc33668257c327c2 parent=73de75d39bbc0b022af63a1e2be8434495ab7902 lines=3 wall_s=29.57 load=8.19->7.18
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=72acbef8bb2065586a522c5b6f1d233f9fceacfb913e000f032d542d8485c718 after=72acbef8bb2065586a522c5b6f1d233f9fceacfb913e000f032d542d8485c718 exact-before=9a5fd212e0980a5ad4d3107c55c042ffb58d71d443ad1cb1b85a412589ed5867 exact-after=66b81cc3a3dd13915b236e7e258c18223f6ee6a3f684aebacf29831510a099de
+program level=checked-ir verdict="text identical, checked IR identical" diagnostic-metadata=differs
+program changed-facts=0 checked-facts=0 source-facts=0 shown=0 omitted=0 detail=--id identity
+
+# revision=73de75d39bbc0b022af63a1e2be8434495ab7902 parent=570f90a0518579c22695297de092fad0c5aa48a2 lines=3 wall_s=13.47 load=7.18->6.99
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=72acbef8bb2065586a522c5b6f1d233f9fceacfb913e000f032d542d8485c718 after=72acbef8bb2065586a522c5b6f1d233f9fceacfb913e000f032d542d8485c718 exact-before=9a5fd212e0980a5ad4d3107c55c042ffb58d71d443ad1cb1b85a412589ed5867 exact-after=66b81cc3a3dd13915b236e7e258c18223f6ee6a3f684aebacf29831510a099de
+program level=checked-ir verdict="text identical, checked IR identical" diagnostic-metadata=differs
+program changed-facts=0 checked-facts=0 source-facts=0 shown=0 omitted=0 detail=--id identity
+
+# revision=570f90a0518579c22695297de092fad0c5aa48a2 parent=e75fb1447f146feb7e16332fa96d5cdb1a944ba6 lines=3 wall_s=13.40 load=6.99->7.46
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=72acbef8bb2065586a522c5b6f1d233f9fceacfb913e000f032d542d8485c718 after=72acbef8bb2065586a522c5b6f1d233f9fceacfb913e000f032d542d8485c718 exact-before=9a5fd212e0980a5ad4d3107c55c042ffb58d71d443ad1cb1b85a412589ed5867 exact-after=66b81cc3a3dd13915b236e7e258c18223f6ee6a3f684aebacf29831510a099de
+program level=checked-ir verdict="text identical, checked IR identical" diagnostic-metadata=differs
+program changed-facts=0 checked-facts=0 source-facts=0 shown=0 omitted=0 detail=--id identity
+
+# revision=e75fb1447f146feb7e16332fa96d5cdb1a944ba6 parent=2d143a1fd27ce8e475653cebf6cdb85332032e32 lines=3 wall_s=12.72 load=7.46->7.32
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=72acbef8bb2065586a522c5b6f1d233f9fceacfb913e000f032d542d8485c718 after=72acbef8bb2065586a522c5b6f1d233f9fceacfb913e000f032d542d8485c718 exact-before=9a5fd212e0980a5ad4d3107c55c042ffb58d71d443ad1cb1b85a412589ed5867 exact-after=66b81cc3a3dd13915b236e7e258c18223f6ee6a3f684aebacf29831510a099de
+program level=checked-ir verdict="text identical, checked IR identical" diagnostic-metadata=differs
+program changed-facts=0 checked-facts=0 source-facts=0 shown=0 omitted=0 detail=--id identity
+
+# revision=2d143a1fd27ce8e475653cebf6cdb85332032e32 parent=77469a1075e54f8d61e0eba763e3e4feb1f404fd lines=3 wall_s=13.03 load=7.32->6.86
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=72acbef8bb2065586a522c5b6f1d233f9fceacfb913e000f032d542d8485c718 after=72acbef8bb2065586a522c5b6f1d233f9fceacfb913e000f032d542d8485c718 exact-before=9a5fd212e0980a5ad4d3107c55c042ffb58d71d443ad1cb1b85a412589ed5867 exact-after=66b81cc3a3dd13915b236e7e258c18223f6ee6a3f684aebacf29831510a099de
+program level=checked-ir verdict="text identical, checked IR identical" diagnostic-metadata=differs
+program changed-facts=0 checked-facts=0 source-facts=0 shown=0 omitted=0 detail=--id identity
+
+# revision=77469a1075e54f8d61e0eba763e3e4feb1f404fd parent=d632a233901b469df9c7d1e5b5d82d2c65c8428c lines=23 wall_s=32.12 load=6.86->9.20
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=8770b8595ca056d14d62b7e25e61f6c02634f793b8ecc046902de3bef6594f00 after=72acbef8bb2065586a522c5b6f1d233f9fceacfb913e000f032d542d8485c718 exact-before=57180159f963c27948947068157353f3d3caacf17032466f55e4a96dea0afa78 exact-after=66b81cc3a3dd13915b236e7e258c18223f6ee6a3f684aebacf29831510a099de
+program level=checked-ir verdict="checked IR differs" diagnostic-metadata=differs
+"ir:type:$closure:100205:4820" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100235:4821" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:100240:4822" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:100270:4823" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:101153:6839" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:101166:6840" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:101188:6839" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:101201:6840" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:101351:6591" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101386:6591" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102023:2660" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:102058:2663" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102260:6602" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:102295:6602" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:102525:6465" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:102560:6465" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102716:6476" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:102751:6476" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:102965:6477" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:103000:6477" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+program changed-facts=9595 checked-facts=9593 source-facts=2 shown=20 omitted=9575 detail=--id identity
+
+# revision=d632a233901b469df9c7d1e5b5d82d2c65c8428c parent=abc1f1ae62f7c3eccfbd4f960170e189f01249be lines=23 wall_s=49.41 load=9.20->9.29
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=73dbe6996c1004890e36f4fb723b8ad844ddea11a43801e588ab0dfcfa47506c after=8770b8595ca056d14d62b7e25e61f6c02634f793b8ecc046902de3bef6594f00 exact-before=9abe332913127d03d147160f6708959baba565b51d5526ecf8d436dc0c0310fd exact-after=814c5fa1290743a9b64a1f06ed85f2685c67797b410ca61d9e281a185cb56a13
+program level=checked-ir verdict="checked IR differs" diagnostic-metadata=differs
+"ir:type:$closure:147088:2867" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:147095:2867" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:147238:2869" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:147261:2869" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:147354:2871" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:147373:2872" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:147377:2871" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:147385:2873" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:147395:2874" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:147396:2872" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:147408:2873" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:147410:2875" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:147418:2874" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:147425:2876" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:147433:2875" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:147440:2877" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:147448:2876" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:147450:2878" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:147463:2877" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:147473:2878" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+program changed-facts=2325 checked-facts=2317 source-facts=8 shown=20 omitted=2305 detail=--id identity
+
+# revision=abc1f1ae62f7c3eccfbd4f960170e189f01249be parent=5fe8d1ff1cc5fb170b9b308822520a7a5809aeb7 lines=3 wall_s=29.38 load=9.42->8.04
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=73dbe6996c1004890e36f4fb723b8ad844ddea11a43801e588ab0dfcfa47506c after=73dbe6996c1004890e36f4fb723b8ad844ddea11a43801e588ab0dfcfa47506c exact-before=9abe332913127d03d147160f6708959baba565b51d5526ecf8d436dc0c0310fd exact-after=e73e413f37c22d3f8da2a22c5f7aa15ef9b4084ee1e9b280ed6376e1c79fbf5e
+program level=checked-ir verdict="text identical, checked IR identical" diagnostic-metadata=differs
+program changed-facts=0 checked-facts=0 source-facts=0 shown=0 omitted=0 detail=--id identity
+
+# revision=5fe8d1ff1cc5fb170b9b308822520a7a5809aeb7 parent=22b9794803a8cc6204a05e121581aeaf24c778ce lines=23 wall_s=31.67 load=8.92->11.09
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=c5655ae442e02a47d2118958270dfbe3b55ee16c7bc9b384cb3d4b0cc86e1ee2 after=73dbe6996c1004890e36f4fb723b8ad844ddea11a43801e588ab0dfcfa47506c exact-before=9108c6d2820945be45fc197402684bf33f2050e08476ff6db8729cb417730972 exact-after=e73e413f37c22d3f8da2a22c5f7aa15ef9b4084ee1e9b280ed6376e1c79fbf5e
+program level=checked-ir verdict="checked IR differs" diagnostic-metadata=differs
+"ir:type:$closure:115463:6780" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:115626:6780" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:115937:6213" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:116100:6213" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:116212:4780" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:116462:4780" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:116666:5411" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:116680:5412" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:116683:5413" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:116916:5411" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:116930:5412" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:116933:5413" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:117164:5417" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:117414:5417" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:117478:5421" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:117728:5421" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:118019:5419" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:118238:6950" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:118269:5419" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:118411:6956" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+program changed-facts=3489 checked-facts=3485 source-facts=4 shown=20 omitted=3469 detail=--id identity
+
+# revision=22b9794803a8cc6204a05e121581aeaf24c778ce parent=d127f09c1538311bedf4bd0aef7e831336ca265a lines=23 wall_s=46.05 load=13.57->12.45
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=2f36f643a54285a940d83626b7dd0ca0bdc48460b3cb8ade2c9abf9f21fe8955 after=c5655ae442e02a47d2118958270dfbe3b55ee16c7bc9b384cb3d4b0cc86e1ee2 exact-before=dca9d6aade6e1bbd2d3f0d111a5d6b70a020e1cb3563c2c4f02115fd683d85b6 exact-after=78c92b075df43a44496e0c670e54c7e84f54d39831b064366e66f2358b1dc0a2
+program level=checked-ir verdict="checked IR differs" diagnostic-metadata=differs
+"ir:type:$closure:100205:4809" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100205:4820" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:100235:4810" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:100235:4821" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:101153:6832" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:101153:6839" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:101166:6833" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:101166:6840" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:101351:6580" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101351:6591" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102260:6591" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:102260:6602" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:102525:6454" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:102525:6465" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102716:6465" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:102716:6476" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:102965:6466" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:102965:6477" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:103260:6606" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:103260:6617" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+program changed-facts=8784 checked-facts=8737 source-facts=47 shown=20 omitted=8764 detail=--id identity
+
+# revision=d127f09c1538311bedf4bd0aef7e831336ca265a parent=4891bf56ac181fe16b5e9c0bc5029505f5bea691 lines=23 wall_s=43.35 load=12.45->8.25
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=8c3e6f9a6ad781a43acb77f8d08e72c26bea381529291e35e51ce747fc2c5cce after=2f36f643a54285a940d83626b7dd0ca0bdc48460b3cb8ade2c9abf9f21fe8955 exact-before=cf4717f0bd1c30e337e2f1b20207ecdda6702b2b1cbad96d58e5fbd3c59abe3b exact-after=b0cbb3b88cdb62d3d81877e580a80724b451a1f8b9dbff11132dfd2c9bcb7201
+program level=checked-ir verdict="checked IR differs" diagnostic-metadata=differs
+"ir:test_runner::same_source_custom_traps_preserve_message_code_and_file" level=checked-ir changed=authority before="absent" after=""
+"ir:type:$closure:100009:4809" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100039:4810" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:100205:4809" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:100235:4810" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:100957:6832" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:100970:6833" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:101153:6832" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:101155:6580" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101166:6833" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:101351:6580" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:101827:2660" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:102023:2660" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102064:6591" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:102260:6591" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:102329:6454" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:102520:6465" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:102525:6454" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102716:6465" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:102769:6466" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+program changed-facts=9558 checked-facts=9548 source-facts=10 shown=20 omitted=9538 detail=--id identity
+
+# revision=4891bf56ac181fe16b5e9c0bc5029505f5bea691 parent=931e8a5c1886b1c31ebb4aef834fcecce1473ca0 lines=23 wall_s=49.99 load=8.25->9.52
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=2e9722a504bcd3af4bd5c6d634f15a6416d5430f9c86fba955459f777f19ba2b after=8c3e6f9a6ad781a43acb77f8d08e72c26bea381529291e35e51ce747fc2c5cce exact-before=da5977f8c4db2c4e0077475e7e391bb4c4fc622d17e62c152a1e687095e15705 exact-after=0af5a130a06d8b67ecf1a1bcf77fc77507581953888fafddf0071f5a12311dfd
+program level=checked-ir verdict="checked IR differs" diagnostic-metadata=differs
+"ir:type:$closure:100009:4801" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100009:4809" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:100039:4802" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:100039:4810" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:100957:6824" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:100957:6832" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:100970:6825" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:100970:6833" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:101155:6572" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101155:6580" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:101827:2659" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101827:2660" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102064:6583" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:102064:6591" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:102329:6446" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:102329:6454" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102520:6457" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:102520:6465" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:102769:6458" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:102769:6466" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+program changed-facts=9919 checked-facts=9895 source-facts=24 shown=20 omitted=9899 detail=--id identity
+
+# revision=931e8a5c1886b1c31ebb4aef834fcecce1473ca0 parent=f7f2d7eaca3efece0291ca641544b2a24ded208f lines=23 wall_s=48.66 load=9.52->8.84
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=bba0e172298ce8c04a5cabe8b9818947afd74241093a8b9a1f172fc52c233609 after=2e9722a504bcd3af4bd5c6d634f15a6416d5430f9c86fba955459f777f19ba2b exact-before=91c62eacac3b1b39bf1a2d5919d8e9018a07590ccaaee1049144955e60dd499c exact-after=c088fb2a45f28628fb4329b0f8ff5b35f584c40a0badc75bcdc8632424d12d9c
+program level=checked-ir verdict="checked IR differs" diagnostic-metadata=differs
+"ir:type:$closure:100005:4801" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100009:4801" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:100035:4802" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:100039:4802" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:100953:6824" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:100957:6824" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:100966:6825" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:100970:6825" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:101151:6572" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101155:6572" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:101823:2659" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101827:2659" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102060:6583" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:102064:6583" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:102325:6446" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:102329:6446" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102516:6457" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:102520:6457" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:102765:6458" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:102769:6458" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+program changed-facts=7571 checked-facts=7567 source-facts=4 shown=20 omitted=7551 detail=--id identity
+
+# revision=f7f2d7eaca3efece0291ca641544b2a24ded208f parent=8af5fd899ed81f47ce702d9ed808a01c14e171c0 lines=23 wall_s=44.24 load=8.84->7.21
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=ae7510638942eea76daaff487573798572015cb5270bd7d16cbc106bc402ac38 after=bba0e172298ce8c04a5cabe8b9818947afd74241093a8b9a1f172fc52c233609 exact-before=1f3bf8743e1bc9f27fe63c84848bd49836bb287c7da98c744016c32e177de2c1 exact-after=47c100b516bddbbfe90264d2b6e3701fe612b2ae3ffe3b0560c02d2622d3fc92
+program level=checked-ir verdict="checked IR differs" diagnostic-metadata=differs
+"ir:type:$closure:100005:4801" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:100035:4802" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:100662:6824" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:100675:6825" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:100860:6572" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100953:6824" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:100966:6825" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:101151:6572" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:101532:2659" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101769:6583" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:101823:2659" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102034:6446" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:102060:6583" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:102225:6457" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:102325:6446" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102474:6458" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:102516:6457" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:102765:6458" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:102769:6598" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:103060:6598" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+program changed-facts=4993 checked-facts=4977 source-facts=16 shown=20 omitted=4973 detail=--id identity
+
+# revision=8af5fd899ed81f47ce702d9ed808a01c14e171c0 parent=2dff561281784a93bd81f57aeeecc91fb3026839 lines=23 wall_s=45.06 load=7.11->8.64
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=a40459e22f3a8de253d0cfbea2bd0f2baa8378e9cf9387131e4a9d2bc3d69213 after=ae7510638942eea76daaff487573798572015cb5270bd7d16cbc106bc402ac38 exact-before=03bd2080380e1476b6430d57d722b2a9e1a3e4ee41987a3d47febb056fa0167e exact-after=3fe91c7905ad48c11c37c2038c69ada11e97b6e6417e252e98488dda438d77fb
+program level=checked-ir verdict="checked IR differs" diagnostic-metadata=differs
+"ir:type:$closure:100662:6824" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:100664:6824" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:100675:6825" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:100677:6825" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:100860:6572" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:100862:6572" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101532:2659" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:101534:2659" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101769:6583" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:101771:6583" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:102034:6446" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102036:6446" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:102225:6457" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:102227:6457" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:102474:6458" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:102476:6458" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:102769:6598" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102771:6598" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:103216:6670" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:103218:6670" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+program changed-facts=7690 checked-facts=7688 source-facts=2 shown=20 omitted=7670 detail=--id identity
+
+# revision=2dff561281784a93bd81f57aeeecc91fb3026839 parent=81048410169c593a251af05697f7953db5324808 lines=23 wall_s=47.05 load=8.64->8.02
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=f31f6f3f0775689a1e3bde66fcd57b14676766a39fc77205e1e9cea986116bca after=a40459e22f3a8de253d0cfbea2bd0f2baa8378e9cf9387131e4a9d2bc3d69213 exact-before=270022032a4f9355ec12a9c651958bcd02c9c41392cf4c3276b44a5c2218abbc exact-after=9f74422d7f15c45e241cc1fbf5d412fac20b5a347e3a3e43b24cbc27a2ded2bc
+program level=checked-ir verdict="checked IR differs" diagnostic-metadata=differs
+"ir:type:$closure:100448:6796" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:100461:6797" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:100646:6544" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100664:6824" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:100677:6825" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:100862:6572" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:101318:2657" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101534:2659" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:101555:6555" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:101771:6583" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:101820:6418" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:102011:6429" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:102036:6446" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102227:6457" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:102260:6430" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:102476:6458" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:102555:6570" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:102771:6598" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:103002:6642" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:103218:6670" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+program changed-facts=9998 checked-facts=9937 source-facts=61 shown=20 omitted=9978 detail=--id identity
+
+# revision=81048410169c593a251af05697f7953db5324808 parent=f307bb3e849a378e82e53c6eeaf530056fba6490 lines=23 wall_s=43.91 load=7.86->6.93
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=61bcb7514da17377b98e0be56bbb3424a210552960c2d6d4edaa7af681fd9374 after=f31f6f3f0775689a1e3bde66fcd57b14676766a39fc77205e1e9cea986116bca exact-before=56d3dce7f5c8a4522a815210b05389c21023a20a2416faab4136121c2463428b exact-after=b38afa9c352d4c766cf62148f25bbd5765f72db8d8a47913a53fa7a7733f4b47
+program level=checked-ir verdict="checked IR differs" diagnostic-metadata=differs
+"ir:type:$closure:100122:6535" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100448:6796" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:100461:6797" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:100646:6544" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:100794:2645" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101031:6546" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:101296:6409" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101318:2657" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:101487:6420" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:101555:6555" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:101736:6421" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:101820:6418" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102011:6429" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:102031:6561" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:102260:6430" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:102478:6633" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:102555:6570" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:103002:6642" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:103440:6571" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:103811:6584" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+program changed-facts=10110 checked-facts=10054 source-facts=56 shown=20 omitted=10090 detail=--id identity
+
+# revision=f307bb3e849a378e82e53c6eeaf530056fba6490 parent=a33db55e1c75cdf8f4e8e8517519d1e36d4e289b lines=23 wall_s=44.31 load=7.58->11.48
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=d2db751a669e5284edef8029d0242b2300ce74b017fab29b44adf6d29221c448 after=61bcb7514da17377b98e0be56bbb3424a210552960c2d6d4edaa7af681fd9374 exact-before=fd644bf0eccd680b0969dd062d2bfbcceac585ffd8ee711c61b7c7119b420de0 exact-after=c4e35873b083de4e6e4b573d4cf3d32a9a878136fcaa4745ef8552c6a4c9cdbf
+program level=checked-ir verdict="checked IR differs" diagnostic-metadata=differs
+"ir:type:$closure:100122:6521" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100122:6535" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:101031:6532" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:101031:6546" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:101296:6387" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101296:6409" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:101487:6398" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:101487:6420" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:101736:6399" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:101736:6421" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:102031:6547" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:102031:6561" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102478:6619" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:102478:6633" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:103440:6557" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:103440:6571" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:103811:6570" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:103811:6584" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:103825:6571" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:103825:6585" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+program changed-facts=6591 checked-facts=6584 source-facts=7 shown=20 omitted=6571 detail=--id identity
+
+# revision=a33db55e1c75cdf8f4e8e8517519d1e36d4e289b parent=675c088de4cd056548c13b20d28b0b5ebc484405 lines=23 wall_s=48.14 load=11.68->9.54
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=f4236a5b70ac1219d736f49da4d9da67ede952fa67bd564f491d079b2ea2a08d after=d2db751a669e5284edef8029d0242b2300ce74b017fab29b44adf6d29221c448 exact-before=f907bf3fa724df2811e8eba8bf756a72beda90c2b788c245b72d27c3ec9ad131 exact-after=f32c05df613192de2928b48d6165e785ee9cee84f5e56f116820d101b04b302b
+program level=checked-ir verdict="checked IR differs" diagnostic-metadata=differs
+"ir:optimizer::default_limit" level=checked-ir changed=authority before="absent" after=""
+"ir:type:$closure:100122:6521" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:100145:6350" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:100394:6351" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:100689:6499" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100794:2645" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:101031:6532" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:101136:6571" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101296:6387" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:101487:6398" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:101736:6399" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:102031:6547" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102098:6509" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:102469:6522" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:102478:6619" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102483:6523" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:103259:6857" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:103440:6557" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:103811:6570" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:103825:6571" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+program changed-facts=10987 checked-facts=10803 source-facts=184 shown=20 omitted=10967 detail=--id identity
+
+# revision=675c088de4cd056548c13b20d28b0b5ebc484405 parent=c1baa3fed440a608e95f6ff83ddcb997f4e0e96e lines=23 wall_s=42.57 load=9.50->7.12
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=b43f8c83c6ab139d44becb083e0f3b0cacaf1e6e7674006f8702b9c00b93adc9 after=f4236a5b70ac1219d736f49da4d9da67ede952fa67bd564f491d079b2ea2a08d exact-before=cc2ae2851ced952813a74fef07180fbbbd13078503a1d799f2a75fc574cbba85 exact-after=1830fe49204746fc20836837efde672f51131e73821c791d8789751bc4a73ec0
+program level=checked-ir verdict="checked IR differs" diagnostic-metadata=differs
+"ir:type:$closure:100145:6339" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:100145:6350" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:100394:6340" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:100394:6351" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:100689:6488" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100689:6499" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:101136:6560" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101136:6571" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102098:6498" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:102098:6509" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102469:6511" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:102469:6522" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102483:6512" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:102483:6523" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:103259:6847" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:103259:6857" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:104299:6828" level=checked-ir changed=layout before="bytes=40 alignment=8 layout=6616d2c9b226df02500818cb5fd13dd5b6910188fec7be87177ff6e91627b0c4" after="absent"
+"ir:type:$closure:104299:6838" level=checked-ir changed=layout before="absent" after="bytes=40 alignment=8 layout=6616d2c9b226df02500818cb5fd13dd5b6910188fec7be87177ff6e91627b0c4"
+"ir:type:$closure:104718:2618" level=checked-ir changed=layout before="bytes=24 alignment=8 layout=3b7e66fdd5315213b4dcea77416fc97969a945ea5a09f9d4d1d2739428a3bd57" after="absent"
+"ir:type:$closure:104718:2622" level=checked-ir changed=layout before="absent" after="bytes=24 alignment=8 layout=3b7e66fdd5315213b4dcea77416fc97969a945ea5a09f9d4d1d2739428a3bd57"
+program changed-facts=9871 checked-facts=9813 source-facts=58 shown=20 omitted=9851 detail=--id identity
+
+# revision=c1baa3fed440a608e95f6ff83ddcb997f4e0e96e parent=df5cf3e4f0f2fcf343242c867f9f77bd0a0c936e lines=23 wall_s=44.07 load=8.47->8.05
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=43fbfb12fd9a818a6b988b6ff7ef6327194211fe3eca5c3ce1a52c8bc328f4a2 after=b43f8c83c6ab139d44becb083e0f3b0cacaf1e6e7674006f8702b9c00b93adc9 exact-before=7dafea8761568f7b4d2ed3f1fe189a95c2f5ccbee2d7943ecdebe9ebbd8cc81e exact-after=6d0b39bfb22de1f770bbd28d649901223cbd19d0696b6a5683206752eb0f1701
+program level=checked-ir verdict="checked IR differs" diagnostic-metadata=differs
+"ir:type:$closure:100135:6336" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:100145:6339" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:100384:6337" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:100394:6340" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:100679:6484" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100689:6488" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:101126:6556" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101136:6560" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102088:6494" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:102098:6498" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102459:6507" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:102469:6511" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102473:6508" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:102483:6512" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:103249:6842" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:103259:6847" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:104289:6823" level=checked-ir changed=layout before="bytes=40 alignment=8 layout=6616d2c9b226df02500818cb5fd13dd5b6910188fec7be87177ff6e91627b0c4" after="absent"
+"ir:type:$closure:104299:6828" level=checked-ir changed=layout before="absent" after="bytes=40 alignment=8 layout=6616d2c9b226df02500818cb5fd13dd5b6910188fec7be87177ff6e91627b0c4"
+"ir:type:$closure:104708:2618" level=checked-ir changed=layout before="bytes=24 alignment=8 layout=3b7e66fdd5315213b4dcea77416fc97969a945ea5a09f9d4d1d2739428a3bd57" after="absent"
+"ir:type:$closure:104718:2618" level=checked-ir changed=layout before="absent" after="bytes=24 alignment=8 layout=3b7e66fdd5315213b4dcea77416fc97969a945ea5a09f9d4d1d2739428a3bd57"
+program changed-facts=5985 checked-facts=5959 source-facts=26 shown=20 omitted=5965 detail=--id identity
+
+# revision=df5cf3e4f0f2fcf343242c867f9f77bd0a0c936e parent=70fe3b69c5e43e1abfebac03a828be30ea8f4ab5 lines=23 wall_s=46.65 load=8.05->8.76
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=ddbcc0b4cd7b4cc9d4e9155a8703302e19623b632a41818d4430cce161d7490e after=43fbfb12fd9a818a6b988b6ff7ef6327194211fe3eca5c3ce1a52c8bc328f4a2 exact-before=89c409411d57dfdf052f1e5b223a396d2c65dbc650bcee4dc52ab4398c5dd9c9 exact-after=34180c2c47e900f504fb25b135c6f5c6924872b45e7501ebd09564f71689bdd4
+program level=checked-ir verdict="checked IR differs" diagnostic-metadata=differs
+"ir:type:$closure:113097:4641" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:113102:4641" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:113551:5275" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:113556:5275" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:113565:5276" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:113568:5277" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:113570:5276" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:113573:5277" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:114012:5281" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:114053:5281" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:114327:5285" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:114367:5285" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:114868:5283" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:114908:5283" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:115087:6826" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:115127:6826" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:115260:6832" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:115300:6832" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:116027:2674" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:116088:2674" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+program changed-facts=3441 checked-facts=3432 source-facts=9 shown=20 omitted=3421 detail=--id identity
+
+# revision=70fe3b69c5e43e1abfebac03a828be30ea8f4ab5 parent=1ed3e6ae8995df9b2a0bb8d224329693976bb3f1 lines=3 wall_s=28.93 load=9.34->8.28
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=ddbcc0b4cd7b4cc9d4e9155a8703302e19623b632a41818d4430cce161d7490e after=ddbcc0b4cd7b4cc9d4e9155a8703302e19623b632a41818d4430cce161d7490e exact-before=89c409411d57dfdf052f1e5b223a396d2c65dbc650bcee4dc52ab4398c5dd9c9 exact-after=5977ec10cbe586582c3677ee36e1973b39b2c959e80001f573776d2a83fc8393
+program level=checked-ir verdict="text identical, checked IR identical" diagnostic-metadata=differs
+program changed-facts=0 checked-facts=0 source-facts=0 shown=0 omitted=0 detail=--id identity
+
+# revision=1ed3e6ae8995df9b2a0bb8d224329693976bb3f1 parent=7d00e01ecc31fbc62677d2834298c02518c8609a lines=23 wall_s=31.85 load=8.28->7.73
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=b88be0aff1a9f5091466f773896b8433b412bd3f70f42a98d67e026ea5094a67 after=ddbcc0b4cd7b4cc9d4e9155a8703302e19623b632a41818d4430cce161d7490e exact-before=feca9ea4193056ce584dff00656e7cfad737dfa1cf525e6db41abdf7ab57f1aa exact-after=5977ec10cbe586582c3677ee36e1973b39b2c959e80001f573776d2a83fc8393
+program level=checked-ir verdict="checked IR differs" diagnostic-metadata=differs
+"ir:type:$closure:100135:6336" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:100255:6463" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100384:6337" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:100626:6476" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100640:6477" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:100679:6484" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:101126:6556" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:101416:6811" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:102088:6494" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102419:6792" level=checked-ir changed=layout before="bytes=40 alignment=8 layout=6616d2c9b226df02500818cb5fd13dd5b6910188fec7be87177ff6e91627b0c4" after="absent"
+"ir:type:$closure:102459:6507" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102473:6508" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:102832:2600" level=checked-ir changed=layout before="bytes=24 alignment=8 layout=3b7e66fdd5315213b4dcea77416fc97969a945ea5a09f9d4d1d2739428a3bd57" after="absent"
+"ir:type:$closure:103249:6842" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:103457:5191" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:103566:5229" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:103576:5230" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:103806:5209" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:103816:5210" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:103992:6587" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+program changed-facts=9975 checked-facts=9598 source-facts=377 shown=20 omitted=9955 detail=--id identity
+
+# revision=7d00e01ecc31fbc62677d2834298c02518c8609a parent=28c1fda0b315b44489bdea9856aa7fac0d74feb6 lines=23 wall_s=42.57 load=8.95->7.42
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=a59df144a69773b04b5f15bf05dad8aa987d8a5316d6bf764d1e1c1d5590a41c after=b88be0aff1a9f5091466f773896b8433b412bd3f70f42a98d67e026ea5094a67 exact-before=5617881c56283910468d378f4c9b5aaa259738b2a9ea0fa5ad9e5b8d9f7fcdd0 exact-after=0e3811b0aac2eceed78c0edffaafec237c600b13717dc9043e0668f564378b29
+program level=checked-ir verdict="checked IR differs" diagnostic-metadata=differs
+"ir:driver::main" level=checked-ir changed=authority before="effect:child_terminate,effect:child_wait,effect:clock_read,effect:directory_close,effect:directory_create,effect:directory_open,effect:directory_open_directory,effect:directory_read,effect:directory_remove,effect:directory_rename,effect:directory_rewind,effect:file_close,effect:file_duplicate,effect:file_executable,effect:file_read,effect:file_readonly,effect:file_rewind,effect:file_write,effect:listener_accept,effect:listener_address,effect:listener_close,effect:process_spawn,effect:stderr_write,effect:stdin_read,effect:stdout_write,effect:world_arg_copy,effect:world_arg_count,effect:world_arg_len,effect:world_clock,effect:world_directory,effect:world_exit_status,effect:world_file,effect:world_listen,effect:world_process,effect:world_stderr,effect:world_stdin,effect:world_stdout,grant:World" after="effect:child_terminate,effect:child_wait,effect:clock_read,effect:directory_close,effect:directory_create,effect:directory_open,effect:directory_open_directory,effect:directory_read,effect:directory_remove,effect:directory_rename,effect:file_close,effect:file_duplicate,effect:file_executable,effect:file_read,effect:file_readonly,effect:file_rewind,effect:file_write,effect:listener_accept,effect:listener_address,effect:listener_close,effect:process_spawn,effect:stderr_write,effect:stdin_read,effect:stdout_write,effect:world_arg_copy,effect:world_arg_count,effect:world_arg_len,effect:world_clock,effect:world_directory,effect:world_exit_status,effect:world_file,effect:world_listen,effect:world_process,effect:world_stderr,effect:world_stdin,effect:world_stdout,grant:World"
+"ir:main" level=checked-ir changed=authority before="effect:child_terminate,effect:child_wait,effect:clock_read,effect:directory_close,effect:directory_create,effect:directory_open,effect:directory_open_directory,effect:directory_read,effect:directory_remove,effect:directory_rename,effect:directory_rewind,effect:file_close,effect:file_duplicate,effect:file_executable,effect:file_read,effect:file_readonly,effect:file_rewind,effect:file_write,effect:listener_accept,effect:listener_address,effect:listener_close,effect:process_spawn,effect:stderr_write,effect:stdin_read,effect:stdout_write,effect:world_arg_copy,effect:world_arg_count,effect:world_arg_len,effect:world_clock,effect:world_directory,effect:world_exit_status,effect:world_file,effect:world_listen,effect:world_process,effect:world_stderr,effect:world_stdin,effect:world_stdout,grant:World" after="effect:child_terminate,effect:child_wait,effect:clock_read,effect:directory_close,effect:directory_create,effect:directory_open,effect:directory_open_directory,effect:directory_read,effect:directory_remove,effect:directory_rename,effect:file_close,effect:file_duplicate,effect:file_executable,effect:file_read,effect:file_readonly,effect:file_rewind,effect:file_write,effect:listener_accept,effect:listener_address,effect:listener_close,effect:process_spawn,effect:stderr_write,effect:stdin_read,effect:stdout_write,effect:world_arg_copy,effect:world_arg_count,effect:world_arg_len,effect:world_clock,effect:world_directory,effect:world_exit_status,effect:world_file,effect:world_listen,effect:world_process,effect:world_stderr,effect:world_stdin,effect:world_stdout,grant:World"
+"ir:type:$closure:100255:6463" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:100596:6803" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100626:6476" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:100640:6477" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:101416:6811" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:101599:6784" level=checked-ir changed=layout before="bytes=40 alignment=8 layout=6616d2c9b226df02500818cb5fd13dd5b6910188fec7be87177ff6e91627b0c4" after="absent"
+"ir:type:$closure:101947:2596" level=checked-ir changed=layout before="bytes=24 alignment=8 layout=3b7e66fdd5315213b4dcea77416fc97969a945ea5a09f9d4d1d2739428a3bd57" after="absent"
+"ir:type:$closure:102419:6792" level=checked-ir changed=layout before="absent" after="bytes=40 alignment=8 layout=6616d2c9b226df02500818cb5fd13dd5b6910188fec7be87177ff6e91627b0c4"
+"ir:type:$closure:102572:5185" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:102681:5223" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:102691:5224" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:102832:2600" level=checked-ir changed=layout before="absent" after="bytes=24 alignment=8 layout=3b7e66fdd5315213b4dcea77416fc97969a945ea5a09f9d4d1d2739428a3bd57"
+"ir:type:$closure:102921:5203" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:102931:5204" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:103107:6579" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:103457:5191" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:103467:6727" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:103555:6574" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+program changed-facts=9110 checked-facts=8805 source-facts=305 shown=20 omitted=9090 detail=--id identity
+
+# revision=28c1fda0b315b44489bdea9856aa7fac0d74feb6 parent=4bea1891c8c116fe0ffa4e955248813ec27db321 lines=23 wall_s=47.49 load=8.03->9.11
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=88f900d2dc8d956bb4201b745048a49edecdf1e0fa6b75f4964db182418399c2 after=a59df144a69773b04b5f15bf05dad8aa987d8a5316d6bf764d1e1c1d5590a41c exact-before=172a8594bcf633e13b2cf4a9b6fb9b0321598d59f80e7f243ff728e6221818c3 exact-after=e59bab30caebf097372ed46c5a61d2f3c67de7842e29a2d0ab05b8957990a141
+program level=checked-ir verdict="checked IR differs" diagnostic-metadata=differs
+"ir:type:$closure:100267:6772" level=checked-ir changed=layout before="bytes=40 alignment=8 layout=6616d2c9b226df02500818cb5fd13dd5b6910188fec7be87177ff6e91627b0c4" after="absent"
+"ir:type:$closure:100596:6803" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:100615:2584" level=checked-ir changed=layout before="bytes=24 alignment=8 layout=3b7e66fdd5315213b4dcea77416fc97969a945ea5a09f9d4d1d2739428a3bd57" after="absent"
+"ir:type:$closure:101240:5168" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:101349:5206" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:101359:5207" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:101589:5186" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:101599:5187" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:101599:6784" level=checked-ir changed=layout before="absent" after="bytes=40 alignment=8 layout=6616d2c9b226df02500818cb5fd13dd5b6910188fec7be87177ff6e91627b0c4"
+"ir:type:$closure:101775:6567" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:101947:2596" level=checked-ir changed=layout before="absent" after="bytes=24 alignment=8 layout=3b7e66fdd5315213b4dcea77416fc97969a945ea5a09f9d4d1d2739428a3bd57"
+"ir:type:$closure:102135:6715" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:102223:6562" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:102348:6564" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:102572:5185" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:102681:5223" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:102691:5224" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:102921:5203" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:102931:5204" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:103075:2592" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+program changed-facts=10982 checked-facts=10847 source-facts=135 shown=20 omitted=10962 detail=--id identity
+
+# revision=4bea1891c8c116fe0ffa4e955248813ec27db321 parent=676f38f019dbb1effe40078399780e2ec180aa94 lines=23 wall_s=42.22 load=9.11->7.60
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=54625592aa7fc349ebfee38663cff1382395eb24274937ef8dab2809838a33ae after=88f900d2dc8d956bb4201b745048a49edecdf1e0fa6b75f4964db182418399c2 exact-before=4318f376ed5a6d17e42067a610e258fda7bda5b182c3b81a07dd4b94a5a054b1 exact-after=a6b8a67af0afcbf858c413f45f1d4bd7ad2ff707639930e08bbb36bfd1c8b4f7
+program level=checked-ir verdict="checked IR differs" diagnostic-metadata=differs
+"ir:type:$closure:100240:6751" level=checked-ir changed=layout before="bytes=40 alignment=8 layout=6616d2c9b226df02500818cb5fd13dd5b6910188fec7be87177ff6e91627b0c4" after="absent"
+"ir:type:$closure:100267:6772" level=checked-ir changed=layout before="absent" after="bytes=40 alignment=8 layout=6616d2c9b226df02500818cb5fd13dd5b6910188fec7be87177ff6e91627b0c4"
+"ir:type:$closure:100588:2581" level=checked-ir changed=layout before="bytes=24 alignment=8 layout=3b7e66fdd5315213b4dcea77416fc97969a945ea5a09f9d4d1d2739428a3bd57" after="absent"
+"ir:type:$closure:100615:2584" level=checked-ir changed=layout before="absent" after="bytes=24 alignment=8 layout=3b7e66fdd5315213b4dcea77416fc97969a945ea5a09f9d4d1d2739428a3bd57"
+"ir:type:$closure:101213:5152" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:101240:5168" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:101322:5190" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:101332:5191" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:101349:5206" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:101359:5207" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:101562:5170" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:101572:5171" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:101589:5186" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:101599:5187" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:101748:6551" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:101775:6567" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:102108:6694" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:102135:6715" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102196:6546" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:102223:6562" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+program changed-facts=11398 checked-facts=11363 source-facts=35 shown=20 omitted=11378 detail=--id identity
+
+# revision=676f38f019dbb1effe40078399780e2ec180aa94 parent=f6c67fefc682bea80b7168549e620b09c2255f50 lines=23 wall_s=47.91 load=7.60->11.77
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=6406a5324c106adf4bce15994817cdf8c42d3588b40d512708fdb0f8e81acea8 after=54625592aa7fc349ebfee38663cff1382395eb24274937ef8dab2809838a33ae exact-before=8531dec3e37d361d5bb622896f5d9393466c3dd6436c5cac852c1053b00def49 exact-after=217c9b1a5da2ca4d3a29c59f08189a71e25ecbd7713e571dfe912e21e76a9144
+program level=checked-ir verdict="checked IR differs" diagnostic-metadata=differs
+"ir:type:$closure:100086:6488" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:100211:6490" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100240:6751" level=checked-ir changed=layout before="absent" after="bytes=40 alignment=8 layout=6616d2c9b226df02500818cb5fd13dd5b6910188fec7be87177ff6e91627b0c4"
+"ir:type:$closure:100588:2581" level=checked-ir changed=layout before="absent" after="bytes=24 alignment=8 layout=3b7e66fdd5315213b4dcea77416fc97969a945ea5a09f9d4d1d2739428a3bd57"
+"ir:type:$closure:100937:2575" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100958:2576" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101009:2577" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101213:5152" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:101216:6483" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101256:6485" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101322:5190" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:101332:5191" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:101562:5170" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:101572:5171" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:101683:5929" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101748:6551" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:102108:6694" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102196:6546" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:102321:6548" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102373:2592" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+program changed-facts=11469 checked-facts=10842 source-facts=627 shown=20 omitted=11449 detail=--id identity
+
+# revision=f6c67fefc682bea80b7168549e620b09c2255f50 parent=509c2da89dad9c3c183edfdc605d0f70d69834bd lines=3 wall_s=26.61 load=11.77->9.32
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=6406a5324c106adf4bce15994817cdf8c42d3588b40d512708fdb0f8e81acea8 after=6406a5324c106adf4bce15994817cdf8c42d3588b40d512708fdb0f8e81acea8 exact-before=8531dec3e37d361d5bb622896f5d9393466c3dd6436c5cac852c1053b00def49 exact-after=dc8f442a0cc617bde611c1e19e38d72c534edda80276f7a7b4f847457ed766cf
+program level=checked-ir verdict="text identical, checked IR identical" diagnostic-metadata=differs
+program changed-facts=0 checked-facts=0 source-facts=0 shown=0 omitted=0 detail=--id identity
+
+# revision=509c2da89dad9c3c183edfdc605d0f70d69834bd parent=4eef8920d3f653cbe13d400461d67c205a063875 lines=3 wall_s=12.12 load=9.13->8.79
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=6406a5324c106adf4bce15994817cdf8c42d3588b40d512708fdb0f8e81acea8 after=6406a5324c106adf4bce15994817cdf8c42d3588b40d512708fdb0f8e81acea8 exact-before=8531dec3e37d361d5bb622896f5d9393466c3dd6436c5cac852c1053b00def49 exact-after=dc8f442a0cc617bde611c1e19e38d72c534edda80276f7a7b4f847457ed766cf
+program level=checked-ir verdict="text identical, checked IR identical" diagnostic-metadata=differs
+program changed-facts=0 checked-facts=0 source-facts=0 shown=0 omitted=0 detail=--id identity
+
+# revision=4eef8920d3f653cbe13d400461d67c205a063875 parent=be277dab565fa8a3dc47166b0cb843244492db33 lines=23 wall_s=26.55 load=8.79->7.49
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=1e375e28e43cc4426248963e20e2837420ac7aa34e22eb3d0533f7054db5d094 after=6406a5324c106adf4bce15994817cdf8c42d3588b40d512708fdb0f8e81acea8 exact-before=a61cbca950458c43fe092948a780a7036929318cbb30852f8323e0224e3a8d34 exact-after=dc8f442a0cc617bde611c1e19e38d72c534edda80276f7a7b4f847457ed766cf
+program level=checked-ir verdict="checked IR differs" diagnostic-metadata=differs
+"ir:type:$closure:100078:6481" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:100086:6488" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:100203:6483" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100211:6490" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:100929:2572" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100937:2575" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:100950:2573" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100958:2576" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:101001:2574" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101009:2577" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:101208:6476" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101216:6483" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:101248:6478" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101256:6485" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:101675:5922" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101683:5929" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:102365:2589" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:102373:2592" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:103380:5100" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:103388:5107" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+program changed-facts=9776 checked-facts=9748 source-facts=28 shown=20 omitted=9756 detail=--id identity
+
+# revision=be277dab565fa8a3dc47166b0cb843244492db33 parent=7716ff4ebcf0225b73b90c4adcbc5a422b7697c8 lines=23 wall_s=38.46 load=7.49->6.76
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=f7c8b9361f4c1ac88e27f910ff01f9231a382a2f8bc3b18c38d8a967bc7bdf43 after=1e375e28e43cc4426248963e20e2837420ac7aa34e22eb3d0533f7054db5d094 exact-before=817f6b3e75a31c08ff437a385385d05f0d834fb5a68840c21b124cd1b47a3daa exact-after=7309959e0a1972922f9efa5baec60b66d346a2eb6ca87a40cadc794f0a731e24
+program level=checked-ir verdict="checked IR differs" diagnostic-metadata=differs
+"ir:native::cache::contracts" level=checked-ir changed=authority before="absent" after=""
+"ir:native::cache_contracts" level=checked-ir changed=authority before="absent" after=""
+"ir:reuse::header_size" level=checked-ir changed=authority before="absent" after=""
+"ir:type:$closure:100078:6481" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:100082:4894" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100136:4895" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100203:6483" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:100278:5362" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=8ddcef551082bb90f9bf1fe7ee1d042913870408fb799156ae2a77067122df66" after="absent"
+"ir:type:$closure:100929:2572" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:100939:6449" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:100950:2573" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:101001:2574" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:101208:6476" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:101248:6478" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:10126:1501" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:101420:6467" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101675:5922" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:101687:6493" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101737:6471" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:101740:6472" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+program changed-facts=11638 checked-facts=11153 source-facts=485 shown=20 omitted=11618 detail=--id identity
+
+# revision=7716ff4ebcf0225b73b90c4adcbc5a422b7697c8 parent=0c881c4aea3c933c860bd0cc1597db69e44c9031 lines=23 wall_s=41.11 load=6.76->6.74
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=3061e79e4b33f5939fc4f20a0076c04207b24b237f534cade09d40877c0ba6fe after=f7c8b9361f4c1ac88e27f910ff01f9231a382a2f8bc3b18c38d8a967bc7bdf43 exact-before=7b07b618f7e925252a5245ef79e8cce235d9f1052efd2a1cf33bfca87be3141d exact-after=c17f6efe7121806d3d64109d92d233ee47e9027fb8944df7b8e10cebc7e3ecec
+program level=checked-ir verdict="checked IR differs" diagnostic-metadata=differs
+"ir:type:$closure:100055:6425" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:100082:4894" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:100136:4895" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:100278:5362" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=8ddcef551082bb90f9bf1fe7ee1d042913870408fb799156ae2a77067122df66"
+"ir:type:$closure:100536:6443" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100803:6469" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100853:6447" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:100856:6448" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:100865:6449" level=checked-ir changed=layout before="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246" after="absent"
+"ir:type:$closure:100939:6449" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:10118:1493" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:10126:1501" level=checked-ir changed=layout before="absent" after="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6"
+"ir:type:$closure:101420:6467" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:101687:6493" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:101737:6471" level=checked-ir changed=layout before="absent" after="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909"
+"ir:type:$closure:101740:6472" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:101749:6473" level=checked-ir changed=layout before="absent" after="bytes=16 alignment=8 layout=498dd79d8dd18fb793bf53ff0f5de3cd4163784538453d371e95341cdba90246"
+"ir:type:$closure:102127:4321" level=checked-ir changed=layout before="bytes=8 alignment=8 layout=bed2b3aef17f61d6becaa16467564d5d2ee863336321ca5b5337ebed03508909" after="absent"
+"ir:type:$closure:102581:4942" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+"ir:type:$closure:102595:4943" level=checked-ir changed=layout before="bytes=1 alignment=1 layout=7be31ccc8105668dc375ca3a11b1b355614e03185e9b0ca86519652675b5f9a6" after="absent"
+program changed-facts=10705 checked-facts=10480 source-facts=225 shown=20 omitted=10685 detail=--id identity

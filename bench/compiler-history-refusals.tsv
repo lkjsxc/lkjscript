@@ -1,0 +1,172 @@
+revision	first_reason	source_root	library_environment	first_diagnostic_or_scope
+ce405407660cc5f5cb72dd47ad54d10ce11be93e	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+7af20c25acf9c183d0bf57fa9d1e577b531428c6	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+fce333fd500c23a1413c8b6b00c6a0153cba27e7	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+5c86cd33c97d7c0dbad2897b38eff6433469b04e	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+a2757ebffc3b370037b327dc2911f78d4eaa3e36	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+6a15fdab20cdbf89ebc8683e8aa1d8b0f64b7142	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+d632a233901b469df9c7d1e5b5d82d2c65c8428c	E_REPLAY_DATA	src/main.lkj	historical-roots	"<before>/library/prelude.rs" E_REPLAY_DATA changed include-only data needs an explicit data-file operation
+5a9629ef986ed2dc63b8befbc8ad081a10c04b28	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+9e81f9bfa4cb5982a6d4c1f2668330822760b4c4	E_UNSUPPORTED	src/lib.lkj	historical-roots	src/resolve.lkj:948:18: E_UNSUPPORTED unsupported construct: impl
+c60c3cbaffb5303e8e6e141a56465bd48e2b7364	E_PARSE	src/lib.lkj	historical-roots	src/facts.lkj:270:39: E_PARSE expected `>`
+e11bd43ec9efaf265f930fae9134608177055ef4	E_IMPORT	src/lib.lkj	historical-roots	<before>/src/wasm.lkj:3:1: E_IMPORT unresolved or cyclic import std::collections::BTreeSet
+785a0d3e7f4e4a616312e8fb817340b7a74a138b	E_IMPORT	src/lib.lkj	historical-roots	<before>/src/wasm.lkj:3:1: E_IMPORT unresolved or cyclic import std::collections::BTreeSet
+c282cfcabcdc4ad41bae1e7ff9652eb63e5d5f6f	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+6648d40890d4ab0f3ce44bfad73dc4ebabba8aeb	E_UNSUPPORTED	src/lib.lkj	historical-roots	src/resolve.lkj:948:18: E_UNSUPPORTED unsupported construct: impl
+66c01e3536d731cbab01b19fd34640caa69e9cfb	E_IMPORT	src/lib.lkj	historical-roots	<before>/src/wasm.lkj:3:1: E_IMPORT unresolved or cyclic import std::collections::BTreeSet
+1185a95cf7cf66715e2c5685b6fcaeb9f984e474	E_IMPORT	src/lib.lkj	historical-roots	<before>/src/wasm.lkj:3:1: E_IMPORT unresolved or cyclic import std::collections::BTreeSet
+ccbed8cf132a633a81182d62192031d38b03b9ca	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+1654430d5473e7f032d0067dccb3c0e7905c2061	E_IMPORT	src/lib.lkj	historical-roots	<before>/src/wasm.lkj:3:1: E_IMPORT unresolved or cyclic import std::collections::BTreeSet
+931e8a5c1886b1c31ebb4aef834fcecce1473ca0	changed-source-outside-applied-operation-files	src/main.lkj	historical-roots	src/semantic_tests/optimizer.rs
+a49aceb3455dbdf616ec9e14507abb8c9b657d63	E_REPLAY_FILES	src/main.lkj	historical-roots	"<after>/src/native/storage_plan.lkj" E_REPLAY_FILES a newly loaded file needs an explicit file-creation operation
+65736a3452413d31ce9372f64d777337f3f595e4	E_IMPORT	src/lib.lkj	historical-roots	<before>/src/wasm.lkj:3:1: E_IMPORT unresolved or cyclic import std::collections::BTreeSet
+01c805a202b258a1a9241f1edafd5feaa7655ce1	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+1f9ea3faad5765834fb274de9f5acb122159ce6b	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+2f16c6189ca4f5536111114679e740571644d6aa	E_IMPORT	src/lib.lkj	historical-roots	<before>/src/wasm.lkj:3:1: E_IMPORT unresolved or cyclic import std::collections::BTreeSet
+940b1dce2ec2892d2def628dbfe5c6bb757ad415	E_PARSE	src/lib.lkj	historical-roots	src/facts.lkj:270:39: E_PARSE expected `>`
+5f46e96a8f0d648f286c58ac1617bbd9bf4e4515	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+fd7de72c3531f89f5927c4900cd483fccc0d5130	E_IMPORT	src/lib.lkj	historical-roots	<before>/src/wasm.lkj:3:1: E_IMPORT unresolved or cyclic import std::collections::BTreeSet
+df5cf3e4f0f2fcf343242c867f9f77bd0a0c936e	changed-source-outside-applied-operation-files	src/main.lkj	historical-roots	src/semantic_tests.rs,src/semantic_tests/scalar_clone.rs
+4891bf56ac181fe16b5e9c0bc5029505f5bea691	E_REPLAY_FILES	src/main.lkj	historical-roots	"<after>/src/diagnostics/iterator_edits.lkj" E_REPLAY_FILES a newly loaded file needs an explicit file-creation operation
+a8c4d1c4534c92a6c97a1d8cdbea0fb91ed8d59c	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+8af5fd899ed81f47ce702d9ed808a01c14e171c0	changed-source-outside-applied-operation-files	src/main.lkj	historical-roots	src/semantic_tests/optimizer.rs,src/semantic_tests/optimizer/wrappers.rs
+d33760e92fe6a185f50a5deb218bc43ef52f1953	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+d4a91ae8908b9f93e4fd6338692d7d5ab96f26d4	E_IMPORT	src/lib.lkj	historical-roots	<before>/src/wasm.lkj:3:1: E_IMPORT unresolved or cyclic import std::collections::BTreeSet
+0dbb92336396b1dae9a9f75247ade76b1f68ffeb	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+f7f2d7eaca3efece0291ca641544b2a24ded208f	changed-source-outside-applied-operation-files	src/main.lkj	historical-roots	src/semantic_tests.rs,src/semantic_tests/panic_messages.rs
+4f83bdf302550fafb5e9b06519b1bb4861ebe61a	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+d225e8cbe643ee7e1e99b1d345a482e127e5b3b3	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+4bea1891c8c116fe0ffa4e955248813ec27db321	E_REPLAY_FILES	src/main.lkj	historical-roots	"<after>/src/elaborate/diagnostic_edits.lkj" E_REPLAY_FILES a newly loaded file needs an explicit file-creation operation
+113ec43428e441dd5b81b7d73272db605218368e	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+22b9794803a8cc6204a05e121581aeaf24c778ce	E_REPLAY_FILES	src/main.lkj	historical-roots	"<after>/src/diagnostics/static_label_edits.lkj" E_REPLAY_FILES a newly loaded file needs an explicit file-creation operation
+d32a611d62caa574da48c8c37e6fe94eb70afa67	E_PARSE	src/lib.lkj	historical-roots	src/facts.lkj:270:39: E_PARSE expected `>`
+abd293a4e2b846ac53ef4432b772143ad2292b19	E_IMPORT	src/lib.lkj	historical-roots	<before>/src/wasm.lkj:3:1: E_IMPORT unresolved or cyclic import std::collections::BTreeSet
+4165156d4d4c9726af61199d34f9b1b2053b9ef3	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+4f303ce6ed4d93e6c12be8071c9e4ab10bd30a2a	E_UNSUPPORTED	src/lib.lkj	historical-roots	src/resolve.lkj:948:18: E_UNSUPPORTED unsupported construct: impl
+0d420bfb9a20cd682317d03a7424361bafcfc152	E_IMPORT	src/lib.lkj	historical-roots	<before>/src/wasm.lkj:3:1: E_IMPORT unresolved or cyclic import std::collections::BTreeSet
+67132509f820b8e6b1f5e7ba55112e310e0da162	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+9c2660c4aa0ab10ebd12938aa5d3ac8cb74acfb5	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+b2aaa22ef2529e531058e09898c1645468fbea9d	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+403916225f24fbc2f83f2be156a0abdcadc77a32	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+7007e54660478b10011776841521963e3c8f817b	E_IMPORT	src/lib.lkj	historical-roots	<before>/src/wasm.lkj:3:1: E_IMPORT unresolved or cyclic import std::collections::BTreeSet
+675c088de4cd056548c13b20d28b0b5ebc484405	E_REPLAY_FILES	src/main.lkj	historical-roots	"<after>/src/diagnostics/borrow_edits.lkj" E_REPLAY_FILES a newly loaded file needs an explicit file-creation operation
+2f2c22e329d0fcedb51993f73f3158e0b743c9cb	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+35a5d862b5b093916efacc523bbf5542b77dd226	E_IMPORT	src/lib.lkj	historical-roots	<before>/src/generics.lkj:4:1: E_IMPORT unresolved or cyclic import std::collections::BTreeMap
+2dff561281784a93bd81f57aeeecc91fb3026839	E_REPLAY_FILES	src/main.lkj	historical-roots	"<after>/src/diagnostics/consumer_edits.lkj" E_REPLAY_FILES a newly loaded file needs an explicit file-creation operation
+5459af83b2115163d26e7ac91d98debcc08ed7c3	E_IMPORT	src/lib.lkj	historical-roots	<before>/src/wasm.lkj:3:1: E_IMPORT unresolved or cyclic import std::collections::BTreeSet
+7d928f74ad1c47bc625cd55fd9675f61e3a21ceb	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+95e50f3753136f27ffb4e493b10e6788ccb2ec11	E_PARSE	src/lib.lkj	historical-roots	src/facts.lkj:371:39: E_PARSE expected `>`
+47e33ae90ec77b176597e45d7917694749526aba	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+964ceae03d5f94cb160683f66b46bc1c768bb518	E_UNSUPPORTED	src/lib.lkj	historical-roots	src/resolve.lkj:948:18: E_UNSUPPORTED unsupported construct: impl
+0c881c4aea3c933c860bd0cc1597db69e44c9031	E_REPLAY_FILES	src/main.lkj	historical-roots	"<after>/library/sha256.rs" E_REPLAY_FILES a newly loaded file needs an explicit file-creation operation
+2144fc8012664096899d3585a8c12343139f7ee3	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+1be06af9f3c908ec7d95a2e2cb4d64c9d68e440f	E_IMPORT	src/lib.lkj	historical-roots	<before>/src/wasm.lkj:3:1: E_IMPORT unresolved or cyclic import std::collections::BTreeSet
+75fefba97ab25204db5f3bf1b3975190d4d2e45d	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+d1461c863e1b0a507815632616223a27c84772a5	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+4fdd3f7f4ff208b3a72f7f116a6d7430100e615f	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+88261014f0b56cc5a4099654a9d0951b3ea88a6d	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+3389860cd34b1997a4f9a0a7737588ba2697f63a	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+990958497e226dd5c49c81e17af7970c6753a283	E_PARSE	src/lib.lkj	historical-roots	src/facts.lkj:270:39: E_PARSE expected `>`
+892b46da28c0e7a9dd529e7167dd763defabcc39	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+3cedfe546a390797e7528179ebc0ecc499d50cdf	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+91d3a9b36a1d9fb2156de1114f238839dffd4f69	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+20fd17938d14db146e4df20295dfbc4b977548f6	E_UNSUPPORTED	src/lib.lkj	historical-roots	src/resolve.lkj:948:18: E_UNSUPPORTED unsupported construct: impl
+ea6d5729431e426268a391b8e4a47a115cc5775b	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+2af992d73f8baea796983e6197f4e6e1175659a0	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+81048410169c593a251af05697f7953db5324808	changed-source-outside-applied-operation-files	src/main.lkj	historical-roots	src/semantic_tests/optimizer.rs,src/semantic_tests/optimizer/forwarding.rs
+230f21dc02697b93abbee30174ae7fe3d736e6d5	E_IMPORT	src/lib.lkj	historical-roots	<before>/src/wasm.lkj:3:1: E_IMPORT unresolved or cyclic import std::collections::BTreeSet
+1c856a5e3a83a2b5b65c5509b934db98e0337634	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+352f0997142d9fed279f3964a76102d61f7ac1e6	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+42c3d390be9655fa1e37fa7264de752a7cab7199	E_IMPORT	src/lib.lkj	historical-roots	<before>/src/wasm.lkj:3:1: E_IMPORT unresolved or cyclic import std::collections::BTreeSet
+be923bdd843e9c6e460aa58c269e0ae1822ede84	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+2655a6fbc8bf90e1e437367bc5d6f974a1bf3dbb	E_IMPORT	src/lib.lkj	historical-roots	<before>/src/wasm.lkj:3:1: E_IMPORT unresolved or cyclic import std::collections::BTreeSet
+47e989412e40ad2fd6ab75240f5c6a31d922288c	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+13771737a4a9bc49179927fdc0eaaea68003eee1	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+2d50e71ba9362f9eb2d5cd08e1bd10fc5d7a50e4	E_REPLAY_FILES	src/main.lkj	historical-roots	"<after>/src/native/environment.lkj" E_REPLAY_FILES a newly loaded file needs an explicit file-creation operation
+a065f740a6aa4ee90c477dfe3900963a4a8c94bc	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+6998f1b5db7e135e02603ff83fc6f84afe76200e	E_IMPORT	src/lib.lkj	historical-roots	<before>/src/generics.lkj:4:1: E_IMPORT unresolved or cyclic import std::collections::BTreeMap
+6c8eadf6e0b77f9ed5c1322665eade2440d6cc9c	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+19d012fcf4d210e1e46b823272309ccf00fa7528	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+0315632b111e8dc3452b0deb60d57a993f1e4778	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+2396e69cc3eccd8971bdee092ccc47e7978cbd52	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+52e3e11cd45dd4f05b7bffbf12c8f6ea986cf645	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:16:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+4c71274a1ab111ea4fbb67e588b21c77d5946fee	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+90e215bfc216e4a673c41f8c24b8f6eca90cba8e	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+1bbb2df30e16252adc1d5183856ed58583b6d0e0	E_REPLAY_FILES	src/main.lkj	historical-roots	"<after>/library/text.rs" E_REPLAY_FILES a newly loaded file needs an explicit file-creation operation
+793932361af47325ccd0b2c096cb1c252748bc25	E_IMPORT	src/lib.lkj	historical-roots	<before>/src/wasm.lkj:3:1: E_IMPORT unresolved or cyclic import std::collections::BTreeSet
+3bbd8a93196978e6467d362c20f16fe0c90d2f7c	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+4d7557366c8d552054fbcf5070837038a9cef0c0	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+ba297e80d25b4f1ecda03f99de1ead7901aaa163	E_UNSUPPORTED	src/lib.lkj	historical-roots	src/machine.lkj:101:9: E_UNSUPPORTED unsupported construct: impl item
+32f0d1dc27c39cf7ddc607ea4929ee6da6d00fce	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+2824d948a15d1974bd4a664207cc6518e4ebd528	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+857a61010477b2cc2a51a2aac16248f0e301fa3a	E_IMPORT	src/lib.lkj	historical-roots	<before>/src/wasm.lkj:3:1: E_IMPORT unresolved or cyclic import std::collections::BTreeSet
+a3f49149f2b6fed15e9482833cdca87d9e53ecc2	E_IMPORT	src/lib.lkj	historical-roots	<before>/src/wasm.lkj:3:1: E_IMPORT unresolved or cyclic import std::collections::BTreeSet
+d9166adba66192ae02b0fd7ec0d2a46e8597e1e0	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+932f197ebcd9c17e2702372300ab73996bb20754	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+108906b51259f00fae4c4fd1c53d16a05b3df1b5	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+7716ff4ebcf0225b73b90c4adcbc5a422b7697c8	E_REPLAY_FILES	src/main.lkj	historical-roots	"<after>/src/host_network.lkj" E_REPLAY_FILES a newly loaded file needs an explicit file-creation operation
+9eaaad620b047e1b9170efb5bb00e93a4fc9fc86	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+58cedda10b18a61f91218257efa29760815d2cf2	E_PARSE	src/lib.lkj	historical-roots	src/facts.lkj:371:39: E_PARSE expected `>`
+7d00e01ecc31fbc62677d2834298c02518c8609a	E_REPLAY_FILES	src/main.lkj	historical-roots	"<after>/src/native/storage.lkj" E_REPLAY_FILES a newly loaded file needs an explicit file-creation operation
+1ddf90d8e9815a1221c528cbf29c292112da2743	E_IMPORT	src/lib.lkj	historical-roots	<before>/src/wasm.lkj:3:1: E_IMPORT unresolved or cyclic import std::collections::BTreeSet
+45c088f9053098fc5aeb50a7e9cc92bcc9f638e2	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+227987594673468c991fb8154f7b3b5bb0d8082c	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:16:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+a33db55e1c75cdf8f4e8e8517519d1e36d4e289b	E_REPLAY_FILES	src/main.lkj	historical-roots	"<after>/src/optimizer.lkj" E_REPLAY_FILES a newly loaded file needs an explicit file-creation operation
+dd03f5c168900702b5ae6e1f5e9d2da911c25b31	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+48d134b40ac9d3282fc4288a5a7d6c64221a56b1	E_REPLAY_FILES	src/main.lkj	historical-roots	"<after>/src/authority.lkj" E_REPLAY_FILES a newly loaded file needs an explicit file-creation operation
+368cbb37efa3809febfdf3ce6aeb9a3fe4457e49	E_IMPORT	src/lib.lkj	historical-roots	<before>/src/wasm.lkj:3:1: E_IMPORT unresolved or cyclic import std::collections::BTreeSet
+777d438925be0d76f850b4e55e6f187484248bb2	E_UNSUPPORTED	src/lib.lkj	historical-roots	src/resolve.lkj:947:18: E_UNSUPPORTED unsupported construct: impl
+1ed3e6ae8995df9b2a0bb8d224329693976bb3f1	E_REPLAY_FILES	src/main.lkj	historical-roots	"<after>/src/native/lifecycle.lkj" E_REPLAY_FILES a newly loaded file needs an explicit file-creation operation
+3556e5824c77ddfe2d18322fe35d5f6de947a679	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+7d99c2270635d669430d0f5487607f5f5f611f7e	E_UNSUPPORTED	src/lib.lkj	historical-roots	src/interpreter.lkj:236:54: E_UNSUPPORTED unsupported construct: impl
+be277dab565fa8a3dc47166b0cb843244492db33	E_REPLAY_FILES	src/main.lkj	historical-roots	"<after>/src/reuse.lkj" E_REPLAY_FILES a newly loaded file needs an explicit file-creation operation
+acf740271957297971e379efb90c74ef392316a7	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+5e7e8d37831b33a9e44c3e50a0b733cfd049b64d	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+5a940bbb5a59f540a4181642c77a0186a675e905	E_IMPORT	src/lib.lkj	historical-roots	<before>/src/wasm.lkj:3:1: E_IMPORT unresolved or cyclic import std::collections::BTreeSet
+d8d8325120efd3e2310e0e1f935be8ab36328c42	E_PARSE	src/lib.lkj	historical-roots	src/generics/signature_bounds.lkj:51:40: E_PARSE expected an identifier
+b83b6dd5dc235daaef0483d10342988f7712085c	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+4d7bb759b2f388a28f5164e2abe005a6aeba5c09	E_REPLAY_FILES	src/main.lkj	historical-roots	"<after>/src/program_directory.lkj" E_REPLAY_FILES a newly loaded file needs an explicit file-creation operation
+a1e4c9dd3adaae299c17da220e238e135baabdc2	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+f708f69c38f88911712bb45a6fe730faab59b1dd	E_UNSUPPORTED	src/lib.lkj	historical-roots	src/resolve.lkj:947:18: E_UNSUPPORTED unsupported construct: impl
+e9564f2daedd30e0914df910c5f03692b606fce8	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+c68e47296fafe3890c7eec12296ca023172b0ad4	E_UNSUPPORTED	src/lib.lkj	historical-roots	src/resolve.lkj:946:18: E_UNSUPPORTED unsupported construct: impl
+676f38f019dbb1effe40078399780e2ec180aa94	E_REPLAY_FILES	src/main.lkj	historical-roots	"<after>/src/native/readiness.lkj" E_REPLAY_FILES a newly loaded file needs an explicit file-creation operation
+9d14512807476f47598c6525627c3f5ea26b469b	E_REPLAY_FILES	src/main.lkj	historical-roots	"<after>/src/native/foreign.lkj" E_REPLAY_FILES a newly loaded file needs an explicit file-creation operation
+4048e172ab9d2e3d517d6d79e52072f0fedf3d46	E_REPLAY_FILES	src/main.lkj	historical-roots	"<after>/src/runtime_diagnostics.lkj" E_REPLAY_FILES a newly loaded file needs an explicit file-creation operation
+16627997c37fd67d4606c42beb4efaae48e0db35	E_TYPE	src/lib.lkj	frozen-compiler-embedded	<before>/src/generics.lkj:75:25: E_TYPE type mismatch: expected usize, found &_; help: make the expression and its declared context use the same type
+20b031ba921ab92d101d633f33f3711e77701b4f	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+dfc57ac850bb36541eb822f89196099f1ae55feb	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+40acb5a7c83300e1d7d9fa1060d52e98ef1caf75	E_UNSUPPORTED	src/lib.lkj	historical-roots	src/machine.lkj:101:9: E_UNSUPPORTED unsupported construct: impl item
+a7a3d778fe34df5ed9a8f0fb5595fbf2f858c1a5	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+436da27e1a5991c08621a3d6e778ef6aa63a6ef0	E_PARSE	src/lib.lkj	historical-roots	src/facts.lkj:270:39: E_PARSE expected `>`
+1bb742a71354a759a47bf09abffd505c2d288e4e	E_PARSE	src/lib.lkj	historical-roots	src/facts.lkj:371:39: E_PARSE expected `>`
+319cfeb80e8139b7df61e1bfff2a577d83af8d42	E_UNSUPPORTED	src/lib.lkj	historical-roots	src/resolve.lkj:951:18: E_UNSUPPORTED unsupported construct: impl
+5ee9930d7b0623e7e3ae9a7852d2b186c0ccdab6	E_PARSE	src/lib.lkj	historical-roots	src/facts.lkj:371:39: E_PARSE expected `>`
+a76a560d6a9d54ee1e27333dd7424997bf949003	E_PARSE	src/lib.lkj	historical-roots	src/generics/signature_bounds.lkj:51:40: E_PARSE expected an identifier
+9d3d1172885681ed622b28168684d7504e1dc9da	E_PARSE	src/lib.lkj	historical-roots	src/facts.lkj:270:39: E_PARSE expected `>`
+8ffb023e9c5589b697d3b4507387a332d7050a33	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+d8e62956791fd649e0a6bfd2722067375cacce83	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+6bf7559a2e0d486072d83128fe508079e97ca6d8	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+e45d1b6d8ffc6c6e83e0077f2e01320b572119d2	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+f2b87375ac5c498cef7147619e199b3a9f870f22	E_UNSUPPORTED	src/lib.lkj	historical-roots	src/interpreter.lkj:236:54: E_UNSUPPORTED unsupported construct: impl
+a9c40eb1f37a7346c88244d411e3dbe53b8254a7	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+7a2fc4b52b2a4618e5b79a9a0b043f758cc446da	E_PARSE	src/lib.lkj	historical-roots	src/facts.lkj:351:39: E_PARSE expected `>`
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+799f40f37262636b80d6fc060b94a94760f299e1	E_UNSUPPORTED	src/lib.lkj	historical-roots	src/resolve.lkj:948:18: E_UNSUPPORTED unsupported construct: impl
+54c07ecb7dca0e3dbde7b74c311b21331f5296f8	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+2ce8d546e6445b8a08ff10ff7daec5a141d582d8	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+90f5574a00cf5b9f8697f34942c89424426b2bff	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+57ea0dcfdc1a68eaa4f64063f3aecd4a45b23f40	E_UNSUPPORTED	src/lib.lkj	historical-roots	src/interpreter.lkj:101:9: E_UNSUPPORTED unsupported construct: impl item
+6ec9f5f119c51643622edc7194ffb669026e6c92	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+01394befbb74dc7778a6438bd82d11b31305aee5	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+fbe7a54378ec5c4a3957f683d2f3e9820ae52a37	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+010ce014ae97e87df17d2f6acbea728f73bf14d1	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+a3c2f046d451209cd3f638b13de78f535a54bc7a	E_REPLAY_FILES	src/main.lkj	historical-roots	"<before>/library/lib.rs" E_REPLAY_FILES source file has no stable identity or unambiguous relative-path counterpart
+dad67f97c6b9b008300d59d83e3e4e7540acfa4f	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+e7a44d289ddd90daf81125a9f37c66fa17cd3c21	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+1ef67b8e569cdfca00425e48338d3bcfec61d0bc	E_REPLAY_FILES	src/main.lkj	historical-roots	"<after>/src/test_runner.lkj" E_REPLAY_FILES a newly loaded file needs an explicit file-creation operation
+8526ed77f65df2fad3fa4aeb28802bf2878ac927	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+9c7c581e0d0a4ce9977ebc4492a38e194760771a	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:16:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+39eff1467fc0cc2c8948732ddcc46cf60f142dea	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+80e635eb75fcc85e587b311b37d308bd6edddce2	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
+154d983be26003aa8882205bebcf7af3bf963d28	E_UNSUPPORTED_MACRO	src/lib.lkj	frozen-compiler-embedded	src/lib.lkj:11:35: E_UNSUPPORTED_MACRO unsupported macro: env!
