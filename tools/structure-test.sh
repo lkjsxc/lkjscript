@@ -59,7 +59,7 @@ done <<'OPERATIONS'
 {"op":"add-item","id":"a","source":"pub fn bad() -> i64 { missing() }"}
 {"op":"remove-item","id":"a::increment"}
 {"op":"rename","id":"a::increment","name":"not-an-identifier"}
-{"op":"move","id":"a::increment","parent":"b"}
+{"op":"move","id":"a::increment","parent":"missing_module"}
 {"op":"replace-body","id":"a::increment","expect":"wrong","source":"{ value }"}
 OPERATIONS
 printf '%s\n' '{"version":1,"snapshot":"wrong","operations":[{"op":"replace-body","id":"a::increment","source":"{ value }"}]}' > "$fixture/request"
@@ -89,4 +89,26 @@ printf '%s\n' '{"version":1,"operations":[{"op":"replace-body","id":"a::incremen
 edit --store-key "$fixture/key"
 test "$("$compiler" run "$fixture/source/main.lkj" --no-library --no-store)" = 47
 test ! -e "$fixture/source/.lkjscript-edit.pending"
+# A missing spelling span for a known, unrelated standard-library intrinsic
+# does not make a user free function ambiguous.
+cp -a "$fixture/source" "$fixture/before-library-rename"
+common=(main.lkj --source-dir "$fixture/source" --library-dir "$PWD/library" --no-store)
+printf '%s\n' '{"version":1,"operations":[{"op":"rename","id":"a::increment","name":"increase"}]}' > "$fixture/request"
+edit --store-key "$fixture/key" || { cat "$fixture/error" >&2; exit 1; }
+test "$("$compiler" run "$fixture/source/main.lkj" --no-library --no-store)" = 47
+"$compiler" compare "$fixture/source/main.lkj" --against "$fixture/before-library-rename/main.lkj" --library-dir "$PWD/library" --against-library-dir "$PWD/library" --no-store > "$fixture/comparison"
+grep -q 'text differs, checked IR identical' "$fixture/comparison"
+# A mixed request proves its move subset independently while allowing the
+# explicitly requested body replacement to change the complete candidate.
+cat > "$fixture/source/main.lkj" <<'SOURCE'
+fn offset() -> i64 { 7i64 }
+mod old { pub fn helper(n: i64) -> i64 { if n == 0i64 { crate::offset() } else { helper(n - 1i64) } } }
+mod fresh {}
+pub fn probe() -> i64 { old::helper(2i64) }
+SOURCE
+common=(main.lkj --source-dir "$fixture/source" --no-library --no-store)
+printf '%s\n' '{"version":1,"operations":[{"op":"move","id":"old::helper","parent":"fresh"},{"op":"replace-body","id":"offset","source":"{ 8i64 }"}]}' > "$fixture/request"
+edit --store-key "$fixture/key" || { cat "$fixture/error" >&2; exit 1; }
+test "$("$compiler" run "$fixture/source/main.lkj" --no-library --no-store)" = 8
+grep -q 'mode=apply' "$fixture/plan"
 printf 'ok structural transactions: checks, refusals, untouched bytes, rename/comment identity, authenticated recovery\n'

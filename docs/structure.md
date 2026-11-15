@@ -89,12 +89,14 @@ within the same module. Refactor planners extend these forms; their supported
 cases, evaluation order and explicit decision sites are in
 [refactors](structure-refactors.md).
 
-A rename rewrites exact resolved declaration/use spans. Import aliases retain
-their local spelling. It also must preserve the checked-meaning digest. In a
-mixed request, the rename subset is separately elaborated and checked for that
-postcondition before the complete candidate is accepted. This conservative
-condition can reject a request whose renames would only become valid after
-other operations; split or restate that request explicitly.
+Renames and moves rewrite exact resolved declaration/use spans. Import aliases
+retain their local spelling. These operations must also preserve the
+checked-meaning digest. In a mixed request, the rename/move subset is separately
+elaborated and checked for that postcondition before the complete candidate is
+accepted. This conservative condition can reject a request whose relocations
+would only become valid after other operations; split or restate it explicitly.
+Moves require the full reference catalog, including outgoing references in the
+relocated item; declaration-only capture cannot establish that proof.
 
 The plan names changed identities/files and sites, authority gained/lost per
 entry, original/candidate checked meaning, fresh/reused instance counts and
@@ -177,6 +179,12 @@ metadata is outside the tracked projection.
 `--against-library-dir` selects the other library closure. Default output is
 two summary lines, at most 27 fact lines, and one continuation/detail line.
 `--id ID` selects detail; a larger explicit `--limit` can request more facts.
+The bounded summary samples authority, source declarations, representation and
+instances in deterministic rounds. Generated IR names follow named facts
+within their category. The final line counts every category, including omitted
+facts; presentation order never changes an identity or proof. Authority facts
+state the gained/lost effects and grants explicitly, plus entry presence on
+both sides.
 
 Source signature/body/text changes are labelled claims. Absolute checkout paths
 are excluded from that summary. Text equality compares exact bytes under the

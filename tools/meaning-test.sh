@@ -39,6 +39,14 @@ compare --library-dir library
 grep -q '"ir:main" level=checked-ir changed=authority' "$fixture/report"
 grep -q 'grant:0:Stdout' "$fixture/report"
 grep -q 'effect:stdout_write' "$fixture/report"
+grep -q 'authority-gained=.*effect:stdout_write' "$fixture/report"
+grep -q 'authority-lost=""' "$fixture/report"
+cp "$fixture/new/main.lkj" "$fixture/swap"
+cp "$fixture/old/main.lkj" "$fixture/new/main.lkj"
+mv "$fixture/swap" "$fixture/old/main.lkj"
+compare --library-dir library
+grep -q 'authority-lost=.*effect:stdout_write' "$fixture/report"
+grep -q 'authority-gained=""' "$fixture/report"
 cat > "$fixture/old/main.lkj" <<'SOURCE'
 struct Node { next: Option<Box<Node>>, value: i64 }
 pub fn probe() -> i64 { let node = Node { next: None, value: 7 }; node.value }
@@ -65,4 +73,11 @@ for ((index=0; index<64; index++)); do
 done
 compare --no-library
 grep -Eq 'omitted=[1-9][0-9]*' "$fixture/report"
+grep -q 'level=source-claim changed=body' "$fixture/report"
+grep -q 'level=checked-ir changed=instance' "$fixture/report"
+grep -Eq 'instance-facts=[1-9][0-9]*' "$fixture/report"
+compare --no-library --limit 1
+test "$(wc -l < "$fixture/report")" -eq 4
+compare --no-library --limit 0
+test "$(wc -l < "$fixture/report")" -eq 3
 printf 'ok checked meaning: layout, type graph, authority, stable instances, cyclic graphs and bounded review\n'

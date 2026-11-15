@@ -125,51 +125,6 @@ pub(crate) fn validate_item(target: &semantic::Item, inputs: &[(String, Vec<u8>)
     }
     Ok(())
 }
-pub(crate) fn rename(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)], target: &semantic::Item,
-    name: &str, patches: &mut Vec<Patch>) -> Result<(), String> {
-    if !catalog.references_recorded {
-        return Err(error(&target.identity, "REFERENCES", "rename requires a full resolved-reference catalog"));
-    }
-    if !identifier(name) { return Err(error(&target.identity, "NAME", "new name must be one identifier")); }
-    if matches!(target.kind.as_str(), "field" | "variant" | "parameter" | "binding" | "implementation" | "method" | "generic-parameter" | "struct" | "enum" | "trait" | "alias" | "module") {
-        return Err(error(&target.identity, "REFERENCES", "this identity needs complete typed constructor, pattern or lexical reference evidence before rename"));
-    }
-    let free_function = target.kind == "function" && (target.parent == "crate"
-        || catalog.by_identity.get(&target.parent).is_some_and(|index| catalog.items[*index].kind == "module"));
-    for site in &catalog.unresolved {
-        if free_function && matches!(site.kind.as_str(), "intrinsic-qualification" | "associated-qualification"
-            | "associated-type" | "associated-function" | "visibility-qualification" | "local-origin") { continue; }
-        if site.kind == "lexical-name" && site.target != target.name { continue; }
-        let typed = site.kind == "typed-method" || site.kind == "typed-field" || site.kind == "typed-member";
-        if typed && (free_function || matches!(target.kind.as_str(), "struct" | "enum" | "trait" | "alias" | "module" | "variant")) { continue; }
-        if typed {
-            let bytes = input(inputs, &site.file)?;
-            if site.start <= site.end && site.end <= bytes.len()
-                && bytes[site.start..site.end] != *target.name.as_bytes() { continue; }
-        }
-        return Err(error(&target.identity, "REFERENCES", &format!(
-            "incoming references are incomplete; decision site {} {}:{}..{} ({})",
-            semantic::quote(&site.owner), semantic::quote(&site.file), site.start, site.end, site.kind)));
-    }
-    let bytes = input(inputs, &target.file)?;
-    if target.name_start >= target.name_end || target.name_end > bytes.len()
-        || bytes[target.name_start..target.name_end] != *target.name.as_bytes() {
-        return Err(error(&target.identity, "NAME", "definition has no exact editable name span"));
-    }
-    patch(patches, &target.identity, &target.file, target.name_start, target.name_end, name);
-    for reference in &catalog.references {
-        if reference.target != target.identity || reference.kind.starts_with("alias-") { continue; }
-        let bytes = input(inputs, &reference.file)?;
-        if reference.start > reference.end || reference.end > bytes.len() {
-            return Err(error(&reference.owner, "SPAN", "reference span is outside source"));
-        }
-        if bytes[reference.start..reference.end] != *target.name.as_bytes() {
-            return Err(error(&reference.owner, "REFERENCE", "resolved alias or path needs an explicit rewrite"));
-        }
-        patch(patches, &reference.owner, &reference.file, reference.start, reference.end, name);
-    }
-    Ok(())
-}
 pub(crate) fn insertion(catalog: &semantic::Catalog,
     inputs: &[(String, Vec<u8>)], identity: &str) -> Result<(String, usize), String> {
     if identity == "crate" {
@@ -306,7 +261,8 @@ pub fn plan(catalog: &semantic::Catalog,
                 let (start, end) = remove_span(target, inputs)?;
                 patch(&mut patches, &operation.identity, &target.file, start, end, "");
             },
-            "rename" => rename(catalog, inputs, target, &operation.name, &mut patches)?,
+            "rename" => return Err(error(&operation.identity, "REFERENCES",
+                "this identity has no complete source-scope rename proof")),
             "move" => {
                 // Relocation within one semantic module preserves the source
                 // identity. Cross-module relocation also needs resolved path edits.

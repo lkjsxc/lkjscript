@@ -203,10 +203,10 @@ fn edit(world: &mut World, request: &Request, stats: &mut Stats) -> Result<u8, S
     let mut desired_identity = String::new();
     let mut desired_read: Option<Memo> = None;
     let mut items_only = true;
-    let mut renames: Vec<structure_edit::Operation> = Vec::new();
+    let mut preserving: Vec<structure_edit::Operation> = Vec::new();
     for operation in &operations.operations {
-        if !matches!(operation.kind.as_str(), "replace-body" | "replace-item" | "add-item" | "remove-item" | "move") { items_only = false; }
-        if operation.kind == "rename" { renames.push(operation.clone()); }
+        if !matches!(operation.kind.as_str(), "replace-body" | "replace-item" | "add-item" | "remove-item") { items_only = false; }
+        if matches!(operation.kind.as_str(), "rename" | "move") { preserving.push(operation.clone()); }
     }
     let mut before = Memo::new(world, &request.options);
     before.catalog_items_only = items_only;
@@ -234,17 +234,17 @@ fn edit(world: &mut World, request: &Request, stats: &mut Stats) -> Result<u8, S
         desired_read = Some(desired_memo);
     }
     let draft = structure_edit::plan(&old_catalog, &before.source_inputs, &operations)?;
-    if !renames.is_empty() && renames.len() != operations.operations.len() {
-        let rename_request = structure_edit::Request { snapshot: operations.snapshot.clone(), operations: renames.clone() };
-        let rename_draft = structure_edit::plan(&old_catalog, &before.source_inputs, &rename_request)?;
+    if !preserving.is_empty() && preserving.len() != operations.operations.len() {
+        let preserving_request = structure_edit::Request { snapshot: operations.snapshot.clone(), operations: preserving.clone() };
+        let preserving_draft = structure_edit::plan(&old_catalog, &before.source_inputs, &preserving_request)?;
         let mut proof_options = request.options.clone(); proof_options.store_directory = None;
         let mut proof = Memo::new(world, &proof_options);
         proof.capture_catalog = true; proof.catalog_items_only = true;
         proof.private_source_digest = before.private_source_digest;
-        replace_snapshot(&before, &mut proof, &rename_draft)?;
-        let renamed = super::compile(world, &proof_options, stats, &mut proof)?;
-        if original_identity != meaning::identity(renamed.original().checked()) {
-            return Err("transaction E_EDIT_MEANING rename subset changed checked IR; no source was published".to_string());
+        replace_snapshot(&before, &mut proof, &preserving_draft)?;
+        let preserved = super::compile(world, &proof_options, stats, &mut proof)?;
+        if original_identity != meaning::identity(preserved.original().checked()) {
+            return Err("transaction E_EDIT_MEANING rename/move subset changed checked IR; no source was published".to_string());
         }
     }
     let mut uncached = request.options.clone();
@@ -260,9 +260,9 @@ fn edit(world: &mut World, request: &Request, stats: &mut Stats) -> Result<u8, S
             semantic::quote(&joined(&draft.identities))) })?;
     let new_catalog = after.catalog.take().ok_or("E_EDIT_SOURCE candidate source catalog is missing")?;
     let candidate_identity = meaning::identity(new.original().checked());
-    if !renames.is_empty() && renames.len() == operations.operations.len()
+    if !preserving.is_empty() && preserving.len() == operations.operations.len()
         && original_identity != candidate_identity {
-        return Err("transaction E_EDIT_MEANING rename changed checked IR; no source was published".to_string());
+        return Err("transaction E_EDIT_MEANING rename/move changed checked IR; no source was published".to_string());
     }
     if !desired_identity.is_empty() && desired_identity != candidate_identity {
         return Err(format!("transaction E_REPLAY_MEANING desired={} candidate={}; no source was published",

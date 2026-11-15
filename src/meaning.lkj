@@ -368,6 +368,34 @@ pub(crate) mod verified {
     }
 }
 
+
+fn authority_fact(fact: &verified::Fact) -> String {
+    let mut before: BTreeSet<String> = BTreeSet::new();
+    let mut after: BTreeSet<String> = BTreeSet::new();
+    if fact.before != "absent" {
+        for value in fact.before.as_str().split(',') { if !value.is_empty() { before.insert(value.to_string()); } }
+    }
+    if fact.after != "absent" {
+        for value in fact.after.as_str().split(',') { if !value.is_empty() { after.insert(value.to_string()); } }
+    }
+    let mut gained = String::new();
+    let mut lost = String::new();
+    for value in &after {
+        if !before.contains(value) {
+            if !gained.is_empty() { gained.push(','); }
+            gained.push_str(value);
+        }
+    }
+    for value in &before {
+        if !after.contains(value) {
+            if !lost.is_empty() { lost.push(','); }
+            lost.push_str(value);
+        }
+    }
+    format!("{} level=checked-ir changed=authority authority-gained={} authority-lost={} entry-before={} entry-after={}\n",
+        semantic::quote(&fact.identity), semantic::quote(&gained), semantic::quote(&lost),
+        fact.before != "absent", fact.after != "absent")
+}
 pub fn compare(before: &semantic::Catalog, old: &ir::CheckedProgram,
     after: &semantic::Catalog, new: &ir::CheckedProgram, text_identical: bool, limit: usize, detail: &str) -> Result<String, String> {
     let old_meaning = identity(old);
@@ -386,19 +414,7 @@ pub fn compare(before: &semantic::Catalog, old: &ir::CheckedProgram,
     let mut names: BTreeSet<String> = BTreeSet::new();
     for value in &before.items { names.insert(value.identity.clone()); }
     for value in &after.items { names.insert(value.identity.clone()); }
-    let mut emitted = 0usize;
-    let mut omitted = 0usize;
-    let mut changed = 0usize;
-    for fact in &verified {
-        if !detail.is_empty() && detail != fact.identity { continue; }
-        changed += 1usize;
-        if emitted < limit {
-            out.push_str(&format!("{} level=checked-ir changed={} before={} after={}\n",
-                semantic::quote(&fact.identity), fact.kind, semantic::quote(&fact.before), semantic::quote(&fact.after)));
-            emitted += 1usize;
-        } else { omitted += 1usize; }
-    }
-    let verified_changes = changed;
+    let mut source: Vec<(String, String)> = Vec::new();
     for name in names {
         if !detail.is_empty() && detail != name { continue; }
         let old_item = before.by_identity.get(&name).map(|index| &before.items[*index]);
@@ -409,15 +425,59 @@ pub fn compare(before: &semantic::Catalog, old: &ir::CheckedProgram,
             (None, Some(_)) => "added".to_string(),
             _ => String::new(),
         };
-        if delta.is_empty() { continue; }
-        changed += 1usize;
-        if emitted < limit {
-            out.push_str(&format!("{} level=source-claim changed={}\n", semantic::quote(&name), delta));
-            emitted += 1usize;
-        } else { omitted += 1usize; }
+        if !delta.is_empty() { source.push((name, delta)); }
     }
-    out.push_str(&format!("program changed-facts={} checked-facts={} source-facts={} shown={} omitted={} detail=--id identity\n",
-        changed, verified_changes, changed - verified_changes, emitted, omitted));
+    // Review samples every category before one large category can exhaust the
+    // bound. Generated IR names follow named facts; all remain addressable.
+    // This is presentation order only, never an identity or proof projection.
+    let mut groups: Vec<Vec<usize>> = vec![Vec::new(), Vec::new(), Vec::new(), Vec::new()];
+    for index in 0usize..source.len() { groups[1usize].push(index); }
+    let mut layout_changes = 0usize;
+    let mut type_changes = 0usize;
+    let mut destructor_changes = 0usize;
+    for generated in 0usize..2usize {
+        for index in 0usize..verified.len() {
+            let fact = &verified[index];
+            if !detail.is_empty() && detail != fact.identity { continue; }
+            if fact.identity.contains('$') != (generated == 1usize) { continue; }
+            let group = match fact.kind.as_str() {
+                "authority" => 0usize,
+                "instance" => 3usize,
+                "layout" => { layout_changes += 1usize; 2usize },
+                "type-identity" => { type_changes += 1usize; 2usize },
+                _ => { destructor_changes += 1usize; 2usize },
+            };
+            groups[group].push(index);
+        }
+    }
+    let verified_changes = groups[0usize].len() + groups[2usize].len() + groups[3usize].len();
+    let changed = verified_changes + source.len();
+    let mut positions: Vec<usize> = vec![0usize; 4usize];
+    let mut emitted = 0usize;
+    while emitted < limit && emitted < changed {
+        for group in 0usize..4usize {
+            if emitted == limit { break; }
+            let at = positions[group];
+            if at == groups[group].len() { continue; }
+            let index = groups[group][at];
+            positions[group] += 1usize;
+            if group == 1usize {
+                out.push_str(&format!("{} level=source-claim changed={}\n",
+                    semantic::quote(&source[index].0), source[index].1));
+            } else {
+                let fact = &verified[index];
+                if fact.kind == "authority" { out.push_str(&authority_fact(fact)); }
+                else {
+                    out.push_str(&format!("{} level=checked-ir changed={} before={} after={}\n",
+                        semantic::quote(&fact.identity), fact.kind, semantic::quote(&fact.before), semantic::quote(&fact.after)));
+                }
+            }
+            emitted += 1usize;
+        }
+    }
+    out.push_str(&format!("program changed-facts={} checked-facts={} source-facts={} shown={} omitted={} authority-facts={} layout-facts={} type-identity-facts={} destructor-facts={} instance-facts={} detail=--id identity\n",
+        changed, verified_changes, source.len(), emitted, changed - emitted,
+        groups[0usize].len(), layout_changes, type_changes, destructor_changes, groups[3usize].len()));
     Ok(out)
 }
 
