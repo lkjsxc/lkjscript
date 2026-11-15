@@ -1219,3 +1219,5 @@ pub fn semantic_path_alias(resolver: &Resolver<'_>, scope: ModuleId, name: &str,
         .ok_or_else(|| Diagnostic::new(span, "E_NAME", &format!("unresolved semantic path {name}")))?;
     Ok(resolved.binding.is_some_and(|binding| binding.semantic_alias))
 }
+
+pub(crate) fn intrinsic_name(name: &str) -> bool { builtin(name) }

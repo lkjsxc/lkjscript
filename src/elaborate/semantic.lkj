@@ -104,3 +104,46 @@ pub fn source_type_name(program: &a::Program, ty: usize) -> String {
         }
     }
 }
+
+pub fn intrinsic_method_name(name: &str) -> bool {
+    use super::methods::{self, Receiver};
+    if generic_check::BuiltinMethod::named(name).is_some() { return true; }
+    let mut receiver = Receiver::Integer;
+    loop {
+        if methods::direct(receiver, name).is_some() { return true; }
+        // Exhaustive traversal keeps a new receiver class from silently escaping
+        // the semantic-operation spelling guard.
+        receiver = match receiver {
+            Receiver::Integer => Receiver::Float,
+            Receiver::Float => Receiver::Character,
+            Receiver::Character => Receiver::Text,
+            Receiver::Text => Receiver::Vector,
+            Receiver::Vector => Receiver::Array,
+            Receiver::Array => Receiver::Slice,
+            Receiver::Slice => Receiver::World,
+            Receiver::World => Receiver::Arguments,
+            Receiver::Arguments => Receiver::Environment,
+            Receiver::Environment => Receiver::ExitStatus,
+            Receiver::ExitStatus => Receiver::Stdout,
+            Receiver::Stdout => Receiver::Stdin,
+            Receiver::Stdin => Receiver::Stderr,
+            Receiver::Stderr => Receiver::Directory,
+            Receiver::Directory => Receiver::ReadDirectory,
+            Receiver::ReadDirectory => Receiver::ReadFile,
+            Receiver::ReadFile => Receiver::ForeignCommand,
+            Receiver::ForeignCommand => Receiver::NullDevice,
+            Receiver::NullDevice => Receiver::File,
+            Receiver::File => Receiver::Process,
+            Receiver::Process => Receiver::Clock,
+            Receiver::Clock => Receiver::Child,
+            Receiver::Child => Receiver::Listener,
+            Receiver::Listener => Receiver::Connector,
+            Receiver::Connector => Receiver::Readiness,
+            Receiver::Readiness => Receiver::Entropy,
+            Receiver::Entropy => Receiver::Stop,
+            Receiver::Stop => Receiver::Other,
+            Receiver::Other => break,
+        };
+    }
+    false
+}
