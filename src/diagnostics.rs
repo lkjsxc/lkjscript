@@ -35,3 +35,24 @@ pub fn complete_unsupported(report: &mut SourceReport) {
         }
     }
 }
+
+/// Machine-applicable replacements refer to byte offsets in this exact input,
+/// never to line/column display coordinates or an already edited intermediate.
+pub fn edit_record(path: &str, problem: &crate::diagnostic::Diagnostic) -> String {
+    let mut out: Vec<u8> = Vec::new();
+    out.extend_from_slice(b"LKJSCRIPT_EDITS {\"version\":1,\"path\":");
+    crate::json::write_string(&mut out, path);
+    out.extend_from_slice(b",\"code\":");
+    crate::json::write_string(&mut out, &problem.code);
+    out.extend_from_slice(b",\"edits\":[");
+    for (index, edit) in problem.edits.iter().enumerate() {
+        if index != 0 { out.push(b','); }
+        out.extend_from_slice(
+            format!("{{\"start\":{},\"end\":{},\"replacement\":", edit.start, edit.end).as_bytes(),
+        );
+        crate::json::write_string(&mut out, &edit.replacement);
+        out.push(b'}');
+    }
+    out.extend_from_slice(b"]}");
+    String::from_utf8(out).unwrap()
+}

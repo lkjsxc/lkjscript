@@ -8,6 +8,15 @@ pub struct Span {
     pub column: usize,
 }
 
+/// One replacement in the diagnostic's original UTF-8 source file.
+/// A diagnostic's edits form one ordered, nonoverlapping atomic set.
+#[derive(Clone, PartialEq, Eq)]
+pub struct Edit {
+    pub start: usize,
+    pub end: usize,
+    pub replacement: String,
+}
+
 #[derive(Clone, PartialEq, Eq)]
 pub struct Diagnostic {
     pub path: String,
@@ -16,6 +25,7 @@ pub struct Diagnostic {
     pub column: usize,
     pub code: String,
     pub message: String,
+    pub edits: Vec<Edit>,
 }
 
 impl Diagnostic {
@@ -27,6 +37,7 @@ impl Diagnostic {
             column: span.column,
             code: code.to_string(),
             message: message.to_string(),
+            edits: Vec::new(),
         }
     }
 }

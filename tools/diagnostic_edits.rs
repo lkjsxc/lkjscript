@@ -1,0 +1,144 @@
+//! Independent consumer of the compiler's diagnostic edit wire format.
+use std::collections::BTreeMap;
+
+struct Edit { end: usize, replacement: String }
+struct Cursor<'a> { bytes: &'a [u8], at: usize }
+
+fn invalid() -> String { "invalid diagnostic edit record".to_string() }
+fn hex(byte: u8) -> Result<u8, String> {
+    if byte >= b'0' && byte <= b'9' { Ok(byte - b'0') }
+    else if byte >= b'a' && byte <= b'f' { Ok(byte - b'a' + 10u8) }
+    else if byte >= b'A' && byte <= b'F' { Ok(byte - b'A' + 10u8) }
+    else { Err(invalid()) }
+}
+impl Cursor<'_> {
+    fn literal(&mut self, expected: &[u8]) -> Result<(), String> {
+        if expected.len() > self.bytes.len() - self.at
+            || &self.bytes[self.at..self.at + expected.len()] != expected
+        { return Err(invalid()); }
+        self.at += expected.len();
+        Ok(())
+    }
+    fn number(&mut self) -> Result<usize, String> {
+        let start = self.at;
+        let mut value = 0usize;
+        while self.at < self.bytes.len() {
+            let byte = self.bytes[self.at];
+            if byte < b'0' || byte > b'9' { break; }
+            let digit = (byte - b'0') as usize;
+            if value > ((!0usize) - digit) / 10usize { return Err(invalid()); }
+            value = value * 10usize + digit;
+            self.at += 1usize;
+        }
+        if self.at == start { Err(invalid()) } else { Ok(value) }
+    }
+    fn string(&mut self) -> Result<String, String> {
+        self.literal(b"\"")?;
+        let mut out: Vec<u8> = Vec::new();
+        while self.at < self.bytes.len() {
+            let byte = self.bytes[self.at];
+            self.at += 1usize;
+            if byte == b'"' {
+                return match String::from_utf8(out) { Ok(text) => Ok(text), Err(_) => Err(invalid()) };
+            }
+            if byte < 32u8 { return Err(invalid()); }
+            if byte != b'\\' { out.push(byte); continue; }
+            if self.at == self.bytes.len() { return Err(invalid()); }
+            let escaped = self.bytes[self.at];
+            self.at += 1usize;
+            match escaped {
+                b'"' | b'\\' | b'/' => out.push(escaped),
+                b'n' => out.push(b'\n'),
+                b'r' => out.push(b'\r'),
+                b't' => out.push(b'\t'),
+                b'b' => out.push(8u8),
+                b'f' => out.push(12u8),
+                b'u' => {
+                    self.literal(b"00")?;
+                    if self.bytes.len() - self.at < 2usize { return Err(invalid()); }
+                    out.push(hex(self.bytes[self.at])? * 16u8 + hex(self.bytes[self.at + 1usize])?);
+                    self.at += 2usize;
+                }
+                _ => return Err(invalid()),
+            }
+        }
+        Err(invalid())
+    }
+}
+
+fn record(line: &str, path: &str, edits: &mut BTreeMap<usize, Edit>) -> Result<(), String> {
+    let mut cursor = Cursor { bytes: line.as_bytes(), at: 0usize };
+    cursor.literal(b"{\"version\":1,\"path\":")?;
+    if cursor.string()? != path { return Err("diagnostic edit names another source file".to_string()); }
+    cursor.literal(b",\"code\":")?;
+    let code = cursor.string()?;
+    if code.is_empty() { return Err(invalid()); }
+    cursor.literal(b",\"edits\":[")?;
+    let mut first = true;
+    while cursor.at < cursor.bytes.len() && cursor.bytes[cursor.at] != b']' {
+        if !first { cursor.literal(b",")?; }
+        first = false;
+        cursor.literal(b"{\"start\":")?;
+        let start = cursor.number()?;
+        cursor.literal(b",\"end\":")?;
+        let end = cursor.number()?;
+        cursor.literal(b",\"replacement\":")?;
+        let replacement = cursor.string()?;
+        cursor.literal(b"}")?;
+        if edits.insert(start, Edit { end, replacement }).is_some() {
+            return Err("diagnostic edits have an ambiguous shared start".to_string());
+        }
+    }
+    cursor.literal(b"]}")?;
+    if first || cursor.at != cursor.bytes.len() { return Err(invalid()); }
+    Ok(())
+}
+fn boundary(bytes: &[u8], at: usize) -> bool {
+    at <= bytes.len() && (at == bytes.len() || bytes[at] & 192u8 != 128u8)
+}
+
+/// Apply all emitted records to the unchanged input, checking their file and ranges.
+pub fn apply(source: &str, errors: &[u8], path: &str) -> Result<String, String> {
+    let text = match std::str::from_utf8(errors) {
+        Ok(text) => text,
+        Err(_) => return Err("diagnostic stderr is not UTF-8".to_string()),
+    };
+    let mut edits: BTreeMap<usize, Edit> = BTreeMap::new();
+    let mut records = 0usize;
+    for line in text.lines() {
+        if let Some(payload) = line.strip_prefix("LKJSCRIPT_EDITS ") {
+            record(payload, path, &mut edits)?;
+            records += 1usize;
+        }
+    }
+    if records == 0usize { return Err("compiler emitted no diagnostic edits".to_string()); }
+    let bytes = source.as_bytes();
+    let mut at = 0usize;
+    let mut output: Vec<u8> = Vec::new();
+    for (start, edit) in edits {
+        if start < at || edit.end < start || !boundary(bytes, start) || !boundary(bytes, edit.end) {
+            return Err("diagnostic edits overlap or split a UTF-8 character".to_string());
+        }
+        output.extend_from_slice(&bytes[at..start]);
+        output.extend_from_slice(edit.replacement.as_bytes());
+        at = edit.end;
+    }
+    output.extend_from_slice(&bytes[at..]);
+    match String::from_utf8(output) { Ok(text) => Ok(text), Err(_) => Err(invalid()) }
+}
+
+pub fn self_test() {
+    let good = b"LKJSCRIPT_EDITS {\"version\":1,\"path\":\"case.rs\",\"code\":\"E_TYPE\",\"edits\":[{\"start\":2,\"end\":2,\"replacement\":\"!\"}]}\n";
+    assert!(apply("π", good, "case.rs").unwrap() == "π!");
+    assert!(apply("π", good, "other.rs").is_err());
+    for body in vec![
+        "{\"start\":1,\"end\":1,\"replacement\":\"x\"}".to_string(),
+        "{\"start\":0,\"end\":3,\"replacement\":\"x\"}".to_string(),
+        "{\"start\":2,\"end\":1,\"replacement\":\"x\"}".to_string(),
+        "{\"start\":0,\"end\":2,\"replacement\":\"x\"},{\"start\":1,\"end\":2,\"replacement\":\"y\"}".to_string(),
+        "{\"start\":2,\"end\":2,\"replacement\":\"x\"},{\"start\":2,\"end\":2,\"replacement\":\"y\"}".to_string(),
+    ] {
+        let record = format!("LKJSCRIPT_EDITS {{\"version\":1,\"path\":\"case.rs\",\"code\":\"E_TYPE\",\"edits\":[{body}]}}\n");
+        assert!(apply("π", record.as_bytes(), "case.rs").is_err());
+    }
+}

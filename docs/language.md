@@ -305,7 +305,7 @@ concurrency cases specify intended ownership rules, with their missing features.
 
 | Facility | Source behavior and lowering | Limit or rewrite |
 | --- | --- | --- |
-| Text/String | Literals are immutable module-long UTF-8 views; str is unsized and shared. len counts bytes; is_empty/as_bytes/to_string preserve origins. String privately owns Vec bytes; Clone/clone_from copy valid bytes and reuse target capacity; equality compares length/bytes. | Bare/mutable text rejects. as_str currently revalidates UTF-8. |
+| Text/String | Literals are immutable module-long UTF-8 views; str is unsized and shared. len counts bytes; is_empty/as_bytes/to_string preserve origins. String privately owns Vec bytes; Clone/clone_from copy valid bytes and reuse target capacity; equality compares length/bytes. | Bare/mutable text rejects. String.parse requires text.as_str().parse::<T>(); as_str currently revalidates UTF-8. |
 | str::from_utf8 | Checked runtime validation returns source Result<&str, Utf8Error>, borrowing original bytes. Utf8Error is an opaque marker. | No unchecked conversion or error-position/length API. |
 | Text methods | Prefix/suffix, contains/find/rfind, ASCII case/comparison, repeat/replace, bytes/chars, LF/CRLF lines, strip_prefix, split_once and split (including empty patterns). Pattern shares text/char needles; integer decimal parse covers ten types with validity/range checks. | General Unicode case conversion is unsupported. Borrowed iterators retain owners. |
 | Character helpers | UTF-8/UTF-16 lengths, ASCII predicates/case, Unicode whitespace/control, to_digit and to_string. | Operate on Unicode scalars, never arbitrary code points. |
@@ -314,12 +314,12 @@ concurrency cases specify intended ownership rules, with their missing features.
 | Option extras | xor, zip/unzip, flatten, replace/insert/get_or_insert, is_some_and/is_none_or, ok_or/ok_or_else. None predicates yield false/true respectively. filter borrows the payload then keeps/drops the owner. | Returned views preserve selected input/factory origins. |
 | Option<&T>/Option<&mut T> | copied uses Copy without Clone; cloned invokes Clone once for Some, never None. | Owned clones may be independent, but nested views retain external origins. |
 | Vec/slice access | is_empty/get/first/last and mutable slice counterparts; invalid get returns None, including usize::MAX. contains borrows query/elements and uses eq in order without copying/consuming. | Returned references retain collection footprints. |
-| Collection copying/equality | extend_from_slice/to_vec clone in order; empty input does no clones. Vec Clone requires Clone; equality requires only PartialEq, checks length then element ==, and Vec ne negates the whole result. Nested types/floats/custom implementations follow selected traits. | Inherent clone/ne cannot replace generic contracts. Helper signatures and element constraints check independently. |
+| Collection copying/equality | extend_from_slice/to_vec clone in order; empty input does no clones. Vec Clone requires Clone; equality requires only PartialEq, checks length then element ==, and Vec ne negates the whole result. Nested types/floats/custom implementations follow selected traits. | Inherent clone/ne cannot replace generic contracts. Arrays use array[..].to_vec(); helper signatures and element constraints check independently. |
 | Slice/Vec helpers | starts_with borrows; copy_from_slice needs Copy and equal lengths; predicate split retains empty groups at delimiters. clear/truncate destroy removed elements forward; stable sort/retain are source operations. | General From/Into, Sum/FromIterator and exclusive iter_mut need their own contracts. |
 | Ordered maps/sets | BTreeMap uses an indexed AVL arena/free slots with logarithmic lookup/insertion/removal; BTreeSet reuses it. Sorted shared/owned iteration, map keys/values/first_key_value/pop_first/retain and set first/pop_first. Clear/drop and partially consumed iterators destroy in key order; Clone/Default/equality ignore arena shape. | Entirely source algorithms over existing storage, not new trusted primitives. |
 
 Option/Result also provide map, map_or/map_or_else, and_then/or_else/unwrap_or_else;
-Option has filter and Result map_err. String ordering/from conversion, scalar
+Option has filter and Result map_err. A map_err closure needs known input/result types: annotate the missing type. For a literal.to_string() result use |_| -> std::String { literal.to_string() }; this supplies the result type while preserving receiver evaluation and the closure's capture/return/? scope. String ordering/from conversion, scalar
 ASCII helpers and min/max are ordinary source conveniences, not general trait evidence.
 [Formatting case](../tests/reference/formatting.rs).
 
@@ -422,7 +422,7 @@ shared signatures, independent inference/IR body errors accumulate; each failing
 body stops at its diagnostic. Diagnostic-only placeholders preserve known signatures
 for dependent checks, never executable authority. Shared resolution/signature errors
 block dependent work; no fabricated types or ownership facts continue analysis.
-Single-error APIs select the first diagnostic from these same production paths.
+Single-error APIs select the first diagnostic from these same production paths. When a rewrite is available, stderr adds LKJSCRIPT_EDITS followed by one JSON object {version:1,path,code,edits:[{start,end,replacement}]}; edits use half-open UTF-8 byte offsets in the unchanged input named by path. Apply each nonoverlapping set atomically, then check the rewritten source again; display line/column values are not edit offsets.
 
 ## World and capabilities
 

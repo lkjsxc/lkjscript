@@ -254,15 +254,16 @@ fn text(bytes: Vec<u8>, path: &str) -> Result<String, String> {
 }
 
 fn report(path: &str, problem: ast::Diagnostic) -> String {
-    let label = if problem.path.is_empty() {
-        path.to_string()
-    } else {
-        problem.path
-    };
-    format!(
+    let label = if problem.path.is_empty() { path } else { problem.path.as_str() };
+    let mut output = format!(
         "{label}:{}:{}: {} {}",
         problem.line, problem.column, problem.code, problem.message
-    )
+    );
+    if !problem.edits.is_empty() {
+        output.push('\n');
+        output.push_str(&diagnostics::edit_record(label, &problem));
+    }
+    output
 }
 fn located(path: &str, program: &ast::Program, mut problem: ast::Diagnostic) -> String {
     if problem.path.is_empty() {
@@ -1564,6 +1565,7 @@ fn check_reusing(
                     path: String::new(), file: 0, line: 1, column: 1,
                     code: "E_TEST".to_string(),
                     message: "authenticated reuse changed the checker verdict".to_string(),
+                    edits: Vec::new(),
                 }]);
             }
         }

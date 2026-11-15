@@ -1,5 +1,6 @@
 // Run with a compiler executable and an existing empty work directory.
 // This suite uses only lkjscript capabilities and leaves that directory empty.
+mod diagnostic_edits;
 struct Outcome {
     status: i64,
     output: Vec<u8>,
@@ -336,6 +337,93 @@ fn occurrences(bytes: &[u8], needle: &[u8]) -> usize {
     count
 }
 
+fn rewrite_diagnostics(
+    world: &mut World,
+    executable: &File,
+    directory: &mut Directory,
+    config: &Config,
+    report: &mut Report,
+) -> Result<(), String> {
+    diagnostic_edits::self_test();
+    let cases: Vec<(String, String, String, String)> = vec![
+        ("array-edit.rs".to_string(), include_str!("../tests/diagnostics/array_to_vec.rs").to_string(), "probe".to_string(), "4\n".to_string()),
+        ("string-edit.rs".to_string(), include_str!("../tests/diagnostics/string_parse.rs").to_string(), "probe".to_string(), "123\n".to_string()),
+        ("map-edit.rs".to_string(), include_str!("../tests/diagnostics/map_err_closure_context.rs").to_string(), "probe".to_string(), "true\n".to_string()),
+        ("quote\"-π.rs".to_string(), r#"// π 😀: offsets count UTF-8 bytes.
+fn bytes(calls: &mut i64) -> [u8; 4] { *calls += 1; [1u8, 2u8, 3u8, 4u8] }
+pub fn probe() -> i64 {
+    let mut calls = 0i64;
+    let values = bytes(&mut calls).to_vec();
+    calls * 100i64 + values.len() as i64
+}"#.to_string(), "probe".to_string(), "104\n".to_string()),
+        ("string-once.rs".to_string(), r#"fn text(calls: &mut i64) -> String { *calls += 1; "123".to_string() }
+pub fn probe() -> i64 {
+    let mut calls = 0i64;
+    let value = text(&mut calls).parse::<u16>().unwrap();
+    calls * 1000i64 + value as i64
+}"#.to_string(), "probe".to_string(), "1123\n".to_string()),
+        ("map-once.rs".to_string(), r#"fn scenario(world: &mut World, bad: bool) {
+    let __lkjscript_result_0 = 2i64;
+    let __lkjscript_value_0 = 5i64;
+    let result: Result<i64, i64> = if bad { Err(7i64) } else { Ok(42i64) };
+    let good = { world.stdout().write(b"R"); result }
+        .map_err(|_| "invalid".to_string()).is_ok();
+    assert!(__lkjscript_result_0 + __lkjscript_value_0 == 7i64);
+    if good { world.stdout().write(b"O"); } else { world.stdout().write(b"E"); }
+}
+pub fn main(mut world: World) { scenario(&mut world, false); scenario(&mut world, true); world.stdout().write(b"\n"); }
+"#.to_string(), "main".to_string(), "RORE\n".to_string()),
+    ];
+    for (name, source, entry, expected) in cases {
+        write(directory, &name, source.as_bytes())?;
+        let checked = invoke(world, executable, &command(config, "check", &name), b"")?;
+        if checked.status != 1 {
+            return Err(format!("diagnostic edit fixture {name} did not reject before its rewrite"));
+        }
+        let rewritten = diagnostic_edits::apply(&source, &checked.errors, &path(config, &name))?;
+        write(directory, &name, rewritten.as_bytes())?;
+        run_value(world, executable, config, report, &name, &entry, &expected)?;
+    }
+    let unchanged: Vec<(String, String)> = vec![
+        ("borrowed-map.rs".to_string(), r#"pub fn probe() -> bool {
+    let value = String::from_utf8(Vec::new());
+    (&value).map_err(|_| "invalid".to_string()).is_ok()
+}"#.to_string()),
+        ("map-captures.rs".to_string(), r#"struct Marker { output: Stdout }
+impl Drop for Marker { fn drop(&mut self) { self.output.write(b"D"); } }
+fn consumed(mut marker: Marker) { marker.output.write(b"C"); }
+pub fn main(mut world: World) {
+    let marker = Marker { output: world.stdout() };
+    let _good = String::from_utf8(vec![255u8]).map_err(move |_| {
+        consumed(marker);
+        "invalid".to_string()
+    }).is_ok();
+}"#.to_string()),
+        ("map-return.rs".to_string(), r#"pub fn probe() -> bool {
+    String::from_utf8(vec![255u8]).map_err(|_| {
+        if true { return "early".to_string(); }
+        "invalid".to_string()
+    }).is_ok()
+}"#.to_string()),
+        ("map-question.rs".to_string(), r#"pub fn probe() -> bool {
+    String::from_utf8(vec![255u8]).map_err(|_| {
+        let input: Result<i64, i64> = Err(7i64);
+        let _value = input?;
+        Ok::<_, i64>("invalid".to_string())
+    }).is_ok()
+}"#.to_string()),
+    ];
+    for (name, source) in unchanged {
+        write(directory, &name, source.as_bytes())?;
+        let rejected = invoke(world, executable, &command(config, "check", &name), b"")?;
+        report.require(
+            rejected.status == 1 && !contains(&rejected.errors, b"LKJSCRIPT_EDITS "),
+            format!("unsafe closure or borrowed Result rewrite for {name}: {}", display_bytes(&rejected.errors)),
+        );
+    }
+    Ok(())
+}
+
 fn diagnostics(
     world: &mut World,
     executable: &File,
@@ -343,6 +431,7 @@ fn diagnostics(
     config: &Config,
     report: &mut Report,
 ) -> Result<(), String> {
+    rewrite_diagnostics(world, executable, directory, config, report)?;
     write(directory, "recovered.rs", b"fn broken() { let = 1; } fn probe() -> i64 { 42 }")?;
     write(directory, "independent.rs", b"fn first() -> i64 { true }\nfn second() -> bool { 1i64 }\n")?;
     for name in pair("recovered.rs", "independent.rs") {

@@ -8,6 +8,7 @@ mod definition_types;
 mod derive_check;
 mod derive_methods;
 mod diagnostic_inference;
+mod diagnostic_edits;
 mod floats;
 mod generic_check;
 mod inference;
@@ -2811,7 +2812,10 @@ impl Builder<'_, '_> {
                 name,
                 types,
                 args,
-            } => self.method(id, receiver, &name, &types, &args, node.span),
+            } => match self.method(id, receiver, &name, &types, &args, node.span) {
+                Ok(value) => Ok(value),
+                Err(problem) => Err(self.method_context_diagnostic(id, problem)),
+            },
             a::Expr::Struct { path, fields, base } => {
                 self.construct_struct(&path, &fields, base, context, node.span)
             }
@@ -4459,6 +4463,11 @@ impl Builder<'_, '_> {
                             "method trait is not in scope"
                         },
                     ));
+                }
+                if candidates.is_empty() {
+                    if let Some(problem) = self.receiver_diagnostic(expression, receiver, base, name, span) {
+                        return Err(problem);
+                    }
                 }
                 if candidates.len() != 1 {
                     return Err(err(
