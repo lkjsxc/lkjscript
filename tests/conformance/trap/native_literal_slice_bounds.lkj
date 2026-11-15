@@ -1,0 +1,4 @@
+// expect: trap R0003
+// stdout:
+fn selected(values: &[u8]) -> u8 { values[2usize] }
+pub fn probe() -> u8 { selected(&[1u8, 2u8]) }

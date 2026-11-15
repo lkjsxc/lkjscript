@@ -1,0 +1,76 @@
+// expect: value 42
+// witness: {}
+fn mix(mut value: u32, other: u32) -> u32 {
+    value = value.wrapping_add(other);
+    value = value.wrapping_mul(0x80000001u32);
+    value = value.wrapping_sub(other);
+    (value & 0xffffff00u32) | ((value ^ 0x55u32) & 255u32)
+}
+pub fn probe() -> i64 {
+    assert_eq!(4294967295u32.wrapping_add(1u32), 0u32);
+    assert_eq!(0u32.wrapping_sub(1u32), 4294967295u32);
+    assert_eq!(2147483648u32.wrapping_mul(2u32), 0u32);
+    assert_eq!(4294967295u32.wrapping_mul(4294967295u32), 1u32);
+    assert_eq!(mix(42u32, 17u32), 2147483775u32);
+    assert_eq!(255u8.wrapping_add(1u8), 0u8);
+    assert_eq!(65535u16.wrapping_add(1u16), 0u16);
+    assert_eq!(18446744073709551615u64.wrapping_add(1u64), 0u64);
+    assert_eq!(127i8.wrapping_add(1i8), -128i8);
+    assert_eq!(32767i16.wrapping_add(1i16), -32768i16);
+    assert_eq!(2147483647i32.wrapping_add(1i32), -2147483648i32);
+    assert_eq!(9223372036854775807i64.wrapping_add(1i64), -9223372036854775808i64);
+    let mut value = 4294967295u32;
+    for count in 0u32..32u32 {
+        let left = value << count;
+        let right = value >> count;
+        assert_eq!(left >> count, value & (4294967295u32 >> count));
+        assert_eq!(right << count, value & (4294967295u32 << count));
+        value = value.wrapping_sub(17u32);
+    }
+    assert_eq!(signed_pattern(-128i32), -1i32);
+    assert_eq!(different_pattern(0x01000000u32, 1u32), 0x02020000u32);
+    assert_eq!(unequal_pattern(0x80000001u32), 0x01000000u32);
+    let mut narrow = 0x81234567u32;
+    let mut wide = 0x8123456789abcdefu64;
+    for _ in 0usize..32usize {
+        assert_eq!(rotate_right32(narrow), reference32(narrow, 7u32));
+        assert_eq!(rotate_left32(narrow), reference32(narrow, 19u32));
+        assert_eq!(rotate_edge32(narrow), reference32(narrow, 31u32));
+        assert_eq!(rotate_right64(wide), reference64(wide, 17u64));
+        assert_eq!(rotate_left64(wide), reference64(wide, 35u64));
+        assert_eq!(rotate_edge64(wide), reference64(wide, 63u64));
+        narrow = narrow.wrapping_mul(1664525u32).wrapping_add(1013904223u32);
+        wide = wide.wrapping_mul(6364136223846793005u64).wrapping_add(1442695040888963407u64);
+    }
+    42
+}
+
+fn rotate_right32(value: u32) -> u32 { (value >> 7u32) | (value << 25u32) }
+
+fn rotate_left32(value: u32) -> u32 { (value << 13u32) | (value >> 19u32) }
+
+fn rotate_edge32(value: u32) -> u32 { (value >> 31u32) | (value << 1u32) }
+
+fn rotate_right64(value: u64) -> u64 { (value >> 17u64) | (value << 47u64) }
+
+fn rotate_left64(value: u64) -> u64 { (value << 29u64) | (value >> 35u64) }
+
+fn rotate_edge64(value: u64) -> u64 { (value >> 63u64) | (value << 1u64) }
+
+fn signed_pattern(value: i32) -> i32 { (value >> 7i32) | (value << 25i32) }
+
+fn different_pattern(left: u32, right: u32) -> u32 { (left >> 7u32) | (right << 25u32) }
+
+fn unequal_pattern(value: u32) -> u32 { (value >> 7u32) | (value << 24u32) }
+
+fn reference32(value: u32, count: u32) -> u32 {
+    let right = value >> count;
+    let left = value << (32u32 - count);
+    right | left
+}
+
+fn reference64(value: u64, count: u64) -> u64 {
+    let right = value >> count;
+    let left = value << (64u64 - count);
+    right | left
+}

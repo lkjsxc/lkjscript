@@ -2,6 +2,10 @@
 
 The [source-shape scale ladder](scale.md) measures the compiler and deterministic
 10k/100k/1M/10M-line programs, edited builds and explicit resource refusals.
+The [fixed-byte hash attribution](hash.md) isolates exact producer identity costs
+and compares optimization levels, explicit inlining removal and native profiles.
+The [fixed-source compiler attribution](compiler_attribution.md) repeats the
+original compiler workload across optimization and inlining settings.
 
 Run from the checkout after bootstrap:
 

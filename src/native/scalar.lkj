@@ -127,6 +127,10 @@ impl Body<'_> {
             TypeKind::Char => (32, false),
             _ => return Err(self.problem("unsupported scalar binary type")),
         };
+        if matches!(self.program.types[self.ty(left)].kind, TypeKind::Int { bits: 32, signed: false })
+            && self.scalar_word32(dst, op, left, right) {
+            return Ok(());
+        }
         let assigned = self.registers[dst].unwrap_or(A);
         let fixed = matches!(op, BinaryOp::Div | BinaryOp::Rem)
             || (!signed && bits == 64 && op == BinaryOp::Mul);
@@ -345,5 +349,102 @@ impl Body<'_> {
         }
         self.write(dst, A);
         Ok(())
+    }
+}
+
+pub(super) fn rotation(program: &Program, function: &Function, at: usize) -> Option<(usize, usize, u8, u8)> {
+    if at > function.body.len() || function.body.len() - at < 7usize { return None; }
+    let code = &function.body[at..at + 7usize];
+    let (first_copy, source) = match &code[0].op {
+        Op::Read { dst, place, moving: false } if place.projections.is_empty() => (*dst, place.local),
+        _ => return None,
+    };
+    let (first_count, first_amount) = match code[1].op {
+        Op::Int { dst, value } => (dst, value), _ => return None,
+    };
+    let (first_value, first_op) = match code[2].op {
+        Op::Binary { dst, op, left, right } if left == first_copy && right == first_count => (dst, op),
+        _ => return None,
+    };
+    let second_copy = match &code[3].op {
+        Op::Read { dst, place, moving: false } if place.projections.is_empty() && place.local == source => *dst,
+        _ => return None,
+    };
+    let (second_count, second_amount) = match code[4].op {
+        Op::Int { dst, value } => (dst, value), _ => return None,
+    };
+    let (second_value, second_op) = match code[5].op {
+        Op::Binary { dst, op, left, right } if left == second_copy && right == second_count => (dst, op),
+        _ => return None,
+    };
+    let destination = match code[6].op {
+        Op::Binary { dst, op: BinaryOp::BitOr, left, right }
+            if (left == first_value && right == second_value) || (left == second_value && right == first_value) => dst,
+        _ => return None,
+    };
+    if !((first_op == BinaryOp::Shr && second_op == BinaryOp::Shl)
+        || (first_op == BinaryOp::Shl && second_op == BinaryOp::Shr)) { return None; }
+    let bits = match program.types[function.locals[source].ty].kind {
+        TypeKind::Int { bits, signed: false } if bits == 32u8 || bits == 64u8 => bits,
+        _ => return None,
+    };
+    if first_amount <= 0 || first_amount >= bits as i64 || second_amount <= 0
+        || second_amount >= bits as i64 || first_amount + second_amount != bits as i64 { return None; }
+    // The seven instructions contain no effects, projections or control edges.
+    // Checked initialization prevents any intermediate value from escaping after
+    // its consuming operation. Explicitly exclude every write to the shared input.
+    if first_copy == source || first_count == source || first_value == source
+        || second_copy == source || second_count == source || second_value == source
+        || destination == source { return None; }
+    let count = if first_op == BinaryOp::Shr { first_amount } else { second_amount };
+    Some((source, destination, count as u8, bits))
+}
+
+impl Body<'_> {
+    pub(super) fn emit_rotation(&mut self, instruction: &ir::Instruction,
+        source: usize, destination: usize, count: u8, bits: u8) {
+        self.site = Span {
+            file: instruction.file.unwrap_or(self.function.file) + self.source_base,
+            start: 0, end: 0, line: instruction.line, column: instruction.column,
+        };
+        self.a.location(self.site.file, self.site.line, self.site.column);
+        let register = self.registers[destination].unwrap_or(A);
+        self.read(source, register);
+        if bits == 32u8 { self.a.shift32(register, 1, count); }
+        else { self.a.shift(register, 1, count); }
+        self.write_normalized(destination, register);
+    }
+}
+
+impl Body<'_> {
+    fn scalar_word32(&mut self, dst: usize, op: BinaryOp, left: usize, right: usize) -> bool {
+        let opcode = match op {
+            BinaryOp::WrappingAdd => 0x01u8,
+            BinaryOp::WrappingSub => 0x29u8,
+            BinaryOp::WrappingMul => 0xafu8,
+            BinaryOp::BitAnd => 0x21u8,
+            BinaryOp::BitOr => 0x09u8,
+            BinaryOp::BitXor => 0x31u8,
+            BinaryOp::Shl => 0xd0u8,
+            BinaryOp::Shr => 0xd1u8,
+            _ => return false,
+        };
+        let assigned = self.registers[dst].unwrap_or(A);
+        let register = if self.registers[right] == Some(assigned) { A } else { assigned };
+        self.read(left, register);
+        self.read(right, C);
+        if opcode == 0xafu8 {
+            self.a.imul32(register, C);
+        } else if opcode == 0xd0u8 || opcode == 0xd1u8 {
+            // Preserve the checked language's width trap before x86 masks CL.
+            self.a.immediate(D, 32);
+            self.check_compare(C, D, 3, 1);
+            self.a.shift_cl32(register, if opcode == 0xd0u8 { 4 } else { 5 });
+        } else {
+            self.a.rr(opcode, register, C, false);
+        }
+        // Every selected r32 result is zero-extended by the machine instruction.
+        self.write_normalized(dst, register);
+        true
     }
 }

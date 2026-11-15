@@ -11,6 +11,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 mod cache;
 
+
 pub(crate) fn cache_contracts() { cache::contracts(); }
 mod entry;
 mod child_entry;
@@ -859,8 +860,10 @@ impl<'a> Body<'a> {
                 } else if scalar {
                     let bytes = self.layout.storage(ty).bytes as u8;
                     let signed = self.layout.storage(ty).signed;
-                    self.a.load_width(A, SI, 0, bytes, signed);
-                    self.write(*dst, A);
+                    // load_width already sign- or zero-extends the checked scalar type.
+                    let register = self.registers[*dst].unwrap_or(A);
+                    self.a.load_width(register, SI, 0, bytes, signed);
+                    self.write_normalized(*dst, register);
                 } else {
                     self.local_address(*dst, DI);
                     self.copy_value(DI, SI, ty);
@@ -1235,8 +1238,15 @@ fn emit_function(
         return_label,
         source_base,
     };
-    for instruction in &function.body {
-        body.emit(instruction)?;
+    let mut at = 0usize;
+    while at < function.body.len() {
+        if let Some((source, destination, count, bits)) = scalar::rotation(program, function, at) {
+            body.emit_rotation(&function.body[at + 6usize], source, destination, count, bits);
+            at += 7usize;
+        } else {
+            body.emit(&function.body[at])?;
+            at += 1usize;
+        }
     }
     body.a.bind(return_label);
     let return_kind = body.a.scope_kind(KIND_PROLOGUE);
@@ -1971,4 +1981,20 @@ fn prepare_program(
     }
     a.bytes.extend_from_slice(&data);
     Ok(PreparedImage { assembler: a, data_offset, function_bytes })
+}
+
+impl<'a> Body<'a> {
+    // Only selected instructions that already produce the checked type's canonical
+    // register value use this path. All other writes retain normalization.
+    fn write_normalized(&mut self, local: usize, register: u8) {
+        let storage = self.layout.storage(self.ty(local));
+        if storage.bytes != 0 {
+            if let Some(assigned) = self.registers[local] {
+                self.a.mov(assigned, register);
+            } else {
+                self.a.store_width(BP, self.slots[local], register, storage.bytes as u8);
+            }
+        }
+        self.mark(local);
+    }
 }

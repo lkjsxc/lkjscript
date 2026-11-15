@@ -1,0 +1,96 @@
+// expect: value 42
+// witness: {}
+// Exercise literal shifts at every width, signed normalization, fixed-array
+// addresses, and cases whose mutable counts or aliases must retain checks.
+fn change(value: &mut u32, replacement: u32) { *value = replacement; }
+fn branch(value: bool) -> u32 {
+    let mut count = 1u32;
+    if value { count = 3u32; } else { count = 4u32; }
+    1u32 << count
+}
+pub fn probe() -> i64 {
+    composite_stride_loads();
+    projected_scalars();
+    assert_eq!(1u8 << 7u8, 128u8);
+    assert_eq!(128u8 >> 7u16, 1u8);
+    assert_eq!(1u16 << 15u32, 32768u16);
+    assert_eq!(32768u16 >> 15u64, 1u16);
+    assert_eq!(1u32 << 31usize, 2147483648u32);
+    assert_eq!(2147483648u32 >> 31u8, 1u32);
+    assert_eq!(1u64 << 63u16, 9223372036854775808u64);
+    assert_eq!(9223372036854775808u64 >> 63u32, 1u64);
+    assert_eq!(1i8 << 7u64, -128i8);
+    assert_eq!(-128i8 >> 7usize, -1i8);
+    assert_eq!(1i16 << 15u8, -32768i16);
+    assert_eq!(-32768i16 >> 15u16, -1i16);
+    assert_eq!(1i32 << 31u32, -2147483648i32);
+    assert_eq!(-2147483648i32 >> 31u64, -1i32);
+    assert_eq!(1i64 << 63usize, -9223372036854775808i64);
+    assert_eq!(-9223372036854775808i64 >> 63u8, -1i64);
+    assert_eq!(42u64 << 0u8, 42u64);
+    assert_eq!(-42i64 >> 0u8, -42i64);
+    let mut count = 1u32;
+    count = 2u32;
+    assert_eq!(1u8 << count, 4u8);
+    change(&mut count, 3u32);
+    assert_eq!(1u8 << count, 8u8);
+    assert_eq!(branch(true), 8u32);
+    assert_eq!(branch(false), 16u32);
+    let mut total = 0u32;
+    for index in 0u32..3u32 { total += index << 2u8; }
+    assert_eq!(total, 12u32);
+    let mut values = [[1u32, 2u32, 3u32], [4u32, 5u32, 6u32]];
+    assert_eq!(values[1usize][2usize], 6u32);
+    values[0usize][2usize] = 42u32;
+    assert_eq!(values[0usize][2usize], 42u32);
+    let units = [(); 4];
+    assert_eq!(units[3usize], ());
+    42
+}
+
+fn projected_scalars() {
+    let mut signed8 = [-128i8, 127i8];
+    let signed16 = [-32768i16, 32767i16];
+    let signed32 = [-2147483648i32, 2147483647i32];
+    let signed64 = [-9223372036854775808i64, 9223372036854775807i64];
+    let unsigned8 = [128u8, 255u8];
+    let unsigned16 = [32768u16, 65535u16];
+    let unsigned32 = [2147483648u32, 4294967295u32];
+    let unsigned64 = [9223372036854775808u64, 18446744073709551615u64];
+    assert_eq!(signed8[0usize] as i64, -128i64);
+    assert_eq!(signed16[0usize] as i64, -32768i64);
+    assert_eq!(signed32[0usize] as i64, -2147483648i64);
+    assert_eq!(signed64[0usize], -9223372036854775808i64);
+    assert_eq!(unsigned8[1usize] as u64, 255u64);
+    assert_eq!(unsigned16[1usize] as u64, 65535u64);
+    assert_eq!(unsigned32[1usize] as u64, 4294967295u64);
+    assert_eq!(unsigned64[1usize], 18446744073709551615u64);
+    let value = &mut signed8[1usize];
+    *value = -1i8;
+    assert_eq!(*value as i64, -1i64);
+    assert_eq!(signed8[1usize] as i64, -1i64);
+    let flags = [false, true];
+    let letters = ['a', 'λ'];
+    let floats = [0.5f64, -1.25f64];
+    assert_eq!(flags[0usize], false);
+    assert_eq!(flags[1usize], true);
+    assert_eq!(letters[1usize], 'λ');
+    assert_eq!(floats[1usize], -1.25f64);
+}
+
+struct NativeStrideRecord { first: u64, second: u64, third: u64 }
+
+fn composite_stride_loads() {
+    let mut rows = [
+        NativeStrideRecord { first: 1u64, second: 2u64, third: 3u64 },
+        NativeStrideRecord { first: 4u64, second: 5u64, third: 6u64 },
+    ];
+    let mut total = 0u64;
+    for index in 0usize..2usize {
+        total += rows[index].first + rows[index].second + rows[index].third;
+    }
+    assert_eq!(total, 21u64);
+    rows[1usize].third = 42u64;
+    let nested = [rows];
+    assert_eq!(nested[0usize][1usize].third, 42u64);
+}

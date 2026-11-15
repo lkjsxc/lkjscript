@@ -1,0 +1,3 @@
+// expect: trap R0001
+// stdout:
+pub fn probe() -> u32 { let value = 42u32; (value >> 0u32) | (value << 32u32) }

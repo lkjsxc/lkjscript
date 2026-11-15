@@ -1,0 +1,51 @@
+//! Hash exactly the supplied bytes through the compiler's 64 KiB read/update path.
+use std::sha256::Sha256;
+fn io<T>(value: Result<T, i64>) -> Result<T, String> { value.map_err(|errno| format!("I/O errno {errno}")) }
+fn hex(bytes: &[u8]) -> String {
+    let digits = b"0123456789abcdef";
+    let mut text = String::new();
+    for byte in bytes {
+        text.push(digits[(*byte >> 4u8) as usize] as char);
+        text.push(digits[(*byte & 15u8) as usize] as char);
+    }
+    text
+}
+fn execute(world: &mut World) -> Result<(), String> {
+    let arguments = world.args();
+    if arguments.len() != 3usize { return Err("usage: hash ROOT FILE REPEATS".to_string()); }
+    let root = String::from_utf8(arguments[0].clone()).map_err(|_| -> String { "root is not UTF-8".to_string() })?;
+    let path = String::from_utf8(arguments[1].clone()).map_err(|_| -> String { "path is not UTF-8".to_string() })?;
+    let count = String::from_utf8(arguments[2].clone()).map_err(|_| -> String { "count is not UTF-8".to_string() })?;
+    let count = count.as_str().parse::<usize>().map_err(|_| -> String { "count is not an integer".to_string() })?;
+    if count == 0usize { return Err("count must be positive".to_string()); }
+    let mut root = io(world.directory(&root))?;
+    let mut file = io(root.open(&path))?;
+    let mut clock = world.clock();
+    let mut first = [0u8; 32];
+    let mut total_bytes = 0usize;
+    let mut buffer = [0u8; 65536];
+    let before = io(clock.nanoseconds())?;
+    for iteration in 0usize..count {
+        io(file.rewind())?;
+        let mut hash = Sha256::new();
+        let mut bytes = 0usize;
+        loop {
+            let n = io(file.read(&mut buffer))?;
+            if n == 0usize { break; }
+            hash.update(&buffer[..n]);
+            bytes += n;
+        }
+        let digest = hash.finish();
+        if iteration == 0usize { first = digest; total_bytes = bytes; }
+        else { assert_eq!(digest, first); assert_eq!(bytes, total_bytes); }
+    }
+    let elapsed = io(clock.nanoseconds())? - before;
+    world.stdout().write(format!("bytes={total_bytes} repeats={count} elapsed_ns={elapsed} sha256={}\n", hex(&first)).as_bytes());
+    Ok(())
+}
+pub fn main(mut world: World) {
+    if let Err(problem) = execute(&mut world) {
+        world.stderr().write(format!("E_HASH_BENCH {problem}\n").as_bytes());
+        world.set_exit_status(1u8);
+    }
+}

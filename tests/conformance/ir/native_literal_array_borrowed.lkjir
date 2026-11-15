@@ -1,0 +1,32 @@
+lkjscript-ir 1
+# expect: value 42
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "Values" array 4 2
+type "&mut usize" ref mut 4
+fn "probe" 0 4
+local "left" 4 let
+local "right" 4 let
+local "values" 7 let
+local "index" 4 mut
+local "reference" 8 let
+local "replacement" 4 let
+local "result" 4 let
+@1 int 0 1
+@2 int 1 42
+@3 array 2 0 1
+@4 int 3 0
+@5 borrow 4 mut 3
+@6 int 5 1
+@7 assign 5 4 deref
+@8 drop 4
+@9 read 6 copy 2 index 3
+@10 drop 2
+@10 drop 3
+@11 return 6
+endfn

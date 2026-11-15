@@ -1,0 +1,3 @@
+// expect: trap R0003
+// stdout:
+pub fn probe() -> u8 { [1u8, 2u8][2usize] }

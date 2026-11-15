@@ -545,6 +545,23 @@ impl Assembler {
         self.rex_for(true, 0, reg, false);
         self.raw_bytes(&[0xd3, 0xc0 | ((kind & 7) << 3) | (reg & 7)]);
     }
+    pub fn shift32(&mut self, reg: u8, kind: u8, count: u8) {
+        if self.profile { self.kind(KIND_ARITHMETIC); }
+        self.rex_for(false, 0, reg, false);
+        self.raw_bytes(&[0xc1, 0xc0 | ((kind & 7) << 3) | (reg & 7), count]);
+    }
+
+
+    pub fn shift_cl32(&mut self, reg: u8, kind: u8) {
+        if self.profile { self.kind(KIND_ARITHMETIC); }
+        self.rex_for(false, 0, reg, false);
+        self.raw_bytes(&[0xd3, 0xc0 | ((kind & 7) << 3) | (reg & 7)]);
+    }
+    pub fn imul32(&mut self, dst: u8, src: u8) {
+        if self.profile { self.kind(KIND_ARITHMETIC); }
+        self.rex_for(false, dst, src, false);
+        self.raw_bytes(&[0x0f, 0xaf, 0xc0 | ((dst & 7) << 3) | (src & 7)]);
+    }
     pub fn imul(&mut self, dst: u8, src: u8) {
         if self.profile { self.kind(KIND_ARITHMETIC); }
         self.rex_for(true, dst, src, false);
