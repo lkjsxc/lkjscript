@@ -1,0 +1,190 @@
+//! Direct IR campaign: no source producer participates in a mutant verdict.
+mod ir;
+mod ir_binary;
+mod diagnostic;
+mod facts;
+mod reuse;
+mod check;
+use std::sha256;
+use std::collections::BTreeMap;
+use ir::*;
+
+const SEED: u64 = 901173u64;
+struct Counts { accepted:usize, rejected:usize, properties:usize, codes:BTreeMap<String,usize> }
+fn local(ty:usize)->Local {Local{name:String::new(),ty,mutable:true}}
+fn place(index:usize)->Place {Place{local:index,projections:Vec::new()}}
+fn instruction(op:Op)->Instruction {Instruction{file:None,line:1usize,column:1usize,op}}
+fn program(types:Vec<Type>,locals:Vec<Local>,params:usize,result:usize,source:Option<ReturnSource>,ops:Vec<Op>)->Program {
+    let mut body=Vec::new();for op in ops {body.push(instruction(op));}
+    Program{sources:Vec::new(),destructors:Vec::new(),types,functions:vec![Function{file:0usize,name:"probe".to_string(),params,result,return_source:source,locals,body,test:false}]}
+}
+fn add(types:&mut Vec<Type>,kind:TypeKind)->usize {let index=types.len();types.push(Type{name:String::new(),kind});index}
+fn result(types:&mut Vec<Type>,success:usize)->usize {
+    add(types,TypeKind::Enum{copy:false,variants:vec![Variant{name:"Ok".to_string(),fields:vec![Field{name:"0".to_string(),ty:success}]},Variant{name:"Err".to_string(),fields:vec![Field{name:"0".to_string(),ty:I64}]}]})
+}
+fn types()->Vec<Type> {
+    let mut types=primitives();
+    // 7 Image, 8 Channel, 9 Worker, 10 ReadRegion, 11 File, 12 ReadFile.
+    for kind in vec![TypeKind::Image,TypeKind::Channel,TypeKind::Worker,TypeKind::ReadRegion,TypeKind::File,TypeKind::ReadFile] {add(&mut types,kind);}
+    // 13 &mut Image, 14 &mut Channel, 15 &mut Worker, 16 &mut File.
+    for inner in vec![7usize,8usize,9usize,11usize] {add(&mut types,TypeKind::Ref{inner,mutable:true});}
+    add(&mut types,TypeKind::Ref{inner:10usize,mutable:false}); // 17 &ReadRegion.
+    add(&mut types,TypeKind::Slice{inner:U8,mutable:false}); // 18 [u8].
+    add(&mut types,TypeKind::Ref{inner:18usize,mutable:false}); // 19 &[u8].
+    add(&mut types,TypeKind::Ref{inner:18usize,mutable:true}); // 20 &mut [u8].
+    // 21 Result<Worker>, 22 Result<File>, 23 Result<ReadFile>, 24 Result<Region>,
+    // 25 Result<usize>, 26 Result<i64>, 27 Result<()>.
+    for success in vec![9usize,11usize,12usize,10usize,U64,I64,UNIT] {result(&mut types,success);}
+    types
+}
+fn spec(index:usize)->(IntrinsicOp,Vec<usize>,usize) {
+    match index {
+        0usize=>(IntrinsicOp::ImageSpawn,vec![13usize,U64],21usize),
+        1usize=>(IntrinsicOp::ImageBuffer,vec![13usize,19usize],22usize),
+        2usize=>(IntrinsicOp::ChannelSend,vec![14usize,19usize,U64],25usize),
+        3usize=>(IntrinsicOp::ChannelReceive,vec![14usize,20usize,U64],25usize),
+        4usize=>(IntrinsicOp::WorkerSend,vec![15usize,19usize,U64],25usize),
+        5usize=>(IntrinsicOp::WorkerReceive,vec![15usize,20usize,U64],25usize),
+        6usize=>(IntrinsicOp::ChannelSendFile,vec![14usize,11usize,U64],27usize),
+        7usize=>(IntrinsicOp::WorkerSendFile,vec![15usize,11usize,U64],27usize),
+        8usize=>(IntrinsicOp::ChannelReceiveFile,vec![14usize,U64],22usize),
+        9usize=>(IntrinsicOp::WorkerReceiveFile,vec![15usize,U64],22usize),
+        10usize=>(IntrinsicOp::WorkerWait,vec![15usize,U64],26usize),
+        11usize=>(IntrinsicOp::WorkerTerminate,vec![15usize],27usize),
+        12usize=>(IntrinsicOp::WorkerResult,vec![15usize],23usize),
+        13usize=>(IntrinsicOp::FileMapReadonly,vec![16usize],24usize),
+        14usize=>(IntrinsicOp::ReadRegionBytes,vec![17usize],19usize),
+        _=>(IntrinsicOp::ReadRegionLen,vec![17usize],U64),
+    }
+}
+fn source(index:usize)->Option<ReturnSource> {
+    if index==14usize {Some(ReturnSource::Parameter{index:0usize,projections:Vec::new()})} else {None}
+}
+fn control(index:usize)->Program {
+    let (name,args,result)=spec(index);let params=args.len();let mut locals=Vec::new();let mut operands=Vec::new();
+    for ty in args {operands.push(locals.len());locals.push(local(ty));} locals.push(local(result));
+    program(types(),locals,params,result,source(index),vec![Op::Intrinsic{dst:params,name,args:operands},Op::Return{src:params}])
+}
+fn accept(p:Program,label:&str,counts:&mut Counts,output:&mut Stdout) {
+    match check::check(p) {
+        Ok(_)=>counts.accepted+=1usize,
+        Err(error)=>{output.write(format!("REFUSED CONTROL {label}: {} {}\n",error.code,error.message).as_bytes());panic!("process mutation control rejected");}
+    }
+}
+fn reject(p:Program,label:&str,counts:&mut Counts,output:&mut Stdout) {
+    match check::check(p) {
+        Ok(_)=>{output.write(format!("ACCEPTED MUTANT {label}; seed={SEED}\n").as_bytes());panic!("process mutation checker finding");}
+        Err(error)=>{
+            counts.rejected+=1usize;
+            let before=match counts.codes.get(&error.code) {Some(value)=>*value,None=>0usize};
+            counts.codes.insert(error.code,before+1usize);
+        }
+    }
+}
+fn signature_mutant(index:usize,variant:usize)->Program {
+    let mut p=control(index);let (mut name,args,_result)=spec(index);let count=args.len();
+    let mut operands=Vec::new();for at in 0usize..count {operands.push(at);}
+    let receiver=args[0usize];
+    let (inner,mutable)=match p.types[receiver].kind {TypeKind::Ref{inner,mutable}=>(inner,mutable),_=>panic!("receiver shape")};
+    match variant {
+        0usize=>{operands.pop();},
+        1usize=>operands.push(0usize),
+        2usize=>p.types[inner].kind=TypeKind::Stdout,
+        3usize=>p.types[receiver].kind=TypeKind::Ref{inner,mutable:!mutable},
+        4usize=>{p.functions[0usize].locals[count].ty=I64;p.functions[0usize].result=I64;p.functions[0usize].return_source=None;},
+        5usize=>{p.functions[0usize].locals[count-1usize].ty=I64;},
+        6usize=>{p.functions[0usize].locals[0usize].ty=inner;},
+        _=>{
+            if index==1usize || (index>=2usize && index<=5usize) {p.functions[0usize].locals[1usize].ty=if args[1usize]==19usize {20usize}else{19usize};}
+            else if index==6usize || index==7usize {p.functions[0usize].locals[1usize].ty=16usize;}
+            else if count>1usize {p.functions[0usize].locals[count-1usize].ty=BOOL;}
+            else {name=if index==14usize {IntrinsicOp::ReadRegionLen}else{IntrinsicOp::ReadRegionBytes};}
+        }
+    }
+    p.functions[0usize].body[0usize]=instruction(Op::Intrinsic{dst:count,name,args:operands});p
+}
+fn property(types:&[Type],kind:usize,copy:bool,counts:&mut Counts) {
+    assert_eq!(check::is_copy(types,kind),copy);assert!(!check::is_data(types,kind));counts.properties+=2usize;
+}
+fn opaque(counts:&mut Counts,output:&mut Stdout) {
+    for kind in 7usize..11usize {
+        let base=types();property(&base,kind,false,counts);
+        accept(program(base.clone(),vec![local(kind),local(kind)],1usize,kind,None,vec![Op::Read{dst:1usize,place:place(0usize),moving:true},Op::Return{src:1usize}]),"opaque move",counts,output);
+        for mode in 0usize..3usize {
+            let op=match mode {0usize=>Op::Int{dst:0usize,value:1i64},1usize=>Op::Struct{dst:0usize,fields:Vec::new()},_=>Op::Array{dst:0usize,elements:Vec::new()}};
+            reject(program(base.clone(),vec![local(kind)],0usize,kind,None,vec![op,Op::Return{src:0usize}]),&format!("opaque/{kind}/construct/{mode}"),counts,output);
+        }
+        reject(program(base.clone(),vec![local(kind),local(kind)],1usize,kind,None,vec![Op::Read{dst:1usize,place:place(0usize),moving:false},Op::Return{src:1usize}]),&format!("opaque/{kind}/copy"),counts,output);
+        reject(program(base.clone(),vec![local(kind),local(kind),local(kind)],1usize,kind,None,vec![Op::Read{dst:1usize,place:place(0usize),moving:true},Op::Read{dst:2usize,place:place(0usize),moving:true},Op::Drop{place:place(1usize)},Op::Return{src:2usize}]),&format!("opaque/{kind}/second-move"),counts,output);
+        let mut borrowed=base.clone();let shared=add(&mut borrowed,TypeKind::Ref{inner:kind,mutable:false});property(&borrowed,shared,true,counts);
+        reject(program(borrowed,vec![local(shared),local(kind)],1usize,kind,None,vec![Op::Intrinsic{dst:1usize,name:IntrinsicOp::Clone,args:vec![0usize]},Op::Return{src:1usize}]),&format!("opaque/{kind}/clone"),counts,output);
+        let mut copied=base.clone();add(&mut copied,TypeKind::Struct{copy:true,fields:vec![Field{name:"owner".to_string(),ty:kind}]});
+        reject(program(copied,vec![local(UNIT)],0usize,UNIT,None,vec![Op::Unit{dst:0usize},Op::Return{src:0usize}]),&format!("opaque/{kind}/copy-wrapper"),counts,output);
+        let mut containers=base;
+        for wrapper in vec![TypeKind::Struct{copy:false,fields:vec![Field{name:"owner".to_string(),ty:kind}]},TypeKind::Vec{inner:kind},TypeKind::Box{inner:kind},TypeKind::Array{inner:kind,len:1usize}] {
+            let wrapped=add(&mut containers,wrapper);property(&containers,wrapped,false,counts);
+        }
+        accept(program(containers,vec![local(UNIT)],0usize,UNIT,None,vec![Op::Unit{dst:0usize},Op::Return{src:0usize}]),"owned opaque containers",counts,output);
+    }
+}
+fn file_transfer(index:usize,branch:usize,reuse:bool)->Program {
+    let mut p=control(index);let (name,_args,_result)=spec(index);
+    p.functions[0usize].locals.push(local(BOOL));p.functions[0usize].locals.push(local(11usize));
+    let mut body=vec![instruction(Op::Intrinsic{dst:3usize,name,args:vec![0usize,1usize,2usize]})];
+    if branch<2usize {body.push(instruction(Op::TagTest{dst:4usize,place:place(3usize),variant:branch}));body.push(instruction(Op::If{condition:4usize}));}
+    if reuse {body.push(instruction(Op::Read{dst:5usize,place:place(1usize),moving:true}));body.push(instruction(Op::Drop{place:place(5usize)}));}
+    if branch<2usize {body.push(instruction(Op::End));}
+    body.push(instruction(Op::Return{src:3usize}));p.functions[0usize].body=body;p
+}
+fn region_owner()->Program {
+    program(types(),vec![local(10usize),local(17usize),local(19usize),local(UNIT),local(10usize)],1usize,UNIT,None,
+        vec![Op::Borrow{dst:1usize,place:place(0usize),mutable:false},Op::Intrinsic{dst:2usize,name:IntrinsicOp::ReadRegionBytes,args:vec![1usize]},Op::Drop{place:place(2usize)},Op::Drop{place:place(0usize)},Op::Unit{dst:3usize},Op::Return{src:3usize}])
+}
+fn regions(counts:&mut Counts,output:&mut Stdout) {
+    accept(region_owner(),"region owner/view cleanup",counts,output);
+    let mut p=region_owner();p.functions[0usize].body[2usize]=instruction(Op::Drop{place:place(0usize)});p.functions[0usize].body[3usize]=instruction(Op::Drop{place:place(2usize)});
+    reject(p,"region/drop-before-view",counts,output);
+    let mut p=region_owner();p.functions[0usize].body[2usize]=instruction(Op::Read{dst:4usize,place:place(0usize),moving:true});
+    reject(p,"region/move-before-view",counts,output);
+    let mut p=region_owner();p.functions[0usize].locals[2usize].ty=20usize;
+    reject(p,"region/mutable-view",counts,output);
+    let mut p=control(14usize);p.functions[0usize].return_source=Some(ReturnSource::Static);
+    reject(p,"region/false-static-metadata",counts,output);
+    let p=program(types(),vec![local(17usize),local(17usize),local(19usize)],2usize,19usize,Some(ReturnSource::Parameter{index:0usize,projections:Vec::new()}),vec![Op::Intrinsic{dst:2usize,name:IntrinsicOp::ReadRegionBytes,args:vec![0usize]},Op::Drop{place:place(1usize)},Op::Return{src:2usize}]);
+    accept(p.clone(),"region two owners correct origin",counts,output);
+    let mut changed=p;changed.functions[0usize].return_source=Some(ReturnSource::Parameter{index:1usize,projections:Vec::new()});
+    reject(changed,"region/wrong-owner-metadata",counts,output);
+    let mut p=region_owner();add(&mut p.types,TypeKind::Vec{inner:19usize});
+    reject(p,"region/view-in-heap",counts,output);
+}
+pub fn main(mut output:Stdout) {
+    let mut counts=Counts{accepted:0usize,rejected:0usize,properties:0usize,codes:BTreeMap::new()};
+    for index in 0usize..16usize {
+        let p=control(index);accept(p.clone(),&format!("operation/{index}"),&mut counts,&mut output);
+        let bytes=ir_binary::write(&p);let restored=ir_binary::read(&bytes).unwrap();
+        accept(restored,&format!("binary-operation/{index}"),&mut counts,&mut output);
+    }
+    opaque(&mut counts,&mut output);
+    for index in vec![6usize,7usize] {
+        for branch in 0usize..2usize {accept(file_transfer(index,branch,false),"send-file result branch",&mut counts,&mut output);}
+        for branch in 0usize..3usize {reject(file_transfer(index,branch,true),&format!("send-file/{index}/use-after-move/branch{branch}"),&mut counts,&mut output);}
+    }
+    regions(&mut counts,&mut output);
+    let mut state=SEED;let mut trial=0usize;
+    for _round in 0usize..4usize {
+        let mut order=Vec::new();for index in 0usize..128usize {order.push(index);}
+        let mut remaining=order.len();while remaining>1usize {
+            state=state.wrapping_mul(6364136223846793005u64).wrapping_add(1442695040888963407u64);
+            let selected=(state%(remaining as u64)) as usize;let last=remaining-1usize;
+            let value=order[last];order[last]=order[selected];order[selected]=value;remaining=last;
+        }
+        for code in order {
+            let operation=code/8usize;let edit=code%8usize;let mut p=signature_mutant(operation,edit);
+            for index in 0usize..p.functions[0usize].body.len() {p.functions[0usize].body[index].line=trial+1usize;}
+            reject(p,&format!("signature/op{operation}/edit{edit}/trial{trial}"),&mut counts,&mut output);trial+=1usize;
+        }
+    }
+    assert_eq!(trial,512usize);assert_eq!(counts.rejected,552usize);
+    output.write(format!("ok process IR mutation: {} admitted controls, {} rejected trials (512 signature trials,128 distinct signature edits,28 opaque,6 File-move,6 Region); {} Copy/Data predicates; seed={SEED}\n",counts.accepted,counts.rejected,counts.properties).as_bytes());
+    for (code,count) in counts.codes {output.write(format!("  {code}: {count}\n").as_bytes());}
+}

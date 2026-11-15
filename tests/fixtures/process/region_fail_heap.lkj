@@ -1,0 +1,6 @@
+// ReadRegion does not create a new exception for views in heap containers.
+pub fn probe(mut file: File) -> usize {
+    let region = file.map_readonly().unwrap();
+    let views = vec![region.bytes()];
+    views.len()
+}

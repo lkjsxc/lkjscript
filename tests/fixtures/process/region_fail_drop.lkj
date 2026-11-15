@@ -1,0 +1,7 @@
+// A byte view retains its ReadRegion owner across calls and explicit drop.
+pub fn probe(mut file: File) -> usize {
+    let region = file.map_readonly().unwrap();
+    let bytes = region.bytes();
+    drop(region);
+    bytes.len()
+}

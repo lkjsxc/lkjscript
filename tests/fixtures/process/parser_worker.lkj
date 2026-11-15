@@ -1,0 +1,30 @@
+use std::workers::{packet,decode};
+fn parse(bytes:&[u8])->u64 {
+    if bytes.starts_with(b"GET /panic ") {panic!("untrusted parser worker trap");}
+    if bytes.starts_with(b"GET /spin ") {loop {}}
+    if bytes.starts_with(b"GET /ok HTTP/1.") && complete(bytes) {42u64}else{400u64}
+}
+pub fn main(mut channel:Channel)->i64 {
+    loop {
+        let mut command=[0u8;17];let count=channel.receive(&mut command,!0usize).unwrap();
+        if count==0usize {return 0;}
+        let Some((tag,job,_))=decode(&command[..count]) else{return -1;};
+        if tag==0u8 {return 0;}
+        if tag!=6u8 || job!=0usize {return -2;}
+        let mut stream=channel.receive_file(!0usize).unwrap();
+        let mut bytes=[0u8;2048];let mut count=0usize;
+        while count<bytes.len() {
+            let read=stream.read(&mut bytes[count..]).unwrap();
+            if read==0usize {break;}
+            count+=read;
+            if complete(&bytes[..count]) {break;}
+        }
+        let value=parse(&bytes[..count]);
+        if value==42u64 {stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n42").unwrap();}
+        else {stream.write_all(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 3\r\nConnection: close\r\n\r\nbad").unwrap();}
+        channel.send(&packet(6u8,0usize,value),!0usize).unwrap();
+    }
+}
+fn complete(bytes:&[u8])->bool {
+    bytes.len()>=4usize && &bytes[bytes.len()-4usize..]==b"\r\n\r\n".as_slice()
+}

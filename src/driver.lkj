@@ -196,7 +196,7 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
     }
     if out.command == "test" && out.path.is_empty() { out.path = "tests/conformance".to_string(); }
     if out.witness.is_some() && out.command != "test" { return Err("E_USAGE --witness requires test".to_string()); }
-    if !out.grants.is_empty() && out.command != "build" && out.command != "build-entries" && out.command != "run" { return Err("E_USAGE --grant requires build, build-entries or run".to_string()); }
+    if !out.grants.is_empty() && !matches!(out.command.as_str(), "build" | "build-entries" | "run" | "authority") { return Err("E_USAGE --grant requires build, build-entries, run or authority".to_string()); }
     if out.command == "build-entries" {
         if out.artifacts.is_empty() || out.output.is_none() || out.entry.is_some() {
             return Err("E_USAGE build-entries requires -o DIRECTORY and --artifact NAME=ENTRY; do not use --entry".to_string());
@@ -1814,7 +1814,7 @@ fn execute_source(world: &mut World, options: &Options, stats: &mut Stats, memo:
         let analysis = crate::authority::analyze(checked.original().checked(), selected)?;
         let output = crate::authority::render(checked.original().checked(), &analysis);
         world.stdout().write(output.as_bytes());
-        if !options.grants.is_empty() {
+        if !options.grants.is_empty() || options.program.is_some() {
             let grants = admitted_grants(world, prepare_grants(checked.original().program(), selected, options)?, options)?;
             world.stdout().write(image_grant_report(&grants).as_bytes());
         }

@@ -1,0 +1,7 @@
+fn consume(region: ReadRegion) { drop(region); }
+pub fn probe(mut file: File) -> usize {
+    let region = file.map_readonly().unwrap();
+    let bytes = region.bytes();
+    consume(region);
+    bytes.len()
+}

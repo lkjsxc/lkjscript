@@ -1,0 +1,18 @@
+use std::workers::{packet,Supervisor};
+pub fn main(mut image:Image,mut clock:Clock)->i64 {
+    let deadline=clock.nanoseconds().unwrap()+2_000_000_000usize;
+    let mut waiting=image.spawn(deadline).unwrap();
+    assert_eq!(waiting.wait(clock.nanoseconds().unwrap()+10_000_000usize),Err(110i64));
+    assert_eq!(waiting.wait(0usize).unwrap(),137i64);
+    drop(waiting);
+    let mut trapped=image.spawn(deadline).unwrap();
+    trapped.send(&packet(4u8,0usize,0u64),deadline).unwrap();
+    assert!(trapped.wait(deadline).unwrap()!=0i64);
+    let mut report=trapped.result().unwrap();assert!(!report.read_to_end().unwrap().is_empty());
+    drop(trapped);
+    let mut stopped=image.spawn(deadline).unwrap();
+    stopped.send(&packet(0u8,0usize,0u64),deadline).unwrap();
+    assert_eq!(stopped.wait(deadline).unwrap(),0i64);
+    stopped.terminate().unwrap();assert_eq!(stopped.wait(0usize).unwrap(),0i64);
+    42
+}

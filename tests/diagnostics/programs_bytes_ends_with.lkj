@@ -1,0 +1,6 @@
+// expect: reject E_UNSUPPORTED
+// cause: expected a Rust form.
+// pending: Byte-slice ends_with is an ordinary library demand from the isolated
+// untrusted parser specimen. Its current explicit length/suffix comparison is
+// accepted; no new IR or trusted primitive is needed for this convenience.
+pub fn probe() -> bool { b"request\r\n".as_slice().ends_with(b"\r\n") }

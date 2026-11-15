@@ -1,0 +1,11 @@
+// expect: reject E_TYPE
+// cause: bad message.
+// pending: An unknown enum variant field should list its declared field names.
+// The direct-IR campaign wrote TagTest.src from the text operation's scalar
+// spelling; the IR constructor takes place, which required reading its declaration.
+enum Operation { TagTest { dst: usize, place: usize, variant: usize } }
+pub fn probe() -> usize {
+    let predicate = Operation::TagTest { dst: 0usize, src: 1usize, variant: 0usize };
+    drop(predicate);
+    0usize
+}

@@ -1,0 +1,5 @@
+// expect: reject E_UNSUPPORTED
+// cause: expected a Rust form.
+// pending: Name Stdout.write (unit result) in the write_all diagnostic. The
+// process timing specimen initially assumed the File method on Stdout.
+pub fn probe(mut output:Stdout) { output.write_all(b"timing").unwrap(); }

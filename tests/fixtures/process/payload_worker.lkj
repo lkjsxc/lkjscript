@@ -1,0 +1,24 @@
+use std::workers::{packet,decode};
+pub fn main(mut channel:Channel)->i64 {
+    loop {
+        let mut command=[0u8;17];let count=channel.receive(&mut command,!0usize).unwrap();
+        if count==0usize {return 0;}
+        let Some((tag,job,length))=decode(&command[..count]) else{return -1;};
+        if tag==0u8 {return 0;}
+        let mut checksum=0u64;
+        let full=tag==9u8 || tag==10u8;let step=if full {1usize}else{4096usize};
+        if tag==7u8 || tag==10u8 {
+            let mut remaining=length as usize;
+            while remaining!=0usize {
+                let mut bytes=[0u8;65536];let n=channel.receive(&mut bytes,!0usize).unwrap();
+                if n==0usize || n>remaining {return -2;}
+                let mut at=0usize;while at<n {if full {assert_eq!(bytes[at],7u8);}checksum+=bytes[at] as u64;at+=step;}remaining-=n;
+            }
+        } else if tag==8u8 || tag==9u8 {
+            let mut file=channel.receive_file(!0usize).unwrap();let region=file.map_readonly().unwrap();drop(file);
+            let bytes=region.bytes();if bytes.len()!=length as usize {return -3;}
+            let mut at=0usize;while at<bytes.len() {if full {assert_eq!(bytes[at],7u8);}checksum+=bytes[at] as u64;at+=step;}
+        } else {return -4;}
+        channel.send(&packet(tag,job,checksum),!0usize).unwrap();
+    }
+}
