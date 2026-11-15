@@ -1,0 +1,47 @@
+//! Immutable mapping survives its original File, refuses every writable alias,
+//! and keeps empty maps distinct from descriptor zero. Tests use a fresh root.
+pub fn main(mut image: Image, mut clock: Clock, mut root: Directory) -> usize {
+    let started=clock.nanoseconds().unwrap();
+    let payload: &[u8]=b"immutable shared payload";
+    let mut original=image.buffer(payload).unwrap();
+    let mut alias=original.duplicate().unwrap();
+    let region=original.map_readonly().unwrap();
+    assert_eq!(region.bytes(),payload);
+    assert!(alias.write(b"mutate").is_err());
+    assert!(alias.truncate(0usize).is_err());
+    assert!(original.write(b"mutate").is_err());
+    assert!(original.truncate(4096usize).is_err());
+    drop(original);
+    assert_eq!(region.bytes(),payload);
+    drop(alias);
+    assert_eq!(region.bytes(),payload);
+    let detached=region.bytes().to_vec();
+    drop(region);
+    assert_eq!(detached.as_slice(),payload);
+
+    let mut empty=image.buffer(b"").unwrap();
+    let empty_region=empty.map_readonly().unwrap();
+    assert_eq!(empty_region.bytes().len(),0usize);
+    drop(empty);
+    assert_eq!(empty_region.bytes().len(),0usize);
+    drop(empty_region);
+
+    let mut unsealed=root.create("unsealed").unwrap();
+    unsealed.write_all(b"mutable").unwrap();
+    assert!(unsealed.map_readonly().is_err());
+    unsealed.write_all(b"still owned").unwrap();
+    drop(unsealed);
+    root.remove("unsealed").unwrap();
+
+    // Repeated maps alias one sealed object; dropping one does not unmap another.
+    let mut original=image.buffer(payload).unwrap();
+    let first=original.map_readonly().unwrap();
+    let second=original.map_readonly().unwrap();
+    drop(first);
+    assert_eq!(second.bytes(),payload);
+    drop(original);
+    assert_eq!(second.bytes(),payload);
+    drop(second);
+    assert!(clock.nanoseconds().unwrap()>=started);
+    42usize
+}

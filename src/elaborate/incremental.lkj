@@ -139,6 +139,7 @@ fn key(out: &mut Vec<u8>, value: &TypeKey) {
         TypeKey::Entropy => word(out, 19), TypeKey::Stop => word(out, 20), TypeKey::Str => word(out, 21),
         TypeKey::Arguments => word(out, 22), TypeKey::Environment => word(out, 23), TypeKey::ExitStatus => word(out, 24),
         TypeKey::ReadDirectory => word(out, 25), TypeKey::ReadFile => word(out, 26),
+        TypeKey::Image => word(out, 30), TypeKey::Channel => word(out, 31), TypeKey::Worker => word(out, 32), TypeKey::ReadRegion => word(out, 33),
         TypeKey::ForeignCommand => word(out, 27), TypeKey::NullDevice => word(out, 28),
         TypeKey::ForeignSession => word(out, 29),
     }
@@ -156,6 +157,7 @@ fn take_key(input: &mut Reader<'_>) -> Option<TypeKey> {
         18 => TypeKey::Readiness, 19 => TypeKey::Entropy, 20 => TypeKey::Stop, 21 => TypeKey::Str,
         22 => TypeKey::Arguments, 23 => TypeKey::Environment, 24 => TypeKey::ExitStatus,
         25 => TypeKey::ReadDirectory, 26 => TypeKey::ReadFile,
+        30 => TypeKey::Image, 31 => TypeKey::Channel, 32 => TypeKey::Worker, 33 => TypeKey::ReadRegion,
         27 => TypeKey::ForeignCommand, 28 => TypeKey::NullDevice,
         29 => TypeKey::ForeignSession,
         _ => return None,

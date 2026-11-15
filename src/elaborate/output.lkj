@@ -17,6 +17,10 @@ impl Builder<'_, '_> {
             Value::Directory => self.compiler.intern(String::new(), ir::TypeKind::Directory),
             Value::ReadDirectory => self.compiler.intern(String::new(), ir::TypeKind::ReadDirectory),
             Value::ReadFile => self.compiler.intern(String::new(), ir::TypeKind::ReadFile),
+            Value::Image => self.compiler.intern(String::new(), ir::TypeKind::Image),
+            Value::Channel => self.compiler.intern(String::new(), ir::TypeKind::Channel),
+            Value::Worker => self.compiler.intern(String::new(), ir::TypeKind::Worker),
+            Value::ReadRegion => self.compiler.intern(String::new(), ir::TypeKind::ReadRegion),
             Value::ForeignCommand => self.compiler.intern(String::new(), ir::TypeKind::ForeignCommand),
             Value::ForeignSession => self.compiler.intern(String::new(), ir::TypeKind::ForeignSession),
             Value::NullDevice => self.compiler.intern(String::new(), ir::TypeKind::NullDevice),
@@ -95,6 +99,7 @@ impl Builder<'_, '_> {
             | Value::ResultBytes
             | Value::ResultUnit
             | Value::ResultChild
+            | Value::ResultReadRegion | Value::ResultWorker
             | Value::ResultListener
             | Value::ResultConnector
             | Value::ResultReadiness
@@ -112,6 +117,8 @@ impl Builder<'_, '_> {
                     Value::ResultReadFile => self.capability_type(Value::ReadFile, span)?,
                     Value::ResultForeignSession => self.capability_type(Value::ForeignSession, span)?,
                     Value::ResultFile => self.capability_type(Value::File, span)?,
+                    Value::ResultReadRegion => self.capability_type(Value::ReadRegion, span)?,
+                    Value::ResultWorker => self.capability_type(Value::Worker, span)?,
                     Value::ResultChild => self.capability_type(Value::Child, span)?,
                     Value::ResultListener => self.capability_type(Value::Listener, span)?,
                     Value::ResultConnector => self.capability_type(Value::Connector, span)?,
@@ -188,7 +195,7 @@ impl Builder<'_, '_> {
             ));
         }
         let result = self.capability_type(result, span)?;
-        let receiver = self.borrow(target, true, span.line)?.0;
+        let receiver = self.borrow(target, !matches!(method, capabilities::Method::ReadRegionBytes | capabilities::Method::ReadRegionLen), span.line)?.0;
         let mut values = vec![receiver];
         let mut index = 0;
         while index < parameters.len() {

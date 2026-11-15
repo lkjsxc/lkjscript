@@ -1,0 +1,22 @@
+pub fn main(mut channel: Channel) -> i64 {
+    let mut count = 0i64;
+    loop {
+        let mut bytes = [0u8; 64];
+        let length = channel.receive(&mut bytes, !0usize).unwrap();
+        if length == 0usize { return count; }
+        if bytes[0] == 0u8 { return count; }
+        if bytes[0] == 1u8 {
+            channel.send(&bytes[1usize..length], !0usize).unwrap();
+            count += 1;
+        } else if bytes[0] == 2u8 {
+            let mut file = channel.receive_file(!0usize).unwrap();
+            let data = file.read_to_end().unwrap();
+            channel.send(&data, !0usize).unwrap();
+            count += 1;
+        } else if bytes[0] == 3u8 {
+            loop {}
+        } else if bytes[0] == 4u8 {
+            panic!("worker specimen trap");
+        } else { return -1; }
+    }
+}

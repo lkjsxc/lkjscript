@@ -123,6 +123,7 @@ impl<H: Host> Interpreter<'_, H> {
                     TypeKind::ReadFile => Value::ReadFile(handle),
                     TypeKind::ForeignSession => Value::ForeignSession(handle),
                     TypeKind::File => Value::File(handle),
+                    TypeKind::Image => Value::Image(handle), TypeKind::Worker => Value::Worker(handle), TypeKind::Channel => Value::Channel(handle),
                     TypeKind::Child => Value::Child(handle),
                     TypeKind::Listener => Value::Listener(handle),
                     TypeKind::Readiness => Value::Readiness(handle),
@@ -144,6 +145,7 @@ impl<H: Host> Interpreter<'_, H> {
             Value::Directory(handle)
             | Value::ReadDirectory(handle)
             | Value::ReadFile(handle)
+            | Value::Image(handle) | Value::Channel(handle) | Value::Worker(handle)
             | Value::ForeignCommand(handle)
             | Value::ForeignSession(handle)
             | Value::NullDevice(handle)
@@ -280,6 +282,97 @@ impl<H: Host> Interpreter<'_, H> {
             return Err(self.invalid("capability intrinsic argument count differs"));
         }
         let value = match name {
+            ir::IntrinsicOp::ImageBuffer if values.len() == 2 => {
+                let authority=self.io_authority(values,TypeKind::Image)?; let handle=self.io_handle(&authority)?;
+                let types=self.io_open_types(result,TypeKind::File)?;
+                let buffer=self.io_buffer(values,1,false)?; let bytes=self.bytes(&buffer)?;
+                let opened=self.host.image_buffer(handle,&bytes);
+                self.io_open_result(types,opened,TypeKind::File)?
+            }
+            ir::IntrinsicOp::FileMapReadonly if values.len() == 1 => {
+                let authority=self.io_authority(values,TypeKind::File)?; let handle=self.io_handle(&authority)?;
+                let types=self.io_open_types(result,TypeKind::ReadRegion)?;
+                match self.host.map_readonly_file(handle) {
+                    Ok((handle,bytes)) if handle != 0 => {
+                        let mut cells=Vec::new();
+                        for byte in bytes {cells.push(self.allocate(ir::U8,Some(Value::Bits(byte as u64)),false)?);}
+                        let child=self.allocate(types.0,Some(Value::ReadRegion {handle,bytes:cells}),false)?;
+                        Value::Aggregate {variant:Some(0),fields:vec![child]}
+                    }
+                    Err(errno) if errno > 0 => {
+                        let child=self.allocate(types.1,Some(Value::Bits(errno as u64)),false)?;
+                        Value::Aggregate {variant:Some(1),fields:vec![child]}
+                    }
+                    _=>return Err(self.error(super::InterpreterError::InvalidHost,"invalid readonly region")),
+                }
+            }
+            ir::IntrinsicOp::ReadRegionLen if values.len() == 1 => {
+                let authority=self.io_reference(values,0,false)?;
+                if self.kind(authority.ty)? != &TypeKind::ReadRegion {return Err(self.invalid("region length requires ReadRegion"));}
+                self.io_result_type(result,ir::U64)?;
+                Value::Bits(self.sequence(&authority)?.len() as u64)
+            }
+            ir::IntrinsicOp::ImageSpawn if values.len() == 2 => {
+                let authority = self.io_authority(values, TypeKind::Image)?;
+                let types = self.io_open_types(result, TypeKind::Worker)?;
+                let handle = self.io_handle(&authority)?;
+                let deadline = self.io_number(values, 1, ir::U64)? as usize;
+                let opened = self.host.spawn_image(handle, deadline);
+                self.io_open_result(types, opened, TypeKind::Worker)?
+            }
+            ir::IntrinsicOp::ChannelSend | ir::IntrinsicOp::ChannelReceive | ir::IntrinsicOp::WorkerSend | ir::IntrinsicOp::WorkerReceive if values.len() == 3 => {
+                let worker = matches!(name, ir::IntrinsicOp::WorkerSend | ir::IntrinsicOp::WorkerReceive);
+                let receive = matches!(name, ir::IntrinsicOp::WorkerReceive | ir::IntrinsicOp::ChannelReceive);
+                let authority = self.io_authority(values, if worker { TypeKind::Worker } else { TypeKind::Channel })?;
+                let handle = self.io_handle(&authority)?;
+                let buffer = self.io_buffer(values, 1, receive)?;
+                let mut bytes = self.bytes(&buffer)?;
+                let deadline = self.io_number(values, 2, ir::U64)? as usize;
+                let types = self.io_scalar_types(result, TypeKind::Int { bits: 64, signed: false })?;
+                let outcome = if receive { self.host.ipc_receive(handle, worker, &mut bytes, deadline) } else { self.host.ipc_send(handle, worker, &bytes, deadline) };
+                if receive {
+                    if let Ok(count) = &outcome {
+                        if *count > bytes.len() as u64 { return Err(self.error(super::InterpreterError::InvalidHost, "IPC read exceeded buffer")); }
+                        self.io_write_buffer(&buffer, &bytes[..*count as usize])?;
+                    }
+                }
+                self.io_scalar_result(types, outcome)?
+            }
+            ir::IntrinsicOp::ChannelSendFile | ir::IntrinsicOp::WorkerSendFile if values.len() == 3 => {
+                let worker = name == ir::IntrinsicOp::WorkerSendFile;
+                let authority = self.io_authority(values, if worker { TypeKind::Worker } else { TypeKind::Channel })?;
+                let handle = self.io_handle(&authority)?;
+                if *self.kind(values[1].0)? != TypeKind::File { return Err(self.invalid("IPC transfers require an owned File, never a borrow")); }
+                let Value::File(file) = &values[1].1 else { return Err(self.invalid("IPC transfer value is not File")); };
+                let deadline = self.io_number(values, 2, ir::U64)? as usize;
+                let types = self.io_unit_types(result)?;
+                let outcome = self.host.ipc_send_file(handle, worker, *file, deadline);
+                self.io_unit_result(types, outcome)?
+            }
+            ir::IntrinsicOp::ChannelReceiveFile | ir::IntrinsicOp::WorkerReceiveFile if values.len() == 2 => {
+                let worker = name == ir::IntrinsicOp::WorkerReceiveFile;
+                let authority = self.io_authority(values, if worker { TypeKind::Worker } else { TypeKind::Channel })?;
+                let handle = self.io_handle(&authority)?;
+                let deadline = self.io_number(values, 1, ir::U64)? as usize;
+                let types = self.io_open_types(result, TypeKind::File)?;
+                let outcome = self.host.ipc_receive_file(handle, worker, deadline);
+                self.io_open_result(types, outcome, TypeKind::File)?
+            }
+            ir::IntrinsicOp::WorkerWait if values.len() == 2 => {
+                let authority = self.io_authority(values, TypeKind::Worker)?;
+                let handle = self.io_handle(&authority)?;
+                let deadline = self.io_number(values, 1, ir::U64)? as usize;
+                let types = self.io_scalar_types(result, TypeKind::Int { bits: 64, signed: true })?;
+                let outcome = self.host.wait_worker(handle, deadline); self.io_scalar_result(types, outcome)?
+            }
+            ir::IntrinsicOp::WorkerTerminate if values.len() == 1 => {
+                let authority = self.io_authority(values, TypeKind::Worker)?; let handle = self.io_handle(&authority)?;
+                let types = self.io_unit_types(result)?; let outcome = self.host.terminate_worker(handle); self.io_unit_result(types, outcome)?
+            }
+            ir::IntrinsicOp::WorkerResult if values.len() == 1 => {
+                let authority = self.io_authority(values, TypeKind::Worker)?; let handle = self.io_handle(&authority)?;
+                let types = self.io_open_types(result, TypeKind::ReadFile)?; let outcome = self.host.result_worker(handle); self.io_open_result(types, outcome, TypeKind::ReadFile)?
+            }
             ir::IntrinsicOp::ForeignImage => {
                 let authority = self.io_authority(values, TypeKind::ForeignCommand)?;
                 let types = self.io_open_types(result, TypeKind::ReadFile)?;

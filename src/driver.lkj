@@ -191,7 +191,7 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
         if out.command == "build-child" && (out.output.is_none() || out.image_admission.is_some()) {
             return Err("E_USAGE build-child requires -o IMAGE; it writes IMAGE.admission".to_string());
         }
-    } else if out.image_key.is_some() || out.image_admission.is_some() {
+    } else if out.image_admission.is_some() || (out.image_key.is_some() && !matches!(out.command.as_str(), "build" | "run" | "authority" | "build-entries")) {
         return Err("E_USAGE --image-key/--admission require a child image command".to_string());
     }
     if out.command == "test" && out.path.is_empty() { out.path = "tests/conformance".to_string(); }
@@ -866,7 +866,10 @@ fn interpret(
         None
     } else {
         match prepare_grants(program, index, options) {
-            Ok(grants) => Some(grants),
+            Ok(grants) => match admitted_grants(world, grants, options) {
+                Ok(grants) => Some(grants),
+                Err(problem) => { return Outcome { status: 1, completion: Completion::Other, stdout: Vec::new(), stderr: Vec::new(), diagnostic: problem }; }
+            },
             Err(problem) => {
                 return Outcome { status: 1, completion: Completion::Other, stdout: Vec::new(), stderr: Vec::new(), diagnostic: problem };
             }
@@ -1017,6 +1020,7 @@ fn native_run(
 ) -> Result<Outcome, String> {
     let name = &checked.original().program().functions[index].name;
     let grants = prepare_grants(checked.original().program(), index, options)?;
+    let grants = admitted_grants(world, grants, options)?;
     let grants = invocation_grants(world, grants)?;
     let bytes = emit_reusing(checked.native(), runtime, name, &grants, Some(3), None, memo, stats)
         .map_err(|problem| report(&options.path, problem))?;
@@ -1513,6 +1517,52 @@ fn build_child(world: &mut World, options: &Options, stats: &mut Stats, memo: &m
     world.stdout().write(crate::child_image::render(&manifest, image.bytes.len(), &sha256::digest(&image.bytes)).as_bytes());
     Ok(0)
 }
+fn admitted_grants(world: &mut World, grants: Vec<ir::EntryGrant>, options: &Options) -> Result<Vec<ir::EntryGrant>, String> {
+    let mut output = Vec::new();
+    for grant in grants {
+        match grant {
+            ir::EntryGrant::ImagePath(path) => {
+                let path = String::from_utf8(path[..path.len() - 1].to_vec()).map_err(|_| -> String { "E_CHILD_IMAGE image path must be UTF-8".to_string() })?;
+                let key = child_key(world, options)?;
+                let producer = child_producer(world)?;
+                let admitted = child_record(world, &format!("{path}.admission"), &producer, &key)?;
+                let manifest = admitted.manifest();
+                if manifest.slots.len() != 1 || manifest.slots[0].kind != crate::child_image::Kind::Channel {
+                    return Err("E_CHILD_IMAGE worker requires exactly one Channel slot; no other entry authority is transferred".to_string());
+                }
+                let identity = crate::child_image::identity(manifest);
+                let length = admitted.length();
+                let digest = admitted.digest().to_vec();
+                let (parent, name) = location(&path);
+                let mut directory = world.directory(&parent).map_err(|errno: i64| io(&parent, "open image directory", errno))?;
+                let mut source = directory.open(&name).map_err(|errno: i64| io(&path, "open image", errno))?;
+                let mut sealed = crate::admitted_image::snapshot(world, &mut source, admitted)?;
+                let mut file = sealed.executable_alias().map_err(|errno: i64| io(&path, "retain sealed image", errno))?;
+                file.rewind().map_err(|errno: i64| io(&path, "rewind sealed image", errno))?;
+                let bytes = file.read_to_end().map_err(|errno: i64| io(&path, "read sealed image", errno))?;
+                if bytes.len() != length { return Err("E_CHILD_IMAGE immutable image length changed".to_string()); }
+                let mut packed = b"LKJIMG2\0"[..].to_vec(); packed.extend_from_slice(&identity); packed.extend_from_slice(&digest);
+                for shift in 0usize..8usize { packed.push(((length as u64) >> (shift * 8usize)) as u8); }
+                packed.extend_from_slice(&bytes); output.push(ir::EntryGrant::Image(packed));
+            }
+            other => output.push(other),
+        }
+    }
+    Ok(output)
+}
+fn image_grant_report(grants: &[ir::EntryGrant]) -> String {
+    let mut text = String::new();
+    for (index, grant) in grants.iter().enumerate() {
+        if let ir::EntryGrant::Image(bytes) = grant {
+            text.push_str(&format!("child image parameter={index} target=linux-x86_64 identity="));
+            for byte in &bytes[40usize..72usize] { text.push_str(&format!("{:02x}", *byte)); }
+            text.push_str(" manifest=");
+            for byte in &bytes[8usize..40usize] { text.push_str(&format!("{:02x}", *byte)); }
+            text.push_str(" receives=Channel(slot0,owned) detached=no\n");
+        }
+    }
+    text
+}
 fn image_authority(world: &mut World, options: &Options) -> Result<u8, String> {
     let key = child_key(world, options)?; let producer = child_producer(world)?;
     let record = options.image_admission.clone().unwrap_or_else(|| -> String { format!("{}.admission", options.path) });
@@ -1562,6 +1612,7 @@ fn build_entries(world: &mut World, options: &Options, stats: &mut Stats, memo: 
         }
         let selected = checked_entry(checked.original().program(), &Some(columns[1].clone()))?;
         let grants = prepare_grants(checked.original().program(), selected, options)?;
+        let grants = admitted_grants(world, grants, options)?;
         let analysis = crate::authority::analyze(checked.original().checked(), selected)?;
         let authority = crate::authority::render(checked.original().checked(), &analysis);
         artifacts.push(EntryArtifact { path, entry: selected, grants, authority });
@@ -1678,6 +1729,7 @@ fn execute(world: &mut World, options: &Options, stats: &mut Stats, memo: &mut M
 }
 
 fn execute_source(world: &mut World, options: &Options, stats: &mut Stats, memo: &mut Memo) -> Result<u8, String> {
+    if options.image_key.is_some() { memo.private_source_digest = Some(sha256::digest(&child_key(world, options)?)); }
     if options.command == "delta" {
         world.stdout().write(delta().as_bytes());
         return Ok(0);
@@ -1727,7 +1779,7 @@ fn execute_source(world: &mut World, options: &Options, stats: &mut Stats, memo:
         if options.observe { record(world, 0, "interpreter", true, &outcome); return Ok(outcome.status); }
         return Ok(deliver(world, outcome, true));
     }
-    if options.command == "build" {
+    if options.command == "build" && options.image_key.is_none() {
         if let Some(bytes) = memo.lookup(world, options, "image", stats) {
             let path: String = match &options.output { Some(path) => path.clone(), None => format!("{}.elf", options.path) };
             publish(world, &path, &bytes, true)?;
@@ -1762,11 +1814,16 @@ fn execute_source(world: &mut World, options: &Options, stats: &mut Stats, memo:
         let analysis = crate::authority::analyze(checked.original().checked(), selected)?;
         let output = crate::authority::render(checked.original().checked(), &analysis);
         world.stdout().write(output.as_bytes());
+        if !options.grants.is_empty() {
+            let grants = admitted_grants(world, prepare_grants(checked.original().program(), selected, options)?, options)?;
+            world.stdout().write(image_grant_report(&grants).as_bytes());
+        }
         return Ok(0);
     }
     if options.command == "build" {
         let selected = checked_entry(checked.original().program(), &options.entry)?;
         let grants = prepare_grants(checked.original().program(), selected, options)?;
+        let grants = admitted_grants(world, grants, options)?;
         ensure_runtime(world, options, &mut runtime, memo)?;
         stats.mark("runtime")?;
         let path: String = match &options.output {
@@ -1784,7 +1841,7 @@ fn execute_source(world: &mut World, options: &Options, stats: &mut Stats, memo:
         stats.mark("native_encode")?;
         publish(world, &path, &bytes, true)?;
         stats.mark("write")?;
-        memo.remember(options, "image", &bytes);
+        if options.image_key.is_none() { memo.remember(options, "image", &bytes); }
         stats.mark("store_io")?;
         return Ok(0);
     }

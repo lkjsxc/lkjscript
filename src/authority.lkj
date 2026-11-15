@@ -47,6 +47,10 @@ fn capability(kind: &TypeKind) -> Option<(&'static str, bool)> {
         TypeKind::Process => Some(("Process", false)),
         TypeKind::Directory => Some(("Directory", true)),
         TypeKind::ReadDirectory => Some(("ReadDirectory", true)),
+        TypeKind::Image => Some(("Image", true)),
+        TypeKind::Channel => Some(("Channel", false)),
+        TypeKind::Worker => Some(("Worker", false)),
+        TypeKind::ReadRegion => Some(("ReadRegion", false)),
         TypeKind::ForeignCommand => Some(("ForeignCommand", true)),
         TypeKind::ForeignSession => Some(("ForeignSession", true)),
         TypeKind::NullDevice => Some(("NullDevice", false)),
@@ -235,6 +239,10 @@ fn cleanup(
             }
             TypeKind::Vec { inner } | TypeKind::Box { inner } => pending.push(*inner),
             TypeKind::File | TypeKind::ReadFile => operation(operations, "file_close", line, column, true),
+            TypeKind::Image => operation(operations, "image_close", line, column, true),
+            TypeKind::Channel => operation(operations, "channel_close", line, column, true),
+            TypeKind::Worker => operation(operations, "worker_kill_reap_close", line, column, true),
+            TypeKind::ReadRegion => operation(operations, "read_region_unmap_close", line, column, true),
             TypeKind::ForeignCommand => operation(operations, "foreign_command_close", line, column, true),
             TypeKind::ForeignSession => operation(operations, "foreign_session_kill_reap_close", line, column, true),
             TypeKind::NullDevice => operation(operations, "null_device_close", line, column, true),
@@ -414,7 +422,7 @@ pub fn render(checked: &CheckedProgram, report: &Report) -> String {
         text.push_str("  none\n");
     } else {
         for requirement in &report.manifest.requirements {
-            let value = if requirement.capability == "Directory" || requirement.capability == "ReadDirectory" || requirement.capability == "ForeignCommand" {
+            let value = if requirement.capability == "Directory" || requirement.capability == "ReadDirectory" || requirement.capability == "ForeignCommand" || requirement.capability == "Image" {
                 "=PATH"
             } else if requirement.capability == "Environment" {
                 "=NAME"

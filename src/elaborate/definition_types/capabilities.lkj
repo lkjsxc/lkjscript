@@ -16,6 +16,10 @@ impl Infer<'_, '_> {
             Value::Directory => self.atom("Directory"),
             Value::ReadDirectory => self.atom("ReadDirectory"),
             Value::ReadFile => self.atom("ReadFile"),
+            Value::Image => self.atom("Image"),
+            Value::Channel => self.atom("Channel"),
+            Value::Worker => self.atom("Worker"),
+            Value::ReadRegion => self.atom("ReadRegion"),
             Value::ForeignCommand => self.atom("ForeignCommand"),
             Value::ForeignSession => self.atom("ForeignSession"),
             Value::NullDevice => self.atom("NullDevice"),
@@ -78,6 +82,7 @@ impl Infer<'_, '_> {
             | Value::ResultBytes
             | Value::ResultUnit
             | Value::ResultChild
+            | Value::ResultReadRegion | Value::ResultWorker
             | Value::ResultListener
             | Value::ResultConnector
             | Value::ResultReadiness
@@ -95,6 +100,8 @@ impl Infer<'_, '_> {
                     Value::ResultReadFile => self.capability_type(Value::ReadFile, span)?,
                     Value::ResultForeignSession => self.capability_type(Value::ForeignSession, span)?,
                     Value::ResultFile => self.capability_type(Value::File, span)?,
+                    Value::ResultReadRegion => self.capability_type(Value::ReadRegion, span)?,
+                    Value::ResultWorker => self.capability_type(Value::Worker, span)?,
                     Value::ResultChild => self.capability_type(Value::Child, span)?,
                     Value::ResultListener => self.capability_type(Value::Listener, span)?,
                     Value::ResultConnector => self.capability_type(Value::Connector, span)?,

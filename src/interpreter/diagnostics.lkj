@@ -40,6 +40,8 @@ pub(super) fn grant_failure(grant: &ir::EntryGrant) -> HostFailure {
         ir::EntryGrant::Directory(path) => format!("Directory {}", path_text(path)),
         ir::EntryGrant::ReadDirectory(path) => format!("ReadDirectory {}", path_text(path)),
         ir::EntryGrant::ReadDirectoryEnvironment(name) | ir::EntryGrant::ReadDirectoryEnvironmentValue(name, _) => format!("ReadDirectory env:{}", path_text(name)),
+        ir::EntryGrant::Image(_) => "Image authenticated immutable child".to_string(),
+        ir::EntryGrant::ImagePath(_) => "Image unresolved (invalid)".to_string(),
         ir::EntryGrant::ForeignCommand(path) => format!("ForeignCommand {}", path_text(path)),
         ir::EntryGrant::NullDevice => "NullDevice /dev/null".to_string(),
         ir::EntryGrant::DirectoryEnvironment(name) | ir::EntryGrant::DirectoryEnvironmentValue(name, _) => format!("Directory env:{}", path_text(name)),

@@ -10,6 +10,7 @@ enum Handle {
     RemoteFile(u64),
     ForeignCommand(u64),
     ForeignSession(u64),
+    Image(u64), Worker(u64),
     NullDevice(u64),
     RemoteChild(u64),
     Listener(u64),
@@ -219,6 +220,8 @@ impl<'world, 'program> Host<'world, 'program> {
             | Handle::Listener(descriptor)
             | Handle::Readiness(descriptor)
             | Handle::Stop(descriptor, _) => self.network.close_remote(descriptor),
+            Handle::Image(record) => self.network.close_image(record),
+            Handle::Worker(record) => self.network.close_worker(record),
             Handle::RemoteChild(identity) => self.network.drop_remote_child(identity),
             Handle::ForeignSession(identity) => self.network.drop_foreign(identity),
             _ => {}
@@ -256,6 +259,13 @@ impl<'world, 'program> Host<'world, 'program> {
         }
     }
 
+    fn ipc_handle(&self, handle:u64, worker:bool)->Result<u64,i64> {
+        match self.handles.get(&handle) {
+            Some(Handle::Worker(record)) if worker => Ok(*record),
+            Some(Handle::RemoteFile(descriptor)) if !worker => Ok(*descriptor),
+            _ => Err(9),
+        }
+    }
     fn stop_handle(&self, handle: u64) -> Result<u64, i64> {
         match self.handles.get(&handle) {
             Some(Handle::Stop(descriptor, _)) => Ok(*descriptor),
@@ -289,6 +299,76 @@ impl<'world, 'program> Host<'world, 'program> {
 }
 
 impl interpreter::Host for Host<'_, '_> {
+    fn image_buffer(&mut self, image:u64, bytes:&[u8])->Result<u64,i64> {
+        if !matches!(self.handles.get(&image),Some(Handle::Image(_))) {return Err(9);}
+        let mut file=self.world.temporary_file()?; write_all(&mut file,bytes)?; file.seal()?; file.rewind()?;
+        self.insert_handle(Handle::File(file))
+    }
+    fn map_readonly_file(&mut self, file:u64)->Result<(u64,Vec<u8>),i64> {
+        let descriptor=self.remote_file(file)?;
+        if self.network.seals_remote(descriptor)? & 15u64 != 15u64 {return Err(1);}
+        let opened=self.network.readonly_remote(descriptor)?;
+        if let Err(errno)=self.network.seek_remote(opened,0,0u8) {self.network.close_remote(opened);return Err(errno);}
+        let mut bytes=Vec::new(); let mut chunk=[0u8;16384];
+        loop {
+            match self.network.read_remote(opened,&mut chunk) {
+                Ok(0)=>break,
+                Ok(count)=>bytes.extend_from_slice(&chunk[..count]),
+                Err(4)=>{},
+                Err(errno)=>{self.network.close_remote(opened);return Err(errno);}
+            }
+        }
+        let handle=self.insert_handle(Handle::RemoteFile(opened))?;
+        Ok((handle,bytes))
+    }
+    fn open_image(&mut self, bytes:&[u8])->Result<u64,i64> {
+        let record=self.network.open_image(self.world,bytes)?;
+        self.insert_handle(Handle::Image(record))
+    }
+    fn spawn_image(&mut self, handle:u64, deadline:usize)->Result<u64,i64> {
+        let record=match self.handles.get(&handle) { Some(Handle::Image(record))=>*record,_=>return Err(9) };
+        let worker=self.network.spawn_image(record,deadline)?; self.insert_handle(Handle::Worker(worker))
+    }
+    fn close_image(&mut self, handle:u64) {
+        if let Some(Handle::Image(record))=self.handles.remove(&handle) {self.network.close_image(record);}
+    }
+    fn close_worker(&mut self, handle:u64) {
+        if let Some(Handle::Worker(record))=self.handles.remove(&handle) {self.network.close_worker(record);}
+    }
+    fn ipc_send(&mut self, handle:u64, worker:bool, bytes:&[u8],deadline:usize)->Result<u64,i64> {
+        let record=self.ipc_handle(handle,worker)?; self.network.ipc_send(record,worker,bytes,deadline)
+    }
+    fn ipc_receive(&mut self, handle:u64, worker:bool, bytes:&mut [u8],deadline:usize)->Result<u64,i64> {
+        let record=self.ipc_handle(handle,worker)?; self.network.ipc_receive(record,worker,bytes,deadline)
+    }
+    fn ipc_send_file(&mut self, handle:u64, worker:bool, file:u64,deadline:usize)->Result<(),i64> {
+        let record=match self.ipc_handle(handle,worker) { Ok(record)=>record, Err(errno)=>{self.close_handle(file);return Err(errno);} };
+        let descriptor=match self.remote_file(file) {Ok(descriptor)=>descriptor,Err(errno)=>{self.close_handle(file);return Err(errno);} };
+        // The syscall consumes its descriptor on success and refusal. Remove the
+        // language owner before sending; only its local duplicate drops here.
+        match self.handles.remove(&file) {
+            Some(Handle::ImportedFile(local,_)) | Some(Handle::File(local)) => drop(local),
+            Some(Handle::RemoteFile(_)) => {},
+            _ => return Err(9),
+        }
+        self.network.ipc_send_file(record,worker,descriptor,deadline)
+    }
+    fn ipc_receive_file(&mut self,handle:u64,worker:bool,deadline:usize)->Result<u64,i64> {
+        let record=self.ipc_handle(handle,worker)?;
+        let descriptor=self.network.ipc_receive_file(record,worker,deadline)?;
+        self.insert_handle(Handle::RemoteFile(descriptor))
+    }
+    fn wait_worker(&mut self,handle:u64,deadline:usize)->Result<u64,i64> {
+        let record=self.ipc_handle(handle,true)?;self.network.wait_worker(record,deadline)
+    }
+    fn terminate_worker(&mut self,handle:u64)->Result<(),i64> {
+        let record=self.ipc_handle(handle,true)?;self.network.terminate_worker(record)
+    }
+    fn result_worker(&mut self,handle:u64)->Result<u64,i64> {
+        let record=self.ipc_handle(handle,true)?;let descriptor=self.network.result_worker(record)?;
+        self.insert_handle(Handle::RemoteFile(descriptor))
+    }
+
     fn failure_operation(&self) -> u64 { self.last_operation }
     fn write_stdout(&mut self, bytes: &[u8]) -> Result<(), i64> {
         self.last_operation = 1;
