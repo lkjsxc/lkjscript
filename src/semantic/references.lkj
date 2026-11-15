@@ -80,19 +80,23 @@ pub(super) fn import_reference(result: &mut Catalog, files: &[SourceText], owner
     record_site(result, files, owner, target, a::Span { file: imported.span.file, ..token.span }, if alias { "alias-import" } else { "import" }, proven);
 }
 fn field_label(file: &SourceText, outer: a::Span, value: a::Span, name: &str) -> Option<(a::Span, bool)> {
+    if value.file != outer.file || value.start < outer.start || value.start >= outer.end { return None; }
     let at = token_at(&file.tokens, value.start);
     if at >= 2usize && file.tokens[at - 1usize].text == ":" && file.tokens[at - 2usize].text == name
         && file.tokens[at - 2usize].span.start >= outer.start {
         return Some((a::Span { file: outer.file, ..file.tokens[at - 2usize].span }, false));
     }
+    // Shorthand Bind spans retain only the first token. Follow the parser's
+    // exact optional ref/mut prefix, then require the field name and delimiter.
     let mut scan = at;
-    while scan < file.tokens.len() && file.tokens[scan].span.end <= value.end {
-        let token = &file.tokens[scan];
-        if token.text == name { return Some((a::Span { file: outer.file, ..token.span }, true)); }
-        if token.text != "ref" && token.text != "mut" { return None; }
-        scan += 1usize;
-    }
-    None
+    if scan < file.tokens.len() && file.tokens[scan].text == "ref" { scan += 1usize; }
+    if scan < file.tokens.len() && file.tokens[scan].text == "mut" { scan += 1usize; }
+    let token = file.tokens.get(scan)?;
+    if token.kind != 0u8 || token.text != name || token.span.end > outer.end { return None; }
+    if scan == at && token.span.end > value.end { return None; }
+    let next = file.tokens.get(scan + 1usize)?;
+    if next.span.end > outer.end || !matches!(next.text.as_str(), "," | "}") { return None; }
+    Some((a::Span { file: outer.file, ..token.span }, true))
 }
 fn field_reference(result: &mut Catalog, files: &[SourceText], owner: &str, target: &Option<String>,
     outer: a::Span, value: a::Span, name: &str, pattern: bool) {
