@@ -2291,6 +2291,9 @@ impl Builder<'_, '_> {
                     self.cleanup(before, None, block.span.line);
                 }
                 a::Stmt::Item(a::Item::Use(_)) => {}
+                a::Stmt::Item(a::Item::Constant(index)) => {
+                    return Err(self.local_constant_diagnostic(index));
+                }
                 a::Stmt::Item(_) => {
                     return Err(err(
                         block.span,
@@ -3050,7 +3053,7 @@ impl Builder<'_, '_> {
             values.push(value.0);
         }
         let inner =
-            inner.ok_or_else(|| err(span, "E_TYPE", "empty array needs an element type"))?;
+            inner.ok_or_else(|| self.empty_array_diagnostic(expected, span))?;
         self.compiler.check_owned_element(inner, span)?;
         let ty = self.compiler.intern(
             String::new(),
@@ -3930,7 +3933,7 @@ impl Builder<'_, '_> {
         let function = self
             .compiler
             .instantiate(index, sub.clone())
-            .map_err(|problem| at_use_site(problem, span))?;
+            .map_err(|problem| self.iterator_diagnostic(index, args, &values, span, problem))?;
         self.compiler.record_static_contract(function, index, sub);
         for (position, value) in values.iter().enumerate() {
             let expected = self.compiler.functions[function].locals[position].ty;

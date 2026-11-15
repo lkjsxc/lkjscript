@@ -19,15 +19,15 @@ Programs both compilers accept behave the same. [Status](status.md) records gaps
 
 Expressions execute left to right; logical operators short circuit. Assignment
 and primitive compound assignment evaluate RHS before destination/index expressions,
-then compound assignment reads the old value. Each operand executes once.
+then compound assignment reads the old value. Each operand executes once. Empty [] needs an element type: use a [T; 0] binding, or &[0u8; 0] for &[u8].
 Traps terminate without cleanup or recovery; there is no unwinding.
 Cases: [scalar bits](../tests/reference/scalar_bits.rs), [evaluation order](../tests/reference/evaluation_order.rs).
 
 ## Statements, control and patterns
 
-Functions, structs, enums, constants, aliases, generics, trait implementations,
+Functions, structs, enums, module constants, aliases, generics, trait implementations,
 match, if, while, loop and for are implemented. Assertions, panic and vec forms
-are fixed syntax. Unsupported forms receive named diagnostics.
+are fixed syntax. Local const declarations reject; move the declaration to its containing module.
 
 Unparenthesized block forms in statement position end before a binary operator,
 call or index that can start another expression; dot and ? continue the expression.
@@ -305,7 +305,7 @@ concurrency cases specify intended ownership rules, with their missing features.
 
 | Facility | Source behavior and lowering | Limit or rewrite |
 | --- | --- | --- |
-| Text/String | Literals are immutable module-long UTF-8 views; str is unsized and shared. len counts bytes; is_empty/as_bytes/to_string preserve origins. String privately owns Vec bytes; Clone/clone_from copy valid bytes and reuse target capacity; equality compares length/bytes. | Bare/mutable text rejects. String.parse requires text.as_str().parse::<T>(); as_str currently revalidates UTF-8. |
+| Text/String | Literals are immutable module-long UTF-8 views; str is unsized and shared. len counts bytes; is_empty/as_bytes/to_string preserve origins. String privately owns Vec bytes; Clone/clone_from copy valid bytes and reuse target capacity; equality compares length/bytes. | Bare/mutable text rejects. String.parse requires text.as_str().parse::<T>(); String.split uses text.as_str().split(separator). as_str currently revalidates UTF-8. |
 | str::from_utf8 | Checked runtime validation returns source Result<&str, Utf8Error>, borrowing original bytes. Utf8Error is an opaque marker. | No unchecked conversion or error-position/length API. |
 | Text methods | Prefix/suffix, contains/find/rfind, ASCII case/comparison, repeat/replace, bytes/chars, LF/CRLF lines, strip_prefix, split_once and split (including empty patterns). Pattern shares text/char needles; integer decimal parse covers ten types with validity/range checks. | General Unicode case conversion is unsupported. Borrowed iterators retain owners. |
 | Character helpers | UTF-8/UTF-16 lengths, ASCII predicates/case, Unicode whitespace/control, to_digit and to_string. | Operate on Unicode scalars, never arbitrary code points. |
@@ -328,13 +328,13 @@ Collection for holds iterable temporaries in an outer match, loops over next and
 binds each item with an irrefutable let. Non-unit bodies/refutable patterns reject;
 break/continue/return/exhaustion preserve item/iterator cleanup. Numeric ranges
 share binding machinery. No iteration IR operation or nominal-name shortcut exists.
-Shared Vec/slice/map/set and owned Vec/Option/map/set iteration are supported.
+Shared Vec/slice/map/set and owned Vec/Option/map/set iteration are supported. Owned arrays need an IntoIterator implementation; index them, or use vec![elements] for owned literal iteration.
 
 enumerate/skip/take/zip are source adapters; chain currently needs identical
 iterator types to prove Item equality. map/filter/filter_map/inspect store the
 iterator/callable. filter/inspect borrow fresh items; map/filter_map transfer them.
 Adapters follow next even after a previous None and do not silently fuse.
-fold/for_each stop at first None and consume in order; fold owns its accumulator.
+fold/for_each stop at first None and consume in order; fold owns its accumulator. Source IteratorExt has no count; for str::Split use fold(0usize, |n: usize, _: &str| -> usize { n + 1usize }).
 any/all borrow the iterator mutably, pass items by value to FnMut and stop at a
 decisive result/None; empty answers are false/true. Iteration resumes after that
 consumed item; callbacks/captures drop on return and remaining items stay owned.

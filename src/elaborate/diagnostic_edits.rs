@@ -19,14 +19,24 @@ impl Builder<'_, '_> {
         name: &str,
         span: a::Span,
     ) -> Option<a::Diagnostic> {
-        let (no_types, no_args) = {
+        let (no_types, argument_count) = {
             let a::Expr::Method { types, args, .. } = &self.compiler.source.exprs[expression].kind else {
                 return None;
             };
-            (types.is_empty(), args.is_empty())
+            (types.is_empty(), args.len())
         };
-        if !no_args { return None; }
         let receiver_span = self.compiler.source.exprs[receiver].span;
+        if name == "split" && no_types && argument_count == 1usize && self.library_string(base, span) {
+            let mut problem = err(
+                span,
+                "E_UNSUPPORTED",
+                "String.split requires a str receiver; help: write text.as_str().split(separator) (docs/language.md, Source library)",
+            );
+            problem.edits = receiver_edits(receiver_span, ".as_str()");
+            self.split_count_diagnostic(expression, span, &mut problem);
+            return Some(problem);
+        }
+        if argument_count != 0usize { return None; }
         if name == "to_vec" && no_types {
             if let ir::TypeKind::Array { inner, .. } = self.compiler.types[base].kind {
                 if !self.compiler.satisfies_identity(inner, &TraitIdentity::Builtin("Clone".to_string())) {
@@ -158,6 +168,167 @@ impl Builder<'_, '_> {
             Edit { start: body.span.end, end: body.span.end,
                 replacement: " }".to_string() },
         ];
+        revised
+    }
+}
+
+impl Builder<'_, '_> {
+    fn split_count_diagnostic(
+        &self,
+        expression: a::ExprId,
+        span: a::Span,
+        problem: &mut a::Diagnostic,
+    ) {
+        // Do not replace a user's count method, including a trait method whose
+        // applicability becomes known only after repairing the split receiver.
+        for index in 0..self.compiler.source.functions.len() {
+            let function = &self.compiler.source.functions[index];
+            if function.name == "count"
+                && self.compiler.source.function_owner(a::FunctionId { index }) != a::FunctionOwner::Free
+            {
+                return;
+            }
+        }
+        for node in &self.compiler.source.exprs {
+            let a::Expr::Method { receiver, name, types, args } = &node.kind else { continue; };
+            if *receiver == expression && name == "count" && types.is_empty() && args.is_empty()
+                && node.span.file == span.file && node.span.start == span.start && node.span.end > span.end
+            {
+                problem.message.push_str("; source IteratorExt has no count method; use fold(0usize, |n: usize, _: &str| -> usize { n + 1usize })");
+                problem.edits.push(Edit {
+                    start: span.end,
+                    end: node.span.end,
+                    replacement: ".fold(0usize, |n: usize, _: &str| -> usize { n + 1usize })".to_string(),
+                });
+                return;
+            }
+        }
+    }
+
+    pub(super) fn empty_array_diagnostic(
+        &self,
+        expected: Option<usize>,
+        span: a::Span,
+    ) -> a::Diagnostic {
+        let mut problem = err(
+            span,
+            "E_TYPE",
+            "empty array literal [] needs an element type; help: annotate a [T; 0] binding, or write &[0u8; 0] for an empty &[u8] argument (docs/language.md, Scalars and evaluation)",
+        );
+        let inner = match expected {
+            Some(ty) => match self.compiler.types[ty].kind {
+                ir::TypeKind::Slice { inner, .. } => inner,
+                _ => return problem,
+            },
+            None => return problem,
+        };
+        let Some(annotation) = self.primitive_edit_type(inner) else { return problem; };
+        let value = match self.compiler.types[inner].kind {
+            ir::TypeKind::Int { .. } => format!("0{annotation}"),
+            ir::TypeKind::F64 => "0.0f64".to_string(),
+            ir::TypeKind::Bool => "false".to_string(),
+            ir::TypeKind::Char => "'\\0'".to_string(),
+            ir::TypeKind::Unit => "()".to_string(),
+            _ => return problem,
+        };
+        problem.message = format!(
+            "empty array literal [] needs an element type; help: write &[{value}; 0] for an empty &[{annotation}] argument (docs/language.md, Scalars and evaluation)"
+        );
+        problem.edits.push(Edit {
+            start: span.start,
+            end: span.end,
+            replacement: format!("[{value}; 0]"),
+        });
+        problem
+    }
+
+    pub(super) fn local_constant_diagnostic(&mut self, index: usize) -> a::Diagnostic {
+        let constant = self.compiler.source.constants[index].clone();
+        let mut problem = err(
+            constant.span,
+            "E_UNSUPPORTED",
+            "local const declarations are unsupported; help: move the declaration to its containing module (docs/language.md, Statements, control and patterns)",
+        );
+        let source = self.compiler.source;
+        let function = &source.functions[self.source_function];
+        if self.scope != source.files[self.file].crate_root
+            || constant.span.file != self.file || constant.module != function.module
+            || !function.generics.is_empty()
+            || source.function_owner(a::FunctionId { index: self.source_function }) != a::FunctionOwner::Free
+            || self.binding(&constant.name).is_some()
+            || source.attrs.iter().any(|attribute| attribute.span.file == self.file)
+        {
+            return problem;
+        }
+        for declaration in &source.declarations {
+            if declaration.scope == self.scope && declaration.name == constant.name
+                && declaration.item != a::Item::Constant(index)
+            {
+                return problem;
+            }
+        }
+        let ty = match self.compiler.resolve(constant.ty, &self.sub) {
+            Ok(ty) => ty,
+            Err(_) => return problem,
+        };
+        let Some(annotation) = self.primitive_edit_type(ty) else { return problem; };
+        let value = match (&self.compiler.types[ty].kind, &self.compiler.source.exprs[constant.value].kind) {
+            (ir::TypeKind::Int { .. }, a::Expr::Int(text))
+            | (ir::TypeKind::F64, a::Expr::Float(text)) => text.clone(),
+            (ir::TypeKind::Bool, a::Expr::Bool(value)) => {
+                if *value { "true".to_string() } else { "false".to_string() }
+            },
+            (ir::TypeKind::Char, a::Expr::Char(value)) => format!("'\\u{{{:x}}}'", *value as u32),
+            _ => return problem,
+        };
+        // No source text or effectful initializer is moved speculatively.
+        // The root-module restriction keeps names in their existing module,
+        // and insertion before the file preserves function visibility/attributes.
+        problem.edits = vec![
+            Edit {
+                start: 0usize,
+                end: 0usize,
+                replacement: format!("const {}: {annotation} = {value};\n", constant.name),
+            },
+            Edit {
+                start: constant.span.start,
+                end: constant.span.end,
+                replacement: String::new(),
+            },
+        ];
+        problem
+    }
+
+    pub(super) fn iterator_diagnostic(
+        &self,
+        target: usize,
+        arguments: &[usize],
+        values: &[usize],
+        span: a::Span,
+        problem: a::Diagnostic,
+    ) -> a::Diagnostic {
+        let problem = super::at_use_site(problem, span);
+        if problem.code != "E_TRAIT"
+            || problem.message != "associated projection needs its declared implementation witness"
+            || arguments.len() != 1usize || values.len() != 1usize
+            || !matches!(self.compiler.types[self.ty(values[0])].kind, ir::TypeKind::Array { .. })
+            || self.compiler.names.library_function("iter", "__lkjscript_into_iter", span).ok() != Some(target)
+        {
+            return problem;
+        }
+        let mut revised = err(
+            span,
+            "E_TRAIT",
+            "owned-array iteration requires an IntoIterator implementation; help: iterate by index, or use vec![elements] for owned literal elements (docs/language.md, Source library)",
+        );
+        let argument = &self.compiler.source.exprs[arguments[0]];
+        if matches!(argument.kind, a::Expr::Array(_)) {
+            revised.edits.push(Edit {
+                start: argument.span.start,
+                end: argument.span.start,
+                replacement: "vec!".to_string(),
+            });
+        }
         revised
     }
 }

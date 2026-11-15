@@ -1,3 +1,3 @@
 // expect: reject E_UNSUPPORTED
-// pending: Name the unsupported local const declaration and suggest moving it to module scope.
+// diagnostic edits: Move the root-module literal declaration outside its function.
 pub fn probe() -> i64 { const VALUE: i64 = 7; VALUE }

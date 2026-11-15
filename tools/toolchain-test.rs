@@ -346,6 +346,33 @@ fn rewrite_diagnostics(
 ) -> Result<(), String> {
     diagnostic_edits::self_test();
     let cases: Vec<(String, String, String, String)> = vec![
+        ("split-edit.rs".to_string(), include_str!("../tests/diagnostics/string_split.rs").to_string(), "probe".to_string(), "2\n".to_string()),
+        ("empty-edit.rs".to_string(), include_str!("../tests/diagnostics/empty_slice_argument.rs").to_string(), "probe".to_string(), "0\n".to_string()),
+        ("const-edit.rs".to_string(), include_str!("../tests/diagnostics/local_const_declaration.rs").to_string(), "probe".to_string(), "7\n".to_string()),
+        ("iteration-edit.rs".to_string(), include_str!("../tests/diagnostics/owned_array_iteration.rs").to_string(), "probe".to_string(), "3\n".to_string()),
+        ("split-custom-count.rs".to_string(), r#"trait Count { fn count(self) -> usize; }
+impl<'a> Count for std::str::Split<'a, char> {
+    fn count(self) -> usize { 99usize }
+}
+pub fn probe() -> usize { "a\nb".to_string().split('\n').count() }
+"#.to_string(), "probe".to_string(), "99\n".to_string()),
+        ("split-once.rs".to_string(), r#"fn text(calls: &mut i64) -> String { *calls += 1; "a\nb".to_string() }
+pub fn probe() -> i64 {
+    let mut calls = 0i64;
+    let count = text(&mut calls).split('\n').count();
+    calls * 100i64 + count as i64
+}"#.to_string(), "probe".to_string(), "102\n".to_string()),
+        ("iteration-once.rs".to_string(), r#"fn item(calls: &mut u64, value: u64) -> u64 { *calls = *calls * 10u64 + value; value }
+pub fn probe() -> u64 {
+    let mut calls = 0u64;
+    let mut sum = 0u64;
+    for value in [item(&mut calls, 1u64), item(&mut calls, 2u64)] { sum += value; }
+    calls * 100u64 + sum
+}"#.to_string(), "probe".to_string(), "1203\n".to_string()),
+        ("const-π.rs".to_string(), r#"// π: edits count bytes and preserve the public function and its attributes.
+#[allow(dead_code)]
+pub fn probe() -> i64 { const VALUE: i64 = 7; VALUE }
+"#.to_string(), "probe".to_string(), "7\n".to_string()),
         ("array-edit.rs".to_string(), include_str!("../tests/diagnostics/array_to_vec.rs").to_string(), "probe".to_string(), "4\n".to_string()),
         ("string-edit.rs".to_string(), include_str!("../tests/diagnostics/string_parse.rs").to_string(), "probe".to_string(), "123\n".to_string()),
         ("map-edit.rs".to_string(), include_str!("../tests/diagnostics/map_err_closure_context.rs").to_string(), "probe".to_string(), "true\n".to_string()),
@@ -380,11 +407,40 @@ pub fn main(mut world: World) { scenario(&mut world, false); scenario(&mut world
         if checked.status != 1 {
             return Err(format!("diagnostic edit fixture {name} did not reject before its rewrite"));
         }
+        let required = match name.as_str() {
+            "split-edit.rs" => "String.split requires a str receiver",
+            "empty-edit.rs" => "empty array literal [] needs an element type",
+            "const-edit.rs" => "local const declarations are unsupported",
+            "iteration-edit.rs" => "owned-array iteration requires an IntoIterator implementation",
+            _ => "",
+        };
+        report.require(
+            contains(&checked.errors, b"docs/language.md") && contains(&checked.errors, required.as_bytes()),
+            format!("diagnostic edit fixture {name} omitted its construct, rule or language reference"),
+        );
         let rewritten = diagnostic_edits::apply(&source, &checked.errors, &path(config, &name))?;
         write(directory, &name, rewritten.as_bytes())?;
         run_value(world, executable, config, report, &name, &entry, &expected)?;
     }
     let unchanged: Vec<(String, String)> = vec![
+        ("nested-const.rs".to_string(), r#"mod nested {
+    pub fn value() -> i64 { const VALUE: i64 = 7; VALUE }
+}
+pub fn probe() -> i64 { nested::value() }
+"#.to_string()),
+        ("captured-const.rs".to_string(), r#"pub fn probe(input: i64) -> i64 { const VALUE: i64 = input; VALUE }
+"#.to_string()),
+        ("shadowed-const.rs".to_string(), r#"pub fn probe(VALUE: i64) -> i64 { const VALUE: i64 = 7; VALUE }
+"#.to_string()),
+        ("array-place.rs".to_string(), r#"pub fn probe() -> u64 {
+    let values = [1u64, 2u64];
+    let mut sum = 0u64;
+    for value in values { sum += value; }
+    sum
+}"#.to_string()),
+        ("shadowed-string.rs".to_string(), r#"struct String { value: u64 }
+pub fn probe() -> usize { String { value: 1u64 }.split('\n').count() }
+"#.to_string()),
         ("borrowed-map.rs".to_string(), r#"pub fn probe() -> bool {
     let value = String::from_utf8(Vec::new());
     (&value).map_err(|_| "invalid".to_string()).is_ok()
@@ -418,9 +474,23 @@ pub fn main(mut world: World) {
         let rejected = invoke(world, executable, &command(config, "check", &name), b"")?;
         report.require(
             rejected.status == 1 && !contains(&rejected.errors, b"LKJSCRIPT_EDITS "),
-            format!("unsafe closure or borrowed Result rewrite for {name}: {}", display_bytes(&rejected.errors)),
+            format!("unsafe or context-dependent diagnostic rewrite for {name}: {}", display_bytes(&rejected.errors)),
         );
     }
+    // A user implementation reaches ordinary resolution before any rewrite is
+    // considered. Do not diagnose the literal array merely from its syntax.
+    let implemented = r#"impl IntoIterator for [u64; 2] {
+    type IntoIter = std::iter::IntoIter<u64>;
+    fn into_iter(self) -> std::iter::IntoIter<u64> { vec![self[0], self[1]].into_iter() }
+}
+pub fn probe() -> u64 {
+    let mut sum = 0u64;
+    for value in [1u64, 2u64] { sum += value; }
+    sum
+}
+"#;
+    write(directory, "array-implemented.rs", implemented.as_bytes())?;
+    run_value(world, executable, config, report, "array-implemented.rs", "probe", "3\n")?;
     Ok(())
 }
 
