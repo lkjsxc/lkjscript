@@ -1,4 +1,4 @@
-# Status — 2026-11-14
+# Status — 2026-11-15
 
 ## Current milestone: 6.4 complete; next content-addressed reuse
 
@@ -56,5 +56,5 @@ Inclusive rows overlap; the remaining cost is spread across checking, inference 
 64-byte calls (10 M): native 0.36 s / rustc opt=0 0.30 s / rustc -O 0.10 s.
 64-byte Vec (1 M elements, 10 M reads): 0.06 / 0.08 / 0.02 s, with equal results.
 
-Next: content-addressed IR-closure/code/test reuse, ahead of rechecked inlining.
-Shared-host observations; measurements are not admission limits.
+SHA-256 is shared source; standard, padding and streaming vectors pass on both routes.
+Four-worker gate: 174.560 s, load 4.35 → 5.04. Next: authenticated checked-work reuse.

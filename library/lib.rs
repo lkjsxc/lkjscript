@@ -13,6 +13,7 @@ pub mod io;
 pub mod iter;
 mod ordered_map;
 mod ordered_set;
+pub mod sha256;
 pub mod str;
 pub use ordered_map::BTreeMap;
 pub use ordered_set::BTreeSet;

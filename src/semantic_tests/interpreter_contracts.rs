@@ -11,6 +11,7 @@ fn compiled(text: &str) -> ir::CheckedProgram {
         "$std/bytes.rs".to_string(),
         "$std/string.rs".to_string(),
         "$std/str.rs".to_string(),
+        "$std/sha256.rs".to_string(),
         "$std/char.rs".to_string(),
         "$std/fmt.rs".to_string(),
         "$std/iter.rs".to_string(),
