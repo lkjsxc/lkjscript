@@ -98,17 +98,20 @@ the old, differently shaped 1M specimen.
    manifest before the primary command.
 5. Run exactly one fresh-store ordinary 1M build. Success must satisfy the same
    statistics controls as 100k. If it succeeds, the conditional check is
-   explicitly not run. Stop after this primary result; 10M remains unrequested.
-6. Only a nonzero primary exit with a located R0006/R0008 diagnostic and
-   complete wall/CPU/RSS/exit/load capture releases one separate fresh-store
-   check of the unchanged 1M source. Check uses the same producer, source,
+   explicitly not run. Stop after this primary result; 10M is outside this
+   diagnostic protocol and remains pending in the owner's ladder.
+6. Only an ordinary primary exit in 1..123 with a located R0006/R0008 diagnostic,
+   matching wrapper/GNU exit values and complete wall/CPU/RSS/load capture
+   releases one separate fresh-store check of the unchanged 1M source. Check uses the same producer, source,
    library, key, budget, memory bound and deadline. Verify the source manifest
    again first, and repeat the same fixed host-headroom preflight. If that
    preflight refuses, record the check as not run. Neither store is reused or
    copied into the other.
-7. A watchdog, unlocated failure, missing metrics, statistics failure or failed
-   generation is its recorded result and stops further compiler work. There
-   is no retry, memory escalation, reduced source, alternative seed or silent
+7. A watchdog (124), signal-style exit (128 or greater), launcher failure
+   (125..127), inconsistent exit records, unlocated failure, missing metrics,
+   statistics failure or failed generation is its recorded result and stops
+   further compiler work. A located diagnostic never overrides watchdog,
+   signal or incomplete-capture classification. There is no retry, memory escalation, reduced source, alternative seed or silent
    repair. The conditional check itself runs once and stops on any outcome.
 
 All compiler commands use a copied, read-only executable with the exact released
@@ -223,18 +226,23 @@ are distinct columns; this harness adds no store-authentication claim.
 Private key bytes are never copied into evidence.
 
 After independent review, guarded cleanup verifies the repository/run prefix,
-dead owner, absence of processes referring to the run/key, paired external-key
-ownership and evidence location. It preserves ownership and cleanup extents
-before deleting only that run and its key. Ambiguous ownership refuses cleanup.
+dead owner, absence of other processes referring to the run/key, paired
+external-key ownership and evidence location. The cleanup process and its
+complete parent chain are excluded from the reference check; missing or cyclic
+ancestry refuses cleanup. Other live processes, including descendants and
+unrelated awk invocations, are not excluded. It preserves ownership and cleanup
+extents before deleting only that run and its key. Ambiguous ownership refuses cleanup.
 Keep raw evidence in bench before landing results; generated trees stay temporary.
 No compiler or generator is launched by cleanup.
 
 ## 10M cells and exponents
 
-10M is not generated or executed by this protocol, even if 1M succeeds.
+10M is not generated or executed by this diagnostic protocol, even if 1M succeeds.
+It remains pending in the owner's requested ladder.
 Its observed wall/CPU/RSS/store/image/instances/questions/rename cells are
 not run, with no load sample. After a 1M refusal, use the reason
-after_one_million_resource_refusal. After success, use not_requested_by_protocol.
+after_one_million_resource_refusal. After success, use unexecuted_by_this_protocol;
+that reason describes this protocol's execution scope, not the owner's request.
 Do not print zero, a guessed exit or the planned 8 GiB ceiling as measured RSS.
 
 The accepted v3 10k/100k ordinary cold exponents are wall 0.853986 and RSS

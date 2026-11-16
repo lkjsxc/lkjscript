@@ -27,9 +27,24 @@ if [[ ${1-} == cleanup ]]; then
     evidence=$(realpath -e "$(cat "$candidate/owner-evidence")")
     [[ $evidence == "$repository"/target/compiler-scale-refusal-evidence.* &&
        ${evidence#"$repository/target/"} != */* && ! -L $evidence ]] || exit 2
-    process_list=$(ps -eo pid=,args=) || { echo 'process inventory failed; cleanup refused' >&2; exit 2; }
-    if printf '%s\n' "$process_list" | awk -v run="$candidate" -v key="$key_directory" -v self="$" -v parent="$PPID" \
-        '$1!=self && $1!=parent && (index($0,run)>0 || index($0,key)>0) && $0!~/awk -v run=/ {found=1} END {exit !found}'; then
+    cleanup_pid=$BASHPID
+    process_list=$(ps -eo pid=,ppid=,args=) || { echo 'process inventory failed; cleanup refused' >&2; exit 2; }
+    # Exclude only this cleanup and its ancestors. Other matching live users,
+    # including descendants and unrelated awk processes, still refuse cleanup.
+    live_references=$(printf '%s\n' "$process_list" | awk -v run="$candidate" -v key="$key_directory" -v self="$cleanup_pid" '
+        { parents[$1]=$2; commands[$1]=$0 }
+        END {
+            current=self;
+            while (current>0) {
+                if (ancestors[current] || !(current in parents)) exit 2;
+                ancestors[current]=1;
+                current=parents[current];
+            }
+            for (pid in commands)
+                if (!ancestors[pid] && (index(commands[pid],run)>0 || index(commands[pid],key)>0))
+                    print pid;
+        }') || { echo 'cleanup ancestry could not be established; cleanup refused' >&2; exit 2; }
+    if [[ -n $live_references ]]; then
         echo 'a process still refers to the run or key; cleanup refused' >&2; exit 2
     fi
     recovery="$evidence/cleanup"
@@ -233,7 +248,7 @@ retained_bytes 1000000-cold "$store" "$image"
 if ((primary_status == 0)); then
     validate_build 1000000-cold build || stop one_million_build_invalid
     printf '1000000-check\tnot_run\tprimary_build_succeeded\n' > "$evidence/localization.tsv"
-    printf '10000000\tnot_run\tnot_requested_by_protocol\t-\t-\t-\t-\n' >> "$evidence/skipped.tsv"
+    printf '10000000\tnot_run\tunexecuted_by_this_protocol\t-\t-\t-\t-\n' >> "$evidence/skipped.tsv"
     printf 'primary_build_succeeded\n' > "$evidence/outcome"
     exit 0
 fi

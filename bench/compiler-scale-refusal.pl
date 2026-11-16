@@ -126,10 +126,22 @@ if ($mode eq 'release') {
     }
     $result->{stats_records} = $stats_count;
     $result->{store_io_summary_records} = $io_count;
-    if ($status != 0) {
-        $result->{outcome} = 'watchdog' if $status == 124;
-        $result->{outcome} = 'signal_or_watchdog' if $status == 137;
-        $result->{outcome} = 'located_resource_refusal' if exists $result->{located_resource_trap};
+    # A diagnostic does not override how the launcher actually stopped.
+    # Normal resource refusal requires complete, matching exit/time/load records.
+    $result->{wrapper_gnu_exit_equal} = defined($result->{gnu_exit}) && $result->{gnu_exit} == $status
+        ? JSON::PP::true : JSON::PP::false;
+    if ($status == 124) {
+        $result->{outcome} = 'watchdog';
+    } elsif ($status >= 128) {
+        $result->{outcome} = $status == 137 ? 'signal_or_watchdog' : 'signal_style_exit';
+    } elsif (!$result->{complete_metrics}) {
+        $result->{outcome} = 'capture_incomplete';
+    } elsif (!$result->{wrapper_gnu_exit_equal}) {
+        $result->{outcome} = 'exit_capture_mismatch';
+    } elsif ($status >= 125) {
+        $result->{outcome} = 'launcher_failure';
+    } elsif ($status > 0 && exists($result->{located_resource_trap})) {
+        $result->{outcome} = 'located_resource_refusal';
     }
     $result->{capture_status} = $result->{complete_metrics} ? 'complete' : 'incomplete';
     print $json->encode($result);
