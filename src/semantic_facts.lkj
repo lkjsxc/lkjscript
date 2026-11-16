@@ -30,12 +30,22 @@ fn chunks(value: &str) -> Vec<String> {
     if result.is_empty() { result.push(String::new()); }
     result
 }
-fn source_signature(item: &semantic::Item) -> String {
+fn source_signature(item: &semantic::Item) -> Vec<String> {
     let signature = std::str::trim_ascii(item.signature.as_str());
-    let mut end = 1024usize.min(signature.len());
-    while end > 0usize && end < signature.len() && signature.as_bytes()[end] & 192u8 == 128u8 { end -= 1usize; }
-    fact(&item.identity, "source-claim", "signature",
-        &format!("kind={} text={} bytes={} complete={}", item.kind, semantic::quote(&signature[..end]), signature.len(), end == signature.len()))
+    let parts = chunks(signature);
+    let total = parts.len();
+    let mut result = Vec::new();
+    for (index, part) in parts.iter().enumerate() {
+        // Preserve single-chunk spelling; sort longer signatures by fixed-width index.
+        let detail = if total == 1usize {
+            format!("kind={} text={} bytes={} complete=true", item.kind, semantic::quote(part), signature.len())
+        } else {
+            format!("kind={} chunk={index:016x} chunks={total} text={} bytes={} complete={}",
+                item.kind, semantic::quote(part), signature.len(), index + 1usize == total)
+        };
+        result.push(fact(&item.identity, "source-claim", "signature", &detail));
+    }
+    result
 }
 fn join(values: &BTreeSet<String>) -> String {
     let mut result = String::new();
@@ -73,8 +83,10 @@ pub fn build_emitted(catalog: &semantic::Catalog, checked: &ir::CheckedProgram, 
         result.add("meta", &item.identity, fact(&item.identity, "source-claim", "identity",
             &format!("signature={} body={} scope=semantic-path body-locals=token-body-epoch",
                 item.signature_digest, item.body_digest)));
-        result.add("signature", &item.identity, source_signature(item));
-        result.add("outline", &item.parent, source_signature(item));
+        for signature in source_signature(item) {
+            result.add("signature", &item.identity, signature.clone());
+            result.add("outline", &item.parent, signature);
+        }
         result.add("@outline", &item.parent, item.identity.clone());
         for (index, chunk) in chunks(&item.text).iter().enumerate() {
             result.add("text", &item.identity, fact(&item.identity, "source-claim", "text",

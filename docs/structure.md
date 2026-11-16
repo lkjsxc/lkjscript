@@ -39,6 +39,20 @@ protocol and cursor, is subject to `--bytes`. A bound that cannot contain a
 valid reply refuses before writing stdout. See the authenticated snapshot
 contract in [IR](ir.md).
 
+Signature text is trimmed at its ASCII whitespace edges and split at UTF-8
+boundaries into fragments of at most 1,024 bytes. One-fragment signatures retain
+their original fact spelling. Longer signatures add `chunk=` (zero-based,
+16-digit hexadecimal) and `chunks=` (decimal total); `bytes=` is the full
+signature byte count, and only the last fragment has `complete=true`.
+Both signature and parent-outline queries include every fragment and continue
+through the usual authenticated cursor. Fragment indices determine their order,
+including when multiple fragments contain identical text.
+
+Existing pinned snapshots retain the facts their producing compiler published.
+A snapshot from an older producer can therefore retain its historical clipped
+signature; rebuild the index with the repaired producer for complete long
+signatures. Reading a historical pin does not replace or upgrade its facts.
+
 Module and declaration IDs follow resolved source paths, without an initial
 `crate::`; the root module is `crate`. Fields use `::field:NAME`, variants
 `::variant:NAME`, named parameters `::param:NAME`. Query the outline for an
