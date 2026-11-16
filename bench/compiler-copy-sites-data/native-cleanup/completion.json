@@ -1,0 +1,30 @@
+{
+   "absent" : [
+      "/home/coder/workspace/lkjscript-compiler-copy-sites-native-20261116/target/compiler-copy-sites-candidate",
+      "/home/coder/workspace/lkjscript-compiler-copy-sites-native-20261116/target/compiler-copy-sites-candidate-v2",
+      "/home/coder/workspace/lkjscript-compiler-copy-sites-native-20261116/target/compiler-copy-sites-role-fixture-candidate"
+   ],
+   "compiler_executions" : 0,
+   "elapsed_seconds" : 0.044776318,
+   "end_utc" : "2026-11-16T13:13:59Z\n",
+   "load_after" : [
+      "2.24",
+      "1.66",
+      "1.99"
+   ],
+   "load_before" : [
+      "2.24",
+      "1.66",
+      "1.99"
+   ],
+   "preserved" : "worktree, shared target, retained committed archives and inventory",
+   "private_key_reads" : 0,
+   "process_observers" : 0,
+   "removed_directories" : 7,
+   "removed_file_bytes" : 295550,
+   "removed_files" : 22,
+   "request" : "compiler-copy-sites-cleanup-once-20261116-051",
+   "start_utc" : "2026-11-16T13:13:59Z\n",
+   "status" : 0,
+   "time" : "wall_seconds=0.04 user_seconds=0.03 system_seconds=0.01 peak_rss_kib=15580\n"
+}

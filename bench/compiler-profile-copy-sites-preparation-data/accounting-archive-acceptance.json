@@ -1,0 +1,8 @@
+{
+   "archive_sha256" : "ff8e03d6bdbc49d6c97f7fdb79f223e71e9bc619885df273d9e072db328e8e90",
+   "directories" : 41,
+   "logical_bytes" : 630813,
+   "manifest_sha256" : "4146ef453a3ed60e2b846827fb454ebeb7a29128357dce87bf785a5d1120a96d",
+   "regular_files" : 322,
+   "status" : "all archived and live file bytes agree"
+}

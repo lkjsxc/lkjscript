@@ -1,0 +1,40 @@
+committed_bundle=f9e4581ae815ba041510d31421e6b588d66b4059 global_manifest=7b73b1dcd1b7de39230e35ca93149f4d44df311ec13bc23aa650cad13036008f records=304 selected_records=4 pins=exact
+archive=compiler-copy-sites-candidate members=exact files=10 directories=3 bytes=219718
+archive=compiler-copy-sites-candidate-v2 members=exact files=4 directories=3 bytes=53083
+archive=compiler-copy-sites-role-fixture-candidate members=exact files=8 directories=1 bytes=22749
+preflight=complete exact_live_files=22 exact_live_directories=7 bytes=295550 secret_reads=0 observer_started=no
+removed_file=compiler-copy-sites-candidate-v2/corrections.diff bytes=2168 sha256=edbff13de0ae1425d67622168367d182d1a3d201d2895029f7e4ab42934d2fc7
+removed_file=compiler-copy-sites-candidate-v2/manifest.sha256 bytes=368 sha256=c6b1cbe4555aa2ccc0183b66d185b0bf492a3ee55efe6b058695d9b63faa5978
+removed_file=compiler-copy-sites-candidate-v2/src/native/cache.lkj bytes=16824 sha256=08508a69aa4c8024a3f5980bec8c00e2df9a368c2e7ad78f2667b0877b5ca57c
+removed_file=compiler-copy-sites-candidate-v2/src/x86.lkj bytes=33723 sha256=297c8b56d3fa8b2533245ad3a6c70af2097137020a502a3daa6fbfe283d72fac
+removed_file=compiler-copy-sites-candidate/README.md bytes=6789 sha256=d119dd2311e2e5f5a00dafea22da0e2c79eb8ece719e18448d76825b46594bde
+removed_file=compiler-copy-sites-candidate/candidate.sha256 bytes=486 sha256=0a534c802109171cac8a34c100491e13f4f873959e9429c9865c8800a2ccc328
+removed_file=compiler-copy-sites-candidate/manifest.sha256 bytes=1071 sha256=daa9e05099b9f38b7c25a69428513a1146f3da3e55c1e2449759073012ef21ea
+removed_file=compiler-copy-sites-candidate/proposal.diff bytes=34154 sha256=b897a024a32fdada7034a90c8ed0ace56fe2172771da65c124093336c614e89d
+removed_file=compiler-copy-sites-candidate/provenance.txt bytes=357 sha256=2bcb2139f00c5a6557010b1407c875ba2943a2933fbc604332bfe4f79df2a718
+removed_file=compiler-copy-sites-candidate/source.sha256 bytes=338 sha256=6b19719d05bf5756542fab2795f9b1d6bf9336519837b453a389e7f19a9df3f1
+removed_file=compiler-copy-sites-candidate/src/native.lkj bytes=88541 sha256=8443ca135131e565c01d311533c4fc976dea74c7177f14d19fbb8f8dc86a54f4
+removed_file=compiler-copy-sites-candidate/src/native/cache.lkj bytes=16820 sha256=2b125a813e20f04fb2d5a939a4e5f81f252082e0ca882ba840341be2244c1da1
+removed_file=compiler-copy-sites-candidate/src/native/intrinsics.lkj bytes=37534 sha256=22b0cb4fd6e6bbe469d514a7ba25cfdb4be64784a5df683aaa11cd3f014d97c8
+removed_file=compiler-copy-sites-candidate/src/x86.lkj bytes=33628 sha256=6e25b0a456cc2bd278f30ebca7eeb7d8a3932e1235401502a9c27c39ecc54e09
+removed_file=compiler-copy-sites-role-fixture-candidate/README.md bytes=6683 sha256=62a511df28b4065b28fb6dc2cc4ef349eea83d29be01dd97753688b980292cf4
+removed_file=compiler-copy-sites-role-fixture-candidate/additions.diff bytes=3535 sha256=0759982d55f3ec052b4abaef3fbc088f884a1635eefa5d66873ea676ebcdaee0
+removed_file=compiler-copy-sites-role-fixture-candidate/additions.json bytes=4045 sha256=2b10947b55b9687a13ab1a67276dadbd062365d2b1915c46b7717f109ee940f2
+removed_file=compiler-copy-sites-role-fixture-candidate/additions.lkj bytes=3266 sha256=f75120197455312f4c02ba635d4ea5fb5bb8129f61c5df95714c8114523394e1
+removed_file=compiler-copy-sites-role-fixture-candidate/identities.txt bytes=126 sha256=04f2d818dc5711cbb79a3f01339065c7b900336429f5ec1b082c1c4350a4a6bb
+removed_file=compiler-copy-sites-role-fixture-candidate/manifest.sha256 bytes=560 sha256=617b0475ea31b3e4344a955c548bf2303766058d0444e738a1a1f4f2280e4e60
+removed_file=compiler-copy-sites-role-fixture-candidate/profile.lkj bytes=4376 sha256=184adbc8dd758c72474f268122602285468e99d2b21362216b9c5918b6e79fd4
+removed_file=compiler-copy-sites-role-fixture-candidate/static-check.txt bytes=158 sha256=6de76ef92a1d1a485206a5e6ed63ac5d0db7cc40842656c8741e44878da5fb54
+removed_directory=compiler-copy-sites-candidate-v2/src/native
+removed_directory=compiler-copy-sites-role-fixture-candidate
+removed_directory=compiler-copy-sites-candidate/src/native
+removed_directory=compiler-copy-sites-candidate-v2/src
+removed_directory=compiler-copy-sites-candidate/src
+removed_directory=compiler-copy-sites-candidate-v2
+removed_directory=compiler-copy-sites-candidate
+absent=/home/coder/workspace/lkjscript-compiler-copy-sites-native-20261116/target/compiler-copy-sites-candidate
+absent=/home/coder/workspace/lkjscript-compiler-copy-sites-native-20261116/target/compiler-copy-sites-candidate-v2
+absent=/home/coder/workspace/lkjscript-compiler-copy-sites-native-20261116/target/compiler-copy-sites-role-fixture-candidate
+preserved_parent=/home/coder/workspace/lkjscript-compiler-copy-sites-native-20261116 dev=144 inode=37034259
+preserved_parent=/home/coder/workspace/lkjscript-compiler-copy-sites-native-20261116/target dev=144 inode=37041659
+cleanup=complete files=22 directories=7 bytes=295550 retained_archives=unchanged global_manifest=unchanged compiler_executions=0
