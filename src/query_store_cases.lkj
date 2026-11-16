@@ -1,0 +1,166 @@
+//! Native bridge for authenticated pinned-query storage.
+pub fn main(mut world: World) {
+    match cases::execute(&mut world) {
+        Ok(()) => {}
+        Err(problem) => {
+            world.stderr().write(format!("{problem}\n").as_bytes());
+            world.set_exit_status(1u8);
+        }
+    }
+}
+
+mod diagnostic;
+
+mod ir;
+
+mod ir_binary;
+
+mod reuse;
+
+mod sha256 { pub use std::sha256::{Sha256, digest, hex_digest}; }
+
+mod store;
+
+mod cases {
+use crate::{store, sha256, reuse};
+use crate::store::QueryAccess;
+
+fn read_key(world: &mut World, path: &str) -> Result<Vec<u8>, String> {
+    let at = path.rfind('/').ok_or("key path must be absolute")?;
+    let mut directory = world.directory(&path[..at]).map_err(|errno: i64| -> String { format!("key directory: {errno}") })?;
+    let mut file = directory.open(&path[at + 1usize..]).map_err(|errno: i64| -> String { format!("key file: {errno}") })?;
+    let bytes = file.read_to_end().map_err(|errno: i64| -> String { format!("key read: {errno}") })?;
+    if bytes.len() != 32usize { return Err("key length".to_string()); }
+    Ok(bytes)
+}
+
+fn from_hex(text: &str) -> Vec<u8> {
+    assert_eq!(text.len(), 64usize);
+    let mut bytes = Vec::new();
+    for at in 0usize..32usize {
+        let high = text.as_bytes()[at * 2usize];
+        let low = text.as_bytes()[at * 2usize + 1usize];
+        let high = if high.is_ascii_digit() { high - b'0' } else { high - b'a' + 10u8 };
+        let low = if low.is_ascii_digit() { low - b'0' } else { low - b'a' + 10u8 };
+        bytes.push(high * 16u8 + low);
+    }
+    bytes
+}
+
+fn checked_access<Q: store::QueryAccess>(query: &mut Q, identity: &str, selector: &str,
+    root: &str, producer: &str, pinned: bool) -> Result<(), String> {
+    if query.query_producer() != producer { return Err("producer mismatch".to_string()); }
+    let bytes = query.query_root(identity).ok_or("root missing")?;
+    if sha256::hex_digest(&bytes) != identity { return Err("root digest mismatch".to_string()); }
+    let page = query.query_page(root).ok_or("page missing")?;
+    if sha256::hex_digest(&page) != root { return Err("page digest mismatch".to_string()); }
+    if pinned {
+        assert_eq!(query.query_bound_root(), Some(root.to_string()));
+        assert!(query.query_latest(selector).is_none());
+        assert!(query.query_root(&sha256::hex_digest(b"another snapshot")).is_none());
+    } else { assert!(query.query_bound_root().is_none()); }
+    let question = sha256::hex_digest(b"fixed query");
+    let mut cursor = query.query_cursor(&question, b"v2 state");
+    assert_eq!(query.open_query_cursor(&question, &cursor), Some(b"v2 state"[..].to_vec()));
+    assert!(query.open_query_cursor(&sha256::hex_digest(b"another query"), &cursor).is_none());
+    let last = cursor.len() - 1usize;
+    cursor[last] ^= 1u8;
+    assert!(query.open_query_cursor(&question, &cursor).is_none());
+    Ok(())
+}
+
+fn publish(world: &mut World, path: &Option<String>, key: &Option<String>, label: &str) -> Result<(), String> {
+    let mut cache = store::Store::open_bounded(world, path, key, 8192usize).ok_or("store open")?;
+    let producer = cache.query_producer();
+    let selector = sha256::hex_digest(b"query store selector");
+    let page = format!("page:{label}").into_bytes();
+    let root = sha256::hex_digest(&page);
+    let mut bytes = Vec::new();
+    store::push_word(&mut bytes, 2usize);
+    store::push_bytes(&mut bytes, producer.as_bytes());
+    store::push_bytes(&mut bytes, sha256::hex_digest(format!("source:{label}").as_bytes()).as_bytes());
+    store::push_bytes(&mut bytes, sha256::hex_digest(format!("ir:{label}").as_bytes()).as_bytes());
+    store::push_bytes(&mut bytes, root.as_bytes());
+    store::push_bytes(&mut bytes, selector.as_bytes());
+    store::push_word(&mut bytes, 1usize);
+    let identity = sha256::hex_digest(&bytes);
+    cache.put("semantic-page", &root, &page);
+    cache.put("semantic-root", &identity, &bytes);
+    assert!(cache.publish_query_locator(&identity, &selector, &root));
+    cache.put("semantic-latest", &selector, &bytes);
+    cache.put("check", &sha256::hex_digest(b"proof sentinel"), b"unrelated proof bytes");
+    assert!(cache.query_locator_retained(&identity, &selector, &root));
+    checked_access(&mut cache, &identity, &selector, &root, &producer, false)?;
+    cache.finish();
+    world.stdout().write(format!("id={identity} selector={selector} root={root} producer={producer} bytes={}\n", cache.retained_bytes).as_bytes());
+    Ok(())
+}
+
+pub fn execute(world: &mut World) -> Result<(), String> {
+    let mut arguments: Vec<String> = Vec::new();
+    for bytes in world.args() { arguments.push(String::from_utf8(bytes).map_err(|_| -> String { "argument encoding".to_string() })?); }
+    if arguments.len() < 3usize { return Err("mode store key [arguments]".to_string()); }
+    let mode = &arguments[0usize];
+    let path = Some(arguments[1usize].clone());
+    let key = Some(arguments[2usize].clone());
+    if mode == "publish" {
+        if arguments.len() != 4usize { return Err("publish label".to_string()); }
+        return publish(world, &path, &key, &arguments[3usize]);
+    }
+    if mode == "pressure" {
+        let mut cache = store::Store::open_bounded(world, &path, &key, 2048usize).ok_or("store open")?;
+        cache.put("budget-test", &sha256::hex_digest(b"pressure"), &vec![7u8; 512usize]);
+        cache.finish();
+        world.stdout().write(format!("bytes={}\n", cache.retained_bytes).as_bytes());
+        return Ok(());
+    }
+    if arguments.len() != 7usize { return Err("mode store key id selector root producer".to_string()); }
+    let identity = &arguments[3usize]; let selector = &arguments[4usize];
+    let root = &arguments[5usize]; let producer = &arguments[6usize];
+    if mode == "oversized-root" || mode == "oversized-page" {
+        let mut cache = store::Store::open_bounded(world, &path, &key, 65536usize).ok_or("store open")?;
+        let count = if mode == "oversized-root" { 377usize } else { 32769usize };
+        let namespace = if mode == "oversized-root" { "semantic-root" } else { "semantic-page" };
+        let target = if mode == "oversized-root" { identity } else { root };
+        cache.put(namespace, target, &vec![0u8; count]);
+        cache.finish();
+        let mut query = store::QueryReader::open(world, &path, &key, 65536usize, identity, selector)?;
+        if mode == "oversized-root" { assert!(query.query_root(identity).is_none()); }
+        else { assert!(query.query_page(root).is_none()); }
+        world.stdout().write(b"ok authenticated representation bound\n");
+        return Ok(());
+    }
+    if mode == "current-invalidate" {
+        let mut cache = store::Store::open_bounded(world, &path, &key, 8192usize).ok_or("store open")?;
+        cache.invalidate_query_snapshot(identity, selector);
+        cache.finish();
+        world.stdout().write(b"invalidated current\n");
+        return Ok(());
+    }
+    if mode == "current" || mode == "touch" {
+        let mut cache = store::Store::open_bounded(world, &path, &key, 8192usize).ok_or("store open")?;
+        if mode == "touch" { cache.put("budget-test", &sha256::hex_digest(b"touch"), b"touch"); }
+        checked_access(&mut cache, identity, selector, root, producer, false)?;
+        assert!(cache.query_locator_retained(identity, selector, root));
+        cache.finish();
+        world.stdout().write(format!("bytes={}\n", cache.retained_bytes).as_bytes());
+        return Ok(());
+    }
+    let mut query = store::QueryReader::open(world, &path, &key, 8192usize, identity, selector)?;
+    if mode == "invalidate" {
+        query.invalidate_query_snapshot(identity, selector);
+        world.stdout().write(b"invalidated\n");
+        return Ok(());
+    }
+    if mode != "read" { return Err("unknown mode".to_string()); }
+    checked_access(&mut query, identity, selector, root, producer, true)?;
+    let secret = read_key(world, &arguments[2usize])?;
+    let question = sha256::hex_digest(b"fixed query");
+    let legacy = reuse::seal(&from_hex(producer), &secret, "semantic-cursor", &question, b"v1 state");
+    assert!(query.open_query_cursor(&question, &legacy).is_none());
+    query.invalidate_query_snapshot(&sha256::hex_digest(b"another snapshot"), selector);
+    assert!(query.query_root(identity).is_some());
+    world.stdout().write(b"ok pinned storage\n");
+    Ok(())
+}
+}
