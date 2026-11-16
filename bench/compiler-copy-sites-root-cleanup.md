@@ -3,8 +3,8 @@
 The exact [six-scope preparation](compiler-copy-sites-root-cleanup-data/README.md)
 and retained/disposable partition are accepted. The first released guard stopped
 at Perl compilation before any cleanup action. Its complete failure remains
-unchanged. The separately prepared v2 guard has passed syntax checking and root
-review; its execution requires a distinct release naming this committed bundle.
+unchanged. The separately prepared v2 guard completed once after syntax checking,
+root review and a distinct release naming commit 99ac7a60. All six scopes are absent.
 
 The six literal scopes contain 21,076 regular files and 112 directories,
 779,287,389 logical bytes. Exact existing Git/archive/seed recovery covers
@@ -74,4 +74,27 @@ The exact candidate passed `perl -c`, with only `syntax OK` on stderr:
 This was syntax checking, not guard-body execution. All 19 preparation files
 are retained in [v2 preparation](compiler-copy-sites-root-cleanup-v2-preparation/README.md),
 manifest `d5ad15f4aa79aaf70eed8339fa3738c88cb7e9d45ff34725d6268d9dca55604e`.
-A distinct once-only v2 release must keep fresh captures and stop on any failure.
+The distinct once-only v2 release required fresh captures and stopping on any failure.
+
+## Completed v2 release
+
+The distinct request `compiler-copy-sites-root-cleanup-v2-execute-20261116-148`
+ran the exact v2 guard from main against committed bundle
+`99ac7a6043cd9ee411970e55970634a34506a709`, under 4 GiB address space and a
+300 s watchdog with 10 s grace. It exited zero with empty stderr, removing
+21,076 files, 112 directories and 779,287,389 logical bytes. UTC was
+15:12:34–15:12:43 on 2026-11-16; GNU wall time was 8.17 s, with load
+0.96/1.57/1.95→0.97/1.55/1.94. This includes recovery validation and deletion.
+
+The [completion](compiler-copy-sites-root-cleanup-v2-data/cleanup-completion-v2.json)
+and independent postcheck verify all six literal ENOENT results, the unchanged
+standard 32,584,542 B canonical producer and all 39 original retention records.
+Root separately confirmed the six absences and canonical identity, then copied
+and byte-compared all 25 completion-bundle files (185,626 B), including the
+24-record manifest. Its SHA-256 is
+`42e00f099f7a3ddda9f622623457882a2db86a554ea040e5a76fb234b92b7d3c`;
+the guard result is
+`84c8d11ca3949c4a5a8fade9a6a990c0036ac20b64255bf8a4dfe1f549d3eaeb`.
+The 686,883,145 disposable bytes remain explicitly unrecoverable products,
+not retained evidence. No compiler, image, new observer or service ran.
+The failed first attempt remains closed and byte-identical.
