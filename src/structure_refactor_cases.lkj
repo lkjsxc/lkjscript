@@ -142,7 +142,10 @@ mod cases {
         refuses(joined, r#"{"op":"remove-field","id":"Choice::variant:A::field:x"}"#, "E_EDIT_REMOVED_BINDING")?;
         let generic = "struct Value<T> { old: T } fn main() -> u64 { Value { old: 2147483647 + 1 }.old as u64 }";
         refuses(generic, r#"{"op":"add-field","id":"Value","source":"new: T","value":"0u64"}"#, "CHECK")?;
-        Ok(11usize)
+        let associated = "mod types { pub struct Item { pub value: i64 } impl Item { pub fn new() -> Self { Self { value: 21i64 } } } } use types::Item as Alias; fn main() -> i64 { types::Item::new().value + Alias::new().value }";
+        accepts(associated, r#"{"op":"add-field","id":"types::Item","source":"tag: i64","value":"0i64"}"#, 42i64)?;
+        refuses(associated, r#"{"op":"add-field","id":"types::Item","source":"tag: i64","value":"true"}"#, "CHECK")?;
+        Ok(13usize)
     }
     fn variants() -> Result<usize, String> {
         let added = "enum Choice { A } fn main() -> i64 { match Choice::A { Choice::A => 1i64 } }";

@@ -450,7 +450,10 @@ fn add_field(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)], operatio
         let mut handled: BTreeSet<(usize, usize)> = BTreeSet::new();
         let mut constructors: BTreeMap<(usize, usize), a::Span> = BTreeMap::new();
         for site in &sites {
-            if matches!(site.kind.as_str(), "type" | "alias-type") { continue; }
+            // Type imports and qualified prefixes do not construct a value.
+            // Their terminal constructor/pattern references are checked below.
+            if matches!(site.kind.as_str(), "type" | "alias-type" | "qualification"
+                | "alias-qualification" | "import" | "alias-import") { continue; }
             let mut found = false;
             for node in &unit.tree.exprs {
                 if let a::Expr::Struct { base, .. } = &node.kind {
