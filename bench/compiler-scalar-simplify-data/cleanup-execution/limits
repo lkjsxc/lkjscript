@@ -1,0 +1,1 @@
+4 GiB AS; 900 s TERM watchdog; 10 s KILL grace; one cleanup worker; no compiler/native/compression
