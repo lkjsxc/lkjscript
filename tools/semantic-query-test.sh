@@ -4,7 +4,22 @@ cd "$(dirname "$0")/.."
 compiler=${1:-target/lkjscript}
 compiler=$(realpath "$compiler")
 fixture=$(mktemp -d target/semantic-query.XXXXXX)
-trap 'rm -rf "$fixture"' EXIT HUP INT TERM
+finish() {
+    local result=$?
+    trap - EXIT HUP INT TERM
+    if [[ -n "${LKJSCRIPT_QUERY_EVIDENCE:-}" ]]; then
+        mkdir -p "$LKJSCRIPT_QUERY_EVIDENCE"
+        while IFS= read -r -d '' evidence; do
+            [[ $(basename "$evidence") == key ]] && continue
+            if [[ ! -s "$evidence" ]] || LC_ALL=C grep -Iq '' "$evidence"; then
+                cp "$evidence" "$LKJSCRIPT_QUERY_EVIDENCE/"
+            fi
+        done < <(find "$fixture" -maxdepth 1 -type f -print0)
+    fi
+    rm -rf "$fixture"
+    exit "$result"
+}
+trap finish EXIT HUP INT TERM
 umask 077
 mkdir "$fixture/source" "$fixture/store"
 head -c 32 /dev/urandom > "$fixture/key"
@@ -110,9 +125,62 @@ refuse() {
     if "$@" > "$fixture/refused.out" 2> "$fixture/refused.err"; then fail 'hostile query accepted'; fi
     [[ ! -s "$fixture/refused.out" ]] || fail 'refusal leaked a partial answer'
     grep -Eq 'E_QUERY_' "$fixture/refused.err" || { cat "$fixture/refused.err" >&2; fail 'missing structural refusal'; }
+    { printf 'refused:'; printf ' %q' "$@"; printf '\n'; cat "$fixture/refused.err"; } >> "$fixture/refusals.log"
+}
+flip_byte() {
+    perl - "$1" "$2" <<'PERL'
+use strict;
+use warnings;
+my ($path, $offset) = @ARGV;
+open my $file, '+<:raw', $path or die $!;
+seek($file, $offset, 0) or die $!;
+read($file, my $byte, 1) == 1 or die "missing mutation byte\n";
+seek($file, $offset, 0) or die $!;
+print {$file} chr(ord($byte) ^ 1) or die $!;
+close $file or die $!;
+PERL
 }
 build
 first=$snapshot
+# A protocol-compatible reader can inspect another authenticated producing
+# generation, while admission and image reuse remain exact-producer claims.
+producer_a=$(sha256sum "$compiler" | cut -d' ' -f1)
+producer_a_root=$(find "$fixture/store" -maxdepth 1 -type f -name "semantic-root-*-$first" -print -quit)
+[[ -n "$producer_a_root" ]] || fail 'producer A snapshot root missing'
+producer_a_slot=$(basename "$producer_a_root" | cut -d- -f3)
+reader="$fixture/another-reader"
+cp "$compiler" "$reader"
+printf 'query reader protocol generation test\n' >> "$reader"
+producer_b=$(sha256sum "$reader" | cut -d' ' -f1)
+[[ "$producer_a" != "$producer_b" ]] || fail 'reader producer did not change'
+query meta crate > "$fixture/producer-a"
+grep -Eq "version=2 producer=$producer_a validation=authenticated-producing-compiler current-check=not-performed" "$fixture/producer-a" || fail 'producer attestation label'
+"$reader" query "${common[@]}" --snapshot "$first" --kind meta --id crate > "$fixture/cross-reader"
+cmp "$fixture/producer-a" "$fixture/cross-reader" || fail 'cross-reader changed the pinned answer'
+refuse "$reader" query "${common[@]}" --kind meta --id crate
+refuse "$reader" query main.lkj --source-dir "$fixture/not-selected" --no-library --store "$fixture/store" --store-key "$fixture/key" --snapshot "$first" --kind meta --id crate
+query outline helpers --limit 1 > "$fixture/producer-a-cursor"
+producer_a_cursor=$(sed -n 's/.*cursor=\([0-9a-f]*\) facts=.*/\1/p' "$fixture/producer-a-cursor")
+[[ -n "$producer_a_cursor" ]] || fail 'missing producer A cursor'
+"$reader" query "${common[@]}" --snapshot "$first" --kind outline --id helpers --limit 1 --cursor "$producer_a_cursor" > "$fixture/cross-reader-cursor"
+"$reader" build "${common[@]}" --index --stats -o "$fixture/producer-b-program" > "$fixture/producer-b-build.log" 2>&1 || { cat "$fixture/producer-b-build.log" >&2; fail 'producer B build'; }
+second=$(sed -n 's/^LKJSCRIPT_SNAPSHOT \([0-9a-f]*\) .*/\1/p' "$fixture/producer-b-build.log")
+[[ ${#second} == 64 && "$second" != "$first" ]] || fail 'snapshot identity did not bind producer'
+for statistic in checked_reused build_reused; do
+    count=$(sed -n "s/.*\"$statistic\":\([0-9][0-9]*\).*/\1/p" "$fixture/producer-b-build.log")
+    [[ "$count" == 0 ]] || fail "producer B reused producer A $statistic"
+done
+"$compiler" query "${common[@]}" --snapshot "$second" --kind meta --id crate > "$fixture/producer-b"
+grep -Eq "version=2 producer=$producer_b validation=authenticated-producing-compiler current-check=not-performed" "$fixture/producer-b" || fail 'reader substituted its own producer'
+for fact in source checked-ir; do
+    a=$(sed -n "s/.* $fact=\([^ ]*\) .*/\1/p" "$fixture/producer-a" | head -n 1)
+    b=$(sed -n "s/.* $fact=\([^ ]*\) .*/\1/p" "$fixture/producer-b" | head -n 1)
+    [[ -n "$a" && "$a" == "$b" ]] || fail "unchanged cross-producer $fact mismatch"
+done
+tail -c 32 "$fixture/store/semantic-locator-$first" > "$fixture/root-a"
+tail -c 32 "$fixture/store/semantic-locator-$second" > "$fixture/root-b"
+cmp "$fixture/root-a" "$fixture/root-b" || fail 'unchanged cross-producer fact root mismatch'
+refuse "$reader" query "${common[@]}" --snapshot "$second" --kind outline --id helpers --limit 1 --cursor "$producer_a_cursor"
 mkdir "$fixture/small-store"
 refuse "$compiler" build main.lkj --source-dir "$fixture/source" --no-library --store "$fixture/small-store" --store-key "$fixture/key" --store-bytes 32768 --index -o "$fixture/small-program"
 refuse "$compiler" query main.lkj --source-dir "$fixture/source" --no-library --store "$fixture/small-store" --store-key "$fixture/key" --kind outline
@@ -249,7 +317,7 @@ refuse query outline helpers --cursor "${cursor%?}z"
 query meta helpers::square > "$fixture/before"
 before_signature=$(sed -n 's/.*signature=\([^ ]*\).*/\1/p' "$fixture/before")
 before_body=$(sed -n 's/.*body=\([^ ]*\).*/\1/p' "$fixture/before")
-latest=$(find "$fixture/store" -maxdepth 1 -type f -name 'semantic-latest-*' -print -quit)
+latest=$(find "$fixture/store" -maxdepth 1 -type f -name "semantic-latest-$producer_a_slot-*" -print -quit)
 cp "$latest" "$fixture/old-latest"
 mkdir "$fixture/source/helpers"
 mv "$fixture/source/helpers.lkj" "$fixture/source/helpers/mod.lkj"
@@ -259,6 +327,18 @@ build
 query meta helpers::square > "$fixture/after"
 [[ $(sed -n 's/.*signature=\([^ ]*\).*/\1/p' "$fixture/after") == "$before_signature" ]] || fail 'signature identity changed with physical move/formatting'
 [[ $(sed -n 's/.*body=\([^ ]*\).*/\1/p' "$fixture/after") == "$before_body" ]] || fail 'body epoch changed with formatting'
+# Cached indexed builds must repair a missing or corrupt locator even when
+# the immutable snapshot root and complete image proof are still present.
+repair_snapshot=$snapshot
+for attack in missing corrupt; do
+    locator="$fixture/store/semantic-locator-$snapshot"
+    if [[ "$attack" == missing ]]; then rm "$locator"; else flip_byte "$locator" 98; fi
+    refuse query authority writes
+    build
+    [[ "$snapshot" == "$repair_snapshot" ]] || fail 'unchanged locator repair changed the snapshot'
+    query authority writes > "$fixture/locator-repaired"
+    grep -Eq stdout_write "$fixture/locator-repaired" || fail 'indexed build did not repair its locator'
+done
 refuse query outline helpers --cursor "$cursor"
 mv "$fixture/source" "$fixture/hidden-source"
 query authority writes > "$fixture/no-source"
@@ -278,18 +358,38 @@ local $/;
 my $data = <$file>;
 my $at = length("lkjscript-store-2\n") + 8 + 64 + 8;
 sub field { my $n = unpack('Q<', substr($data, $at, 8)); $at += 8; my $v = substr($data, $at, $n); $at += $n; return $v; }
-field(); field();
+field(); field(); field();
 print field();
 PERL
 )
 page_name=$(basename "$(find "$fixture/store" -maxdepth 1 -type f -name "semantic-page-*-$root_page" -print -quit)")
 [[ -n "$page_name" ]] || fail 'root page not found'
+locator_name="semantic-locator-$snapshot"
+[[ -f "$fixture/store/$locator_name" ]] || fail 'published snapshot has no locator'
+for attack in producer selector root truncate substitute missing fifo symlink; do
+    rm -rf "$fixture/store"
+    cp -a "$fixture/saved-store" "$fixture/store"
+    target="$fixture/store/$locator_name"
+    case "$attack" in
+        producer) flip_byte "$target" 98 ;;
+        selector) flip_byte "$target" 130 ;;
+        root) flip_byte "$target" 162 ;;
+        truncate) truncate -s 40 "$target" ;;
+        substitute) cp "$fixture/store/semantic-locator-$first" "$target" ;;
+        missing) rm "$target" ;;
+        fifo) rm "$target"; mkfifo "$target" ;;
+        symlink) rm "$target"; ln -s ../old-latest "$target" ;;
+    esac
+    refuse timeout --kill-after=2s 10s "$reader" query "${common[@]}" --snapshot "$snapshot" --kind authority --id writes
+done
+rm -rf "$fixture/store"
+cp -a "$fixture/saved-store" "$fixture/store"
 for attack in mutate truncate substitute fifo symlink; do
     rm -rf "$fixture/store"
     cp -a "$fixture/saved-store" "$fixture/store"
     target="$fixture/store/$page_name"
     case "$attack" in
-        mutate) printf X | dd of="$target" bs=1 seek=40 conv=notrunc status=none ;;
+        mutate) flip_byte "$target" 40 ;;
         truncate) truncate -s 40 "$target" ;;
         substitute)
             other=$(find "$fixture/store" -maxdepth 1 -type f -name 'semantic-page-*' ! -name "$page_name" -print -quit)
@@ -418,4 +518,4 @@ done
 "$compiler" query "${self_untyped_common[@]}" --snapshot "$self_untyped_snapshot" --kind references --id std::Actual::construct > "$fixture/self-resolved"
 grep -Eq '^"std::Actual".*kind=alias-constructor$' "$fixture/self-resolved" || fail 'resolved owner missing from an undemanded inherent method'
 
-printf 'ok semantic-query: identities, source/IR levels, ordinary authority, all question kinds, bounded authenticated cursor, source-free lookup, physical move/formatting, explicit snapshot replay and five index attacks\n'
+printf 'ok semantic-query: identities, source/IR levels, ordinary authority, all question kinds, bounded authenticated cursor, source-free lookup, physical move/formatting, explicit cross-producer provenance, producer-bound admission, snapshot replay, eight locator and five index attacks\n'
