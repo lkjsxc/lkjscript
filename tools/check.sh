@@ -160,6 +160,7 @@ parallel_step 1 optimizer timeout --kill-after=10s 600s bash tools/optimizer-tes
 parallel_step 1 resources timeout --kill-after=10s 600s bash tools/resource-test.sh "$check_binary"
 parallel_step 1 diagnostic-cases diagnostic_cases
 parallel_step 1 cache-io timeout --kill-after=10s 600s bash tools/cache-io-test.sh "$check_binary"
+parallel_step 1 cache-read timeout --kill-after=10s 600s bash tools/cache-read-test.sh "$check_binary"
 parallel_step 2 store timeout --kill-after=10s 600s bash tools/store-test.sh "$check_binary"
 parallel_step 2 program-directory timeout --kill-after=10s 600s bash tools/program-directory-test.sh "$check_binary"
 parallel_step 2 http timeout --kill-after=10s 600s sh tools/http-test.sh --compiler "$check_binary" --seconds 0 --out target/gate/http-profiles
