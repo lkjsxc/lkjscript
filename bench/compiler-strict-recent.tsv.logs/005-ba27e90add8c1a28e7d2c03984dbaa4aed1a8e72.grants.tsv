@@ -1,0 +1,6 @@
+role	canonical_path
+before-source	/home/coder/workspace/lkjscript-compiler-strict-recent-20261116/target/compiler-strict-recent.TAz4Df/case-005/before
+desired-source	/home/coder/workspace/lkjscript-compiler-strict-recent-20261116/target/compiler-strict-recent.TAz4Df/case-005/after
+before-library	/home/coder/workspace/lkjscript-compiler-strict-recent-20261116/target/compiler-strict-recent.TAz4Df/case-005/before/library
+desired-library	/home/coder/workspace/lkjscript-compiler-strict-recent-20261116/target/compiler-strict-recent.TAz4Df/case-005/after/library
+private-key	/home/coder/workspace/lkjscript-compiler-strict-recent-20261116/target/compiler-strict-recent.TAz4Df/key

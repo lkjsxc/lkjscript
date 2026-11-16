@@ -1,0 +1,7 @@
+ordinal	revision	parent	status	exit_code	operations	stdout_lines	wall_s	user_s	sys_s	peak_kib	load_before	load_after	reason	library_environment	source_root
+1	9047a677f9a353ae13883b4998adf9da2fc67b48	14180552c2fbc4df4eec4aa9d7c08e5503f26c5f	refused	1	0	0	42.19	40.98	0.47	1107996	2.18,4.62,6.64	2.30,4.33,6.46	E_REPLAY_FILES	historical-roots	src/main.lkj
+2	de65c09bab9d336e10dcfe245058d4ee14b3aea2	8317e94efad30e297de5bd0bd70d028c804c4530	refused	1	0	0	44.62	43.38	0.52	1100644	2.84,4.41,6.47	3.74,4.44,6.39	E_REPLAY_FILES	historical-roots	src/main.lkj
+3	0a410badb7e96ed9f6cf185df7d1f781d71c5fdb	579cf55e88177b9c9a4c59e2ff6c1bf7829e2878	refused	1	0	0	45.93	44.59	0.54	1103184	3.74,4.44,6.39	5.21,4.69,6.37	E_REPLAY_FILES	historical-roots	src/main.lkj
+4	c5f67a5583aaba6dd338ba3e7278fdc775f36731	2b3ff6c9cdaaedb052c379023780b8e3b148801d	refused	1	0	0	46.19	44.39	0.55	1120048	5.21,4.69,6.37	6.16,5.05,6.42	E_REPLAY_FILES	historical-roots	src/main.lkj
+5	ba27e90add8c1a28e7d2c03984dbaa4aed1a8e72	6c3f0ce8294400ebcd81e4e7f1a82e08bda6262d	refused	1	0	0	43.85	42.19	0.49	1149400	6.16,5.05,6.42	4.23,4.70,6.23	E_REPLAY_FILES	historical-roots	src/main.lkj
+6	71e821dfcaaf6a7940ed67bb7d2d3a721c169922	05b8e88c0d96a6fe4cf5cb6104eb5d90359c4f8a	refused	1	0	0	42.78	41.53	0.40	1175340	4.23,4.70,6.23	3.34,4.38,6.06	E_REPLAY_FILES	historical-roots	src/main.lkj
