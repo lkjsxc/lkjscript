@@ -1,0 +1,4 @@
+Scalar found where operator expected (Missing operator before "$class"?) at bench/compiler-copy-sites-root-cleanup-data/guard.pl line 171, near "m{^compiler-copy-sites-gate\.ccpzZ9/store/}if$class"
+Unknown regexp modifier "/f" at bench/compiler-copy-sites-root-cleanup-data/guard.pl line 171, at end of line
+syntax error at bench/compiler-copy-sites-root-cleanup-data/guard.pl line 171, near "m{^compiler-copy-sites-gate\.ccpzZ9/store/}if$class "
+Execution of bench/compiler-copy-sites-root-cleanup-data/guard.pl aborted due to compilation errors.

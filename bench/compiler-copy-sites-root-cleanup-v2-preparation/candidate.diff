@@ -1,0 +1,41 @@
+--- a/guard.pl
++++ b/compiler-copy-sites-root-cleanup-guard-v2.pl
+@@ -21,7 +21,7 @@
+ my $inventory_sha='e50bebef5501856268d0cb9459b9dd4465246cf8d49273803c4076c7dc934736';
+ my $retention_sha='56825fc0ed67a0e772d46404598c0b0dd2d3ff099d05734e977cda0582317a22';
+ my $seed_ref='7d0731e99aeaf241c4334fc5ff065a341fb388c8:seed/lkjscript.gz';
+-my $result_dir='/home/coder/workspace/lkjscript-compiler-copy-sites-native-20261116/target/compiler-copy-sites-root-inventory-20261116/cleanup-results';
++my $result_dir='/home/coder/workspace/lkjscript-compiler-copy-sites-native-20261116/target/compiler-copy-sites-root-inventory-20261116/cleanup-results-v2';
+ my @scopes=qw(
+  compiler-copy-sites-integrated
+  compiler-copy-sites-driver-candidate
+@@ -168,13 +168,13 @@
+ }
+ sub safe_disposable {
+  my($p,$class)=@_;
+- return$p=~m{^compiler-copy-sites-gate\.ccpzZ9/store/}if$class eq'disposable_store';
+- return$p=~m{^(?:compiler-copy-sites-gate\.ccpzZ9/previous-target-gate|gate)/http-profiles/http\.(?:samples|memory)\.[0-9]+$}if$class eq'disposable_http_test_product';
+- return$rows{$p}[13]eq'elf'&&$p=~m{^(?:compiler-copy-sites-gate\.ccpzZ9/previous-target-gate|gate|compiler-copy-sites-integration-evidence)/}if$class eq'disposable_generated_executable';
+- return$p=~m{^(?:compiler-copy-sites-gate\.ccpzZ9/previous-target-gate|gate)/generated/.*\.lkj$}if$class eq'disposable_generated_source';
+- return$p=~m{^(?:compiler-copy-sites-gate\.ccpzZ9/previous-target-gate|gate)/.*\.lkjir$}if$class eq'disposable_generated_ir';
+- return$p=~m{^(?:compiler-copy-sites-gate\.ccpzZ9/previous-target-gate|gate)/.*\.authority$}if$class eq'disposable_generated_authority';
+- return$p=~m{^(?:compiler-copy-sites-gate\.ccpzZ9/previous-target-gate|gate)/.*\.rs$}if$class eq'disposable_generated_witness';
++ return$p=~m{^compiler-copy-sites-gate\.ccpzZ9/store/} if $class eq'disposable_store';
++ return$p=~m{^(?:compiler-copy-sites-gate\.ccpzZ9/previous-target-gate|gate)/http-profiles/http\.(?:samples|memory)\.[0-9]+$} if $class eq'disposable_http_test_product';
++ return$rows{$p}[13]eq'elf'&&$p=~m{^(?:compiler-copy-sites-gate\.ccpzZ9/previous-target-gate|gate|compiler-copy-sites-integration-evidence)/} if $class eq'disposable_generated_executable';
++ return$p=~m{^(?:compiler-copy-sites-gate\.ccpzZ9/previous-target-gate|gate)/generated/.*\.lkj$} if $class eq'disposable_generated_source';
++ return$p=~m{^(?:compiler-copy-sites-gate\.ccpzZ9/previous-target-gate|gate)/.*\.lkjir$} if $class eq'disposable_generated_ir';
++ return$p=~m{^(?:compiler-copy-sites-gate\.ccpzZ9/previous-target-gate|gate)/.*\.authority$} if $class eq'disposable_generated_authority';
++ return$p=~m{^(?:compiler-copy-sites-gate\.ccpzZ9/previous-target-gate|gate)/.*\.rs$} if $class eq'disposable_generated_witness';
+  return 0;
+ }
+ my$ok=eval{
+@@ -191,7 +191,7 @@
+  for my$n(qw(guard.pl full-inventory.tsv disposition.tsv recovery.json disposable.json retained-inputs.json retained-unmatched.tar.gz summary.json plan.json)){
+   die"bundle lacks $n"unless exists$contents{$n};
+  }
+- die"guard differs from committed bytes"unless sha256_hex(slurp(__FILE__))eq sha256_hex($contents{'guard.pl'});
++ die"guard differs from committed bytes"unless sha256_hex(slurp(__FILE__))eq sha256_hex(git_blob("$bundle_commit:bench/compiler-copy-sites-root-cleanup-guard-v2.pl"));
+  die"inventory identity"unless sha256_hex($contents{'full-inventory.tsv'})eq$inventory_sha;
+  my@lines=split/\n/,$contents{'full-inventory.tsv'};
+  die"inventory schema"unless shift(@lines)eq join("\t",qw(type mode uid gid links bytes blocks device inode mtime ctime sha256 git_blob hint path));

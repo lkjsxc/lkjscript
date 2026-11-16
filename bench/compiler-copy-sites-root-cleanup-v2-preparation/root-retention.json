@@ -1,0 +1,10 @@
+{
+   "all_copies_byte_identical" : true,
+   "all_live_files_accounted" : true,
+   "copied_bytes" : 46031,
+   "copied_files" : 19,
+   "destination" : "bench/compiler-copy-sites-root-cleanup-v2-preparation",
+   "manifest_sha256" : "d5ad15f4aa79aaf70eed8339fa3738c88cb7e9d45ff34725d6268d9dca55604e",
+   "source" : "/home/coder/workspace/lkjscript-compiler-copy-sites-native-20261116/target/compiler-copy-sites-cleanup-guard-v2-20261116",
+   "verified_records" : 18
+}

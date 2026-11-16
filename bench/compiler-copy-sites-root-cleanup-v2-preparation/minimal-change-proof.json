@@ -1,0 +1,33 @@
+{
+  "original_sha256": "3001e0e524c6694e56c1ad27cdc162a381493782670ce3a804c92522dbded5e7",
+  "original_bytes": 16497,
+  "candidate_sha256": "55884264496cbe04ff872883128e65400092c42b32e84b6785a961a5c8197c41",
+  "candidate_bytes": 16570,
+  "token_boundary_fixes": 7,
+  "result_directory_changes": 1,
+  "self_pin_changes": 1,
+  "changed_line_numbers": [
+    24,
+    171,
+    172,
+    173,
+    174,
+    175,
+    176,
+    177,
+    194
+  ],
+  "added_or_removed_lines": 0,
+  "reversing_exact_nine_changes_reconstructs_original_bytes": true,
+  "original_manifest_prefix": "bench/compiler-copy-sites-root-cleanup-data",
+  "original_manifest_sha256": "ca8ee6113e3fb5a7e11bdeca3deef7f68b88e97023e1bffd4f53587100c7b9c1",
+  "manifest_loading_verification_and_required_entries_unchanged": true,
+  "release_flag_and_exact_revision_argument_checks_unchanged": true,
+  "self_pin": "Git blob at supplied bundle revision: bench/compiler-copy-sites-root-cleanup-guard-v2.pl",
+  "fresh_result_directory": "/home/coder/workspace/lkjscript-compiler-copy-sites-native-20261116/target/compiler-copy-sites-root-inventory-20261116/cleanup-results-v2",
+  "all_other_bytes_including_scope_inventory_recovery_disposal_checks_unchanged": true,
+  "syntax_only": true,
+  "guard_body_executed": false,
+  "cleanup_release_received": false,
+  "original_attempt": "Closed at compilation exit 2, with zero guard cleanup actions; no retry or reinterpretation."
+}
