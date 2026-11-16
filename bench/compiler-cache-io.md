@@ -217,5 +217,7 @@ its store counters are not required to fit only the driver's `store_io` phase.
 No page migration, >10% performance step, historical timing replacement,
 million-line retry or backend floor is established here. All generated ordinary
 trees, stores, per-run keys and outputs were removed by the harness and absence
-verified. The three frozen producers are intentionally retained for the approved
-separate indexed-condition experiment.
+verified. The three frozen producers were retained through the approved separate
+[indexed-condition experiment](compiler-cache-index-condition.md). After both
+reports were accepted, the copied executables and private operation key were
+removed; requests, manifests and recorded evidence remain.

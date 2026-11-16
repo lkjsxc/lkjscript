@@ -216,6 +216,9 @@ partition that old observation. The concurrent no-create-read repair is also
 outside this frozen producer and is not credited with any result here.
 
 All generated trees, stores, per-run private keys and images were removed by the
-harness, and run-directory absence was independently verified. The copied
-emitter/baseline/instrumented producers are retained temporarily for root's
-evidence audit. This follow-up changes no production source.
+harness, and run-directory absence was independently verified. After root accepted the evidence, the copied
+emitter/baseline/instrumented producers and private operation key were removed.
+The source lock was free, no pending intent or process used those artifacts,
+and absence was verified. Requests, manifests and raw evidence remain; see the
+[cleanup record](compiler-cache-io.cleanup.meta). This follow-up changes no
+production source.
