@@ -1,0 +1,97 @@
++ set -euo pipefail
+++ dirname tools/replay-test.sh
++ cd tools/..
++ compiler=target/compiler-replay-scope
++ case "$compiler" in
++ compiler=/home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-scope
+++ mktemp -d target/compiler-replay-test.XXXXXX
++ fixture=target/compiler-replay-test.73QAB1
+++ realpath target/compiler-replay-test.73QAB1
++ fixture=/home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1
++ trap cleanup EXIT
++ trap 'exit 130' HUP INT TERM
++ mkdir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/old /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/new
++ head -c 32 /dev/urandom
++ cat
++ cat
++ common=(main.lkj --source-dir "$fixture/old" --no-library --no-store --against main.lkj --against-source-dir "$fixture/new" --store-key "$fixture/key")
++ cp /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/old/main.lkj /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/before
++ /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-scope edit main.lkj --source-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/old --no-library --no-store --against main.lkj --against-source-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/new --store-key /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/key --dry-run
++ cmp /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/before /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/old/main.lkj
++ /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-scope edit main.lkj --source-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/old --no-library --no-store --against main.lkj --against-source-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/new --store-key /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/key
++ perl - /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/plan
+++ /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-scope run main.lkj --source-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/old --no-library --no-store
++ test 9 = 9
++ grep -Fq 'fn kept() -> i64 { 2 }' /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/old/main.lkj
++ /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-scope compare main.lkj --source-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/old --against main.lkj --against-source-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/new --no-library --no-store
++ grep -q 'checked IR identical' /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/comparison
++ cat
++ cp /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/old/main.lkj /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/new/main.lkj
++ cat
++ sed 's/+ 1i64/+ 2i64/' /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/old/helper.lkj
++ printf '\377\000'
++ cp /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/old/payload.bin /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/new/payload.bin
++ /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-scope edit main.lkj --source-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/old --no-library --no-store --against main.lkj --against-source-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/new --store-key /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/key
++ grep -q verified=true /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/plan
+++ /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-scope run main.lkj --source-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/old --no-library --no-store
++ test 4 = 4
++ cp /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/old/main.lkj /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/before
++ printf '\376\000'
++ /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-scope edit main.lkj --source-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/old --no-library --no-store --against main.lkj --against-source-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/new --store-key /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/key
++ grep -q E_REPLAY_DATA /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/error
++ cmp /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/before /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/old/main.lkj
++ cat
++ sed 's/use helpers::first/use helpers::second/' /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/old/main.lkj
++ cp /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/old/main.lkj /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/before
++ /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-scope edit main.lkj --source-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/old --no-library --no-store --against main.lkj --against-source-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/new --store-key /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/key
++ grep -q E_REPLAY_FRAME /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/error
++ cmp /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/before /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/old/main.lkj
++ cp /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/key /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/new/private.bin
++ cat
++ /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-scope edit main.lkj --source-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/old --no-library --no-store --against main.lkj --against-source-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/new --store-key /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/key
++ grep -q 'private.*key' /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/error
++ cmp /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/before /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/old/main.lkj
++ test '!' -e /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/old/.lkjscript-edit.pending
++ mkdir -p /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-old/src /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-new/src
++ cp -R library /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-old/library
++ cp -R library /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-new/library
++ cat
++ sed 's/+ 1i64/+ 2i64/' /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-old/src/main.lkj
++ cp /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-old/src/main.lkj /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-before
++ scoped=(src/main.lkj --source-dir "$fixture/scoped-old" --library-dir "$fixture/scoped-old/library" --against src/main.lkj --against-library-dir "$fixture/scoped-new/library" --no-store --store-key "$fixture/key")
++ cd /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-new
++ /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-scope edit src/main.lkj --source-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-old --library-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-old/library --against src/main.lkj --against-library-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-new/library --no-store --store-key /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/key
++ grep -q E_REPLAY_FILES /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-error
++ grep -Fq /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-old/library/runtime.lkj /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-error
++ test '!' -s /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-plan
++ cmp /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-before /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-old/src/main.lkj
++ /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-scope edit src/main.lkj --source-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-old --library-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-old/library --against src/main.lkj --against-library-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-new/library --no-store --store-key /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/key --against-source-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-new --dry-run
++ grep -q verified=true /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-plan
++ cmp /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-before /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-old/src/main.lkj
++ /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-scope edit src/main.lkj --source-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-old --library-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-old/library --against src/main.lkj --against-library-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-new/library --no-store --store-key /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/key --against-source-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-new
++ grep -q verified=true /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-plan
++ cmp /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-old/src/main.lkj /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-new/src/main.lkj
++ /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-scope compare src/main.lkj --source-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-old --library-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-old/library --against src/main.lkj --against-library-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-new/library --no-store --store-key /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/key --against-source-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-new
++ grep -q 'checked IR identical' /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-comparison
++ for command in edit compare
++ /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-scope edit src/main.lkj --source-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-old --library-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-old/library --against src/main.lkj --against-library-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-new/library --no-store --store-key /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/key --against-source-dir /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/missing
++ grep -Fq /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/missing /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-error
++ cleanup
++ local result=1
++ test 1 -ne 0
++ for output in "$fixture/plan" "$fixture/error" "$fixture/scoped-plan" "$fixture/scoped-error"
++ test -f /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/plan
++ cat /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/plan
++ for output in "$fixture/plan" "$fixture/error" "$fixture/scoped-plan" "$fixture/scoped-error"
++ test -f /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/error
++ cat /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/error
+main.lkj:1:37: E_IO cannot read embedded file private.bin: E_CHILD_IMAGE source or include attempted to read the private admission key
+main.lkj:0:0: E_BLOCKED semantic phase: source errors prevent complete name resolution and semantic checking
++ for output in "$fixture/plan" "$fixture/error" "$fixture/scoped-plan" "$fixture/scoped-error"
++ test -f /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-plan
++ cat /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-plan
++ for output in "$fixture/plan" "$fixture/error" "$fixture/scoped-plan" "$fixture/scoped-error"
++ test -f /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-error
++ cat /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1/scoped-error
+transaction E_EDIT_IO open source transaction scope: errno 2
++ rm -rf /home/coder/workspace/lkjscript-compiler-replay-scope-20261116/target/compiler-replay-test.73QAB1

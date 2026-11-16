@@ -210,8 +210,17 @@ resource refusal are in [the ladder](../bench/scale.md).
 ## Replaying a checked target
 
 `edit SOURCE --source-dir ROOT --against DESIRED_SOURCE` derives one request
-from two independently checked source catalogs. `--against-library-dir`
+from two independently checked source catalogs. `--against-source-dir` selects
+the target's source Directory independently of the editable `--source-dir`;
+its `--against` entry is resolved beneath that grant. `--against-library-dir`
 selects the target's library; `--dry-run` prints the same plan without publication.
+The source option requires `--against`; an unavailable explicit Directory refuses
+without falling back to the working directory. Use explicit source/library roots
+for both trees and keep the private key outside every one of those grants.
+Without the option, the existing entry-based source selection still applies:
+a relative desired entry uses the current directory, an absolute entry uses `/`.
+Different include-path spellings can still make the conservative file pairing
+refuse; the option does not infer aliases or broaden the correspondence rule.
 A request file and `--against` are mutually exclusive. Existing declarations are
 paired by stable source identity and source files by an unambiguous bijection.
 Include-only inputs inherit the longest directory correspondence proved by
@@ -325,7 +334,8 @@ multi-directory atomicity is claimed.
 ## Comparing checked meaning
 
 `compare SOURCE --against OTHER_SOURCE` checks both source trees.
-`--against-library-dir` selects the other library closure. Default output is
+`--against-source-dir` selects the other source Directory with the same rules
+as replay; `--against-library-dir` selects the other library closure. Default output is
 two summary lines, at most 27 fact lines, and one continuation/detail line.
 `--id ID` selects detail; a larger explicit `--limit` can request more facts.
 The bounded summary samples authority, source declarations, representation and

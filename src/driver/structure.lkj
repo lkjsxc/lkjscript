@@ -9,6 +9,7 @@ struct Request {
     dry: bool,
     recover: bool,
     against: String,
+    against_source: Option<String>,
     against_library: String,
     limit: usize,
     detail: String,
@@ -20,6 +21,7 @@ fn parse(values: &[String]) -> Result<Request, String> {
     let mut dry = false;
     let mut recover = false;
     let mut against = String::new();
+    let mut against_source = None;
     let mut against_library = String::new();
     let mut limit = 27usize;
     let mut detail = String::new();
@@ -28,12 +30,13 @@ fn parse(values: &[String]) -> Result<Request, String> {
         let name = values[at].as_str();
         if name == "--dry-run" { dry = true; }
         else if name == "--recover" { recover = true; }
-        else if matches!(name, "--request" | "--against" | "--against-library-dir" | "--limit" | "--id") {
+        else if matches!(name, "--request" | "--against" | "--against-source-dir" | "--against-library-dir" | "--limit" | "--id") {
             at += 1usize;
             if at == values.len() { return Err(format!("E_USAGE {name} needs a value")); }
             match name {
                 "--request" => request = values[at].clone(),
                 "--against" => against = values[at].clone(),
+                "--against-source-dir" => against_source = Some(values[at].clone()),
                 "--against-library-dir" => against_library = values[at].clone(),
                 "--id" => detail = values[at].clone(),
                 _ => limit = super::inline_limit(&values[at])?,
@@ -41,11 +44,14 @@ fn parse(values: &[String]) -> Result<Request, String> {
         } else { arguments.push(values[at].as_bytes().to_vec()); }
         at += 1usize;
     }
+    if against_source.is_some() && against.is_empty() {
+        return Err("E_USAGE --against-source-dir requires --against SOURCE".to_string());
+    }
     let mut options = super::options(arguments)?;
     options.command = "check".to_string();
     options.index = false;
     options.inline_limit = Some(0usize);
-    Ok(Request { options, request, dry, recover, against, against_library, limit, detail })
+    Ok(Request { options, request, dry, recover, against, against_source, against_library, limit, detail })
 }
 fn normal(path: &str) -> String {
     if path.starts_with("./") { path[2usize..].to_string() } else { path.to_string() }
@@ -165,7 +171,7 @@ fn compare(world: &mut World, request: &Request, stats: &mut Stats) -> Result<u8
     if request.against.is_empty() { return Err("E_USAGE compare requires --against SOURCE".to_string()); }
     let mut before_options = request.options.clone();
     before_options.path = request.against.clone();
-    before_options.source_directory = None;
+    before_options.source_directory = request.against_source.clone();
     if !request.against_library.is_empty() { before_options.library_directory = Some(request.against_library.clone()); }
     let mut before = Memo::new(world, &before_options);
     before.capture_catalog = true;
@@ -227,7 +233,7 @@ fn replay_target(world: &mut World, request: &Request, options: &Options,
     desired_read: &mut Option<Memo>) -> Result<(structure_edit::Request, String), String> {
     let mut desired_options = options.clone();
     desired_options.path = request.against.clone();
-    desired_options.source_directory = None;
+    desired_options.source_directory = request.against_source.clone();
     if !request.against_library.is_empty() {
         desired_options.library_directory = Some(request.against_library.clone());
     }
