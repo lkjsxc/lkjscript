@@ -105,6 +105,7 @@ impl Budget {
 }
 
 pub struct Store {
+    io_stats: Option<IoStats>,
     directory: Directory,
     clock: Clock,
     producer: Vec<u8>,
@@ -186,6 +187,7 @@ impl Store {
         }
         let producer = hash.finish();
         Some(Self {
+            io_stats: None,
             directory, clock: world.clock(), producer: producer[..].to_vec(),
             producer_slot: sha256::hex_digest(&producer), secret,
             sequence: 0, hits: 0, misses: 0, rejected: 0, writes: 0,
@@ -195,14 +197,29 @@ impl Store {
     }
 
     fn raw(&mut self, namespace: &str, key: &str) -> Option<reuse::VerifiedPayload> {
-        // Generations coexist until the disposable store reaches its size cap.
-        // Authentication always binds the original executable digest.
-        let name = format!("{namespace}-{}-{key}", self.producer_slot);
-        let mut file = cache_file(&mut self.directory, &name)?;
-        let result = read_envelope(&mut file, &self.producer, &self.secret, namespace, key, self.capacity);
-        if result.is_none() { self.rejected += 1; self.discard(namespace, key); }
-        result
+    let span = self.io_begin();
+    let name = format!("{namespace}-{}-{key}", self.producer_slot);
+    let mut opened = false;
+    let result = match cache_file(&mut self.directory, &name) {
+        Some(mut file) => {
+            opened = true;
+            read_envelope(&mut file, &self.producer, &self.secret, namespace, key, self.capacity)
+        }
+        None => None,
+    };
+    let elapsed = self.io_end(span);
+    if let Some(row) = self.io_row(namespace) {
+        row.read_attempts = io_add(row.read_attempts, 1usize, &mut row.overflow);
+        row.read_ns = io_add(row.read_ns, elapsed, &mut row.overflow);
+        if let Some(payload) = &result {
+            row.authenticated_reads = io_add(row.authenticated_reads, 1usize, &mut row.overflow);
+            row.authenticated_payload_bytes = io_add(row.authenticated_payload_bytes, payload.bytes().len(), &mut row.overflow);
+            row.authenticated_envelope_bytes = io_add(row.authenticated_envelope_bytes, payload.bytes().len() + reuse::header_size(), &mut row.overflow);
+        }
     }
+    if opened && result.is_none() { self.rejected += 1; self.discard(namespace, key); }
+    result
+}
 
     pub fn get(&mut self, namespace: &str, key: &str) -> Option<Vec<u8>> {
         let raw = match self.raw(namespace, key) {
@@ -214,13 +231,28 @@ impl Store {
     }
 
     pub fn records(&mut self, namespace: &str, group: &str, keys: &[String]) -> reuse::Records {
-        let mut records = reuse::Records::packed(&self.producer, &self.secret, namespace, group);
-        if let Some(raw) = self.raw(namespace, group) {
-            if !records.load_verified_pack(raw) { self.discard(namespace, group); }
+    let mut records = reuse::Records::packed(&self.producer, &self.secret, namespace, group);
+    if let Some(raw) = self.raw(namespace, group) {
+        let bytes = raw.bytes().len();
+        let span = self.io_begin();
+        let loaded = records.load_verified_pack(raw);
+        let elapsed = self.io_end(span);
+        if let Some(row) = self.io_row(namespace) {
+            row.pack_decode_bytes = io_add(row.pack_decode_bytes, bytes, &mut row.overflow);
+            row.pack_decode_ns = io_add(row.pack_decode_ns, elapsed, &mut row.overflow);
+            if loaded { row.pack_loads = io_add(row.pack_loads, 1usize, &mut row.overflow); }
         }
-        records.retain(namespace, keys);
-        records
+        if !loaded { self.discard(namespace, group); }
     }
+    let span = self.io_begin();
+    records.retain(namespace, keys);
+    let elapsed = self.io_end(span);
+    if let Some(row) = self.io_row(namespace) {
+        row.pack_retain_calls = io_add(row.pack_retain_calls, 1usize, &mut row.overflow);
+        row.pack_retain_ns = io_add(row.pack_retain_ns, elapsed, &mut row.overflow);
+    }
+    records
+}
 
     fn erase(&mut self, name: &str) -> bool {
         match self.directory.remove(name) {
@@ -251,134 +283,95 @@ impl Store {
     }
 
     fn writable(&mut self) -> bool {
-        if self.write_state != 0u8 { return self.write_state == 1u8; }
-        self.write_state = 2u8;
-        let mut lock = match self.directory.open_append(".budget-lock") { Ok(file) => file, Err(_) => return false };
-        match lock.lock_exclusive() {
-            Ok(()) => {}
-            Err(11) => { self.write_state = 0u8; return false; }
-            Err(_) => return false,
-        }
-        self.writer = Some(lock);
-        self.write_state = 1u8;
-        let identity = sha256::digest(b"lkjscript-store-size-index-1");
-        let mut valid_index = false;
-        if let Some(mut file) = cache_file(&mut self.directory, ".budget-index") {
-            if let Some(raw) = read_envelope(&mut file, &identity[..], &self.secret, "size-index", "1", self.capacity) {
-                if let Some(budget) = Budget::decode(raw.bytes()) {
-                    self.budget = budget;
-                    self.index_bytes = raw.bytes().len() + reuse::header_size();
-                    valid_index = true;
-                }
-            }
-        }
-        if !valid_index {
-            match self.directory.remove(".budget-index") {
-                Ok(()) | Err(2) => {}
-                Err(_) => { self.write_state = 2u8; return false; }
-            }
-        }
-        let names = match self.directory.list() { Ok(names) => names, Err(_) => { self.write_state = 2u8; return false; } };
-        let mut present: BTreeSet<String> = BTreeSet::new();
-        for bytes in names {
-            let Ok(name) = String::from_utf8(bytes) else { continue; };
-            if indexed_name(&name) {
-                let expected = match self.budget.entries.get(&name) { Some(entry) => Some(entry.bytes), None => None };
-                let mut valid = false;
-                if let Some(expected) = expected {
-                    if let Some(mut file) = cache_file(&mut self.directory, &name) {
-                        let mut header = vec![0u8; reuse::header_size()];
-                        if read_exact(&mut file, &mut header) {
-                            if let Some(payload) = reuse::payload_length(&header) {
-                                valid = payload.checked_add(header.len()) == Some(expected);
-                            }
-                        }
-                    }
-                }
-                // A failed prior index checkpoint can leave a larger valid pack.
-                // Its old accounting is a miss; never undercharge the replacement.
-                if valid { present.insert(name); }
-                else if !self.erase(&name) { return false; }
-            } else if name.starts_with(".tmp-") {
-                if let Ok(mut temporary) = self.directory.open_directory(&name) { let _ = temporary.remove("entry"); }
-                let _ = self.directory.remove_directory(&name);
-            }
-        }
-        let mut absent: Vec<String> = Vec::new();
-        for (name, _) in &self.budget.entries {
-            if !present.contains(name) { absent.push(name.clone()); }
-        }
-        for name in absent { self.budget.forget(&name); self.dirty = true; }
-        while self.budget.size() > self.capacity {
-            if !self.evict_oldest() {
-                let _ = self.directory.remove(".budget-index");
-                self.write_state = 2u8;
-                self.retained_bytes = 0usize;
-                return false;
-            }
-        }
-        self.retained_bytes = self.budget.bytes + self.index_bytes;
-        true
-    }
+    let span = self.io_begin();
+    let result = self.writable_inner();
+    let elapsed = self.io_end(span);
+    if let Some(row) = self.io_row("size-index") { row.metadata_ns = io_add(row.metadata_ns, elapsed, &mut row.overflow); }
+    result
+}
 
     fn discard(&mut self, namespace: &str, key: &str) {
         let name = format!("{namespace}-{}-{key}", self.producer_slot);
         if entry_producer(&name).is_some() && self.writable() { let _ = self.erase(&name); }
     }
 
-    fn atomic_publish(&mut self, name: &str, bytes: &[u8]) -> bool {
-        let stamp = match self.clock.nanoseconds() { Ok(stamp) => stamp, Err(_) => return false };
-        let temporary: String = loop {
-            self.sequence = self.sequence.wrapping_add(1);
-            let name = format!(".tmp-{stamp}-{}", self.sequence);
-            match self.directory.create_directory(&name) {
-                Ok(()) => break name,
-                Err(17) => continue,
-                Err(_) => return false,
-            }
-        };
-        let mut written = false;
-        if let Ok(mut directory) = self.directory.open_directory(&temporary) {
-            if let Ok(mut file) = directory.create("entry") { written = file.write_all(bytes).is_ok(); }
+    fn atomic_publish(&mut self, namespace: &str, name: &str, bytes: &[u8]) -> bool {
+    let span = self.io_begin();
+    let published = self.atomic_publish_inner(name, bytes);
+    let elapsed = self.io_end(span);
+    if let Some(row) = self.io_row(namespace) {
+        row.publish_attempts = io_add(row.publish_attempts, 1usize, &mut row.overflow);
+        row.publish_ns = io_add(row.publish_ns, elapsed, &mut row.overflow);
+        if published {
+            row.published = io_add(row.published, 1usize, &mut row.overflow);
+            row.published_payload_bytes = io_add(row.published_payload_bytes, bytes.len() - reuse::header_size(), &mut row.overflow);
+            row.published_envelope_bytes = io_add(row.published_envelope_bytes, bytes.len(), &mut row.overflow);
         }
-        let from = format!("{temporary}/entry");
-        let published = written && self.directory.rename(&from, name).is_ok();
-        let _ = self.directory.remove(&from);
-        let _ = self.directory.remove_directory(&temporary);
-        published
     }
+    published
+}
 
     fn checkpoint(&mut self) {
-        if self.write_state != 1u8 || !self.dirty { return; }
-        let payload = self.budget.encode();
-        let identity = sha256::digest(b"lkjscript-store-size-index-1");
-        let bytes = reuse::seal(&identity[..], &self.secret, "size-index", "1", &payload);
-        if self.atomic_publish(".budget-index", &bytes) {
-            self.dirty = false;
-            self.index_bytes = bytes.len();
-        }
-        self.retained_bytes = self.budget.bytes + self.index_bytes;
+    if self.write_state != 1u8 || !self.dirty { return; }
+    let outer = self.io_begin();
+    let payload = self.budget.encode();
+    let identity = sha256::digest(b"lkjscript-store-size-index-1");
+    let span = self.io_begin();
+    let bytes = reuse::seal(&identity[..], &self.secret, "size-index", "1", &payload);
+    let elapsed = self.io_end(span);
+    if let Some(row) = self.io_row("size-index") {
+        row.seals = io_add(row.seals, 1usize, &mut row.overflow);
+        row.sealed_payload_bytes = io_add(row.sealed_payload_bytes, payload.len(), &mut row.overflow);
+        row.seal_ns = io_add(row.seal_ns, elapsed, &mut row.overflow);
     }
+    if self.atomic_publish("size-index", ".budget-index", &bytes) {
+        self.dirty = false;
+        self.index_bytes = bytes.len();
+    }
+    self.retained_bytes = self.budget.bytes + self.index_bytes;
+    let elapsed = self.io_end(outer);
+    if let Some(row) = self.io_row("size-index") { row.metadata_ns = io_add(row.metadata_ns, elapsed, &mut row.overflow); }
+}
 
     fn publish(&mut self, namespace: &str, key: &str, bytes: &[u8]) {
     let name = format!("{namespace}-{}-{key}", self.producer_slot);
-    self.publish_named(&name, bytes);
+    self.publish_named(namespace, &name, bytes);
 }
 
     pub fn put(&mut self, namespace: &str, key: &str, payload: &[u8]) {
-        if payload.len() > self.capacity || !self.writable() { return; }
-        let envelope = reuse::seal(&self.producer, &self.secret, namespace, key, payload);
-        self.publish(namespace, key, &envelope);
+    if let Some(row) = self.io_row(namespace) { row.put_requests = io_add(row.put_requests, 1usize, &mut row.overflow); }
+    if payload.len() > self.capacity || !self.writable() { return; }
+    let span = self.io_begin();
+    let envelope = reuse::seal(&self.producer, &self.secret, namespace, key, payload);
+    let elapsed = self.io_end(span);
+    if let Some(row) = self.io_row(namespace) {
+        row.seals = io_add(row.seals, 1usize, &mut row.overflow);
+        row.sealed_payload_bytes = io_add(row.sealed_payload_bytes, payload.len(), &mut row.overflow);
+        row.seal_ns = io_add(row.seal_ns, elapsed, &mut row.overflow);
     }
+    self.publish(namespace, key, &envelope);
+}
 
     pub fn flush(&mut self, records: &reuse::Records) {
-        self.hits += records.hits;
-        self.misses += records.misses;
-        self.rejected += records.rejected;
-        if let Some(pending) = records.sealed_pack() {
-            self.publish(&pending.namespace, &pending.key, &pending.bytes);
+    self.hits += records.hits;
+    self.misses += records.misses;
+    self.rejected += records.rejected;
+    let span = self.io_begin();
+    let pending = records.sealed_pack();
+    let elapsed = self.io_end(span);
+    if let Some(pending) = pending {
+        if let Some(row) = self.io_row(&pending.namespace) {
+            row.pack_reseal_calls = io_add(row.pack_reseal_calls, 1usize, &mut row.overflow);
+            row.pack_reseals = io_add(row.pack_reseals, 1usize, &mut row.overflow);
+            row.pack_reseal_payload_bytes = io_add(row.pack_reseal_payload_bytes, pending.bytes.len() - reuse::header_size(), &mut row.overflow);
+            row.pack_reseal_ns = io_add(row.pack_reseal_ns, elapsed, &mut row.overflow);
         }
+        self.publish(&pending.namespace, &pending.key, &pending.bytes);
+    } else if let Some(row) = self.io_row("pack-idle") {
+        row.pack_reseal_calls = io_add(row.pack_reseal_calls, 1usize, &mut row.overflow);
+        row.pack_reseal_ns = io_add(row.pack_reseal_ns, elapsed, &mut row.overflow);
     }
+}
 
     /// Commit policy metadata once at the process boundary, while holding its lock.
     pub fn finish(&mut self) { self.checkpoint(); }
@@ -619,31 +612,15 @@ fn authenticate_query_cursor(producer: &[u8], secret: &[u8], question: &str, byt
 impl Store {
     /// The actual executable digest, not the doubly hashed storage slot.
     pub fn query_producer(&self) -> String { query_hex(&self.producer) }
-    fn publish_named(&mut self, name: &str, bytes: &[u8]) {
-        let valid = owned_entry(name, &self.producer_slot);
-        if !valid || !self.writable() { return; }
-        if self.budget.entries.contains_key(&name.to_string()) && !self.erase(name) { return; }
-        loop {
-            let fits = match self.budget.growth(name, &self.producer_slot, bytes.len(), self.index_bytes) {
-                Some(size) => size <= self.capacity, None => false,
-            };
-            if fits { break; }
-            if !self.evict_oldest() {
-                self.checkpoint();
-                let fits = match self.budget.growth(name, &self.producer_slot, bytes.len(), self.index_bytes) {
-                    Some(size) => size <= self.capacity, None => false,
-                };
-                if fits { break; }
-                return;
-            }
-        }
-        if self.atomic_publish(name, bytes) {
-            self.budget.remember(name, &self.producer_slot, bytes.len());
-            self.dirty = true;
-            self.writes += 1usize;
-            self.retained_bytes = self.budget.bytes + self.index_bytes;
-        }
+    fn publish_named(&mut self, namespace: &str, name: &str, bytes: &[u8]) {
+    let span = self.io_begin();
+    self.publish_named_inner(namespace, name, bytes);
+    let elapsed = self.io_end(span);
+    if let Some(row) = self.io_row(namespace) {
+        row.publish_requests = io_add(row.publish_requests, 1usize, &mut row.overflow);
+        row.prepare_ns = io_add(row.prepare_ns, elapsed, &mut row.overflow);
     }
+}
     pub fn publish_query_locator(&mut self, identity: &str, selector: &str, root: &str) -> bool {
         if !hex_identity(identity) || self.producer.len() != 32usize { return false; }
         let Some(selector_bytes) = query_digest(selector) else { return false; };
@@ -654,15 +631,33 @@ impl Store {
         payload.extend_from_slice(&selector_bytes);
         payload.extend_from_slice(&root_bytes);
         let protocol = query_locator_producer();
+        let span = self.io_begin();
         let bytes = reuse::seal(&protocol, &self.secret, "semantic-locator", identity, &payload);
-        self.publish_named(&query_locator_name(identity), &bytes);
+        let elapsed = self.io_end(span);
+        if let Some(row) = self.io_row("semantic-locator") {
+            row.seals = io_add(row.seals, 1usize, &mut row.overflow);
+            row.sealed_payload_bytes = io_add(row.sealed_payload_bytes, payload.len(), &mut row.overflow);
+            row.seal_ns = io_add(row.seal_ns, elapsed, &mut row.overflow);
+        }
+        self.publish_named("semantic-locator", &query_locator_name(identity), &bytes);
         self.query_locator_retained(identity, selector, root)
     }
     pub fn query_locator_retained(&mut self, identity: &str, selector: &str, root: &str) -> bool {
-        let Some((producer, actual_selector, actual_root)) =
-            read_query_locator(&mut self.directory, &self.secret, self.capacity, identity) else { return false; };
-        producer == self.producer && actual_selector == selector && actual_root == root
+    let span = self.io_begin();
+    let locator = read_query_locator(&mut self.directory, &self.secret, self.capacity, identity);
+    let elapsed = self.io_end(span);
+    if let Some(row) = self.io_row("semantic-locator") {
+        row.read_attempts = io_add(row.read_attempts, 1usize, &mut row.overflow);
+        row.read_ns = io_add(row.read_ns, elapsed, &mut row.overflow);
+        if locator.is_some() {
+            row.authenticated_reads = io_add(row.authenticated_reads, 1usize, &mut row.overflow);
+            row.authenticated_payload_bytes = io_add(row.authenticated_payload_bytes, 104usize, &mut row.overflow);
+            row.authenticated_envelope_bytes = io_add(row.authenticated_envelope_bytes, 104usize + reuse::header_size(), &mut row.overflow);
+        }
     }
+    let Some((producer, actual_selector, actual_root)) = locator else { return false; };
+    producer == self.producer && actual_selector == selector && actual_root == root
+}
 }
 
 impl QueryAccess for Store {
@@ -764,4 +759,349 @@ fn invalidate_store_query_snapshot(store: &mut Store, identity: &str, selector: 
         && store.budget.entries.get(&name).is_some_and(|entry| entry.producer == store.producer_slot) {
         let _ = store.erase(&name);
     }
+}
+
+struct IoCounters {
+    overflow: bool,
+    read_attempts: usize,
+    authenticated_reads: usize,
+    authenticated_payload_bytes: usize,
+    authenticated_envelope_bytes: usize,
+    read_ns: usize,
+    pack_loads: usize,
+    pack_decode_bytes: usize,
+    pack_decode_ns: usize,
+    pack_retain_calls: usize,
+    pack_retain_ns: usize,
+    put_requests: usize,
+    seals: usize,
+    sealed_payload_bytes: usize,
+    seal_ns: usize,
+    pack_reseal_calls: usize,
+    pack_reseals: usize,
+    pack_reseal_payload_bytes: usize,
+    pack_reseal_ns: usize,
+    publish_requests: usize,
+    publish_attempts: usize,
+    published: usize,
+    published_payload_bytes: usize,
+    published_envelope_bytes: usize,
+    publish_ns: usize,
+    prepare_ns: usize,
+    metadata_ns: usize,
+    budget_headers: usize,
+    budget_header_bytes: usize,
+}
+
+impl IoCounters {
+    fn new() -> Self {
+        Self {
+            overflow: false,
+            read_attempts: 0usize,
+            authenticated_reads: 0usize,
+            authenticated_payload_bytes: 0usize,
+            authenticated_envelope_bytes: 0usize,
+            read_ns: 0usize,
+            pack_loads: 0usize,
+            pack_decode_bytes: 0usize,
+            pack_decode_ns: 0usize,
+            pack_retain_calls: 0usize,
+            pack_retain_ns: 0usize,
+            put_requests: 0usize,
+            seals: 0usize,
+            sealed_payload_bytes: 0usize,
+            seal_ns: 0usize,
+            pack_reseal_calls: 0usize,
+            pack_reseals: 0usize,
+            pack_reseal_payload_bytes: 0usize,
+            pack_reseal_ns: 0usize,
+            publish_requests: 0usize,
+            publish_attempts: 0usize,
+            published: 0usize,
+            published_payload_bytes: 0usize,
+            published_envelope_bytes: 0usize,
+            publish_ns: 0usize,
+            prepare_ns: 0usize,
+            metadata_ns: 0usize,
+            budget_headers: 0usize,
+            budget_header_bytes: 0usize,
+        }
+    }
+}
+
+struct IoStats {
+    overflow: bool,
+    rows: BTreeMap<String, IoCounters>,
+    accounted_ns: usize,
+    clock_failures: usize,
+}
+
+fn io_category(namespace: &str) -> &str {
+    if namespace.starts_with("native-") { "native" }
+    else if namespace == "semantic" || namespace.starts_with("semantic-") { "index" }
+    else {
+        match namespace {
+            "front" => "front",
+            "check" => "check",
+            "image" => "image",
+            "inputs-image" => "inputs-image",
+            "inputs-semantic" => "inputs-index",
+            "test" => "test",
+            "inputs-test" => "inputs-test",
+            "size-index" => "metadata",
+            _ => "other",
+        }
+    }
+}
+
+impl Store {
+    /// Additional ordinary-store attribution is opt-in and never changes an authentication domain.
+    pub fn enable_io_stats(&mut self) {
+        self.io_stats = Some(IoStats { overflow: false, rows: BTreeMap::new(), accounted_ns: 0usize, clock_failures: 0usize });
+    }
+    fn io_begin(&mut self) -> Option<(usize, usize)> {
+    let accounted = self.io_stats.as_ref()?.accounted_ns;
+    match self.clock.nanoseconds() {
+        Ok(now) => Some((now, accounted)),
+        Err(_) => {
+            let io = self.io_stats.as_mut().unwrap();
+            io.clock_failures = io_add(io.clock_failures, 1usize, &mut io.overflow);
+            None
+        }
+    }
+}
+    // Each completed nested span has already joined accounted_ns. Subtract it
+    // before recording this outer span, so phase durations never double-count.
+    fn io_end(&mut self, span: Option<(usize, usize)>) -> usize {
+    let Some((started, nested_before)) = span else { return 0usize; };
+    let now = self.clock.nanoseconds().ok();
+    let io = self.io_stats.as_mut().unwrap();
+    match io_interval(started, now, nested_before, io.accounted_ns) {
+        Some((elapsed, accounted)) => {
+            io.accounted_ns = accounted;
+            elapsed
+        }
+        None => {
+            io.clock_failures = io_add(io.clock_failures, 1usize, &mut io.overflow);
+            0usize
+        }
+    }
+}
+    fn io_row(&mut self, namespace: &str) -> Option<&mut IoCounters> {
+        let rows = &mut self.io_stats.as_mut()?.rows;
+        let category = io_category(namespace).to_string();
+        if !rows.contains_key(&category) { rows.insert(category.clone(), IoCounters::new()); }
+        rows.get_mut(&category)
+    }
+    /// Bytes describe accepted authenticated snapshots or successful publications,
+    /// not syscall traffic. No namespace digest, path, key or payload is printed.
+    pub fn io_report(&self) -> String {
+        let mut output = String::new();
+        let Some(io) = &self.io_stats else { return output; };
+        let mut overflow = io.overflow;
+        for (_, row) in &io.rows { if row.overflow { overflow = true; } }
+        let overflow = if overflow { 1usize } else { 0usize };
+        let pending = if self.write_state == 1u8 && self.dirty { 1usize } else { 0usize };
+        output.push_str(&format!("LKJSCRIPT_STORE_IO {{\"category\":\"summary\",\"global_timing_failures\":{},\"global_counter_overflow\":{overflow},\"pending_checkpoint\":{pending},\"accounted_ns\":{}}}\n", io.clock_failures, io.accounted_ns));
+        for (category, row) in &io.rows {
+            output.push_str(&format!("LKJSCRIPT_STORE_IO {{\"category\":\"{category}\""));
+            output.push_str(&format!(",\"read_attempts\":{}", row.read_attempts));
+            output.push_str(&format!(",\"authenticated_reads\":{}", row.authenticated_reads));
+            output.push_str(&format!(",\"authenticated_payload_bytes\":{}", row.authenticated_payload_bytes));
+            output.push_str(&format!(",\"authenticated_envelope_bytes\":{}", row.authenticated_envelope_bytes));
+            output.push_str(&format!(",\"read_ns\":{}", row.read_ns));
+            output.push_str(&format!(",\"pack_loads\":{}", row.pack_loads));
+            output.push_str(&format!(",\"pack_decode_bytes\":{}", row.pack_decode_bytes));
+            output.push_str(&format!(",\"pack_decode_ns\":{}", row.pack_decode_ns));
+            output.push_str(&format!(",\"pack_retain_calls\":{}", row.pack_retain_calls));
+            output.push_str(&format!(",\"pack_retain_ns\":{}", row.pack_retain_ns));
+            output.push_str(&format!(",\"put_requests\":{}", row.put_requests));
+            output.push_str(&format!(",\"seals\":{}", row.seals));
+            output.push_str(&format!(",\"sealed_payload_bytes\":{}", row.sealed_payload_bytes));
+            output.push_str(&format!(",\"seal_ns\":{}", row.seal_ns));
+            output.push_str(&format!(",\"pack_reseal_calls\":{}", row.pack_reseal_calls));
+            output.push_str(&format!(",\"pack_reseals\":{}", row.pack_reseals));
+            output.push_str(&format!(",\"pack_reseal_payload_bytes\":{}", row.pack_reseal_payload_bytes));
+            output.push_str(&format!(",\"pack_reseal_ns\":{}", row.pack_reseal_ns));
+            output.push_str(&format!(",\"publish_requests\":{}", row.publish_requests));
+            output.push_str(&format!(",\"publish_attempts\":{}", row.publish_attempts));
+            output.push_str(&format!(",\"published\":{}", row.published));
+            output.push_str(&format!(",\"published_payload_bytes\":{}", row.published_payload_bytes));
+            output.push_str(&format!(",\"published_envelope_bytes\":{}", row.published_envelope_bytes));
+            output.push_str(&format!(",\"publish_ns\":{}", row.publish_ns));
+            output.push_str(&format!(",\"prepare_ns\":{}", row.prepare_ns));
+            output.push_str(&format!(",\"metadata_ns\":{}", row.metadata_ns));
+            output.push_str(&format!(",\"budget_headers\":{}", row.budget_headers));
+            output.push_str(&format!(",\"budget_header_bytes\":{}", row.budget_header_bytes));
+            output.push_str("}\n");
+        }
+        output
+    }
+    fn writable_inner(&mut self) -> bool {
+        if self.write_state != 0u8 { return self.write_state == 1u8; }
+        self.write_state = 2u8;
+        let mut lock = match self.directory.open_append(".budget-lock") { Ok(file) => file, Err(_) => return false };
+        match lock.lock_exclusive() {
+            Ok(()) => {}
+            Err(11) => { self.write_state = 0u8; return false; }
+            Err(_) => return false,
+        }
+        self.writer = Some(lock);
+        self.write_state = 1u8;
+        let identity = sha256::digest(b"lkjscript-store-size-index-1");
+        let mut valid_index = false;
+        let span = self.io_begin();
+        let raw = match cache_file(&mut self.directory, ".budget-index") {
+            Some(mut file) => read_envelope(&mut file, &identity[..], &self.secret, "size-index", "1", self.capacity),
+            None => None,
+        };
+        let elapsed = self.io_end(span);
+        if let Some(row) = self.io_row("size-index") {
+            row.read_attempts = io_add(row.read_attempts, 1usize, &mut row.overflow);
+            row.read_ns = io_add(row.read_ns, elapsed, &mut row.overflow);
+            if let Some(payload) = &raw {
+                row.authenticated_reads = io_add(row.authenticated_reads, 1usize, &mut row.overflow);
+                row.authenticated_payload_bytes = io_add(row.authenticated_payload_bytes, payload.bytes().len(), &mut row.overflow);
+                row.authenticated_envelope_bytes = io_add(row.authenticated_envelope_bytes, payload.bytes().len() + reuse::header_size(), &mut row.overflow);
+            }
+        }
+        if let Some(raw) = raw {
+            if let Some(budget) = Budget::decode(raw.bytes()) {
+                self.budget = budget;
+                self.index_bytes = raw.bytes().len() + reuse::header_size();
+                valid_index = true;
+            }
+        }
+        if !valid_index {
+            match self.directory.remove(".budget-index") {
+                Ok(()) | Err(2) => {}
+                Err(_) => { self.write_state = 2u8; return false; }
+            }
+        }
+        let names = match self.directory.list() { Ok(names) => names, Err(_) => { self.write_state = 2u8; return false; } };
+        let mut present: BTreeSet<String> = BTreeSet::new();
+        for bytes in names {
+            let Ok(name) = String::from_utf8(bytes) else { continue; };
+            if indexed_name(&name) {
+                let expected = match self.budget.entries.get(&name) { Some(entry) => Some(entry.bytes), None => None };
+                let mut valid = false;
+                if let Some(expected) = expected {
+                    if let Some(mut file) = cache_file(&mut self.directory, &name) {
+                        let mut header = vec![0u8; reuse::header_size()];
+                        if read_exact(&mut file, &mut header) {
+                            if let Some(row) = self.io_row("size-index") {
+                                row.budget_headers = io_add(row.budget_headers, 1usize, &mut row.overflow);
+                                row.budget_header_bytes = io_add(row.budget_header_bytes, header.len(), &mut row.overflow);
+                            }
+                            if let Some(payload) = reuse::payload_length(&header) {
+                                valid = payload.checked_add(header.len()) == Some(expected);
+                            }
+                        }
+                    }
+                }
+                // A failed prior index checkpoint can leave a larger valid pack.
+                // Its old accounting is a miss; never undercharge the replacement.
+                if valid { present.insert(name); }
+                else if !self.erase(&name) { return false; }
+            } else if name.starts_with(".tmp-") {
+                if let Ok(mut temporary) = self.directory.open_directory(&name) { let _ = temporary.remove("entry"); }
+                let _ = self.directory.remove_directory(&name);
+            }
+        }
+        let mut absent: Vec<String> = Vec::new();
+        for (name, _) in &self.budget.entries {
+            if !present.contains(name) { absent.push(name.clone()); }
+        }
+        for name in absent { self.budget.forget(&name); self.dirty = true; }
+        while self.budget.size() > self.capacity {
+            if !self.evict_oldest() {
+                let _ = self.directory.remove(".budget-index");
+                self.write_state = 2u8;
+                self.retained_bytes = 0usize;
+                return false;
+            }
+        }
+        self.retained_bytes = self.budget.bytes + self.index_bytes;
+        true
+    }
+    fn atomic_publish_inner(&mut self, name: &str, bytes: &[u8]) -> bool {
+        let stamp = match self.clock.nanoseconds() { Ok(stamp) => stamp, Err(_) => return false };
+        let temporary: String = loop {
+            self.sequence = self.sequence.wrapping_add(1);
+            let name = format!(".tmp-{stamp}-{}", self.sequence);
+            match self.directory.create_directory(&name) {
+                Ok(()) => break name,
+                Err(17) => continue,
+                Err(_) => return false,
+            }
+        };
+        let mut written = false;
+        if let Ok(mut directory) = self.directory.open_directory(&temporary) {
+            if let Ok(mut file) = directory.create("entry") { written = file.write_all(bytes).is_ok(); }
+        }
+        let from = format!("{temporary}/entry");
+        let published = written && self.directory.rename(&from, name).is_ok();
+        let _ = self.directory.remove(&from);
+        let _ = self.directory.remove_directory(&temporary);
+        published
+    }
+    fn publish_named_inner(&mut self, namespace: &str, name: &str, bytes: &[u8]) {
+        let valid = owned_entry(name, &self.producer_slot);
+        if !valid || !self.writable() { return; }
+        if self.budget.entries.contains_key(&name.to_string()) && !self.erase(name) { return; }
+        loop {
+            let fits = match self.budget.growth(name, &self.producer_slot, bytes.len(), self.index_bytes) {
+                Some(size) => size <= self.capacity, None => false,
+            };
+            if fits { break; }
+            if !self.evict_oldest() {
+                self.checkpoint();
+                let fits = match self.budget.growth(name, &self.producer_slot, bytes.len(), self.index_bytes) {
+                    Some(size) => size <= self.capacity, None => false,
+                };
+                if fits { break; }
+                return;
+            }
+        }
+        if self.atomic_publish(namespace, name, bytes) {
+            self.budget.remember(name, &self.producer_slot, bytes.len());
+            self.dirty = true;
+            self.writes += 1usize;
+            self.retained_bytes = self.budget.bytes + self.index_bytes;
+        }
+    }
+}
+
+// Optional attribution must never add an arithmetic trap to an otherwise valid build.
+fn io_add(value: usize, extra: usize, overflow: &mut bool) -> usize {
+    match value.checked_add(extra) {
+        Some(total) => total,
+        None => { *overflow = true; (!0usize) }
+    }
+}
+
+// Exact exclusive interval arithmetic, independent of the clock effect.
+fn io_interval(started: usize, now: Option<usize>, nested_before: usize, accounted: usize)
+    -> Option<(usize, usize)> {
+    let duration = now?.checked_sub(started)?;
+    let nested = accounted.checked_sub(nested_before)?;
+    let exclusive = duration.checked_sub(nested)?;
+    Some((exclusive, accounted.checked_add(exclusive)?))
+}
+
+pub(crate) fn io_timing_contracts() {
+    let child = io_interval(20usize, Some(35usize), 0usize, 0usize).unwrap();
+    assert!(child == (15usize, 15usize));
+    let outer = io_interval(10usize, Some(60usize), 0usize, child.1).unwrap();
+    assert!(outer == (35usize, 50usize));
+    let sibling = io_interval(70usize, Some(80usize), outer.1, outer.1).unwrap();
+    assert!(sibling == (10usize, 60usize));
+    assert!(io_interval(10usize, None, 0usize, 0usize).is_none());
+    assert!(io_interval(10usize, Some(9usize), 0usize, 0usize).is_none());
+    assert!(io_interval(10usize, Some(20usize), 1usize, 0usize).is_none());
+    assert!(io_interval(10usize, Some(20usize), 0usize, 11usize).is_none());
+    assert!(io_interval(0usize, Some(20usize), (!0usize) - 5usize, (!0usize)).is_none());
+    let mut overflow = false;
+    assert!(io_add(40usize, 2usize, &mut overflow) == 42usize && !overflow);
+    assert!(io_add((!0usize), 1usize, &mut overflow) == (!0usize) && overflow);
 }

@@ -233,7 +233,7 @@ if "$compiler" check main.lkj --source-dir "$source_directory" > "$test_director
     fail "alternate module fixture was not ambiguous"
 fi
 if cached_build absent-alternative; then fail "cached source plan ignored a newly present module"; fi
-sed '/^LKJSCRIPT_STATS /d' "$test_directory/absent-alternative.log" > "$test_directory/ambiguous.actual"
+sed '/^LKJSCRIPT_STATS /d; /^LKJSCRIPT_STORE_IO /d' "$test_directory/absent-alternative.log" > "$test_directory/ambiguous.actual"
 cmp "$test_directory/ambiguous.expected" "$test_directory/ambiguous.actual"
 rm "$source_directory/dependency/mod.lkj"
 rmdir "$source_directory/dependency"

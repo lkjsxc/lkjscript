@@ -421,6 +421,7 @@ fn split(text: &str, separator: u8, fields: usize) -> Vec<String> {
 
 struct Stats {
     enabled: bool,
+    cache_io: String,
     clock: Clock,
     started: usize,
     previous: usize,
@@ -438,6 +439,7 @@ impl Stats {
             0
         };
         Ok(Stats {
+            cache_io: String::new(),
             enabled,
             clock,
             started,
@@ -498,6 +500,7 @@ impl Stats {
             }
         }
         out.push_str("}\n");
+        out.push_str(&self.cache_io);
         world.stderr().write(out.as_bytes());
         Ok(())
     }
@@ -1905,8 +1908,12 @@ impl Memo {
         Ok(())
     }
     fn new(world: &mut World, options: &Options) -> Self {
+        let mut store = store::Store::open_bounded(world, &options.store_directory, &options.store_key, options.store_bytes);
+        if options.stats {
+            if let Some(store) = store.as_mut() { store.enable_io_stats(); }
+        }
         Self {
-            store: store::Store::open_bounded(world, &options.store_directory, &options.store_key, options.store_bytes),
+            store,
             private_source_digest: None,
             capture_catalog: options.index, catalog_items_only: false, catalog: None, native_sizes: BTreeMap::new(),
             embedded_sources: Vec::new(),
@@ -1931,6 +1938,7 @@ impl Memo {
         stats.count("inline_accepted", self.inline_accepted);
         stats.count("inline_rejected", self.inline_rejected);
         if let Some(store) = &self.store {
+            if stats.enabled { stats.cache_io = store.io_report(); }
             stats.count("store_hits", store.hits);
             stats.count("store_misses", store.misses);
             stats.count("store_rejected", store.rejected);
