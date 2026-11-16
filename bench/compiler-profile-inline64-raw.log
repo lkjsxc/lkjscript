@@ -1,0 +1,277 @@
+campaign=one_predeclared_profile_pair
+measurement_attempts=1
+refusals=0
+retries=0
+no_new_speedup_observations=true
+7463ede6260b4fdc98916657ae3539bff87f875aff96267dcf4c3133ba90813b  target/compiler-profile-inline64.run.log
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  target/compiler-profile-inline64.run.err
+3bcbbf024d6e97c0e3195287931bc3d71c88d1c4e35d7f8b71d8da90a52e92b6  target/compiler-profile-inline64.tsv.outcome
+afe6f210a0c29e0d270dad20f0a0c7c3359472298dc254e78b7ebe38501eeb6c  target/compiler-profile-inline64.tsv.fixture
+f9b3280c8bdfbaf2329da2d6261fc5ec7efc7ef0082b6e5b4ae765f947cb7892  target/compiler-profile-inline64.tsv.raw/checkpoint
+bc6c0c8114e431d742ad60eb2d48cb1976363774148aeb1a4c99058b840f9980  target/compiler-profile-inline64.tsv
+ca3275a8eea357c2fabe4f5035dd7337188392cbf972faf02eae4d7b42a3d957  target/compiler-profile-inline64.tsv.meta
+fe97f26970baccc455ae5abf8887f385da728c334519925360ad3a47e03919fc  target/compiler-profile-inline64.tsv.parity.tsv
+c605c5a4061d6175a6ceee0df9659b75aa2021d9a73549e195fc9bebb629e562  target/compiler-profile-inline64.tsv.counts.tsv
+50f29b8f0200a7329811649159989c9a747ffd0568ad028b118acef3a37574e4  target/compiler-profile-inline64.tsv.kinds.tsv
+99ffae41e102cb0f06758fe33298e008184353fb899ac484c94b81894216bda8  target/compiler-profile-inline64.tsv.functions.tsv
+
+file=target/compiler-profile-inline64.run.log
+7463ede6260b4fdc98916657ae3539bff87f875aff96267dcf4c3133ba90813b  target/compiler-profile-inline64.run.log
+construct	profile0	1	0	17.63	17.36	0.05	627920	51581850	772b026072769852b5afb45a0299cbe20246f4256c910c10268b4a3d2f18a798	1.95 2.24 2.54	2.63 2.37 2.57
+construct	profile64	1	0	28.65	28.13	0.10	1010736	73407161	f9312d3f51929406bcc20fabe85f501059bbf4d0e925f5404c003aba69452147	2.63 2.37 2.57	2.93 2.48 2.60
+profile	profile0	1	0	17.64	17.32	0.06	632208	16228028	8ca3225bebb5738376479d7556cd6d88b666805391fd2477331523ee6c666132	2.93 2.48 2.60	3.39 2.60 2.64
+profile	profile64	1	0	15.39	15.08	0.06	662352	16228028	8ca3225bebb5738376479d7556cd6d88b666805391fd2477331523ee6c666132	3.39 2.60 2.64	3.08 2.57 2.63
+ok one instrumented 0/64 pair; both outputs equal the frozen seed; existing profile reports accepted
+retained_fixture=/home/coder/workspace/lkjscript-compiler-inline64-profile-20261116/target/compiler-profile-inline64.adpFnR
+results=/home/coder/workspace/lkjscript-compiler-inline64-profile-20261116/target/compiler-profile-inline64.tsv
+
+file=target/compiler-profile-inline64.run.err
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  target/compiler-profile-inline64.run.err
+
+file=target/compiler-profile-inline64.tsv.outcome
+3bcbbf024d6e97c0e3195287931bc3d71c88d1c4e35d7f8b71d8da90a52e92b6  target/compiler-profile-inline64.tsv.outcome
+status=0
+completed=true
+last_phase=decode
+retained_fixture=/home/coder/workspace/lkjscript-compiler-inline64-profile-20261116/target/compiler-profile-inline64.adpFnR
+
+file=target/compiler-profile-inline64.tsv.fixture
+afe6f210a0c29e0d270dad20f0a0c7c3359472298dc254e78b7ebe38501eeb6c  target/compiler-profile-inline64.tsv.fixture
+/home/coder/workspace/lkjscript-compiler-inline64-profile-20261116/target/compiler-profile-inline64.adpFnR
+
+file=target/compiler-profile-inline64.tsv.raw/checkpoint
+f9b3280c8bdfbaf2329da2d6261fc5ec7efc7ef0082b6e5b4ae765f947cb7892  target/compiler-profile-inline64.tsv.raw/checkpoint
+phase=profile/profile64/1
+load_before=3.39 2.60 2.64
+
+file=target/compiler-profile-inline64.tsv.raw/construct.profile0.1.arguments
+fab791160197419eab5cff04480c46864b48139eeaad43e0c94c43a84c9ba3c2  target/compiler-profile-inline64.tsv.raw/construct.profile0.1.arguments
+/home/coder/workspace/lkjscript-compiler-inline64-profile-20261116/target/compiler-profile-inline64.adpFnR/emitter
+build
+src/main.lkj
+--source-dir
+/home/coder/workspace/lkjscript-compiler-inline64-profile-20261116/target/compiler-profile-inline64.adpFnR/source
+--library-dir
+/home/coder/workspace/lkjscript-compiler-inline64-profile-20261116/target/compiler-profile-inline64.adpFnR/source/library
+--runtime-source
+/home/coder/workspace/lkjscript-compiler-inline64-profile-20261116/target/compiler-profile-inline64.adpFnR/source/library/runtime.lkj
+--no-store
+--inline-limit
+0
+--profile
+--stats
+-o
+/home/coder/workspace/lkjscript-compiler-inline64-profile-20261116/target/compiler-profile-inline64.adpFnR/producer-profile-0
+
+file=target/compiler-profile-inline64.tsv.raw/construct.profile0.1.start
+7509e76ea82773e54a2acd602f623d2710adaad330c26147562675a1f503bece  target/compiler-profile-inline64.tsv.raw/construct.profile0.1.start
+1794797911067394998	1.95 2.24 2.54
+
+file=target/compiler-profile-inline64.tsv.raw/construct.profile0.1.capture
+7eb580157303af10d1b2aa6d33c109f1ab605f9af2fb520eeb6534433835d6ba  target/compiler-profile-inline64.tsv.raw/construct.profile0.1.capture
+1794797911067394998	1794797928702068651	1.95 2.24 2.54	2.63 2.37 2.57	0
+
+file=target/compiler-profile-inline64.tsv.raw/construct.profile0.1.time
+6dbd03cee109f386497473dfc67c36a89af324fd5515e14312a6eadcfb1310e6  target/compiler-profile-inline64.tsv.raw/construct.profile0.1.time
+17.63	17.36	0.05	627920
+
+file=target/compiler-profile-inline64.tsv.raw/construct.profile0.1.stdout
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  target/compiler-profile-inline64.tsv.raw/construct.profile0.1.stdout
+
+file=target/compiler-profile-inline64.tsv.raw/construct.profile0.1.stderr
+b1ed38ce4bc180984a8a6ad637d5dd6758d4cf0bbb47642eb4b150793f59b614  target/compiler-profile-inline64.tsv.raw/construct.profile0.1.stderr
+LKJSCRIPT_STATS {"route":"compiler","stopped_stage":"done","total_ms":17630.301,"assemble_ms":153.419,"build_ir_ms":4779.210,"check_ms":0.013,"check_body_ms":5026.438,"check_verification_ms":0.014,"emit_ms":1046.167,"key_hash_ms":0.007,"load_parse_ms":755.246,"native_encode_ms":0.010,"other_ms":39.233,"producer_hash_ms":0.003,"resolve_ms":172.250,"runtime_ms":27.422,"store_io_ms":0.015,"type_ms":5625.545,"write_ms":5.289,"build_reused":0,"checked_local_reused":0,"checked_reused":0,"emitted_bytes":51581850,"emitted_reused":0,"front_definitions":2714,"front_functions":10072,"front_reused":0,"inline_accepted":0,"inline_attempts":0,"inline_calls":0,"inline_functions":0,"inline_rejected":0,"ir_functions":10072,"ir_instructions":928672,"test_rerun":0,"test_reused":0,"peak_rss_bytes":642990080}
+
+file=target/compiler-profile-inline64.tsv.raw/construct.profile64.1.arguments
+ac7fb4be412bb650ed2ae137e6d0879fd5a8cda0ed79d0d7bf17db1b5689891e  target/compiler-profile-inline64.tsv.raw/construct.profile64.1.arguments
+/home/coder/workspace/lkjscript-compiler-inline64-profile-20261116/target/compiler-profile-inline64.adpFnR/emitter
+build
+src/main.lkj
+--source-dir
+/home/coder/workspace/lkjscript-compiler-inline64-profile-20261116/target/compiler-profile-inline64.adpFnR/source
+--library-dir
+/home/coder/workspace/lkjscript-compiler-inline64-profile-20261116/target/compiler-profile-inline64.adpFnR/source/library
+--runtime-source
+/home/coder/workspace/lkjscript-compiler-inline64-profile-20261116/target/compiler-profile-inline64.adpFnR/source/library/runtime.lkj
+--no-store
+--inline-limit
+64
+--profile
+--stats
+-o
+/home/coder/workspace/lkjscript-compiler-inline64-profile-20261116/target/compiler-profile-inline64.adpFnR/producer-profile-64
+
+file=target/compiler-profile-inline64.tsv.raw/construct.profile64.1.start
+02b2e53616b92b6a5160f9d525f58bc13502ac56409d2fe3d3f0065fe7d83ff8  target/compiler-profile-inline64.tsv.raw/construct.profile64.1.start
+1794797928732237954	2.63 2.37 2.57
+
+file=target/compiler-profile-inline64.tsv.raw/construct.profile64.1.capture
+e7cba0e69c089ab6d50c17ce669854c6cc2ce4bebd5638798f86a5b151587052  target/compiler-profile-inline64.tsv.raw/construct.profile64.1.capture
+1794797928732237954	1794797957384649266	2.63 2.37 2.57	2.93 2.48 2.60	0
+
+file=target/compiler-profile-inline64.tsv.raw/construct.profile64.1.time
+f284940cdf3ebd64d4986d549e2bcc4a2476153986a660518983a2ea5f029d37  target/compiler-profile-inline64.tsv.raw/construct.profile64.1.time
+28.65	28.13	0.10	1010736
+
+file=target/compiler-profile-inline64.tsv.raw/construct.profile64.1.stdout
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  target/compiler-profile-inline64.tsv.raw/construct.profile64.1.stdout
+
+file=target/compiler-profile-inline64.tsv.raw/construct.profile64.1.stderr
+8ed7810edb2075254a8873918d703355508ac5bd55f023f169679495a588c0b7  target/compiler-profile-inline64.tsv.raw/construct.profile64.1.stderr
+LKJSCRIPT_STATS {"route":"compiler","stopped_stage":"done","total_ms":28647.591,"assemble_ms":252.549,"build_ir_ms":4783.574,"check_ms":0.016,"check_body_ms":14751.834,"check_optimized_ms":0.006,"check_verification_ms":0.022,"emit_ms":1604.237,"inline_ms":556.150,"key_hash_ms":0.006,"load_parse_ms":758.476,"native_encode_ms":0.015,"other_ms":93.003,"producer_hash_ms":0.003,"resolve_ms":171.483,"runtime_ms":27.619,"store_io_ms":0.018,"type_ms":5641.483,"write_ms":7.076,"build_reused":0,"checked_local_reused":4455,"checked_reused":0,"emitted_bytes":73407161,"emitted_reused":0,"front_definitions":2714,"front_functions":10072,"front_reused":0,"inline_accepted":1,"inline_attempts":1,"inline_calls":30619,"inline_functions":5617,"inline_rejected":0,"ir_functions":10072,"ir_instructions":928672,"test_rerun":0,"test_reused":0,"peak_rss_bytes":1034993664}
+
+file=target/compiler-profile-inline64.tsv.raw/profile.profile0.1.arguments
+26b402079fada38eda5fda0e2bacaaf65a4a85ee47d2f2a082dc92ef128b83a4  target/compiler-profile-inline64.tsv.raw/profile.profile0.1.arguments
+/home/coder/workspace/lkjscript-compiler-inline64-profile-20261116/target/compiler-profile-inline64.adpFnR/producer-profile-0
+build
+src/main.lkj
+--source-dir
+/home/coder/workspace/lkjscript-compiler-inline64-profile-20261116/target/compiler-profile-inline64.adpFnR/source
+--library-dir
+/home/coder/workspace/lkjscript-compiler-inline64-profile-20261116/target/compiler-profile-inline64.adpFnR/source/library
+--runtime-source
+/home/coder/workspace/lkjscript-compiler-inline64-profile-20261116/target/compiler-profile-inline64.adpFnR/source/library/runtime.lkj
+--no-store
+--inline-limit
+0
+-o
+/home/coder/workspace/lkjscript-compiler-inline64-profile-20261116/target/compiler-profile-inline64.adpFnR/output-profile-0
+
+file=target/compiler-profile-inline64.tsv.raw/profile.profile0.1.start
+da03effd2a78ac2e28a850beb5722938b82b1e35f20c77dae951fbe50605a5a1  target/compiler-profile-inline64.tsv.raw/profile.profile0.1.start
+1794797957427363425	2.93 2.48 2.60
+
+file=target/compiler-profile-inline64.tsv.raw/profile.profile0.1.capture
+2dd4f0835e994db7989ea7571f146873f33173f702d9897539eed62c03290d3f  target/compiler-profile-inline64.tsv.raw/profile.profile0.1.capture
+1794797957427363425	1794797975071986485	2.93 2.48 2.60	3.39 2.60 2.64	0
+
+file=target/compiler-profile-inline64.tsv.raw/profile.profile0.1.time
+13a75c2e04340172b65827f6bdc1a2a87601495da55720d413bd6ab3c2a47e37  target/compiler-profile-inline64.tsv.raw/profile.profile0.1.time
+17.64	17.32	0.06	632208
+
+file=target/compiler-profile-inline64.tsv.raw/profile.profile0.1.stdout
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  target/compiler-profile-inline64.tsv.raw/profile.profile0.1.stdout
+
+file=target/compiler-profile-inline64.tsv.raw/profile.profile0.1.stderr
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  target/compiler-profile-inline64.tsv.raw/profile.profile0.1.stderr
+
+file=target/compiler-profile-inline64.tsv.raw/profile.profile64.1.arguments
+9c0e553eb3bac1eb329e0259ad198a51293f7cdd0136edf8d5d4dfb996b25045  target/compiler-profile-inline64.tsv.raw/profile.profile64.1.arguments
+/home/coder/workspace/lkjscript-compiler-inline64-profile-20261116/target/compiler-profile-inline64.adpFnR/producer-profile-64
+build
+src/main.lkj
+--source-dir
+/home/coder/workspace/lkjscript-compiler-inline64-profile-20261116/target/compiler-profile-inline64.adpFnR/source
+--library-dir
+/home/coder/workspace/lkjscript-compiler-inline64-profile-20261116/target/compiler-profile-inline64.adpFnR/source/library
+--runtime-source
+/home/coder/workspace/lkjscript-compiler-inline64-profile-20261116/target/compiler-profile-inline64.adpFnR/source/library/runtime.lkj
+--no-store
+--inline-limit
+0
+-o
+/home/coder/workspace/lkjscript-compiler-inline64-profile-20261116/target/compiler-profile-inline64.adpFnR/output-profile-64
+
+file=target/compiler-profile-inline64.tsv.raw/profile.profile64.1.start
+17256260a80c9acbc37007ddd7833621dd20b176e3b4d92d38a7019739c833d1  target/compiler-profile-inline64.tsv.raw/profile.profile64.1.start
+1794797975097864802	3.39 2.60 2.64
+
+file=target/compiler-profile-inline64.tsv.raw/profile.profile64.1.capture
+b525fe81703b496c7159a99320d92eef2a35f8a9f79926d3e8b1377dfa77ba4c  target/compiler-profile-inline64.tsv.raw/profile.profile64.1.capture
+1794797975097864802	1794797990495269707	3.39 2.60 2.64	3.08 2.57 2.63	0
+
+file=target/compiler-profile-inline64.tsv.raw/profile.profile64.1.time
+9c1710f4f15601f94fa5b57352bc40384f56d2085afd8f0dac5dc2fcdf257617  target/compiler-profile-inline64.tsv.raw/profile.profile64.1.time
+15.39	15.08	0.06	662352
+
+file=target/compiler-profile-inline64.tsv.raw/profile.profile64.1.stdout
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  target/compiler-profile-inline64.tsv.raw/profile.profile64.1.stdout
+
+file=target/compiler-profile-inline64.tsv.raw/profile.profile64.1.stderr
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  target/compiler-profile-inline64.tsv.raw/profile.profile64.1.stderr
+
+file=target/compiler-profile-inline64.tsv.profile0.report
+71007c8c4d7441fcc15ad113ba89e2646fc181e36afad110de411622e3e1213e  target/compiler-profile-inline64.tsv.profile0.report
+CPU samples: 17354; requested period 1000 us; inclusive counts each function once per sample
+Top self time
+self% incl% samples function
+3.7 3.7 649 $std::sequence::__lkjscript_slice_order<T=t5;> [file 120:358]
+2.7 3.8 480 $std::bytes::append_bytes [file 131:30]
+2.2 2.8 390 $runtime::release
+2.1 2.1 375 $runtime::payload_class
+2.1 5.5 375 $runtime::allocate
+1.5 1.7 262 $runtime::valid_utf8_bytes
+1.2 41.8 224 check::check_function_body [file 108:2448]
+Top inclusive time
+self% incl% samples function
+0.0 100.0 17354 $platform::entry
+0.0 100.0 17354 main [file 0:39]
+0.0 100.0 17354 driver::main [file 100:1631]
+0.0 100.0 17354 driver::execute [file 100:1425]
+0.0 100.0 17354 driver::execute_source [file 100:1454]
+0.0 95.1 16515 driver::compile [file 100:463]
+1.2 41.8 7266 check::check_function_body [file 108:2448]
+Emitted instruction kinds (self samples)
+kind self% samples class
+kind 0.0 0 unknown
+kind 16.1 2810 inline copy
+kind 1.3 239 checks
+kind 0.7 138 call instruction
+kind 4.9 867 frame load/store
+kind 11.0 1918 other memory
+kind 11.9 2077 arithmetic / comparison / conversion
+kind 2.8 488 branch
+kind 9.2 1607 allocator
+kind 2.4 428 runtime
+kind 11.3 1968 register-to-register move
+kind 7.2 1256 address formation (LEA)
+kind 5.9 1039 immediate constant
+kind 2.5 435 argument setup / result capture
+kind 9.3 1627 prologue / epilogue
+kind 2.6 457 return
+
+file=target/compiler-profile-inline64.tsv.profile0.report.stderr
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  target/compiler-profile-inline64.tsv.profile0.report.stderr
+
+file=target/compiler-profile-inline64.tsv.profile64.report
+3d4c7fdd4bcd7883aaa9c3720c291d7844a2a1d791f3e501e4d1e0699ad40c15  target/compiler-profile-inline64.tsv.profile64.report
+CPU samples: 15122; requested period 1000 us; inclusive counts each function once per sample
+Top self time
+self% incl% samples function
+4.1 4.1 621 $std::sequence::__lkjscript_slice_order<T=t5;> [file 120:358]
+3.0 6.9 460 $runtime::allocate
+2.7 3.4 416 $runtime::release
+2.6 2.6 399 $runtime::payload_class
+1.7 2.0 272 $runtime::valid_utf8_bytes
+1.6 40.5 245 check::check_function_body [file 108:2448]
+1.4 1.6 226 $builtin:$order:t271 [file 125:262]
+Top inclusive time
+self% incl% samples function
+0.0 100.0 15122 $platform::entry
+0.0 100.0 15122 main [file 0:39]
+0.0 100.0 15122 driver::main [file 100:1631]
+0.0 100.0 15122 driver::execute [file 100:1425]
+0.0 100.0 15122 driver::execute_source [file 100:1454]
+0.0 95.2 14404 driver::compile [file 100:463]
+1.6 40.5 6131 check::check_function_body [file 108:2448]
+Emitted instruction kinds (self samples)
+kind self% samples class
+kind 0.0 0 unknown
+kind 10.3 1568 inline copy
+kind 1.6 254 checks
+kind 0.7 106 call instruction
+kind 6.9 1045 frame load/store
+kind 13.9 2114 other memory
+kind 13.2 2007 arithmetic / comparison / conversion
+kind 2.9 452 branch
+kind 11.6 1757 allocator
+kind 2.7 417 runtime
+kind 12.6 1913 register-to-register move
+kind 8.6 1310 address formation (LEA)
+kind 7.2 1102 immediate constant
+kind 1.0 163 argument setup / result capture
+kind 4.9 753 prologue / epilogue
+kind 1.0 161 return
+
+file=target/compiler-profile-inline64.tsv.profile64.report.stderr
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  target/compiler-profile-inline64.tsv.profile64.report.stderr

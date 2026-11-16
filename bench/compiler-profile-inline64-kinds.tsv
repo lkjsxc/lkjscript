@@ -1,0 +1,33 @@
+policy	kind	samples	percent	class
+0	0	0	0.000000	unknown
+0	1	2810	16.192232	inline copy
+0	2	239	1.377204	checks
+0	3	138	0.795206	call instruction
+0	4	867	4.995966	frame load/store
+0	5	1918	11.052207	other memory
+0	6	2077	11.968422	arithmetic / comparison / conversion
+0	7	488	2.812032	branch
+0	8	1607	9.260113	allocator
+0	9	428	2.466290	runtime
+0	10	1968	11.340325	register-to-register move
+0	11	1256	7.237524	address formation (LEA)
+0	12	1039	5.987092	immediate constant
+0	13	435	2.506627	argument setup / result capture
+0	14	1627	9.375360	prologue / epilogue
+0	15	457	2.633399	return
+64	0	0	0.000000	unknown
+64	1	1568	10.368999	inline copy
+64	2	254	1.679672	checks
+64	3	106	0.700965	call instruction
+64	4	1045	6.910462	frame load/store
+64	5	2114	13.979632	other memory
+64	6	2007	13.272054	arithmetic / comparison / conversion
+64	7	452	2.989023	branch
+64	8	1757	11.618833	allocator
+64	9	417	2.757572	runtime
+64	10	1913	12.650443	register-to-register move
+64	11	1310	8.662875	address formation (LEA)
+64	12	1102	7.287396	immediate constant
+64	13	163	1.077900	argument setup / result capture
+64	14	753	4.979500	prologue / epilogue
+64	15	161	1.064674	return
