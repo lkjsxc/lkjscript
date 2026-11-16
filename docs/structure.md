@@ -41,10 +41,19 @@ contract in [IR](ir.md).
 
 Module and declaration IDs follow resolved source paths, without an initial
 `crate::`; the root module is `crate`. Fields use `::field:NAME`, variants
-`::variant:NAME`, parameters `::param:NAME`. Query the outline for an
+`::variant:NAME`, named parameters `::param:NAME`. Query the outline for an
 implementation's displayed identity. Physical file moves, whitespace and
 neighboring items do not determine these identities. A semantic path rename or
 move changes the addressed path.
+
+An anonymous `_` parameter uses `::param:POSITION`, where POSITION is its
+zero-based position in the complete signature, including a receiver. For example,
+`fn f(_: u8, named: i64, _: bool)` has `f::param:0`,
+`f::param:named` and `f::param:2`. Numeric positions cannot collide with
+legal parameter names. Anonymous IDs remain stable until signature positions
+change; after adding, removing or reordering parameters, query the new outline.
+`::param:_` is not an alias. Signature changes and inlining refuse a referenced
+wildcard until it has an explicit named-parameter decision.
 
 A binding or call site belongs to the token-normalized body epoch plus its local
 ordinal. Reformatting and comments preserve that epoch. After a token change

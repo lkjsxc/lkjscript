@@ -102,6 +102,8 @@ pub enum Color { Red, Blue(i64) }
 pub trait Apply { fn apply(&self, value: i64) -> i64; }
 impl Apply for Counter { fn apply(&self, value: i64) -> i64 { self.value + value } }
 pub fn identity<T>(value: T) -> T { value }
+pub fn anonymous(_: u8, named: i64, _: bool) -> i64 { named }
+pub fn anonymous_reference(_: i64, _: i64) -> i64 { _ }
 pub fn square(value: i64) -> i64 { value * value }
 pub fn record() -> i64 { let value = Counter { value: 9 }; value.value }
 pub fn applied(value: Counter) -> i64 { value.apply(4) }
@@ -289,6 +291,20 @@ grep -Eq 'arguments="<T=i64>"' "$fixture/instances" || fail 'generic instance ar
 grep -Eq 'native-bytes=[0-9].*native-size=producer-measurement' "$fixture/instances" || fail 'native instance bytes'
 query type 'scalar::param:value' > "$fixture/type"
 grep -Eq 'value="i64"' "$fixture/type" || fail type
+query outline helpers::anonymous --limit 8 > "$fixture/anonymous-outline"
+for parameter in 0 named 2; do
+    grep -Fq "\"helpers::anonymous::param:$parameter\"" "$fixture/anonymous-outline" || fail 'anonymous parameter identity missing'
+done
+query type helpers::anonymous::param:0 > "$fixture/anonymous-first"
+grep -Eq 'value="u8"' "$fixture/anonymous-first" || fail 'first anonymous parameter type'
+query type helpers::anonymous::param:2 > "$fixture/anonymous-last"
+grep -Eq 'value="bool"' "$fixture/anonymous-last" || fail 'last anonymous parameter type'
+query references helpers::anonymous > "$fixture/anonymous-named"
+grep -Eq '"helpers::anonymous::param:named".*kind=local-value' "$fixture/anonymous-named" || fail 'named parameter identity changed'
+query references helpers::anonymous_reference > "$fixture/anonymous-reference"
+grep -Eq '"helpers::anonymous_reference::param:1".*kind=local-value' "$fixture/anonymous-reference" || fail 'anonymous reference lost its exact parameter position'
+refuse query type helpers::anonymous::param:_
+refuse query type helpers::anonymous::param:1
 query layout helpers::Counter > "$fixture/layout"
 grep -Eq 'level=checked-ir.*bytes=8 alignment=8' "$fixture/layout" || fail 'checked layout'
 query authority scalar > "$fixture/pure"

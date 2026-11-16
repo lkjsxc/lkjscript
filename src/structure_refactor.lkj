@@ -232,6 +232,15 @@ fn signature(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)], operatio
     if target.kind != "function" { return Err(fail(&target.identity, "FUNCTION", "change-signature needs a function identity")); }
     let unit = parse_unit(catalog, target, inputs)?; let old = function(&unit)?;
     if old.body.is_none() { return Err(fail(&target.identity, "DISPATCH", "trait declarations require explicit coordinated implementation changes")); }
+    for (position, parameter) in old.params.iter().enumerate() {
+        if parameter.name != "_" { continue; }
+        let identity = semantic::parameter_identity(&target.identity, &parameter.name, position);
+        for site in &catalog.references {
+            if site.owner == target.identity && site.target == identity {
+                return Err(at_site(&target.identity, "WILDCARD_PARAMETER", site, "a referenced wildcard parameter needs an explicit named-parameter decision"));
+            }
+        }
+    }
     let mut parameters: Vec<Parameter> = Vec::new();
     let mut seen: BTreeSet<String> = BTreeSet::new(); let mut names: BTreeSet<String> = BTreeSet::new();
     let mut added = String::new();
@@ -241,7 +250,10 @@ fn signature(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)], operatio
             let source = edit::item(catalog, identity)?;
             if source.kind != "parameter" || source.parent != target.identity { return Err(fail(identity, "PARAMETER", "parameter belongs to another function")); }
             let mut found: Option<usize> = None;
-            for (index, parameter) in old.params.iter().enumerate() { if parameter.name == source.name { found = Some(index); } }
+            for (index, parameter) in old.params.iter().enumerate() {
+                if semantic::parameter_identity(&target.identity, &parameter.name, index) == source.identity
+                    && absolute(&unit, parameter.span) == (source.start, source.end) { found = Some(index); }
+            }
             let index = found.ok_or_else(|| fail(identity, "PARAMETER", "parameter is absent from parsed signature"))?;
             Parameter { old: Some(index), declaration: raw(&unit, old.params[index].span)?, argument: String::new(), name: source.name.clone() }
         } else {
@@ -254,7 +266,7 @@ fn signature(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)], operatio
             added.push_str(&argument); added.push('\n');
             Parameter { old: None, declaration: format!("{name}: {ty}"), argument, name }
         };
-        if !names.insert(parameter.name.clone()) { return Err(fail(&target.identity, "PARAMETER", "parameter names must be distinct")); }
+        if parameter.name != "_" && !names.insert(parameter.name.clone()) { return Err(fail(&target.identity, "PARAMETER", "parameter names must be distinct")); }
         parameters.push(parameter);
     }
     let receiver = old.params.first().is_some_and(|parameter| parameter.name == "self");
@@ -1203,8 +1215,9 @@ mod functions {
         if !free(catalog, target) { return Err(fail(&target.identity, "FUNCTION", "inlining currently needs a free function identity")); }
         let source = parse_unit(catalog, target, inputs)?; let function = function(&source)?;
         if !function.generics.is_empty() { return Err(fail(&target.identity, "GENERIC_INLINE", "generic inlining needs instance substitutions; choose a concrete wrapper")); }
-        if function.params.iter().any(|parameter| parameter.name == "_") {
-            let wildcard = format!("{}::param:_", target.identity);
+        for (position, parameter) in function.params.iter().enumerate() {
+            if parameter.name != "_" { continue; }
+            let wildcard = semantic::parameter_identity(&target.identity, &parameter.name, position);
             for site in &catalog.references {
                 if site.owner == target.identity && site.target == wildcard {
                     return Err(at_site(&target.identity, "WILDCARD_PARAMETER", site, "a referenced wildcard parameter needs an explicit named-parameter decision"));

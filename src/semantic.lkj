@@ -407,6 +407,13 @@ pub fn catalog_typed(program: &a::Program, inputs: &[(String, Vec<u8>)], checked
     catalog_mode(program, inputs, checked, evidence, true)
 }
 
+
+/// Named parameters retain their spelling identity. An anonymous parameter
+/// uses its zero-based signature position, stable until those positions change.
+pub(crate) fn parameter_identity(owner: &str, name: &str, position: usize) -> String {
+    if name == "_" { format!("{owner}::param:{position}") }
+    else { format!("{owner}::param:{name}") }
+}
 fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir::CheckedProgram,
     evidence: &Option<crate::elaborate::semantic::Evidence>, include_references: bool) -> Result<Catalog, String> {
     if !program.resolved { return Err("E_IDENTITY source is not resolved".to_string()); }
@@ -443,8 +450,8 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         let body = value.body.map(|body| (program.blocks[body].span.start, program.blocks[body].span.end));
         append(&mut result, &files, identity.clone(), parent, "function", &value.name,
             value.span, body, function_signature(program, value), true)?;
-        for parameter in &value.params {
-            append(&mut result, &files, format!("{}::param:{}", identity, parameter.name), identity.clone(),
+        for (position, parameter) in value.params.iter().enumerate() {
+            append(&mut result, &files, parameter_identity(&identity, &parameter.name, position), identity.clone(),
                 "parameter", &parameter.name, parameter.span, None, type_name(program, parameter.ty), false)?;
         }
         for parameter in &value.generics {

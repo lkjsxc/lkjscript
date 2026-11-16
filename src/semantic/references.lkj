@@ -177,7 +177,7 @@ pub(super) fn local_reference(result: &mut Catalog, files: &[SourceText], progra
     let identity = match target {
         LocalTarget::Pattern(pattern) => bindings.get(&pattern).cloned(),
         LocalTarget::Parameter(position) => functions.get(&owner.to_string()).and_then(|function| {
-            program.functions[*function].params.get(position).map(|parameter| format!("{}::param:{}", owner, parameter.name))
+            program.functions[*function].params.get(position).map(|parameter| parameter_identity(owner, &parameter.name, position))
         }),
         LocalTarget::Unavailable => None,
     };
