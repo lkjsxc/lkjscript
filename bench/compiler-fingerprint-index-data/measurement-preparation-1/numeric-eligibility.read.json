@@ -1,0 +1,713 @@
+{
+   "call_sites" : [
+      {
+         "line" : 145,
+         "text" : "                    \"--depth\" => out.query.depth = inline_limit(&value)?,"
+      },
+      {
+         "line" : 146,
+         "text" : "                    \"--limit\" => { out.query.limit = inline_limit(&value)?; out.profile_limit_explicit = true; },"
+      },
+      {
+         "line" : 147,
+         "text" : "                    \"--bytes\" => { out.query.bytes = inline_limit(&value)?; out.profile_bytes_explicit = true; },"
+      },
+      {
+         "line" : 173,
+         "text" : "                    \"--inline-limit\" => out.inline_limit = Some(inline_limit(&value)?),"
+      },
+      {
+         "line" : 181,
+         "text" : "                    \"--store-bytes\" => out.store_bytes = inline_limit(&value).map_err(|_: String| -> String { \"E_USAGE --store-bytes requires a nonnegative decimal byte count\".to_string() })?,"
+      },
+      {
+         "line" : 291,
+         "text" : "fn inline_limit(text: &str) -> Result<usize, String> {"
+      }
+   ],
+   "driver_file_bytes" : 120359,
+   "driver_file_sha256" : "333d6ec927416917fa32269730a9a507fcfe31072a2191403a24161b5cf6c412",
+   "edit" : {
+      "after_body_sha256" : "c4aea53244a222793e35f79516d94e8c8c28449110965c25412ecc39353a87bb",
+      "after_body_text" : "{\n    if text.is_empty() { return Err(\"E_USAGE --inline-limit requires a nonnegative decimal integer\".to_string()); }\n    let mut value = 1usize;\n    for byte in text.as_bytes() {\n        if *byte < b'0' || *byte > b'9' {\n            return Err(\"E_USAGE --inline-limit requires a nonnegative decimal integer\".to_string());\n        }\n        let digit = (*byte - b'0') as usize;\n        if value > ((!0usize) - digit) / 10usize {\n            return Err(\"E_USAGE --inline-limit exceeds usize\".to_string());\n        }\n        value = value * 10usize + digit;\n    }\n    Ok(value)\n}",
+      "after_sha256" : "7acceb488b8a47a328ce269d880134eadfa7b92dee788f7b8ac6751e60ea33c3",
+      "before_body_sha256" : "92e13f4d03d042b2e821a32aa04374696337fba6d5c0bb2d7e53a456da6cb2b5",
+      "before_body_text" : "{\n    if text.is_empty() { return Err(\"E_USAGE --inline-limit requires a nonnegative decimal integer\".to_string()); }\n    let mut value = 0usize;\n    for byte in text.as_bytes() {\n        if *byte < b'0' || *byte > b'9' {\n            return Err(\"E_USAGE --inline-limit requires a nonnegative decimal integer\".to_string());\n        }\n        let digit = (*byte - b'0') as usize;\n        if value > ((!0usize) - digit) / 10usize {\n            return Err(\"E_USAGE --inline-limit exceeds usize\".to_string());\n        }\n        value = value * 10usize + digit;\n    }\n    Ok(value)\n}",
+      "before_sha256" : "333d6ec927416917fa32269730a9a507fcfe31072a2191403a24161b5cf6c412",
+      "body_bytes" : 577,
+      "body_end" : 18817,
+      "body_start" : 18240,
+      "changed_byte_offset" : 18378,
+      "file_bytes" : 120359,
+      "function_start" : 18187,
+      "git_blob" : "2de543fa7f32ab3d4d43d8aa9b5302ecb5cdde0f",
+      "git_revision" : "c887b7c5aca7bb80d70ca26d7dfdf1a44213a163",
+      "identity" : "driver::inline_limit",
+      "input" : "compiler",
+      "new_hex" : "31",
+      "new_text" : "let mut value = 1usize;",
+      "old_hex" : "30",
+      "old_text" : "let mut value = 0usize;",
+      "path" : "src/driver.lkj"
+   },
+   "fingerprint_source" : {
+      "fingerprint_excerpt_sha256" : "edaf7e49e52116f043b60dfc5c2efb5fd3b2a4db3bf0be2b770b8510f8c90cfe",
+      "path" : "src/elaborate/incremental.lkj",
+      "resume_excerpt_sha256" : "0ca89734aa15489a8b8d139f0c4ba8d950f20b25ca87aeb121547d2aeb50a1ac",
+      "revision" : "e5294c339d9aefbbafc2e951c997f4fefabcc9ad",
+      "sha256" : "760485a5a12d97ce320ba9113797370df584c154084ee4a1f9689da28c7d1127"
+   },
+   "include_scan" : {
+      "driver_hits" : [],
+      "files" : 13,
+      "literal_calls" : [
+         {
+            "file" : "src/embedded.lkj",
+            "kind" : "include_str",
+            "line" : 4,
+            "literal" : "../library/lib.lkj",
+            "resolved" : "library/lib.lkj"
+         },
+         {
+            "file" : "src/embedded.lkj",
+            "kind" : "include_str",
+            "line" : 5,
+            "literal" : "../library/prelude.lkj",
+            "resolved" : "library/prelude.lkj"
+         },
+         {
+            "file" : "src/embedded.lkj",
+            "kind" : "include_str",
+            "line" : 6,
+            "literal" : "../library/sequence.lkj",
+            "resolved" : "library/sequence.lkj"
+         },
+         {
+            "file" : "src/embedded.lkj",
+            "kind" : "include_str",
+            "line" : 7,
+            "literal" : "../library/arena.lkj",
+            "resolved" : "library/arena.lkj"
+         },
+         {
+            "file" : "src/embedded.lkj",
+            "kind" : "include_str",
+            "line" : 8,
+            "literal" : "../library/process_model.lkj",
+            "resolved" : "library/process_model.lkj"
+         },
+         {
+            "file" : "src/embedded.lkj",
+            "kind" : "include_str",
+            "line" : 9,
+            "literal" : "../library/buffer.lkj",
+            "resolved" : "library/buffer.lkj"
+         },
+         {
+            "file" : "src/embedded.lkj",
+            "kind" : "include_str",
+            "line" : 10,
+            "literal" : "../library/timers.lkj",
+            "resolved" : "library/timers.lkj"
+         },
+         {
+            "file" : "src/embedded.lkj",
+            "kind" : "include_str",
+            "line" : 11,
+            "literal" : "../library/http_protocol.lkj",
+            "resolved" : "library/http_protocol.lkj"
+         },
+         {
+            "file" : "src/embedded.lkj",
+            "kind" : "include_str",
+            "line" : 12,
+            "literal" : "../library/http_policy.lkj",
+            "resolved" : "library/http_policy.lkj"
+         },
+         {
+            "file" : "src/embedded.lkj",
+            "kind" : "include_str",
+            "line" : 13,
+            "literal" : "../library/http_server.lkj",
+            "resolved" : "library/http_server.lkj"
+         },
+         {
+            "file" : "src/embedded.lkj",
+            "kind" : "include_str",
+            "line" : 14,
+            "literal" : "../library/json.lkj",
+            "resolved" : "library/json.lkj"
+         },
+         {
+            "file" : "src/embedded.lkj",
+            "kind" : "include_str",
+            "line" : 15,
+            "literal" : "../library/hmac.lkj",
+            "resolved" : "library/hmac.lkj"
+         },
+         {
+            "file" : "src/embedded.lkj",
+            "kind" : "include_str",
+            "line" : 16,
+            "literal" : "../library/time.lkj",
+            "resolved" : "library/time.lkj"
+         },
+         {
+            "file" : "src/embedded.lkj",
+            "kind" : "include_str",
+            "line" : 17,
+            "literal" : "../library/text.lkj",
+            "resolved" : "library/text.lkj"
+         },
+         {
+            "file" : "src/embedded.lkj",
+            "kind" : "include_str",
+            "line" : 18,
+            "literal" : "../library/text_lower.lkj",
+            "resolved" : "library/text_lower.lkj"
+         },
+         {
+            "file" : "src/embedded.lkj",
+            "kind" : "include_str",
+            "line" : 19,
+            "literal" : "../library/bytes.lkj",
+            "resolved" : "library/bytes.lkj"
+         },
+         {
+            "file" : "src/embedded.lkj",
+            "kind" : "include_str",
+            "line" : 20,
+            "literal" : "../library/string.lkj",
+            "resolved" : "library/string.lkj"
+         },
+         {
+            "file" : "src/embedded.lkj",
+            "kind" : "include_str",
+            "line" : 21,
+            "literal" : "../library/str.lkj",
+            "resolved" : "library/str.lkj"
+         },
+         {
+            "file" : "src/embedded.lkj",
+            "kind" : "include_str",
+            "line" : 22,
+            "literal" : "../library/sha256.lkj",
+            "resolved" : "library/sha256.lkj"
+         },
+         {
+            "file" : "src/embedded.lkj",
+            "kind" : "include_str",
+            "line" : 23,
+            "literal" : "../library/char.lkj",
+            "resolved" : "library/char.lkj"
+         },
+         {
+            "file" : "src/embedded.lkj",
+            "kind" : "include_str",
+            "line" : 24,
+            "literal" : "../library/fmt.lkj",
+            "resolved" : "library/fmt.lkj"
+         },
+         {
+            "file" : "src/embedded.lkj",
+            "kind" : "include_str",
+            "line" : 25,
+            "literal" : "../library/iter.lkj",
+            "resolved" : "library/iter.lkj"
+         },
+         {
+            "file" : "src/embedded.lkj",
+            "kind" : "include_str",
+            "line" : 26,
+            "literal" : "../library/integer.lkj",
+            "resolved" : "library/integer.lkj"
+         },
+         {
+            "file" : "src/embedded.lkj",
+            "kind" : "include_str",
+            "line" : 27,
+            "literal" : "../library/io.lkj",
+            "resolved" : "library/io.lkj"
+         },
+         {
+            "file" : "src/embedded.lkj",
+            "kind" : "include_str",
+            "line" : 28,
+            "literal" : "../library/command.lkj",
+            "resolved" : "library/command.lkj"
+         },
+         {
+            "file" : "src/embedded.lkj",
+            "kind" : "include_str",
+            "line" : 29,
+            "literal" : "../library/read_io.lkj",
+            "resolved" : "library/read_io.lkj"
+         },
+         {
+            "file" : "src/embedded.lkj",
+            "kind" : "include_str",
+            "line" : 30,
+            "literal" : "../library/foreign.lkj",
+            "resolved" : "library/foreign.lkj"
+         },
+         {
+            "file" : "src/embedded.lkj",
+            "kind" : "include_str",
+            "line" : 31,
+            "literal" : "../library/foreign_session.lkj",
+            "resolved" : "library/foreign_session.lkj"
+         },
+         {
+            "file" : "src/embedded.lkj",
+            "kind" : "include_str",
+            "line" : 32,
+            "literal" : "../library/workers.lkj",
+            "resolved" : "library/workers.lkj"
+         },
+         {
+            "file" : "src/embedded.lkj",
+            "kind" : "include_str",
+            "line" : 33,
+            "literal" : "../library/ordered_map.lkj",
+            "resolved" : "library/ordered_map.lkj"
+         },
+         {
+            "file" : "src/embedded.lkj",
+            "kind" : "include_str",
+            "line" : 34,
+            "literal" : "../library/ordered_set.lkj",
+            "resolved" : "library/ordered_set.lkj"
+         },
+         {
+            "file" : "src/embedded.lkj",
+            "kind" : "include_str",
+            "line" : 40,
+            "literal" : "../library/runtime.lkj",
+            "resolved" : "library/runtime.lkj"
+         },
+         {
+            "file" : "src/programs_directory_cases.lkj",
+            "kind" : "include_str",
+            "line" : 22,
+            "literal" : "../examples/site/program.lkj",
+            "resolved" : "examples/site/program.lkj"
+         },
+         {
+            "file" : "src/programs_directory_cases.lkj",
+            "kind" : "include_str",
+            "line" : 25,
+            "literal" : "../examples/journal/program.lkj",
+            "resolved" : "examples/journal/program.lkj"
+         },
+         {
+            "file" : "src/programs_directory_cases.lkj",
+            "kind" : "include_str",
+            "line" : 29,
+            "literal" : "../examples/desk/program.lkj",
+            "resolved" : "examples/desk/program.lkj"
+         },
+         {
+            "file" : "src/semantic_tests/allocator.lkj",
+            "kind" : "include_str",
+            "line" : 16,
+            "literal" : "../../library/runtime.lkj",
+            "resolved" : "library/runtime.lkj"
+         },
+         {
+            "file" : "src/semantic_tests/allocator.lkj",
+            "kind" : "include_str",
+            "line" : 17,
+            "literal" : "allocator_fixture.lkj",
+            "resolved" : "src/semantic_tests/allocator_fixture.lkj"
+         },
+         {
+            "file" : "src/semantic_tests/array_repeat.lkj",
+            "kind" : "include_str",
+            "line" : 54,
+            "literal" : "../../tests/conformance/pass/array_repeat_compact.lkj",
+            "resolved" : "tests/conformance/pass/array_repeat_compact.lkj"
+         },
+         {
+            "file" : "src/semantic_tests/entry_grants.lkj",
+            "kind" : "include_str",
+            "line" : 9,
+            "literal" : "../../library/runtime.lkj",
+            "resolved" : "library/runtime.lkj"
+         },
+         {
+            "file" : "src/semantic_tests/entry_grants.lkj",
+            "kind" : "include_str",
+            "line" : 20,
+            "literal" : "../../tests/fixtures/authority/grant_pair.lkjir",
+            "resolved" : "tests/fixtures/authority/grant_pair.lkjir"
+         },
+         {
+            "file" : "src/semantic_tests/entry_grants.lkj",
+            "kind" : "include_str",
+            "line" : 112,
+            "literal" : "../../tests/fixtures/authority/connector_entry.lkjir",
+            "resolved" : "tests/fixtures/authority/connector_entry.lkjir"
+         },
+         {
+            "file" : "src/semantic_tests/entry_grants.lkj",
+            "kind" : "include_str",
+            "line" : 144,
+            "literal" : "../../tests/fixtures/authority/readiness_entry.lkjir",
+            "resolved" : "tests/fixtures/authority/readiness_entry.lkjir"
+         },
+         {
+            "file" : "src/semantic_tests/entry_grants.lkj",
+            "kind" : "include_str",
+            "line" : 175,
+            "literal" : "../../tests/fixtures/authority/lifecycle_entry.lkjir",
+            "resolved" : "tests/fixtures/authority/lifecycle_entry.lkjir"
+         },
+         {
+            "file" : "src/semantic_tests/entry_grants.lkj",
+            "kind" : "include_str",
+            "line" : 209,
+            "literal" : "../../tests/fixtures/authority/command_entry.lkjir",
+            "resolved" : "tests/fixtures/authority/command_entry.lkjir"
+         },
+         {
+            "file" : "src/semantic_tests/entry_grants.lkj",
+            "kind" : "include_str",
+            "line" : 254,
+            "literal" : "../../tests/fixtures/authority/read_root_entry.lkjir",
+            "resolved" : "tests/fixtures/authority/read_root_entry.lkjir"
+         },
+         {
+            "file" : "src/semantic_tests/entry_grants.lkj",
+            "kind" : "include_str",
+            "line" : 297,
+            "literal" : "../../tests/fixtures/authority/foreign_entry.lkjir",
+            "resolved" : "tests/fixtures/authority/foreign_entry.lkjir"
+         },
+         {
+            "file" : "src/semantic_tests/interpreter_contracts.lkj",
+            "kind" : "include_str",
+            "line" : 85,
+            "literal" : "../../tests/conformance/pass/arithmetic.lkj",
+            "resolved" : "tests/conformance/pass/arithmetic.lkj"
+         },
+         {
+            "file" : "src/semantic_tests/interpreter_contracts.lkj",
+            "kind" : "include_str",
+            "line" : 86,
+            "literal" : "../../tests/conformance/pass/fibonacci.lkj",
+            "resolved" : "tests/conformance/pass/fibonacci.lkj"
+         },
+         {
+            "file" : "src/semantic_tests/interpreter_contracts.lkj",
+            "kind" : "include_str",
+            "line" : 87,
+            "literal" : "../../tests/conformance/pass/loop_control.lkj",
+            "resolved" : "tests/conformance/pass/loop_control.lkj"
+         },
+         {
+            "file" : "src/semantic_tests/interpreter_contracts.lkj",
+            "kind" : "include_str",
+            "line" : 89,
+            "literal" : "../../tests/conformance/pass/disjoint_mutable_fields.lkj",
+            "resolved" : "tests/conformance/pass/disjoint_mutable_fields.lkj"
+         },
+         {
+            "file" : "src/semantic_tests/interpreter_contracts.lkj",
+            "kind" : "include_str",
+            "line" : 93,
+            "literal" : "../../tests/conformance/pass/partial_move_reinitialize.lkj",
+            "resolved" : "tests/conformance/pass/partial_move_reinitialize.lkj"
+         },
+         {
+            "file" : "src/semantic_tests/interpreter_contracts.lkj",
+            "kind" : "include_str",
+            "line" : 96,
+            "literal" : "../../tests/conformance/pass/recursive_box.lkj",
+            "resolved" : "tests/conformance/pass/recursive_box.lkj"
+         },
+         {
+            "file" : "src/semantic_tests/interpreter_contracts.lkj",
+            "kind" : "include_str",
+            "line" : 115,
+            "literal" : "../../tests/conformance/pass/float_bits.lkj",
+            "resolved" : "tests/conformance/pass/float_bits.lkj"
+         },
+         {
+            "file" : "src/semantic_tests/interpreter_contracts.lkj",
+            "kind" : "include_str",
+            "line" : 120,
+            "literal" : "../../tests/conformance/migrated/backend_nan_negation.lkjir",
+            "resolved" : "tests/conformance/migrated/backend_nan_negation.lkjir"
+         },
+         {
+            "file" : "src/semantic_tests/interpreter_contracts.lkj",
+            "kind" : "include_str",
+            "line" : 440,
+            "literal" : "../../tests/conformance/output/bytes.lkj",
+            "resolved" : "tests/conformance/output/bytes.lkj"
+         },
+         {
+            "file" : "src/semantic_tests/interpreter_contracts.lkj",
+            "kind" : "include_str",
+            "line" : 452,
+            "literal" : "../../tests/conformance/output/drop_order.lkj",
+            "resolved" : "tests/conformance/output/drop_order.lkj"
+         },
+         {
+            "file" : "src/semantic_tests/interpreter_contracts.lkj",
+            "kind" : "include_str",
+            "line" : 458,
+            "literal" : "../../tests/conformance/output/derived_writer.lkj",
+            "resolved" : "tests/conformance/output/derived_writer.lkj"
+         },
+         {
+            "file" : "src/semantic_tests/interpreter_contracts.lkj",
+            "kind" : "include_str",
+            "line" : 464,
+            "literal" : "../../tests/conformance/output/before_trap.lkj",
+            "resolved" : "tests/conformance/output/before_trap.lkj"
+         },
+         {
+            "file" : "src/semantic_tests/interpreter_contracts.lkj",
+            "kind" : "include_str",
+            "line" : 802,
+            "literal" : "../../tests/conformance/ir/drop_if_owned.lkjir",
+            "resolved" : "tests/conformance/ir/drop_if_owned.lkjir"
+         },
+         {
+            "file" : "src/semantic_tests/interpreter_contracts.lkj",
+            "kind" : "include_str",
+            "line" : 823,
+            "literal" : "../../tests/conformance/ir/double_projected_drop.lkjir",
+            "resolved" : "tests/conformance/ir/double_projected_drop.lkjir"
+         },
+         {
+            "file" : "src/semantic_tests/interpreter_contracts.lkj",
+            "kind" : "include_str",
+            "line" : 829,
+            "literal" : "../../tests/conformance/ir/drop_after_projected_move.lkjir",
+            "resolved" : "tests/conformance/ir/drop_after_projected_move.lkjir"
+         },
+         {
+            "file" : "src/semantic_tests/interpreter_contracts.lkj",
+            "kind" : "include_str",
+            "line" : 835,
+            "literal" : "../../tests/conformance/ir/drop_if_absent_ancestor.lkjir",
+            "resolved" : "tests/conformance/ir/drop_if_absent_ancestor.lkjir"
+         },
+         {
+            "file" : "src/semantic_tests/interpreter_contracts.lkj",
+            "kind" : "include_str",
+            "line" : 841,
+            "literal" : "../../tests/conformance/ir/drop_if_borrowed_owner.lkjir",
+            "resolved" : "tests/conformance/ir/drop_if_borrowed_owner.lkjir"
+         },
+         {
+            "file" : "src/semantic_tests/interpreter_contracts.lkj",
+            "kind" : "include_str",
+            "line" : 847,
+            "literal" : "../../tests/conformance/ir/drop_if_indexed_owner.lkjir",
+            "resolved" : "tests/conformance/ir/drop_if_indexed_owner.lkjir"
+         },
+         {
+            "file" : "src/semantic_tests/interpreter_contracts.lkj",
+            "kind" : "include_str",
+            "line" : 867,
+            "literal" : "../../tests/conformance/ir/borrowed_reference_carrier_drop.lkjir",
+            "resolved" : "tests/conformance/ir/borrowed_reference_carrier_drop.lkjir"
+         },
+         {
+            "file" : "src/semantic_tests/interpreter_contracts.lkj",
+            "kind" : "include_str",
+            "line" : 872,
+            "literal" : "../../tests/conformance/ir/shared_reborrow_parent_write.lkjir",
+            "resolved" : "tests/conformance/ir/shared_reborrow_parent_write.lkjir"
+         },
+         {
+            "file" : "src/semantic_tests/interpreter_contracts.lkj",
+            "kind" : "include_str",
+            "line" : 896,
+            "literal" : "../../tests/conformance/ir/range_wrong_bound.lkjir",
+            "resolved" : "tests/conformance/ir/range_wrong_bound.lkjir"
+         },
+         {
+            "file" : "src/semantic_tests/interpreter_contracts.lkj",
+            "kind" : "include_str",
+            "line" : 900,
+            "literal" : "../../tests/conformance/ir/range_wrong_source.lkjir",
+            "resolved" : "tests/conformance/ir/range_wrong_source.lkjir"
+         },
+         {
+            "file" : "src/semantic_tests/interpreter_contracts.lkj",
+            "kind" : "include_str",
+            "line" : 904,
+            "literal" : "../../tests/conformance/ir/range_wrong_element.lkjir",
+            "resolved" : "tests/conformance/ir/range_wrong_element.lkjir"
+         },
+         {
+            "file" : "src/semantic_tests/interpreter_contracts.lkj",
+            "kind" : "include_str",
+            "line" : 908,
+            "literal" : "../../tests/conformance/ir/range_immutable_mut.lkjir",
+            "resolved" : "tests/conformance/ir/range_immutable_mut.lkjir"
+         },
+         {
+            "file" : "src/semantic_tests/interpreter_contracts.lkj",
+            "kind" : "include_str",
+            "line" : 912,
+            "literal" : "../../tests/conformance/ir/range_consumed_bound.lkjir",
+            "resolved" : "tests/conformance/ir/range_consumed_bound.lkjir"
+         },
+         {
+            "file" : "src/semantic_tests/interpreter_contracts.lkj",
+            "kind" : "include_str",
+            "line" : 916,
+            "literal" : "../../tests/conformance/ir/range_live_owner_drop.lkjir",
+            "resolved" : "tests/conformance/ir/range_live_owner_drop.lkjir"
+         },
+         {
+            "file" : "src/semantic_tests/interpreter_contracts.lkj",
+            "kind" : "include_str",
+            "line" : 920,
+            "literal" : "../../tests/conformance/ir/range_owner_write.lkjir",
+            "resolved" : "tests/conformance/ir/range_owner_write.lkjir"
+         },
+         {
+            "file" : "src/semantic_tests/interpreter_contracts.lkj",
+            "kind" : "include_str",
+            "line" : 924,
+            "literal" : "../../tests/conformance/ir/range_mutable_text.lkjir",
+            "resolved" : "tests/conformance/ir/range_mutable_text.lkjir"
+         },
+         {
+            "file" : "src/semantic_tests/interpreter_contracts.lkj",
+            "kind" : "include_str",
+            "line" : 928,
+            "literal" : "../../tests/conformance/ir/range_end_past.lkjir",
+            "resolved" : "tests/conformance/ir/range_end_past.lkjir"
+         },
+         {
+            "file" : "src/semantic_tests/interpreter_contracts.lkj",
+            "kind" : "include_str",
+            "line" : 932,
+            "literal" : "../../tests/conformance/ir/range_utf8_start.lkjir",
+            "resolved" : "tests/conformance/ir/range_utf8_start.lkjir"
+         },
+         {
+            "file" : "src/semantic_tests/optimizer.lkj",
+            "kind" : "include_str",
+            "line" : 21,
+            "literal" : "../../library/runtime.lkj",
+            "resolved" : "library/runtime.lkj"
+         },
+         {
+            "file" : "src/semantic_tests/panic_messages.lkj",
+            "kind" : "include_str",
+            "line" : 18,
+            "literal" : "../../library/runtime.lkj",
+            "resolved" : "library/runtime.lkj"
+         },
+         {
+            "file" : "src/semantic_tests/scalar_clone.lkj",
+            "kind" : "include_str",
+            "line" : 78,
+            "literal" : "../../tests/conformance/pass/scalar_clone_bits.lkj",
+            "resolved" : "tests/conformance/pass/scalar_clone_bits.lkj"
+         },
+         {
+            "file" : "src/semantic_tests/scalar_clone.lkj",
+            "kind" : "include_str",
+            "line" : 79,
+            "literal" : "../../tests/conformance/pass/scalar_clone_views.lkj",
+            "resolved" : "tests/conformance/pass/scalar_clone_views.lkj"
+         },
+         {
+            "file" : "src/semantic_tests/scalar_clone.lkj",
+            "kind" : "include_str",
+            "line" : 80,
+            "literal" : "../../tests/conformance/pass/scalar_clone_custom_copy.lkj",
+            "resolved" : "tests/conformance/pass/scalar_clone_custom_copy.lkj"
+         },
+         {
+            "file" : "src/semantic_tests/scalar_clone.lkj",
+            "kind" : "include_str",
+            "line" : 81,
+            "literal" : "../../tests/conformance/pass/scalar_clone_temporary_drop.lkj",
+            "resolved" : "tests/conformance/pass/scalar_clone_temporary_drop.lkj"
+         }
+      ],
+      "scope" : "All fixed Git src/library files containing include_str or include_bytes; textual literal-call overapproximation, not a parser execution.",
+      "unmatched_calls" : [
+         {
+            "file" : "src/semantic_tests/source_contracts.lkj",
+            "kind" : "include_bytes",
+            "line" : 22,
+            "suffix" : "\\\"../assets/data.bin\\\")}\\npub fn probe()->i64 {let bytes:[u8;4]=*data();bytes[0] as i64+bytes[1] as i64+bytes[2] as i64+bytes[3] as i64+include_str!(\\\"../assets/message.txt\\\").len("
+         },
+         {
+            "file" : "src/semantic_tests/source_contracts.lkj",
+            "kind" : "include_str",
+            "line" : 22,
+            "suffix" : "\\\"../assets/message.txt\\\").len() as i64+child::length()}\".as_bytes().to_vec()),\n        (\"src/child.lkj\".to_string(),\"pub fn length()->i64{include_str!(\\\"../assets/child.txt\\\",).le"
+         },
+         {
+            "file" : "src/semantic_tests/source_contracts.lkj",
+            "kind" : "include_str",
+            "line" : 23,
+            "suffix" : "\\\"../assets/child.txt\\\",).len() as i64}\".as_bytes().to_vec()),\n        (\"assets/data.bin\".to_string(),vec![255u8,0u8,10u8,27u8]),\n        (\"assets/message.txt\".to_string(),\"π\\n\".a"
+         },
+         {
+            "file" : "src/semantic_tests/source_contracts.lkj",
+            "kind" : "include_bytes",
+            "line" : 71,
+            "suffix" : "\\\"{requested}\\\"); }}\");\n    let mut reads: Vec<String> = Vec::new();\n    let report = source::load_report(\n        root,\n        None,\n        &mut |path: &str| -> Result<Option<Ve"
+         },
+         {
+            "file" : "src/semantic_tests/source_contracts.lkj",
+            "kind" : "include_str",
+            "line" : 102,
+            "suffix" : ")\");\n    literal_path(\"include_bytes!(path)\");\n    literal_path(\"include_bytes!(\\\"a\\\", \\\"b\\\")\");\n    literal_path(\"include_str!(\\\"a\\\"; 1)\");\n    let report = source::load_report(\"m"
+         },
+         {
+            "file" : "src/semantic_tests/source_contracts.lkj",
+            "kind" : "include_bytes",
+            "line" : 103,
+            "suffix" : "path)\");\n    literal_path(\"include_bytes!(\\\"a\\\", \\\"b\\\")\");\n    literal_path(\"include_str!(\\\"a\\\"; 1)\");\n    let report = source::load_report(\"main.lkj\", None, &mut |path: &str| -> R"
+         },
+         {
+            "file" : "src/semantic_tests/source_contracts.lkj",
+            "kind" : "include_bytes",
+            "line" : 104,
+            "suffix" : "\\\"a\\\", \\\"b\\\")\");\n    literal_path(\"include_str!(\\\"a\\\"; 1)\");\n    let report = source::load_report(\"main.lkj\", None, &mut |path: &str| -> Result<\n        Option<Vec<u8>>,\n        St"
+         },
+         {
+            "file" : "src/semantic_tests/source_contracts.lkj",
+            "kind" : "include_str",
+            "line" : 105,
+            "suffix" : "\\\"a\\\"; 1)\");\n    let report = source::load_report(\"main.lkj\", None, &mut |path: &str| -> Result<\n        Option<Vec<u8>>,\n        String,\n    > {\n        assert_eq!(path, \"main.lkj"
+         },
+         {
+            "file" : "src/semantic_tests/source_contracts.lkj",
+            "kind" : "include_bytes",
+            "line" : 112,
+            "suffix" : "\\\"absent\\\");} fn probe()->i64{1}\"\n                .as_bytes()\n                .to_vec(),\n        ))\n    });\n    assert!(report.diagnostics.is_empty());\n}\nfn io_errors() {\n    let r"
+         },
+         {
+            "file" : "src/semantic_tests/source_contracts.lkj",
+            "kind" : "include_bytes",
+            "line" : 126,
+            "suffix" : "\\\"blocked\\\");}\"\n                    .as_bytes()\n                    .to_vec(),\n            ))\n        } else {\n            Err(\"permission denied\".to_string())\n        }\n    });\n  "
+         },
+         {
+            "file" : "src/semantic_tests/source_contracts.lkj",
+            "kind" : "include_bytes",
+            "line" : 139,
+            "suffix" : "\\\"{requested}\\\")[0] as i64}}\"\n    );\n    let mut reads: Vec<String> = Vec::new();\n    let program = source::load(\n        root,\n        None,\n        &mut |path: &str| -> Result<Op"
+         }
+      ]
+   },
+   "native_commands" : 0,
+   "read_only" : true,
+   "schema" : "fingerprint-numeric-edit-static-read-1",
+   "source_revision" : "c887b7c5aca7bb80d70ca26d7dfdf1a44213a163"
+}

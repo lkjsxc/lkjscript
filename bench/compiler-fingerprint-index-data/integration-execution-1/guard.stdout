@@ -1,0 +1,10 @@
+{
+   "compiler_or_edit_executed" : false,
+   "input_files" : 1743,
+   "module_sha256" : "ccaad8644eddaab9f4ae344648922ef7e3df032751a732e8923dcdbe1df7d956",
+   "producer_sha256" : "b01eabfa60015ad93d86dd991f5f64a59754811062b578e12737e2feb4e0d5db",
+   "qualification" : "A read-only point-in-time guard. The compiler still resolves identities, captures negative inputs, checks the full candidate and rechecks publication inputs. No semantic snapshot or item expect digest was invented.",
+   "request_sha256" : "47ceb4ed8e8e7fdc3746537d325ae48da9520142f3845b0527baecfe61d3927c",
+   "status" : "prelaunch_source_bytes_match",
+   "tracked_language_files" : 1221
+}

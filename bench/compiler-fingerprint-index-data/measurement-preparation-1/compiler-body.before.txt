@@ -1,0 +1,15 @@
+{
+    if text.is_empty() { return Err("E_USAGE --inline-limit requires a nonnegative decimal integer".to_string()); }
+    let mut value = 0usize;
+    for byte in text.as_bytes() {
+        if *byte < b'0' || *byte > b'9' {
+            return Err("E_USAGE --inline-limit requires a nonnegative decimal integer".to_string());
+        }
+        let digit = (*byte - b'0') as usize;
+        if value > ((!0usize) - digit) / 10usize {
+            return Err("E_USAGE --inline-limit exceeds usize".to_string());
+        }
+        value = value * 10usize + digit;
+    }
+    Ok(value)
+}

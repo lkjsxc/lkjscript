@@ -1,0 +1,3 @@
+Static preparation refusal; zero compiler/native/workload commands.
+
+The proposed compiler driver::usage String-literal l-to-L edit changes the topology shape because elaborate::incremental::fingerprint includes every Expr::String/Expr::Bytes payload, including ordinary body strings. It therefore cannot establish the required positive front_reused body-resume sample. Root accepted this independent optimization_review finding before any execution. The complete initial proposal is preserved here; the generated integer xor1-to-2 edit and all workload/order/budget controls remain appropriate. A separately identified numeric edit is required before a runnable release.

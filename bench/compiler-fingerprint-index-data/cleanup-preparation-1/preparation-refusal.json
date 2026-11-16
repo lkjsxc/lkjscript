@@ -1,0 +1,14 @@
+{
+  "request_id": "compiler-fingerprint-cleanup-controls-1500",
+  "phase": "control-file preparation",
+  "result": {
+    "error": "McpServerError: invalid type: null, expected a string",
+    "error_code": "INVALID_ARGUMENT",
+    "error_data": {
+      "type": "json_rpc_error",
+      "code": -32602,
+      "message": "invalid type: null, expected a string"
+    }
+  },
+  "scope": "Tool argument decoding refused before file operations; no helper or deletion execution."
+}

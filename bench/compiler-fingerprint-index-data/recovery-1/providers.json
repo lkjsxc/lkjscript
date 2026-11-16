@@ -1,0 +1,94 @@
+{
+   "golden_prep" : {
+      "commit" : "042bce952af30959b1ecdff2fc686033f789c497",
+      "files" : 46,
+      "kind" : "git-blob",
+      "original_bytes" : 1067635,
+      "prefix" : "bench/compiler-fingerprint-index-data/golden-preparation-1/",
+      "verification" : "Every mapped original compared directly to the immutable Git blob bytes."
+   },
+   "image" : {
+      "expanded_bytes" : 1568827,
+      "expanded_sha256" : "99a179be5fd5f6cd9c8e7d3e4466468ff4b519a406303e77e935c1d27dcade89",
+      "files" : 1,
+      "gzip_bytes" : 315511,
+      "gzip_sha256" : "f7497c1346b56a6eb513137dd86f44a0fb27e8ebde525e99783bc4d564dc7f57",
+      "kind" : "new-gzip",
+      "original_bytes" : 1568827,
+      "path" : "artifacts/golden-image-99a179be.gz",
+      "verification" : "One full expansion compared byte-for-byte to the exact owned image; expanded identity matches the pinned original. New artifact is pending root commit."
+   },
+   "integration" : {
+      "commit" : "88a06df2b212d5856b62aa9bcb49e9092cad1d10",
+      "files" : 49,
+      "kind" : "git-blob",
+      "original_bytes" : 1382925,
+      "prefix" : "bench/compiler-fingerprint-index-data/integration-preparation-1/",
+      "verification" : "Every mapped original compared directly to the immutable Git blob bytes."
+   },
+   "overlay_fixture" : {
+      "commit" : "042bce952af30959b1ecdff2fc686033f789c497",
+      "files" : 1,
+      "fixed" : "incremental-fingerprint-module.txt",
+      "kind" : "git-blob",
+      "original_bytes" : 10463,
+      "prefix" : "bench/compiler-fingerprint-index-data/golden-preparation-1/control/",
+      "verification" : "Every mapped original compared directly to the immutable Git blob bytes."
+   },
+   "overlay_main" : {
+      "commit" : "042bce952af30959b1ecdff2fc686033f789c497",
+      "files" : 1,
+      "fixed" : "golden-main.txt",
+      "kind" : "git-blob",
+      "original_bytes" : 746,
+      "prefix" : "bench/compiler-fingerprint-index-data/golden-preparation-1/control/",
+      "verification" : "Every mapped original compared directly to the immutable Git blob bytes."
+   },
+   "prep" : {
+      "commit" : "1f74338b332bb6750f7b29c0cd9f25ff41e9ad5f",
+      "files" : 9,
+      "kind" : "git-blob",
+      "original_bytes" : 39730,
+      "prefix" : "bench/compiler-fingerprint-index-data/preparation-1/",
+      "verification" : "Every mapped original compared directly to the immutable Git blob bytes."
+   },
+   "raw" : {
+      "commit" : "88a06df2b212d5856b62aa9bcb49e9092cad1d10",
+      "files" : 23,
+      "kind" : "git-blob",
+      "original_bytes" : 881267,
+      "prefix" : "bench/compiler-fingerprint-index-data/golden-acceptance-1/results-v2/raw/",
+      "verification" : "Every mapped original compared directly to the immutable Git blob bytes."
+   },
+   "release" : {
+      "commit" : "88a06df2b212d5856b62aa9bcb49e9092cad1d10",
+      "files" : 1,
+      "fixed" : "golden-release-1.json",
+      "kind" : "git-blob",
+      "original_bytes" : 1046,
+      "prefix" : "bench/compiler-fingerprint-index-data/",
+      "verification" : "Every mapped original compared directly to the immutable Git blob bytes."
+   },
+   "seed" : {
+      "commit" : "e5294c339d9aefbbafc2e951c997f4fefabcc9ad",
+      "expanded_bytes" : 32588975,
+      "expanded_sha256" : "b01eabfa60015ad93d86dd991f5f64a59754811062b578e12737e2feb4e0d5db",
+      "files" : 1,
+      "git_blob" : "b4d1f9e6713d8b15c69e69b4c41765cdf923634a",
+      "gzip_bytes" : 6551428,
+      "gzip_sha256" : "c7912e43e0bbb26f814008a6616f3e8b2e4dbe09b45166e5b9523ce0461018ae",
+      "kind" : "git-gzip",
+      "known_expanded_pin_source" : "042bce952af30959b1ecdff2fc686033f789c497:bench/compiler-fingerprint-index-data/golden-preparation-1/control/pins.json",
+      "original_bytes" : 32588975,
+      "path" : "seed/lkjscript.gz",
+      "verification" : "PENDING direct expanded-byte comparison. Original owned compiler hash/size and compressed Git seed hash are verified. This task did not expand the seed or read canonical."
+   },
+   "source" : {
+      "commit" : "9326dbaab1bf6832b9f35dc156e12d0d62eccd9e",
+      "files" : 1742,
+      "kind" : "git-blob",
+      "original_bytes" : 9379487,
+      "prefix" : "",
+      "verification" : "Every mapped original compared directly to the immutable Git blob bytes."
+   }
+}

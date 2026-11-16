@@ -1,0 +1,21 @@
+{
+  "schema": "fingerprint-three-root-cleanup-release-1",
+  "status": "NOT_RELEASED",
+  "guard_sha256": "d1e6d59747e145a4827bdd148c7ec4dee70168e9e4919f0dec0814ffca7efebe",
+  "retention_commit": "ROOT_TO_FILL_AFTER_COMMIT",
+  "recovery_manifest_sha256": "f7f88ed9b02362c2d3ca9b80f9fcad3a9787db2761b90bbe53a17c9b910875d7",
+  "seed_proof_manifest_sha256": "5fb0e5e5d19b0f8379565fb4567c81f52bdb4e281e2eea078d8bc55baa2ebe05",
+  "comparison_owns_producer_a": false,
+  "comparison_producer_a_sha256": "b01eabfa60015ad93d86dd991f5f64a59754811062b578e12737e2feb4e0d5db",
+  "comparison_copy_evidence": "ROOT_TO_FILL_AFTER_COMPARISON_COPY",
+  "scope": [
+    "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-preparation-1",
+    "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1",
+    "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-integration-1"
+  ],
+  "expected": {
+    "files": 1874,
+    "directories": 57,
+    "bytes": 46921101
+  }
+}

@@ -1,0 +1,31 @@
+{
+   "directories" : 57,
+   "files" : 1874,
+   "new_image_comparison" : "pending_single_gzip_and_full_expansion",
+   "provider_bytes" : {
+      "golden_prep" : 1067635,
+      "image" : 1568827,
+      "integration" : 1382925,
+      "overlay_fixture" : 10463,
+      "overlay_main" : 746,
+      "prep" : 39730,
+      "raw" : 881267,
+      "release" : 1046,
+      "seed" : 32588975,
+      "source" : 9379487
+   },
+   "provider_files" : {
+      "golden_prep" : 46,
+      "image" : 1,
+      "integration" : 49,
+      "overlay_fixture" : 1,
+      "overlay_main" : 1,
+      "prep" : 9,
+      "raw" : 23,
+      "release" : 1,
+      "seed" : 1,
+      "source" : 1742
+   },
+   "seed_comparison" : "pending_no_expansion_authorized_here",
+   "status" : "all_originals_enumerated_and_git_providers_byte_compared"
+}

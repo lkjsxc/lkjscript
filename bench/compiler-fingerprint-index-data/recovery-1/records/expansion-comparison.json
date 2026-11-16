@@ -1,0 +1,24 @@
+{
+   "after_ns" : "1794860554908655880",
+   "artifact" : "artifacts/golden-image-99a179be.gz",
+   "before_ns" : "1794860554898078874",
+   "compared_every_byte" : true,
+   "expanded_bytes" : 1568827,
+   "expanded_sha256" : "99a179be5fd5f6cd9c8e7d3e4466468ff4b519a406303e77e935c1d27dcade89",
+   "gzip_bytes" : 315511,
+   "gzip_sha256" : "f7497c1346b56a6eb513137dd86f44a0fb27e8ebde525e99783bc4d564dc7f57",
+   "implementation" : "IO::Uncompress::Gunzip, Strict=1, one streaming expansion",
+   "load_after" : [
+      "4.83",
+      "3.78",
+      "2.90"
+   ],
+   "load_before" : [
+      "4.83",
+      "3.78",
+      "2.90"
+   ],
+   "new_expanded_file_created" : false,
+   "original" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/bin/fingerprint-golden",
+   "status" : "exact"
+}

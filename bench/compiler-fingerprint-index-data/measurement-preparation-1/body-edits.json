@@ -1,0 +1,56 @@
+{
+  "byte_offsets": "zero-based; body_end exclusive",
+  "edits": [
+    {
+      "after_file_text": "pub fn target(value: u64) -> u64 {\nvalue ^ 2u64\n}\n",
+      "after_sha256": "04e1031f9b7e0c7c933ad815f07879694fd7ec33ebf221fa80673bcedead0722",
+      "before_file_text": "pub fn target(value: u64) -> u64 {\nvalue ^ 1u64\n}\n",
+      "before_sha256": "b580c07ebeb918056105792f08191869adb72a5d7799afa37fd3aaaa1d4e7a0c",
+      "body_end": 49,
+      "body_start": 33,
+      "changed_byte_offset": 43,
+      "file_bytes": 50,
+      "identity": "edit::target",
+      "input": "generated-100k",
+      "new_hex": "32",
+      "old_hex": "31",
+      "origin": "Exact literal in committed scale-generator-source.lkj.txt; preimage SHA/size match retained generated-members.json. Existing scale.sh and cache-I/O specimens use the same 1u64 to 2u64 change.",
+      "path": "edit.lkj",
+      "body_bytes": 16,
+      "before_body_text": "{\nvalue ^ 1u64\n}",
+      "after_body_text": "{\nvalue ^ 2u64\n}"
+    },
+    {
+      "after_body_sha256": "c4aea53244a222793e35f79516d94e8c8c28449110965c25412ecc39353a87bb",
+      "after_body_text": "{\n    if text.is_empty() { return Err(\"E_USAGE --inline-limit requires a nonnegative decimal integer\".to_string()); }\n    let mut value = 1usize;\n    for byte in text.as_bytes() {\n        if *byte < b'0' || *byte > b'9' {\n            return Err(\"E_USAGE --inline-limit requires a nonnegative decimal integer\".to_string());\n        }\n        let digit = (*byte - b'0') as usize;\n        if value > ((!0usize) - digit) / 10usize {\n            return Err(\"E_USAGE --inline-limit exceeds usize\".to_string());\n        }\n        value = value * 10usize + digit;\n    }\n    Ok(value)\n}",
+      "after_sha256": "7acceb488b8a47a328ce269d880134eadfa7b92dee788f7b8ac6751e60ea33c3",
+      "before_body_sha256": "92e13f4d03d042b2e821a32aa04374696337fba6d5c0bb2d7e53a456da6cb2b5",
+      "before_body_text": "{\n    if text.is_empty() { return Err(\"E_USAGE --inline-limit requires a nonnegative decimal integer\".to_string()); }\n    let mut value = 0usize;\n    for byte in text.as_bytes() {\n        if *byte < b'0' || *byte > b'9' {\n            return Err(\"E_USAGE --inline-limit requires a nonnegative decimal integer\".to_string());\n        }\n        let digit = (*byte - b'0') as usize;\n        if value > ((!0usize) - digit) / 10usize {\n            return Err(\"E_USAGE --inline-limit exceeds usize\".to_string());\n        }\n        value = value * 10usize + digit;\n    }\n    Ok(value)\n}",
+      "before_sha256": "333d6ec927416917fa32269730a9a507fcfe31072a2191403a24161b5cf6c412",
+      "body_bytes": 577,
+      "body_end": 18817,
+      "body_start": 18240,
+      "changed_byte_offset": 18378,
+      "file_bytes": 120359,
+      "function_start": 18187,
+      "git_blob": "2de543fa7f32ab3d4d43d8aa9b5302ecb5cdde0f",
+      "git_revision": "c887b7c5aca7bb80d70ca26d7dfdf1a44213a163",
+      "identity": "driver::inline_limit",
+      "input": "compiler",
+      "new_hex": "31",
+      "new_text": "let mut value = 1usize;",
+      "old_hex": "30",
+      "old_text": "let mut value = 0usize;",
+      "path": "src/driver.lkj",
+      "origin": "Same-width 0usize to 1usize numeric initializer in the nongeneric free function driver::inline_limit; exact fixed Git blob. It changes the emitted specimen's decimal-parser accumulator, not either executing producer. The emitted images will not be executed."
+    }
+  ],
+  "schema": "compiler-fingerprint-store-body-edits-1",
+  "status": "PROPOSED_NOT_APPLIED_STATIC_ELIGIBILITY_ONLY",
+  "preparation_revision": 2,
+  "rejected_initial_proposal": {
+    "directory": "v1-rejected-string-edit",
+    "manifest_sha256": "2725aada954aeee57741cbfc356bd9b1486b9df5f536136f64ba88430e7a46cd",
+    "reason": "driver::usage String payload contributes to fingerprint topology, so it is unsuitable for the required frontend-resumed body sample. Zero workload observations."
+  }
+}

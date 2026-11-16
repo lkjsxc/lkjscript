@@ -1,0 +1,5 @@
+ src/elaborate/incremental.lkj | 31 ++++++++++++++++++++++++++-----
+ src/semantic_main.lkj         |  2 +-
+ src/semantic_tests.lkj        |  3 +++
+ tools/closed-semantics.sh     |  2 +-
+ 4 files changed, 31 insertions(+), 7 deletions(-)

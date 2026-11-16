@@ -1,0 +1,56 @@
+"closed_core" level=source-claim operation-target
+"elaborate::incremental::fingerprint" level=source-claim operation-target
+"semantic_tests" level=source-claim operation-target
+"semantic_tests::core" level=source-claim operation-target
+"semantic_tests::incremental_fingerprint" level=source-claim operation-target
+"semantic_tests::incremental_fingerprint" level=source-claim projection parent="semantic_tests" path="src/semantic_tests/incremental_fingerprint.lkj" bytes=15640 source=ccaad8644eddaab9f4ae344648922ef7e3df032751a732e8923dcdbe1df7d956
+"/home/coder/workspace/lkjscript/src/elaborate/incremental.lkj" level=source-claim file before=760485a5a12d97ce320ba9113797370df584c154084ee4a1f9689da28c7d1127 after=5e917048bb58d9cce214a7821ada2cc8a7539209623dc7d20d73d049cebb9316
+"/home/coder/workspace/lkjscript/src/semantic_main.lkj" level=source-claim file before=6e6fe4120f041247ccdff5679bff6aabb342dee9e537fbad4fb65e403de68ad6 after=61cacbbcefc9353d37770f84783780b5d516abaddddd89bf957272c21f70c0f3
+"/home/coder/workspace/lkjscript/src/semantic_tests.lkj" level=source-claim file before=4d174b8311b10c29d417c0b7907a0d0d8a7de2797af5a915fb80fb932fd4c94f after=356e0b8fe45bb9b012212cc9116cdb9e042071f9b4de84badaa951b251901de6
+"/home/coder/workspace/lkjscript/src/semantic_tests/incremental_fingerprint.lkj" level=source-claim file before=absent after=ccaad8644eddaab9f4ae344648922ef7e3df032751a732e8923dcdbe1df7d956
+transaction sites=4 files=4 identities=5
+"closed_core" level=source-claim changed=body
+"elaborate::incremental::fingerprint" level=source-claim changed=body
+"semantic_tests::core" level=source-claim changed=body
+"semantic_tests::incremental_fingerprint" level=source-claim changed=added
+"semantic_tests::incremental_fingerprint::assert_case" level=source-claim changed=added
+"semantic_tests::incremental_fingerprint::assert_case::param:case" level=source-claim changed=added
+"semantic_tests::incremental_fingerprint::case_name" level=source-claim changed=added
+"semantic_tests::incremental_fingerprint::case_name::param:case" level=source-claim changed=added
+"semantic_tests::incremental_fingerprint::dump" level=source-claim changed=added
+"semantic_tests::incremental_fingerprint::expanded_include_vectors" level=source-claim changed=added
+"semantic_tests::incremental_fingerprint::expected" level=source-claim changed=added
+"semantic_tests::incremental_fingerprint::expected::param:case" level=source-claim changed=added
+"semantic_tests::incremental_fingerprint::file_index" level=source-claim changed=added
+"semantic_tests::incremental_fingerprint::file_index::param:path" level=source-claim changed=added
+"semantic_tests::incremental_fingerprint::file_index::param:program" level=source-claim changed=added
+"semantic_tests::incremental_fingerprint::fixed_topology_vectors" level=source-claim changed=added
+"semantic_tests::incremental_fingerprint::fixture" level=source-claim changed=added
+"semantic_tests::incremental_fingerprint::fixture::param:case" level=source-claim changed=added
+"semantic_tests::incremental_fingerprint::function_index" level=source-claim changed=added
+"semantic_tests::incremental_fingerprint::function_index::param:name" level=source-claim changed=added
+"semantic_tests::incremental_fingerprint::function_index::param:program" level=source-claim changed=added
+"semantic_tests::incremental_fingerprint::include_inputs" level=source-claim changed=added
+"semantic_tests::incremental_fingerprint::input_length" level=source-claim changed=added
+"semantic_tests::incremental_fingerprint::input_length::param:inputs" level=source-claim changed=added
+"semantic_tests::incremental_fingerprint::input_length::param:path" level=source-claim changed=added
+"semantic_tests::incremental_fingerprint::input_selection_and_extra_order" level=source-claim changed=added
+"semantic_tests::incremental_fingerprint::multi_inputs" level=source-claim changed=added
+"semantic_tests::incremental_fingerprint::prepend" level=source-claim changed=added
+"semantic_tests::incremental_fingerprint::prepend::param:bytes" level=source-claim changed=added
+"semantic_tests::incremental_fingerprint::prepend::param:inputs" level=source-claim changed=added
+"semantic_tests::incremental_fingerprint::prepend::param:path" level=source-claim changed=added
+"semantic_tests::incremental_fingerprint::record" level=source-claim changed=added
+"semantic_tests::incremental_fingerprint::record::param:case" level=source-claim changed=added
+"semantic_tests::incremental_fingerprint::region_and_type_refusals" level=source-claim changed=added
+"semantic_tests::incremental_fingerprint::resolved" level=source-claim changed=added
+"semantic_tests::incremental_fingerprint::resolved::param:inputs" level=source-claim changed=added
+"semantic_tests::incremental_fingerprint::resolved::param:root" level=source-claim changed=added
+"semantic_tests::incremental_fingerprint::run" level=source-claim changed=added
+"ir:semantic_tests::incremental_fingerprint::expanded_include_vectors" level=checked-ir authority-gained="" authority-lost="" entry-before=false entry-after=true
+"ir:semantic_tests::incremental_fingerprint::fixed_topology_vectors" level=checked-ir authority-gained="" authority-lost="" entry-before=false entry-after=true
+"ir:semantic_tests::incremental_fingerprint::input_selection_and_extra_order" level=checked-ir authority-gained="" authority-lost="" entry-before=false entry-after=true
+"ir:semantic_tests::incremental_fingerprint::region_and_type_refusals" level=checked-ir authority-gained="" authority-lost="" entry-before=false entry-after=true
+"ir:semantic_tests::incremental_fingerprint::run" level=checked-ir authority-gained="" authority-lost="" entry-before=false entry-after=true
+program level=checked-ir before=0b770ac6868af0bd5a3647b4bb003af31ba1bafdb45a0934a98d8b402854dc4d after=cd70ead245f91bf3d1a89e7b4496b8a0fe110272ac337068c5815d280def4b71 checked-instances=10559 fresh-checked=10559 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=04aabd52eba1dd4eda3fc546357a1c375e7735a298df32458af1ca3587515354 source-after=a0551f20b76811d949313c460a7e25d1a73e6a267cf94b81cb0caf5188047661 mode=apply

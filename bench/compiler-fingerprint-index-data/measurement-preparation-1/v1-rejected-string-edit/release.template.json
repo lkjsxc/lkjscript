@@ -1,0 +1,17 @@
+{
+  "schema": "compiler-fingerprint-store-comparison-release-1",
+  "released": false,
+  "status": "NOT_RUNNABLE_PENDING_B_GATE_AND_ROOT_REVIEW",
+  "plan_sha256": null,
+  "input_pins_sha256": null,
+  "body_edits_sha256": null,
+  "harness_sha256": null,
+  "setup_proof": null,
+  "producer_A_sha256": "b01eabfa60015ad93d86dd991f5f64a59754811062b578e12737e2feb4e0d5db",
+  "producer_B_sha256": null,
+  "producer_B_source": null,
+  "gate_proof": null,
+  "ci_observation": null,
+  "measurement_rows": 36,
+  "run_root": "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-measurement-1"
+}

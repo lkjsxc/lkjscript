@@ -1,0 +1,6 @@
+LC_ALL=C
+TZ=UTC
+LKJSCRIPT_STORE_IO=unset
+LKJSCRIPT_GATE_JOBS=4
+LKJSCRIPT_STORE=/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-gate-store-1
+LKJSCRIPT_STORE_KEY=/home/coder/.local/state/lkjscript/store-key

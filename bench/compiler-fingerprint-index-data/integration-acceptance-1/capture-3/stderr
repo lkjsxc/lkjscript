@@ -1,0 +1,2 @@
+fatal: packfile .git/objects/pack/pack-2b483645804b3f3bbba9a66b492f0edb826a8c82.pack cannot be mapped, check sys.vm.max_map_count and/or RLIMIT_DATA: Cannot allocate memory
+Git batch header

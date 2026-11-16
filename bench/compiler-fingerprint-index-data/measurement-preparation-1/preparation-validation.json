@@ -1,0 +1,48 @@
+{
+   "archives_decompressed_or_extracted" : 0,
+   "baseline_incremental_sha256" : "760485a5a12d97ce320ba9113797370df584c154084ee4a1f9689da28c7d1127",
+   "candidate_incremental_sha256" : "5e917048bb58d9cce214a7821ada2cc8a7539209623dc7d20d73d049cebb9316",
+   "credential_or_store_creation" : 0,
+   "edit_checks" : [
+      {
+         "after_sha256" : "04e1031f9b7e0c7c933ad815f07879694fd7ec33ebf221fa80673bcedead0722",
+         "before_sha256" : "b580c07ebeb918056105792f08191869adb72a5d7799afa37fd3aaaa1d4e7a0c",
+         "body_end" : 49,
+         "body_start" : 33,
+         "changed_bytes" : 1,
+         "identity" : "edit::target",
+         "input" : "generated-100k",
+         "path" : "edit.lkj"
+      },
+      {
+         "after_sha256" : "7acceb488b8a47a328ce269d880134eadfa7b92dee788f7b8ac6751e60ea33c3",
+         "before_sha256" : "333d6ec927416917fa32269730a9a507fcfe31072a2191403a24161b5cf6c412",
+         "body_end" : 18817,
+         "body_start" : 18240,
+         "changed_bytes" : 1,
+         "identity" : "driver::inline_limit",
+         "input" : "compiler",
+         "path" : "src/driver.lkj"
+      }
+   ],
+   "language" : "Perl",
+   "original_v1_records_verified" : 11,
+   "resume_bytes" : 3682,
+   "resume_function_identical_A_B" : true,
+   "resume_sha256" : "b25f298be840c8d883c49e1e01103359c1358bf267dd3c33b9a613189c3dbcc8",
+   "rows" : 36,
+   "schema" : "fingerprint-store-preparation-validation-1",
+   "setup_or_workload_commands" : 0,
+   "stats_boundary" : "Baseline cached and ordinary build paths both set emitted_bytes to the returned image length. No timing/build was run.",
+   "stats_read_request" : "compiler-fingerprint-measurement-stats-boundary-20261116-354",
+   "status" : "STATIC_CONTROLS_ONLY_NO_WORKLOAD",
+   "unchanged_protocol_fields" : [
+      "rows",
+      "command_templates",
+      "limits",
+      "controls",
+      "coverage_requirements",
+      "disk_forecast"
+   ],
+   "unmatched_include_classification" : "All11 in escaped/deliberately malformed source-contract test strings; inspected in context. No driver include in the82 literal-call overapproximation."
+}

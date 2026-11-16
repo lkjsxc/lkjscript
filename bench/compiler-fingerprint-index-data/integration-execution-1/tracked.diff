@@ -1,0 +1,89 @@
+diff --git a/src/elaborate/incremental.lkj b/src/elaborate/incremental.lkj
+index 1b40e2ad0..fc2b83f2c 100644
+--- a/src/elaborate/incremental.lkj
++++ b/src/elaborate/incremental.lkj
+@@ -55,18 +55,40 @@ fn take_words(input: &mut Reader<'_>) -> Option<Vec<usize>> {
+ pub fn fingerprint(source: &a::Program, inputs: &[(String, Vec<u8>)]) -> Option<Fingerprint> {
+     let mut data = b"lkjscript-front-topology-2"[..].to_vec();
+     let mut bodies = vec![String::new(); source.functions.len()];
++    // Locate each path once without changing the first-match input contract.
++    let mut first_input: BTreeMap<String, usize> = BTreeMap::new();
++    for (index, input) in inputs.iter().enumerate() {
++        if !first_input.contains_key(&input.0) {
++            first_input.insert(input.0.clone(), index);
++        }
++    }
++    let mut file_inputs: Vec<Option<usize>> = Vec::new();
++    let mut file_functions: Vec<Vec<usize>> = Vec::new();
++    for descriptor in &source.files {
++        file_inputs.push(first_input.get(&descriptor.path).copied());
++        file_functions.push(Vec::new());
++    }
++    drop(first_input);
++    // Do not inspect a body's block until its original per-file visit.
++    // An out-of-range function FileId was ignored by the old scan.
++    for (index, function) in source.functions.iter().enumerate() {
++        if function.span.file < file_functions.len() && function.body.is_some() {
++            file_functions[function.span.file].push(index);
++        }
++    }
+     let mut source_paths = BTreeSet::new();
+     for (file, descriptor) in source.files.iter().enumerate() {
+-        let raw = &inputs.iter().find(|input| input.0 == descriptor.path)?.1;
++        let raw = &inputs[file_inputs[file]?].1;
+         source_paths.insert(descriptor.path.clone());
+         bytes(&mut data, descriptor.path.as_bytes()); word(&mut data, descriptor.crate_root);
+         let mut regions: Vec<(usize, usize, usize)> = Vec::new();
+-        for (index, function) in source.functions.iter().enumerate() {
++        for index in &file_functions[file] {
++            let function = &source.functions[*index];
+             if function.span.file == file {
+                 if let Some(body) = function.body {
+                     let site = source.blocks[body].span;
+                     if site.start > site.end || site.end > raw.len() { return None; }
+-                    regions.push((site.start, site.end, index));
++                    regions.push((site.start, site.end, *index));
+                 }
+             }
+         }
+@@ -87,8 +109,7 @@ pub fn fingerprint(source: &a::Program, inputs: &[(String, Vec<u8>)]) -> Option<
+     word(&mut data, source.types.len());
+     for node in &source.types {
+         span(&mut data, node.span); word(&mut data, node.scope);
+-        let path = &source.files[node.span.file].path;
+-        let raw = &inputs.iter().find(|input| &input.0 == path)?.1;
++        let raw = &inputs[file_inputs[node.span.file]?].1;
+         if node.span.start > node.span.end || node.span.end > raw.len() { return None; }
+         bytes(&mut data, &raw[node.span.start..node.span.end]);
+     }
+diff --git a/src/semantic_main.lkj b/src/semantic_main.lkj
+index a4ebaeabc..ded151656 100644
+--- a/src/semantic_main.lkj
++++ b/src/semantic_main.lkj
+@@ -49,7 +49,7 @@ fn closed_sources(shard: usize) {
+     assert!(errors.is_empty());
+     assert_eq!(count, 134usize);
+ }
+-pub fn closed_core() { assert_eq!(semantic_tests::core(), 192usize); }
++pub fn closed_core() { assert_eq!(semantic_tests::core(), 196usize); }
+ pub fn closed_source_0() { closed_sources(0usize); }
+ pub fn closed_source_1() { closed_sources(1usize); }
+ pub fn closed_source_2() { closed_sources(2usize); }
+diff --git a/src/semantic_tests.lkj b/src/semantic_tests.lkj
+index 39d12274d..17671d185 100644
+--- a/src/semantic_tests.lkj
++++ b/src/semantic_tests.lkj
+@@ -145,6 +145,7 @@ pub fn core() -> usize {
+     count += function_owners::run();
+     count += library_demand::run();
+     count += reference_capture::run();
++    count += incremental_fingerprint::run();
+     count += source_contracts::run();
+     count += return_contracts::run();
+     count += array_repeat::run();
+@@ -199,3 +200,5 @@ fn derived_source_case(
+     }
+     source_case_at(name, root, library, files, expected, root, expected_line, 0)
+ }
++
++mod incremental_fingerprint;

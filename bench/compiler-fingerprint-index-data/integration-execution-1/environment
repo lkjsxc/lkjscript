@@ -1,0 +1,5 @@
+LC_ALL=C
+TZ=UTC
+LKJSCRIPT_STORE=unset
+LKJSCRIPT_STORE_KEY=unset; explicit argv path only
+LKJSCRIPT_STORE_IO=unset

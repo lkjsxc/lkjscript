@@ -1,0 +1,6 @@
+ok directory identity: exact dev/ino, same-inode alias and retained parent after pathname replacement
+ok directory identity native: lengths 0/15/17 refuse without changes; raw/helper metadata EIO preserves caller bytes
+ok directory identity: exact dev/ino, same-inode alias and retained parent after pathname replacement
+ok directory identity interpreter: lengths 0/15/17 refuse without changes; raw/helper metadata EIO preserves caller bytes
+ok directory identity: checked-IR mutable Directory and mutable byte-view boundary, arity and result
+ok directory identity suite: 2 routes, 0.749 s, load 4.04 2.37 2.26 5/5553 1580743 -> 4.04 2.37 2.26 4/5553 1580921

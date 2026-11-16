@@ -1,0 +1,36 @@
+{
+  "cancelled": false,
+  "capture_status": "complete",
+  "duration_ms": 24,
+  "exit_code": 0,
+  "finished": true,
+  "generation": "pipe-npdcaimiboomebdaiofhhkdimeionbeh",
+  "request_id": "compiler-fingerprint-recovery-providers-1486",
+  "signal": null,
+  "status": "done",
+  "stderr": "",
+  "stderr_capture_truncated": false,
+  "stderr_ref": {
+    "available": true,
+    "end_offset": 0,
+    "offset": 0,
+    "path": "/home/coder/.local/state/lkjyolo/outputs/pipe-npdcaimiboomebdaiofhhkdimeionbeh.stderr",
+    "total_bytes": 0
+  },
+  "stderr_truncated": false,
+  "stdout": "1f74338b332bb6750f7b29c0cd9f25ff41e9ad5f\n042bce952af30959b1ecdff2fc686033f789c497\n88a06df2b212d5856b62aa9bcb49e9092cad1d10\ne5294c339d9aefbbafc2e951c997f4fefabcc9ad\n9326dbaab1bf6832b9f35dc156e12d0d62eccd9e\nbench/compiler-fingerprint-index-data/preparation-1/PLAN.md\nbench/compiler-fingerprint-index-data/preparation-1/baseline-fingerprint.txt\nbench/compiler-fingerprint-index-data/preparation-1/candidate-fingerprint.txt\nbench/compiler-fingerprint-index-data/preparation-1/fixtures.json\nbench/compiler-fingerprint-index-data/preparation-1/golden-preparation-1/README.md\nbench/compiler-fingerprint-index-data/preparation-1/golden-preparation-1/golden-main.txt\nbench/compiler-fingerprint-index-data/preparation-1/golden-preparation-1/incremental-fingerprint-module.txt\nbench/compiler-fingerprint-index-data/preparation-1/golden-preparation-1/integration-proposal.json\nbench/compiler-fingerprint-index-data/preparation-1/manifest.sha256\nbench/compiler-fingerprint-index-data/preparation-1/replacement-body.txt\n[\n   {\n      \"bytes\" : 39730,\n      \"files\" : 9,\n      \"other_golden\" : [],\n      \"root\" : \"/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-preparation-1\",\n      \"top_counts\" : {\n         \"PLAN.md\" : 1,\n         \"baseline-fingerprint.txt\" : 1,\n         \"candidate-fingerprint.txt\" : 1,\n         \"fixtures.json\" : 1,\n         \"golden-preparation-1\" : 4,\n         \"replacement-body.txt\" : 1\n      }\n   },\n   {\n      \"bytes\" : 45498446,\n      \"files\" : 1816,\n      \"other_golden\" : [\n         \"release.json\"\n      ],\n      \"root\" : \"/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1\",\n      \"top_counts\" : {\n         \"bin\" : 2,\n         \"control\" : 15,\n         \"preparation-manifest.sha256\" : 1,\n         \"records\" : 53,\n         \"release.json\" : 1,\n         \"source\" : 1744\n      }\n   },\n   {\n      \"bytes\" : 1382925,\n      \"files\" : 49,\n      \"other_golden\" : [],\n      \"root\" : \"/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-integration-1\",\n      \"top_counts\" : {\n         \"README.md\" : 1,\n         \"before\" : 12,\n         \"commands.json\" : 1,\n         \"correspondence.json\" : 1,\n         \"guard.pl\" : 1,\n         \"manifest.sha256\" : 1,\n         \"pins.json\" : 1,\n         \"prepare-request.pl\" : 1,\n         \"proposals\" : 6,\n         \"records\" : 23,\n         \"request.json\" : 1\n      }\n   }\n]\n",
+  "stdout_capture_truncated": false,
+  "stdout_ref": {
+    "available": true,
+    "end_offset": 2362,
+    "offset": 2362,
+    "path": "/home/coder/.local/state/lkjyolo/outputs/pipe-npdcaimiboomebdaiofhhkdimeionbeh.stdout",
+    "total_bytes": 2362
+  },
+  "stdout_truncated": false,
+  "stream_mode": "pipes",
+  "timed_out": false,
+  "tool": "exec_command",
+  "truncated": false,
+  "workdir": "/home/coder/workspace/lkjscript"
+}

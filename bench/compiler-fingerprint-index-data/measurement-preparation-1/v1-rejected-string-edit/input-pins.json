@@ -1,0 +1,110 @@
+{
+  "schema": "compiler-fingerprint-store-input-pins-1",
+  "status": "PROPOSED_RECOVERY_NOT_EXECUTED",
+  "retention_commit": "d84cac6edcee59e2c2ad631fb6ca15d63340a1c8",
+  "baseline": {
+    "role": "A",
+    "sha256": "b01eabfa60015ad93d86dd991f5f64a59754811062b578e12737e2feb4e0d5db",
+    "bytes": 32588975,
+    "existing_owned_source": "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/bin/compiler-baseline",
+    "git_recovery": {
+      "commit": "e5294c339d9aefbbafc2e951c997f4fefabcc9ad",
+      "path": "seed/lkjscript.gz",
+      "git_blob": "b4d1f9e6713d8b15c69e69b4c41765cdf923634a",
+      "compressed_bytes": 6551428,
+      "compressed_sha256": "c7912e43e0bbb26f814008a6616f3e8b2e4dbe09b45166e5b9523ce0461018ae"
+    },
+    "source_commit": "bd8a9050a3786de9f227c6c4037f5acd43205f71",
+    "recovery_evidence": {
+      "path": "bench/compiler-reference-capture-data/comparison-recovery/producer-recovery.json",
+      "sha256": "fd215d45fcf9b48a57b4b2f28611f72fdc52c9e3ecec50efaea2e9a355c44113",
+      "record": "historical recipe B is this cohort's baseline A"
+    },
+    "src_tree": "626c9c1f234f4d003a08820d9b69840535eff8b8",
+    "library_tree": "25bdb8ff8567b941790d3951c78e896b23e26e8e"
+  },
+  "candidate": {
+    "role": "B",
+    "status": "PENDING_GATED_FIXED_POINT",
+    "sha256": null,
+    "bytes": null,
+    "source_commit": null,
+    "src_tree": null,
+    "library_tree": null,
+    "gate_proof": null,
+    "ci_observation": null
+  },
+  "compiler": {
+    "revision": "c887b7c5aca7bb80d70ca26d7dfdf1a44213a163",
+    "trees": {
+      "src": "c710586b4d1b7ab476fd179a7d2c699477a2054a",
+      "library": "25bdb8ff8567b941790d3951c78e896b23e26e8e",
+      "tests": "e2b30ac0f2fa8f897f366293189d6af552a41980"
+    },
+    "archive": {
+      "path": "bench/compiler-reference-capture-data/setup2/artifacts/compiler-source.tar",
+      "git_blob": "6918362680d524d8ac7fc65f6b055ca250c7c797",
+      "bytes": 10741760,
+      "sha256": "79aa24a9eb6f8e7940b4424fc20839759a79dd8d480b1b746f7e29b17171d806"
+    },
+    "inventory": {
+      "path": "bench/compiler-reference-capture-data/setup2/artifacts/compiler-inputs.json",
+      "git_blob": "1401ff1d49982b1e2e4465b2e1bb3d15cf3fe087",
+      "sha256": "2e2e0ec2121c90767780b063cfba0cbe048f9d39914a3c0294e4e42641dcde4c",
+      "regular_files": 1742,
+      "bytes": 9356858
+    },
+    "entry": "src/main.lkj",
+    "source_root": "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-measurement-1/inputs/compiler",
+    "library_root": "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-measurement-1/inputs/compiler/library",
+    "runtime": "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-measurement-1/inputs/compiler/library/runtime.lkj",
+    "runtime_sha256": "eeeb173d23c597d7b666aca949a32ba171fa5407be4173ad4626abe1ad295d14"
+  },
+  "generated": {
+    "cohort_origin": "Previously completed reference-capture setup2; reuse its exact retained specimen, no new generation",
+    "seed": 20261116,
+    "lines": 100000,
+    "source_files": 169,
+    "source_bytes": 3923070,
+    "regular_files": 170,
+    "all_member_bytes": 3923332,
+    "archive": {
+      "path": "bench/compiler-reference-capture-data/setup2/artifacts/generated-100k.tar.gz",
+      "git_blob": "806d76ee3d98d92b150cdca30895bd03149abd8b",
+      "bytes": 405428,
+      "sha256": "57ead08d82ea53ba4d833b2689cbf1158550931b8cf288aac3363644d2dab07c",
+      "decoded_tar_bytes": 4055040,
+      "decoded_tar_sha256": "ae6b1704d0796e9c2437c7e4ebefe25995c493fedca7308fe0a2fc6c42857cb4"
+    },
+    "inventory": {
+      "path": "bench/compiler-reference-capture-data/setup2/artifacts/generated-members.json",
+      "git_blob": "89a8cd214f4d717d905de3045ffbadbfc96363fc",
+      "sha256": "cfc023b8d4224c66853c1545b6cdca391203f32c94654d7d9c51c77f6b694cb7"
+    },
+    "sha_manifest": {
+      "path": "bench/compiler-reference-capture-data/setup2/artifacts/generated-members.sha256",
+      "sha256": "2fe98d661332250cf410dfde36c5c364c3059756fdf7a02f0122bf8395e0e1ca"
+    },
+    "generator_source": {
+      "path": "bench/compiler-reference-capture-data/setup2/artifacts/scale-generator-source.lkj.txt",
+      "sha256": "557d6b124fe739f17c678c77b92e5f6259d87ebca69c2a56aca411071c5ff1e9"
+    },
+    "shape": {
+      "path": "bench/compiler-reference-capture-data/setup2/artifacts/shape",
+      "sha256": "0457f8f9424882d2e3160a568f280193d49b9b046a5fae2d6e2d0b6da047072c"
+    },
+    "workload": {
+      "path": "bench/compiler-reference-capture-data/setup2/artifacts/workload.txt",
+      "sha256": "d4ea2dc094f268b2413c0c0edd1bea23cb6338adeb6a97e236cbed65a15cee3a"
+    },
+    "entry": "main.lkj",
+    "source_root": "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-measurement-1/inputs/generated-100k",
+    "library_root": "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-measurement-1/inputs/compiler/library",
+    "runtime": "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-measurement-1/inputs/compiler/library/runtime.lkj"
+  },
+  "prior_input_acceptance": {
+    "path": "bench/compiler-reference-capture-data/setup2-acceptance/acceptance.json",
+    "sha256": "157b7b5ce70e5fb6a5d7bafdb82428328133cb5ab4f17e01c881e8ed6a77c855"
+  },
+  "preparation_boundary": "Pins are read from committed records and Git. No archive is decompressed/extracted, no generator/compiler/native command is run, and no key/store or source root is created by this preparation."
+}

@@ -1,0 +1,31 @@
+{
+   "all_originals_still_required" : true,
+   "committed_git_byte_comparisons" : 1872,
+   "directories" : 57,
+   "directories_sha256" : "9c34654344a5148d0c2de6e75126d20286fb10fa84c38381f993a6d0ee001de1",
+   "exclusions" : "No deletion, key read, canonical read, gate-store/measurement-preparation access, unrelated archive expansion, source generation, compiler/native execution, observer or Git commit.",
+   "files" : 1874,
+   "files_sha256" : "2701a10d6d72cc2f54d4c7dec5c5277ff83bad0e0c5cd8b63433c12eff30ff9c",
+   "image" : {
+      "expanded_bytes" : 1568827,
+      "expanded_sha256" : "99a179be5fd5f6cd9c8e7d3e4466468ff4b519a406303e77e935c1d27dcade89",
+      "files" : 1,
+      "gzip_bytes" : 315511,
+      "gzip_sha256" : "f7497c1346b56a6eb513137dd86f44a0fb27e8ebde525e99783bc4d564dc7f57",
+      "kind" : "new-gzip",
+      "original_bytes" : 1568827,
+      "path" : "artifacts/golden-image-99a179be.gz",
+      "verification" : "One full expansion compared byte-for-byte to the exact owned image; expanded identity matches the pinned original. New artifact is pending root commit."
+   },
+   "logical_bytes" : 46921101,
+   "new_gzip_files" : 1,
+   "new_gzip_full_byte_comparisons" : 1,
+   "new_raw_record_copies" : 0,
+   "original_modes" : "Exact current octal modes/uid/gid/dev/inode/nlink are recorded for every original file and directory. Providers recover bytes; restore mode from this inventory. No historical nanosecond metadata claim.",
+   "pending" : "Owned baseline A remains in place. Its b01 digest and the e529 compressed seed digest match known committed pins; no new seed expansion comparison was performed.",
+   "pending_seed_expansion_comparisons" : 1,
+   "providers_sha256" : "6b7be7fd6444654ffaad89ba501fc762b4c6365851646bee07afef942ffc2716",
+   "roots" : 3,
+   "schema" : "fingerprint-three-root-recovery-1",
+   "status" : "recovery_prepared_roots_retained"
+}

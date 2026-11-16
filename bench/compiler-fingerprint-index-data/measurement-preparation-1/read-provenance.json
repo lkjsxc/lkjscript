@@ -1,0 +1,44 @@
+{
+  "archive_access": "No archive decompression, extraction, native/generator/compiler invocation.",
+  "commands": [
+    [
+      "git",
+      "show",
+      "c887b7c5aca7bb80d70ca26d7dfdf1a44213a163:src/driver.lkj"
+    ],
+    [
+      "git",
+      "rev-parse",
+      "c887b7c5aca7bb80d70ca26d7dfdf1a44213a163:src/driver.lkj"
+    ]
+  ],
+  "compiler_preimage_check": {
+    "bytes": 120359,
+    "path": "src/driver.lkj",
+    "retained_path": "bench/compiler-reference-capture-data/setup2/artifacts/compiler-inputs.json",
+    "sha256": "333d6ec927416917fa32269730a9a507fcfe31072a2191403a24161b5cf6c412"
+  },
+  "generated_preimage_check": {
+    "bytes": 50,
+    "path": "edit.lkj",
+    "retained_path": "bench/compiler-reference-capture-data/setup2/artifacts/generated-members.json",
+    "sha256": "b580c07ebeb918056105792f08191869adb72a5d7799afa37fd3aaaa1d4e7a0c"
+  },
+  "language": "Perl",
+  "mutation_scope": "Only proposed JSON/text under this new preparation directory; no source input, producer, store or key created/modified.",
+  "schema": "fingerprint-comparison-preparation-read-1",
+  "preparation_revision": 2,
+  "additional_gateway_reads": [
+    "compiler-fingerprint-measurement-numeric-eligibility-20261116-348",
+    "compiler-fingerprint-measurement-numeric-controls-20261116-349",
+    "compiler-fingerprint-measurement-include-check-20261116-350",
+    "compiler-fingerprint-measurement-rule-parity-20261116-351"
+  ],
+  "static_evidence": [
+    "numeric-eligibility.read.json",
+    "numeric-eligibility.fingerprint.txt",
+    "numeric-eligibility.resume.txt",
+    "numeric-eligibility.md"
+  ],
+  "rejected_initial_proposal": "v1-rejected-string-edit, untouched; zero setup/native/workload commands"
+}

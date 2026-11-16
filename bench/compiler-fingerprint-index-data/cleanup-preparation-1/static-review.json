@@ -1,0 +1,36 @@
+{
+  "schema": "fingerprint-three-root-cleanup-static-review-1",
+  "helper_sha256": "d1e6d59747e145a4827bdd148c7ec4dee70168e9e4919f0dec0814ffca7efebe",
+  "reviewer": "/root/optimization_review",
+  "result": "No concrete false-acceptance or deletion-scope defect found in bounded static review.",
+  "checks": [
+    "Fixed P/G/I paths and exact per-root counts and bytes close the population before mutation.",
+    "Committed provider and seed-proof checks, all population checks and original hashes precede the first unlink.",
+    "Removal is enumerated with held-directory and path checks, per-file rehash, deepest-first empty rmdir, and ENOENT.",
+    "Failure preserves intent and progress and stops; empty-read normalization is appropriate."
+  ],
+  "qualifications": [
+    "Cooperative, non-atomic contract; no guarantee against hostile concurrent rename.",
+    "Review relies on already-reviewed recovery-map and proof pins.",
+    "Reviewer did not execute the guard, inventory scopes, read archives, or re-audit payloads."
+  ],
+  "syntax": {
+    "request_id": "compiler-fingerprint-cleanup-syntax-1502",
+    "status": 0,
+    "wall_s": "0.01",
+    "user_s": "0.01",
+    "sys_s": "0.00",
+    "max_rss_kib": 10860,
+    "load_before": [
+      "2.35",
+      "3.42",
+      "3.22"
+    ],
+    "load_after": [
+      "2.35",
+      "3.42",
+      "3.22"
+    ]
+  },
+  "execution_state": "Preparation only; guard never invoked."
+}

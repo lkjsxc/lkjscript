@@ -1,0 +1,1495 @@
+{
+   "gate" : {
+      "argv" : [
+         "/usr/bin/time",
+         "-o",
+         "/home/coder/workspace/lkjscript/bench/compiler-fingerprint-index-data/gate-1/time",
+         "-f",
+         "wall_s=%e user_s=%U system_s=%S maxrss_kib=%M exit_status=%x",
+         "/usr/bin/timeout",
+         "--signal=TERM",
+         "--kill-after=10s",
+         "2400s",
+         "/usr/bin/prlimit",
+         "--as=4294967296",
+         "--",
+         "bash",
+         "tools/check.sh"
+      ],
+      "closed_records" : 26,
+      "end_ns" : "1794860731183648056",
+      "end_utc" : "2026-11-16T20:25:31.184767722Z\n",
+      "gnu" : {
+         "exit_status" : 0,
+         "maxrss_kib" : 1267048,
+         "system_s" : "23.33",
+         "user_s" : "1503.92",
+         "wall_s" : "600.09"
+      },
+      "gnu_cpu_centiseconds" : 152725,
+      "internal_wall_ms" : 600087,
+      "load_after" : [
+         "3.66",
+         "3.84",
+         "3.09"
+      ],
+      "load_before" : [
+         "1.87",
+         "1.77",
+         "2.11"
+      ],
+      "outer_wall_ns" : "600091569160",
+      "phase_count" : 60,
+      "phase_duration_sum_ms" : 875374,
+      "rerun" : 5459,
+      "reused" : 0,
+      "rounded_phase_interval_gap_ms" : 55,
+      "rounded_phase_interval_union_ms" : 600032,
+      "start_ns" : "1794860131092078896",
+      "start_utc" : "2026-11-16T20:15:31.090869100Z\n",
+      "stats_records" : 60,
+      "status" : 0,
+      "structural_contracts" : 732
+   },
+   "limitations" : [
+      "The 60 source-declared successful phases bind freshness. Any extra copied log is retained data only; no freshness claim comes from file presence alone.",
+      "The gate began from working base 88a06df2 with the recorded source changes and newly added module. The five gated files were subsequently committed as 31f412a0 without changing their bytes; the complete captured input set still matches.",
+      "Bootstrap intentionally changed canonical b01 to the captured after digest. The fixed-point claim is the retained success of the pinned bootstrap comparison script, not a rerun by this audit. Seed c791 stayed unchanged.",
+      "Phase wall intervals overlap under four workers. Their sum is not total wall or CPU; rounded interval endpoints carry millisecond precision. GNU CPU is user plus system.",
+      "The fixed mutation aggregate is verified, including its 12 checked/5 emitted internal reuses. Those are distinct from the zero skipped case requests. No individual mutant record is reconstructed.",
+      "No compiler, native image, test, official reader, new observation, archive operation, source modification, key read or cache read ran in this audit."
+   ],
+   "mutation" : {
+      "checked_reuses" : 12,
+      "detail_sha256" : "5fb7b26bd9e7d1b44eda05ba800ce00a53136baa06ce1addc54ccf6ef8766788",
+      "emitted_reuses" : 5,
+      "findings" : 0,
+      "load_after" : "3.66",
+      "load_before" : "3.81",
+      "nontermination" : 1,
+      "rejected" : 104,
+      "reported_per_minute" : 3198,
+      "reported_wall_ms" : 2401,
+      "resources" : 0,
+      "seed" : 1701,
+      "store_rejects" : 0,
+      "total" : 128,
+      "traps" : 1,
+      "values" : 22,
+      "workers" : 4
+   },
+   "phases" : [
+      {
+         "closed" : [],
+         "detail_sha256" : "8164a66e041500a94fe6ebcacd1174b2bc5d13dd8a7f2b09d79e640f042b425b",
+         "end_ms" : 76789,
+         "load_after" : "1.88",
+         "load_before" : "1.87",
+         "name" : "bootstrap",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 2,
+         "stats" : [],
+         "wall_ms" : 76788
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "9872e3b7453b7f6047a0df7a2c3c003522d674cd14f90c3f34dab97a307f7584",
+         "end_ms" : 76794,
+         "load_after" : "1.88",
+         "load_before" : "1.88",
+         "name" : "independence",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 76791,
+         "stats" : [],
+         "wall_ms" : 2
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+         "end_ms" : 78602,
+         "load_after" : "2.21",
+         "load_before" : "1.88",
+         "name" : "tool-build",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 76795,
+         "stats" : [],
+         "wall_ms" : 1807
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+         "end_ms" : 116665,
+         "load_after" : "2.73",
+         "load_before" : "2.21",
+         "name" : "closed-build",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 78603,
+         "stats" : [],
+         "wall_ms" : 38062
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "2ee44fc45f5eab100102aabce776ac53a55fc3ad7bdbe6ef29732ca6795b05ec",
+         "end_ms" : 116752,
+         "load_after" : "2.73",
+         "load_before" : "2.73",
+         "name" : "generate",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 116667,
+         "stats" : [],
+         "wall_ms" : 84
+      },
+      {
+         "closed" : [
+            {
+               "closure" : "929b8a1b2522e447d4686aef08727faf3e6e5ade21078992af26230b112140c6",
+               "rerun" : 28,
+               "reused" : 0
+            }
+         ],
+         "detail_sha256" : "39890b48c95083b561148d08de74303f05c1b5d61a4c48cb081688c7c2ae0153",
+         "end_ms" : 117318,
+         "load_after" : "2.73",
+         "load_before" : "2.73",
+         "name" : "closed-semantics",
+         "rerun" : 28,
+         "reused" : 0,
+         "start_ms" : 116754,
+         "stats" : [],
+         "wall_ms" : 564
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "597ad14ce03e40096f40e19a215f2212e1e1686b908380ea1ad672ef2e75f93b",
+         "end_ms" : 118447,
+         "load_after" : "2.83",
+         "load_before" : "2.73",
+         "name" : "closed-proof-attacks",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 116754,
+         "stats" : [],
+         "wall_ms" : 1693
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "7580cda8c677d88d133c9bbf83a91147638b75107c87a8bf3446e82c9611cc5e",
+         "end_ms" : 181221,
+         "load_after" : "5.79",
+         "load_before" : "2.73",
+         "name" : "toolchain",
+         "rerun" : 96,
+         "reused" : 0,
+         "start_ms" : 116754,
+         "stats" : [
+            {
+               "contains_test_reused" : true,
+               "sha256" : "c70fe460c6370c6bc46e52074bdd95d83e916d28993960144d1419110ad7a303",
+               "stopped_stage" : "done",
+               "test_rerun" : 1,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "0ccd0d18595ebbb1340a80475b499210e8783604eabb8848e2bf8bb37ee8de10",
+               "stopped_stage" : "done",
+               "test_rerun" : 25,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "798b849f817c720574f9a8f061d098a7bb42e8b25a695c5a8ba8620551db1df1",
+               "stopped_stage" : "done",
+               "test_rerun" : 1,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "8744dd7c04174d43bd895e90bca8d1bbd60ab2704f2c9f8cb5e7136a64e1ba18",
+               "stopped_stage" : "done",
+               "test_rerun" : 1,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "7bbfdbfe5ccc354fd3c0d77851007a76979aa3c052855a6702bcc02e88e6b3dd",
+               "stopped_stage" : "done",
+               "test_rerun" : 1,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "00af219333dfbc09891529d70af3a11616ac9bd8fc4bda8ac5210e410494f730",
+               "stopped_stage" : "done",
+               "test_rerun" : 1,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "dd89b07f4bd155a490f79a533ed84f7f4a24a435417a81eea776e78dc866ea91",
+               "stopped_stage" : "done",
+               "test_rerun" : 1,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "3ba6021fcd39b8466fbfb038e4c74c010c3d45c67545db09a45b6fb12cd0544f",
+               "stopped_stage" : "done",
+               "test_rerun" : 1,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "0828c66794d327cc40b1fc47b81589041b23bff9884a07bd92fa71d2dd2a3fe3",
+               "stopped_stage" : "done",
+               "test_rerun" : 1,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "51e6b11453c2a7fa7e2633a3714b79fd2bcdd3645d7427b389e380907a5da213",
+               "stopped_stage" : "done",
+               "test_rerun" : 1,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "4c359160554c95a9da5137b9716a9c2adeaa5ff914e0f0149f2d02b9f2925927",
+               "stopped_stage" : "done",
+               "test_rerun" : 1,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "b27645f53e7360ca3b787921c10079ab0948db1842d47deb4050f0765b2e4f62",
+               "stopped_stage" : "done",
+               "test_rerun" : 1,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "8376dc419b445f8a9fbc58f20f1b6367f1562ab305c33cbc06e41cc00b7ec6bd",
+               "stopped_stage" : "done",
+               "test_rerun" : 1,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "3ed60687c8ab445cef7bbdb6b98f151f9bbf8ff15183beadf6d27b62caee54cb",
+               "stopped_stage" : "done",
+               "test_rerun" : 1,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "0213914c723cb9745e339874efda0f011cb63655b9eec79ab5466050781b0c43",
+               "stopped_stage" : "done",
+               "test_rerun" : 1,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "cbc3d6e1971766111a616c06243d46c04a8e713db007fdb70cf50bdfc2fa2f0e",
+               "stopped_stage" : "done",
+               "test_rerun" : 1,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "b591106f0ba7079053602df05f7fa588b280cb74c0e6e6e958a935b20cdb0282",
+               "stopped_stage" : "done",
+               "test_rerun" : 1,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "488f2909af1e5d76fe3be523b415b99af2154773081f2617eb12e91c7f2efac2",
+               "stopped_stage" : "done",
+               "test_rerun" : 1,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "4109f7e06fef802f6d3f21488c6a14010e9a04c486f4bd5e16f2a10c754a61f9",
+               "stopped_stage" : "done",
+               "test_rerun" : 1,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "d9c207c98e63e44450f7fe069eb9e8415279a7e76583fd66024248815ada769f",
+               "stopped_stage" : "done",
+               "test_rerun" : 1,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "ea816ff6d1e8d39c3cf6662447a6e121a62bbebc7c036765d6176ce6efc08b9c",
+               "stopped_stage" : "done",
+               "test_rerun" : 1,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "10b02d5b7ff9ced4e6f329225db50ad9cd18ec5d4d9b7dcdbdbb7891ef51c626",
+               "stopped_stage" : "done",
+               "test_rerun" : 5,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "c7f45ed1d59879e5a4a7d8e6f6d04b6fbc79f7797da578c51427b47ea12e63de",
+               "stopped_stage" : "done",
+               "test_rerun" : 10,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "5368c70920e3aa58d0cabe4b4951e2cd6f995283fb2508e6d648f19723d68caf",
+               "stopped_stage" : "done",
+               "test_rerun" : 9,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "f9f2d686b7815dc41c60ed78bffab3ce16bd8f7361485eea4eea2f8e2e9cd2b7",
+               "stopped_stage" : "done",
+               "test_rerun" : 24,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "5683898c067cac4a956b9184ffd7878cb8afdb219e7d3253c629d94e2991a28d",
+               "stopped_stage" : "done",
+               "test_rerun" : 3,
+               "test_reused" : 0
+            }
+         ],
+         "wall_ms" : 64468
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "66455bf173aa2ec632c3a3e873d77ab77ef63fb8322adbdf7f555d4afa720edd",
+         "end_ms" : 143212,
+         "load_after" : "3.96",
+         "load_before" : "2.73",
+         "name" : "world",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 116754,
+         "stats" : [],
+         "wall_ms" : 26459
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "4c434831879d629c93619aaecfd8cb7f94cc53e633ce499805463d30bc9ff650",
+         "end_ms" : 125283,
+         "load_after" : "2.93",
+         "load_before" : "2.73",
+         "name" : "semantic-query",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 117320,
+         "stats" : [],
+         "wall_ms" : 7963
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "5c960d3481dd07fe17c3af5c3b406e69d2c9b06852533796668255bf9fe4b292",
+         "end_ms" : 124469,
+         "load_after" : "2.93",
+         "load_before" : "2.83",
+         "name" : "associated-query",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 118449,
+         "stats" : [],
+         "wall_ms" : 6020
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "6bbe5c9765d9efe9dc7132dca10cd2a58a8372bba230c19ca57e74adf4ee9e57",
+         "end_ms" : 124931,
+         "load_after" : "2.93",
+         "load_before" : "2.93",
+         "name" : "query-signature",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 124474,
+         "stats" : [],
+         "wall_ms" : 457
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "56b0efaab1f6fdc86efd3572161126a01258f4273316da3d3e563f9d97ad093b",
+         "end_ms" : 143912,
+         "load_after" : "4.04",
+         "load_before" : "2.93",
+         "name" : "generated-source",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 124933,
+         "stats" : [],
+         "wall_ms" : 18979
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "35692dab7a7e97f1929b26f79bfef5b85275be7dc1f23954a803a2dcd062ea96",
+         "end_ms" : 127359,
+         "load_after" : "2.93",
+         "load_before" : "2.93",
+         "name" : "query-store",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 125284,
+         "stats" : [],
+         "wall_ms" : 2074
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "c02714afb6f98d216d6d276a35ef42a9c1c58db4cdde19a4bbc2d2b34ceed1b7",
+         "end_ms" : 148378,
+         "load_after" : "4.28",
+         "load_before" : "2.93",
+         "name" : "semantic-index-page",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 127361,
+         "stats" : [],
+         "wall_ms" : 21017
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "ab5007b22bc379d63fbe6992df958777ba19342d87c7d610c0fde36a403a6e55",
+         "end_ms" : 143893,
+         "load_after" : "4.04",
+         "load_before" : "3.96",
+         "name" : "query-publication",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 143215,
+         "stats" : [],
+         "wall_ms" : 678
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "eccb7ff6a52efea7e86e5aa8bf075ff1f0a0d3fc4f37a50c68c307d6dfaee8fb",
+         "end_ms" : 146528,
+         "load_after" : "4.04",
+         "load_before" : "4.04",
+         "name" : "directory-publication",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 143894,
+         "stats" : [],
+         "wall_ms" : 2634
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "bc61a27f45d36898a71c3376dbd68003f196b730fe8dffa4daf850694e39d5df",
+         "end_ms" : 144668,
+         "load_after" : "4.04",
+         "load_before" : "4.04",
+         "name" : "directory-identity",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 143914,
+         "stats" : [],
+         "wall_ms" : 754
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "05a0ede6c720c4cf12f4b34a0d0ee97187d6e1cbe28729a3e034f3e56f90c56e",
+         "end_ms" : 161633,
+         "load_after" : "5.43",
+         "load_before" : "4.04",
+         "name" : "structure-projection",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 144669,
+         "stats" : [],
+         "wall_ms" : 16964
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "e12b6c6fd0c2f8508c8f30649f0df90390c45ccf57a8f45bc06dc40d1b020c57",
+         "end_ms" : 148165,
+         "load_after" : "4.04",
+         "load_before" : "4.04",
+         "name" : "structure-module",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 146529,
+         "stats" : [],
+         "wall_ms" : 1635
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "cce755bece8c262351e7c7c8ae7ca384b7f1e79c54f65da933b1b1e7083994a7",
+         "end_ms" : 148261,
+         "load_after" : "4.04",
+         "load_before" : "4.04",
+         "name" : "structure-alternate-race",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 148167,
+         "stats" : [],
+         "wall_ms" : 94
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "b5de4a334bc5c8abb5a6e2d9c330fc2a7333c4b0cdfb52df0a3b60168032569e",
+         "end_ms" : 148742,
+         "load_after" : "4.28",
+         "load_before" : "4.04",
+         "name" : "structure-create",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 148263,
+         "stats" : [],
+         "wall_ms" : 480
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "83e20e9baf134ea1113fcc0edd67ba45d682e7196edd6f27065c87d12185d762",
+         "end_ms" : 161021,
+         "load_after" : "5.43",
+         "load_before" : "4.28",
+         "name" : "structure-create-kills",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 148380,
+         "stats" : [],
+         "wall_ms" : 12642
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "ada91075cd80e7bffb25650bda4764b0bbe83a30025a42f541f31e9dde167662",
+         "end_ms" : 151692,
+         "load_after" : "4.28",
+         "load_before" : "4.28",
+         "name" : "structure-edit",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 148744,
+         "stats" : [],
+         "wall_ms" : 2947
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "575f514ddcd5cad4f5e997aa765380dad4aaca03dfa1320ea852c17c4e703817",
+         "end_ms" : 152143,
+         "load_after" : "4.28",
+         "load_before" : "4.28",
+         "name" : "structure-embedded",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 151693,
+         "stats" : [],
+         "wall_ms" : 450
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "e659df5e1d7b18c678ab318c8b370a9633fd2eb68955299230a816963bd5d544",
+         "end_ms" : 169820,
+         "load_after" : "5.68",
+         "load_before" : "4.28",
+         "name" : "structure-refactor",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 152145,
+         "stats" : [],
+         "wall_ms" : 17675
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "f79401890615478c6489f6e98c4e0ca28d4ec4b5fe834053854c1fa2327bd61e",
+         "end_ms" : 165469,
+         "load_after" : "5.39",
+         "load_before" : "5.43",
+         "name" : "checked-meaning",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 161023,
+         "stats" : [],
+         "wall_ms" : 4446
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "627f7adfdbec2123407de7d54307d80c424a4590ee41e3048950d13ed9c23dfc",
+         "end_ms" : 162666,
+         "load_after" : "5.43",
+         "load_before" : "5.43",
+         "name" : "type-identity",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 161635,
+         "stats" : [],
+         "wall_ms" : 1031
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "2d3e231d45542eba3f786945d61948b7c2ea7fd92b703143cba9a19370d0b914",
+         "end_ms" : 165576,
+         "load_after" : "5.39",
+         "load_before" : "5.43",
+         "name" : "history-replay",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 162667,
+         "stats" : [],
+         "wall_ms" : 2909
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "409fd4b3acc8f2664809831782c3a9b46127b535198a64fa0b33797757127729",
+         "end_ms" : 171973,
+         "load_after" : "5.68",
+         "load_before" : "5.39",
+         "name" : "profiler",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 165472,
+         "stats" : [],
+         "wall_ms" : 6501
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "ddc01dfbb0cc9f7e0b1e2db2333c23c119fd8e6b895dd8b68caea7a7615b88d8",
+         "end_ms" : 175497,
+         "load_after" : "6.03",
+         "load_before" : "5.39",
+         "name" : "optimizer",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 165580,
+         "stats" : [],
+         "wall_ms" : 9917
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "724d2cda086badba659fb8f58b56f904758a55f8a98ede0c8401bf11209cf64d",
+         "end_ms" : 170508,
+         "load_after" : "5.68",
+         "load_before" : "5.68",
+         "name" : "resources",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 169822,
+         "stats" : [],
+         "wall_ms" : 686
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "c3413a7d372bd22e2e93308d1108b801ff2446a98a4cf410de550fb4197411db",
+         "end_ms" : 181764,
+         "load_after" : "5.79",
+         "load_before" : "5.68",
+         "name" : "diagnostic-cases",
+         "rerun" : 65,
+         "reused" : 0,
+         "start_ms" : 170510,
+         "stats" : [
+            {
+               "contains_test_reused" : true,
+               "sha256" : "42fa3e8c2265c5d049cda8e91f621694a7439da2990082bc1cd12e5be9d71822",
+               "stopped_stage" : "done",
+               "test_rerun" : 64,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "cd07479da6b1403fc234bb45ce72615033bedb9a44f722425c2946cbfa5969b4",
+               "stopped_stage" : "done",
+               "test_rerun" : 0,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "38008368ca2216e3bc22aeca0577f634b53cf54ed06369225fa00e7d5e97cdac",
+               "stopped_stage" : "done",
+               "test_rerun" : 1,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "63214345c03b72dc771021502bbdabf1ca54d2dad3535ba24257fd14cca410a1",
+               "stopped_stage" : "done",
+               "test_rerun" : 0,
+               "test_reused" : 0
+            }
+         ],
+         "wall_ms" : 11255
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "dc60e51f288749861d8c9c4989ac9c15a387665bea6be2785fb98fe9ebf26ed6",
+         "end_ms" : 176640,
+         "load_after" : "6.03",
+         "load_before" : "5.68",
+         "name" : "cache-io",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 171975,
+         "stats" : [],
+         "wall_ms" : 4665
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "3c7dcdb943169ce913cbaacec5e75de1a13791219a30924484e9f3ca6eb9578b",
+         "end_ms" : 176586,
+         "load_after" : "6.03",
+         "load_before" : "6.03",
+         "name" : "cache-read",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 175498,
+         "stats" : [],
+         "wall_ms" : 1088
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "46cddc9678c83372be9fa64d45241cf361032a354470f62c8f0c4e9bef122b67",
+         "end_ms" : 221727,
+         "load_after" : "4.79",
+         "load_before" : "6.03",
+         "name" : "store",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 176643,
+         "stats" : [],
+         "wall_ms" : 45084
+      },
+      {
+         "closed" : [
+            {
+               "closure" : "596389106a70414f115406c3cda4c85facc58218ffafee3bbdd4c12a2b4b7e5f",
+               "rerun" : 1,
+               "reused" : 0
+            },
+            {
+               "closure" : "c7e1e926fbb6d648349041e0008fd70096ef879f3d6bdbfb223d134cb3c5392b",
+               "rerun" : 1,
+               "reused" : 0
+            },
+            {
+               "closure" : "a6c0fd083fd205ad3ef6166e8e2d50090f93a47191e095b790e00047c08e930b",
+               "rerun" : 2,
+               "reused" : 0
+            }
+         ],
+         "detail_sha256" : "ec6061c807a500be1615475de8a9317f915b72cd8debb488a9c136d93e2c030a",
+         "end_ms" : 221650,
+         "load_after" : "4.79",
+         "load_before" : "5.79",
+         "name" : "program-directory",
+         "rerun" : 4,
+         "reused" : 0,
+         "start_ms" : 181766,
+         "stats" : [
+            {
+               "contains_test_reused" : true,
+               "sha256" : "e53eae5bc35396a7e5c0546cc46fc9f8ab077339a24278542f67c180c0501c9c",
+               "stopped_stage" : "done",
+               "test_rerun" : 0,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "ce832ad388e6f548ea730d1d6e84c0e0243a000ec2a40975d965e3bc77cbd0bd",
+               "stopped_stage" : "done",
+               "test_rerun" : 0,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "96a8bd6b54e843ac6c91b66d249d8a2a46746d409eaa75df0d2c5a782fccbd2b",
+               "stopped_stage" : "done",
+               "test_rerun" : 0,
+               "test_reused" : 0
+            }
+         ],
+         "wall_ms" : 39884
+      },
+      {
+         "closed" : [
+            {
+               "closure" : "5a51feb75689bb6dd3f116395ee6876581ac1134ec52fae0278fe001486bb2a6",
+               "rerun" : 1,
+               "reused" : 0
+            },
+            {
+               "closure" : "eea29d01dcb9faf42fa2a522d3a15a662b79c020a7fedff6d03a74284c3fc938",
+               "rerun" : 1,
+               "reused" : 0
+            },
+            {
+               "closure" : "d0e56d0ca1e4f92bf51ca322c6c7be980761f5883f7c6a344e0714649123c486",
+               "rerun" : 1,
+               "reused" : 0
+            },
+            {
+               "closure" : "f0e561da1172370233a20fd20b1c64db0e95f3b3d95ba9da248e4bb0a8842cd4",
+               "rerun" : 1,
+               "reused" : 0
+            },
+            {
+               "closure" : "dca41b5d0f600d57a6e0b4bed6942be8fd794f8bb7ab37b9c9c83c213e1145c9",
+               "rerun" : 1,
+               "reused" : 0
+            },
+            {
+               "closure" : "5dbc856eed72727ccd764f7ec3758c549d963158784bc6d904cc5c8ec88d722f",
+               "rerun" : 1,
+               "reused" : 0
+            },
+            {
+               "closure" : "aaffac5cf6cbb074239b51384c4ad47d7d426e8c317da3ffd23ca6d689ab0a14",
+               "rerun" : 1,
+               "reused" : 0
+            },
+            {
+               "closure" : "c6d78eb6b2f377045fea0d0ff91e43ef5d52f2751a7fb9a7c29cf3c07a7f1a77",
+               "rerun" : 1,
+               "reused" : 0
+            },
+            {
+               "closure" : "9d5f50013621cb87c568b0fa38342170ef00e168b088c185afabb79e84bb4228",
+               "rerun" : 1,
+               "reused" : 0
+            },
+            {
+               "closure" : "377686d1f7a6c8efdaa63a122e998eec2bf9b34e6e00940e87f58a485d4cddb7",
+               "rerun" : 1,
+               "reused" : 0
+            },
+            {
+               "closure" : "889bbf564f129a38e014fa2df2fd6b4b81e183546a06c4f3a953b2b4533bde80",
+               "rerun" : 10,
+               "reused" : 0
+            },
+            {
+               "closure" : "392e23e55dba2337ff8563f080b1e257df7b2bfdbcf5da7bd75fe02bf19a79ad",
+               "rerun" : 1,
+               "reused" : 0
+            },
+            {
+               "closure" : "8026cf856f568724f7bcb8b17a5efc4663adfb95985094534390225c9ea929a1",
+               "rerun" : 1,
+               "reused" : 0
+            },
+            {
+               "closure" : "3d1ab0019021f1a2c319a9bca599fcc5858cd0e252a0a88a3cb122b223b3a12e",
+               "rerun" : 1,
+               "reused" : 0
+            },
+            {
+               "closure" : "2abd8a5530603c998eb9c108b65ec2ac27fb4edb6660d64ef830ae68423262a2",
+               "rerun" : 3,
+               "reused" : 0
+            },
+            {
+               "closure" : "367f625ce3505d358c76984b953af474da4d3f4cc924765884b4f5479db61956",
+               "rerun" : 1,
+               "reused" : 0
+            },
+            {
+               "closure" : "0d3554e806d8297fbc6ce1cd45e8b913fcf879433d7b309e1f8224a905bedef6",
+               "rerun" : 1,
+               "reused" : 0
+            }
+         ],
+         "detail_sha256" : "58c3b010bddf1862fe0ff5357bdcdaa0916c52d6d3d54638e3a0934d0c6e6074",
+         "end_ms" : 250653,
+         "load_after" : "4.11",
+         "load_before" : "4.79",
+         "name" : "http",
+         "rerun" : 28,
+         "reused" : 0,
+         "start_ms" : 221654,
+         "stats" : [],
+         "wall_ms" : 28999
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "2a8b09eb22b17be775dfdd93ad3e4a9919d12572d67d464459f0cfece772e547",
+         "end_ms" : 223198,
+         "load_after" : "4.79",
+         "load_before" : "4.79",
+         "name" : "journal",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 221729,
+         "stats" : [],
+         "wall_ms" : 1469
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "d923ab844c162e1ab3f54eed309d2082cae211686b548d7f0524672d252bea4c",
+         "end_ms" : 226020,
+         "load_after" : "4.73",
+         "load_before" : "4.79",
+         "name" : "stop",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 223200,
+         "stats" : [],
+         "wall_ms" : 2821
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "9ae525337b9caf998480640f8d8dfe658869a41cd8f89a8137505f534d8a55fe",
+         "end_ms" : 230524,
+         "load_after" : "4.51",
+         "load_before" : "4.73",
+         "name" : "stop-interpreter",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 226022,
+         "stats" : [],
+         "wall_ms" : 4502
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "7d37e7de2374ae894e08759b6b872bc6359d5e73b3875f7b50e0c475dcd1be0a",
+         "end_ms" : 232522,
+         "load_after" : "4.51",
+         "load_before" : "4.51",
+         "name" : "site",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 230526,
+         "stats" : [],
+         "wall_ms" : 1997
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "0861294b255c3f328e84b0bca714f9812c083942594fa243fd24de6de098fb12",
+         "end_ms" : 239128,
+         "load_after" : "4.59",
+         "load_before" : "4.51",
+         "name" : "desk",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 232524,
+         "stats" : [],
+         "wall_ms" : 6604
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "7b43292048e20c001e95251c592923a9a4983ecabd92040167e703db67c398b6",
+         "end_ms" : 241922,
+         "load_after" : "4.59",
+         "load_before" : "4.59",
+         "name" : "desk-events",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 239130,
+         "stats" : [],
+         "wall_ms" : 2792
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "562df4d467f319f86833be13db81bc882f69f50cfc0a0fdfc3c404be2d8971f3",
+         "end_ms" : 248626,
+         "load_after" : "4.11",
+         "load_before" : "4.59",
+         "name" : "child-image",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 241924,
+         "stats" : [],
+         "wall_ms" : 6702
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "1fb6cac55d6e3f7d62d65a6a01efe8de5585a951d81682c2a0ffce2724c9d1b8",
+         "end_ms" : 244354,
+         "load_after" : "4.38",
+         "load_before" : "4.59",
+         "name" : "foreign-child",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 241924,
+         "stats" : [],
+         "wall_ms" : 2430
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "f09ae0540d3754d7f8cba2ccf5770f31a307d10e96a68a9a45ddbe708167837c",
+         "end_ms" : 254896,
+         "load_after" : "3.94",
+         "load_before" : "4.11",
+         "name" : "foreign-session",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 248629,
+         "stats" : [],
+         "wall_ms" : 6267
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "6a0220ddde5e15248ac35412cb97de10de089450bef75e44950e1ac10ba3e667",
+         "end_ms" : 271710,
+         "load_after" : "3.43",
+         "load_before" : "3.94",
+         "name" : "process-workers",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 254898,
+         "stats" : [],
+         "wall_ms" : 16812
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "f33e76bfe68d6ed961361acd7d61cc99c8c0771d802e0d26383a4e2fd22adebe",
+         "end_ms" : 286500,
+         "load_after" : "3.25",
+         "load_before" : "3.43",
+         "name" : "object-graphs",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 271711,
+         "stats" : [],
+         "wall_ms" : 14789
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "f374d70ece85a89f66462559088da1e2e52653f931e33b9c4a8037431eb6bd28",
+         "end_ms" : 294639,
+         "load_after" : "3.06",
+         "load_before" : "3.43",
+         "name" : "runtime-admission",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 271712,
+         "stats" : [],
+         "wall_ms" : 22928
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "db6276a90f485f33bf9d9ea6a7a81f7127a7e664f709ea1abe82d75f68a689fd",
+         "end_ms" : 295662,
+         "load_after" : "3.06",
+         "load_before" : "3.06",
+         "name" : "pool-publication",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 294641,
+         "stats" : [],
+         "wall_ms" : 1021
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "b15fa09c767fc4da004e919e83defa82d16e510beb9d3a0ee77ebd7a6ccd0c6f",
+         "end_ms" : 365451,
+         "load_after" : "4.33",
+         "load_before" : "3.06",
+         "name" : "conformance",
+         "rerun" : 813,
+         "reused" : 0,
+         "start_ms" : 295664,
+         "stats" : [
+            {
+               "contains_test_reused" : true,
+               "sha256" : "362153e78605e42b8e1800de5e0540090881852350ca21ce11eaa6eb1b38a798",
+               "stopped_stage" : "done",
+               "test_rerun" : 204,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "9fdfc06571bbe3e75df7d360399babcb0351934366ec1b319d610947d7d21404",
+               "stopped_stage" : "done",
+               "test_rerun" : 203,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "565249aa2fedf3a73d1d89722ac93d6dd2a4f4bf1db54647d6d2377fb801961a",
+               "stopped_stage" : "done",
+               "test_rerun" : 203,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "4d864cf9f5f1132a5c142a5bf2e04d452b725806a4e5b7f46acae07e1a726647",
+               "stopped_stage" : "done",
+               "test_rerun" : 203,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "27a0663ed1bab04df2484f4eb475c6263bdb28243095483a599f450128dfe7ec",
+               "stopped_stage" : "done",
+               "test_rerun" : 0,
+               "test_reused" : 0
+            }
+         ],
+         "wall_ms" : 69787
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "d3b05029477f4a2e15046d135550b7619b74ff2a252fade022351e088321846f",
+         "end_ms" : 418358,
+         "load_after" : "4.72",
+         "load_before" : "4.33",
+         "name" : "generated",
+         "rerun" : 1215,
+         "reused" : 0,
+         "start_ms" : 365453,
+         "stats" : [
+            {
+               "contains_test_reused" : true,
+               "sha256" : "f34f5723007b944572ed906c96131b95f010832ebda1c6479f2b601311f73fb6",
+               "stopped_stage" : "done",
+               "test_rerun" : 305,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "b7e8122892f3a4423e0a88facfc66eab9be1d0b3cfcec8c1fc69cd7badb6585e",
+               "stopped_stage" : "done",
+               "test_rerun" : 303,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "fe020bd435b3f436a3bef5fed797251017256adb36cfb0d3fb820329adf3647c",
+               "stopped_stage" : "done",
+               "test_rerun" : 303,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "2d963429a0fbbc4e57a9ce74dc9eec7d230ef8304e5007985bd987b1d265dcd3",
+               "stopped_stage" : "done",
+               "test_rerun" : 304,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "a4bfdb0d57b67f107fb76cdf65905aae5a150f1cf01265fd9d566aea22a73c8a",
+               "stopped_stage" : "done",
+               "test_rerun" : 0,
+               "test_reused" : 0
+            }
+         ],
+         "wall_ms" : 52906
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "4af9e3d82752e69ad4620912a7534b53518bc71b973b3fd09dc618e1112f9287",
+         "end_ms" : 489180,
+         "load_after" : "3.83",
+         "load_before" : "4.72",
+         "name" : "optimized-conformance",
+         "rerun" : 813,
+         "reused" : 0,
+         "start_ms" : 418361,
+         "stats" : [
+            {
+               "contains_test_reused" : true,
+               "sha256" : "5252321d45d39e11dadb9bf6a6d71c7b9a02d4487b3b3a54de700b2462b76d6d",
+               "stopped_stage" : "done",
+               "test_rerun" : 204,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "719de78e1d11dd7f6083643ccab81edf6a9bba8224a7252ef6a28e85c65ec4d5",
+               "stopped_stage" : "done",
+               "test_rerun" : 203,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "41d2fc2ebb00888928afaf467112b1ff965198807f4a362af3c6444a4eb3297a",
+               "stopped_stage" : "done",
+               "test_rerun" : 203,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "3dca9c96152a9f47eefef6c0c655e26b69345a647ccc7d89cf3d288c0bc58c74",
+               "stopped_stage" : "done",
+               "test_rerun" : 203,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "59dec61cc826c71b21a2630f33a29401d5a8d6e3bdbf522e4c7d6a0c00cdd60d",
+               "stopped_stage" : "done",
+               "test_rerun" : 0,
+               "test_reused" : 0
+            }
+         ],
+         "wall_ms" : 70819
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "e1dcd6b1656cc56e1b44303449b113062e20209739b627311f175d62fa56d7ff",
+         "end_ms" : 544780,
+         "load_after" : "4.05",
+         "load_before" : "3.83",
+         "name" : "optimized-generated",
+         "rerun" : 1215,
+         "reused" : 0,
+         "start_ms" : 489182,
+         "stats" : [
+            {
+               "contains_test_reused" : true,
+               "sha256" : "e889fe4e00fe141dabcea7c5a4634a7b40ef725f196368a65698346c8feca480",
+               "stopped_stage" : "done",
+               "test_rerun" : 305,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "26af2d44da6003d305c150b1c237f93e26ca17059f6d5db07f257a58b6718c69",
+               "stopped_stage" : "done",
+               "test_rerun" : 303,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "179ea6226a3f8692eb77661bd40e6cd6a246b11bc533c693f9f8909695044feb",
+               "stopped_stage" : "done",
+               "test_rerun" : 303,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "863519e255251823f3fa393820657365918657d7241ee808464f809dc23d0bc8",
+               "stopped_stage" : "done",
+               "test_rerun" : 304,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "fd8669b89861a0dd10e345d29fa5a7819b63729aecf0878a51f55a039a281167",
+               "stopped_stage" : "done",
+               "test_rerun" : 0,
+               "test_reused" : 0
+            }
+         ],
+         "wall_ms" : 55597
+      },
+      {
+         "closed" : [
+            {
+               "closure" : "ef7978e524d028e3560067782e39e696349699bc61b11cdc273322973866ac2f",
+               "rerun" : 196,
+               "reused" : 0
+            },
+            {
+               "closure" : "2a60204f490a6d850c7a716a913dba97e2099520252c6f434de63ccec9bf30ce",
+               "rerun" : 134,
+               "reused" : 0
+            },
+            {
+               "closure" : "50f6eaad50680d6b645492d623836976786b51cd2dbfcb73f997f45dca5ebcf0",
+               "rerun" : 134,
+               "reused" : 0
+            },
+            {
+               "closure" : "2a7209e503c4d44860b645de8fe5c369c471b5db574dc60c50a5952540c9e74f",
+               "rerun" : 134,
+               "reused" : 0
+            },
+            {
+               "closure" : "303f191bec6e56aff296f61a2d34c1ebe7cd5b2bd906b1eb6827b08a37fc1f6f",
+               "rerun" : 134,
+               "reused" : 0
+            }
+         ],
+         "detail_sha256" : "4d6e9a4a8024bb14b90cc801fb76b1b248dca0e06e7c4811ea79496465d7cdf9",
+         "end_ms" : 563677,
+         "load_after" : "4.36",
+         "load_before" : "4.05",
+         "name" : "semantic-structure",
+         "rerun" : 732,
+         "reused" : 0,
+         "start_ms" : 544782,
+         "stats" : [],
+         "wall_ms" : 18895
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "f9fbfc6c25754e22aca8c8e9ca6eb98c51087bb9f10b042ae5530354b166bb25",
+         "end_ms" : 564203,
+         "load_after" : "4.36",
+         "load_before" : "4.36",
+         "name" : "semantic-host",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 563679,
+         "stats" : [],
+         "wall_ms" : 524
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "8f95bd4f5c01336fb3a589aad06e5c86782cb115635839801ee76887914d4040",
+         "end_ms" : 576911,
+         "load_after" : "4.30",
+         "load_before" : "4.36",
+         "name" : "semantic-cases",
+         "rerun" : 436,
+         "reused" : 0,
+         "start_ms" : 564205,
+         "stats" : [
+            {
+               "contains_test_reused" : true,
+               "sha256" : "da9247f27e43e3e6dfa3f686fb9bb24e2730739f943eda6edccf149dbf38c9df",
+               "stopped_stage" : "done",
+               "test_rerun" : 109,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "70ac76d946bcbd0559372562313ebf31628527c6d9ee6a5b760af50af221b068",
+               "stopped_stage" : "done",
+               "test_rerun" : 109,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "ff1f33253505bbaba72838929f0f03446bbd35b218c787cbbc419a41d779d17c",
+               "stopped_stage" : "done",
+               "test_rerun" : 109,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "2b3ed4c70ff330203ff9a02acc9fe9bc3fdb46bae82e6555347d59deed648e36",
+               "stopped_stage" : "done",
+               "test_rerun" : 109,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "bbcc743c24ca5294c6268d1eed3dbd8f2288832968f599a1cd0581c709b4a0d9",
+               "stopped_stage" : "done",
+               "test_rerun" : 0,
+               "test_reused" : 0
+            }
+         ],
+         "wall_ms" : 12707
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "474a744202b26f9c87b2a1f77c45b1a446aa703d810a8944de4eb8efddb53993",
+         "end_ms" : 597661,
+         "load_after" : "3.81",
+         "load_before" : "4.30",
+         "name" : "references",
+         "rerun" : 14,
+         "reused" : 0,
+         "start_ms" : 576914,
+         "stats" : [
+            {
+               "contains_test_reused" : true,
+               "sha256" : "5007dd4d3d6f88ce93d22886fc406ae8e4358feaf39d88a048830588c434e002",
+               "stopped_stage" : "done",
+               "test_rerun" : 14,
+               "test_reused" : 0
+            },
+            {
+               "contains_test_reused" : true,
+               "sha256" : "30ad20decf4db65368c8b188069f11b773e4457fac13ca8b7de08f834e4e1760",
+               "stopped_stage" : "done",
+               "test_rerun" : 0,
+               "test_reused" : 0
+            }
+         ],
+         "wall_ms" : 20747
+      },
+      {
+         "closed" : [],
+         "detail_sha256" : "5fb7b26bd9e7d1b44eda05ba800ce00a53136baa06ce1addc54ccf6ef8766788",
+         "end_ms" : 600086,
+         "load_after" : "3.66",
+         "load_before" : "3.81",
+         "name" : "ir-mutation",
+         "rerun" : 0,
+         "reused" : 0,
+         "start_ms" : 597682,
+         "stats" : [],
+         "wall_ms" : 2403
+      }
+   ],
+   "producer" : {
+      "after" : {
+         "seed/lkjscript.gz" : "c7912e43e0bbb26f814008a6616f3e8b2e4dbe09b45166e5b9523ce0461018ae",
+         "target/lkjscript" : "a92e81e2d2c18fe1bd645a9b5e287c3a1a2af5eaffa1be16e400289590e7625a"
+      },
+      "before" : {
+         "seed/lkjscript.gz" : "c7912e43e0bbb26f814008a6616f3e8b2e4dbe09b45166e5b9523ce0461018ae",
+         "target/lkjscript" : "b01eabfa60015ad93d86dd991f5f64a59754811062b578e12737e2feb4e0d5db"
+      },
+      "bootstrap_detail_sha256" : "8164a66e041500a94fe6ebcacd1174b2bc5d13dd8a7f2b09d79e640f042b425b",
+      "bootstrap_script_sha256" : "1e8371471dd3b8cba3a4a5c2d6b0bef99d89efa811b4dea7bd46dd762fd5cdc3",
+      "current_artifacts" : {
+         "seed/lkjscript.gz" : {
+            "bytes" : 6551428,
+            "sha256" : "c7912e43e0bbb26f814008a6616f3e8b2e4dbe09b45166e5b9523ce0461018ae"
+         },
+         "target/lkjscript" : {
+            "bytes" : 32593071,
+            "sha256" : "a92e81e2d2c18fe1bd645a9b5e287c3a1a2af5eaffa1be16e400289590e7625a"
+         }
+      },
+      "seed_git_commit" : "e5294c339d9aefbbafc2e951c997f4fefabcc9ad",
+      "seed_unchanged" : true
+   },
+   "retention" : {
+      "all_listed_live_and_permanent_logs_byte_equal" : true,
+      "copied_logs" : 119,
+      "log_bytes" : 351692,
+      "raw_root" : "bench/compiler-fingerprint-index-data/gate-1",
+      "retained_only_log_paths" : [],
+      "roster_bound_logs" : 119,
+      "top_level_files" : 25
+   },
+   "schema" : "compiler-fingerprint-index-gate-independent-acceptance-1",
+   "source" : {
+      "before_after_byte_equal" : true,
+      "captured_working_base" : "88a06df2b212d5856b62aa9bcb49e9092cad1d10",
+      "current_full_path_set_and_hashes_equal" : true,
+      "gated_source_commit" : "31f412a0a7df47d897b6b39e794a9b152b4fa29e",
+      "input_bytes" : 11128526,
+      "input_files" : 1940,
+      "input_groups" : {
+         ".github" : 1,
+         "examples" : 67,
+         "library" : 32,
+         "src" : 186,
+         "tests" : 1526,
+         "tools" : 118,
+         "witness" : 10
+      },
+      "input_manifest_sha256" : "7182979b5951f113d95217addf0fb9500f10b0ad06e5199401916950e1563baa",
+      "observed_head" : "31f412a0a7df47d897b6b39e794a9b152b4fa29e",
+      "reviewed_source_sha256" : {
+         "src/elaborate/incremental.lkj" : "5e917048bb58d9cce214a7821ada2cc8a7539209623dc7d20d73d049cebb9316",
+         "src/semantic_main.lkj" : "61cacbbcefc9353d37770f84783780b5d516abaddddd89bf957272c21f70c0f3",
+         "src/semantic_tests.lkj" : "356e0b8fe45bb9b012212cc9116cdb9e042071f9b4de84badaa951b251901de6",
+         "src/semantic_tests/incremental_fingerprint.lkj" : "ccaad8644eddaab9f4ae344648922ef7e3df032751a732e8923dcdbe1df7d956",
+         "tools/bootstrap.sh" : "1e8371471dd3b8cba3a4a5c2d6b0bef99d89efa811b4dea7bd46dd762fd5cdc3",
+         "tools/check.sh" : "ae4f2e6e698132bd458aab70bd57269a475fad8610c20c732514e03dae384d52",
+         "tools/closed-semantics.sh" : "ebbd18fb4edb6fa98b61efc458b38e9d94f3ace1ebf45c362db0b48fa34deb25"
+      },
+      "trees" : {
+         "library" : "25bdb8ff8567b941790d3951c78e896b23e26e8e",
+         "src" : "59fcc8447761f00edaae5dacefbf5edb9b23df36",
+         "tests" : "e2b30ac0f2fa8f897f366293189d6af552a41980",
+         "tools" : "509bc4263409056a36eb485caadabd80bd2daf97"
+      }
+   },
+   "status" : "accepted"
+}

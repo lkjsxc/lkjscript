@@ -1,0 +1,2 @@
+Global symbol "$lf" requires explicit package name (did you forget to declare "my $lf"?) at bench/compiler-fingerprint-index-data/integration-acceptance-1/audit.pl line 96.
+Execution of bench/compiler-fingerprint-index-data/integration-acceptance-1/audit.pl aborted due to compilation errors.

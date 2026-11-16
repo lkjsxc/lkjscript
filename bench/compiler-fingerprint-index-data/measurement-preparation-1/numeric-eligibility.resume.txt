@@ -1,0 +1,68 @@
+pub fn resume<F: FnMut(&str)>(source: &a::Program, fingerprint: &Fingerprint, data: &[u8], mark: &mut F) -> Option<Resumed> {
+    if !data.starts_with(b"LKJFRONT2") { return None; }
+    let mut input = Reader::new(&data[9..]);
+    if input.text()? != fingerprint.shape || input.count()? != fingerprint.bodies.len() { return None; }
+    let mut changed = BTreeSet::new();
+    for (index, body) in fingerprint.bodies.iter().enumerate() {
+        if input.text()? != *body { changed.insert(index); }
+    }
+    for index in &changed {
+        let function = &source.functions[*index];
+        if source.function_owner(a::FunctionId { index: *index }) != a::FunctionOwner::Free
+            || function.generics.iter().any(|value| !value.lifetime) { return None; }
+        let site = source.blocks[function.body?].span;
+        for expression in &source.exprs {
+            if expression.span.file == site.file && expression.span.start >= site.start && expression.span.end <= site.end
+                && matches!(expression.kind, a::Expr::Closure { .. }) { return None; }
+        }
+    }
+    let saved = input.bytes()?;
+    let original = ir_binary::read(&input.bytes()?)?;
+    if !input.done() { return None; }
+    let original_types = original.types.clone();
+    let original_destructors = original.destructors.clone();
+    let mut c = Compiler::new_with_capture(source, false).ok()?;
+    c.types = original.types; c.functions = original.functions; c.destructors = original.destructors;
+    restore(&mut c, &saved)?;
+    mark("front_restore");
+    let mut selected = Vec::new();
+    for index in &changed { selected.push(*index); }
+    let inferred = diagnostic_inference::infer_selected(source, &c.names, &c.implementations, &selected, false);
+    if !inferred.problems.is_empty() { return None; }
+    let mut verifier = Compiler::new_with_capture(source, false).ok()?;
+    let (evidence, problems) = generic_check::validate_demand(source, &mut verifier, inferred.definitions).ok()?;
+    if !problems.is_empty() { return None; }
+    c.definition_types = evidence.types;
+    c.method_selections = evidence.methods;
+    c.closures.evidence = evidence.closures;
+
+    mark("type");
+    let mut instances = Vec::new();
+    for ((source, args), id) in &c.instance_names {
+        if changed.contains(source) {
+            if c.return_inference.contains(id) { return None; }
+            let mut substitutions = BTreeMap::new();
+            for (name, value) in args { substitutions.insert(name.clone(), *value); }
+            instances.push((*id, super::Instance { source: *source, substitutions }));
+        }
+    }
+    let count = instances.len();
+    for (id, instance) in instances {
+        let before = c.functions[id].clone();
+        c.functions[id].body.clear();
+        let params = c.functions[id].params;
+        c.functions[id].locals.truncate(params);
+        let after = c.compile_function(id, &instance).ok()?;
+        if !same_skeleton(&before, &after) { return None; }
+        c.functions[id] = after;
+    }
+    if catalog(&c) != saved || c.types != original_types || c.destructors != original_destructors { return None; }
+    let mut roots = BTreeSet::new();
+    for id in c.scoped_bodies.keys() { roots.insert(*id); }
+    let (scopes, problems) = c.scoped_definitions(&roots);
+    if !problems.is_empty() { return None; }
+    let program = ir::Program { sources: super::source_paths(source), types: c.types, functions: c.functions, destructors: c.destructors };
+    if !crate::check::scoped::check_definitions(&program, &scopes).is_empty() { return None; }
+    mark("build_ir");
+    Some(Resumed { program, catalog: saved, definitions: changed.len(), functions: count })
+}

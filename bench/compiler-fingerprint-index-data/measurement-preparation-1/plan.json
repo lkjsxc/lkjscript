@@ -1,0 +1,505 @@
+{
+  "schema": "compiler-fingerprint-store-comparison-plan-1",
+  "status": "PREPARATION_ONLY_NOT_RUNNABLE",
+  "run_root": "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-measurement-1",
+  "measurement_rows": 36,
+  "row_groups": 12,
+  "simultaneous_compiler_processes": 1,
+  "source_order": [
+    "generated-100k",
+    "compiler"
+  ],
+  "row_order": [
+    "A1",
+    "B1",
+    "B2",
+    "A2",
+    "A3",
+    "B3"
+  ],
+  "state_order": [
+    "cold",
+    "unchanged",
+    "body"
+  ],
+  "producers": {
+    "A": "Pinned b01eabfa; exact bytes copied/recovered during separately released setup",
+    "B": "Root-reported fixed point a92e81e2d2c18fe1bd645a9b5e287c3a1a2af5eaffa1be16e400289590e7625a from source31f412a0; independent gate acceptance, seed recovery and explicit release remain pending."
+  },
+  "limits": {
+    "address_space_bytes": 4294967296,
+    "timeout_seconds": 900,
+    "term_grace_seconds": 10,
+    "store_budget_bytes_per_row": 2147483648,
+    "minimum_free_bytes_initial": 30064771072,
+    "minimum_free_bytes_before_each_build": 2415919104
+  },
+  "controls": {
+    "inline_limit": 0,
+    "stats": true,
+    "store": true,
+    "index": false,
+    "profile": false,
+    "no_store": false,
+    "file_cache_reset": false,
+    "warmup_commands": 0,
+    "retries": 0,
+    "additional_builds": 0
+  },
+  "input_pins": "input-pins.json",
+  "body_edits": "body-edits.json",
+  "key_policy": "One private owned 32-byte store key under the future run root's credentials sibling; outside both source roots and physical library/runtime roots. Created only by separately released setup. Never record its bytes, copy it into source grants or use an existing global key.",
+  "source_protocol": "Recover exactly once into one shared fixed source path per input. S0 is the retained input. In each row build cold and unchanged at S0, then change only the exact pinned byte within the named body to S1. Restore only that byte/file to the exact S0 preimage between rows, never between the row's cold and unchanged states. No source regeneration, signature change or producer-specific path.",
+  "source_checks": "Before and after every build verify complete fixed source/library member paths, modes, sizes and hashes against S0/S1 manifests; these validation reads are outside compiler timing and can warm file pages. Cold means an empty authenticated store, not cold OS file caches. The patch/restore additionally requires the exact full-file preimage and postimage digests.",
+  "store_protocol": "Twelve distinct empty owned store directories, one per input/row group. A row alone uses its store for its three builds; no store sharing, copies, prepopulation, cross-producer proof substitution or later reuse. Retain stores until accepted cleanup. Count only known store file/directory metadata after each phase; do not read/hash payloads merely for metrics.",
+  "output_protocol": "One fixed -o path per input across all 18 builds. After each successful phase retain the actual full image under that phase's distinct record path and require the next output slot absent. Each S0 output must compare in full with the input's A1-cold image and each unchanged output with its own cold image. Every S1 output must compare in full with A1-body. Require S1 differs from S0. Keep all actual images and every diagnostic, including any failed/partial output labelled unvalidated.",
+  "timing_protocol": "Sequential command-only /usr/bin/time plus start/end UTC and decimal ns with all-three load values around every phase; stdout/stderr/status/signal/raw command/cwd/environment captured. Preparation, recovery, full-source validation, patch/restore, image comparison/copy and store metadata counts are separately recorded outside the compiler interval. No extra native execution, query, profile, warmup or no-store control.",
+  "required_stats": [
+    "route",
+    "stopped_stage",
+    "key_hash_ms",
+    "front_reused",
+    "build_reused",
+    "checked_reused",
+    "emitted_reused",
+    "inline_attempts",
+    "inline_accepted",
+    "inline_calls",
+    "inline_rejected",
+    "emitted_bytes",
+    "front_definitions",
+    "front_functions"
+  ],
+  "optional_stats": "Retain all actual fields, including source_read_ms, load_parse_ms, front_restore_ms/front_encode_ms, front_definitions/front_functions, ir_functions/ir_instructions, store counts/retained bytes, and fixed LKJSCRIPT_STORE_IO rows. Missing optional values are NA, never zero. Flagged I/O summary/pending checkpoint is retained as incomplete attribution rather than silently summed.",
+  "acceptance": "Exactly the frozen sequence, each status0 with completed compiler stats; no inline activity; every emitted_bytes matches actual image; cold has no prior proof reuse; unchanged whole-image reuse is observed; body has positive front_reused and build_reused0; exact source state and all full-byte image equalities hold. Any missing required evidence or mismatch stops the whole cohort without replacement.",
+  "stop_policy": "First failed preflight/setup/build, signal/watchdog/resource refusal, incomplete capture, stats failure or byte mismatch is terminal. Preserve all prior and failing records, classify remaining fixed ordinals not-run. No rerun/resume/alternative source, edit, limit, threshold or rung.",
+  "analysis": "Report all 36 raw rows. For each input and state separately report the three A and B observations, arithmetic means/medians, B/A wall and CPU ratios, and RSS distributions with paired loads. key_hash_ms is an aggregate existing phase, not isolation of fingerprint time. Store topology/count differences remain visible. N=3 and fixed order do not establish statistical significance or a backend/size floor. No 10% adoption threshold is imposed for this frontend/cache change.",
+  "exclusions": "The closed 12 no-store comparisons are historical and outside this store-enabled path. No timing rows are imported from them; no 1M or R0008 conclusion follows from this cohort.",
+  "release_requirements": [
+    "Root review of this plan and concrete harness before any workload",
+    "Immutable A and B byte/source pins",
+    "B fixed-point and completed gate proof; actual CI status recorded without borrowing baseline CI",
+    "Authorized bounded recovery of the exact committed archives and full member equivalence before measurement",
+    "No overlapping compiler/performance workload and explicit one-worker release",
+    "Committed prospective controls, exact body edits, final setup proof and a non-placeholder release document"
+  ],
+  "rows": [
+    {
+      "ordinal": 1,
+      "input": "generated-100k",
+      "row": "A1",
+      "producer": "A",
+      "state": "cold",
+      "source_state": "S0",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 2,
+      "input": "generated-100k",
+      "row": "A1",
+      "producer": "A",
+      "state": "unchanged",
+      "source_state": "S0",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 3,
+      "input": "generated-100k",
+      "row": "A1",
+      "producer": "A",
+      "state": "body",
+      "source_state": "S1",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 4,
+      "input": "generated-100k",
+      "row": "B1",
+      "producer": "B",
+      "state": "cold",
+      "source_state": "S0",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 5,
+      "input": "generated-100k",
+      "row": "B1",
+      "producer": "B",
+      "state": "unchanged",
+      "source_state": "S0",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 6,
+      "input": "generated-100k",
+      "row": "B1",
+      "producer": "B",
+      "state": "body",
+      "source_state": "S1",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 7,
+      "input": "generated-100k",
+      "row": "B2",
+      "producer": "B",
+      "state": "cold",
+      "source_state": "S0",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 8,
+      "input": "generated-100k",
+      "row": "B2",
+      "producer": "B",
+      "state": "unchanged",
+      "source_state": "S0",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 9,
+      "input": "generated-100k",
+      "row": "B2",
+      "producer": "B",
+      "state": "body",
+      "source_state": "S1",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 10,
+      "input": "generated-100k",
+      "row": "A2",
+      "producer": "A",
+      "state": "cold",
+      "source_state": "S0",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 11,
+      "input": "generated-100k",
+      "row": "A2",
+      "producer": "A",
+      "state": "unchanged",
+      "source_state": "S0",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 12,
+      "input": "generated-100k",
+      "row": "A2",
+      "producer": "A",
+      "state": "body",
+      "source_state": "S1",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 13,
+      "input": "generated-100k",
+      "row": "A3",
+      "producer": "A",
+      "state": "cold",
+      "source_state": "S0",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 14,
+      "input": "generated-100k",
+      "row": "A3",
+      "producer": "A",
+      "state": "unchanged",
+      "source_state": "S0",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 15,
+      "input": "generated-100k",
+      "row": "A3",
+      "producer": "A",
+      "state": "body",
+      "source_state": "S1",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 16,
+      "input": "generated-100k",
+      "row": "B3",
+      "producer": "B",
+      "state": "cold",
+      "source_state": "S0",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 17,
+      "input": "generated-100k",
+      "row": "B3",
+      "producer": "B",
+      "state": "unchanged",
+      "source_state": "S0",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 18,
+      "input": "generated-100k",
+      "row": "B3",
+      "producer": "B",
+      "state": "body",
+      "source_state": "S1",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 19,
+      "input": "compiler",
+      "row": "A1",
+      "producer": "A",
+      "state": "cold",
+      "source_state": "S0",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 20,
+      "input": "compiler",
+      "row": "A1",
+      "producer": "A",
+      "state": "unchanged",
+      "source_state": "S0",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 21,
+      "input": "compiler",
+      "row": "A1",
+      "producer": "A",
+      "state": "body",
+      "source_state": "S1",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 22,
+      "input": "compiler",
+      "row": "B1",
+      "producer": "B",
+      "state": "cold",
+      "source_state": "S0",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 23,
+      "input": "compiler",
+      "row": "B1",
+      "producer": "B",
+      "state": "unchanged",
+      "source_state": "S0",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 24,
+      "input": "compiler",
+      "row": "B1",
+      "producer": "B",
+      "state": "body",
+      "source_state": "S1",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 25,
+      "input": "compiler",
+      "row": "B2",
+      "producer": "B",
+      "state": "cold",
+      "source_state": "S0",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 26,
+      "input": "compiler",
+      "row": "B2",
+      "producer": "B",
+      "state": "unchanged",
+      "source_state": "S0",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 27,
+      "input": "compiler",
+      "row": "B2",
+      "producer": "B",
+      "state": "body",
+      "source_state": "S1",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 28,
+      "input": "compiler",
+      "row": "A2",
+      "producer": "A",
+      "state": "cold",
+      "source_state": "S0",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 29,
+      "input": "compiler",
+      "row": "A2",
+      "producer": "A",
+      "state": "unchanged",
+      "source_state": "S0",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 30,
+      "input": "compiler",
+      "row": "A2",
+      "producer": "A",
+      "state": "body",
+      "source_state": "S1",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 31,
+      "input": "compiler",
+      "row": "A3",
+      "producer": "A",
+      "state": "cold",
+      "source_state": "S0",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 32,
+      "input": "compiler",
+      "row": "A3",
+      "producer": "A",
+      "state": "unchanged",
+      "source_state": "S0",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 33,
+      "input": "compiler",
+      "row": "A3",
+      "producer": "A",
+      "state": "body",
+      "source_state": "S1",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 34,
+      "input": "compiler",
+      "row": "B3",
+      "producer": "B",
+      "state": "cold",
+      "source_state": "S0",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 35,
+      "input": "compiler",
+      "row": "B3",
+      "producer": "B",
+      "state": "unchanged",
+      "source_state": "S0",
+      "status": "NOT_RELEASED"
+    },
+    {
+      "ordinal": 36,
+      "input": "compiler",
+      "row": "B3",
+      "producer": "B",
+      "state": "body",
+      "source_state": "S1",
+      "status": "NOT_RELEASED"
+    }
+  ],
+  "command_templates": {
+    "generated-100k": {
+      "cwd": "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-measurement-1/inputs/generated-100k",
+      "argv": [
+        "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-measurement-1/producer-ROLE",
+        "build",
+        "main.lkj",
+        "--source-dir",
+        "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-measurement-1/inputs/generated-100k",
+        "--library-dir",
+        "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-measurement-1/inputs/compiler/library",
+        "--runtime-source",
+        "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-measurement-1/inputs/compiler/library/runtime.lkj",
+        "--inline-limit",
+        "0",
+        "--stats",
+        "--store",
+        "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-measurement-1/stores/generated-100k/ROW",
+        "--store-key",
+        "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-measurement-1/credentials/store.key",
+        "--store-bytes",
+        "2147483648",
+        "-o",
+        "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-measurement-1/output/generated-100k/image"
+      ],
+      "substitutions": {
+        "ROLE": "Exact A or B selected by the fixed row",
+        "ROW": "Exact A1,B1,B2,A2,A3,B3 row name"
+      },
+      "not_directly_executable": true
+    },
+    "compiler": {
+      "cwd": "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-measurement-1/inputs/compiler",
+      "argv": [
+        "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-measurement-1/producer-ROLE",
+        "build",
+        "src/main.lkj",
+        "--source-dir",
+        "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-measurement-1/inputs/compiler",
+        "--library-dir",
+        "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-measurement-1/inputs/compiler/library",
+        "--runtime-source",
+        "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-measurement-1/inputs/compiler/library/runtime.lkj",
+        "--inline-limit",
+        "0",
+        "--stats",
+        "--store",
+        "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-measurement-1/stores/compiler/ROW",
+        "--store-key",
+        "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-measurement-1/credentials/store.key",
+        "--store-bytes",
+        "2147483648",
+        "-o",
+        "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-measurement-1/output/compiler/image"
+      ],
+      "substitutions": {
+        "ROLE": "Exact A or B selected by the fixed row",
+        "ROW": "Exact A1,B1,B2,A2,A3,B3 row name"
+      },
+      "not_directly_executable": true
+    }
+  },
+  "coverage_requirements": {
+    "cold": "front_reused=0, build_reused=0 and no prior check/emission reuse from its empty row store",
+    "unchanged": "build_reused>0 plus exact own-cold/S0 image equality",
+    "body": "front_reused>0, build_reused=0 and changed S1 image; retain actual resumed definition/function counts"
+  },
+  "environment": {
+    "set": {
+      "LC_ALL": "C",
+      "TZ": "UTC"
+    },
+    "unset": [
+      "LKJSCRIPT_STORE_IO"
+    ],
+    "stdin": "/dev/null"
+  },
+  "store_budget_evidence": "store-budget.json; explicit --store-bytes 2147483648 for both inputs, not the default 268435456. The previous successful 100k body/index protocol used the same cap. The >1GiB historical two-snapshot total is semantic-index storage; this cohort never requests --index.",
+  "disk_forecast": {
+    "kind": "conservative capacity envelope, not measured usage",
+    "row_stores": 12,
+    "per_row_budget_bytes": 2147483648,
+    "capped_store_payload_total_bytes": 25769803776,
+    "one_active_staging_allowance_bytes": 2147483648,
+    "outputs_inputs_records_allowance_bytes": 2147483648,
+    "total_initial_guard_bytes": 30064771072,
+    "prior_same_input_image_retention_estimate_bytes": 467230734,
+    "prior_image_estimate_qualification": "18 images per input using historical 4,468,259/21,489,004B image sizes; selectors differ in this new root, so this is a disk forecast only, never an expected output identity."
+  },
+  "preparation_revision": 2,
+  "edit_eligibility": "numeric-eligibility.md plus exact body-edits.json; same-width integer payloads, unchanged type spelling/node coordinates, no closure/generic/local-item change or edited-file inclusion. Static conditions only; actual positive front_reused remains required.",
+  "specimen_execution": "None. The compiler input's 0usize to 1usize change alters the compiled specimen's decimal-parser accumulator. Neither frozen executing producer is changed; every measured build explicitly selects --inline-limit 0.",
+  "preparation_amendment": "The first String-body proposal and static refusal are frozen in v1-rejected-string-edit. No setup or workload ran. Only the prospective compiler edit coordinate and reported B provenance change here; generated edit, order, stores, limits and equality checks are unchanged."
+}

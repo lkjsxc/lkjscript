@@ -1,0 +1,35 @@
+[
+   {
+      "bytes" : 39730,
+      "dev" : 144,
+      "files" : 9,
+      "gid" : 1001,
+      "id" : "P",
+      "inode" : 37770618,
+      "mode" : "0700",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-preparation-1",
+      "uid" : 1001
+   },
+   {
+      "bytes" : 45498446,
+      "dev" : 144,
+      "files" : 1816,
+      "gid" : 1001,
+      "id" : "G",
+      "inode" : 37789198,
+      "mode" : "0700",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1",
+      "uid" : 1001
+   },
+   {
+      "bytes" : 1382925,
+      "dev" : 144,
+      "files" : 49,
+      "gid" : 1001,
+      "id" : "I",
+      "inode" : 37840123,
+      "mode" : "0700",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-integration-1",
+      "uid" : 1001
+   }
+]
