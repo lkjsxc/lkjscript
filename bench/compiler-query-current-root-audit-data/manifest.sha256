@@ -7,3 +7,4 @@ f46592d6ffe7ee00ce4367bd28a7283f2080fc5cd1e82c10973bb8b6cc78be61  bench/compiler
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  bench/compiler-query-current-root-audit-data/stderr
 ec1704cfcc4b99804e5121c68924b9bbee4f5da48bd2fc6948ea917bb0a0a119  bench/compiler-query-current-root-audit-data/stdout
 25e4044f791d99a33560abeb97ca56dd3e76f8a219c8cb002573ad75187e9127  bench/compiler-query-current-root-audit-data/time
+3260f2430b4b62cc6bb0b2555b65aafc6ea36f0c38b7216266ebb7aa3c759b56  bench/compiler-query-current-root-audit-data/cleanup-check.json
