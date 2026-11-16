@@ -1,0 +1,8 @@
+{
+   "measured_commands_executed" : 0,
+   "ordered_builds" : 12,
+   "release_executable" : false,
+   "run_root" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2",
+   "setup_root" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2",
+   "syntax_only" : true
+}

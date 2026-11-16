@@ -1,0 +1,345 @@
+{
+  "schema": "compiler-reference-capture-trial-controls-2",
+  "cohort": "compiler-reference-capture-20261116-2",
+  "repository": "/home/coder/workspace/lkjscript",
+  "setup_root": "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2",
+  "run_root": "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2",
+  "protocol_origin": {
+    "path": "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-preparation-1/plan.md",
+    "sha256": "249af04e480480490f059b89af48b7469730c8e98c49c5627d21514ee11b9f80",
+    "qualification": "Original cohort1 terminated at setup1. Cohort2 repeats input recovery after a corrected preparation-reader failure under a separately recorded root amendment; no measured sample is repeated or selected."
+  },
+  "prior_cohort": {
+    "id": "compiler-reference-capture-20261116-1",
+    "status": "CLOSED_AFTER_SETUP_FAILURE",
+    "native_commands": 0,
+    "measured_builds": 0,
+    "comparison_rows": "all twelve not-run",
+    "run_root": "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-1",
+    "controls_manifest_sha256": "edb63ca8c50e2659c12e057225f3adb7a774aa3fa9091ee277e872770b4d2d58"
+  },
+  "setup_release": {
+    "commit": "5e1b82f3cf23654e04d0904e948c202c96723c0d",
+    "controls_manifest_sha256": "fe8321b36a88864b33dd3c8bda9a71ab954f9dae14926d3ba9e45fbb564af847",
+    "status": "completed and durably independently accepted; the separate comparison release must bind these records",
+    "acceptance_commit": "1404b4af81b2afa979993b0c426921321a6801f0",
+    "acceptance_path": "bench/compiler-reference-capture-data/setup2-acceptance/acceptance.json",
+    "acceptance_sha256": "157b7b5ce70e5fb6a5d7bafdb82428328133cb5ab4f17e01c881e8ed6a77c855",
+    "acceptance_manifest_sha256": "0e94b4f77d6281b9a5ec0a50618f248f5dee4619cc72c68e6b2c59cf8ea7d399"
+  },
+  "setup_files": [
+    {
+      "bytes": 1915,
+      "path": "artifacts.sha256",
+      "sha256": "694f2b21c4c4ea2c8445912680bd2f5db8e34fe4cf5d0ada15b332b3ca500683"
+    },
+    {
+      "bytes": 6547345,
+      "path": "artifacts/baseline-A.gz",
+      "sha256": "505be947525d53b4db1bff6c85cb77622cb2f5dc7e7d7fe92b772ee3b8ffc3e2"
+    },
+    {
+      "bytes": 540860,
+      "path": "artifacts/compiler-archive-members.json",
+      "sha256": "217e0169bddf3f180f081f143a37acc9759134b586bd155751d6d7468edb0302"
+    },
+    {
+      "bytes": 399199,
+      "path": "artifacts/compiler-inputs.json",
+      "sha256": "2e2e0ec2121c90767780b063cfba0cbe048f9d39914a3c0294e4e42641dcde4c"
+    },
+    {
+      "bytes": 10741760,
+      "path": "artifacts/compiler-source.tar",
+      "sha256": "79aa24a9eb6f8e7940b4424fc20839759a79dd8d480b1b746f7e29b17171d806"
+    },
+    {
+      "bytes": 399200,
+      "path": "artifacts/factory-after.json",
+      "sha256": "f85504c91b7e06b218092e02c28853a9c14b624247e03a8aaec49962fcbaa4cf"
+    },
+    {
+      "bytes": 540860,
+      "path": "artifacts/factory-archive-members.json",
+      "sha256": "217e0169bddf3f180f081f143a37acc9759134b586bd155751d6d7468edb0302"
+    },
+    {
+      "bytes": 399199,
+      "path": "artifacts/factory-before.json",
+      "sha256": "2e2e0ec2121c90767780b063cfba0cbe048f9d39914a3c0294e4e42641dcde4c"
+    },
+    {
+      "bytes": 22192,
+      "path": "artifacts/factory-main.diff",
+      "sha256": "8a9c99695a31e10b5c35be0218652d380442f9d61dfbc6a2ff15bfe2e23851d2"
+    },
+    {
+      "bytes": 1039,
+      "path": "artifacts/factory-main.original.lkj",
+      "sha256": "7f7d43c94196d6ef9641bebf3f764fc5f3691f84c3bc8dcd137c7deb4eedd07a"
+    },
+    {
+      "bytes": 4055040,
+      "path": "artifacts/generated-100k.tar",
+      "sha256": "ae6b1704d0796e9c2437c7e4ebefe25995c493fedca7308fe0a2fc6c42857cb4"
+    },
+    {
+      "bytes": 405428,
+      "path": "artifacts/generated-100k.tar.gz",
+      "sha256": "57ead08d82ea53ba4d833b2689cbf1158550931b8cf288aac3363644d2dab07c"
+    },
+    {
+      "bytes": 30959,
+      "path": "artifacts/generated-members.json",
+      "sha256": "cfc023b8d4224c66853c1545b6cdca391203f32c94654d7d9c51c77f6b694cb7"
+    },
+    {
+      "bytes": 12644,
+      "path": "artifacts/generated-members.sha256",
+      "sha256": "2fe98d661332250cf410dfde36c5c364c3059756fdf7a02f0122bf8395e0e1ca"
+    },
+    {
+      "bytes": 991,
+      "path": "artifacts/generator-build-stats.json",
+      "sha256": "e4d85ac048476417c93b2ff7397ffd9200aaa8bd892f3b200e8a18512dc50337"
+    },
+    {
+      "bytes": 335011,
+      "path": "artifacts/generator.gz",
+      "sha256": "3b7f282a8fd1c0d373741fe9c81b5a2afcae365888b0c45ea4736fa123015f91"
+    },
+    {
+      "bytes": 382,
+      "path": "artifacts/recovery.json",
+      "sha256": "4a3e352a96f8da4f22882f71ab1e563d50afc2279bd6f1d444a00758797f072c"
+    },
+    {
+      "bytes": 20625,
+      "path": "artifacts/scale-generator-source.lkj",
+      "sha256": "557d6b124fe739f17c678c77b92e5f6259d87ebca69c2a56aca411071c5ff1e9"
+    },
+    {
+      "bytes": 68884,
+      "path": "artifacts/shape",
+      "sha256": "0457f8f9424882d2e3160a568f280193d49b9b046a5fae2d6e2d0b6da047072c"
+    },
+    {
+      "bytes": 262,
+      "path": "artifacts/workload.txt",
+      "sha256": "d4ea2dc094f268b2413c0c0edd1bea23cb6338adeb6a97e236cbed65a15cee3a"
+    },
+    {
+      "bytes": 306,
+      "path": "control/controls.manifest.sha256",
+      "sha256": "fe8321b36a88864b33dd3c8bda9a71ab954f9dae14926d3ba9e45fbb564af847"
+    },
+    {
+      "bytes": 67,
+      "path": "records/completion",
+      "sha256": "aeee8301dfbf04c42c6b63794d2b62e71b10fc5747636b8ee68faecfc644b307"
+    },
+    {
+      "bytes": 168,
+      "path": "records/phases.tsv",
+      "sha256": "71c2cc1311274fbed6e10e6f7657cfcc2649b962049549a4ce0f5764450f9404"
+    },
+    {
+      "bytes": 2,
+      "path": "records/status",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "bytes": 4552,
+      "path": "setup-summary.json",
+      "sha256": "e08b9aa27dcb08da50bf6f296c0bf347f322d0fb2a64d8594999a43920d95ece"
+    }
+  ],
+  "producers": {
+    "A": {
+      "sha256": "6cd52308aba91d6f84396e6f999ffba6d97eb7ccbacbb6bec654c31fee7bdacc",
+      "bytes": 32584542,
+      "source_commit": "d461c2d98e93aeed6061508ee80ab36b9eeaa04f",
+      "src_tree": "c710586b4d1b7ab476fd179a7d2c699477a2054a",
+      "library_tree": "25bdb8ff8567b941790d3951c78e896b23e26e8e",
+      "producer_inline_limit": 64,
+      "source_path": "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2/producer-A",
+      "owned_path": "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/producer-A",
+      "seed_commit": "7d0731e99aeaf241c4334fc5ff065a341fb388c8",
+      "seed_sha256": "505be947525d53b4db1bff6c85cb77622cb2f5dc7e7d7fe92b772ee3b8ffc3e2"
+    },
+    "B": {
+      "sha256": "b01eabfa60015ad93d86dd991f5f64a59754811062b578e12737e2feb4e0d5db",
+      "bytes": 32588975,
+      "source_commit": "bd8a9050a3786de9f227c6c4037f5acd43205f71",
+      "src_tree": "626c9c1f234f4d003a08820d9b69840535eff8b8",
+      "library_tree": "25bdb8ff8567b941790d3951c78e896b23e26e8e",
+      "producer_inline_limit": 64,
+      "owned_path": "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/producer-B",
+      "seed_commit": "e5294c339d9aefbbafc2e951c997f4fefabcc9ad",
+      "seed_path": "seed/lkjscript.gz",
+      "seed_sha256": "c7912e43e0bbb26f814008a6616f3e8b2e4dbe09b45166e5b9523ce0461018ae",
+      "seed_bytes": 6551428
+    }
+  },
+  "inputs": [
+    {
+      "name": "new-100k",
+      "cwd": "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2/generated-100k",
+      "entry": "main.lkj",
+      "inventory": "artifacts/generated-members.json",
+      "regular_members": 170,
+      "source_files": 169,
+      "lines": 100000,
+      "source_bytes": 3923070,
+      "archive": "artifacts/generated-100k.tar.gz",
+      "archive_sha256": "57ead08d82ea53ba4d833b2689cbf1158550931b8cf288aac3363644d2dab07c",
+      "archive_bytes": 405428
+    },
+    {
+      "name": "compiler",
+      "cwd": "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2/compiler-input",
+      "entry": "src/main.lkj",
+      "inventory": "artifacts/compiler-inputs.json",
+      "regular_members": 1742,
+      "source_revision": "c887b7c5aca7bb80d70ca26d7dfdf1a44213a163",
+      "archive": "artifacts/compiler-source.tar",
+      "archive_sha256": "79aa24a9eb6f8e7940b4424fc20839759a79dd8d480b1b746f7e29b17171d806",
+      "archive_bytes": 10741760
+    }
+  ],
+  "library_root": "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2/compiler-input/library",
+  "runtime_path": "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2/compiler-input/library/runtime.lkj",
+  "runtime_sha256": "eeeb173d23c597d7b666aca949a32ba171fa5407be4173ad4626abe1ad295d14",
+  "tools": [
+    {
+      "path": "/usr/bin/bash",
+      "sha256": "bc5945feb8bd26203ebfafea5ce1878bb2e32cb8fb50ab7ae395cfb1e1aaaef1"
+    },
+    {
+      "path": "/usr/bin/perl",
+      "sha256": "fa36b75b21e94f424b61aa058b743cc62c94e7fa45a085fdeffb2bae687ed925"
+    },
+    {
+      "path": "/usr/bin/time",
+      "sha256": "3b11dec50514a8473e9f6efa7a34d584d0657538c09988f61b72d38ad4991a10"
+    },
+    {
+      "path": "/usr/bin/timeout",
+      "sha256": "12690a043dfd555a6c14ccc1564f5649c18f1762c0d6ff66729948130898ec52"
+    },
+    {
+      "path": "/usr/bin/prlimit",
+      "sha256": "17064f67e650d6152a6902b013aab496b54c87587c8eea6f5023aafee6154069"
+    },
+    {
+      "path": "/usr/bin/git",
+      "sha256": "2a8c18fbf43da9f692d75474c72bea9dfd796c260b0f3dfe456376abc3bbd668"
+    },
+    {
+      "path": "/usr/bin/date",
+      "sha256": "7d870c845fe650dffb1f55f3db9233a1815213de3f4d1db5d0c2af06c2d22752"
+    },
+    {
+      "path": "/usr/bin/df",
+      "sha256": "83dbe7428a5c042b6199c2ee147684fa578b71e9fd4b83e7d1bdb03b9510bba8"
+    },
+    {
+      "path": "/usr/bin/cut",
+      "sha256": "74e458a2da3a338c2b9e9a9180c300ed344f214d5f9de79dc39f7fa050d9c476"
+    },
+    {
+      "path": "/usr/bin/tail",
+      "sha256": "03806be6481b4232405b9a16cb6d2a615977f12b2fd49fc6eabcefc6c6abbbdc"
+    },
+    {
+      "path": "/usr/bin/tr",
+      "sha256": "35ee22fe3bc5387017902f243d19f5d967e74d9f682b10d1c25fe0bce2b03733"
+    },
+    {
+      "path": "/usr/bin/sha256sum",
+      "sha256": "4d2db56c867e5324e0084c9e897f6360d37517de77ac96f2bd31494223d69a60"
+    },
+    {
+      "path": "/usr/bin/cp",
+      "sha256": "95cdd604fdf0a292e349d27d1a80170ca0913bd3bbd9d2c0fcfc6c8adaebe2f0"
+    },
+    {
+      "path": "/usr/bin/mkdir",
+      "sha256": "430c3f949d7d328cd835722f5bbddeac0956fbdfbbb6a197e0abb1def3ed27e2"
+    }
+  ],
+  "limits": {
+    "workers": 1,
+    "address_space_bytes": 4294967296,
+    "timeout_seconds": 900,
+    "kill_grace_seconds": 10,
+    "minimum_free_bytes": 3221225472
+  },
+  "policy": {
+    "input_order": [
+      "new-100k",
+      "compiler"
+    ],
+    "order_per_input": [
+      "A1",
+      "B1",
+      "B2",
+      "A2",
+      "A3",
+      "B3"
+    ],
+    "builds_max": 12,
+    "no_store": true,
+    "output_inline_limit": 0,
+    "stats": true,
+    "warmups": 0,
+    "retries": 0,
+    "profiles": 0,
+    "observers": 0,
+    "cache_reset": false,
+    "output_reference": "First successful A1 for each input; all later successful outputs must compare full bytes.",
+    "threshold": null,
+    "summary": "Complete-cohort arithmetic mean B/A ratios with median/range; separate inputs. Descriptive only; no 10% rule, significance, allocation attribution, or 1M implication."
+  },
+  "candidate_provenance": {
+    "bootstrap": {
+      "command": [
+        "sh",
+        "tools/bootstrap.sh"
+      ],
+      "status": "passed",
+      "gnu_wall_s": 79.97,
+      "load_before": "1.58 3.39 3.66",
+      "load_after": "2.78 3.37 3.63",
+      "argv_sha256": "fed8b4efe6aaf95345a1d83e94e82604e04492d98ebf7641dfca2ac3f014ef3a",
+      "source_before_and_after_sha256": "3bcdcb955f65b037311343b6fedf02384a39546c6a2711a6e7a926fdda43a45f",
+      "canonical_hash_record_sha256": "a0365672f1a34788c3ca767a0e2eb92e46cd9888cadd7df274209ffb3f126ebd"
+    },
+    "focused_query": {
+      "status": "passed",
+      "gnu_wall_s": 8.33,
+      "load_before": "2.42 3.21 3.56",
+      "load_after": "5.64 3.89 3.78"
+    },
+    "full_gate": {
+      "status": "passed",
+      "fresh_requests": 5455,
+      "reused_requests": 0,
+      "internal_wall_s": 611.802,
+      "gnu_wall_s": 611.8,
+      "load_before": "3.45 3.72 3.74",
+      "load_after": "3.68 4.14 3.94",
+      "peak_rss_kib": 1354700,
+      "qualification": "Root-reported completed capture; final release must bind retained gate acceptance."
+    },
+    "ci_at_preparation": {
+      "run_id": 43925403668,
+      "status": "in_progress",
+      "head": "1148e56a2a324e2bbe0e92cfdb4762025519cd5c",
+      "created_at": "2026-11-16T18:06:52Z",
+      "record_path": "target/compiler-reference-capture-ci-1/initial.json",
+      "record_sha256": "b376b5e0e1220c18ad8c5bf62c20565f9096d7d12588709b58d0c1a1e2856e7a",
+      "qualification": "This is not a CI success claim; final release records the actual latest observation without changing measured producers."
+    }
+  }
+}

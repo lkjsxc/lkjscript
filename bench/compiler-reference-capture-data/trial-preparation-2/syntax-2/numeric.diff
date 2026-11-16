@@ -1,0 +1,35 @@
+--- review-v1/trial.pl
++++ trial.pl
+@@ -30,6 +30,12 @@
+ }
+ sub write_json {new_file($_[0],$json->encode($_[1]));}
+ sub digest_record {return{bytes=>length($_[0]),sha256=>sha256_hex($_[0])};}
++sub unsigned_json_integer {
++    my($value)=@_;
++    return 0 unless defined($value) && !ref($value);
++    my$encoded=JSON::PP->new->allow_nonref->encode($value);
++    return $encoded =~ /\A(?:0|[1-9][0-9]*)\z/;
++}
+ sub assert_pin {
+     my($bytes,$pin,$label)=@_;
+     die "$label digest mismatch\n" unless defined($pin->{sha256}) && sha256_hex($bytes) eq $pin->{sha256};
+@@ -239,16 +245,16 @@
+         my$stats=decode_json($stats[0]);$row->{stats}=$stats;
+         die "compiler did not finish\n" unless$stats->{route}eq'compiler' && $stats->{stopped_stage}eq'done';
+         for my$key(qw(front_reused checked_reused checked_local_reused emitted_reused build_reused inline_attempts)){
+-            die "missing/nonzero no-store inline0 field $key\n" unless defined($stats->{$key}) && $stats->{$key}==0;
++            die "missing/nonzero no-store inline0 field $key\n" unless unsigned_json_integer($stats->{$key}) && $stats->{$key}==0;
+         }
+         for my$key(qw(store_hits store_misses store_rejected store_writes store_retained_bytes store_evicted)){
+-            die "unexpected store activity $key\n" if exists($stats->{$key}) && $stats->{$key}!=0;
++            die "unexpected store activity $key\n" if exists($stats->{$key}) && (!unsigned_json_integer($stats->{$key}) || $stats->{$key}!=0);
+         }
+         die "unexpected cache attribution row\n" if ($stdout."\n".$stderr)=~/^LKJSCRIPT_CACHE_IO(?:_SUMMARY)? /m;
+         die "successful output missing\n" unless$row->{output_slot_retained};
+         my$image=read_regular($entry->{retained_output});
+         die "image is not ELF or emitted size differs\n" unless substr($image,0,4)eq"\x7fELF"
+-            && defined($stats->{emitted_bytes}) && $stats->{emitted_bytes}==length($image);
++            && unsigned_json_integer($stats->{emitted_bytes}) && $stats->{emitted_bytes}==length($image);
+         my$reference=read_regular($entry->{reference});
+         $row->{full_byte_equal}=($image eq$reference)?JSON::PP::true:JSON::PP::false;
+         die "output differs from this input's first A1\n" unless$row->{full_byte_equal};

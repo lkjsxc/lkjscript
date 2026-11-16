@@ -1,0 +1,55 @@
+{
+  "schema": "compiler-reference-capture-trial-release-2",
+  "status": "PENDING_NOT_EXECUTABLE",
+  "released": false,
+  "cohort": "compiler-reference-capture-20261116-2",
+  "controls_manifest_sha256": "291425ebfe187959ab5cd505d6a163349ef7f214be52da50c7a34cfbe08f3971",
+  "order_sha256": "c3d13ecf4e075c3a59c8d263a4986a0525614bd119718333d1d5fe254aec739d",
+  "candidate_sha256": "b01eabfa60015ad93d86dd991f5f64a59754811062b578e12737e2feb4e0d5db",
+  "candidate_source_commit": "bd8a9050a3786de9f227c6c4037f5acd43205f71",
+  "setup_summary_sha256": "e08b9aa27dcb08da50bf6f296c0bf347f322d0fb2a64d8594999a43920d95ece",
+  "setup_accepted": true,
+  "gate_accepted": false,
+  "retained_records": [
+    {
+      "purpose": "setup-acceptance",
+      "commit": "1404b4af81b2afa979993b0c426921321a6801f0",
+      "path": "bench/compiler-reference-capture-data/setup2-acceptance/acceptance.json",
+      "sha256": "157b7b5ce70e5fb6a5d7bafdb82428328133cb5ab4f17e01c881e8ed6a77c855"
+    },
+    {
+      "purpose": "input-recovery",
+      "commit": "1404b4af81b2afa979993b0c426921321a6801f0",
+      "path": "bench/compiler-reference-capture-data/setup2/artifacts/compiler-source.tar",
+      "sha256": "79aa24a9eb6f8e7940b4424fc20839759a79dd8d480b1b746f7e29b17171d806",
+      "bytes": 10741760
+    },
+    {
+      "purpose": "input-recovery",
+      "commit": "1404b4af81b2afa979993b0c426921321a6801f0",
+      "path": "bench/compiler-reference-capture-data/setup2/artifacts/generated-100k.tar.gz",
+      "sha256": "57ead08d82ea53ba4d833b2689cbf1158550931b8cf288aac3363644d2dab07c",
+      "bytes": 405428
+    }
+  ],
+  "retained_records_required_purposes": [
+    "setup-acceptance",
+    "input-recovery",
+    "gate-acceptance",
+    "ci-observation"
+  ],
+  "retained_record_schema": {
+    "purpose": "one required purpose",
+    "commit": "40-hex immutable Git revision",
+    "path": "bench/relative-path",
+    "sha256": "64-hex exact blob SHA-256",
+    "bytes": "integer byte count"
+  },
+  "candidate_ci": {
+    "run_id": 43925403668,
+    "status": "in_progress",
+    "observed_at": null,
+    "qualification": "Initial preparation observation only. Fill actual retained observation and timestamp before root release."
+  },
+  "root_release_note": null
+}

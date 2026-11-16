@@ -1,0 +1,1 @@
+gh run view 43925403668 --repo lkjsxc/lkjscript --json headSha,status,conclusion,url,jobs,createdAt,updatedAt
