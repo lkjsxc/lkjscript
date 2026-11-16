@@ -73,7 +73,13 @@ all-retained-language-lines metric, not 945/945.
 Guarded cleanup of the experiment's owned fixtures, stores, private external key,
 images and copied producers was released after acceptance. Durable edit metadata,
 committed text evidence, the worktree and unrelated/global keys remain protected.
-Cleanup completion belongs to its separate record. The combined source gate,
+The [separate cleanup record](compiler-query-container-data/cleanup/README.md),
+integrated as `44c675d8`, removes eleven named paths and 2,437,428,197 logical
+file bytes in 2.52 s (load 3.47 / 4.20 / 5.09 before and after). Root's
+`compiler-v1033-container-cleanup-absence-audit` independently confirms all eleven
+paths are absent and all four durable edit metadata hashes are unchanged.
+The cleanup's first manifest-base guard refusal remains recorded; it removed
+nothing. The combined source gate,
 canonical seed refresh, CI and newly pinned current-compiler question campaign
 remain pending at this acceptance point. The blocked new syscall/race observer
 remains unexecuted; no new concurrent mutation or interruption-boundary result
