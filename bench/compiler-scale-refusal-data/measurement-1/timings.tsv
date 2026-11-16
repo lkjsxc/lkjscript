@@ -1,0 +1,7 @@
+phase	kind	outcome	wall_s	user_s	kernel_s	rss_kib	wrapper_exit	gnu_exit	memory_limit_bytes	timeout_seconds	load_before	load_after	capture_status
+generator-build	setup	ok	2.14	2.07	0.01	115292	0	0	4294967296	900	0.85,1.35,1.63	0.85,1.35,1.63	complete
+100000-generate	setup	ok	1.11	1.07	0	2112	0	0	4294967296	900	0.85,1.35,1.63	0.85,1.35,1.63	complete
+100000-cold	build	ok	11.2	10.74	0.18	713512	0	0	4294967296	900	0.85,1.35,1.63	0.95,1.35,1.63	complete
+1000000-generate	setup	ok	10.93	10.69	0.05	8704	0	0	4294967296	900	0.95,1.35,1.63	1.17,1.39,1.63	complete
+1000000-cold	build	located_resource_refusal	77.04	74.07	1.43	5224960	1	1	8589934592	456	1.17,1.39,1.63	1.94,1.56,1.67	complete
+1000000-check	check	located_resource_refusal	76.24	73.49	1.42	5220184	1	1	8589934592	456	1.94,1.56,1.67	2.34,1.77,1.74	complete

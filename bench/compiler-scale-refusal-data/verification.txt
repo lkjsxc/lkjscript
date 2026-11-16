@@ -1,0 +1,17 @@
+raw_files_preserved=92 raw_bytes=308668 exact_path_set=true
+phase=generator-build status=0 metrics=complete wall=2.14 user=2.07 kernel=0.01 rss_kib=115292 load=0.85,1.35,1.63->0.85,1.35,1.63
+phase=100000-generate status=0 metrics=complete wall=1.11 user=1.07 kernel=0 rss_kib=2112 load=0.85,1.35,1.63->0.85,1.35,1.63
+phase=100000-cold status=0 metrics=complete wall=11.2 user=10.74 kernel=0.18 rss_kib=713512 load=0.85,1.35,1.63->0.95,1.35,1.63
+phase=1000000-generate status=0 metrics=complete wall=10.93 user=10.69 kernel=0.05 rss_kib=8704 load=0.95,1.35,1.63->1.17,1.39,1.63
+phase=1000000-cold status=1 metrics=complete wall=77.04 user=74.07 kernel=1.43 rss_kib=5224960 load=1.17,1.39,1.63->1.94,1.56,1.67
+phase=1000000-check status=1 metrics=complete wall=76.24 user=73.49 kernel=1.42 rss_kib=5220184 load=1.94,1.56,1.67->2.34,1.77,1.74
+fresh100k_source_manifest_exact=true
+one_million_source_records_rechecked=1881
+bound_formula_verified=true
+conditional_check_store_distinct=true
+producer_after_sha256=34491766f5258dd3af3caf92db6b92dfeba09b405c00a8dd19cd955205c0d377
+image100k_sha256=cf6568cea58777168705a5d6ed11aa0eb57c0ca0f811eebd55f5b3c3e9370bea
+completed_build_points=1
+new_cohort_exponents=unavailable
+ten_million=not_run
+cleanup=not_run

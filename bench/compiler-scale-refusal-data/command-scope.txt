@@ -1,0 +1,4 @@
+phase=100000-cold exact_argv=true cwd=true distinct_store=/home/coder/workspace/lkjscript-compiler-scale-refusal-20261116/target/compiler-scale-refusal-run.tCSZMe/store-100000-build key_outside_source_library=true
+phase=1000000-cold exact_argv=true cwd=true distinct_store=/home/coder/workspace/lkjscript-compiler-scale-refusal-20261116/target/compiler-scale-refusal-run.tCSZMe/store-1000000-build key_outside_source_library=true
+phase=1000000-check exact_argv=true cwd=true distinct_store=/home/coder/workspace/lkjscript-compiler-scale-refusal-20261116/target/compiler-scale-refusal-run.tCSZMe/store-1000000-check key_outside_source_library=true
+current_producer_commands=3 exact_commands=3 distinct_fresh_store_paths=3

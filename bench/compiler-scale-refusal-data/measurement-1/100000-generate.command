@@ -1,0 +1,1 @@
+/home/coder/workspace/lkjscript-compiler-scale-refusal-20261116/target/compiler-scale-refusal-run.tCSZMe/generator generate /home/coder/workspace/lkjscript-compiler-scale-refusal-20261116/target/compiler-scale-refusal-run.tCSZMe/source-100000 100000 20261116 

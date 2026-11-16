@@ -1,0 +1,11 @@
+phase=100000-cold
+kind=build
+started_utc=2026-11-16T11:53:01Z
+load_before=0.85,1.35,1.63
+memory_limit_bytes=4294967296
+timeout_seconds=900
+kill_grace_seconds=10
+stdin=/dev/null
+completed_utc=2026-11-16T11:53:12Z
+load_after=0.95,1.35,1.63
+wrapper_exit=0

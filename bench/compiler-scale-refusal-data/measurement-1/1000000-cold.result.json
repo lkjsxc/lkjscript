@@ -1,0 +1,22 @@
+{
+   "capture_status" : "complete",
+   "complete_metrics" : true,
+   "cpu_s" : 75.5,
+   "gnu_exit" : 1,
+   "kernel_s" : 1.43,
+   "kind" : "build",
+   "load_after" : "1.94,1.56,1.67",
+   "load_before" : "1.17,1.39,1.63",
+   "located_resource_trap" : "src/elaborate.lkj:2618: R0008 stack exhausted",
+   "memory_limit_bytes" : 8589934592,
+   "outcome" : "located_resource_refusal",
+   "phase" : "1000000-cold",
+   "rss_kib" : 5224960,
+   "stats_records" : 0,
+   "store_io_summary_records" : 0,
+   "timeout_seconds" : 456,
+   "user_s" : 74.07,
+   "wall_s" : 77.04,
+   "wrapper_exit" : 1,
+   "wrapper_gnu_exit_equal" : true
+}

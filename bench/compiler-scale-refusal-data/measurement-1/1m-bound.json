@@ -1,0 +1,14 @@
+{
+   "ceiling_mib" : 8192,
+   "control" : "100000-cold",
+   "control_lines" : 100000,
+   "desired_limit_mib" : 14192,
+   "kill_grace_seconds" : 10,
+   "memory_exponent_for_bound" : 1,
+   "memory_limit_bytes" : 8589934592,
+   "memory_limit_mib" : 8192,
+   "next_lines" : 1000000,
+   "predicted_rss_kib" : 7135120,
+   "timeout_ceiling_seconds" : 900,
+   "timeout_seconds" : 456
+}

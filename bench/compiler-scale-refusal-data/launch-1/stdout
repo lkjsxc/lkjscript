@@ -1,0 +1,6 @@
+phase=generator-build wrapper_exit=0 capture_exit=0 load=0.85,1.35,1.63->0.85,1.35,1.63
+phase=100000-generate wrapper_exit=0 capture_exit=0 load=0.85,1.35,1.63->0.85,1.35,1.63
+phase=100000-cold wrapper_exit=0 capture_exit=0 load=0.85,1.35,1.63->0.95,1.35,1.63
+phase=1000000-generate wrapper_exit=0 capture_exit=0 load=0.95,1.35,1.63->1.17,1.39,1.63
+phase=1000000-cold wrapper_exit=1 capture_exit=0 load=1.17,1.39,1.63->1.94,1.56,1.67
+phase=1000000-check wrapper_exit=1 capture_exit=0 load=1.94,1.56,1.67->2.34,1.77,1.74

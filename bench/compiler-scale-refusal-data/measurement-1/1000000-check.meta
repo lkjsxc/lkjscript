@@ -1,0 +1,11 @@
+phase=1000000-check
+kind=check
+started_utc=2026-11-16T11:54:41Z
+load_before=1.94,1.56,1.67
+memory_limit_bytes=8589934592
+timeout_seconds=456
+kill_grace_seconds=10
+stdin=/dev/null
+completed_utc=2026-11-16T11:55:57Z
+load_after=2.34,1.77,1.74
+wrapper_exit=1
