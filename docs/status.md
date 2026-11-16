@@ -51,9 +51,10 @@ Runtime admission receives IR after startup, uses the build-time checker, admits
 | Independent process OS witness | 1.596 (7.70→7.48) | Pre-exec deadline, pre-prctl parent death, ancillary/buffer/descriptor cleanup |
 | Consumer closure cold +producer renewal | 73.330 (4.15→10.15) | All 32 HTTP/client/program-directory observations reused; zero reruns |
 | Actual HTTP /program-directory wrappers | 30.544 (13.09→15.21) /43.107 (15.21→13.32) | Live I/O stays fresh; own processes, ports and state cleaned |
+| Integrated cold gate: local /CI | 771.134 (4.18→11.24) /1,023.704 (0.81→2.28) | 0 reused /5,409 fresh requests each; 128-mutant gate; both passed |
 
 Targeted final IR campaigns reject all 552 worker/region and 517 foreign-session mutants; 46+2 controls admit, 48 Copy/Data checks pass. Earlier audit findings were fixed before these runs.
 Remaining handoffs: semantic message identity/generated codecs, other capability message kinds, compiler-driver pool adoption, narrow admission provenance and runtime-grant key exclusion (including hardlinks). Foreign descriptor/shared-region transport, same-address-space threads and other targets remain explicit gaps.
 Code wins: the old three scoped-concurrency pending cases were stale; only borrowed_closure_escape exists. consumer_gate_closure was prose; it now has an executable cross-producer proof. The initial worktree was eight commits behind its fetched baseline, not four.
 This note touched 25 tagged diagnostic/handoff records: Rust form 12 / new rule 8 / bad message 5, not attempt totals. The graph had four repaired diagnostic cases; all retry causes remain under tests/diagnostics.
-Final empty-store four-worker gate: 771.134 s (load 4.18→11.24), 0 reused /5,409 fresh requests; 128 global IR mutants, zero findings. The stale canonical fixture inventory is repaired (721 structural contracts). Fixed point 17,929,344 B; Programs seed unchanged. Main landing and CI verification follow.
+Source e5a54dd2 passed [CI43778996002](https://github.com/lkjsxc/lkjscript/actions/runs/43778996002): required native gate and optional Rust witness (274 value/output cases, 344 verdicts and compiler byte identity). The stale canonical fixture inventory is repaired (721 structural contracts). Fixed point 17,929,344 B; Programs seed unchanged.
