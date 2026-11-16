@@ -1,0 +1,8 @@
+compiler_executions=0
+replay_executions=0
+phase=static-preparation
+bench/compiler-strict-derived-audit.pl syntax OK
+bench/compiler-strict-derived-state.pl syntax OK
+verified named_horizon=6a187b94fb763f7b0565436a98ab5feda3cd642f prior_inside=24 prior_outside=0 selected=6 language_commits=11 compiler_executions=0
+static_checks=passed
+verified prior_unique_in_named_window=29 selected_case_not_previously_passed=true compiler_executions=0
