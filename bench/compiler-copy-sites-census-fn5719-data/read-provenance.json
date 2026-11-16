@@ -1,0 +1,45 @@
+{
+  "requests": [
+    "compiler-copy-fn5719-join-read-20261116-182",
+    "compiler-copy-fn5719-semantics-read-20261116-183",
+    "compiler-copy-fn5719-state-rules-20261116-184",
+    "compiler-copy-fn5719-state-final-20261116-185"
+  ],
+  "source_lookup_note": "Request183 included one nonexistent src/interpret.lkj search operand. Its raw gateway stderr is retained at the request's stderr_ref; other requested source/signature/hash reads completed. No interpreter was invoked.",
+  "claim": {
+    "cancelled": false,
+    "capture_status": "complete",
+    "duration_ms": 8,
+    "exit_code": 0,
+    "finished": true,
+    "generation": "pipe-injpjlmhnolaedookhnipgakjjldobpm",
+    "request_id": "compiler-copy-fn5719-proof-claim-20261116-186",
+    "signal": null,
+    "status": "done",
+    "stderr": "",
+    "stderr_capture_truncated": false,
+    "stderr_ref": {
+      "available": true,
+      "end_offset": 0,
+      "offset": 0,
+      "path": "/home/coder/.local/state/lkjyolo/outputs/pipe-injpjlmhnolaedookhnipgakjjldobpm.stderr",
+      "total_bytes": 0
+    },
+    "stderr_truncated": false,
+    "stdout": "target/compiler-copy-sites-fn5719-review.20261116-1.bcni8c\n",
+    "stdout_capture_truncated": false,
+    "stdout_ref": {
+      "available": true,
+      "end_offset": 59,
+      "offset": 59,
+      "path": "/home/coder/.local/state/lkjyolo/outputs/pipe-injpjlmhnolaedookhnipgakjjldobpm.stdout",
+      "total_bytes": 59
+    },
+    "stdout_truncated": false,
+    "stream_mode": "pipes",
+    "timed_out": false,
+    "tool": "exec_command",
+    "truncated": false,
+    "workdir": "/home/coder/workspace/lkjscript-compiler-scale-refusal-20261116"
+  }
+}

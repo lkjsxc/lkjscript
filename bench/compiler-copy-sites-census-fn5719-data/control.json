@@ -1,0 +1,194 @@
+{
+  "index_basis": "zero-based selected-IR body instructions; locals/framing excluded",
+  "regions": [
+    {
+      "op": "if",
+      "start": 75,
+      "elseAt": null,
+      "end": 77
+    },
+    {
+      "op": "if",
+      "start": 86,
+      "elseAt": null,
+      "end": 91
+    },
+    {
+      "op": "if",
+      "start": 94,
+      "elseAt": 95,
+      "end": 97
+    },
+    {
+      "op": "if",
+      "start": 122,
+      "elseAt": 138,
+      "end": 140
+    },
+    {
+      "op": "if",
+      "start": 116,
+      "elseAt": 120,
+      "end": 141
+    },
+    {
+      "op": "if",
+      "start": 145,
+      "elseAt": null,
+      "end": 150
+    },
+    {
+      "op": "if",
+      "start": 153,
+      "elseAt": 154,
+      "end": 156
+    },
+    {
+      "op": "if",
+      "start": 170,
+      "elseAt": 174,
+      "end": 177
+    },
+    {
+      "op": "if",
+      "start": 151,
+      "elseAt": 168,
+      "end": 178
+    },
+    {
+      "op": "if",
+      "start": 191,
+      "elseAt": null,
+      "end": 194
+    },
+    {
+      "op": "if",
+      "start": 197,
+      "elseAt": 198,
+      "end": 200
+    },
+    {
+      "op": "if",
+      "start": 195,
+      "elseAt": 204,
+      "end": 206
+    },
+    {
+      "op": "if",
+      "start": 92,
+      "elseAt": 187,
+      "end": 207
+    },
+    {
+      "op": "loop",
+      "start": 72,
+      "elseAt": null,
+      "end": 212
+    },
+    {
+      "op": "if",
+      "start": 69,
+      "elseAt": 218,
+      "end": 221
+    },
+    {
+      "op": "if",
+      "start": 280,
+      "elseAt": null,
+      "end": 282
+    },
+    {
+      "op": "if",
+      "start": 291,
+      "elseAt": null,
+      "end": 296
+    },
+    {
+      "op": "if",
+      "start": 299,
+      "elseAt": 300,
+      "end": 302
+    },
+    {
+      "op": "if",
+      "start": 327,
+      "elseAt": 343,
+      "end": 345
+    },
+    {
+      "op": "if",
+      "start": 321,
+      "elseAt": 325,
+      "end": 346
+    },
+    {
+      "op": "if",
+      "start": 350,
+      "elseAt": null,
+      "end": 355
+    },
+    {
+      "op": "if",
+      "start": 358,
+      "elseAt": 359,
+      "end": 361
+    },
+    {
+      "op": "if",
+      "start": 375,
+      "elseAt": 379,
+      "end": 382
+    },
+    {
+      "op": "if",
+      "start": 356,
+      "elseAt": 373,
+      "end": 383
+    },
+    {
+      "op": "if",
+      "start": 396,
+      "elseAt": null,
+      "end": 399
+    },
+    {
+      "op": "if",
+      "start": 402,
+      "elseAt": 403,
+      "end": 405
+    },
+    {
+      "op": "if",
+      "start": 400,
+      "elseAt": 409,
+      "end": 411
+    },
+    {
+      "op": "if",
+      "start": 297,
+      "elseAt": 392,
+      "end": 412
+    },
+    {
+      "op": "loop",
+      "start": 277,
+      "elseAt": null,
+      "end": 417
+    },
+    {
+      "op": "if",
+      "start": 274,
+      "elseAt": 423,
+      "end": 426
+    }
+  ],
+  "statements": [
+    "First Span chain is inside if i69 and loop i72..i212, then arm of if i92.",
+    "Second Span chain is inside if i274 and loop i277..i417, then arm of if i297.",
+    "l31 remains live across call i114 and condition/join i145..i150 and i151..i178; l98 across i319 and i350..i355 and i356..i383.",
+    "Error paths drop l31 at i126 before Return i137 and l98 at i331 before Return i342.",
+    "Normal paths drop l31 at i179 before Continue i211 and l98 at i384 before Continue i416. No Span family member is shown live across either loop backedge.",
+    "Other loop/condition arms skip these definitions; mere textual placement inside a loop is not used as proof of a live backedge crossing.",
+    "Call f1814 at i162/i367 is conditional and occurs while l31/l98 remains live; only its signature is supplied, so irrelevance is not established here."
+  ]
+}

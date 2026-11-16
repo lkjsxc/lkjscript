@@ -1,0 +1,65 @@
+function	instruction	local	type	shape_status	members	known_blockers_json	body_sha256	associated_raw_rows	associated_raw_samples
+4546	72	19	3418	no		["type:custom-destructor","type:field-0-not-flat-scalar:vec","type:move-struct","type:no-nonzero-field"]	f1e788644c73ad5aac0c5b28df418e06ca7dc9cf93dbcafb179a5fc189d1402e	30574	4
+5729	120	769	19	no		["type:field-0-not-flat-scalar:vec","type:move-struct","type:no-nonzero-field"]	f899492b69b98daf1da9b19ce8b93b1e2480ff9628eda3a6394d8b1c4e15e449	32844	0
+5729	147	83	72	no		["type:field-1-not-flat-scalar:vec","type:move-struct"]	f899492b69b98daf1da9b19ce8b93b1e2480ff9628eda3a6394d8b1c4e15e449	32845	0
+5729	185	107	72	no		["type:field-1-not-flat-scalar:vec","type:move-struct"]	f899492b69b98daf1da9b19ce8b93b1e2480ff9628eda3a6394d8b1c4e15e449	32849	0
+5729	286	127	72	no		["type:field-1-not-flat-scalar:vec","type:move-struct"]	f899492b69b98daf1da9b19ce8b93b1e2480ff9628eda3a6394d8b1c4e15e449	32851	0
+5729	296	131	72	no		["type:field-1-not-flat-scalar:vec","type:move-struct"]	f899492b69b98daf1da9b19ce8b93b1e2480ff9628eda3a6394d8b1c4e15e449	32853	0
+5729	1049	507	1672	no		["type:field-0-not-flat-scalar:ref","type:move-struct"]	f899492b69b98daf1da9b19ce8b93b1e2480ff9628eda3a6394d8b1c4e15e449	32857	0
+5729	1296	612	1672	no		["type:field-0-not-flat-scalar:ref","type:move-struct"]	f899492b69b98daf1da9b19ce8b93b1e2480ff9628eda3a6394d8b1c4e15e449	32860	0
+5729	1656	763	70	no		["type:field-0-not-flat-scalar:enum","type:field-1-not-flat-scalar:enum","type:move-struct"]	f899492b69b98daf1da9b19ce8b93b1e2480ff9628eda3a6394d8b1c4e15e449	32866,32867	3
+4445	72	19	3267	no		["type:custom-destructor","type:field-0-not-flat-scalar:vec","type:move-struct","type:no-nonzero-field"]	26a69e6304bd94a450e07e5f187a78fdba96a9c3d69913fbdf5859f5c8f77223	30502	2
+752	16	60	502	no		["type:custom-destructor","type:field-0-not-flat-scalar:vec","type:move-struct"]	e1e340c7beacfcacf54753be2e5bce1647f3ba30378ffb09787eb055bc8f64c9	60932	0
+752	17	3	501	no		["type:field-0-not-flat-scalar:struct","type:move-struct","type:no-nonzero-field"]	e1e340c7beacfcacf54753be2e5bce1647f3ba30378ffb09787eb055bc8f64c9	60933	0
+752	36	67	502	no		["type:custom-destructor","type:field-0-not-flat-scalar:vec","type:move-struct"]	e1e340c7beacfcacf54753be2e5bce1647f3ba30378ffb09787eb055bc8f64c9	60935	1
+752	38	9	501	no		["type:field-0-not-flat-scalar:struct","type:move-struct","type:no-nonzero-field"]	e1e340c7beacfcacf54753be2e5bce1647f3ba30378ffb09787eb055bc8f64c9	60936	9
+752	52	17	3675	no		["type:field-0-not-flat-scalar:ref","type:move-struct"]	e1e340c7beacfcacf54753be2e5bce1647f3ba30378ffb09787eb055bc8f64c9	60937	0
+5719	4	3	5655	no		["type:custom-destructor","type:field-0-not-flat-scalar:vec","type:move-struct"]	22be5dcdac99e1c8d4a10492d438482363cb65c1b7c214579906261b6dc3eec9	32804	0
+5719	10	147	219	no		["type:custom-destructor","type:field-0-not-flat-scalar:vec","type:move-struct"]	22be5dcdac99e1c8d4a10492d438482363cb65c1b7c214579906261b6dc3eec9	32805	0
+5719	15	148	219	no		["type:custom-destructor","type:field-0-not-flat-scalar:vec","type:move-struct"]	22be5dcdac99e1c8d4a10492d438482363cb65c1b7c214579906261b6dc3eec9	32806	0
+5719	16	5	484	no		["type:field-0-not-flat-scalar:struct","type:field-1-not-flat-scalar:struct","type:move-struct","type:no-nonzero-field"]	22be5dcdac99e1c8d4a10492d438482363cb65c1b7c214579906261b6dc3eec9	32807,32808	0
+5719	64	8	2594	no		["type:field-0-not-flat-scalar:ref","type:move-struct"]	22be5dcdac99e1c8d4a10492d438482363cb65c1b7c214579906261b6dc3eec9		0
+5719	269	75	2594	no		["type:field-0-not-flat-scalar:ref","type:move-struct"]	22be5dcdac99e1c8d4a10492d438482363cb65c1b7c214579906261b6dc3eec9		0
+2652	4	227	502	no		["type:custom-destructor","type:field-0-not-flat-scalar:vec","type:move-struct"]	88b939615581997b8ac906a02402218b9a8c8b69f202594b1fa6b9c96d918d17	24814	0
+2652	5	5	501	no		["type:field-0-not-flat-scalar:struct","type:move-struct","type:no-nonzero-field"]	88b939615581997b8ac906a02402218b9a8c8b69f202594b1fa6b9c96d918d17	24815	8
+2652	12	8	3273	no		["type:field-0-not-flat-scalar:ref","type:move-struct"]	88b939615581997b8ac906a02402218b9a8c8b69f202594b1fa6b9c96d918d17	24817	0
+2652	156	264	3295	no		["type:field-0-not-flat-scalar:ref","type:move-struct"]	88b939615581997b8ac906a02402218b9a8c8b69f202594b1fa6b9c96d918d17		0
+2652	158	40	3294	no		["type:field-0-not-flat-scalar:struct","type:move-struct","type:no-nonzero-field"]	88b939615581997b8ac906a02402218b9a8c8b69f202594b1fa6b9c96d918d17	24820	0
+2652	446	338	3672	no		["type:field-0-not-flat-scalar:struct","type:move-struct"]	88b939615581997b8ac906a02402218b9a8c8b69f202594b1fa6b9c96d918d17	24827	1
+2652	448	91	3671	no		["type:field-0-not-flat-scalar:struct","type:move-struct","type:no-nonzero-field"]	88b939615581997b8ac906a02402218b9a8c8b69f202594b1fa6b9c96d918d17	24828	2
+2652	640	425	3273	no		["type:field-0-not-flat-scalar:ref","type:move-struct"]	88b939615581997b8ac906a02402218b9a8c8b69f202594b1fa6b9c96d918d17	24835	0
+2652	646	423	3277	no		["type:field-0-not-flat-scalar:ref","type:no-nonzero-field"]	88b939615581997b8ac906a02402218b9a8c8b69f202594b1fa6b9c96d918d17	24836	0
+2652	677	431	19	no		["type:field-0-not-flat-scalar:vec","type:move-struct","type:no-nonzero-field"]	88b939615581997b8ac906a02402218b9a8c8b69f202594b1fa6b9c96d918d17	24838	0
+2652	685	438	1451	no		["type:field-0-not-flat-scalar:ref","type:move-struct"]	88b939615581997b8ac906a02402218b9a8c8b69f202594b1fa6b9c96d918d17		0
+2652	1262	698	41	yes	698	["aggregate-call-argument-at-1265"]	88b939615581997b8ac906a02402218b9a8c8b69f202594b1fa6b9c96d918d17		0
+7372	37	39	72	no		["type:field-1-not-flat-scalar:vec","type:move-struct"]	19506feb8ace808823242560a5897fe0f54b82b64650935c4ef38af05930e1f2	38722	0
+7372	41	35	509	no		["type:field-0-not-flat-scalar:struct","type:field-1-not-flat-scalar:struct","type:move-struct","type:no-nonzero-field"]	19506feb8ace808823242560a5897fe0f54b82b64650935c4ef38af05930e1f2	38723,38724	3
+7372	54	13	508	no		["type:field-0-not-flat-scalar:enum","type:move-struct"]	19506feb8ace808823242560a5897fe0f54b82b64650935c4ef38af05930e1f2	38727	3
+690	6	3	496	no		["type:field-0-not-flat-scalar:enum","type:field-1-not-flat-scalar:vec","type:move-struct","type:no-nonzero-field"]	af24e1e1dec79607e8042b4ff9412eee6bc47a294b8d45dad816c3d27a9a8d86	59719,59720	7
+690	9	5	495	no		["type:field-0-not-flat-scalar:struct","type:move-struct"]	af24e1e1dec79607e8042b4ff9412eee6bc47a294b8d45dad816c3d27a9a8d86	59721	6
+690	17	413	502	no		["type:custom-destructor","type:field-0-not-flat-scalar:vec","type:move-struct"]	af24e1e1dec79607e8042b4ff9412eee6bc47a294b8d45dad816c3d27a9a8d86	59722	1
+690	18	9	501	no		["type:field-0-not-flat-scalar:struct","type:move-struct","type:no-nonzero-field"]	af24e1e1dec79607e8042b4ff9412eee6bc47a294b8d45dad816c3d27a9a8d86	59723	7
+690	19	10	3299	no		["type:field-0-not-flat-scalar:struct","type:field-1-not-flat-scalar:vec","type:field-2-not-flat-scalar:struct","type:move-struct","type:no-nonzero-field"]	af24e1e1dec79607e8042b4ff9412eee6bc47a294b8d45dad816c3d27a9a8d86	59724,59725,59726	4
+690	89	58	2012	no		["type:field-0-not-flat-scalar:ref","type:move-struct"]	af24e1e1dec79607e8042b4ff9412eee6bc47a294b8d45dad816c3d27a9a8d86	59733	1
+690	96	60	3303	no		["type:field-0-not-flat-scalar:struct","type:move-struct"]	af24e1e1dec79607e8042b4ff9412eee6bc47a294b8d45dad816c3d27a9a8d86	59734	3
+690	182	103	72	no		["type:field-1-not-flat-scalar:vec","type:move-struct"]	af24e1e1dec79607e8042b4ff9412eee6bc47a294b8d45dad816c3d27a9a8d86	59737	0
+690	232	127	3284	no		["type:field-1-not-flat-scalar:enum"]	af24e1e1dec79607e8042b4ff9412eee6bc47a294b8d45dad816c3d27a9a8d86	59738	1
+690	267	140	3284	no		["type:field-1-not-flat-scalar:enum"]	af24e1e1dec79607e8042b4ff9412eee6bc47a294b8d45dad816c3d27a9a8d86	59741	0
+690	390	188	72	no		["type:field-1-not-flat-scalar:vec","type:move-struct"]	af24e1e1dec79607e8042b4ff9412eee6bc47a294b8d45dad816c3d27a9a8d86	59745	2
+690	401	192	3289	no		["type:field-0-not-flat-scalar:ref","type:move-struct"]	af24e1e1dec79607e8042b4ff9412eee6bc47a294b8d45dad816c3d27a9a8d86	59747	0
+690	485	216	72	no		["type:field-1-not-flat-scalar:vec","type:move-struct"]	af24e1e1dec79607e8042b4ff9412eee6bc47a294b8d45dad816c3d27a9a8d86	59750	0
+690	544	235	3289	no		["type:field-0-not-flat-scalar:ref","type:move-struct"]	af24e1e1dec79607e8042b4ff9412eee6bc47a294b8d45dad816c3d27a9a8d86	59752	1
+690	628	259	72	no		["type:field-1-not-flat-scalar:vec","type:move-struct"]	af24e1e1dec79607e8042b4ff9412eee6bc47a294b8d45dad816c3d27a9a8d86	59755	0
+690	746	502	3295	no		["type:field-0-not-flat-scalar:ref","type:move-struct"]	af24e1e1dec79607e8042b4ff9412eee6bc47a294b8d45dad816c3d27a9a8d86		0
+690	748	286	3294	no		["type:field-0-not-flat-scalar:struct","type:move-struct","type:no-nonzero-field"]	af24e1e1dec79607e8042b4ff9412eee6bc47a294b8d45dad816c3d27a9a8d86	59757	0
+690	940	322	3273	no		["type:field-0-not-flat-scalar:ref","type:move-struct"]	af24e1e1dec79607e8042b4ff9412eee6bc47a294b8d45dad816c3d27a9a8d86	59761	0
+690	1047	602	496	no		["type:field-0-not-flat-scalar:enum","type:field-1-not-flat-scalar:vec","type:move-struct","type:no-nonzero-field"]	af24e1e1dec79607e8042b4ff9412eee6bc47a294b8d45dad816c3d27a9a8d86	59766,59767	0
+690	1050	342	495	no		["type:field-0-not-flat-scalar:struct","type:move-struct"]	af24e1e1dec79607e8042b4ff9412eee6bc47a294b8d45dad816c3d27a9a8d86	59768	2
+690	1099	630	72	no		["type:field-1-not-flat-scalar:vec","type:move-struct"]	af24e1e1dec79607e8042b4ff9412eee6bc47a294b8d45dad816c3d27a9a8d86	59770	0
+690	1129	645	502	no		["type:custom-destructor","type:field-0-not-flat-scalar:vec","type:move-struct"]	af24e1e1dec79607e8042b4ff9412eee6bc47a294b8d45dad816c3d27a9a8d86	59773	0
+690	1131	362	501	no		["type:field-0-not-flat-scalar:struct","type:move-struct","type:no-nonzero-field"]	af24e1e1dec79607e8042b4ff9412eee6bc47a294b8d45dad816c3d27a9a8d86	59774	3
+690	1133	363	3299	no		["type:field-0-not-flat-scalar:struct","type:field-1-not-flat-scalar:vec","type:field-2-not-flat-scalar:struct","type:move-struct","type:no-nonzero-field"]	af24e1e1dec79607e8042b4ff9412eee6bc47a294b8d45dad816c3d27a9a8d86	59775,59776,59777	0
+690	1285	407	780	no		["type:field-0-not-flat-scalar:vec","type:field-1-not-flat-scalar:vec","type:field-2-not-flat-scalar:struct","type:move-struct"]	af24e1e1dec79607e8042b4ff9412eee6bc47a294b8d45dad816c3d27a9a8d86	59785,59786,59787	4
+9782	37	39	72	no		["type:field-1-not-flat-scalar:vec","type:move-struct"]	ba6ad63e953f05cb9f56ed5710ed1fbfd9a1fb8d0ac71c28bccd433368f13a07	51581	2
+9782	40	35	515	no		["type:field-0-not-flat-scalar:struct","type:move-struct","type:no-nonzero-field"]	ba6ad63e953f05cb9f56ed5710ed1fbfd9a1fb8d0ac71c28bccd433368f13a07	51582	1
+9782	53	13	514	no		["type:field-0-not-flat-scalar:enum","type:move-struct"]	ba6ad63e953f05cb9f56ed5710ed1fbfd9a1fb8d0ac71c28bccd433368f13a07	51585	5

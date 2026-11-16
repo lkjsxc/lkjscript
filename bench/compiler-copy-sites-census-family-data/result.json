@@ -1,0 +1,277 @@
+{
+   "all_struct_constructor_roots" : "64",
+   "compiler_executed" : "no",
+   "exit_status" : "0",
+   "extra_page" : "no",
+   "family_root_verdicts" : {
+      "blocked" : "64",
+      "eligible" : "not-issued",
+      "unassessed" : "0"
+   },
+   "flat_shape_locals" : "13",
+   "flat_shape_struct_constructor_roots" : "1",
+   "flat_shape_types" : [
+      "41"
+   ],
+   "functions" : [
+      {
+         "all_struct_roots" : "0",
+         "flat_shape_locals" : [],
+         "flat_shape_struct_roots" : "0",
+         "flat_shape_types" : [],
+         "function" : "4545",
+         "instructions" : "64",
+         "name" : "$std::iter::next$f2359<Self=t3418;Self::Item=t72;T=t72;>",
+         "ordinal" : "0"
+      },
+      {
+         "all_struct_roots" : "1",
+         "flat_shape_locals" : [],
+         "flat_shape_struct_roots" : "0",
+         "flat_shape_types" : [],
+         "function" : "4546",
+         "instructions" : "75",
+         "name" : "$std::iter::owned<T=t72;>",
+         "ordinal" : "1"
+      },
+      {
+         "all_struct_roots" : "0",
+         "flat_shape_locals" : [],
+         "flat_shape_struct_roots" : "0",
+         "flat_shape_types" : [],
+         "function" : "4452",
+         "instructions" : "64",
+         "name" : "$std::iter::next$f2359<Self=t3267;Self::Item=t495;T=t495;>",
+         "ordinal" : "2"
+      },
+      {
+         "all_struct_roots" : "0",
+         "flat_shape_locals" : [],
+         "flat_shape_struct_roots" : "0",
+         "flat_shape_types" : [],
+         "function" : "3101",
+         "instructions" : "91",
+         "name" : "$std::str::matches_bytes",
+         "ordinal" : "3"
+      },
+      {
+         "all_struct_roots" : "8",
+         "flat_shape_locals" : [],
+         "flat_shape_struct_roots" : "0",
+         "flat_shape_types" : [],
+         "function" : "5729",
+         "instructions" : "1664",
+         "name" : "elaborate::emit$f1124<Self=t122;>",
+         "ordinal" : "4"
+      },
+      {
+         "all_struct_roots" : "0",
+         "flat_shape_locals" : [],
+         "flat_shape_struct_roots" : "0",
+         "flat_shape_types" : [],
+         "function" : "7492",
+         "instructions" : "136",
+         "name" : "$std::sequence::__lkjscript_slice_order<T=t5;>",
+         "ordinal" : "5"
+      },
+      {
+         "all_struct_roots" : "0",
+         "flat_shape_locals" : [],
+         "flat_shape_struct_roots" : "0",
+         "flat_shape_types" : [],
+         "function" : "4631",
+         "instructions" : "64",
+         "name" : "$std::iter::next$f2359<Self=t3527;Self::Item=t496;T=t496;>",
+         "ordinal" : "6"
+      },
+      {
+         "all_struct_roots" : "1",
+         "flat_shape_locals" : [],
+         "flat_shape_struct_roots" : "0",
+         "flat_shape_types" : [],
+         "function" : "4445",
+         "instructions" : "75",
+         "name" : "$std::iter::owned<T=t495;>",
+         "ordinal" : "7"
+      },
+      {
+         "all_struct_roots" : "0",
+         "flat_shape_locals" : [
+            "4",
+            "5",
+            "7",
+            "9",
+            "17",
+            "19"
+         ],
+         "flat_shape_struct_roots" : "0",
+         "flat_shape_types" : [
+            "41"
+         ],
+         "function" : "7710",
+         "instructions" : "29",
+         "name" : "elaborate::expr_with_inference$f1147<Self=t122;>",
+         "ordinal" : "8"
+      },
+      {
+         "all_struct_roots" : "5",
+         "flat_shape_locals" : [],
+         "flat_shape_struct_roots" : "0",
+         "flat_shape_types" : [],
+         "function" : "752",
+         "instructions" : "181",
+         "name" : "check::scoped::common_permissions",
+         "ordinal" : "9"
+      },
+      {
+         "all_struct_roots" : "6",
+         "flat_shape_locals" : [
+            "30",
+            "31",
+            "37",
+            "97",
+            "98",
+            "104"
+         ],
+         "flat_shape_struct_roots" : "0",
+         "flat_shape_types" : [
+            "41"
+         ],
+         "function" : "5719",
+         "instructions" : "435",
+         "name" : "elaborate::definition_types::instantiate$f1449<Self=t342;>",
+         "ordinal" : "10"
+      },
+      {
+         "all_struct_roots" : "0",
+         "flat_shape_locals" : [],
+         "flat_shape_struct_roots" : "0",
+         "flat_shape_types" : [],
+         "function" : "2234",
+         "instructions" : "72",
+         "name" : "$std::sequence::__lkjscript_vec_clone<T=t61;>",
+         "ordinal" : "11"
+      },
+      {
+         "all_struct_roots" : "0",
+         "flat_shape_locals" : [],
+         "flat_shape_struct_roots" : "0",
+         "flat_shape_types" : [],
+         "function" : "2615",
+         "instructions" : "96",
+         "name" : "facts::at$f1055<Self=t113;>",
+         "ordinal" : "12"
+      },
+      {
+         "all_struct_roots" : "12",
+         "flat_shape_locals" : [
+            "698"
+         ],
+         "flat_shape_struct_roots" : "1",
+         "flat_shape_types" : [
+            "41"
+         ],
+         "function" : "2652",
+         "instructions" : "1339",
+         "name" : "check::scoped::check$f1968<Self=t785;>",
+         "ordinal" : "13"
+      },
+      {
+         "all_struct_roots" : "0",
+         "flat_shape_locals" : [],
+         "flat_shape_struct_roots" : "0",
+         "flat_shape_types" : [],
+         "function" : "6179",
+         "instructions" : "64",
+         "name" : "$std::iter::next$f2359<Self=t4306;Self::Item=t781;T=t781;>",
+         "ordinal" : "14"
+      },
+      {
+         "all_struct_roots" : "0",
+         "flat_shape_locals" : [],
+         "flat_shape_struct_roots" : "0",
+         "flat_shape_types" : [],
+         "function" : "6244",
+         "instructions" : "217",
+         "name" : "$std::ordered_map::remove_node$f2257<IR=t72;Self=t507;V=t494;>",
+         "ordinal" : "15"
+      },
+      {
+         "all_struct_roots" : "3",
+         "flat_shape_locals" : [],
+         "flat_shape_struct_roots" : "0",
+         "flat_shape_types" : [],
+         "function" : "7372",
+         "instructions" : "76",
+         "name" : "$std::sequence::__lkjscript_vec_clone<T=t508;>",
+         "ordinal" : "16"
+      },
+      {
+         "all_struct_roots" : "25",
+         "flat_shape_locals" : [],
+         "flat_shape_struct_roots" : "0",
+         "flat_shape_types" : [],
+         "function" : "690",
+         "instructions" : "1292",
+         "name" : "check::resolve_origin",
+         "ordinal" : "17"
+      },
+      {
+         "all_struct_roots" : "0",
+         "flat_shape_locals" : [],
+         "flat_shape_struct_roots" : "0",
+         "flat_shape_types" : [],
+         "function" : "1417",
+         "instructions" : "93",
+         "name" : "$std::str::__lkjscript_find<P=t985;>",
+         "ordinal" : "18"
+      },
+      {
+         "all_struct_roots" : "3",
+         "flat_shape_locals" : [],
+         "flat_shape_struct_roots" : "0",
+         "flat_shape_types" : [],
+         "function" : "9782",
+         "instructions" : "75",
+         "name" : "$std::sequence::__lkjscript_vec_clone<T=t514;>",
+         "ordinal" : "19"
+      }
+   ],
+   "initialization_policy" : "explicit consumption roles are evidence; no serialized loan state or complete lifetime proof is invented",
+   "instructions" : "6202",
+   "join_or_extractor_rerun" : "no",
+   "nominal_origin" : "unestablished-by-ir-shape",
+   "pins" : {
+      "companion" : "32c0f43dbde125e43f2ca5a0c6d8548ba0f1774ce3b51bc62d94a6488af0fdca",
+      "extraction" : "63d59716e15c302d241d9e19ba792a0d715b0a0e25aeda75827b24be0799d480",
+      "join" : "b69c1d21e9ac89fde114dda7a0abee592bc16698c94cb902a4de669193ddff31"
+   },
+   "profile_executed" : "no",
+   "purpose" : "complete-bounded-family-evidence",
+   "read_closure_rule" : "same-type whole-local Read edges; multi-definition local ambiguity is a blocker, not a proven version-sensitive family",
+   "selection" : [
+      "4545",
+      "4546",
+      "4452",
+      "3101",
+      "5729",
+      "7492",
+      "4631",
+      "4445",
+      "7710",
+      "752",
+      "5719",
+      "2234",
+      "2615",
+      "2652",
+      "6179",
+      "6244",
+      "7372",
+      "690",
+      "1417",
+      "9782"
+   ],
+   "status" : "complete-inventory",
+   "version" : "1",
+   "whole_program_conclusion" : "none"
+}

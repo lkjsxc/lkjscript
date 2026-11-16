@@ -1,0 +1,127 @@
+{
+  "schema": "compiler-copy-sites-family-review-1",
+  "scope": "complete selected function 7710 in accepted companion 32c0f43dbde125e43f2ca5a0c6d8548ba0f1774ce3b51bc62d94a6488af0fdca",
+  "function": "7710",
+  "body_sha256": "2dd35e998d34896cf8e255f30a365da643f65abe71d6d50c897c366d07f1a435",
+  "body_bytes": "1206",
+  "instructions": "29",
+  "parameters": "4",
+  "locals": "22",
+  "span_type": "41",
+  "span_locals": [
+    "4",
+    "5",
+    "7",
+    "9",
+    "17",
+    "19"
+  ],
+  "span_parameter_count": "0",
+  "struct_instruction_count": "0",
+  "source_nominal_origin": "unestablished by IR shape/name",
+  "assessment": "blocked for the frozen initial fresh-Struct subset",
+  "assessment_basis": "manual complete-body review of independently verified exact bytes; no transformation or execution",
+  "chains": [
+    {
+      "origin": {
+        "instruction": "0",
+        "local": "4",
+        "kind": "Read copy",
+        "place": "0 deref field 14"
+      },
+      "transfers": [
+        {
+          "instruction": "1",
+          "kind": "Assign consumes source",
+          "source": "4",
+          "destination": "5"
+        },
+        {
+          "instruction": "16",
+          "kind": "Read copy retains source",
+          "source": "5",
+          "destination": "17"
+        },
+        {
+          "instruction": "18",
+          "kind": "replace consumes operand",
+          "source": "17",
+          "result": "19"
+        },
+        {
+          "instruction": "19",
+          "kind": "Drop",
+          "local": "19"
+        },
+        {
+          "instruction": "23",
+          "kind": "Drop",
+          "local": "5"
+        }
+      ],
+      "known_blockers": [
+        "origin is projected/dereferenced existing storage, not Struct",
+        "Assign is outside the permitted Read-only family transfer subset",
+        "retained snapshot crosses replace and call barriers",
+        "whole-value replacement operand"
+      ],
+      "sampled_rows": [
+        {
+          "row": "40165",
+          "instruction": "0",
+          "samples": "1"
+        }
+      ]
+    },
+    {
+      "origin": {
+        "instruction": "3",
+        "local": "7",
+        "kind": "Read copy",
+        "place": "0 deref field 3 deref field 0 deref field 6 index 6 field 2"
+      },
+      "transfers": [
+        {
+          "instruction": "5",
+          "kind": "replace consumes operand",
+          "source": "7",
+          "result": "9"
+        },
+        {
+          "instruction": "6",
+          "kind": "Drop",
+          "local": "9"
+        }
+      ],
+      "known_blockers": [
+        "origin is indexed/projected/dereferenced existing storage, not Struct",
+        "whole-value replacement operand"
+      ],
+      "sampled_rows": [
+        {
+          "row": "40166",
+          "instruction": "3",
+          "samples": "10"
+        }
+      ]
+    }
+  ],
+  "control": {
+    "branches": "0",
+    "loops": "0",
+    "call_barrier_instruction": "14",
+    "call_target": "8359",
+    "mutable_storage_borrows": [
+      "4",
+      "10",
+      "17"
+    ],
+    "loop_backedge_crossing": "not asserted"
+  },
+  "interpretation_limits": [
+    "11 samples belong only to the two disjoint original raw intervals",
+    "Replace and other work outside existing KIND_COPY remains outside attribution",
+    "no removed-time, gain or broader family claim",
+    "nominal uncertainty does not erase independent freshness and use blockers"
+  ]
+}

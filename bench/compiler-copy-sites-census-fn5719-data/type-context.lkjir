@@ -1,0 +1,13 @@
+type "usize" int 64 unsigned
+type "diagnostic::Span" struct copy "file" 4 "start" 4 "end" 4 "line" 4 "column" 4
+type "elaborate::Compiler" struct move "source" 185 "names" 186 "implementations" 247 "field_positions" 265 "variant_positions" 265 "anonymous_fields" 266 "types" 57 "type_names" 195 "type_keys" 272 "declaration_names" 195 "functions" 78 "pending_functions" 282 "derived_functions" 284 "instance_names" 290 "applications" 296 "destructors" 80 "uses" 301 "contracts" 334 "method_selections" 337 "definition_types" 355 "closures" 360 "scoped_bodies" 438 "trait_proofs" 458 "return_inference" 398 "diagnostic_functions" 460
+type "ast::Program" struct move "files" 126 "scopes" 128 "declarations" 132 "resolved" 1 "function_owners" 136 "types" 140 "exprs" 147 "patterns" 150 "blocks" 154 "functions" 160 "structs" 164 "enums" 169 "traits" 173 "impls" 175 "uses" 177 "modules" 180 "aliases" 182 "constants" 184 "items" 179 "attrs" 159
+type "ast::ExprNode" struct move "scope" 4 "kind" 142 "span" 41
+type "Vec<t141>" vec 141
+type "ast::PatternNode" struct move "scope" 4 "kind" 149 "span" 41
+type "Vec<t148>" vec 148
+type "&t124" ref shared 124
+type "&mut t123" ref mut 123
+type "&t195" ref shared 195
+type "&t342" ref shared 342
+type "&mut t5655" ref mut 5655

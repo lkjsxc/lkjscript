@@ -1,0 +1,23 @@
+{
+   "body_bytes" : {
+      "count" : "20",
+      "max" : "56134",
+      "median" : "2644",
+      "min" : "1206",
+      "total" : "203690"
+   },
+   "context_bytes" : {
+      "count" : "20",
+      "max" : "122246",
+      "median" : "23613",
+      "min" : "22762",
+      "total" : "770639"
+   },
+   "eligibility" : "not-assessed",
+   "instruction_records_verified" : "6202",
+   "manifest_records" : "345",
+   "signature_excerpts_verified_including_repetition" : "198",
+   "signature_parts_verified" : "651",
+   "status" : "verified-complete-extraction",
+   "type_blocks_verified_including_repetition" : "1882"
+}

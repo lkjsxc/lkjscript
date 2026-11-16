@@ -1,0 +1,9 @@
+{
+   "all_archive_members_equal_live_bytes" : true,
+   "archive_bytes" : 83235,
+   "archive_sha256" : "6f354d1d4ce488343cdc99a5f9a070c6ff6309175416e015e128315dadfb1cee",
+   "inventory_sha256" : "c351f115a1735c33dc42e7cf288785a5fe28269bb9831e8f427f633d5efecc84",
+   "logical_bytes" : 594062,
+   "verified_directories" : 6,
+   "verified_files" : 109
+}

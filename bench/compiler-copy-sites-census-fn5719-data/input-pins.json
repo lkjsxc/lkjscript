@@ -1,0 +1,63 @@
+[
+  {
+    "path": "/home/coder/workspace/lkjscript/target/compiler-copy-sites-census-output.20261116-1/functions/10-function-5719/body.lkjir",
+    "sha256": "22be5dcdac99e1c8d4a10492d438482363cb65c1b7c214579906261b6dc3eec9",
+    "bytes": "13440"
+  },
+  {
+    "path": "/home/coder/workspace/lkjscript/target/compiler-copy-sites-census-output.20261116-1/functions/10-function-5719/extraction.json",
+    "sha256": "99d90fb60790c6d1e5f65392cb108397bf8d14395891fde02a5f468e087b5a5f",
+    "bytes": "7138"
+  },
+  {
+    "path": "/home/coder/workspace/lkjscript/target/compiler-copy-sites-census-output.20261116-1/functions/10-function-5719/instructions.tsv",
+    "sha256": "87f392d3aeefe48a98e41a40bfc635bb42932e5bc08ec10b026a78f9f44fd671",
+    "bytes": "43354"
+  },
+  {
+    "path": "/home/coder/workspace/lkjscript/target/compiler-copy-sites-census-output.20261116-1/functions/10-function-5719/types.lkjir",
+    "sha256": "eed28418f11bcff37193f6b82cba1061b5343a36dcc597b8be08a057104d1d6e",
+    "bytes": "37710"
+  },
+  {
+    "path": "/home/coder/workspace/lkjscript/target/compiler-copy-sites-census-output.20261116-1/functions/10-function-5719/types.tsv",
+    "sha256": "6e7f391c98314574b21fa26a455195d2ba08bfca5608f4fa53675e007302ff17",
+    "bytes": "48382"
+  },
+  {
+    "path": "/home/coder/workspace/lkjscript/target/compiler-copy-sites-census-output.20261116-1/functions/10-function-5719/signatures/function-6852.lkjir",
+    "sha256": "64cf89e6275ba7a98dabaff7a94fbb68c5562714a9917ae5372a016bf639cbc1",
+    "bytes": "222"
+  },
+  {
+    "path": "/home/coder/workspace/lkjscript/target/compiler-copy-sites-census-output.20261116-1/functions/10-function-5719/signatures/function-1814.lkjir",
+    "sha256": "daf3859cee17650b98f59b7cd93307a408ab763c87fd7a20f5c91822767d7ecb",
+    "bytes": "140"
+  },
+  {
+    "path": "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-copy-sites-census-join-20261116/phase-1/output/selected-copy-rows.tsv",
+    "sha256": "cc15c9d93120dc5533c27ee1b8febf31d0182de0060fdb391083189f748b69be",
+    "bytes": "88429"
+  },
+  {
+    "path": "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-copy-sites-census-join-20261116/phase-1/output/payload-types.json",
+    "sha256": "1ebadf5e4ea3916e32631e57004e2a8c1b2880f4cf79cab00c2351cb9dd1e0fb",
+    "bytes": "62605"
+  },
+  {
+    "path": "/home/coder/workspace/lkjscript/src/check.lkj",
+    "sha256": "71a23af143af92e8134f8453f34dd53f934b41d25736419f296c7458f5016e78"
+  },
+  {
+    "path": "/home/coder/workspace/lkjscript/src/native/layout.lkj",
+    "sha256": "f88d1ff9a50ce796d2fc10bfa04cd4e8d73a30d8284d5a9b3bcd3488f724daf0"
+  },
+  {
+    "path": "/home/coder/workspace/lkjscript/bench/compiler-copy-sites-census-plan.md",
+    "sha256": "8a1f3e3d5354b3eca7fd9adb68bfee892f94360130a19b265f3f9ffb73c4dc15"
+  },
+  {
+    "path": "/home/coder/workspace/lkjscript/target/compiler-copy-sites-census-output.20261116-1/shared/destructors.lkjir",
+    "sha256": "249f4864e4ff9f126535b1566c144fef8fa94aeefbfee03554b43cc77385568a"
+  }
+]

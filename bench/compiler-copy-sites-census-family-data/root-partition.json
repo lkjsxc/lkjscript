@@ -1,0 +1,37 @@
+{
+   "claim_scope" : "frozen 20 complete bodies; no global eligibility or speedup claim",
+   "disjoint_counts" : {
+      "copy_enum_field" : 2,
+      "copy_reference_field" : 1,
+      "fresh_span_aggregate_call" : 1,
+      "move" : 60
+   },
+   "roots" : 64,
+   "source" : "bench/compiler-copy-sites-census-family-data/struct-roots.tsv",
+   "special_coordinates" : [
+      [
+         "2652",
+         "646",
+         "423",
+         3277
+      ],
+      [
+         2652,
+         1262,
+         698,
+         41
+      ],
+      [
+         "690",
+         "232",
+         "127",
+         3284
+      ],
+      [
+         "690",
+         "267",
+         "140",
+         3284
+      ]
+   ]
+}

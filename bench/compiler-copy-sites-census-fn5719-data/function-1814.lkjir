@@ -1,0 +1,5 @@
+fn "$std::ordered_map::insert$f2270<IR=t4;Self=t219;V=t4;>" 3 38 file 125
+local "self" 1358 let
+local "key" 4 let
+local "value" 4 let
+endfn

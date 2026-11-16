@@ -1,0 +1,13 @@
+instruction	role	instruction_json
+105	define l30 by copying a projected Span from compiler.source.exprs[l29].span	"@154:24 read 30 copy 1 deref field 0 deref field 6 index 29 field 2\n"
+106	consume l30; initialize previously absent l31 by whole-local Assign	"@154:1 assign 30 31\n"
+113	read-copy l31 into absent l37; retain l31	"@155:89 read 37 copy 31\n"
+114	consume l37 as f6852 parameter 5 (sixth argument)	"@155:31 call 38 6852 32 33 34 35 36 37\n"
+126	error arm: drop initialized l31 before return at i137	"@155:31 drop 31\n"
+179	normal arm: drop initialized l31 before loop backedge i211	"@153:9 drop 31\n"
+310	define l97 by copying a projected Span from compiler.source.patterns[l96].span	"@160:24 read 97 copy 1 deref field 0 deref field 7 index 96 field 2\n"
+311	consume l97; initialize previously absent l98 by whole-local Assign	"@160:1 assign 97 98\n"
+318	read-copy l98 into absent l104; retain l98	"@161:89 read 104 copy 98\n"
+319	consume l104 as f6852 parameter 5 (sixth argument)	"@161:31 call 105 6852 99 100 101 102 103 104\n"
+331	error arm: drop initialized l98 before return at i342	"@161:31 drop 98\n"
+384	normal arm: drop initialized l98 before loop backedge i416	"@159:9 drop 98\n"

@@ -1,0 +1,95 @@
+{
+   "compiler_executed" : "no",
+   "deduplication" : "one output per original table row and unique nonoverlapping interval; duplicates refuse",
+   "exit_status" : "0",
+   "extra_page_requested" : "no",
+   "extraction" : {
+      "manifest_sha256" : "63d59716e15c302d241d9e19ba792a0d715b0a0e25aeda75827b24be0799d480",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-copy-sites-census-output.20261116-1",
+      "selection_sha256" : "3dd145c8920a3169b322bf6fbee0e637ceb4e8989980229260b217c04e38d80c"
+   },
+   "gain" : "not-inferred",
+   "official_reader_executed" : "no",
+   "outside_population" : {
+      "displayed_samples" : "395",
+      "rows" : "67834",
+      "total_mapped_samples" : "1034",
+      "unshown_samples" : "639"
+   },
+   "pins" : {
+      "acceptance" : "adfb9a9837ec044cc1a03cec186a7ada643300bab7efe79b324df6e597bddcbe",
+      "companion" : "32c0f43dbde125e43f2ca5a0c6d8548ba0f1774ce3b51bc62d94a6488af0fdca",
+      "detail" : "06093752531ea752f7081548166f33cc95c71aad381e72d2713e35f5bcaab25d",
+      "extraction_manifest" : "63d59716e15c302d241d9e19ba792a0d715b0a0e25aeda75827b24be0799d480",
+      "layout" : "f88d1ff9a50ce796d2fc10bfa04cd4e8d73a30d8284d5a9b3bcd3488f724daf0",
+      "plan" : "8a1f3e3d5354b3eca7fd9adb68bfee892f94360130a19b265f3f9ffb73c4dc15",
+      "profile" : "7849d4dd69906491d07664f493eb0f4fd8340cfde3760f6e4f168dbbde95f302",
+      "selection" : "3dd145c8920a3169b322bf6fbee0e637ceb4e8989980229260b217c04e38d80c"
+   },
+   "population" : {
+      "displayed_samples" : "430",
+      "functions" : [
+         "4545",
+         "4546",
+         "4452",
+         "3101",
+         "5729",
+         "7492",
+         "4631",
+         "4445",
+         "7710",
+         "752",
+         "5719",
+         "2234",
+         "2615",
+         "2652",
+         "6179",
+         "6244",
+         "7372",
+         "690",
+         "1417",
+         "9782"
+      ],
+      "rows" : "258",
+      "total_samples" : "469",
+      "unshown_samples" : "39"
+   },
+   "primary_inputs_after" : "unchanged",
+   "profile" : {
+      "bytes" : "55464197",
+      "copy_rows" : "68092",
+      "detail_minus_kind_copy" : "0",
+      "function_rows" : "10072",
+      "interrupted_sample_location" : "unallocated; no row adjusted",
+      "kind_copy_samples" : "1503",
+      "kind_total" : "14658",
+      "mapped_copy_samples" : "1503",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-copy-sites-run.20261116-2/producer-profile64.samples.00000000000002892325",
+      "serial" : "14658",
+      "serial_minus_kind_total" : "0",
+      "sha256" : "7849d4dd69906491d07664f493eb0f4fd8340cfde3760f6e4f168dbbde95f302",
+      "symbol_rows" : "5893",
+      "unmapped_copy_samples" : "0"
+   },
+   "profile_executed" : "no",
+   "purpose" : "all-raw-copy-row-join-and-type-only-screen",
+   "sample_times_width" : "not-computed",
+   "sole_detail_page" : {
+      "complete_raw_census" : "no",
+      "rows" : "200",
+      "samples" : "825"
+   },
+   "source_mutation" : "none",
+   "status" : "complete",
+   "type_only_screen" : {
+      "flat_copy_ir_struct_shape_types" : "1",
+      "flat_copy_ir_struct_shape_types_with_nonzero_samples" : "1",
+      "interpretation" : "payload-type-only shape screen; nominal origin is not established because tuples also lower to IR Struct; this is not a containing-family screen or verdict; constructor scalar payloads may belong to a flat Copy aggregate; fresh roots, complete families, uses, control flow and escape are not assessed",
+      "payload_types" : "78",
+      "raw_samples" : "21",
+      "rows" : "4"
+   },
+   "verified_extraction_files" : "345",
+   "version" : "1",
+   "whole_body_eligibility" : "not-assessed"
+}

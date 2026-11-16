@@ -1,0 +1,24 @@
+{
+  "alignment": "8",
+  "cleanup": "false",
+  "copy_flag": "copy",
+  "custom_destructors": [],
+  "declaration_bytes": "83",
+  "declaration_offset": "18549",
+  "declaration_sha256": "f80f1d296a2a47bb38b512b2ae540cd2559c2e908326096a1c787ad08125eea3",
+  "functions": [
+    "5719",
+    "7710"
+  ],
+  "kind": "struct",
+  "layout_bytes": "40",
+  "name": "diagnostic::Span",
+  "nominal_origin": "not-established-by-ir-shape",
+  "reasons": [],
+  "rows": "4",
+  "samples": "21",
+  "type": "41",
+  "type_only_status": "flat-copy-ir-struct-shape-only",
+  "whole_body_eligibility": "not-assessed",
+  "zero_sample_rows": "0"
+}

@@ -1,0 +1,8 @@
+fn "elaborate::definition_types::materialize$f1450<Self=t342;>" 6 4225 file 82
+local "self" 4216 let
+local "v" 4 let
+local "compiler" 461 let
+local "substitutions" 1151 let
+local "known" 5660 let
+local "span" 41 let
+endfn

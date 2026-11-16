@@ -1,0 +1,10 @@
+local	parameter	type	declaration_json
+0	yes	4216	"local \"self\" 4216 let\n"
+1	yes	461	"local \"compiler\" 461 let\n"
+2	yes	1151	"local \"substitutions\" 1151 let\n"
+30	no	41	"local \"$\" 41 let\n"
+31	no	41	"local \"span\" 41 let\n"
+37	no	41	"local \"$\" 41 let\n"
+97	no	41	"local \"$\" 41 let\n"
+98	no	41	"local \"span\" 41 let\n"
+104	no	41	"local \"$\" 41 let\n"

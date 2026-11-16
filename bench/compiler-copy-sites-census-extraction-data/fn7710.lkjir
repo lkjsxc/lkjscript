@@ -1,0 +1,53 @@
+fn "elaborate::expr_with_inference$f1147<Self=t122;>" 4 5004 file 55
+local "self" 5007 let
+local "id" 4 let
+local "expected" 38 let
+local "inferred" 38 let
+local "$" 41 let
+local "previous" 41 let
+local "$" 4 let
+local "$" 41 let
+local "$" 3894 let
+local "$" 41 let
+local "$" 0 let
+local "$" 5007 let
+local "$" 4 let
+local "$" 38 let
+local "$" 38 let
+local "$" 5004 let
+local "result" 5004 let
+local "$" 41 let
+local "$" 3894 let
+local "$" 41 let
+local "$" 0 let
+local "$" 5004 let
+@2381:24 read 4 copy 0 deref field 14
+@2381:1 assign 4 5
+@2382:55 read 6 copy 1
+@2382:28 read 7 copy 0 deref field 3 deref field 0 deref field 6 index 6 field 2
+@2382:9 borrow 8 mut 0 deref field 14
+@2382:9 intrinsic 9 "replace" 8 7
+@2382:9 drop 9
+@2382:9 unit 10
+@2380:1 drop 10
+@2380:1 drop 6
+@2383:22 borrow 11 mut 0 deref
+@2383:53 read 12 copy 1
+@2383:57 read 13 copy 2
+@2383:67 read 14 copy 3
+@2383:22 call 15 8359 11 12 13 14
+@2383:1 assign 15 16
+@2384:28 read 17 copy 5
+@2384:9 borrow 18 mut 0 deref field 14
+@2384:9 intrinsic 19 "replace" 18 17
+@2384:9 drop 19
+@2384:9 unit 20
+@2380:1 drop 20
+@2385:9 read 21 move 16
+@2380:1 drop 5
+@2375:5 drop 3
+@2375:5 drop 2
+@2375:5 drop 1
+@2375:5 drop 0
+@2375:5 return 21
+endfn

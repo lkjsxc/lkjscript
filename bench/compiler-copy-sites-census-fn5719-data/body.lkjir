@@ -1,0 +1,648 @@
+fn "elaborate::definition_types::instantiate$f1449<Self=t342;>" 3 5003 file 82
+local "self" 4216 let
+local "compiler" 461 let
+local "substitutions" 1151 let
+local "$" 5655 let
+local "known" 5655 mut
+local "$" 484 let
+local "result" 484 mut
+local "$" 1156 let
+local "$" 2594 mut
+local "$" 1 let
+local "$" 2594 let
+local "$for:127068:iterator" 2594 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 2604 let
+local "$" 2407 mut
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 2406 let
+local "$for:127068:item" 2406 mut
+local "$" 1505 let
+local "expression" 1505 let
+local "$" 1505 let
+local "v" 1505 let
+local "$" 4 let
+local "$" 41 let
+local "span" 41 let
+local "$" 4216 let
+local "$" 4 let
+local "$" 461 let
+local "$" 1151 let
+local "$" 5660 let
+local "$" 41 let
+local "$" 4225 let
+local "$try" 38 mut
+local "$" 1 let
+local "$" 38 let
+local "$" 1 let
+local "$" 43 let
+local "$" 5003 let
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "ty" 4 let
+local "$" 1358 let
+local "$" 4 let
+local "$" 4 let
+local "$" 38 let
+local "$" 0 let
+local "$match" 0 mut
+local "$" 1 let
+local "$" 0 let
+local "$" 0 let
+local "$match" 0 mut
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 0 let
+local "$" 0 let
+local "$" 0 let
+local "$" 0 let
+local "$match" 0 mut
+local "$" 1156 let
+local "$" 2594 mut
+local "$" 1 let
+local "$" 2594 let
+local "$for:127098:iterator" 2594 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 2604 let
+local "$" 2407 mut
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 2406 let
+local "$for:127098:item" 2406 mut
+local "$" 1505 let
+local "pattern" 1505 let
+local "$" 1505 let
+local "v" 1505 let
+local "$" 4 let
+local "$" 41 let
+local "span" 41 let
+local "$" 4216 let
+local "$" 4 let
+local "$" 461 let
+local "$" 1151 let
+local "$" 5660 let
+local "$" 41 let
+local "$" 4225 let
+local "$try" 38 mut
+local "$" 1 let
+local "$" 38 let
+local "$" 1 let
+local "$" 43 let
+local "$" 5003 let
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "ty" 4 let
+local "$" 1358 let
+local "$" 4 let
+local "$" 4 let
+local "$" 38 let
+local "$" 0 let
+local "$match" 0 mut
+local "$" 1 let
+local "$" 0 let
+local "$" 0 let
+local "$match" 0 mut
+local "$pattern" 1 mut
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 1 let
+local "$" 0 let
+local "$" 0 let
+local "$" 0 let
+local "$" 0 let
+local "$match" 0 mut
+local "$" 484 let
+local "$" 5003 let
+local "$" 5659 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 219 let
+local "$" 219 let
+local "$" 223 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 223 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1156 let
+local "self" 1156 let
+local "$" 1156 let
+local "self" 1156 let
+local "$" 1156 let
+local "$" 1156 let
+local "$" 4 mut
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "iterator" 2604 let
+local "$" 2604 let
+local "$" 1156 let
+local "self" 1156 let
+local "$" 1156 let
+local "self" 1156 let
+local "$" 1156 let
+local "$" 1156 let
+local "$" 4 mut
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 4 let
+local "$" 1 let
+local "$" 1 let
+local "$" 4 let
+local "$" 4 let
+local "$" 0 let
+local "$" 0 let
+local "$" 0 let
+local "$if" 0 mut
+local "$" 0 let
+local "iterator" 2604 let
+local "$" 2604 let
+@125/33:20 intrinsic 143 "vec_new"
+@125/34:19 int 144 0
+@125/35:21 int 145 0
+@125/36:20 int 146 0
+@125/32:9 struct 3 143 144 145 146
+@151:1 assign 3 4
+@125/33:20 intrinsic 149 "vec_new"
+@125/34:19 int 150 0
+@125/35:21 int 151 0
+@125/36:20 int 152 0
+@125/32:9 struct 147 149 150 151 152
+@125/33:20 intrinsic 153 "vec_new"
+@125/34:19 int 154 0
+@125/35:21 int 155 0
+@125/36:20 int 156 0
+@125/32:9 struct 148 153 154 155 156
+@82/131:12 struct 5 147 148
+@152:1 assign 5 6
+@153:32 borrow 7 shared 0 deref field 1
+@126/59:5 read 157 copy 7
+@126/59:5 read 158 move 157
+@125/389:9 borrow 159 shared 158 deref
+@125/389:9 read 160 move 159
+@125/246:18 read 161 copy 160
+@125/247:19 borrow 162 shared 160 deref
+@125/247:35 read 163 copy 160 deref field 1
+@125/47:12 read 165 copy 163
+@125/47:21 int 166 0
+@125/47:12 read 167 copy 166
+@125/47:12 binary 168 "!=" 165 167
+@125/47:9 if 168
+@125/48:13 loop
+@125/48:30 read 169 copy 163
+@125/48:19 read 170 copy 162 deref field 0 index 169 field 1
+@125/48:45 int 171 0
+@125/48:19 read 172 copy 171
+@125/48:19 binary 173 "!=" 170 172
+@125/48:13 drop 171
+@125/48:13 drop 169
+@125/48:13 unary 174 "!" 173
+@125/48:13 if 174
+@125/48:13 break
+@125/48:13 end
+@125/49:36 read 175 copy 163
+@125/49:25 read 176 copy 162 deref field 0 index 175 field 1
+@125/49:17 assign 176 163
+@125/49:17 unit 177
+@125/48:13 drop 177
+@125/48:13 drop 175
+@125/48:13 unit 178
+@125/48:13 drop 178
+@125/48:13 continue
+@125/48:13 end
+@125/48:13 unit 179
+@125/47:9 assign 179 180
+@125/47:9 else
+@125/47:9 unit 181
+@125/47:9 assign 181 180
+@125/47:9 end
+@125/46:5 drop 180
+@125/46:5 drop 166
+@125/52:9 read 164 copy 163
+@125/46:5 drop 163
+@125/46:5 drop 162
+@125/245:9 struct 8 161 164
+@125/244:9 drop 160
+@125/388:5 drop 158
+@126/58:5 drop 7
+@153:9 int 9 1
+@153:9 if 9
+@153:9 read 10 move 8
+@153:9 assign 10 11
+@153:9 loop
+@153:9 int 12 1
+@153:9 unary 13 "!" 12
+@153:9 if 13
+@153:9 break
+@153:9 end
+@153:9 borrow 14 mut 11
+@153:9 read 182 move 14
+@126/62:5 borrow 183 mut 182 deref
+@126/62:5 call 15 4757 183
+@126/61:5 drop 182
+@153:9 int 17 0
+@153:9 assign 17 16
+@153:9 tag-test-place 18 1 15
+@153:9 if 18
+@153:9 int 19 1
+@153:9 int 20 1
+@153:9 binary 21 "&" 19 20
+@153:9 assign 21 16
+@153:9 end
+@153:9 if 16
+@153:9 tag-test-place 22 1 15
+@153:9 if 22
+@153:9 else
+@153:9 trap "unreachable selected pattern"
+@153:9 end
+@153:9 read 23 copy 15 variant 1 0
+@153:9 assign 23 24
+@153:9 read 25 copy 24 field 0
+@153:9 assign 25 26
+@153:9 read 27 copy 24 field 1
+@153:9 assign 27 28
+@154:46 read 29 copy 26 deref
+@154:24 read 30 copy 1 deref field 0 deref field 6 index 29 field 2
+@154:1 assign 30 31
+@154:1 drop 29
+@155:31 borrow 32 shared 0 deref
+@155:48 read 33 copy 28 deref
+@155:52 borrow 34 mut 1 deref
+@155:62 read 35 copy 2
+@155:77 borrow 36 mut 4
+@155:89 read 37 copy 31
+@155:31 call 38 6852 32 33 34 35 36 37
+@155:31 tag-test-place 40 0 38
+@155:31 if 40
+@155:31 read 41 copy 38 variant 0 0
+@155:31 assign 41 39
+@155:31 drop-if 38
+@155:31 else
+@155:31 tag-test-place 42 1 38
+@155:31 if 42
+@155:31 read 43 move 38 variant 1 0
+@155:31 variant 44 1 43
+@155:31 drop 38
+@155:31 drop 31
+@155:31 drop 28
+@155:31 drop 26
+@155:31 drop 24
+@155:31 drop 15
+@155:31 drop 11
+@155:31 drop 6
+@155:31 drop 4
+@155:31 drop 2
+@155:31 drop 1
+@155:31 drop 0
+@155:31 return 44
+@155:31 else
+@155:31 trap "unreachable ? variant"
+@155:31 end
+@155:31 end
+@155:13 int 46 0
+@155:13 assign 46 45
+@155:13 tag-test-place 47 1 39
+@155:13 if 47
+@155:13 int 48 1
+@155:13 int 49 1
+@155:13 binary 50 "&" 48 49
+@155:13 assign 50 45
+@155:13 end
+@155:13 if 45
+@155:13 tag-test-place 51 1 39
+@155:13 if 51
+@155:13 else
+@155:13 trap "unreachable selected pattern"
+@155:13 end
+@155:13 read 52 copy 39 variant 1 0
+@155:13 assign 52 53
+@156:17 borrow 54 mut 6 field 0
+@156:43 read 55 copy 26 deref
+@156:56 read 56 copy 53
+@156:17 call 57 1814 54 55 56
+@155:96 drop 57
+@155:96 unit 58
+@155:13 assign 58 59
+@155:13 drop 53
+@155:13 drop 39
+@155:13 else
+@155:13 int 60 1
+@155:13 if 60
+@155:13 unit 61
+@155:13 assign 61 59
+@155:13 drop 39
+@155:13 else
+@155:13 trap "unreachable arm after irrefutable pattern"
+@155:13 trap "unreachable match"
+@155:13 end
+@155:13 end
+@153:9 drop 31
+@153:9 drop 59
+@153:9 drop 28
+@153:9 drop 26
+@153:9 unit 62
+@153:9 assign 62 63
+@153:9 drop 24
+@153:9 drop 15
+@153:9 else
+@153:9 int 65 0
+@153:9 assign 65 64
+@153:9 tag-test-place 66 0 15
+@153:9 if 66
+@153:9 int 67 1
+@153:9 assign 67 64
+@153:9 end
+@153:9 if 64
+@153:9 tag-test-place 68 0 15
+@153:9 if 68
+@153:9 else
+@153:9 trap "unreachable selected pattern"
+@153:9 end
+@153:9 drop 15
+@153:9 break
+@153:9 unit 69
+@153:9 else
+@153:9 trap "unreachable match"
+@153:9 end
+@153:9 end
+@153:9 drop 63
+@153:9 unit 70
+@153:9 drop 70
+@153:9 continue
+@153:9 end
+@153:9 unit 71
+@153:9 drop 71
+@153:9 unit 72
+@153:9 assign 72 73
+@153:9 drop 11
+@153:9 else
+@153:9 trap "unreachable arm after irrefutable pattern"
+@153:9 trap "unreachable match"
+@153:9 end
+@150:1 drop 73
+@159:29 borrow 74 shared 0 deref field 2
+@126/59:5 read 184 copy 74
+@126/59:5 read 185 move 184
+@125/389:9 borrow 186 shared 185 deref
+@125/389:9 read 187 move 186
+@125/246:18 read 188 copy 187
+@125/247:19 borrow 189 shared 187 deref
+@125/247:35 read 190 copy 187 deref field 1
+@125/47:12 read 192 copy 190
+@125/47:21 int 193 0
+@125/47:12 read 194 copy 193
+@125/47:12 binary 195 "!=" 192 194
+@125/47:9 if 195
+@125/48:13 loop
+@125/48:30 read 196 copy 190
+@125/48:19 read 197 copy 189 deref field 0 index 196 field 1
+@125/48:45 int 198 0
+@125/48:19 read 199 copy 198
+@125/48:19 binary 200 "!=" 197 199
+@125/48:13 drop 198
+@125/48:13 drop 196
+@125/48:13 unary 201 "!" 200
+@125/48:13 if 201
+@125/48:13 break
+@125/48:13 end
+@125/49:36 read 202 copy 190
+@125/49:25 read 203 copy 189 deref field 0 index 202 field 1
+@125/49:17 assign 203 190
+@125/49:17 unit 204
+@125/48:13 drop 204
+@125/48:13 drop 202
+@125/48:13 unit 205
+@125/48:13 drop 205
+@125/48:13 continue
+@125/48:13 end
+@125/48:13 unit 206
+@125/47:9 assign 206 207
+@125/47:9 else
+@125/47:9 unit 208
+@125/47:9 assign 208 207
+@125/47:9 end
+@125/46:5 drop 207
+@125/46:5 drop 193
+@125/52:9 read 191 copy 190
+@125/46:5 drop 190
+@125/46:5 drop 189
+@125/245:9 struct 75 188 191
+@125/244:9 drop 187
+@125/388:5 drop 185
+@126/58:5 drop 74
+@159:9 int 76 1
+@159:9 if 76
+@159:9 read 77 move 75
+@159:9 assign 77 78
+@159:9 loop
+@159:9 int 79 1
+@159:9 unary 80 "!" 79
+@159:9 if 80
+@159:9 break
+@159:9 end
+@159:9 borrow 81 mut 78
+@159:9 read 209 move 81
+@126/62:5 borrow 210 mut 209 deref
+@126/62:5 call 82 4757 210
+@126/61:5 drop 209
+@159:9 int 84 0
+@159:9 assign 84 83
+@159:9 tag-test-place 85 1 82
+@159:9 if 85
+@159:9 int 86 1
+@159:9 int 87 1
+@159:9 binary 88 "&" 86 87
+@159:9 assign 88 83
+@159:9 end
+@159:9 if 83
+@159:9 tag-test-place 89 1 82
+@159:9 if 89
+@159:9 else
+@159:9 trap "unreachable selected pattern"
+@159:9 end
+@159:9 read 90 copy 82 variant 1 0
+@159:9 assign 90 91
+@159:9 read 92 copy 91 field 0
+@159:9 assign 92 93
+@159:9 read 94 copy 91 field 1
+@159:9 assign 94 95
+@160:49 read 96 copy 93 deref
+@160:24 read 97 copy 1 deref field 0 deref field 7 index 96 field 2
+@160:1 assign 97 98
+@160:1 drop 96
+@161:31 borrow 99 shared 0 deref
+@161:48 read 100 copy 95 deref
+@161:52 borrow 101 mut 1 deref
+@161:62 read 102 copy 2
+@161:77 borrow 103 mut 4
+@161:89 read 104 copy 98
+@161:31 call 105 6852 99 100 101 102 103 104
+@161:31 tag-test-place 107 0 105
+@161:31 if 107
+@161:31 read 108 copy 105 variant 0 0
+@161:31 assign 108 106
+@161:31 drop-if 105
+@161:31 else
+@161:31 tag-test-place 109 1 105
+@161:31 if 109
+@161:31 read 110 move 105 variant 1 0
+@161:31 variant 111 1 110
+@161:31 drop 105
+@161:31 drop 98
+@161:31 drop 95
+@161:31 drop 93
+@161:31 drop 91
+@161:31 drop 82
+@161:31 drop 78
+@161:31 drop 6
+@161:31 drop 4
+@161:31 drop 2
+@161:31 drop 1
+@161:31 drop 0
+@161:31 return 111
+@161:31 else
+@161:31 trap "unreachable ? variant"
+@161:31 end
+@161:31 end
+@161:13 int 113 0
+@161:13 assign 113 112
+@161:13 tag-test-place 114 1 106
+@161:13 if 114
+@161:13 int 115 1
+@161:13 int 116 1
+@161:13 binary 117 "&" 115 116
+@161:13 assign 117 112
+@161:13 end
+@161:13 if 112
+@161:13 tag-test-place 118 1 106
+@161:13 if 118
+@161:13 else
+@161:13 trap "unreachable selected pattern"
+@161:13 end
+@161:13 read 119 copy 106 variant 1 0
+@161:13 assign 119 120
+@162:17 borrow 121 mut 6 field 1
+@162:40 read 122 copy 93 deref
+@162:50 read 123 copy 120
+@162:17 call 124 1814 121 122 123
+@161:96 drop 124
+@161:96 unit 125
+@161:13 assign 125 126
+@161:13 drop 120
+@161:13 drop 106
+@161:13 else
+@161:13 int 127 1
+@161:13 if 127
+@161:13 unit 128
+@161:13 assign 128 126
+@161:13 drop 106
+@161:13 else
+@161:13 trap "unreachable arm after irrefutable pattern"
+@161:13 trap "unreachable match"
+@161:13 end
+@161:13 end
+@159:9 drop 98
+@159:9 drop 126
+@159:9 drop 95
+@159:9 drop 93
+@159:9 unit 129
+@159:9 assign 129 130
+@159:9 drop 91
+@159:9 drop 82
+@159:9 else
+@159:9 int 132 0
+@159:9 assign 132 131
+@159:9 tag-test-place 133 0 82
+@159:9 if 133
+@159:9 int 134 1
+@159:9 assign 134 131
+@159:9 end
+@159:9 if 131
+@159:9 tag-test-place 135 0 82
+@159:9 if 135
+@159:9 else
+@159:9 trap "unreachable selected pattern"
+@159:9 end
+@159:9 drop 82
+@159:9 break
+@159:9 unit 136
+@159:9 else
+@159:9 trap "unreachable match"
+@159:9 end
+@159:9 end
+@159:9 drop 130
+@159:9 unit 137
+@159:9 drop 137
+@159:9 continue
+@159:9 end
+@159:9 unit 138
+@159:9 drop 138
+@159:9 unit 139
+@159:9 assign 139 140
+@159:9 drop 78
+@159:9 else
+@159:9 trap "unreachable arm after irrefutable pattern"
+@159:9 trap "unreachable match"
+@159:9 end
+@150:1 drop 140
+@165:12 read 141 move 6
+@165:9 variant 142 0 141
+@150:1 drop 4
+@146:16 drop 2
+@146:16 drop 1
+@146:16 drop 0
+@146:16 return 142
+endfn

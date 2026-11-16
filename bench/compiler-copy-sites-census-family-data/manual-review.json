@@ -1,0 +1,246 @@
+{
+  "version": "1",
+  "mode": "bounded-complete-family-census-plus-manual-root-review",
+  "population": {
+    "function_count": "20",
+    "instructions": "6202",
+    "selection": "the original first-appearance 20; unchanged",
+    "all_struct_roots": "64",
+    "flat_shape_locals": "13",
+    "flat_shape_type": "41",
+    "flat_shape_fresh_struct_roots": "1"
+  },
+  "pins": {
+    "plan": "8a1f3e3d5354b3eca7fd9adb68bfee892f94360130a19b265f3f9ffb73c4dc15",
+    "reader": "b4f3df6b6ffc443d7b3baf839b4e1dbdbb664a21f8ff366a437f05c5114113a6",
+    "wrapper": "51603557b926f48e1d60e7bc488df21b8731496f0bc75678252434c26699e8b4",
+    "companion": "32c0f43dbde125e43f2ca5a0c6d8548ba0f1774ce3b51bc62d94a6488af0fdca",
+    "extraction": "63d59716e15c302d241d9e19ba792a0d715b0a0e25aeda75827b24be0799d480",
+    "join": "b69c1d21e9ac89fde114dda7a0abee592bc16698c94cb902a4de669193ddff31",
+    "inventory_output": "7c14fc93ff46c4ad19ba9d20625d9572e25a599e73066d0b826df0a925c74e9a",
+    "native_layout": "f88d1ff9a50ce796d2fc10bfa04cd4e8d73a30d8284d5a9b3bcd3488f724daf0"
+  },
+  "disjoint_root_disposition": [
+    {
+      "count": "60",
+      "rule": "Move Struct is outside Copy subset"
+    },
+    {
+      "count": "1",
+      "type": "3277",
+      "function": "2652",
+      "instruction": "646",
+      "rule": "Copy closure has reference field t1286",
+      "nominal_status": "not needed for the independent type blocker"
+    },
+    {
+      "count": "2",
+      "type": "3284",
+      "function": "690",
+      "instructions": [
+        "232",
+        "267"
+      ],
+      "rule": "Copy IR tuple has enum field t1325",
+      "nominal_status": "not needed for the independent type blocker"
+    },
+    {
+      "count": "1",
+      "type": "41",
+      "function": "2652",
+      "instruction": "1262",
+      "rule": "fresh flat-shape value is consumed as an aggregate call argument at i1265"
+    }
+  ],
+  "candidate": {
+    "function": "2652",
+    "function_name": "check::scoped::check$f1968<Self=t785;>",
+    "body_sha256": "88b939615581997b8ac906a02402218b9a8c8b69f202594b1fa6b9c96d918d17",
+    "function_instructions": "1339",
+    "locals": "701",
+    "parameters": "5",
+    "root_local": "698",
+    "type": "41",
+    "constructor": "1262",
+    "shape": {
+      "copy": "yes",
+      "scalar_fields": "five t4/usize",
+      "custom_destructor": "none for t41 or t4",
+      "native_cleanup": "false",
+      "extent": "40",
+      "alignment": "8",
+      "offsets": [
+        "0",
+        "8",
+        "16",
+        "24",
+        "32"
+      ],
+      "nominal_origin": "unestablished by IR shape/name"
+    },
+    "freshness": {
+      "nonparameter": "yes",
+      "whole_definitions": "1",
+      "earlier_uses": "0",
+      "definition_kind": "Struct"
+    },
+    "all_uses": [
+      {
+        "instruction": "1265",
+        "kind": "Call argument",
+        "callee": "1295",
+        "parameter": "0",
+        "consumption": "consumes"
+      }
+    ],
+    "read_descendants": [],
+    "borrow_or_view_uses": [],
+    "partial_writes": [],
+    "field_reads": [],
+    "returns": [],
+    "drops": [],
+    "control": {
+      "enclosing_scope": [
+        "if:451:then",
+        "loop:454",
+        "if:524:then",
+        "if:661:then"
+      ],
+      "between_definition_and_consumption": [
+        "1263 Read of l692 into l699",
+        "1264 Read of l207 into l700"
+      ],
+      "branch_or_join_between": "none",
+      "qualification": "Enclosing loop is not treated as evidence of a live backedge crossing. No full callee behavior is inferred."
+    },
+    "initialization": "Constructor consumes its five scalar operand locals and initializes l698; Call consumes l698. No later use or drop exists in the complete body. No serialized loan state is claimed.",
+    "callee_signature": {
+      "sha256": "c6844ed3142ae35d9d20d3aace58f875befabc7eab3953a09a147217cab648e1",
+      "name": "diagnostic::new$f1863<Self=t43;>",
+      "parameter_types": [
+        "41",
+        "985",
+        "985"
+      ],
+      "result_type": "43",
+      "body": "not supplied or analyzed"
+    },
+    "observed_rows": [],
+    "observed_samples": "0",
+    "sampling_qualification": "No matching recorded copy interval; this is not a proof of no execution, no machine work or no cost.",
+    "verdict": "blocked-for-frozen-initial-subset",
+    "independent_blocker": "aggregate argument at i1265",
+    "nominal_uncertainty_does_not_remove_blocker": true,
+    "fields_in_declaration_order": [
+      {
+        "name": "file",
+        "type": "4",
+        "input_local": "693"
+      },
+      {
+        "name": "start",
+        "type": "4",
+        "input_local": "696"
+      },
+      {
+        "name": "end",
+        "type": "4",
+        "input_local": "697"
+      },
+      {
+        "name": "line",
+        "type": "4",
+        "input_local": "694"
+      },
+      {
+        "name": "column",
+        "type": "4",
+        "input_local": "695"
+      }
+    ]
+  },
+  "other_flat_locals": {
+    "function_7710": {
+      "locals": [
+        "4",
+        "5",
+        "7",
+        "9",
+        "17",
+        "19"
+      ],
+      "struct_roots": "0",
+      "whole_read_edges": [
+        {
+          "instruction": "16",
+          "source": "5",
+          "destination": "17"
+        }
+      ],
+      "origins": "projected reads, consuming Assign and Replace results; none is a fresh Struct in this body",
+      "blockers": [
+        "fresh-Struct rule",
+        "intrinsic Replace uses"
+      ],
+      "callee_irrelevance": "not assumed"
+    },
+    "function_5719": {
+      "locals": [
+        "30",
+        "31",
+        "37",
+        "97",
+        "98",
+        "104"
+      ],
+      "struct_roots": "0",
+      "whole_read_edges": [
+        {
+          "instruction": "113",
+          "source": "31",
+          "destination": "37"
+        },
+        {
+          "instruction": "318",
+          "source": "98",
+          "destination": "104"
+        }
+      ],
+      "origins": "two projected reads followed by Assign and Read",
+      "blockers": [
+        "fresh-Struct rule",
+        "aggregate argument",
+        "retained values cross live branches and joins"
+      ],
+      "qualification": "Drops precede both loop backedges; no live-backedge claim",
+      "independent_review_manifest": "c7438357fcb0247d2ef379722303a33b3fb4e49f331bd620ad59a9881090a0ba"
+    }
+  },
+  "conclusion": {
+    "scope": "only the frozen 20 complete selected bodies",
+    "fresh_struct_roots_qualifying_for_initial_subset": "0",
+    "proof": "All 64 Struct roots have an independent blocking rule. The other 12 flat-shaped locals do not originate in a Struct in these bodies.",
+    "nominal_origin": "unestablished; no positive eligibility relies on it",
+    "outside_population": "unreviewed",
+    "whole_program_zero": "not claimed",
+    "removed_time_or_speedup": "not inferred"
+  },
+  "execution": {
+    "gateway": "compiler-copy-tests-family-once-1261",
+    "invocations": "1",
+    "exit": "0",
+    "elapsed_s": "0.38",
+    "user_s": "0.36",
+    "system_s": "0.01",
+    "peak_rss_kib": "89660",
+    "load_before": "1.32 1.35 1.70",
+    "load_after": "1.32 1.35 1.70",
+    "stderr_bytes": "0",
+    "address_space_kib": "4194304",
+    "timeout_s": "300",
+    "grace_s": "10",
+    "compiler_profiler_reader_or_old_helper": "not run",
+    "extra_pages": "0",
+    "tracked_edits": "none"
+  }
+}

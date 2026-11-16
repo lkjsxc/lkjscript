@@ -1,0 +1,226 @@
+{
+  "version": "1",
+  "mode": "manual-complete-body-review-with-coordinate-tables",
+  "function": "5719",
+  "name": "elaborate::definition_types::instantiate$f1449<Self=t342;>",
+  "body": {
+    "sha256": "22be5dcdac99e1c8d4a10492d438482363cb65c1b7c214579906261b6dc3eec9",
+    "bytes": "13440",
+    "instructions": "435",
+    "locals": "211",
+    "parameters": "3",
+    "file": "82",
+    "original_byte_offset": "39323057",
+    "original_end_offset_exclusive": "39336497"
+  },
+  "selected_companion": "32c0f43dbde125e43f2ca5a0c6d8548ba0f1774ce3b51bc62d94a6488af0fdca",
+  "plan_sha256": "8a1f3e3d5354b3eca7fd9adb68bfee892f94360130a19b265f3f9ffb73c4dc15",
+  "join": {
+    "reader_sha256": "d3583950adc72bbc895254727ed752dd5454c81618b23326395207c693f1e3e1",
+    "manifest_sha256": "b69c1d21e9ac89fde114dda7a0abee592bc16698c94cb902a4de669193ddff31",
+    "selected_rows_sha256": "cc15c9d93120dc5533c27ee1b8febf31d0182de0060fdb391083189f748b69be",
+    "result_sha256": "0a3492d04958ec7c88474821e0ac0f6f26c7647dbc06d0271517383443465e5f",
+    "warnings": "upstream Perl >32-bit hexadecimal portability warnings retained by join owner; no join rerun here"
+  },
+  "span": {
+    "type": "41",
+    "nominal_origin": "not-established-from-supplied-IR-context",
+    "layout_bytes": "40",
+    "alignment": "8",
+    "field_offsets": [
+      "0",
+      "8",
+      "16",
+      "24",
+      "32"
+    ],
+    "fields_all_type": "4",
+    "cleanup": "false",
+    "custom_destructor_rows_for_type_or_fields": "0",
+    "locals": [
+      "30",
+      "31",
+      "37",
+      "97",
+      "98",
+      "104"
+    ],
+    "parameters": [],
+    "fresh_struct_definitions": []
+  },
+  "all_struct_definitions": [
+    {
+      "instruction": "4",
+      "destination": "3",
+      "type": "5655"
+    },
+    {
+      "instruction": "10",
+      "destination": "147",
+      "type": "219"
+    },
+    {
+      "instruction": "15",
+      "destination": "148",
+      "type": "219"
+    },
+    {
+      "instruction": "16",
+      "destination": "5",
+      "type": "484"
+    },
+    {
+      "instruction": "64",
+      "destination": "8",
+      "type": "2594"
+    },
+    {
+      "instruction": "269",
+      "destination": "75",
+      "type": "2594"
+    }
+  ],
+  "chains": [
+    {
+      "name": "expression-span",
+      "locals": [
+        "30",
+        "31",
+        "37"
+      ],
+      "root_instruction": "105",
+      "root": "projected-copy from incoming compiler reference through owned vector element; not fresh Struct",
+      "assignment": "106",
+      "whole_local_read_copy": "113",
+      "consuming_call": {
+        "instruction": "114",
+        "function": "6852",
+        "parameter": "5"
+      },
+      "drops": {
+        "error": "126",
+        "normal": "179"
+      },
+      "row": "32811",
+      "row_sha256": "4051ba7374440d83e4a5d548251b3ee4f722629d7be8e1fa6b06cecfab5234a0",
+      "samples": "9",
+      "displayed_rank": "13",
+      "start": "15079336",
+      "end": "15079362"
+    },
+    {
+      "name": "pattern-span",
+      "locals": [
+        "97",
+        "98",
+        "104"
+      ],
+      "root_instruction": "310",
+      "root": "projected-copy from incoming compiler reference through owned vector element; not fresh Struct",
+      "assignment": "311",
+      "whole_local_read_copy": "318",
+      "consuming_call": {
+        "instruction": "319",
+        "function": "6852",
+        "parameter": "5"
+      },
+      "drops": {
+        "error": "331",
+        "normal": "384"
+      },
+      "row": "32818",
+      "row_sha256": "a341d219d6ea3b073f3be6f80bd88b4ba1c66bdd6b7f257a0a7fb60a8ad138f5",
+      "samples": "1",
+      "displayed_rank": "unshown",
+      "start": "15081897",
+      "end": "15081923"
+    }
+  ],
+  "exhaustive_span_instruction_count": "12",
+  "direct_span_borrows": [],
+  "direct_span_field_reads": [],
+  "direct_span_returns": [],
+  "span_partial_writes": [],
+  "span_replacements": [],
+  "nearby_borrows": {
+    "first": [
+      {
+        "instruction": "108",
+        "base": "0",
+        "mode": "shared"
+      },
+      {
+        "instruction": "110",
+        "base": "1",
+        "mode": "mut"
+      },
+      {
+        "instruction": "112",
+        "base": "4",
+        "mode": "mut"
+      },
+      {
+        "instruction": "159",
+        "base": "6 field 0",
+        "mode": "mut"
+      }
+    ],
+    "second": [
+      {
+        "instruction": "313",
+        "base": "0",
+        "mode": "shared"
+      },
+      {
+        "instruction": "315",
+        "base": "1",
+        "mode": "mut"
+      },
+      {
+        "instruction": "317",
+        "base": "4",
+        "mode": "mut"
+      },
+      {
+        "instruction": "364",
+        "base": "6 field 1",
+        "mode": "mut"
+      }
+    ],
+    "qualification": "These borrow other storage, not any of the six Span locals. No serialized instruction-loan state is claimed."
+  },
+  "decision": {
+    "scope": "only the two whole-value Span transfer chains in complete fn5719",
+    "classification": "blocked-for-frozen-initial-subset",
+    "independent_rules": [
+      "root is an indexed/dereferenced read, not a fresh Struct definition",
+      "whole Span passed as an aggregate call argument",
+      "retained whole value remains live across branches/joins; lifetime is not one straight-line region"
+    ],
+    "additional_limitations": [
+      "Assign is a consuming transfer, not a read alias; no permission to forward or discard initialization effects follows",
+      "callee bodies and their behavior are not extracted; only signatures are used",
+      "source nominal origin remains unestablished",
+      "scalar constructor payloads and other functions/families remain separate review work"
+    ]
+  },
+  "accounting": {
+    "reviewed_raw_rows": "2",
+    "reviewed_raw_samples": "10",
+    "displayed_samples": "9",
+    "unshown_samples": "1",
+    "raw_interval_overlap": "none",
+    "other_span_transfers": "no additional descriptors in accepted selected table for i106/i113/i311/i318; no inference about emitted execution or time from absence",
+    "eligible_sample_prediction": "not-made",
+    "speedup_prediction": "not-made"
+  },
+  "execution": {
+    "compiler": "not-run",
+    "extractor": "not-run",
+    "official_reader": "not-run",
+    "join": "not-run",
+    "accounting_helper": "not-run",
+    "profile": "not-run",
+    "transformation": "none"
+  }
+}

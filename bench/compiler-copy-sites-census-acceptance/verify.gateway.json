@@ -1,0 +1,36 @@
+{
+  "cancelled": false,
+  "capture_status": "complete",
+  "duration_ms": 9884,
+  "exit_code": 0,
+  "finished": true,
+  "generation": "pipe-kncjkngjdbelebhojfehlpmhchaocpji",
+  "request_id": "compiler-copy-sites-census-audit-170-wait",
+  "signal": null,
+  "status": "done",
+  "stderr": "",
+  "stderr_capture_truncated": false,
+  "stderr_ref": {
+    "available": true,
+    "end_offset": 0,
+    "offset": 0,
+    "path": "/home/coder/.local/state/lkjyolo/outputs/pipe-kncjkngjdbelebhojfehlpmhchaocpji.stderr",
+    "total_bytes": 0
+  },
+  "stderr_truncated": false,
+  "stdout": "0\n{\n   \"body_bytes\" : {\n      \"count\" : \"20\",\n      \"max\" : \"56134\",\n      \"median\" : \"2644\",\n      \"min\" : \"1206\",\n      \"total\" : \"203690\"\n   },\n   \"context_bytes\" : {\n      \"count\" : \"20\",\n      \"max\" : \"122246\",\n      \"median\" : \"23613\",\n      \"min\" : \"22762\",\n      \"total\" : \"770639\"\n   },\n   \"eligibility\" : \"not-assessed\",\n   \"instruction_records_verified\" : \"6202\",\n   \"manifest_records\" : \"345\",\n   \"signature_excerpts_verified_including_repetition\" : \"198\",\n   \"signature_parts_verified\" : \"651\",\n   \"status\" : \"verified-complete-extraction\",\n   \"type_blocks_verified_including_repetition\" : \"1882\"\n}\n",
+  "stdout_capture_truncated": false,
+  "stdout_ref": {
+    "available": true,
+    "end_offset": 612,
+    "offset": 612,
+    "path": "/home/coder/.local/state/lkjyolo/outputs/pipe-kncjkngjdbelebhojfehlpmhchaocpji.stdout",
+    "total_bytes": 612
+  },
+  "stdout_truncated": false,
+  "stream_mode": "pipes",
+  "timed_out": false,
+  "tool": "wait_for_exit",
+  "truncated": false,
+  "workdir": "/home/coder/workspace/lkjscript-compiler-scale-refusal-20261116"
+}

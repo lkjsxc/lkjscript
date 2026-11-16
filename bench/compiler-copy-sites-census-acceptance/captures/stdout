@@ -1,0 +1,8 @@
+{
+   "eligibility" : "not-assessed",
+   "exit_status" : "0",
+   "manifest_sha256" : "63d59716e15c302d241d9e19ba792a0d715b0a0e25aeda75827b24be0799d480",
+   "output" : "/home/coder/workspace/lkjscript/target/compiler-copy-sites-census-output.20261116-1",
+   "selected_functions" : "20",
+   "status" : "complete"
+}
