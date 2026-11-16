@@ -10,9 +10,10 @@ trusted program representation.
 Build with `--index --store DIRECTORY --store-key KEY` and retain the printed
 snapshot identity. Query with the same source/library selector and explicit
 `--snapshot ID`. The selector identifies the build context; query never opens
-the source tree. The version-two snapshot identity includes its producing
-compiler's exact executable digest. An explicit pin authenticates a locator,
-root and the requested pages without reading the current executable. The answer
+the source tree. The version-three snapshot identity includes its producing
+compiler's exact executable digest and authenticated container manifest. An
+explicit pin authenticates a locator, the fixed manifest and requested node
+extents without reading the current executable or the whole container. The answer
 reports `producer=HEX`, `validation=authenticated-producing-compiler` and
 `current-check=not-performed`: the facts were admitted by that producing compiler.
 The query reader cannot turn historical evidence into a current checker proof,
@@ -48,10 +49,25 @@ Both signature and parent-outline queries include every fragment and continue
 through the usual authenticated cursor. Fragment indices determine their order,
 including when multiple fragments contain identical text.
 
-Existing pinned snapshots retain the facts their producing compiler published.
-A snapshot from an older producer can therefore retain its historical clipped
-signature; rebuild the index with the repaired producer for complete long
-signatures. Reading a historical pin does not replace or upgrade its facts.
+A supported pinned snapshot retains the facts its producing compiler published.
+Reading a historical pin does not replace or upgrade those facts. Version-three
+readers support historical producers using the same format; version-two pins and
+cursors refuse and require rebuilding the index.
+
+Each snapshot owns one immutable-by-publication container. Its fixed authenticated
+manifest binds the source/IR identities, root extent and complete physical length;
+a query checks exact EOF, then reads and authenticates only the bounded node
+extents its answer needs. The total file may exceed the reader's per-read limit:
+that limit applies to individual manifest/node allocations. A retained readonly
+descriptor does not seal the inode against another writer; already verified owned
+bytes remain valid historical evidence, without a freshness claim.
+
+Every new snapshot charges its full container to the store budget. It can
+duplicate payloads retained by an earlier snapshot; unchanged reuse keeps the
+same identity. The first writable opening retires exact old semantic page/root/
+latest/locator names under the existing lock, while preserving unrelated signed
+entries. This first migration still visits the old population. Old-format writers
+must not share the directory with the new format.
 
 Module and declaration IDs follow resolved source paths, without an initial
 `crate::`; the root module is `crate`. Fields use `::field:NAME`, variants

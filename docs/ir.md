@@ -542,36 +542,82 @@ Generic queries cover current instances, not all future substitutions. Dependent
 are conservative recorded signature dependencies; remaining evidence gaps prevent
 exhaustive rename proofs.
 
-A version-two authenticated snapshot root binds the exact producing executable
-digest, selector, source digest, exact checked IR and radix-tree root. Its content
-identity therefore pins both facts and producer provenance. Every bounded page
-has an authenticated content identity and ordered key range. Lookups follow only
-the requested path, without source reads.
+Version-three snapshots use one immutable-by-publication container. Its fixed
+400-byte manifest encodes word 3, five length-framed 64-digit hexadecimal fields
+(producing executable digest, source digest, exact checked IR, root-node digest,
+selector), fact count, root offset, root envelope length and total container
+length. Numeric words are little-endian u64 with checked host conversion.
+The snapshot identity is SHA-256 of those exact manifest bytes. A 90-byte reuse
+envelope authenticates them under the raw producing compiler, namespace
+`semantic-container-v3` and snapshot identity; the fixed front is 490 bytes.
 
-An explicit pin uses a separately authenticated locator and a narrow query reader;
-it does not read or hash the current executable. The answer reports the producing
-compiler digest and `validation=authenticated-producing-compiler`. These are
-historical facts admitted by that producer, not an assertion that the current
-checker would admit them. This reader cannot create general store records, return
-`CheckedProgram`, or supply admission, image authority or gate reuse. Ordinary
-builds, current authority and unpinned lookup retain exact current-producer checks.
-Locator publication is accounted under its producing generation and follows
-complete root/page retention. After the final semantic memo writes, publication
-also requires a healthy writer, retained Merkle-root accounting, and authenticated
-root and locator. Eviction at this point refuses `E_QUERY_STORE` before printing
-a snapshot identity. Later eviction or corruption remains a disposable miss.
+Nodes follow in deterministic postorder. Each is separately authenticated in
+`semantic-node-v3` under its payload digest and producing compiler. A reference
+contains that digest, physical offset and complete envelope length. Node payloads
+are 32–32,768 bytes; offsets begin at 490 and checked ends fit both the signed
+total and nonnegative i64. The root ends exactly at the authenticated total.
+Every branch descriptor, including an unselected child, must end before or at
+its parent's offset. Ordered radix digits, depth, leaf key hashes/prefixes,
+framing and fact continuations are checked on the requested path. No whole-file
+payload scan or validation of every unselected node is required for a query.
 
-A query reader fixes one snapshot for its lifetime. Fully validated decoded fact
-pages and authenticated absence may be cached by exact kind, identity and page
-number. Every cache miss traverses authenticated bytes and performs the existing
-rooted-range, framing and continuation checks; errors invalidate the snapshot and
-stay uncached.
+Open an existing regular container and retain its descriptor. Read/authenticate
+the fixed manifest and require exact physical EOF before seeking to requested
+node extents. Authenticate each fixed node header before allocating its bounded
+owned payload, require exact reference-length agreement and verify its digest.
+The reader's per-read capacity bounds manifest/node buffers, not the signed
+container total; a larger valid container remains queryable with smaller read
+settings. Already verified owned bytes may be cached even if another writer
+later changes the inode; no filesystem freshness is inferred from that cache.
 
-Cursor state has an explicit query protocol version and authenticates the exact
+An explicit pin uses a separately authenticated version-three locator and a
+narrow query reader; it does not read or hash the current executable. The locator
+binds raw producer, selector and root digest in 104 bytes, under the snapshot key
+and protocol producer SHA-256(`lkjscript-semantic-locator-3`). The answer reports
+the producing digest and `validation=authenticated-producing-compiler`.
+These are historical facts admitted by that producer, not an assertion that
+the current checker would admit them. This reader cannot create general store
+records, return `CheckedProgram`, or supply admission, image authority or gate
+reuse. Ordinary builds, current authority and unpinned lookup retain exact
+current-producer checks; latest selection must match the actual container front.
+
+The writer exclusively borrows its Store while streaming a newly owned temporary
+file. Before each write it reserves the full prospective staged extent, entry/
+generation metadata and the larger current/prospective signed index. It seals
+nodes, backpatches the fixed front, checks EOF and renames through the held parent
+directories. Budget accounting charges the whole physical file, including gaps,
+not just its front. Container reconciliation authenticates that bounded front
+and requires its total to agree with both physical EOF and signed accounting;
+an unindexed container remains an orphan, not an adoptable proof.
+
+Publication orders the container, locator and latest before semantic/input memo
+writes. After the final memo writes, a healthy writer, retained full-container
+accounting, newly authenticated front/EOF and authenticated locator are required.
+Eviction there refuses `E_QUERY_STORE` before printing a snapshot identity.
+Later eviction/corruption remains a disposable miss. Each distinct snapshot owns
+a complete stream, so physical page deduplication across snapshots is lost.
+
+Under the writer lock, migration retires only canonical old semantic-page,
+semantic-root, semantic-latest and old locator names. Old locator recognition
+remains for signed budget decoding/retirement; it does not permit old queries.
+Unrelated signed entries survive a valid mixed-store migration. The first
+migration still visits the old population; subsequent discovery has no trusted
+clean marker. Version-two pins/cursors and concurrent old-format writers are
+unsupported. Historical producer queries remain supported within version three.
+
+A query reader fixes one snapshot for its lifetime. Raw node cache keys include
+digest, offset and length, with extent bounds checked before cache lookup.
+Fully validated decoded fact pages and authenticated absence may be cached by
+exact kind, identity and page number. Every cache miss traverses authenticated
+bytes and performs range, framing and continuation checks; errors invalidate the
+snapshot and stay uncached. Unlocked pinned invalidation does not delete latest;
+locked invalidation preserves a newer selection.
+
+Cursor state uses query protocol version three and authenticates the exact
 snapshot/question/depth under the selected producer. It carries a bounded
 depth-first traversal stack; cycles on that path are skipped. A malformed or
-missing locator/root/page refuses before any answer is written. There is no
-fallback from an explicit pin to latest, another producer or an unsigned hint.
+missing locator/manifest/node refuses before any answer is written. There is no
+fallback from an explicit pin to latest, another producer or an older format.
 Invalidation makes the next indexed build repair a damaged selection.
 
 Every answer states `freshness=not-asserted`. A mutable latest pointer cannot prove

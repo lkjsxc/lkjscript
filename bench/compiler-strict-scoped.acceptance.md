@@ -39,7 +39,10 @@ peak RSS 12,216 KiB. The load observations bracketing both audits were
 Both ran with a 4 GiB address-space ceiling and 900-second deadline and exited zero.
 These are audit costs, not replay or build measurements.
 
-The owned fixture remains accepted for the pre-reviewed guarded cleanup.
-Cleanup is deferred until the separate container experiment ends to avoid disk
-interference with its timings. The frozen textual evidence will remain.
-No new replay, compiler execution or recovery was authorized by this acceptance.
+The separate container experiment finished before cleanup was released. Commit
+`a377ef0a338141ced30c6bf7dddac1107336b0d0` (integrated as `862a2989`)
+records guarded removal of the owned fixture and verification of its absence at
+09:37:02 UTC, with load 4.16 / 4.50 / 5.05 before and after. The old copied
+compiler, key, store and twelve archives are gone. The measured records and
+proof tables remain unchanged; the report adds the cleanup and retains its
+pre-cleanup accepted report/manifest hashes explicitly. No replay or recovery ran.

@@ -1,4 +1,4 @@
-# Direction — 2026-11-15
+# Direction — 2026-11-16
 
 lkjscript is an AI-native general-purpose language in which agents directly
 understand, query and change a program's semantic structure, with a foundation
@@ -118,7 +118,7 @@ Compact binary IR preserves exact tags and raw bits; decoding gives no checker a
 One invocation shares actual source reads, including absent candidates; runtime dependencies are the bytes actually sealed.
 Closed tests include fixed stdout/stderr captures only when both checked original/native effect closures permit those four operations; other host/resource/model outcomes rerun.
 Fresh checked zero-authority ELF execution may reuse an exact stable-runner/image/input proof; compiler verdicts stay generation-bound.
-Authenticate a fixed root binding producer/target/domain, length and digest before allocation; read one owned payload, require EOF and hash it once. VerifiedPayload preserves the exact authentication domain.
+Authenticate ordinary roots before payload allocation, require exact EOF and verify owned bytes. Version-three query containers authenticate a fixed manifest/EOF and each requested bounded node; charge the full stream. VerifiedPayload preserves its exact domain.
 Default cap: 256 MiB of published compiler-owned bytes per Directory; evict oldest producer generations. Each worker-N gets one quarter of the base budget: 512 MiB for four workers, 768 MiB for eight.
 Valid reads do not lock; nonblocking writers enforce the cap and commit accounting at invocation end. Closed runners release miss-cleanup locks before execution and reopen only after success. Corruption/refusal/concurrency/orphans are misses.
 Program directories use literal SOURCE/ENTRY/GRANTS/CASES constants in program.lkj; signature authority is unchanged and missing/extra grants reject.
