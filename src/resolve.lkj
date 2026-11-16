@@ -116,56 +116,26 @@ pub fn module(program: &Program, name: &str) -> ModuleId {
         .position(|s| s.path == name)
         .unwrap_or(0)
 }
+
+/// Intrinsic value types, separate from the resolver's builtin predicates.
+pub(crate) fn intrinsic_type_name(name: &str) -> bool {
+    matches!(name, "bool" | "u8" | "u16" | "u32"
+            | "u64" | "usize" | "i8" | "i16"
+            | "i32" | "i64" | "isize" | "f64"
+            | "str" | "char" | "Vec" | "Box"
+            | "World" | "Arguments" | "Environment" | "ExitStatus"
+            | "Stdout" | "Stdin" | "Stderr" | "Directory"
+            | "ReadDirectory" | "ReadFile" | "Image" | "Channel"
+            | "Worker" | "ReadRegion" | "ForeignCommand" | "ForeignSession"
+            | "NullDevice" | "File" | "Process" | "Clock"
+            | "Child" | "Listener" | "Connector" | "Readiness"
+            | "Entropy" | "Stop")
+}
 fn builtin(name: &str) -> bool {
-    matches!(
-        name,
-        "bool"
-            | "u8"
-            | "u16"
-            | "u32"
-            | "u64"
-            | "usize"
-            | "i8"
-            | "i16"
-            | "i32"
-            | "i64"
-            | "isize"
-            | "f64"
-            | "str"
-            | "char"
-            | "Vec"
-            | "Box"
-            | "World"
-            | "Arguments"
-            | "Environment"
-            | "ExitStatus"
-            | "Stdout"
-            | "Stdin"
-            | "Stderr"
-            | "Directory" | "ReadDirectory" | "ReadFile" | "Image" | "Channel" | "Worker" | "ReadRegion" | "ForeignCommand" | "ForeignSession" | "NullDevice"
-            | "File"
-            | "Process"
-            | "Clock"
-            | "Child"
-            | "Listener"
-            | "Connector"
-            | "Readiness"
-            | "Entropy"
-            | "Stop"
-            | "Copy"
-            | "Clone"
-            | "Ord"
-            | "Eq"
-            | "PartialEq"
-            | "PartialOrd"
-            | "Send"
-            | "Sync"
-            | "Data"
-            | "Drop"
-            | "Fn"
-            | "FnMut"
-            | "FnOnce"
-    )
+    intrinsic_type_name(name) || matches!(name, "Copy" | "Clone" | "Ord" | "Eq"
+            | "PartialEq" | "PartialOrd" | "Send" | "Sync"
+            | "Data" | "Drop" | "Fn" | "FnMut"
+            | "FnOnce")
 }
 fn insert_function_owner(
     owners: &mut [FunctionOwner],

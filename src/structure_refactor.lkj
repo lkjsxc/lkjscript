@@ -1315,7 +1315,7 @@ pub mod annotations {
         name == "Self" && catalog.by_identity.get(&owner.parent)
             .is_some_and(|index| matches!(catalog.items[*index].kind.as_str(), "implementation" | "trait"))
     }
-    fn intrinsic(name: &str) -> bool { crate::resolve::intrinsic_name(name) }
+    fn intrinsic(name: &str) -> bool { crate::resolve::intrinsic_type_name(name) }
     pub fn render(catalog: &semantic::Catalog, unit: &Unit, name: &str) -> Result<String, String> {
         let wrapped = format!("fn __lkjscript_annotation(value: {name}) {{}}");
         let parsed = syntax::parse(&wrapped).map_err(|problem| fail(&unit.owner.identity, "TYPE_IDENTITY", &problem.message))?;

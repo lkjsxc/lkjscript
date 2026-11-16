@@ -84,6 +84,11 @@ for capability in ForeignSession Image Channel Worker ReadRegion; do
     grep -Eq "let .*: $capability =" "$fixture/project/main.lkj"
     value 0
 done
+# A nominal source Data is distinct from the builtin Data predicate.
+printf '%s\n' 'struct Data { n: i64 } fn combine(value: &Data, add: i64) -> i64 { value.n + add } fn main() -> i64 { let data = Data { n: 3i64 }; combine(&data, 4i64) }' > "$fixture/project/main.lkj"
+apply '{"op":"change-signature","id":"combine","parameters":["combine::param:add","combine::param:value"]}'
+grep -Fq 'crate::Data' "$fixture/project/main.lkj"
+value 7
 # The existing conservative shadow rule must also cover the new capabilities.
 printf '%s\n' 'mod other { pub struct Image { pub value: i64 } } fn discard(value: Image) -> i64 { 7i64 } fn caller(value: Image) -> i64 { discard(value) } pub fn probe() -> i64 { 0i64 }' > "$fixture/project/main.lkj"
 cp "$fixture/project/main.lkj" "$fixture/annotation-before"
