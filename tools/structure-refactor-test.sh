@@ -76,4 +76,21 @@ PERL
 "$compiler" edit "${common[@]}" --request "$fixture/request.json" > "$fixture/plan"
 value 42
 grep -q 'fn calculate' "$fixture/project/main.lkj"
+# Inferred annotations recognize every capability in the resolver inventory.
+# No host values are fabricated: these unused callers are elaborated/checked.
+for capability in ForeignSession Image Channel Worker ReadRegion; do
+    printf 'fn discard(value: %s) -> i64 { 7i64 }\nfn caller(value: %s) -> i64 { discard(value) }\npub fn probe() -> i64 { 0i64 }\n' "$capability" "$capability" > "$fixture/project/main.lkj"
+    apply '{"op":"change-signature","id":"discard","parameters":[]}'
+    grep -Eq "let .*: $capability =" "$fixture/project/main.lkj"
+    value 0
+done
+# The existing conservative shadow rule must also cover the new capabilities.
+printf '%s\n' 'mod other { pub struct Image { pub value: i64 } } fn discard(value: Image) -> i64 { 7i64 } fn caller(value: Image) -> i64 { discard(value) } pub fn probe() -> i64 { 0i64 }' > "$fixture/project/main.lkj"
+cp "$fixture/project/main.lkj" "$fixture/annotation-before"
+printf '%s\n' '{"version":1,"operations":[{"op":"change-signature","id":"discard","parameters":[]}]}' > "$fixture/request.json"
+if "$compiler" edit "${common[@]}" --request "$fixture/request.json" > "$fixture/plan" 2> "$fixture/error"; then exit 1; fi
+grep -q 'E_EDIT_TYPE_IDENTITY' "$fixture/error"
+cmp "$fixture/annotation-before" "$fixture/project/main.lkj"
+test ! -e "$fixture/project/.lkjscript-edit.pending"
+
 printf 'ok structural refactor CLI: seven kinds, exact checked results, untouched bytes and checked refusal\n'
