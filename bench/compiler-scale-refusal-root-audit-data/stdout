@@ -1,0 +1,101 @@
+{
+   "applied_limit_mib" : 8192,
+   "compiler_executions" : 0,
+   "control_instances" : 4209,
+   "control_instructions" : 896361,
+   "deadline_seconds" : 456,
+   "desired_limit_mib" : 14192,
+   "key_contents_read" : false,
+   "live_input_total" : 2294,
+   "live_inputs" : [
+      {
+         "files" : 215,
+         "manifest" : "factory-inputs.sha256",
+         "source_bytes" : 5106746,
+         "source_lines" : 107505
+      },
+      {
+         "files" : 28,
+         "manifest" : "specimen-library-inputs.sha256",
+         "source_bytes" : 259234,
+         "source_lines" : 7610
+      },
+      {
+         "files" : 170,
+         "manifest" : "100000-inputs.sha256",
+         "source_bytes" : 3923070,
+         "source_lines" : 100000
+      },
+      {
+         "files" : 1881,
+         "manifest" : "1000000-inputs.sha256",
+         "source_bytes" : 40327556,
+         "source_lines" : 1000000
+      }
+   ],
+   "manifest_records" : 106,
+   "meaning" : "one successful control; two located refusals; no new build exponent",
+   "phases" : [
+      {
+         "exit" : 0,
+         "label" : "generator-build",
+         "load_after" : "0.85,1.35,1.63",
+         "load_before" : "0.85,1.35,1.63",
+         "rss_kib" : 115292,
+         "system_s" : 0.01,
+         "user_s" : 2.07,
+         "wall_s" : 2.14
+      },
+      {
+         "exit" : 0,
+         "label" : "100000-generate",
+         "load_after" : "0.85,1.35,1.63",
+         "load_before" : "0.85,1.35,1.63",
+         "rss_kib" : 2112,
+         "system_s" : 0,
+         "user_s" : 1.07,
+         "wall_s" : 1.11
+      },
+      {
+         "exit" : 0,
+         "label" : "100000-cold",
+         "load_after" : "0.95,1.35,1.63",
+         "load_before" : "0.85,1.35,1.63",
+         "rss_kib" : 713512,
+         "system_s" : 0.18,
+         "user_s" : 10.74,
+         "wall_s" : 11.2
+      },
+      {
+         "exit" : 0,
+         "label" : "1000000-generate",
+         "load_after" : "1.17,1.39,1.63",
+         "load_before" : "0.95,1.35,1.63",
+         "rss_kib" : 8704,
+         "system_s" : 0.05,
+         "user_s" : 10.69,
+         "wall_s" : 10.93
+      },
+      {
+         "exit" : 1,
+         "label" : "1000000-cold",
+         "load_after" : "1.94,1.56,1.67",
+         "load_before" : "1.17,1.39,1.63",
+         "rss_kib" : 5224960,
+         "system_s" : 1.43,
+         "user_s" : 74.07,
+         "wall_s" : 77.04
+      },
+      {
+         "exit" : 1,
+         "label" : "1000000-check",
+         "load_after" : "2.34,1.77,1.74",
+         "load_before" : "1.94,1.56,1.67",
+         "rss_kib" : 5220184,
+         "system_s" : 1.42,
+         "user_s" : 73.49,
+         "wall_s" : 76.24
+      }
+   ],
+   "result" : "accepted"
+}

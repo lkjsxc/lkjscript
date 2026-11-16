@@ -35,7 +35,7 @@ and stack checks. Reject unencodable rel32 calls/branches with a located error.
 The allocator grows regions geometrically, reuses size classes and mremaps
 dedicated large blocks. Reserve the stack above the mapping arena; halve refused
 requests, return unused reservation on heap refusal and regrow when needed.
-Stack/heap pressure shares the address space without moving live stack addresses.
+Stack/heap pressure shares the address space without moving live stack addresses. A located R0008 does not establish growing recursion: body instantiation is already queued, and the [current 1M refusal](../bench/compiler-scale-refusal-62fa76f4.md) lacks the final mapping reason; do not add a duplicate callee work queue.
 Operations are enums with stable IR spellings. Preserve byte reproduction and
 hello under a 4 GiB address-space limit.
 

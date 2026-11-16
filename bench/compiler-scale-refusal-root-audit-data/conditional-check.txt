@@ -1,0 +1,4 @@
+preflight free_bytes=388072198144 mem_available_kib=59123710 load=0.84,1.36,1.63 accepted
+1m-preflight free_bytes=388075933696 mem_available_kib=58821765 load=0.95,1.35,1.63 accepted
+check-preflight free_bytes=388044357632 mem_available_kib=59104771 load=1.94,1.56,1.67 accepted
+conditional_source_recheck_records=1881
