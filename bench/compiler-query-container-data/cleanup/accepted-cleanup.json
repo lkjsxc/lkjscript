@@ -1,0 +1,121 @@
+{
+   "accepted_report_commit" : "d06ff0553071c71cdcfb2630cd3fb66ec72c3233",
+   "key_contents_read" : false,
+   "manifests_verified" : {
+      "case_copy" : 215,
+      "implementation" : 789,
+      "results" : 1666
+   },
+   "preserved_metadata" : {
+      "/home/coder/workspace/lkjscript-compiler-query-container-20261116/.lkjscript-edit.generation" : "ce49582f1b93e2b87f353866f9e508033cb205322ceccb9702b734eb812cf8fa",
+      "/home/coder/workspace/lkjscript-compiler-query-container-20261116/.lkjscript-edit.lock" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-container-case-migration/.lkjscript-edit.generation" : "e96a0e891392ab097354bcd3e01a728ab263058744954289d5f15acc1602ecb5",
+      "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-container-case-migration/.lkjscript-edit.lock" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "preserved_operation_key_directory" : "/tmp/compiler-container-key.m4u6F6",
+   "process_reference_check" : "no matching live process observed; own tool ancestry excluded",
+   "removed" : [
+      {
+         "bytes" : 2293925125,
+         "device" : 144,
+         "files" : 78057,
+         "inode" : 36392043,
+         "path" : "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-query-container-run.jKz4Mn",
+         "removed" : true,
+         "uid" : 1001
+      },
+      {
+         "bytes" : 141,
+         "device" : 144,
+         "files" : 2,
+         "inode" : 36392048,
+         "path" : "/tmp/compiler-query-container-key.7KdwbR",
+         "removed" : true,
+         "uid" : 1001
+      },
+      {
+         "bytes" : 531753,
+         "device" : 144,
+         "files" : 77,
+         "inode" : 36367017,
+         "path" : "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-container-helper-run.6JS2DU",
+         "removed" : true,
+         "uid" : 1001
+      },
+      {
+         "bytes" : 142,
+         "device" : 144,
+         "files" : 2,
+         "inode" : 36367018,
+         "path" : "/tmp/compiler-container-helper-key.ABXkeg",
+         "removed" : true,
+         "uid" : 1001
+      },
+      {
+         "bytes" : 31716730,
+         "device" : 144,
+         "files" : 1,
+         "inode" : 36269320,
+         "path" : "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-container-baseline",
+         "removed" : true,
+         "uid" : 1001
+      },
+      {
+         "bytes" : 21145666,
+         "device" : 144,
+         "files" : 1,
+         "inode" : 36276408,
+         "path" : "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-container-candidate",
+         "removed" : true,
+         "uid" : 1001
+      },
+      {
+         "bytes" : 21145666,
+         "device" : 144,
+         "files" : 1,
+         "inode" : 36277752,
+         "path" : "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-container-candidate-2",
+         "removed" : true,
+         "uid" : 1001
+      },
+      {
+         "bytes" : 31922848,
+         "device" : 144,
+         "files" : 1,
+         "inode" : 36310645,
+         "path" : "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-container-inline64-g1",
+         "removed" : true,
+         "uid" : 1001
+      },
+      {
+         "bytes" : 31922848,
+         "device" : 144,
+         "files" : 1,
+         "inode" : 36311832,
+         "path" : "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-container-inline64-g2",
+         "removed" : true,
+         "uid" : 1001
+      },
+      {
+         "bytes" : 4836541,
+         "device" : 144,
+         "files" : 183,
+         "inode" : 36277415,
+         "path" : "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-container-case-migration/src",
+         "removed" : true,
+         "uid" : 1001
+      },
+      {
+         "bytes" : 280737,
+         "device" : 144,
+         "files" : 32,
+         "inode" : 36277382,
+         "path" : "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-container-case-migration/library",
+         "removed" : true,
+         "uid" : 1001
+      }
+   ],
+   "scope" : "Only named owned fixture paths and executable copies. Worktree, evidence, durable edit metadata, global/main keys preserved.",
+   "status" : "owned-cleanup-complete",
+   "worktree" : "/home/coder/workspace/lkjscript-compiler-query-container-20261116"
+}
