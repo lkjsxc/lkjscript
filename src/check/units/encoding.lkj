@@ -1,0 +1,184 @@
+//! Canonical interface framing. Only a domain-checked authenticated snapshot
+//! reaches decode; decoding ordinary IR bytes cannot mint unit authority.
+use super::{Binding, Dependency, Interface, Layout, TARGET_ABI};
+use crate::{ir_binary, sha256};
+
+fn word(out: &mut Vec<u8>, value: usize) {
+    for shift in 0usize..8usize { out.push((value >> (shift * 8usize)) as u8); }
+}
+fn wide(out: &mut Vec<u8>, value: u64) {
+    for shift in 0usize..8usize { out.push((value >> (shift * 8usize)) as u8); }
+}
+fn bytes(out: &mut Vec<u8>, value: &[u8]) {
+    word(out, value.len()); out.extend_from_slice(value);
+}
+fn text(out: &mut Vec<u8>, value: &str) { bytes(out, value.as_bytes()); }
+fn dependencies(out: &mut Vec<u8>, values: &[Dependency]) {
+    word(out, values.len());
+    for value in values { text(out, &value.name); text(out, &value.identity); }
+}
+fn offsets(out: &mut Vec<u8>, values: &[u64]) {
+    word(out, values.len());
+    for value in values { wide(out, *value); }
+}
+pub(super) fn store_key(name: &str, input: &str, values: &[Dependency]) -> String {
+    let mut out = b"lkjscript-unit-input-1\0"[..].to_vec();
+    text(&mut out, TARGET_ABI); text(&mut out, name); text(&mut out, input);
+    dependencies(&mut out, values);
+    sha256::hex_digest(&out)
+}
+pub(super) fn encode(interface: &Interface, semantic: bool) -> Vec<u8> {
+    let mut out = b"LKJUNIT1"[..].to_vec();
+    text(&mut out, TARGET_ABI); text(&mut out, &interface.name);
+    if semantic { text(&mut out, ""); text(&mut out, ""); }
+    else { text(&mut out, &interface.input); text(&mut out, &interface.body); }
+    bytes(&mut out, &ir_binary::write(&interface.program));
+    word(&mut out, interface.defined.len());
+    for index in 0usize..interface.defined.len() {
+        word(&mut out, interface.defined[index] as usize);
+        let origin = &interface.origins[index];
+        text(&mut out, &origin.unit); text(&mut out, &origin.interface_identity); text(&mut out, &origin.name);
+    }
+    if semantic { word(&mut out, 0usize); }
+    else { dependencies(&mut out, &interface.dependencies); }
+    word(&mut out, interface.layouts.len());
+    for layout in &interface.layouts {
+        wide(&mut out, layout.bytes); word(&mut out, layout.alignment as usize);
+        word(&mut out, layout.scalar as usize); word(&mut out, layout.signed as usize);
+        word(&mut out, layout.cleanup as usize);
+        offsets(&mut out, &layout.fields); word(&mut out, layout.variants.len());
+        for variant in &layout.variants { offsets(&mut out, variant); }
+    }
+    word(&mut out, interface.effects.len());
+    for row in &interface.effects {
+        word(&mut out, row.len()); for value in row { text(&mut out, value); }
+    }
+    out
+}
+struct Reader<'a> { data: &'a [u8], at: usize }
+impl<'a> Reader<'a> {
+    fn wide(&mut self) -> Option<u64> {
+        if self.data.len() - self.at < 8usize { return None; }
+        let mut value = 0u64;
+        for shift in 0usize..8usize { value |= (self.data[self.at + shift] as u64) << (shift * 8usize); }
+        self.at += 8usize;
+        Some(value)
+    }
+    fn word(&mut self) -> Option<usize> {
+        let value = self.wide()?;
+        if value > (!0usize) as u64 { return None; }
+        Some(value as usize)
+    }
+    fn boolean(&mut self) -> Option<bool> {
+        match self.word()? { 0 => Some(false), 1 => Some(true), _ => None }
+    }
+    fn count(&mut self, width: usize) -> Option<usize> {
+        let count = self.word()?;
+        if count > (self.data.len() - self.at) / width { return None; }
+        Some(count)
+    }
+    fn bytes(&mut self) -> Option<Vec<u8>> {
+        let count = self.count(1usize)?;
+        let value = self.data[self.at..self.at + count].to_vec();
+        self.at += count; Some(value)
+    }
+    fn text(&mut self) -> Option<String> { String::from_utf8(self.bytes()?).ok() }
+    fn offsets(&mut self) -> Option<Vec<u64>> {
+        let count = self.count(8usize)?;
+        let mut values = Vec::new();
+        for _ in 0usize..count { values.push(self.wide()?); }
+        Some(values)
+    }
+}
+fn digest(text: &str) -> bool {
+    if text.len() != 64usize { return false; }
+    for byte in text.bytes() {
+        if !(byte >= b'0' && byte <= b'9') && !(byte >= b'a' && byte <= b'f') { return false; }
+    }
+    true
+}
+pub(super) fn decode(
+    data: &[u8], expected_name: &str, expected_input: &str, expected_dependencies: &[Dependency],
+) -> Option<Interface> {
+    if data.len() < 8usize || &data[..8usize] != b"LKJUNIT1" { return None; }
+    let mut reader = Reader { data, at: 8usize };
+    if reader.text()? != TARGET_ABI { return None; }
+    let name = reader.text()?;
+    let input = reader.text()?;
+    let body = reader.text()?;
+    if name != expected_name || input != expected_input || name.is_empty() || input.is_empty() || !digest(&body) {
+        return None;
+    }
+    let program = ir_binary::read(&reader.bytes()?)?;
+    if super::super::check_structure(&program).is_err() { return None; }
+    for function in &program.functions {
+        if function.locals.len() != function.params || !function.body.is_empty() { return None; }
+    }
+    if reader.word()? != program.functions.len() { return None; }
+    let mut defined = Vec::new();
+    let mut origins = Vec::new();
+    for _ in &program.functions {
+        defined.push(reader.boolean()?);
+        origins.push(Binding { unit: reader.text()?, interface_identity: reader.text()?, name: reader.text()? });
+    }
+    let count = reader.count(16usize)?;
+    let mut dependencies: Vec<Dependency> = Vec::new();
+    for _ in 0usize..count {
+        let dependency = Dependency { name: reader.text()?, identity: reader.text()? };
+        if dependency.name.is_empty() || dependency.name == name || !digest(&dependency.identity) { return None; }
+        if let Some(previous) = dependencies.last() {
+            if previous.name >= dependency.name { return None; }
+        }
+        dependencies.push(dependency);
+    }
+    if dependencies.as_slice() != expected_dependencies { return None; }
+    for index in 0usize..origins.len() {
+        let origin = &origins[index];
+        if origin.name != program.functions[index].name { return None; }
+        if defined[index] {
+            if origin.unit != name || !origin.interface_identity.is_empty() { return None; }
+        } else {
+            let mut found = false;
+            for dependency in &dependencies {
+                if dependency.name == origin.unit && dependency.identity == origin.interface_identity { found = true; }
+            }
+            if !found { return None; }
+        }
+    }
+    if reader.word()? != program.types.len() { return None; }
+    let mut layouts = Vec::new();
+    for _ in &program.types {
+        let bytes = reader.wide()?;
+        let alignment = reader.word()?;
+        if alignment == 0usize || alignment > 8usize || alignment & (alignment - 1usize) != 0usize { return None; }
+        let scalar = reader.boolean()?;
+        let signed = reader.boolean()?;
+        let cleanup = reader.boolean()?;
+        let fields = reader.offsets()?;
+        let count = reader.count(8usize)?;
+        let mut variants = Vec::new();
+        for _ in 0usize..count { variants.push(reader.offsets()?); }
+        layouts.push(Layout { bytes, alignment: alignment as u8, fields, variants, scalar, signed, cleanup });
+    }
+    if super::layout::derive(&program).ok()? != layouts { return None; }
+    if reader.word()? != program.functions.len() { return None; }
+    let mut effects = Vec::new();
+    for _ in &program.functions {
+        let count = reader.count(8usize)?;
+        let mut row: Vec<String> = Vec::new();
+        for _ in 0usize..count {
+            let value = reader.text()?;
+            if value.is_empty() { return None; }
+            if let Some(previous) = row.last() { if previous >= &value { return None; } }
+            row.push(value);
+        }
+        effects.push(row);
+    }
+    if reader.at != data.len() { return None; }
+    let mut result = Interface { name, input, body, identity: String::new(), program,
+        defined, origins, dependencies, layouts, effects };
+    result.identity = sha256::hex_digest(&encode(&result, true));
+    // Reject alternate framings as well as trailing bytes.
+    if encode(&result, false).as_slice() != data { return None; }
+    Some(result)
+}

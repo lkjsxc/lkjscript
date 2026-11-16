@@ -1,0 +1,119 @@
+//! Public boundaries exclude private locals, types and bodies. Sorting by
+//! normalized semantic names keeps arena insertion order out of interface IDs.
+use super::{Interface, Layout};
+use crate::ir;
+use crate::diagnostic::Diagnostic;
+use std::collections::BTreeMap;
+
+fn select(index: usize, selected: &mut [bool], pending: &mut Vec<usize>) -> Result<(), Diagnostic> {
+    if index >= selected.len() { return Err(super::problem("unit export index is out of range")); }
+    if !selected[index] { selected[index] = true; pending.push(index); }
+    Ok(())
+}
+fn children(kind: &ir::TypeKind) -> Vec<usize> {
+    let mut values = super::super::direct_children(kind);
+    match kind {
+        ir::TypeKind::Ref { inner, .. } | ir::TypeKind::Slice { inner, .. }
+        | ir::TypeKind::Vec { inner } | ir::TypeKind::Box { inner } => values.push(*inner),
+        _ => {}
+    }
+    values
+}
+pub(super) fn project(
+    interface: Interface, function_exports: &[usize], type_exports: &[usize],
+) -> Result<(Interface, Vec<bool>, Vec<Layout>), Diagnostic> {
+    let program = &interface.program;
+    let mut selected_functions = vec![false; program.functions.len()];
+    let mut selected_types = vec![false; program.types.len()];
+    let mut functions = Vec::new();
+    let mut types = Vec::new();
+    for index in function_exports { select(*index, &mut selected_functions, &mut functions)?; }
+    for index in type_exports { select(*index, &mut selected_types, &mut types)?; }
+    for index in 0usize..ir::primitives().len() { select(index, &mut selected_types, &mut types)?; }
+    while !functions.is_empty() || !types.is_empty() {
+        while let Some(index) = functions.pop() {
+            let function = &program.functions[index];
+            select(function.result, &mut selected_types, &mut types)?;
+            for local in &function.locals { select(local.ty, &mut selected_types, &mut types)?; }
+        }
+        while let Some(index) = types.pop() {
+            for child in children(&program.types[index].kind) {
+                select(child, &mut selected_types, &mut types)?;
+            }
+            for (ty, function) in &program.destructors {
+                if *ty == index { select(*function, &mut selected_functions, &mut functions)?; }
+            }
+        }
+    }
+    let primitive_count = ir::primitives().len();
+    let mut named_types: BTreeMap<String, usize> = BTreeMap::new();
+    for index in primitive_count..program.types.len() {
+        if selected_types[index] {
+            let name = program.types[index].name.clone();
+            if named_types.insert(name, index).is_some() {
+                return Err(super::problem("exported types need unique normalized semantic names"));
+            }
+        }
+    }
+    let mut type_order = Vec::new();
+    for index in 0usize..primitive_count { type_order.push(index); }
+    for (_, index) in named_types { type_order.push(index); }
+    let mut type_map = vec![None; program.types.len()];
+    for (target, source) in type_order.iter().enumerate() { type_map[*source] = Some(target); }
+    let mut named_functions: BTreeMap<String, usize> = BTreeMap::new();
+    for index in 0usize..program.functions.len() {
+        if selected_functions[index] { named_functions.insert(program.functions[index].name.clone(), index); }
+    }
+    let mut function_order = Vec::new();
+    for (_, index) in named_functions { function_order.push(index); }
+    let mut function_map = vec![None; program.functions.len()];
+    for (target, source) in function_order.iter().enumerate() { function_map[*source] = Some(target); }
+    let mut named_sources: BTreeMap<String, usize> = BTreeMap::new();
+    if !program.sources.is_empty() {
+        for index in &function_order {
+            named_sources.insert(program.sources[program.functions[*index].file].clone(), 0usize);
+        }
+    }
+    let mut source_names = Vec::new();
+    for (name, _) in &named_sources { source_names.push(name.clone()); }
+    for (index, name) in source_names.iter().enumerate() { named_sources.insert(name.clone(), index); }
+    let mut projected_types = Vec::new();
+    let mut projected_layouts = Vec::new();
+    for source in &type_order {
+        projected_types.push(super::mapped_type(&program.types[*source], &type_map)?);
+        projected_layouts.push(interface.layouts[*source].clone());
+    }
+    let mut projected_functions = Vec::new();
+    let mut defined = Vec::new();
+    let mut origins = Vec::new();
+    let mut effects = Vec::new();
+    for source in &function_order {
+        let mut function = program.functions[*source].clone();
+        function.result = super::mapped(&type_map, function.result)?;
+        for index in 0usize..function.locals.len() { function.locals[index].ty = super::mapped(&type_map, function.locals[index].ty)?; }
+        if !program.sources.is_empty() {
+            function.file = *named_sources.get(&program.sources[function.file]).expect("selected source has an index");
+        }
+        projected_functions.push(function);
+        defined.push(interface.defined[*source]);
+        origins.push(interface.origins[*source].clone());
+        effects.push(interface.effects[*source].clone());
+    }
+    let mut destructors = Vec::new();
+    for (ty, function) in &program.destructors {
+        if selected_types[*ty] { destructors.push((super::mapped(&type_map, *ty)?, super::mapped(&function_map, *function)?)); }
+    }
+    // Destructor declaration ordering is not a semantic fact.
+    let mut sorted_drops: BTreeMap<usize, usize> = BTreeMap::new();
+    for (ty, function) in destructors { sorted_drops.insert(ty, function); }
+    let mut destructors = Vec::new();
+    for (ty, function) in sorted_drops { destructors.push((ty, function)); }
+    let projected = ir::Program { sources: source_names, types: projected_types,
+        functions: projected_functions, destructors };
+    let result = Interface {
+        name: interface.name, input: interface.input, body: interface.body, identity: String::new(),
+        program: projected, defined, origins, dependencies: interface.dependencies,
+        layouts: projected_layouts, effects,
+    };
+    Ok((result, selected_functions, interface.layouts))
+}

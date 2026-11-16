@@ -279,9 +279,20 @@ impl AuthenticatedRoot {
     }
 }
 
-/// Construction is private to authenticated roots. The domain includes the key
-/// authority as well as producer/namespace/key; a valid foreign root cannot enter
-/// another collection. Consumers may move the verified snapshot, never rehash it.
+/// Expected producer and key authority, copied from the trusted store without
+/// exposing its secret. Interface and object readers check the entire domain.
+#[derive(Clone)]
+pub struct ProofDomain {
+    producer: Vec<u8>,
+    authority: [u8; 32],
+}
+impl ProofDomain {
+    pub(crate) fn new(producer: &[u8], secret: &[u8]) -> Self {
+        Self { producer: producer.to_vec(), authority: sha256::digest(secret) }
+    }
+}
+/// Construction is private to authenticated roots. A foreign producer, key,
+/// namespace or record cannot authorize another collection.
 pub struct VerifiedPayload {
     producer: Vec<u8>,
     authority: [u8; 32],
@@ -290,6 +301,12 @@ pub struct VerifiedPayload {
     bytes: Vec<u8>,
 }
 impl VerifiedPayload {
+    pub fn matches_domain(
+        &self, domain: &ProofDomain, namespace: &str, key: &str,
+    ) -> bool {
+        self.producer == domain.producer && self.authority == domain.authority
+            && self.namespace == namespace && self.key == key
+    }
     fn matches(&self, producer: &[u8], secret: &[u8], namespace: &str, key: &str) -> bool {
         self.producer.as_slice() == producer && self.authority == sha256::digest(secret)
             && self.namespace == namespace && self.key == key

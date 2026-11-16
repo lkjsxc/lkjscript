@@ -1,0 +1,322 @@
+//! Independently admitted IR units. Imported signatures are authenticated facts;
+//! their empty bodies never acquire CheckedProgram authority.
+mod encoding;
+mod effects;
+mod layout;
+mod projection;
+use crate::{ir, ir_binary, reuse, sha256};
+use crate::diagnostic::Diagnostic;
+use std::collections::{BTreeMap, BTreeSet};
+pub use layout::Layout;
+
+pub const TARGET_ABI: &str = "linux-x86_64-lkjscript-layout-1";
+pub const STORE_NAMESPACE: &str = "lkjscript-unit-interface-1";
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct Dependency {
+    pub name: String,
+    pub identity: String,
+}
+#[derive(Clone, PartialEq, Eq)]
+pub struct Binding {
+    pub unit: String,
+    pub interface_identity: String,
+    pub name: String,
+}
+
+/// A claim is constructed only after local checking or exact authenticated
+/// restoration. Header IR and byte encoding alone cannot construct this type.
+#[derive(Clone)]
+pub struct Interface {
+    name: String,
+    input: String,
+    body: String,
+    identity: String,
+    program: ir::Program,
+    defined: Vec<bool>,
+    origins: Vec<Binding>,
+    dependencies: Vec<Dependency>,
+    layouts: Vec<Layout>,
+    effects: Vec<Vec<String>>,
+}
+impl Interface {
+    pub fn from_checked_unit(unit: &CheckedUnit) -> Self { unit.interface.clone() }
+    pub fn name(&self) -> &str { &self.name }
+    pub fn identity(&self) -> &str { &self.identity }
+    pub fn input_identity(&self) -> &str { &self.input }
+    pub fn body_identity(&self) -> &str { &self.body }
+    pub fn target_abi(&self) -> &str { TARGET_ABI }
+    pub fn program(&self) -> &ir::Program { &self.program }
+    pub fn defined(&self, function: usize) -> bool { self.defined[function] }
+    pub fn dependencies(&self) -> &[Dependency] { &self.dependencies }
+    pub fn layouts(&self) -> &[Layout] { &self.layouts }
+    /// Conservative transitive operations, including owning cleanup. The
+    /// function's explicit capability parameter types remain in its signature.
+    pub fn effects(&self, function: usize) -> &[String] { &self.effects[function] }
+    pub fn binding(&self, function: usize) -> Binding {
+        if self.defined[function] {
+            Binding { unit: self.name.clone(), interface_identity: self.identity.clone(),
+                name: self.program.functions[function].name.clone() }
+        } else { self.origins[function].clone() }
+    }
+    pub fn encode(&self) -> Vec<u8> { encoding::encode(self, false) }
+    pub fn store_key(name: &str, input: &str, dependencies: &[Dependency]) -> String {
+        encoding::store_key(name, input, dependencies)
+    }
+    pub fn seal(&self, producer: &[u8], secret: &[u8]) -> Vec<u8> {
+        let key = Self::store_key(&self.name, &self.input, &self.dependencies);
+        reuse::seal(producer, secret, STORE_NAMESPACE, &key, &self.encode())
+    }
+    pub fn authenticate(
+        producer: &[u8], secret: &[u8], name: &str, input: &str,
+        dependencies: &[Dependency], bytes: &[u8],
+    ) -> Option<Self> {
+        let key = Self::store_key(name, input, dependencies);
+        let bytes = reuse::authenticate(producer, secret, STORE_NAMESPACE, &key, bytes)?;
+        encoding::decode(&bytes, name, input, dependencies)
+    }
+    pub fn from_verified(
+        domain: &reuse::ProofDomain, name: &str, input: &str,
+        dependencies: &[Dependency], payload: reuse::VerifiedPayload,
+    ) -> Option<Self> {
+        let key = Self::store_key(name, input, dependencies);
+        if !payload.matches_domain(domain, STORE_NAMESPACE, &key) { return None; }
+        encoding::decode(payload.bytes(), name, input, dependencies)
+    }
+}
+
+/// Maps interface-local IDs to IDs in this candidate unit. Every referenced
+/// type child and custom destructor must be mapped, but unrelated exports need
+/// not be imported. Owning the proof keeps views out of heap containers.
+pub struct Import {
+    pub interface: Interface,
+    pub types: Vec<(usize, usize)>,
+    pub functions: Vec<(usize, usize)>,
+}
+pub struct CheckedUnit {
+    program: ir::Program,
+    imported: Vec<bool>,
+    exported: Vec<bool>,
+    layouts: Vec<Layout>,
+    origins: Vec<Binding>,
+    interface: Interface,
+}
+impl CheckedUnit {
+    pub fn program(&self) -> &ir::Program { &self.program }
+    pub fn interface(&self) -> &Interface { &self.interface }
+    pub fn imported(&self, function: usize) -> bool { self.imported[function] }
+    pub fn exported(&self, function: usize) -> bool { self.exported[function] }
+    pub fn layouts(&self) -> &[Layout] { &self.layouts }
+    pub fn binding(&self, function: usize) -> Binding {
+        if self.imported[function] { self.origins[function].clone() }
+        else { Binding { unit: self.interface.name.clone(), interface_identity: self.interface.identity.clone(), name: self.program.functions[function].name.clone() } }
+    }
+}
+fn problem(message: &str) -> Diagnostic { super::error(1, "E_UNIT", message) }
+fn mapped(mapping: &[Option<usize>], index: usize) -> Result<usize, Diagnostic> {
+    match mapping.get(index) {
+        Some(Some(value)) => Ok(*value),
+        _ => Err(problem("import omits a referenced type or function")),
+    }
+}
+fn mapping(
+    pairs: &[(usize, usize)], source_count: usize, target_count: usize,
+) -> Result<Vec<Option<usize>>, Diagnostic> {
+    let mut result = vec![None; source_count];
+    let mut targets = BTreeSet::new();
+    for (source, target) in pairs {
+        if *source >= source_count || *target >= target_count
+            || result[*source].is_some() || !targets.insert(*target) {
+            return Err(problem("import map is out of range or repeats an identity"));
+        }
+        result[*source] = Some(*target);
+    }
+    Ok(result)
+}
+fn mapped_type(value: &ir::Type, types: &[Option<usize>]) -> Result<ir::Type, Diagnostic> {
+    let mut result = value.clone();
+    match &mut result.kind {
+        ir::TypeKind::Struct { fields, .. } => {
+            for index in 0usize..fields.len() { fields[index].ty = mapped(types, fields[index].ty)?; }
+        }
+        ir::TypeKind::Enum { variants, .. } => {
+            for variant in 0usize..variants.len() {
+                for field in 0usize..variants[variant].fields.len() {
+                    let ty = variants[variant].fields[field].ty;
+                    variants[variant].fields[field].ty = mapped(types, ty)?;
+                }
+            }
+        }
+        ir::TypeKind::Ref { inner, .. } | ir::TypeKind::Slice { inner, .. }
+        | ir::TypeKind::Array { inner, .. } | ir::TypeKind::Vec { inner }
+        | ir::TypeKind::Box { inner } => { *inner = mapped(types, *inner)?; }
+        _ => {}
+    }
+    Ok(result)
+}
+fn same_signature(
+    imported: &ir::Function, candidate: &ir::Function, types: &[Option<usize>],
+) -> Result<bool, Diagnostic> {
+    if imported.name != candidate.name || imported.params != candidate.params
+        || imported.test != candidate.test || imported.return_source != candidate.return_source
+        || mapped(types, imported.result)? != candidate.result
+        || candidate.locals.len() != candidate.params || !candidate.body.is_empty() {
+        return Ok(false);
+    }
+    for index in 0usize..imported.params {
+        let left = &imported.locals[index];
+        let right = &candidate.locals[index];
+        if left.name != right.name || left.mutable != right.mutable || mapped(types, left.ty)? != right.ty {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+fn insert_dependency(
+    dependencies: &mut BTreeMap<String, String>, name: &str, identity: &str,
+) -> Result<(), Diagnostic> {
+    let previous: Option<String> = {
+        match dependencies.get(&name.to_string()) { Some(value) => Some(value.clone()), None => None }
+    };
+    match previous {
+        Some(previous) if previous.as_str() != identity =>
+            return Err(problem("one dependency name has two interface identities")),
+        Some(_) => {}
+        None => { dependencies.insert(name.to_string(), identity.to_string()); }
+    }
+    Ok(())
+}
+fn header(program: &ir::Program) -> ir::Program {
+    let mut functions = Vec::new();
+    for function in &program.functions {
+        let mut parameters = Vec::new();
+        for parameter in &function.locals[..function.params] { parameters.push(parameter.clone()); }
+        functions.push(ir::Function {
+            file: function.file, name: function.name.clone(), params: function.params,
+            result: function.result, return_source: function.return_source.clone(),
+            locals: parameters, body: Vec::new(), test: function.test,
+        });
+    }
+    ir::Program { sources: program.sources.clone(), types: program.types.clone(),
+        functions, destructors: program.destructors.clone() }
+}
+
+/// Validate one complete local graph and local bodies against admitted headers.
+/// Calls do not inspect a dependency's body. Cyclic units must be grouped before
+/// this API; one unit cannot import its own or a transitive self interface.
+pub fn check_unit(
+    name: &str, input: &str, program: ir::Program, imports: &[Import],
+) -> Result<CheckedUnit, Vec<Diagnostic>> {
+    let mut functions = Vec::new();
+    let mut types = Vec::new();
+    for index in 0usize..program.functions.len() { functions.push(index); }
+    for index in 0usize..program.types.len() { types.push(index); }
+    check_unit_with_exports(name, input, program, imports, &functions, &types)
+}
+
+pub fn check_unit_with_exports(
+    name: &str, input: &str, program: ir::Program, imports: &[Import],
+    function_exports: &[usize], type_exports: &[usize],
+) -> Result<CheckedUnit, Vec<Diagnostic>> {
+    check_unit_inner(name, input, program, imports, function_exports, type_exports).map_err(|error| vec![error])
+}
+fn check_unit_inner(
+    name: &str, input: &str, program: ir::Program, imports: &[Import],
+    function_exports: &[usize], type_exports: &[usize],
+) -> Result<CheckedUnit, Diagnostic> {
+    if name.is_empty() || input.is_empty() {
+        return Err(problem("unit name and exact input identity must be nonempty"));
+    }
+    super::check_structure(&program)?;
+    let mut imported = vec![false; program.functions.len()];
+    let mut origins = Vec::new();
+    let mut known_effects = Vec::new();
+    for function in &program.functions {
+        origins.push(Binding { unit: name.to_string(), interface_identity: String::new(),
+            name: function.name.clone() });
+        known_effects.push(Vec::new());
+    }
+    let mut dependencies = BTreeMap::new();
+    let mut expected_drops: BTreeMap<usize, Option<usize>> = BTreeMap::new();
+    for import in imports {
+        let interface = &import.interface;
+        if interface.name == name {
+            return Err(problem("recursive unit import must be checked as one unit"));
+        }
+        for dependency in &interface.dependencies {
+            if dependency.name == name {
+                return Err(problem("cyclic unit interfaces must be checked as one unit"));
+            }
+        }
+        insert_dependency(&mut dependencies, &interface.name, &interface.identity)?;
+        for dependency in &interface.dependencies {
+            insert_dependency(&mut dependencies, &dependency.name, &dependency.identity)?;
+        }
+        let types = mapping(&import.types, interface.program.types.len(), program.types.len())?;
+        let functions = mapping(&import.functions, interface.program.functions.len(), program.functions.len())?;
+        for (source, target) in &import.types {
+            if mapped_type(&interface.program.types[*source], &types)? != program.types[*target] {
+                return Err(problem("imported type differs from its authenticated definition"));
+            }
+            let mut expected = None;
+            for (ty, function) in &interface.program.destructors {
+                if *ty == *source { expected = Some(mapped(&functions, *function)?); }
+            }
+            let previous: Option<Option<usize>> = {
+                match expected_drops.get(target) { Some(value) => Some(*value), None => None }
+            };
+            if let Some(previous) = previous {
+                if previous != expected {
+                    return Err(problem("imported type has conflicting destructor claims"));
+                }
+            } else { expected_drops.insert(*target, expected); }
+        }
+        for (source, target) in &import.functions {
+            if imported[*target] {
+                return Err(problem("two imported function claims occupy one local identity"));
+            }
+            if !same_signature(&interface.program.functions[*source], &program.functions[*target], &types)? {
+                return Err(problem("imported signature, returned-view contract or empty body differs"));
+            }
+            imported[*target] = true;
+            origins[*target] = interface.binding(*source);
+            known_effects[*target] = interface.effects(*source).to_vec();
+        }
+    }
+    for (ty, expected) in expected_drops {
+        let mut actual = None;
+        for (owner, function) in &program.destructors {
+            if *owner == ty { actual = Some(*function); }
+        }
+        if actual != expected {
+            return Err(problem("imported destructor was omitted, replaced or newly introduced"));
+        }
+    }
+    let facts = super::TypeFacts::new(&program);
+    for index in 0usize..program.functions.len() {
+        if !imported[index] { super::check_function(&program, &program.functions[index], &facts)?; }
+    }
+    let layouts = layout::derive(&program)?;
+    for import in imports {
+        for (source, target) in &import.types {
+            if import.interface.layouts[*source] != layouts[*target] {
+                return Err(problem("imported native layout differs from its authenticated claim"));
+            }
+        }
+    }
+    let operations = effects::derive(&program, &imported, known_effects);
+    let mut dependency_list = Vec::new();
+    for (name, identity) in dependencies { dependency_list.push(Dependency { name, identity }); }
+    let mut defined = Vec::new();
+    for value in &imported { defined.push(!*value); }
+    let mut interface = Interface {
+        name: name.to_string(), input: input.to_string(),
+        body: sha256::hex_digest(&ir_binary::write(&program)), identity: String::new(),
+        program: header(&program), defined, origins: origins.clone(), dependencies: dependency_list, layouts,
+        effects: operations,
+    };
+    let (projected, exported, layouts) = projection::project(interface, function_exports, type_exports)?;
+    interface = projected;
+    interface.identity = sha256::hex_digest(&encoding::encode(&interface, true));
+    Ok(CheckedUnit { program, imported, exported, layouts, origins, interface })
+}

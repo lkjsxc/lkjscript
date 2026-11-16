@@ -1,0 +1,247 @@
+//! Direct controls and mutations of authenticated unit boundaries.
+use crate::{check, ir, reuse};
+use crate::check::units::{self, CheckedUnit, Import, Interface, Dependency};
+fn local(name: &str, ty: usize) -> ir::Local {
+    ir::Local { name: name.to_string(), ty, mutable: false }
+}
+fn function(name: &str, params: usize, result: usize, locals: Vec<ir::Local>, ops: Vec<ir::Op>) -> ir::Function {
+    let mut body = Vec::new();
+    for op in ops { body.push(ir::Instruction { file: None, line: 1, column: 1, op }); }
+    ir::Function { file: 0, name: name.to_string(), params, result, return_source: None,
+        locals, body, test: false }
+}
+fn literal(name: &str, value: i64) -> ir::Function {
+    function(name, 0, ir::I64, vec![local("value", ir::I64)],
+        vec![ir::Op::Int { dst: 0, value }, ir::Op::Return { src: 0 }])
+}
+fn program(functions: Vec<ir::Function>) -> ir::Program {
+    ir::Program { sources: Vec::new(), types: ir::primitives(), functions, destructors: Vec::new() }
+}
+fn no_imports() -> Vec<Import> { Vec::new() }
+fn identity() -> CheckedUnit {
+    units::check_unit("numbers", "numbers-v1", program(vec![
+        function("numbers::identity", 1, ir::I64, vec![local("value", ir::I64)], vec![ir::Op::Return { src: 0 }]),
+    ]), &no_imports()).unwrap()
+}
+fn all_imports(interface: &Interface) -> Import {
+    let mut types = Vec::new();
+    let mut functions = Vec::new();
+    for index in 0usize..interface.program().types.len() { types.push((index, index)); }
+    for index in 0usize..interface.program().functions.len() { functions.push((index, index)); }
+    Import { interface: interface.clone(), types, functions }
+}
+fn consumer(interface: &Interface) -> ir::Program {
+    let mut candidate = interface.program().clone();
+    candidate.functions.push(function("user::probe", 0, ir::I64,
+        vec![local("argument", ir::I64), local("result", ir::I64)], vec![
+            ir::Op::Int { dst: 0, value: 42 },
+            ir::Op::Call { dst: 1, function: 0, args: vec![0usize] },
+            ir::Op::Return { src: 1 },
+        ]));
+    candidate
+}
+fn expect_rejection(candidate: ir::Program, imports: Vec<Import>) {
+    assert!(units::check_unit("user", "user-input", candidate, &imports).is_err());
+}
+fn checked_imports_and_local_mutants() -> usize {
+    let origin = identity();
+    let interface = origin.interface();
+    let candidate = consumer(interface);
+    let unit = units::check_unit_with_exports("user", "user-input", candidate.clone(),
+        &[all_imports(interface)], &[1usize], &[0usize; 0]).unwrap();
+    assert!(unit.imported(0usize)); assert!(!unit.imported(1usize));
+    assert!(!unit.exported(0usize)); assert!(unit.exported(1usize));
+    assert_eq!(unit.interface().program().functions.len(), 1usize);
+    assert_eq!(unit.interface().program().functions[0].name, "user::probe");
+    assert_eq!(unit.binding(0usize), interface.binding(0usize));
+    assert_eq!(unit.binding(1usize).interface_identity, unit.interface().identity());
+    assert!(check::check_all(candidate.clone()).is_err());
+    let mut merged = candidate.clone();
+    merged.functions[0] = origin.program().functions[0].clone();
+    assert!(check::check_all(merged).is_ok());
+    for variant in 0usize..8usize {
+        let mut changed = candidate.clone();
+        match variant {
+            0 => changed.functions[0].result = ir::U64,
+            1 => changed.functions[0].locals[0].name = "different".to_string(),
+            2 => changed.functions[0].locals[0].mutable = true,
+            3 => changed.functions[0].body = origin.program().functions[0].body.clone(),
+            4 => changed.functions[0].locals.push(local("extra", ir::I64)),
+            5 => changed.functions[0].name = "forged::identity".to_string(),
+            6 => changed.functions[1].body[0].op = ir::Op::Int { dst: !0usize, value: 1 },
+            _ => changed.functions[1].body.clear(),
+        }
+        expect_rejection(changed, vec![all_imports(interface)]);
+    }
+    for variant in 0usize..6usize {
+        let mut imported = all_imports(interface);
+        match variant {
+            0 => imported.functions.push((0usize, 0usize)),
+            1 => imported.functions[0].0 = !0usize,
+            2 => imported.functions[0].1 = !0usize,
+            3 => imported.types[0].0 = !0usize,
+            4 => imported.types.push((0usize, 0usize)),
+            _ => { imported.types.retain(|pair| pair.0 != ir::I64); }
+        }
+        expect_rejection(candidate.clone(), vec![imported]);
+    }
+    expect_rejection(candidate, vec![all_imports(interface), all_imports(interface)]);
+    let mut broken = program(vec![literal("broken", 7)]);
+    broken.functions[0].body[0].op = ir::Op::Int { dst: 99usize, value: 7 };
+    assert!(units::check_unit("broken", "broken-v1", broken, &no_imports()).is_err());
+    assert!(units::check_unit("numbers", "self", consumer(interface), &[all_imports(interface)]).is_err());
+    17usize
+}
+fn destructor_and_return_contracts() -> usize {
+    let mut source = program(Vec::new());
+    source.types.push(ir::Type { name: "drop::Owner".to_string(), kind: ir::TypeKind::Struct {
+        fields: vec![ir::Field { name: "value".to_string(), ty: ir::I64 }], copy: false } });
+    source.types.push(ir::Type { name: "drop::OwnerRef".to_string(),
+        kind: ir::TypeKind::Ref { inner: 7usize, mutable: true } });
+    source.functions.push(function("drop::destroy", 1, ir::UNIT,
+        vec![local("value", 8usize), local("unit", ir::UNIT)], vec![
+            ir::Op::Drop { place: ir::Place::local(0usize) }, ir::Op::Unit { dst: 1usize },
+            ir::Op::Return { src: 1usize },
+        ]));
+    source.destructors.push((7usize, 0usize));
+    let origin = units::check_unit("drop", "drop-v1", source, &no_imports()).unwrap();
+    let interface = origin.interface();
+    assert!(units::check_unit("uses_drop", "uses-drop", interface.program().clone(),
+        &[all_imports(interface)]).is_ok());
+    for variant in 0usize..5usize {
+        let mut candidate = interface.program().clone();
+        let mut imported = all_imports(interface);
+        match variant {
+            0 => candidate.destructors.clear(),
+            1 => { if let ir::TypeKind::Struct { fields, .. } = &mut candidate.types[7usize].kind { fields[0].ty = ir::U64; } }
+            2 => { if let ir::TypeKind::Struct { fields, .. } = &mut candidate.types[7usize].kind { fields[0].name = "other".to_string(); } }
+            3 => { imported.functions.clear(); }
+            _ => { imported.types.retain(|pair| pair.0 != 7usize); }
+        }
+        expect_rejection(candidate, vec![imported]);
+    }
+    let mut source = program(Vec::new());
+    source.types.push(ir::Type { name: "view".to_string(), kind: ir::TypeKind::Ref { inner: ir::I64, mutable: false } });
+    let mut choose = function("views::choose", 2usize, 7usize,
+        vec![local("left", 7usize), local("right", 7usize)],
+        vec![ir::Op::Drop { place: ir::Place::local(1usize) }, ir::Op::Return { src: 0usize }]);
+    choose.return_source = Some(ir::ReturnSource::Parameter { index: 0usize, projections: Vec::new() });
+    source.functions.push(choose);
+    let origin = units::check_unit("views", "views-v1", source, &no_imports()).unwrap();
+    let interface = origin.interface();
+    let mut changed = interface.program().clone();
+    changed.functions[0].return_source = Some(ir::ReturnSource::Parameter { index: 1usize, projections: Vec::new() });
+    expect_rejection(changed, vec![all_imports(interface)]);
+    6usize
+}
+fn private_changes_keep_public_identity() -> usize {
+    let first = units::check_unit_with_exports("stable", "input-one",
+        program(vec![literal("stable::answer", 42)]), &no_imports(), &[0usize], &[0usize; 0]).unwrap();
+    let second = units::check_unit_with_exports("stable", "input-two",
+        program(vec![literal("stable::answer", 43)]), &no_imports(), &[0usize], &[0usize; 0]).unwrap();
+    assert_eq!(first.interface().identity(), second.interface().identity());
+    assert!(first.interface().body_identity() != second.interface().body_identity());
+    let mut changed = program(vec![literal("private::helper", 9), literal("stable::answer", 42)]);
+    changed.types.push(ir::Type { name: "private::Owner".to_string(),
+        kind: ir::TypeKind::Struct { fields: Vec::new(), copy: true } });
+    let third = units::check_unit_with_exports("stable", "input-three", changed, &no_imports(), &[1usize], &[0usize; 0]).unwrap();
+    assert_eq!(first.interface().identity(), third.interface().identity());
+    assert!(first.interface().body_identity() != third.interface().body_identity());
+    assert_eq!(third.interface().program().types.len(), ir::primitives().len());
+    assert_eq!(third.layouts().len(), ir::primitives().len() + 1usize);
+    let mut changed = program(vec![literal("stable::answer", 43)]);
+    changed.functions[0].result = ir::U64; changed.functions[0].locals[0].ty = ir::U64;
+    let fourth = units::check_unit_with_exports("stable", "input-four", changed, &no_imports(), &[0usize], &[0usize; 0]).unwrap();
+    assert!(first.interface().identity() != fourth.interface().identity());
+    0usize
+}
+fn inherited_effects_and_drop_layout() -> usize {
+    let mut source = program(Vec::new());
+    source.types.push(ir::Type { name: "File".to_string(), kind: ir::TypeKind::File });
+    source.functions.push(function("files::close", 1usize, ir::UNIT,
+        vec![local("file", 7usize), local("unit", ir::UNIT)], vec![
+            ir::Op::Drop { place: ir::Place::local(0usize) }, ir::Op::Unit { dst: 1usize }, ir::Op::Return { src: 1usize },
+        ]));
+    let origin = units::check_unit("files", "files-v1", source, &no_imports()).unwrap();
+    let interface = origin.interface();
+    assert!(interface.effects(0usize).contains(&"file_close".to_string()));
+    assert_eq!(interface.layouts()[7usize].bytes, 8u64);
+    assert!(interface.layouts()[7usize].cleanup);
+    let mut candidate = interface.program().clone();
+    candidate.functions.push(function("caller::close", 1usize, ir::UNIT,
+        vec![local("file", 7usize), local("unit", ir::UNIT)], vec![
+            ir::Op::Call { dst: 1usize, function: 0usize, args: vec![0usize] }, ir::Op::Return { src: 1usize },
+        ]));
+    let called = units::check_unit_with_exports("caller", "caller-v1", candidate,
+        &[all_imports(interface)], &[1usize], &[0usize; 0]).unwrap();
+    assert!(called.interface().effects(0usize).contains(&"file_close".to_string()));
+    let next = called.interface();
+    assert!(units::check_unit("files", "cyclic", next.program().clone(), &[all_imports(next)]).is_err());
+    1usize
+}
+fn verified(
+    producer: &[u8], secret: &[u8], namespace: &str, key: &str, bytes: &[u8],
+) -> reuse::VerifiedPayload {
+    let envelope = reuse::seal(producer, secret, namespace, key, bytes);
+    let length = reuse::header_size();
+    reuse::AuthenticatedRoot::new(producer, secret, namespace, key, &envelope[..length]).unwrap()
+        .verify(envelope[length..].to_vec()).unwrap()
+}
+fn auth_mutations() -> usize {
+    let unit = identity();
+    let interface = unit.interface();
+    let producer = [0x31u8; 32];
+    let secret = [0x72u8; 32];
+    let other = [0x19u8; 32];
+    let deps: Vec<Dependency> = Vec::new();
+    let envelope = interface.seal(&producer, &secret);
+    let recovered = Interface::authenticate(&producer, &secret, "numbers", "numbers-v1", &deps, &envelope).unwrap();
+    assert_eq!(interface.identity(), recovered.identity());
+    assert_eq!(interface.encode(), recovered.encode());
+    assert!(Interface::authenticate(&other, &secret, "numbers", "numbers-v1", &deps, &envelope).is_none());
+    assert!(Interface::authenticate(&producer, &other, "numbers", "numbers-v1", &deps, &envelope).is_none());
+    assert!(Interface::authenticate(&producer, &secret, "numbers", "numbers-v2", &deps, &envelope).is_none());
+    assert!(Interface::authenticate(&producer, &secret, "other", "numbers-v1", &deps, &envelope).is_none());
+    let wrong_deps = vec![Dependency { name: "other".to_string(), identity: interface.identity().to_string() }];
+    assert!(Interface::authenticate(&producer, &secret, "numbers", "numbers-v1", &wrong_deps, &envelope).is_none());
+    let mut count = 5usize;
+    for index in 0usize..envelope.len() {
+        let mut changed = envelope.clone(); changed[index] ^= 1u8;
+        assert!(Interface::authenticate(&producer, &secret, "numbers", "numbers-v1", &deps, &changed).is_none());
+        count += 1usize;
+    }
+    for length in 0usize..reuse::header_size() {
+        assert!(Interface::authenticate(&producer, &secret, "numbers", "numbers-v1", &deps, &envelope[..length]).is_none());
+        count += 1usize;
+    }
+    let key = Interface::store_key("numbers", "numbers-v1", &deps);
+    let domain = reuse::ProofDomain::new(&producer, &secret);
+    let bytes = interface.encode();
+    let token = verified(&producer, &secret, units::STORE_NAMESPACE, &key, &bytes);
+    assert!(Interface::from_verified(&domain, "numbers", "numbers-v1", &deps, token).is_some());
+    let token = verified(&producer, &secret, "wrong-namespace", &key, &bytes);
+    assert!(Interface::from_verified(&domain, "numbers", "numbers-v1", &deps, token).is_none());
+    let token = verified(&producer, &secret, units::STORE_NAMESPACE, "wrong-key", &bytes);
+    assert!(Interface::from_verified(&domain, "numbers", "numbers-v1", &deps, token).is_none());
+    let token = verified(&other, &secret, units::STORE_NAMESPACE, &key, &bytes);
+    assert!(Interface::from_verified(&domain, "numbers", "numbers-v1", &deps, token).is_none());
+    let token = verified(&producer, &other, units::STORE_NAMESPACE, &key, &bytes);
+    assert!(Interface::from_verified(&domain, "numbers", "numbers-v1", &deps, token).is_none());
+    count += 4usize;
+    for variant in 0usize..3usize {
+        let mut changed = bytes.clone();
+        match variant {
+            0 => { changed.push(0u8); }
+            1 => { changed[16usize] ^= 1u8; }
+            _ => { changed.pop(); }
+        }
+        let token = verified(&producer, &secret, units::STORE_NAMESPACE, &key, &changed);
+        assert!(Interface::from_verified(&domain, "numbers", "numbers-v1", &deps, token).is_none());
+        count += 1usize;
+    }
+    count
+}
+pub fn run() -> usize {
+    checked_imports_and_local_mutants() + destructor_and_return_contracts()
+        + private_changes_keep_public_identity() + inherited_effects_and_drop_layout() + auth_mutations()
+}

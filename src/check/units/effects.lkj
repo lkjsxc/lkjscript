@@ -1,0 +1,99 @@
+//! Conservative authority summaries. All local operations are included, even
+//! in unreachable text; importing a summary cannot hide an effect.
+use crate::ir::{Program, TypeKind, Op};
+use std::collections::BTreeSet;
+
+fn cleanup(
+    program: &Program, first: usize, calls: &mut BTreeSet<usize>,
+    operations: &mut BTreeSet<String>,
+) {
+    let mut pending = vec![first];
+    let mut seen = BTreeSet::new();
+    while let Some(ty) = pending.pop() {
+        if !seen.insert(ty) { continue; }
+        for (owner, function) in &program.destructors {
+            if *owner == ty { calls.insert(*function); }
+        }
+        let name = match &program.types[ty].kind {
+            TypeKind::File | TypeKind::ReadFile => "file_close",
+            TypeKind::Directory | TypeKind::ReadDirectory => "directory_close",
+            TypeKind::Image => "image_close",
+            TypeKind::Channel => "channel_close",
+            TypeKind::Worker => "worker_kill_reap_close",
+            TypeKind::ReadRegion => "read_region_unmap_close",
+            TypeKind::ForeignCommand => "foreign_command_close",
+            TypeKind::ForeignSession => "foreign_session_kill_reap_close",
+            TypeKind::NullDevice => "null_device_close",
+            TypeKind::Listener => "listener_close",
+            TypeKind::Readiness => "readiness_close",
+            TypeKind::Stop => "stop_close",
+            TypeKind::Child => {
+                operations.insert("child_terminate".to_string());
+                "child_wait"
+            }
+            _ => "",
+        };
+        if !name.is_empty() { operations.insert(name.to_string()); }
+        match &program.types[ty].kind {
+            TypeKind::Struct { fields, .. } => {
+                for field in fields { pending.push(field.ty); }
+            }
+            TypeKind::Enum { variants, .. } => {
+                for variant in variants { for field in &variant.fields { pending.push(field.ty); } }
+            }
+            TypeKind::Array { inner, len } => { if *len != 0 { pending.push(*inner); } }
+            TypeKind::Vec { inner } | TypeKind::Box { inner } => { pending.push(*inner); }
+            _ => {}
+        }
+    }
+}
+pub(super) fn derive(
+    program: &Program, imported: &[bool], known: Vec<Vec<String>>,
+) -> Vec<Vec<String>> {
+    let mut operations = Vec::new();
+    let mut callers: Vec<Vec<usize>> = Vec::new();
+    let mut pending = BTreeSet::new();
+    for values in known {
+        let mut set = BTreeSet::new();
+        for value in values { set.insert(value); }
+        operations.push(set);
+        callers.push(Vec::new());
+    }
+    for index in 0usize..program.functions.len() {
+        if !imported[index] {
+            let function = &program.functions[index];
+            let mut calls = BTreeSet::new();
+            for instruction in &function.body {
+                match &instruction.op {
+                    Op::Call { function, .. } => { calls.insert(*function); }
+                    Op::Intrinsic { name, .. } => {
+                        operations[index].insert(name.as_str().to_string());
+                    }
+                    Op::Drop { place } | Op::DropIf { place } => {
+                        let ty = super::super::place_type(&program.types, function, place)
+                            .expect("checked drop has a type");
+                        cleanup(program, ty, &mut calls, &mut operations[index]);
+                    }
+                    _ => {}
+                }
+            }
+            for called in calls { callers[called].push(index); }
+        }
+        pending.insert(index);
+    }
+    while let Some(called) = pending.pop_first() {
+        let inherited = operations[called].clone();
+        for caller in &callers[called] {
+            let mut changed = false;
+            for operation in &inherited { changed |= operations[*caller].insert(operation.clone()); }
+            if changed { pending.insert(*caller); }
+        }
+    }
+    let mut result = Vec::new();
+    for set in operations {
+        let mut row = Vec::new();
+        for value in set { row.push(value); }
+        result.push(row);
+    }
+    result
+}

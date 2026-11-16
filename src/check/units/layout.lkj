@@ -1,0 +1,121 @@
+//! Target layout claims independently derived from checked type structure.
+//! Keep this calculation separate from the native emitter; parity is tested.
+use crate::ir::{self, Program, TypeKind};
+use crate::diagnostic::Diagnostic;
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct Layout {
+    pub bytes: u64,
+    pub alignment: u8,
+    pub fields: Vec<u64>,
+    pub variants: Vec<Vec<u64>>,
+    pub scalar: bool,
+    pub signed: bool,
+    pub cleanup: bool,
+}
+fn blank() -> Layout {
+    Layout { bytes: 8, alignment: 8, fields: Vec::new(), variants: Vec::new(),
+        scalar: true, signed: false, cleanup: false }
+}
+fn align(value: u64, alignment: u8) -> Result<u64, Diagnostic> {
+    match value.checked_add(alignment as u64 - 1u64) {
+        Some(value) => Ok(value & !(alignment as u64 - 1u64)),
+        None => Err(super::problem("unit layout exceeds the address representation")),
+    }
+}
+fn fields(
+    values: &[Layout], members: &[ir::Field], start: u64,
+) -> Result<(u64, u8, Vec<u64>, bool), Diagnostic> {
+    let mut extent = start;
+    let mut alignment = if start == 0u64 { 1u8 } else { 8u8 };
+    let mut offsets = Vec::new();
+    let mut cleanup = false;
+    for field in members {
+        let storage = &values[field.ty];
+        extent = align(extent, storage.alignment)?;
+        offsets.push(extent);
+        alignment = alignment.max(storage.alignment);
+        extent = extent.checked_add(storage.bytes)
+            .ok_or_else(|| super::problem("unit field layout exceeds the address representation"))?;
+        cleanup |= storage.cleanup;
+    }
+    Ok((align(extent.max(1u64), alignment)?, alignment, offsets, cleanup))
+}
+pub(super) fn derive(program: &Program) -> Result<Vec<Layout>, Diagnostic> {
+    let mut values = Vec::new();
+    let mut custom = vec![false; program.types.len()];
+    for (ty, _) in &program.destructors { custom[*ty] = true; }
+    for _ in &program.types { values.push(blank()); }
+    let mut colors = vec![0u8; program.types.len()];
+    for first in 0usize..program.types.len() {
+        let mut pending = vec![(first, false)];
+        while let Some((index, leaving)) = pending.pop() {
+            if colors[index] == 2u8 { continue; }
+            if !leaving {
+                if colors[index] == 1u8 {
+                    return Err(super::problem("unit has a recursive inline layout"));
+                }
+                colors[index] = 1u8;
+                pending.push((index, true));
+                for child in super::super::direct_children(&program.types[index].kind) {
+                    pending.push((child, false));
+                }
+                continue;
+            }
+            let mut value = blank();
+            match &program.types[index].kind {
+                TypeKind::Unit => { value.bytes = 0; value.alignment = 1; }
+                TypeKind::Bool => { value.bytes = 1; value.alignment = 1; }
+                TypeKind::Char => { value.bytes = 4; value.alignment = 4; }
+                TypeKind::Int { bits, signed } => {
+                    value.bytes = (*bits / 8u8) as u64;
+                    value.alignment = *bits / 8u8;
+                    value.signed = *signed;
+                }
+                TypeKind::Struct { fields: members, .. } => {
+                    let (bytes, alignment, offsets, cleanup) = fields(&values, members, 0)?;
+                    value.bytes = bytes; value.alignment = alignment; value.fields = offsets;
+                    value.scalar = false; value.cleanup = cleanup;
+                }
+                TypeKind::Enum { variants, .. } => {
+                    for variant in variants {
+                        let (bytes, alignment, offsets, cleanup) = fields(&values, &variant.fields, 8)?;
+                        value.bytes = value.bytes.max(bytes);
+                        value.alignment = value.alignment.max(alignment);
+                        value.variants.push(offsets);
+                        value.cleanup |= cleanup;
+                    }
+                    value.bytes = align(value.bytes, value.alignment)?;
+                    value.scalar = false;
+                }
+                TypeKind::Array { inner, len } => {
+                    value.bytes = values[*inner].bytes.checked_mul(*len as u64)
+                        .ok_or_else(|| super::problem("unit array layout exceeds the address representation"))?;
+                    value.alignment = values[*inner].alignment;
+                    value.cleanup = values[*inner].cleanup;
+                    value.scalar = false;
+                }
+                TypeKind::Vec { .. } => {
+                    value.bytes = 24; value.scalar = false; value.cleanup = true;
+                }
+                TypeKind::Box { .. } | TypeKind::File | TypeKind::ReadFile
+                | TypeKind::Directory | TypeKind::ReadDirectory | TypeKind::Image
+                | TypeKind::Channel | TypeKind::Worker | TypeKind::ReadRegion
+                | TypeKind::ForeignCommand | TypeKind::ForeignSession | TypeKind::NullDevice
+                | TypeKind::Child | TypeKind::Listener | TypeKind::Readiness => { value.cleanup = true; }
+                TypeKind::Stop => { value.bytes = 16; value.scalar = false; value.cleanup = true; }
+                TypeKind::Ref { inner, .. } => {
+                    if matches!(program.types[*inner].kind, TypeKind::Slice { .. } | TypeKind::Str) {
+                        value.bytes = 16; value.scalar = false;
+                    }
+                }
+                TypeKind::Slice { .. } | TypeKind::Str => { value.bytes = 16; value.scalar = false; }
+                _ => {}
+            }
+            value.cleanup |= custom[index];
+            values[index] = value;
+            colors[index] = 2u8;
+        }
+    }
+    Ok(values)
+}

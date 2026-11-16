@@ -1,0 +1,13 @@
+//! Authenticated unit-boundary controls and direct mutation campaign.
+pub mod check;
+pub mod diagnostic;
+pub(crate) mod facts;
+pub mod ir;
+pub mod ir_binary;
+pub mod reuse;
+pub use std::sha256;
+mod unit_check_cases;
+pub fn main(mut world: World) {
+    let count = unit_check_cases::run();
+    world.stdout().write(format!("checked unit controls passed; {count} mutants refused\n").as_bytes());
+}
