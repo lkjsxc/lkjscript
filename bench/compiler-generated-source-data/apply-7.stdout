@@ -1,0 +1,9 @@
+"semantic::origins::derived_default" level=source-claim operation-target
+"semantic::origins::field_value" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-generated-source-20261116/src/semantic/origins.lkj" level=source-claim file before=7dd4681fba7802c451c2f6d009542eb7bf64b70f8dfbd938a9b5c8991bff6626 after=b1922fef4fb8100c64caf936ffb237653e74174143b44f706ec3351c990df2d7
+transaction sites=2 files=1 identities=2
+"semantic::origins::derived_default" level=source-claim changed=body
+"semantic::origins::field_value" level=source-claim changed=body
+program level=checked-ir authority-delta=none
+program level=checked-ir before=b88e40003068642e1f0066666b506a39a76f79ce7a9de0e2c33aac7bd89e714b after=6e00f51393b089d7d0fee798e3f2b7f5ea348e9cc5eb9b8a566830c7a93c2eec checked-instances=12757 fresh-checked=12757 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=f1177fddaa5653b572b19cdea0b9f39e01ae9fa4d6df69ec366deea925a7a7d9 source-after=ecf58be91d826be4abfeef9f568501b5984687fddec5c7fb1d53b237dcd62b9b mode=apply

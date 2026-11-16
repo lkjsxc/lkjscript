@@ -1,0 +1,79 @@
+{"version":1,"operations":[{"op":"replace-body","id":"<Record as std::prelude::Default>::default","source":"{ 0i64 }"}]}
+"<Record as std::prelude::Default>::default" E_EDIT_GENERATED_SOURCE derive-default projection has no editable source; edit defining item "Record"
+exit=1
+{"version":1,"operations":[{"op":"replace-item","id":"<Record as std::prelude::Default>::default","source":"{ 0i64 }"}]}
+"<Record as std::prelude::Default>::default" E_EDIT_GENERATED_SOURCE derive-default projection has no editable source; edit defining item "Record"
+exit=1
+{"version":1,"operations":[{"op":"remove-item","id":"<Record as std::prelude::Default>::default","source":"{ 0i64 }"}]}
+"<Record as std::prelude::Default>::default" E_EDIT_GENERATED_SOURCE derive-default projection has no editable source; edit defining item "Record"
+exit=1
+{"version":1,"operations":[{"op":"rename","id":"<Record as std::prelude::Default>::default","source":"{ 0i64 }"}]}
+"<Record as std::prelude::Default>::default" E_EDIT_GENERATED_SOURCE derive-default projection has no editable source; edit defining item "Record"
+exit=1
+{"version":1,"operations":[{"op":"move","id":"<Record as std::prelude::Default>::default","source":"{ 0i64 }"}]}
+"<Record as std::prelude::Default>::default" E_EDIT_GENERATED_SOURCE derive-default projection has no editable source; edit defining item "Record"
+exit=1
+{"version":1,"operations":[{"op":"inline-function","id":"<Record as std::prelude::Default>::default","source":"{ 0i64 }"}]}
+"<Record as std::prelude::Default>::default" E_EDIT_GENERATED_SOURCE derive-default projection has no editable source; edit defining item "Record"
+exit=1
+{"version":1,"operations":[{"op":"add-item","id":"impl:<Record as std::prelude::Default>#5effd8a25a8aa8e1","source":"fn extra() {}"}]}
+"impl:<Record as std::prelude::Default>#5effd8a25a8aa8e1" E_EDIT_GENERATED_SOURCE derive-default projection has no editable source; edit defining item "Record"
+exit=1
+{"version":1,"operations":[{"op":"replace-item","id":"<Record as std::prelude::Default>::default::derived:6c50cbbea62af879184620c51fd38da72750d56d91479a7f1493749aa90860e4::call:0","source":"fn extra() {}"}]}
+"<Record as std::prelude::Default>::default::derived:6c50cbbea62af879184620c51fd38da72750d56d91479a7f1493749aa90860e4::call:0" E_EDIT_GENERATED_SOURCE derive-default projection has no editable source; edit defining item "Record"
+exit=1
+{"version":1,"operations":[{"op":"change-signature","id":"std::prelude::__lkjscript_default","source":""}]}
+"std::prelude::__lkjscript_default" E_EDIT_GENERATED_REFERENCE call from "<FieldType as std::prelude::Default>::default" has no editable source; edit defining item "FieldType"
+exit=1
+{"version":1,"operations":[{"op":"rename","id":"FieldType","name":"RenamedField"},{"op":"rename","id":"Marker","name":"RenamedMarker"}]}
+"FieldType" level=source-claim operation-target
+"Generic" level=source-claim operation-target
+"Marker" level=source-claim operation-target
+"Record" level=source-claim operation-target
+"Tuple" level=source-claim operation-target
+"impl:<FieldType as Marker>#e3b0c44298fc1c14" level=source-claim operation-target
+"probe" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-generated-source-20261116/target/compiler-generated-source.Bsfv3U/source/main.lkj" level=source-claim file before=594897ddc80b6f0c7d5b10113e0a96d4377e57041a9c6d391459c7f9643c4335 after=312ba7b2cd33596004d20a0a8913369ae65faaedab0a4dc1d3778feb3e9a0c9d
+transaction sites=9 files=1 identities=7
+"<FieldType as std::prelude::Default>::default" level=source-claim changed=removed
+"<Generic<T> as std::prelude::Default>::default" level=source-claim changed=body
+"<Record as std::prelude::Default>::default" level=source-claim changed=body
+"<RenamedField as std::prelude::Default>::default" level=source-claim changed=added
+"<Tuple as std::prelude::Default>::default" level=source-claim changed=body
+"FieldType" level=source-claim changed=removed
+"FieldType::field:value" level=source-claim changed=removed
+"Generic" level=source-claim changed=signature
+"Generic::field:fixed" level=source-claim changed=signature
+"Generic::generic:T" level=source-claim changed=signature
+"Marker" level=source-claim changed=removed
+"Record" level=source-claim changed=signature
+"Record::field:record_field" level=source-claim changed=signature
+"RenamedField" level=source-claim changed=added
+"RenamedField::field:value" level=source-claim changed=added
+"RenamedMarker" level=source-claim changed=added
+"Tuple" level=source-claim changed=signature
+"Tuple::field:0" level=source-claim changed=signature
+"impl:<FieldType as Marker>#e3b0c44298fc1c14" level=source-claim changed=removed
+"impl:<FieldType as std::prelude::Default>#5effd8a25a8aa8e1" level=source-claim changed=removed
+"impl:<RenamedField as RenamedMarker>#e3b0c44298fc1c14" level=source-claim changed=added
+"impl:<RenamedField as std::prelude::Default>#5effd8a25a8aa8e1" level=source-claim changed=added
+"probe" level=source-claim changed=body
+program level=checked-ir authority-delta=none
+program level=checked-ir before=4e9b80212b513ba15323a4bcb6e705663f31c328c0523412809fbbbaa2d5c03e after=4e9b80212b513ba15323a4bcb6e705663f31c328c0523412809fbbbaa2d5c03e checked-instances=18 fresh-checked=18 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=8b0183ed280c6bcdd7b83bf4b17edccabee09f016d30fd4358ffc664c2cbfcf6 source-after=27386391a6579ed1a82f34d82329534912a4fc3dcb7209861e19f65a8bb33d73 mode=apply
+exit=0
+{"version":1,"operations":[{"op":"rename","id":"Record::field:record_field","name":"renamed_record_field"}]}
+"probe" E_EDIT_REFERENCES relevant unresolved references need an explicit decision; decision site "probe" "/home/coder/workspace/lkjscript-compiler-generated-source-20261116/target/compiler-generated-source.Bsfv3U/source/main.lkj":847..859 (typed-field)
+exit=1
+{"version":1,"operations":[{"op":"rename","id":"Spare::field:origin_fixture_marker","name":"renamed_origin_fixture_marker"}]}
+"Spare::field:origin_fixture_marker" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-generated-source-20261116/target/compiler-generated-source.Bsfv3U/source/main.lkj" level=source-claim file before=312ba7b2cd33596004d20a0a8913369ae65faaedab0a4dc1d3778feb3e9a0c9d after=ebb49292b5bff8f1d0e77a6e5049e2d1aa1a1b438083f4e18893390b36efd7ca
+transaction sites=1 files=1 identities=1
+"<Spare as std::prelude::Default>::default" level=source-claim changed=body
+"Spare" level=source-claim changed=signature
+"Spare::field:origin_fixture_marker" level=source-claim changed=removed
+"Spare::field:renamed_origin_fixture_marker" level=source-claim changed=added
+program level=checked-ir authority-delta=none
+program level=checked-ir before=4e9b80212b513ba15323a4bcb6e705663f31c328c0523412809fbbbaa2d5c03e after=4e9b80212b513ba15323a4bcb6e705663f31c328c0523412809fbbbaa2d5c03e checked-instances=18 fresh-checked=18 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=27386391a6579ed1a82f34d82329534912a4fc3dcb7209861e19f65a8bb33d73 source-after=9650e7776914be08d2841a3f9d93498cb11a3525cb6e602e4e6da98933b90a07 mode=apply
+exit=0

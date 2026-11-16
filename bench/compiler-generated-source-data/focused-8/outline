@@ -1,0 +1,21 @@
+"crate"	level=protocol	fact=query	version=2 producer=a43c0ee337599a4c9ebf6d2c02b27b74f949c20206b4134e7775ebf2d123859d validation=authenticated-producing-compiler current-check=not-performed snapshot=00cc7165ae179c16e0f70e4393cf6955b600c3ddbd2487fa4a43f651934f0d3e source=aa3485fe35e3d1ddca3f045ea688e2b344b28db16f467072d426186cc7601d43 checked-ir=4347d74438e41b2039f6989a46b892674167650dd8fd2f069bb616043a8b615c kind=outline depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit
+"FieldType"	level=source-claim	fact=signature	kind=struct text="#[derive(Default)]\u000astruct FieldType { value: i64 }" bytes=50 complete=true
+"Generic"	level=source-claim	fact=signature	kind=struct text="#[derive(Default)]\u000astruct Generic<T: Marker> { fixed: FieldType, generic: T }" bytes=77 complete=true
+"Manual"	level=source-claim	fact=signature	kind=struct text="struct Manual;" bytes=14 complete=true
+"Marker"	level=source-claim	fact=signature	kind=trait text="trait Marker" bytes=12 complete=true
+"Record"	level=source-claim	fact=signature	kind=struct text="#[derive(Default)]\u000astruct Record { record_field: FieldType }" bytes=60 complete=true
+"Spare"	level=source-claim	fact=signature	kind=struct text="#[derive(Default)]\u000astruct Spare { origin_fixture_marker: i64 }" bytes=62 complete=true
+"Tuple"	level=source-claim	fact=signature	kind=struct text="#[derive(Default)]\u000astruct Tuple(FieldType);" bytes=43 complete=true
+"Unit"	level=source-claim	fact=signature	kind=struct text="#[derive(Default)]\u000astruct Unit;" bytes=31 complete=true
+"body"	level=source-claim	fact=signature	kind=function text="fn body() -> i64" bytes=16 complete=true
+"external"	level=source-claim	fact=signature	kind=module text="mod external;" bytes=13 complete=true
+"impl:<FieldType as Marker>#e3b0c44298fc1c14"	level=source-claim	fact=signature	kind=implementation text="impl Marker for FieldType" bytes=25 complete=true
+"impl:<FieldType as std::prelude::Default>#5effd8a25a8aa8e1"	level=source-claim	fact=signature	kind=implementation text="impl std::prelude::Default for FieldType" bytes=40 complete=true origin=generated definition="FieldType" expansion=derive-default source-projection=false
+"impl:<Generic<T> as std::prelude::Default>#5effd8a25a8aa8e1"	level=source-claim	fact=signature	kind=implementation text="impl std::prelude::Default for Generic<T>" bytes=41 complete=true origin=generated definition="Generic" expansion=derive-default source-projection=false
+"impl:<Manual as std::prelude::Default>#5effd8a25a8aa8e1"	level=source-claim	fact=signature	kind=implementation text="impl Default for Manual" bytes=23 complete=true
+"impl:<Record as std::prelude::Default>#5effd8a25a8aa8e1"	level=source-claim	fact=signature	kind=implementation text="impl std::prelude::Default for Record" bytes=37 complete=true origin=generated definition="Record" expansion=derive-default source-projection=false
+"impl:<Spare as std::prelude::Default>#5effd8a25a8aa8e1"	level=source-claim	fact=signature	kind=implementation text="impl std::prelude::Default for Spare" bytes=36 complete=true origin=generated definition="Spare" expansion=derive-default source-projection=false
+"impl:<Tuple as std::prelude::Default>#5effd8a25a8aa8e1"	level=source-claim	fact=signature	kind=implementation text="impl std::prelude::Default for Tuple" bytes=36 complete=true origin=generated definition="Tuple" expansion=derive-default source-projection=false
+"impl:<Unit as std::prelude::Default>#5effd8a25a8aa8e1"	level=source-claim	fact=signature	kind=implementation text="impl std::prelude::Default for Unit" bytes=35 complete=true origin=generated definition="Unit" expansion=derive-default source-projection=false
+"probe"	level=source-claim	fact=signature	kind=function text="pub fn probe() -> i64" bytes=21 complete=true
+"crate"	level=protocol	fact=continuation	cursor=none facts=19 pages-read=7 traversal-steps=21

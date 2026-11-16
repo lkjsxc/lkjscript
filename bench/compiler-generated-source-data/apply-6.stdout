@@ -1,0 +1,7 @@
+"semantic::catalog_mode" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-generated-source-20261116/src/semantic.lkj" level=source-claim file before=bb8737d36f5d0f1ed53d9951d09812c13d532f4c437c9d256bd98e4a51cdbc1c after=f85b5d25336462e58505a07d4426c94489e9df849306174c3719b8de5a8a91d0
+transaction sites=1 files=1 identities=1
+"semantic::catalog_mode" level=source-claim changed=body
+program level=checked-ir authority-delta=none
+program level=checked-ir before=c519623b7913ff054bb5fa4368a02b05e8533b94665d861f74dccc496f562264 after=b88e40003068642e1f0066666b506a39a76f79ce7a9de0e2c33aac7bd89e714b checked-instances=12757 fresh-checked=12757 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=cfae6339079b4606e22e8d34467a5c6e3457c4ac11321308700420a5a3682ecf source-after=f1177fddaa5653b572b19cdea0b9f39e01ae9fa4d6df69ec366deea925a7a7d9 mode=apply

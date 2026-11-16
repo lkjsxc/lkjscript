@@ -1,0 +1,25 @@
+mod external;
+trait RenamedMarker {}
+#[derive(Default)]
+struct RenamedField { value: i64 }
+impl crate::RenamedMarker for crate::RenamedField {}
+#[derive(Default)]
+struct Record { record_field: crate::RenamedField, extra: i64 }
+#[derive(Default)]
+struct Generic<T: crate::RenamedMarker> { fixed: crate::RenamedField, generic: T }
+#[derive(Default)]
+struct Tuple(crate::RenamedField);
+#[derive(Default)]
+struct Unit;
+struct Manual;
+impl Default for Manual { fn default() -> Self { Manual } }
+fn body() -> i64 { 4i64 }
+pub fn probe() -> i64 {
+    let record = Record::default();
+    let generic = Generic::<crate::RenamedField>::default();
+    let tuple = Tuple::default();
+    let unit = Unit::default();
+    let manual = Manual::default();
+    record.record_field.value + generic.fixed.value + generic.generic.value + tuple.0.value
+        + body() + external::value()
+}

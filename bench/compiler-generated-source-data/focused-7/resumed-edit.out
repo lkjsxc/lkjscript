@@ -1,0 +1,7 @@
+"body" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-generated-source-20261116/target/compiler-generated-source.ZOTd1U/source/main.lkj" level=source-claim file before=ebb49292b5bff8f1d0e77a6e5049e2d1aa1a1b438083f4e18893390b36efd7ca after=992ae6655d9a76d01cde27cfd8e8011df6a150165a1f1b2f0d0bd4cd3a8e8888
+transaction sites=1 files=1 identities=1
+"body" level=source-claim changed=body
+program level=checked-ir authority-delta=none
+program level=checked-ir before=4e9b80212b513ba15323a4bcb6e705663f31c328c0523412809fbbbaa2d5c03e after=be1c7bbb8d7bc77fd30a01d2be281cc5d668b453a13e66e111813877c5cbcbdb checked-instances=18 fresh-checked=1 proof-reused=17 frontend-resumed=792 library-validation=demanded
+transaction source-before=225159e632a3da6784694c4a4a07bd75395a510f9dd2f209488e0ea2315cd1df source-after=6b8ff108f5eabce67ae4a142760afef23764754b23dc343533b3667dea72dc63 mode=apply

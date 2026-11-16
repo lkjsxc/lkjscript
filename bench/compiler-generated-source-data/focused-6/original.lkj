@@ -1,0 +1,28 @@
+mod external;
+trait Marker {}
+#[derive(Default)]
+struct FieldType { value: i64 }
+impl Marker for FieldType {}
+#[derive(Default)]
+struct Record { record_field: FieldType }
+#[derive(Default)]
+struct Generic<T: Marker> { fixed: FieldType, generic: T }
+#[derive(Default)]
+struct Tuple(FieldType);
+#[derive(Default)]
+struct Unit;
+#[derive(Default)]
+struct Spare { code: i64 }
+struct Manual;
+impl Default for Manual { fn default() -> Self { Manual } }
+fn body() -> i64 { 4i64 }
+pub fn probe() -> i64 {
+    let record = Record::default();
+    let generic = Generic::<FieldType>::default();
+    let tuple = Tuple::default();
+    let unit = Unit::default();
+    let spare = Spare::default();
+    let manual = Manual::default();
+    record.record_field.value + generic.fixed.value + generic.generic.value + tuple.0.value
+        + body() + external::value()
+}

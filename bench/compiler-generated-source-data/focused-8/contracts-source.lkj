@@ -1,0 +1,55 @@
+mod ast; mod diagnostic; mod names; mod syntax; mod resolve; mod source; mod origins;
+mod diagnostics {
+    #[derive(Clone)]
+    pub struct BlockedRegion { pub path: String, pub span: crate::ast::Span, pub kind: String, pub reason: String }
+}
+fn parsed() -> ast::Program {
+    let root = "mod external; trait Bound {} struct Field; #[derive(Default)] struct Named<T:Bound> { field:Field, value:T } #[derive(Default)] struct Tuple(Field); #[derive(Default)] struct Unit; struct Manual; impl std::default::Default for Manual { fn default()->Self { Manual } } fn free() { fn nested() {} nested(); }";
+    let standard = "pub mod default { pub trait Default { fn default()->Self; } pub fn __lkjscript_default<T:Default>()->T { T::default() } }";
+    let report = source::load_report("main.lkj", Some("$std/lib.lkj"), &mut |path:&str| -> Result<Option<Vec<u8>>,String> {
+        Ok(match path { "main.lkj"=>Some(root.as_bytes().to_vec()), "$std/lib.lkj"=>Some(standard.as_bytes().to_vec()), "external.lkj"=>Some("pub fn external_function() {}".as_bytes().to_vec()), _=>None })
+    });
+    let program = report.into_result().unwrap();
+    resolve::resolve(&program).unwrap()
+}
+fn refused(program:&ast::Program) {
+    let resolver = resolve::Resolver::new(program).unwrap();
+    match origins::collect(program, &resolver) { Err(message)=>assert!(message.contains("E_IDENTITY_ORIGIN")), Ok(_)=>panic!("unexplained origin accepted") }
+}
+fn main() {
+    let program = parsed();
+    let resolver = resolve::Resolver::new(&program).unwrap();
+    let relation = origins::collect(&program, &resolver).unwrap();
+    let mut functions = 0usize; let mut implementations = 0usize;
+    for value in &relation.functions { if value.is_some() { functions += 1usize; } }
+    for value in &relation.implementations { if value.is_some() { implementations += 1usize; } }
+    assert!(functions == 3usize && implementations == 3usize);
+    for definition in &program.structs {
+        for field in &definition.fields { assert!(!relation.types.contains_key(&field.ty)); }
+        for parameter in &definition.generics {
+            for bound in &parameter.bounds { assert!(!relation.types.contains_key(bound)); }
+        }
+    }
+    let free = program.functions.iter().position(|value| value.name == "free").unwrap();
+    let mut missing = program.clone();
+    missing.items.retain(|item| *item != ast::Item::Function(free));
+    refused(&missing);
+    let explicit = program.impls.iter().position(|value| {
+        value.methods.iter().any(|index| relation.functions[*index].is_none())
+    }).unwrap();
+    let mut missing_impl = program.clone();
+    missing_impl.items.retain(|item| *item != ast::Item::Impl(explicit));
+    refused(&missing_impl);
+    let generated = relation.functions.iter().position(|value| value.is_some()).unwrap();
+    let mut wrong_owner = program.clone();
+    wrong_owner.function_owners[generated] = ast::FunctionOwner::Free;
+    wrong_owner.items.push(ast::Item::Function(generated));
+    refused(&wrong_owner);
+    let mut wrong_body = program.clone();
+    wrong_body.functions[generated].body = program.functions[free].body;
+    refused(&wrong_body);
+    let mut wrong_target = program.clone();
+    let derived_impl = relation.implementations.iter().position(|value| value.is_some()).unwrap();
+    wrong_target.impls[derived_impl].target = program.impls[explicit].target;
+    refused(&wrong_target);
+}

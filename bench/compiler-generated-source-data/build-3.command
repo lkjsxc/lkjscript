@@ -1,0 +1,2 @@
+cwd=/home/coder/workspace/lkjscript-compiler-generated-source-20261116
+target/compiler-generated-source-baseline build src/main.lkj --source-dir /home/coder/workspace/lkjscript-compiler-generated-source-20261116 --library-dir /home/coder/workspace/lkjscript-compiler-generated-source-20261116/library --runtime-source /home/coder/workspace/lkjscript-compiler-generated-source-20261116/library/runtime.lkj --inline-limit 64 --no-store -o target/compiler-generated-source-candidate3

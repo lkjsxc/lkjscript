@@ -1,0 +1,18 @@
+{"version":1,"operations":[{"op":"replace-body","id":"<Record as std::prelude::Default>::default","source":"{ 0i64 }"}]}
+"<Record as std::prelude::Default>::default" E_EDIT_GENERATED_SOURCE derive-default projection has no editable source; edit defining item "Record"
+{"version":1,"operations":[{"op":"replace-item","id":"<Record as std::prelude::Default>::default","source":"{ 0i64 }"}]}
+"<Record as std::prelude::Default>::default" E_EDIT_GENERATED_SOURCE derive-default projection has no editable source; edit defining item "Record"
+{"version":1,"operations":[{"op":"remove-item","id":"<Record as std::prelude::Default>::default","source":"{ 0i64 }"}]}
+"<Record as std::prelude::Default>::default" E_EDIT_GENERATED_SOURCE derive-default projection has no editable source; edit defining item "Record"
+{"version":1,"operations":[{"op":"rename","id":"<Record as std::prelude::Default>::default","source":"{ 0i64 }"}]}
+"<Record as std::prelude::Default>::default" E_EDIT_GENERATED_SOURCE derive-default projection has no editable source; edit defining item "Record"
+{"version":1,"operations":[{"op":"move","id":"<Record as std::prelude::Default>::default","source":"{ 0i64 }"}]}
+"<Record as std::prelude::Default>::default" E_EDIT_GENERATED_SOURCE derive-default projection has no editable source; edit defining item "Record"
+{"version":1,"operations":[{"op":"inline-function","id":"<Record as std::prelude::Default>::default","source":"{ 0i64 }"}]}
+"<Record as std::prelude::Default>::default" E_EDIT_GENERATED_SOURCE derive-default projection has no editable source; edit defining item "Record"
+{"version":1,"operations":[{"op":"add-item","id":"impl:<Record as std::prelude::Default>#5effd8a25a8aa8e1","source":"fn extra() {}"}]}
+"impl:<Record as std::prelude::Default>#5effd8a25a8aa8e1" E_EDIT_GENERATED_SOURCE derive-default projection has no editable source; edit defining item "Record"
+{"version":1,"operations":[{"op":"replace-item","id":"<Record as std::prelude::Default>::default::derived:6c50cbbea62af879184620c51fd38da72750d56d91479a7f1493749aa90860e4::call:0","source":"fn extra() {}"}]}
+"<Record as std::prelude::Default>::default::derived:6c50cbbea62af879184620c51fd38da72750d56d91479a7f1493749aa90860e4::call:0" E_EDIT_GENERATED_SOURCE derive-default projection has no editable source; edit defining item "Record"
+{"version":1,"operations":[{"op":"change-signature","id":"std::prelude::__lkjscript_default","source":""}]}
+"std::prelude::__lkjscript_default" E_EDIT_GENERATED_REFERENCE call from "<FieldType as std::prelude::Default>::default" has no editable source; edit defining item "FieldType"

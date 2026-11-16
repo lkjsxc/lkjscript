@@ -1,0 +1,271 @@
+//! Source projection provenance for parsed functions and Default expansions.
+//! Module membership is a container relation, never a claim that a module's
+//! declaration bytes were authored: the loader also injects library modules.
+use crate::{ast as a, names};
+use std::collections::{BTreeMap, BTreeSet};
+
+pub(super) struct Origins {
+    pub functions: Vec<Option<usize>>,
+    pub implementations: Vec<Option<usize>>,
+    pub types: BTreeMap<usize, usize>,
+    pub expressions: BTreeMap<usize, usize>,
+    pub blocks: BTreeMap<usize, usize>,
+}
+struct Written {
+    functions: BTreeSet<usize>,
+    implementations: BTreeSet<usize>,
+    traits: BTreeSet<usize>,
+    structures: BTreeSet<usize>,
+}
+fn failure(identity: &str, detail: &str) -> String {
+    format!("\"{identity}\" E_IDENTITY_ORIGIN {detail}")
+}
+fn same_span(left: a::Span, right: a::Span) -> bool {
+    left.file == right.file && left.start == right.start && left.end == right.end
+        && left.line == right.line && left.column == right.column
+}
+fn remember(program: &a::Program, written: &mut Written, item: a::Item) -> Result<(), String> {
+    let valid = match item {
+        a::Item::Function(index) => index < program.functions.len() && written.functions.insert(index),
+        a::Item::Impl(index) => index < program.impls.len() && written.implementations.insert(index),
+        a::Item::Trait(index) => index < program.traits.len() && written.traits.insert(index),
+        a::Item::Struct(index) => index < program.structs.len() && written.structures.insert(index),
+        _ => true,
+    };
+    if !valid { return Err(failure("source", "duplicate or out-of-range parsed declaration")); }
+    Ok(())
+}
+fn mark(nodes: &mut BTreeMap<usize, usize>, index: usize, function: usize) -> Result<(), String> {
+    if nodes.contains_key(&index) {
+        return Err(failure("source", "generated nodes have more than one expansion owner"));
+    }
+    nodes.insert(index, function); Ok(())
+}
+fn path_structure(program: &a::Program, path: &a::Path) -> Option<usize> {
+    let declaration = program.declarations.get(path.declaration?)?;
+    match declaration.item { a::Item::Struct(index) => Some(index), _ => None }
+}
+fn target_path(program: &a::Program, resolver: &crate::resolve::Resolver<'_>, expression: usize, structure: usize,
+    arguments: &[usize], span: a::Span) -> bool {
+    let Some(node) = program.exprs.get(expression) else { return false; };
+    if !same_span(node.span, span) { return false; }
+    match &node.kind {
+        a::Expr::Path(path) => {
+            match resolver.value_path(node.scope, path, node.span) {
+                Ok(resolved) => path_structure(program, &resolved) == Some(structure) && resolved.args.as_slice() == arguments,
+                Err(_) => false,
+            }
+        },
+        _ => false,
+    }
+}
+fn field_value(program: &a::Program, resolver: &crate::resolve::Resolver<'_>, field: &a::Field, value: usize, function: usize,
+    origins: &mut Origins) -> Result<(), String> {
+    let Some(node) = program.exprs.get(value) else { return Err(failure("source", "generated field value is absent")); };
+    if !same_span(node.span, field.span) { return Err(failure("source", "generated field value has a different defining span")); }
+    let a::Expr::Call { callee, args } = &node.kind else {
+        return Err(failure("source", "generated field value is not a Default helper call"));
+    };
+    if !args.is_empty() { return Err(failure("source", "generated field helper has source arguments")); }
+    let Some(called) = program.exprs.get(*callee) else { return Err(failure("source", "generated field callee is absent")); };
+    let a::Expr::Path(path) = &called.kind else { return Err(failure("source", "generated field callee is not a path")); };
+    let resolved = match resolver.value_path(called.scope, path, called.span) {
+        Ok(path) => path,
+        Err(_) => return Err(failure("source", "generated field helper does not resolve")),
+    };
+    let expected_path = a::Path { declaration: None,
+        name: "std::default::__lkjscript_default".to_string(), args: Vec::new() };
+    let expected = match resolver.value_path(called.scope, &expected_path, called.span) {
+        Ok(path) => path,
+        Err(_) => return Err(failure("source", "canonical Default helper does not resolve")),
+    };
+    if resolved.declaration.is_none() || resolved.declaration != expected.declaration
+        || resolved.name != expected.name {
+        return Err(failure("source", "generated field helper differs from the canonical Default helper"));
+    }
+    if !same_span(called.span, field.span) || path.args.len() != 1usize || path.args[0usize] != field.ty
+        || !resolved.declaration.and_then(|index| program.declarations.get(index))
+            .is_some_and(|declaration| matches!(declaration.item, a::Item::Function(_))) {
+        return Err(failure("source", "generated field helper does not retain its authored field type"));
+    }
+    // field.ty is deliberately NOT marked: this node belongs to the written field.
+    mark(&mut origins.expressions, *callee, function)?;
+    mark(&mut origins.expressions, value, function)
+}
+fn derived_default(program: &a::Program, resolver: &crate::resolve::Resolver<'_>, written: &Written, implementation: usize,
+    origins: &mut Origins) -> Result<usize, String> {
+    let value = &program.impls[implementation];
+    let label = format!("implementation:{implementation}");
+    let Some(target) = program.types.get(value.target) else { return Err(failure(&label, "implementation target is absent")); };
+    let a::Type::Path(target_name) = &target.kind else { return Err(failure(&label, "unwritten implementation has no nominal target")); };
+    let Some(structure) = path_structure(program, target_name) else { return Err(failure(&label, "unwritten implementation does not target a resolved struct")); };
+    let Some(definition) = program.structs.get(structure) else { return Err(failure(&label, "generated struct target is absent")); };
+    let identity = names::qualified(&definition.module, &definition.name);
+    if !written.structures.contains(&structure) || !same_span(value.span, definition.span)
+        || !same_span(target.span, definition.span) || value.module != definition.module {
+        return Err(failure(&identity, "unwritten implementation has no matching parsed defining struct"));
+    }
+    let mut requests = 0usize;
+    for attribute in &definition.attrs {
+        if attribute.name == "derive" {
+            for name in &attribute.args { if name == "Default" { requests += 1usize; } }
+        }
+    }
+    if requests != 1usize || value.methods.len() != 1usize || !value.associated.is_empty()
+        || value.generics.len() != definition.generics.len() || target_name.args.len() != definition.generics.len() {
+        return Err(failure(&identity, "unwritten implementation is not the recorded Default expansion shape"));
+    }
+    let function = value.methods[0usize];
+    let Some(method) = program.functions.get(function) else { return Err(failure(&identity, "generated Default method is absent")); };
+    if program.function_owner(a::FunctionId { index: function })
+        != a::FunctionOwner::Implementation(a::ImplId { index: implementation }) {
+        return Err(failure(&identity, "generated Default method has a different implementation owner"));
+    }
+    if method.name != "default" || method.module != definition.module || !method.params.is_empty()
+        || !method.generics.is_empty() || !method.attrs.is_empty() || method.result != value.target
+        || method.public != a::Visibility::Public || !same_span(method.span, definition.span) {
+        return Err(failure(&identity, "generated Default method does not match its defining struct"));
+    }
+    let Some(bound) = value.trait_ty else { return Err(failure(&identity, "generated Default trait is absent")); };
+    let Some(bound_node) = program.types.get(bound) else { return Err(failure(&identity, "generated Default bound type is absent")); };
+    let a::Type::Path(bound_name) = &bound_node.kind else { return Err(failure(&identity, "generated Default bound is not a resolved trait path")); };
+    let expected_bound = match crate::resolve::semantic_type_path(
+        resolver, bound_node.scope, "std::default::Default", bound_node.span) {
+        Ok(path) => path,
+        Err(_) => return Err(failure(&identity, "canonical Default trait does not resolve")),
+    };
+    if bound_name.declaration.is_none() || bound_name.declaration != expected_bound.declaration
+        || bound_name.name != expected_bound.name {
+        return Err(failure(&identity, "generated trait differs from the canonical Default trait"));
+    }
+    if !same_span(bound_node.span, definition.span) || !bound_name.args.is_empty()
+        || !bound_name.declaration.and_then(|index| program.declarations.get(index))
+            .is_some_and(|declaration| matches!(declaration.item, a::Item::Trait(_))) {
+        return Err(failure(&identity, "generated Default bound is not a resolved trait at the defining span"));
+    }
+    let Some(expected_target) = bound.checked_add(definition.generics.len())
+        .and_then(|index| index.checked_add(1usize)) else {
+        return Err(failure(&identity, "generated type indices overflow"));
+    };
+    if value.target != expected_target {
+        return Err(failure(&identity, "generated target does not follow its newly allocated type arguments"));
+    }
+    mark(&mut origins.types, bound, function)?;
+    for (index, parameter) in definition.generics.iter().enumerate() {
+        let argument = target_name.args[index];
+        let Some(expected) = bound.checked_add(index).and_then(|index| index.checked_add(1usize)) else {
+            return Err(failure(&identity, "generated argument index overflows"));
+        };
+        let Some(node) = program.types.get(argument) else { return Err(failure(&identity, "generated type argument is absent")); };
+        let a::Type::Path(path) = &node.kind else { return Err(failure(&identity, "generated argument is not a parameter path")); };
+        let copied = &value.generics[index];
+        if argument != expected || path.name != parameter.name || path.declaration.is_some()
+            || !path.args.is_empty() || !same_span(node.span, parameter.span)
+            || copied.name != parameter.name || copied.lifetime != parameter.lifetime
+            || !same_span(copied.span, parameter.span) {
+            return Err(failure(&identity, "generated parameter argument or copied generic differs"));
+        }
+        let extra = if parameter.lifetime { 0usize } else { 1usize };
+        if copied.bounds.len() != parameter.bounds.len() + extra {
+            return Err(failure(&identity, "generated generic does not retain its authored bounds"));
+        }
+        for (at, original) in parameter.bounds.iter().enumerate() {
+            if *original >= bound || copied.bounds[at] != *original {
+                return Err(failure(&identity, "generated generic reuses a non-authored bound"));
+            }
+        }
+        if extra != 0usize && copied.bounds[parameter.bounds.len()] != bound {
+            return Err(failure(&identity, "generated generic is missing its fresh Default bound"));
+        }
+        // Only this freshly allocated argument is marked, never original bounds.
+        mark(&mut origins.types, argument, function)?;
+    }
+    for field in &definition.fields {
+        if field.ty >= bound { return Err(failure(&identity, "generated expansion aliases an authored field type")); }
+    }
+    mark(&mut origins.types, value.target, function)?;
+    let Some(block) = method.body else { return Err(failure(&identity, "generated Default body is absent")); };
+    let Some(body) = program.blocks.get(block) else { return Err(failure(&identity, "generated Default block is absent")); };
+    if !same_span(body.span, definition.span) || !body.statements.is_empty() {
+        return Err(failure(&identity, "generated Default block is not its defining expansion"));
+    }
+    let Some(tail) = body.tail else { return Err(failure(&identity, "generated Default body has no result")); };
+    let Some(node) = program.exprs.get(tail) else { return Err(failure(&identity, "generated Default result is absent")); };
+    if !same_span(node.span, definition.span) { return Err(failure(&identity, "generated result has a different defining span")); }
+    if definition.unit {
+        if !target_path(program, resolver, tail, structure, &target_name.args, definition.span) {
+            return Err(failure(&identity, "generated unit constructor differs from its defining struct"));
+        }
+    } else if definition.tuple {
+        let a::Expr::Call { callee, args } = &node.kind else { return Err(failure(&identity, "generated tuple constructor is not a call")); };
+        if !target_path(program, resolver, *callee, structure, &target_name.args, definition.span)
+            || args.len() != definition.fields.len() {
+            return Err(failure(&identity, "generated tuple constructor differs from its defining struct"));
+        }
+        mark(&mut origins.expressions, *callee, function)?;
+        for (index, field) in definition.fields.iter().enumerate() {
+            field_value(program, resolver, field, args[index], function, origins)?;
+        }
+    } else {
+        let a::Expr::Struct { path, fields, base } = &node.kind else { return Err(failure(&identity, "generated named constructor is not a record")); };
+        if path_structure(program, path) != Some(structure) || path.args != target_name.args
+            || base.is_some() || fields.len() != definition.fields.len() {
+            return Err(failure(&identity, "generated named constructor differs from its defining struct"));
+        }
+        for (index, field) in definition.fields.iter().enumerate() {
+            if fields[index].0 != field.name { return Err(failure(&identity, "generated field order differs")); }
+            field_value(program, resolver, field, fields[index].1, function, origins)?;
+        }
+    }
+    mark(&mut origins.expressions, tail, function)?;
+    mark(&mut origins.blocks, block, function)?;
+    origins.functions[function] = Some(structure);
+    Ok(structure)
+}
+pub(super) fn collect(program: &a::Program, resolver: &crate::resolve::Resolver<'_>) -> Result<Origins, String> {
+    if !program.resolved || program.function_owners.len() != program.functions.len() {
+        return Err(failure("source", "generated origin requires a complete resolved ownership relation"));
+    }
+    let mut written = Written { functions: BTreeSet::new(), implementations: BTreeSet::new(),
+        traits: BTreeSet::new(), structures: BTreeSet::new() };
+    for item in &program.items { remember(program, &mut written, *item)?; }
+    for module in &program.modules {
+        for item in &module.items { remember(program, &mut written, *item)?; }
+    }
+    for block in &program.blocks {
+        for statement in &block.statements {
+            if let a::Stmt::Item(item) = statement { remember(program, &mut written, *item)?; }
+        }
+    }
+    let mut result = Origins { functions: vec![None; program.functions.len()],
+        implementations: vec![None; program.impls.len()], types: BTreeMap::new(),
+        expressions: BTreeMap::new(), blocks: BTreeMap::new() };
+    for index in 0usize..program.impls.len() {
+        if !written.implementations.contains(&index) {
+            let owner = derived_default(program, resolver, &written, index, &mut result)?;
+            result.implementations[index] = Some(owner);
+        }
+    }
+    for (index, function) in program.functions.iter().enumerate() {
+        let authored = match program.function_owner(a::FunctionId { index }) {
+            a::FunctionOwner::Free => written.functions.contains(&index),
+            a::FunctionOwner::Trait(owner) => !written.functions.contains(&index) && written.traits.contains(&owner.index),
+            a::FunctionOwner::Implementation(owner) => {
+                if owner.index >= result.implementations.len() {
+                    return Err(failure(&function.name, "function implementation owner is absent"));
+                }
+                if let Some(structure) = result.implementations[owner.index] {
+                    if written.functions.contains(&index) || result.functions[index] != Some(structure) {
+                        return Err(failure(&function.name, "generated function does not belong to its validated expansion"));
+                    }
+                    continue;
+                }
+                !written.functions.contains(&index) && written.implementations.contains(&owner.index)
+            }
+        };
+        if !authored {
+            return Err(failure(&names::qualified(&function.module, &function.name), "function has no parsed declaration or validated expansion"));
+        }
+    }
+    Ok(result)
+}

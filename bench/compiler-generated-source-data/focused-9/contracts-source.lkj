@@ -1,0 +1,93 @@
+mod ast; mod diagnostic; mod names; mod syntax; mod resolve; mod source; mod origins;
+mod diagnostics {
+    #[derive(Clone)]
+    pub struct BlockedRegion { pub path: String, pub span: crate::ast::Span, pub kind: String, pub reason: String }
+}
+fn parsed() -> ast::Program {
+    let root = "mod external; trait Bound {} struct Field; #[derive(Default)] struct Named<T:Bound> { field:Field, value:T } #[derive(Default)] struct Tuple(Field); #[derive(Default)] struct Unit; struct Manual; impl std::default::Default for Manual { fn default()->Self { Manual } } fn free() { fn nested() {} nested(); }";
+    let standard = "pub mod default { pub trait Default { fn default()->Self; } pub fn __lkjscript_default<T:Default>()->T { T::default() } }";
+    let report = source::load_report("main.lkj", Some("$std/lib.lkj"), &mut |path:&str| -> Result<Option<Vec<u8>>,String> {
+        Ok(match path { "main.lkj"=>Some(root.as_bytes().to_vec()), "$std/lib.lkj"=>Some(standard.as_bytes().to_vec()), "external.lkj"=>Some("pub fn external_function() {}".as_bytes().to_vec()), _=>None })
+    });
+    let program = report.into_result().unwrap();
+    resolve::resolve(&program).unwrap()
+}
+fn refused(program:&ast::Program) {
+    let resolver = resolve::Resolver::new(program).unwrap();
+    match origins::collect(program, &resolver) { Err(message)=>assert!(message.contains("E_IDENTITY_ORIGIN")), Ok(_)=>panic!("unexplained origin accepted") }
+}
+fn main() {
+    let program = parsed();
+    let resolver = resolve::Resolver::new(&program).unwrap();
+    let relation = origins::collect(&program, &resolver).unwrap();
+    let mut functions = 0usize; let mut implementations = 0usize;
+    for value in &relation.functions { if value.is_some() { functions += 1usize; } }
+    for value in &relation.implementations { if value.is_some() { implementations += 1usize; } }
+    assert!(functions == 3usize && implementations == 3usize);
+    for definition in &program.structs {
+        for field in &definition.fields { assert!(!relation.types.contains_key(&field.ty)); }
+        for parameter in &definition.generics {
+            for bound in &parameter.bounds { assert!(!relation.types.contains_key(bound)); }
+        }
+    }
+    let mut free = None;
+    for (index, value) in program.functions.iter().enumerate() { if value.name == "free" { free = Some(index); } }
+    let free = free.unwrap();
+    let mut missing = program.clone();
+    let items = std::mem::replace(&mut missing.items, Vec::new());
+    for item in items { if item != ast::Item::Function(free) { missing.items.push(item); } }
+    refused(&missing);
+    let mut explicit = None;
+    for (index, value) in program.impls.iter().enumerate() {
+        for method in &value.methods { if relation.functions[*method].is_none() { explicit = Some(index); } }
+    }
+    let explicit = explicit.unwrap();
+    let mut missing_impl = program.clone();
+    let items = std::mem::replace(&mut missing_impl.items, Vec::new());
+    for item in items { if item != ast::Item::Impl(explicit) { missing_impl.items.push(item); } }
+    refused(&missing_impl);
+    let mut generated = None;
+    for (index, value) in relation.functions.iter().enumerate() { if value.is_some() { generated = Some(index); break; } }
+    let generated = generated.unwrap();
+    let mut wrong_owner = program.clone();
+    wrong_owner.function_owners[generated] = ast::FunctionOwner::Free;
+    wrong_owner.items.push(ast::Item::Function(generated));
+    refused(&wrong_owner);
+    let mut wrong_body = program.clone();
+    wrong_body.functions[generated].body = program.functions[free].body;
+    refused(&wrong_body);
+    let mut wrong_target = program.clone();
+    let mut derived_impl = None;
+    for (index, value) in relation.implementations.iter().enumerate() { if value.is_some() { derived_impl = Some(index); break; } }
+    let derived_impl = derived_impl.unwrap();
+    wrong_target.impls[derived_impl].target = program.impls[explicit].target;
+    refused(&wrong_target);
+    let mut helper = None; let mut free_declaration = None;
+    for (index, node) in program.exprs.iter().enumerate() {
+        if let ast::Expr::Path(path) = &node.kind {
+            if path.name == "std::default::__lkjscript_default" { helper = Some(index); break; }
+        }
+    }
+    for (index, declaration) in program.declarations.iter().enumerate() {
+        if declaration.item == ast::Item::Function(free) { free_declaration = Some(index); }
+    }
+    let helper = helper.unwrap(); let free_declaration = free_declaration.unwrap();
+    let mut wrong_helper = program.clone();
+    if let ast::Expr::Path(path) = &mut wrong_helper.exprs[helper].kind {
+        path.declaration = Some(free_declaration);
+    } else { panic!("missing helper path"); }
+    refused(&wrong_helper);
+    let mut unrelated_trait = None;
+    for (index, declaration) in program.declarations.iter().enumerate() {
+        if let ast::Item::Trait(target) = declaration.item {
+            if program.traits[target].name == "Bound" { unrelated_trait = Some(index); }
+        }
+    }
+    let unrelated_trait = unrelated_trait.unwrap();
+    let bound = program.impls[derived_impl].trait_ty.unwrap();
+    let mut wrong_bound = program.clone();
+    if let ast::Type::Path(path) = &mut wrong_bound.types[bound].kind {
+        path.declaration = Some(unrelated_trait);
+    } else { panic!("missing bound path"); }
+    refused(&wrong_bound);
+}

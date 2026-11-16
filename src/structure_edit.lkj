@@ -132,6 +132,10 @@ pub(crate) fn identifier(name: &str) -> bool {
     true
 }
 pub(crate) fn validate_item(target: &semantic::Item, inputs: &[(String, Vec<u8>)], expected: &str) -> Result<(), String> {
+    if !target.generated_from.is_empty() {
+        return Err(error(&target.identity, "GENERATED_SOURCE",
+            &format!("derive-default projection has no editable source; edit defining item {}", semantic::quote(&target.generated_from))));
+    }
     let bytes = input(inputs, &target.file)?;
     if target.start > target.end || target.end > bytes.len() {
         return Err(error(&target.identity, "SPAN", "catalog span is outside its input"));
@@ -350,6 +354,21 @@ pub fn plan(catalog: &semantic::Catalog,
     let mut projected_identities: BTreeSet<String> = BTreeSet::new();
     let mut projected_paths: BTreeSet<String> = BTreeSet::new();
     for operation in &request.operations {
+        if let Some(index) = catalog.by_identity.get(&operation.identity) {
+            let selected = &catalog.items[*index];
+            if !selected.generated_from.is_empty() { validate_item(selected, inputs, &operation.expected)?; }
+            if selected.kind == "function" && matches!(operation.kind.as_str(),
+                "rename" | "move" | "change-signature" | "inline-function" | "remove-item") {
+                for site in &catalog.generated_references {
+                    if site.kind == "call" && site.target == selected.identity {
+                        let owner = item(catalog, &site.owner)?;
+                        return Err(error(&selected.identity, "GENERATED_REFERENCE",
+                            &format!("call from {} has no editable source; edit defining item {}",
+                                semantic::quote(&site.owner), semantic::quote(&owner.generated_from))));
+                    }
+                }
+            }
+        }
         if operation.kind == "add-item" {
             if let Some(projected) = projection(catalog, operation)? {
                 if !projected_identities.insert(projected.identity.clone())

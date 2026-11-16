@@ -1,0 +1,1 @@
+baseline build src/main.lkj --source-dir WORKTREE --library-dir WORKTREE/library --runtime-source WORKTREE/library/runtime.lkj --inline-limit 64 --no-store -o target/compiler-generated-source-candidate

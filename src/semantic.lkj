@@ -17,6 +17,8 @@ pub struct Item {
     pub name_start: usize,
     pub name_end: usize,
     pub body: Option<(usize, usize)>,
+    /// Defining struct for a validated generated projection; no authored bytes.
+    pub generated_from: String,
     pub signature: String,
     pub text: String,
     pub type_name: String,
@@ -53,6 +55,8 @@ pub struct Catalog {
     pub items: Vec<Item>,
     pub by_identity: BTreeMap<String, usize>,
     pub references: Vec<Reference>,
+    /// Semantic edges from validated expansions, never editable spelling sites.
+    pub generated_references: Vec<Reference>,
     pub unresolved: Vec<Reference>,
     /// Resolved frontend expression types; None is unavailable or ambiguous.
     pub expression_types: BTreeMap<(String, usize, usize), Option<String>>,
@@ -187,13 +191,23 @@ fn append(
         Some((begin, end)) => token_digest(&file.tokens, begin, end),
         None => String::new(),
     };
+    let generated_from = match result.by_identity.get(&parent) {
+        Some(index) => result.items[*index].generated_from.clone(), None => String::new(),
+    };
+    let generated = !generated_from.is_empty();
+    let signature = if generated { ty.clone() } else { signature };
+    let text = if generated { String::new() } else { text };
+    let signature_digest = if generated { normalized_digest(&signature)? }
+        else { token_digest(&file.tokens, start, signature_end) };
     let item = Item {
         identity: identity.clone(), parent, kind: kind.to_string(), name: name.to_string(),
-        file: file.path.clone(), start, end: span.end, name_start, name_end, body,
-        signature_digest: token_digest(&file.tokens, start, signature_end),
+        file: file.path.clone(), start, end: span.end,
+        name_start: if generated { start } else { name_start },
+        name_end: if generated { start } else { name_end },
+        body: if generated { None } else { body }, generated_from, signature_digest,
         text_digest: sha256::hex_digest(text.as_bytes()), body_digest,
         signature, text, type_name: ty, type_resolved: !matches!(kind, "binding" | "call-site"), file_digest: file.digest.clone(),
-        references_complete: true,
+        references_complete: !generated,
     };
     result.by_identity.insert(identity, result.items.len());
     result.items.push(item);
@@ -279,7 +293,7 @@ impl Owners {
         let mut order: BTreeMap<String, Vec<(usize, usize, String)>> = BTreeMap::new();
         for item in &catalog.items {
             if matches!(item.kind.as_str(), "parameter" | "field" | "variant" | "generic-parameter" | "associated-type")
-                || item.start == item.end { continue; }
+                || item.start == item.end || !item.generated_from.is_empty() { continue; }
             if !order.contains_key(&item.file) { order.insert(item.file.clone(), Vec::new()); }
             order.get_mut(&item.file).unwrap().push((item.start, (!0usize) - item.end, item.identity.clone()));
         }
@@ -427,6 +441,8 @@ pub(crate) fn parameter_identity(owner: &str, name: &str, position: usize) -> St
 fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir::CheckedProgram,
     evidence: &Option<crate::elaborate::semantic::Evidence>, include_references: bool) -> Result<Catalog, String> {
     if !program.resolved { return Err("E_IDENTITY source is not resolved".to_string()); }
+    let resolver = resolve::Resolver::new(program).map_err(|problem| problem.message)?;
+    let origins = origins::collect(program, &resolver)?;
     let mut by_path: BTreeMap<String, usize> = BTreeMap::new();
     let mut input_identity = b"lkjscript-source-snapshot-1"[..].to_vec();
     for (index, (path, raw)) in inputs.iter().enumerate() { by_path.insert(path.clone(), index); }
@@ -444,7 +460,7 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
     }
     let mut result = Catalog {
         root: program.files[0usize].path.clone(), module_sources: Vec::new(), references_recorded: include_references,
-        items: Vec::new(), by_identity: BTreeMap::new(), references: Vec::new(), unresolved: Vec::new(),
+        items: Vec::new(), by_identity: BTreeMap::new(), references: Vec::new(), generated_references: Vec::new(), unresolved: Vec::new(),
         expression_types: BTreeMap::new(),
         function_ids: Vec::new(), instance_ids: Vec::new(), instance_sources: Vec::new(),
         implementations: Vec::new(), instance_arguments: Vec::new(), input_digest: sha256::hex_digest(&input_identity),
@@ -477,6 +493,9 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         let body = value.body.map(|body| (program.blocks[body].span.start, program.blocks[body].span.end));
         append(&mut result, &files, identity.clone(), parent, "function", &value.name,
             value.span, body, function_signature(program, value), true)?;
+        if let Some(structure) = origins.functions[index] {
+            generated_projection(&mut result, &files, program, &identity, structure, function_signature(program, value), true)?;
+        }
         for (position, parameter) in value.params.iter().enumerate() {
             append(&mut result, &files, parameter_identity(&identity, &parameter.name, position), identity.clone(),
                 "parameter", &parameter.name, parameter.span, None, type_name(program, parameter.ty), false)?;
@@ -526,6 +545,10 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         let identity = implementation_identity(program, index);
         append(&mut result, &files, identity.clone(), root_parent(&value.module), "implementation", "impl",
             value.span, None, type_name(program, value.target), true)?;
+        if let Some(structure) = origins.implementations[index] {
+            let signature = format!("impl {} for {}", type_name(program, value.trait_ty.unwrap()), type_name(program, value.target));
+            generated_projection(&mut result, &files, program, &identity, structure, signature, false)?;
+        }
         append_generics(&mut result, &files, &identity, &value.generics)?;
         result.implementations.push((identity.clone(), type_name(program, value.target),
             value.trait_ty.map_or(String::new(), |ty| type_name(program, ty))));
@@ -549,13 +572,35 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         append(&mut result, &files, qualified(&value.module, &value.name), root_parent(&value.module), "constant",
             &value.name, value.span, None, type_name(program, value.ty), true)?;
     }
+    // Validated generated calls have identities even in declaration-only catalogs.
+    // Their edges never require editable source spelling or body inference.
+    let mut generated_calls: BTreeMap<String, usize> = BTreeMap::new();
+    for (expression, function) in &origins.expressions {
+        generated_expression(&mut result, &files, program, &resolver, *expression, *function, &mut generated_calls, evidence)?;
+    }
     if include_references {
         let owners = Owners::new(&result);
-        let resolver = resolve::Resolver::new(program).map_err(|problem| problem.message)?;
         import_qualifications(&mut result, &files, program, &resolver);
         visibility_qualifications(&mut result, &files, &owners);
         // Every declaration-backed type path is a resolved reference, including aliases.
-        for node in &program.types {
+        for (type_index, node) in program.types.iter().enumerate() {
+            if let Some(function) = origins.types.get(&type_index) {
+                let owner = result.function_ids[*function].clone();
+                let target = match &node.kind {
+                    a::Type::Path(path) => {
+                        path.declaration.and_then(|declaration| declaration_identity(program, declaration, &result.function_ids))
+                            .or_else(|| {
+                                let structure = origins.functions[*function]?;
+                                let definition = &program.structs[structure];
+                                let candidate = format!("{}::generic:{}", qualified(&definition.module, &definition.name), path.name);
+                                if result.by_identity.contains_key(&candidate) { Some(candidate) } else { None }
+                            })
+                    }
+                    _ => None,
+                };
+                generated_reference(&mut result, &files, &owner, target, node.span, "type");
+                continue;
+            }
             if let a::Type::Path(path) = &node.kind {
                 let file = &files[node.span.file];
                 let Some(owner) = owners.get(&file.path, node.span.start, node.span.end) else { continue; };
@@ -631,6 +676,7 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         }
         let mut calls: BTreeMap<String, usize> = BTreeMap::new();
         for (expression, node) in program.exprs.iter().enumerate() {
+            if origins.expressions.contains_key(&expression) { continue; }
             let file = &files[node.span.file];
             let Some(owner) = owners.get(&file.path, node.span.start, node.span.end) else { continue; };
             let key = (file.path.clone(), node.span.start, node.span.end);
@@ -752,4 +798,79 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
 /// This view cannot authorize rename/refactoring or any claim of absent uses.
 pub fn catalog_items(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir::CheckedProgram) -> Result<Catalog, String> {
     catalog_mode(program, inputs, checked, &None, false)
+}
+
+mod origins;
+
+fn generated_projection(catalog: &mut Catalog, files: &[SourceText], program: &a::Program,
+    identity: &str, structure: usize, signature: String, body: bool) -> Result<(), String> {
+    let definition = &program.structs[structure];
+    let defining = qualified(&definition.module, &definition.name);
+    let file = &files[definition.span.file];
+    let start = preceding(&file.tokens, definition.span.start);
+    let declaration = token_digest(&file.tokens, start, definition.span.end);
+    let mut epoch = b"lkjscript-derived-default-body-1"[..].to_vec();
+    bytes(&mut epoch, defining.as_bytes()); bytes(&mut epoch, declaration.as_bytes());
+    let index = *catalog.by_identity.get(&identity.to_string())
+        .ok_or_else(|| -> String { format!("{} E_IDENTITY_ORIGIN generated item is absent", quote(identity)) })?;
+    let item = &mut catalog.items[index];
+    item.generated_from = defining;
+    item.signature_digest = normalized_digest(&signature)?;
+    item.signature = signature;
+    item.text.clear(); item.text_digest = sha256::hex_digest(b"");
+    item.name_start = item.start; item.name_end = item.start;
+    item.body = None;
+    item.body_digest = if body { sha256::hex_digest(&epoch) } else { String::new() };
+    item.references_complete = false;
+    Ok(())
+}
+
+fn generated_reference(catalog: &mut Catalog, files: &[SourceText], owner: &str,
+    target: Option<String>, span: a::Span, kind: &str) {
+    catalog.generated_references.push(Reference { owner: owner.to_string(),
+        target: target.unwrap_or_else(|| -> String { String::new() }), file: files[span.file].path.clone(),
+        kind: kind.to_string(), start: span.start, end: span.end });
+}
+
+fn generated_expression(catalog: &mut Catalog, files: &[SourceText], program: &a::Program,
+    resolver: &resolve::Resolver<'_>, expression: usize, function: usize, calls: &mut BTreeMap<String, usize>,
+    evidence: &Option<crate::elaborate::semantic::Evidence>) -> Result<(), String> {
+    let node = &program.exprs[expression];
+    let owner = catalog.function_ids[function].clone();
+    match &node.kind {
+        a::Expr::Path(path) => {
+            let target = resolver.value_path(node.scope, path, node.span).ok()
+                .and_then(|path| value_identity(program, &path, &catalog.function_ids));
+            generated_reference(catalog, files, &owner, target, node.span, "value");
+        }
+        a::Expr::Struct { path, fields, .. } => {
+            let target = value_identity(program, path, &catalog.function_ids);
+            generated_reference(catalog, files, &owner, target.clone(), node.span, "constructor");
+            for (name, _) in fields {
+                let field = target.as_ref().map(|target: &String| -> String { format!("{target}::field:{name}") });
+                generated_reference(catalog, files, &owner, field, node.span, "constructor-field");
+            }
+        }
+        a::Expr::Call { callee, .. } => {
+            let target = match &program.exprs[*callee].kind {
+                a::Expr::Path(path) => resolver.value_path(program.exprs[*callee].scope, path, program.exprs[*callee].span).ok()
+                    .and_then(|path| value_identity(program, &path, &catalog.function_ids)),
+                _ => None,
+            };
+            generated_reference(catalog, files, &owner, target, node.span, "call");
+            let ordinal = calls.get(&owner).copied().unwrap_or(0usize);
+            calls.insert(owner.clone(), ordinal + 1usize);
+            let index = *catalog.by_identity.get(&owner).unwrap();
+            let epoch = catalog.items[index].body_digest.clone();
+            let identity = format!("{owner}::derived:{epoch}::call:{ordinal}");
+            let ty = evidence.as_ref().and_then(|value| value.expressions.get(&expression)).cloned();
+            append(catalog, files, identity.clone(), owner, "call-site", "", node.span, None,
+                ty.clone().unwrap_or_else(|| -> String { "inferred result type is unavailable".to_string() }), false)?;
+            let index = *catalog.by_identity.get(&identity).unwrap();
+            catalog.items[index].type_resolved = ty.is_some();
+            catalog.items[index].body_digest = epoch;
+        }
+        _ => return Err(format!("{} E_IDENTITY_ORIGIN generated expression has no validated form", quote(&owner))),
+    }
+    Ok(())
 }

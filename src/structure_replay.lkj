@@ -17,7 +17,7 @@ fn selectable(kind: &str) -> bool {
 fn items(catalog: &semantic::Catalog) -> Result<Items, String> {
     let mut ordered: BTreeMap<(String, usize, usize, String), usize> = BTreeMap::new();
     for (index, item) in catalog.items.iter().enumerate() {
-        if selectable(&item.kind) {
+        if selectable(&item.kind) && item.generated_from.is_empty() {
             ordered.insert((item.file.clone(), item.start, !item.end, item.identity.clone()), index);
         }
     }
@@ -259,8 +259,9 @@ fn file_pairs_allowed(before: &semantic::Catalog, before_inputs: &[(String, Vec<
     let mut files = BTreeMap::new(); let mut reverse = BTreeMap::new();
     pair(&mut files, &mut reverse, &before.root, &after.root)?;
     for item in &before.items {
-        if !selectable(&item.kind) { continue; }
+        if !selectable(&item.kind) || !item.generated_from.is_empty() { continue; }
         if let Some(index) = after.by_identity.get(&item.identity) {
+            if !after.items[*index].generated_from.is_empty() { continue; }
             pair(&mut files, &mut reverse, &item.file, &after.items[*index].file)?;
         }
     }

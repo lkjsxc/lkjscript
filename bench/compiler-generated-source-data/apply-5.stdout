@@ -1,0 +1,10 @@
+"semantic::generated_expression" level=source-claim operation-target
+"semantic::origins::derived_default" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-generated-source-20261116/src/semantic.lkj" level=source-claim file before=0c45321576ae3bcec6079aa2700f73cae8e785d48853aa95328630a9b41942a8 after=bb8737d36f5d0f1ed53d9951d09812c13d532f4c437c9d256bd98e4a51cdbc1c
+"/home/coder/workspace/lkjscript-compiler-generated-source-20261116/src/semantic/origins.lkj" level=source-claim file before=164b81fc4a68a5a732113ff59ac68773fa59d38c07fa82580758b14dcbf20b2b after=7dd4681fba7802c451c2f6d009542eb7bf64b70f8dfbd938a9b5c8991bff6626
+transaction sites=2 files=2 identities=2
+"semantic::generated_expression" level=source-claim changed=body
+"semantic::origins::derived_default" level=source-claim changed=body
+program level=checked-ir authority-delta=none
+program level=checked-ir before=aed3c232f77d3a04d3a2c25ba193445dcb2b5c38f1af6d62f5aad2a0559cf46f after=c519623b7913ff054bb5fa4368a02b05e8533b94665d861f74dccc496f562264 checked-instances=12757 fresh-checked=12757 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=6a78c2c6575985f333f40b1349737a180883e0ba60996f3cfd5b79964aaaff08 source-after=cfae6339079b4606e22e8d34467a5c6e3457c4ac11321308700420a5a3682ecf mode=apply

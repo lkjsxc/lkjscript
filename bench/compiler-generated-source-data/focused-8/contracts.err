@@ -1,0 +1,2 @@
+/home/coder/workspace/lkjscript-compiler-generated-source-20261116/target/compiler-generated-source.PYJKQm/contracts/main.lkj:35:26: E_TYPE closure parameter or result type needs context
+main.lkj:1:1: E_BLOCKED remaining semantic analysis: failed bodies are blocked; independent typed bodies were constructed and checked

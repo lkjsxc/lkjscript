@@ -43,6 +43,9 @@ fn source_signature(item: &semantic::Item) -> Vec<String> {
             format!("kind={} chunk={index:016x} chunks={total} text={} bytes={} complete={}",
                 item.kind, semantic::quote(part), signature.len(), index + 1usize == total)
         };
+        let detail = if item.generated_from.is_empty() { detail } else {
+            format!("{detail} origin=generated definition={} expansion=derive-default source-projection=false", semantic::quote(&item.generated_from))
+        };
         result.push(fact(&item.identity, "source-claim", "signature", &detail));
     }
     result
@@ -76,21 +79,39 @@ pub fn build_emitted(catalog: &semantic::Catalog, checked: &ir::CheckedProgram, 
         &format!("source={} items={} unresolved={} freshness=not-asserted", catalog.input_digest, catalog.items.len(), catalog.unresolved.len())));
     result.empty("outline", "crate"); result.empty("@outline", "crate");
     for item in &catalog.items {
+        let origin = if item.generated_from.is_empty() { String::new() } else {
+            format!(" origin=generated definition={} source-projection=false span=definition-anchor", semantic::quote(&item.generated_from))
+        };
         result.add("meta", &item.identity, fact(&item.identity, "source-claim", "item",
-            &format!("kind={} parent={} file={} start={} end={} file-sha256={} item-sha256={} references-complete={}",
+            &format!("kind={} parent={} file={} start={} end={} file-sha256={} item-sha256={} references-complete={}{}",
                 item.kind, semantic::quote(&item.parent), semantic::quote(&item.file), item.start, item.end,
-                item.file_digest, item.text_digest, item.references_complete)));
-        result.add("meta", &item.identity, fact(&item.identity, "source-claim", "identity",
-            &format!("signature={} body={} scope=semantic-path body-locals=token-body-epoch",
-                item.signature_digest, item.body_digest)));
+                item.file_digest, item.text_digest, item.references_complete, origin)));
+        if item.generated_from.is_empty() {
+            result.add("meta", &item.identity, fact(&item.identity, "source-claim", "identity",
+                &format!("signature={} body={} scope=semantic-path body-locals=token-body-epoch",
+                    item.signature_digest, item.body_digest)));
+        } else {
+            result.add("meta", &item.identity, fact(&item.identity, "source-claim", "origin",
+                &format!("origin=generated definition={} expansion=derive-default source-projection=false span=definition-anchor",
+                    semantic::quote(&item.generated_from))));
+            result.add("meta", &item.identity, fact(&item.identity, "source-claim", "identity",
+                &format!("signature={} derived-epoch={} scope=semantic-path body-locals=derived-declaration-epoch epoch-domain=lkjscript-derived-default-body-1",
+                    item.signature_digest, item.body_digest)));
+        }
         for signature in source_signature(item) {
             result.add("signature", &item.identity, signature.clone());
             result.add("outline", &item.parent, signature);
         }
         result.add("@outline", &item.parent, item.identity.clone());
-        for (index, chunk) in chunks(&item.text).iter().enumerate() {
-            result.add("text", &item.identity, fact(&item.identity, "source-claim", "text",
-                &format!("chunk={index:016x} value={}", semantic::quote(chunk))));
+        if item.generated_from.is_empty() {
+            for (index, chunk) in chunks(&item.text).iter().enumerate() {
+                result.add("text", &item.identity, fact(&item.identity, "source-claim", "text",
+                    &format!("chunk={index:016x} value={}", semantic::quote(chunk))));
+            }
+        } else {
+            result.add("text", &item.identity, fact(&item.identity, "source-claim", "text-unavailable",
+                &format!("reason=generated-definition definition={} expansion=derive-default source-projection=false",
+                    semantic::quote(&item.generated_from))));
         }
         let type_fact = if matches!(item.kind.as_str(), "binding" | "call-site") { if item.type_resolved { "inferred-type" } else { "type-unavailable" } }
             else if matches!(item.kind.as_str(), "module" | "trait" | "implementation") { "source-kind" } else { "declared-type" };
@@ -116,6 +137,23 @@ pub fn build_emitted(catalog: &semantic::Catalog, checked: &ir::CheckedProgram, 
             &format!("target={} file={} start={} end={} kind={}", semantic::quote(&reference.target),
                 semantic::quote(&reference.file), reference.start, reference.end, reference.kind));
         edge(&mut result, "dependents", &reference.target, &reference.owner, "source-claim", "change=signature conservative=true");
+    }
+    for reference in &catalog.generated_references {
+        let index = catalog.by_identity.get(&reference.owner)
+            .ok_or_else(|| -> String { format!("{} E_IDENTITY_ORIGIN generated reference owner is absent", semantic::quote(&reference.owner)) })?;
+        let owner = &catalog.items[*index];
+        let detail = format!("owner={} definition={} origin=generated expansion=derive-default source-projection=false anchor-file={} anchor-start={} anchor-end={} kind={}",
+            semantic::quote(&reference.owner), semantic::quote(&owner.generated_from),
+            semantic::quote(&reference.file), reference.start, reference.end, reference.kind);
+        if reference.target.is_empty() {
+            result.add("references", &reference.owner, fact(&reference.owner, "source-claim", "generated-reference",
+                &format!("{detail} target=unavailable claim=partial")));
+        } else {
+            edge(&mut result, "references", &reference.owner, &reference.target, "source-claim", &detail);
+            edge(&mut result, "uses", &reference.target, &reference.owner, "source-claim", &detail);
+            edge(&mut result, "dependents", &reference.target, &reference.owner, "source-claim",
+                &format!("{detail} change=signature conservative=true"));
+        }
     }
     for reference in &catalog.unresolved {
         result.add("references", &reference.owner, fact(&reference.owner, "source-claim", "unresolved-reference",

@@ -1,0 +1,6 @@
+compiler-generated-source-baseline
+compiler-generated-source-candidate
+compiler-generated-source-candidate2
+compiler-generated-source-candidate3
+compiler-generated-source-candidate4
+compiler-generated-source-key-path

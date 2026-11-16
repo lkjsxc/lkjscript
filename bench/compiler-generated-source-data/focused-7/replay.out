@@ -1,0 +1,10 @@
+"Record" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-generated-source-20261116/target/compiler-generated-source.ZOTd1U/source/main.lkj" level=source-claim file before=e7cba3e71159f3814b3e4017ebdc6cced94913656fea8972e6d87fd2a8fba826 after=594897ddc80b6f0c7d5b10113e0a96d4377e57041a9c6d391459c7f9643c4335
+transaction sites=1 files=1 identities=1
+"<Record as std::prelude::Default>::default" level=source-claim changed=body
+"Record" level=source-claim changed=signature
+"Record::field:extra" level=source-claim changed=added
+program level=checked-ir authority-delta=none
+program level=checked-ir before=73b6f3b18173eee9b87a7c4fa6fb1c3644d85aeaa89fd7f81178bd32280e8953 after=4e9b80212b513ba15323a4bcb6e705663f31c328c0523412809fbbbaa2d5c03e checked-instances=18 fresh-checked=18 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=a125a37cfb645c61463607f14a8219eb745a94b4e9e7c7b0f38596ae82d6f0fa source-after=9ec6698b5ab2d12aedddede5ee0179a0f90608dd3d93d873d4407d8105b5c7df mode=apply
+replay desired=4e9b80212b513ba15323a4bcb6e705663f31c328c0523412809fbbbaa2d5c03e candidate=4e9b80212b513ba15323a4bcb6e705663f31c328c0523412809fbbbaa2d5c03e verified=true operations=1

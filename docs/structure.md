@@ -32,7 +32,7 @@ An instance's source association is still a labelled producer claim. Native code
 sizes are measurements of the selected emitter output, not a checker theorem.
 
 `outline` returns signatures to a chosen depth. `item`/`text` returns one
-item's exact source; `slice` adds the signatures it directly mentions and can
+authored item's exact source; `slice` adds the signatures it directly mentions and can
 expand to a specified depth. `uses`, `references`, `callers`, `callees`,
 `impls`, `instances`, `type`, `layout`, `authority` and `dependents`
 have explicit identities, bounds and continuations. The entire reply, including
@@ -90,6 +90,35 @@ ordinal. Reformatting and comments preserve that epoch. After a token change
 there is no promise that a prior body-local identity still denotes anything.
 Use the enclosing function identity for a whole-body replacement, or query the
 new body first.
+
+Default derives have semantic function and implementation identities, but their
+expansion is not an independently authored source item. The catalog validates
+the complete parser Item relation for functions and implementations, then
+recognizes the exact resolved Default expansion of a defining struct. Unknown
+orphan functions or implementations refuse with `E_IDENTITY_ORIGIN`; the loader's
+injected module declarations are outside this narrower authorship rule.
+
+Generated facts carry `origin=generated`, the `definition` identity and
+`source-projection=false`. Their spans are labelled definition anchors.
+Signatures describe the generated callable or implementation; `text` returns
+`text-unavailable` instead of the struct's bytes. Generated calls use
+`FUNCTION::derived:EPOCH::call:N`; the epoch hashes the defining identity and
+token-normalized declaration under `lkjscript-derived-default-body-1`. It is
+distinct from a source-body epoch. Changing that declaration invalidates these
+call IDs; whitespace and comments do not. There are no aliases for the old
+erroneous source-span call IDs.
+
+Generated reference edges retain their actual expansion owner and defining
+identity in a separate uneditable collection. Shared authored field type nodes
+and generic bounds remain ordinary editable references. Direct edits of a
+generated item, including use as an insertion parent, refuse with
+`E_EDIT_GENERATED_SOURCE`. A function rename, move, signature change, inline or
+removal that would rewrite a generated call refuses with
+`E_EDIT_GENERATED_REFERENCE`. Edit the defining declaration instead; candidate
+elaboration regenerates and checks the expansion. Replay selects authored
+declarations. Existing historical snapshots retain the producing compiler's
+facts, including an older incorrect projection; rebuilding publishes the
+repaired origin contract.
 
 `references-complete=false` and unresolved-reference facts are explicit limits,
 not evidence that an item has no uses. Declaration-only capture deliberately

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "operations": [
+    {
+      "op": "replace-body",
+      "id": "semantic::quote",
+      "source": "{\n    let mut out = Vec::new(); json::write_string(&mut out, value);\n    String::from_utf8(out).unwrap()\n}"
+    }
+  ]
+}

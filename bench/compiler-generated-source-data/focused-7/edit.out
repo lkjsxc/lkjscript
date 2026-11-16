@@ -1,0 +1,10 @@
+"Spare::field:origin_fixture_marker" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-generated-source-20261116/target/compiler-generated-source.ZOTd1U/source/main.lkj" level=source-claim file before=312ba7b2cd33596004d20a0a8913369ae65faaedab0a4dc1d3778feb3e9a0c9d after=ebb49292b5bff8f1d0e77a6e5049e2d1aa1a1b438083f4e18893390b36efd7ca
+transaction sites=1 files=1 identities=1
+"<Spare as std::prelude::Default>::default" level=source-claim changed=body
+"Spare" level=source-claim changed=signature
+"Spare::field:origin_fixture_marker" level=source-claim changed=removed
+"Spare::field:renamed_origin_fixture_marker" level=source-claim changed=added
+program level=checked-ir authority-delta=none
+program level=checked-ir before=4e9b80212b513ba15323a4bcb6e705663f31c328c0523412809fbbbaa2d5c03e after=4e9b80212b513ba15323a4bcb6e705663f31c328c0523412809fbbbaa2d5c03e checked-instances=18 fresh-checked=18 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=bacf79c9c8ede0e358bb25a8cbad964f7f7c63127ebd9cff03eed762df8d260f source-after=225159e632a3da6784694c4a4a07bd75395a510f9dd2f209488e0ea2315cd1df mode=apply

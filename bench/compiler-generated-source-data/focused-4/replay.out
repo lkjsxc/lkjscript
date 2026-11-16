@@ -1,0 +1,10 @@
+"Record" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-generated-source-20261116/target/compiler-generated-source.8TwvN9/source/main.lkj" level=source-claim file before=d04a570e600748d65952009bef57443c21478c5967e04da50694fecdbecab834 after=14a2e82fa0636e9d13a2475c723717a3a8214b0e6c5441d78278d4fbdc3adceb
+transaction sites=1 files=1 identities=1
+"<Record as std::prelude::Default>::default" level=source-claim changed=body
+"Record" level=source-claim changed=signature
+"Record::field:extra" level=source-claim changed=added
+program level=checked-ir authority-delta=none
+program level=checked-ir before=e76c9f2252c998261998ea5329d5ff98fefd14ae8c44c05cb53b57265db5245c after=66c0827b0995ab3c0de9aa3ad90462923af1a38f015c284b9499e06d8de42437 checked-instances=17 fresh-checked=17 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=91c87db358d5cad8fcd4be84aa2334b33753b0068b9a51aea2a098871980c701 source-after=55b1d50d6756abc9943612f4392e1031e2b8362d879fc8cc9a83bf99bde9c71a mode=apply
+replay desired=66c0827b0995ab3c0de9aa3ad90462923af1a38f015c284b9499e06d8de42437 candidate=66c0827b0995ab3c0de9aa3ad90462923af1a38f015c284b9499e06d8de42437 verified=true operations=1
