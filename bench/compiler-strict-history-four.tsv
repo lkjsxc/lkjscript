@@ -1,0 +1,5 @@
+ordinal	revision	parent	status	projection	operations	stdout_lines	wall_s	user_s	sys_s	peak_kib	load_before	load_after	reason	library_environment	source_root
+1	39d18d444302ae9ce96d2bf05fdf0c9b17568890	7b6d333b0853094725c191b2503cf247ecc128c4	passed	native-lkj	11	50	67.22	65.14	0.54	1086608	1.68	2.03	desired-checked-meaning-identical	historical-roots	src/main.lkj
+2	20fd17938d14db146e4df20295dfbc4b977548f6	319cfeb80e8139b7df61e1bfff2a577d83af8d42	ineligible	legacy-rs-copies	0	0	0.70	0.66	0.00	67164	2.03	2.03	E_UNSUPPORTED	historical-roots	src/lib.lkj
+3	89bb5bef41541e48578d8234943aa4519a4568d6	6d3185ac24de6101c52f01c3694ef5deeb6fe657	ineligible	native-lkj	2	99	70.40	68.29	0.57	1165260	2.03	2.52	changed-required-source-outside-applied-operation-files	historical-roots	src/main.lkj
+4	5e7e8d37831b33a9e44c3e50a0b733cfd049b64d	932f197ebcd9c17e2702372300ab73996bb20754	ineligible	legacy-rs-copies	0	0	5.27	5.07	0.04	164536	2.80	2.66	E_UNSUPPORTED_MACRO	frozen-compiler-embedded	src/lib.lkj

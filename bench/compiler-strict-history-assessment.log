@@ -1,0 +1,5 @@
+remaining=94 no_outside_language=15 with_outside_language=79 no_outside_and_no_projected_file_set_change=4 no_outside_with_projected_file_set_change=11
+prior_for_no_outside ineligible/E_UNSUPPORTED 1
+prior_for_no_outside ineligible/E_UNSUPPORTED_MACRO 7
+prior_for_no_outside ineligible/changed-source-outside-applied-operation-files 1
+prior_for_no_outside not-in-original-data/- 6

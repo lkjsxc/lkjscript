@@ -1,0 +1,6 @@
+verified new_attempts=4 new_passed=1 new_operations=11 imported_passed=23 combined_language_scope=24
+new_file_facts=4 exact_historical_before=4 exact_target_text=4 target_text_differs=0
+reason E_UNSUPPORTED 1
+reason E_UNSUPPORTED_MACRO 1
+reason changed-required-source-outside-applied-operation-files 1
+reason desired-checked-meaning-identical 1

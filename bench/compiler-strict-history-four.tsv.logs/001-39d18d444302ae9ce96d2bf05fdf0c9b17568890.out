@@ -1,0 +1,50 @@
+"driver" level=source-claim operation-target
+"driver::compile" level=source-claim operation-target
+"driver::execute_source" level=source-claim operation-target
+"driver::structure" level=source-claim operation-target
+"impl:structure_write::Writer#6731be1edf9e6f05" level=source-claim operation-target
+"structure_edit::one_item" level=source-claim operation-target
+"structure_write" level=source-claim operation-target
+"structure_write::Writer" level=source-claim operation-target
+"structure_write::atomic" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-strict-history.XaAYZO/before/src/driver.lkj" level=source-claim file before=c38824cce92aab02c6e8aadfc509ebd6ea770033cd5cf56f37bcd9b7a04c7bef after=2396fa886c4ce053957c4721ecd816c9eb4b6702d65f5847d62b6a16b991791d
+"/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-strict-history.XaAYZO/before/src/driver/structure.lkj" level=source-claim file before=1435a6c84918a37ada100c671b05efb5ab4a3d69f27b4f4260e36573ce1416d0 after=48971ef5240ffec40e5022f8148f6786b6606d1be2c3aaa8f674e5e9ee33b3c0
+"/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-strict-history.XaAYZO/before/src/structure_edit.lkj" level=source-claim file before=8c5d8dc44fa4e79a456c3f49a513be3a36bdf0abbbcd990e297ce20800ebe933 after=b5cf667cee39916cd8aaaa3aac050a044bfccb21894634c9b8c39019c5e792d1
+"/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-strict-history.XaAYZO/before/src/structure_write.lkj" level=source-claim file before=a0370e61bdba85e4dec4d25438a58a3ddb0adcda84f4da5d41b6d7cf7d628214 after=a98f65fc8db47245b0df34fe6614773883d7057e93e1805d76ece92d71074830
+transaction sites=9 files=4 identities=9
+"driver::compile" level=source-claim changed=body
+"driver::compile_snapshot" level=source-claim changed=added
+"driver::compile_snapshot::param:memo" level=source-claim changed=added
+"driver::compile_snapshot::param:options" level=source-claim changed=added
+"driver::compile_snapshot::param:stats" level=source-claim changed=added
+"driver::compile_snapshot::param:world" level=source-claim changed=added
+"driver::execute_source" level=source-claim changed=body
+"driver::structure::consistency" level=source-claim changed=added
+"driver::structure::consistency::capture" level=source-claim changed=added
+"driver::structure::consistency::capture::param:options" level=source-claim changed=added
+"driver::structure::consistency::capture::param:world" level=source-claim changed=added
+"driver::structure::consistency::verify" level=source-claim changed=added
+"driver::structure::consistency::verify::param:values" level=source-claim changed=added
+"driver::structure::consistency::verify::param:world" level=source-claim changed=added
+"impl:structure_write::Writer#6731be1edf9e6f05" level=source-claim changed=text-only
+"structure_edit::one_item" level=source-claim changed=body
+"structure_write::Intent" level=source-claim changed=added
+"structure_write::Intent::field:changes" level=source-claim changed=added
+"structure_write::Intent::field:generation" level=source-claim changed=added
+"structure_write::Writer" level=source-claim changed=signature
+"structure_write::Writer::field:entropy" level=source-claim changed=added
+"structure_write::Writer::open" level=source-claim changed=body
+"structure_write::Writer::pending" level=source-claim changed=signature,body
+"structure_write::Writer::publish" level=source-claim changed=body
+"structure_write::Writer::recover" level=source-claim changed=body
+"structure_write::atomic" level=source-claim changed=body
+"structure_write::stamp" level=source-claim changed=added
+"structure_write::stamp::param:scope" level=source-claim changed=added
+"structure_write::stamp::param:world" level=source-claim changed=added
+"structure_write::valid_generation" level=source-claim changed=added
+"structure_write::valid_generation::param:value" level=source-claim changed=added
+"ir:driver::main" level=checked-ir authority-gained="effect:directory_create_private,effect:entropy_fill,effect:world_entropy" authority-lost="effect:directory_create_new" entry-before=true entry-after=true
+"ir:main" level=checked-ir authority-gained="effect:directory_create_private,effect:entropy_fill,effect:world_entropy" authority-lost="effect:directory_create_new" entry-before=true entry-after=true
+program level=checked-ir before=f90ef92ea14e38e0ead154c4178bce9b2c3731056218273118595dac128a13fa after=f3c13c0ff209c50b94e9747266e8de3af0274de284f69c19b1a1aa1cb398304b checked-instances=11407 fresh-checked=11407 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=69170b7ca1f20001045adde21733f99133b8eed57cb141dd8bde98175320ed1f source-after=9de08626278d1f7a1cf6945bc6ce49d8c579f81fee0e0dbb869302101baed1c1 mode=apply
+replay desired=f3c13c0ff209c50b94e9747266e8de3af0274de284f69c19b1a1aa1cb398304b candidate=f3c13c0ff209c50b94e9747266e8de3af0274de284f69c19b1a1aa1cb398304b verified=true operations=11

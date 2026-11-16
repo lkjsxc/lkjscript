@@ -1,0 +1,11 @@
+cleanup_utc=2026-11-16T03:57:53Z
+accepted_by=root
+completed_worker=pipe-gcdlklpifhmdefebjafceflfjfickdbc
+fixture=/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-strict-history.XaAYZO
+fixture_bytes_before=332021266
+producer_sha256=4c4537ea7ccb31213f376d1402f619883eea6f8877fdb8b752b31df364099e09
+fixture_removed=true
+private_key_removed=true
+producer_copy_removed=true
+stop_marker_absent=true
+text_evidence_preserved=true

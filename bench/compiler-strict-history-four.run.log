@@ -1,0 +1,4 @@
+history mode=replay attempted=1 passed=1 revision=39d18d444302ae9ce96d2bf05fdf0c9b17568890 result=passed reason=desired-checked-meaning-identical
+history mode=replay attempted=2 passed=1 revision=20fd17938d14db146e4df20295dfbc4b977548f6 result=ineligible reason=E_UNSUPPORTED
+history mode=replay attempted=3 passed=1 revision=89bb5bef41541e48578d8234943aa4519a4568d6 result=ineligible reason=changed-required-source-outside-applied-operation-files
+history mode=replay attempted=4 passed=1 revision=5e7e8d37831b33a9e44c3e50a0b733cfd049b64d result=ineligible reason=E_UNSUPPORTED_MACRO

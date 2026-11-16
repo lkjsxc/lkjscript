@@ -1,0 +1,19 @@
+mode=replay root_policy=common-main-otherwise-common-lib scan=300 probe_count=4 memory_bytes=4294967296 timeout_seconds=900 store_bytes=2147483648
+segment=separate-four-candidate-probe
+original_ordinals=104,107,112,158
+ordinal_kind=probe-sequence
+imported_count=23
+imported_from=5e63d79b03485344e18c0b5170b7aa97f7ccbfa3
+imported_proofs_sha256=0aafd3a891bf224bd3113ab9de58219fecba44b84e0c5605a28f8ced0f25acb1
+source_proofs_sha256=8fd505fc658b051491ddc157e43783bff39befcde721e3ab4b97115661a93eae
+source_manifest_sha256=f1979bc70f3127080a0fd957772f4fb975f5e2257bad11dd0a0428d628ed3b8b
+acceptance=canonical-checked-meaning-and-every-changed-language-file
+store_state=cold
+history_head=a4fd685a9bb2e7736110a4ed2a43651dfe040d56
+compiler_origin=/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-self-history-strict-producer
+4c4537ea7ccb31213f376d1402f619883eea6f8877fdb8b752b31df364099e09  /home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-strict-history.XaAYZO/compiler
+harness_sha256=acc598b8e21e644351494fe8e6c8f3ce9de7ea6daae97481f0b5ce9b436b0bb2
+library_policy=historical-roots-when-both-present-else-frozen-compiler-embedded-on-both-sides
+stop_file=/home/coder/workspace/lkjscript-compiler-self-history-20261116/bench/compiler-strict-history-four.tsv.stop
+attempted=4 passed=1 expected_probes=4
+retained_fixture=/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-strict-history.XaAYZO
