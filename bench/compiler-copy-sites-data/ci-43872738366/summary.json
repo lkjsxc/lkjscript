@@ -1,0 +1,152 @@
+{
+  "bootstrap": {
+    "ci_image_sha256_printed": false,
+    "git_seed_identity": {
+      "bytes": 32584542,
+      "not_a_hash_printed_by_CI": true,
+      "sha256": "6cd52308aba91d6f84396e6f999ffba6d97eb7ccbacbb6bec654c31fee7bdacc",
+      "source": "Git seed bytes at f9e4581ae815ba041510d31421e6b588d66b4059; data-only decompression"
+    },
+    "policy_inline_limit": 64,
+    "proof": "Successful pinned recipe compares consecutive current-emitter generations and checks the source library; compact native suite log does not contain the image digest",
+    "recipe": "bootstrap.sh"
+  },
+  "capture": {
+    "inspection_warning": "Optional file utility was unavailable during text inspection; exact raw gateway result retained as inspection-1.gateway.json",
+    "polling_stopped_after": "jobs-14.json",
+    "successful_cli_request_captures": 20,
+    "failed_cli_request_captures": 0
+  },
+  "conclusion": "success",
+  "fresh_requests": {
+    "component_rows": 12,
+    "rerun": 5448,
+    "reused": 0,
+    "selection_line": "2026-11-16T13:35:25.6832083Z ok gate selection: skipped 0 case requests on authenticated exact compiler/input closure or stable runner/sealed ELF/checked closure/closed contract equality; reran 5448 misses/open effects; host suites rerun"
+  },
+  "head_sha": "f9e4581ae815ba041510d31421e6b588d66b4059",
+  "jobs": [
+    {
+      "completed_at": "2026-11-16T13:10:04Z",
+      "conclusion": "success",
+      "head_sha": "f9e4581ae815ba041510d31421e6b588d66b4059",
+      "id": 133317833494,
+      "name": "witness",
+      "run_id": 43872738366,
+      "started_at": "2026-11-16T13:07:14Z",
+      "status": "completed"
+    },
+    {
+      "completed_at": "2026-11-16T13:35:32Z",
+      "conclusion": "success",
+      "head_sha": "f9e4581ae815ba041510d31421e6b588d66b4059",
+      "id": 133317833855,
+      "name": "gate",
+      "run_id": 43872738366,
+      "started_at": "2026-11-16T13:07:14Z",
+      "status": "completed"
+    }
+  ],
+  "mutation": {
+    "count_basis": "128 requested by the pinned gate argv; successful suite exit implies zero findings by the pinned command exit rule",
+    "detailed_counters_in_ci_log": false,
+    "findings": 0,
+    "per_category_counts": null,
+    "requested_count": 128,
+    "requested_seed": 1701,
+    "suite_passed": true,
+    "workers": 4
+  },
+  "phases": {
+    "bootstrap": {
+      "elapsed_s": "90.078",
+      "line_number": 559,
+      "one_minute_load_after": "1.31",
+      "one_minute_load_before": "1.18",
+      "raw_line": "2026-11-16T13:09:01.9643237Z ok bootstrap (90.078 s, load 1.18 -> 1.31; gate+0.014..90.092 s); rerun suite (live host observations or fresh admission)"
+    },
+    "gate": {
+      "elapsed_s": "1677.588",
+      "line_number": 620,
+      "one_minute_load_after": "2.15",
+      "one_minute_load_before": "1.18",
+      "raw_line": "2026-11-16T13:35:29.4598277Z ok gate (1677.588 s, load 1.18 -> 2.15)"
+    },
+    "ir-mutation": {
+      "elapsed_s": "3.772",
+      "line_number": 619,
+      "one_minute_load_after": "2.15",
+      "one_minute_load_before": "2.15",
+      "raw_line": "2026-11-16T13:35:29.4579717Z ok ir-mutation (3.772 s, load 2.15 -> 2.15; gate+1673.814..1677.586 s); rerun suite (live host observations or fresh admission)"
+    },
+    "profiler": {
+      "elapsed_s": "25.139",
+      "line_number": 588,
+      "one_minute_load_after": "4.83",
+      "one_minute_load_before": "4.77",
+      "raw_line": "2026-11-16T13:35:25.6553413Z ok profiler (25.139 s, load 4.77 -> 4.83; gate+358.052..383.191 s); rerun suite (live host observations or fresh admission)"
+    }
+  },
+  "records": [
+    {
+      "bytes": 11628,
+      "path": "run-final.json",
+      "sha256": "3c9930766c6bdc39fe4ceb2925a1d7a3dc718d8a765e3def6831ab5be9c1e3e2"
+    },
+    {
+      "bytes": 4177,
+      "path": "jobs-14.json",
+      "sha256": "ad9a74c805e476588746d82bf67a6bce4bd8414159734b7b41fff13ff9b23e04"
+    },
+    {
+      "bytes": 61177,
+      "path": "gate-log-1.log",
+      "sha256": "9684344d99260190247bb2c79ce2f81230c70242b973bb494efa072141da59e0"
+    },
+    {
+      "bytes": 53923,
+      "path": "witness-log-1.log",
+      "sha256": "4bce27360e8238a41ec2cfcab8396d92933936f677838dca3c310c2b7299b117"
+    },
+    {
+      "bytes": 950,
+      "path": "check.yml",
+      "sha256": "e0e9d3c7ccb0351b0909d17d98e0c5603f62909c0d7d4e7b379be73dae780a18"
+    },
+    {
+      "bytes": 2037,
+      "path": "bootstrap.sh",
+      "sha256": "1e8371471dd3b8cba3a4a5c2d6b0bef99d89efa811b4dea7bd46dd762fd5cdc3"
+    },
+    {
+      "bytes": 13551,
+      "path": "check.sh",
+      "sha256": "ae4f2e6e698132bd458aab70bd57269a475fad8610c20c732514e03dae384d52"
+    },
+    {
+      "bytes": 52731,
+      "path": "test_generators.lkj",
+      "sha256": "7079eecd341aeef03256d4625a37666b375bba65cbed2045b927daf43469dc1f"
+    },
+    {
+      "bytes": 222,
+      "path": "seed-uncompressed-identity.json",
+      "sha256": "2905820fc5ad5147a1dfbffdb32ac71003bc542de8900d5ddae75b8d295b252b"
+    }
+  ],
+  "run_attempt": 1,
+  "run_id": 43872738366,
+  "schema": "compiler-copy-sites-ci-summary-v1",
+  "scope": "Read-only API/file inspection and data-only seed hashing; no local compiler, generator, profiler, test, push or shared-document edit",
+  "status": "completed",
+  "witness": {
+    "auxiliary_timing_lines": [
+      "2026-11-16T13:10:00.9655874Z ok directory rename_new suite: 3 routes, 4.717 s, load 1.18 0.69 0.29 1/263 3888 -> 1.24 0.71 0.30 1/265 4073",
+      "2026-11-16T13:10:02.5527227Z ok directory identity suite: 3 routes, 1.569 s, load 1.24 0.71 0.30 1/265 4080 -> 1.24 0.71 0.30 1/264 4187"
+    ],
+    "compiler_byte_identity_passed": true,
+    "count_line": "2026-11-16T13:09:56.2347810Z ok Rust witness: 276 values/output cases, 344 verdicts",
+    "values_output_cases": "276",
+    "verdicts": "344"
+  }
+}

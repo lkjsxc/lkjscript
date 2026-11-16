@@ -1,0 +1,44 @@
+[
+   {
+      "authoritative" : false,
+      "replacement" : "full-inventory.tsv",
+      "request" : "compiler-legacy-root-inventory-names-20261116-053",
+      "status" : "preliminary output capture truncated at 1 MiB"
+   },
+   {
+      "authoritative" : false,
+      "phase" : "Perl syntax error before payload verification",
+      "record" : "attempts/verification-attempt-1.json",
+      "request" : "compiler-legacy-root-inventory-verify-20261116-061",
+      "status" : 255
+   },
+   {
+      "authoritative" : true,
+      "phase" : "309 committed counterpart SHA-256 checks and historical seed recovery",
+      "record" : "verification-summary.json",
+      "request" : "compiler-legacy-root-inventory-verify-v2-20261116-063",
+      "status" : 0
+   },
+   {
+      "authoritative" : false,
+      "phase" : "preparation helper defect: unparenthesized Perl list function consumed classification fields when constructing JSON",
+      "record" : "attempts/transcript-review-invalid.json",
+      "request" : "compiler-legacy-root-inventory-transcript-audit-20261116-065",
+      "status" : 0
+   },
+   {
+      "authoritative" : true,
+      "phase" : "corrected parenthesized SHA-256 and complete 533-line classification",
+      "record" : "transcript-review-v2.json",
+      "request" : "compiler-legacy-root-inventory-transcript-review-20261116-067",
+      "status" : 0
+   },
+   {
+      "authoritative" : true,
+      "drain_request" : "compiler-legacy-root-inventory-full-drain-20261116-071",
+      "phase" : "complete metadata recheck and every regular-file SHA-256",
+      "record" : "full-inventory.tsv",
+      "request" : "compiler-legacy-root-inventory-full-20261116-070",
+      "status" : 0
+   }
+]

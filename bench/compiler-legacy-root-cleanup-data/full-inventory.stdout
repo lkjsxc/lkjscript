@@ -1,0 +1,100 @@
+{
+   "cache_categories" : {
+      ".budget-index" : {
+         "bytes" : 3718183,
+         "files" : 5
+      },
+      ".budget-lock" : {
+         "bytes" : 0,
+         "files" : 5
+      },
+      "check" : {
+         "bytes" : 3915356,
+         "files" : 2140
+      },
+      "front" : {
+         "bytes" : 220512595,
+         "files" : 2984
+      },
+      "gate-closed" : {
+         "bytes" : 3042,
+         "files" : 26
+      },
+      "image" : {
+         "bytes" : 14586367,
+         "files" : 6
+      },
+      "inputs-image" : {
+         "bytes" : 66625,
+         "files" : 6
+      },
+      "inputs-test" : {
+         "bytes" : 1447136,
+         "files" : 4548
+      },
+      "native" : {
+         "bytes" : 73077625,
+         "files" : 1781
+      },
+      "test" : {
+         "bytes" : 1492221,
+         "files" : 4548
+      }
+   },
+   "cache_payloads_retained" : false,
+   "compiler_executed" : false,
+   "deleted" : false,
+   "main_evidence_pin" : "f9e4581ae815ba041510d31421e6b588d66b4059",
+   "private_key_content_read" : false,
+   "process_or_fd_observer" : false,
+   "scopes" : {
+      "compiler-container-root-audit" : {
+         "allocated_bytes" : 57344,
+         "directories" : 1,
+         "file_bytes" : 26555,
+         "files" : 10
+      },
+      "compiler-current50-root-audit" : {
+         "allocated_bytes" : 77824,
+         "directories" : 1,
+         "file_bytes" : 49028,
+         "files" : 10
+      },
+      "compiler-generated-source-root-audit" : {
+         "allocated_bytes" : 24576,
+         "directories" : 1,
+         "file_bytes" : 2607,
+         "files" : 6
+      },
+      "compiler-origin-container-gate.uQZd6X" : {
+         "allocated_bytes" : 415346688,
+         "directories" : 7,
+         "file_bytes" : 364308624,
+         "files" : 16173
+      },
+      "compiler-scale-refusal-root-audit" : {
+         "allocated_bytes" : 28672,
+         "directories" : 1,
+         "file_bytes" : 3674,
+         "files" : 8
+      },
+      "compiler-strict-derived-root-audit" : {
+         "allocated_bytes" : 335872,
+         "directories" : 2,
+         "file_bytes" : 221789,
+         "files" : 34
+      },
+      "compiler-strict-scoped-root-audit" : {
+         "allocated_bytes" : 1671168,
+         "directories" : 2,
+         "file_bytes" : 1264482,
+         "files" : 124
+      }
+   },
+   "total" : {
+      "allocated_bytes" : 417542144,
+      "directories" : 15,
+      "file_bytes" : 365876759,
+      "files" : 16365
+   }
+}

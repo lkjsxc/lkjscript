@@ -15,6 +15,16 @@ e1736dc05209b1246ff183faffdb67f85d9faaf44d84e40e03e5ba1f7e5bcacf  bench/compiler
 87cf92434c3c62384777637241f822fcedfc9adced23e8e33e1951b1631548de  bench/compiler-copy-sites-data/candidate-3.sha256
 c31eba504587cc1047be1a22334a0734bfac331a0a5f4bdde478431320beab53  bench/compiler-copy-sites-data/candidate.sha256
 85dcbc04be568238d8b7f079292b5e4475567428fc7d1c8be326ed9e10eb5109  bench/compiler-copy-sites-data/capture.sh
+50a4034c74b31e7aefe861f613ee8ee761b9d5cf24fe3d4903a7f83004f5b630  bench/compiler-copy-sites-data/ci-43872738366/README.md
+4f46aa50265315b33cfc2db26288f333b08a98f2087430abbffc89d63fc91cfc  bench/compiler-copy-sites-data/ci-43872738366/archive-acceptance.json
+64c1683afa10c8f533edf97b0bd744760924568f862b9d34ba55f7549a40b69f  bench/compiler-copy-sites-data/ci-43872738366/capture-README.md
+9684344d99260190247bb2c79ce2f81230c70242b973bb494efa072141da59e0  bench/compiler-copy-sites-data/ci-43872738366/gate-log-1.log
+ad9a74c805e476588746d82bf67a6bce4bd8414159734b7b41fff13ff9b23e04  bench/compiler-copy-sites-data/ci-43872738366/jobs-14.json
+12197424fe9194642cae806776e8100498dd8c19d50470ce7784416c0b2f4ab5  bench/compiler-copy-sites-data/ci-43872738366/raw-ci.tar.gz
+1d3710033c86e8062f67bb0bf45313cd43f060ccf7a7b5a50509e07dcddcf4c8  bench/compiler-copy-sites-data/ci-43872738366/raw-manifest.sha256
+3c9930766c6bdc39fe4ceb2925a1d7a3dc718d8a765e3def6831ab5be9c1e3e2  bench/compiler-copy-sites-data/ci-43872738366/run-final.json
+a265d1520d99e604331b08633760c32c6573d2a1c28deaefe19edeb200276565  bench/compiler-copy-sites-data/ci-43872738366/summary.json
+4bce27360e8238a41ec2cfcab8396d92933936f677838dca3c310c2b7299b117  bench/compiler-copy-sites-data/ci-43872738366/witness-log-1.log
 055e09cd1d81034149e13368c81f350993589b9e14d92fb03bcc87f42d428aa1  bench/compiler-copy-sites-data/closed-core-1/command
 75e946c91813d01074089c1c600b05b504ea1691f0cdf50d0837ef3f197086a3  bench/compiler-copy-sites-data/closed-core-1/cwd
 d6603f914422db4427822f6d9372c7c94948c1b2cc75450933f5f34d44ceddee  bench/compiler-copy-sites-data/closed-core-1/end.utc
@@ -317,4 +327,4 @@ c73689e2dea219192e721a2f476aa94903e2c98508acf11b890297182e034147  bench/compiler
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  bench/compiler-copy-sites-data/transaction-4/stderr
 0681df96273a8b35dc037607b51c384405eb96ab02e5495a1191cef2212b8210  bench/compiler-copy-sites-data/transaction-4/stdout
 1a4beefd591c20ea10dcfcc1e84a91e7e3554eb6eb44e73e6a489d91fd284ebf  bench/compiler-copy-sites-data/transaction-4/time
-592ee819784c62173e41b44208d117b412d1abccaace749e7f6f0d155338cbbc  bench/compiler-copy-sites.md
+87ba3448d9ee084e04d6dbacff55c435a438e310ff83957f145ffc707d63e2f9  bench/compiler-copy-sites.md

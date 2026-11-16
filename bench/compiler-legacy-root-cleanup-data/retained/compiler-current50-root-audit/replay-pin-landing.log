@@ -1,0 +1,17 @@
+[main 44718a39] Pin the gated derived-origin replay producer after current50 completion
+ Date: Mon Nov 16 11:23:54 2026 +0000
+ 14 files changed, 474 insertions(+)
+ create mode 100644 bench/compiler-strict-derived.launch-ready.sha256
+ create mode 100644 bench/compiler-strict-derived.producer
+ create mode 100644 bench/compiler-strict-derived.producer-check.log
+ create mode 100644 bench/compiler-strict-derived.producer-evidence.sha256
+ create mode 100644 bench/compiler-strict-derived.producer-evidence/current50-checkpoint.json
+ create mode 100644 bench/compiler-strict-derived.producer-evidence/current50-completion
+ create mode 100644 bench/compiler-strict-derived.producer-evidence/current50-queries.tsv
+ create mode 100644 bench/compiler-strict-derived.producer-evidence/current50-summary.json
+ create mode 100644 bench/compiler-strict-derived.producer-evidence/current50-timed-completion
+ create mode 100644 bench/compiler-strict-derived.producer-evidence/gate.log
+ create mode 100644 bench/compiler-strict-derived.producer-evidence/gate.meta
+ create mode 100644 bench/compiler-strict-derived.producer-evidence/gate.status
+ create mode 100644 bench/compiler-strict-derived.producer-evidence/gate.time
+ create mode 100644 bench/compiler-strict-derived.producer.md

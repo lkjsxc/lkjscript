@@ -1,0 +1,45 @@
+{
+   "bundle_git_prefix" : "bench/compiler-legacy-root-cleanup-data",
+   "cache_bytes_recoverable" : false,
+   "cache_content_archived" : false,
+   "evidence_pin" : "f9e4581ae815ba041510d31421e6b588d66b4059",
+   "exact_seed_recovery_commit" : "72a259e8889cff6e7c4ac712d7940b77343a9f5b",
+   "full_inventory_sha256" : "bda3ce9d26ec494ba97779315bd1d731cb35ecf97c326f80ce6e58d542d69b8e",
+   "future_invocation" : "perl guard.pl --execute-after-root-release EXACT_COMMITTED_BUNDLE_REVISION",
+   "known_ownership_basis" : "root-provided completed command scopes; no independent liveness assertion",
+   "no_private_key_content_read" : true,
+   "no_process_or_fd_observer" : true,
+   "pending_conditions" : [
+      "Root verifies and commits this bundle under bundle_git_prefix.",
+      "Root explicitly releases that exact guard and commit after confirming known owned commands are complete.",
+      "At execution, exact committed bundle, all retained counterparts, historical seed and every live path/type/metadata/hash still match; no extra entries."
+   ],
+   "preserved_paths" : [
+      "/home/coder/workspace/lkjscript/target/gate",
+      "/home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence",
+      "/home/coder/workspace/lkjscript/target/compiler-copy-sites-driver-candidate",
+      "/home/coder/.local/state/lkjscript/store-key",
+      "/tmp/compiler-container-key.m4u6F6"
+   ],
+   "preserved_scope_rule" : "Everything outside the seven literal root_target child paths, including all copy-sites directories, shared target, worktrees, credentials and this inventory bundle, is outside deletion scope.",
+   "proposed_deleted_cache_bytes" : 318819150,
+   "proposed_deleted_cache_files" : 16049,
+   "root_target" : "/home/coder/workspace/lkjscript/target",
+   "scopes" : [
+      "compiler-container-root-audit",
+      "compiler-current50-root-audit",
+      "compiler-generated-source-root-audit",
+      "compiler-origin-container-gate.uQZd6X",
+      "compiler-scale-refusal-root-audit",
+      "compiler-strict-derived-root-audit",
+      "compiler-strict-scoped-root-audit"
+   ],
+   "state" : "prepared-only; no deletion release",
+   "total" : {
+      "allocated_bytes" : 417542144,
+      "directories" : 15,
+      "file_bytes" : 365876759,
+      "files" : 16365
+   },
+   "version" : 1
+}

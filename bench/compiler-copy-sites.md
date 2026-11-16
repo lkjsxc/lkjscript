@@ -225,9 +225,22 @@ with the fixed-point canonical image. Production source tree is
 `25bdb8ff8567b941790d3951c78e896b23e26e8e` and runtime blob
 `2fed59cd33d8a2ab80d562f160648b05f24b8c4c` are unchanged.
 
-Current-source CI remains pending publication and inspection. The preceding
-bench/docs-only head `dc0a325e` passed both CI43864548875 jobs; that result is
-not a CI claim about this source change.
+[CI43872738366](https://github.com/lkjsxc/lkjscript/actions/runs/43872738366),
+at exact head `f9e4581ae815ba041510d31421e6b588d66b4059`, completes successfully
+on attempt 1. Both native gate job `133317833855` and optional witness job
+`133317833494` pass. The native log reports **1,677.588 s (load 1.18 → 2.15)**,
+5,448 fresh requests and zero skips. Bootstrap passes in **90.078 s
+(1.18 → 1.31)**; profiler in **25.139 s (4.77 → 4.83)**; mutation in
+**3.772 s (2.15 → 2.15)**. The compact CI log does not print individual mutant
+outcome counts, so the 104/22/1/1 distribution above remains local-gate evidence.
+The witness reports 276 value/output cases, 344 verdicts and compiler byte
+identity. Both complete logs and final API responses are retained under
+[ci-43872738366](compiler-copy-sites-data/ci-43872738366/).
+
+The exact checked Git seed separately decompresses to the same 32,584,542-byte
+`6cd52308…e7bdacc` canonical image. This is an independently checked Git-seed
+identity, not a digest printed by CI. CI and local timings use different hosts
+and load windows; their difference is not a measured source-change speed ratio.
 
 ## Evidence and next measurement
 
@@ -238,9 +251,13 @@ projected-write coverage and standalone scalar output were corrected by the
 actual selected IR and execution described above; those proposals were not
 retroactively rewritten.
 
-Before cleanup, verify the retained bundle and exact original source/proposal
-contents. The global compiler store key and unrelated query-container operation
-credentials remain outside this evidence and cleanup scope.
+After exact archive/live-inventory comparison, the three native proposal
+folders were removed once: 22 files, 295,550 logical bytes and seven directories,
+in 0.044776318 s (GNU time 0.04 s), load 2.24/1.66/1.99 unchanged. Root verifies
+all 15 retained [cleanup records](compiler-copy-sites-data/native-cleanup/)
+and the three final absences. Other current working evidence remains for its
+own acceptance. The global compiler store key and unrelated query-container
+operation credentials stay outside this evidence and cleanup scope.
 
 A separately committed and released fixed-source protocol must bind the gated
 producer, runtime/library inputs, selected-IR bytes, ordinary control, limits,

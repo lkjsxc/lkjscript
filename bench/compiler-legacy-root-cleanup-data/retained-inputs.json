@@ -1,0 +1,38 @@
+[
+   {
+      "bundle_path" : "retained/compiler-current50-root-audit/continuation-landing.log",
+      "bytes" : 11022,
+      "sha256" : "c47f00a7448ae912080db376db28de0b85767993f37f06b64a06123b85646adb",
+      "source_path" : "/home/coder/workspace/lkjscript/target/compiler-current50-root-audit/continuation-landing.log"
+   },
+   {
+      "bundle_path" : "retained/compiler-current50-root-audit/results-landing.log",
+      "bytes" : 34307,
+      "sha256" : "c4093144d11e8a1db1dbd84368c0060abe8d7c9b00a40e81f1a31a5374046e87",
+      "source_path" : "/home/coder/workspace/lkjscript/target/compiler-current50-root-audit/results-landing.log"
+   },
+   {
+      "bundle_path" : "retained/compiler-current50-root-audit/replay-pin-landing.log",
+      "bytes" : 1270,
+      "sha256" : "203890a43dbc52c40da13177c20ee9ac82e739a3d12ad92c522cad40b4170ab9",
+      "source_path" : "/home/coder/workspace/lkjscript/target/compiler-current50-root-audit/replay-pin-landing.log"
+   },
+   {
+      "bundle_path" : "retained/compiler-origin-container-gate.uQZd6X/owner-repository",
+      "bytes" : 32,
+      "sha256" : "75e946c91813d01074089c1c600b05b504ea1691f0cdf50d0837ef3f197086a3",
+      "source_path" : "/home/coder/workspace/lkjscript/target/compiler-origin-container-gate.uQZd6X/owner-repository"
+   },
+   {
+      "bundle_path" : "retained/compiler-origin-container-gate.uQZd6X/owner-pid",
+      "bytes" : 8,
+      "sha256" : "c6b3676afd763ea41e5b3a51aa2c1a9fe206261d81e7c39d4dd70d21c418debc",
+      "source_path" : "/home/coder/workspace/lkjscript/target/compiler-origin-container-gate.uQZd6X/owner-pid"
+   },
+   {
+      "bundle_path" : "retained/compiler-origin-container-gate.uQZd6X/start-marker",
+      "bytes" : 0,
+      "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source_path" : "/home/coder/workspace/lkjscript/target/compiler-origin-container-gate.uQZd6X/start-marker"
+   }
+]

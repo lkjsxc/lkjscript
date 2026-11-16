@@ -1,0 +1,19 @@
+{
+   "absence_basis" : "Full path census contains only declared regular audit/control files and recognized cache namespaces; no source-edit pending or staging metadata, no symlinks or special entries.",
+   "evidence_pin" : "f9e4581ae815ba041510d31421e6b588d66b4059",
+   "key_observation" : "path string in retained gate.meta only; credential file and contents were not read",
+   "observed_gate_key_path" : "/home/coder/.local/state/lkjscript/store-key",
+   "recovery_limit" : "Cache payload hashes identify what would be discarded; they do not preserve bytes or attest HMAC validity. Rebuilding can repopulate useful cache state but is not an exact-byte recovery claim.",
+   "references" : [
+      {
+         "claim" : "--store is a disposable Directory; --store-key is a separate private 32-byte secret. Key remains outside every read grant.",
+         "path" : "docs/direction.md",
+         "section" : "Authenticated reuse"
+      },
+      {
+         "claim" : "Missing, special and unreadable entries are disposable misses.",
+         "item" : "cache_file",
+         "path" : "src/store.lkj"
+      }
+   ]
+}

@@ -1,0 +1,14 @@
+{
+  "guard_parse_request": "compiler-legacy-root-inventory-guard-parse-20261116-076",
+  "guard_parse_status": 0,
+  "guard_parse_stderr": "target/compiler-legacy-root-inventory-20261116/bundle/guard.pl syntax OK\n",
+  "guard_invoked": false,
+  "package_request": "compiler-legacy-root-inventory-package-20261116-074",
+  "package_status": 0,
+  "package_warning": "Use of uninitialized value $text in print at target/compiler-legacy-root-inventory-20261116/package-inventory.pl line 16.\n",
+  "warning_boundary": "Empty source stderr capture was copied as an empty file. Final exact-byte verification is required before freeze.",
+  "process_or_fd_scan": false,
+  "private_key_read": false,
+  "compiler_executed": false,
+  "deleted": false
+}

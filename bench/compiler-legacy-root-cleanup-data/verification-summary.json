@@ -1,0 +1,119 @@
+{
+   "cross_family_matches" : [
+      {
+         "bytes" : 32,
+         "git_blob" : "e4d75fd59593d94d08a0bfce638bab3dcfa4fbde",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-origin-container-gate.uQZd6X/owner-repository",
+         "reference" : "f9e4581ae815ba041510d31421e6b588d66b4059:bench/compiler-copy-sites-data/build-1/cwd",
+         "sha256" : "75e946c91813d01074089c1c600b05b504ea1691f0cdf50d0837ef3f197086a3"
+      },
+      {
+         "bytes" : 53,
+         "git_blob" : "b665e62c4da937678971df5814f17b42e6b73805",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-container-root-audit/audit.meta",
+         "reference" : "f9e4581ae815ba041510d31421e6b588d66b4059:bench/compiler-query-container-data/root-acceptance/audit.meta",
+         "sha256" : "02a98684c05982cdcc9cfd0bb24ba2684a7cd275853285b82afd3fc4792feb5d"
+      },
+      {
+         "bytes" : 6466,
+         "git_blob" : "e3874c521b64d1e490838f287a8de7f4a24974b5",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-container-root-audit/10000-baseline.census.json",
+         "reference" : "f9e4581ae815ba041510d31421e6b588d66b4059:bench/compiler-query-container-data/root-acceptance/10000-baseline.census.json",
+         "sha256" : "2b0c7ff2e115a2783ef1be8a24408854e3253e3c78eabf598b291d832fd4a79d"
+      },
+      {
+         "bytes" : 23,
+         "git_blob" : "84651537d7cb164ff9082c5c5f4f9d963b1b5070",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-container-root-audit/10000-baseline.time",
+         "reference" : "f9e4581ae815ba041510d31421e6b588d66b4059:bench/compiler-query-container-data/root-acceptance/10000-baseline.time",
+         "sha256" : "93b7886f39ced8bf17e79d83ac312f3a2b9a61792d8348f21660d44dac4cbfc9"
+      },
+      {
+         "bytes" : 6380,
+         "git_blob" : "486a0132155423b57cbb0277ce8dafb7c564fe2d",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-container-root-audit/10000-candidate.census.json",
+         "reference" : "f9e4581ae815ba041510d31421e6b588d66b4059:bench/compiler-query-container-data/root-acceptance/10000-candidate.census.json",
+         "sha256" : "7ad8c45d2d0989938bf491e676e8fe8317c5d0b4560a81eccb7cbad9e9d3037a"
+      },
+      {
+         "bytes" : 22,
+         "git_blob" : "81c0e1173a7f22fe060ad90db68053299269c096",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-container-root-audit/10000-candidate.time",
+         "reference" : "f9e4581ae815ba041510d31421e6b588d66b4059:bench/compiler-query-container-data/root-acceptance/10000-candidate.time",
+         "sha256" : "bce8c1fa2e539c31bc4bda0e8f2679c33f19c975b2a322e485f0ac5c73f4e9bf"
+      },
+      {
+         "bytes" : 6503,
+         "git_blob" : "18c39758ea1bbdf0a9a85655660a293ee3a5af17",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-container-root-audit/100000-baseline.census.json",
+         "reference" : "f9e4581ae815ba041510d31421e6b588d66b4059:bench/compiler-query-container-data/root-acceptance/100000-baseline.census.json",
+         "sha256" : "e689c5f684f8e53bf49364e9155d2091f94a0f3679b9ec0483b23d74e8a96195"
+      },
+      {
+         "bytes" : 23,
+         "git_blob" : "8cc4dd844da784f0cb0c039178ad525c72885e08",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-container-root-audit/100000-baseline.time",
+         "reference" : "f9e4581ae815ba041510d31421e6b588d66b4059:bench/compiler-query-container-data/root-acceptance/100000-baseline.time",
+         "sha256" : "72a822e948f36ab953dbc169fbc0e588780f43d5e89b2577d1d4927b7fb6be81"
+      },
+      {
+         "bytes" : 6411,
+         "git_blob" : "e514dc3a5266bc6fbc2a664e00c0031f2981ae5e",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-container-root-audit/100000-candidate.census.json",
+         "reference" : "f9e4581ae815ba041510d31421e6b588d66b4059:bench/compiler-query-container-data/root-acceptance/100000-candidate.census.json",
+         "sha256" : "4e00a5249b6e16f3d79a16967e4a05066f5d3969c04469a5667d090691e1eba3"
+      },
+      {
+         "bytes" : 22,
+         "git_blob" : "4bfb3fa2709ad81f74facb106d49b12386971eb3",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-container-root-audit/100000-candidate.time",
+         "reference" : "f9e4581ae815ba041510d31421e6b588d66b4059:bench/compiler-query-container-data/root-acceptance/100000-candidate.time",
+         "sha256" : "545a86c3a22f3b0a50a0e838dbb846e4fd0b81ca1168c76279828acf0c70a4d9"
+      },
+      {
+         "bytes" : 652,
+         "git_blob" : "f44fd62b3ddcfd840f2971ecd654758f47940498",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-container-root-audit/census.sha256",
+         "reference" : "f9e4581ae815ba041510d31421e6b588d66b4059:bench/compiler-query-container-data/root-acceptance/census.sha256",
+         "sha256" : "3b701cc93b690e2b6d99f26a6871ed34d070a89661ba781651e60ef4f11a9ed7"
+      }
+   ],
+   "retained_bytes_verified" : 1882030,
+   "retained_files_verified" : 309,
+   "seed_recovery" : {
+      "compressed_bytes" : 6466085,
+      "compressed_sha256" : "0f2b0b0f0d62dc31e625eea80cfb37e317f007f6fcb4a7e8ecf6ef5249d51522",
+      "decoded_bytes" : 32196802,
+      "decoded_sha256" : "34491766f5258dd3af3caf92db6b92dfeba09b405c00a8dd19cd955205c0d377",
+      "exact_live_paths" : [
+         "/home/coder/workspace/lkjscript/target/compiler-origin-container-gate.uQZd6X/canonical",
+         "/home/coder/workspace/lkjscript/target/compiler-origin-container-gate.uQZd6X/seed-1.gz",
+         "/home/coder/workspace/lkjscript/target/compiler-origin-container-gate.uQZd6X/seed-2.gz"
+      ],
+      "executed" : false,
+      "git_blob" : "fe46a492f4c63abd254a649c8ce916a72e8027fd",
+      "reference" : "72a259e8889cff6e7c4ac712d7940b77343a9f5b:seed/lkjscript.gz"
+   },
+   "unmatched_git_object_checks" : [
+      {
+         "git_blob" : "44df475e369ff1e391db1a91a9f00c4cfa5ea5af",
+         "object_present" : false,
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-origin-container-gate.uQZd6X/owner-pid"
+      },
+      {
+         "git_blob" : "7e13e726f2ab0b939a4111e4d7120cef23b5afd1",
+         "object_present" : false,
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-current50-root-audit/continuation-landing.log"
+      },
+      {
+         "git_blob" : "7313df8c20fa934efb58c8b643f5760d39980e5d",
+         "object_present" : false,
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-current50-root-audit/results-landing.log"
+      },
+      {
+         "git_blob" : "eef914f5250a44a0666414e3d74a5395a0e3b3e1",
+         "object_present" : false,
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-current50-root-audit/replay-pin-landing.log"
+      }
+   ]
+}

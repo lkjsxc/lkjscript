@@ -1,0 +1,10 @@
+{
+  "request_id": "compiler-legacy-root-inventory-verify-20261116-061",
+  "exit_code": 255,
+  "phase": "Perl syntax check, before Git or payload reads",
+  "script": "verify-evidence.pl",
+  "script_sha256": "1b4b741d8529afc2d3b501ed37f7afe38b3a44ef04f1796c802b56b79e15a5c8",
+  "stdout_ref": "/home/coder/.local/state/lkjyolo/outputs/pipe-kebkhhbakcepemockeaalbkhhdnbfnbg.stdout",
+  "stderr_ref": "/home/coder/.local/state/lkjyolo/outputs/pipe-kebkhhbakcepemockeaalbkhhdnbfnbg.stderr",
+  "stderr": "Global symbol \"$newline\" requires explicit package name (did you forget to declare \"my $newline\"?) at target/compiler-legacy-root-inventory-20261116/verify-evidence.pl line 27.\nExecution of target/compiler-legacy-root-inventory-20261116/verify-evidence.pl aborted due to compilation errors.\n"
+}
