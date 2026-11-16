@@ -38,67 +38,70 @@ impl Budget {
     }
     fn size(&self) -> usize { self.bytes + self.metadata + reuse::header_size() }
     fn forget(&mut self, name: &str) {
-        if let Some(entry) = self.entries.remove(&name.to_string()) {
-            self.bytes -= entry.bytes;
-            self.metadata -= 16usize + name.len();
-        }
+    if let Some(entry) = self.entries.remove(&name.to_string()) {
+        self.bytes -= entry.bytes;
+        self.metadata -= 24usize + name.len() + entry.producer.len();
     }
+}
     fn remember(&mut self, name: &str, producer: &str, bytes: usize) {
-        self.forget(name);
-        if !self.generations.contains(&producer.to_string()) {
-            self.generations.push(producer.to_string());
-            self.metadata += 8usize + producer.len();
-        }
-        self.metadata += 16usize + name.len();
-        self.bytes += bytes;
-        self.entries.insert(name.to_string(), StoredEntry { producer: producer.to_string(), bytes });
+    self.forget(name);
+    if !self.generations.contains(&producer.to_string()) {
+        self.generations.push(producer.to_string());
+        self.metadata += 8usize + producer.len();
     }
+    self.bytes += bytes;
+    self.metadata += 24usize + name.len() + producer.len();
+    self.entries.insert(name.to_string(), StoredEntry { producer: producer.to_string(), bytes });
+}
     fn growth(&self, name: &str, producer: &str, bytes: usize, current_index: usize) -> Option<usize> {
-        let generation = if self.generations.contains(&producer.to_string()) { 0usize } else { 8usize + producer.len() };
-        let index = self.metadata.checked_add(generation)?.checked_add(16usize)?.checked_add(name.len())?
-            .checked_add(reuse::header_size())?;
-        self.bytes.checked_add(bytes)?.checked_add(index.max(current_index))
-    }
+    let generation = if self.generations.contains(&producer.to_string()) { 0usize } else { 8usize + producer.len() };
+    let index = self.metadata.checked_add(generation)?
+        .checked_add(24usize + name.len() + producer.len())?
+        .checked_add(reuse::header_size())?;
+    self.bytes.checked_add(bytes)?.checked_add(index.max(current_index))
+}
     fn encode(&self) -> Vec<u8> {
-        let mut out = Vec::new();
-        push_word(&mut out, 1usize);
-        push_word(&mut out, self.generations.len());
-        for generation in &self.generations { push_bytes(&mut out, generation.as_bytes()); }
-        push_word(&mut out, self.entries.len());
-        for (name, entry) in &self.entries {
-            push_bytes(&mut out, name.as_bytes());
-            push_word(&mut out, entry.bytes);
-        }
-        out
+    let mut out = Vec::new();
+    push_word(&mut out, 2usize);
+    push_word(&mut out, self.generations.len());
+    for generation in &self.generations { push_bytes(&mut out, generation.as_bytes()); }
+    push_word(&mut out, self.entries.len());
+    for (name, entry) in &self.entries {
+        push_bytes(&mut out, name.as_bytes());
+        push_bytes(&mut out, entry.producer.as_bytes());
+        push_word(&mut out, entry.bytes);
     }
+    out
+}
     fn decode(bytes: &[u8]) -> Option<Self> {
-        let mut reader = Reader::new(bytes);
-        if reader.word()? != 1usize { return None; }
-        let count = reader.word()?;
-        if count > bytes.len() / 72usize { return None; }
-        let mut result = Self::new();
-        for _ in 0usize..count {
-            let producer = reader.text()?;
-            if !hex_identity(&producer) || result.generations.contains(&producer) { return None; }
-            result.metadata = result.metadata.checked_add(8usize + producer.len())?;
-            result.generations.push(producer);
-        }
-        let count = reader.word()?;
-        if count > bytes.len() / 16usize { return None; }
-        for _ in 0usize..count {
-            let name = reader.text()?;
-            let producer = entry_producer(&name)?;
-            let length = reader.word()?;
-            if !result.generations.contains(&producer) || result.entries.contains_key(&name)
-                || length < reuse::header_size() { return None; }
-            result.bytes = result.bytes.checked_add(length)?;
-            result.metadata = result.metadata.checked_add(16usize + name.len())?;
-            result.entries.insert(name, StoredEntry { producer, bytes: length });
-        }
-        result.bytes.checked_add(result.metadata)?.checked_add(reuse::header_size())?;
-        if !reader.done() { return None; }
-        Some(result)
+    let mut reader = Reader::new(bytes);
+    if reader.word()? != 2usize { return None; }
+    let count = reader.word()?;
+    if count > bytes.len() / 72usize { return None; }
+    let mut result = Self::new();
+    for _ in 0usize..count {
+        let producer = reader.text()?;
+        if !hex_identity(&producer) || result.generations.contains(&producer) { return None; }
+        result.metadata = result.metadata.checked_add(8usize + producer.len())?;
+        result.generations.push(producer);
     }
+    let count = reader.word()?;
+    if count > bytes.len() / 24usize { return None; }
+    for _ in 0usize..count {
+        let name = reader.text()?;
+        let producer = reader.text()?;
+        let length = reader.word()?;
+        if !owned_entry(&name, &producer) || !result.generations.contains(&producer)
+            || result.entries.contains_key(&name) || length < reuse::header_size() { return None; }
+        if query_locator_identity(&name).is_some() && length != reuse::header_size() + 104usize { return None; }
+        result.bytes = result.bytes.checked_add(length)?;
+        result.metadata = result.metadata.checked_add(24usize + name.len() + producer.len())?;
+        result.entries.insert(name, StoredEntry { producer, bytes: length });
+    }
+    result.bytes.checked_add(result.metadata)?.checked_add(reuse::header_size())?;
+    if !reader.done() { return None; }
+    Some(result)
+}
 }
 
 pub struct Store {
@@ -150,16 +153,9 @@ impl Store {
         true
     }
     pub fn invalidate_query_snapshot
-(&mut self, identity: &str, selector: &str) {
-        self.discard("semantic-root", identity);
-        self.discard("semantic-latest", selector);
-    }
-    pub fn query_cursor(&self, query: &str, payload: &[u8]) -> Vec<u8> {
-        reuse::seal(&self.producer, &self.secret, "semantic-cursor", query, payload)
-    }
-    pub fn open_query_cursor(&self, query: &str, bytes: &[u8]) -> Option<Vec<u8>> {
-        reuse::authenticate(&self.producer, &self.secret, "semantic-cursor", query, bytes)
-    }
+(&mut self, identity: &str, selector: &str) { invalidate_store_query_snapshot(self, identity, selector); }
+    pub fn query_cursor(&self, query: &str, payload: &[u8]) -> Vec<u8> { seal_query_cursor(&self.producer, &self.secret, query, payload) }
+    pub fn open_query_cursor(&self, query: &str, bytes: &[u8]) -> Option<Vec<u8>> { authenticate_query_cursor(&self.producer, &self.secret, query, bytes) }
     pub fn open(world: &mut World, path: &Option<String>, key: &Option<String>) -> Option<Self> {
         Self::open_bounded(world, path, key, 256usize * 1024usize * 1024usize)
     }
@@ -286,7 +282,7 @@ impl Store {
         let mut present: BTreeSet<String> = BTreeSet::new();
         for bytes in names {
             let Ok(name) = String::from_utf8(bytes) else { continue; };
-            if entry_producer(&name).is_some() {
+            if indexed_name(&name) {
                 let expected = match self.budget.entries.get(&name) { Some(entry) => Some(entry.bytes), None => None };
                 let mut valid = false;
                 if let Some(expected) = expected {
@@ -365,31 +361,9 @@ impl Store {
     }
 
     fn publish(&mut self, namespace: &str, key: &str, bytes: &[u8]) {
-        let name = format!("{namespace}-{}-{key}", self.producer_slot);
-        let valid = { match entry_producer(&name) { Some(producer) => producer == self.producer_slot, None => false } };
-        if !valid || !self.writable() { return; }
-        if self.budget.entries.contains_key(&name) && !self.erase(&name) { return; }
-        loop {
-            let fits = match self.budget.growth(&name, &self.producer_slot, bytes.len(), self.index_bytes) {
-                Some(size) => size <= self.capacity, None => false,
-            };
-            if fits { break; }
-            if !self.evict_oldest() {
-                self.checkpoint();
-                let fits = match self.budget.growth(&name, &self.producer_slot, bytes.len(), self.index_bytes) {
-                    Some(size) => size <= self.capacity, None => false,
-                };
-                if fits { break; }
-                return;
-            }
-        }
-        if self.atomic_publish(&name, bytes) {
-            self.budget.remember(&name, &self.producer_slot, bytes.len());
-            self.dirty = true;
-            self.writes += 1usize;
-            self.retained_bytes = self.budget.bytes + self.index_bytes;
-        }
-    }
+    let name = format!("{namespace}-{}-{key}", self.producer_slot);
+    self.publish_named(&name, bytes);
+}
 
     pub fn put(&mut self, namespace: &str, key: &str, payload: &[u8]) {
         if payload.len() > self.capacity || !self.writable() { return; }
@@ -525,4 +499,269 @@ fn read_envelope(
     // Verify exactly these owned bytes once. Concurrent writers, stale roots,
     // swapped entries, truncation and trailing bytes cannot alter this snapshot.
     root.verify(bytes)
+}
+
+/// Query-only access never exposes a compiler proof namespace or writer.
+pub trait QueryAccess {
+    fn query_producer(&self) -> String;
+    fn query_bound_root(&self) -> Option<String>;
+    fn query_root(&mut self, identity: &str) -> Option<Vec<u8>>;
+    fn query_latest(&mut self, selector: &str) -> Option<Vec<u8>>;
+    fn query_page(&mut self, identity: &str) -> Option<Vec<u8>>;
+    fn query_cursor(&self, question: &str, payload: &[u8]) -> Vec<u8>;
+    fn open_query_cursor(&self, question: &str, bytes: &[u8]) -> Option<Vec<u8>>;
+    fn invalidate_query_snapshot(&mut self, identity: &str, selector: &str);
+}
+
+/// An authenticated historical query capability, never convertible to Store.
+pub struct QueryReader {
+    directory: Directory,
+    secret: Vec<u8>,
+    producer: Vec<u8>,
+    producer_slot: String,
+    identity: String,
+    selector: String,
+    root: String,
+    capacity: usize,
+}
+
+fn query_hex(bytes: &[u8]) -> String {
+    let alphabet = b"0123456789abcdef";
+    let mut result = String::new();
+    for byte in bytes {
+        result.push(alphabet[(*byte >> 4u8) as usize] as char);
+        result.push(alphabet[(*byte & 15u8) as usize] as char);
+    }
+    result
+}
+
+fn query_digest(identity: &str) -> Option<Vec<u8>> {
+    if !hex_identity(identity) { return None; }
+    let mut bytes = Vec::new();
+    for index in 0usize..32usize {
+        let high = identity.as_bytes()[index * 2usize];
+        let low = identity.as_bytes()[index * 2usize + 1usize];
+        let high = if high.is_ascii_digit() { high - b'0' } else { high - b'a' + 10u8 };
+        let low = if low.is_ascii_digit() { low - b'0' } else { low - b'a' + 10u8 };
+        bytes.push(high * 16u8 + low);
+    }
+    Some(bytes)
+}
+
+fn query_locator_name(identity: &str) -> String { format!("semantic-locator-{identity}") }
+
+fn query_locator_identity(name: &str) -> Option<&str> {
+    if !name.starts_with("semantic-locator-") || name.len() != 81usize { return None; }
+    let identity = &name[17usize..];
+    if hex_identity(identity) { Some(identity) } else { None }
+}
+
+fn indexed_name(name: &str) -> bool {
+    if name.starts_with("semantic-locator-") { query_locator_identity(name).is_some() }
+    else { entry_producer(name).is_some() }
+}
+
+fn owned_entry(name: &str, producer: &str) -> bool {
+    if !hex_identity(producer) { return false; }
+    if name.starts_with("semantic-locator-") { return query_locator_identity(name).is_some(); }
+    entry_producer(name).is_some_and(|owner| owner == producer)
+}
+
+fn read_store_secret(world: &mut World, key: &str) -> Option<Vec<u8>> {
+    let (parent, name) = location(key);
+    let mut owner = world.directory(parent).ok()?;
+    let mut file = owner.open(name).ok()?;
+    let mut secret = vec![0u8; 33usize];
+    let mut length = 0usize;
+    while length < secret.len() {
+        let count = file.read(&mut secret[length..]).ok()?;
+        if count == 0usize { break; }
+        length += count;
+    }
+    if length != 32usize { return None; }
+    secret.pop();
+    Some(secret)
+}
+
+fn query_locator_producer() -> [u8; 32] { sha256::digest(b"lkjscript-semantic-locator-2") }
+
+fn read_query_locator(directory: &mut Directory, secret: &[u8], capacity: usize,
+    identity: &str) -> Option<(Vec<u8>, String, String)> {
+    if !hex_identity(identity) { return None; }
+    let mut file = cache_file(directory, &query_locator_name(identity))?;
+    let protocol = query_locator_producer();
+    let limit = capacity.min(reuse::header_size() + 104usize);
+    let payload = read_envelope(&mut file, &protocol, secret, "semantic-locator", identity, limit)?.into_bytes();
+    if payload.len() != 104usize { return None; }
+    let mut reader = Reader::new(&payload);
+    if reader.word() != Some(2usize) { return None; }
+    Some((payload[8usize..40usize].to_vec(), query_hex(&payload[40usize..72usize]),
+        query_hex(&payload[72usize..104usize])))
+}
+
+fn query_cursor_key(producer: &[u8], question: &str) -> String {
+    let mut bytes = b"lkjscript-semantic-cursor-question-2"[..].to_vec();
+    push_bytes(&mut bytes, producer);
+    push_bytes(&mut bytes, question.as_bytes());
+    sha256::hex_digest(&bytes)
+}
+
+fn seal_query_cursor(producer: &[u8], secret: &[u8], question: &str, payload: &[u8]) -> Vec<u8> {
+    let protocol = sha256::digest(b"lkjscript-semantic-cursor-2");
+    reuse::seal(&protocol, secret, "semantic-cursor-2", &query_cursor_key(producer, question), payload)
+}
+
+fn authenticate_query_cursor(producer: &[u8], secret: &[u8], question: &str, bytes: &[u8]) -> Option<Vec<u8>> {
+    let protocol = sha256::digest(b"lkjscript-semantic-cursor-2");
+    reuse::authenticate(&protocol, secret, "semantic-cursor-2", &query_cursor_key(producer, question), bytes)
+}
+
+impl Store {
+    /// The actual executable digest, not the doubly hashed storage slot.
+    pub fn query_producer(&self) -> String { query_hex(&self.producer) }
+    fn publish_named(&mut self, name: &str, bytes: &[u8]) {
+        let valid = owned_entry(name, &self.producer_slot);
+        if !valid || !self.writable() { return; }
+        if self.budget.entries.contains_key(&name.to_string()) && !self.erase(name) { return; }
+        loop {
+            let fits = match self.budget.growth(name, &self.producer_slot, bytes.len(), self.index_bytes) {
+                Some(size) => size <= self.capacity, None => false,
+            };
+            if fits { break; }
+            if !self.evict_oldest() {
+                self.checkpoint();
+                let fits = match self.budget.growth(name, &self.producer_slot, bytes.len(), self.index_bytes) {
+                    Some(size) => size <= self.capacity, None => false,
+                };
+                if fits { break; }
+                return;
+            }
+        }
+        if self.atomic_publish(name, bytes) {
+            self.budget.remember(name, &self.producer_slot, bytes.len());
+            self.dirty = true;
+            self.writes += 1usize;
+            self.retained_bytes = self.budget.bytes + self.index_bytes;
+        }
+    }
+    pub fn publish_query_locator(&mut self, identity: &str, selector: &str, root: &str) -> bool {
+        if !hex_identity(identity) || self.producer.len() != 32usize { return false; }
+        let Some(selector_bytes) = query_digest(selector) else { return false; };
+        let Some(root_bytes) = query_digest(root) else { return false; };
+        let mut payload = Vec::new();
+        push_word(&mut payload, 2usize);
+        payload.extend_from_slice(&self.producer);
+        payload.extend_from_slice(&selector_bytes);
+        payload.extend_from_slice(&root_bytes);
+        let protocol = query_locator_producer();
+        let bytes = reuse::seal(&protocol, &self.secret, "semantic-locator", identity, &payload);
+        self.publish_named(&query_locator_name(identity), &bytes);
+        self.query_locator_retained(identity, selector, root)
+    }
+    pub fn query_locator_retained(&mut self, identity: &str, selector: &str, root: &str) -> bool {
+        let Some((producer, actual_selector, actual_root)) =
+            read_query_locator(&mut self.directory, &self.secret, self.capacity, identity) else { return false; };
+        producer == self.producer && actual_selector == selector && actual_root == root
+    }
+}
+
+impl QueryAccess for Store {
+    fn query_producer(&self) -> String { query_hex(&self.producer) }
+    fn query_bound_root(&self) -> Option<String> { None }
+    fn query_root(&mut self, identity: &str) -> Option<Vec<u8>> {
+        if !hex_identity(identity) { return None; }
+        self.get("semantic-root", identity)
+    }
+    fn query_latest(&mut self, selector: &str) -> Option<Vec<u8>> {
+        if !hex_identity(selector) { return None; }
+        self.get("semantic-latest", selector)
+    }
+    fn query_page(&mut self, identity: &str) -> Option<Vec<u8>> {
+        if !hex_identity(identity) { return None; }
+        self.get("semantic-page", identity)
+    }
+    fn query_cursor(&self, question: &str, payload: &[u8]) -> Vec<u8> {
+        seal_query_cursor(&self.producer, &self.secret, question, payload)
+    }
+    fn open_query_cursor(&self, question: &str, bytes: &[u8]) -> Option<Vec<u8>> {
+        authenticate_query_cursor(&self.producer, &self.secret, question, bytes)
+    }
+    fn invalidate_query_snapshot(&mut self, identity: &str, selector: &str) {
+        invalidate_store_query_snapshot(self, identity, selector)
+    }
+}
+
+impl QueryReader {
+    pub fn open(world: &mut World, path: &Option<String>, key: &Option<String>, capacity: usize,
+        identity: &str, selector: &str) -> Result<Self, String> {
+        if !hex_identity(identity) || !hex_identity(selector) {
+            return Err("E_QUERY_SNAPSHOT expected exact snapshot and selector digests".to_string());
+        }
+        let path = path.as_ref().ok_or("E_QUERY_STORE query needs an authenticated --store and --store-key")?;
+        let key = key.as_ref().ok_or("E_QUERY_STORE query needs an authenticated --store and --store-key")?;
+        let secret = read_store_secret(world, key)
+            .ok_or("E_QUERY_STORE query key must be readable and contain exactly 32 bytes")?;
+        let mut directory = world.directory(path).map_err(|_: i64| -> String {
+            "E_QUERY_STORE query store is unavailable".to_string()
+        })?;
+        let (producer, actual_selector, root) = read_query_locator(&mut directory, &secret, capacity, identity)
+            .ok_or("E_QUERY_SNAPSHOT no authenticated pinned locator; build with --index first")?;
+        if actual_selector != selector {
+            return Err("E_QUERY_SNAPSHOT snapshot belongs to another source selection".to_string());
+        }
+        let producer_slot = sha256::hex_digest(&producer);
+        Ok(Self { directory, secret, producer, producer_slot,
+            identity: identity.to_string(), selector: selector.to_string(), root, capacity })
+    }
+    fn raw(&mut self, namespace: &str, identity: &str, limit: usize) -> Option<Vec<u8>> {
+        if !hex_identity(identity) { return None; }
+        let name = format!("{namespace}-{}-{identity}", self.producer_slot);
+        let mut file = cache_file(&mut self.directory, &name)?;
+        read_envelope(&mut file, &self.producer, &self.secret, namespace, identity,
+            self.capacity.min(limit)).map(|payload| payload.into_bytes())
+    }
+}
+
+impl QueryAccess for QueryReader {
+    fn query_producer(&self) -> String { query_hex(&self.producer) }
+    fn query_bound_root(&self) -> Option<String> { Some(self.root.clone()) }
+    fn query_root(&mut self, identity: &str) -> Option<Vec<u8>> {
+        if identity != self.identity { return None; }
+        // Snapshot v2: version + five length-framed 64-byte digests + fact count.
+        self.raw("semantic-root", identity, reuse::header_size() + 376usize)
+    }
+    fn query_latest(&mut self, _selector: &str) -> Option<Vec<u8>> { None }
+    fn query_page(&mut self, identity: &str) -> Option<Vec<u8>> {
+        self.raw("semantic-page", identity, reuse::header_size() + 32768usize)
+    }
+    fn query_cursor(&self, question: &str, payload: &[u8]) -> Vec<u8> {
+        seal_query_cursor(&self.producer, &self.secret, question, payload)
+    }
+    fn open_query_cursor(&self, question: &str, bytes: &[u8]) -> Option<Vec<u8>> {
+        authenticate_query_cursor(&self.producer, &self.secret, question, bytes)
+    }
+    fn invalidate_query_snapshot(&mut self, identity: &str, selector: &str) {
+        if identity != self.identity || selector != self.selector { return; }
+        let root = format!("semantic-root-{}-{identity}", self.producer_slot);
+        let locator = query_locator_name(identity);
+        let _ = self.directory.remove(&root);
+        let _ = self.directory.remove(&locator);
+        // Never unlink latest without the ordinary writer lock: another build
+        // may replace it after a reader compares its authenticated payload.
+        // These removals only overcharge the signed budget until its next writer.
+    }
+}
+
+fn invalidate_store_query_snapshot(store: &mut Store, identity: &str, selector: &str) {
+    if !store.writable() { return; }
+    // Compare latest while holding the same lock as every ordinary publisher.
+    let latest_matches = store.get("semantic-latest", selector)
+        .is_some_and(|bytes| sha256::hex_digest(&bytes) == identity);
+    store.discard("semantic-root", identity);
+    if latest_matches { store.discard("semantic-latest", selector); }
+    let name = query_locator_name(identity);
+    if hex_identity(identity)
+        && store.budget.entries.get(&name).is_some_and(|entry| entry.producer == store.producer_slot) {
+        let _ = store.erase(&name);
+    }
 }
