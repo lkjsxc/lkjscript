@@ -1,0 +1,77 @@
+{
+   "interpretation" : "One fixed cohort. Source/producer and indexed-output policy differ from historical v2; no causal speed comparison. Recorded source-reference coverage is not an exhaustive semantic proof.",
+   "pins" : {
+      "checked_ir" : "4613bd709ee1d9238dca31e51b25d091abcd21a77f018090fedb8db8032c0fa2",
+      "image_sha256" : "34491766f5258dd3af3caf92db6b92dfeba09b405c00a8dd19cd955205c0d377",
+      "producer" : "34491766f5258dd3af3caf92db6b92dfeba09b405c00a8dd19cd955205c0d377",
+      "snapshot" : "9ff914ad9f4ef15c9bc5c61cb5d0718abcfde00322243a7a52a73f6b08d3534e",
+      "source" : "d01c7eb47d92c7aefc7490b83f9bbc05025f6197871a7f90c51dfcad1576bb2b"
+   },
+   "sets" : {
+      "all" : {
+         "commands" : 50,
+         "coverage" : {
+            "nonempty-recorded" : 50
+         },
+         "protocol_valid" : 50,
+         "semantic_query_ms" : {
+            "max" : 57.565,
+            "median" : 2.298,
+            "min" : 0.714,
+            "n" : 50
+         },
+         "valid_at_or_over_100ms" : 0,
+         "valid_under_100ms" : 50,
+         "wrapper_wall_ns" : {
+            "max" : 60812180,
+            "median" : 4461788,
+            "min" : 2729156,
+            "n" : 50
+         }
+      },
+      "core" : {
+         "commands" : 40,
+         "coverage" : {
+            "nonempty-recorded" : 40
+         },
+         "protocol_valid" : 40,
+         "semantic_query_ms" : {
+            "max" : 57.565,
+            "median" : 2.627,
+            "min" : 0.714,
+            "n" : 40
+         },
+         "valid_at_or_over_100ms" : 0,
+         "valid_under_100ms" : 40,
+         "wrapper_wall_ns" : {
+            "max" : 60812180,
+            "median" : 4810564.5,
+            "min" : 2729156,
+            "n" : 40
+         }
+      },
+      "supplemental" : {
+         "commands" : 10,
+         "coverage" : {
+            "nonempty-recorded" : 10
+         },
+         "protocol_valid" : 10,
+         "semantic_query_ms" : {
+            "max" : 20.192,
+            "median" : 0.958,
+            "min" : 0.81,
+            "n" : 10
+         },
+         "valid_at_or_over_100ms" : 0,
+         "valid_under_100ms" : 10,
+         "wrapper_wall_ns" : {
+            "max" : 22557347,
+            "median" : 3758419,
+            "min" : 2765646,
+            "n" : 10
+         }
+      }
+   },
+   "status" : "all-captured-protocols-valid",
+   "threshold_ns" : 100000000
+}
