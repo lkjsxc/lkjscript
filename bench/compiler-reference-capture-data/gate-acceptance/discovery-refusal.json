@@ -1,0 +1,36 @@
+{
+  "cancelled": false,
+  "capture_status": "complete",
+  "duration_ms": 12,
+  "exit_code": 2,
+  "finished": true,
+  "generation": "pipe-lpdajaailpjbekiljgbpipgiolkjghmp",
+  "request_id": "compiler-reference-capture-gate-source-300",
+  "signal": null,
+  "status": "done",
+  "stderr": "rg: tools/gate.lkj: No such file or directory (os error 2)\n",
+  "stderr_capture_truncated": false,
+  "stderr_ref": {
+    "available": true,
+    "end_offset": 59,
+    "offset": 59,
+    "path": "/home/coder/.local/state/lkjyolo/outputs/pipe-lpdajaailpjbekiljgbpipgiolkjghmp.stderr",
+    "total_bytes": 59
+  },
+  "stderr_truncated": false,
+  "stdout": "tools/check.sh:25:    local details=\"target/gate/details-$label.log\"\ntools/check.sh:52:            printf \"ok %s (%.3f s, load %s -> %s; gate+%.3f..%.3f s)\", label, elapsed_ns / 1000000000, before, after, offset_ns / 1000000000, (offset_ns + elapsed_ns) / 1000000000\ntools/check.sh:85:    sh tests/diagnostics/mutation_no_store.sh \"$check_binary\"\ntools/check.sh:129:    local log=\"target/gate/$1.log\"\ntools/check.sh:185:parallel_step \"$check_suite_jobs\" semantic-structure timeout --kill-after=10s 600s bash tools/closed-semantics.sh \"$check_binary\" structure\ntools/check.sh:198:    END { printf \"ok gate selection: skipped %d case requests on authenticated exact compiler/input closure or stable runner/sealed ELF/checked closure/closed contract equality; reran %d misses/open effects; host suites rerun\\n\", reused, rerun }\ntools/check.sh:201:step ir-mutation timeout --kill-after=10s 600s \"$check_binary\" mutate 1701 128 --jobs \"$check_jobs\" \"${check_reuse[@]}\"\nsrc/test_generators.lkj:6:#[path = \"test_generators/mutation.lkj\"]\nsrc/test_generators.lkj:7:mod mutation;\nsrc/test_generators.lkj:226:) -> Result<Vec<mutation::Seed>, String> {\nsrc/test_generators.lkj:227:    let mut out: Vec<mutation::Seed> = Vec::new();\nsrc/test_generators.lkj:230:        let prepared = mutation::prepare(&path, source)?;\nsrc/test_generators.lkj:236:        let checked = check_mutation(program, store, counts).map_err(\nsrc/test_generators.lkj:242:            let selected = select_mutation(checked, store, counts, inline_limit);\nsrc/test_generators.lkj:243:            emit_mutation(selected.native(), runtime, store, counts).map_err(\nsrc/test_generators.lkj:267:    for row in mutation::lines(text) {\nsrc/test_generators.lkj:394:fn check_mutation(\nsrc/test_generators.lkj:416:fn recheck_mutation(\nsrc/test_generators.lkj:448:fn select_mutation(\nsrc/test_generators.lkj:462:    let result = recheck_mutation(original.checked(), candidate, store, counts);\nsrc/test_generators.lkj:479:fn emit_mutation(\nsrc/test_generators.lkj:536:    let selected = index.ok_or(\"E_ENTRY mutation seed has no probe\")?;\nsrc/test_generators.lkj:537:    let image = emit_mutation(selection.native(), runtime, store, counts).map_err(\nsrc/test_generators.lkj:679:        return Err(\"E_HOST invalid mutation worker summary\".to_string());\nsrc/test_generators.lkj:701:fn mutation_worker(\nsrc/test_generators.lkj:727:        let (base, mutation) = mutation::choose(&seeds, &mut random);\nsrc/test_generators.lkj:731:        let source = mutation::apply(&seeds[base].text, mutation)?;\nsrc/test_generators.lkj:733:            Ok(program) => match check_mutation(program, &mut store, &mut counts) {\nsrc/test_generators.lkj:740:            let selection = select_mutation(checked, &mut store, &mut counts, inline_limit);\nsrc/test_generators.lkj:749:                    \"seed {seed}, index {index}, base {}, mutation {}, category {category}, inline {}\\ninterpreter {} {} line {}\\n{}\\nnative {} {} line {}\\n{}\\n\",\nsrc/test_generators.lkj:751:                    mutation.kind,\nsrc/test_generators.lkj:793:fn mutation_campaign(\nsrc/test_generators.lkj:804:        return mutation_worker(world, seed, count, 1, 0, output, store_path, store_key, inline_limit);\nsrc/test_generators.lkj:850:            .map_err(|errno: i64| problem(\"mutation worker spawn\", errno))?;\nsrc/test_generators.lkj:863:            .map_err(|errno: i64| problem(\"mutation worker wait\", errno))?;\nsrc/test_generators.lkj:868:                \"E_HOST mutation worker status {status}: {errors}\\n\"\nsrc/test_generators.lkj:897:        let selected = select_mutation(reuse::Checked::uncached(check::check_all(checked.program().clone()).unwrap()), &mut store, &mut counts, limit);\nsrc/test_generators.lkj:905:    let prepared = mutation::prepare(\"calls\", source.clone())?;\nsrc/test_generators.lkj:911:        let (_, a) = mutation::choose(&entries, &mut first);\nsrc/test_generators.lkj:912:        let (_, b) = mutation::choose(&entries, &mut second);\nsrc/test_generators.lkj:916:        let changed = mutation::apply(&source, a)?;\nsrc/test_generators.lkj:925:        if mutation::apply(&source, &invalid).is_ok() {\nsrc/test_generators.lkj:933:    if mutation::prepare(\"authority\", authority.to_string()).is_ok() {\nsrc/test_generators.lkj:938:        match mutation::prepare(\"authority\", text) {\nsrc/test_generators.lkj:963:        match mutation::prepare(\"authority\", text) {\nsrc/test_generators.lkj:1208:    // a mutation was already checked before its execution and cannot reject.\nsrc/test_generators.lkj:1380:    let mut output = format!(\"target/mutation-{seed}-{count}\");\nsrc/test_generators.lkj:1403:            _ => return Err(format!(\"E_USAGE unknown mutation option {option}\")),\nsrc/test_generators.lkj:1416:        let counts = mutation_worker(world, seed, count, jobs, index, &output, &store_path, &store_key, inline_limit)?;\nsrc/test_generators.lkj:1426:    let counts = mutation_campaign(world, seed, count, jobs, &output, &store_path, &store_key, inline_limit)?;\nsrc/test_generators.lkj:1445:    world.stdout().write(format!(\"{} mutation: {} mutants, {} rejected, {} values, {} traps, {} did not terminate, {} resources, {} findings; {} mutants/minute ({}.{:03} s, {} workers){reuse}{inlining}\\n\", if counts.findings == 0 { \"ok\" } else { \"FAIL\" }, counts.total, counts.rejected, counts.values, counts.traps, counts.timeout, counts.resources, counts.findings, per_minute, elapsed / 1_000_000_000, elapsed / 1_000_000 % 1000, jobs).as_bytes());\n",
+  "stdout_capture_truncated": false,
+  "stdout_ref": {
+    "available": true,
+    "end_offset": 5471,
+    "offset": 5471,
+    "path": "/home/coder/.local/state/lkjyolo/outputs/pipe-lpdajaailpjbekiljgbpipgiolkjghmp.stdout",
+    "total_bytes": 5471
+  },
+  "stdout_truncated": false,
+  "stream_mode": "pipes",
+  "timed_out": false,
+  "tool": "exec_command",
+  "truncated": false,
+  "workdir": "/home/coder/workspace/lkjscript"
+}

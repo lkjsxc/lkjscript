@@ -1,0 +1,36 @@
+{
+  "cancelled": false,
+  "capture_status": "complete",
+  "duration_ms": 225,
+  "exit_code": 255,
+  "finished": true,
+  "generation": "pipe-kgfpjkmhpcieelnklglnfdcfedngmmam",
+  "request_id": "compiler-reference-capture-gate-audit-corrected-309",
+  "signal": null,
+  "status": "done",
+  "stderr": "current producer/seed differs seed/lkjscript.gz\n",
+  "stderr_capture_truncated": false,
+  "stderr_ref": {
+    "available": true,
+    "end_offset": 48,
+    "offset": 48,
+    "path": "/home/coder/.local/state/lkjyolo/outputs/pipe-kgfpjkmhpcieelnklglnfdcfedngmmam.stderr",
+    "total_bytes": 48
+  },
+  "stderr_truncated": false,
+  "stdout": "Command exited with non-zero status 255\nwall_s=0.18 user_s=0.15 system_s=0.02 maxrss_kib=20664 exit_status=255\n",
+  "stdout_capture_truncated": false,
+  "stdout_ref": {
+    "available": true,
+    "end_offset": 111,
+    "offset": 111,
+    "path": "/home/coder/.local/state/lkjyolo/outputs/pipe-kgfpjkmhpcieelnklglnfdcfedngmmam.stdout",
+    "total_bytes": 111
+  },
+  "stdout_truncated": false,
+  "stream_mode": "pipes",
+  "timed_out": false,
+  "tool": "exec_command",
+  "truncated": false,
+  "workdir": "/home/coder/workspace/lkjscript"
+}
