@@ -87,63 +87,8 @@ fn directory(path: &str) -> String {
 }
 fn file_pairs(before: &semantic::Catalog, before_inputs: &[(String, Vec<u8>)],
     after: &semantic::Catalog, after_inputs: &[(String, Vec<u8>)]) -> Result<BTreeMap<String, String>, String> {
-    let mut files = BTreeMap::new(); let mut reverse = BTreeMap::new();
-    pair(&mut files, &mut reverse, &before.root, &after.root)?;
-    for item in &before.items {
-        if !selectable(&item.kind) { continue; }
-        if let Some(index) = after.by_identity.get(&item.identity) {
-            pair(&mut files, &mut reverse, &item.file, &after.items[*index].file)?;
-        }
-    }
-    // Infer directory correspondence only from the root and stable source
-    // identities. Include-only inputs have no item identity of their own.
-    let mut directories: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for (old_file, new_file) in &files {
-        let old_directory = directory(old_file);
-        let new_directory = directory(new_file);
-        if !directories.contains_key(&old_directory) {
-            directories.insert(old_directory.clone(), Vec::new());
-        }
-        let targets = directories.get_mut(&old_directory).unwrap();
-        if !targets.contains(&new_directory) { targets.push(new_directory); }
-    }
-    let after_index = input_index(after_inputs)?;
-    for (path, _) in before_inputs {
-        if files.contains_key(path) { continue; }
-        if after_index.contains_key(path) {
-            pair(&mut files, &mut reverse, path, path)?;
-            continue;
-        }
-        let mut selected = false;
-        let mut prefix_length = 0usize;
-        let mut target_directory = String::new();
-        let mut ambiguous = false;
-        for (old_directory, targets) in &directories {
-            if path.starts_with(old_directory) && (!selected || old_directory.len() > prefix_length) {
-                selected = true;
-                prefix_length = old_directory.len();
-                ambiguous = targets.len() != 1usize;
-                target_directory = if ambiguous { String::new() } else { targets[0].clone() };
-            }
-        }
-        if selected {
-            if ambiguous {
-                return Err(failure(path, "FILE_AMBIGUOUS", "stable identities imply several counterpart directories for this include-only input"));
-            }
-            let candidate = format!("{}{}", target_directory, &path[prefix_length..]);
-            if after_index.contains_key(&candidate) {
-                pair(&mut files, &mut reverse, path, &candidate)?;
-                continue;
-            }
-        }
-        return Err(failure(path, "FILES", "source file has no stable identity or unambiguous relative-path counterpart"));
-    }
-    for (path, _) in after_inputs {
-        if !reverse.contains_key(path) {
-            return Err(failure(path, "FILES", "a newly loaded file needs an explicit file-creation operation"));
-        }
-    }
-    Ok(files)
+    let allowed: BTreeMap<String, bool> = BTreeMap::new();
+    file_pairs_allowed(before, before_inputs, after, after_inputs, &allowed)
 }
 fn frame(catalog: &semantic::Catalog, selected: &Items, inputs: &[(String, Vec<u8>)],
     index: &BTreeMap<String, usize>, file: &str) -> Result<String, String> {
@@ -204,9 +149,199 @@ fn operation(out: &mut String, count: &mut usize, kind: &str, identity: &str,
 }
 pub fn request(before: &semantic::Catalog, before_inputs: &[(String, Vec<u8>)],
     after: &semantic::Catalog, after_inputs: &[(String, Vec<u8>)]) -> Result<structure_edit::Request, String> {
+    request_with_scope(before, before_inputs, after, after_inputs, "")
+}
+
+struct Projections {
+    by_identity: BTreeMap<String, structure_edit::Projection>,
+    files: BTreeMap<String, bool>,
+}
+
+fn mounted<'a>(catalog: &'a semantic::Catalog, identity: &str) -> Option<&'a semantic::ModuleSource> {
+    for source in &catalog.module_sources { if source.identity == identity { return Some(source); } }
+    None
+}
+
+fn module_base(source: &semantic::ModuleSource) -> Result<String, String> {
+    if source.parent.is_empty() || source.file.ends_with("/mod.lkj") || source.file == "mod.lkj" {
+        return Ok(directory(&source.file));
+    }
+    if !source.file.ends_with(".lkj") {
+        return Err(failure(&source.identity, "MODULE_PATH", "loaded module file has no .lkj suffix"));
+    }
+    Ok(format!("{}/", &source.file[..source.file.len() - 4usize]))
+}
+
+fn relative_projection(path: &str, scope: &str) -> Result<String, String> {
+    let mut end = scope.len();
+    while end > 1usize && scope.as_bytes()[end - 1usize] == b'/' { end -= 1usize; }
+    let scope = &scope[..end];
+    let relative = if scope == "." {
+        if path.starts_with('/') { return Err(failure(path, "MODULE_SCOPE", "absolute projection cannot use a relative transaction scope")); }
+        path.to_string()
+    } else {
+        let prefix = if scope == "/" { "/".to_string() } else { format!("{scope}/") };
+        if !path.starts_with(&prefix) { return Err(failure(path, "MODULE_SCOPE", "new module is outside the transaction scope")); }
+        path[prefix.len()..].to_string()
+    };
+    if relative.is_empty() || !relative.ends_with(".lkj") || relative.as_bytes().contains(&0u8) {
+        return Err(failure(path, "MODULE_PATH", "projection needs a normalized relative .lkj path"));
+    }
+    for component in relative.as_str().split('/') {
+        if component.is_empty() || component == "." || component == ".." {
+            return Err(failure(path, "MODULE_PATH", "projection path contains an empty, current or parent component"));
+        }
+    }
+    Ok(relative)
+}
+
+fn projections(before: &semantic::Catalog, before_inputs: &[(String, Vec<u8>)],
+    after: &semantic::Catalog, after_inputs: &[(String, Vec<u8>)], selected: &Items,
+    scope: &str) -> Result<Projections, String> {
+    let mut result = Projections { by_identity: BTreeMap::new(), files: BTreeMap::new() };
+    if scope.is_empty() { return Ok(result); }
+    let before_index = input_index(before_inputs)?; let after_index = input_index(after_inputs)?;
+    let mut destinations: BTreeMap<String, bool> = BTreeMap::new();
+    for source in &after.module_sources {
+        if mounted(before, &source.identity).is_some() { continue; }
+        if source.parent.is_empty() || before.by_identity.contains_key(&source.identity) {
+            return Err(failure(&source.identity, "MODULE_PROJECTION", "new roots or inline-to-external changes need an explicit source decision"));
+        }
+        let index = selected.by_identity.get(&source.identity)
+            .ok_or_else(|| failure(&source.identity, "MODULE_PROJECTION", "new module declaration is not a separate selected item"))?;
+        let item = &after.items[*index];
+        if item.kind != "module" || item.parent != source.parent {
+            return Err(failure(&source.identity, "MODULE_PROJECTION", "loaded module does not match its selected declaration"));
+        }
+        let old_parent = mounted(before, &source.parent)
+            .ok_or_else(|| failure(&source.identity, "MODULE_PARENT", "projection replay requires an existing loaded module parent"))?;
+        let new_parent = mounted(after, &source.parent)
+            .ok_or_else(|| failure(&source.identity, "MODULE_PARENT", "desired parent has no actual loaded module source"))?;
+        if item.file != new_parent.file {
+            return Err(failure(&source.identity, "MODULE_PARENT", "declaration does not belong to its loaded parent file"));
+        }
+        let name = structure_edit::external_module_name(&item.identity, &item.text)?;
+        let identity = if item.parent == "crate" { name.clone() } else { format!("{}::{name}", item.parent) };
+        if identity != source.identity {
+            return Err(failure(&source.identity, "MODULE_PROJECTION", "external declaration identity does not match loader provenance"));
+        }
+        let old_base = module_base(old_parent)?; let new_base = module_base(new_parent)?;
+        let direct = format!("{new_base}{name}.lkj"); let nested = format!("{new_base}{name}/mod.lkj");
+        let destination = if source.file == direct && source.alternate == nested {
+            format!("{old_base}{name}.lkj")
+        } else if source.file == nested && source.alternate == direct {
+            format!("{old_base}{name}/mod.lkj")
+        } else {
+            return Err(failure(&source.identity, "MODULE_PATH", "loaded file and alternate are not this parent's exact module candidates"));
+        };
+        if before_index.contains_key(&destination) {
+            return Err(failure(&source.identity, "MODULE_EXISTING", "new projection destination is already a loaded source or data input"));
+        }
+        let path = relative_projection(&destination, scope)?;
+        let body = input(after_inputs, &after_index, &source.file)?;
+        String::from_utf8(body.to_vec()).map_err(|_| -> String {
+            failure(&source.identity, "MODULE_SOURCE", "new module source is not UTF-8")
+        })?;
+        if result.files.contains_key(&source.file) || destinations.contains_key(&path) {
+            return Err(failure(&source.identity, "MODULE_DUPLICATE", "projections repeat a source file or destination"));
+        }
+        result.files.insert(source.file.clone(), true); destinations.insert(path.clone(), true);
+        result.by_identity.insert(source.identity.clone(), structure_edit::Projection {
+            identity: source.identity.clone(), parent: source.parent.clone(), path, source: body.to_vec(),
+        });
+    }
+    Ok(result)
+}
+
+fn file_pairs_allowed(before: &semantic::Catalog, before_inputs: &[(String, Vec<u8>)],
+    after: &semantic::Catalog, after_inputs: &[(String, Vec<u8>)],
+    new_files: &BTreeMap<String, bool>) -> Result<BTreeMap<String, String>, String> {
+    let mut files = BTreeMap::new(); let mut reverse = BTreeMap::new();
+    pair(&mut files, &mut reverse, &before.root, &after.root)?;
+    for item in &before.items {
+        if !selectable(&item.kind) { continue; }
+        if let Some(index) = after.by_identity.get(&item.identity) {
+            pair(&mut files, &mut reverse, &item.file, &after.items[*index].file)?;
+        }
+    }
+    for old_source in &before.module_sources {
+        if let Some(new_source) = mounted(after, &old_source.identity) {
+            pair(&mut files, &mut reverse, &old_source.file, &new_source.file)?;
+        }
+    }
+    // Infer directory correspondence only from the root and stable source
+    // identities. Include-only inputs have no item identity of their own.
+    let mut directories: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for (old_file, new_file) in &files {
+        let old_directory = directory(old_file);
+        let new_directory = directory(new_file);
+        if !directories.contains_key(&old_directory) {
+            directories.insert(old_directory.clone(), Vec::new());
+        }
+        let targets = directories.get_mut(&old_directory).unwrap();
+        if !targets.contains(&new_directory) { targets.push(new_directory); }
+    }
+    let after_index = input_index(after_inputs)?;
+    for (path, _) in before_inputs {
+        if files.contains_key(path) { continue; }
+        if after_index.contains_key(path) {
+            pair(&mut files, &mut reverse, path, path)?;
+            continue;
+        }
+        let mut selected = false;
+        let mut prefix_length = 0usize;
+        let mut target_directory = String::new();
+        let mut ambiguous = false;
+        for (old_directory, targets) in &directories {
+            if path.starts_with(old_directory) && (!selected || old_directory.len() > prefix_length) {
+                selected = true;
+                prefix_length = old_directory.len();
+                ambiguous = targets.len() != 1usize;
+                target_directory = if ambiguous { String::new() } else { targets[0].clone() };
+            }
+        }
+        if selected {
+            if ambiguous {
+                return Err(failure(path, "FILE_AMBIGUOUS", "stable identities imply several counterpart directories for this include-only input"));
+            }
+            let candidate = format!("{}{}", target_directory, &path[prefix_length..]);
+            if after_index.contains_key(&candidate) {
+                pair(&mut files, &mut reverse, path, &candidate)?;
+                continue;
+            }
+        }
+        return Err(failure(path, "FILES", "source file has no stable identity or unambiguous relative-path counterpart"));
+    }
+    for (path, _) in after_inputs {
+        if !reverse.contains_key(path) && !new_files.contains_key(path) {
+            return Err(failure(path, "FILES", "a newly loaded file needs an explicit file-creation operation"));
+        }
+    }
+    for (path, _) in new_files {
+        if reverse.contains_key(path) {
+            return Err(failure(path, "MODULE_EXISTING", "a projected module body already has an existing input counterpart"));
+        }
+    }
+    Ok(files)
+}
+
+fn projected_operation(out: &mut String, count: &mut usize, item: &semantic::Item,
+    projection: &structure_edit::Projection, anchor: &str) -> Result<(), String> {
+    let source = String::from_utf8(projection.source.clone())
+        .map_err(|_| -> String { failure(&item.identity, "MODULE_SOURCE", "projection is not UTF-8") })?;
+    if *count != 0usize { out.push(','); }
+    out.push_str(&format!("{{\"op\":\"add-item\",\"id\":{},\"source\":{},\"projection\":{{\"path\":{},\"source\":{}}}",
+        semantic::quote(&item.parent), semantic::quote(&item.text), semantic::quote(&projection.path), semantic::quote(&source)));
+    if !anchor.is_empty() { out.push_str(&format!(",\"before\":{}", semantic::quote(anchor))); }
+    out.push('}'); *count += 1usize; Ok(())
+}
+
+pub fn request_with_scope(before: &semantic::Catalog, before_inputs: &[(String, Vec<u8>)],
+    after: &semantic::Catalog, after_inputs: &[(String, Vec<u8>)], scope: &str) -> Result<structure_edit::Request, String> {
     let old = items(before)?; let new = items(after)?;
     let before_index = input_index(before_inputs)?; let after_index = input_index(after_inputs)?;
-    let pairs = file_pairs(before, before_inputs, after, after_inputs)?;
+    let projected = projections(before, before_inputs, after, after_inputs, &new, scope)?;
+    let pairs = file_pairs_allowed(before, before_inputs, after, after_inputs, &projected.files)?;
     for (before_file, after_file) in &pairs {
         let old_bytes = input(before_inputs, &before_index, before_file)?;
         let new_bytes = input(after_inputs, &after_index, after_file)?;
@@ -240,11 +375,13 @@ pub fn request(before: &semantic::Catalog, before_inputs: &[(String, Vec<u8>)],
             operation(&mut encoded, &mut count, "remove-item", identity, "", &item.text_digest, "");
         }
     }
-    for (_, indices) in &new.by_file {
+    for (file, indices) in &new.by_file {
+        if projected.files.contains_key(file) { continue; }
         for (position, index) in indices.iter().enumerate() {
             let item = &after.items[*index];
             if old.by_identity.contains_key(&item.identity) { continue; }
-            if item.parent != "crate" && !before.by_identity.contains_key(&item.parent) {
+            if item.parent != "crate" && !before.by_identity.contains_key(&item.parent)
+                && mounted(before, &item.parent).is_none() {
                 return Err(failure(&item.identity, "PARENT", "added item has no existing source module parent"));
             }
             let mut anchor = String::new();
@@ -254,7 +391,11 @@ pub fn request(before: &semantic::Catalog, before_inputs: &[(String, Vec<u8>)],
                     anchor = following.identity.clone(); break;
                 }
             }
-            operation(&mut encoded, &mut count, "add-item", &item.parent, &item.text, "", &anchor);
+            if let Some(projection) = projected.by_identity.get(&item.identity) {
+                projected_operation(&mut encoded, &mut count, item, projection, &anchor)?;
+            } else {
+                operation(&mut encoded, &mut count, "add-item", &item.parent, &item.text, "", &anchor);
+            }
         }
     }
     if count == 0usize {

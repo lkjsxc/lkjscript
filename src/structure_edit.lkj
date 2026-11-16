@@ -38,8 +38,19 @@ pub struct Change {
     pub before: PreviousText,
     pub after: Vec<u8>,
 }
+
+/// A proposed external-module projection. Only the driver may bind its path
+/// to an absent source change after pinning loader and directory evidence.
+#[derive(Clone)]
+pub struct Projection {
+    pub identity: String,
+    pub parent: String,
+    pub path: String,
+    pub source: Vec<u8>,
+}
 pub struct Draft {
     pub changes: Vec<Change>,
+    pub projections: Vec<Projection>,
     pub identities: Vec<String>,
     pub patches: Vec<Patch>,
 }
@@ -76,9 +87,12 @@ pub fn parse(bytes: &[u8]) -> Result<Request, String> {
         let fields = operation.as_object().ok_or_else(|| error("transaction", "REQUEST", "operation must be an object"))?;
         let kind = string(operation, "op", true)?;
         for (key, _) in fields {
+            if key == "projection" && kind != "add-item" {
+                return Err(error("transaction", "REQUEST", "projection is valid only on add-item"));
+            }
             if key != "op" && key != "id" && key != "source" && key != "name"
                 && key != "parent" && key != "expect"
-                && !(key == "before" && kind == "add-item")
+                && !((key == "before" || key == "projection") && kind == "add-item")
                 && matches!(kind.as_str(), "replace-body" | "replace-item" | "add-item" | "remove-item" | "rename" | "move") {
                 return Err(error("transaction", "REQUEST", &format!("unknown operation field {key}")));
             }
@@ -137,6 +151,20 @@ pub(crate) fn insertion(catalog: &semantic::Catalog,
         let bytes = input(inputs, &catalog.root)?;
         return Ok((catalog.root.clone(), bytes.len()));
     }
+    // Crate roots and external modules have actual selected-file provenance,
+    // including empty modules. A positive include read never enters this list.
+    for mounted in &catalog.module_sources {
+        if mounted.identity == identity {
+            if !mounted.parent.is_empty() {
+                let target = item(catalog, identity)?;
+                if target.kind != "module" {
+                    return Err(error(identity, "PARENT", "items can be inserted only in a module"));
+                }
+            }
+            let bytes = input(inputs, &mounted.file)?;
+            return Ok((mounted.file.clone(), bytes.len()));
+        }
+    }
     let target = item(catalog, identity)?;
     if target.kind != "module" {
         return Err(error(identity, "PARENT", "items can be inserted only in a module"));
@@ -146,28 +174,14 @@ pub(crate) fn insertion(catalog: &semantic::Catalog,
     let tokens = syntax::semantic_tokens(&text).map_err(|problem| error(identity, "SYNTAX", &problem.message))?;
     let mut last = None;
     for token in &tokens {
-        if target.start <= token.span.start && token.span.end <= target.end && token.text == "}" {
+        if target.start <= token.span.start && token.span.end <= target.end
+            && token.kind == 6u8 && token.text == "}" {
             last = Some(token.span.start);
         }
     }
     match last {
         Some(at) => Ok((target.file.clone(), at)),
-        None => {
-            // External modules have no brace in the declaring file. The loaded
-            // children, rather than a guessed file-system path, identify their file.
-            let mut path = String::new();
-            for child in &catalog.items {
-                if child.parent == identity && child.file != target.file {
-                    if path.is_empty() { path = child.file.clone(); }
-                    else if path != child.file { return Err(error(identity, "PARENT", "module spans multiple files; choose a child module")); }
-                }
-            }
-            if path.is_empty() {
-                return Err(error(identity, "PARENT", "empty external module needs a source-file identity"));
-            }
-            let bytes = input(inputs, &path)?;
-            Ok((path, bytes.len()))
-        }
+        None => Err(error(identity, "PARENT", "external module has no actual loader-selected source")),
     }
 }
 fn finish(inputs: &[(String, Vec<u8>)], patches: Vec<Patch>) -> Result<Draft, String> {
@@ -218,7 +232,7 @@ fn finish(inputs: &[(String, Vec<u8>)], patches: Vec<Patch>) -> Result<Draft, St
     }
     let mut names = Vec::new();
     for identity in identities { names.push(identity); }
-    Ok(Draft { changes, identities: names, patches: all })
+    Ok(Draft { changes, projections: Vec::new(), identities: names, patches: all })
 }
 pub(crate) fn one_item(identity: &str, source: &str, body: bool) -> Result<(), String> {
     let wrapped = if body { format!("fn __lkjscript_transaction_body() {source}") }
@@ -235,15 +249,115 @@ pub(crate) fn one_item(identity: &str, source: &str, body: bool) -> Result<(), S
     }
     Ok(())
 }
+
+pub(crate) fn external_module_name(identity: &str, source: &str) -> Result<String, String> {
+    let prefix = "mod __lkjscript_transaction_scope { ";
+    let parsed = syntax::parse(&format!("{prefix}{source} }}"))
+        .map_err(|problem| error(identity, "SYNTAX", &problem.message))?;
+    if parsed.items.len() != 1usize {
+        return Err(error(identity, "PROJECTION", "projection needs exactly one external module declaration"));
+    }
+    let crate::ast::Item::Module(wrapper) = parsed.items[0usize] else {
+        return Err(error(identity, "PROJECTION", "projection needs an external module"));
+    };
+    let children = &parsed.modules[wrapper].items;
+    if children.len() != 1usize {
+        return Err(error(identity, "PROJECTION", "projection needs exactly one enabled external module"));
+    }
+    let crate::ast::Item::Module(index) = children[0usize] else {
+        return Err(error(identity, "PROJECTION", "projection source is not a module declaration"));
+    };
+    let module = &parsed.modules[index];
+    if !module.external || module.span.start < prefix.len() {
+        return Err(error(identity, "PROJECTION", "projection needs an external mod declaration, not an inline body"));
+    }
+    let tokens = syntax::semantic_tokens(source).map_err(|problem| error(identity, "SYNTAX", &problem.message))?;
+    let mut at = 0usize;
+    while at < tokens.len() && tokens[at].kind == 6u8 && tokens[at].text == "#" {
+        at += 1usize;
+        if at >= tokens.len() || tokens[at].kind != 6u8 || tokens[at].text != "[" {
+            return Err(error(identity, "PROJECTION", "only outer declaration attributes may precede the module"));
+        }
+        at += 1usize;
+        let mut depth = 1usize;
+        while at < tokens.len() && depth != 0usize {
+            if tokens[at].kind == 6u8 {
+                if tokens[at].text == "[" { depth += 1usize; }
+                else if tokens[at].text == "]" { depth -= 1usize; }
+            }
+            at += 1usize;
+        }
+        if depth != 0usize { return Err(error(identity, "PROJECTION", "unclosed declaration attribute")); }
+    }
+    if at < tokens.len() && tokens[at].kind == 0u8 && tokens[at].text == "pub" {
+        at += 1usize;
+        if at < tokens.len() && tokens[at].kind == 6u8 && tokens[at].text == "(" {
+            at += 1usize;
+            while at < tokens.len() && !(tokens[at].kind == 6u8 && tokens[at].text == ")") { at += 1usize; }
+            if at == tokens.len() { return Err(error(identity, "PROJECTION", "unclosed module visibility")); }
+            at += 1usize;
+        }
+    }
+    if tokens.len() != at + 3usize || tokens[at].kind != 0u8 || tokens[at].text != "mod"
+        || tokens[at + 1usize].kind != 0u8 || tokens[at + 1usize].text != module.name
+        || tokens[at + 2usize].kind != 6u8 || tokens[at + 2usize].text != ";"
+        || tokens[at].span.start + prefix.len() != module.span.start
+        || tokens[at + 2usize].span.end + prefix.len() != module.span.end {
+        return Err(error(identity, "PROJECTION", "projection source must contain only its module declaration"));
+    }
+    Ok(module.name.clone())
+}
+
+fn projection(catalog: &semantic::Catalog, operation: &Operation) -> Result<Option<Projection>, String> {
+    let value = json::parse(operation.data.as_bytes()).map_err(|problem| error(&operation.identity, "REQUEST", &problem.message))?;
+    let Some(projected) = value.get("projection") else { return Ok(None); };
+    let fields = projected.as_object().ok_or_else(|| error(&operation.identity, "PROJECTION", "projection must be an object"))?;
+    for (key, _) in fields {
+        if key != "path" && key != "source" {
+            return Err(error(&operation.identity, "PROJECTION", &format!("unknown projection field {key}")));
+        }
+    }
+    let path = string(projected, "path", true)?;
+    if path.is_empty() || !path.ends_with(".lkj") || path.as_bytes().contains(&0u8) {
+        return Err(error(&operation.identity, "PROJECTION", "projection needs a relative .lkj source path"));
+    }
+    for part in path.as_str().split('/') {
+        if part.is_empty() || part == "." || part == ".." {
+            return Err(error(&operation.identity, "PROJECTION", "projection path must be relative and normalized"));
+        }
+    }
+    let name = external_module_name(&operation.identity, &operation.source)?;
+    let identity = if operation.identity == "crate" { name }
+        else { format!("{}::{name}", operation.identity) };
+    if catalog.by_identity.contains_key(&identity) {
+        return Err(error(&identity, "NAME", "projected module identity already exists"));
+    }
+    for module in &catalog.module_sources {
+        if module.identity == identity {
+            return Err(error(&identity, "NAME", "projected module identity already exists"));
+        }
+    }
+    Ok(Some(Projection { identity, parent: operation.identity.clone(), path,
+        source: string(projected, "source", true)?.as_bytes().to_vec() }))
+}
 pub fn plan(catalog: &semantic::Catalog,
     inputs: &[(String, Vec<u8>)], request: &Request) -> Result<Draft, String> {
     if !request.snapshot.is_empty() && request.snapshot != catalog.input_digest {
         return Err(error("transaction", "STALE", "expected source snapshot differs"));
     }
     let mut patches = Vec::new();
+    let mut projections = Vec::new();
+    let mut projected_identities: BTreeSet<String> = BTreeSet::new();
+    let mut projected_paths: BTreeSet<String> = BTreeSet::new();
     for operation in &request.operations {
         if operation.kind == "add-item" {
-            one_item(&operation.identity, &operation.source, false)?;
+            if let Some(projected) = projection(catalog, operation)? {
+                if !projected_identities.insert(projected.identity.clone())
+                    || !projected_paths.insert(projected.path.clone()) {
+                    return Err(error(&projected.identity, "PROJECTION", "duplicate projected identity or path"));
+                }
+                projections.push(projected);
+            } else { one_item(&operation.identity, &operation.source, false)?; }
             let (file, at) = add_location(catalog, inputs, operation)?;
             patch(&mut patches, &operation.identity, &file, at, at, &format!("\n{}\n", operation.source));
             continue;
@@ -286,12 +400,20 @@ pub fn plan(catalog: &semantic::Catalog,
             _ => return Err(error(&operation.identity, "OPERATION", &format!("unsupported structural operation {}", operation.kind))),
         }
     }
-    finish(inputs, patches)
+    let mut draft = finish(inputs, patches)?;
+    for projected in &projections { draft.identities.push(projected.identity.clone()); }
+    draft.projections = projections;
+    Ok(draft)
 }
 pub fn report(draft: &Draft) -> String {
     let mut out = String::new();
     for identity in &draft.identities {
         out.push_str(&format!("{} level=source-claim operation-target\n", semantic::quote(identity)));
+    }
+    for projected in &draft.projections {
+        out.push_str(&format!("{} level=source-claim projection parent={} path={} bytes={} source={}\n",
+            semantic::quote(&projected.identity), semantic::quote(&projected.parent),
+            semantic::quote(&projected.path), projected.source.len(), sha256::hex_digest(&projected.source)));
     }
     for change in &draft.changes {
         let before = match &change.before {

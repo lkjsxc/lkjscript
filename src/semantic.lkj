@@ -36,8 +36,18 @@ pub struct Reference {
     pub start: usize,
     pub end: usize,
 }
+
+/// Source-loader provenance, never inferred from arbitrary positive file reads.
+#[derive(Clone)]
+pub struct ModuleSource {
+    pub identity: String,
+    pub parent: String,
+    pub file: String,
+    pub alternate: String,
+}
 pub struct Catalog {
     pub root: String,
+    pub module_sources: Vec<ModuleSource>,
     /// Whether reference discovery was requested; false is declarations-only.
     pub references_recorded: bool,
     pub items: Vec<Item>,
@@ -433,12 +443,29 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         files.push(SourceText { path: file.path.clone(), digest: sha256::hex_digest(raw), text, tokens });
     }
     let mut result = Catalog {
-        root: program.files[0usize].path.clone(), references_recorded: include_references,
+        root: program.files[0usize].path.clone(), module_sources: Vec::new(), references_recorded: include_references,
         items: Vec::new(), by_identity: BTreeMap::new(), references: Vec::new(), unresolved: Vec::new(),
         expression_types: BTreeMap::new(),
         function_ids: Vec::new(), instance_ids: Vec::new(), instance_sources: Vec::new(),
         implementations: Vec::new(), instance_arguments: Vec::new(), input_digest: sha256::hex_digest(&input_identity),
     };
+    let mut mounted: BTreeSet<String> = BTreeSet::new();
+    for loaded in &program.loaded_modules {
+        if loaded.scope >= program.scopes.len() || loaded.file >= program.files.len() {
+            return Err("E_IDENTITY invalid loaded module source".to_string());
+        }
+        let scope = &program.scopes[loaded.scope];
+        let identity = root_parent(&scope.path);
+        if !mounted.insert(identity.clone()) {
+            return Err(format!("E_IDENTITY duplicate loaded module {}", quote(&identity)));
+        }
+        let parent = match scope.parent {
+            Some(parent) => root_parent(&program.scopes[parent].path),
+            None => String::new(),
+        };
+        result.module_sources.push(ModuleSource { identity, parent,
+            file: program.files[loaded.file].path.clone(), alternate: loaded.alternate.clone() });
+    }
     for index in 0usize..program.functions.len() { result.function_ids.push(function_identity(program, index)); }
     for (index, value) in program.functions.iter().enumerate() {
         let identity = result.function_ids[index].clone();

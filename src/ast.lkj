@@ -444,6 +444,14 @@ pub enum Visibility {
     Public,
 }
 
+
+/// Actual loader-selected source for a module or crate root; includes are not modules.
+#[derive(Clone)]
+pub struct LoadedModule {
+    pub scope: ModuleId,
+    pub file: FileId,
+    pub alternate: String,
+}
 #[derive(Clone)]
 pub struct SourceFile {
     pub path: String,
@@ -467,6 +475,7 @@ pub struct Declaration {
 #[derive(Clone, Default)]
 pub struct Program {
     pub files: Vec<SourceFile>,
+    pub loaded_modules: Vec<LoadedModule>,
     pub scopes: Vec<ModuleScope>,
     pub declarations: Vec<Declaration>,
     pub resolved: bool,

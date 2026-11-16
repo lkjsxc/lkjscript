@@ -283,20 +283,20 @@ pub fn load_report<F: FnMut(&str) -> std::result::Result<Option<Vec<u8>>, String
         parent: None,
         crate_root: 0,
     });
-    let mut pending: Vec<(String, ModuleId, Option<usize>)> = Vec::new();
+    let mut pending: Vec<(String, ModuleId, Option<usize>, String)> = Vec::new();
     if let Some(path) = standard {
         program.scopes.push(ModuleScope {
             path: "$std".to_string(),
             parent: None,
             crate_root: 1,
         });
-        pending.push((path.to_string(), 1, None));
+        pending.push((path.to_string(), 1, None, String::new()));
     }
-    pending.push((root.to_string(), 0, None));
+    pending.push((root.to_string(), 0, None, String::new()));
     let mut directories: BTreeMap<ModuleId, String> = BTreeMap::new();
     let mut loaded: BTreeMap<ModuleId, String> = BTreeMap::new();
     let mut next_module = 0;
-    while let Some((path, scope, owner)) = pending.pop() {
+    while let Some((path, scope, owner, alternate)) = pending.pop() {
         let text = match read_source(read, &path, Span::default()) {
             Ok(Some(text)) => text,
             result => {
@@ -351,6 +351,7 @@ pub fn load_report<F: FnMut(&str) -> std::result::Result<Option<Vec<u8>>, String
             path: path.clone(),
             crate_root: program.scopes[scope].crate_root,
         });
+        program.loaded_modules.push(LoadedModule { scope, file, alternate });
         let base = if program.scopes[scope].parent.is_none() || stem(&path) == "mod" {
             parent(&path).to_string()
         } else {
@@ -501,7 +502,7 @@ pub fn load_report<F: FnMut(&str) -> std::result::Result<Option<Vec<u8>>, String
                     continue;
                 }
             };
-            let selected = match (first, second) {
+            let (selected, alternate) = match (first, second) {
                 (Some(_), Some(_)) => {
                     let error = load_error(
                         &program,
@@ -518,8 +519,8 @@ pub fn load_report<F: FnMut(&str) -> std::result::Result<Option<Vec<u8>>, String
                     diagnostics.push(error);
                     continue;
                 }
-                (Some(_), None) => direct,
-                (None, Some(_)) => nested,
+                (Some(_), None) => (direct, nested),
+                (None, Some(_)) => (nested, direct),
                 (None, None) => {
                     let error = load_error(
                         &program,
@@ -537,7 +538,7 @@ pub fn load_report<F: FnMut(&str) -> std::result::Result<Option<Vec<u8>>, String
                     continue;
                 }
             };
-            pending.push((selected, module.scope, Some(index)));
+            pending.push((selected, module.scope, Some(index), alternate));
         }
     }
     if !diagnostics.is_empty() {
