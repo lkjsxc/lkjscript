@@ -1,0 +1,25 @@
+{
+  "qualification": "Recorded from the exact submitted gateway command; the original argv.json is the equivalent cwd-relative logical script argument.",
+  "argv": [
+    "/usr/bin/perl",
+    "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/control/prepare.pl"
+  ],
+  "wrapper_argv": [
+    "/usr/bin/time",
+    "-o",
+    "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/preparation/time.tsv",
+    "-f",
+    "elapsed_seconds\t%e\nuser_seconds\t%U\nsystem_seconds\t%S\nmax_rss_kib\t%M\nexit\t%x",
+    "/usr/bin/timeout",
+    "--signal=TERM",
+    "--kill-after=10s",
+    "900s",
+    "/usr/bin/prlimit",
+    "--as=4294967296",
+    "--",
+    "/usr/bin/perl",
+    "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/control/prepare.pl"
+  ],
+  "cwd": "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1",
+  "gateway_request": "compiler-fingerprint-golden-materialize-1468"
+}

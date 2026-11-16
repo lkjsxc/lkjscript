@@ -1,0 +1,186 @@
+{
+  "schema": "compiler-fingerprint-index-fixture-proposal-1",
+  "status": "PREPARATION_ONLY_GOLDENS_PENDING",
+  "original_function_file_sha256": "760485a5a12d97ce320ba9113797370df584c154084ee4a1f9689da28c7d1127",
+  "baseline_producer_sha256": "b01eabfa60015ad93d86dd991f5f64a59754811062b578e12737e2feb4e0d5db",
+  "rule": "Build/resolve the named source fixture once; variants mutate only its fingerprint input table or stated AST metadata. No golden values have been generated. Retain full fixture bytes, canonical mutation descriptions and complete shape/bodies vectors from the unchanged function before adopting the replacement.",
+  "fixtures": [
+    {
+      "id": "multi",
+      "root": "src/main.lkj",
+      "library": null,
+      "inputs": [
+        {
+          "path": "src/main.lkj",
+          "utf8": "mod alpha;\nmod empty;\nmod beta;\ntrait Contract { fn declared(&self) -> i64; }\nfn first(value:i64)->i64 { value + 1i64 }\nfn second(value:i64)->i64 { value + 2i64 }\npub fn main()->i64 { first(1i64)+second(2i64)+alpha::left()+beta::right() }\n"
+        },
+        {
+          "path": "src/beta.lkj",
+          "utf8": "pub fn right()->i64 { 26i64 }\n"
+        },
+        {
+          "path": "src/empty.lkj",
+          "utf8": "pub const FLAG: bool = true;\n"
+        },
+        {
+          "path": "src/alpha.lkj",
+          "utf8": "pub fn left()->i64 { 10i64 }\n"
+        },
+        {
+          "path": "unused-note.bin",
+          "hex": "00ff417c"
+        },
+        {
+          "path": "unused-empty.bin",
+          "hex": ""
+        }
+      ]
+    },
+    {
+      "id": "includes",
+      "root": "inc/main.lkj",
+      "library": null,
+      "inputs": [
+        {
+          "path": "inc/main.lkj",
+          "utf8": "mod child;\npub fn main()->u64 { include_bytes!(\"child.lkj\")[0] as u64 + include_bytes!(\"data.bin\")[0] as u64 + include_str!(\"message.txt\").len() as u64 }\n"
+        },
+        {
+          "path": "inc/child.lkj",
+          "utf8": "pub fn answer()->i64 { 40i64 }\n"
+        },
+        {
+          "path": "inc/data.bin",
+          "hex": "00ff0a03"
+        },
+        {
+          "path": "inc/message.txt",
+          "utf8": "π\n"
+        }
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "multi-base",
+      "fixture": "multi",
+      "mutation": "none",
+      "expected": "Some; complete fixed shape and body vector"
+    },
+    {
+      "id": "multi-reversed-functions",
+      "fixture": "multi",
+      "mutation": "Reverse source.functions only after resolving. This is a fingerprint-coordinate fixture, not a claim of admitted reordered AST semantics.",
+      "expected": "Some; fixed golden retains original vector positions of the mutated fixture"
+    },
+    {
+      "id": "duplicate-parsed-later",
+      "fixture": "multi",
+      "mutation": "Append a second src/alpha.lkj input with UTF-8 bytes 'ignored later duplicate\\n'; keep resolved AST.",
+      "expected": "Exactly multi-base"
+    },
+    {
+      "id": "duplicate-parsed-first",
+      "fixture": "multi",
+      "mutation": "Prepend src/alpha.lkj with the same-length original source except 10i64 -> 11i64; keep resolved AST.",
+      "expected": "Same shape as multi-base; only alpha::left body hash changes"
+    },
+    {
+      "id": "missing-bodyless-source",
+      "fixture": "multi",
+      "mutation": "Remove src/empty.lkj from fingerprint inputs; keep resolved AST.",
+      "expected": "None, despite no function body in this file"
+    },
+    {
+      "id": "duplicate-first-truncated",
+      "fixture": "multi",
+      "mutation": "Prepend an empty src/alpha.lkj input before the valid original; keep resolved AST.",
+      "expected": "None; later valid duplicate must not rescue first match"
+    },
+    {
+      "id": "ignored-invalid-function-file",
+      "fixture": "multi",
+      "mutation": "For function first set span.file=source.files.len() and body=Some(source.blocks.len()); do not dereference the invalid body.",
+      "expected": "Some; first body fingerprint remains empty, exact full golden records metadata and unmasked source bytes"
+    },
+    {
+      "id": "reversed-body-bounds",
+      "fixture": "multi",
+      "mutation": "For first's body set block.span.start=block.span.end+1.",
+      "expected": "None"
+    },
+    {
+      "id": "body-past-eof",
+      "fixture": "multi",
+      "mutation": "For first's body set block.span.end to src/main.lkj input length+1.",
+      "expected": "None"
+    },
+    {
+      "id": "overlapping-bodies",
+      "fixture": "multi",
+      "mutation": "Set second's body block.span.start to first's body block.span.start; leave both ends.",
+      "expected": "None"
+    },
+    {
+      "id": "type-past-eof",
+      "fixture": "multi",
+      "mutation": "Choose the first source.types entry in src/main.lkj; set its span.end to that file input length+1.",
+      "expected": "None"
+    },
+    {
+      "id": "unparsed-order",
+      "fixture": "multi",
+      "mutation": "Swap only the two unused *.bin input rows.",
+      "expected": "Some; shape differs from multi-base, body vector identical"
+    },
+    {
+      "id": "unparsed-duplicate",
+      "fixture": "multi",
+      "mutation": "Append unused-note.bin with hex 0102.",
+      "expected": "Some; both unparsed duplicate entries remain in original input order; shape differs, body vector identical"
+    },
+    {
+      "id": "include-base",
+      "fixture": "includes",
+      "mutation": "none",
+      "expected": "Some; fixed expanded-literal, parsed-source and extra-input golden"
+    },
+    {
+      "id": "include-parsed-body",
+      "fixture": "includes",
+      "mutation": "Change child.lkj 40i64 -> 41i64; rebuild/resolve the source fixture and pass those exact inputs.",
+      "expected": "Some; shape changes due expanded parsed-source include, plus changed child body hash"
+    },
+    {
+      "id": "include-binary-payload",
+      "fixture": "includes",
+      "mutation": "Change data.bin hex 00ff0a03 -> 01ff0a03; rebuild/resolve.",
+      "expected": "Some; shape changes; complete body vector retained"
+    },
+    {
+      "id": "include-string-payload",
+      "fixture": "includes",
+      "mutation": "Change message.txt UTF-8 'π\\n' -> 'ρ\\n'; rebuild/resolve.",
+      "expected": "Some; shape changes; complete body vector retained"
+    }
+  ],
+  "integration": {
+    "proposed_module": "src/semantic_tests/incremental_fingerprint.lkj",
+    "contract_groups": [
+      "fixed_topology_vectors",
+      "input_selection_and_extra_order",
+      "region_and_type_refusals",
+      "expanded_include_vectors"
+    ],
+    "registration": [
+      "src/semantic_tests.lkj: mod incremental_fingerprint; count += incremental_fingerprint::run();",
+      "src/semantic_main.lkj: closed_core expected count 192 -> 196 if exactly these four groups are adopted"
+    ],
+    "existing_regressions": [
+      "tools/store-test.sh: successive body edits reuse one definition and match cold images",
+      "tools/store-test.sh: generic/control/length context changes miss",
+      "tools/store-test.sh: parsed-source include_str/include_bytes changes miss and match cold images",
+      "tools/semantic-query-test.sh: ordinary body resume; full-reference index bypass and fresh/cold fact equality"
+    ]
+  }
+}

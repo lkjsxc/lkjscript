@@ -1,0 +1,6 @@
+{
+  "schema": "compiler-fingerprint-baseline-golden-release-1",
+  "status": "NOT_RELEASED",
+  "run_root": "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1",
+  "control_manifest_sha256": "ROOT_TO_BIND_FROZEN_MANIFEST"
+}

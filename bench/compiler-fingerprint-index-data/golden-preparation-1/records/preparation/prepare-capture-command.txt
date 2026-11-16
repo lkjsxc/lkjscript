@@ -1,0 +1,27 @@
+set -euo pipefail
+export LC_ALL=C TZ=UTC
+umask 077
+record='/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/preparation'
+control='/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/control'
+pwd > "$record/cwd"
+printf '%s\n' '["/usr/bin/perl","control/prepare.pl"]' > "$record/argv.json"
+date -u +%Y-%m-%dT%H:%M:%S.%NZ > "$record/before.utc"
+date +%s%N > "$record/before.ns"
+cut -d' ' -f1-3 /proc/loadavg > "$record/load-before"
+set +e
+/usr/bin/perl -c "$control/prepare.pl" > "$record/syntax.stdout" 2> "$record/syntax.stderr"
+syntax_status=$?
+set -e
+printf '%s\n' "$syntax_status" > "$record/syntax.status"
+if [ "$syntax_status" -ne 0 ]; then exit "$syntax_status"; fi
+set +e
+/usr/bin/time -o "$record/time.tsv" -f 'elapsed_seconds\t%e\nuser_seconds\t%U\nsystem_seconds\t%S\nmax_rss_kib\t%M\nexit\t%x' /usr/bin/timeout --signal=TERM --kill-after=10s 900s /usr/bin/prlimit --as=4294967296 -- /usr/bin/perl "$control/prepare.pl" > "$record/stdout" 2> "$record/stderr"
+prepare_status=$?
+set -e
+date +%s%N > "$record/after.ns"
+date -u +%Y-%m-%dT%H:%M:%S.%NZ > "$record/after.utc"
+cut -d' ' -f1-3 /proc/loadavg > "$record/load-after"
+printf '%s\n' "$prepare_status" > "$record/status"
+cat "$record/stdout"
+cat "$record/stderr" >&2
+exit "$prepare_status"

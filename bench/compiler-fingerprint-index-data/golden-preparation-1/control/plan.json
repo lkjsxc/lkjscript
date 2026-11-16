@@ -1,0 +1,129 @@
+{
+  "schema": "compiler-fingerprint-baseline-golden-plan-1",
+  "status": "PREPARED_ONLY_NOT_EXECUTED",
+  "run_root": "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1",
+  "baseline_source_commit": "9326dbaab1bf6832b9f35dc156e12d0d62eccd9e",
+  "source_manifest_sha256": "354bb88fe20e3685586fd689cc6681ce6c31d7fdba8c5db6ff9fe4f1d923acf5",
+  "producer_sha256": "b01eabfa60015ad93d86dd991f5f64a59754811062b578e12737e2feb4e0d5db",
+  "phases": [
+    {
+      "id": "build",
+      "cwd": "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/source",
+      "argv": [
+        "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/bin/compiler-baseline",
+        "build",
+        "src/main.lkj",
+        "--source-dir",
+        "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/source",
+        "--library-dir",
+        "library",
+        "--runtime-source",
+        "library/runtime.lkj",
+        "--inline-limit",
+        "0",
+        "--no-store",
+        "--stats",
+        "-o",
+        "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/bin/fingerprint-golden"
+      ]
+    },
+    {
+      "id": "dump",
+      "cwd": "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1",
+      "argv": [
+        "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/bin/fingerprint-golden"
+      ]
+    }
+  ],
+  "limits": {
+    "address_space_bytes": 4294967296,
+    "timeout_seconds": 900,
+    "term_grace_seconds": 10,
+    "simultaneous_compiler_or_native_processes": 1
+  },
+  "invocation": [
+    "/usr/bin/perl",
+    "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/control/capture.pl",
+    "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/release.json"
+  ],
+  "source_grants": {
+    "source": "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/source",
+    "library": "cwd-relative library",
+    "runtime": "cwd-relative library/runtime.lkj",
+    "output": "owned bin sibling",
+    "private_keys": "none; no key/store copied, created or read"
+  },
+  "runtime": {
+    "mode": "explicit pinned runtime source",
+    "sha256": "eeeb173d23c597d7b666aca949a32ba171fa5407be4173ad4626abe1ad295d14"
+  },
+  "frozen_population": {
+    "cases": 17,
+    "none": 6,
+    "some": 11,
+    "case_order": [
+      "multi-base",
+      "multi-reversed-functions",
+      "duplicate-parsed-later",
+      "duplicate-parsed-first",
+      "missing-bodyless-source",
+      "duplicate-first-truncated",
+      "ignored-invalid-function-file",
+      "reversed-body-bounds",
+      "body-past-eof",
+      "overlapping-bodies",
+      "type-past-eof",
+      "unparsed-order",
+      "unparsed-duplicate",
+      "include-base",
+      "include-parsed-body",
+      "include-binary-payload",
+      "include-string-payload"
+    ],
+    "none_ordinals": [
+      4,
+      5,
+      7,
+      8,
+      9,
+      10
+    ]
+  },
+  "capture": {
+    "stdin": "/dev/null",
+    "environment": {
+      "LC_ALL": "C",
+      "TZ": "UTC"
+    },
+    "unset": [
+      "LKJSCRIPT_STORE_IO"
+    ],
+    "records": "records/execution",
+    "complete_source_and_producer_checks": "before and after each command, outside timed interval",
+    "raw_fields": [
+      "exact argv and external wrapper argv",
+      "cwd",
+      "stdout",
+      "stderr",
+      "raw wait status and exit code",
+      "GNU time elapsed/user/system/RSS/exit",
+      "UTC and exact decimal nanoseconds",
+      "load before/after"
+    ],
+    "golden_wire": "Complete ordered raw stdout plus exact record strings and shape/body vectors; empty body slots preserved."
+  },
+  "acceptance": [
+    "Exactly one successful original-source build; emitted size agrees with stats.",
+    "Exactly one successful native dump with the frozen 17 cases and six prescribed None results.",
+    "Full source and producer bytes remain unchanged around both commands.",
+    "expected() and all actual production source remain untouched; root separately reviews/retains goldens."
+  ],
+  "restrictions": [
+    "No candidate fingerprint replacement",
+    "No extra fixture/corpus or workload",
+    "No Python or Node",
+    "No process/FD/syscall/race observer",
+    "No retry, prequery, warmup, store, key or cleanup",
+    "No claim of canonical image byte identity; this image has an explicit temporary main/fixture overlay."
+  ]
+}

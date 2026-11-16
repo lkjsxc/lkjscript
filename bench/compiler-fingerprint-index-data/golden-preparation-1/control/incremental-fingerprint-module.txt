@@ -1,0 +1,282 @@
+//! Fixed fingerprint vectors: the oracle is captured from the unchanged producer.
+use crate::{ast, elaborate, resolve, source};
+
+fn multi_inputs() -> Vec<(String, Vec<u8>)> {
+    vec![
+        ("src/main.lkj".to_string(), "mod alpha;\nmod empty;\nmod beta;\ntrait Contract { fn declared(&self) -> i64; }\nfn first(value:i64)->i64 { value + 1i64 }\nfn second(value:i64)->i64 { value + 2i64 }\npub fn main()->i64 { first(1i64)+second(2i64)+alpha::left()+beta::right() }\n".as_bytes().to_vec()),
+        ("src/beta.lkj".to_string(), "pub fn right()->i64 { 26i64 }\n".as_bytes().to_vec()),
+        ("src/empty.lkj".to_string(), "pub const FLAG: bool = true;\n".as_bytes().to_vec()),
+        ("src/alpha.lkj".to_string(), "pub fn left()->i64 { 10i64 }\n".as_bytes().to_vec()),
+        ("unused-note.bin".to_string(), vec![0u8, 255u8, 65u8, 124u8]),
+        ("unused-empty.bin".to_string(), Vec::<u8>::new()),
+    ]
+}
+
+fn include_inputs() -> Vec<(String, Vec<u8>)> {
+    vec![
+        ("inc/main.lkj".to_string(), "mod child;\npub fn main()->u64 { include_bytes!(\"child.lkj\")[0] as u64 + include_bytes!(\"data.bin\")[0] as u64 + include_str!(\"message.txt\").len() as u64 }\n".as_bytes().to_vec()),
+        ("inc/child.lkj".to_string(), "pub fn answer()->i64 { 40i64 }\n".as_bytes().to_vec()),
+        ("inc/data.bin".to_string(), vec![0u8, 255u8, 10u8, 3u8]),
+        ("inc/message.txt".to_string(), "π\n".as_bytes().to_vec()),
+    ]
+}
+
+fn case_name(case: usize) -> String {
+    match case {
+        0 => "multi-base".to_string(),
+        1 => "multi-reversed-functions".to_string(),
+        2 => "duplicate-parsed-later".to_string(),
+        3 => "duplicate-parsed-first".to_string(),
+        4 => "missing-bodyless-source".to_string(),
+        5 => "duplicate-first-truncated".to_string(),
+        6 => "ignored-invalid-function-file".to_string(),
+        7 => "reversed-body-bounds".to_string(),
+        8 => "body-past-eof".to_string(),
+        9 => "overlapping-bodies".to_string(),
+        10 => "type-past-eof".to_string(),
+        11 => "unparsed-order".to_string(),
+        12 => "unparsed-duplicate".to_string(),
+        13 => "include-base".to_string(),
+        14 => "include-parsed-body".to_string(),
+        15 => "include-binary-payload".to_string(),
+        16 => "include-string-payload".to_string(),
+        _ => panic!("unknown fingerprint fixture {case}"),
+    }
+}
+
+fn resolved(root: &str, inputs: &[(String, Vec<u8>)]) -> ast::Program {
+    // Raw loading preserves the binary include containing 0xff. A SourceBundle
+    // contains UTF-8 Strings and cannot represent this exact fixed input.
+    let parsed = source::load(
+        root,
+        None,
+        &mut |path: &str| -> Result<Option<Vec<u8>>, String> {
+            for (name, bytes) in inputs {
+                if name.as_str() == path {
+                    return Ok(Some(bytes.clone()));
+                }
+            }
+            Ok(None)
+        },
+    ).unwrap();
+    resolve::resolve(&parsed).unwrap()
+}
+
+fn function_index(program: &ast::Program, name: &str) -> usize {
+    for (index, function) in program.functions.iter().enumerate() {
+        if function.name.as_str() == name {
+            return index;
+        }
+    }
+    panic!("missing fixture function {name}")
+}
+
+fn file_index(program: &ast::Program, path: &str) -> usize {
+    for (index, file) in program.files.iter().enumerate() {
+        if file.path.as_str() == path {
+            return index;
+        }
+    }
+    panic!("missing fixture source {path}")
+}
+
+fn input_length(inputs: &[(String, Vec<u8>)], path: &str) -> usize {
+    for (name, bytes) in inputs {
+        if name.as_str() == path {
+            return bytes.len();
+        }
+    }
+    panic!("missing fixture input {path}")
+}
+
+fn prepend(
+    inputs: Vec<(String, Vec<u8>)>, path: &str, bytes: Vec<u8>,
+) -> Vec<(String, Vec<u8>)> {
+    let mut result = vec![(path.to_string(), bytes)];
+    for input in inputs {
+        result.push(input);
+    }
+    result
+}
+
+fn fixture(case: usize) -> (ast::Program, Vec<(String, Vec<u8>)>) {
+    assert!(case < 17usize);
+    let mut inputs = if case < 13usize { multi_inputs() } else { include_inputs() };
+    // Include payloads must change before parsing so their expanded AST literals
+    // agree with the exact modified input bytes.
+    if case == 14usize {
+        assert_eq!(inputs[1].0, "inc/child.lkj");
+        inputs[1].1 = "pub fn answer()->i64 { 41i64 }\n".as_bytes().to_vec();
+    } else if case == 15usize {
+        assert_eq!(inputs[2].0, "inc/data.bin");
+        inputs[2].1 = vec![1u8, 255u8, 10u8, 3u8];
+    } else if case == 16usize {
+        assert_eq!(inputs[3].0, "inc/message.txt");
+        inputs[3].1 = "ρ\n".as_bytes().to_vec();
+    }
+    let mut program = if case < 13usize {
+        resolved("src/main.lkj", &inputs)
+    } else {
+        resolved("inc/main.lkj", &inputs)
+    };
+
+    match case {
+        1 => {
+            // This permutes fingerprint coordinates, not an admitted source AST.
+            let mut reversed: Vec<ast::Function> = Vec::new();
+            while let Some(function) = program.functions.pop() {
+                reversed.push(function);
+            }
+            program.functions = reversed;
+        }
+        2 => {
+            inputs.push((
+                "src/alpha.lkj".to_string(),
+                "ignored later duplicate\n".as_bytes().to_vec(),
+            ));
+        }
+        3 => {
+            inputs = prepend(
+                inputs, "src/alpha.lkj",
+                "pub fn left()->i64 { 11i64 }\n".as_bytes().to_vec(),
+            );
+        }
+        4 => {
+            let mut kept = Vec::new();
+            let mut removed = 0usize;
+            for input in inputs {
+                if input.0 == "src/empty.lkj" {
+                    removed += 1usize;
+                } else {
+                    kept.push(input);
+                }
+            }
+            assert_eq!(removed, 1usize);
+            inputs = kept;
+        }
+        5 => {
+            inputs = prepend(inputs, "src/alpha.lkj", Vec::new());
+        }
+        6 => {
+            let first = function_index(&program, "first");
+            let invalid_file = program.files.len();
+            let invalid_body = program.blocks.len();
+            program.functions[first].span.file = invalid_file;
+            program.functions[first].body = Some(invalid_body);
+        }
+        7 => {
+            let first = function_index(&program, "first");
+            let body = program.functions[first].body.unwrap();
+            program.blocks[body].span.start = program.blocks[body].span.end + 1usize;
+        }
+        8 => {
+            let first = function_index(&program, "first");
+            let body = program.functions[first].body.unwrap();
+            program.blocks[body].span.end = input_length(&inputs, "src/main.lkj") + 1usize;
+        }
+        9 => {
+            let first = function_index(&program, "first");
+            let second = function_index(&program, "second");
+            let first_body = program.functions[first].body.unwrap();
+            let second_body = program.functions[second].body.unwrap();
+            program.blocks[second_body].span.start = program.blocks[first_body].span.start;
+        }
+        10 => {
+            let file = file_index(&program, "src/main.lkj");
+            let mut selected = None;
+            for index in 0usize..program.types.len() {
+                if program.types[index].span.file == file {
+                    selected = Some(index);
+                    break;
+                }
+            }
+            let index = selected.unwrap();
+            program.types[index].span.end = input_length(&inputs, "src/main.lkj") + 1usize;
+        }
+        11 => {
+            let last = inputs.pop().unwrap();
+            let previous = inputs.pop().unwrap();
+            assert_eq!(last.0, "unused-empty.bin");
+            assert_eq!(previous.0, "unused-note.bin");
+            inputs.push(last);
+            inputs.push(previous);
+        }
+        12 => {
+            inputs.push(("unused-note.bin".to_string(), vec![1u8, 2u8]));
+        }
+        _ => {}
+    }
+    (program, inputs)
+}
+
+fn record(case: usize) -> String {
+    let (program, inputs) = fixture(case);
+    let fingerprint = elaborate::incremental::fingerprint(&program, &inputs);
+    let must_refuse = case == 4usize || case == 5usize || case == 7usize
+        || case == 8usize || case == 9usize || case == 10usize;
+    assert_eq!(fingerprint.is_none(), must_refuse, "fixed fingerprint outcome");
+    let mut out = format!("case {case} {}\n", case_name(case));
+    match fingerprint {
+        None => out.push_str("none\n"),
+        Some(value) => {
+            out.push_str(&format!("some {} {}\n", value.shape.as_str(), value.bodies.len()));
+            for (index, body) in value.bodies.iter().enumerate() {
+                if body.is_empty() {
+                    out.push_str(&format!("body {index} empty\n"));
+                } else {
+                    out.push_str(&format!("body {index} {}\n", body.as_str()));
+                }
+            }
+        }
+    }
+    out.push_str("end\n");
+    out
+}
+
+/// The baseline harness calls this; it never calls expected() or run().
+pub fn dump() -> String {
+    let mut out = "lkjscript-fingerprint-goldens 1\n".to_string();
+    for case in 0usize..17usize {
+        out.push_str(&record(case));
+    }
+    out.push_str("complete 17\n");
+    out
+}
+
+/// Replace only this item with the reviewed fixed baseline records before
+/// publishing the closed tests. A missing oracle cannot silently pass.
+fn expected(case: usize) -> String {
+    panic!("fingerprint golden {case} is pending the root baseline capture")
+}
+
+fn assert_case(case: usize) {
+    assert_eq!(record(case), expected(case), "fixed complete fingerprint vector");
+}
+
+fn fixed_topology_vectors() {
+    for case in vec![0usize, 1usize, 6usize] {
+        assert_case(case);
+    }
+}
+fn input_selection_and_extra_order() {
+    for case in vec![2usize, 3usize, 4usize, 5usize, 11usize, 12usize] {
+        assert_case(case);
+    }
+}
+fn region_and_type_refusals() {
+    for case in vec![7usize, 8usize, 9usize, 10usize] {
+        assert_case(case);
+    }
+}
+fn expanded_include_vectors() {
+    for case in vec![13usize, 14usize, 15usize, 16usize] {
+        assert_case(case);
+    }
+}
+pub fn run() -> usize {
+    fixed_topology_vectors();
+    input_selection_and_extra_order();
+    region_and_type_refusals();
+    expanded_include_vectors();
+    4usize
+}

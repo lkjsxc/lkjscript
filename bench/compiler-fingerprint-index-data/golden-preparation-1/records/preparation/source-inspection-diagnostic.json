@@ -1,0 +1,39 @@
+{
+  "qualification": "Inspection only: rg named nonexistent src/driver/stats.lkj, emitted a diagnostic; the stats implementation was read in src/driver.lkj. No compiler/native command was executed.",
+  "gateway": {
+    "cancelled": false,
+    "capture_status": "complete",
+    "duration_ms": 8,
+    "exit_code": 0,
+    "finished": true,
+    "generation": "pipe-kmpemidfikgjeiojkiendilmajggmlad",
+    "request_id": "compiler-fingerprint-golden-stat-format-1465",
+    "signal": null,
+    "status": "done",
+    "stderr": "rg: src/driver/stats.lkj: No such file or directory (os error 2)\n",
+    "stderr_capture_truncated": false,
+    "stderr_ref": {
+      "available": true,
+      "end_offset": 65,
+      "offset": 65,
+      "path": "/home/coder/.local/state/lkjyolo/outputs/pipe-kmpemidfikgjeiojkiendilmajggmlad.stderr",
+      "total_bytes": 65
+    },
+    "stderr_truncated": false,
+    "stdout": "src/driver.lkj:353:fn report(path: &str, problem: ast::Diagnostic) -> String {\nsrc/driver.lkj:501:            \"LKJSCRIPT_STATS {{\\\"route\\\":\\\"compiler\\\",\\\"stopped_stage\\\":\\\"{stopped}\\\",\\\"total_ms\\\":{}\",\nfn record(case: usize) -> String {\n    let (program, inputs) = fixture(case);\n    let fingerprint = elaborate::incremental::fingerprint(&program, &inputs);\n    let must_refuse = case == 4usize || case == 5usize || case == 7usize\n        || case == 8usize || case == 9usize || case == 10usize;\n    assert_eq!(fingerprint.is_none(), must_refuse, \"fixed fingerprint outcome\");\n    let mut out = format!(\"case {case} {}\\n\", case_name(case));\n    match fingerprint {\n        None => out.push_str(\"none\\n\"),\n        Some(value) => {\n            out.push_str(&format!(\"some {} {}\\n\", value.shape.as_str(), value.bodies.len()));\n            for (index, body) in value.bodies.iter().enumerate() {\n                if body.is_empty() {\n                    out.push_str(&format!(\"body {index} empty\\n\"));\n                } else {\n                    out.push_str(&format!(\"body {index} {}\\n\", body.as_str()));\n                }\n            }\n        }\n    }\n    out.push_str(\"end\\n\");\n    out\n}\n\n/// The baseline harness calls this; it never calls expected() or run().\npub fn dump() -> String {\n    let mut out = \"lkjscript-fingerprint-goldens 1\\n\".to_string();\n    for case in 0usize..17usize {\n        out.push_str(&record(case));\n    }\n    out.push_str(\"complete 17\\n\");\n    out\n}\n\n/// Replace only this item with the reviewed fixed baseline records before\n/// publishing the closed tests. A missing oracle cannot silently pass.\nfn expected(case: usize) -> String {\n    panic!(\"fingerprint golden {case} is pending the root baseline capture\")\n}\n        let input = text(bytes, &options.path)?;\n        let meaning = ir_text::read_located(&input, &options.path).map_err(|problem| report(&options.path, problem))?;\n        stats.mark(\"parse_ir\")?;\n        let checked = check_reusing(meaning, memo, options.roundtrip, stats)\n            .map_err(|problems: Vec<ast::Diagnostic>| ir_failure(&options.path, problems))?;\n        stats.mark(\"check\")?;\n        return select_checked(checked, options, stats, memo);\n    }\n    if !options.path.ends_with(\".lkj\") {\n        return Err(format!(\"{}: E_SOURCE_EXTENSION source files use .lkj; checked IR uses .lkjir\", options.path));\n    }\n    let (directory_path, root): (String, String) = match &options.source_directory {\n        Some(path) => (path.to_string(), options.path.clone()),\n        None => {\n            if options.path.starts_with('/') {\n                (\"/\".to_string(), options.path.clone())\n            } else {\n                (\".\".to_string(), options.path.clone())\n            }\n        }\n    };\n    let mut directory = world\n        .directory(&directory_path)\n        .map_err(|errno: i64| io(&directory_path, \"open directory\", errno))?;\n    let mut library: Option<Directory> = None;\n    if let Some(path) = &options.library_directory {\n        library = Some(match world.directory(path) {\n            Ok(directory) => directory,\n            Err(errno) => return Err(io(path, \"open library\", errno)),\n        });\n    }\n    let standard = if options.no_library {\n        None\n    } else {\n        Some(\"$std/lib.lkj\")\n    };\n    let absolute_source = options.source_directory.is_none() && options.path.starts_with('/');\n    let mut loaded = source::load_report(&root, standard, &mut |path: &str| {\n        let result = if options.command == \"check-library\" && path == \"$toolchain/library-check.lkj\" {\n            Ok(Some(\"fn main() {}\".as_bytes().to_vec()))\n        } else if path.starts_with(\"$std/\") {\n            match library.as_mut() {\n                Some(directory) => {\n                    memo.read_source(directory, options.library_directory.as_ref().unwrap(), &path[5..], stats)\n                },\n                None => Ok(embedded::library(path)),\n",
+    "stdout_capture_truncated": false,
+    "stdout_ref": {
+      "available": true,
+      "end_offset": 3915,
+      "offset": 3915,
+      "path": "/home/coder/.local/state/lkjyolo/outputs/pipe-kmpemidfikgjeiojkiendilmajggmlad.stdout",
+      "total_bytes": 3915
+    },
+    "stdout_truncated": false,
+    "stream_mode": "pipes",
+    "timed_out": false,
+    "tool": "exec_command",
+    "truncated": false,
+    "workdir": "/home/coder/workspace/lkjscript"
+  }
+}

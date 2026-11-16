@@ -1,0 +1,61 @@
+{
+   "cases" : [
+      "multi-base",
+      "multi-reversed-functions",
+      "duplicate-parsed-later",
+      "duplicate-parsed-first",
+      "missing-bodyless-source",
+      "duplicate-first-truncated",
+      "ignored-invalid-function-file",
+      "reversed-body-bounds",
+      "body-past-eof",
+      "overlapping-bodies",
+      "type-past-eof",
+      "unparsed-order",
+      "unparsed-duplicate",
+      "include-base",
+      "include-parsed-body",
+      "include-binary-payload",
+      "include-string-payload"
+   ],
+   "commit" : "9326dbaab1bf6832b9f35dc156e12d0d62eccd9e",
+   "correspondence_sha256" : "203a393129b20930d72e2636a8bb7d47a57b013543f5b4e9288dd73aa29557a5",
+   "incremental_module_sha256" : "760485a5a12d97ce320ba9113797370df584c154084ee4a1f9689da28c7d1127",
+   "none_ordinals" : [
+      4,
+      5,
+      7,
+      8,
+      9,
+      10
+   ],
+   "original_manifest_sha256" : "3bcdcb955f65b037311343b6fedf02384a39546c6a2711a6e7a926fdda43a45f",
+   "overlays" : {
+      "src/fingerprint_fixture.lkj" : "5b5a7c739cb6c45c5fd88bf366b46a04c196c1ea88d58997484623a6dee1c7b5",
+      "src/main.lkj" : "7132e34bfb2da3bcfe033b5b99800198b24baf5db807a8ca947df304ba886e85"
+   },
+   "producer" : {
+      "bytes" : 32588975,
+      "original" : "/home/coder/workspace/lkjscript/target/lkjscript",
+      "owned" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/bin/compiler-baseline",
+      "sha256" : "b01eabfa60015ad93d86dd991f5f64a59754811062b578e12737e2feb4e0d5db"
+   },
+   "root" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1",
+   "runtime" : {
+      "mode" : "explicit pinned source",
+      "path" : "library/runtime.lkj",
+      "sha256" : "eeeb173d23c597d7b666aca949a32ba171fa5407be4173ad4626abe1ad295d14"
+   },
+   "schema" : "fingerprint-baseline-golden-pins-1",
+   "source" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/source",
+   "source_boundary" : "Only tracked src/library/tests from the fixed Git tree plus the two named overlays; no bench, seed, tools, .git, key or store is copied.",
+   "source_bytes" : 9390696,
+   "source_files" : 1744,
+   "source_manifest_sha256" : "354bb88fe20e3685586fd689cc6681ce6c31d7fdba8c5db6ff9fe4f1d923acf5",
+   "status" : "PREPARED_NOT_EXECUTED",
+   "trees" : {
+      "library" : "25bdb8ff8567b941790d3951c78e896b23e26e8e",
+      "src" : "626c9c1f234f4d003a08820d9b69840535eff8b8",
+      "tests" : "e2b30ac0f2fa8f897f366293189d6af552a41980"
+   }
+}
