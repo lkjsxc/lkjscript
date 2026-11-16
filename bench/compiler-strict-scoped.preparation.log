@@ -1,0 +1,27 @@
+stage=producer-independent-static-preparation
+compiler_executions=0
+replay_executions=0
+utc=2026-11-16T08:28:20Z
+69e5382b5c05c038074861a37e5faf03b704fe6c
+4.49 5.97 6.66 7/6156 2790617
+bench/compiler-strict-scoped-audit.pl syntax OK
+bench/compiler-strict-scoped-state.pl syntax OK
+verified named_horizon=6a187b94fb763f7b0565436a98ab5feda3cd642f prior_inside=24 prior_outside=0 selected=6 language_commits=11 compiler_executions=0
+ordinal	revision	parent	operations	changed_source_files	desired_meaning	candidate_meaning	source_before	source_after	source_root	library_environment	stdout_sha256	stderr_sha256
+verified new_planned=6 new_launched=6 new_passed=0 new_operations=0 prior_strict_inside_named_window=24 conditional_union=24
+new_required_file_facts=0 exact_historical_before=0 exact_target_text=0 target_text_differs=0 missing_result_rows=0
+claim=complete-changed-language-coverage-plus-selected-root-canonical-checked-meaning
+not_claimed=serialized-IR-byte-identity,non-language-Git-effects,unmeasured-cases
+reason E_REPLAY_FILES 6
+a6dfa7da05b35328d653cd9268b8083a4c361499f7b67c537b5cf44b76de011c  bench/compiler-strict-scoped.sh
+44a9df0c739538019e41460f66cdee9563dd8f9240afd48cf8038a79e1ab787b  bench/compiler-strict-scoped-audit.pl
+5bf1cb7f79092204d926b0c08ecb8c0f538845571ecf71245dedaf8a2aa5496f  bench/compiler-strict-scoped-state.pl
+af6eaa9d48dff6d29c4604c7e03a266bc8ef28991fd24a1104fa6e1f932f98d9  bench/compiler-strict-scoped.plan.md
+old_cohort_unchanged=yes
+old_fixture_absent=yes
+new_pin_absent=yes
+new_execution_authorized=no
+4.85 6.02 6.67 5/6156 2790930
+finished_utc=2026-11-16T08:28:21Z
+independent_prelaunch_review=pending-root-review
+producer_addendum=separate-next-commit
