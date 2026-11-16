@@ -24,3 +24,5 @@ da9c554a3a46aaed950412d083cdcd26f3bc2c2a04739d74de24773aa0979274  bench/compiler
 cdd8bbdac1202ee2c29e2b9def36a682a1e1d51721771eb4e7ff478849b8df93  bench/compiler-store-gate-data/accepted-cold.time
 07fe86f113d6be5c172bfdbe1a977c7048edd17f6bb432ec5dbbc1eb5daba643  bench/compiler-store-gate-data/accepted-cold.meta
 876429e77eb1af1023df48b57cae630213a2acfe940942b98614d0cb1d1cd79c  bench/compiler-store-gate-data/accepted-mutation.log
+e1952492373748ae5deb124174a3f8465be83abb2a88b70db1828c59b04f3edc  bench/compiler-store-gate-data/ci-gate.log
+d4a42a92a42a4b4a5719f18f0f1eb9422dc13803833ec54c83b99749e7875801  bench/compiler-store-gate-data/ci-witness.log

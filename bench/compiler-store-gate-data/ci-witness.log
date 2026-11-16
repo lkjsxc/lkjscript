@@ -1,0 +1,613 @@
+﻿2026-11-16T07:57:26.8643041Z Current runner version: '2.338.2'
+2026-11-16T07:57:26.8662417Z ##[group]Runner Image Provisioner
+2026-11-16T07:57:26.8663090Z Hosted Compute Agent
+2026-11-16T07:57:26.8663564Z Version: 20261103.629
+2026-11-16T07:57:26.8664322Z Commit: 15dbd9ccb5dbf34fae002b6ed1a2670f52df37bc
+2026-11-16T07:57:26.8664918Z Build Date: 2026-11-03T17:26:59Z
+2026-11-16T07:57:26.8665455Z Worker ID: {d28c2b05-515a-433b-aa45-d8c1733af7e2}
+2026-11-16T07:57:26.8666019Z Region: us-east-1
+2026-11-16T07:57:26.8666459Z Cloud: AWS
+2026-11-16T07:57:26.8666830Z ##[endgroup]
+2026-11-16T07:57:26.8667778Z ##[group]Operating System
+2026-11-16T07:57:26.8668255Z Ubuntu
+2026-11-16T07:57:26.8668758Z 26.04.1
+2026-11-16T07:57:26.8669168Z LTS
+2026-11-16T07:57:26.8669550Z ##[endgroup]
+2026-11-16T07:57:26.8669964Z ##[group]Runner Image
+2026-11-16T07:57:26.8670426Z Image: ubuntu-26.04
+2026-11-16T07:57:26.8670868Z Version: 20261111.82.6
+2026-11-16T07:57:26.8671868Z Included Software: https://github.com/actions/runner-images/blob/ubuntu26/20261111.82/images/ubuntu/Ubuntu2604-Readme.md
+2026-11-16T07:57:26.8673102Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu26%2F20261111.82
+2026-11-16T07:57:26.8674099Z ##[endgroup]
+2026-11-16T07:57:26.8675086Z ##[group]GITHUB_TOKEN Permissions
+2026-11-16T07:57:26.8676995Z Contents: read
+2026-11-16T07:57:26.8677416Z Metadata: read
+2026-11-16T07:57:26.8677831Z Packages: read
+2026-11-16T07:57:26.8678267Z ##[endgroup]
+2026-11-16T07:57:26.8679774Z Secret source: Actions
+2026-11-16T07:57:26.8680436Z Cache mode: write
+2026-11-16T07:57:26.8681075Z Prepare workflow directory
+2026-11-16T07:57:26.8951163Z Prepare all required actions
+2026-11-16T07:57:26.8989245Z Getting action download info
+2026-11-16T07:57:27.0457059Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-11-16T07:57:28.0407228Z Download action repository 'dtolnay/rust-toolchain@stable' (SHA:39008827e6b4319a349e9a42dfc90579dd25f1ca)
+2026-11-16T07:57:28.2823517Z Complete job name: witness
+2026-11-16T07:57:28.3541656Z ##[group]Run actions/checkout@v4
+2026-11-16T07:57:28.3542763Z with:
+2026-11-16T07:57:28.3543523Z   repository: lkjsxc/lkjscript
+2026-11-16T07:57:28.3550269Z   token: ***
+2026-11-16T07:57:28.3551035Z   ssh-strict: true
+2026-11-16T07:57:28.3551808Z   ssh-user: git
+2026-11-16T07:57:28.3552589Z   persist-credentials: true
+2026-11-16T07:57:28.3553415Z   clean: true
+2026-11-16T07:57:28.3554379Z   sparse-checkout-cone-mode: true
+2026-11-16T07:57:28.3555246Z   fetch-depth: 1
+2026-11-16T07:57:28.3556006Z   fetch-tags: false
+2026-11-16T07:57:28.3556766Z   show-progress: true
+2026-11-16T07:57:28.3557529Z   lfs: false
+2026-11-16T07:57:28.3558277Z   submodules: false
+2026-11-16T07:57:28.3559042Z   set-safe-directory: true
+2026-11-16T07:57:28.3559922Z   allow-unsafe-pr-checkout: false
+2026-11-16T07:57:28.3561029Z env:
+2026-11-16T07:57:28.3561762Z   CARGO_BUILD_JOBS: 1
+2026-11-16T07:57:28.3562604Z   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+2026-11-16T07:57:28.3563531Z ##[endgroup]
+2026-11-16T07:57:30.7696577Z Syncing repository: lkjsxc/lkjscript
+2026-11-16T07:57:30.7698122Z ##[group]Getting Git version info
+2026-11-16T07:57:30.7698716Z Working directory is '/home/runner/work/lkjscript/lkjscript'
+2026-11-16T07:57:30.7699560Z [command]/usr/bin/git version
+2026-11-16T07:57:30.7708228Z git version 2.56.1
+2026-11-16T07:57:30.7721189Z ##[endgroup]
+2026-11-16T07:57:30.7732845Z Temporarily overriding HOME='/home/runner/work/_temp/63ff7810-99ae-4dd8-8015-e3ad4a6f753f' before making global git config changes
+2026-11-16T07:57:30.7734192Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-16T07:57:30.7736539Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/lkjscript/lkjscript
+2026-11-16T07:57:30.8617056Z Deleting the contents of '/home/runner/work/lkjscript/lkjscript'
+2026-11-16T07:57:30.8618768Z ##[group]Initializing the repository
+2026-11-16T07:57:30.8622595Z [command]/usr/bin/git init /home/runner/work/lkjscript/lkjscript
+2026-11-16T07:57:30.8773964Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-11-16T07:57:30.8774924Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-11-16T07:57:30.8775489Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-11-16T07:57:30.8775890Z hint: call:
+2026-11-16T07:57:30.8776118Z hint:
+2026-11-16T07:57:30.8776467Z hint: 	git config --global init.defaultBranch <name>
+2026-11-16T07:57:30.8776804Z hint:
+2026-11-16T07:57:30.8777140Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-11-16T07:57:30.8777602Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-11-16T07:57:30.8778030Z hint:
+2026-11-16T07:57:30.8778469Z hint: 	git branch -m <name>
+2026-11-16T07:57:30.8778873Z hint:
+2026-11-16T07:57:30.8779226Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-11-16T07:57:30.8799085Z Initialized empty Git repository in /home/runner/work/lkjscript/lkjscript/.git/
+2026-11-16T07:57:30.8806836Z [command]/usr/bin/git remote add origin https://github.com/lkjsxc/lkjscript
+2026-11-16T07:57:30.8869290Z ##[endgroup]
+2026-11-16T07:57:30.8870111Z ##[group]Disabling automatic garbage collection
+2026-11-16T07:57:30.8872645Z [command]/usr/bin/git config --local gc.auto 0
+2026-11-16T07:57:30.8895563Z ##[endgroup]
+2026-11-16T07:57:30.8896058Z ##[group]Setting up auth
+2026-11-16T07:57:30.8900808Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-16T07:57:30.8921976Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-16T07:57:31.1697291Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-16T07:57:31.1721513Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-16T07:57:31.1899377Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-16T07:57:31.1921712Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-16T07:57:31.2093322Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-11-16T07:57:31.2134409Z ##[endgroup]
+2026-11-16T07:57:31.2134923Z ##[group]Fetching the repository
+2026-11-16T07:57:31.2135661Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +2bdab38837e54c3057489891e0e33b7a8beea178:refs/remotes/origin/main
+2026-11-16T07:57:31.8770494Z From https://github.com/lkjsxc/lkjscript
+2026-11-16T07:57:31.8770986Z  * [new ref]         2bdab38837e54c3057489891e0e33b7a8beea178 -> origin/main
+2026-11-16T07:57:31.8774691Z ##[endgroup]
+2026-11-16T07:57:31.8775278Z ##[group]Determining the checkout info
+2026-11-16T07:57:31.8776619Z ##[endgroup]
+2026-11-16T07:57:31.8781573Z [command]/usr/bin/git sparse-checkout disable
+2026-11-16T07:57:31.8849542Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-11-16T07:57:31.8852482Z ##[group]Checking out the ref
+2026-11-16T07:57:31.8855609Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+2026-11-16T07:57:32.0026185Z Switched to a new branch 'main'
+2026-11-16T07:57:32.0045225Z branch 'main' set up to track 'origin/main'.
+2026-11-16T07:57:32.0047370Z ##[endgroup]
+2026-11-16T07:57:32.0088732Z [command]/usr/bin/git log -1 --format=%H
+2026-11-16T07:57:32.0107158Z 2bdab38837e54c3057489891e0e33b7a8beea178
+2026-11-16T07:57:32.0362189Z ##[group]Run dtolnay/rust-toolchain@stable
+2026-11-16T07:57:32.0362506Z with:
+2026-11-16T07:57:32.0362721Z   toolchain: stable
+2026-11-16T07:57:32.0362958Z env:
+2026-11-16T07:57:32.0363169Z   CARGO_BUILD_JOBS: 1
+2026-11-16T07:57:32.0363518Z   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+2026-11-16T07:57:32.0364088Z ##[endgroup]
+2026-11-16T07:57:32.0419773Z ##[start-action display=Parse toolchain version;id=__dtolnay_rust-toolchain.parse]
+2026-11-16T07:57:32.0469265Z ##[group]Run if [[ -z $toolchain ]]; then
+2026-11-16T07:57:32.0469685Z [36;1mif [[ -z $toolchain ]]; then[0m
+2026-11-16T07:57:32.0470177Z [36;1m  # GitHub does not enforce `required: true` inputs itself. https://github.com/actions/runner/issues/1070[0m
+2026-11-16T07:57:32.0470635Z [36;1m  echo "'toolchain' is a required input" >&2[0m
+2026-11-16T07:57:32.0470945Z [36;1m  exit 1[0m
+2026-11-16T07:57:32.0471316Z [36;1melif [[ $toolchain =~ ^stable' '[0-9]+' '(year|month|week|day)s?' 'ago$ ]]; then[0m
+2026-11-16T07:57:32.0471730Z [36;1m  if [[ Linux == macOS ]]; then[0m
+2026-11-16T07:57:32.0472230Z [36;1m    echo "toolchain=1.$((($(date -v-$(sed 's/stable \([0-9]*\) \(.\).*/\1\2/' <<< $toolchain) +%s)/60/60/24-16569)/7/6))" >> $GITHUB_OUTPUT[0m
+2026-11-16T07:57:32.0472677Z [36;1m  else[0m
+2026-11-16T07:57:32.0473048Z [36;1m    echo "toolchain=1.$((($(date --date "${toolchain#stable }" +%s)/60/60/24-16569)/7/6))" >> $GITHUB_OUTPUT[0m
+2026-11-16T07:57:32.0473432Z [36;1m  fi[0m
+2026-11-16T07:57:32.0474016Z [36;1melif [[ $toolchain =~ ^stable' 'minus' '[0-9]+' 'releases?$ ]]; then[0m
+2026-11-16T07:57:32.0474563Z [36;1m  echo "toolchain=1.$((($(date +%s)/60/60/24-16569)/7/6-${toolchain//[^0-9]/}))" >> $GITHUB_OUTPUT[0m
+2026-11-16T07:57:32.0474975Z [36;1melif [[ $toolchain =~ ^1\.[0-9]+$ ]]; then[0m
+2026-11-16T07:57:32.0475418Z [36;1m  echo "toolchain=1.$((i=${toolchain#1.}, c=($(date +%s)/60/60/24-16569)/7/6, i+9*i*(10*i<=c)+90*i*(100*i<=c)))" >> $GITHUB_OUTPUT[0m
+2026-11-16T07:57:32.0475827Z [36;1melse[0m
+2026-11-16T07:57:32.0476038Z [36;1m  delimiter=EOF[0m
+2026-11-16T07:57:32.0476347Z [36;1m  while [[ $toolchain == *$delimiter* ]]; do delimiter+=_; done[0m
+2026-11-16T07:57:32.0476786Z [36;1m  printf 'toolchain<<%s\n%s\n%s\n' "$delimiter" "$toolchain" "$delimiter" >> $GITHUB_OUTPUT[0m
+2026-11-16T07:57:32.0477183Z [36;1mfi[0m
+2026-11-16T07:57:32.0499357Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-11-16T07:57:32.0499723Z env:
+2026-11-16T07:57:32.0499950Z   CARGO_BUILD_JOBS: 1
+2026-11-16T07:57:32.0500220Z   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+2026-11-16T07:57:32.0500483Z   toolchain: stable
+2026-11-16T07:57:32.0500692Z ##[endgroup]
+2026-11-16T07:57:32.0580584Z ##[end-action id=__dtolnay_rust-toolchain.parse;outcome=success;conclusion=success;duration_ms=15]
+2026-11-16T07:57:32.0584435Z ##[start-action display=Set $CARGO_HOME;id=__dtolnay_rust-toolchain.__run]
+2026-11-16T07:57:32.0613495Z ##[group]Run echo CARGO_HOME=${CARGO_HOME:-"$HOME/.cargo"} >> $GITHUB_ENV
+2026-11-16T07:57:32.0614369Z [36;1mecho CARGO_HOME=${CARGO_HOME:-"$HOME/.cargo"} >> $GITHUB_ENV[0m
+2026-11-16T07:57:32.0631312Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-11-16T07:57:32.0631630Z env:
+2026-11-16T07:57:32.0631881Z   CARGO_BUILD_JOBS: 1
+2026-11-16T07:57:32.0632175Z   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+2026-11-16T07:57:32.0632424Z ##[endgroup]
+2026-11-16T07:57:32.0670769Z ##[end-action id=__dtolnay_rust-toolchain.__run;outcome=success;conclusion=success;duration_ms=8]
+2026-11-16T07:57:32.0672836Z ##[start-action display=Install rustup if needed;id=__dtolnay_rust-toolchain.__run_2]
+2026-11-16T07:57:32.0696264Z ##[group]Run if ! command -v rustup &>/dev/null; then
+2026-11-16T07:57:32.0696611Z [36;1mif ! command -v rustup &>/dev/null; then[0m
+2026-11-16T07:57:32.0697234Z [36;1m  curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused --location --silent --show-error --fail https://sh.rustup.rs | sh -s -- --default-toolchain none -y[0m
+2026-11-16T07:57:32.0697883Z [36;1m  echo "$CARGO_HOME/bin" >> $GITHUB_PATH[0m
+2026-11-16T07:57:32.0698145Z [36;1mfi[0m
+2026-11-16T07:57:32.0712112Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-11-16T07:57:32.0712495Z env:
+2026-11-16T07:57:32.0712716Z   CARGO_BUILD_JOBS: 1
+2026-11-16T07:57:32.0713041Z   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+2026-11-16T07:57:32.0713337Z   CARGO_HOME: /home/runner/.cargo
+2026-11-16T07:57:32.0713583Z ##[endgroup]
+2026-11-16T07:57:32.0748838Z ##[end-action id=__dtolnay_rust-toolchain.__run_2;outcome=success;conclusion=success;duration_ms=7]
+2026-11-16T07:57:32.0750996Z ##[start-action display=Install rustup if needed on windows;id=__dtolnay_rust-toolchain.__run_3]
+2026-11-16T07:57:32.0757109Z ##[end-action id=__dtolnay_rust-toolchain.__run_3;outcome=skipped;conclusion=skipped;duration_ms=0]
+2026-11-16T07:57:32.0767740Z ##[start-action display=rustup toolchain install stable;id=__dtolnay_rust-toolchain.__run_4]
+2026-11-16T07:57:32.0789410Z ##[group]Run set -f  # split targets and components on commas and whitespace, without glob expansion
+2026-11-16T07:57:32.0789997Z [36;1mset -f  # split targets and components on commas and whitespace, without glob expansion[0m
+2026-11-16T07:57:32.0790392Z [36;1mflags=()[0m
+2026-11-16T07:57:32.0790692Z [36;1mfor t in ${targets//,/ }; do flags+=(--target "$t"); done[0m
+2026-11-16T07:57:32.0791074Z [36;1mfor c in ${components//,/ }; do flags+=(--component "$c"); done[0m
+2026-11-16T07:57:32.0791529Z [36;1mif [[ $toolchain == nightly && -n $components ]]; then flags+=(--allow-downgrade); fi[0m
+2026-11-16T07:57:32.0791907Z [36;1mlog=$(mktemp)[0m
+2026-11-16T07:57:32.0792166Z [36;1mtrap 'rm -f "$log"' EXIT[0m
+2026-11-16T07:57:32.0792450Z [36;1mfor attempt in 1 2 3 4 5; do[0m
+2026-11-16T07:57:32.0792933Z [36;1m  if rustup toolchain install "$toolchain" "${flags[@]}" --profile minimal --no-self-update --force-non-host 2>&1 | tee "$log"; then[0m
+2026-11-16T07:57:32.0793388Z [36;1m    break[0m
+2026-11-16T07:57:32.0793599Z [36;1m  else[0m
+2026-11-16T07:57:32.0794028Z [36;1m    status=$?[0m
+2026-11-16T07:57:32.0794306Z [36;1m  fi[0m
+2026-11-16T07:57:32.0794611Z [36;1m  if [[ $attempt == 5 ]] || ! grep -Fq 'checksum failed for ' "$log" \[0m
+2026-11-16T07:57:32.0795066Z [36;1m      || ! grep -Fq 'this is likely due to an ongoing update of the official release server' "$log"; then[0m
+2026-11-16T07:57:32.0795454Z [36;1m    exit "$status"[0m
+2026-11-16T07:57:32.0795714Z [36;1m  fi[0m
+2026-11-16T07:57:32.0796061Z [36;1m  echo "Retrying rustup toolchain install in 30 seconds (retry $attempt of 4)" >&2[0m
+2026-11-16T07:57:32.0796427Z [36;1m  sleep 30[0m
+2026-11-16T07:57:32.0796727Z [36;1mdone[0m
+2026-11-16T07:57:32.0810834Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-11-16T07:57:32.0811177Z env:
+2026-11-16T07:57:32.0811440Z   CARGO_BUILD_JOBS: 1
+2026-11-16T07:57:32.0811687Z   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+2026-11-16T07:57:32.0811964Z   CARGO_HOME: /home/runner/.cargo
+2026-11-16T07:57:32.0812239Z   toolchain: stable
+2026-11-16T07:57:32.0812480Z   targets: 
+2026-11-16T07:57:32.0812694Z   components: 
+2026-11-16T07:57:32.0812961Z   RUSTUP_PERMIT_COPY_RENAME: 1
+2026-11-16T07:57:32.0813206Z ##[endgroup]
+2026-11-16T07:57:34.0831992Z info: syncing channel updates for stable-x86_64-unknown-linux-gnu
+2026-11-16T07:57:34.2377601Z info: latest update on 2026-11-12 for version 1.100.0 (0ef1bc386 2026-11-09)
+2026-11-16T07:57:34.2494960Z info: removing previous version of component rustfmt
+2026-11-16T07:57:34.2514848Z info: removing previous version of component clippy
+2026-11-16T07:57:34.2524244Z info: removing previous version of component cargo
+2026-11-16T07:57:34.2571941Z info: removing previous version of component rust-std
+2026-11-16T07:57:34.2596578Z info: removing previous version of component rustc
+2026-11-16T07:57:34.2638816Z info: downloading 5 components
+2026-11-16T07:57:41.7120492Z 
+2026-11-16T07:57:41.7174893Z   stable-x86_64-unknown-linux-gnu updated - rustc 1.100.0 (0ef1bc386 2026-11-09) (from rustc 1.99.1 (58cf8f9c3 2026-10-13))
+2026-11-16T07:57:41.7175644Z 
+2026-11-16T07:57:41.7270060Z ##[end-action id=__dtolnay_rust-toolchain.__run_4;outcome=success;conclusion=success;duration_ms=9650]
+2026-11-16T07:57:41.7276569Z ##[start-action display=rustup default stable;id=__dtolnay_rust-toolchain.__run_5]
+2026-11-16T07:57:41.7294398Z ##[group]Run rustup default "$toolchain" --force-non-host
+2026-11-16T07:57:41.7294852Z [36;1mrustup default "$toolchain" --force-non-host[0m
+2026-11-16T07:57:41.7312487Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-11-16T07:57:41.7312829Z env:
+2026-11-16T07:57:41.7313052Z   CARGO_BUILD_JOBS: 1
+2026-11-16T07:57:41.7313318Z   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+2026-11-16T07:57:41.7313619Z   CARGO_HOME: /home/runner/.cargo
+2026-11-16T07:57:41.7314228Z   toolchain: stable
+2026-11-16T07:57:41.7314580Z ##[endgroup]
+2026-11-16T07:57:41.7387142Z info: using existing install for stable-x86_64-unknown-linux-gnu
+2026-11-16T07:57:41.7390938Z info: default toolchain set to stable-x86_64-unknown-linux-gnu
+2026-11-16T07:57:41.7391157Z 
+2026-11-16T07:57:41.7439945Z   stable-x86_64-unknown-linux-gnu unchanged - rustc 1.100.0 (0ef1bc386 2026-11-09)
+2026-11-16T07:57:41.7440436Z 
+2026-11-16T07:57:41.7451765Z ##[end-action id=__dtolnay_rust-toolchain.__run_5;outcome=success;conclusion=success;duration_ms=17]
+2026-11-16T07:57:41.7455390Z ##[start-action display=Create cachekey;id=__dtolnay_rust-toolchain.rustc-version]
+2026-11-16T07:57:41.7471173Z ##[group]Run DATE=$(rustc +"$toolchain" --version --verbose | sed -ne 's/^commit-date: \(20[0-9][0-9]\)-\([01][0-9]\)-\([0-3][0-9]\)$/\1\2\3/p')
+2026-11-16T07:57:41.7471887Z [36;1mDATE=$(rustc +"$toolchain" --version --verbose | sed -ne 's/^commit-date: \(20[0-9][0-9]\)-\([01][0-9]\)-\([0-3][0-9]\)$/\1\2\3/p')[0m
+2026-11-16T07:57:41.7472446Z [36;1mHASH=$(rustc +"$toolchain" --version --verbose | sed -ne 's/^commit-hash: //p')[0m
+2026-11-16T07:57:41.7472890Z [36;1mecho "cachekey=$(echo $DATE$HASH | head -c12)" >> $GITHUB_OUTPUT[0m
+2026-11-16T07:57:41.7489370Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-11-16T07:57:41.7489665Z env:
+2026-11-16T07:57:41.7489934Z   CARGO_BUILD_JOBS: 1
+2026-11-16T07:57:41.7490219Z   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+2026-11-16T07:57:41.7490501Z   CARGO_HOME: /home/runner/.cargo
+2026-11-16T07:57:41.7490799Z   toolchain: stable
+2026-11-16T07:57:41.7491003Z ##[endgroup]
+2026-11-16T07:57:41.7717441Z ##[end-action id=__dtolnay_rust-toolchain.rustc-version;outcome=success;conclusion=success;duration_ms=26]
+2026-11-16T07:57:41.7719680Z ##[start-action display=Disable incremental compilation;id=__dtolnay_rust-toolchain.__run_6]
+2026-11-16T07:57:41.7735989Z ##[group]Run if [ -z "${CARGO_INCREMENTAL+set}" ]; then
+2026-11-16T07:57:41.7736327Z [36;1mif [ -z "${CARGO_INCREMENTAL+set}" ]; then[0m
+2026-11-16T07:57:41.7736653Z [36;1m  echo CARGO_INCREMENTAL=0 >> $GITHUB_ENV[0m
+2026-11-16T07:57:41.7736941Z [36;1mfi[0m
+2026-11-16T07:57:41.7751833Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-11-16T07:57:41.7752235Z env:
+2026-11-16T07:57:41.7752477Z   CARGO_BUILD_JOBS: 1
+2026-11-16T07:57:41.7752731Z   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+2026-11-16T07:57:41.7753020Z   CARGO_HOME: /home/runner/.cargo
+2026-11-16T07:57:41.7753272Z ##[endgroup]
+2026-11-16T07:57:41.7787739Z ##[end-action id=__dtolnay_rust-toolchain.__run_6;outcome=success;conclusion=success;duration_ms=6]
+2026-11-16T07:57:41.7790017Z ##[start-action display=Enable colors in Cargo output;id=__dtolnay_rust-toolchain.__run_7]
+2026-11-16T07:57:41.7805395Z ##[group]Run if [ -z "${CARGO_TERM_COLOR+set}" ]; then
+2026-11-16T07:57:41.7805751Z [36;1mif [ -z "${CARGO_TERM_COLOR+set}" ]; then[0m
+2026-11-16T07:57:41.7806064Z [36;1m  echo CARGO_TERM_COLOR=always >> $GITHUB_ENV[0m
+2026-11-16T07:57:41.7806342Z [36;1mfi[0m
+2026-11-16T07:57:41.7819397Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-11-16T07:57:41.7819692Z env:
+2026-11-16T07:57:41.7819927Z   CARGO_BUILD_JOBS: 1
+2026-11-16T07:57:41.7820188Z   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+2026-11-16T07:57:41.7820565Z   CARGO_HOME: /home/runner/.cargo
+2026-11-16T07:57:41.7820846Z   CARGO_INCREMENTAL: 0
+2026-11-16T07:57:41.7821069Z ##[endgroup]
+2026-11-16T07:57:41.7854003Z ##[end-action id=__dtolnay_rust-toolchain.__run_7;outcome=success;conclusion=success;duration_ms=6]
+2026-11-16T07:57:41.7857145Z ##[start-action display=Enable Cargo sparse registry;id=__dtolnay_rust-toolchain.__run_8]
+2026-11-16T07:57:41.7873259Z ##[group]Run # implemented in 1.66, stabilized in 1.68, made default in 1.70
+2026-11-16T07:57:41.7874191Z [36;1m# implemented in 1.66, stabilized in 1.68, made default in 1.70[0m
+2026-11-16T07:57:41.7874770Z [36;1mif [ -z "${CARGO_REGISTRIES_CRATES_IO_PROTOCOL+set}" -o -f "/home/runner/work/_temp"/.implicit_cargo_registries_crates_io_protocol ]; then[0m
+2026-11-16T07:57:41.7875329Z [36;1m  if rustc +"$toolchain" --version --verbose | grep -q '^release: 1\.6[89]\.'; then[0m
+2026-11-16T07:57:41.7875850Z [36;1m    touch "/home/runner/work/_temp"/.implicit_cargo_registries_crates_io_protocol || true[0m
+2026-11-16T07:57:41.7876347Z [36;1m    echo CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse >> $GITHUB_ENV[0m
+2026-11-16T07:57:41.7876778Z [36;1m  elif rustc +"$toolchain" --version --verbose | grep -q '^release: 1\.6[67]\.'; then[0m
+2026-11-16T07:57:41.7877250Z [36;1m    touch "/home/runner/work/_temp"/.implicit_cargo_registries_crates_io_protocol || true[0m
+2026-11-16T07:57:41.7877655Z [36;1m    echo CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git >> $GITHUB_ENV[0m
+2026-11-16T07:57:41.7877978Z [36;1m  fi[0m
+2026-11-16T07:57:41.7878198Z [36;1mfi[0m
+2026-11-16T07:57:41.7890769Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-11-16T07:57:41.7891064Z env:
+2026-11-16T07:57:41.7891329Z   CARGO_BUILD_JOBS: 1
+2026-11-16T07:57:41.7891621Z   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+2026-11-16T07:57:41.7891904Z   CARGO_HOME: /home/runner/.cargo
+2026-11-16T07:57:41.7892157Z   CARGO_INCREMENTAL: 0
+2026-11-16T07:57:41.7892378Z   CARGO_TERM_COLOR: always
+2026-11-16T07:57:41.7892661Z   toolchain: stable
+2026-11-16T07:57:41.7892880Z ##[endgroup]
+2026-11-16T07:57:41.8078196Z ##[end-action id=__dtolnay_rust-toolchain.__run_8;outcome=success;conclusion=success;duration_ms=22]
+2026-11-16T07:57:41.8081200Z ##[start-action display=Work around spurious network errors in curl 8.0;id=__dtolnay_rust-toolchain.__run_9]
+2026-11-16T07:57:41.8095548Z ##[group]Run # https://rust-lang.zulipchat.com/#narrow/stream/246057-t-cargo/topic/timeout.20investigation
+2026-11-16T07:57:41.8096133Z [36;1m# https://rust-lang.zulipchat.com/#narrow/stream/246057-t-cargo/topic/timeout.20investigation[0m
+2026-11-16T07:57:41.8096651Z [36;1mif rustc +"$toolchain" --version --verbose | grep -q '^release: 1\.7[01]\.'; then[0m
+2026-11-16T07:57:41.8097071Z [36;1m  echo CARGO_HTTP_MULTIPLEXING=false >> $GITHUB_ENV[0m
+2026-11-16T07:57:41.8097367Z [36;1mfi[0m
+2026-11-16T07:57:41.8110235Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-11-16T07:57:41.8110561Z env:
+2026-11-16T07:57:41.8110822Z   CARGO_BUILD_JOBS: 1
+2026-11-16T07:57:41.8111101Z   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+2026-11-16T07:57:41.8111370Z   CARGO_HOME: /home/runner/.cargo
+2026-11-16T07:57:41.8111619Z   CARGO_INCREMENTAL: 0
+2026-11-16T07:57:41.8111871Z   CARGO_TERM_COLOR: always
+2026-11-16T07:57:41.8112109Z   toolchain: stable
+2026-11-16T07:57:41.8112335Z ##[endgroup]
+2026-11-16T07:57:41.8219770Z ##[end-action id=__dtolnay_rust-toolchain.__run_9;outcome=success;conclusion=success;duration_ms=13]
+2026-11-16T07:57:41.8223520Z ##[start-action display=rustc +stable --version --verbose;id=__dtolnay_rust-toolchain.__run_10]
+2026-11-16T07:57:41.8237972Z ##[group]Run rustc +"$toolchain" --version --verbose
+2026-11-16T07:57:41.8238292Z [36;1mrustc +"$toolchain" --version --verbose[0m
+2026-11-16T07:57:41.8250831Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-11-16T07:57:41.8251183Z env:
+2026-11-16T07:57:41.8251392Z   CARGO_BUILD_JOBS: 1
+2026-11-16T07:57:41.8251619Z   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+2026-11-16T07:57:41.8252032Z   CARGO_HOME: /home/runner/.cargo
+2026-11-16T07:57:41.8252278Z   CARGO_INCREMENTAL: 0
+2026-11-16T07:57:41.8252514Z   CARGO_TERM_COLOR: always
+2026-11-16T07:57:41.8252738Z   toolchain: stable
+2026-11-16T07:57:41.8252940Z ##[endgroup]
+2026-11-16T07:57:41.8345880Z rustc 1.100.0 (0ef1bc386 2026-11-09)
+2026-11-16T07:57:41.8346468Z binary: rustc
+2026-11-16T07:57:41.8346909Z commit-hash: 0ef1bc386059596dada8fb65b50425aab2ea637a
+2026-11-16T07:57:41.8347378Z commit-date: 2026-11-09
+2026-11-16T07:57:41.8347788Z host: x86_64-unknown-linux-gnu
+2026-11-16T07:57:41.8348196Z release: 1.100.0
+2026-11-16T07:57:41.8348452Z LLVM version: 23.1.5
+2026-11-16T07:57:41.8355681Z ##[end-action id=__dtolnay_rust-toolchain.__run_10;outcome=success;conclusion=success;duration_ms=13]
+2026-11-16T07:57:41.8402463Z ##[group]Run sh tools/bootstrap.sh
+2026-11-16T07:57:41.8402791Z [36;1msh tools/bootstrap.sh[0m
+2026-11-16T07:57:41.8416329Z shell: /usr/bin/bash -e {0}
+2026-11-16T07:57:41.8416664Z env:
+2026-11-16T07:57:41.8416872Z   CARGO_BUILD_JOBS: 1
+2026-11-16T07:57:41.8417117Z   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+2026-11-16T07:57:41.8417406Z   CARGO_HOME: /home/runner/.cargo
+2026-11-16T07:57:41.8417682Z   CARGO_INCREMENTAL: 0
+2026-11-16T07:57:41.8417932Z   CARGO_TERM_COLOR: always
+2026-11-16T07:57:41.8418174Z ##[endgroup]
+2026-11-16T07:58:35.2856555Z ok bootstrap
+2026-11-16T07:58:35.2938092Z ##[group]Run bash witness/check.sh
+2026-11-16T07:58:35.2938571Z [36;1mbash witness/check.sh[0m
+2026-11-16T07:58:35.2956250Z shell: /usr/bin/bash -e {0}
+2026-11-16T07:58:35.2956571Z env:
+2026-11-16T07:58:35.2956779Z   CARGO_BUILD_JOBS: 1
+2026-11-16T07:58:35.2957049Z   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+2026-11-16T07:58:35.2957349Z   CARGO_HOME: /home/runner/.cargo
+2026-11-16T07:58:35.2957602Z   CARGO_INCREMENTAL: 0
+2026-11-16T07:58:35.2957846Z   CARGO_TERM_COLOR: always
+2026-11-16T07:58:35.2958084Z ##[endgroup]
+2026-11-16T07:58:38.6237089Z [1m[33mwarning[0m[1m: unused variable: `fd`[0m
+2026-11-16T07:58:38.6238507Z   [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/native/diagnostics.rs:25:44
+2026-11-16T07:58:38.6239248Z    [1m[94m|[0m
+2026-11-16T07:58:38.6239753Z [1m[94m25[0m [1m[94m|[0m fn literal(a: &mut Assembler, p: Platform, fd: u32, value: &str) {
+2026-11-16T07:58:38.6240857Z    [1m[94m|[0m                                            [1m[33m^^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_fd`[0m
+2026-11-16T07:58:38.6241484Z    [1m[94m|[0m
+2026-11-16T07:58:38.6242067Z    [1m[94m= [0m[1mnote[0m: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+2026-11-16T07:58:38.6242484Z 
+2026-11-16T07:58:38.9351381Z [1m[33mwarning[0m[1m: unused variable: `index`[0m
+2026-11-16T07:58:38.9352197Z    [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/structure_refactor.rs:323:18
+2026-11-16T07:58:38.9352731Z     [1m[94m|[0m
+2026-11-16T07:58:38.9353166Z [1m[94m323[0m [1m[94m|[0m             for (index, parameter) in parameters.iter().enumerate() {
+2026-11-16T07:58:38.9354026Z     [1m[94m|[0m                  [1m[33m^^^^^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_index`[0m
+2026-11-16T07:58:38.9354414Z 
+2026-11-16T07:58:38.9354693Z [1m[33mwarning[0m[1m: value assigned to `arguments` is never read[0m
+2026-11-16T07:58:38.9355496Z    [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/structure_refactor.rs:297:45
+2026-11-16T07:58:38.9356146Z     [1m[94m|[0m
+2026-11-16T07:58:38.9360317Z [1m[94m297[0m [1m[94m|[0m             let mut arguments: Vec<usize> = Vec::new(); let mut head = String::new();
+2026-11-16T07:58:38.9360892Z     [1m[94m|[0m                                             [1m[33m^^^^^^^^^^[0m [1m[33mthis value is reassigned later and never used[0m
+2026-11-16T07:58:38.9361294Z [1m[94m...[0m
+2026-11-16T07:58:38.9361866Z [1m[94m300[0m [1m[94m|[0m                 a::Expr::Call { callee, args } => { head = raw(&caller, caller.tree.exprs[*callee].span)?; arguments = args.clone(); }
+2026-11-16T07:58:38.9362630Z     [1m[94m|[0m                                                                                                            [1m[94m---------[0m [1m[94m`arguments` is overwritten here before the previous value is read[0m
+2026-11-16T07:58:38.9363524Z     [1m[94m|[0m
+2026-11-16T07:58:38.9364125Z     [1m[94m= [0m[1mnote[0m: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+2026-11-16T07:58:38.9364381Z 
+2026-11-16T07:58:38.9364599Z [1m[33mwarning[0m[1m: value assigned to `head` is never read[0m
+2026-11-16T07:58:38.9365236Z    [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/structure_refactor.rs:297:72
+2026-11-16T07:58:38.9365762Z     [1m[94m|[0m
+2026-11-16T07:58:38.9366243Z [1m[94m297[0m [1m[94m|[0m             let mut arguments: Vec<usize> = Vec::new(); let mut head = String::new();
+2026-11-16T07:58:38.9366813Z     [1m[94m|[0m                                                                        [1m[33m^^^^^^^^^^^^^[0m [1m[33mthis value is reassigned later and never used[0m
+2026-11-16T07:58:38.9367347Z [1m[94m...[0m
+2026-11-16T07:58:38.9367865Z [1m[94m300[0m [1m[94m|[0m                 a::Expr::Call { callee, args } => { head = raw(&caller, caller.tree.exprs[*callee].span)?; arguments = args.clone(); }
+2026-11-16T07:58:38.9368513Z     [1m[94m|[0m                                                     [1m[94m----[0m [1m[94m`head` is overwritten here before the previous value is read[0m
+2026-11-16T07:58:38.9368841Z 
+2026-11-16T07:58:38.9528631Z [1m[33mwarning[0m[1m: unused variable: `begin`[0m
+2026-11-16T07:58:38.9529381Z    [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/structure_refactor.rs:546:38
+2026-11-16T07:58:38.9530070Z     [1m[94m|[0m
+2026-11-16T07:58:38.9530531Z [1m[94m546[0m [1m[94m|[0m                         if let Some((begin, end)) = label(&unit, node.span, unit.tree.exprs[*value].span, field) {
+2026-11-16T07:58:38.9531180Z     [1m[94m|[0m                                      [1m[33m^^^^^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_begin`[0m
+2026-11-16T07:58:38.9531555Z 
+2026-11-16T07:58:38.9531702Z [1m[33mwarning[0m[1m: unused variable: `end`[0m
+2026-11-16T07:58:38.9532301Z    [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/structure_refactor.rs:546:45
+2026-11-16T07:58:38.9532857Z     [1m[94m|[0m
+2026-11-16T07:58:38.9533296Z [1m[94m546[0m [1m[94m|[0m                         if let Some((begin, end)) = label(&unit, node.span, unit.tree.exprs[*value].span, field) {
+2026-11-16T07:58:38.9534253Z     [1m[94m|[0m                                             [1m[33m^^^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_end`[0m
+2026-11-16T07:58:38.9534660Z 
+2026-11-16T07:58:39.1518400Z [1m[33mwarning[0m[1m: unused variable: `raw`[0m
+2026-11-16T07:58:39.1519648Z    [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/semantic.rs:432:24
+2026-11-16T07:58:39.1520817Z     [1m[94m|[0m
+2026-11-16T07:58:39.1521493Z [1m[94m432[0m [1m[94m|[0m     for (index, (path, raw)) in inputs.iter().enumerate() { by_path.insert(path.clone(), index); }
+2026-11-16T07:58:39.1522385Z     [1m[94m|[0m                        [1m[33m^^^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_raw`[0m
+2026-11-16T07:58:39.1522889Z 
+2026-11-16T07:58:39.1685896Z [1m[33mwarning[0m[1m: unused variable: `ty`[0m
+2026-11-16T07:58:39.1687067Z    [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/semantic_facts.rs:191:17
+2026-11-16T07:58:39.1688177Z     [1m[94m|[0m
+2026-11-16T07:58:39.1688727Z [1m[94m191[0m [1m[94m|[0m     for (index, ty) in program.types.iter().enumerate() {
+2026-11-16T07:58:39.1689855Z     [1m[94m|[0m                 [1m[33m^^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_ty`[0m
+2026-11-16T07:58:39.1690379Z 
+2026-11-16T07:58:39.3046721Z [1m[33mwarning[0m[1m: variants `ForeignCommand`, `Image`, `Channel`, and `NullDevice` are never constructed[0m
+2026-11-16T07:58:39.3048072Z   [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/elaborate/capabilities.rs:21:5
+2026-11-16T07:58:39.3049028Z    [1m[94m|[0m
+2026-11-16T07:58:39.3049414Z [1m[94m 5[0m [1m[94m|[0m pub(super) enum Value {
+2026-11-16T07:58:39.3049871Z    [1m[94m|[0m                 [1m[94m-----[0m [1m[94mvariants in this enum[0m
+2026-11-16T07:58:39.3050305Z [1m[94m...[0m
+2026-11-16T07:58:39.3050675Z [1m[94m21[0m [1m[94m|[0m     ForeignCommand,
+2026-11-16T07:58:39.3051162Z    [1m[94m|[0m     [1m[33m^^^^^^^^^^^^^^[0m
+2026-11-16T07:58:39.3051556Z [1m[94m22[0m [1m[94m|[0m     ForeignSession,
+2026-11-16T07:58:39.3052199Z [1m[94m23[0m [1m[94m|[0m     Image,
+2026-11-16T07:58:39.3052559Z    [1m[94m|[0m     [1m[33m^^^^^[0m
+2026-11-16T07:58:39.3052899Z [1m[94m24[0m [1m[94m|[0m     Channel,
+2026-11-16T07:58:39.3053282Z    [1m[94m|[0m     [1m[33m^^^^^^^[0m
+2026-11-16T07:58:39.3053603Z [1m[94m...[0m
+2026-11-16T07:58:39.3054101Z [1m[94m29[0m [1m[94m|[0m     NullDevice,
+2026-11-16T07:58:39.3054521Z    [1m[94m|[0m     [1m[33m^^^^^^^^^^[0m
+2026-11-16T07:58:39.3055018Z    [1m[94m|[0m
+2026-11-16T07:58:39.3055650Z    [1m[94m= [0m[1mnote[0m: `Value` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+2026-11-16T07:58:39.3056352Z    [1m[94m= [0m[1mnote[0m: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+2026-11-16T07:58:39.3056709Z 
+2026-11-16T07:58:39.3057022Z [1m[33mwarning[0m[1m: method `origin` is never used[0m
+2026-11-16T07:58:39.3057822Z   [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/elaborate/definition_types/semantic.rs:21:19
+2026-11-16T07:58:39.3058448Z    [1m[94m|[0m
+2026-11-16T07:58:39.3058813Z [1m[94m11[0m [1m[94m|[0m impl SourceBindings {
+2026-11-16T07:58:39.3059275Z    [1m[94m|[0m [1m[94m-------------------[0m [1m[94mmethod in this implementation[0m
+2026-11-16T07:58:39.3059672Z [1m[94m...[0m
+2026-11-16T07:58:39.3060118Z [1m[94m21[0m [1m[94m|[0m     pub(super) fn origin(&self, name: &str) -> Option<LocalTarget> {
+2026-11-16T07:58:39.3060617Z    [1m[94m|[0m                   [1m[33m^^^^^^[0m
+2026-11-16T07:58:39.3060825Z 
+2026-11-16T07:58:39.3061133Z [1m[33mwarning[0m[1m: function `reference_probe_checked` is never used[0m
+2026-11-16T07:58:39.3061826Z     [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/interpreter.rs:2764:4
+2026-11-16T07:58:39.3062372Z      [1m[94m|[0m
+2026-11-16T07:58:39.3062822Z [1m[94m2764[0m [1m[94m|[0m fn reference_probe_checked<T>(value: Result<T, RunError>) -> T {
+2026-11-16T07:58:39.3063340Z      [1m[94m|[0m    [1m[33m^^^^^^^^^^^^^^^^^^^^^^^[0m
+2026-11-16T07:58:39.3063554Z 
+2026-11-16T07:58:39.3064038Z [1m[33mwarning[0m[1m: function `assert_reference_reuse` is never used[0m
+2026-11-16T07:58:39.3064766Z     [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/interpreter.rs:2768:15
+2026-11-16T07:58:39.3065321Z      [1m[94m|[0m
+2026-11-16T07:58:39.3065721Z [1m[94m2768[0m [1m[94m|[0m pub(crate) fn assert_reference_reuse() {
+2026-11-16T07:58:39.3066171Z      [1m[94m|[0m               [1m[33m^^^^^^^^^^^^^^^^^^^^^^[0m
+2026-11-16T07:58:39.3066419Z 
+2026-11-16T07:58:39.3066724Z [1m[33mwarning[0m[1m: function `write_function` is never used[0m
+2026-11-16T07:58:39.3067382Z     [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/ir_text.rs:1146:15
+2026-11-16T07:58:39.3068044Z      [1m[94m|[0m
+2026-11-16T07:58:39.3068507Z [1m[94m1146[0m [1m[94m|[0m pub(crate) fn write_function(function: &Function) -> String {
+2026-11-16T07:58:39.3068992Z      [1m[94m|[0m               [1m[33m^^^^^^^^^^^^^^[0m
+2026-11-16T07:58:39.3069354Z 
+2026-11-16T07:58:39.3069644Z [1m[33mwarning[0m[1m: function `cache_contracts` is never used[0m
+2026-11-16T07:58:39.3070471Z   [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/native.rs:15:15
+2026-11-16T07:58:39.3071164Z    [1m[94m|[0m
+2026-11-16T07:58:39.3071889Z [1m[94m15[0m [1m[94m|[0m pub(crate) fn cache_contracts() { cache::contracts(); }
+2026-11-16T07:58:39.3072468Z    [1m[94m|[0m               [1m[33m^^^^^^^^^^^^^^^[0m
+2026-11-16T07:58:39.3072797Z 
+2026-11-16T07:58:39.3073135Z [1m[33mwarning[0m[1m: function `fixture` is never used[0m
+2026-11-16T07:58:39.3074400Z    [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/native/cache.rs:212:4
+2026-11-16T07:58:39.3075235Z     [1m[94m|[0m
+2026-11-16T07:58:39.3075988Z [1m[94m212[0m [1m[94m|[0m fn fixture(padding: usize, existing: bool) -> (Assembler, Label, Label, BTreeMap<Vec<u8>, Label>) {
+2026-11-16T07:58:39.3076713Z     [1m[94m|[0m    [1m[33m^^^^^^^[0m
+2026-11-16T07:58:39.3077038Z 
+2026-11-16T07:58:39.3077358Z [1m[33mwarning[0m[1m: function `fixture_body` is never used[0m
+2026-11-16T07:58:39.3078206Z    [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/native/cache.rs:230:4
+2026-11-16T07:58:39.3078800Z     [1m[94m|[0m
+2026-11-16T07:58:39.3079157Z [1m[94m230[0m [1m[94m|[0m fn fixture_body(
+2026-11-16T07:58:39.3079578Z     [1m[94m|[0m    [1m[33m^^^^^^^^^^^^[0m
+2026-11-16T07:58:39.3079838Z 
+2026-11-16T07:58:39.3080103Z [1m[33mwarning[0m[1m: function `fixture_finish` is never used[0m
+2026-11-16T07:58:39.3080775Z    [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/native/cache.rs:259:4
+2026-11-16T07:58:39.3081330Z     [1m[94m|[0m
+2026-11-16T07:58:39.3081872Z [1m[94m259[0m [1m[94m|[0m fn fixture_finish(mut a: Assembler, symbols: &BTreeMap<Vec<u8>, Label>) -> (Vec<u8>, Vec<(usize, u8)>) {
+2026-11-16T07:58:39.3082404Z     [1m[94m|[0m    [1m[33m^^^^^^^^^^^^^^[0m
+2026-11-16T07:58:39.3082645Z 
+2026-11-16T07:58:39.3082904Z [1m[33mwarning[0m[1m: function `contracts` is never used[0m
+2026-11-16T07:58:39.3083562Z    [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/native/cache.rs:267:15
+2026-11-16T07:58:39.3084697Z     [1m[94m|[0m
+2026-11-16T07:58:39.3085067Z [1m[94m267[0m [1m[94m|[0m pub(super) fn contracts() {
+2026-11-16T07:58:39.3085409Z     [1m[94m|[0m               [1m[33m^^^^^^^^^[0m
+2026-11-16T07:58:39.3085654Z 
+2026-11-16T07:58:39.3085893Z [1m[33mwarning[0m[1m: associated function `fallible` is never used[0m
+2026-11-16T07:58:39.3086508Z   [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/native/entry.rs:48:19
+2026-11-16T07:58:39.3087022Z    [1m[94m|[0m
+2026-11-16T07:58:39.3087312Z [1m[94m47[0m [1m[94m|[0m impl Plan {
+2026-11-16T07:58:39.3087693Z    [1m[94m|[0m [1m[94m---------[0m [1m[94massociated function in this implementation[0m
+2026-11-16T07:58:39.3088187Z [1m[94m48[0m [1m[94m|[0m     pub(super) fn fallible(grant: &EntryGrant) -> bool {
+2026-11-16T07:58:39.3088567Z    [1m[94m|[0m                   [1m[33m^^^^^^^^[0m
+2026-11-16T07:58:39.3088746Z 
+2026-11-16T07:58:39.3088928Z [1m[33mwarning[0m[1m: field `lock` is never read[0m
+2026-11-16T07:58:39.3089509Z   [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/structure_write.rs:65:5
+2026-11-16T07:58:39.3090152Z    [1m[94m|[0m
+2026-11-16T07:58:39.3090476Z [1m[94m59[0m [1m[94m|[0m pub struct Writer {
+2026-11-16T07:58:39.3090833Z    [1m[94m|[0m            [1m[94m------[0m [1m[94mfield in this struct[0m
+2026-11-16T07:58:39.3091166Z [1m[94m...[0m
+2026-11-16T07:58:39.3091430Z [1m[94m65[0m [1m[94m|[0m     lock: File,
+2026-11-16T07:58:39.3091721Z    [1m[94m|[0m     [1m[33m^^^^[0m
+2026-11-16T07:58:39.3091892Z 
+2026-11-16T07:59:28.7538820Z [1m[33mwarning[0m[1m: unnecessary parentheses around method argument[0m
+2026-11-16T07:59:28.7540496Z    [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/host_network/broker.lkj:675:20
+2026-11-16T07:59:28.7541331Z     [1m[94m|[0m
+2026-11-16T07:59:28.7541739Z [1m[94m675[0m [1m[94m|[0m     a.immediate(C, (!0x800u64));
+2026-11-16T07:59:28.7542158Z     [1m[94m|[0m                    [1m[33m^[0m         [1m[33m^[0m
+2026-11-16T07:59:28.7542787Z     [1m[94m|[0m
+2026-11-16T07:59:28.7543213Z     [1m[94m= [0m[1mnote[0m: `#[warn(unused_parens)]` (part of `#[warn(unused)]`) on by default
+2026-11-16T07:59:28.7543935Z [1m[96mhelp[0m: remove these parentheses
+2026-11-16T07:59:28.7544296Z     [1m[94m|[0m
+2026-11-16T07:59:28.7544749Z [1m[94m675[0m [91m- [0m    a.immediate(C, [91m([0m!0x800u64[91m)[0m);
+2026-11-16T07:59:28.7545281Z [1m[94m675[0m [92m+ [0m    a.immediate(C, !0x800u64);
+2026-11-16T07:59:28.7545699Z     [1m[94m|[0m
+2026-11-16T07:59:28.7545841Z 
+2026-11-16T07:59:28.7546270Z [1m[33mwarning[0m[1m: unnecessary parentheses around block return value[0m
+2026-11-16T07:59:28.7547248Z     [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/store.rs:1078:37
+2026-11-16T07:59:28.7548005Z      [1m[94m|[0m
+2026-11-16T07:59:28.7548494Z [1m[94m1078[0m [1m[94m|[0m         None => { *overflow = true; (!0usize) }
+2026-11-16T07:59:28.7549065Z      [1m[94m|[0m                                     [1m[33m^[0m       [1m[33m^[0m
+2026-11-16T07:59:28.7549715Z      [1m[94m|[0m
+2026-11-16T07:59:28.7550090Z [1m[96mhelp[0m: remove these parentheses
+2026-11-16T07:59:28.7550451Z      [1m[94m|[0m
+2026-11-16T07:59:28.7550995Z [1m[94m1078[0m [91m- [0m        None => { *overflow = true; [91m([0m!0usize[91m)[0m }
+2026-11-16T07:59:28.7551597Z [1m[94m1078[0m [92m+ [0m        None => { *overflow = true; !0usize }
+2026-11-16T07:59:28.7552071Z      [1m[94m|[0m
+2026-11-16T07:59:28.7552280Z 
+2026-11-16T07:59:28.7552574Z [1m[33mwarning[0m[1m: unnecessary parentheses around function argument[0m
+2026-11-16T07:59:28.7553517Z     [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/store.rs:1102:68
+2026-11-16T07:59:28.7554509Z      [1m[94m|[0m
+2026-11-16T07:59:28.7555148Z [1m[94m1102[0m [1m[94m|[0m     assert!(io_interval(0usize, Some(20usize), (!0usize) - 5usize, (!0usize)).is_none());
+2026-11-16T07:59:28.7555946Z      [1m[94m|[0m                                                                    [1m[33m^[0m       [1m[33m^[0m
+2026-11-16T07:59:28.7556424Z      [1m[94m|[0m
+2026-11-16T07:59:28.7556780Z [1m[96mhelp[0m: remove these parentheses
+2026-11-16T07:59:28.7557261Z      [1m[94m|[0m
+2026-11-16T07:59:28.7557745Z [1m[94m1102[0m [91m- [0m    assert!(io_interval(0usize, Some(20usize), (!0usize) - 5usize, [91m([0m!0usize[91m)[0m).is_none());
+2026-11-16T07:59:28.7558433Z [1m[94m1102[0m [92m+ [0m    assert!(io_interval(0usize, Some(20usize), (!0usize) - 5usize, !0usize).is_none());
+2026-11-16T07:59:28.7558828Z      [1m[94m|[0m
+2026-11-16T07:59:28.7558943Z 
+2026-11-16T07:59:28.7559163Z [1m[33mwarning[0m[1m: unnecessary parentheses around function argument[0m
+2026-11-16T07:59:28.7559836Z     [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/store.rs:1105:20
+2026-11-16T07:59:28.7560551Z      [1m[94m|[0m
+2026-11-16T07:59:28.7560955Z [1m[94m1105[0m [1m[94m|[0m     assert!(io_add((!0usize), 1usize, &mut overflow) == (!0usize) && overflow);
+2026-11-16T07:59:28.7561416Z      [1m[94m|[0m                    [1m[33m^[0m       [1m[33m^[0m
+2026-11-16T07:59:28.7561735Z      [1m[94m|[0m
+2026-11-16T07:59:28.7562018Z [1m[96mhelp[0m: remove these parentheses
+2026-11-16T07:59:28.7562309Z      [1m[94m|[0m
+2026-11-16T07:59:28.7562731Z [1m[94m1105[0m [91m- [0m    assert!(io_add([91m([0m!0usize[91m)[0m, 1usize, &mut overflow) == (!0usize) && overflow);
+2026-11-16T07:59:28.7563297Z [1m[94m1105[0m [92m+ [0m    assert!(io_add(!0usize, 1usize, &mut overflow) == (!0usize) && overflow);
+2026-11-16T07:59:28.7563883Z      [1m[94m|[0m
+2026-11-16T07:59:28.7564038Z 
+2026-11-16T07:59:28.7564280Z [1m[33mwarning[0m[1m: unnecessary parentheses around function argument[0m
+2026-11-16T07:59:28.7565080Z    [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/test_generators/reduction.lkj:294:26
+2026-11-16T07:59:28.7565642Z     [1m[94m|[0m
+2026-11-16T07:59:28.7565984Z [1m[94m294[0m [1m[94m|[0m     let mut pairs = vec![(!0usize); tokens.len()];
+2026-11-16T07:59:28.7566383Z     [1m[94m|[0m                          [1m[33m^[0m       [1m[33m^[0m
+2026-11-16T07:59:28.7566698Z     [1m[94m|[0m
+2026-11-16T07:59:28.7566979Z [1m[96mhelp[0m: remove these parentheses
+2026-11-16T07:59:28.7567240Z     [1m[94m|[0m
+2026-11-16T07:59:28.7567622Z [1m[94m294[0m [91m- [0m    let mut pairs = vec![[91m([0m!0usize[91m)[0m; tokens.len()];
+2026-11-16T07:59:28.7568094Z [1m[94m294[0m [92m+ [0m    let mut pairs = vec![!0usize; tokens.len()];
+2026-11-16T07:59:28.7568447Z     [1m[94m|[0m
+2026-11-16T07:59:28.7568555Z 
+2026-11-16T07:59:29.5305380Z [1m[33mwarning[0m[1m: unused variable: `code`[0m
+2026-11-16T07:59:29.5306146Z    [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/test_generators.rs:559:29
+2026-11-16T07:59:29.5306955Z     [1m[94m|[0m
+2026-11-16T07:59:29.5307777Z [1m[94m559[0m [1m[94m|[0m [1m[94m...[0m   } else if let Some((code, diagnostic, message)) = driver::native_trap(path, selection.native().program(), runtime, &capture.r[1m[94m...[0m
+2026-11-16T07:59:29.5308524Z     [1m[94m|[0m                           [1m[33m^^^^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_code`[0m
+2026-11-16T07:59:29.5308931Z     [1m[94m|[0m
+2026-11-16T07:59:29.5309432Z     [1m[94m= [0m[1mnote[0m: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+2026-11-16T07:59:29.5309751Z 
+2026-11-16T07:59:29.5309926Z [1m[33mwarning[0m[1m: unused variable: `message`[0m
+2026-11-16T07:59:29.5310544Z    [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/test_generators.rs:559:47
+2026-11-16T07:59:29.5311113Z     [1m[94m|[0m
+2026-11-16T07:59:29.5311741Z [1m[94m559[0m [1m[94m|[0m [1m[94m...[0m   } else if let Some((code, diagnostic, message)) = driver::native_trap(path, selection.native().program(), runtime, &capture.r[1m[94m...[0m
+2026-11-16T07:59:29.5312507Z     [1m[94m|[0m                                             [1m[33m^^^^^^^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_message`[0m
+2026-11-16T07:59:29.5312868Z 
+2026-11-16T08:00:02.7012854Z ok Rust witness: 276 values/output cases, 344 verdicts
+2026-11-16T08:00:05.5806099Z ok directory rename_new native: absent success, 7 occupied destinations, public/raw basenames, UTF-8/raw bytes, regular-only read and readonly File
+2026-11-16T08:00:05.5881577Z ok directory boundary: destination created at renameat2 entry was never overwritten
+2026-11-16T08:00:05.5958434Z ok directory boundary: read retained inode after pathname replacement
+2026-11-16T08:00:05.6057753Z ok directory rename_new native: ENOSYS/EOPNOTSUPP propagate without a replacing fallback
+2026-11-16T08:00:07.0074169Z ok directory rename_new interpreter: absent success, 7 occupied destinations, public/raw basenames, UTF-8/raw bytes, regular-only read and readonly File
+2026-11-16T08:00:07.4499090Z ok directory boundary: destination created at renameat2 entry was never overwritten
+2026-11-16T08:00:07.7836944Z ok directory boundary: read retained inode after pathname replacement
+2026-11-16T08:00:08.4187819Z ok directory rename_new interpreter: ENOSYS/EOPNOTSUPP propagate without a replacing fallback
+2026-11-16T08:00:08.4410122Z ok directory rename_new witness: absent success, 7 occupied destinations, public/raw basenames, UTF-8/raw bytes, regular-only read and readonly File
+2026-11-16T08:00:08.4493608Z ok directory boundary: destination created at renameat2 entry was never overwritten
+2026-11-16T08:00:08.4580020Z ok directory boundary: read retained inode after pathname replacement
+2026-11-16T08:00:08.4687953Z ok directory rename_new witness: ENOSYS/EOPNOTSUPP propagate without a replacing fallback
+2026-11-16T08:00:08.5406963Z ok directory rename_new: independent checked-IR mutable authority, ReadDirectory refusal, arity, byte-view and result signatures
+2026-11-16T08:00:08.5460966Z ok directory rename_new suite: 3 routes, 5.835 s, load 1.23 0.57 0.23 1/297 3967 -> 1.21 0.58 0.23 1/297 4155
+2026-11-16T08:00:09.4187112Z ok directory identity: exact dev/ino, same-inode alias and retained parent after pathname replacement
+2026-11-16T08:00:09.4265871Z ok directory identity native: lengths 0/15/17 refuse without changes; raw/helper metadata EIO preserves caller bytes
+2026-11-16T08:00:09.6422962Z ok directory identity: exact dev/ino, same-inode alias and retained parent after pathname replacement
+2026-11-16T08:00:09.8672421Z ok directory identity interpreter: lengths 0/15/17 refuse without changes; raw/helper metadata EIO preserves caller bytes
+2026-11-16T08:00:09.8754814Z ok directory identity: exact dev/ino, same-inode alias and retained parent after pathname replacement
+2026-11-16T08:00:09.8841863Z ok directory identity witness: lengths 0/15/17 refuse without changes; raw/helper metadata EIO preserves caller bytes
+2026-11-16T08:00:09.9168518Z ok directory identity: checked-IR mutable Directory and mutable byte-view boundary, arity and result
+2026-11-16T08:00:09.9221614Z ok directory identity suite: 3 routes, 1.364 s, load 1.21 0.58 0.23 1/297 4162 -> 1.21 0.58 0.23 2/297 4269
+2026-11-16T08:00:09.9246581Z ok optional Rust witness and compiler byte identity
+2026-11-16T08:00:09.9357114Z Post job cleanup.
+2026-11-16T08:00:09.9994121Z [command]/usr/bin/git version
+2026-11-16T08:00:10.0025597Z git version 2.56.1
+2026-11-16T08:00:10.0050965Z Temporarily overriding HOME='/home/runner/work/_temp/2cfb2fad-0167-4c33-9191-e1ad181ae24d' before making global git config changes
+2026-11-16T08:00:10.0051924Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-16T08:00:10.0056858Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/lkjscript/lkjscript
+2026-11-16T08:00:10.0082338Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-16T08:00:10.0106623Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-16T08:00:10.0301921Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-16T08:00:10.0319787Z http.https://github.com/.extraheader
+2026-11-16T08:00:10.0326469Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-11-16T08:00:10.0347365Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-16T08:00:10.0540400Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-16T08:00:10.0566162Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-16T08:00:10.0860339Z Cleaning up orphan processes
+2026-11-16T08:00:10.1099304Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

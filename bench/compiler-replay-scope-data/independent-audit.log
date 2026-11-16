@@ -1,0 +1,16 @@
+independent_exact_four_item_reconstruction=pass
+request_sha256=cc92ff50f86eb5479bcfb19f08bffbe9d9b8a33140f1ac0a434d1e092c55ff3d
+spec_sha256=2ba92aab4d3803131e3fae5ec6aa2fa38759b97b7e7c4f8d4919d978d28d23f9
+parent_file_sha256=b5511e8e6ee3ba68b4dd8e120f0e1d26d005b76b390efae9f3ed86b1a9afc411
+committed_and_main_file_sha256=2b02455269ae3226ca027da6c41bfa7cfc09c11cf023a983f850297dd71c3c49
+manifest_paths=1206 matched_blobs=2412 changed_paths=1
+successful_operations=4 retained_lkj_added=10 retained_lkj_deleted=4 credited_lines=14
+apply_mode=apply authority_delta=none checked_instances=12692 fresh=12692 reused=0
+wall_seconds=50.42
+user_seconds=48.09
+system_seconds=0.61
+peak_rss_kib=1149276
+exit_status=0
+load_before=3.24 4.20 5.87 7/5883 2433870
+load_after=12.84 6.69 6.63 5/5902 2461874
+compiler_or_test_executions=0 source_edits=0
