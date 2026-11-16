@@ -155,6 +155,35 @@ route under the declared envelope. The matching diagnostic is a source-level
 trap location in this producer. No stack trace, dynamic recursion depth,
 allocation-site proof or OS observer was added.
 
+A read-only review of the declared producer source narrows the interpretation.
+In [elaborate.lkj](../src/elaborate.lkj), `Compiler::instantiate` queues a source
+instance and creates its declared function, while `elaborate_definitions`
+drains `pending_functions` iteratively. Ordinary callee bodies are not compiled
+by recursively following each call. Definition inference's
+[`header_signature`](../src/elaborate/definition_types.lkj) reads the declared
+generic, parameter and result contract. The frozen generator's
+[`make_function` and `root_source`](scale.lkj) use shallow statement templates
+and dispatch groups of at most 32 calls. Its calls to earlier generated
+functions therefore do not establish growing callee-body elaboration depth.
+
+[`native::stack_available`](../src/native.lkj) reports R0008 for an
+unrepresentable downward stack request or for a failed growth request.
+[`platform::stack`](../src/native/platform.lkj) attempts adjacent stack
+mappings, reduces a refused request toward the required size, and returns
+Boolean failure after replacing the final mapping result with zero. The
+captured trap thus cannot distinguish actual stack/frame demand, address-space
+pressure or a blocked adjacent mapping. This source review provides no dynamic
+stack depth, final mapping errno or failed allocation size, and does not justify
+a speculative work-queue repair.
+
+| Statically reviewed file at the declared source tree | SHA-256 |
+| --- | --- |
+| `src/elaborate.lkj` | `f6df272d50928d3bc22b1f55412a081ba74839523bb9193b9f375917e3d97d90` |
+| `src/elaborate/definition_types.lkj` | `163766449e8cbcc5d4d48a6979f26172db6ff8f08980038b1114a62c0338adf8` |
+| `src/native.lkj` | `36b9063ac248741a4c92d3aff1ec165e3c4fce2012804ad4f5ed459759137d49` |
+| `src/native/platform.lkj` | `ce8b3fdf826a878abbb9e75832c611eae48560dd1e39e7162029d96070bdd0e5` |
+| `bench/scale.lkj` | `557d6b124fe739f17c678c77b92e5f6259d87ebca69c2a56aca411071c5ff1e9` |
+
 The old 1M observation used another producer and source population and reported
 a different trap with missing completion metrics. Neither its missing values
 nor its cause are filled by this new result. Historical container timings
