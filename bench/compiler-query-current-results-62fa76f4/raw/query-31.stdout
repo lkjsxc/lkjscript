@@ -1,0 +1,8 @@
+"reuse::AuthenticatedRoot"	level=protocol	fact=query	version=3 producer=34491766f5258dd3af3caf92db6b92dfeba09b405c00a8dd19cd955205c0d377 validation=authenticated-producing-compiler current-check=not-performed snapshot=9ff914ad9f4ef15c9bc5c61cb5d0718abcfde00322243a7a52a73f6b08d3534e source=d01c7eb47d92c7aefc7490b83f9bbc05025f6197871a7f90c51dfcad1576bb2b checked-ir=4613bd709ee1d9238dca31e51b25d091abcd21a77f018090fedb8db8032c0fa2 kind=outline depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit
+"reuse::AuthenticatedRoot::field:authority"	level=source-claim	fact=signature	kind=field text="authority: [u8; 32]" bytes=19 complete=true
+"reuse::AuthenticatedRoot::field:digest"	level=source-claim	fact=signature	kind=field text="digest: [u8; 32]" bytes=16 complete=true
+"reuse::AuthenticatedRoot::field:key"	level=source-claim	fact=signature	kind=field text="key: String" bytes=11 complete=true
+"reuse::AuthenticatedRoot::field:length"	level=source-claim	fact=signature	kind=field text="length: usize" bytes=13 complete=true
+"reuse::AuthenticatedRoot::field:namespace"	level=source-claim	fact=signature	kind=field text="namespace: String" bytes=17 complete=true
+"reuse::AuthenticatedRoot::field:producer"	level=source-claim	fact=signature	kind=field text="producer: Vec<u8>" bytes=17 complete=true
+"reuse::AuthenticatedRoot"	level=protocol	fact=continuation	cursor=none facts=6 pages-read=5 traversal-steps=7

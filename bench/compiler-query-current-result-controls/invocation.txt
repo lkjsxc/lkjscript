@@ -1,0 +1,5 @@
+cwd=/home/coder/workspace/lkjscript-compiler-query-container-20261116
+commit=fc0147a6ceef94a3aea9eee6729205130b690393
+request=compiler-current50-continuation-launch-1087
+session=pipe-mdkmmjpkminceikojimgjkldpbidkhad
+bash bench/compiler-query-current-continue.sh --checkpoint bench/compiler-query-current-continuation-62fa76f4.json --results target/compiler-query-current-continuation-62fa76f4

@@ -1,0 +1,119 @@
+{
+  "pause_ns": "779069631557",
+  "query_segment_span_ns": "1352031809",
+  "timed_wrapper_sum_ns": "452195526",
+  "stats": {
+    "answer_bytes": {
+      "n": 50,
+      "min": 767,
+      "median": 2262.5,
+      "max": 32530
+    },
+    "facts": {
+      "n": 50,
+      "min": 1,
+      "median": 6,
+      "max": 96
+    },
+    "pages_read": {
+      "n": 50,
+      "min": 5,
+      "median": 11,
+      "max": 274
+    },
+    "traversal_steps": {
+      "n": 50,
+      "min": 2,
+      "median": 12,
+      "max": 266
+    },
+    "rss_kib": {
+      "n": 50,
+      "min": 4700,
+      "median": 4700,
+      "max": 8272
+    },
+    "snapshot_auth_ms": {
+      "n": 50,
+      "min": 0.074,
+      "median": 0.0875,
+      "max": 0.162
+    },
+    "semantic_query_ms": {
+      "n": 50,
+      "min": 0.714,
+      "median": 2.298,
+      "max": 57.565
+    },
+    "total_ms": {
+      "n": 50,
+      "min": 0.8,
+      "median": 2.3905,
+      "max": 57.676
+    },
+    "wrapper_wall_ns": {
+      "n": 50,
+      "min": 2729156,
+      "median": 4461788,
+      "max": 60812180
+    }
+  },
+  "more": [
+    {
+      "ordinal": "8",
+      "kind": "slice",
+      "id": "driver::execute_source",
+      "bytes": 32294,
+      "facts": 96,
+      "pages": 267,
+      "ns": 60812180
+    },
+    {
+      "ordinal": "36",
+      "kind": "slice",
+      "id": "source::load_report",
+      "bytes": 32530,
+      "facts": 95,
+      "pages": 274,
+      "ns": 58526448
+    },
+    {
+      "ordinal": "41",
+      "kind": "uses",
+      "id": "driver::Memo",
+      "bytes": 14702,
+      "facts": 96,
+      "pages": 89,
+      "ns": 22557347
+    },
+    {
+      "ordinal": "43",
+      "kind": "callees",
+      "id": "driver::execute_source",
+      "bytes": 22338,
+      "facts": 96,
+      "pages": 31,
+      "ns": 11428691
+    }
+  ],
+  "level": {
+    "source-claim": 44,
+    "checked-ir": 5,
+    "protocol,source-claim": 1
+  },
+  "source_slices": {
+    "n": 20,
+    "min": 1491,
+    "median": 3738,
+    "max": 32530
+  },
+  "fact_rows": 844,
+  "reply_bytes": 233757,
+  "owner20_reply_bytes": 42230,
+  "first_attempt_query_launches": 0,
+  "continuation_query_launches": 50,
+  "builds_repeated": 0,
+  "raw_result_file_count": 380,
+  "queries_tsv_sha256": "21dd0f8bbe8d6806d58df6b7cb6306f4109ffbd59fa73d474b7b68710c23bea8",
+  "summary_sha256": "c7aaf9418e51f8c8aa064f5a71a9b2d3201352f883b11bbc2d477a8b9af56a95"
+}

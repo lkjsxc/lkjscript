@@ -1,0 +1,7 @@
+repository=/home/coder/workspace/lkjscript-compiler-query-container-20261116
+fixture=/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-query-current-run.TDPm4g
+external_key_directory=/tmp/compiler-query-current-key.seAq58
+original_evidence=/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-query-current-62fa76f4
+continuation_evidence=/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-query-current-continuation-62fa76f4
+cleanup=not_released; retain fixture/store/key/images for root live audit
+key_contents=not_copied

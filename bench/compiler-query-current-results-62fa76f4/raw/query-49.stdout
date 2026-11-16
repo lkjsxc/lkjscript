@@ -1,0 +1,27 @@
+"semantic_store::Snapshot"	level=protocol	fact=query	version=3 producer=34491766f5258dd3af3caf92db6b92dfeba09b405c00a8dd19cd955205c0d377 validation=authenticated-producing-compiler current-check=not-performed snapshot=9ff914ad9f4ef15c9bc5c61cb5d0718abcfde00322243a7a52a73f6b08d3534e source=d01c7eb47d92c7aefc7490b83f9bbc05025f6197871a7f90c51dfcad1576bb2b checked-ir=4613bd709ee1d9238dca31e51b25d091abcd21a77f018090fedb8db8032c0fa2 kind=dependents depth=2 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit
+"impl:semantic_store::Snapshot#144df4413fe95a53"	level=source-claim	fact=dependents	change=signature conservative=true
+"semantic_store::Reader"	level=source-claim	fact=dependents	change=signature conservative=true
+"semantic_store::Reader::new"	level=source-claim	fact=dependents	change=signature conservative=true
+"semantic_store::decode_snapshot"	level=source-claim	fact=dependents	change=signature conservative=true
+"semantic_store::open"	level=source-claim	fact=dependents	change=signature conservative=true
+"semantic_store::publish"	level=source-claim	fact=dependents	change=signature conservative=true
+"semantic_store::publish_emitted"	level=source-claim	fact=dependents	change=signature conservative=true
+"impl:semantic_store::Snapshot#144df4413fe95a53"	level=protocol	fact=empty-indexed-result	kind=dependents claim=recorded-facts-only
+"impl:semantic_store::Reader#a12b2efe61535204"	level=source-claim	fact=dependents	change=signature conservative=true
+"semantic_query::run"	level=source-claim	fact=dependents	change=signature conservative=true
+"semantic_store::Reader::new"	level=source-claim	fact=dependents	change=signature conservative=true
+"semantic_query::run"	level=source-claim	fact=dependents	change=signature checked-instance-call=true conservative=true
+"semantic_store::open"	level=source-claim	fact=dependents	change=signature checked-instance-call=true conservative=true
+"semantic_store::open"	level=source-claim	fact=dependents	change=signature conservative=true
+"semantic_store::publish_emitted"	level=source-claim	fact=dependents	change=signature checked-instance-call=true conservative=true
+"semantic_store::publish_emitted"	level=source-claim	fact=dependents	change=signature conservative=true
+"driver::execute_source"	level=source-claim	fact=dependents	change=signature checked-instance-call=true conservative=true
+"driver::execute_source"	level=source-claim	fact=dependents	change=signature conservative=true
+"semantic_query::run"	level=source-claim	fact=dependents	change=signature checked-instance-call=true conservative=true
+"semantic_query::run"	level=source-claim	fact=dependents	change=signature conservative=true
+"semantic_store::publish"	level=protocol	fact=empty-indexed-result	kind=dependents claim=recorded-facts-only
+"driver::execute_source"	level=source-claim	fact=dependents	change=signature checked-instance-call=true conservative=true
+"driver::execute_source"	level=source-claim	fact=dependents	change=signature conservative=true
+"semantic_store::publish"	level=source-claim	fact=dependents	change=signature checked-instance-call=true conservative=true
+"semantic_store::publish"	level=source-claim	fact=dependents	change=signature conservative=true
+"semantic_store::Snapshot"	level=protocol	fact=continuation	cursor=none facts=25 pages-read=42 traversal-steps=41

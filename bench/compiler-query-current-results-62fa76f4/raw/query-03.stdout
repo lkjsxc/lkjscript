@@ -1,0 +1,28 @@
+"driver::Memo"	level=protocol	fact=query	version=3 producer=34491766f5258dd3af3caf92db6b92dfeba09b405c00a8dd19cd955205c0d377 validation=authenticated-producing-compiler current-check=not-performed snapshot=9ff914ad9f4ef15c9bc5c61cb5d0718abcfde00322243a7a52a73f6b08d3534e source=d01c7eb47d92c7aefc7490b83f9bbc05025f6197871a7f90c51dfcad1576bb2b checked-ir=4613bd709ee1d9238dca31e51b25d091abcd21a77f018090fedb8db8032c0fa2 kind=outline depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit
+"driver::Memo::field:build_reused"	level=source-claim	fact=signature	kind=field text="build_reused: usize" bytes=19 complete=true
+"driver::Memo::field:capture_catalog"	level=source-claim	fact=signature	kind=field text="capture_catalog: bool" bytes=21 complete=true
+"driver::Memo::field:catalog"	level=source-claim	fact=signature	kind=field text="catalog: Option<crate::semantic::Catalog>" bytes=41 complete=true
+"driver::Memo::field:catalog_items_only"	level=source-claim	fact=signature	kind=field text="catalog_items_only: bool" bytes=24 complete=true
+"driver::Memo::field:checked_local_reused"	level=source-claim	fact=signature	kind=field text="checked_local_reused: usize" bytes=27 complete=true
+"driver::Memo::field:checked_reused"	level=source-claim	fact=signature	kind=field text="checked_reused: usize" bytes=21 complete=true
+"driver::Memo::field:embedded_sources"	level=source-claim	fact=signature	kind=field text="embedded_sources: Vec<String>" bytes=29 complete=true
+"driver::Memo::field:emitted_reused"	level=source-claim	fact=signature	kind=field text="emitted_reused: usize" bytes=21 complete=true
+"driver::Memo::field:front_definitions"	level=source-claim	fact=signature	kind=field text="front_definitions: usize" bytes=24 complete=true
+"driver::Memo::field:front_functions"	level=source-claim	fact=signature	kind=field text="front_functions: usize" bytes=22 complete=true
+"driver::Memo::field:front_reused"	level=source-claim	fact=signature	kind=field text="front_reused: usize" bytes=19 complete=true
+"driver::Memo::field:inline_accepted"	level=source-claim	fact=signature	kind=field text="inline_accepted: usize" bytes=22 complete=true
+"driver::Memo::field:inline_attempts"	level=source-claim	fact=signature	kind=field text="inline_attempts: usize" bytes=22 complete=true
+"driver::Memo::field:inline_calls"	level=source-claim	fact=signature	kind=field text="inline_calls: usize" bytes=19 complete=true
+"driver::Memo::field:inline_functions"	level=source-claim	fact=signature	kind=field text="inline_functions: usize" bytes=23 complete=true
+"driver::Memo::field:inline_rejected"	level=source-claim	fact=signature	kind=field text="inline_rejected: usize" bytes=22 complete=true
+"driver::Memo::field:input_snapshot"	level=source-claim	fact=signature	kind=field text="input_snapshot: BTreeMap<(String, String), (Option<Vec<u8>>, Option<String>)>" bytes=77 complete=true
+"driver::Memo::field:inputs"	level=source-claim	fact=signature	kind=field text="inputs: Vec<store::Input>" bytes=25 complete=true
+"driver::Memo::field:native_sizes"	level=source-claim	fact=signature	kind=field text="native_sizes: BTreeMap<String, usize>" bytes=37 complete=true
+"driver::Memo::field:private_source_digest"	level=source-claim	fact=signature	kind=field text="private_source_digest: Option<[u8; 32]>" bytes=39 complete=true
+"driver::Memo::field:runtime_input"	level=source-claim	fact=signature	kind=field text="runtime_input: Option<store::Input>" bytes=35 complete=true
+"driver::Memo::field:source_inputs"	level=source-claim	fact=signature	kind=field text="source_inputs: Vec<(String, Vec<u8>)>" bytes=37 complete=true
+"driver::Memo::field:store"	level=source-claim	fact=signature	kind=field text="store: Option<store::Store>" bytes=27 complete=true
+"driver::Memo::field:test_rerun"	level=source-claim	fact=signature	kind=field text="test_rerun: usize" bytes=17 complete=true
+"driver::Memo::field:test_reused"	level=source-claim	fact=signature	kind=field text="test_reused: usize" bytes=18 complete=true
+"driver::Memo::field:valid_inputs"	level=source-claim	fact=signature	kind=field text="valid_inputs: bool" bytes=18 complete=true
+"driver::Memo"	level=protocol	fact=continuation	cursor=none facts=26 pages-read=9 traversal-steps=28

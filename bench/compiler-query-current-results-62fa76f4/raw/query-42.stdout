@@ -1,0 +1,18 @@
+"driver::compile"	level=protocol	fact=query	version=3 producer=34491766f5258dd3af3caf92db6b92dfeba09b405c00a8dd19cd955205c0d377 validation=authenticated-producing-compiler current-check=not-performed snapshot=9ff914ad9f4ef15c9bc5c61cb5d0718abcfde00322243a7a52a73f6b08d3534e source=d01c7eb47d92c7aefc7490b83f9bbc05025f6197871a7f90c51dfcad1576bb2b checked-ir=4613bd709ee1d9238dca31e51b25d091abcd21a77f018090fedb8db8032c0fa2 kind=callers depth=2 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit
+"driver::batch"	level=checked-ir	fact=callers	caller-instance="ir:driver::batch" callee-instance="ir:driver::compile" mapping=source-claim cleanup=false
+"driver::build_child"	level=checked-ir	fact=callers	caller-instance="ir:driver::build_child" callee-instance="ir:driver::compile" mapping=source-claim cleanup=false
+"driver::build_entries"	level=checked-ir	fact=callers	caller-instance="ir:driver::build_entries" callee-instance="ir:driver::compile" mapping=source-claim cleanup=false
+"driver::execute"	level=checked-ir	fact=callers	caller-instance="ir:driver::execute" callee-instance="ir:driver::compile" mapping=source-claim cleanup=false
+"driver::execute_source"	level=checked-ir	fact=callers	caller-instance="ir:driver::execute_source" callee-instance="ir:driver::compile" mapping=source-claim cleanup=false
+"driver::structure::compare"	level=checked-ir	fact=callers	caller-instance="ir:driver::structure::compare" callee-instance="ir:driver::compile" mapping=source-claim cleanup=false
+"driver::structure::edit"	level=checked-ir	fact=callers	caller-instance="ir:driver::structure::edit" callee-instance="ir:driver::compile" mapping=source-claim cleanup=false
+"driver::structure::replay_target"	level=checked-ir	fact=callers	caller-instance="ir:driver::structure::replay_target" callee-instance="ir:driver::compile" mapping=source-claim cleanup=false
+"driver::execute_source"	level=checked-ir	fact=callers	caller-instance="ir:driver::execute_source" callee-instance="ir:driver::batch" mapping=source-claim cleanup=false
+"driver::execute_source"	level=checked-ir	fact=callers	caller-instance="ir:driver::execute_source" callee-instance="ir:driver::build_child" mapping=source-claim cleanup=false
+"driver::execute_source"	level=checked-ir	fact=callers	caller-instance="ir:driver::execute_source" callee-instance="ir:driver::build_entries" mapping=source-claim cleanup=false
+"driver::main"	level=checked-ir	fact=callers	caller-instance="ir:driver::main" callee-instance="ir:driver::execute" mapping=source-claim cleanup=false
+"driver::execute"	level=checked-ir	fact=callers	caller-instance="ir:driver::execute" callee-instance="ir:driver::execute_source" mapping=source-claim cleanup=false
+"driver::structure::run"	level=checked-ir	fact=callers	caller-instance="ir:driver::structure::run" callee-instance="ir:driver::structure::compare" mapping=source-claim cleanup=false
+"driver::structure::run"	level=checked-ir	fact=callers	caller-instance="ir:driver::structure::run" callee-instance="ir:driver::structure::edit" mapping=source-claim cleanup=false
+"driver::structure::edit"	level=checked-ir	fact=callers	caller-instance="ir:driver::structure::edit" callee-instance="ir:driver::structure::replay_target" mapping=source-claim cleanup=false
+"driver::compile"	level=protocol	fact=continuation	cursor=none facts=16 pages-read=39 traversal-steps=34

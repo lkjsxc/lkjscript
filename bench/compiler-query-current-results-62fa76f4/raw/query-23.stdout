@@ -1,0 +1,5 @@
+"ir::ReturnSource"	level=protocol	fact=query	version=3 producer=34491766f5258dd3af3caf92db6b92dfeba09b405c00a8dd19cd955205c0d377 validation=authenticated-producing-compiler current-check=not-performed snapshot=9ff914ad9f4ef15c9bc5c61cb5d0718abcfde00322243a7a52a73f6b08d3534e source=d01c7eb47d92c7aefc7490b83f9bbc05025f6197871a7f90c51dfcad1576bb2b checked-ir=4613bd709ee1d9238dca31e51b25d091abcd21a77f018090fedb8db8032c0fa2 kind=outline depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit
+"ir::ReturnSource::variant:Leaves"	level=source-claim	fact=signature	kind=variant text="Leaves(Vec<ReturnLeaf>)" bytes=23 complete=true
+"ir::ReturnSource::variant:Parameter"	level=source-claim	fact=signature	kind=variant text="Parameter {\u000a        index: usize,\u000a        projections: Vec<Projection>,\u000a    }" bytes=77 complete=true
+"ir::ReturnSource::variant:Static"	level=source-claim	fact=signature	kind=variant text="Static" bytes=6 complete=true
+"ir::ReturnSource"	level=protocol	fact=continuation	cursor=none facts=3 pages-read=5 traversal-steps=4
