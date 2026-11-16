@@ -1,0 +1,10 @@
+// expect: reject E_TRAIT
+// cause: bad message.
+// pending: Explain the missing mutable-Vec iteration witness at the for loop
+// over capability-bearing Supervisor elements. Indexed borrowing is accepted
+// and is the current isolated parser supervisor specimen's spelling.
+use std::workers::Supervisor;
+pub fn probe(image:&mut Image,deadline:usize) {
+    let mut workers=Vec::new();workers.push(Supervisor::new(image,2usize,deadline).unwrap());
+    for worker in &mut workers {worker.shutdown(deadline).unwrap();}
+}

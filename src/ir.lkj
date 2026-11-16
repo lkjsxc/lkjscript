@@ -53,6 +53,13 @@ pub enum TypeKind {
     ReadFile,
     /// Affine immutable admitted foreign image; only confined execution can use it.
     ForeignCommand,
+    /// Attached confined worker; destruction terminates and reaps its process.
+    ForeignSession,
+    /// Authenticated immutable child image, kernel IPC endpoint, and owned worker.
+    Image,
+    Channel,
+    Worker,
+    ReadRegion,
     /// Explicit descriptor authority for the kernel's null device.
     NullDevice,
     /// Affine open file; structural destruction closes its handle.
@@ -100,6 +107,10 @@ pub enum EntryGrant {
     ReadDirectoryEnvironmentValue(Vec<u8>, Option<Vec<u8>>),
     /// Exactly one absolute NUL-terminated executable path, snapshotted at entry.
     ForeignCommand(Vec<u8>),
+    /// Host-only unresolved path; never reaches execution.
+    ImagePath(Vec<u8>),
+    /// Authenticated manifest identity, image digest and exact ELF bytes.
+    Image(Vec<u8>),
     NullDevice,
     /// Exact sixteen-byte IPv4 sockaddr, matching WorldListen.
     Listener(Vec<u8>),
@@ -286,6 +297,22 @@ pub enum IntrinsicOp {
     StdoutWrite,
     StderrWrite,
     WorldProcess,
+    ImageSpawn,
+    ImageBuffer,
+    FileMapReadonly,
+    ReadRegionBytes,
+    ReadRegionLen,
+    ChannelSend,
+    ChannelReceive,
+    ChannelSendFile,
+    ChannelReceiveFile,
+    WorkerSend,
+    WorkerReceive,
+    WorkerSendFile,
+    WorkerReceiveFile,
+    WorkerWait,
+    WorkerTerminate,
+    WorkerResult,
     WorldClock,
     WorldFile,
     ClockRead,
@@ -342,6 +369,9 @@ pub enum IntrinsicOp {
     FileModifiedNanoseconds,
     ForeignRun,
     ForeignImage,
+    ForeignStart,
+    ForeignExchange,
+    ForeignFinish,
 }
 impl IntrinsicOp {
     pub fn parse(text: &str) -> Option<IntrinsicOp> {
@@ -379,6 +409,22 @@ impl IntrinsicOp {
             "stdout_write" => Some(IntrinsicOp::StdoutWrite),
             "stderr_write" => Some(IntrinsicOp::StderrWrite),
             "world_process" => Some(IntrinsicOp::WorldProcess),
+            "image_buffer" => Some(IntrinsicOp::ImageBuffer),
+            "file_map_readonly" => Some(IntrinsicOp::FileMapReadonly),
+            "read_region_bytes" => Some(IntrinsicOp::ReadRegionBytes),
+            "read_region_len" => Some(IntrinsicOp::ReadRegionLen),
+            "image_spawn" => Some(IntrinsicOp::ImageSpawn),
+            "channel_send" => Some(IntrinsicOp::ChannelSend),
+            "channel_receive" => Some(IntrinsicOp::ChannelReceive),
+            "channel_send_file" => Some(IntrinsicOp::ChannelSendFile),
+            "channel_receive_file" => Some(IntrinsicOp::ChannelReceiveFile),
+            "worker_send" => Some(IntrinsicOp::WorkerSend),
+            "worker_receive" => Some(IntrinsicOp::WorkerReceive),
+            "worker_send_file" => Some(IntrinsicOp::WorkerSendFile),
+            "worker_receive_file" => Some(IntrinsicOp::WorkerReceiveFile),
+            "worker_wait" => Some(IntrinsicOp::WorkerWait),
+            "worker_terminate" => Some(IntrinsicOp::WorkerTerminate),
+            "worker_result" => Some(IntrinsicOp::WorkerResult),
             "world_clock" => Some(IntrinsicOp::WorldClock),
             "world_file" => Some(IntrinsicOp::WorldFile),
             "clock_read" => Some(IntrinsicOp::ClockRead),
@@ -435,6 +481,9 @@ impl IntrinsicOp {
             "file_modified_nanoseconds" => Some(IntrinsicOp::FileModifiedNanoseconds),
             "foreign_run" => Some(IntrinsicOp::ForeignRun),
             "foreign_image" => Some(IntrinsicOp::ForeignImage),
+            "foreign_start" => Some(IntrinsicOp::ForeignStart),
+            "foreign_exchange" => Some(IntrinsicOp::ForeignExchange),
+            "foreign_finish" => Some(IntrinsicOp::ForeignFinish),
 
             _ => None,
         }
@@ -474,6 +523,22 @@ impl IntrinsicOp {
             IntrinsicOp::StdoutWrite => "stdout_write",
             IntrinsicOp::StderrWrite => "stderr_write",
             IntrinsicOp::WorldProcess => "world_process",
+            IntrinsicOp::ImageBuffer => "image_buffer",
+            IntrinsicOp::FileMapReadonly => "file_map_readonly",
+            IntrinsicOp::ReadRegionBytes => "read_region_bytes",
+            IntrinsicOp::ReadRegionLen => "read_region_len",
+            IntrinsicOp::ImageSpawn => "image_spawn",
+            IntrinsicOp::ChannelSend => "channel_send",
+            IntrinsicOp::ChannelReceive => "channel_receive",
+            IntrinsicOp::ChannelSendFile => "channel_send_file",
+            IntrinsicOp::ChannelReceiveFile => "channel_receive_file",
+            IntrinsicOp::WorkerSend => "worker_send",
+            IntrinsicOp::WorkerReceive => "worker_receive",
+            IntrinsicOp::WorkerSendFile => "worker_send_file",
+            IntrinsicOp::WorkerReceiveFile => "worker_receive_file",
+            IntrinsicOp::WorkerWait => "worker_wait",
+            IntrinsicOp::WorkerTerminate => "worker_terminate",
+            IntrinsicOp::WorkerResult => "worker_result",
             IntrinsicOp::WorldClock => "world_clock",
             IntrinsicOp::WorldFile => "world_file",
             IntrinsicOp::ClockRead => "clock_read",
@@ -530,6 +595,9 @@ impl IntrinsicOp {
             IntrinsicOp::FileModifiedNanoseconds => "file_modified_nanoseconds",
             IntrinsicOp::ForeignRun => "foreign_run",
             IntrinsicOp::ForeignImage => "foreign_image",
+            IntrinsicOp::ForeignStart => "foreign_start",
+            IntrinsicOp::ForeignExchange => "foreign_exchange",
+            IntrinsicOp::ForeignFinish => "foreign_finish",
 
         }
     }

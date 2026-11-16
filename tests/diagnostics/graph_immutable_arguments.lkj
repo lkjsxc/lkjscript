@@ -1,0 +1,4 @@
+// expect: reject E_BORROW
+// cause: rule with no Rust counterpart.
+// pending: Arguments.args requires a mutable capability; identify the Arguments binding and suggest mut at its declaration.
+pub fn probe(arguments: Arguments) -> usize { arguments.args().len() }

@@ -1,0 +1,5 @@
+// expect: reject E_TYPE
+// cause: rule with no Rust counterpart.
+// pending: Name the Directory pathname parameter and its str contract when a byte literal is supplied; the publication specimen first tried create_private(b"next") and rename byte paths.
+// accepted: root.create_private("next"); Directory convenience paths are text.
+pub fn probe(root: &mut Directory) { let _ = root.create_private(b"next"); }

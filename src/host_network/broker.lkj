@@ -5,6 +5,8 @@ use super::process::{self, ProcessCode};
 use super::directories;
 use super::lifecycle;
 use super::foreign::{self, ForeignCode};
+use super::foreign_session;
+use super::workers::{self, WorkerCode};
 
 pub(super) const REQUEST: i64 = -128;
 const RESPONSE: i64 = -224;
@@ -158,8 +160,10 @@ pub(super) fn image(local: &[u8], address: &[u8], nonce: &[u8]) -> Result<Vec<u8
     let mut a = Assembler::new();
     let p = ProcessCode::new(&mut a);
     let foreign = ForeignCode::new(&mut a);
+    let workers = WorkerCode::new(&mut a);
+    let mut worker_operations = Vec::new(); for _ in 0usize..11usize { worker_operations.push(a.label()); }
     let mut foreign_operations = Vec::new();
-    for _index in 0usize..3usize { foreign_operations.push(a.label()); }
+    for _index in 0usize..7usize { foreign_operations.push(a.label()); }
     let next = a.label();
     let rpc = a.label();
     let unix_request = a.label();
@@ -192,7 +196,9 @@ pub(super) fn image(local: &[u8], address: &[u8], nonce: &[u8]) -> Result<Vec<u8
     a.lea(SP, SP, DRAIN);
     a.immediate(A, 0);
     a.store(BP, -16, A); // Process-record head.
+    a.store(BP, -240, A); // Confined session-record head.
     lifecycle::initialize(&mut a);
+    workers::initialize(&mut a);
     a.immediate(R14, 0);
     a.immediate(R15, 0);
     a.immediate(DI, 1); // PR_SET_PDEATHSIG
@@ -326,6 +332,7 @@ pub(super) fn image(local: &[u8], address: &[u8], nonce: &[u8]) -> Result<Vec<u8
         a.compare(A, C);
         a.condition(4, operations[index]);
     }
+    for index in 0usize..worker_operations.len() { a.immediate(C, 61 + index as u64); a.compare(A,C); a.condition(4,worker_operations[index]); }
     a.immediate(C, 55); a.compare(A, C); a.condition(4, file_seal);
     a.immediate(C, 56); a.compare(A, C); a.condition(4, file_seals);
     a.immediate(C, 50);
@@ -357,6 +364,7 @@ pub(super) fn image(local: &[u8], address: &[u8], nonce: &[u8]) -> Result<Vec<u8
         a.compare(A, C);
         a.condition(4, foreign_operations[index]);
     }
+    for index in 0usize..4usize { a.immediate(C,57+index as u64); a.compare(A,C); a.condition(4,foreign_operations[index+3]); }
     for (number, label) in vec![(20u64, p.spawn), (21u64, p.wait), (22u64, p.terminate), (23u64, p.drop_child), (24u64, p.request_stop)] {
         a.immediate(C, number);
         a.compare(A, C);
@@ -382,7 +390,10 @@ pub(super) fn image(local: &[u8], address: &[u8], nonce: &[u8]) -> Result<Vec<u8
     emit_readiness(&mut a, &operations, reply, invalid, bad);
     process::emit(&mut a, &p, reply);
     foreign::dispatch(&mut a, foreign, &foreign_operations, reply, bad);
+    foreign_session::dispatch(&mut a, foreign, &foreign_operations[3..], reply, bad);
     foreign::emit(&mut a, foreign);
+    workers::dispatch(&mut a, workers, &worker_operations, reply, bad);
+    workers::emit(&mut a, workers);
 
     a.bind(bad);
     a.immediate(A, (-9i64) as u64);
@@ -424,6 +435,8 @@ pub(super) fn image(local: &[u8], address: &[u8], nonce: &[u8]) -> Result<Vec<u8
     exact(&mut a, read_all, 0, exit);
     exact(&mut a, write_all, 1, exit);
     a.bind(exit);
+    a.call(foreign.foreign_shutdown);
+    a.call(workers.shutdown);
     a.call(p.shutdown);
     a.immediate(DI, 0);
     a.immediate(A, 60);

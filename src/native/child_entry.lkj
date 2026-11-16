@@ -62,6 +62,12 @@ fn descriptor(a: &mut Assembler, fd: u64, kind: Kind, bad: Label) {
         Kind::Directory | Kind::ReadDirectory => { stat(a, fd, bad); file_kind(a, 0x4000, bad); }
         Kind::ReadFile => { stat(a, fd, bad); file_kind(a, 0x8000, bad); }
         Kind::NullDevice => { stat(a, fd, bad); file_kind(a, 0x2000, bad); expect(a, BP, -216, 0x103, bad); }
+        Kind::Channel => {
+            socket_option(a, fd, 3, 5, bad); // SOCK_SEQPACKET.
+            a.immediate(A, 32); a.store(BP, -64, A);
+            a.immediate(DI, fd); a.lea(SI, BP, -112); a.lea(D, BP, -64); checked(a, 51, bad);
+            a.load_width(A, BP, -112, 2, false); equal(a, A, 1, bad); // AF_UNIX.
+        }
         Kind::Listener => {
             socket_option(a, fd, 3, 1, bad); // SO_TYPE == SOCK_STREAM.
             socket_option(a, fd, 30, 1, bad); // SO_ACCEPTCONN.

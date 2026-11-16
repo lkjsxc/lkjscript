@@ -1,0 +1,26 @@
+use std::workers::{ordered_map,packet,decode};
+use std::process_model::verify_trace;
+pub fn main(mut image:Image,mut clock:Clock,mut output:Stdout)->i64 {
+    let deadline=clock.nanoseconds().unwrap()+120_000_000_000usize;
+    let input=vec![1_000_000u64;4096];
+    let mut one_trace=Vec::new();let start=clock.nanoseconds().unwrap();
+    let one=ordered_map(&mut image,1usize,&input,deadline,&mut one_trace).unwrap();
+    let single=clock.nanoseconds().unwrap()-start;
+    let mut four_trace=Vec::new();let start=clock.nanoseconds().unwrap();
+    let four=ordered_map(&mut image,4usize,&input,deadline,&mut four_trace).unwrap();
+    let parallel=clock.nanoseconds().unwrap()-start;
+    assert_eq!(one,four);assert_eq!(verify_trace(4usize,4usize,&one,&four_trace).unwrap().results,four);
+    let start=clock.nanoseconds().unwrap();
+    let mut worker=image.spawn(deadline).unwrap();
+    let startup=clock.nanoseconds().unwrap()-start;
+    let start=clock.nanoseconds().unwrap();
+    for job in 0usize..1000usize {
+        worker.send(&packet(1u8,job,0u64),deadline).unwrap();let mut bytes=[0u8;17];
+        let count=worker.receive(&mut bytes,deadline).unwrap();
+        let (tag,id,_)=decode(&bytes[..count]).unwrap();assert_eq!(tag,1u8);assert_eq!(id,job);
+    }
+    let roundtrip=(clock.nanoseconds().unwrap()-start)/1000usize;
+    worker.send(&packet(0u8,0usize,0u64),deadline).unwrap();assert_eq!(worker.wait(deadline).unwrap(),0i64);
+    output.write(format!("pool jobs=4096 rounds_per_job=1000000 single_ns={single} four_ns={parallel} speedup_milli={} worker_start_ns={startup} roundtrip_ns={roundtrip}\n",(single*1000usize)/parallel).as_bytes());
+    42
+}

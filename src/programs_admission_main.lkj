@@ -1,0 +1,161 @@
+//! Runtime IR-admission specimen. This image is an explicit privileged compiler producer.
+//! It admits only zero-authority entries and contains each call in a sealed child.
+pub mod ast;
+pub mod authority;
+pub mod child_image;
+mod admitted_image;
+pub mod entry_grants;
+pub mod program_directory;
+pub mod backend;
+pub mod check;
+pub mod diagnostic;
+pub mod diagnostics;
+pub mod driver;
+pub mod driver_host;
+pub mod host_network;
+pub mod elaborate;
+pub mod embedded;
+pub(crate) mod facts;
+pub mod frontend;
+pub mod generics;
+pub mod interpreter;
+pub mod ir;
+pub mod ir_text;
+pub mod ir_binary;
+pub mod json;
+pub mod names;
+pub mod native;
+pub mod optimizer;
+pub mod resolve;
+pub mod reuse;
+pub mod runtime;
+pub mod runtime_memory;
+pub mod runtime_diagnostics;
+pub use std::sha256;
+pub mod source;
+pub mod store;
+pub mod syntax;
+pub mod test_runner;
+pub mod test_generators;
+pub mod x86;
+
+
+fn io(operation: &str, errno: i64) -> String {
+    format!("E_ADMIT_IO {operation} errno={errno}")
+}
+fn diagnostic(problem: diagnostic::Diagnostic) -> String {
+    let path = if problem.path.is_empty() { "<admitted-ir>" } else { problem.path.as_str() };
+    format!("{path}:{}:{}: {} {}", problem.line, problem.column, problem.code, problem.message)
+}
+fn read_exact(input: &mut File, bytes: &mut [u8]) -> Result<bool, String> {
+    let mut used = 0usize;
+    while used < bytes.len() {
+        let count = input.read(&mut bytes[used..]).map_err(|error: i64| io("read frame", error))?;
+        if count == 0usize {
+            if used == 0usize { return Ok(false); }
+            return Err("E_ADMIT_FRAME truncated input".to_string());
+        }
+        used += count;
+    }
+    Ok(true)
+}
+fn word(bytes: &[u8]) -> u64 {
+    let mut value = 0u64;
+    for index in 0usize..8usize { value |= (bytes[index] as u64) << ((index * 8usize) as u64); }
+    value
+}
+fn frame(input: &mut File) -> Result<Option<Vec<u8>>, String> {
+    let mut header = [0u8; 8];
+    if !read_exact(input, &mut header)? { return Ok(None); }
+    let length = word(&header);
+    if length == 0u64 { return Ok(None); }
+    if length > (!0usize) as u64 { return Err("E_ADMIT_FRAME length exceeds usize".to_string()); }
+    let mut bytes = vec![0u8; length as usize];
+    if !read_exact(input, &mut bytes)? { return Err("E_ADMIT_FRAME missing body".to_string()); }
+    Ok(Some(bytes))
+}
+fn producer(world: &mut World) -> Result<String, String> {
+    let mut file = world.executable().map_err(|error: i64| io("producer", error))?;
+    let mut hash = sha256::Sha256::new();
+    let mut buffer = [0u8; 65536];
+    loop {
+        let count = file.read(&mut buffer).map_err(|error: i64| io("producer read", error))?;
+        if count == 0usize { break; }
+        hash.update(&buffer[..count]);
+    }
+    Ok(child_image::hex(&hash.finish()))
+}
+fn admit(world: &mut World, runtime: &runtime::Runtime, bytes: Vec<u8>, deadline: usize) -> Result<String, String> {
+    let text = String::from_utf8(bytes).map_err(|_| -> String { "E_ADMIT_INPUT IR is not UTF-8".to_string() })?;
+    // Identical parser/checker to build-time admission. No source evaluator,
+    // unchecked optimizer output, cached verdict, or caller-made proof is accepted.
+    let raw = ir_text::read_located(&text, "<admitted-ir>").map_err(|problem| diagnostic(problem))?;
+    let checked = check::check(raw).map_err(|problem| diagnostic(problem))?;
+    let mut entry = None;
+    for (index, function) in checked.program().functions.iter().enumerate() {
+        if function.name == "probe" { entry = Some(index); break; }
+    }
+    let entry = entry.ok_or("E_ADMIT_ENTRY requires probe".to_string())?;
+    let manifest = child_image::manifest(&checked, entry)?;
+    if !manifest.slots.is_empty() {
+        return Err("E_ADMIT_AUTHORITY admitted entry must receive no capabilities".to_string());
+    }
+    let report = authority::analyze(&checked, entry)?;
+    if report.manifest.full_world || !report.manifest.requirements.is_empty()
+        || report.functions.iter().any(|function: &authority::ReachableFunction| !function.operations.is_empty()) {
+        return Err("E_ADMIT_AUTHORITY admitted closure must have no effects".to_string());
+    }
+    let image = backend::prepare_child(&checked, runtime, entry, &manifest).map_err(|problem| diagnostic(problem))?
+        .finish().map_err(|problem| diagnostic(problem))?;
+    let digest = sha256::hex_digest(&image.bytes);
+    let mut executable = world.temporary_file().map_err(|error: i64| io("image", error))?;
+    executable.write_all(&image.bytes).map_err(|error: i64| io("image write", error))?;
+    executable.set_executable().map_err(|error: i64| io("image executable", error))?;
+    executable.seal().map_err(|error: i64| io("image seal", error))?;
+    // No path/reopened object between emission and execution. The producer itself
+    // owns the freshly checked object; this is not a general File -> Image cast.
+    let arguments: Vec<Vec<u8>> = Vec::new();
+    let capture = test_runner::invoke(world, &executable, &arguments, deadline)?;
+    if capture.timed_out { return Ok(format!("deadline image={digest}")); }
+    if !capture.stdout.is_empty() || !capture.stderr.is_empty() {
+        return Err("E_ADMIT_CAPTURE zero-authority child wrote a standard stream".to_string());
+    }
+    if let Some((_, location, _)) = runtime_diagnostics::decode("<admitted-ir>", checked.program(), runtime, &capture.result) {
+        return Ok(format!("trapped {location} image={digest}"));
+    }
+    if capture.status != 0i64 || capture.result.len() != 8usize {
+        return Ok(format!("terminated status={} result-bytes={} image={digest}", capture.status, capture.result.len()));
+    }
+    Ok(format!("returned kind={} bits={} image={digest}", manifest.result, word(&capture.result)))
+}
+fn run(world: &mut World) -> Result<(), String> {
+    let arguments = world.args();
+    if arguments.len() != 1usize { return Err("E_ADMIT_ARGUMENT expected explicit per-call deadline in nanoseconds".to_string()); }
+    let deadline = String::from_utf8(arguments[0].clone()).map_err(|_| -> String { "E_ADMIT_ARGUMENT invalid deadline".to_string() })?
+        .as_str().parse::<usize>().map_err(|_| -> String { "E_ADMIT_ARGUMENT invalid deadline".to_string() })?;
+    if deadline == 0usize { return Err("E_ADMIT_ARGUMENT deadline must be nonzero".to_string()); }
+    let runtime = driver::load_runtime(world, &None)?;
+    let identity = producer(world)?;
+    let mut input = world.stdin_file().map_err(|error: i64| io("input", error))?;
+    world.stdout().write(format!("ready producer={identity} authority=World admitted-authority=none execution=attached-process\n").as_bytes());
+    let mut count = 0usize;
+    while let Some(bytes) = frame(&mut input)? {
+        let reply = match admit(world, &runtime, bytes, deadline) {
+            Ok(value) => value,
+            Err(error) => format!("refused {error}"),
+        };
+        let mut output = Vec::new();
+        json::write_string(&mut output, &reply);
+        output.push(b'\n');
+        world.stdout().write(&output);
+        count += 1usize;
+    }
+    world.stdout().write(format!("finished requests={count}\n").as_bytes());
+    Ok(())
+}
+pub fn main(mut world: World) {
+    if let Err(error) = run(&mut world) {
+        world.stderr().write(format!("{error}\n").as_bytes());
+        world.set_exit_status(1u8);
+    }
+}

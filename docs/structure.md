@@ -195,8 +195,10 @@ The bounded summary samples authority, source declarations, representation and
 instances in deterministic rounds. Generated IR names follow named facts
 within their category. The final line counts every category, including omitted
 facts; presentation order never changes an identity or proof. Authority facts
-state the gained/lost effects and grants explicitly, plus entry presence on
-both sides.
+state the gained/lost effects and declared capability slots explicitly, plus entry
+presence on both sides. Both host-grantable entries and the authenticated child
+transfer profile participate; Channel, File and ReadFile parameters do not vanish
+from comparison merely because the host CLI cannot create those grants.
 
 Source signature/body/text changes are labelled claims. Absolute checkout paths
 are excluded from that summary. Text equality compares exact bytes under the

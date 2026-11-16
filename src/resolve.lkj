@@ -142,7 +142,7 @@ fn builtin(name: &str) -> bool {
             | "Stdout"
             | "Stdin"
             | "Stderr"
-            | "Directory" | "ReadDirectory" | "ReadFile" | "ForeignCommand" | "NullDevice"
+            | "Directory" | "ReadDirectory" | "ReadFile" | "Image" | "Channel" | "Worker" | "ReadRegion" | "ForeignCommand" | "ForeignSession" | "NullDevice"
             | "File"
             | "Process"
             | "Clock"

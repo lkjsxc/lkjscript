@@ -1,0 +1,29 @@
+use std::workers::{packet,decode};
+pub fn main(mut image:Image,mut clock:Clock,mut output:Stdout)->i64 {
+    let deadline=clock.nanoseconds().unwrap()+60_000_000_000usize;
+    let payload=vec![7u8;1024usize*1024usize];let mut backing=image.buffer(&payload).unwrap();
+    let mut worker=image.spawn(deadline).unwrap();let mut timings=Vec::new();
+    // Validate every byte through both transports before the timed page samples.
+    for tag in 9u8..11u8 {
+        worker.send(&packet(tag,0usize,payload.len() as u64),deadline).unwrap();
+        if tag==10u8 {
+            let mut offset=0usize;while offset<payload.len() {worker.send(&payload[offset..offset+65536usize],deadline).unwrap();offset+=65536usize;}
+        } else {worker.send_file(backing.duplicate().unwrap(),deadline).unwrap();}
+        let mut reply=[0u8;17];let count=worker.receive(&mut reply,deadline).unwrap();
+        assert_eq!(decode(&reply[..count]),Some((tag,0usize,7_340_032u64)));
+    }
+    for tag in 7u8..9u8 {
+        let start=clock.nanoseconds().unwrap();
+        for job in 0usize..32usize {
+            worker.send(&packet(tag,job,payload.len() as u64),deadline).unwrap();
+            if tag==7u8 {
+                let mut offset=0usize;while offset<payload.len() {worker.send(&payload[offset..offset+65536usize],deadline).unwrap();offset+=65536usize;}
+            } else {worker.send_file(backing.duplicate().unwrap(),deadline).unwrap();}
+            let mut reply=[0u8;17];let count=worker.receive(&mut reply,deadline).unwrap();
+            assert_eq!(decode(&reply[..count]),Some((tag,job,1792u64)));
+        }
+        timings.push(clock.nanoseconds().unwrap()-start);
+    }
+    worker.send(&packet(0u8,0usize,0u64),deadline).unwrap();assert_eq!(worker.wait(deadline).unwrap(),0i64);
+    output.write(format!("payload full_byte_controls=2 sample_stride=4096 bytes=1048576 rounds=32 copy_ns={} shared_ns={} copy_mib_s={} shared_mib_s={}\n",timings[0],timings[1],32_000_000_000usize/timings[0],32_000_000_000usize/timings[1]).as_bytes());42
+}

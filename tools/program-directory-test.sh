@@ -160,4 +160,5 @@ for adopted in examples/site examples/journal examples/desk; do
         "$((($(date +%s%N) - adopted_built_ns) / 1000000))" \
         "$adopted_load_before" "$adopted_load_built" "$(cat /proc/loadavg)"
 done
+bash tools/programs-unit-cases.sh "$compiler" src/programs_directory_cases.lkj
 printf 'ok program directories (module discovery, cases, authority, exact grants, invocation environment, literal source, isolated cache identity)\n'

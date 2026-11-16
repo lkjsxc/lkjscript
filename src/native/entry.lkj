@@ -16,6 +16,8 @@ fn description(grant: &EntryGrant) -> String {
         EntryGrant::Directory(path) => format!("Directory {}", path_value(path)),
         EntryGrant::ReadDirectory(path) => format!("ReadDirectory {}", path_value(path)),
         EntryGrant::ReadDirectoryEnvironment(name) | EntryGrant::ReadDirectoryEnvironmentValue(name, _) => format!("ReadDirectory env:{}", path_value(name)),
+        EntryGrant::Image(_) => "Image authenticated immutable child".to_string(),
+        EntryGrant::ImagePath(_) => "Image unresolved (invalid)".to_string(),
         EntryGrant::ForeignCommand(path) => format!("ForeignCommand {}", path_value(path)),
         EntryGrant::NullDevice => "NullDevice /dev/null".to_string(),
         EntryGrant::DirectoryEnvironment(name) | EntryGrant::DirectoryEnvironmentValue(name, _) => format!("Directory env:{}", path_value(name)),
@@ -125,6 +127,10 @@ impl Plan {
                     a.immediate(SI, path.len() as u64);
                     a.call(p.directory_open);
                 }
+                EntryGrant::Image(bytes) => {
+                    a.address(DI, self.paths[index]); a.immediate(SI, bytes.len() as u64); a.call(p.image_open);
+                }
+                EntryGrant::ImagePath(_) => { a.immediate(A, (-22i64) as u64); }
                 EntryGrant::ForeignCommand(path) => {
                     a.address(DI, self.paths[index]);
                     a.immediate(SI, path.len() as u64);
@@ -177,7 +183,7 @@ impl Plan {
             bytes.extend_from_slice(self.descriptions[index].as_bytes());
             a.data_label(self.paths[index], offset + bytes.len());
             match grant {
-                EntryGrant::ForeignCommand(path) | EntryGrant::Directory(path) | EntryGrant::DirectoryEnvironment(path) | EntryGrant::ReadDirectory(path) | EntryGrant::ReadDirectoryEnvironment(path) | EntryGrant::Environment(path) => bytes.extend_from_slice(path),
+                EntryGrant::Image(path) | EntryGrant::ImagePath(path) | EntryGrant::ForeignCommand(path) | EntryGrant::Directory(path) | EntryGrant::DirectoryEnvironment(path) | EntryGrant::ReadDirectory(path) | EntryGrant::ReadDirectoryEnvironment(path) | EntryGrant::Environment(path) => bytes.extend_from_slice(path),
                 EntryGrant::EnvironmentValue(Some(value)) | EntryGrant::DirectoryEnvironmentValue(_, Some(value)) | EntryGrant::ReadDirectoryEnvironmentValue(_, Some(value)) => { bytes.extend_from_slice(value); bytes.push(0); },
                 EntryGrant::Listener(address) | EntryGrant::Connector(address) => bytes.extend_from_slice(address),
                 _ => {}

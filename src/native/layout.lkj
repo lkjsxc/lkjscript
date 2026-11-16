@@ -173,7 +173,12 @@ impl Layouts {
             | TypeKind::Directory
             | TypeKind::ReadDirectory
             | TypeKind::ReadFile
+            | TypeKind::Image
+            | TypeKind::Channel
+            | TypeKind::Worker
+            | TypeKind::ReadRegion
             | TypeKind::ForeignCommand
+            | TypeKind::ForeignSession
             | TypeKind::NullDevice
             | TypeKind::Child
             | TypeKind::Listener

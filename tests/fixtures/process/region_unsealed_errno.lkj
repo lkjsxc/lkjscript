@@ -1,0 +1,8 @@
+// A memfd exists but has not received any seals; errno is part of engine parity.
+pub fn main(mut world: World) -> i64 {
+    let mut file = world.temporary_file().unwrap();
+    let error = file.map_readonly().unwrap_err();
+    assert_eq!(error,22i64);
+    file.write_all(b"still owned").unwrap();
+    error
+}

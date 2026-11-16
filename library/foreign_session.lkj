@@ -1,0 +1,43 @@
+//! Long-lived kernel-confined foreign workers. No foreign code enters this image.
+//! Exchange uses caller-selected exact response framing and commits only a full
+//! response before the absolute deadline. Failure poisons and reaps the session.
+use crate::{Option, Result};
+use crate::bytes::append_bytes;
+
+pub fn start(tool: &mut ForeignCommand, root: &mut ReadDirectory, sink: &mut NullDevice, arguments: &[Vec<u8>], duration_ns: usize) -> Result<ForeignSession, i64> {
+    let mut encoded = b"foreign\0"[..].to_vec();
+    for argument in arguments {
+        if argument.contains(&0u8) { return Err(22); }
+        append_bytes(&mut encoded, argument); encoded.push(0u8);
+    }
+    tool.__lkjscript_start(root, sink, &encoded, duration_ns)
+}
+pub fn exchange(session: &mut ForeignSession, request: &[u8], expected: usize, duration_ns: usize) -> Result<Vec<u8>, i64> {
+    let mut response = vec![0u8; expected];
+    let count = session.__lkjscript_exchange(request, &mut response, duration_ns);
+    if count < 0 { return Err(-count); }
+    if count as usize != expected { return Err(5); }
+    Ok(response)
+}
+/// Raw wait status is retained after a deadline/death; this call is idempotent.
+pub fn finish(session: &mut ForeignSession, duration_ns: usize) -> Result<usize, i64> {
+    let status = session.__lkjscript_finish(duration_ns);
+    if status < 0 { Err(-status) } else { Ok(status as usize) }
+}
+/// Restarts are explicit library policy. Requests are retried only when the caller
+/// declares them idempotent; a failed response does not prove the worker did no work.
+pub fn idempotent_request(tool: &mut ForeignCommand, root: &mut ReadDirectory, sink: &mut NullDevice, arguments: &[Vec<u8>], slot: &mut Option<ForeignSession>, request: &[u8], expected: usize, duration_ns: usize, restarts: usize) -> Result<Vec<u8>, i64> {
+    let mut failures = 0usize;
+    loop {
+        if slot.is_none() { *slot = Some(start(tool, root, sink, arguments, duration_ns)?); }
+        let result = exchange(slot.as_mut().unwrap(), request, expected, duration_ns);
+        match result {
+            Ok(response) => return Ok(response),
+            Err(error) => {
+                *slot = None;
+                if failures == restarts { return Err(error); }
+                failures += 1usize;
+            }
+        }
+    }
+}

@@ -9,8 +9,8 @@ export LKJSCRIPT_STORE_KEY="${LKJSCRIPT_STORE_KEY:-$(sh tools/store-key.sh || tr
 mkdir -p "$LKJSCRIPT_STORE"
 check_reuse=()
 if [[ -n "$LKJSCRIPT_STORE_KEY" ]]; then check_reuse=(--store "$LKJSCRIPT_STORE" --store-key "$LKJSCRIPT_STORE_KEY"); fi
-if [[ ! "$check_jobs" =~ ^[2-4]$ ]]; then
-    echo 'LKJSCRIPT_GATE_JOBS must be between two and four (HTTP needs a server/client pair)' >&2
+if [[ "$check_jobs" != 4 ]]; then
+    echo 'LKJSCRIPT_GATE_JOBS must be four (the process pool specimens exercise four workers)' >&2
     exit 1
 fi
 check_suite_jobs=$((check_jobs < 4 ? check_jobs : 4))
@@ -158,6 +158,11 @@ parallel_step 2 desk timeout --kill-after=10s 600s bash tools/http-desk-test.sh 
 parallel_step 2 desk-events timeout --kill-after=10s 600s bash tools/http-desk-events.sh --compiler "$check_binary"
 parallel_step 1 child-image timeout --kill-after=10s 600s bash tools/child-image-test.sh "$check_binary"
 parallel_step 1 foreign-child timeout --kill-after=10s 600s bash tools/foreign-child-test.sh --compiler "$check_binary"
+parallel_step 2 foreign-session timeout --kill-after=10s 600s bash tools/programs-foreign-session-test.sh --compiler "$check_binary"
+parallel_step 4 process-workers timeout --kill-after=10s 600s bash tools/programs-process-test.sh --compiler "$check_binary"
+parallel_step 1 object-graphs timeout --kill-after=10s 600s bash tools/programs-graph-test.sh --compiler "$check_binary"
+parallel_step 2 runtime-admission timeout --kill-after=10s 600s bash tools/programs-admission-test.sh "$check_binary"
+parallel_step 4 pool-publication timeout --kill-after=10s 600s bash tools/programs-publication-test.sh --compiler "$check_binary"
 parallel_step "$check_suite_jobs" conformance timeout --kill-after=10s 600s "$check_binary" test tests/conformance --stats --jobs "$check_suite_jobs" "${check_reuse[@]}"
 parallel_step "$check_suite_jobs" generated timeout --kill-after=10s 600s "$check_binary" test target/gate/generated --stats --jobs "$check_suite_jobs" "${check_reuse[@]}"
 parallel_step "$check_suite_jobs" optimized-conformance timeout --kill-after=10s 600s "$check_binary" test tests/conformance --stats --jobs "$check_suite_jobs" --inline-limit 64 "${check_reuse[@]}"

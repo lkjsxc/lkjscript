@@ -1,0 +1,4 @@
+// expect: reject E_UNSUPPORTED
+// cause: rule with no Rust counterpart.
+// pending: Stdout.write returns unit; show its return type and explain that unwrap is inapplicable at the output call.
+pub fn probe(mut output: Stdout) { output.write(b"test").unwrap(); }

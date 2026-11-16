@@ -1576,7 +1576,12 @@ fn trait_requirements(
             | TypeKind::Directory
             | TypeKind::ReadDirectory
             | TypeKind::ReadFile
+            | TypeKind::Image
+            | TypeKind::Channel
+            | TypeKind::Worker
+            | TypeKind::ReadRegion
             | TypeKind::ForeignCommand
+            | TypeKind::ForeignSession
             | TypeKind::NullDevice
             | TypeKind::File
             | TypeKind::Process
@@ -1648,7 +1653,12 @@ fn trait_requirements(
             | TypeKind::Directory
             | TypeKind::ReadDirectory
             | TypeKind::ReadFile
+            | TypeKind::Image
+            | TypeKind::Channel
+            | TypeKind::Worker
+            | TypeKind::ReadRegion
             | TypeKind::ForeignCommand
+            | TypeKind::ForeignSession
             | TypeKind::NullDevice
             | TypeKind::File
             | TypeKind::Process

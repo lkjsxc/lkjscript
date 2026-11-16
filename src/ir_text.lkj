@@ -635,7 +635,7 @@ pub fn read(text: &str) -> Result<Program> {
                         exact(&words, 3, line)?;
                         TypeKind::Stdout
                     }
-                    "stdin" | "stderr" | "directory" | "read_directory" | "read_file" | "foreign_command" | "null_device" | "file" | "process" | "clock" | "child"
+                    "stdin" | "stderr" | "directory" | "read_directory" | "read_file" | "image" | "channel" | "worker" | "read_region" | "foreign_command" | "foreign_session" | "null_device" | "file" | "process" | "clock" | "child"
                     | "listener" | "connector" | "readiness" | "entropy" | "stop"
                     | "arguments" | "environment" | "exit_status" => {
                         exact(&words, 3, line)?;
@@ -648,7 +648,12 @@ pub fn read(text: &str) -> Result<Program> {
                             "directory" => TypeKind::Directory,
                             "read_directory" => TypeKind::ReadDirectory,
                             "read_file" => TypeKind::ReadFile,
+                            "image" => TypeKind::Image,
+                            "channel" => TypeKind::Channel,
+                            "worker" => TypeKind::Worker,
+                            "read_region" => TypeKind::ReadRegion,
                             "foreign_command" => TypeKind::ForeignCommand,
+                            "foreign_session" => TypeKind::ForeignSession,
                             "null_device" => TypeKind::NullDevice,
                             "process" => TypeKind::Process,
                             "clock" => TypeKind::Clock,
@@ -1020,7 +1025,12 @@ pub fn write(program: &Program) -> String {
             TypeKind::Directory => text.push_str("directory"),
             TypeKind::ReadDirectory => text.push_str("read_directory"),
             TypeKind::ReadFile => text.push_str("read_file"),
+            TypeKind::Image => text.push_str("image"),
+            TypeKind::Channel => text.push_str("channel"),
+            TypeKind::Worker => text.push_str("worker"),
+            TypeKind::ReadRegion => text.push_str("read_region"),
             TypeKind::ForeignCommand => text.push_str("foreign_command"),
+            TypeKind::ForeignSession => text.push_str("foreign_session"),
             TypeKind::NullDevice => text.push_str("null_device"),
             TypeKind::File => text.push_str("file"),
             TypeKind::Process => text.push_str("process"),

@@ -332,7 +332,7 @@ impl Body<'_> {
                 self.intrinsic_open_result(dst);
                 return Ok(true);
             }
-            IntrinsicOp::ForeignRun => {
+            IntrinsicOp::ForeignRun | IntrinsicOp::ForeignStart => {
                 for index in 0usize..3usize {
                     self.read(args[index], A);
                     self.a.load(A, A, 0);
@@ -345,9 +345,62 @@ impl Body<'_> {
                 self.read(args[4], A);
                 self.a.store(BP, self.scratch[5], A);
                 self.a.lea(DI, BP, self.scratch[0]);
-                self.a.call(self.platform.foreign_run);
+                self.a.call(if name == IntrinsicOp::ForeignStart { self.platform.foreign_start } else { self.platform.foreign_run });
                 self.intrinsic_open_result(dst);
                 return Ok(true);
+            }
+            IntrinsicOp::ForeignExchange => {
+                self.read(args[0], A); self.a.load(A, A, 0); self.a.store(BP, self.scratch[0], A);
+                for index in 1usize..3usize { self.read_word(args[index], 0, A); self.a.store(BP, self.scratch[index*2-1], A); self.read_word(args[index], 1, A); self.a.store(BP, self.scratch[index*2], A); }
+                self.read(args[3], A); self.a.store(BP, self.scratch[5], A);
+                self.a.lea(DI, BP, self.scratch[0]); self.a.call(self.platform.foreign_exchange);
+            }
+            IntrinsicOp::ForeignFinish => { self.read(args[0], DI); self.a.load(DI, DI, 0); self.read(args[1], SI); self.a.call(self.platform.foreign_finish); }
+            IntrinsicOp::ImageBuffer => {
+                self.read_word(args[1],0,DI); self.read_word(args[1],1,SI); self.a.call(self.platform.image_buffer);
+                self.intrinsic_open_result(dst); return Ok(true);
+            }
+            IntrinsicOp::FileMapReadonly => {
+                self.read(args[0],DI); self.a.load(DI,DI,0); self.a.call(self.platform.file_map_readonly);
+                self.intrinsic_open_result(dst); return Ok(true);
+            }
+            IntrinsicOp::ReadRegionBytes => {
+                self.read(args[0],DI); self.a.load(DI,DI,0); self.a.load(A,DI,8); self.write_word(dst,0,A);
+                self.a.load(A,DI,16); self.write_word(dst,1,A); self.mark(dst); return Ok(true);
+            }
+            IntrinsicOp::ReadRegionLen => {
+                self.read(args[0],DI); self.a.load(DI,DI,0); self.a.load(A,DI,16); self.write(dst,A); return Ok(true);
+            }
+            IntrinsicOp::ImageSpawn => {
+                self.read(args[0], DI); self.a.load(DI, DI, 0); self.read(args[1], SI); self.a.call(self.platform.image_spawn);
+                self.intrinsic_open_result(dst); return Ok(true);
+            }
+            IntrinsicOp::ChannelSend | IntrinsicOp::ChannelReceive | IntrinsicOp::WorkerSend | IntrinsicOp::WorkerReceive => {
+                self.read(args[0], DI); self.a.load(DI, DI, 0);
+                if matches!(name, IntrinsicOp::WorkerSend | IntrinsicOp::WorkerReceive) { self.a.load(DI, DI, 8); }
+                self.read_word(args[1], 0, SI); self.read_word(args[1], 1, D); self.read(args[2], C);
+                self.a.call(if matches!(name, IntrinsicOp::ChannelReceive | IntrinsicOp::WorkerReceive) { self.platform.channel_receive } else { self.platform.channel_send });
+                self.intrinsic_open_result(dst); return Ok(true);
+            }
+            IntrinsicOp::ChannelSendFile | IntrinsicOp::WorkerSendFile | IntrinsicOp::ChannelReceiveFile | IntrinsicOp::WorkerReceiveFile => {
+                self.read(args[0], DI); self.a.load(DI, DI, 0);
+                if matches!(name, IntrinsicOp::WorkerSendFile | IntrinsicOp::WorkerReceiveFile) { self.a.load(DI, DI, 8); }
+                if matches!(name, IntrinsicOp::WorkerSendFile | IntrinsicOp::ChannelSendFile) {
+                    self.read(args[1], SI); self.read(args[2], D); self.a.call(self.platform.channel_send_file);
+                } else { self.a.immediate(SI, 0); self.read(args[1], D); self.a.call(self.platform.channel_receive_file); }
+                self.intrinsic_open_result(dst); return Ok(true);
+            }
+            IntrinsicOp::WorkerWait | IntrinsicOp::WorkerTerminate | IntrinsicOp::WorkerResult => {
+                self.read(args[0], DI); self.a.load(DI, DI, 0);
+                if name == IntrinsicOp::WorkerWait { self.read(args[1], SI); self.a.call(self.platform.worker_wait); }
+                else if name == IntrinsicOp::WorkerTerminate { self.a.call(self.platform.worker_terminate); }
+                else {
+                    let running = self.a.label(); let ready = self.a.label();
+                    self.a.load(A, DI, 0); self.a.test(A, true); self.a.condition(5, running);
+                    self.a.load(DI, DI, 16); self.a.call(self.platform.file_readonly); self.a.jump(ready);
+                    self.a.bind(running); self.a.immediate(A, (-16i64) as u64); self.a.bind(ready);
+                }
+                self.intrinsic_open_result(dst); return Ok(true);
             }
             IntrinsicOp::ProcessSpawn => {
                 self.read(args[1], A);

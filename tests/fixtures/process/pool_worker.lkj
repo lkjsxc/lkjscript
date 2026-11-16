@@ -1,0 +1,24 @@
+mod common;
+use std::workers::{packet,decode};
+pub fn main(mut channel:Channel)->i64 {
+    loop {
+        let mut bytes=[0u8;17];
+        let count=match channel.receive(&mut bytes,!0usize) {Ok(count)=>count,Err(_)=>return -1};
+        if count==0usize {return 0;}
+        let Some((tag,job,value))=decode(&bytes[..count]) else {return -2;};
+        if tag==0u8 {return 0;}
+        if tag==1u8 {
+            channel.send(&packet(1u8,job,common::work(value)),!0usize).unwrap();
+        } else if tag==3u8 {
+            for sequence in 0usize..(value as usize) {
+                channel.send(&packet(2u8,sequence,((job+sequence)%8usize) as u64),!0usize).unwrap();
+                let mut reply=[0u8;17];let length=channel.receive(&mut reply,!0usize).unwrap();
+                let Some((reply_tag,id,total))=decode(&reply[..length]) else {return -3;};
+                if reply_tag!=2u8 || id!=sequence || total==0u64 {return -4;}
+            }
+            channel.send(&packet(3u8,job,value),!0usize).unwrap();
+        } else if tag==4u8 {panic!("isolated worker trap");}
+        else if tag==5u8 {loop {}}
+        else {return -5;}
+    }
+}

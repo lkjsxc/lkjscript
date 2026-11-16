@@ -1,0 +1,22 @@
+pub fn main(mut image: Image, mut clock: Clock, mut root: Directory) -> i64 {
+    let deadline = clock.nanoseconds().unwrap() + 5_000_000_000usize;
+    let mut worker = image.spawn(deadline).unwrap();
+    for _ in 0usize..16usize {
+        assert_eq!(worker.send(b"\x01hello", deadline).unwrap(), 6usize);
+        let mut bytes = [0u8; 64];
+        let count = worker.receive(&mut bytes, deadline).unwrap();
+        assert_eq!(count, 5usize);
+        assert_eq!(&bytes[..count], b"hello".as_slice());
+    }
+    worker.send(b"\x02", deadline).unwrap();
+    let file = root.open("payload").unwrap();
+    worker.send_file(file, deadline).unwrap();
+    let mut bytes = [0u8; 64];
+    assert_eq!(worker.receive(&mut bytes, deadline).unwrap(), 12usize);
+    assert_eq!(&bytes[..12usize], b"file payload".as_slice());
+    worker.send(b"\0", deadline).unwrap();
+    assert_eq!(worker.wait(deadline).unwrap(), 0i64);
+    let mut result = worker.result().unwrap();
+    assert!(!result.read_to_end().unwrap().is_empty());
+    42
+}

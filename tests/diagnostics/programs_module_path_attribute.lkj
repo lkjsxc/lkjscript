@@ -1,0 +1,5 @@
+// expect: reject E_MODULE_MISSING
+// cause: expected a Rust form.
+// pending: Explain that path attributes do not relocate module discovery; place the probe in the source directory so `mod ir` resolves normally.
+#[path = "../../src/ir.lkj"] mod chosen_ir;
+pub fn probe() {}

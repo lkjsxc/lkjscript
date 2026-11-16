@@ -1,0 +1,30 @@
+use std::foreign_session;
+pub fn main(mut tool: ForeignCommand,mut root: ReadDirectory,mut sink: NullDevice,mut arguments: Arguments,mut output: Stdout) {
+    let args=arguments.args(); assert_eq!(args.len(),1usize);
+    for mode in vec![b"--probe"[..].to_vec(),b"--reexec"[..].to_vec()] {
+        let mut worker=foreign_session::start(&mut tool,&mut root,&mut sink,&vec![mode,args[0].clone()],3_000_000_000usize).unwrap();
+        assert_eq!(foreign_session::exchange(&mut worker,b"",5usize,3_000_000_000usize).unwrap().as_slice(),b"PASS\n");
+        for _index in 0usize..32usize { assert_eq!(foreign_session::exchange(&mut worker,b"request\n",8usize,3_000_000_000usize).unwrap().as_slice(),b"request\n"); }
+        assert_eq!(foreign_session::finish(&mut worker,3_000_000_000usize).unwrap(),0usize);
+    }
+    let mut worker=foreign_session::start(&mut tool,&mut root,&mut sink,&vec![b"--partial"[..].to_vec()],3_000_000_000usize).unwrap();
+    let mut unchanged=[19u8;4];
+    assert_eq!(worker.__lkjscript_exchange(b"",&mut unchanged,20_000_000usize),-110i64);
+    assert_eq!(unchanged,[19u8;4]);
+    assert_eq!(foreign_session::exchange(&mut worker,b"",4usize,3_000_000_000usize).unwrap_err(),32i64);
+    assert_eq!(foreign_session::finish(&mut worker,3_000_000_000usize).unwrap(),9usize);
+    let mut worker=foreign_session::start(&mut tool,&mut root,&mut sink,&vec![b"--exit"[..].to_vec()],3_000_000_000usize).unwrap();
+    assert_eq!(foreign_session::finish(&mut worker,3_000_000_000usize).unwrap(),1792usize);
+    let mut slot: Option<ForeignSession>=None;
+    assert_eq!(foreign_session::idempotent_request(&mut tool,&mut root,&mut sink,&vec![b"--exit"[..].to_vec()],&mut slot,b"request",5usize,3_000_000_000usize,2usize).unwrap_err(),32i64);
+    assert!(slot.is_none());
+    output.write(b"ok persistent confinement: outside/write/socket/fork/inheritance/reexec; partial deadline; exit status; bounded restarts\n");
+}
+pub fn owner(mut tool: ForeignCommand,mut root: ReadDirectory,mut sink: NullDevice,mut clock: Clock) {
+    let worker=foreign_session::start(&mut tool,&mut root,&mut sink,&vec![b"--wait-owner"[..].to_vec()],3_000_000_000usize).unwrap();
+    let end=clock.nanoseconds().unwrap()+10_000_000_000usize; while clock.nanoseconds().unwrap()<end {} drop(worker);
+}
+pub fn unavailable(mut tool: ForeignCommand,mut root: ReadDirectory,mut sink: NullDevice,mut output: Stdout) {
+    let result=foreign_session::start(&mut tool,&mut root,&mut sink,&vec![b"--wait-owner"[..].to_vec()],3_000_000_000usize);
+    assert!(result.is_err()); output.write(b"ok foreign session unsupported kernel refuses before foreign code\n");
+}

@@ -1,0 +1,16 @@
+use std::workers::Supervisor;
+pub fn main(mut image:Image,mut clock:Clock,mut root:Directory)->i64 {
+    let mut poison=root.create("poison").unwrap();
+    poison.write_all(b"GET /panic HTTP/1.1\r\n\r\n").unwrap();drop(poison);
+    let mut supervisor=Supervisor::new(&mut image,1usize,clock.nanoseconds().unwrap()+2_000_000_000usize).unwrap();
+    for _ in 0usize..2usize {
+        let request=root.open("poison").unwrap();
+        assert!(supervisor.request_file(&mut image,request,clock.nanoseconds().unwrap()+2_000_000_000usize).is_err());
+        assert!(!supervisor.last_output.is_empty());
+    }
+    assert_eq!(supervisor.restarts(),1usize);
+    let request=root.open("poison").unwrap();
+    assert_eq!(supervisor.request_file(&mut image,request,clock.nanoseconds().unwrap()+2_000_000_000usize),Err(11i64));
+    assert_eq!(supervisor.restarts(),1usize);
+    supervisor.shutdown(clock.nanoseconds().unwrap()+1_000_000_000usize).unwrap();42
+}

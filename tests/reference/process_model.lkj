@@ -1,0 +1,216 @@
+// expect: value 42
+// Isolated-actor protocol exploration, not native scheduling or race detection.
+use std::process_model::{Event, MapEvent, verify_trace, verify_map_trace};
+
+struct Random { state: u64 }
+impl Random {
+    fn next(&mut self) -> usize {
+        self.state ^= self.state << 13u64;
+        self.state ^= self.state >> 7u64;
+        self.state ^= self.state << 17u64;
+        self.state as usize
+    }
+}
+
+fn inputs(count: usize) -> Vec<u64> {
+    let mut expected: Vec<u64> = Vec::new();
+    let mut index = 0usize;
+    while index < count {
+        expected.push((index as u64).wrapping_mul(17u64).wrapping_add(3u64));
+        index += 1usize;
+    }
+    expected
+}
+
+// This scheduler owns a separate operational plan. The validator only sees its
+// resulting observable history and the independent expected output sequence.
+fn schedule(seed: u64, kill: bool) -> bool {
+    let workers = 4usize;
+    let capacity = 1usize + (seed as usize % 4usize);
+    let count = 9usize + (seed as usize % 5usize);
+    let expected = inputs(count);
+    let mut random = Random { state: seed };
+    let mut busy: Vec<Option<usize>> = vec![None; workers];
+    let mut stopped = vec![false; workers];
+    let mut exited = vec![false; workers];
+    let mut next = 0usize;
+    let mut eof = false;
+    let mut trace: Vec<Event> = Vec::new();
+    let fail_at = 1usize + seed as usize % (count + workers);
+    loop {
+        if kill && trace.len() >= fail_at {
+            // Death may happen with an outstanding job, while idle or after
+            // shutdown. Only these fixture-owned workers are represented.
+            let mut live: Vec<usize> = Vec::new();
+            let mut worker = 0usize;
+            while worker < workers {
+                if !exited[worker] { live.push(worker); }
+                worker += 1usize;
+            }
+            while !live.is_empty() {
+                let selected = random.next() % live.len();
+                let worker = live[selected];
+                live[selected] = live[live.len() - 1usize];
+                live.pop();
+                trace.push(Event::Exit(worker, 9i64));
+                exited[worker] = true;
+                busy[worker] = None;
+            }
+            if !eof { trace.push(Event::Eof); }
+            let outcome = match verify_trace(workers, capacity, &expected, &trace) {
+                Some(outcome) => outcome,
+                None => return false,
+            };
+            if !outcome.failed || outcome.committed || outcome.exited != workers
+                || !outcome.results.is_empty() { return false; }
+            trace.push(Event::Commit);
+            return verify_trace(workers, capacity, &expected, &trace).is_none();
+        }
+
+        let mut active = 0usize;
+        let mut departed = 0usize;
+        let mut worker = 0usize;
+        while worker < workers {
+            if busy[worker].is_some() { active += 1usize; }
+            if exited[worker] { departed += 1usize; }
+            worker += 1usize;
+        }
+        if departed == workers {
+            trace.push(Event::Commit);
+            let outcome = match verify_trace(workers, capacity, &expected, &trace) {
+                Some(outcome) => outcome,
+                None => return false,
+            };
+            return !kill && outcome.committed && !outcome.failed
+                && outcome.accepted == count && outcome.completed == count
+                && outcome.results == expected;
+        }
+        let mut enabled: Vec<Event> = Vec::new();
+        if next == count && !eof { enabled.push(Event::Eof); }
+        let mut worker = 0usize;
+        while worker < workers {
+            if !exited[worker] {
+                if let Some(job) = busy[worker] {
+                    enabled.push(Event::Complete(worker, job, expected[job]));
+                } else if stopped[worker] {
+                    enabled.push(Event::Exit(worker, 0i64));
+                } else if eof {
+                    enabled.push(Event::Shutdown(worker));
+                } else if next < count && active < capacity {
+                    enabled.push(Event::Dispatch(worker, next));
+                }
+            }
+            worker += 1usize;
+        }
+        if enabled.is_empty() { return false; }
+        let event = enabled[random.next() % enabled.len()];
+        trace.push(event);
+        match event {
+            Event::Dispatch(worker, job) => { busy[worker] = Some(job); next += 1usize; }
+            Event::Complete(worker, _, _) => { busy[worker] = None; }
+            Event::Eof => { eof = true; }
+            Event::Shutdown(worker) => { stopped[worker] = true; }
+            Event::Exit(worker, _) => { exited[worker] = true; }
+            Event::Commit => return false,
+        }
+    }
+}
+
+fn map_schedule(seed: u64) -> bool {
+    let workers = 4usize;
+    let keys = 3usize;
+    let mut random = Random { state: seed };
+    let mut counters = vec![0u64; keys];
+    let mut next = vec![0usize; workers];
+    let mut events: Vec<MapEvent> = Vec::new();
+    let mut turn = 0usize;
+    while turn < 32usize {
+        let worker = random.next() % workers;
+        let key = random.next() % keys;
+        let delta = 1u64 + random.next() as u64 % 7u64;
+        counters[key] += delta;
+        events.push(MapEvent {
+            worker, sequence: next[worker], key, delta, reply: counters[key],
+        });
+        next[worker] += 1usize;
+        turn += 1usize;
+    }
+    if !verify_map_trace(workers, keys, &events) { return false; }
+    // The reply was exposed before applying its own increment.
+    events[17usize].reply -= events[17usize].delta;
+    if verify_map_trace(workers, keys, &events) { return false; }
+    events[17usize].reply += events[17usize].delta;
+    events[17usize].sequence += 1usize;
+    !verify_map_trace(workers, keys, &events)
+}
+
+fn adversarial() -> bool {
+    let expected = vec![10u64, 20u64];
+    let good = vec![
+        Event::Dispatch(0usize, 0usize), Event::Dispatch(1usize, 1usize),
+        Event::Complete(1usize, 1usize, 20u64), Event::Complete(0usize, 0usize, 10u64),
+        Event::Eof, Event::Shutdown(0usize), Event::Shutdown(1usize),
+        Event::Exit(1usize, 0i64), Event::Exit(0usize, 0i64), Event::Commit,
+    ];
+    let outcome = match verify_trace(2usize, 2usize, &expected, &good) {
+        Some(outcome) => outcome, None => return false,
+    };
+    if outcome.results != expected || !outcome.committed || outcome.failed { return false; }
+    if verify_trace(2usize, 1usize, &expected, &good).is_some() { return false; }
+    let mut bad = good.clone();
+    bad[1usize] = Event::Dispatch(1usize, 0usize);
+    if verify_trace(2usize, 2usize, &expected, &bad).is_some() { return false; }
+    bad = good.clone();
+    bad[2usize] = Event::Complete(0usize, 1usize, 20u64);
+    if verify_trace(2usize, 2usize, &expected, &bad).is_some() { return false; }
+    bad = good.clone();
+    bad[3usize] = Event::Complete(1usize, 1usize, 20u64);
+    if verify_trace(2usize, 2usize, &expected, &bad).is_some() { return false; }
+    bad = good.clone();
+    bad[2usize] = Event::Complete(1usize, 1usize, 21u64);
+    if verify_trace(2usize, 2usize, &expected, &bad).is_some() { return false; }
+    bad = good.clone();
+    bad[4usize] = Event::Commit;
+    if verify_trace(2usize, 2usize, &expected, &bad).is_some() { return false; }
+    bad = good.clone();
+    bad[8usize] = Event::Exit(1usize, 0i64);
+    if verify_trace(2usize, 2usize, &expected, &bad).is_some() { return false; }
+    bad = good.clone();
+    bad.push(Event::Eof);
+    if verify_trace(2usize, 2usize, &expected, &bad).is_some() { return false; }
+    let busy_shutdown = vec![Event::Dispatch(0usize, 0usize), Event::Eof, Event::Shutdown(0usize)];
+    if verify_trace(1usize, 1usize, &expected, &busy_shutdown).is_some() { return false; }
+    let after_eof = vec![Event::Eof, Event::Dispatch(0usize, 0usize)];
+    if verify_trace(1usize, 1usize, &expected, &after_eof).is_some() { return false; }
+    let mut unexpected = vec![
+        Event::Dispatch(0usize, 0usize), Event::Complete(0usize, 0usize, 10u64),
+        Event::Eof, Event::Exit(0usize, 0i64),
+    ];
+    let outcome = match verify_trace(1usize, 1usize, &expected, &unexpected) {
+        Some(outcome) => outcome, None => return false,
+    };
+    if !outcome.failed || outcome.committed || !outcome.results.is_empty() { return false; }
+    unexpected.push(Event::Commit);
+    if verify_trace(1usize, 1usize, &expected, &unexpected).is_some() { return false; }
+    let empty: Vec<u64> = Vec::new();
+    let empty_trace = vec![
+        Event::Eof, Event::Shutdown(0usize), Event::Exit(0usize, 0i64), Event::Commit,
+    ];
+    let outcome = match verify_trace(1usize, 1usize, &empty, &empty_trace) {
+        Some(outcome) => outcome, None => return false,
+    };
+    outcome.committed && !outcome.failed && outcome.results.is_empty()
+}
+
+pub fn probe() -> i64 {
+    if !adversarial() { return -1i64; }
+    let mut seed = 1u64;
+    while seed <= 64u64 {
+        // Non-42 results reproduce the exact failed schedule without a clock.
+        if !schedule(seed, false) { return -(1000i64 + seed as i64); }
+        if !schedule(seed, true) { return -(2000i64 + seed as i64); }
+        if !map_schedule(seed) { return -(3000i64 + seed as i64); }
+        seed += 1u64;
+    }
+    42i64
+}

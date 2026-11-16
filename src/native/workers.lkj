@@ -1,0 +1,262 @@
+//! Narrow authenticated images and process-owned byte channels.
+use super::platform::Platform;
+use crate::x86::*;
+
+fn enter(a: &mut Assembler, size: i64) { a.push(BP); a.mov(BP, SP); a.lea(SP, SP, -size); }
+fn leave(a: &mut Assembler) { a.mov(SP, BP); a.pop(BP); a.ret(); }
+fn call(a: &mut Assembler, n: u64) {
+    let retry = a.label(); a.bind(retry); a.immediate(A, n); a.syscall();
+    if n != 3 { a.immediate(C, (-4i64) as u64); a.compare(A, C); a.condition(4, retry); }
+}
+fn checked(a: &mut Assembler, n: u64, bad: Label) { call(a, n); a.test(A, true); a.condition(8, bad); }
+fn map(a: &mut Assembler, size: u64) {
+    a.immediate(DI, 0); a.immediate(SI, size); a.immediate(D, 3);
+    a.immediate(R10, 0x22); a.immediate(R8, !0u64); a.immediate(R9, 0); call(a, 9);
+}
+fn close_at(a: &mut Assembler, offset: i64) { a.load(DI, BP, offset); call(a, 3); }
+fn word(a: &mut Assembler, offset: i64, value: u64) { a.immediate(A, value); a.store(BP, offset, A); }
+fn promote_new(a: &mut Assembler, bad: Label) {
+    // Keep runtime-only descriptors above closed standard-stream sentinels.
+    a.mov(R9, A); a.mov(DI, A); a.immediate(SI, 1030); a.immediate(D, 16); call(a, 72);
+    a.mov(R10, A); a.mov(DI, R9); call(a, 3); a.mov(A, R10); a.test(A, true); a.condition(8, bad);
+}
+fn memfd(a: &mut Assembler, name: Label, bad: Label) {
+    a.address(DI, name); a.immediate(SI, 3); checked(a, 319, bad); promote_new(a, bad);
+}
+fn write_all(a: &mut Assembler, bad: Label) {
+    let again = a.label(); let done = a.label(); a.bind(again);
+    a.test(D, true); a.condition(4, done); call(a, 1);
+    a.test(A, true); a.condition(14, bad);
+    a.rr(0x01, SI, A, true); a.rr(0x29, D, A, true); a.jump(again); a.bind(done);
+}
+fn seal(a: &mut Assembler, bad: Label) {
+    a.immediate(SI, 1033); a.immediate(D, 15); checked(a, 72, bad);
+    a.immediate(SI, 1034); a.immediate(D, 0); checked(a, 72, bad);
+    a.immediate(C, 15); a.compare(A, C); let sealed = a.label(); a.condition(4, sealed);
+    a.immediate(A, (-1i64) as u64); a.jump(bad); a.bind(sealed);
+}
+fn promote(a: &mut Assembler, bad: Label) {
+    a.immediate(SI, 1030); a.immediate(D, 16); checked(a, 72, bad);
+}
+fn kill_wait(a: &mut Assembler) {
+    // DI is a record with pid at 0 and cached exit status at 24.
+    enter(a, 32); a.store(BP, -8, DI); a.load(DI, DI, 0);
+    let done = a.label(); a.test(DI, true); a.condition(4, done);
+    a.immediate(SI, 9); call(a, 62); a.load(DI, BP, -8); a.load(DI, DI, 0);
+    a.lea(SI, BP, -16); a.immediate(D, 0); a.immediate(R10, 0); call(a, 61);
+    a.test(A,true); let waited=a.label(); a.condition(9,waited); leave(a); a.bind(waited);
+    a.load(DI, BP, -8); a.immediate(A, 0); a.store(DI, 0, A);
+    a.load_width(A,BP,-16,4,false); a.mov(C,A); a.immediate(D,127); a.rr(0x21,C,D,true);
+    let normal=a.label(); let status=a.label(); a.test(C,true); a.condition(4,normal); a.lea(A,C,128); a.jump(status);
+    a.bind(normal); a.shift(A,5,8); a.immediate(C,255); a.rr(0x21,A,C,true); a.bind(status); a.store(DI,24,A);
+    a.bind(done); a.immediate(A, 0); leave(a);
+}
+fn image(a: &mut Assembler, p: Platform) {
+    let name = a.label(); let bad = a.label(); let invalid = a.label(); let cleanup = a.label(); let done = a.label();
+    a.bind(p.image_open); enter(a, 96); a.store(BP, -8, DI); a.store(BP, -16, SI);
+    word(a, -24, 0); word(a, -32, !0u64); word(a, -40, 0);
+    a.immediate(C, 80); a.compare(SI, C); a.condition(6, invalid);
+    a.load(A, DI, 0); a.immediate(C, 0x0032474d494a4b4c); a.compare(A, C); a.condition(5, invalid);
+    a.lea(SI, SI, -80); a.load(A, DI, 72); a.compare(A, SI); a.condition(5, invalid);
+    a.store(BP, -16, SI);
+    map(a, 48); a.test(A, true); a.condition(8, bad); a.store(BP, -24, A);
+    memfd(a, name, bad); a.store(BP, -32, A);
+    a.mov(DI, A); a.immediate(SI, 0o755); checked(a, 91, bad);
+    a.load(DI, BP, -32); a.load(SI, BP, -8); a.lea(SI, SI, 80); a.load(D, BP, -16); write_all(a, bad);
+    a.load(DI, BP, -32); seal(a, bad);
+    a.immediate(DI, 0); a.load(SI, BP, -16); a.immediate(D, 1); a.immediate(R10, 1);
+    a.load(R8, BP, -32); a.immediate(R9, 0); checked(a, 9, bad); a.store(BP, -40, A);
+    // Compare the immutable object that will reach exec, not a pathname copy.
+    a.mov(R8, A); a.load(R9, BP, -8); a.lea(R9, R9, 80); a.load(R10, BP, -16);
+    let compare = a.label(); let same = a.label(); a.bind(compare);
+    a.test(R10, true); a.condition(4, same);
+    a.load_width(A, R8, 0, 1, false); a.load_width(C, R9, 0, 1, false); a.compare(A, C); a.condition(5, invalid);
+    a.lea(R8, R8, 1); a.lea(R9, R9, 1); a.lea(R10, R10, -1); a.jump(compare); a.bind(same);
+    a.load(DI, BP, -40); a.load(SI, BP, -16); call(a, 11); word(a, -40, 0);
+    a.load(R8, BP, -24); a.load(A, BP, -32); a.store(R8, 0, A);
+    a.load(R9, BP, -8);
+    for at in 0i64..4i64 { a.load(A, R9, 8 + at * 8); a.store(R8, 8 + at * 8, A); }
+    a.mov(A, R8); a.jump(done);
+    a.bind(invalid); a.immediate(A, (-22i64) as u64); a.jump(bad);
+    a.bind(bad); a.store(BP, -48, A);
+    a.load(DI, BP, -40); a.test(DI, true); a.condition(4, cleanup);
+    a.load(SI, BP, -16); call(a, 11);
+    a.bind(cleanup); close_at(a, -32);
+    a.load(DI, BP, -24); a.test(DI, true); let released = a.label(); a.condition(4, released);
+    a.immediate(SI, 48); call(a, 11); a.bind(released); a.load(A, BP, -48);
+    a.bind(done); leave(a);
+    a.bind(p.image_drop); enter(a, 16); a.store(BP, -8, DI); a.load(DI, DI, 0); call(a, 3);
+    a.load(DI, BP, -8); a.immediate(SI, 48); call(a, 11); leave(a);
+    a.bind(name); a.raw(b"lkjscript-image\0");
+}
+fn spawn(a: &mut Assembler, p: Platform, ready: Label) {
+    let name = a.label(); let empty = a.label(); let child = a.label(); let bad = a.label();
+    let child_bad = a.label(); let cleanup = a.label(); let success = a.label(); let done = a.label();
+    a.bind(p.image_spawn); enter(a, 352); a.store(BP, -8, DI); a.store(BP, -232, SI); word(a, -16, 0);
+    for offset in vec![-24i64,-32,-40,-48,-56,-64,-72,-80,-88,-96] { word(a, offset, !0u64); }
+    map(a, 48); a.test(A, true); a.condition(8, bad); a.store(BP, -16, A);
+    for offset in vec![0i64,40] { a.immediate(C, 0); a.store(A, offset, C); }
+    for offset in vec![8i64,16,24,32] { a.immediate(C, !0u64); a.store(A, offset, C); }
+    a.immediate(DI, 1); a.immediate(SI, 0x80805); a.immediate(D, 0); a.lea(R10, BP, -112); checked(a, 53, bad);
+    a.load_width(A, BP, -112, 4, false); a.store(BP, -24, A);
+    a.load_width(A, BP, -108, 4, false); a.store(BP, -32, A);
+    for offset in vec![-24i64,-32] { a.load(A, BP, offset); promote_new(a, bad); a.store(BP, offset, A); }
+    memfd(a, name, bad); a.store(BP, -40, A);
+    memfd(a, name, bad); a.store(BP, -48, A);
+    word(a, -224, 0x00314448434a4b4c);
+    a.load(R8, BP, -8);
+    for at in 0i64..4i64 { a.load(A, R8, 8 + at * 8); a.store(BP, -216 + at * 8, A); }
+    word(a, -184, 1); word(a, -176, 17); word(a, -168, 0); word(a, -160, 0);
+    a.load(DI, BP, -48); a.lea(SI, BP, -224); a.immediate(D, 72); write_all(a, bad);
+    a.load(DI, BP, -48); seal(a, bad);
+    a.lea(DI, BP, -112); a.immediate(SI, 0x80800); checked(a, 293, bad);
+    a.load_width(A, BP, -112, 4, false); a.store(BP, -56, A);
+    a.load_width(A, BP, -108, 4, false); a.store(BP, -64, A);
+    for offset in vec![-56i64,-64] { a.load(A, BP, offset); promote_new(a, bad); a.store(BP, offset, A); }
+    // Promote collision-prone fixed startup descriptors before any dup2.
+    for (index, offset) in vec![-40i64,-48,-32].iter().enumerate() {
+        a.load(DI, BP, *offset); promote(a, bad); a.store(BP, -72 - index as i64 * 8, A);
+    }
+    a.load(DI, BP, -8); a.load(DI, DI, 0); promote(a, bad); a.store(BP, -96, A);
+    call(a, 39); a.store(BP, -120, A); checked(a, 57, bad);
+    a.test(A, true); a.condition(4, child);
+    a.load(R8, BP, -16); a.store(R8, 0, A);
+    a.mov(DI, A); a.immediate(SI, 0); checked(a, 434, bad); promote_new(a, bad); a.load(R8, BP, -16); a.store(R8, 32, A);
+    close_at(a, -64); word(a, -64, !0u64); word(a, -128, 0);
+    let read_status = a.label(); let eof = a.label(); a.bind(read_status);
+    a.load(DI, BP, -56); a.immediate(SI, 1); a.load(D, BP, -232); a.call(ready); a.test(A, true); a.condition(8, bad);
+    a.load(DI, BP, -56); a.lea(SI, BP, -144); a.load(R8, BP, -128); a.rr(0x01, SI, R8, true);
+    a.immediate(D, 8); a.rr(0x29, D, R8, true); checked(a, 0, bad); a.test(A, true); a.condition(4, eof);
+    a.load(R8, BP, -128); a.rr(0x01, R8, A, true); a.store(BP, -128, R8); a.immediate(C, 8); a.compare(R8, C); a.condition(5, read_status);
+    a.load(A, BP, -144); a.jump(bad);
+    a.bind(eof); a.load(A, BP, -128); a.test(A, true); a.condition(4, success); a.immediate(A, (-5i64) as u64); a.jump(bad);
+    a.bind(child);
+    a.immediate(DI, 1); a.immediate(SI, 9); a.immediate(D, 0); a.immediate(R10, 0); a.immediate(R8, 0); checked(a, 157, child_bad);
+    call(a, 110); a.load(C, BP, -120); a.compare(A, C); let alive = a.label(); a.condition(4, alive);
+    a.immediate(A, (-10i64) as u64); a.jump(child_bad); a.bind(alive);
+    // Close-on-exec every unpassed descriptor before installing the three slots.
+    a.immediate(DI, 0); a.immediate(SI, 0xffffffff); a.immediate(D, 4); checked(a, 436, child_bad);
+    for (index, target) in vec![3u64,4,8].iter().enumerate() {
+        a.load(DI, BP, -72 - index as i64 * 8); a.immediate(SI, *target); a.immediate(D, 0); checked(a, 292, child_bad);
+    }
+    a.load(DI, BP, -96); a.address(SI, empty); word(a, -152, 0); a.lea(D, BP, -152); a.lea(R10, BP, -152); a.immediate(R8, 0x1000);
+    call(a, 322);
+    a.bind(child_bad); a.store(BP, -144, A); a.load(DI, BP, -64); a.lea(SI, BP, -144); a.immediate(D, 8);
+    let exit_child = a.label(); write_all(a, exit_child); a.bind(exit_child);
+    a.immediate(DI, 126); a.immediate(A, 231); a.syscall();
+    a.bind(success); a.load(R8, BP, -16);
+    a.load(A, BP, -24); a.store(R8, 8, A); word(a, -24, !0u64);
+    a.load(A, BP, -40); a.store(R8, 16, A); word(a, -40, !0u64);
+    a.mov(A, R8); a.store(BP, -136, A); a.jump(cleanup);
+    a.bind(bad); a.store(BP, -136, A); a.load(DI, BP, -16); a.test(DI, true); a.condition(4, cleanup);
+    a.call(p.worker_drop); word(a, -16, 0);
+    a.bind(cleanup);
+    for offset in vec![-24i64,-32,-40,-48,-56,-64,-72,-80,-88,-96] { close_at(a, offset); }
+    a.load(A, BP, -136); a.bind(done); leave(a);
+    a.bind(empty); a.raw(&[0]); a.bind(name); a.raw(b"lkjscript-worker\0");
+}
+fn wait_ready(a: &mut Assembler, label: Label) {
+    // DI fd, SI poll interest, D absolute monotonic nanoseconds. 0 or -errno.
+    a.bind(label); enter(a, 64); a.store(BP, -8, DI); a.store(BP, -16, SI); a.store(BP, -24, D);
+    let again=a.label(); let timeout=a.label(); let done=a.label(); a.bind(again);
+    a.immediate(DI,1); a.lea(SI,BP,-48); checked(a,228,done);
+    a.load(A,BP,-48); a.immediate(C,1_000_000_000); a.imul(A,C); a.load(C,BP,-40); a.rr(0x01,A,C,true);
+    a.load(R8,BP,-24); a.compare(A,R8); a.condition(3,timeout); a.rr(0x29,R8,A,true);
+    a.mov(A,R8); a.immediate(C,1_000_000_000); a.immediate(D,0); a.divide(C,false);
+    a.store(BP,-48,A); a.store(BP,-40,D);
+    a.load(A,BP,-8); a.store_width(BP,-64,A,4); a.load(A,BP,-16); a.store_width(BP,-60,A,2); a.immediate(A,0); a.store_width(BP,-58,A,2);
+    a.lea(DI,BP,-64); a.immediate(SI,1); a.lea(D,BP,-48); a.immediate(R10,0); a.immediate(R8,8);
+    a.immediate(A,271); a.syscall(); a.immediate(C,(-4i64) as u64); a.compare(A,C); a.condition(4,again);
+    a.test(A,true); a.condition(8,done); a.condition(4,timeout); a.immediate(A,0); a.jump(done);
+    a.bind(timeout); a.immediate(A,(-110i64) as u64); a.bind(done); leave(a);
+}
+fn byte_io(a: &mut Assembler, p: Platform, ready: Label, receive: bool) {
+    a.bind(if receive { p.channel_receive } else { p.channel_send }); enter(a,160);
+    a.store(BP,-8,DI); a.store(BP,-16,SI); a.store(BP,-24,D); a.store(BP,-32,C);
+    let retry=a.label(); let done=a.label(); let invalid=a.label(); let empty=a.label(); let finish=a.label();
+    word(a,-128,0); a.test(D,true); a.condition(4,empty);
+    if receive {
+        a.immediate(DI,0); a.load(SI,BP,-24); a.immediate(D,3); a.immediate(R10,0x22); a.immediate(R8,(-1i64) as u64); a.immediate(R9,0); call(a,9);
+        a.test(A,true); a.condition(8,done); a.store(BP,-128,A);
+    }
+    a.bind(retry);
+    a.load(DI,BP,-8); a.immediate(SI,if receive {1}else{4}); a.load(D,BP,-32); a.call(ready); a.test(A,true); a.condition(8,done);
+    a.load(DI,BP,-8);
+    if receive {
+        for offset in vec![-96i64,-88,-80,-72,-64,-56,-48] {word(a,offset,0);}
+        a.load(A,BP,-128); a.store(BP,-112,A); a.load(A,BP,-24); a.store(BP,-104,A);
+        a.lea(A,BP,-112); a.store(BP,-80,A); word(a,-72,1);
+        a.lea(SI,BP,-96); a.immediate(D,64); call(a,47);
+    } else {
+        a.load(SI,BP,-16); a.load(D,BP,-24); a.immediate(R10,0x4040); a.immediate(R8,0); a.immediate(R9,0); call(a,44);
+    }
+    a.immediate(C,(-11i64) as u64); a.compare(A,C); a.condition(4,retry); a.test(A,true); a.condition(8,done);
+    if receive {
+        a.load_width(C,BP,-48,4,false); a.immediate(D,0x28); a.rr(0x21,C,D,true); a.test(C,true); a.condition(5,invalid);
+        a.store(BP,-136,A); a.load(DI,BP,-16); a.load(SI,BP,-128); a.mov(C,A); a.raw(&[0xf3u8,0xa4]); a.load(A,BP,-136);
+    }
+    a.jump(done); a.bind(invalid); a.immediate(A,(-90i64) as u64); a.jump(done);
+    a.bind(empty); a.immediate(A,(-22i64) as u64);
+    a.bind(done);
+    if receive {
+        a.store(BP,-136,A); a.load(DI,BP,-128); a.test(DI,true); a.condition(4,finish);
+        a.load(SI,BP,-24); call(a,11); a.bind(finish); a.load(A,BP,-136);
+    } else { a.bind(finish); }
+    leave(a);
+}
+fn file_io(a: &mut Assembler, p: Platform, ready: Label, receive: bool) {
+    a.bind(if receive {p.channel_receive_file}else{p.channel_send_file}); enter(a,192);
+    a.store(BP,-8,DI); a.store(BP,-16,SI); a.store(BP,-24,D);
+    let retry=a.label(); let done=a.label(); let invalid=a.label(); let received=a.label();
+    a.bind(retry); a.load(DI,BP,-8); a.immediate(SI,if receive {1}else{4}); a.load(D,BP,-24); a.call(ready); a.test(A,true); a.condition(8,done);
+    for offset in vec![-96i64,-88,-80,-72,-64,-56,-48,-144,-136,-128] {word(a,offset,0);}
+    word(a,-120,0xf1); a.lea(A,BP,-120); a.store(BP,-112,A); word(a,-104,1);
+    a.lea(A,BP,-112); a.store(BP,-80,A); word(a,-72,1); a.lea(A,BP,-144); a.store(BP,-64,A); word(a,-56,24);
+    if !receive {word(a,-144,20); word(a,-136,0x100000001); a.load(A,BP,-16); a.store_width(BP,-128,A,4);}
+    a.load(DI,BP,-8); a.lea(SI,BP,-96); a.immediate(D,if receive {0x40000040}else{0x4040}); call(a,if receive {47}else{46});
+    a.immediate(C,(-11i64) as u64); a.compare(A,C); a.condition(4,retry); a.test(A,true); a.condition(8,done);
+    if receive {
+        a.store(BP,-152,A);
+        // Only SCM_RIGHTS supplies descriptor words; never close unrelated ancillary bytes.
+        a.load(A,BP,-136); a.immediate(C,0x100000001); a.compare(A,C); a.condition(5,invalid);
+        // Kernel delivered at most two descriptors in this control buffer.
+        a.load(A,BP,-144); a.immediate(C,20); a.compare(A,C); a.condition(2,invalid);
+        a.load_width(A,BP,-128,4,false); a.store(BP,-160,A);
+        a.load(A,BP,-152); a.immediate(C,1); a.compare(A,C); a.condition(5,received);
+        a.load(A,BP,-144); a.immediate(C,20); a.compare(A,C); a.condition(5,received);
+        a.load(A,BP,-136); a.immediate(C,0x100000001); a.compare(A,C); a.condition(5,received);
+        a.load_width(A,BP,-120,1,false); a.immediate(C,0xf1); a.compare(A,C); a.condition(5,received);
+        a.load_width(A,BP,-48,4,false); a.immediate(C,0x28); a.rr(0x21,A,C,true); a.test(A,true); a.condition(5,received);
+        a.load(DI,BP,-160); a.immediate(SI,1030); a.immediate(D,3); call(a,72); a.store(BP,-168,A);
+        close_at(a,-160); a.load(A,BP,-168); a.jump(done);
+        a.bind(received); close_at(a,-160);
+        a.load(A,BP,-144); a.immediate(C,24); a.compare(A,C); a.condition(2,invalid);
+        a.load_width(DI,BP,-124,4,false); call(a,3);
+    } else { a.immediate(C,1); a.compare(A,C); a.condition(5,invalid); a.immediate(A,0); a.jump(done); }
+    a.bind(invalid); a.immediate(A,(-71i64) as u64);
+    a.bind(done);
+    if !receive {a.store(BP,-176,A); close_at(a,-16); a.load(A,BP,-176);}
+    leave(a);
+}
+fn worker(a: &mut Assembler, p: Platform, ready: Label) {
+    a.bind(p.worker_terminate); kill_wait(a);
+    a.bind(p.worker_drop); enter(a,16); a.store(BP,-8,DI); a.call(p.worker_terminate);
+    for offset in vec![8i64,16,32] { a.load(DI,BP,-8); a.load(DI,DI,offset); call(a,3); }
+    a.load(DI,BP,-8); a.immediate(SI,48); call(a,11); leave(a);
+    a.bind(p.worker_wait); enter(a,32); a.store(BP,-8,DI); a.store(BP,-16,SI);
+    let done=a.label(); let known=a.label(); let failed=a.label();
+    a.load(A,DI,0); a.test(A,true); a.condition(4,known);
+    a.mov(D,SI); a.load(DI,DI,32); a.immediate(SI,1); a.call(ready); a.test(A,true); a.condition(8,failed);
+    a.load(DI,BP,-8); a.load(DI,DI,0); a.lea(SI,BP,-24); a.immediate(D,0); a.immediate(R10,0); call(a,61); a.test(A,true); a.condition(8,failed);
+    a.load(DI,BP,-8); a.immediate(A,0); a.store(DI,0,A);
+    a.load_width(A,BP,-24,4,false); a.mov(C,A); a.immediate(D,127); a.rr(0x21,C,D,true);
+    let normal=a.label(); a.test(C,true); a.condition(4,normal); a.lea(A,C,128); let status=a.label(); a.jump(status);
+    a.bind(normal); a.shift(A,5,8); a.immediate(C,255); a.rr(0x21,A,C,true); a.bind(status); a.store(DI,24,A); a.jump(done);
+    a.bind(known); a.load(A,DI,24); a.jump(done);
+    a.bind(failed); a.store(BP,-32,A); a.load(DI,BP,-8); a.call(p.worker_terminate); a.load(A,BP,-32);
+    a.bind(done); leave(a);
+}
+pub(super) fn emit(a: &mut Assembler, p: Platform) {
+    let ready=a.label(); image(a,p); spawn(a,p,ready); wait_ready(a,ready);
+    byte_io(a,p,ready,false); byte_io(a,p,ready,true); file_io(a,p,ready,false); file_io(a,p,ready,true); worker(a,p,ready);
+}

@@ -248,3 +248,14 @@ A future profile must name writable roots, secret inputs, network scope and chil
 Until those policies are implemented and proved, those tools remain host compositions.
 Authenticated lkjscript children separately await compiler image identity, a comparable entry-authority manifest and descriptor-only startup.
 This foreign ELF profile supplies none of those proofs, and does not start cxloop.
+
+## Long-lived foreign code
+
+The same outside-image boundary applies to a worker retained for the parent's
+lifetime. [ForeignSession](../docs/programs-foreign-session-contract.md) specifies
+the exact affine operations, per-request deadline, transactional response and
+library restart policy. The [Git batch specimen](foreign-session/README.md)
+compares persistent requests with one spawn per request. Its channel currently
+carries bytes; passed descriptors and shared regions for foreign workers remain
+an explicit gap. The [ten-line in-image boundary cost](../docs/programs-foreign-session-contract.md#foreign-code-inside-the-image-boundary-cost)
+explains why native FFI is not admitted to the checked image.

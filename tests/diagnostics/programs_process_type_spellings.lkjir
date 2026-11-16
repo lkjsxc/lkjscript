@@ -1,0 +1,22 @@
+lkjscript-ir 1
+# expect: check
+# cause: bad message.
+# pending (resolved): New type inner decoder arms were unreachable because the
+# outer shape dispatch omitted these spellings; E_IR_TEXT named no rejected word.
+# Keep all four accepted type spellings beside the existing ForeignCommand case.
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "Image" image
+type "Channel" channel
+type "Worker" worker
+type "ReadRegion" read_region
+fn "probe" 0 0
+local "done" 0 let
+@1 unit 0
+@1 return 0
+endfn

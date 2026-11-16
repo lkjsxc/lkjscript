@@ -1,0 +1,8 @@
+//! A tracer holds this fixture's child before exec; spawn itself must time out.
+pub fn main(mut image: Image, mut clock: Clock) {
+    let deadline = clock.nanoseconds().unwrap() + 250_000_000usize;
+    match image.spawn(deadline) {
+        Err(errno) => assert_eq!(errno, 110i64),
+        Ok(_) => panic!("pre-exec stopped child was admitted without startup deadline"),
+    }
+}

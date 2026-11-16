@@ -1,0 +1,44 @@
+//! Closed program-directory contracts, separated from fresh filesystem proofs.
+pub mod ast;
+pub mod diagnostic;
+pub mod diagnostics;
+pub mod source;
+pub mod resolve;
+pub mod names;
+pub mod syntax;
+pub mod json;
+pub mod ir;
+pub mod entry_grants;
+pub mod program_directory;
+
+fn reject(text: &str, fragment: &str) {
+    match program_directory::parse("/specimen", text) {
+        Ok(_) => panic!("invalid program manifest was accepted"),
+        Err(message) => assert!(message.contains(fragment)),
+    }
+}
+#[test]
+fn reviewed_manifest_contracts() {
+    let site = program_directory::parse("/specimen/site", include_str!("../examples/site/program.lkj")).unwrap();
+    assert_eq!(site.source, "main.lkj"); assert_eq!(site.entry, "main");
+    assert_eq!(site.grants.len(), 5usize); assert_eq!(site.cases, vec!["routes.lkj".to_string()]);
+    let journal = program_directory::parse("/specimen/journal", include_str!("../examples/journal/program.lkj")).unwrap();
+    assert_eq!(journal.source, "main.lkj"); assert_eq!(journal.entry, "main");
+    assert!(journal.grants.contains(&"root=env:LKJSCRIPT_JOURNAL_STATE".to_string()));
+    assert_eq!(journal.cases, vec!["contract.lkj".to_string()]);
+    let desk = program_directory::parse("/specimen/desk", include_str!("../examples/desk/program.lkj")).unwrap();
+    assert_eq!(desk.source, "main.lkj"); assert_eq!(desk.entry, "serve");
+    assert!(desk.grants.contains(&"state=env:DESK_STATE".to_string()));
+    assert_eq!(desk.cases, vec!["arguments.lkj".to_string()]);
+}
+#[test]
+fn literal_manifest_refusals() {
+    let valid = "const SOURCE: &str = \"main.lkj\"; const ENTRY: &str = \"main\"; const GRANTS: &[&str] = &[]; const CASES: &[&str] = &[\"cases.lkj\"];";
+    assert!(program_directory::parse("/specimen", valid).is_ok());
+    reject(&valid.replace("\"main.lkj\"", "\"../main.lkj\""), "SOURCE must be");
+    reject(&valid.replace("\"cases.lkj\"", "\"../cases.lkj\""), "CASES path");
+    reject(&valid.replace("SOURCE: &str", "SOURCE: bool"), "SOURCE must have type");
+    reject(&valid.replace("\"main.lkj\"", "select()"), "SOURCE must be a string literal");
+    reject(&format!("{valid} const ENTRY: &str = \"other\";"), "duplicate ENTRY");
+    reject(&valid.replace("\"cases.lkj\"", "\"cases.lkj\", \"cases.lkj\""), "duplicate CASES");
+}

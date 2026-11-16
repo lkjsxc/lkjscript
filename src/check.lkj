@@ -105,7 +105,12 @@ pub fn is_data(types: &[Type], ty: usize) -> bool {
             | TypeKind::Directory
             | TypeKind::ReadDirectory
             | TypeKind::ReadFile
+            | TypeKind::Image
+            | TypeKind::Channel
+            | TypeKind::Worker
+            | TypeKind::ReadRegion
             | TypeKind::ForeignCommand
+            | TypeKind::ForeignSession
             | TypeKind::NullDevice
             | TypeKind::File
             | TypeKind::Process
@@ -3171,7 +3176,7 @@ fn check_function_body(
                 }
             }
             Op::Intrinsic { dst, name, args } => {
-                if *name == IntrinsicOp::StrAsBytes || *name == IntrinsicOp::StrFromUtf8 {
+                if *name == IntrinsicOp::StrAsBytes || *name == IntrinsicOp::StrFromUtf8 || *name == IntrinsicOp::ReadRegionBytes {
                     let source = Place::local(args[0]);
                     let destination = Place {
                         local: *dst,

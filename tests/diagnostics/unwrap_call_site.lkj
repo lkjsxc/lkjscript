@@ -1,5 +1,8 @@
 // expect: trap R0004
 // cause: bad message.
-// pending: A structured source error lost through unwrap needs the failing source path and diagnostic; semantic fixture helpers now print that context explicitly.
+// pending: A structured source error lost through unwrap needs the failing source path and diagnostic; helpers with an already granted writer should print that context explicitly.
+// Programs structural gate instance: interpreter_contracts::compiled panicked at
+// its helper when canonical arena/process_model files were absent, hiding the
+// E_MODULE_MISSING diagnostic. Central fixture completion now supplies both files.
 // Contract: unwrap reports its ordinary library callee; preserve errno and the user location with an explicit match and an already granted writer.
 pub fn probe() { let failure: Result<(),i64> = Err(5i64); failure.unwrap(); }

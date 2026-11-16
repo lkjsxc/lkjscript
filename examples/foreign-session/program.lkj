@@ -1,0 +1,4 @@
+pub const SOURCE: &str = "main.lkj";
+pub const ENTRY: &str = "main";
+pub const GRANTS: &[&str] = &["tool=/usr/bin/git", "root=env:LKJSCRIPT_FOREIGN_ROOT", "sink", "args", "output", "clock"];
+pub const CASES: &[&str] = &[];

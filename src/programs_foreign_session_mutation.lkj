@@ -1,0 +1,81 @@
+//! Direct IR adversaries; source elaboration is not involved in any verdict.
+mod ir;
+mod ir_binary;
+mod diagnostic;
+mod facts;
+mod reuse;
+mod check;
+use std::sha256;
+use ir::*;
+
+fn local(ty: usize) -> Local { Local { name:String::new(),ty,mutable:true } }
+fn make(types: Vec<Type>, locals: Vec<Local>, params: usize, result: usize, operations: Vec<Op>) -> Program {
+    let mut body=Vec::new();
+    for op in operations { body.push(Instruction{file:None,line:1usize,column:1usize,op}); }
+    Program { sources:Vec::new(),destructors:Vec::new(),types,functions:vec![Function{file:0usize,name:"probe".to_string(),params,result,return_source:None,locals,body,test:false}] }
+}
+fn add(types: &mut Vec<Type>, kind: TypeKind) -> usize { let index=types.len(); types.push(Type{name:String::new(),kind}); index }
+fn start() -> Program {
+    let mut types=primitives();
+    let command=add(&mut types,TypeKind::ForeignCommand);
+    let root=add(&mut types,TypeKind::ReadDirectory);
+    let sink=add(&mut types,TypeKind::NullDevice);
+    let session=add(&mut types,TypeKind::ForeignSession);
+    let command_ref=add(&mut types,TypeKind::Ref{inner:command,mutable:true});
+    let root_ref=add(&mut types,TypeKind::Ref{inner:root,mutable:true});
+    let sink_ref=add(&mut types,TypeKind::Ref{inner:sink,mutable:true});
+    let bytes=add(&mut types,TypeKind::Slice{inner:U8,mutable:false});
+    let input=add(&mut types,TypeKind::Ref{inner:bytes,mutable:false});
+    let outcome=add(&mut types,TypeKind::Enum{copy:false,variants:vec![
+        Variant{name:"Ok".to_string(),fields:vec![Field{name:"0".to_string(),ty:session}]},
+        Variant{name:"Err".to_string(),fields:vec![Field{name:"0".to_string(),ty:I64}]}]});
+    make(types,vec![local(command_ref),local(root_ref),local(sink_ref),local(input),local(U64),local(outcome)],5usize,outcome,
+        vec![Op::Intrinsic{dst:5usize,name:IntrinsicOp::ForeignStart,args:vec![0usize,1usize,2usize,3usize,4usize]},Op::Return{src:5usize}])
+}
+fn exchange() -> Program {
+    let mut types=primitives(); let session=add(&mut types,TypeKind::ForeignSession);
+    let owner=add(&mut types,TypeKind::Ref{inner:session,mutable:true});
+    let bytes=add(&mut types,TypeKind::Slice{inner:U8,mutable:false});
+    let input=add(&mut types,TypeKind::Ref{inner:bytes,mutable:false});
+    let output=add(&mut types,TypeKind::Ref{inner:bytes,mutable:true});
+    make(types,vec![local(owner),local(input),local(output),local(U64),local(I64)],4usize,I64,
+        vec![Op::Intrinsic{dst:4usize,name:IntrinsicOp::ForeignExchange,args:vec![0usize,1usize,2usize,3usize]},Op::Return{src:4usize}])
+}
+fn reject(program: Program) { assert!(check::check(program).is_err(),"forged foreign session was accepted"); }
+pub fn main(mut output: Stdout) {
+    let valid=start(); assert!(check::check(valid.clone()).is_ok());
+    let io=exchange(); assert!(check::check(io.clone()).is_ok());
+    let mut types=primitives(); let session=add(&mut types,TypeKind::ForeignSession);
+    assert!(!check::is_copy(&types,session)); assert!(!check::is_data(&types,session));
+    reject(make(types.clone(),vec![local(session)],0usize,session,vec![Op::Int{dst:0usize,value:1i64},Op::Return{src:0usize}]));
+    reject(make(types.clone(),vec![local(session)],0usize,session,vec![Op::Struct{dst:0usize,fields:Vec::new()},Op::Return{src:0usize}]));
+    reject(make(types.clone(),vec![local(session),local(session)],1usize,session,vec![Op::Read{dst:1usize,place:Place{local:0usize,projections:Vec::new()},moving:false},Op::Return{src:1usize}]));
+    reject(make(types.clone(),vec![local(session),local(session),local(session)],1usize,session,vec![Op::Read{dst:1usize,place:Place{local:0usize,projections:Vec::new()},moving:true},Op::Read{dst:2usize,place:Place{local:0usize,projections:Vec::new()},moving:true},Op::Return{src:2usize}]));
+    let shared=add(&mut types,TypeKind::Ref{inner:session,mutable:false});
+    reject(make(types.clone(),vec![local(shared),local(session)],1usize,session,vec![Op::Intrinsic{dst:1usize,name:IntrinsicOp::Clone,args:vec![0usize]},Op::Return{src:1usize}]));
+    let mut state=901171u64;
+    for _index in 0usize..512usize {
+        state=state.wrapping_mul(6364136223846793005u64).wrapping_add(1442695040888963407u64);
+        let which=(state%8u64) as usize;
+        if which<4usize {
+            let mut changed=valid.clone();
+            match which {
+                0usize=>changed.types[7usize].kind=TypeKind::File,
+                1usize=>changed.types[8usize].kind=TypeKind::Directory,
+                2usize=>changed.types[9usize].kind=TypeKind::File,
+                _=>changed.types[11usize].kind=TypeKind::Ref{inner:7usize,mutable:false},
+            }
+            reject(changed);
+        } else {
+            let mut changed=io.clone();
+            match which {
+                4usize=>changed.types[7usize].kind=TypeKind::Child,
+                5usize=>changed.types[8usize].kind=TypeKind::Ref{inner:7usize,mutable:false},
+                6usize=>changed.types[11usize].kind=TypeKind::Ref{inner:9usize,mutable:false},
+                _=>changed.functions[0usize].locals[3usize].ty=I64,
+            }
+            reject(changed);
+        }
+    }
+    output.write(b"ok foreign session IR: 517 rejected attacks, two admitted controls; seed 901171\n");
+}

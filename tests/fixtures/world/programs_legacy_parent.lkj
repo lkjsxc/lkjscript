@@ -1,0 +1,16 @@
+//! Only an isolated test root and the oracle binary inside it are used.
+pub fn main(mut world: World) {
+    let arguments = world.args();
+    assert_eq!(arguments.len(), 1usize);
+    let path = String::from_utf8(arguments[0usize].clone()).unwrap();
+    let mut root = world.directory(path.as_str()).unwrap();
+    let executable = root.open("witness").unwrap();
+    let input = world.temporary_file().unwrap();
+    let output = root.create("child-body").unwrap();
+    let errors = world.temporary_file().unwrap();
+    let result = world.temporary_file().unwrap();
+    let arguments = vec![b"--oracle-body"[..].to_vec()];
+    let mut process = world.process();
+    let mut child = process.spawn_file(&executable, &arguments, &input, &output, &errors, &result).unwrap();
+    assert_eq!(child.wait().unwrap(), 0i64);
+}

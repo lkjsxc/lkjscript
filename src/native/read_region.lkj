@@ -1,0 +1,79 @@
+//! Immutable shared payloads. A region borrows a fully sealed File only to
+//! duplicate its same kernel object, then owns one read-only mapping and fd.
+use super::platform::Platform;
+use crate::x86::*;
+
+fn enter(a: &mut Assembler, bytes: i64) { a.push(BP); a.mov(BP,SP); a.lea(SP,SP,-bytes); }
+fn leave(a: &mut Assembler) { a.mov(SP,BP); a.pop(BP); a.ret(); }
+fn call(a: &mut Assembler, number: u64) {
+    if number==3 { a.immediate(A,number); a.syscall(); return; }
+    let again=a.label(); a.bind(again); a.immediate(A,number); a.syscall();
+    a.immediate(C,(-4i64) as u64); a.compare(A,C); a.condition(4,again);
+}
+fn checked(a: &mut Assembler, number: u64, failed: Label) { call(a,number); a.test(A,true); a.condition(8,failed); }
+fn constant(a: &mut Assembler, at: i64, value: u64) { a.immediate(A,value); a.store(BP,at,A); }
+fn close_slot(a: &mut Assembler, at: i64) {
+    let absent=a.label(); a.load(DI,BP,at); a.test(DI,true); a.condition(8,absent); call(a,3); a.bind(absent);
+}
+fn seals(a: &mut Assembler, invalid: Label, failed: Label) {
+    a.immediate(SI,1034); a.immediate(D,0); checked(a,72,failed);
+    a.immediate(C,15); a.rr(0x21,A,C,true); a.compare(A,C); a.condition(5,invalid);
+}
+fn map_record(a: &mut Assembler, failed: Label) {
+    a.immediate(DI,0); a.immediate(SI,24); a.immediate(D,3);
+    a.immediate(R10,0x22); a.immediate(R8,!0u64); a.immediate(R9,0); checked(a,9,failed);
+}
+fn region(a: &mut Assembler, p: Platform) {
+    a.bind(p.file_map_readonly); enter(a,208); a.store(BP,-16,DI);
+    constant(a,-8,0); constant(a,-24,!0u64); constant(a,-32,0); constant(a,-40,0);
+    let invalid=a.label(); let overflow=a.label(); let failed=a.label(); let finish=a.label(); let empty=a.label();
+    // Every writable alias is restricted before any size or mapping is trusted.
+    seals(a,invalid,failed);
+    a.load(DI,BP,-16); a.lea(SI,BP,-208); checked(a,5,failed);
+    a.load_width(A,BP,-184,4,false); a.immediate(C,0xf000); a.rr(0x21,A,C,true);
+    a.immediate(C,0x8000); a.compare(A,C); a.condition(5,invalid);
+    a.load(A,BP,-160); a.test(A,true); a.condition(8,overflow); a.store(BP,-40,A);
+    // F_DUPFD_CLOEXEC preserves the sealed open-file description, not a pathname.
+    a.load(DI,BP,-16); a.immediate(SI,1030); a.immediate(D,16); checked(a,72,failed); a.store(BP,-24,A);
+    map_record(a,failed); a.store(BP,-8,A);
+    a.load(SI,BP,-40); a.test(SI,true); a.condition(4,empty);
+    a.immediate(DI,0); a.immediate(D,1); a.immediate(R10,1); a.load(R8,BP,-24); a.immediate(R9,0); checked(a,9,failed);
+    a.store(BP,-32,A);
+    a.bind(empty); a.load(R8,BP,-8); a.load(A,BP,-24); a.store(R8,0,A);
+    a.load(A,BP,-32); a.store(R8,8,A); a.load(A,BP,-40); a.store(R8,16,A);
+    a.mov(A,R8); a.jump(finish);
+    a.bind(invalid); a.immediate(A,(-22i64) as u64); a.jump(failed);
+    a.bind(overflow); a.immediate(A,(-75i64) as u64);
+    a.bind(failed); a.store(BP,-48,A);
+    close_slot(a,-24);
+    a.load(DI,BP,-8); a.test(DI,true); let absent=a.label(); a.condition(4,absent);
+    a.immediate(SI,24); call(a,11); a.bind(absent); a.load(A,BP,-48);
+    a.bind(finish); leave(a);
+
+    a.bind(p.read_region_drop); enter(a,16); a.store(BP,-8,DI);
+    a.load(SI,DI,16); a.test(SI,true); let no_mapping=a.label(); a.condition(4,no_mapping);
+    a.load(DI,DI,8); call(a,11); a.bind(no_mapping);
+    a.load(DI,BP,-8); a.load(DI,DI,0); call(a,3);
+    a.load(DI,BP,-8); a.immediate(SI,24); call(a,11); a.immediate(A,0); leave(a);
+}
+fn buffer(a: &mut Assembler, p: Platform) {
+    a.bind(p.image_buffer); enter(a,64); a.store(BP,-8,DI); a.store(BP,-16,SI); constant(a,-24,!0u64);
+    let name=a.label(); let failed=a.label(); let invalid=a.label(); let overflow=a.label(); let finish=a.label();
+    a.test(SI,true); a.condition(8,overflow);
+    a.address(DI,name); a.immediate(SI,3); checked(a,319,failed); a.store(BP,-24,A);
+    a.mov(DI,A); a.immediate(SI,1030); a.immediate(D,16); call(a,72); a.store(BP,-32,A);
+    close_slot(a,-24); constant(a,-24,!0u64); a.load(A,BP,-32); a.test(A,true); a.condition(8,failed); a.store(BP,-24,A);
+    a.load(SI,BP,-8); a.load(D,BP,-16); let writing=a.label(); let written=a.label();
+    a.bind(writing); a.test(D,true); a.condition(4,written);
+    a.load(DI,BP,-24); call(a,1); a.test(A,true); a.condition(8,failed); a.condition(4,invalid);
+    a.rr(0x01,SI,A,true); a.rr(0x29,D,A,true); a.jump(writing);
+    a.bind(written); a.load(DI,BP,-24); a.immediate(SI,1033); a.immediate(D,15); checked(a,72,failed);
+    a.load(DI,BP,-24); seals(a,invalid,failed);
+    a.load(DI,BP,-24); a.immediate(SI,0); a.immediate(D,0); checked(a,8,failed);
+    a.load(A,BP,-24); a.jump(finish);
+    a.bind(invalid); a.immediate(A,(-5i64) as u64); a.jump(failed);
+    a.bind(overflow); a.immediate(A,(-75i64) as u64);
+    a.bind(failed); a.store(BP,-40,A); close_slot(a,-24); a.load(A,BP,-40);
+    a.bind(finish); leave(a); a.bind(name); a.raw(b"lkjscript-read-region\0");
+}
+pub(super) fn emit(a: &mut Assembler, p: Platform) { region(a,p); buffer(a,p); }

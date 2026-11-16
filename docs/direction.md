@@ -74,36 +74,35 @@ report count/throughput and preserve every finding as a permanent case.
 Reference examples are executable cases; language.md stays below 500 lines with
 form, meaning, lowering, rejection and rewrite. Port language/IR contracts; drop host tests.
 Holder liveness is conservative; its rejection names the lexical-scope rewrite.
-borrowed_closure_escape remains pending; programs decides the scoped-concurrency cases.
+borrowed_closure_escape remains pending; obsolete prose about three absent scoped-concurrency cases is not a contract.
 Cargo, bridge and rustc shim stay in witness/. CI gates from an empty store and seed
 without cargo/rustc/node; inspect the nonblocking witness job and never constrain
 language design for Rust. Accepted programs agree; delete the witness when it blocks
 needed forms or ceases to find useful differences. Source uses .lkj to identify lkjscript before reading; only actual Rust witness code uses .rs. Retain Rust shape; child.lkj/child/mod.lkj and program.lkj have no .rs alias or fallback.
 
 ## Program specimens (programs stream)
-
-Applications are specimens of program classes, not goals; site, journal and desk remain gate cases. The compiler is the first consumer of structural operations.
+[Runtime demand table](runtime-demands.md) orders work. Applications are specimens; site, journal and desk remain unchanged gate cases. The compiler is the first consumer.
 Programs work in /home/coder/workspace/lkjscript-programs-20261115 on programs; fetch/rebase, bootstrap, four-worker gate, push HEAD:main. Never refresh seed here.
-Connector grants one numeric IPv4:port without DNS or retargeting; both executors validate descriptors and authority follows checked-IR effects and cleanup.
-HTTP/1.1 persistence/pipelining retain exact framing. Keep indexed deadlines, bounded dispatch and receive times; tiny progress never renews a deadline.
-Use readiness for concurrency, processes for parallelism. Wait sets borrow handles without storing language views; closure escape remains pending, without thread rules.
-Keep compiler source within the stored seed's forms. The independent interpreter broker operates actual descriptors, without relay queues.
-Journal acknowledges after log fsync, a synced head and atomic rename plus directory fsync; one writer lock. Replay validates checksums/boundaries before tail repair. Stop claims SIGTERM, drains admitted work to a fixed deadline, syncs and exits.
-Entropy supplies kernel bytes; publish private synced keys atomically. Write tokens bind expiry/nonce through HMAC and a separate key-root grant; authenticate before mutation.
-The documentation origin embeds published bodies/search Markdown under exact hardening. Preserve live/frozen route, header, unusual HEAD and same-port restart parity; Claude owns deployment.
-Desk is composed by the host: one writable state root, named read-only board/handoff roots and one loopback listener; no child authority. File contracts are in examples/desk.md.
-ReadDirectory/ReadFile are affine and cannot produce writable/chmod-capable handles. Inspect and read the same regular-file descriptor; atomic replacement preserves a coherent snapshot.
-Separate command/service entries avoid eager listeners. Named environment grants never discover HOME; fixed-offset local time is explicit; arbitrary listen remains an external flock wrapper.
-Desk append holds .lock, repairs only an incomplete suffix and issues one O_APPEND write, never copies the log. Sync is default; buffered durability is an explicit argument shown in phase reports.
-Desk push uses durable byte cursors and idempotent row IDs; one service metadata tick does no per-idle-peer work. Queued writes have fixed deadlines; polling is the fallback.
-Wake is a durable high-water request/ack consumed idempotently by the host: launch plus acknowledgement cannot be exactly once. Prove units in fresh transient instances; no live switches.
-build-child and image-authority bind exact ELF length/hash, target/entry/result/transfer ABI and canonical checked capability slots. admitted_image::SealedImage verifies the same sealed kernel file retained through exec; no pathname is reopened. Startup validates transferred slots before descriptor writes. docs/child-image.md specifies the wire contract; programs owns affine transfer/lifecycle APIs and the remaining external_child_authority case.
-A child imports transferred affine slots, never reopens baked roots or reacquires World. Reports name every image/slot; deadline exit/output values and parent-death cleanup are required.
-Foreign-child design: a separate affine command grant snapshots the initial executable; a read root and NullDevice are explicit. Broad Process is never a narrow grant.
-Stage every dynamic runtime file beneath R; report transformed PT_INTERP bytes honestly. Kernel setup between fork/exec uses Landlock, seccomp and no_new_privs, without a helper.
-Kernel profile: read/execute R, plus the explicit initial image, writable capture memfds and verified /dev/null (1:3); deny other file writes, sockets, descendants and privilege regain. Reexec keeps confinement, including anonymous capture execution. Close unpassed descriptors, use fixed streams/env, impose an absolute kill deadline then reap, and check parent-death races; fail closed on unsupported hosts.
-Report observable outside-path metadata, clocks/entropy and mutable root contents; no filesystem snapshot or information-flow claim. No language grant ships before checker/executor/report cases agree.
-cxloop network/home/process-tree authority remains work in examples/foreign-child.md. Journal next needs reviewed account/live/worker contracts; outbound TLS needs checked certificate validation and trust roots.
+Concurrency is process-isolated parallelism and readiness for idle work; no mutable shared address space or heap views. The [ordered pool library and map/channel specimens](../examples/process-workers.md) share only sealed immutable payloads.
+The compiler pays separate heaps and checked-unit serialization; no single-process speedup is claimed. Seeded actor protocol exploration is distinct from a thread-race detector.
+Connector grants one numeric IPv4:port, without DNS/retargeting. HTTP framing, indexed deadlines, bounded dispatch and fixed receive/write deadlines remain in the existing suites.
+ReadDirectory/ReadFile are affine and cannot make writable/chmod-capable handles. Inspect/read one regular descriptor; atomic replacement preserves its coherent snapshot.
+Journal commit/replay/authentication and Stop drain contracts remain in examples/journal; desktop/browser services are not extended or deployed.
+Desk is host composition: state root, named board/handoff read roots and loopback listener. File, append, SSE, wake, units and handoff contracts remain in examples/desk.md; Claude owns its switch.
+The documented site hardening and route/HEAD/same-port parity remain mandatory. Preserve live services and data.
+Keep compiler source within stored-seed forms. The independent interpreter broker operates descriptors, without hidden relay queues.
+build-child/image-authority bind exact ELF length/hash, target/entry/result/transfer ABI and checked capability slots; docs/child-image.md owns that wire contract.
+A child imports only moved slots, never reopens roots or reacquires World. Report image identity and slots; deadline exit/output values, attached lifetime and parent-death cleanup are required.
+Foreign code stays outside checked images: an attached confined worker may serve many requests. Absolute request deadlines poison/reap failed sessions; restart bounds are library.
+Foreign grants snapshot the initial executable; read root and NullDevice are explicit. Dynamic runtime files live beneath R; report transformed PT_INTERP bytes honestly.
+Landlock/seccomp/no_new_privs permit read/execute R, initial image and explicit streams; deny other writes, sockets, descendants and privilege regain. Reexec keeps confinement; close unpassed descriptors, check parent-death races, fail closed on unsupported hosts.
+Outside-path metadata, clocks/entropy and mutable root contents remain observable; no snapshot/information-flow claim. In-image FFI would forfeit checked control flow, memory integrity and trustworthy authority accounting (examples/foreign-child.md).
+Runtime admission uses the process form: a dedicated compiler producer carries checker/backend, receives framed IR while running and admits only an empty authority closure.
+That producer presently declares World, including broad Process; it is an explicit trusted compiler, not a narrow public Admission value or a proof manufactured by an ordinary library struct.
+Check every IR body with the same build-time checker, derive entry authority, emit transfer-only code, seal its memfd, then execute that exact descriptor with no capability slots.
+There is no writable executable mapping in the producer. Each invocation returns scalar/trap/deadline evidence; reap before dropping its image. A child trap is contained and located; no in-image unwinding or unloading contract is invented.
+The caller-facing authenticated Image/Channel form is separate from this producer's broad authority. Keep that gap visible in [runtime admission](runtime-admission.md), rather than call arbitrary File bytes admitted.
+Long-lived object graphs use ordinary owning arenas and typed generational handles; temporary lookup views obey existing loans. Removed/reused/exhausted generations are checked; [specimen](../examples/object_graph/README.md).
 
 ## Authenticated reuse
 
@@ -139,7 +138,7 @@ sizes in status and commits. Measurements do not gate. Measure remaining gaps.
 ## Horizon and working policy
 
 Make structure directly operable: source claims and checked-instance facts are labelled, queries are bounded, edits are checked transactions, and comparisons use checked identities. Size measurements decide checking units; range facts follow measured use. A checked-IR seed and a second target still follow need. No mandatory formatter or fragment marker: retained diagnostic cases show no need for their frontend cost; delta prints accepted rewrites.
-Programs decides concurrency; do not build on pending scoped-concurrency cases.
+Processes-only parallelism is chosen; a single-address-space compiler pays IPC/unit-serialization costs until separately checked thread/allocator rules exist.
 Compiler owns main, seed, emission, driver/store, bench, CI and hash; programs owns
 its separate worktree, consumers and new capabilities. Preserve its additions.
 Only compiler refreshes seed, in its own commit. Do not move/reformat whole files.

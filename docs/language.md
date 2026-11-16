@@ -296,9 +296,8 @@ IR checking; they grant no authority. Disjoint mutable outputs stay disjoint, an
 shared results may outlive reference-only environments while owners live.
 Generic/associated result families can refine similarly: acyclic callees first,
 recursive groups conservatively. This does not prove unused generic hidden effects.
-Opaque generic reference outputs, impl Trait closure returns, lending closures,
-dynamic callables and scoped concurrency remain unfinished. Pending escape/three
-concurrency cases specify intended ownership rules, with their missing features.
+Opaque generic reference outputs, impl Trait closure returns, lending closures and dynamic callables remain unfinished.
+Only borrowed_closure_escape remains pending; concurrency uses isolated processes and owned messages, not shared-address-space threads.
 
 ## Source library
 
@@ -316,6 +315,7 @@ concurrency cases specify intended ownership rules, with their missing features.
 | Collection copying/equality | extend_from_slice/to_vec clone in order; empty input does no clones. Vec Clone requires Clone; equality requires only PartialEq, checks length then element ==, and Vec ne negates the whole result. Nested types/floats/custom implementations follow selected traits. | Inherent clone/ne cannot replace generic contracts. Arrays use array[..].to_vec(); helper signatures and element constraints check independently. |
 | Slice/Vec helpers | starts_with borrows; copy_from_slice needs Copy and equal lengths, with array receivers written as array[..].copy_from_slice(source); predicate split retains empty groups at delimiters. clear/truncate destroy removed elements forward; stable sort/retain are source operations. | General From/Into, Sum/FromIterator and exclusive iter_mut need their own contracts. |
 | Ordered maps/sets | BTreeMap uses an indexed AVL arena/free slots with logarithmic lookup/insertion/removal; BTreeSet reuses it. Sorted shared/owned iteration, map keys/values/first_key_value/pop_first/retain and set first/pop_first. Clear/drop and partially consumed iterators destroy in key order; Clone/Default/equality ignore arena shape. | Entirely source algorithms over existing storage, not new trusted primitives. |
+| Generational arenas | std::arena::Arena<T,Kind> owns graph nodes; Handle<Kind> stores owner namespace/index/generation. get/get_mut lend temporary checked views; remove moves the value and invalidates prior handles. Exhausted generations retire. | Caller assigns distinct same-Kind owner IDs while any handle survives. Handles are values, not authority; no heap views or new IR. [Million-node specimen](../examples/object_graph/README.md). |
 
 Option/Result also provide map, map_or/map_or_else, and_then/or_else/unwrap_or_else;
 Option has filter and Result map_err. A map_err closure needs known input/result types: annotate the missing type. For a literal.to_string() result use |_| -> std::String { literal.to_string() }; this supplies the result type while preserving receiver evaluation and the closure's capture/return/? scope. String ordering/from conversion, scalar
@@ -427,11 +427,11 @@ Single-error APIs select the first diagnostic from these same production paths. 
 
 ## World and capabilities
 
-Entries take owned Arguments, Environment, ExitStatus, Stdout/Stdin/Stderr, Directory/ReadDirectory, ForeignCommand, NullDevice, Listener, Connector, Readiness, Process, Clock, Entropy or Stop; no parameters; or a sole World declaring implicit full authority.
-build/run require --grant NAME for each parameter: Directory/ReadDirectory take NAME=PATH or NAME=env:VARIABLE, ForeignCommand NAME=/absolute/executable, Environment NAME=VARIABLE, Listener/Connector NAME=IPv4:PORT; others have no payload. Only Listener permits port zero. build embeds descriptors; handles are acquired at startup.
+Entries take owned Arguments, Environment, ExitStatus, Stdout/Stdin/Stderr, Directory/ReadDirectory, Image, ForeignCommand, NullDevice, Listener, Connector, Readiness, Process, Clock, Entropy or Stop; no parameters; or a sole World declaring implicit full authority.
+build/run require --grant NAME for each parameter: Directory/ReadDirectory take NAME=PATH or NAME=env:VARIABLE, ForeignCommand NAME=/absolute/executable, Image NAME=CHILD_ELF authenticated with --image-key, Environment NAME=VARIABLE, Listener/Connector NAME=IPv4:PORT; others have no payload. Only Listener permits port zero. build embeds descriptors; handles are acquired at startup.
 Directory/ReadDirectory's env:VARIABLE selector resolves only that named variable at invocation/startup; absent or empty fails with errno 2, without a default or directory creation. Reading its path bytes separately requires an Environment grant.
 Duplicate, missing, unknown or malformed grants reject before publication/execution; acquisition failure traps R0007 at entry with the capability kind, granted value, actual operation and symbolic/numeric errno, e.g. `Listener 127.0.0.1:8798 bind: EADDRINUSE (98)`. Listener can rebind after TIME_WAIT; an active listener still excludes it.
-Ordinary build/run rejects File/ReadFile/Child/borrowed/aggregate entry parameters; acquire files through a granted Directory/ReadDirectory. Transfer-only child images can import File/ReadFile as documented in the child image ABI.
+Ordinary build/run rejects File/ReadFile/Child/Channel/Worker/ReadRegion/ForeignSession/borrowed/aggregate entry parameters; acquire derived owners from explicit grants. Transfer-only child images follow the child image ABI; Image.spawn currently admits exactly one owned Channel slot.
 All capability types, including World, File and Child, are affine, without constructors or Copy/Clone/Data/Send/Sync implementations. Names, integers or casts cannot forge authority. IR checks each operation independently; methods below exclusively borrow receivers, and derived owners can outlive those borrows.
 
 | Form | Result and authority |
@@ -469,15 +469,15 @@ All capability types, including World, File and Child, are affine, without const
 | Stdin/File/ReadFile.read(&mut [u8]), read_to_end() | Result with short-read count or collected bytes; zero is EOF for nonempty buffers. |
 | File.write/write_all(&[u8]) | One-write count or complete-write Result. |
 | File.duplicate()/readonly() | Duplicate sharing offset/state; or read-only reopen with independent zero offset. Closed remains closed. |
-| File.rewind()/set_executable() | Seek zero or set mode 0755. |
-| File.seal() | Result<(),i64>; permanently seal writes, growth, shrink and seal changes on a sealable anonymous File, including every alias; regular files reject. This restricts File and grants no executable admission. |
+| File.rewind()/set_executable()/seal() | Seek zero, set mode 0755, or permanently seal writes/growth/shrink/seal changes on anonymous storage, including every alias. All return Result<(),i64>; ordinary files cannot seal. Neither mode nor seals grant executable admission. |
 | Stdout/Stderr.write(&[u8]) | Complete write or R0007 at the call with stream kind, inherited descriptor, write operation and symbolic/numeric errno. |
 | Clock.nanoseconds()/unix_seconds()/unix_nanoseconds() | Result<usize,i64> monotonic nanoseconds for deadlines; Result<i64,i64> CLOCK_REALTIME seconds; Result<usize,i64> CLOCK_REALTIME nanoseconds. Realtime may jump; unix_nanoseconds returns errno 75 for negative or unrepresentable time. |
 | ForeignCommand.run(&mut ReadDirectory,&mut NullDevice,&[Vec<u8>],duration_ns:usize) | Result<ReadFile,i64> framed exit/deadline/stdout/stderr; std::foreign::decode consumes it. Synchronous, nonzero duration; absolute deadline begins before setup; every child is killed/reaped before return. |
 | ForeignCommand.image() | Result<ReadFile,i64> fresh read view of immutable transformed initial ELF for checked SHA256; no execution or raw writable image access. |
+| std::foreign_session::{start,exchange,finish,idempotent_request} | Start derives affine ForeignSession from ForeignCommand, ReadDirectory and NullDevice; exact response framing, one request deadline and transactional output; finish/drop reap, bounded restart is explicit library policy. [Exact contract](programs-foreign-session-contract.md). |
+| Image.spawn(deadline)/buffer(bytes); Worker/Channel.send/receive/send_file/receive_file; Worker.wait/terminate/result; File.map_readonly(), ReadRegion.bytes()/len() | Authenticated attached workers, deadline-bound byte packets and moved File values; sealed immutable shared bytes with checked owner loans. ReadRegion methods share-borrow; other receivers borrow exclusively. [Types, results, lifecycle and remaining message-identity gap](ir.md#isolated-workers-and-immutable-regions). |
 | Process.spawn_file(executable,&args,stdin,stdout,stderr,result) | Result<Child,i64>, explicit executable File, argument byte vectors and four File streams; result maps to descriptor 3. |
-| Child.wait()/try_wait() | Exit code or 128+signal, with Option for polling; reaped children later fail ECHILD. |
-| Child.terminate()/request_stop() | Result<(),i64>; send SIGKILL/SIGTERM only to the owned child, without waiting. Dropping a live Child kills and reaps it. |
+| Child.wait()/try_wait()/terminate()/request_stop() | Wait gives exit code or 128+signal (Option when polling); reaped children later fail ECHILD. Signals give Result<(),i64>, affect only the owned child and do not wait. Dropping a live Child kills and reaps it. |
 
 Convenience methods live in library/io.lkj, command.lkj, read_io.lkj and foreign.lkj. The loader mounts new typed helper modules beside canonical $std/lib.lkj so stored seeds can still build the compiler. Result errors carry positive Linux errno; `std::io::errno_name(errno)` returns its static Linux name (EUNKNOWN otherwise). Explicit matches retain operation/grant context; Result::unwrap never formats generic E. Raw read/write leaves return negative errno. EINTR retries except close, which consumes once.
 Paths reject NUL; raw paths need exactly one trailing NUL. Descendants use openat2 RESOLVE_BENEATH|RESOLVE_NO_MAGICLINKS. Only ENOSYS selects anchored openat component traversal: absolute paths, parent/empty components and every symlink reject; held directories retain their inode across rename. The fallback allocates the actual path length, with no guessed path/component limit.
@@ -490,7 +490,7 @@ Native Stop.target is the program PID; interpreted Stop.target is the owned sysc
 After a successful Stop claim, spawned children restore only the SIGTERM mask bit saved before the first successful acquisition, preserving every other bit. Without a claim the mask stays unchanged; an originally blocked SIGTERM remains blocked.
 
 Captured process files share offsets; rewind before reading. Closed File returns EBADF, drops harmlessly and closes the assigned child stream. Spawn validates NUL-free arguments, chooses argv0 lkjscript, clears environment and executes the File with execveat, without PATH/shell fallback; exec failure returns errno. Direct children receive parent-death SIGKILL. No caller slice pointer survives I/O.
-File/ReadFile/Directory/ReadDirectory/ForeignCommand/NullDevice/Listener/Readiness/Stop drops close once; standard-stream capability drops leave inherited streams open. Acquiring capabilities preserves inherited closed streams.
+File/ReadFile/Directory/ReadDirectory/ForeignCommand/Image/Channel/NullDevice/Listener/Readiness/Stop drops close once; ReadRegion unmaps/closes; Worker and ForeignSession kill/reap/close. Standard-stream drops leave inherited streams open; acquisition preserves inherited closed streams.
 Readiness drops only its wait set. Unwatch before closing a watched descriptor if aliases remain. Wait batches at most 64 events without limiting registrations; expired deadlines poll once.
 Read interest reports half-close; drain readable final bytes. Write-only interest does not report peer write-half closure repeatedly.
 

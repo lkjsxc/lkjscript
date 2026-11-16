@@ -1,0 +1,5 @@
+// expect: reject E_TYPE
+// cause: expected a Rust form.
+// pending: Closed unit harness passed &[] to &[u64]; preserve the contextual suggestion &[0u64; 0] and its edit.
+fn count(values: &[u64]) -> usize { values.len() }
+pub fn probe() -> usize { count(&[]) }

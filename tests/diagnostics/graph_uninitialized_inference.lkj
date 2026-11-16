@@ -1,0 +1,8 @@
+// expect: reject E_TYPE
+// cause: expected a Rust form.
+// pending: An uninitialized local needs an explicit type here; infer from both assignment branches or name the local and show a type annotation.
+pub fn probe() -> usize {
+    let index;
+    if true { index = 1usize; } else { index = 2usize; }
+    index
+}

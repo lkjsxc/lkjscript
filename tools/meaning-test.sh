@@ -80,4 +80,36 @@ compare --no-library --limit 1
 test "$(wc -l < "$fixture/report")" -eq 4
 compare --no-library --limit 0
 test "$(wc -l < "$fixture/report")" -eq 3
+# Transfer-only entries have authority even when the host CLI cannot grant them.
+cat > "$fixture/old/main.lkj" <<'SOURCE'
+pub fn main() {}
+SOURCE
+for kind in Channel File ReadFile Image; do
+    case "$kind" in
+        Channel) body='let _ = value.send(b"x", !0usize);'; effect=channel_send ;;
+        File|ReadFile) body='let mut bytes = [0u8; 1]; let _ = value.read(&mut bytes);'; effect=file_read ;;
+        Image) body='let _ = value.buffer(b"x");'; effect=image_buffer ;;
+    esac
+    printf 'pub fn main(mut value: %s) { %s }\n' "$kind" "$body" > "$fixture/new/main.lkj"
+    compare --library-dir library --id ir:main
+    grep -Eq '"ir:main".*changed=authority' "$fixture/report"
+    grep -q "grant:0:$kind" "$fixture/report"
+    grep -q "effect:$effect" "$fixture/report"
+done
+cat > "$fixture/new/main.lkj" <<'SOURCE'
+pub fn main(channel: Channel, ordinary: i64) { let _ = ordinary; }
+SOURCE
+compare --library-dir library --id ir:main
+if grep -Eq 'authority-gained="[^"]*grant:0:Channel' "$fixture/report"; then
+    printf 'ordinary mixed parameters became a transferable entry\n' >&2; exit 1
+fi
+cp "$fixture/old/main.lkj" "$fixture/new/main.lkj"
+cat > "$fixture/child-request.json" <<'REQUEST'
+{"version":1,"operations":[{"op":"replace-item","id":"main","source":"pub fn main(mut channel: Channel) { let _ = channel.send(b\"x\", !0usize); }"}]}
+REQUEST
+"$compiler" edit main.lkj --source-dir "$fixture/new" --library-dir library --no-store \
+    --request "$fixture/child-request.json" --dry-run > "$fixture/child-plan"
+grep -Eq '"ir:main".*authority-gained="[^"]*effect:channel_send' "$fixture/child-plan"
+grep -Eq '"ir:main".*authority-gained="[^"]*grant:0:Channel' "$fixture/child-plan"
+cmp "$fixture/old/main.lkj" "$fixture/new/main.lkj"
 printf 'ok checked meaning: layout, type graph, authority, stable instances, cyclic graphs and bounded review\n'

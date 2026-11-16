@@ -1,0 +1,245 @@
+//! One owner, arbitrary graph lifetimes. No borrowed value is stored in a node.
+use crate::arena::{Arena, Handle};
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum NodeKind { Node }
+pub type Key = Handle<NodeKind>;
+
+pub struct Node {
+    parent: Option<Key>,
+    first_child: Option<Key>,
+    previous: Option<Key>,
+    next: Option<Key>,
+    attributes: [u64; 2],
+    observers: [Option<Key>; 2],
+}
+impl Node {
+    fn new(parent: Option<Key>, value: u64) -> Node {
+        Node {
+            parent, first_child: None, previous: None, next: None,
+            attributes: [value, value.wrapping_mul(7u64)],
+            observers: [None, None],
+        }
+    }
+}
+
+pub struct Tree {
+    nodes: Arena<Node, NodeKind>,
+    root: Key,
+}
+pub struct Random { state: u64 }
+impl Random {
+    pub fn new(seed: u64) -> Random {
+        assert!(seed != 0u64);
+        Random { state: seed }
+    }
+    pub fn next(&mut self) -> usize {
+        self.state ^= self.state << 13u64;
+        self.state ^= self.state >> 7u64;
+        self.state ^= self.state << 17u64;
+        self.state as usize
+    }
+}
+
+pub struct Observed {
+    pub nodes: usize,
+    pub edges: usize,
+    pub observers: usize,
+    pub stale: usize,
+    pub checksum: u64,
+}
+pub struct Report {
+    pub initial: usize,
+    pub removed: usize,
+    pub added: usize,
+    pub live: usize,
+    pub stale: usize,
+    pub slots: usize,
+    pub checksum: u64,
+}
+
+impl Tree {
+    pub fn new(owner: u64) -> Tree {
+        let mut nodes: Arena<Node, NodeKind> = Arena::new(owner);
+        let root = nodes.insert(Node::new(None, 0u64));
+        Tree { nodes, root }
+    }
+    pub fn root(&self) -> Key { self.root }
+    pub fn len(&self) -> usize { self.nodes.len() }
+    pub fn slot_count(&self) -> usize { self.nodes.slot_count() }
+    pub fn contains(&self, key: &Key) -> bool { self.nodes.contains(key) }
+
+    pub fn insert(&mut self, parent: Key, value: u64) -> Key {
+        let first = self.nodes.get(&parent).unwrap().first_child;
+        let mut node = Node::new(Some(parent), value);
+        node.next = first;
+        let key = self.nodes.insert(node);
+        self.nodes.get_mut(&parent).unwrap().first_child = Some(key);
+        if let Some(first) = first {
+            self.nodes.get_mut(&first).unwrap().previous = Some(key);
+        }
+        key
+    }
+    pub fn observe(&mut self, from: Key, left: Option<Key>, right: Option<Key>) {
+        self.nodes.get_mut(&from).unwrap().observers = [left, right];
+    }
+    pub fn parent(&self, key: &Key) -> Option<Key> {
+        self.nodes.get(key).unwrap().parent
+    }
+
+    pub fn remove_subtree(&mut self, key: Key) -> usize {
+        assert!(key != self.root);
+        let (parent, previous, next) = {
+            let node = self.nodes.get(&key).unwrap();
+            (node.parent.unwrap(), node.previous, node.next)
+        };
+        if let Some(previous) = previous {
+            self.nodes.get_mut(&previous).unwrap().next = next;
+        } else {
+            self.nodes.get_mut(&parent).unwrap().first_child = next;
+        }
+        if let Some(next) = next {
+            self.nodes.get_mut(&next).unwrap().previous = previous;
+        }
+        let mut stack: Vec<Key> = vec![key];
+        let mut count = 0usize;
+        while let Some(current) = stack.pop() {
+            let mut child = self.nodes.get(&current).unwrap().first_child;
+            while let Some(key) = child {
+                stack.push(key);
+                child = self.nodes.get(&key).unwrap().next;
+            }
+            let removed = self.nodes.remove(&current);
+            assert!(removed.is_some());
+            assert!(!self.nodes.contains(&current));
+            count += 1usize;
+        }
+        count
+    }
+
+    pub fn inspect(&self) -> Observed {
+        let mut stack: Vec<Key> = vec![self.root];
+        let mut count = 0usize;
+        let mut edges = 0usize;
+        let mut observers = 0usize;
+        let mut stale = 0usize;
+        let mut checksum = 0u64;
+        while let Some(current) = stack.pop() {
+            let node = self.nodes.get(&current).unwrap();
+            count += 1usize;
+            assert!(count <= self.nodes.len());
+            checksum = checksum.wrapping_add(node.attributes[0]);
+            checksum = checksum.wrapping_add(node.attributes[1]);
+            let mut which = 0usize;
+            while which < 2usize {
+                if let Some(observed) = node.observers[which] {
+                    observers += 1usize;
+                    if self.nodes.contains(&observed) { checksum ^= observed.generation(); }
+                    else { stale += 1usize; }
+                }
+                which += 1usize;
+            }
+            let mut child = node.first_child;
+            let mut previous = None;
+            while let Some(key) = child {
+                let linked = self.nodes.get(&key).unwrap();
+                assert!(linked.parent == Some(current));
+                assert!(linked.previous == previous);
+                stack.push(key);
+                edges += 1usize;
+                assert!(edges < self.nodes.len());
+                previous = Some(key);
+                child = linked.next;
+            }
+        }
+        assert_eq!(count, self.nodes.len());
+        assert_eq!(edges + 1usize, count);
+        Observed { nodes: count, edges, observers, stale, checksum }
+    }
+}
+
+pub fn exercise(count: usize, mutations: usize, seed: u64) -> Report {
+    assert!(count > 1usize);
+    let mut random = Random::new(seed);
+    let mut tree = Tree::new(1u64);
+    let mut keys: Vec<Key> = vec![tree.root()];
+    let mut index = 1usize;
+    while index < count {
+        let parent = keys[(index - 1usize) / 4usize];
+        let key = tree.insert(parent, index as u64);
+        let left = keys[random.next() % keys.len()];
+        let right = keys[random.next() % keys.len()];
+        tree.observe(key, Some(left), Some(right));
+        keys.push(key);
+        index += 1usize;
+    }
+    let initial = tree.inspect();
+    assert_eq!(initial.nodes, count);
+    assert_eq!(initial.edges, count - 1usize);
+    assert_eq!(initial.observers, (count - 1usize) * 2usize);
+    assert_eq!(initial.stale, 0usize);
+    let mut removed = 0usize;
+    let mut added = 0usize;
+    let mut turn = 0usize;
+    while turn < mutations {
+        let mut victim = keys[1usize + random.next() % (keys.len() - 1usize)];
+        // Old handles remain in the sample and in observers deliberately.
+        while !tree.contains(&victim) {
+            victim = keys[1usize + random.next() % (keys.len() - 1usize)];
+        }
+        let parent = tree.parent(&victim).unwrap();
+        let root = tree.root();
+        tree.observe(root, Some(victim), Some(parent));
+        removed += tree.remove_subtree(victim);
+        assert!(!tree.contains(&victim));
+        let branch_size = 1usize + random.next() % 16usize;
+        let branch = tree.insert(parent, 1_000_000_000u64 + added as u64);
+        assert!(!tree.contains(&victim));
+        keys.push(branch);
+        added += 1usize;
+        let mut branch_keys: Vec<Key> = vec![branch];
+        let mut child = 1usize;
+        while child < branch_size {
+            let branch_parent = branch_keys[(child - 1usize) / 3usize];
+            let key = tree.insert(branch_parent, 1_000_000_000u64 + added as u64);
+            let observed = keys[random.next() % keys.len()];
+            tree.observe(key, Some(observed), Some(victim));
+            branch_keys.push(key);
+            keys.push(key);
+            added += 1usize;
+            child += 1usize;
+        }
+        turn += 1usize;
+    }
+    let final_state = tree.inspect();
+    assert_eq!(count + added - removed, final_state.nodes);
+    if mutations != 0usize { assert!(final_state.stale != 0usize); }
+    Report {
+        initial: count, removed, added, live: final_state.nodes,
+        stale: final_state.stale, slots: tree.slot_count(), checksum: final_state.checksum,
+    }
+}
+
+#[test]
+fn back_links_observers_and_reused_slots() {
+    let mut tree = Tree::new(1u64);
+    let root = tree.root();
+    let first = tree.insert(root, 1u64);
+    let second = tree.insert(root, 2u64);
+    let child = tree.insert(first, 3u64);
+    tree.observe(root, Some(child), Some(second));
+    assert_eq!(tree.inspect().nodes, 4usize);
+    assert_eq!(tree.remove_subtree(first), 2usize);
+    let reused = tree.insert(second, 4u64);
+    assert!(!tree.contains(&first));
+    assert!(!tree.contains(&child));
+    assert!(tree.contains(&reused));
+    assert_eq!(tree.inspect().stale, 1usize);
+    assert_eq!(tree.inspect().nodes, 3usize);
+}
+#[test]
+fn seeded_mutations_keep_the_tree() {
+    let report = exercise(127usize, 63usize, 6840227782638526189u64);
+    assert_eq!(report.initial + report.added - report.removed, report.live);
+    assert!(report.stale > 0usize);
+}

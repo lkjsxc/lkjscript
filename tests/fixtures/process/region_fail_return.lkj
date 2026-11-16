@@ -1,0 +1,5 @@
+// Returning a view cannot outlive the local mapping that owns it.
+pub fn probe(file: &mut File) -> &[u8] {
+    let region = file.map_readonly().unwrap();
+    region.bytes()
+}

@@ -1,0 +1,4 @@
+// expect: reject E_UNSUPPORTED
+// cause: expected a Rust form.
+// pending: Suggest Clock.nanoseconds() when a user calls now(); the supported capability method is absent from the current diagnostic.
+pub fn probe(clock: &mut Clock) -> usize { clock.now().unwrap() }

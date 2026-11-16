@@ -1,0 +1,31 @@
+use std::workers::Supervisor;
+pub fn main(mut image:Image,mut listener:Listener,mut root:Directory,mut clock:Clock)->i64 {
+    listener.set_nonblocking(false).unwrap();
+    let port=listener.port().unwrap();
+    let mut announced=root.create("port").unwrap();announced.write_all(format!("{port}\n").as_bytes()).unwrap();announced.sync().unwrap();drop(announced);
+    let mut workers=Vec::new();
+    for _ in 0usize..2usize {workers.push(Supervisor::new(&mut image,2usize,clock.nanoseconds().unwrap()+2_000_000_000usize).unwrap());}
+    let mut accepted=0usize;let mut rejected=0usize;let mut failed=0usize;
+    for request in 0usize..8usize {
+        let stream=listener.accept().unwrap();
+        match workers[request%2usize].request_file(&mut image,stream,clock.nanoseconds().unwrap()+500_000_000usize) {
+            Ok(42u64)=>accepted+=1usize,
+            Ok(400u64)=>rejected+=1usize,
+            Ok(_)=>panic!("parser reply"),
+            Err(_)=>{
+                failed+=1usize;
+                let mut diagnostic=root.create(&format!("failure-{request}")).unwrap();
+                diagnostic.write_all(&workers[request%2usize].last_output).unwrap();diagnostic.sync().unwrap();
+            },
+        }
+    }
+    let mut restarts=0usize;
+    for index in 0usize..workers.len() {
+        restarts+=workers[index].restarts();
+        workers[index].shutdown(clock.nanoseconds().unwrap()+2_000_000_000usize).unwrap();
+    }
+    assert_eq!(accepted,5usize);assert_eq!(rejected,1usize);assert_eq!(failed,2usize);assert_eq!(restarts,2usize);
+    let mut done=root.create("supervisor-result").unwrap();
+    done.write_all(format!("accepted={accepted} rejected={rejected} failed={failed} restarts={restarts}\n").as_bytes()).unwrap();
+    done.sync().unwrap();root.sync().unwrap();42
+}

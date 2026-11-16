@@ -1,0 +1,108 @@
+//! Process isolation is the parallelism boundary. This byte protocol is a library
+//! convention pending compiler-provided semantic message identity. Every Worker
+//! is affine; a failed map drops its children and exposes no partial result.
+use crate::process_model::Event;
+
+pub fn packet(tag:u8, job:usize, value:u64)->[u8;17] {
+    let mut out=[0u8;17]; out[0]=tag;
+    for i in 0usize..8usize {out[1usize+i]=(job >> (i*8usize)) as u8;out[9usize+i]=(value >> (i*8usize)) as u8;}
+    out
+}
+pub fn decode(bytes:&[u8])->Option<(u8,usize,u64)> {
+    if bytes.len()!=17usize {return None;}
+    let mut job=0usize;let mut value=0u64;
+    for i in 0usize..8usize {job|=(bytes[1usize+i] as usize) << (i*8usize);value|=(bytes[9usize+i] as u64) << (i*8usize);}
+    Some((bytes[0],job,value))
+}
+fn abort(workers:&mut [Worker], events:&mut Vec<Event>) {
+    for index in 0usize..workers.len() {
+        let _=workers[index].terminate();
+        let status=workers[index].wait(0usize).unwrap_or(255i64);
+        events.push(Event::Exit(index,status));
+    }
+}
+/// One accepted job per worker bounds the queue. Each image implements tag1
+/// as its pure function. Results remain private until EOF, drain and every join.
+pub fn ordered_map(image:&mut Image, width:usize, input:&[u64], deadline:usize, events:&mut Vec<Event>)->Result<Vec<u64>,i64> {
+    if width==0usize {return Err(22);}
+    let mut workers=Vec::new();
+    for _ in 0usize..width {workers.push(image.spawn(deadline)?);}
+    let mut output=Vec::new();let mut begin=0usize;
+    while begin<input.len() {
+        let end=(begin+width).min(input.len());
+        for job in begin..end {
+            let bytes=packet(1u8,job,input[job]);
+            if let Err(errno)=workers[job-begin].send(&bytes,deadline) {abort(&mut workers,events);return Err(errno);}
+            events.push(Event::Dispatch(job-begin,job));
+        }
+        for job in begin..end {
+            let mut bytes=[0u8;17];
+            let count=match workers[job-begin].receive(&mut bytes,deadline) {
+                Ok(count)=>count,Err(errno)=>{abort(&mut workers,events);return Err(errno);}
+            };
+            let Some((tag,id,value))=decode(&bytes[..count]) else {abort(&mut workers,events);return Err(71);};
+            if tag!=1u8 || id!=job {abort(&mut workers,events);return Err(71);}
+            output.push(value);events.push(Event::Complete(job-begin,job,value));
+        }
+        begin=end;
+    }
+    events.push(Event::Eof);
+    for index in 0usize..workers.len() {
+        if let Err(errno)=workers[index].send(&packet(0u8,0usize,0u64),deadline) {abort(&mut workers,events);return Err(errno);}
+        events.push(Event::Shutdown(index));
+    }
+    for index in 0usize..workers.len() {
+        let status=workers[index].wait(deadline)?;
+        events.push(Event::Exit(index,status));
+        if status!=0i64 {return Err(10);}
+    }
+    events.push(Event::Commit);Ok(output)
+}
+
+/// Caller-supplied restart bound. The current request is never replayed: its
+/// File has moved. A replacement serves only the next explicitly supplied File.
+pub struct Supervisor {
+    worker: Option<Worker>,
+    restarts: usize,
+    limit: usize,
+    pub last_status: Option<i64>,
+    pub last_output: Vec<u8>,
+}
+fn exchange_file(worker:&mut Worker, file:File, deadline:usize)->Result<u64,i64> {
+    worker.send(&packet(6u8,0usize,0u64),deadline)?;
+    worker.send_file(file,deadline)?;
+    let mut bytes=[0u8;17];let count=worker.receive(&mut bytes,deadline)?;
+    let Some((tag,job,value))=decode(&bytes[..count]) else {return Err(71);};
+    if tag!=6u8 || job!=0usize {return Err(71);}
+    Ok(value)
+}
+impl Supervisor {
+    pub fn new(image:&mut Image,limit:usize,deadline:usize)->Result<Self,i64> {
+        Ok(Self {worker:Some(image.spawn(deadline)?),restarts:0usize,limit,last_status:None,last_output:Vec::new()})
+    }
+    pub fn request_file(&mut self,image:&mut Image,file:File,deadline:usize)->Result<u64,i64> {
+        if self.worker.is_none() {
+            if self.restarts>=self.limit {return Err(11);}
+            self.restarts+=1usize;self.worker=Some(image.spawn(deadline)?);
+        }
+        let result=exchange_file(self.worker.as_mut().unwrap(),file,deadline);
+        match result {
+            Ok(value)=>Ok(value),
+            Err(errno)=>{
+                let mut worker=self.worker.take().unwrap();let _=worker.terminate();
+                self.last_status=Some(worker.wait(0usize).unwrap_or(255i64));
+                self.last_output=match worker.result() {Ok(mut file)=>file.read_to_end().unwrap_or(Vec::new()),Err(_)=>Vec::new()};
+                Err(errno)
+            }
+        }
+    }
+    pub fn restarts(&self)->usize {self.restarts}
+    pub fn shutdown(&mut self,deadline:usize)->Result<(),i64> {
+        if let Some(mut worker)=self.worker.take() {
+            worker.send(&packet(0u8,0usize,0u64),deadline)?;
+            let status=worker.wait(deadline)?;self.last_status=Some(status);
+            if status!=0i64 {return Err(10);}
+        }
+        Ok(())
+    }
+}

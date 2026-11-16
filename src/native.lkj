@@ -24,6 +24,10 @@ mod ownership;
 pub(crate) mod platform;
 mod process;
 mod foreign;
+#[path = "native/foreign_session.lkj"]
+mod foreign_session;
+mod workers;
+mod read_region;
 mod network;
 mod readiness;
 mod storage;
@@ -1411,6 +1415,17 @@ fn emit_drop(
                 a.call(runtime.release);
             }
         }
+        TypeKind::ForeignSession => { a.load(DI, BP, -8); a.load(DI, DI, 0); a.call(p.foreign_session_drop); }
+        TypeKind::ReadRegion => {
+            a.load(DI,BP,-8); a.load(DI,DI,0); a.call(p.read_region_drop);
+        }
+        TypeKind::Image | TypeKind::Worker => {
+            a.load(DI, BP, -8); a.load(DI, DI, 0);
+            a.call(if matches!(program.types[ty].kind, TypeKind::Image) { p.image_drop } else { p.worker_drop });
+        }
+        TypeKind::Channel => {
+            a.load(DI, BP, -8); a.load(DI, DI, 0); a.call(p.handle_close);
+        }
         TypeKind::Child => {
             a.load(DI, BP, -8);
             a.call(p.child_drop);
@@ -1543,6 +1558,8 @@ fn grant_matches(kind: &TypeKind, grant: &ir::EntryGrant, parameters: usize) -> 
         ir::EntryGrant::Stderr => matches!(kind, TypeKind::Stderr),
         ir::EntryGrant::Clock => matches!(kind, TypeKind::Clock),
         ir::EntryGrant::Process => matches!(kind, TypeKind::Process),
+        ir::EntryGrant::Image(bytes) => matches!(kind, TypeKind::Image) && bytes.len() > 80 && bytes[0] == b'L' && bytes[1] == b'K' && bytes[2] == b'J' && bytes[3] == b'I' && bytes[4] == b'M' && bytes[5] == b'G' && bytes[6] == b'2' && bytes[7] == 0u8,
+        ir::EntryGrant::ImagePath(_) => false,
         ir::EntryGrant::ForeignCommand(path) => matches!(kind, TypeKind::ForeignCommand) && valid_foreign_path(path),
         ir::EntryGrant::NullDevice => matches!(kind, TypeKind::NullDevice),
         ir::EntryGrant::Directory(_) => matches!(kind, TypeKind::Directory),
@@ -1674,8 +1691,8 @@ fn prepare_program(
         matches!(instruction.op, Op::Intrinsic { name: IntrinsicOp::FileLockWait, .. })));
     let command_environment = program.types.iter().any(|ty| matches!(ty.kind, TypeKind::Environment))
         || match grants { Some(grants) => grants.iter().any(|grant| matches!(grant, ir::EntryGrant::DirectoryEnvironment(_) | ir::EntryGrant::ReadDirectoryEnvironment(_))), None => false };
-    let foreign = program.functions.iter().any(|function| function.body.iter().any(|instruction|
-        matches!(instruction.op, Op::Intrinsic { name: IntrinsicOp::ForeignRun | IntrinsicOp::ForeignImage, .. })))
+    let foreign = program.types.iter().any(|ty| matches!(ty.kind, TypeKind::ForeignSession)) || program.functions.iter().any(|function| function.body.iter().any(|instruction|
+        matches!(instruction.op, Op::Intrinsic { name: IntrinsicOp::ForeignRun | IntrinsicOp::ForeignImage | IntrinsicOp::ForeignStart | IntrinsicOp::ForeignExchange | IntrinsicOp::ForeignFinish, .. })))
         || grants.map_or(false, |provided| provided.iter().any(|grant| matches!(grant, ir::EntryGrant::ForeignCommand(_) | ir::EntryGrant::NullDevice)));
     let private_file = program.functions.iter().any(|function| function.body.iter().any(|instruction|
         matches!(instruction.op, Op::Intrinsic { name: IntrinsicOp::FileSetPrivate, .. })));
@@ -1837,6 +1854,8 @@ fn prepare_program(
     let platform_kind = a.region_kind(KIND_RUNTIME);
     platform::emit(&mut a, p, functions[entry.function], &entry, profile, grant_plan.as_ref());
     if foreign { foreign::emit(&mut a, p); }
+    if program.types.iter().any(|ty| matches!(ty.kind, TypeKind::Image | TypeKind::Channel | TypeKind::Worker)) { workers::emit(&mut a, p); }
+    if program.types.iter().any(|ty| matches!(ty.kind, TypeKind::Image | TypeKind::ReadRegion)) { read_region::emit(&mut a, p); }
     if connector { network::emit_connector(&mut a, p); }
     if accept_nodelay { network::emit_accept_nodelay(&mut a, p); }
     if readiness { readiness::emit(&mut a, p); }

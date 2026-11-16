@@ -4,7 +4,7 @@ use crate::{ir, reuse, sha256};
 
 pub fn target() -> &'static str { "linux-x86_64" }
 pub fn abi() -> &'static [u8] {
-    b"lkjscript-child-transfer-1\0linux-x86_64\0fd3=result;zero-slots=no-packet-close-fd4-plus;fd4=sealed-packet-for-nonzero;fd8+i=slot;packet=LKJCHD1,manifest32,count64,kind64-offset64-length64;value-payloads=consecutive;env=tag-bytes-nul;argv=explicit;close-undeclared;no-path-open"
+    b"lkjscript-child-transfer-2\0linux-x86_64\0channel17=unix-seqpacket\0fd3=result;zero-slots=no-packet-close-fd4-plus;fd4=sealed-packet-for-nonzero;fd8+i=slot;packet=LKJCHD1,manifest32,count64,kind64-offset64-length64;value-payloads=consecutive;env=tag-bytes-nul;argv=explicit;close-undeclared;no-path-open"
 }
 pub fn abi_digest() -> [u8; 32] { sha256::digest(abi()) }
 pub fn packet_magic() -> &'static [u8] { b"LKJCHD1\0" }
@@ -13,7 +13,7 @@ pub fn packet_magic() -> &'static [u8] { b"LKJCHD1\0" }
 pub enum Kind {
     Arguments, Environment, ExitStatus, Stdout, Stdin, Stderr, Clock,
     Directory, ReadDirectory, File, ReadFile, NullDevice, Listener,
-    Connector, Readiness, Entropy,
+    Connector, Readiness, Entropy, Channel,
 }
 impl Kind {
     pub fn code(self) -> u64 {
@@ -22,7 +22,7 @@ impl Kind {
             Kind::Stdout => 4, Kind::Stdin => 5, Kind::Stderr => 6, Kind::Clock => 7,
             Kind::Directory => 8, Kind::ReadDirectory => 9, Kind::File => 10,
             Kind::ReadFile => 11, Kind::NullDevice => 12, Kind::Listener => 13,
-            Kind::Connector => 14, Kind::Readiness => 15, Kind::Entropy => 16,
+            Kind::Connector => 14, Kind::Readiness => 15, Kind::Entropy => 16, Kind::Channel => 17,
         }
     }
     pub fn decode(code: u64) -> Option<Self> {
@@ -32,7 +32,7 @@ impl Kind {
             7 => Some(Kind::Clock), 8 => Some(Kind::Directory), 9 => Some(Kind::ReadDirectory),
             10 => Some(Kind::File), 11 => Some(Kind::ReadFile), 12 => Some(Kind::NullDevice),
             13 => Some(Kind::Listener), 14 => Some(Kind::Connector), 15 => Some(Kind::Readiness),
-            16 => Some(Kind::Entropy), _ => None,
+            16 => Some(Kind::Entropy), 17 => Some(Kind::Channel), _ => None,
         }
     }
     pub fn name(self) -> &'static str {
@@ -41,6 +41,7 @@ impl Kind {
             Kind::ExitStatus => "ExitStatus", Kind::Stdout => "Stdout", Kind::Stdin => "Stdin",
             Kind::Stderr => "Stderr", Kind::Clock => "Clock", Kind::Directory => "Directory",
             Kind::ReadDirectory => "ReadDirectory", Kind::File => "File", Kind::ReadFile => "ReadFile",
+            Kind::Channel => "Channel",
             Kind::NullDevice => "NullDevice", Kind::Listener => "Listener",
             Kind::Connector => "Connector", Kind::Readiness => "Readiness", Kind::Entropy => "Entropy",
         }
@@ -48,11 +49,12 @@ impl Kind {
     pub fn descriptor(self) -> bool {
         matches!(self, Kind::Stdout | Kind::Stdin | Kind::Stderr | Kind::Directory |
             Kind::ReadDirectory | Kind::File | Kind::ReadFile | Kind::NullDevice |
-            Kind::Listener | Kind::Readiness)
+            Kind::Listener | Kind::Readiness | Kind::Channel)
     }
     pub fn value(self) -> bool { matches!(self, Kind::Environment | Kind::Connector) }
     pub fn from_type(kind: &ir::TypeKind) -> Option<Self> {
         match kind {
+            ir::TypeKind::Channel => Some(Kind::Channel),
             ir::TypeKind::Arguments => Some(Kind::Arguments),
             ir::TypeKind::Environment => Some(Kind::Environment),
             ir::TypeKind::ExitStatus => Some(Kind::ExitStatus),

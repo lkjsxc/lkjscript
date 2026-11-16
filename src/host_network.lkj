@@ -10,6 +10,10 @@ mod directories;
 mod lifecycle;
 #[path = "host_network/foreign.lkj"]
 mod foreign;
+#[path = "host_network/foreign_session.lkj"]
+mod foreign_session;
+#[path = "host_network/workers.lkj"]
+mod workers;
 use crate::x86::*;
 
 struct Connection {
@@ -177,6 +181,33 @@ impl Network {
         let (handle, _) = self.request(8, &[file], b"")?;
         Ok(handle as u64)
     }
+    pub fn open_image(&mut self, world: &mut World, bytes: &[u8]) -> Result<u64,i64> {
+        self.ensure(world)?; let (handle,_) = self.request(61,&[0u64;0],bytes)?; Ok(handle as u64)
+    }
+    pub fn spawn_image(&mut self, handle: u64, deadline:usize) -> Result<u64,i64> { let (value,_) = self.request(62,&[handle,deadline as u64],b"")?; Ok(value as u64) }
+    pub fn close_image(&mut self, handle: u64) { let _ = self.unit_request(63,&[handle]); }
+    pub fn close_worker(&mut self, handle: u64) { let _ = self.unit_request(64,&[handle]); }
+    pub fn ipc_send(&mut self, handle:u64, worker:bool, bytes:&[u8], deadline:usize)->Result<u64,i64> {
+        let (count,_) = self.request(65,&[handle,worker as u64,deadline as u64],bytes)?; Ok(count as u64)
+    }
+    pub fn ipc_receive(&mut self, handle:u64, worker:bool, bytes:&mut [u8], deadline:usize)->Result<u64,i64> {
+        let (count,body) = self.request(66,&[handle,worker as u64,deadline as u64,bytes.len() as u64],b"")?;
+        if count < 0 || count as usize != body.len() || body.len() > bytes.len() { return Err(5); }
+        bytes[..body.len()].copy_from_slice(&body); Ok(count as u64)
+    }
+    pub fn ipc_send_file(&mut self, handle:u64, worker:bool, file:u64, deadline:usize)->Result<(),i64> {
+        self.unit_request(67,&[handle,worker as u64,file,deadline as u64])
+    }
+    pub fn ipc_receive_file(&mut self, handle:u64, worker:bool, deadline:usize)->Result<u64,i64> {
+        let (value,_) = self.request(68,&[handle,worker as u64,deadline as u64],b"")?; Ok(value as u64)
+    }
+    pub fn wait_worker(&mut self, handle:u64, deadline:usize)->Result<u64,i64> {
+        let (value,_) = self.request(69,&[handle,deadline as u64],b"")?; Ok(value as u64)
+    }
+    pub fn terminate_worker(&mut self, handle:u64)->Result<(),i64> { self.unit_request(70,&[handle]) }
+    pub fn result_worker(&mut self, handle:u64)->Result<u64,i64> {
+        let (file,_) = self.request(71,&[handle],b"")?; self.readonly_remote(file as u64)
+    }
     pub fn open_foreign_command(&mut self, world: &mut World, path: &[u8]) -> Result<u64, i64> {
         self.ensure(world)?;
         let (handle, _) = self.request(52, &[0u64; 0], path)?;
@@ -191,6 +222,16 @@ impl Network {
         let (handle, _) = self.request(54, &[command, root, sink, duration as u64], arguments)?;
         Ok(handle as u64)
     }
+    pub fn start_foreign(&mut self, command: u64, root: u64, sink: u64, arguments: &[u8], duration: usize) -> Result<u64, i64> {
+        let (handle, _) = self.request(57, &[command, root, sink, duration as u64], arguments)?; Ok(handle as u64)
+    }
+    pub fn exchange_foreign(&mut self, session: u64, request: &[u8], response: &mut [u8], duration: usize) -> Result<usize, i64> {
+        let (count, body) = self.request(58, &[session, response.len() as u64, duration as u64], request)?;
+        if count as usize != response.len() || body.len() != response.len() { return Err(5); }
+        response.copy_from_slice(&body); Ok(body.len())
+    }
+    pub fn finish_foreign(&mut self, session: u64, duration: usize) -> Result<u64, i64> { let (status, _) = self.request(59, &[session, duration as u64], b"")?; Ok(status as u64) }
+    pub fn drop_foreign(&mut self, session: u64) { let _ = self.unit_request(60, &[session]); }
     pub fn readonly_remote(&mut self, file: u64) -> Result<u64, i64> {
         let (handle, _) = self.request(9, &[file], b"")?;
         Ok(handle as u64)

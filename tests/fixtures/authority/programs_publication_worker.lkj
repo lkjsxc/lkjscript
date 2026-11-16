@@ -1,0 +1,15 @@
+mod programs_publication_common;
+
+pub fn main(mut channel: Channel) {
+    let deadline = 18_446_744_073_709_551_615usize;
+    loop {
+        let mut bytes = [0u8; 17];
+        let count = channel.receive(&mut bytes, deadline).unwrap();
+        let (tag, job, value) = std::workers::decode(&bytes[..count]).unwrap();
+        if tag == 0u8 { return; }
+        assert_eq!(tag, 1u8);
+        let result = programs_publication_common::work(value);
+        let reply = std::workers::packet(1u8, job, result);
+        assert_eq!(channel.send(&reply, deadline).unwrap(), reply.len());
+    }
+}

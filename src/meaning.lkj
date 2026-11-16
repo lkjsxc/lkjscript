@@ -294,13 +294,18 @@ pub(crate) mod verified {
         }
         let mut result = BTreeMap::new();
         for index in 0usize..checked.program().functions.len() {
-            if entry_grants::validate(checked.program(), index).is_err() { continue; }
-            let manifest = match authority::manifest(checked, index) { Ok(value) => value, Err(_) => continue };
             let mut values = effects[membership[index]].clone();
-            if manifest.full_world { values.insert("grant:World".to_string()); }
-            for grant in &manifest.requirements {
-                values.insert(format!("grant:{}:{}", grant.parameter, grant.capability));
-            }
+            if entry_grants::validate(checked.program(), index).is_ok() {
+                let manifest = match authority::manifest(checked, index) { Ok(value) => value, Err(_) => continue };
+                if manifest.full_world { values.insert("grant:World".to_string()); }
+                for grant in &manifest.requirements {
+                    values.insert(format!("grant:{}:{}", grant.parameter, grant.capability));
+                }
+            } else if let Ok(manifest) = crate::child_image::manifest(checked, index) {
+                for (parameter, slot) in manifest.slots.iter().enumerate() {
+                    values.insert(format!("grant:{}:{}", parameter, slot.kind.name()));
+                }
+            } else { continue; }
             result.insert(catalog.instance_ids[index].clone(), values);
         }
         result

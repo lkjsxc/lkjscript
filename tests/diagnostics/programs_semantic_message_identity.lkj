@@ -1,0 +1,14 @@
+// expect: reject E_TYPE
+// cause: rule with no Rust counterpart.
+// pending: Compiler semantic comparison supplies a canonical message identity.
+// Both admitted endpoints must bind the same identity; generated checked codecs
+// encode/decode one message definition, including moved affine fields. Never
+// compare source spelling or producer-local type IDs. Programs currently ships
+// byte frames plus File move and rejects all other capability transfer shapes.
+// Specimen: channel-only parser workers, one mismatched schema refused before
+// dispatch, unknown/extra fields rejected, and a File field moved once.
+// Compiler handoff: replace this rejected API only with the identity contract.
+struct Message { sequence: u64, payload: Vec<u8> }
+pub fn probe(mut channel: Channel, message: Message) {
+    channel.send_typed(message, !0usize).unwrap();
+}
