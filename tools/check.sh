@@ -137,6 +137,8 @@ parallel_step 1 closed-proof-attacks timeout --kill-after=10s 600s bash tools/ga
 parallel_step 1 toolchain toolchain
 parallel_step 1 world world_cases
 parallel_step 1 semantic-query timeout --kill-after=10s 600s bash tools/semantic-query-test.sh "$check_binary"
+parallel_step 1 associated-query timeout --kill-after=10s 600s bash tools/associated-query-test.sh "$check_binary"
+parallel_step 1 query-signature timeout --kill-after=10s 600s bash tools/query-signature-test.sh "$check_binary"
 parallel_step 1 query-store timeout --kill-after=10s 600s bash tools/query-store-test.sh "$check_binary"
 parallel_step 1 query-publication timeout --kill-after=10s 600s bash tools/query-publication-test.sh "$check_binary"
 parallel_step 1 structure-edit timeout --kill-after=10s 600s bash tools/structure-test.sh "$check_binary"

@@ -457,6 +457,14 @@ Every fact starts with its quoted identity and declares source-claim, checked-ir
 or protocol. Layout uses the native target's actual checked-IR layout; reachable
 effects include destruction and work for ordinary functions with scalar inputs.
 
+A captured source signature exceeding 1,024 bytes is split at UTF-8 boundaries.
+Its facts carry zero-based fixed-width hexadecimal `chunk`, decimal `chunks`
+and total `bytes`; only the last fragment has `complete=true`. Concatenating
+`text` fragments in order reconstructs the trimmed declaration header without
+its body. Bounded continuation carries all remaining fragments, including across
+stored pages. Short signatures retain their single-fact form. Historical pins
+retain their original producer's claims; rebuild to publish newly complete facts.
+
 Source identities use semantic paths, independent of physical files and whitespace.
 Fields, variants, named parameters, generic parameters and implementations have
 named identities. An anonymous `_` parameter uses `OWNER::param:POSITION`, its
@@ -473,6 +481,14 @@ These producer identities never replace the checker's exact proof identities.
 Source declaration/signature facts are resolved frontend claims. Solved generic
 definition constraints supply binding and expression types, exact lexical binding
 targets and nominal field targets. Method selections come from elaboration.
+Associated-call member facts use a declared trait-selection contract or a source
+choice whose calling function and enclosing implementation have no type or const
+parameters and whose owner is not a trait; lifetime parameters do not vary it.
+The trait contract can cover an undemanded generic definition. Every accepted
+member has an exact terminal-token span, separate from owner-alias qualifications.
+Agreeing generic inherent instances, builtin or conflicting choices and missing
+terminal-token evidence remain explicit gaps. These source references do not
+replace checked monomorphic calls or their authority facts.
 Constructor/pattern paths and member labels carry resolved identities and exact
 spans; shorthand labels are distinct from the coincident lexical binding use.
 Resolved module/type qualifications are separate sites, including grouped/glob
