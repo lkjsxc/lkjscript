@@ -1,0 +1,89 @@
+{
+    let mut data = b"lkjscript-front-topology-2"[..].to_vec();
+    let mut bodies = vec![String::new(); source.functions.len()];
+    // Locate each path once without changing the first-match input contract.
+    let mut first_input: BTreeMap<String, usize> = BTreeMap::new();
+    for (index, input) in inputs.iter().enumerate() {
+        if !first_input.contains_key(&input.0) {
+            first_input.insert(input.0.clone(), index);
+        }
+    }
+    let mut file_inputs: Vec<Option<usize>> = Vec::new();
+    let mut file_functions: Vec<Vec<usize>> = Vec::new();
+    for descriptor in &source.files {
+        file_inputs.push(first_input.get(&descriptor.path).copied());
+        file_functions.push(Vec::new());
+    }
+    drop(first_input);
+    // Do not inspect a body's block until its original per-file visit.
+    // An out-of-range function FileId was ignored by the old scan.
+    for (index, function) in source.functions.iter().enumerate() {
+        if function.span.file < file_functions.len() && function.body.is_some() {
+            file_functions[function.span.file].push(index);
+        }
+    }
+    let mut source_paths = BTreeSet::new();
+    for (file, descriptor) in source.files.iter().enumerate() {
+        let raw = &inputs[file_inputs[file]?].1;
+        source_paths.insert(descriptor.path.clone());
+        bytes(&mut data, descriptor.path.as_bytes()); word(&mut data, descriptor.crate_root);
+        let mut regions: Vec<(usize, usize, usize)> = Vec::new();
+        for index in &file_functions[file] {
+            let function = &source.functions[*index];
+            if function.span.file == file {
+                if let Some(body) = function.body {
+                    let site = source.blocks[body].span;
+                    if site.start > site.end || site.end > raw.len() { return None; }
+                    regions.push((site.start, site.end, *index));
+                }
+            }
+        }
+        regions.sort();
+        let mut at = 0usize;
+        for (start, end, index) in regions {
+            if start < at { return None; }
+            bytes(&mut data, &raw[at..start]); word(&mut data, start); word(&mut data, end);
+            bodies[index] = sha256::hex_digest(&raw[start..end]);
+            at = end;
+        }
+        bytes(&mut data, &raw[at..]);
+    }
+    // Includes which are not parsed source files still affect elaboration.
+    for (path, raw) in inputs {
+        if !source_paths.contains(path) { bytes(&mut data, path.as_bytes()); bytes(&mut data, raw); }
+    }
+    word(&mut data, source.types.len());
+    for node in &source.types {
+        span(&mut data, node.span); word(&mut data, node.scope);
+        let raw = &inputs[file_inputs[node.span.file]?].1;
+        if node.span.start > node.span.end || node.span.end > raw.len() { return None; }
+        bytes(&mut data, &raw[node.span.start..node.span.end]);
+    }
+    word(&mut data, source.exprs.len());
+    for node in &source.exprs {
+        span(&mut data, node.span); word(&mut data, node.scope);
+        // Includes expand to literals before this fingerprint. Their payload is
+        // a peer dependency even when the included path is also parsed source.
+        match &node.kind {
+            a::Expr::String(value) => { word(&mut data, 1); bytes(&mut data, value.as_bytes()); }
+            a::Expr::Bytes(value) => { word(&mut data, 2); bytes(&mut data, value); }
+            _ => word(&mut data, 0),
+        }
+    }
+    word(&mut data, source.patterns.len());
+    for node in &source.patterns { span(&mut data, node.span); word(&mut data, node.scope); }
+    word(&mut data, source.blocks.len());
+    for node in &source.blocks { span(&mut data, node.span); }
+    word(&mut data, source.scopes.len());
+    for scope in &source.scopes {
+        bytes(&mut data, scope.path.as_bytes()); word(&mut data, scope.parent.map_or(0, |v| v + 1));
+        word(&mut data, scope.crate_root);
+    }
+    word(&mut data, source.functions.len());
+    for function in &source.functions { span(&mut data, function.span); word(&mut data, function.body.map_or(0, |v| v + 1)); }
+    // Local item declarations may affect peers; do not resume them.
+    for block in &source.blocks {
+        for statement in &block.statements { if let a::Stmt::Item(item) = statement { if !matches!(item, a::Item::Use(_)) { return None; } } }
+    }
+    Some(Fingerprint { shape: sha256::hex_digest(&data), bodies })
+}

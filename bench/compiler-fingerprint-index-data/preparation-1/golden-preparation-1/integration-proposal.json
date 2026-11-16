@@ -1,0 +1,55 @@
+{
+  "schema": "compiler-fingerprint-golden-integration-proposal-1",
+  "status": "PREPARATION_ONLY_NOT_AN_EXECUTION_RELEASE",
+  "preserved_parent_files": [
+    "baseline-fingerprint.txt",
+    "replacement-body.txt",
+    "candidate-fingerprint.txt",
+    "fixtures.json",
+    "PLAN.md"
+  ],
+  "baseline": {
+    "producer_sha256": "b01eabfa60015ad93d86dd991f5f64a59754811062b578e12737e2feb4e0d5db",
+    "fingerprint_module_sha256": "760485a5a12d97ce320ba9113797370df584c154084ee4a1f9689da28c7d1127",
+    "source_overlay": "New separately owned root selected by root; keep the unchanged compiler modules and library. Do not install the replacement fingerprint before baseline capture.",
+    "files": [
+      {
+        "destination": "src/main.lkj",
+        "proposal": "golden-main.txt"
+      },
+      {
+        "destination": "src/fingerprint_fixture.lkj",
+        "proposal": "incremental-fingerprint-module.txt"
+      }
+    ],
+    "entry": "src/main.lkj",
+    "output": "Whole deterministic UTF-8 dump; exactly seventeen named cases and complete shape/bodies or None. No candidate computation supplies expected values.",
+    "executable_release": false
+  },
+  "closed_test_adoption": {
+    "destination": "src/semantic_tests/incremental_fingerprint.lkj",
+    "proposal": "incremental-fingerprint-module.txt",
+    "blocking_pending_item": "expected",
+    "expected_installation": "Replace expected(case) with the seventeen exact per-case record strings extracted and independently reviewed from the original-function dump. Preserve empty body entries. No recomputation by the candidate.",
+    "semantic_operations": [
+      {
+        "target": "semantic_tests",
+        "purpose": "add external child module incremental_fingerprint"
+      },
+      {
+        "target": "semantic_tests::core",
+        "purpose": "add count += incremental_fingerprint::run();"
+      },
+      {
+        "target": "closed_core",
+        "source": "src/semantic_main.lkj",
+        "purpose": "change expected count 192 to196 after exactly four new groups are adopted"
+      },
+      {
+        "target": "elaborate::incremental::fingerprint",
+        "purpose": "apply separately frozen one-body replacement only after baseline goldens are durable"
+      }
+    ],
+    "gate_unchanged": "Existing store-test and semantic-query-test contracts remain; no new production API/counter, observer, corpus or measurement."
+  }
+}
