@@ -1,0 +1,11 @@
+release_record_utc=2026-11-16T08:58:26Z
+53824dc9a179a9506302f1faa78ffcd79f35c941
+e7afd10853ac737973db4d8f4b23e9eb670414ad
+ab2fa80787261e2fec6d872d989099d3b1dd0984c26ac59bf89c7237d9e97504  /home/coder/workspace/lkjscript/target/lkjscript
+producer_bytes=31724996
+418f72555ed64d50e1a28cc31425de10255c18cc2853c0f8f70ebbb2d8e1847e  /home/coder/workspace/lkjscript/target/compiler-replay-scope-ci-gate.log
+ef7c94e56957afa101b02b242f8b1f106221f9406d19aa70579c6b835a404088  /home/coder/workspace/lkjscript/target/compiler-replay-scope-ci-witness.log
+7.84 8.80 8.91 9/6381 3285048
+       Avail
+403304652800
+preflight_manifests=verified

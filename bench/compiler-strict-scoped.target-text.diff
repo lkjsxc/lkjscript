@@ -1,0 +1,19 @@
+diff --git a/target/compiler-strict-scoped.8wKkOL/case-004/before/src/structure_write.lkj b/target/compiler-strict-scoped.8wKkOL/case-004/after/src/structure_write.lkj
+index fa304ac2..40aafac7 100644
+--- a/target/compiler-strict-scoped.8wKkOL/case-004/before/src/structure_write.lkj
++++ b/target/compiler-strict-scoped.8wKkOL/case-004/after/src/structure_write.lkj
+@@ -238,0 +239,3 @@ struct PinnedChange {
++/// Read-only preconditions and owned parent handles for one exact text draft.
++/// Parent namespace changes by nonparticipating processes remain outside the
++/// cooperative project-writer contract; the descriptors themselves stay pinned.
+@@ -365,0 +369,2 @@ fn prepare_at(root: &mut Directory, scope: &str, changes: &[structure_edit::Chan
++/// Acquire existing parents and verify the old projection without a signing
++/// key, creating files, or changing either source or transaction metadata.
+diff --git a/target/compiler-strict-scoped.8wKkOL/case-006/before/src/store.lkj b/target/compiler-strict-scoped.8wKkOL/case-006/after/src/store.lkj
+index e9550f5d..45f5798d 100644
+--- a/target/compiler-strict-scoped.8wKkOL/case-006/before/src/store.lkj
++++ b/target/compiler-strict-scoped.8wKkOL/case-006/after/src/store.lkj
+@@ -1074,0 +1075 @@ impl Store {
++// Optional attribution must never add an arithmetic trap to an otherwise valid build.
+@@ -1081,0 +1083 @@ fn io_add(value: usize, extra: usize, overflow: &mut bool) -> usize {
++// Exact exclusive interval arithmetic, independent of the clock effect.

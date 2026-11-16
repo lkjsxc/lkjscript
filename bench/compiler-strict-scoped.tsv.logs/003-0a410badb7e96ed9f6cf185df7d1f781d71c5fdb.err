@@ -1,0 +1,2 @@
+LKJSCRIPT_STATS {"route":"compiler","stopped_stage":"failed","total_ms":47716.109,"build_ir_ms":13161.662,"check_ms":0.013,"check_body_ms":12867.794,"check_verification_ms":1.949,"front_encode_ms":427.566,"front_miss_ms":0.004,"key_hash_ms":1688.310,"load_parse_ms":2726.615,"resolve_ms":457.713,"semantic_catalog_ms":1801.004,"source_read_ms":27.608,"store_io_ms":251.197,"type_ms":13275.068,"ir_functions":12565,"ir_instructions":1209680,"peak_rss_bytes":1181372416}
+"<ast::Program as std::prelude::Default>::default" E_EDIT_SYNTAX expected `{`, found `struct`
