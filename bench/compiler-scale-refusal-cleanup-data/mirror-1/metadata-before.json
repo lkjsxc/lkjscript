@@ -1,0 +1,7 @@
+{
+   "bytes_definition" : "Sum of regular-file st_size; directory metadata excluded; file contents unread.",
+   "directories" : 2,
+   "logical_file_bytes" : 309526,
+   "path" : "target/compiler-scale-refusal-evidence.62fa76f4-1",
+   "regular_files" : 98
+}
