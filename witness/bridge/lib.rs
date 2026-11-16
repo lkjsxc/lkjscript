@@ -68,3 +68,8 @@ pub fn trim_source_ascii(value: &str) -> &str {
     }
     &value[start..end]
 }
+
+/// Bridge a crate-local source helper across the witness's library/binary split.
+pub fn structural_error(identity: &str, rule: &str, detail: &str) -> String {
+    language::structure_edit::error(identity, rule, detail)
+}
