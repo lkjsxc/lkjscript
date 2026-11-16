@@ -1708,7 +1708,7 @@ fn prepare_program(
             Op::Intrinsic { name: IntrinsicOp::DirectoryCreateNew | IntrinsicOp::DirectoryCreatePrivate | IntrinsicOp::DirectoryOpenAppend
                 | IntrinsicOp::DirectorySync | IntrinsicOp::FileSync | IntrinsicOp::FileTruncate
                 | IntrinsicOp::FileLockExclusive | IntrinsicOp::FileLockWait
-                | IntrinsicOp::ReadDirectoryOpen | IntrinsicOp::FileSeek | IntrinsicOp::FileModifiedNanoseconds, .. }))
+                | IntrinsicOp::ReadDirectoryOpen | IntrinsicOp::DirectoryOpenRegular | IntrinsicOp::FileSeek | IntrinsicOp::FileModifiedNanoseconds, .. }))
     });
     let accept_nodelay = program.functions.iter().any(|function| {
         function.body.iter().any(|instruction| matches!(
@@ -1825,6 +1825,8 @@ fn prepare_program(
         symbols.push((p.directory_create, "$platform::directory_create".to_string()));
         symbols.push((p.directory_remove, "$platform::directory_remove".to_string()));
         symbols.push((p.directory_rename, "$platform::directory_rename".to_string()));
+    symbols.push((p.directory_rename_new, "$platform::directory_rename_new".to_string()));
+    symbols.push((p.directory_open_regular, "$platform::directory_open_regular".to_string()));
         symbols.push((p.file_executable, "$platform::file_executable".to_string()));
         symbols.push((p.file_duplicate, "$platform::file_duplicate".to_string()));
         symbols.push((p.file_readonly, "$platform::file_readonly".to_string()));

@@ -179,6 +179,10 @@ pub(super) enum Method {
     DirectoryRemoveRaw,
     DirectoryRename,
     DirectoryRenameRaw,
+    DirectoryRenameNew,
+    DirectoryRenameNewRaw,
+    DirectoryOpenRegular,
+    DirectoryOpenRegularRaw,
     WorldConnector,
     WorldConnectorRaw,
     ConnectorConnect,
@@ -354,6 +358,10 @@ pub(super) fn method(receiver: Receiver, name: &str) -> Option<Method> {
         (Receiver::Directory, "__lkjscript_remove") => Method::DirectoryRemoveRaw,
         (Receiver::Directory, "rename") => Method::DirectoryRename,
         (Receiver::Directory, "__lkjscript_rename") => Method::DirectoryRenameRaw,
+        (Receiver::Directory, "rename_new") => Method::DirectoryRenameNew,
+        (Receiver::Directory, "__lkjscript_rename_new") => Method::DirectoryRenameNewRaw,
+        (Receiver::Directory, "open_regular") => Method::DirectoryOpenRegular,
+        (Receiver::Directory, "__lkjscript_open_regular") => Method::DirectoryOpenRegularRaw,
         _ => return None,
     })
 }
@@ -494,7 +502,10 @@ impl Method {
             Method::DirectoryRemove => (vec![Value::Text], Value::ResultUnit),
             Method::DirectoryRemoveDirectory => (vec![Value::Text], Value::ResultUnit),
             Method::DirectoryRemoveRaw => (vec![Value::Bytes, Value::Boolean], Value::Error),
-            Method::DirectoryRename => (vec![Value::Text, Value::Text], Value::ResultUnit),
+            Method::DirectoryRename | Method::DirectoryRenameNew => (vec![Value::Text, Value::Text], Value::ResultUnit),
+            Method::DirectoryRenameNewRaw => (vec![Value::Bytes, Value::Bytes], Value::Error),
+            Method::DirectoryOpenRegular => (vec![Value::Text], Value::ResultFile),
+            Method::DirectoryOpenRegularRaw => (vec![Value::Bytes], Value::ResultFile),
             Method::DirectoryRenameRaw => (
                 vec![Value::Bytes, Value::DirectoryRef, Value::Bytes],
                 Value::Error,
@@ -596,6 +607,8 @@ impl Method {
             Method::CreateDirectoryRaw => ir::IntrinsicOp::DirectoryCreate,
             Method::DirectoryRemoveRaw => ir::IntrinsicOp::DirectoryRemove,
             Method::DirectoryRenameRaw => ir::IntrinsicOp::DirectoryRename,
+            Method::DirectoryRenameNewRaw => ir::IntrinsicOp::DirectoryRenameNew,
+            Method::DirectoryOpenRegularRaw => ir::IntrinsicOp::DirectoryOpenRegular,
             _ => return None,
         })
     }
@@ -641,13 +654,16 @@ impl Method {
             Method::DirectoryRemove => "__lkjscript_directory_remove",
             Method::DirectoryRemoveDirectory => "__lkjscript_directory_remove_directory",
             Method::DirectoryRename => "__lkjscript_directory_rename",
+            Method::DirectoryRenameNew => "__lkjscript_directory_rename_new",
+            Method::DirectoryOpenRegular => "__lkjscript_directory_open_regular",
             _ => return None,
         })
     }
 }
 
 fn storage_method(name: &str) -> bool {
-    matches!(name, "create_new" | "open_append" | "__lkjscript_create_new" | "__lkjscript_open_append"
+    matches!(name, "rename_new" | "__lkjscript_rename_new" | "open_regular" | "__lkjscript_open_regular"
+        | "create_new" | "open_append" | "__lkjscript_create_new" | "__lkjscript_open_append"
         | "sync" | "seek" | "modified_nanoseconds" | "truncate" | "lock_exclusive" | "lock_wait" | "unix_nanoseconds" | "get" | "set_status"
         | "entropy" | "fill" | "unix_seconds" | "set_private" | "stop" | "requested" | "target"
         | "watch_stop" | "unwatch_stop" | "request_stop" | "create_private" | "__lkjscript_create_private"

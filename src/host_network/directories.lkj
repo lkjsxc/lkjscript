@@ -184,6 +184,42 @@ pub(super) fn emit(a: &mut Assembler, labels: &[Label], reply: Label, invalid: L
     a.load(R10, BP, SCRATCH);
     syscall(a, 264);
     empty(a, reply);
+
+    // 72: same-parent, absent-only publication; never fall back to renameat.
+    a.bind(labels[7]);
+    a.load(DI, BP, REQUEST + 8);
+    check_fd(a, DI, bad);
+    a.load(D, BP, REQUEST + 16);
+    a.compare(D, R15);
+    a.condition(7, invalid);
+    a.mov(SI, R14);
+    path(a, invalid, true);
+    a.mov(SI, R14);
+    a.rr(0x01, SI, D, true);
+    a.store(BP, SCRATCH, SI);
+    a.mov(A, R15);
+    a.rr(0x29, A, D, true);
+    a.mov(D, A);
+    path(a, invalid, true);
+    a.load(DI, BP, REQUEST + 8);
+    a.mov(SI, R14);
+    a.mov(D, DI);
+    a.load(R10, BP, SCRATCH);
+    a.immediate(R8, 1); // RENAME_NOREPLACE, linux/fs.h.
+    syscall(a, 316); // __NR_renameat2, Linux x86-64.
+    empty(a, reply);
+
+    // 73: retain a basename inode without following links or opening for data.
+    a.bind(labels[8]);
+    a.load(DI, BP, REQUEST + 8);
+    check_fd(a, DI, bad);
+    a.mov(SI, R14);
+    a.mov(D, R15);
+    path(a, invalid, true);
+    a.immediate(D, 0x2a0000); // O_PATH | O_NOFOLLOW | O_CLOEXEC.
+    a.immediate(R10, 0);
+    syscall(a, 257); // One validated component needs no path traversal.
+    empty(a, reply);
 }
 
 // Independently implement ENOSYS beneath traversal in the syscall broker.

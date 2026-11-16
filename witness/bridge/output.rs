@@ -593,6 +593,18 @@ impl Directory {
     pub fn __lkjscript_rename(&mut self, old: &[u8], to: &mut Directory, new: &[u8]) -> i64 {
         files::rename_entry(&self.handle, old, &to.handle, new).map_or_else(|e| -e, |()| 0)
     }
+    pub fn __lkjscript_rename_new(&mut self, old: &[u8], new: &[u8]) -> i64 {
+        files::rename_new_entry(&self.handle, old, new).map_or_else(|e| -e, |()| 0)
+    }
+    pub fn rename_new(&mut self, old: &str, new: &str) -> Result<(), i64> {
+        files::rename_new_entry(&self.handle, &files::path_bytes(old)?, &files::path_bytes(new)?)
+    }
+    pub fn __lkjscript_open_regular(&mut self, name: &[u8]) -> Result<File, i64> {
+        Ok(File { handle: Some(files::open_regular_basename(&self.handle, name)?) })
+    }
+    pub fn open_regular(&mut self, name: &str) -> Result<File, i64> {
+        self.__lkjscript_open_regular(&files::path_bytes(name)?)
+    }
     fn parent(&mut self, path: &str) -> Result<(Directory, Vec<u8>), i64> {
         let split = path.rfind('/').map_or(0, |at| at + 1);
         let parent = if split == 0 { "." } else { &path[..split] };
@@ -1248,6 +1260,24 @@ pub(crate) mod files {
             )
         })
         .map(|_| ())
+    }
+    pub fn rename_new_entry(directory: &std::fs::File, old: &[u8], new: &[u8]) -> Result<(), i64> {
+        let old = name(old)?;
+        let new = name(new)?;
+        retry(|| unsafe {
+            syscall(316, i64::from(directory.as_raw_fd()), old.as_ptr(),
+                i64::from(directory.as_raw_fd()), new.as_ptr(), 1_i64)
+        }).map(|_| ())
+    }
+    pub fn open_regular_basename(directory: &std::fs::File, bytes: &[u8]) -> Result<std::fs::File, i64> {
+        let name = name(bytes)?;
+        // O_PATH | O_NOFOLLOW | O_CLOEXEC identifies special entries without data access.
+        let identity = owned(retry(|| unsafe {
+            syscall(257, i64::from(directory.as_raw_fd()), name.as_ptr(), 0x2a0000_i64, 0_i64)
+        })?)?;
+        if !identity.metadata().map_err(error)?.is_file() { return Err(22); }
+        // Retain identity until the same inode has been reopened read-only.
+        readonly(&identity)
     }
     pub fn readonly(file: &std::fs::File) -> Result<std::fs::File, i64> {
         let path = std::ffi::CString::new(format!("/proc/self/fd/{}", file.as_raw_fd())).unwrap();

@@ -110,6 +110,9 @@ pub trait Host {
         to: u64,
         new_name: &[u8],
     ) -> Result<(), i64>;
+    // Optional hosts fail closed until they implement the two basename effects.
+    fn rename_new_entry(&mut self, _directory: u64, _old: &[u8], _new: &[u8]) -> Result<(), i64> { Err(38) }
+    fn open_regular_file(&mut self, _directory: u64, _name: &[u8]) -> Result<u64, i64> { Err(38) }
     fn file_executable(&mut self, file: u64) -> Result<(), i64>;
     fn file_seal(&mut self, file: u64) -> Result<(), i64>;
     fn monotonic_time(&mut self, bytes: &mut [u8]) -> Result<(), i64>;

@@ -15,7 +15,7 @@ fn syscall(a: &mut Assembler, number: u64) {
 }
 
 // SI/D is a NUL-terminated path slice. Names used by mutations contain no slash.
-fn path(a: &mut Assembler, invalid: Label, name: bool) {
+pub(super) fn path(a: &mut Assembler, invalid: Label, name: bool) {
     a.test(D, true);
     a.condition(4, invalid);
     a.mov(R8, SI);
@@ -260,6 +260,30 @@ fn directories(a: &mut Assembler, p: Platform) {
     a.bind(invalid_rename);
     a.immediate(A, (-22i64) as u64);
     a.bind(finish_rename);
+    epilogue(a);
+
+    a.bind(p.directory_rename_new);
+    prologue(a, p, 40, Span::default());
+    let arguments = vec![DI, SI, D, C, R8];
+    for index in 0usize..arguments.len() {
+        a.store(BP, -8 - index as i64 * 8, arguments[index]);
+    }
+    let invalid_new = a.label();
+    let finish_new = a.label();
+    path(a, invalid_new, true);
+    a.load(SI, BP, -32);
+    a.load(D, BP, -40);
+    path(a, invalid_new, true);
+    a.load(DI, BP, -8);
+    a.load(SI, BP, -16);
+    a.mov(D, DI);
+    a.load(R10, BP, -32);
+    a.immediate(R8, 1); // RENAME_NOREPLACE, linux/fs.h.
+    syscall(a, 316); // __NR_renameat2; no check/rename or replacing fallback.
+    a.jump(finish_new);
+    a.bind(invalid_new);
+    a.immediate(A, (-22i64) as u64);
+    a.bind(finish_new);
     epilogue(a);
 }
 

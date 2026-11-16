@@ -265,12 +265,14 @@ impl Body<'_> {
                 self.intrinsic_scalar_result(dst, D);
                 return Ok(true);
             }
-            IntrinsicOp::ReadDirectoryOpen => {
+            IntrinsicOp::ReadDirectoryOpen | IntrinsicOp::DirectoryOpenRegular => {
                 self.read(args[0], DI);
                 self.a.load(DI, DI, 0);
                 self.read_word(args[1], 0, SI);
                 self.read_word(args[1], 1, D);
-                self.a.call(self.platform.file_open_regular);
+                self.a.call(if name == IntrinsicOp::DirectoryOpenRegular {
+                    self.platform.directory_open_regular
+                } else { self.platform.file_open_regular });
                 self.intrinsic_open_result(dst);
                 return Ok(true);
             }
@@ -475,6 +477,15 @@ impl Body<'_> {
                 } else {
                     self.platform.directory_remove
                 });
+            }
+            IntrinsicOp::DirectoryRenameNew => {
+                self.read(args[0], DI);
+                self.a.load(DI, DI, 0);
+                self.read_word(args[1], 0, SI);
+                self.read_word(args[1], 1, D);
+                self.read_word(args[2], 0, C);
+                self.read_word(args[2], 1, R8);
+                self.a.call(self.platform.directory_rename_new);
             }
             IntrinsicOp::DirectoryRename => {
                 self.read(args[0], DI);

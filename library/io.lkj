@@ -494,3 +494,17 @@ pub fn errno_name(errno: i64) -> &'static str {
         _ => "EUNKNOWN",
     }
 }
+
+pub fn __lkjscript_directory_rename_new(
+    directory: &mut Directory,
+    old: &str,
+    new: &str,
+) -> Result<(), i64> {
+    let old = path_bytes(old)?;
+    let new = path_bytes(new)?;
+    unit_result(directory.__lkjscript_rename_new(&old, &new))
+}
+
+pub fn __lkjscript_directory_open_regular(directory: &mut Directory, name: &str) -> Result<File, i64> {
+    directory.__lkjscript_open_regular(&path_bytes(name)?)
+}

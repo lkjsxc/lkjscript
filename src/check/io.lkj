@@ -370,6 +370,19 @@ pub(super) fn signature(
                 && args[2] == BOOL
                 && result == I64
         }
+        IntrinsicOp::DirectoryRenameNew => {
+            args.len() == 3
+                && authority(types, args[0], &TypeKind::Directory)
+                && bytes(types, args[1], false)
+                && bytes(types, args[2], false)
+                && result == I64
+        }
+        IntrinsicOp::DirectoryOpenRegular => {
+            args.len() == 2
+                && authority(types, args[0], &TypeKind::Directory)
+                && bytes(types, args[1], false)
+                && opened(types, result, &TypeKind::File)
+        }
         IntrinsicOp::DirectoryRename => {
             args.len() == 4
                 && authority(types, args[0], &TypeKind::Directory)

@@ -762,6 +762,17 @@ impl interpreter::Host for Host<'_, '_> {
         self.network.move_entry(from, old, to, new)
     }
 
+    fn rename_new_entry(&mut self, directory: u64, old: &[u8], new: &[u8]) -> Result<(), i64> {
+        let directory = self.directory_handle(directory)?;
+        self.network.move_new_entry(directory, old, new)
+    }
+
+    fn open_regular_file(&mut self, directory: u64, name: &[u8]) -> Result<u64, i64> {
+        let directory = self.directory_handle(directory)?;
+        let opened = self.network.open_regular_basename(directory, name)?;
+        self.insert_handle(Handle::RemoteFile(opened))
+    }
+
     fn file_seal(&mut self, file: u64) -> Result<(), i64> {
         let descriptor = self.remote_file(file)?;
         let result = self.network.seal_remote(descriptor);

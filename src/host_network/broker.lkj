@@ -188,7 +188,7 @@ pub(super) fn image(local: &[u8], address: &[u8], nonce: &[u8]) -> Result<Vec<u8
     let mut storage = Vec::new();
     for _index in 0usize..5usize { storage.push(a.label()); }
     let mut directories = Vec::new();
-    for _index in 0usize..7usize { directories.push(a.label()); }
+    for _index in 0usize..9usize { directories.push(a.label()); }
     let mut lifecycle = Vec::new();
     for _index in 0usize..6usize { lifecycle.push(a.label()); }
 
@@ -350,7 +350,7 @@ pub(super) fn image(local: &[u8], address: &[u8], nonce: &[u8]) -> Result<Vec<u8
         a.condition(4, storage[index]);
     }
     for index in 0usize..directories.len() {
-        a.immediate(C, (index + 35) as u64);
+        a.immediate(C, if index < 7usize { (index + 35usize) as u64 } else { (index + 65usize) as u64 });
         a.compare(A, C);
         a.condition(4, directories[index]);
     }

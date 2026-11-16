@@ -167,12 +167,27 @@ fn read_files(a: &mut Assembler, p: Platform) {
     a.bind(stat_done);
     epilogue(a);
 
+    let regular_opened = a.label();
+    let invalid_basename = a.label();
+    a.bind(p.directory_open_regular);
+    prologue(a, p, 16, Span::default());
+    super::process::path(a, invalid_basename, true);
+    a.immediate(D, 0x2a0000); // O_PATH | O_NOFOLLOW | O_CLOEXEC.
+    a.immediate(R10, 0);
+    syscall(a, 257); // openat of a single validated basename, never a data open.
+    promote(a);
+    a.jump(regular_opened);
+    a.bind(invalid_basename);
+    a.immediate(A, (-22i64) as u64);
+    epilogue(a);
+
     a.bind(p.file_open_regular);
     prologue(a, p, 16, Span::default());
     // O_PATH identifies even a FIFO/device without opening it for data access.
     a.immediate(C, 0x280000); // O_PATH | O_CLOEXEC, beneath the acquired root.
     a.immediate(R8, 0);
     a.call(p.file_storage_open);
+    a.bind(regular_opened);
     let opened = a.label();
     let closed = a.label();
     a.test(A, true);

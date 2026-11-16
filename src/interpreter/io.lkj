@@ -263,6 +263,8 @@ impl<H: Host> Interpreter<'_, H> {
         values: &[(usize, Value)],
     ) -> Result<Option<Value>, RunError> {
         let storage_arity = match name {
+            ir::IntrinsicOp::DirectoryRenameNew => 3usize,
+            ir::IntrinsicOp::DirectoryOpenRegular => 2usize,
             ir::IntrinsicOp::ForeignRun | ir::IntrinsicOp::ForeignStart => 5usize,
             ir::IntrinsicOp::ForeignImage => 1usize,
             ir::IntrinsicOp::ForeignExchange => 4usize,
@@ -720,6 +722,30 @@ impl<H: Host> Interpreter<'_, H> {
                 };
                 self.io_status(outcome)?
             }
+            ir::IntrinsicOp::DirectoryRenameNew => {
+                let directory = self.io_authority(values, TypeKind::Directory)?;
+                self.io_result_type(result, ir::I64)?;
+                let old = self.io_buffer(values, 1, false)?;
+                let new = self.io_buffer(values, 2, false)?;
+                let old = self.bytes(&old)?;
+                let new = self.bytes(&new)?;
+                let handle = self.io_handle(&directory)?;
+                let outcome = if valid_basename(&old) && valid_basename(&new) {
+                    self.host.rename_new_entry(handle, &old, &new)
+                } else { Err(22) };
+                self.io_status(outcome)?
+            }
+            ir::IntrinsicOp::DirectoryOpenRegular => {
+                let directory = self.io_authority(values, TypeKind::Directory)?;
+                let types = self.io_open_types(result, TypeKind::File)?;
+                let name = self.io_buffer(values, 1, false)?;
+                let name = self.bytes(&name)?;
+                let handle = self.io_handle(&directory)?;
+                let opened = if valid_basename(&name) {
+                    self.host.open_regular_file(handle, &name)
+                } else { Err(22) };
+                self.io_open_result(types, opened, TypeKind::File)?
+            }
             ir::IntrinsicOp::DirectoryRename if values.len() == 4 => {
                 let from = self.io_authority(values, TypeKind::Directory)?;
                 self.io_result_type(result, ir::I64)?;
@@ -952,4 +978,10 @@ impl<H: Host> Interpreter<'_, H> {
         };
         Ok(Some(value))
     }
+}
+
+fn valid_basename(bytes: &[u8]) -> bool {
+    if bytes.len() < 2usize || bytes[bytes.len() - 1usize] != 0u8 { return false; }
+    let name = &bytes[..bytes.len() - 1usize];
+    name != b"." && name != b".." && !name.iter().any(|byte| *byte == 0u8 || *byte == b'/')
 }

@@ -569,3 +569,25 @@ fn nodelay_image(enabled: bool) -> Result<Vec<u8>, i64> {
     let code = a.finish().map_err(|_| 8i64)?;
     Ok(elf(code))
 }
+
+impl Network {
+    pub fn move_new_entry(&mut self, directory: u64, old: &[u8], new: &[u8]) -> Result<(), i64> {
+        let mut names = old.to_vec();
+        names.extend_from_slice(new);
+        self.request(72, &[directory, old.len() as u64], &names)?;
+        Ok(())
+    }
+
+    pub fn open_regular_basename(&mut self, directory: u64, name: &[u8]) -> Result<u64, i64> {
+        let (identity, _) = self.request(73, &[directory], name)?;
+        let identity = identity as u64;
+        // fstat examines the retained O_PATH | O_NOFOLLOW descriptor before any data open.
+        if let Err(errno) = self.request(51, &[identity], b"") {
+            self.close_remote(identity);
+            return Err(errno);
+        }
+        let readable = self.readonly_remote(identity);
+        self.close_remote(identity);
+        readable
+    }
+}
