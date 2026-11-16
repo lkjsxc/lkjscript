@@ -1,0 +1,15 @@
+Independent eight-file recovery check by /root/optimization_review.
+
+Frozen main commit: 61049544e4461e3365d239191a6cbe704407a85e.
+Archive: bench/compiler-copy-sites-data/proposals/profiler.tar.gz.
+Git blob: 5bf15148758ecbf9fcd64670746f531b19f3a56a.
+Archive SHA-256: 306377afa71b52f8121f6f6447460224be493750daf36c6e3aa10266320e17f8.
+
+All eight regular profiler-candidate files byte-compare with the same-basename
+member beneath compiler-copy-sites-profiler-candidate/. None is missing, and
+no fallback to current source is needed. Exact per-file hashes and sizes are
+also present in this proposal's full inventory.
+
+Retained gateway: compiler-profiler-recovery-exact-20261116-203, exit 0, empty
+stderr. The peer performed no edits, workload/helper execution, cleanup or
+process/FD/key inspection. This review covers the eight profiler files only.

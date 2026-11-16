@@ -1,0 +1,31 @@
+{
+   "bundle_commit" : "99ac7a6043cd9ee411970e55970634a34506a709",
+   "deleted_directories" : 112,
+   "deleted_files" : 21076,
+   "deleted_logical_bytes" : 779287389,
+   "end_utc" : "2026-11-16T15:12:43Z",
+   "gateway_request" : "compiler-copy-sites-root-cleanup-v2-execute-20261116-148",
+   "gnu_time" : "wall_s=8.17 user_s=5.91 system_s=1.28 max_rss_kib=137036 exit_status=0",
+   "guard_sha256" : "55884264496cbe04ff872883128e65400092c42b32e84b6785a961a5c8197c41",
+   "independent_six_ENOENT_absences" : 6,
+   "load_after" : "0.97 1.55 1.94 2/5522 2836570",
+   "load_before" : "0.96 1.57 1.95 1/5537 2835416",
+   "no_compiler_or_image_execution" : true,
+   "no_other_cleanup" : true,
+   "no_private_key_read" : true,
+   "no_process_observer" : true,
+   "original_attempt" : "Preserved separately: compilation exit 2, zero guard cleanup actions.",
+   "postcheck_request" : "compiler-copy-sites-root-cleanup-v2-postcheck-20261116-150",
+   "postcheck_sha256" : "c08df1b430c7720ac70bd4b1a30950739dc759480ce6cc6dd3a77aee723002f9",
+   "result_sha256" : "84c8d11ca3949c4a5a8fade9a6a990c0036ac20b64255bf8a4dfe1f549d3eaeb",
+   "retained_original_manifest_records" : 39,
+   "standard_canonical" : {
+      "bytes" : 32584542,
+      "identity_stable_during_read" : true,
+      "path" : "/home/coder/workspace/lkjscript/target/lkjscript",
+      "sha256" : "6cd52308aba91d6f84396e6f999ffba6d97eb7ccbacbb6bec654c31fee7bdacc"
+   },
+   "start_utc" : "2026-11-16T15:12:34Z",
+   "state" : "complete",
+   "status" : 0
+}

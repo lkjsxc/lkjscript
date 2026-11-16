@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "state": "proposal-only",
+  "owner_worktree": "/home/coder/workspace/lkjscript-compiler-copy-sites-native-20261116",
+  "target_root": "/home/coder/workspace/lkjscript-compiler-copy-sites-native-20261116/target",
+  "retention_pin": "99ac7a6043cd9ee411970e55970634a34506a709",
+  "scopes": [
+    "compiler-copy-sites-cleanup-20261116",
+    "compiler-legacy-root-inventory-20261116",
+    "compiler-ci-43878716520-20261116",
+    "compiler-copy-sites-root-inventory-20261116",
+    "compiler-ci-964be9a4-20261116",
+    "compiler-copy-sites-cleanup-guard-v2-20261116"
+  ],
+  "expected": {
+    "files": 283,
+    "directories": 21,
+    "logical_bytes": 78576766,
+    "allocated_bytes": 79339520,
+    "flagged_entries": 0
+  },
+  "disposition": {
+    "exact_committed_files": 227,
+    "exact_committed_bytes": 38720533,
+    "new_cleanup_file_instances": 17,
+    "new_cleanup_bytes": 20389,
+    "unmatched_CI_file_instances": 7,
+    "unmatched_CI_bytes": 3188,
+    "preparation_intermediates": 32,
+    "preparation_intermediate_bytes": 39832656
+  },
+  "new_retention": {
+    "completed_cleanup": "completed-cleanup-v2/ (all 24 manifest records plus the original manifest)",
+    "historical_CI": "ci/ (all 11 original capture files)",
+    "copied_records": 36,
+    "copied_bytes": 188818,
+    "source_and_destination_hashes": "new-retention.json"
+  },
+  "recommendation": "After root commits this bundle and accepts the explicit dispositions, close all six inventoried scopes in one separately released cleanup. The new proposal directory itself may be closed after its exact committed copy is verified; it is outside the six-scope census.",
+  "protected": [
+    "the worktree itself, its source and Git metadata",
+    "the shared target parent",
+    "all main target paths, including standard target/lkjscript",
+    "all other worktrees and target scopes",
+    "all credentials, services and their data"
+  ],
+  "not_authorized": [
+    "deleting any of these owned scopes",
+    "reusing an earlier cleanup release",
+    "executing a compiler/image",
+    "running a process/FD/syscall observer",
+    "reading a private key"
+  ],
+  "intermediate_limit": "The 32 mapping/census helper intermediates are proposed discarded after final inventories, guards, manifests, retained inputs and raw outcomes are committed. Their hashes identify discarded bytes; exact recovery is not claimed.",
+  "current_cleanup_completion": {
+    "commit": "99ac7a6043cd9ee411970e55970634a34506a709",
+    "manifest_sha256": "42e00f099f7a3ddda9f622623457882a2db86a554ea040e5a76fb234b92b7d3c",
+    "deleted_files": 21076,
+    "deleted_directories": 112,
+    "deleted_logical_bytes": 779287389,
+    "independent_absences": 6,
+    "standard_canonical_sha256": "6cd52308aba91d6f84396e6f999ffba6d97eb7ccbacbb6bec654c31fee7bdacc"
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "schema": "owned-query-worktree-closure-plan-1",
+  "mode": "proposal-only",
+  "removal_authorized": false,
+  "recovery_revision": "61049544e4461e3365d239191a6cbe704407a85e",
+  "scopes": [
+    "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-copy-sites-profiler-candidate",
+    "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-copy-sites-accounting-candidate",
+    "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-copy-sites-extractor-candidate",
+    "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-copy-sites-extractor-package-20261116",
+    "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-copy-sites-census-join-20261116",
+    "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-copy-sites-census-join-package-20261116",
+    "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-copy-sites-family-census-20261116",
+    "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-copy-sites-family-census-package-20261116"
+  ],
+  "counts": {
+    "regular_files": "688",
+    "directories": "82",
+    "logical_bytes": "15840821"
+  },
+  "current_recovery": {
+    "committed_archive_files": "667",
+    "committed_direct_files": "10",
+    "new_retention_files": "11",
+    "new_retention_bytes": "30002"
+  },
+  "proposed_retention_destination": "bench/compiler-query-worktree-closure-data",
+  "pending_retention_source": "inventory-1/pending-retention",
+  "file_inventory": "inventory-1/full-inventory.tsv",
+  "metadata_inventory": "inventory-1/full-inventory.json",
+  "steps_before_any_removal": [
+    "Commit this closure evidence, including all 11 pending-retention copies, and pin the retained manifest/commit.",
+    "Root explicitly releases deletion after confirming all consumers have finished; no process or FD observer is proposed.",
+    "Recheck the complete literal path set, regular-file and directory identities, link counts and all file digests; any mismatch refuses before deletion.",
+    "Recheck the five fixed committed archive digests plus direct-file and newly retained gap correspondence.",
+    "Unlink only the enumerated files, then remove only the enumerated empty directories deepest first; no recursive wildcard deletion.",
+    "Capture time/load/status and exact ENOENT for all eight roots, preserving the proposal, retained Git evidence and all excluded paths."
+  ],
+  "excluded": [
+    "all other target paths, especially compiler-container-* evidence and key locator",
+    "worktree source and durable .lkjscript-edit.* metadata",
+    "/tmp/compiler-container-key.m4u6F6 and every other credential",
+    "main and every other worktree",
+    "this closure proposal directory"
+  ],
+  "disposal_policy": "No uniquely held content is disposable. Only the inventoried duplicate local copies become removable after all retention prerequisites and explicit release.",
+  "executed": "Only read-only inventory/archive-content hashing and copying 11 concrete retention gaps into this separate proposal."
+}

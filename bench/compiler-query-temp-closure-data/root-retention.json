@@ -1,0 +1,9 @@
+{
+   "all_live_files_byte_identical" : true,
+   "bytes_copied" : 1120450,
+   "destination" : "bench/compiler-query-temp-closure-data",
+   "files_copied" : 37,
+   "manifest_sha256" : "45b896170ff6d5c751b5b1e80ec9f584af21b987bf25fb1142a98134f67fb016",
+   "records" : 36,
+   "source" : "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-query-worktree-closure-proposal-20261116"
+}

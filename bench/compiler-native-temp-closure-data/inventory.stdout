@@ -1,0 +1,221 @@
+{
+   "allocated_bytes" : 79339520,
+   "classes" : {
+      "captured_ci_observation" : {
+         "bytes" : 3188,
+         "files" : 7
+      },
+      "exact_committed_counterpart" : {
+         "bytes" : 38720533,
+         "files" : 227
+      },
+      "new_completed_cleanup_evidence" : {
+         "bytes" : 20389,
+         "files" : 17
+      },
+      "preparation_intermediate" : {
+         "bytes" : 39832656,
+         "files" : 32
+      }
+   },
+   "directories" : 21,
+   "files" : 283,
+   "flags" : [],
+   "largest_unmatched" : [
+      {
+         "bytes" : 14157588,
+         "class" : "preparation_intermediate",
+         "git_blob" : "7ebabd80b09c7a362110b1d98e36511e783e1b84",
+         "hint" : "other",
+         "path" : "compiler-copy-sites-root-inventory-20261116/file-map.json",
+         "reference" : "-",
+         "scope" : "compiler-copy-sites-root-inventory-20261116",
+         "sha256" : "259a6dbec53a1ac40a7f441fdedfe9aeaa1fd9afe7323e43cc21ba015696c441"
+      },
+      {
+         "bytes" : 12705155,
+         "class" : "preparation_intermediate",
+         "git_blob" : "6f1a089b47b2c2f62d7914456f68c107b0fe0d96",
+         "hint" : "other",
+         "path" : "compiler-copy-sites-root-inventory-20261116/unmatched.json",
+         "reference" : "-",
+         "scope" : "compiler-copy-sites-root-inventory-20261116",
+         "sha256" : "7a8b66f570ea85d8566bb731c5e6265b6ae2611f905331a344100ddba4d97f58"
+      },
+      {
+         "bytes" : 5560327,
+         "class" : "preparation_intermediate",
+         "git_blob" : "0d5a9e4281b449d90406bed8788ebfe21a77fe3e",
+         "hint" : "other",
+         "path" : "compiler-copy-sites-root-inventory-20261116/metadata.tsv",
+         "reference" : "-",
+         "scope" : "compiler-copy-sites-root-inventory-20261116",
+         "sha256" : "ae9ed601d592280ae5506f69ff448968494ddb5c787166a2723705aa08eacf29"
+      },
+      {
+         "bytes" : 4835637,
+         "class" : "preparation_intermediate",
+         "git_blob" : "6201eed3388b50be6f4b70669f2925787d50aa0d",
+         "hint" : "other",
+         "path" : "compiler-legacy-root-inventory-20261116/metadata.tsv",
+         "reference" : "-",
+         "scope" : "compiler-legacy-root-inventory-20261116",
+         "sha256" : "60b22b0c21e4aac34c36662f0c2f924f8a98905c846a7e902434e8e0d62bfd06"
+      },
+      {
+         "bytes" : 798273,
+         "class" : "preparation_intermediate",
+         "git_blob" : "3a2d7ed9cbef813f8593a5d0680f7f52e0378187",
+         "hint" : "other",
+         "path" : "compiler-copy-sites-root-inventory-20261116/verified-git-counterparts.json",
+         "reference" : "-",
+         "scope" : "compiler-copy-sites-root-inventory-20261116",
+         "sha256" : "71d688437b5395daa430bffaa2bb276dbd815f914c236c55d2fd36820621203d"
+      },
+      {
+         "bytes" : 781667,
+         "class" : "preparation_intermediate",
+         "git_blob" : "b3a901ba6660981b391058a1c63392670f053e9a",
+         "hint" : "other",
+         "path" : "compiler-legacy-root-inventory-20261116/bench-tree.txt",
+         "reference" : "-",
+         "scope" : "compiler-legacy-root-inventory-20261116",
+         "sha256" : "340a00e75f57c51bc0a07defb23b220004fb7082d220203a85208a4feff5783f"
+      },
+      {
+         "bytes" : 290056,
+         "class" : "preparation_intermediate",
+         "git_blob" : "0c89237eb2d27da8149390918f03061d758626ee",
+         "hint" : "other",
+         "path" : "compiler-copy-sites-root-inventory-20261116/current-tree.tsv",
+         "reference" : "-",
+         "scope" : "compiler-copy-sites-root-inventory-20261116",
+         "sha256" : "fd36d129d68fca3860880502b54f73cefd11d1154addedbbc02fbbfd96e91fb7"
+      },
+      {
+         "bytes" : 221483,
+         "class" : "preparation_intermediate",
+         "git_blob" : "af53c06f2aa865e3f68277fc9edb8da8d75fd3d5",
+         "hint" : "other",
+         "path" : "compiler-copy-sites-root-inventory-20261116/baseline-tree.tsv",
+         "reference" : "-",
+         "scope" : "compiler-copy-sites-root-inventory-20261116",
+         "sha256" : "ea90a14489b1d6bf14ee352f8272a3a612b29391222523f0f74d72618868eb19"
+      },
+      {
+         "bytes" : 210687,
+         "class" : "preparation_intermediate",
+         "git_blob" : "051c611dbe0cd7b69c83a1904c42b26e442b8237",
+         "hint" : "other",
+         "path" : "compiler-legacy-root-inventory-20261116/nonstore-evidence.json",
+         "reference" : "-",
+         "scope" : "compiler-legacy-root-inventory-20261116",
+         "sha256" : "11d07cacb2c32f10f000de5fd0d8e6de76ed3904017df04da3fc8c2de47f0fbd"
+      },
+      {
+         "bytes" : 112266,
+         "class" : "preparation_intermediate",
+         "git_blob" : "0cbeda1175cfc4f90d99d1ef0d492fe29638d34e",
+         "hint" : "other",
+         "path" : "compiler-legacy-root-inventory-20261116/nonstore-evidence.tsv",
+         "reference" : "-",
+         "scope" : "compiler-legacy-root-inventory-20261116",
+         "sha256" : "bda98dd9ad90544a7e4020c0177d336e569eb7407de16df363b47b1ebb64c817"
+      }
+   ],
+   "logical_bytes" : 78576766,
+   "scope_summary" : {
+      "compiler-ci-43878716520-20261116" : {
+         "allocated_bytes" : 16384,
+         "bytes" : 2456,
+         "classes" : {
+            "captured_ci_observation" : {
+               "bytes" : 2454,
+               "files" : 3
+            },
+            "exact_committed_counterpart" : {
+               "bytes" : 2,
+               "files" : 2
+            }
+         },
+         "directories" : 1,
+         "files" : 5
+      },
+      "compiler-ci-964be9a4-20261116" : {
+         "allocated_bytes" : 20480,
+         "bytes" : 736,
+         "classes" : {
+            "captured_ci_observation" : {
+               "bytes" : 734,
+               "files" : 4
+            },
+            "exact_committed_counterpart" : {
+               "bytes" : 2,
+               "files" : 2
+            }
+         },
+         "directories" : 1,
+         "files" : 6
+      },
+      "compiler-copy-sites-cleanup-20261116" : {
+         "allocated_bytes" : 69632,
+         "bytes" : 18351,
+         "classes" : {
+            "exact_committed_counterpart" : {
+               "bytes" : 18351,
+               "files" : 16
+            }
+         },
+         "directories" : 1,
+         "files" : 16
+      },
+      "compiler-copy-sites-cleanup-guard-v2-20261116" : {
+         "allocated_bytes" : 102400,
+         "bytes" : 46031,
+         "classes" : {
+            "exact_committed_counterpart" : {
+               "bytes" : 46031,
+               "files" : 19
+            }
+         },
+         "directories" : 1,
+         "files" : 19
+      },
+      "compiler-copy-sites-root-inventory-20261116" : {
+         "allocated_bytes" : 61919232,
+         "bytes" : 61577567,
+         "classes" : {
+            "exact_committed_counterpart" : {
+               "bytes" : 27725054,
+               "files" : 98
+            },
+            "new_completed_cleanup_evidence" : {
+               "bytes" : 20389,
+               "files" : 17
+            },
+            "preparation_intermediate" : {
+               "bytes" : 33832124,
+               "files" : 16
+            }
+         },
+         "directories" : 7,
+         "files" : 131
+      },
+      "compiler-legacy-root-inventory-20261116" : {
+         "allocated_bytes" : 17211392,
+         "bytes" : 16931625,
+         "classes" : {
+            "exact_committed_counterpart" : {
+               "bytes" : 10931093,
+               "files" : 90
+            },
+            "preparation_intermediate" : {
+               "bytes" : 6000532,
+               "files" : 16
+            }
+         },
+         "directories" : 10,
+         "files" : 106
+      }
+   }
+}

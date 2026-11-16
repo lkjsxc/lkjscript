@@ -1,0 +1,14 @@
+{
+   "counts" : {
+      "disposable_bytes" : 141239847,
+      "disposable_files" : 34,
+      "frozen_directories" : 214,
+      "frozen_files" : 2260,
+      "old_directories" : 201,
+      "old_files" : 2175,
+      "old_logical_bytes" : 480049506
+   },
+   "manifest_sha256" : "cbeab75fde4bd9b69da3b216e5db8a3310e6deb24f422995b306be17f579cdf9",
+   "recovery_verified" : "all current file bytes; pending bundles require final committed release",
+   "status" : "prepared"
+}

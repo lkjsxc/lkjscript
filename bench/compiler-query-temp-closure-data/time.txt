@@ -1,0 +1,5 @@
+elapsed_s=0.19
+user_s=0.15
+system_s=0.02
+peak_rss_kib=56224
+exit_status=0

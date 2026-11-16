@@ -1,0 +1,18 @@
+[
+  "/usr/bin/time",
+  "-f",
+  "wall_s=%e user_s=%U system_s=%S max_rss_kib=%M exit_status=%x",
+  "-o",
+  "/home/coder/workspace/lkjscript-compiler-copy-sites-native-20261116/target/compiler-copy-sites-root-inventory-20261116/cleanup-capture-v2/time",
+  "prlimit",
+  "--as=4294967296",
+  "--",
+  "timeout",
+  "--signal=TERM",
+  "--kill-after=10s",
+  "300s",
+  "perl",
+  "bench/compiler-copy-sites-root-cleanup-guard-v2.pl",
+  "--execute-after-root-release",
+  "99ac7a6043cd9ee411970e55970634a34506a709"
+]

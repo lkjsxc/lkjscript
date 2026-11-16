@@ -1,0 +1,116 @@
+{
+   "cleanup_authorized" : false,
+   "directories" : "82",
+   "disposal_policy" : "Only byte-exact duplicate copies after every pending recovery is committed; no unique input is classified as disposable.",
+   "dispositions" : {
+      "committed-git-archive" : {
+         "bytes" : 15244872,
+         "files" : 667
+      },
+      "committed-git-file" : {
+         "bytes" : 565947,
+         "files" : 10
+      },
+      "new-retention-required" : {
+         "bytes" : 30002,
+         "files" : 11
+      }
+   },
+   "exclusions" : [
+      "all other target paths, especially compiler-container-* evidence and key locator",
+      "worktree source and durable .lkjscript-edit.* metadata",
+      "/tmp/compiler-container-key.m4u6F6 and every other credential",
+      "main and every other worktree",
+      "this closure proposal directory"
+   ],
+   "files" : "688",
+   "git_recovery_revision" : "61049544e4461e3365d239191a6cbe704407a85e",
+   "logical_bytes" : "15840821",
+   "notes" : [
+      "Archive content was read, not extracted or executed.",
+      "This frozen metadata inventory is a proposal; any later cleanup must recheck all literal scopes, path sets and hashes.",
+      "No process/FD scan, compiler, profile, official reader, extractor or prior census was run."
+   ],
+   "pending_retention_files" : "11",
+   "removal_performed" : false,
+   "schema" : "owned-query-worktree-closure-proposal-1",
+   "scopes" : [
+      {
+         "bytes" : 183565,
+         "directories" : 1,
+         "dispositions" : {
+            "committed-git-archive" : 8
+         },
+         "files" : 8,
+         "scope" : "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-copy-sites-profiler-candidate"
+      },
+      {
+         "bytes" : 630813,
+         "directories" : 41,
+         "dispositions" : {
+            "committed-git-archive" : 321,
+            "committed-git-file" : 1
+         },
+         "files" : 322,
+         "scope" : "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-copy-sites-accounting-candidate"
+      },
+      {
+         "bytes" : 460223,
+         "directories" : 25,
+         "dispositions" : {
+            "committed-git-archive" : 104
+         },
+         "files" : 104,
+         "scope" : "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-copy-sites-extractor-candidate"
+      },
+      {
+         "bytes" : 181048,
+         "directories" : 1,
+         "dispositions" : {
+            "committed-git-file" : 3,
+            "new-retention-required" : 7
+         },
+         "files" : 10,
+         "scope" : "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-copy-sites-extractor-package-20261116"
+      },
+      {
+         "bytes" : 13410540,
+         "directories" : 6,
+         "dispositions" : {
+            "committed-git-archive" : 125
+         },
+         "files" : 125,
+         "scope" : "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-copy-sites-census-join-20261116"
+      },
+      {
+         "bytes" : 245277,
+         "directories" : 1,
+         "dispositions" : {
+            "committed-git-file" : 3,
+            "new-retention-required" : 2
+         },
+         "files" : 5,
+         "scope" : "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-copy-sites-census-join-package-20261116"
+      },
+      {
+         "bytes" : 594062,
+         "directories" : 6,
+         "dispositions" : {
+            "committed-git-archive" : 109
+         },
+         "files" : 109,
+         "scope" : "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-copy-sites-family-census-20261116"
+      },
+      {
+         "bytes" : 135293,
+         "directories" : 1,
+         "dispositions" : {
+            "committed-git-file" : 3,
+            "new-retention-required" : 2
+         },
+         "files" : 5,
+         "scope" : "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-copy-sites-family-census-package-20261116"
+      }
+   ],
+   "target" : "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target"
+}
