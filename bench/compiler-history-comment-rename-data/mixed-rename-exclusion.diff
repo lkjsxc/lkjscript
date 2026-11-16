@@ -1,0 +1,147 @@
+diff --git a/src/k_text.rs b/src/ir_text.rs
+similarity index 96%
+rename from src/k_text.rs
+rename to src/ir_text.rs
+index 1176b716..8b95feea 100644
+--- a/src/k_text.rs
++++ b/src/ir_text.rs
+@@ -1,6 +1,6 @@
+-//! Text K is a flat instruction listing for inspection and adversarial checks.
++//! Text IR is a flat instruction listing for inspection and adversarial checks.
+ use crate::diagnostic::{Diagnostic, Span};
+-use crate::k::*;
++use crate::ir::*;
+ 
+ type Result<T> = std::result::Result<T, Diagnostic>;
+ 
+@@ -13,7 +13,7 @@ fn error(line: usize, message: &str) -> Diagnostic {
+             line,
+             column: 1,
+         },
+-        "E_K_TEXT",
++        "E_IR_TEXT",
+         message,
+     )
+ }
+@@ -412,8 +412,11 @@ fn instruction(words: &[String], line: usize) -> Result<Instruction> {
+     })
+ }
+ 
+-/// Parse text into unchecked K. Only check::check may grant backend access.
++/// Parse text into unchecked IR. Only check::check may grant backend access.
+ pub fn read(text: &str) -> Result<Program> {
++    if text.is_empty() {
++        return Err(error(1, "expected lkjscript-ir 1 header"));
++    }
+     let mut program = Program {
+         destructors: Vec::new(),
+         types: Vec::new(),
+@@ -425,6 +428,12 @@ pub fn read(text: &str) -> Result<Program> {
+     for (offset, line_text) in text.lines().enumerate() {
+         let line = offset + 1;
+         last_line = line;
++        if offset == 0 {
++            if line_text != "lkjscript-ir 1" {
++                return Err(error(1, "expected lkjscript-ir 1 header"));
++            }
++            continue;
++        }
+         let words = words(line_text, line)?;
+         if words.is_empty() {
+             continue;
+@@ -855,7 +864,7 @@ fn write_instruction(text: &mut String, instruction: &Instruction) {
+ }
+ 
+ pub fn write(program: &Program) -> String {
+-    let mut text = String::new();
++    let mut text = "lkjscript-ir 1\n".to_string();
+     for ty in &program.types {
+         text.push_str(&format!("type {} ", quoted(&ty.name)));
+         match &ty.kind {
+@@ -974,7 +983,7 @@ mod tests {
+     fn assert_same_program(actual: &Program, expected: &Program) {
+         assert!(
+             actual == expected,
+-            "K structures differ:\nactual:\n{}\nexpected:\n{}",
++            "IR structures differ:\nactual:\n{}\nexpected:\n{}",
+             write(actual),
+             write(expected)
+         );
+@@ -1000,12 +1009,32 @@ mod tests {
+                     .err()
+                     .expect("malformed text payload must be rejected")
+                     .code,
+-                "E_K_TEXT",
++                "E_IR_TEXT",
+                 "{encoded}"
+             );
+         }
+     }
+ 
++    #[test]
++    fn format_header_is_required_and_versioned() {
++        for text in [
++            "",
++            "type x unit\n",
++            "lkjscript-ir 0\n",
++            "lkjscript-ir 2\n",
++            "\nlkjscript-ir 1\n",
++            "lkjscript-ir 1 extra\n",
++        ] {
++            let problem = read(text).err().unwrap();
++            assert_eq!(problem.code, "E_IR_TEXT");
++            assert_eq!(problem.line, 1);
++        }
++        let program = read("lkjscript-ir 1\n").unwrap();
++        assert_eq!(write(&program), "lkjscript-ir 1\n");
++        let problem = read("lkjscript-ir 1\ntype\n").err().unwrap();
++        assert_eq!(problem.line, 2);
++    }
++
+     #[test]
+     fn source_round_trip_preserves_meaning_and_locations() {
+         let source = "struct Pair { left:i64, right:i64 } pub fn probe()->i64 { let p=Pair {left:20,right:22}; p.left+p.right }";
+@@ -1018,7 +1047,7 @@ mod tests {
+     }
+ 
+     #[test]
+-    fn text_can_supply_k_the_elaborator_never_emits() {
++    fn text_can_supply_ir_the_elaborator_never_emits() {
+         let mut text = write(&Program {
+             destructors: Vec::new(),
+             types: primitives(),
+@@ -1031,10 +1060,10 @@ mod tests {
+ 
+     #[test]
+     fn no_allocation_uses_declared_parameter_count() {
+-        let text = "fn \"bad\" 18446744073709551615 3\nendfn\n";
++        let text = "lkjscript-ir 1\nfn \"bad\" 18446744073709551615 3\nendfn\n";
+         let mut decoded = read(text).unwrap();
+         decoded.types = primitives();
+-        assert_eq!(crate::check::check(decoded).err().unwrap().code, "E_K");
++        assert_eq!(crate::check::check(decoded).err().unwrap().code, "E_IR");
+     }
+ 
+     #[test]
+@@ -1049,7 +1078,11 @@ mod tests {
+             "type \"x\\uD800\" unit",
+             "type \"x\" unit trailing",
+         ] {
+-            assert_eq!(read(text).err().unwrap().code, "E_K_TEXT", "{text}");
++            assert_eq!(
++                read(&format!("lkjscript-ir 1\n{text}")).err().unwrap().code,
++                "E_IR_TEXT",
++                "{text}"
++            );
+         }
+     }
+ 
+@@ -1065,7 +1098,7 @@ mod tests {
+             functions: Vec::new(),
+         };
+         assert_same_program(&read(&write(&p)).unwrap(), &p);
+-        let decoded = read("type \"\\uD83D\\uDE00\" world\n").unwrap();
++        let decoded = read("lkjscript-ir 1\ntype \"\\uD83D\\uDE00\" world\n").unwrap();
+         assert_eq!(decoded.types[0].name, "😀");
+     }
+ 

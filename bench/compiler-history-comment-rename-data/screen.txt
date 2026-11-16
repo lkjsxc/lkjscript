@@ -1,0 +1,8 @@
+horizon=6a187b94fb763f7b0565436a98ab5feda3cd642f
+window_sha256=bee88306e1c12adfb3e0f8dfc6a96bf71c6b8ad344d4d08c2cdb0b808293cd20
+window_commits=300
+language_diffs=204
+identifier_or_comment_shortlist=2
+pure_content_preserving_language_path_renames=0
+semantic_proof=false
+compiler_executions=0

@@ -1,0 +1,88 @@
+revision=f71dd494d2c7b4ea04471bad6e75c26c4076eb67 path=tools/consumer_edit_tests.lkj blob_sha256=2319c9c3accf017f2e86f38f41dac8632c12de8f2c9f3ab08419737480e25faa excerpt=280..298
+280:    let rejected = invoke(world, executable, &command(config, "check", name), b"")?;
+281:    report.require(rejected.status == 1
+282:        && contains(&rejected.errors, b"requires a mutable Arguments capability")
+283:        && contains(&rejected.errors, b"arguments: &mut Arguments"),
+284:        format!("generic capability helper omitted its concrete receiver: {}", display_bytes(&rejected.errors)));
+285:    let rewritten = source.replace("command_args<T>(arguments: &mut T)", "command_args(arguments: &mut Arguments)");
+286:    write(directory, name, format!("{rewritten}\npub fn probe() -> usize {{ 42usize }}\n").as_bytes())?;
+287:    run_value(world, executable, config, report, name, "probe", "42\n")?;
+288:    let name = "desk-child-authority.lkj";
+289:    write(directory, name, include_str!("../tests/diagnostics/external_child_authority.lkj").as_bytes())?;
+290:    let rejected = invoke(world, executable, &command(config, "check", name), b"")?;
+291:    report.require(rejected.status == 1 && contains(&rejected.errors, b"E_CAPABILITY")
+292:        && contains(&rejected.errors, b"immutable authenticated admitted image")
+293:        && contains(&rejected.errors, b"checked entry grants")
+294:        && contains(&rejected.errors, b"World.process()"),
+295:        format!("external child boundary omitted its missing proof: {}", display_bytes(&rejected.errors)));
+296:    let name = "desk-capability-intern.lkj";
+297:    write(directory, name, include_str!("../tests/diagnostics/command_capability_intern.lkj").as_bytes())?;
+298:    run_value(world, executable, config, report, name, "main", "ok\n")?;
+
+revision=2d143a1fd27ce8e475653cebf6cdb85332032e32 path=tools/runtime_diagnostic_tests.rs blob_sha256=8e3b89fd3a192e8ea09f1e2b7290947fd6eabcedac7e6baf358023b3636be4f2 excerpt=48..62
+48:        }
+49:    }
+50:    Ok(())
+51:}
+52:
+53:fn unwrap_help(world: &mut World, executable: &File, directory: &mut Directory,
+54:    config: &Config, report: &mut Report) -> Result<(), String> {
+55:    let name = "unwrap-help.rs";
+56:    write(directory, name, include_str!("../tests/diagnostics/unwrap_call_site.rs").as_bytes())?;
+57:    let extra: Vec<Vec<u8>> = Vec::new();
+58:    let mut original: Vec<u8> = Vec::new();
+59:    for engine in pair("interpreter", "native") {
+60:        let observed = execute(world, executable, config, name, &engine, "0", &extra)?;
+61:        let text = String::from_utf8(observed.errors.clone()).unwrap();
+62:        report.require(observed.status == 1 && observed.output.is_empty() && observed.result.is_empty()
+
+revision=2d143a1fd27ce8e475653cebf6cdb85332032e32 path=src/test_runner.rs blob_sha256=34d97753d77c9e9017c41de544116d25590ea92a393fde28f1212990f7684532 excerpt=188..235
+188:}
+189:
+190:fn header(line: &str) -> Option<&str> {
+191:    if line.starts_with("// ") {
+192:        Some(&line[3..])
+193:    } else if line.starts_with("# ") {
+194:        Some(&line[2..])
+195:    } else {
+196:        None
+197:    }
+198:}
+199:
+200:fn case(path: &str, source: &str) -> Result<Option<Case>, String> {
+201:    let mut out = Case {
+202:        path: path.to_string(), kind: String::new(), value: String::new(),
+203:        stdout: Vec::new(), stderr: Vec::new(), status: 0, line: 0,
+204:        entry: String::new(), pending: String::new(), reference: String::new(), witness: String::new(),
+205:    };
+206:    for line in pieces(source, b'\n') {
+207:        let text = match header(&line) {
+208:            Some(text) => text,
+209:            None => continue,
+210:        };
+211:        if text.starts_with("expect: ") {
+212:            if !out.kind.is_empty() {
+213:                return Err(format!("E_TEST duplicate expectation in {path}"));
+214:            }
+215:            let expectation = &text[8..];
+216:            let space = expectation.find(' ').unwrap_or(expectation.len());
+217:            out.kind = expectation[..space].to_string();
+218:            let rest = if space == expectation.len() { "" } else { &expectation[space + 1..] };
+219:            if out.kind == "value" || out.kind == "reject" {
+220:                out.value = rest.to_string();
+221:            } else if out.kind == "output" {
+222:                out.stdout = unhex(rest)?;
+223:            } else if out.kind == "trap" {
+224:                let fields = pieces(rest, b' ');
+225:                if fields.is_empty() || fields.len() > 2 {
+226:                    return Err(format!("E_TEST invalid trap expectation in {path}"));
+227:                }
+228:                out.value = fields[0].clone();
+229:                if fields.len() == 2 {
+230:                    out.line = number(&fields[1])?;
+231:                }
+232:                out.status = 1;
+233:            } else if out.kind != "check" && out.kind != "compare" {
+234:                return Err(format!("E_TEST unknown expectation {} in {path}", out.kind));
+235:            }
+

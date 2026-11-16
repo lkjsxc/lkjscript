@@ -1,0 +1,18 @@
+diff --git a/tests/diagnostics/formatted_panic_detail.rs b/tests/diagnostics/formatted_panic_detail.rs
+index 4d399646..b04ea0d1 100644
+--- a/tests/diagnostics/formatted_panic_detail.rs
++++ b/tests/diagnostics/formatted_panic_detail.rs
+@@ -1,3 +1,3 @@
+-// expect: trap R0018
++// expect: trap R0004
+ // Unique immutable literal captures retain their exact static trap explanation.
+ pub fn probe() { let problem = "lock journal: errno 11"; panic!("journal recovery: {problem}"); }
+diff --git a/tests/diagnostics/unwrap_call_site.rs b/tests/diagnostics/unwrap_call_site.rs
+index ceefedfd..7c84149a 100644
+--- a/tests/diagnostics/unwrap_call_site.rs
++++ b/tests/diagnostics/unwrap_call_site.rs
+@@ -1,3 +1,3 @@
+-// expect: trap R0020
++// expect: trap R0004
+ // pending: Automatic unwrap caller attribution and dynamic errno remain unavailable; use an explicit match and an already granted output writer. Static traps now retain the actual callee file index and line.
+ pub fn probe() { let failure: Result<(),i64> = Err(5i64); failure.unwrap(); }
