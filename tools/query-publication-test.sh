@@ -29,11 +29,26 @@ timed() {
     shift
     local status
     printf '%s\tload-before\t%s\n' "$label" "$(cat /proc/loadavg)" >> "$fixture/timing.tsv"
-    if /usr/bin/time -f 'wall=%e user=%U sys=%S peak-kib=%M' -o "$fixture/$label.time" \
-        "$@" > "$fixture/$label.out" 2> "$fixture/$label.err"; then
-        status=0
+    # Minimal CI images need no separate time package. The explicit switch
+    # exercises exactly the same fallback without changing the host.
+    if [[ -x /usr/bin/time && ${LKJSCRIPT_QUERY_PUBLICATION_NO_TIME:-0} != 1 ]]; then
+        if /usr/bin/time -f 'wall=%e user=%U sys=%S peak-kib=%M' -o "$fixture/$label.time" \
+            "$@" > "$fixture/$label.out" 2> "$fixture/$label.err"; then
+            status=0
+        else
+            status=$?
+        fi
     else
-        status=$?
+        local started elapsed
+        started=$(date +%s%N)
+        if "$@" > "$fixture/$label.out" 2> "$fixture/$label.err"; then
+            status=0
+        else
+            status=$?
+        fi
+        elapsed=$(($(date +%s%N) - started))
+        printf 'wall=%d.%09d user=NA sys=NA peak-kib=NA\n' \
+            "$((elapsed / 1000000000))" "$((elapsed % 1000000000))" > "$fixture/$label.time"
     fi
     printf '%s\tresult\t%s\t%s\n' "$label" "$status" "$(cat "$fixture/$label.time")" >> "$fixture/timing.tsv"
     printf '%s\tload-after\t%s\n' "$label" "$(cat /proc/loadavg)" >> "$fixture/timing.tsv"
